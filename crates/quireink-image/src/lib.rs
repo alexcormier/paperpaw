@@ -223,7 +223,7 @@ pub fn decode(
     fit: Fit,
     sink: &mut dyn ImageSink,
 ) -> Result<(), ImageError> {
-    let mut reader = Reader::new(source);
+    let mut reader = Reader::new(source)?;
     match format {
         Format::Jpeg => jpeg::decode(&mut reader, fit, sink),
         Format::Png => png::decode(&mut reader, fit, sink),
@@ -234,20 +234,21 @@ pub fn decode(
 /// Buffered byte reader over a [`Source`].
 pub(crate) struct Reader<'a> {
     source: &'a mut dyn Source,
-    /// Read several blocks of a card at a time.
-    buf: [u8; 4096],
+    /// Read several blocks of a card at a time. On the heap: decoding
+    /// takes much of the stack as it is.
+    buf: alloc::boxed::Box<[u8]>,
     pos: usize,
     len: usize,
 }
 
 impl<'a> Reader<'a> {
-    fn new(source: &'a mut dyn Source) -> Self {
-        Self {
+    fn new(source: &'a mut dyn Source) -> Result<Self, ImageError> {
+        Ok(Self {
             source,
-            buf: [0; 4096],
+            buf: zeroed(4096)?.into_boxed_slice(),
             pos: 0,
             len: 0,
-        }
+        })
     }
 
     /// The next byte, `None` at the end.

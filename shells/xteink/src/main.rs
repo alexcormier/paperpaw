@@ -24,6 +24,7 @@ mod input;
 mod power;
 mod remote;
 mod sent;
+mod stack;
 mod traced;
 mod wifi;
 
@@ -126,6 +127,7 @@ fn now() -> Instant {
 
 #[main]
 fn main() -> ! {
+    stack::paint();
     let p = esp_hal::init(esp_hal::Config::default().with_cpu_clock(CpuClock::max()));
     // The battery's power stays on only while this pin holds it.
     let mut power_latch = Output::new(p.GPIO13, Level::High, OutputConfig::default());
@@ -346,6 +348,7 @@ fn main() -> ! {
 
         power::feed();
         power::mark(power::at::LOOP);
+        stack::check();
         // Not while the radio is on: its tasks run in between.
         let battery = wifi.is_none()
             && ((usb.is_low() && kernel.settings().bool(device::LIGHT_SLEEP.as_str()))

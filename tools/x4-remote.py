@@ -20,7 +20,7 @@ STEPS, separated by commas:
   wait:500           500 ms pass
   screen             print the screen's id
   describe           print what the screen shows, part by part
-  heap               print the heap used and free, in bytes
+  heap               print the heap used and free, and the stack never used, in bytes
   refresh:full       refresh the panel from what the controller holds (also
                      refresh:fast), nothing sent
   input              print how the buttons and the battery are read
@@ -282,8 +282,10 @@ def run(x4, step):
         case ["refresh", kind]:
             print(x4.ask(f"refresh {kind}", "OK")[-1])
         case ["heap"]:
-            _, used, free = x4.ask("heap", "HEAP")[-1].split()
+            _, used, free, *stack = x4.ask("heap", "HEAP")[-1].split()
             print(f"heap: {used} bytes used, {free} free")
+            if stack:
+                print(f"stack: {stack[0]} of {stack[1]} bytes never used")
         case ["describe"]:
             for answer in x4.ask("describe", "END")[:-1]:
                 _, role, x, y, w, h, state, *label = answer.split(" ")

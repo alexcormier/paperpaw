@@ -10,6 +10,8 @@
 //! partition table (MBR, sometimes GPT) and the file system in a partition
 //! after it; some hold the file system from the first block.
 
+use alloc::boxed::Box;
+use alloc::vec;
 use alloc::vec::Vec;
 
 use fatfs::{IoBase, Read, Seek, SeekFrom, Write};
@@ -193,7 +195,9 @@ pub struct BlockDisk<B: Blocks> {
     first: u32,
     position: u64,
     size: u64,
-    slots: [Slot; SLOTS],
+    /// On the heap: kept in the struct, they made it 12 KB, copied over
+    /// the stack wherever it was moved (into a file system, into a box).
+    slots: Box<[Slot]>,
     /// Uses so far, to find the block used longest ago.
     uses: u32,
 }
@@ -244,7 +248,7 @@ impl<B: Blocks> BlockDisk<B> {
             first,
             position: 0,
             size: u64::from(blocks) * BLOCK as u64,
-            slots: [EMPTY; SLOTS],
+            slots: vec![EMPTY; SLOTS].into_boxed_slice(),
             uses: 0,
         }
     }

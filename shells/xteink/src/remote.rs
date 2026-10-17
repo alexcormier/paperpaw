@@ -11,7 +11,8 @@
 //! - `describe`: what it shows, a `QI:PART <role> <x> <y> <width> <height>
 //!   <state> <label>` for each row, button or heading (state: `-`, or
 //!   `focused`, `on`, `off` joined by `+`), then `QI:END`;
-//! - `heap`: `QI:HEAP <used> <free>`, in bytes;
+//! - `heap`: `QI:HEAP <used> <free> <stack left> <stack size>`, in bytes
+//!   (the stack: what it never used since start, see `stack::left`);
 //! - `input`: `QI:INPUT <readings> <front> <side> <power> <millivolts>`, how
 //!   the buttons and the battery are read;
 //! - `profile start`, `profile stop`: notes where the processor is every
@@ -164,8 +165,9 @@ impl Remote {
                 println!("QI:SCREEN {id}");
             }
             Command::Heap => {
+                let (left, size) = crate::stack::left();
                 println!(
-                    "QI:HEAP {} {}",
+                    "QI:HEAP {} {} {left} {size}",
                     esp_alloc::HEAP.used(),
                     esp_alloc::HEAP.free()
                 );

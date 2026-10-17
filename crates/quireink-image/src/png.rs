@@ -323,7 +323,11 @@ pub(crate) fn decode(
                     decoder
                         .try_reserve_exact(1)
                         .map_err(|_| ImageError::OutOfMemory)?;
-                    decoder.push(DecompressorOxide::new());
+                    // Written where it stays: pushed, its 11 KB went over the
+                    // stack first.
+                    decoder.spare_capacity_mut()[0].write(DecompressorOxide::new());
+                    // SAFETY: the one element reserved was just written.
+                    unsafe { decoder.set_len(1) };
                     window = zeroed(WINDOW)?;
                 }
                 let Some(state) = rows.as_mut() else {
