@@ -101,6 +101,7 @@ pub(crate) fn register(r: &mut dyn Registrar) -> Result<(), RegisterError> {
         id: GROUP,
         title: Cow::Borrowed("reader.group.status"),
         order: 15,
+        page: None,
     })?;
     r.add_icon(GROUP, Cow::Borrowed("layout"))?;
     // The chapter, the time and the battery with the page.

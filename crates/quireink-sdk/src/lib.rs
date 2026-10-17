@@ -70,6 +70,7 @@ pub mod usage;
 mod version;
 pub mod web;
 pub mod widgets;
+pub mod wifi;
 
 pub use action::{ActionHandler, ActionSpec, Actions};
 pub use command::{

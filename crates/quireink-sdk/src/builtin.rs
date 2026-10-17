@@ -179,6 +179,9 @@ pub mod params {
     pub const MODE: &str = "mode";
     /// The event a screen emits with its result, e.g. the keyboard's text.
     pub const REPLY: &str = "reply";
+    /// Why something failed, e.g. joining a network
+    /// ([`events::WIFI_FAILED`](super::events::WIFI_FAILED)).
+    pub const REASON: &str = "reason";
     /// A position in a document: section and offset (see
     /// `document::Locator`).
     pub const SECTION: &str = "section";
@@ -267,6 +270,22 @@ pub mod events {
     /// about once a minute where the device measures it: for plugins that
     /// record its use. Nothing need be drawn anew.
     pub const BATTERY_MEASURED: Id = Id::new_static("core.battery-measured");
+    /// The Wi-Fi state changed ([`Env::wifi`](crate::Env), see
+    /// [`wifi`](crate::wifi)).
+    pub const WIFI_CHANGED: Id = Id::new_static("core.wifi-changed");
+    /// Networks were found ([`Wifi::networks`](crate::wifi::Wifi)).
+    pub const WIFI_SCANNED: Id = Id::new_static("core.wifi-scanned");
+    /// Joining a network failed: parameters [`ID`](super::params::ID) (the
+    /// network) and [`REASON`](super::params::REASON) (a
+    /// [`JoinFailure`](crate::wifi::JoinFailure)).
+    pub const WIFI_FAILED: Id = Id::new_static("core.wifi-failed");
+    /// A plugin's request, server or connection waits for the network,
+    /// where QuireInk manages Wi-Fi and is in none: e.g. to join one.
+    pub const NETWORK_WANTED: Id = Id::new_static("core.network-wanted");
+    /// Nothing uses the network any more (no request, server or
+    /// connection), where QuireInk manages Wi-Fi: e.g. to switch the radio
+    /// off a little later.
+    pub const NETWORK_IDLE: Id = Id::new_static("core.network-idle");
 }
 
 /// Status items of the kernel (see [`status`](crate::status)).

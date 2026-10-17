@@ -10,6 +10,7 @@ mod headless;
 mod http;
 mod panel;
 mod profiles;
+mod wifi;
 
 use std::path::PathBuf;
 use std::process::ExitCode;

@@ -42,6 +42,9 @@ pub struct Profile {
     /// The device speaks text aloud (emulated: the text is logged and
     /// takes as long as it would to speak).
     pub speech: bool,
+    /// QuireInk manages Wi-Fi itself, as on the X4 (emulated: made-up
+    /// networks, see `wifi`); elsewhere the system does.
+    pub wifi: bool,
     /// QuireInk shows its sleep screen and the device sleeps (the power
     /// button); Android shows its own.
     pub sleep: bool,
@@ -101,6 +104,7 @@ pub const PROFILES: &[Profile] = &[
             ("core.flash-screens", "false"),
         ],
         speech: false,
+        wifi: true,
         sleep: true,
         button_row: &X4_ROW,
         summary: "ESP32-C3, 4.3\" 800x480, buttons only, 192 KiB heap budget",
@@ -147,6 +151,7 @@ pub const PROFILES: &[Profile] = &[
             ("core.flash-screens", "false"),
         ],
         speech: false,
+        wifi: true,
         sleep: true,
         button_row: &[],
         summary: "ESP32-S3 (unverified), 4.3\" 800x480, touch + buttons, 256 KiB heap budget",
@@ -179,6 +184,7 @@ pub const PROFILES: &[Profile] = &[
         row_align: 1,
         settings: &[],
         speech: true,
+        wifi: false,
         sleep: false,
         button_row: &[],
         summary: "Android, 7\" Carta 1300 1264x1680, touch + page buttons",
@@ -214,6 +220,7 @@ pub const PROFILES: &[Profile] = &[
         row_align: 1,
         settings: &[],
         speech: false,
+        wifi: false,
         sleep: true,
         button_row: &[],
         summary: "Linux, 7\" Kaleido 3 colour 1264x1680, touch + page buttons",
@@ -246,6 +253,7 @@ pub const PROFILES: &[Profile] = &[
         row_align: 1,
         settings: &[],
         speech: false,
+        wifi: false,
         sleep: true,
         button_row: &[],
         summary: "Linux, 6.8\" 1236x1648, touch only",
@@ -278,6 +286,7 @@ pub const PROFILES: &[Profile] = &[
         row_align: 1,
         settings: &[],
         speech: false,
+        wifi: false,
         sleep: true,
         button_row: &[],
         summary: "Linux, 6\" 1072x1448, touch only",
@@ -311,6 +320,7 @@ pub const PROFILES: &[Profile] = &[
         // Only two buttons: everything works with forward and back.
         settings: &[("core.keymap-preset", "core.two-buttons")],
         speech: false,
+        wifi: false,
         sleep: true,
         button_row: &[],
         summary: "Generic 6\" 600x800, only page buttons (also: Bluetooth page turners)",

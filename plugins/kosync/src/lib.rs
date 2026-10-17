@@ -422,6 +422,7 @@ impl Plugin for Kosync {
             id: GROUP,
             title: Cow::Borrowed("kosync.group"),
             order: 28,
+            page: None,
         })?;
         r.add_icon(GROUP, Cow::Borrowed("refresh"))?;
         for spec in [

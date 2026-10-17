@@ -36,21 +36,19 @@
 //!   e.g. after a watchdog's reset or an `idle sleep`;
 //! - `nap <seconds>`: one light sleep that long (at most a minute), then a
 //!   new start, to try that the RTC's watchdog starts it again first;
-//! - `wifi scan`: the networks in reach, as `QI:NET <rssi> <channel>
-//!   <security> <name>` lines, with the heap, then `QI:END` (starts the
-//!   radio the first time; it stays on until the X4 starts again);
+//! - `wifi scan`: switches the radio on and lists the networks in reach,
+//!   as `QI:NET <signal> <secured> <name>` lines, then `QI:END`;
 //! - `wifi connect <name> <password>`: joins that network (both in
-//!   hexadecimal, `-` for no password), answered with `QI:CONNECTED
-//!   <channel>` and, once DHCP gave one, `QI:IP <address>`, or `QI:ERR`;
-//!   the password is not shown anywhere; it is kept, and the network
-//!   joined again by itself after a start on USB;
-//! - `wifi join`: joins the network known from before again (`QI:OK`; the
-//!   outcome in the log and by `wifi status`);
-//! - `wifi status`: `QI:WIFI off`, or `QI:WIFI <on|joining> <address|->`;
-//! - `http get <url> [<path>]`: fetches a plain `http://` address over
-//!   Wi-Fi as plugins' requests are made, into memory or the file `path`,
-//!   answered with `QI:HTTP <status> <bytes> saved <true|false> <ms>`, the
-//!   heap and, for a failure, why;
+//!   hexadecimal, `-` for no password), answered once joined with
+//!   `QI:CONNECTED <name>` and `QI:IP <address>`, or `QI:ERR`; the
+//!   password is not shown anywhere and is kept with the passwords and
+//!   keys, where the `wifi` plugin finds it to join the network again;
+//! - `wifi status`: `QI:WIFI <off|on|joining|online> [<name> <address>]`;
+//! - `wifi off`: switches the radio off (`QI:OK`);
+//! - `http get <url> [<path>]`: fetches a plain `http://` address as
+//!   plugins' requests are made, into memory or the file `path`, answered
+//!   with `QI:HTTP <status> <bytes> saved <true|false>`, the heap and, for
+//!   a failure, why (the radio must be online);
 //! - `get <path>`: a file of the storage, as `QI:SIZE <size>`, then
 //!   `QI:DATA <hex>` lines and `QI:END` (e.g. the battery's log).
 //!
@@ -62,7 +60,9 @@ use core::fmt::Write;
 
 use esp_hal::peripherals::USB_DEVICE;
 use esp_println::println;
-use quireink_core::Kernel;
+use quireink_core::{HttpResponse, JoinFailure, Kernel, WifiNetwork, WifiState};
+
+use crate::network::Ask;
 use quireink_platform::{DisplayInfo, FrameView};
 use quireink_x4::buttons;
 
@@ -97,13 +97,8 @@ pub enum Command {
     Put(usize, String),
     Get(String),
     Boot,
-    WifiScan,
-    /// A network's name and password.
-    WifiConnect(String, String),
-    WifiStatus,
-    WifiJoin,
-    /// An address to fetch, and the file for it.
-    HttpGet(String, Option<String>),
+    /// About the network, for the main loop's `network`.
+    Network(crate::network::Ask),
     Hang(u64),
     Nap(u64),
 }
@@ -171,13 +166,7 @@ impl Remote {
         match command {
             Command::Press(name, ms) => return Some((name, ms)),
             // The main loop does it; asked here, nothing.
-            Command::Refresh(_)
-            | Command::IdleSleep(_)
-            | Command::WifiScan
-            | Command::WifiConnect(..)
-            | Command::WifiStatus
-            | Command::WifiJoin
-            | Command::HttpGet(..) => {
+            Command::Refresh(_) | Command::IdleSleep(_) | Command::Network(_) => {
                 println!("QI:ERR refresh")
             }
             Command::Shot => {
@@ -361,6 +350,55 @@ fn unhex(word: &str) -> Option<String> {
     String::from_utf8(bytes).ok()
 }
 
+pub fn ok() {
+    println!("QI:OK");
+}
+
+/// The networks a scan asked over USB found.
+pub fn networks(networks: &[WifiNetwork]) {
+    for net in networks {
+        println!("QI:NET {} {} {}", net.signal, net.secured, net.ssid);
+    }
+    println!("QI:END");
+}
+
+/// The network asked over USB was joined.
+pub fn connected(ssid: &str, address: &str) {
+    println!("QI:CONNECTED {ssid}");
+    println!("QI:IP {address}");
+}
+
+/// The network asked over USB was not joined.
+pub fn not_connected(ssid: &str, reason: JoinFailure) {
+    println!("QI:ERR wifi connect {ssid}: {}", reason.as_str());
+}
+
+pub fn wifi_state(state: &WifiState) {
+    match state {
+        WifiState::Off => println!("QI:WIFI off"),
+        WifiState::On => println!("QI:WIFI on"),
+        WifiState::Joining { ssid } => println!("QI:WIFI joining {ssid}"),
+        WifiState::Online { ssid, address } => println!("QI:WIFI online {ssid} {address}"),
+    }
+}
+
+/// The answer of a request asked over USB.
+pub fn http_answer(answer: &HttpResponse) {
+    let why = if answer.status == 0 {
+        String::from_utf8_lossy(&answer.body).into_owned()
+    } else {
+        String::new()
+    };
+    println!(
+        "QI:HTTP {} {} saved {} heap {} {} {why}",
+        answer.status,
+        answer.body.len(),
+        answer.saved,
+        esp_alloc::HEAP.used(),
+        esp_alloc::HEAP.free()
+    );
+}
+
 fn parse(line: &str) -> Option<Command> {
     let mut words = line.split_ascii_whitespace();
     let command = match words.next()? {
@@ -371,15 +409,21 @@ fn parse(line: &str) -> Option<Command> {
         "describe" => Command::Describe,
         "heap" => Command::Heap,
         "boot" => Command::Boot,
-        "wifi" => match words.next()? {
-            "scan" => Command::WifiScan,
-            "connect" => Command::WifiConnect(unhex(words.next()?)?, unhex(words.next()?)?),
-            "status" => Command::WifiStatus,
-            "join" => Command::WifiJoin,
+        "wifi" => Command::Network(match words.next()? {
+            "scan" => Ask::Scan,
+            "connect" => Ask::Connect {
+                ssid: unhex(words.next()?)?,
+                password: unhex(words.next()?)?,
+            },
+            "status" => Ask::Status,
+            "off" => Ask::Off,
             _ => return None,
-        },
+        }),
         "http" => match words.next()? {
-            "get" => Command::HttpGet(String::from(words.next()?), words.next().map(String::from)),
+            "get" => Command::Network(Ask::Get {
+                url: String::from(words.next()?),
+                save_to: words.next().map(String::from),
+            }),
             _ => return None,
         },
         "hang" => Command::Hang(words.next()?.parse().ok()?),

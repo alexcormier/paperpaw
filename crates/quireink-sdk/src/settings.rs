@@ -219,6 +219,11 @@ pub struct SettingGroupSpec {
     pub title: Cow<'static, str>,
     /// Groups are listed by order, smallest first.
     pub order: i32,
+    /// A screen of the group's plugin shown instead of the generated page
+    /// (opened with [`params::ID`](crate::builtin::params::ID), the
+    /// group), e.g. Wi-Fi with its networks; it shows the group's
+    /// settings itself.
+    pub page: Option<Id>,
 }
 
 /// Why a setting could not be changed.
@@ -581,6 +586,7 @@ mod tests {
                 id: Id::parse(id).unwrap(),
                 title: Cow::Borrowed(""),
                 order,
+                page: None,
             })
             .unwrap();
         }

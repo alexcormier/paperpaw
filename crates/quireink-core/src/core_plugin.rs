@@ -332,6 +332,7 @@ impl Plugin for CorePlugin {
                 id: id.clone(),
                 title: Cow::Borrowed(title),
                 order,
+                page: None,
             })?;
             r.add_icon(id, Cow::Borrowed(icon))?;
         }

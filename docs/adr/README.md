@@ -21,6 +21,7 @@ superseded by a new record that links back.
 | [0013](0013-x4-firmware.md) | The Xteink X4's firmware | Accepted |
 | [0014](0014-sockets-for-plugins.md) | Sockets for plugins | Accepted |
 | [0015](0015-colour-pictures.md) | Colour pictures | Accepted |
+| [0016](0016-network-and-wifi.md) | Network and Wi-Fi | Accepted |
 
 ## Template
 

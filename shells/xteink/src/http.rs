@@ -45,6 +45,17 @@ enum Sink {
     },
 }
 
+/// A file sent as the body, read from storage in parts as it goes.
+struct Upload {
+    path: String,
+    size: u64,
+    /// Bytes sent so far.
+    at: u64,
+}
+
+/// Bytes of a file read for sending at a time.
+const UPLOAD_PART: usize = 1024;
+
 enum Phase {
     /// Waiting for the network, or for a free connection.
     Waiting,
@@ -54,6 +65,8 @@ enum Phase {
         /// The head and body to send, and how much went.
         request: Vec<u8>,
         sent: usize,
+        /// A file sent after them.
+        upload: Option<Upload>,
         parser: Parser,
     },
 }
@@ -75,16 +88,6 @@ struct Call {
 #[derive(Default)]
 pub struct Calls {
     calls: Vec<Call>,
-}
-
-/// A failed request's answer: status 0 and the reason.
-fn failed(id: u32, reason: &str) -> HttpResponse {
-    HttpResponse {
-        id,
-        status: 0,
-        body: reason.as_bytes().to_vec(),
-        ..HttpResponse::default()
-    }
 }
 
 impl Calls {
@@ -140,7 +143,7 @@ impl Calls {
                         Ok(answer) => call.finish(answer, storage),
                         Err(reason) => {
                             call.discard(storage);
-                            failed(call.call.id, reason)
+                            HttpResponse::failed(call.call.id, reason)
                         }
                     });
                 }
@@ -172,7 +175,7 @@ impl Call {
                 }
                 let port = url.port;
                 match net.resolve(url.host) {
-                    Ok(Resolve::Done(address)) => self.connect(net, address, port),
+                    Ok(Resolve::Done(address)) => self.connect(net, storage, address, port),
                     Ok(Resolve::Asking(query)) => {
                         self.phase = Phase::Resolving(query, port);
                         self.until = now + STALL_MS;
@@ -190,7 +193,7 @@ impl Call {
                 }
                 match resolved {
                     None => (now > self.until).then_some(Err("no such host")),
-                    Some(Ok(address)) => self.connect(net, address, port),
+                    Some(Ok(address)) => self.connect(net, storage, address, port),
                     Some(Err(_)) => Some(Err("no such host")),
                 }
             }
@@ -198,6 +201,7 @@ impl Call {
                 socket,
                 request,
                 sent,
+                upload,
                 parser,
             } => {
                 let socket = net.socket(*socket);
@@ -207,6 +211,30 @@ impl Call {
                         Ok(n) => {
                             *sent += n;
                             progress |= n > 0;
+                        }
+                        Err(_) => return Some(Err("connection lost")),
+                    }
+                }
+                // Then the file, a part at a time, as the socket takes it.
+                while *sent == request.len()
+                    && let Some(upload) = upload.as_mut()
+                    && upload.at < upload.size
+                    && socket.can_send()
+                {
+                    let mut part = [0u8; UPLOAD_PART];
+                    let want = (upload.size - upload.at).min(UPLOAD_PART as u64) as usize;
+                    let Ok(read) = storage.read_at(&upload.path, upload.at, &mut part[..want])
+                    else {
+                        return Some(Err("could not read the file"));
+                    };
+                    if read == 0 {
+                        return Some(Err("could not read the file"));
+                    }
+                    match socket.send_slice(&part[..read]) {
+                        Ok(0) => break,
+                        Ok(n) => {
+                            upload.at += n as u64;
+                            progress = true;
                         }
                         Err(_) => return Some(Err("connection lost")),
                     }
@@ -272,12 +300,15 @@ impl Call {
                     parser,
                     sent,
                     request,
+                    upload,
                     ..
                 } = &mut self.phase
                 else {
                     return None;
                 };
-                if parser.done() || (ended && parser.close().is_ok() && *sent == request.len()) {
+                let all_sent =
+                    *sent == request.len() && upload.as_ref().is_none_or(|u| u.at == u.size);
+                if parser.done() || (ended && parser.close().is_ok() && all_sent) {
                     let head = parser.head().cloned().unwrap_or_default();
                     return Some(Ok(HttpResponse {
                         id: self.call.id,
@@ -305,19 +336,31 @@ impl Call {
     fn connect(
         &mut self,
         net: &mut Net,
+        storage: &dyn Storage,
         address: smoltcp::wire::IpAddress,
         port: u16,
     ) -> Option<Result<HttpResponse, &'static str>> {
         let Some(url) = Url::parse(&self.url) else {
             return Some(Err("not an address"));
         };
+        let upload = match &self.call.body_from {
+            Some(path) => match storage.size(path) {
+                Ok(size) => Some(Upload {
+                    path: path.clone(),
+                    size,
+                    at: 0,
+                }),
+                Err(_) => return Some(Err("could not read the file")),
+            },
+            None => None,
+        };
         let body = self.call.body.as_deref();
-        let mut request = quireink_http::request(
-            &self.call.method,
-            &url,
-            &self.call.headers,
-            body.map(<[u8]>::len),
-        );
+        let body_len = match &upload {
+            Some(upload) => Some(upload.size as usize),
+            None => body.map(<[u8]>::len),
+        };
+        let mut request =
+            quireink_http::request(&self.call.method, &url, &self.call.headers, body_len);
         request.extend_from_slice(body.unwrap_or_default());
         let Ok(socket) = net.open((address, port)) else {
             return Some(Err("could not connect"));
@@ -326,6 +369,7 @@ impl Call {
             socket,
             request,
             sent: 0,
+            upload,
             parser: Parser::new(&self.call.method),
         };
         self.until = now_ms() + STALL_MS;
@@ -355,6 +399,7 @@ impl Call {
         {
             self.call.method = String::from("GET");
             self.call.body = None;
+            self.call.body_from = None;
         }
         self.stop(net);
         self.url = to;
@@ -387,7 +432,7 @@ impl Call {
                 let _ = storage.remove(path);
                 if written.and_then(|()| storage.rename(&part, path)).is_err() {
                     let _ = storage.remove(&part);
-                    return failed(self.call.id, "could not write the file");
+                    return HttpResponse::failed(self.call.id, "could not write the file");
                 }
                 answer.saved = true;
             }

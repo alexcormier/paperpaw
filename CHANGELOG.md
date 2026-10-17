@@ -6,6 +6,33 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Wi-Fi on the X4 (new plugin `wifi`, under Settings, Device): the radio
+  is off while reading and comes on by itself when something needs the
+  network (a catalog, a sync), joins the strongest network joined before
+  and goes off again a minute after the last use (a setting); on USB it
+  stays on. Its page lists the networks in reach to join, with the
+  password typed on the keyboard, and forgets saved ones (menu button or
+  a long press). Saved networks are kept with the passwords and keys.
+  Plain HTTP for now; HTTPS follows.
+- Network for plugins on devices where QuireInk manages Wi-Fi
+  (`quireink_sdk::wifi`, [ADR 0016](docs/adr/0016-network-and-wifi.md)):
+  `Command::Wifi`, `Env::wifi`, and the events `core.wifi-changed`,
+  `core.wifi-scanned`, `core.wifi-failed`, `core.network-wanted` and
+  `core.network-idle`. Requests, servers and connections made without a
+  network wait for one up to 30 seconds. Shells read a request's file to
+  send themselves (`HttpCall::body_from`) and may write a download to its
+  file as it comes (`HttpCall::save_to`, `HttpResponse::saved`).
+- Settings: a group may bring its own page (`SettingGroupSpec::page`),
+  and settings and menu entries may need a device where QuireInk manages
+  Wi-Fi (`MenuNeed::Wifi`).
+- `quireink-http` (new crate): the HTTP/1.1 client protocol without I/O,
+  for shells with their own network stack.
+- The emulator's X4 profiles pretend to manage Wi-Fi, with made-up
+  networks, to try the `wifi` plugin without a device.
+- X4: the stack no longer runs into the memory below it (the FAT cache
+  and the inflate state of pictures went to the heap); `heap` over USB
+  also says how much of the stack was never used.
+
 - Developer options: an advanced setting under System
   (`core.developer`) shows a group of settings for developers
   (`groups::DEVELOPER`), in which any plugin and shell may put its own;

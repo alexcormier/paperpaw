@@ -23,6 +23,7 @@ mod device;
 mod http;
 mod input;
 mod net;
+mod network;
 mod power;
 mod remote;
 mod sent;
@@ -55,6 +56,7 @@ use quireink_platform::{
     Battery, ButtonState, DeviceInfo, DisplayInfo, InputCaps, InputEvent, Instant, MemoryClass,
     PixelFormat, RefreshMode, Rotation, SystemStatus,
 };
+use quireink_sdk::builtin::settings;
 use quireink_x4::battery;
 use quireink_x4::buttons;
 use quireink_x4::display::{self, Display, Planes, Refresh};
@@ -71,12 +73,6 @@ const RECLAIMED_SIZE: usize = 64 * 1024;
 const FRAME_ROWS: u16 = 192;
 /// How long the main loop rests when there is nothing to do.
 const POLL_MS: u64 = 10;
-/// A network known from before is joined this long after a start (time
-/// for the first screen), and tried again this long after a failure, at
-/// most so many times.
-const REJOIN_FIRST_MS: u64 = 1000;
-const REJOIN_AGAIN_MS: u64 = 3000;
-const REJOIN_TRIES: u32 = 5;
 /// How often the battery is read.
 const STATUS_MS: u64 = 60_000;
 /// On battery, the longest the processor sleeps between readings of the
@@ -244,17 +240,12 @@ fn main() -> ! {
         timers1.wdt,
         WATCHDOG_S,
     );
-    // Wi-Fi, started when first wanted.
-    let mut wifi_parts = Some(wifi::Parts {
+    // The radio (on when the kernel says so) and what goes over it.
+    let mut network = network::Network::new(wifi::Parts {
         timer: timers1.timer0,
         interrupt: p.FROM_CPU_INTR0,
         wifi: p.WIFI,
     });
-    let mut wifi: Option<wifi::Wifi> = None;
-    // When to join a network known from before next, and the tries so far.
-    let mut rejoin: Option<(Instant, u32)> = None;
-    // Plugins' HTTP requests going on.
-    let mut calls = http::Calls::default();
     input::start(input::Sampler::new(
         PeriodicTimer::new(timers.timer0),
         adc,
@@ -280,11 +271,13 @@ fn main() -> ! {
         .sleep(true)
         .button_row(&buttons::ROW)
         // A full refresh takes 3.5 s on its panel: screens change fast.
-        .setting_default("core.flash-screens", "false")
-        .setting_default("core.ui-size", "9")
-        .setting_default("reader.font-size", "9")
-        // Over Wi-Fi (`http`); without a network requests fail at once.
-        .network(true);
+        .setting_default(settings::FLASH_SCREENS.as_str(), "false")
+        .setting_default(settings::UI_SIZE.as_str(), "9")
+        .setting_default(quireink_plugin_reader::settings::FONT_SIZE.as_str(), "9")
+        // QuireInk switches the radio (`network`); on USB it stays on in a
+        // network joined before, for transfers and for trying things.
+        .wifi(true)
+        .setting_default(quireink_plugin_wifi::WHILE_CHARGING.as_str(), "true");
     let builder = quireink_app::install(builder, quireink_app::Fonts::Packs).plugin(device::X4);
     let mut kernel = match builder.build() {
         Ok(kernel) => kernel,
@@ -292,14 +285,6 @@ fn main() -> ! {
     };
     for warning in kernel.take_warnings() {
         warn!("{warning}");
-    }
-    // A network joined before is joined again by itself on USB (e.g. after
-    // flashing); on battery the radio stays off for now.
-    if usb.is_high()
-        && !wifi::known(kernel.secrets()).is_empty()
-        && remote_wifi_start(&mut wifi, &mut wifi_parts).is_some()
-    {
-        rejoin = Some((Instant(now().0 + REJOIN_FIRST_MS), 0));
     }
 
     // Light sleeps while idle on battery, the deep one at the end.
@@ -371,52 +356,11 @@ fn main() -> ! {
         power::feed();
         power::mark(power::at::LOOP);
         stack::check();
-        if let Some(radio) = wifi.as_mut() {
-            if let Some(joined) = radio.poll() {
-                match joined {
-                    Ok(info) => {
-                        info!("wifi: joined, channel {}", info.channel);
-                        rejoin = None;
-                    }
-                    Err(e) => {
-                        warn!("wifi: not joined: {e:?}");
-                        rejoin = rejoin
-                            .filter(|&(_, tries)| tries < REJOIN_TRIES)
-                            .map(|(_, tries)| (Instant(now().0 + REJOIN_AGAIN_MS), tries));
-                    }
-                }
-            }
-            if let Some((due, tries)) = rejoin
-                && due <= now()
-                && !radio.joining()
-            {
-                // The one known network, for now (the settings page will
-                // choose among them).
-                match wifi::known(kernel.secrets()).into_iter().next() {
-                    Some((ssid, password)) => match radio.join(&ssid, &password) {
-                        Ok(()) => {
-                            info!("wifi: joining {ssid} (try {})", tries + 1);
-                            rejoin = Some((due, tries + 1));
-                        }
-                        Err(e) => {
-                            warn!("wifi: {e:?}");
-                            rejoin = None;
-                        }
-                    },
-                    None => rejoin = None,
-                }
-            }
+        for effects in network.step(&mut kernel, now()) {
+            sleep |= apply(&mut kernel, &mut display, effects, &mut wake_at);
         }
-        calls_step(
-            &mut kernel,
-            &mut display,
-            &mut calls,
-            &mut wifi,
-            &mut wake_at,
-            &mut sleep,
-        );
         // Not while the radio is on: its tasks run in between.
-        let battery = wifi.is_none()
+        let battery = !network.radio_on()
             && ((usb.is_low() && kernel.settings().bool(device::LIGHT_SLEEP.as_str()))
                 || sleep_on_usb_until.is_some());
         power::allow(battery);
@@ -453,29 +397,8 @@ fn main() -> ! {
         }
 
         let command = remote.poll();
-        if let Some(remote::Command::WifiScan) = command {
-            remote_wifi_scan(&mut wifi, &mut wifi_parts);
-        } else if let Some(remote::Command::WifiConnect(ssid, password)) = &command {
-            remote_wifi_connect(&mut kernel, &mut wifi, &mut wifi_parts, ssid, password);
-        } else if let Some(remote::Command::WifiJoin) = command {
-            rejoin = Some((now(), 0));
-            if remote_wifi_start(&mut wifi, &mut wifi_parts).is_some() {
-                esp_println::println!("QI:OK");
-            }
-        } else if let Some(remote::Command::WifiStatus) = command {
-            match wifi.as_ref() {
-                None => esp_println::println!("QI:WIFI off"),
-                Some(radio) => esp_println::println!(
-                    "QI:WIFI {} {}",
-                    if radio.joining() { "joining" } else { "on" },
-                    radio
-                        .net
-                        .address()
-                        .map_or(alloc::string::String::from("-"), |a| alloc::format!("{a}"))
-                ),
-            }
-        } else if let Some(remote::Command::HttpGet(url, save_to)) = &command {
-            remote_http_get(&kernel, &mut wifi, url, save_to.clone());
+        if let Some(remote::Command::Network(ask)) = command {
+            network.ask(ask);
         } else if let Some(remote::Command::IdleSleep(seconds)) = command {
             // At most ten minutes: the link is gone meanwhile.
             sleep_on_usb_until = Some(Instant(now().0 + seconds.min(600) * 1000));
@@ -548,170 +471,6 @@ fn main() -> ! {
         if !power::nap_until(until) {
             delay.delay_millis(until.saturating_sub(now().0) as u32);
         }
-    }
-}
-
-/// Lists the networks in reach over USB (`wifi scan`), starting the radio
-/// the first time, with the heap before and after.
-fn remote_wifi_scan(wifi: &mut Option<wifi::Wifi>, parts: &mut Option<wifi::Parts>) {
-    let heap = || (esp_alloc::HEAP.used(), esp_alloc::HEAP.free());
-    esp_println::println!("QI:HEAP-BEFORE {} {}", heap().0, heap().1);
-    let Some(radio) = remote_wifi_start(wifi, parts) else {
-        return;
-    };
-    let started = now();
-    match radio.scan(20) {
-        Ok(networks) => {
-            esp_println::println!("QI:SCANNED {} ms", now().since(started));
-            for net in networks {
-                esp_println::println!(
-                    "QI:NET {} {} {:?} {}",
-                    net.signal_strength,
-                    net.channel,
-                    net.auth_method,
-                    net.ssid.as_str()
-                );
-            }
-        }
-        Err(e) => esp_println::println!("QI:ERR wifi scan: {e:?}"),
-    }
-    esp_println::println!("QI:HEAP-AFTER {} {}", heap().0, heap().1);
-    esp_println::println!("QI:END");
-}
-
-/// The radio, started the first time (said over USB, with the heap).
-fn remote_wifi_start<'a>(
-    wifi: &'a mut Option<wifi::Wifi>,
-    parts: &mut Option<wifi::Parts>,
-) -> Option<&'a mut wifi::Wifi> {
-    if wifi.is_none() {
-        let Some(parts) = parts.take() else {
-            esp_println::println!("QI:ERR wifi: gone");
-            return None;
-        };
-        let started = now();
-        match wifi::Wifi::start(parts) {
-            Ok(started_wifi) => *wifi = Some(started_wifi),
-            Err(e) => {
-                esp_println::println!("QI:ERR wifi: {e:?}");
-                return None;
-            }
-        }
-        esp_println::println!("QI:STARTED {} ms", now().since(started));
-        esp_println::println!(
-            "QI:HEAP-STARTED {} {}",
-            esp_alloc::HEAP.used(),
-            esp_alloc::HEAP.free()
-        );
-    }
-    wifi.as_mut()
-}
-
-/// Joins a network over USB (`wifi connect`), starting the radio the first
-/// time, and keeps its password to join it again after a start. The
-/// password is not logged.
-fn remote_wifi_connect(
-    kernel: &mut Kernel,
-    wifi: &mut Option<wifi::Wifi>,
-    parts: &mut Option<wifi::Parts>,
-    ssid: &str,
-    password: &str,
-) {
-    let Some(radio) = remote_wifi_start(wifi, parts) else {
-        return;
-    };
-    let started = now();
-    match radio.connect(ssid, password) {
-        Ok(info) => {
-            kernel.set_secret(wifi::secret(ssid, password));
-            esp_println::println!(
-                "QI:CONNECTED {} in {} ms",
-                info.channel,
-                now().since(started)
-            )
-        }
-        Err(e) => return esp_println::println!("QI:ERR wifi connect: {e:?}"),
-    }
-    match radio.net.wait_online() {
-        Ok(address) => esp_println::println!("QI:IP {address} in {} ms", now().since(started)),
-        Err(e) => esp_println::println!("QI:ERR wifi dhcp: {e:?}"),
-    }
-}
-
-/// Fetches an address over USB (`http get`), to try the network.
-fn remote_http_get(
-    kernel: &Kernel,
-    wifi: &mut Option<wifi::Wifi>,
-    url: &str,
-    save_to: Option<alloc::string::String>,
-) {
-    let mut calls = http::Calls::default();
-    calls.add(quireink_core::HttpCall {
-        id: 0,
-        method: alloc::string::String::from("GET"),
-        url: alloc::string::String::from(url),
-        headers: alloc::vec::Vec::new(),
-        body: None,
-        max_response: if save_to.is_some() {
-            quireink_core::MAX_FILE
-        } else {
-            64 * 1024
-        },
-        save_to,
-    });
-    let started = now();
-    // The requests end by themselves, at the latest when they stall.
-    loop {
-        if let Some(radio) = wifi.as_mut() {
-            radio.poll();
-        }
-        let net = wifi.as_mut().map(|radio| &mut radio.net);
-        if let Some(answer) = calls.poll(net, kernel.storage()).into_iter().next() {
-            let text = if answer.status == 0 {
-                alloc::string::String::from_utf8_lossy(&answer.body).into_owned()
-            } else {
-                alloc::string::String::new()
-            };
-            return esp_println::println!(
-                "QI:HTTP {} {} saved {} {} ms, heap {} {} {text}",
-                answer.status,
-                answer.body.len(),
-                answer.saved,
-                now().since(started),
-                esp_alloc::HEAP.used(),
-                esp_alloc::HEAP.free()
-            );
-        }
-        power::feed();
-    }
-}
-
-/// Passes plugins' new HTTP requests on and moves those going on, giving
-/// the kernel the answers of those done.
-fn calls_step<SPI, DC, RST, BUSY, D>(
-    kernel: &mut Kernel,
-    display: &mut Display<SPI, DC, RST, BUSY, D>,
-    calls: &mut http::Calls,
-    wifi: &mut Option<wifi::Wifi>,
-    wake_at: &mut Option<Instant>,
-    sleep: &mut bool,
-) where
-    SPI: embedded_hal::spi::SpiDevice,
-    DC: embedded_hal::digital::OutputPin,
-    RST: embedded_hal::digital::OutputPin,
-    BUSY: embedded_hal::digital::InputPin,
-    D: embedded_hal::delay::DelayNs,
-{
-    for call in kernel.take_requests() {
-        calls.add(call);
-    }
-    if !calls.busy() {
-        return;
-    }
-    let net = wifi.as_mut().map(|radio| &mut radio.net);
-    for answer in calls.poll(net, kernel.storage()) {
-        let effects = kernel.http_response(now(), answer);
-        *sleep |= apply(kernel, display, effects, wake_at);
     }
 }
 

@@ -254,6 +254,10 @@ pub enum Command {
     /// Keeps or removes a password or key (see
     /// [`secrets`](crate::secrets)), saved at once.
     SetSecret(crate::secrets::SecretChange),
+    /// Tells the radio what to do, where QuireInk manages Wi-Fi
+    /// ([`Env::wifi`](crate::Env)); see [`wifi`](crate::wifi). Ignored
+    /// elsewhere.
+    Wifi(crate::wifi::WifiCommand),
     /// Asks the shell to sleep once the frame is shown, where it can
     /// ([`Env::sleep`](crate::Env)); the kernel is told when it wakes.
     Sleep,

@@ -16,8 +16,6 @@ use smoltcp::socket::{dhcpv4, dns, tcp};
 use smoltcp::time::Instant;
 use smoltcp::wire::{DnsQueryType, EthernetAddress, HardwareAddress, IpAddress, IpCidr};
 
-/// The longest anything of the network is waited for here.
-const WAIT_MS: u64 = 15_000;
 /// Without an address this long after joining a network, DHCP asks anew.
 const DHCP_AGAIN_MS: u64 = 10_000;
 /// Connections (and name lookups) at a time.
@@ -34,8 +32,6 @@ pub enum Error {
     Name,
     /// The connection could not be opened.
     Connection,
-    /// It took longer than [`WAIT_MS`].
-    Timeout,
 }
 
 fn now() -> Instant {
@@ -195,26 +191,6 @@ impl Net {
                 self.stack.routes_mut().remove_default_ipv4_route();
             }
         }
-    }
-
-    /// Polls until `done` says so, at most [`WAIT_MS`].
-    fn wait<T>(&mut self, mut done: impl FnMut(&mut Self) -> Option<T>) -> Result<T, Error> {
-        let until = esp_hal::time::Instant::now() + esp_hal::time::Duration::from_millis(WAIT_MS);
-        loop {
-            self.poll();
-            if let Some(value) = done(self) {
-                return Ok(value);
-            }
-            if esp_hal::time::Instant::now() > until {
-                return Err(Error::Timeout);
-            }
-            crate::power::feed();
-        }
-    }
-
-    /// Waits for an address from DHCP.
-    pub fn wait_online(&mut self) -> Result<smoltcp::wire::Ipv4Cidr, Error> {
-        self.wait(|net| net.address)
     }
 
     /// Starts finding the address of host `name` (at once if it is one);

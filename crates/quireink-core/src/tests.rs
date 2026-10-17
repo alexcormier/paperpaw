@@ -1411,7 +1411,9 @@ fn files_go_up_and_come_down() {
         ..quireink_sdk::HttpRequest::new("PUT", "https://example.org/f", reply.clone())
     });
     let calls = kernel.take_requests();
-    assert_eq!(calls[0].body.as_deref(), Some(&b" data"[..]));
+    // The shell reads the file to send, so it never needs to fit in memory.
+    assert_eq!(calls[0].body, None);
+    assert_eq!(calls[0].body_from.as_deref(), Some("up.bin"));
     assert_eq!(calls[0].max_response, crate::MAX_FILE);
     assert_eq!(calls[0].save_to.as_deref(), Some("down.bin"));
     kernel.http_response(
@@ -2365,4 +2367,198 @@ fn leaving_a_large_picture_refreshes_in_full() {
     assert_eq!(mode(kernel.finish()), Some(RefreshMode::Full));
     render(&mut kernel);
     assert!(!kernel.pictures_shown);
+}
+
+/// Writes down the network's events, and asks for Wi-Fi on when the
+/// network is wanted (as the `wifi` plugin does).
+struct NetPlugin(Log);
+
+impl Plugin for NetPlugin {
+    fn manifest(&self) -> Manifest {
+        Manifest {
+            id: Id::new_static("net"),
+            name: Cow::Borrowed("Net"),
+            description: Cow::Borrowed(""),
+            version: Version::new(1, 0, 0),
+            sdk: SDK_VERSION,
+        }
+    }
+
+    fn register(&self, r: &mut dyn Registrar) -> Result<(), RegisterError> {
+        use quireink_sdk::builtin::events;
+        for event in [
+            events::NETWORK_WANTED,
+            events::NETWORK_IDLE,
+            events::WIFI_CHANGED,
+            events::WIFI_SCANNED,
+            events::WIFI_FAILED,
+            Id::new_static("net.reply"),
+        ] {
+            let log = self.0.clone();
+            let name = event.as_str().to_string();
+            r.subscribe(
+                event.clone(),
+                Box::new(move |_, params, out| {
+                    let extra = params
+                        .get(quireink_sdk::http_params::STATUS)
+                        .or(params.get(quireink_sdk::builtin::params::REASON))
+                        .unwrap_or_default();
+                    log.borrow_mut().push(alloc::format!("{name} {extra}"));
+                    if event == events::NETWORK_WANTED {
+                        out.push(Command::Wifi(quireink_sdk::wifi::WifiCommand::On));
+                    }
+                }),
+            )?;
+        }
+        Ok(())
+    }
+}
+
+fn wifi_kernel(log: &Log) -> Kernel {
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(NetPlugin(log.clone()))
+        .wifi(true)
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    kernel
+}
+
+fn get(kernel: &mut Kernel) {
+    kernel.request(quireink_sdk::HttpRequest::new(
+        "GET",
+        "http://example.org/",
+        Id::new_static("net.reply"),
+    ));
+    kernel.finish();
+}
+
+#[test]
+fn network_work_waits_for_wifi_and_goes_on_once_online() {
+    use crate::{WifiCommand, WifiEvent, WifiState};
+    let log = log();
+    let mut kernel = wifi_kernel(&log);
+    assert!(kernel.shared.env(Instant(0)).network);
+    assert_eq!(
+        kernel.shared.env(Instant(0)).wifi.unwrap().state,
+        WifiState::Off
+    );
+    get(&mut kernel);
+    // Held while offline; plugins hear it once, and ask for the radio.
+    assert!(kernel.take_requests().is_empty());
+    assert_eq!(log.borrow().as_slice(), ["core.network-wanted "]);
+    assert_eq!(kernel.take_wifi_calls(), [WifiCommand::On]);
+    assert!(kernel.shared.wifi.as_ref().unwrap().wanted);
+    get(&mut kernel);
+    assert_eq!(log.borrow().len(), 1);
+    // Online: both go to the shell.
+    let online = WifiState::Online {
+        ssid: String::from("Home"),
+        address: String::from("10.0.0.2"),
+    };
+    kernel.wifi_event(Instant(10), WifiEvent::State(online));
+    let calls = kernel.take_requests();
+    assert_eq!(calls.len(), 2);
+    assert!(!kernel.shared.wifi.as_ref().unwrap().wanted);
+    // Answered: nothing uses the network any more.
+    for call in calls {
+        kernel.http_response(
+            Instant(20),
+            crate::HttpResponse {
+                id: call.id,
+                status: 200,
+                ..Default::default()
+            },
+        );
+    }
+    assert_eq!(
+        log.borrow().as_slice(),
+        [
+            "core.network-wanted ",
+            "core.wifi-changed ",
+            "net.reply 200",
+            "net.reply 200",
+            "core.network-idle "
+        ]
+    );
+}
+
+#[test]
+fn network_work_fails_when_no_network_comes() {
+    let log = log();
+    let mut kernel = wifi_kernel(&log);
+    get(&mut kernel);
+    let deadline = Instant(quireink_sdk::wifi::NETWORK_WAIT_MS);
+    assert_eq!(kernel.finish().wake_at(), Some(deadline));
+    kernel.tick(Instant(1000));
+    assert_eq!(log.borrow().len(), 1);
+    kernel.tick(deadline);
+    // Failed as without a network; then nothing uses it (the radio asked
+    // for may go off again).
+    assert_eq!(
+        log.borrow().as_slice(),
+        ["core.network-wanted ", "net.reply 0", "core.network-idle "]
+    );
+    assert!(kernel.take_requests().is_empty());
+    assert_eq!(kernel.finish().wake_at(), None);
+}
+
+#[test]
+fn scans_and_failures_reach_plugins() {
+    use crate::{JoinFailure, WifiEvent, WifiNetwork};
+    let log = log();
+    let mut kernel = wifi_kernel(&log);
+    let net = |ssid: &str, signal| WifiNetwork {
+        ssid: String::from(ssid),
+        signal,
+        secured: true,
+    };
+    kernel.wifi_event(
+        Instant(1),
+        WifiEvent::Scanned(alloc::vec![
+            net("Weak", -80),
+            net("", -40),
+            net("Home", -50),
+            net("Weak", -60)
+        ]),
+    );
+    // Strongest first, each name once, hidden ones left out.
+    let wifi = kernel.shared.wifi.as_ref().unwrap();
+    let names: Vec<_> = wifi
+        .networks
+        .iter()
+        .map(|n| (n.ssid.as_str(), n.signal))
+        .collect();
+    assert_eq!(names, [("Home", -50), ("Weak", -60)]);
+    kernel.wifi_event(
+        Instant(2),
+        WifiEvent::Failed {
+            ssid: String::from("Home"),
+            reason: JoinFailure::Password,
+        },
+    );
+    assert_eq!(
+        log.borrow().as_slice(),
+        ["core.wifi-scanned ", "core.wifi-failed password"]
+    );
+}
+
+#[test]
+fn wifi_commands_are_ignored_where_the_system_manages_it() {
+    let mut kernel = Kernel::builder(DEVICE).network(true).build().unwrap();
+    kernel.start(Instant(0));
+    assert!(kernel.shared.env(Instant(0)).wifi.is_none());
+    kernel
+        .output
+        .commands
+        .push(Command::Wifi(quireink_sdk::wifi::WifiCommand::On));
+    kernel.finish();
+    assert!(kernel.take_wifi_calls().is_empty());
+    // Requests go to the shell at once.
+    kernel.request(quireink_sdk::HttpRequest::new(
+        "GET",
+        "http://example.org/",
+        Id::new_static("net.reply"),
+    ));
+    assert_eq!(kernel.take_requests().len(), 1);
 }

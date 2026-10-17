@@ -61,6 +61,9 @@ pub enum MenuNeed {
     /// and white ([`settings::TEXT_COLOR`](crate::builtin::settings::TEXT_COLOR)),
     /// hidden elsewhere.
     Colors,
+    /// A device where QuireInk manages Wi-Fi itself
+    /// ([`Env::wifi`](crate::Env)), hidden elsewhere.
+    Wifi,
 }
 
 /// One entry of a resolved menu.
@@ -98,6 +101,7 @@ pub struct Menus {
     tints: bool,
     /// Buttons lie in a row below the screen.
     button_row: bool,
+    wifi: bool,
 }
 
 impl Menus {
@@ -150,6 +154,12 @@ impl Menus {
         self.tints = tints;
     }
 
+    /// Whether QuireInk manages Wi-Fi here, for entries that need it
+    /// ([`MenuNeed::Wifi`]).
+    pub fn set_wifi(&mut self, wifi: bool) {
+        self.wifi = wifi;
+    }
+
     /// Offers `item` only where `need` is met.
     pub fn set_need(&mut self, item: Id, need: MenuNeed) {
         self.needs.insert(item, need);
@@ -178,6 +188,7 @@ impl Menus {
             Some(MenuNeed::Rotation) => self.turns,
             Some(MenuNeed::Colors) => self.tints,
             Some(MenuNeed::ButtonRow) => self.button_row,
+            Some(MenuNeed::Wifi) => self.wifi,
             Some(MenuNeed::NoTouch) => listed || !self.touch,
             None => true,
         }

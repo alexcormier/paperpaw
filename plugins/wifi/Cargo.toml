@@ -1,0 +1,17 @@
+[package]
+name = "quireink-plugin-wifi"
+description = "QuireInk Wi-Fi: joins networks when needed, switches the radio off after, and the page to choose networks"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+categories = ["no-std"]
+
+[dependencies]
+quireink-sdk.workspace = true
+
+[lints]
+workspace = true

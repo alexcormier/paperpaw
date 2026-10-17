@@ -61,6 +61,11 @@ python tools/x4-remote.py --script "page-forward,right,describe" --screenshot ou
 
 - The screen (black and white, fast and full refreshes), the seven
   buttons, the battery, the SD card with long file names, sleep (the
-  power button switches it off and on again, where it was).
-- To come: Wi-Fi (time, sync, transfers), lighter sleep between button
-  reads, 4 gray levels, the UC8179 controller of newer X4s.
+  power button switches it off and on again, where it was), light sleep
+  between button reads on battery.
+- Wi-Fi (ADR 0016): on when something needs the network, chosen on the
+  Wi-Fi page in the settings; plain HTTP for plugins, downloads straight
+  to the card.
+- To come: HTTPS, plugins' servers and sockets (transfers, Calibre),
+  the time over the network, updates over the air, 4 gray levels, the
+  UC8179 controller of newer X4s.

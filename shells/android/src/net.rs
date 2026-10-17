@@ -44,6 +44,13 @@ impl Net {
         });
     }
 
+    /// Answers a request without making it (e.g. its file to send is
+    /// missing), with the others.
+    pub fn answer(&self, response: HttpResponse) {
+        let _ = self.sender.send(response);
+        self.waker.wake();
+    }
+
     /// An answer that has arrived, if any.
     pub fn next(&self) -> Option<HttpResponse> {
         self.receiver.try_recv().ok()

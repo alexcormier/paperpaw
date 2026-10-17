@@ -510,7 +510,13 @@ fn install_samples(app: &AndroidApp, root: &Path) {
 /// Executes the effects of a kernel call; `true` if the screen changed.
 fn apply(state: &mut Running, effects: Effects) -> bool {
     state.wake_at = effects.wake_at();
-    for call in state.kernel.take_requests() {
+    for mut call in state.kernel.take_requests() {
+        if let Err(e) = call.load_body(state.kernel.storage()) {
+            let failed = quireink_core::HttpResponse::failed(call.id, &e.to_string());
+            // Answered on the next round, like the network's answers.
+            state.net.answer(failed);
+            continue;
+        }
         state.net.start(call);
     }
     if let Some(text) = state.kernel.take_clipboard() {

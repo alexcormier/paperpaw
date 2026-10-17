@@ -36,6 +36,8 @@ pub struct Device {
     /// Plugins' servers.
     pub servers: quireink_serve::Servers,
     pub sockets: quireink_serve::Sockets,
+    /// The pretend radio, where the profile's device manages Wi-Fi.
+    wifi: crate::wifi::Wifi,
     /// The texts being spoken (emulated), in order: number and when each
     /// ends.
     /// Sleeping (see `Effects::sleep`): only the power button wakes it.
@@ -84,6 +86,7 @@ impl Device {
             http: crate::http::Http::new(),
             servers: quireink_serve::Servers::new(|| {}),
             sockets: quireink_serve::Sockets::new(|| {}),
+            wifi: crate::wifi::Wifi::default(),
             speech: std::collections::VecDeque::new(),
             asleep: false,
             rotation,
@@ -205,10 +208,10 @@ impl Device {
     /// of speech.
     pub fn next_wake(&self) -> Option<Instant> {
         let speech = self.speech.front().map(|&(_, end)| end);
-        match (self.wake_at, speech) {
-            (Some(a), Some(b)) => Some(a.min(b)),
-            (a, b) => a.or(b),
-        }
+        [self.wake_at, speech, self.wifi.next_due()]
+            .into_iter()
+            .flatten()
+            .min()
     }
 
     /// Ticks the kernel if a requested wake-up is due.
@@ -219,6 +222,10 @@ impl Device {
         self.poll_http(None);
         self.poll_servers();
         let now = self.now();
+        while let Some(event) = self.wifi.take_due(now) {
+            let effects = budget::track(|| self.kernel.wifi_event(now, event));
+            self.execute(effects);
+        }
         while let Some(&(id, end)) = self.speech.front()
             && end <= now
         {
@@ -255,7 +262,14 @@ impl Device {
             let effects = budget::track(|| self.kernel.suspend(now));
             self.execute(effects);
         }
-        for call in self.kernel.take_requests() {
+        for mut call in self.kernel.take_requests() {
+            if let Err(e) = call.load_body(self.kernel.storage()) {
+                let now = self.now();
+                let failed = quireink_core::HttpResponse::failed(call.id, &e.to_string());
+                let effects = budget::track(|| self.kernel.http_response(now, failed));
+                self.execute(effects);
+                continue;
+            }
             self.http.start(call);
         }
         for call in self.kernel.take_server_calls() {
@@ -266,6 +280,10 @@ impl Device {
         }
         for call in self.kernel.take_speech() {
             self.speak(call);
+        }
+        let now = self.now();
+        for call in self.kernel.take_wifi_calls() {
+            self.wifi.apply(call, now);
         }
         self.report_warnings();
         // Turned: the same screens, made anew for the turned size.
@@ -386,6 +404,7 @@ fn build_kernel(
             .clock(micros)
             .glyph_cache(profile.glyph_cache)
             .network(true)
+            .wifi(profile.wifi)
             .speech(profile.speech)
             .sleep(profile.sleep)
             .button_row(profile.button_row)

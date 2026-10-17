@@ -4,6 +4,9 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 
+use quireink_platform::{Storage, StorageError};
+use quireink_sdk::wifi::{JoinFailure, WifiNetwork, WifiState};
+
 /// A request for the shell to make, e.g. on a background thread.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HttpCall {
@@ -14,6 +17,10 @@ pub struct HttpCall {
     pub url: String,
     pub headers: Vec<(String, String)>,
     pub body: Option<Vec<u8>>,
+    /// A file in storage to send as the body instead of `body` (e.g. a
+    /// database to upload): the shell reads it, in parts where it can, so
+    /// it never needs to fit in memory.
+    pub body_from: Option<String>,
     /// The longest response body wanted; shells cut longer ones.
     pub max_response: usize,
     /// The file in storage the body is for, if it is one (e.g. a
@@ -21,6 +28,28 @@ pub struct HttpCall {
     /// too large for memory, and say so with [`HttpResponse::saved`];
     /// otherwise the kernel writes the body it gets.
     pub save_to: Option<String>,
+}
+
+impl HttpCall {
+    /// Reads [`body_from`](Self::body_from) into `body`, for shells with
+    /// memory to spare (others send the file in parts).
+    pub fn load_body(&mut self, storage: &dyn Storage) -> Result<(), StorageError> {
+        if let Some(path) = self.body_from.take() {
+            let size = storage.size(&path)?;
+            let mut body = alloc::vec![0; usize::try_from(size).unwrap_or(usize::MAX)];
+            let mut at = 0;
+            while at < body.len() {
+                let n = storage.read_at(&path, at as u64, &mut body[at..])?;
+                if n == 0 {
+                    break;
+                }
+                at += n;
+            }
+            body.truncate(at);
+            self.body = Some(body);
+        }
+        Ok(())
+    }
 }
 
 /// What came back. `status` 0 means the request failed (no network, no
@@ -39,6 +68,31 @@ pub struct HttpResponse {
     /// The body was written to [`HttpCall::save_to`] by the shell (and
     /// is not in `body`).
     pub saved: bool,
+}
+
+impl HttpResponse {
+    /// The answer of a request that failed (status 0), and why.
+    pub fn failed(id: u32, reason: &str) -> Self {
+        Self {
+            id,
+            status: 0,
+            body: reason.as_bytes().to_vec(),
+            ..Self::default()
+        }
+    }
+}
+
+/// What a shell tells about Wi-Fi, where QuireInk manages it (see
+/// `Kernel::wifi_event` and `quireink_sdk::wifi`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum WifiEvent {
+    /// Where the radio is now.
+    State(WifiState),
+    /// The networks a scan found, in any order.
+    Scanned(Vec<WifiNetwork>),
+    /// Joining network `ssid` failed (the state says where the radio is
+    /// now).
+    Failed { ssid: String, reason: JoinFailure },
 }
 
 /// What a shell does for plugins' servers (see `Kernel::take_server_calls`).

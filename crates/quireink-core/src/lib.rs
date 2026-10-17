@@ -78,12 +78,14 @@ use crate::core_plugin::{CORE, CorePlugin};
 use crate::input::{Recognized, Recognizer, Thresholds};
 use crate::keymap::{InputKey, Keymap, Origin, Zone};
 pub use crate::net::{
-    HttpCall, HttpResponse, MAX_FILE, MAX_RESPONSE, ServedFile, ServerCall, ServerEvent, SpeechCall,
+    HttpCall, HttpResponse, MAX_FILE, MAX_RESPONSE, ServedFile, ServerCall, ServerEvent,
+    SpeechCall, WifiEvent,
 };
 use crate::refresh::RefreshPolicy;
 use crate::registry::{PluginRegistrar, Registry, Staging};
 pub use crate::sockets::{SOCKET_PART, SocketCall, SocketEvent};
 use quireink_sdk::filters::InputVerdict;
+pub use quireink_sdk::wifi::{JoinFailure, WifiCommand, WifiNetwork, WifiState};
 
 pub use quireink_sdk as sdk;
 
@@ -220,6 +222,7 @@ pub struct KernelBuilder {
     user_config: Option<String>,
     glyph_cache: usize,
     network: bool,
+    wifi: bool,
     system_clipboard: bool,
     speech: bool,
     sleep: bool,
@@ -318,6 +321,15 @@ impl KernelBuilder {
 
     /// The shell makes HTTP requests (see [`Kernel::take_requests`]);
     /// without, plugins' requests fail at once.
+    /// QuireInk manages Wi-Fi itself on this device (the shell answers
+    /// [`Kernel::take_wifi_calls`] and reports with [`Kernel::wifi_event`]);
+    /// it implies [`network`](Self::network). See [`quireink_sdk::wifi`].
+    pub fn wifi(mut self, managed: bool) -> Self {
+        self.wifi = managed;
+        self.network |= managed;
+        self
+    }
+
     pub fn network(mut self, available: bool) -> Self {
         self.network = available;
         self
@@ -428,6 +440,7 @@ impl KernelBuilder {
                 refresh_filters: quireink_sdk::filters::RefreshFilters::new(),
                 stylesheets: Vec::new(),
                 network: self.network,
+                wifi: self.wifi.then(quireink_sdk::wifi::Wifi::default),
                 clipboard: String::new(),
                 system_clipboard: false,
                 speech: self.speech,
@@ -486,6 +499,9 @@ impl KernelBuilder {
             next_speech: 0,
             awaiting: Vec::new(),
             next_request: 0,
+            wifi_calls: Vec::new(),
+            network_waiting: None,
+            network_busy: false,
             plugin_defaults: Vec::new(),
             now: Instant::default(),
         };
@@ -494,6 +510,7 @@ impl KernelBuilder {
         kernel.shared.menus.set_sleep(kernel.shared.sleep);
         kernel.shared.menus.set_rotation(self.rotation);
         kernel.shared.menus.set_colors(self.colors);
+        kernel.shared.menus.set_wifi(kernel.shared.wifi.is_some());
         kernel
             .shared
             .menus
@@ -787,6 +804,12 @@ pub struct Kernel {
     /// and where to save the body.
     awaiting: Vec<(u32, Id, Params, Option<String>)>,
     next_request: u32,
+    /// What the shell is to do with the radio (see [`Kernel::take_wifi_calls`]).
+    wifi_calls: Vec<WifiCommand>,
+    /// Since when plugins' network work has waited for a network.
+    network_waiting: Option<Instant>,
+    /// Something used the network at the end of the last call.
+    network_busy: bool,
     /// Setting defaults from plugins, applied once all are registered:
     /// `(plugin, setting, value)`.
     plugin_defaults: Vec<(Id, Id, Cow<'static, str>)>,
@@ -816,6 +839,7 @@ impl Kernel {
             user_config: None,
             glyph_cache: DEFAULT_GLYPH_CACHE,
             network: false,
+            wifi: false,
             system_clipboard: false,
             speech: false,
             sleep: false,
@@ -1076,6 +1100,9 @@ impl Kernel {
                     .commands
                     .push(Command::RunAction(quireink_sdk::builtin::actions::SLEEP));
             }
+        }
+        if self.network_deadline().is_some_and(|at| at <= now) {
+            self.fail_waiting_network();
         }
         let thresholds = self.thresholds();
         for recognized in self.recognizer.tick(now, &thresholds) {
@@ -1589,6 +1616,9 @@ impl Kernel {
     /// (report with [`Kernel::server_event`]). Check after every kernel
     /// call.
     pub fn take_server_calls(&mut self) -> Vec<ServerCall> {
+        if !self.network_ready() {
+            return Vec::new();
+        }
         mem::take(&mut self.server_calls)
     }
 
@@ -1693,6 +1723,9 @@ impl Kernel {
     /// Returns the HTTP requests to make; answer each with
     /// [`Kernel::http_response`]. Check after every kernel call.
     pub fn take_requests(&mut self) -> Vec<HttpCall> {
+        if !self.network_ready() {
+            return Vec::new();
+        }
         mem::take(&mut self.requests)
     }
 
@@ -1700,6 +1733,12 @@ impl Kernel {
     pub fn http_response(&mut self, now: Instant, response: HttpResponse) -> Effects {
         let _running = self.shared.meter.enter(meter::CORE);
         self.now = now;
+        self.answer_request(response);
+        self.finish()
+    }
+
+    /// Turns a request's answer into the plugin's event.
+    fn answer_request(&mut self, response: HttpResponse) {
         if let Some(at) = self.awaiting.iter().position(|(id, ..)| *id == response.id) {
             let (_, reply, params, save_to) = self.awaiting.remove(at);
             let mut status = format!("{}", response.status);
@@ -1730,14 +1769,165 @@ impl Kernel {
             }
             self.output.commands.push(Command::Emit(reply, params));
         }
-        self.finish()
     }
 
     /// What to do for plugins' sockets: connect, send, read, close,
     /// broadcast (report with [`Kernel::socket_event`]). Check after every
     /// kernel call.
     pub fn take_socket_calls(&mut self) -> Vec<SocketCall> {
+        if !self.network_ready() {
+            return Vec::new();
+        }
         mem::take(&mut self.sockets.calls)
+    }
+
+    /// What to do with the radio, where QuireInk manages Wi-Fi
+    /// ([`KernelBuilder::wifi`]); report with [`Kernel::wifi_event`].
+    /// Check after every kernel call.
+    pub fn take_wifi_calls(&mut self) -> Vec<WifiCommand> {
+        mem::take(&mut self.wifi_calls)
+    }
+
+    /// What happened with Wi-Fi: plugins hear of it, and network work that
+    /// waited goes on once there is a network.
+    pub fn wifi_event(&mut self, now: Instant, event: WifiEvent) -> Effects {
+        let _running = self.shared.meter.enter(meter::CORE);
+        self.now = now;
+        let Some(wifi) = &mut self.shared.wifi else {
+            return self.finish();
+        };
+        match event {
+            WifiEvent::State(state) => {
+                if state != wifi.state {
+                    if !state.is_on() {
+                        wifi.scanning = false;
+                    }
+                    wifi.state = state;
+                    self.output
+                        .commands
+                        .push(Command::Emit(events::WIFI_CHANGED, Params::new()));
+                }
+            }
+            WifiEvent::Scanned(mut networks) => {
+                // Strongest first, each name once (several access points
+                // may carry one network).
+                networks.sort_by_key(|n| core::cmp::Reverse(n.signal));
+                let mut seen: Vec<String> = Vec::new();
+                networks.retain(|n| {
+                    let new = !n.ssid.is_empty() && !seen.contains(&n.ssid);
+                    if new {
+                        seen.push(n.ssid.clone());
+                    }
+                    new
+                });
+                wifi.networks = networks;
+                wifi.scanning = false;
+                self.output
+                    .commands
+                    .push(Command::Emit(events::WIFI_SCANNED, Params::new()));
+            }
+            WifiEvent::Failed { ssid, reason } => {
+                let params = Params::new()
+                    .with(quireink_sdk::builtin::params::ID, ssid)
+                    .with(quireink_sdk::builtin::params::REASON, reason.as_str());
+                self.output
+                    .commands
+                    .push(Command::Emit(events::WIFI_FAILED, params));
+            }
+        }
+        self.finish()
+    }
+
+    /// Plugins' network work may go to the shell: there is a network, or
+    /// the system manages it.
+    fn network_ready(&self) -> bool {
+        self.shared
+            .wifi
+            .as_ref()
+            .is_none_or(|wifi| wifi.state.is_online())
+    }
+
+    /// Network work waiting for the shell (requests, servers, sockets).
+    fn network_work_waiting(&self) -> bool {
+        !self.requests.is_empty() || !self.server_calls.is_empty() || !self.sockets.calls.is_empty()
+    }
+
+    /// After every call, where QuireInk manages Wi-Fi: tells plugins that
+    /// work waits for a network ([`events::NETWORK_WANTED`]) or that
+    /// nothing uses it any more ([`events::NETWORK_IDLE`]).
+    fn check_network(&mut self) {
+        let work = self.network_work_waiting();
+        let Some(wifi) = &mut self.shared.wifi else {
+            return;
+        };
+        let waiting = work && !wifi.state.is_online();
+        match (waiting, self.network_waiting) {
+            (true, None) => {
+                self.network_waiting = Some(self.now);
+                wifi.wanted = true;
+                self.output
+                    .commands
+                    .push(Command::Emit(events::NETWORK_WANTED, Params::new()));
+            }
+            (false, Some(_)) => {
+                self.network_waiting = None;
+                wifi.wanted = false;
+            }
+            _ => {}
+        }
+        let busy = !self.awaiting.is_empty() || !self.servers.is_empty() || self.sockets.any();
+        wifi.busy = busy;
+        if self.network_busy && !busy {
+            self.output
+                .commands
+                .push(Command::Emit(events::NETWORK_IDLE, Params::new()));
+        }
+        self.network_busy = busy;
+    }
+
+    /// When network work that waits fails, if it does not get one first.
+    fn network_deadline(&self) -> Option<Instant> {
+        self.network_waiting
+            .map(|since| since.add_millis(quireink_sdk::wifi::NETWORK_WAIT_MS))
+    }
+
+    /// Fails the network work that waited too long, as without a network.
+    fn fail_waiting_network(&mut self) {
+        const REASON: &str = "no network";
+        for call in mem::take(&mut self.requests) {
+            self.answer_request(HttpResponse {
+                id: call.id,
+                status: 0,
+                body: REASON.as_bytes().to_vec(),
+                ..HttpResponse::default()
+            });
+        }
+        if !mem::take(&mut self.server_calls).is_empty() {
+            use quireink_sdk::server_params as p;
+            for (_, id, events, _) in mem::take(&mut self.servers) {
+                let params = Params::new()
+                    .with(quireink_sdk::builtin::params::ID, id.as_str().to_string())
+                    .with(p::KIND, p::FAILED)
+                    .with(p::REASON, REASON);
+                self.output.commands.push(Command::Emit(events, params));
+            }
+        }
+        let mut out = Vec::new();
+        for call in mem::take(&mut self.sockets.calls) {
+            let event = match call {
+                SocketCall::Connect { socket, .. }
+                | SocketCall::Send { socket, .. }
+                | SocketCall::Read { socket, .. }
+                | SocketCall::Close { socket } => SocketEvent::Failed {
+                    socket,
+                    reason: String::from(REASON),
+                },
+                SocketCall::Broadcast { broadcast, .. } => SocketEvent::Done { broadcast },
+            };
+            self.sockets.event(event, &*self.shared.storage, &mut out);
+        }
+        self.output.commands.extend(out);
+        self.network_waiting = None;
     }
 
     /// Whether plugins have sockets or broadcasts open, e.g. to keep
@@ -2461,6 +2651,7 @@ impl Kernel {
         self.shared.meter.snapshot(&mut self.shared.usage.plugins);
         // A screen that set a scope may have closed.
         self.check_scope_owner();
+        self.check_network();
         self.run_commands();
         if let Some(row) = self.hint_row() {
             let hints = self.current_hints();
@@ -2531,6 +2722,7 @@ impl Kernel {
             scheduled,
             self.sleep_due(),
             shot,
+            self.network_deadline(),
         ]
         .into_iter()
         .flatten()
@@ -2610,6 +2802,19 @@ impl Kernel {
             Command::Restart => self.restart = true,
             Command::Sleep => self.sleep = self.shared.sleep,
             Command::SetSecret(change) => self.set_secret(change),
+            Command::Wifi(command) => match &mut self.shared.wifi {
+                Some(wifi) => {
+                    if command == WifiCommand::Scan {
+                        wifi.scanning = true;
+                    }
+                    self.wifi_calls.push(command);
+                }
+                None => self.warn(
+                    WarningSource::Runtime,
+                    None,
+                    String::from("Wi-Fi is not managed by QuireInk on this device"),
+                ),
+            },
             Command::Screenshot(path) => {
                 // The whole screen is drawn anew, and saved as it is.
                 self.screenshot = Some(path);
@@ -3165,22 +3370,21 @@ impl Kernel {
                 .push(Command::Emit(request.reply, params));
             return;
         }
-        let body = match &request.body_from {
-            Some(path) => {
-                match quireink_sdk::read_file(self.shared.storage.as_ref(), path, MAX_FILE) {
-                    Ok(data) => Some(data),
-                    Err(e) => {
-                        let params = request
-                            .params
-                            .with(quireink_sdk::http_params::STATUS, "0")
-                            .with(quireink_sdk::http_params::BODY, format!("{e}"));
-                        self.output
-                            .commands
-                            .push(Command::Emit(request.reply, params));
-                        return;
-                    }
-                }
-            }
+        // A file to send must be there; the shell reads it.
+        if let Some(path) = &request.body_from
+            && let Err(e) = self.shared.storage.size(path)
+        {
+            let params = request
+                .params
+                .with(quireink_sdk::http_params::STATUS, "0")
+                .with(quireink_sdk::http_params::BODY, format!("{e}"));
+            self.output
+                .commands
+                .push(Command::Emit(request.reply, params));
+            return;
+        }
+        let body = match request.body_from {
+            Some(_) => None,
             None => request.body.map(String::into_bytes),
         };
         self.next_request = self.next_request.wrapping_add(1);
@@ -3196,6 +3400,7 @@ impl Kernel {
             url: request.url,
             headers: request.headers,
             body,
+            body_from: request.body_from,
             max_response,
             save_to: request.save_to.clone(),
         });
@@ -3515,6 +3720,8 @@ struct Shared {
     /// Plugins' stylesheets for books.
     stylesheets: Vec<Cow<'static, str>>,
     network: bool,
+    /// Wi-Fi, where QuireInk manages it (see [`KernelBuilder::wifi`]).
+    wifi: Option<quireink_sdk::wifi::Wifi>,
     /// Text copied here.
     clipboard: String,
     /// The system's clipboard has text (see
@@ -3560,6 +3767,7 @@ impl Shared {
             text_filters: &self.text_filters,
             stylesheets: &self.stylesheets,
             network: self.network,
+            wifi: self.wifi.as_ref(),
             clipboard: self.system_clipboard || !self.clipboard.is_empty(),
             speech: self.speech,
             sleep: self.sleep,

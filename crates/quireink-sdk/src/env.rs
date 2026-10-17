@@ -49,9 +49,14 @@ pub struct Env<'a> {
     pub services: &'a crate::services::Services,
     /// What buttons, taps and swipes do (see [`keys`](crate::keys)).
     pub keys: &'a dyn crate::keys::KeyBindings,
-    /// Whether the device can make HTTP requests
-    /// ([`Command::Http`](crate::Command::Http)).
+    /// Whether the device can reach the network: make HTTP requests
+    /// ([`Command::Http`](crate::Command::Http)), serve and connect. Not
+    /// whether it is connected now: where QuireInk manages Wi-Fi
+    /// ([`wifi`](Self::wifi)), work waits for a network a while.
     pub network: bool,
+    /// Wi-Fi, where QuireInk manages it itself (see
+    /// [`wifi`](crate::wifi)); `None` where the system does.
+    pub wifi: Option<&'a crate::wifi::Wifi>,
     /// Whether there is text on the clipboard, copied here
     /// ([`Command::SetClipboard`](crate::Command::SetClipboard)) or, where
     /// the system has a clipboard, in another app; read it with

@@ -258,6 +258,7 @@ impl Plugin for Stats {
             id: GROUP,
             title: Cow::Borrowed("stats.group"),
             order: 25,
+            page: None,
         })?;
         r.add_icon(GROUP, Cow::Borrowed("chart-bar"))?;
         let seconds = |id, title: &'static str, (min, max, default), step| {

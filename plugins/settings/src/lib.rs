@@ -420,10 +420,19 @@ impl GroupList {
 
     fn choose(&self, index: usize, cx: &mut Cx<'_, '_>) {
         match self.entries.get(index).and_then(|e| e.link.as_ref()) {
-            Some(Link::Group(id)) => cx.command(Command::OpenScreen(
-                GROUP_SCREEN,
-                Params::new().with(ID, id.as_str().to_string()),
-            )),
+            Some(Link::Group(id)) => {
+                // The group's own page, if its plugin brings one.
+                let page = cx
+                    .env()
+                    .settings
+                    .groups()
+                    .find(|g| g.id == *id)
+                    .and_then(|g| g.page.clone());
+                cx.command(Command::OpenScreen(
+                    page.unwrap_or(GROUP_SCREEN),
+                    Params::new().with(ID, id.as_str().to_string()),
+                ));
+            }
             Some(Link::Page(action)) => cx.command(Command::RunAction(action.clone())),
             Some(Link::Advanced) => {
                 let advanced = cx.env().settings.bool(ADVANCED.as_str());

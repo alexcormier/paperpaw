@@ -204,6 +204,7 @@ pub fn settings_group(widget: &Id, title: impl Into<Cow<'static, str>>) -> Setti
         id: widget.clone(),
         title: title.into(),
         order: 0,
+        page: None,
     }
 }
 

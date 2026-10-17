@@ -39,6 +39,7 @@ members = [
     "plugins/calibre",
     "plugins/stats",
     "plugins/battery",
+    "plugins/wifi",
     "plugins/file-manager",
     "plugins/transfer",
     "plugins/browser",
@@ -107,6 +108,7 @@ quireink-plugin-kosync = { path = "plugins/kosync", version = "0.3.0" }
 quireink-plugin-calibre = { path = "plugins/calibre", version = "0.3.0" }
 quireink-plugin-stats = { path = "plugins/stats", version = "0.3.0" }
 quireink-plugin-battery = { path = "plugins/battery", version = "0.3.0" }
+quireink-plugin-wifi = { path = "plugins/wifi", version = "0.3.0" }
 quireink-plugin-file-manager = { path = "plugins/file-manager", version = "0.3.0" }
 quireink-plugin-transfer = { path = "plugins/transfer", version = "0.3.0" }
 quireink-plugin-browser = { path = "plugins/browser", version = "0.3.0" }

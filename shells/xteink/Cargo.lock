@@ -1328,6 +1328,7 @@ dependencies = [
  "quireink-plugin-translate",
  "quireink-plugin-vocabulary",
  "quireink-plugin-wallabag",
+ "quireink-plugin-wifi",
  "quireink-plugin-wikipedia",
 ]
 
@@ -1660,6 +1661,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "quireink-plugin-wifi"
+version = "0.3.0"
+dependencies = [
+ "quireink-sdk",
+]
+
+[[package]]
 name = "quireink-plugin-wikipedia"
 version = "0.3.0"
 dependencies = [
@@ -1742,6 +1750,8 @@ dependencies = [
  "quireink-fat",
  "quireink-http",
  "quireink-platform",
+ "quireink-plugin-reader",
+ "quireink-plugin-wifi",
  "quireink-sdk",
  "quireink-x4",
  "smoltcp",
