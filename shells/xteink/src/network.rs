@@ -15,9 +15,37 @@ use quireink_core::{
 };
 use quireink_platform::Instant;
 
+use smoltcp::iface::SocketHandle;
+use smoltcp::socket::dns;
+
+use crate::clock;
 use crate::http::Calls;
+use crate::net::{Net, Resolve};
 use crate::remote;
 use crate::wifi::{Parts, Radio};
+
+/// How often the clock is set again while online, and how long to wait
+/// after a failed try.
+const RESYNC_MS: u64 = 12 * 60 * 60 * 1000;
+const RETRY_MS: u64 = 60_000;
+/// How long an answer is waited for.
+const ASK_MS: u64 = 5_000;
+
+/// Setting the clock over the network (SNTP).
+enum Sync {
+    /// Nothing going on; the next try not before this time.
+    Idle {
+        not_before: u64,
+    },
+    Resolving {
+        query: dns::QueryHandle,
+        until: u64,
+    },
+    Asking {
+        socket: SocketHandle,
+        until: u64,
+    },
+}
 
 /// Why plugins' servers and sockets fail here.
 const NO_SOCKETS: &str = "not supported on this device yet";
@@ -58,6 +86,12 @@ pub struct Network {
     radio: Radio,
     calls: Calls,
     asked: Asked,
+    sync: Sync,
+    /// When the clock was last set over the network.
+    synced: Option<u64>,
+    /// A try to set the clock failed since the radio came online: secure
+    /// requests no longer wait for it.
+    sync_failed: bool,
 }
 
 impl Network {
@@ -66,6 +100,9 @@ impl Network {
             radio: Radio::new(parts),
             calls: Calls::default(),
             asked: Asked::default(),
+            sync: Sync::Idle { not_before: 0 },
+            synced: None,
+            sync_failed: false,
         }
     }
 
@@ -108,8 +145,15 @@ impl Network {
             };
             effects.push(kernel.socket_event(now, event));
         }
+        self.sync_clock(now);
         if self.calls.busy() {
-            for answer in self.calls.poll(self.radio.net(), kernel.storage()) {
+            // Secure requests wait for the clock (their certificates' dates
+            // are checked against it), unless it cannot be had.
+            let clock_ready = clock::unix_ms(now).is_some() || self.sync_failed;
+            for answer in self
+                .calls
+                .poll(self.radio.net(), kernel.storage(), clock_ready)
+            {
                 if answer.id >= REMOTE_REQUESTS {
                     let asked = self
                         .asked
@@ -124,6 +168,69 @@ impl Network {
             }
         }
         effects
+    }
+
+    /// Sets the clock over the network when it is not known or old, once
+    /// the radio is online; a step at a time, never waiting.
+    fn sync_clock(&mut self, now: Instant) {
+        let ms = now.0;
+        let Some(net) = self.radio.net() else {
+            // Offline: whatever went on is gone with the network.
+            self.sync = Sync::Idle { not_before: 0 };
+            self.sync_failed = false;
+            return;
+        };
+        let due = clock::unix_ms(now).is_none()
+            || self
+                .synced
+                .is_none_or(|at| ms.saturating_sub(at) >= RESYNC_MS);
+        self.sync = match core::mem::replace(&mut self.sync, Sync::Idle { not_before: 0 }) {
+            Sync::Idle { not_before } if !due || ms < not_before => Sync::Idle { not_before },
+            Sync::Idle { .. } => match net.resolve(clock::SERVER) {
+                Ok(Resolve::Done(address)) => ask(net, address, ms),
+                Ok(Resolve::Asking(query)) => Sync::Resolving {
+                    query,
+                    until: ms + ASK_MS,
+                },
+                Err(_) => self.sync_failed(ms),
+            },
+            Sync::Resolving { query, until } => match net.resolved(query) {
+                Some(Ok(address)) => ask(net, address, ms),
+                Some(Err(_)) => self.sync_failed(ms),
+                None if ms > until => {
+                    net.forget(query);
+                    self.sync_failed(ms)
+                }
+                None => Sync::Resolving { query, until },
+            },
+            Sync::Asking { socket, until } => {
+                let udp = net.udp(socket);
+                let mut time = None;
+                while let Ok((data, _)) = udp.recv() {
+                    time = time.or(clock::answer(data));
+                }
+                if let Some(unix_ms) = time {
+                    net.release_udp(socket);
+                    clock::set(now, unix_ms);
+                    self.synced = Some(ms);
+                    log::info!("clock: set over the network");
+                    Sync::Idle { not_before: 0 }
+                } else if ms > until {
+                    net.release_udp(socket);
+                    self.sync_failed(ms)
+                } else {
+                    Sync::Asking { socket, until }
+                }
+            }
+        };
+    }
+
+    fn sync_failed(&mut self, ms: u64) -> Sync {
+        log::info!("clock: not set over the network");
+        self.sync_failed = true;
+        Sync::Idle {
+            not_before: ms + RETRY_MS,
+        }
     }
 
     /// What was asked over USB.
@@ -198,5 +305,28 @@ impl Network {
             }
             _ => {}
         }
+    }
+}
+
+/// Sends an SNTP request to `address`.
+fn ask(net: &mut Net, address: smoltcp::wire::IpAddress, ms: u64) -> Sync {
+    let Ok(socket) = net.open_udp() else {
+        return Sync::Idle {
+            not_before: ms + RETRY_MS,
+        };
+    };
+    if net
+        .udp(socket)
+        .send_slice(&clock::request(), (address, clock::PORT))
+        .is_err()
+    {
+        net.release_udp(socket);
+        return Sync::Idle {
+            not_before: ms + RETRY_MS,
+        };
+    }
+    Sync::Asking {
+        socket,
+        until: ms + ASK_MS,
     }
 }

@@ -9,8 +9,8 @@
 //! Certificates: the chain must lead to one of Mozilla's roots
 //! ([`roots`](crate::roots), checked in mbedTLS's verify callback) and be
 //! for the host asked; mbedTLS checks the rest of the chain. Their dates
-//! are not checked yet: the X4 does not know the date until it gets the
-//! time over the network.
+//! are checked in the same callback against the time set over the
+//! network ([`crate::clock`]); secure requests wait for it.
 //!
 //! A session takes about 40 KB of heap (two record buffers of 16 KB,
 //! which TLS needs: a server may send records that long), only while it
@@ -27,13 +27,13 @@ use mbedtls_rs::sys::{
     MBEDTLS_ERR_SSL_RECEIVED_NEW_SESSION_TICKET, MBEDTLS_ERR_SSL_WANT_READ,
     MBEDTLS_ERR_SSL_WANT_WRITE, MBEDTLS_SSL_IS_CLIENT, MBEDTLS_SSL_PRESET_DEFAULT,
     MBEDTLS_SSL_TRANSPORT_STREAM, MBEDTLS_SSL_VERIFY_REQUIRED, MBEDTLS_X509_BADCERT_CN_MISMATCH,
-    MBEDTLS_X509_BADCERT_NOT_TRUSTED, mbedtls_ssl_close_notify, mbedtls_ssl_conf_authmode,
-    mbedtls_ssl_conf_ca_chain, mbedtls_ssl_conf_rng, mbedtls_ssl_conf_verify, mbedtls_ssl_config,
-    mbedtls_ssl_config_defaults, mbedtls_ssl_config_free, mbedtls_ssl_config_init,
-    mbedtls_ssl_context, mbedtls_ssl_free, mbedtls_ssl_get_verify_result, mbedtls_ssl_handshake,
-    mbedtls_ssl_init, mbedtls_ssl_read, mbedtls_ssl_set_bio, mbedtls_ssl_set_hostname,
-    mbedtls_ssl_setup, mbedtls_ssl_write, mbedtls_x509_crt, mbedtls_x509_crt_free,
-    mbedtls_x509_crt_init,
+    MBEDTLS_X509_BADCERT_EXPIRED, MBEDTLS_X509_BADCERT_FUTURE, MBEDTLS_X509_BADCERT_NOT_TRUSTED,
+    mbedtls_ssl_close_notify, mbedtls_ssl_conf_authmode, mbedtls_ssl_conf_ca_chain,
+    mbedtls_ssl_conf_rng, mbedtls_ssl_conf_verify, mbedtls_ssl_config, mbedtls_ssl_config_defaults,
+    mbedtls_ssl_config_free, mbedtls_ssl_config_init, mbedtls_ssl_context, mbedtls_ssl_free,
+    mbedtls_ssl_get_verify_result, mbedtls_ssl_handshake, mbedtls_ssl_init, mbedtls_ssl_read,
+    mbedtls_ssl_set_bio, mbedtls_ssl_set_hostname, mbedtls_ssl_setup, mbedtls_ssl_write,
+    mbedtls_x509_crt, mbedtls_x509_crt_free, mbedtls_x509_crt_init, mbedtls_x509_time,
 };
 
 /// Bytes received and not yet taken by mbedTLS, at most: the socket is
@@ -49,6 +49,8 @@ pub enum Error {
     Untrusted,
     /// The certificate is for another host.
     OtherHost,
+    /// The certificate has expired, or is not valid yet.
+    Dates,
     /// Not enough memory for a session.
     Memory,
     /// Anything else mbedTLS said (its code).
@@ -61,6 +63,7 @@ impl Error {
         match self {
             Error::Untrusted => "the server's certificate is not trusted",
             Error::OtherHost => "the server's certificate is for another host",
+            Error::Dates => "the server's certificate has expired or is not valid yet",
             Error::Memory => "not enough memory for a secure connection",
             Error::Tls(_) => "secure connection failed",
         }
@@ -224,6 +227,7 @@ unsafe extern "C" fn verify(
     }
     // SAFETY: mbedTLS passes a parsed certificate and its flags.
     unsafe {
+        *flags |= dates((*crt).valid_from, (*crt).valid_to);
         if *flags & MBEDTLS_X509_BADCERT_NOT_TRUSTED != 0
             && (crate::roots::is_root(&*crt) || crate::roots::signed(&*crt))
         {
@@ -231,6 +235,31 @@ unsafe extern "C" fn verify(
         }
     }
     0
+}
+
+/// The flags of a certificate valid from `from` to `to`, now (none while
+/// the time is not known: see [`crate::clock`]).
+fn dates(from: mbedtls_x509_time, to: mbedtls_x509_time) -> u32 {
+    let Some(now) = crate::clock::unix_ms(crate::now()).map(|ms| ms / 1000) else {
+        return 0;
+    };
+    let seconds = |t: mbedtls_x509_time| {
+        crate::clock::unix_seconds(
+            t.year,
+            t.mon as u32,
+            t.day as u32,
+            t.hour as u32,
+            t.min as u32,
+            t.sec as u32,
+        )
+    };
+    if now < seconds(from) {
+        MBEDTLS_X509_BADCERT_FUTURE
+    } else if now > seconds(to) {
+        MBEDTLS_X509_BADCERT_EXPIRED
+    } else {
+        0
+    }
 }
 
 /// `Ok` for mbedTLS's results that are not errors; `Err` with the code.
@@ -341,6 +370,9 @@ impl Session {
                     Error::Untrusted
                 } else if flags & MBEDTLS_X509_BADCERT_CN_MISMATCH != 0 {
                     Error::OtherHost
+                } else if flags & (MBEDTLS_X509_BADCERT_EXPIRED | MBEDTLS_X509_BADCERT_FUTURE) != 0
+                {
+                    Error::Dates
                 } else {
                     Error::Tls(code)
                 })

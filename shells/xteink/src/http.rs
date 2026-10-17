@@ -119,7 +119,12 @@ impl Calls {
 
     /// Moves every request on; the answers of those done. `net` is `None`
     /// while the radio is off.
-    pub fn poll(&mut self, mut net: Option<&mut Net>, storage: &dyn Storage) -> Vec<HttpResponse> {
+    pub fn poll(
+        &mut self,
+        mut net: Option<&mut Net>,
+        storage: &dyn Storage,
+        clock_ready: bool,
+    ) -> Vec<HttpResponse> {
         let mut answers = Vec::new();
         let mut at = 0;
         while at < self.calls.len() {
@@ -135,7 +140,8 @@ impl Calls {
                 .count();
             let call = &mut self.calls[at];
             // A TLS connection takes some 40 KB: one at a time.
-            let may_open = open < net::MAX_CALLS && (!call.secure() || secure == 0);
+            let may_open =
+                open < net::MAX_CALLS && (!call.secure() || (secure == 0 && clock_ready));
             let outcome = match net.as_deref_mut() {
                 None => Some(Err("no network")),
                 Some(net) => call.step(net, storage, may_open),

@@ -64,11 +64,13 @@ not checked).
   slowest), a download about 34 KB/s (plain HTTP about 75 KB/s). Untrusted
   roots, self-signed certificates, incomplete chains and certificates for
   another host are refused with a reason for the plugin.
-- **Not yet checked: certificates' dates.** Without a clock an expired or
-  not yet valid certificate is accepted (the chain and the host are still
-  checked). Once the X4 has the time over the network, the verify
-  callback checks the dates of every certificate of the chain itself
-  (`valid_from`, `valid_to`), with no rebuild of mbedTLS needed.
+- Certificates' dates: the X4 has no clock that runs while it is off, so
+  it gets the time over SNTP (`pool.ntp.org`) once online and again every
+  12 hours, and the verify callback checks `valid_from` and `valid_to` of
+  every certificate of the chain against it (no rebuild of mbedTLS
+  needed). Secure requests wait for the time; if it cannot be had (no
+  answer within 5 s), they go ahead with the dates unchecked rather than
+  not at all, and the time is asked for again a minute later.
 - Not checked: revocation (as in most clients without OCSP stapling),
   roots' name constraints (none of Mozilla's TLS roots has any).
 - The firmware grows by about 400 KB of flash; the stack, above `.bss`,

@@ -18,6 +18,7 @@
 extern crate alloc;
 
 mod card;
+mod clock;
 mod crash;
 mod device;
 mod http;
@@ -368,12 +369,12 @@ fn main() -> ! {
                 || sleep_on_usb_until.is_some());
         power::allow(battery);
         let at = now();
-        if status_read.is_none_or(|read| at.since(read) >= STATUS_MS) {
+        if status_read.is_none_or(|read| at.since(read) >= STATUS_MS) || clock::take_changed() {
             power::mark(power::at::STATUS);
             status_read = Some(at);
             let millivolts = input::millivolts();
             let status = SystemStatus {
-                clock: None,
+                clock: clock::wall(at),
                 battery: Some(Battery {
                     percent: battery::percent(millivolts),
                     charging: usb.is_high(),

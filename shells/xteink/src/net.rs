@@ -11,12 +11,14 @@ use embassy_net_driver::Driver;
 use esp_radio::wifi::Interface;
 use smoltcp::iface::{Config, Interface as Stack, SocketHandle, SocketSet};
 use smoltcp::phy::{Device, DeviceCapabilities, Medium};
-use smoltcp::socket::{dhcpv4, dns, tcp};
+use smoltcp::socket::{dhcpv4, dns, tcp, udp};
 use smoltcp::time::Instant;
 use smoltcp::wire::{DnsQueryType, EthernetAddress, HardwareAddress, IpAddress, IpCidr};
 
 /// Without an address this long after joining a network, DHCP asks anew.
 const DHCP_AGAIN_MS: u64 = 10_000;
+/// Bytes of a UDP socket's buffers (one each way).
+const UDP_BUF: usize = 256;
 /// Connections (and name lookups) at a time.
 pub const MAX_CALLS: usize = 2;
 /// Bytes buffered per connection, received and to send.
@@ -248,12 +250,7 @@ impl Net {
             tcp::SocketBuffer::new(zeroed(SEND_BUF)?),
         );
         let handle = self.sockets.add(socket);
-        let local = self.port;
-        self.port = if self.port >= 65000 {
-            49152
-        } else {
-            self.port + 1
-        };
+        let local = self.next_port();
         let connected =
             self.sockets
                 .get_mut::<tcp::Socket>(handle)
@@ -263,6 +260,41 @@ impl Net {
             return Err(Error::Connection);
         }
         Ok(handle)
+    }
+
+    /// Opens a UDP socket for small datagrams (e.g. SNTP's); let it go
+    /// with [`Net::release_udp`].
+    pub fn open_udp(&mut self) -> Result<SocketHandle, Error> {
+        let buffer = |net: &mut Self| -> Result<udp::PacketBuffer<'static>, Error> {
+            let _ = net;
+            Ok(udp::PacketBuffer::new(
+                alloc::vec![udp::PacketMetadata::EMPTY; 2],
+                zeroed(UDP_BUF)?,
+            ))
+        };
+        let mut socket = udp::Socket::new(buffer(self)?, buffer(self)?);
+        let local = self.next_port();
+        socket.bind(local).map_err(|_| Error::Connection)?;
+        Ok(self.sockets.add(socket))
+    }
+
+    pub fn udp(&mut self, handle: SocketHandle) -> &mut udp::Socket<'static> {
+        self.sockets.get_mut::<udp::Socket>(handle)
+    }
+
+    pub fn release_udp(&mut self, handle: SocketHandle) {
+        self.sockets.remove(handle);
+    }
+
+    /// The next local port for a connection.
+    fn next_port(&mut self) -> u16 {
+        let port = self.port;
+        self.port = if self.port >= 65000 {
+            49152
+        } else {
+            self.port + 1
+        };
+        port
     }
 
     pub fn socket(&mut self, handle: SocketHandle) -> &mut tcp::Socket<'static> {

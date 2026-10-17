@@ -10,8 +10,12 @@ change the plugin SDK.
   (TLS 1.2 and 1.3), the certificate checked against Mozilla's roots,
   which stay in flash, and against the host; refused certificates fail
   the request with the reason. One secure connection at a time (about
-  40 KB); a handshake takes 1.3 to 2.7 s. Certificates' dates are checked
-  once the X4 gets the time over the network.
+  40 KB); a handshake takes 1.3 to 2.7 s. Expired certificates and ones
+  not valid yet are refused too.
+- The X4 knows the time once online (SNTP, again every 12 hours) and
+  shows it in the status line and on the home screen; the time zone is
+  chosen under Settings, System (UTC on "Auto": the X4 has none of its
+  own). Gone when it is switched off, until it is online again.
 - X4: requests fail with a reason instead of restarting the X4 when memory
   is short or in pieces; `heap` over USB also says the largest block that
   could be had.
