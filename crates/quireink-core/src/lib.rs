@@ -1707,7 +1707,8 @@ impl Kernel {
                 // Answers that are files: written where asked (a failure
                 // has its reason as the body).
                 Some(path) if response.status != 0 => {
-                    if self.shared.storage.write(&path, &response.body).is_err() {
+                    if !response.saved && self.shared.storage.write(&path, &response.body).is_err()
+                    {
                         status = String::from("0");
                     }
                     params
@@ -3196,6 +3197,7 @@ impl Kernel {
             headers: request.headers,
             body,
             max_response,
+            save_to: request.save_to.clone(),
         });
         self.awaiting
             .push((id, request.reply, request.params, request.save_to));

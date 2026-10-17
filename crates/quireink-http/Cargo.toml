@@ -1,0 +1,17 @@
+[package]
+name = "quireink-http"
+description = "HTTP/1.1 client protocol for QuireInk without I/O: requests built, responses parsed as bytes come, bodies passed on in pieces (no_std)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+categories = ["no-std", "network-programming"]
+keywords = ["http", "client", "no-std", "embedded"]
+
+[dependencies]
+
+[lints]
+workspace = true

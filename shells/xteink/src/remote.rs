@@ -47,8 +47,10 @@
 //! - `wifi join`: joins the network known from before again (`QI:OK`; the
 //!   outcome in the log and by `wifi status`);
 //! - `wifi status`: `QI:WIFI off`, or `QI:WIFI <on|joining> <address|->`;
-//! - `http get <url>`: fetches a plain `http://` address over Wi-Fi,
-//!   answered with `QI:HTTP <status> <bytes> <ms>` and the heap;
+//! - `http get <url> [<path>]`: fetches a plain `http://` address over
+//!   Wi-Fi as plugins' requests are made, into memory or the file `path`,
+//!   answered with `QI:HTTP <status> <bytes> saved <true|false> <ms>`, the
+//!   heap and, for a failure, why;
 //! - `get <path>`: a file of the storage, as `QI:SIZE <size>`, then
 //!   `QI:DATA <hex>` lines and `QI:END` (e.g. the battery's log).
 //!
@@ -100,8 +102,8 @@ pub enum Command {
     WifiConnect(String, String),
     WifiStatus,
     WifiJoin,
-    /// An address to fetch.
-    HttpGet(String),
+    /// An address to fetch, and the file for it.
+    HttpGet(String, Option<String>),
     Hang(u64),
     Nap(u64),
 }
@@ -175,7 +177,7 @@ impl Remote {
             | Command::WifiConnect(..)
             | Command::WifiStatus
             | Command::WifiJoin
-            | Command::HttpGet(_) => {
+            | Command::HttpGet(..) => {
                 println!("QI:ERR refresh")
             }
             Command::Shot => {
@@ -377,7 +379,7 @@ fn parse(line: &str) -> Option<Command> {
             _ => return None,
         },
         "http" => match words.next()? {
-            "get" => Command::HttpGet(String::from(words.next()?)),
+            "get" => Command::HttpGet(String::from(words.next()?), words.next().map(String::from)),
             _ => return None,
         },
         "hang" => Command::Hang(words.next()?.parse().ok()?),

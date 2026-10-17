@@ -1,8 +1,8 @@
 //! The network over Wi-Fi: smoltcp (a TCP/IP stack made for devices
 //! without an operating system) on the radio's station interface. It is
-//! polled: from the main loop, and in a loop while something waits for an
-//! answer (QuireInk's firmware runs no async code). Its address, router and
-//! name servers come by DHCP.
+//! polled from the main loop (QuireInk's firmware runs no async code). Its
+//! address, router and name servers come by DHCP. What goes over it is in
+//! `http`.
 
 use alloc::vec;
 use alloc::vec::Vec;
@@ -18,6 +18,10 @@ use smoltcp::wire::{DnsQueryType, EthernetAddress, HardwareAddress, IpAddress, I
 
 /// The longest anything of the network is waited for here.
 const WAIT_MS: u64 = 15_000;
+/// Without an address this long after joining a network, DHCP asks anew.
+const DHCP_AGAIN_MS: u64 = 10_000;
+/// Connections (and name lookups) at a time.
+pub const MAX_CALLS: usize = 2;
 /// Bytes buffered per connection, received and to send.
 const RECEIVE_BUF: usize = 16 * 1024;
 const SEND_BUF: usize = 1024;
@@ -28,9 +32,7 @@ pub enum Error {
     Offline,
     /// The name could not be resolved.
     Name,
-    /// The address is not of the form `http://host[:port]/path`.
-    Url,
-    /// The connection failed or was reset.
+    /// The connection could not be opened.
     Connection,
     /// It took longer than [`WAIT_MS`].
     Timeout,
@@ -99,6 +101,8 @@ pub struct Net {
     address: Option<smoltcp::wire::Ipv4Cidr>,
     /// The next local port for a connection.
     port: u16,
+    /// When DHCP was last (re)started while joined without an address.
+    asked: Option<Instant>,
 }
 
 impl Net {
@@ -120,6 +124,7 @@ impl Net {
             address: None,
             // In the range for ports a client picks.
             port: 49152 + (rng.random() % 16000) as u16,
+            asked: None,
         }
     }
 
@@ -132,10 +137,19 @@ impl Net {
     /// after the waits it grew while nothing answered.
     pub fn joined(&mut self) {
         self.sockets.get_mut::<dhcpv4::Socket>(self.dhcp).reset();
+        self.asked = Some(now());
     }
 
     /// Sends and receives what is due, and takes what DHCP says.
     pub fn poll(&mut self) {
+        // No answer long after joining (seen once after a start): ask anew.
+        if let Some(asked) = self.asked
+            && self.address.is_none()
+            && now() - asked > smoltcp::time::Duration::from_millis(DHCP_AGAIN_MS)
+        {
+            log::info!("net: asking DHCP again");
+            self.joined();
+        }
         self.stack.poll(now(), &mut self.phy, &mut self.sockets);
         let event = self.sockets.get_mut::<dhcpv4::Socket>(self.dhcp).poll();
         match event {
@@ -166,7 +180,10 @@ impl Net {
                         .get_mut::<dns::Socket>(handle)
                         .update_servers(&servers),
                     None => {
-                        let socket = dns::Socket::new(&servers, vec![None]);
+                        let socket = dns::Socket::new(
+                            &servers,
+                            (0..MAX_CALLS).map(|_| None).collect::<Vec<_>>(),
+                        );
                         self.dns = Some(self.sockets.add(socket));
                     }
                 }
@@ -200,168 +217,83 @@ impl Net {
         self.wait(|net| net.address)
     }
 
-    /// The address of the host `name`.
-    fn resolve(&mut self, name: &str) -> Result<IpAddress, Error> {
+    /// Starts finding the address of host `name` (at once if it is one);
+    /// [`Net::resolved`] tells it.
+    pub fn resolve(&mut self, name: &str) -> Result<Resolve, Error> {
         if let Ok(address) = name.parse::<core::net::Ipv4Addr>() {
-            return Ok(IpAddress::Ipv4(address));
+            return Ok(Resolve::Done(IpAddress::Ipv4(address)));
         }
         let handle = self.dns.ok_or(Error::Offline)?;
-        let query = self
-            .sockets
+        self.sockets
             .get_mut::<dns::Socket>(handle)
             .start_query(self.stack.context(), name, DnsQueryType::A)
-            .map_err(|_| Error::Name)?;
-        self.wait(|net| {
-            match net
-                .sockets
-                .get_mut::<dns::Socket>(handle)
-                .get_query_result(query)
-            {
-                Ok(addresses) => Some(addresses.first().copied().ok_or(Error::Name)),
-                Err(dns::GetQueryResultError::Pending) => None,
-                Err(dns::GetQueryResultError::Failed) => Some(Err(Error::Name)),
-            }
-        })?
+            .map(Resolve::Asking)
+            .map_err(|_| Error::Name)
     }
 
-    /// Fetches `url` (plain HTTP, `http://host[:port]/path`): its status,
-    /// with the body passed to `body` piece by piece as it comes (kept
-    /// whole, a large one would not fit in memory).
-    pub fn get(&mut self, url: &str, body: &mut dyn FnMut(&[u8])) -> Result<u16, Error> {
-        if self.address.is_none() {
-            return Err(Error::Offline);
+    /// The address asked for with [`Net::resolve`], once known.
+    pub fn resolved(&mut self, query: dns::QueryHandle) -> Option<Result<IpAddress, Error>> {
+        let handle = self.dns?;
+        match self
+            .sockets
+            .get_mut::<dns::Socket>(handle)
+            .get_query_result(query)
+        {
+            Ok(addresses) => Some(addresses.first().copied().ok_or(Error::Name)),
+            Err(dns::GetQueryResultError::Pending) => None,
+            Err(dns::GetQueryResultError::Failed) => Some(Err(Error::Name)),
         }
-        let rest = url.strip_prefix("http://").ok_or(Error::Url)?;
-        let (authority, path) = rest.split_at(rest.find('/').unwrap_or(rest.len()));
-        let path = if path.is_empty() { "/" } else { path };
-        let (host, port) = match authority.rsplit_once(':') {
-            Some((host, port)) => (host, port.parse().map_err(|_| Error::Url)?),
-            None => (authority, 80u16),
-        };
-        let address = self.resolve(host)?;
+    }
 
+    /// Stops finding an address no longer wanted.
+    pub fn forget(&mut self, query: dns::QueryHandle) {
+        if let Some(handle) = self.dns {
+            self.sockets
+                .get_mut::<dns::Socket>(handle)
+                .cancel_query(query);
+        }
+    }
+
+    /// Opens a TCP connection to `to`; [`Net::socket`] then reaches it, and
+    /// [`Net::release`] lets it go.
+    pub fn open(&mut self, to: (IpAddress, u16)) -> Result<SocketHandle, Error> {
         let socket = tcp::Socket::new(
             tcp::SocketBuffer::new(vec![0; RECEIVE_BUF]),
             tcp::SocketBuffer::new(vec![0; SEND_BUF]),
         );
         let handle = self.sockets.add(socket);
-        let request = alloc::format!(
-            "GET {path} HTTP/1.1\r\nHost: {host}\r\nUser-Agent: QuireInk\r\nConnection: close\r\n\r\n"
-        );
-        let result = self.exchange(handle, (address, port), request.as_bytes(), body);
-        self.sockets.remove(handle);
-        result
-    }
-
-    /// Connects the socket `handle`, sends `request` and reads the response
-    /// until the server closes the connection after it. Gives up after
-    /// [`WAIT_MS`] without progress.
-    fn exchange(
-        &mut self,
-        handle: SocketHandle,
-        to: (IpAddress, u16),
-        request: &[u8],
-        body: &mut dyn FnMut(&[u8]),
-    ) -> Result<u16, Error> {
         let local = self.port;
         self.port = if self.port >= 65000 {
             49152
         } else {
             self.port + 1
         };
-        self.sockets
-            .get_mut::<tcp::Socket>(handle)
-            .connect(self.stack.context(), to, local)
-            .map_err(|_| Error::Connection)?;
-        let mut sent = 0;
-        let mut head = Head::default();
-        let wait = esp_hal::time::Duration::from_millis(WAIT_MS);
-        let mut until = esp_hal::time::Instant::now() + wait;
-        loop {
-            self.poll();
-            let socket = self.sockets.get_mut::<tcp::Socket>(handle);
-            let mut progress = false;
-            if sent < request.len() && socket.can_send() {
-                let n = socket
-                    .send_slice(&request[sent..])
-                    .map_err(|_| Error::Connection)?;
-                sent += n;
-                progress |= n > 0;
-            }
-            while socket.can_recv() {
-                socket
-                    .recv(|data| {
-                        head.take(data, body);
-                        (data.len(), ())
-                    })
-                    .map_err(|_| Error::Connection)?;
-                progress = true;
-            }
-            if head.failed {
-                socket.abort();
-                return Err(Error::Connection);
-            }
-            match socket.state() {
-                // Closed by the server once all was sent: done.
-                tcp::State::CloseWait | tcp::State::Closed | tcp::State::TimeWait
-                    if sent == request.len() =>
-                {
-                    socket.close();
-                    return head.status.ok_or(Error::Connection);
-                }
-                tcp::State::Closed => return Err(Error::Connection),
-                _ => {}
-            }
-            let at = esp_hal::time::Instant::now();
-            if progress {
-                until = at + wait;
-            } else if at > until {
-                socket.abort();
-                return Err(Error::Timeout);
-            }
-            crate::power::feed();
+        let connected =
+            self.sockets
+                .get_mut::<tcp::Socket>(handle)
+                .connect(self.stack.context(), to, local);
+        if connected.is_err() {
+            self.sockets.remove(handle);
+            return Err(Error::Connection);
         }
+        Ok(handle)
+    }
+
+    pub fn socket(&mut self, handle: SocketHandle) -> &mut tcp::Socket<'static> {
+        self.sockets.get_mut::<tcp::Socket>(handle)
+    }
+
+    /// Closes a connection at once and frees it.
+    pub fn release(&mut self, handle: SocketHandle) {
+        self.sockets.get_mut::<tcp::Socket>(handle).abort();
+        // Sends the reset before the socket goes.
+        self.stack.poll(now(), &mut self.phy, &mut self.sockets);
+        self.sockets.remove(handle);
     }
 }
 
-/// The head of an HTTP response, gathered until it is whole; what follows
-/// is the body.
-#[derive(Default)]
-struct Head {
-    bytes: Vec<u8>,
-    /// Its status, once the head is whole.
-    status: Option<u16>,
-    failed: bool,
-}
-
-impl Head {
-    /// The longest head taken.
-    const MAX: usize = 8192;
-
-    /// Takes received bytes: into the head until it is whole, the rest to
-    /// `body`.
-    fn take(&mut self, data: &[u8], body: &mut dyn FnMut(&[u8])) {
-        if self.status.is_some() {
-            return body(data);
-        }
-        let from = self.bytes.len().saturating_sub(3);
-        self.bytes.extend_from_slice(data);
-        let Some(end) = self.bytes[from..]
-            .windows(4)
-            .position(|w| w == b"\r\n\r\n")
-            .map(|at| from + at)
-        else {
-            self.failed = self.bytes.len() > Self::MAX;
-            return;
-        };
-        self.status = core::str::from_utf8(&self.bytes[..end])
-            .ok()
-            .and_then(|head| head.split_ascii_whitespace().nth(1))
-            .and_then(|status| status.parse().ok());
-        self.failed = self.status.is_none();
-        if !self.failed {
-            body(&self.bytes[end + 4..]);
-        }
-        self.bytes = Vec::new();
-    }
+/// Finding a host's address.
+pub enum Resolve {
+    Done(IpAddress),
+    Asking(dns::QueryHandle),
 }

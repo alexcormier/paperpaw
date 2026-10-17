@@ -20,6 +20,7 @@ quireink-sdk = { path = "../../crates/quireink-sdk" }
 quireink-platform = { path = "../../crates/quireink-platform" }
 quireink-x4 = { path = "../../crates/quireink-x4" }
 quireink-fat = { path = "../../crates/quireink-fat" }
+quireink-http = { path = "../../crates/quireink-http" }
 esp-hal = { version = "1.2", features = ["esp32c3", "unstable"] }
 esp-alloc = { version = "0.11", features = ["esp32c3"] }
 esp-backtrace = { version = "0.20", features = ["esp32c3", "println"] }

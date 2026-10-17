@@ -30,6 +30,21 @@ use esp_radio::wifi::{
 
 /// The longest anything of the radio is waited for here.
 const WAIT_MS: u64 = 15_000;
+/// The longest a try to join a network is waited for to stop.
+const STOP_MS: u64 = 2_000;
+
+/// `future`'s outcome, or `None` if it takes longer than `ms`.
+async fn within<F: Future>(ms: u64, future: F) -> Option<F::Output> {
+    let until = esp_hal::time::Instant::now() + esp_hal::time::Duration::from_millis(ms);
+    let mut future = pin!(future);
+    core::future::poll_fn(|cx| match future.as_mut().poll(cx) {
+        Poll::Ready(value) => Poll::Ready(Some(value)),
+        // Polled again and again (from the main loop): no waking needed.
+        Poll::Pending if esp_hal::time::Instant::now() > until => Poll::Ready(None),
+        Poll::Pending => Poll::Pending,
+    })
+    .await
+}
 
 #[derive(Debug)]
 pub enum Error {
@@ -70,8 +85,7 @@ pub struct Parts {
 pub const SECRET_PREFIX: &str = "wifi.";
 
 /// Joining a network, which holds the controller until it is done.
-type Joining =
-    Pin<Box<dyn Future<Output = (Result<ConnectedInfo, ConnectionError>, Controller)> + 'static>>;
+type Joining = Pin<Box<dyn Future<Output = (Result<ConnectedInfo, Error>, Controller)> + 'static>>;
 type Controller = &'static mut WifiController<'static>;
 
 enum State {
@@ -143,7 +157,15 @@ impl Wifi {
             return Err(Error::Busy);
         };
         self.state = State::Joining(Box::pin(async move {
-            let result = controller.connect_async().await;
+            // Bounded: once, after flashing, no answer ever came.
+            let result = match within(WAIT_MS, controller.connect_async()).await {
+                Some(result) => result.map_err(Error::from),
+                None => {
+                    // Stops the try (bounded too: it may not answer either).
+                    let _ = within(STOP_MS, controller.disconnect_async()).await;
+                    Err(Error::Timeout)
+                }
+            };
             (result, controller)
         }));
         Ok(())
@@ -168,7 +190,7 @@ impl Wifi {
         if result.is_ok() {
             self.net.joined();
         }
-        Some(result.map_err(Error::from))
+        Some(result)
     }
 
     /// Joins the network `ssid` and waits for it, at most [`WAIT_MS`].

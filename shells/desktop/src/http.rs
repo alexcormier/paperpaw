@@ -118,5 +118,6 @@ fn run(call: HttpCall) -> HttpResponse {
         etag,
         content_type,
         url,
+        saved: false,
     }
 }

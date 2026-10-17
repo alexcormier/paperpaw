@@ -20,6 +20,7 @@ extern crate alloc;
 mod card;
 mod crash;
 mod device;
+mod http;
 mod input;
 mod net;
 mod power;
@@ -252,6 +253,8 @@ fn main() -> ! {
     let mut wifi: Option<wifi::Wifi> = None;
     // When to join a network known from before next, and the tries so far.
     let mut rejoin: Option<(Instant, u32)> = None;
+    // Plugins' HTTP requests going on.
+    let mut calls = http::Calls::default();
     input::start(input::Sampler::new(
         PeriodicTimer::new(timers.timer0),
         adc,
@@ -279,7 +282,9 @@ fn main() -> ! {
         // A full refresh takes 3.5 s on its panel: screens change fast.
         .setting_default("core.flash-screens", "false")
         .setting_default("core.ui-size", "9")
-        .setting_default("reader.font-size", "9");
+        .setting_default("reader.font-size", "9")
+        // Over Wi-Fi (`http`); without a network requests fail at once.
+        .network(true);
     let builder = quireink_app::install(builder, quireink_app::Fonts::Packs).plugin(device::X4);
     let mut kernel = match builder.build() {
         Ok(kernel) => kernel,
@@ -402,6 +407,14 @@ fn main() -> ! {
                 }
             }
         }
+        calls_step(
+            &mut kernel,
+            &mut display,
+            &mut calls,
+            &mut wifi,
+            &mut wake_at,
+            &mut sleep,
+        );
         // Not while the radio is on: its tasks run in between.
         let battery = wifi.is_none()
             && ((usb.is_low() && kernel.settings().bool(device::LIGHT_SLEEP.as_str()))
@@ -461,8 +474,8 @@ fn main() -> ! {
                         .map_or(alloc::string::String::from("-"), |a| alloc::format!("{a}"))
                 ),
             }
-        } else if let Some(remote::Command::HttpGet(url)) = &command {
-            remote_http_get(&mut wifi, url);
+        } else if let Some(remote::Command::HttpGet(url, save_to)) = &command {
+            remote_http_get(&kernel, &mut wifi, url, save_to.clone());
         } else if let Some(remote::Command::IdleSleep(seconds)) = command {
             // At most ten minutes: the link is gone meanwhile.
             sleep_on_usb_until = Some(Instant(now().0 + seconds.min(600) * 1000));
@@ -626,20 +639,79 @@ fn remote_wifi_connect(
 }
 
 /// Fetches an address over USB (`http get`), to try the network.
-fn remote_http_get(wifi: &mut Option<wifi::Wifi>, url: &str) {
-    let Some(radio) = wifi.as_mut() else {
-        return esp_println::println!("QI:ERR http: no wifi");
-    };
+fn remote_http_get(
+    kernel: &Kernel,
+    wifi: &mut Option<wifi::Wifi>,
+    url: &str,
+    save_to: Option<alloc::string::String>,
+) {
+    let mut calls = http::Calls::default();
+    calls.add(quireink_core::HttpCall {
+        id: 0,
+        method: alloc::string::String::from("GET"),
+        url: alloc::string::String::from(url),
+        headers: alloc::vec::Vec::new(),
+        body: None,
+        max_response: if save_to.is_some() {
+            quireink_core::MAX_FILE
+        } else {
+            64 * 1024
+        },
+        save_to,
+    });
     let started = now();
-    let mut bytes = 0;
-    match radio.net.get(url, &mut |piece| bytes += piece.len()) {
-        Ok(status) => esp_println::println!(
-            "QI:HTTP {status} {bytes} {} ms, heap {} {}",
-            now().since(started),
-            esp_alloc::HEAP.used(),
-            esp_alloc::HEAP.free()
-        ),
-        Err(e) => esp_println::println!("QI:ERR http: {e:?}"),
+    // The requests end by themselves, at the latest when they stall.
+    loop {
+        if let Some(radio) = wifi.as_mut() {
+            radio.poll();
+        }
+        let net = wifi.as_mut().map(|radio| &mut radio.net);
+        if let Some(answer) = calls.poll(net, kernel.storage()).into_iter().next() {
+            let text = if answer.status == 0 {
+                alloc::string::String::from_utf8_lossy(&answer.body).into_owned()
+            } else {
+                alloc::string::String::new()
+            };
+            return esp_println::println!(
+                "QI:HTTP {} {} saved {} {} ms, heap {} {} {text}",
+                answer.status,
+                answer.body.len(),
+                answer.saved,
+                now().since(started),
+                esp_alloc::HEAP.used(),
+                esp_alloc::HEAP.free()
+            );
+        }
+        power::feed();
+    }
+}
+
+/// Passes plugins' new HTTP requests on and moves those going on, giving
+/// the kernel the answers of those done.
+fn calls_step<SPI, DC, RST, BUSY, D>(
+    kernel: &mut Kernel,
+    display: &mut Display<SPI, DC, RST, BUSY, D>,
+    calls: &mut http::Calls,
+    wifi: &mut Option<wifi::Wifi>,
+    wake_at: &mut Option<Instant>,
+    sleep: &mut bool,
+) where
+    SPI: embedded_hal::spi::SpiDevice,
+    DC: embedded_hal::digital::OutputPin,
+    RST: embedded_hal::digital::OutputPin,
+    BUSY: embedded_hal::digital::InputPin,
+    D: embedded_hal::delay::DelayNs,
+{
+    for call in kernel.take_requests() {
+        calls.add(call);
+    }
+    if !calls.busy() {
+        return;
+    }
+    let net = wifi.as_mut().map(|radio| &mut radio.net);
+    for answer in calls.poll(net, kernel.storage()) {
+        let effects = kernel.http_response(now(), answer);
+        *sleep |= apply(kernel, display, effects, wake_at);
     }
 }
 

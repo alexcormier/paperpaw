@@ -1369,6 +1369,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "quireink-http"
+version = "0.3.0"
+
+[[package]]
 name = "quireink-hyphen"
 version = "0.3.0"
 
@@ -1736,6 +1740,7 @@ dependencies = [
  "quireink-app",
  "quireink-core",
  "quireink-fat",
+ "quireink-http",
  "quireink-platform",
  "quireink-sdk",
  "quireink-x4",

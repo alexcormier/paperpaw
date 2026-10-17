@@ -16,6 +16,7 @@ members = [
     "crates/quireink-hyphen",
     "crates/quireink-image",
     "crates/quireink-zip",
+    "crates/quireink-http",
     "crates/quireink-xml",
     "crates/quireink-stardict",
     "crates/quireink-sdk",
@@ -86,6 +87,7 @@ quireink-graphics = { path = "crates/quireink-graphics", version = "0.3.0" }
 quireink-text = { path = "crates/quireink-text", version = "0.3.0" }
 quireink-document = { path = "crates/quireink-document", version = "0.3.0" }
 quireink-zip = { path = "crates/quireink-zip", version = "0.3.0" }
+quireink-http = { path = "crates/quireink-http", version = "0.3.0" }
 quireink-xml = { path = "crates/quireink-xml", version = "0.3.0" }
 quireink-stardict = { path = "crates/quireink-stardict", version = "0.3.0" }
 quireink-layout = { path = "crates/quireink-layout", version = "0.3.0" }

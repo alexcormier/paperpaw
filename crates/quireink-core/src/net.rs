@@ -16,6 +16,11 @@ pub struct HttpCall {
     pub body: Option<Vec<u8>>,
     /// The longest response body wanted; shells cut longer ones.
     pub max_response: usize,
+    /// The file in storage the body is for, if it is one (e.g. a
+    /// download). A shell may write it there itself as it comes, for one
+    /// too large for memory, and say so with [`HttpResponse::saved`];
+    /// otherwise the kernel writes the body it gets.
+    pub save_to: Option<String>,
 }
 
 /// What came back. `status` 0 means the request failed (no network, no
@@ -31,6 +36,9 @@ pub struct HttpResponse {
     pub content_type: Option<String>,
     /// Where the answer came from after redirects, if elsewhere.
     pub url: Option<String>,
+    /// The body was written to [`HttpCall::save_to`] by the shell (and
+    /// is not in `body`).
+    pub saved: bool,
 }
 
 /// What a shell does for plugins' servers (see `Kernel::take_server_calls`).

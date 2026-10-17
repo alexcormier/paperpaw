@@ -264,5 +264,6 @@ fn answer(
         etag,
         content_type,
         url: None,
+        saved: false,
     })
 }

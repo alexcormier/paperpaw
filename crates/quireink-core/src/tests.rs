@@ -1413,6 +1413,7 @@ fn files_go_up_and_come_down() {
     let calls = kernel.take_requests();
     assert_eq!(calls[0].body.as_deref(), Some(&b" data"[..]));
     assert_eq!(calls[0].max_response, crate::MAX_FILE);
+    assert_eq!(calls[0].save_to.as_deref(), Some("down.bin"));
     kernel.http_response(
         Instant(1),
         crate::HttpResponse {
@@ -1422,12 +1423,33 @@ fn files_go_up_and_come_down() {
             etag: Some(String::from("\"abc\"")),
             content_type: Some(String::from("application/epub+zip")),
             url: Some(String::from("https://example.org/g")),
+            saved: false,
         },
     );
     let storage = kernel.shared.storage.as_ref();
     assert_eq!(
         quireink_sdk::read_file(storage, "down.bin", 64).unwrap(),
         b"\xffbinary"
+    );
+    // Written by the shell itself as it came: left as it is.
+    kernel.request(quireink_sdk::HttpRequest {
+        save_to: Some(String::from("kept.bin")),
+        ..quireink_sdk::HttpRequest::new("GET", "http://example.org/k", reply.clone())
+    });
+    let calls = kernel.take_requests();
+    kernel.storage().write("kept.bin", b"streamed").unwrap();
+    kernel.http_response(
+        Instant(2),
+        crate::HttpResponse {
+            id: calls[0].id,
+            status: 200,
+            saved: true,
+            ..Default::default()
+        },
+    );
+    assert_eq!(
+        quireink_sdk::read_file(kernel.storage(), "kept.bin", 64).unwrap(),
+        b"streamed"
     );
     // A file that is not there fails at once.
     kernel.request(quireink_sdk::HttpRequest {

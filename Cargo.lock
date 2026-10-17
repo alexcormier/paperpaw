@@ -1365,6 +1365,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "quireink-http"
+version = "0.3.0"
+
+[[package]]
 name = "quireink-hyphen"
 version = "0.3.0"
 
