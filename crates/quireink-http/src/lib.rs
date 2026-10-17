@@ -427,7 +427,10 @@ mod tests {
         );
         assert_eq!(url.host_header(), "Example.org:8080");
         let url = Url::parse("HTTPS://user:pw@host?q").unwrap();
-        assert_eq!((url.https, url.host, url.port, url.path), (true, "host", 443, "?q"));
+        assert_eq!(
+            (url.https, url.host, url.port, url.path),
+            (true, "host", 443, "?q")
+        );
         assert_eq!(Url::parse("http://host").unwrap().path, "/");
         assert_eq!(Url::parse("ftp://host"), None);
         assert_eq!(Url::parse("http://"), None);
@@ -490,13 +493,23 @@ mod tests {
         let (_, body, ok) = run("GET", b"HTTP/1.0 200 OK\r\n\r\nall of it", 4, true);
         assert_eq!(body, b"all of it");
         assert!(ok);
-        let (_, _, ok) = run("GET", b"HTTP/1.1 200 OK\r\nContent-Length: 9\r\n\r\npart", 4, true);
+        let (_, _, ok) = run(
+            "GET",
+            b"HTTP/1.1 200 OK\r\nContent-Length: 9\r\n\r\npart",
+            4,
+            true,
+        );
         assert!(!ok);
     }
 
     #[test]
     fn no_bodies() {
-        let (head, body, done) = run("HEAD", b"HTTP/1.1 200 OK\r\nContent-Length: 9\r\n\r\n", 5, false);
+        let (head, body, done) = run(
+            "HEAD",
+            b"HTTP/1.1 200 OK\r\nContent-Length: 9\r\n\r\n",
+            5,
+            false,
+        );
         assert_eq!((head.status, body.len(), done), (200, 0, true));
         let (head, _, done) = run("GET", b"HTTP/1.1 304 Not Modified\r\n\r\n", 5, false);
         assert_eq!((head.status, done), (304, true));
@@ -507,7 +520,10 @@ mod tests {
             false,
         );
         assert!(head.is_redirect());
-        assert_eq!((head.location.as_deref(), body.len(), done), (Some("/x"), 0, true));
+        assert_eq!(
+            (head.location.as_deref(), body.len(), done),
+            (Some("/x"), 0, true)
+        );
     }
 
     #[test]
