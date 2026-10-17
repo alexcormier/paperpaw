@@ -337,6 +337,7 @@ def main():
         x4.port.write(f"wifi connect {args.wifi_connect.encode().hex()} {hexed}\n".encode())
         # Not `ask`: it would repeat the command, password and all, on an error.
         print(x4.expect("wifi connect", "CONNECTED")[-1])
+        print(x4.expect("wifi connect", "IP")[-1])
     if args.profile:
         x4.ask("profile start", "OK")
     if args.trace:

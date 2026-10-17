@@ -34,6 +34,8 @@ critical-section = "1.2"
 # tried; only `src/wifi.rs` uses it.
 esp-radio = { version = "=1.0.0-beta.1", features = ["esp32c3", "wifi", "unstable", "esp-alloc"] }
 esp-rtos = { version = "0.4", features = ["esp32c3", "esp-radio", "esp-alloc"] }
+smoltcp = { version = "0.12", default-features = false, features = ["medium-ethernet", "proto-ipv4", "proto-dhcpv4", "proto-dns", "socket-tcp", "socket-udp", "socket-dhcpv4", "socket-dns", "alloc"] }
+embassy-net-driver = "0.2"
 
 # The radio's code needs optimising for speed (Espressif: otherwise Wi-Fi
 # may fail to connect).

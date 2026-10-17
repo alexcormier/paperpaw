@@ -1272,6 +1272,31 @@ impl Kernel {
         &self.shared.settings
     }
 
+    /// The passwords and keys (see [`quireink_sdk::secrets`]), e.g. for a
+    /// shell that joins networks itself.
+    pub fn secrets(&self) -> &quireink_sdk::secrets::Secrets {
+        &self.shared.secrets
+    }
+
+    /// Keeps or removes a password or key, as [`Command::SetSecret`] of a
+    /// plugin does (e.g. a network's password a shell was given).
+    pub fn set_secret(&mut self, change: quireink_sdk::secrets::SecretChange) {
+        use quireink_sdk::secrets;
+        self.shared.secrets.apply(change);
+        let text = self.shared.secrets.encode();
+        let storage = self.shared.storage.as_ref();
+        let _ = storage.create_dir(".quireink");
+        let saved = if self.shared.secrets.is_empty() {
+            storage.remove(secrets::FILE).or(Ok(()))
+        } else {
+            storage.write(secrets::FILE, text.as_bytes())
+        };
+        if let Err(error) = saved {
+            let message = format!("{}: {error}", secrets::FILE);
+            self.warn(WarningSource::Runtime, None, message);
+        }
+    }
+
     pub fn translator(&self) -> &Translator {
         &self.shared.translator
     }
@@ -2583,22 +2608,7 @@ impl Kernel {
             Command::SetPluginEnabled(id, enabled) => self.set_plugin_enabled(&id, enabled),
             Command::Restart => self.restart = true,
             Command::Sleep => self.sleep = self.shared.sleep,
-            Command::SetSecret(change) => {
-                use quireink_sdk::secrets;
-                self.shared.secrets.apply(change);
-                let text = self.shared.secrets.encode();
-                let storage = self.shared.storage.as_ref();
-                let _ = storage.create_dir(".quireink");
-                let saved = if self.shared.secrets.is_empty() {
-                    storage.remove(secrets::FILE).or(Ok(()))
-                } else {
-                    storage.write(secrets::FILE, text.as_bytes())
-                };
-                if let Err(error) = saved {
-                    let message = format!("{}: {error}", secrets::FILE);
-                    self.warn(WarningSource::Runtime, None, message);
-                }
-            }
+            Command::SetSecret(change) => self.set_secret(change),
             Command::Screenshot(path) => {
                 // The whole screen is drawn anew, and saved as it is.
                 self.screenshot = Some(path);

@@ -3,10 +3,19 @@
 //! here alone, so a change of it changes this file). The radio needs a
 //! scheduler that switches tasks (esp-rtos); both start the first time
 //! Wi-Fi is wanted and run on until the X4 next starts.
+//!
+//! Joining a network takes seconds: it goes on in the background, polled
+//! by the main loop ([`Wifi::poll`]), while the X4 stays usable.
+//!
+//! The networks joined are kept with QuireInk's passwords and keys (see
+//! `quireink_sdk::secrets`), as `wifi.<name>`: the settings list them, to
+//! change or remove.
 
+use alloc::boxed::Box;
+use alloc::string::String;
 use alloc::vec::Vec;
 use core::future::Future;
-use core::pin::pin;
+use core::pin::{Pin, pin};
 use core::task::{Context, Poll, Waker};
 
 use esp_hal::peripherals::{FROM_CPU_INTR0, WIFI};
@@ -30,6 +39,8 @@ pub enum Error {
     Timeout,
     /// The network did not let the X4 in, and why (e.g. a wrong password).
     Refused(#[allow(dead_code)] DisconnectReason),
+    /// Joining a network is going on.
+    Busy,
 }
 
 impl From<ConnectionError> for Error {
@@ -55,8 +66,25 @@ pub struct Parts {
     pub wifi: WIFI<'static>,
 }
 
+/// The prefix of the ids of networks' passwords among the secrets.
+pub const SECRET_PREFIX: &str = "wifi.";
+
+/// Joining a network, which holds the controller until it is done.
+type Joining =
+    Pin<Box<dyn Future<Output = (Result<ConnectedInfo, ConnectionError>, Controller)> + 'static>>;
+type Controller = &'static mut WifiController<'static>;
+
+enum State {
+    Idle(Controller),
+    Joining(Joining),
+    /// Only while changing between the two.
+    Changing,
+}
+
 pub struct Wifi {
-    controller: WifiController<'static>,
+    state: State,
+    /// The network over it.
+    pub net: crate::net::Net,
 }
 
 impl Wifi {
@@ -74,19 +102,33 @@ impl Wifi {
         controller.set_config(&Config::Station(StationConfig::default()))?;
         mark(at::RADIO_STARTED);
         log::info!("wifi: started");
-        Ok(Self { controller })
+        let net = crate::net::Net::new(esp_radio::wifi::Interface::station());
+        // It runs until the X4 starts again.
+        let controller = Box::leak(Box::new(controller));
+        Ok(Self {
+            state: State::Idle(controller),
+            net,
+        })
+    }
+
+    fn controller(&mut self) -> Result<&mut WifiController<'static>, Error> {
+        match &mut self.state {
+            State::Idle(controller) => Ok(controller),
+            _ => Err(Error::Busy),
+        }
     }
 
     /// The networks in reach, at most `max`.
     pub fn scan(&mut self, max: usize) -> Result<Vec<AccessPointInfo>, Error> {
         crate::power::mark(crate::power::at::RADIO_SCAN);
         let config = ScanConfig::default().with_max(max);
-        Ok(block_on(self.controller.scan_async(&config))??)
+        let controller = self.controller()?;
+        Ok(block_on(controller.scan_async(&config))??)
     }
 
-    /// Joins the network `ssid`, with WPA2 or newer if there is a
-    /// password, else an open one.
-    pub fn connect(&mut self, ssid: &str, password: &str) -> Result<ConnectedInfo, Error> {
+    /// Starts joining the network `ssid`, with WPA2 or newer if there is a
+    /// password, else an open one; [`Wifi::poll`] tells when it is done.
+    pub fn join(&mut self, ssid: &str, password: &str) -> Result<(), Error> {
         crate::power::mark(crate::power::at::RADIO_CONNECT);
         let authentication = if password.is_empty() {
             AuthenticationMethodConfig::Open
@@ -96,9 +138,73 @@ impl Wifi {
         let config = StationConfig::default()
             .with_ssid(ssid.try_into()?)
             .with_authentication(authentication);
-        self.controller.set_config(&Config::Station(config))?;
-        Ok(block_on(self.controller.connect_async())??)
+        self.controller()?.set_config(&Config::Station(config))?;
+        let State::Idle(controller) = core::mem::replace(&mut self.state, State::Changing) else {
+            return Err(Error::Busy);
+        };
+        self.state = State::Joining(Box::pin(async move {
+            let result = controller.connect_async().await;
+            (result, controller)
+        }));
+        Ok(())
     }
+
+    /// Joining a network is going on.
+    pub fn joining(&self) -> bool {
+        matches!(self.state, State::Joining(_))
+    }
+
+    /// Moves the network on; the outcome of joining one, once it is known.
+    pub fn poll(&mut self) -> Option<Result<ConnectedInfo, Error>> {
+        self.net.poll();
+        let State::Joining(joining) = &mut self.state else {
+            return None;
+        };
+        let mut cx = Context::from_waker(Waker::noop());
+        let Poll::Ready((result, controller)) = joining.as_mut().poll(&mut cx) else {
+            return None;
+        };
+        self.state = State::Idle(controller);
+        if result.is_ok() {
+            self.net.joined();
+        }
+        Some(result.map_err(Error::from))
+    }
+
+    /// Joins the network `ssid` and waits for it, at most [`WAIT_MS`].
+    pub fn connect(&mut self, ssid: &str, password: &str) -> Result<ConnectedInfo, Error> {
+        self.join(ssid, password)?;
+        let until = esp_hal::time::Instant::now() + esp_hal::time::Duration::from_millis(WAIT_MS);
+        loop {
+            if let Some(result) = self.poll() {
+                return result;
+            }
+            if esp_hal::time::Instant::now() > until {
+                return Err(Error::Timeout);
+            }
+            crate::power::feed();
+        }
+    }
+}
+
+/// The networks joined before, as `(name, password)`.
+pub fn known(secrets: &quireink_sdk::secrets::Secrets) -> Vec<(String, String)> {
+    secrets
+        .iter()
+        .filter_map(|secret| {
+            let name = secret.id.strip_prefix(SECRET_PREFIX)?;
+            Some((String::from(name), secret.value.clone()))
+        })
+        .collect()
+}
+
+/// The secret keeping the password of network `ssid`.
+pub fn secret(ssid: &str, password: &str) -> quireink_sdk::secrets::SecretChange {
+    quireink_sdk::secrets::SecretChange::keep(
+        &alloc::format!("{SECRET_PREFIX}{ssid}"),
+        &alloc::format!("Wi-Fi {ssid}"),
+        password,
+    )
 }
 
 /// The radio's firmware (libphy) locks the chip's internal I2C bus with

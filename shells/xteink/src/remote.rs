@@ -41,7 +41,14 @@
 //!   radio the first time; it stays on until the X4 starts again);
 //! - `wifi connect <name> <password>`: joins that network (both in
 //!   hexadecimal, `-` for no password), answered with `QI:CONNECTED
-//!   <channel>` or `QI:ERR`; the password is not shown anywhere;
+//!   <channel>` and, once DHCP gave one, `QI:IP <address>`, or `QI:ERR`;
+//!   the password is not shown anywhere; it is kept, and the network
+//!   joined again by itself after a start on USB;
+//! - `wifi join`: joins the network known from before again (`QI:OK`; the
+//!   outcome in the log and by `wifi status`);
+//! - `wifi status`: `QI:WIFI off`, or `QI:WIFI <on|joining> <address|->`;
+//! - `http get <url>`: fetches a plain `http://` address over Wi-Fi,
+//!   answered with `QI:HTTP <status> <bytes> <ms>` and the heap;
 //! - `get <path>`: a file of the storage, as `QI:SIZE <size>`, then
 //!   `QI:DATA <hex>` lines and `QI:END` (e.g. the battery's log).
 //!
@@ -91,6 +98,10 @@ pub enum Command {
     WifiScan,
     /// A network's name and password.
     WifiConnect(String, String),
+    WifiStatus,
+    WifiJoin,
+    /// An address to fetch.
+    HttpGet(String),
     Hang(u64),
     Nap(u64),
 }
@@ -161,7 +172,10 @@ impl Remote {
             Command::Refresh(_)
             | Command::IdleSleep(_)
             | Command::WifiScan
-            | Command::WifiConnect(..) => {
+            | Command::WifiConnect(..)
+            | Command::WifiStatus
+            | Command::WifiJoin
+            | Command::HttpGet(_) => {
                 println!("QI:ERR refresh")
             }
             Command::Shot => {
@@ -358,6 +372,12 @@ fn parse(line: &str) -> Option<Command> {
         "wifi" => match words.next()? {
             "scan" => Command::WifiScan,
             "connect" => Command::WifiConnect(unhex(words.next()?)?, unhex(words.next()?)?),
+            "status" => Command::WifiStatus,
+            "join" => Command::WifiJoin,
+            _ => return None,
+        },
+        "http" => match words.next()? {
+            "get" => Command::HttpGet(String::from(words.next()?)),
             _ => return None,
         },
         "hang" => Command::Hang(words.next()?.parse().ok()?),
