@@ -16,6 +16,9 @@ change the plugin SDK.
   is short or in pieces; `heap` over USB also says the largest block that
   could be had.
 - The licence check covers the X4 firmware's dependencies too.
+- Releases carry the X4's firmware as one image for its whole flash
+  (`quireink-x4-<version>.bin`, with its SHA-256), which quireink.org
+  offers for flashing in the browser.
 
 - Wi-Fi on the X4 (new plugin `wifi`, under Settings, Device): the radio
   is off while reading and comes on by itself when something needs the
