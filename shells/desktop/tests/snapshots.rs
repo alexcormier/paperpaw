@@ -150,6 +150,16 @@ const CASES: &[Case] = &[
         colour: 0,
     },
     Case {
+        // The Wi-Fi page (the emulator pretends to manage Wi-Fi on the X4
+        // profiles), switched on: the networks found.
+        name: "x4-pro-wifi",
+        profile: "xteink-x4-pro",
+        book: None,
+        sets: &[],
+        script: "swipe:240:700:240:300,wait:300,tap-on:Settings,wait:500,page-forward,wait:300,                 tap-on:Wi-Fi,wait:500,tap:240:140,wait:2500",
+        colour: 0,
+    },
+    Case {
         name: "boox-all-tools",
         profile: "boox-go-7",
         book: None,

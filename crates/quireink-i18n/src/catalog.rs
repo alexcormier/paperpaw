@@ -1,4 +1,5 @@
 use alloc::borrow::Cow;
+use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt;
@@ -10,10 +11,13 @@ use crate::plural::PluralRule;
 /// The messages of one language.
 ///
 /// Messages are not copied: the catalog keeps its source (usually text
-/// built into the program) and an index of byte ranges into it, 16 bytes
-/// per message. Only values with escape sequences are stored decoded. A
-/// catalog of an unused language can drop its index ([`Catalog::unload`])
-/// and rebuild it when needed.
+/// built into the program) and an index of where each message's line
+/// starts in it, 4 bytes per message; the key and value are read from the
+/// line when looked up. Messages the line does not give plainly (quoted
+/// values, escape sequences) are kept as byte ranges instead, and only
+/// values with escape sequences are stored decoded. A catalog of an
+/// unused language can drop its index ([`Catalog::unload`]) and rebuild it
+/// when needed.
 #[derive(Debug, Clone)]
 pub struct Catalog {
     source: Cow<'static, str>,
@@ -24,8 +28,12 @@ pub struct Catalog {
     /// first (`meta_len` bytes), which stay when the catalog is unloaded.
     escaped: String,
     meta_len: u32,
-    /// Sorted by key; empty while unloaded.
-    index: Vec<(Span, Span)>,
+    /// The messages, sorted by key; empty while unloaded. Each is where
+    /// its line's key starts in the source or, with [`OTHER`] set, the
+    /// place of its key and value in `others`.
+    index: Box<[u32]>,
+    /// Messages whose line does not give them plainly.
+    others: Box<[(Span, Span)]>,
     loaded: bool,
 }
 
@@ -37,6 +45,40 @@ struct Span {
 }
 
 const ESCAPED: u32 = 1 << 31;
+/// In the index: a message of `others`.
+const OTHER: u32 = 1 << 31;
+
+/// The key of the message line starting at `start`: its characters (see
+/// [`plain`]). Only the key is read, as looking a message up compares
+/// many keys and reads one value: the catalog may lie in flash, where
+/// every byte read costs.
+fn plain_key(source: &str, start: u32) -> &str {
+    let line = source.get(start as usize..).unwrap_or_default();
+    let len = line
+        .bytes()
+        .position(|b| !(b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-' | b'.')))
+        .unwrap_or(line.len());
+    &line[..len]
+}
+
+/// The value of the message line starting at `start` (see [`plain`]).
+fn plain_value(source: &str, start: u32) -> Option<&str> {
+    let after = start as usize + plain_key(source, start).len();
+    let rest = source.get(after..)?;
+    let rest = &rest[..rest.find('\n').unwrap_or(rest.len())];
+    let value = rest.trim_start().strip_prefix('=')?.trim();
+    (!value.starts_with('"')).then_some(value)
+}
+
+/// The key and value of the message line starting at `start`, as the
+/// parser reads them when the value is plain: the key's characters, `=`,
+/// then the rest of the line, trimmed. `None` for anything else (a quoted
+/// value), which the index keeps in `others`.
+fn plain(source: &str, start: u32) -> Option<(&str, &str)> {
+    let key = plain_key(source, start);
+    let value = plain_value(source, start)?;
+    (!key.is_empty()).then_some((key, value))
+}
 
 /// Why a catalog could not be loaded.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -83,7 +125,8 @@ impl Catalog {
             plural: PluralRule::OneOther,
             escaped: String::new(),
             meta_len: 0,
-            index: Vec::new(),
+            index: Box::default(),
+            others: Box::default(),
             loaded: false,
         };
         catalog.scan(true)?;
@@ -117,6 +160,7 @@ impl Catalog {
             }
         };
         let mut index = Vec::new();
+        let mut others = Vec::new();
         let (mut language, mut name, mut plural) = (None, None, PluralRule::OneOther);
         for entry in quireink_config::parse(source) {
             let entry = entry.map_err(CatalogError::Syntax)?;
@@ -130,8 +174,22 @@ impl Catalog {
                 }
                 ("meta", _) => {}
                 ("messages", key) => {
-                    let key = span(&mut escaped, Cow::Borrowed(key));
-                    index.push((key, span(&mut escaped, entry.value.as_str())));
+                    let value = entry.value.as_str();
+                    // Plainly on its line, as the parser read it: only
+                    // where the line starts.
+                    let start = (key.as_ptr() as usize - base) as u32;
+                    let read = plain(source, start);
+                    let same = |a: &str, b: &str| a.as_ptr() == b.as_ptr() && a.len() == b.len();
+                    match (&value, read) {
+                        (Cow::Borrowed(v), Some((k, w))) if same(k, key) && same(w, v) => {
+                            index.push(start);
+                        }
+                        _ => {
+                            index.push(others.len() as u32 | OTHER);
+                            let key = span(&mut escaped, Cow::Borrowed(key));
+                            others.push((key, span(&mut escaped, value)));
+                        }
+                    }
                 }
                 _ => return Err(CatalogError::UnexpectedSection { line: entry.line }),
             }
@@ -150,26 +208,29 @@ impl Catalog {
                 .unwrap_or(0);
         }
         // Stable sort keeps file order for duplicates; the last one wins.
-        index.sort_by(|a, b| text_of(source, &escaped, a.0).cmp(text_of(source, &escaped, b.0)));
+        let key = |at: u32| key_of(source, &escaped, &others, at);
+        index.sort_by(|a, b| key(*a).cmp(key(*b)));
         index.dedup_by(|later, earlier| {
-            let duplicate =
-                text_of(source, &escaped, later.0) == text_of(source, &escaped, earlier.0);
+            let duplicate = key(*later) == key(*earlier);
             if duplicate {
-                earlier.1 = later.1;
+                *earlier = *later;
             }
             duplicate
         });
-        index.shrink_to_fit();
         escaped.shrink_to_fit();
         self.escaped = escaped;
-        self.index = index;
+        // Boxed: they no longer change, and a box is smaller than a
+        // vector (one of each per catalog, of every plugin).
+        self.index = index.into_boxed_slice();
+        self.others = others.into_boxed_slice();
         self.loaded = true;
         Ok(())
     }
 
     /// Drops the message index (keeps language, name and plural rule).
     pub fn unload(&mut self) {
-        self.index = Vec::new();
+        self.index = Box::default();
+        self.others = Box::default();
         self.escaped.truncate(self.meta_len as usize);
         self.escaped.shrink_to_fit();
         self.loaded = false;
@@ -205,17 +266,28 @@ impl Catalog {
         self.plural
     }
 
+    fn key(&self, at: u32) -> &str {
+        key_of(&self.source, &self.escaped, &self.others, at)
+    }
+
     /// The message for `key`, if this catalog has one and is loaded.
     pub fn get(&self, key: &str) -> Option<&str> {
-        self.index
-            .binary_search_by(|(k, _)| self.text(*k).cmp(key))
-            .ok()
-            .map(|i| self.text(self.index[i].1))
+        let i = self
+            .index
+            .binary_search_by(|at| self.key(*at).cmp(key))
+            .ok()?;
+        let at = self.index[i];
+        if at & OTHER != 0 {
+            let (_, value) = self.others.get((at & !OTHER) as usize)?;
+            Some(self.text(*value))
+        } else {
+            plain_value(&self.source, at)
+        }
     }
 
     /// All message keys, sorted.
     pub fn keys(&self) -> impl Iterator<Item = &str> {
-        self.index.iter().map(|(key, _)| self.text(*key))
+        self.index.iter().map(|at| self.key(*at))
     }
 
     pub fn len(&self) -> usize {
@@ -224,6 +296,17 @@ impl Catalog {
 
     pub fn is_empty(&self) -> bool {
         self.index.is_empty()
+    }
+}
+
+/// The key of index entry `at` (see the field `index` of `Catalog`).
+fn key_of<'a>(source: &'a str, escaped: &'a str, others: &[(Span, Span)], at: u32) -> &'a str {
+    if at & OTHER != 0 {
+        others
+            .get((at & !OTHER) as usize)
+            .map_or("", |(key, _)| text_of(source, escaped, *key))
+    } else {
+        plain_key(source, at)
     }
 }
 
@@ -276,6 +359,26 @@ a = "two\nlines"
         catalog.load();
         assert_eq!(catalog.get("a"), Some("two\nlines"));
         assert_eq!(catalog.get("b"), Some("plain"));
+    }
+
+    #[test]
+    fn plain_and_quoted_messages() {
+        let catalog = Catalog::parse(
+            "[meta]\nlanguage = en\n[messages]\n  spaced   =   value with = and # in it  \r\n\
+             quoted = \"  kept spaces  \"\nescaped = \"a\\tb\"\nempty =\nlast = end",
+        )
+        .unwrap();
+        assert_eq!(catalog.get("spaced"), Some("value with = and # in it"));
+        assert_eq!(catalog.get("quoted"), Some("  kept spaces  "));
+        assert_eq!(catalog.get("escaped"), Some("a\tb"));
+        assert_eq!(catalog.get("empty"), Some(""));
+        assert_eq!(catalog.get("last"), Some("end"));
+        // Only the quoted ones need more than where their line starts.
+        assert_eq!(catalog.others.len(), 2);
+        assert_eq!(
+            catalog.keys().collect::<Vec<_>>(),
+            ["empty", "escaped", "last", "quoted", "spaced"]
+        );
     }
 
     #[test]

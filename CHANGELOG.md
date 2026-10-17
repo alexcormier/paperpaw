@@ -29,6 +29,9 @@ change the plugin SDK.
   for shells with their own network stack.
 - The emulator's X4 profiles pretend to manage Wi-Fi, with made-up
   networks, to try the `wifi` plugin without a device.
+- Translations take a quarter of the memory: a catalog keeps where each
+  message's line starts (4 bytes, 16 before) and reads key and value from
+  it when looked up; about 16 KiB less on the X4, as fast.
 - X4: the stack no longer runs into the memory below it (the FAT cache
   and the inflate state of pictures went to the heap); `heap` over USB
   also says how much of the stack was never used.
