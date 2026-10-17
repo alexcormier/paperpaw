@@ -32,6 +32,7 @@ its USB id.
 
 import argparse
 import bisect
+import getpass
 import glob
 import os
 import struct
@@ -312,6 +313,9 @@ def main():
     parser.add_argument("--trace", action="store_true", help="what the steps do on the storage")
     parser.add_argument("--put", nargs=2, action="append", default=[], metavar=("FILE", "PATH"))
     parser.add_argument("--get", nargs=2, action="append", default=[], metavar=("PATH", "FILE"))
+    parser.add_argument(
+        "--wifi-connect", metavar="NAME", help="join a network (asks for its password, not shown)"
+    )
     args = parser.parse_args()
     port = open_port(args.port or find_port())
     x4 = X4(port)
@@ -325,6 +329,14 @@ def main():
         x4.put(local, path)
     for path, local in args.get:
         x4.get(path, local)
+    if args.wifi_connect:
+        password = getpass.getpass(f"Password for {args.wifi_connect} (empty if open): ")
+        hexed = password.encode().hex() or "-"
+        x4.port.reset_input_buffer()
+        x4.buffer = b""
+        x4.port.write(f"wifi connect {args.wifi_connect.encode().hex()} {hexed}\n".encode())
+        # Not `ask`: it would repeat the command, password and all, on an error.
+        print(x4.expect("wifi connect", "CONNECTED")[-1])
     if args.profile:
         x4.ask("profile start", "OK")
     if args.trace:

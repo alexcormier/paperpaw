@@ -39,6 +39,9 @@
 //! - `wifi scan`: the networks in reach, as `QI:NET <rssi> <channel>
 //!   <security> <name>` lines, with the heap, then `QI:END` (starts the
 //!   radio the first time; it stays on until the X4 starts again);
+//! - `wifi connect <name> <password>`: joins that network (both in
+//!   hexadecimal, `-` for no password), answered with `QI:CONNECTED
+//!   <channel>` or `QI:ERR`; the password is not shown anywhere;
 //! - `get <path>`: a file of the storage, as `QI:SIZE <size>`, then
 //!   `QI:DATA <hex>` lines and `QI:END` (e.g. the battery's log).
 //!
@@ -86,6 +89,8 @@ pub enum Command {
     Get(String),
     Boot,
     WifiScan,
+    /// A network's name and password.
+    WifiConnect(String, String),
     Hang(u64),
     Nap(u64),
 }
@@ -153,7 +158,10 @@ impl Remote {
         match command {
             Command::Press(name, ms) => return Some((name, ms)),
             // The main loop does it; asked here, nothing.
-            Command::Refresh(_) | Command::IdleSleep(_) | Command::WifiScan => {
+            Command::Refresh(_)
+            | Command::IdleSleep(_)
+            | Command::WifiScan
+            | Command::WifiConnect(..) => {
                 println!("QI:ERR refresh")
             }
             Command::Shot => {
@@ -322,6 +330,21 @@ pub fn note_panic(message: Option<String>) {
     critical_section::with(|cs| PANIC.replace(cs, message));
 }
 
+/// Text sent as hexadecimal (`-` for none), so that it may hold spaces.
+fn unhex(word: &str) -> Option<String> {
+    if word == "-" {
+        return Some(String::new());
+    }
+    let bytes = word
+        .as_bytes()
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|pair| u8::from_str_radix(core::str::from_utf8(pair).ok()?, 16).ok())
+        .collect::<Option<Vec<u8>>>()?;
+    String::from_utf8(bytes).ok()
+}
+
 fn parse(line: &str) -> Option<Command> {
     let mut words = line.split_ascii_whitespace();
     let command = match words.next()? {
@@ -334,6 +357,7 @@ fn parse(line: &str) -> Option<Command> {
         "boot" => Command::Boot,
         "wifi" => match words.next()? {
             "scan" => Command::WifiScan,
+            "connect" => Command::WifiConnect(unhex(words.next()?)?, unhex(words.next()?)?),
             _ => return None,
         },
         "hang" => Command::Hang(words.next()?.parse().ok()?),

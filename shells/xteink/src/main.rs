@@ -389,6 +389,8 @@ fn main() -> ! {
         let command = remote.poll();
         if let Some(remote::Command::WifiScan) = command {
             remote_wifi_scan(&mut wifi, &mut wifi_parts);
+        } else if let Some(remote::Command::WifiConnect(ssid, password)) = &command {
+            remote_wifi_connect(&mut wifi, &mut wifi_parts, ssid, password);
         } else if let Some(remote::Command::IdleSleep(seconds)) = command {
             // At most ten minutes: the link is gone meanwhile.
             sleep_on_usb_until = Some(Instant(now().0 + seconds.min(600) * 1000));
@@ -469,19 +471,7 @@ fn main() -> ! {
 fn remote_wifi_scan(wifi: &mut Option<wifi::Wifi>, parts: &mut Option<wifi::Parts>) {
     let heap = || (esp_alloc::HEAP.used(), esp_alloc::HEAP.free());
     esp_println::println!("QI:HEAP-BEFORE {} {}", heap().0, heap().1);
-    if wifi.is_none() {
-        let Some(parts) = parts.take() else {
-            return esp_println::println!("QI:ERR wifi: gone");
-        };
-        let started = now();
-        match wifi::Wifi::start(parts) {
-            Ok(started_wifi) => *wifi = Some(started_wifi),
-            Err(e) => return esp_println::println!("QI:ERR wifi: {e:?}"),
-        }
-        esp_println::println!("QI:STARTED {} ms", now().since(started));
-        esp_println::println!("QI:HEAP-STARTED {} {}", heap().0, heap().1);
-    }
-    let Some(radio) = wifi.as_mut() else {
+    let Some(radio) = remote_wifi_start(wifi, parts) else {
         return;
     };
     let started = now();
@@ -502,6 +492,56 @@ fn remote_wifi_scan(wifi: &mut Option<wifi::Wifi>, parts: &mut Option<wifi::Part
     }
     esp_println::println!("QI:HEAP-AFTER {} {}", heap().0, heap().1);
     esp_println::println!("QI:END");
+}
+
+/// The radio, started the first time (said over USB, with the heap).
+fn remote_wifi_start<'a>(
+    wifi: &'a mut Option<wifi::Wifi>,
+    parts: &mut Option<wifi::Parts>,
+) -> Option<&'a mut wifi::Wifi> {
+    if wifi.is_none() {
+        let Some(parts) = parts.take() else {
+            esp_println::println!("QI:ERR wifi: gone");
+            return None;
+        };
+        let started = now();
+        match wifi::Wifi::start(parts) {
+            Ok(started_wifi) => *wifi = Some(started_wifi),
+            Err(e) => {
+                esp_println::println!("QI:ERR wifi: {e:?}");
+                return None;
+            }
+        }
+        esp_println::println!("QI:STARTED {} ms", now().since(started));
+        esp_println::println!(
+            "QI:HEAP-STARTED {} {}",
+            esp_alloc::HEAP.used(),
+            esp_alloc::HEAP.free()
+        );
+    }
+    wifi.as_mut()
+}
+
+/// Joins a network over USB (`wifi connect`), starting the radio the first
+/// time. The password is not logged.
+fn remote_wifi_connect(
+    wifi: &mut Option<wifi::Wifi>,
+    parts: &mut Option<wifi::Parts>,
+    ssid: &str,
+    password: &str,
+) {
+    let Some(radio) = remote_wifi_start(wifi, parts) else {
+        return;
+    };
+    let started = now();
+    match radio.connect(ssid, password) {
+        Ok(info) => esp_println::println!(
+            "QI:CONNECTED {} in {} ms",
+            info.channel,
+            now().since(started)
+        ),
+        Err(e) => esp_println::println!("QI:ERR wifi connect: {e:?}"),
+    }
 }
 
 /// A check of the rows sent to a memory of the controller: their tops,

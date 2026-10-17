@@ -51,6 +51,7 @@ pub mod at {
     pub const RADIO_STATION: u32 = 22;
     pub const RADIO_STARTED: u32 = 23;
     pub const RADIO_SCAN: u32 = 24;
+    pub const RADIO_CONNECT: u32 = 25;
 }
 
 /// Notes being at `place` (one of [`at`]).

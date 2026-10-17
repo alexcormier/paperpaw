@@ -13,8 +13,11 @@ use esp_hal::peripherals::{FROM_CPU_INTR0, WIFI};
 use esp_hal::timer::timg::Timer;
 use esp_radio::wifi::ap::AccessPointInfo;
 use esp_radio::wifi::scan::ScanConfig;
-use esp_radio::wifi::sta::StationConfig;
-use esp_radio::wifi::{Config, WifiController, WifiError};
+use esp_radio::wifi::sta::{ConnectedInfo, StationConfig};
+use esp_radio::wifi::{
+    AuthenticationMethodConfig, Config, ConnectionError, DisconnectReason, WifiController,
+    WifiError,
+};
 
 /// The longest anything of the radio is waited for here.
 const WAIT_MS: u64 = 15_000;
@@ -25,6 +28,18 @@ pub enum Error {
     Radio(#[allow(dead_code)] WifiError),
     /// It took longer than [`WAIT_MS`].
     Timeout,
+    /// The network did not let the X4 in, and why (e.g. a wrong password).
+    Refused(#[allow(dead_code)] DisconnectReason),
+}
+
+impl From<ConnectionError> for Error {
+    fn from(e: ConnectionError) -> Self {
+        match e {
+            ConnectionError::Failed(info) => Error::Refused(info.reason),
+            ConnectionError::WifiError(e) => Error::Radio(e),
+            _ => Error::Radio(WifiError::Unsupported),
+        }
+    }
 }
 
 impl From<WifiError> for Error {
@@ -67,6 +82,22 @@ impl Wifi {
         crate::power::mark(crate::power::at::RADIO_SCAN);
         let config = ScanConfig::default().with_max(max);
         Ok(block_on(self.controller.scan_async(&config))??)
+    }
+
+    /// Joins the network `ssid`, with WPA2 or newer if there is a
+    /// password, else an open one.
+    pub fn connect(&mut self, ssid: &str, password: &str) -> Result<ConnectedInfo, Error> {
+        crate::power::mark(crate::power::at::RADIO_CONNECT);
+        let authentication = if password.is_empty() {
+            AuthenticationMethodConfig::Open
+        } else {
+            AuthenticationMethodConfig::Wpa2Personal(password.try_into()?)
+        };
+        let config = StationConfig::default()
+            .with_ssid(ssid.try_into()?)
+            .with_authentication(authentication);
+        self.controller.set_config(&Config::Station(config))?;
+        Ok(block_on(self.controller.connect_async())??)
     }
 }
 
