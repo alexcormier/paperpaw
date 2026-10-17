@@ -18,12 +18,14 @@
 extern crate alloc;
 
 mod card;
+mod crash;
 mod device;
 mod input;
 mod power;
 mod remote;
 mod sent;
 mod traced;
+mod wifi;
 
 use alloc::boxed::Box;
 use core::cell::RefCell;
@@ -132,8 +134,13 @@ fn main() -> ! {
     esp_alloc::heap_allocator!(#[esp_hal::ram(reclaimed)] size: RECLAIMED_SIZE);
     let delay = Delay::new();
     power::note_start();
+    let panicked = crash::take_last();
     let (place, naps, reason) = power::last_run();
     info!("QuireInk starting (reset: {reason:?}, last at {place}, naps {naps})");
+    if let Some(message) = &panicked {
+        warn!("the last run panicked: {message}");
+    }
+    remote::note_panic(panicked);
 
     // One SPI bus for the display and the card, with DMA for all but
     // short transfers: the processor fed the bus a word at a time and
@@ -221,11 +228,19 @@ fn main() -> ! {
     let power = Input::new(p.GPIO3, InputConfig::default().with_pull(Pull::Up));
     let usb = Input::new(p.GPIO20, InputConfig::default());
     let timers = TimerGroup::new(p.TIMG0);
+    let timers1 = TimerGroup::new(p.TIMG1);
     power::watch(
         esp_hal::rtc_cntl::Rtc::new(p.RTC_TIMER),
-        TimerGroup::new(p.TIMG1).wdt,
+        timers1.wdt,
         WATCHDOG_S,
     );
+    // Wi-Fi, started when first wanted.
+    let mut wifi_parts = Some(wifi::Parts {
+        timer: timers1.timer0,
+        interrupt: p.FROM_CPU_INTR0,
+        wifi: p.WIFI,
+    });
+    let mut wifi: Option<wifi::Wifi> = None;
     input::start(input::Sampler::new(
         PeriodicTimer::new(timers.timer0),
         adc,
@@ -331,8 +346,10 @@ fn main() -> ! {
 
         power::feed();
         power::mark(power::at::LOOP);
-        let battery = (usb.is_low() && kernel.settings().bool(device::LIGHT_SLEEP.as_str()))
-            || sleep_on_usb_until.is_some();
+        // Not while the radio is on: its tasks run in between.
+        let battery = wifi.is_none()
+            && ((usb.is_low() && kernel.settings().bool(device::LIGHT_SLEEP.as_str()))
+                || sleep_on_usb_until.is_some());
         power::allow(battery);
         let at = now();
         if status_read.is_none_or(|read| at.since(read) >= STATUS_MS) {
@@ -367,7 +384,9 @@ fn main() -> ! {
         }
 
         let command = remote.poll();
-        if let Some(remote::Command::IdleSleep(seconds)) = command {
+        if let Some(remote::Command::WifiScan) = command {
+            remote_wifi_scan(&mut wifi, &mut wifi_parts);
+        } else if let Some(remote::Command::IdleSleep(seconds)) = command {
             // At most ten minutes: the link is gone meanwhile.
             sleep_on_usb_until = Some(Instant(now().0 + seconds.min(600) * 1000));
             esp_println::println!("QI:OK");
@@ -440,6 +459,46 @@ fn main() -> ! {
             delay.delay_millis(until.saturating_sub(now().0) as u32);
         }
     }
+}
+
+/// Lists the networks in reach over USB (`wifi scan`), starting the radio
+/// the first time, with the heap before and after.
+fn remote_wifi_scan(wifi: &mut Option<wifi::Wifi>, parts: &mut Option<wifi::Parts>) {
+    let heap = || (esp_alloc::HEAP.used(), esp_alloc::HEAP.free());
+    esp_println::println!("QI:HEAP-BEFORE {} {}", heap().0, heap().1);
+    if wifi.is_none() {
+        let Some(parts) = parts.take() else {
+            return esp_println::println!("QI:ERR wifi: gone");
+        };
+        let started = now();
+        match wifi::Wifi::start(parts) {
+            Ok(started_wifi) => *wifi = Some(started_wifi),
+            Err(e) => return esp_println::println!("QI:ERR wifi: {e:?}"),
+        }
+        esp_println::println!("QI:STARTED {} ms", now().since(started));
+        esp_println::println!("QI:HEAP-STARTED {} {}", heap().0, heap().1);
+    }
+    let Some(radio) = wifi.as_mut() else {
+        return;
+    };
+    let started = now();
+    match radio.scan(20) {
+        Ok(networks) => {
+            esp_println::println!("QI:SCANNED {} ms", now().since(started));
+            for net in networks {
+                esp_println::println!(
+                    "QI:NET {} {} {:?} {}",
+                    net.signal_strength,
+                    net.channel,
+                    net.auth_method,
+                    net.ssid.as_str()
+                );
+            }
+        }
+        Err(e) => esp_println::println!("QI:ERR wifi scan: {e:?}"),
+    }
+    esp_println::println!("QI:HEAP-AFTER {} {}", heap().0, heap().1);
+    esp_println::println!("QI:END");
 }
 
 /// A check of the rows sent to a memory of the controller: their tops,

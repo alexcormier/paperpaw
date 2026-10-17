@@ -45,6 +45,12 @@ pub mod at {
     pub const TRIED: u32 = 10;
     /// In a long light sleep tried over USB.
     pub const TRIED_NAP: u32 = 11;
+    /// Starting the radio: its scheduler, its driver, as a station.
+    pub const RADIO_SCHEDULER: u32 = 20;
+    pub const RADIO_DRIVER: u32 = 21;
+    pub const RADIO_STATION: u32 = 22;
+    pub const RADIO_STARTED: u32 = 23;
+    pub const RADIO_SCAN: u32 = 24;
 }
 
 /// Notes being at `place` (one of [`at`]).

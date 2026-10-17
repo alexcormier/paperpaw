@@ -22,7 +22,7 @@ quireink-x4 = { path = "../../crates/quireink-x4" }
 quireink-fat = { path = "../../crates/quireink-fat" }
 esp-hal = { version = "1.2", features = ["esp32c3", "unstable"] }
 esp-alloc = { version = "0.11", features = ["esp32c3"] }
-esp-backtrace = { version = "0.20", features = ["esp32c3", "panic-handler", "println"] }
+esp-backtrace = { version = "0.20", features = ["esp32c3", "println"] }
 esp-println = { version = "0.18", features = ["esp32c3", "log-04"] }
 esp-bootloader-esp-idf = { version = "0.6", features = ["esp32c3"] }
 embedded-hal = "1.0"
@@ -30,6 +30,15 @@ embedded-hal-bus = "0.3"
 log = "0.4"
 nb = "1"
 critical-section = "1.2"
+# Wi-Fi: the radio's driver is a beta of its 1.0, pinned to the version
+# tried; only `src/wifi.rs` uses it.
+esp-radio = { version = "=1.0.0-beta.1", features = ["esp32c3", "wifi", "unstable", "esp-alloc"] }
+esp-rtos = { version = "0.4", features = ["esp32c3", "esp-radio", "esp-alloc"] }
+
+# The radio's code needs optimising for speed (Espressif: otherwise Wi-Fi
+# may fail to connect).
+[profile.release.package.esp-radio]
+opt-level = 3
 
 [profile.release]
 opt-level = "s"

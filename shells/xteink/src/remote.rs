@@ -35,6 +35,9 @@
 //!   e.g. after a watchdog's reset or an `idle sleep`;
 //! - `nap <seconds>`: one light sleep that long (at most a minute), then a
 //!   new start, to try that the RTC's watchdog starts it again first;
+//! - `wifi scan`: the networks in reach, as `QI:NET <rssi> <channel>
+//!   <security> <name>` lines, with the heap, then `QI:END` (starts the
+//!   radio the first time; it stays on until the X4 starts again);
 //! - `get <path>`: a file of the storage, as `QI:SIZE <size>`, then
 //!   `QI:DATA <hex>` lines and `QI:END` (e.g. the battery's log).
 //!
@@ -81,6 +84,7 @@ pub enum Command {
     Put(usize, String),
     Get(String),
     Boot,
+    WifiScan,
     Hang(u64),
     Nap(u64),
 }
@@ -148,7 +152,9 @@ impl Remote {
         match command {
             Command::Press(name, ms) => return Some((name, ms)),
             // The main loop does it; asked here, nothing.
-            Command::Refresh(_) | Command::IdleSleep(_) => println!("QI:ERR refresh"),
+            Command::Refresh(_) | Command::IdleSleep(_) | Command::WifiScan => {
+                println!("QI:ERR refresh")
+            }
             Command::Shot => {
                 shot(kernel, display);
             }
@@ -180,6 +186,9 @@ impl Remote {
             Command::Boot => {
                 let (place, naps, reason) = crate::power::last_run();
                 println!("QI:BOOT {reason:?} {place} {naps}");
+                if let Some(message) = critical_section::with(|cs| PANIC.borrow_ref(cs).clone()) {
+                    println!("QI:PANIC {message}");
+                }
             }
             Command::Profile(true) => {
                 crate::input::profile(true);
@@ -302,6 +311,15 @@ fn send(kernel: &Kernel, path: &str) {
     println!("QI:END");
 }
 
+/// The last run's panic, said by `boot`.
+static PANIC: critical_section::Mutex<core::cell::RefCell<Option<String>>> =
+    critical_section::Mutex::new(core::cell::RefCell::new(None));
+
+/// Keeps the last run's panic for `boot`.
+pub fn note_panic(message: Option<String>) {
+    critical_section::with(|cs| PANIC.replace(cs, message));
+}
+
 fn parse(line: &str) -> Option<Command> {
     let mut words = line.split_ascii_whitespace();
     let command = match words.next()? {
@@ -312,6 +330,10 @@ fn parse(line: &str) -> Option<Command> {
         "describe" => Command::Describe,
         "heap" => Command::Heap,
         "boot" => Command::Boot,
+        "wifi" => match words.next()? {
+            "scan" => Command::WifiScan,
+            _ => return None,
+        },
         "hang" => Command::Hang(words.next()?.parse().ok()?),
         "nap" => Command::Nap(words.next()?.parse().ok()?),
         "input" => Command::Input,
