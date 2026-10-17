@@ -22,12 +22,15 @@ mod crash;
 mod device;
 mod http;
 mod input;
+mod link;
 mod net;
 mod network;
 mod power;
 mod remote;
+mod roots;
 mod sent;
 mod stack;
+mod tls;
 mod traced;
 mod wifi;
 

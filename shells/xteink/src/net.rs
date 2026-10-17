@@ -4,7 +4,6 @@
 //! address, router and name servers come by DHCP. What goes over it is in
 //! `http`.
 
-use alloc::vec;
 use alloc::vec::Vec;
 use core::task::{Context, Waker};
 
@@ -32,6 +31,17 @@ pub enum Error {
     Name,
     /// The connection could not be opened.
     Connection,
+    /// Not enough memory for it.
+    Memory,
+}
+
+/// `len` zero bytes, or [`Error::Memory`]: a connection's buffers are
+/// large, and memory may be short (or in pieces) at any time.
+fn zeroed(len: usize) -> Result<Vec<u8>, Error> {
+    let mut buf = Vec::new();
+    buf.try_reserve_exact(len).map_err(|_| Error::Memory)?;
+    buf.resize(len, 0);
+    Ok(buf)
 }
 
 fn now() -> Instant {
@@ -234,8 +244,8 @@ impl Net {
     /// [`Net::release`] lets it go.
     pub fn open(&mut self, to: (IpAddress, u16)) -> Result<SocketHandle, Error> {
         let socket = tcp::Socket::new(
-            tcp::SocketBuffer::new(vec![0; RECEIVE_BUF]),
-            tcp::SocketBuffer::new(vec![0; SEND_BUF]),
+            tcp::SocketBuffer::new(zeroed(RECEIVE_BUF)?),
+            tcp::SocketBuffer::new(zeroed(SEND_BUF)?),
         );
         let handle = self.sockets.add(socket);
         let local = self.port;

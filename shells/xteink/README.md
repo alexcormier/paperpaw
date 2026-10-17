@@ -64,8 +64,9 @@ python tools/x4-remote.py --script "page-forward,right,describe" --screenshot ou
   power button switches it off and on again, where it was), light sleep
   between button reads on battery.
 - Wi-Fi (ADR 0016): on when something needs the network, chosen on the
-  Wi-Fi page in the settings; plain HTTP for plugins, downloads straight
-  to the card.
-- To come: HTTPS, plugins' servers and sockets (transfers, Calibre),
+  Wi-Fi page in the settings; HTTP and HTTPS (ADR 0017) for plugins,
+  downloads straight to the card.
+- To come: certificates' dates (once the time comes over the network),
+  plugins' servers and sockets (transfers, Calibre),
   the time over the network, updates over the air, 4 gray levels, the
   UC8179 controller of newer X4s.

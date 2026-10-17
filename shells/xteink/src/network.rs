@@ -50,6 +50,8 @@ struct Asked {
     /// The network asked to join, and its password, kept once joined.
     connect: Option<(String, String)>,
     next_request: u32,
+    /// Requests asked: their number and when.
+    requests: Vec<(u32, u64)>,
 }
 
 pub struct Network {
@@ -109,7 +111,13 @@ impl Network {
         if self.calls.busy() {
             for answer in self.calls.poll(self.radio.net(), kernel.storage()) {
                 if answer.id >= REMOTE_REQUESTS {
-                    remote::http_answer(&answer);
+                    let asked = self
+                        .asked
+                        .requests
+                        .iter()
+                        .position(|(id, _)| *id == answer.id);
+                    let since = asked.map(|at| self.asked.requests.remove(at).1);
+                    remote::http_answer(&answer, since.map_or(0, |at| now.0.saturating_sub(at)));
                 } else {
                     effects.push(kernel.http_response(now, answer));
                 }
@@ -141,6 +149,7 @@ impl Network {
             }
             Ask::Get { url, save_to } => {
                 let id = REMOTE_REQUESTS + self.asked.next_request;
+                self.asked.requests.push((id, crate::now().0));
                 self.asked.next_request = self.asked.next_request.wrapping_add(1) % 0x0FFF_FFFF;
                 self.calls.add(HttpCall {
                     id,

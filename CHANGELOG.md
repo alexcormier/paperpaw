@@ -6,6 +6,17 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- HTTPS on the X4 ([ADR 0017](docs/adr/0017-tls-on-the-x4.md)): mbedTLS
+  (TLS 1.2 and 1.3), the certificate checked against Mozilla's roots,
+  which stay in flash, and against the host; refused certificates fail
+  the request with the reason. One secure connection at a time (about
+  40 KB); a handshake takes 1.3 to 2.7 s. Certificates' dates are checked
+  once the X4 gets the time over the network.
+- X4: requests fail with a reason instead of restarting the X4 when memory
+  is short or in pieces; `heap` over USB also says the largest block that
+  could be had.
+- The licence check covers the X4 firmware's dependencies too.
+
 - Wi-Fi on the X4 (new plugin `wifi`, under Settings, Device): the radio
   is off while reading and comes on by itself when something needs the
   network (a catalog, a sync), joins the strongest network joined before
@@ -13,7 +24,7 @@ change the plugin SDK.
   stays on. Its page lists the networks in reach to join, with the
   password typed on the keyboard, and forgets saved ones (menu button or
   a long press). Saved networks are kept with the passwords and keys.
-  Plain HTTP for now; HTTPS follows.
+  Plain HTTP and, since, HTTPS.
 - Network for plugins on devices where QuireInk manages Wi-Fi
   (`quireink_sdk::wifi`, [ADR 0016](docs/adr/0016-network-and-wifi.md)):
   `Command::Wifi`, `Env::wifi`, and the events `core.wifi-changed`,

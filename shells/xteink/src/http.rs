@@ -5,7 +5,8 @@
 //! goes there as it comes (by way of a `.part` file, renamed once whole),
 //! so a large download never needs to fit in memory.
 //!
-//! Plain `http://` only, for now.
+//! `https://` goes over TLS (`tls`), with the certificate checked; one
+//! such connection at a time, for its memory.
 
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -13,9 +14,9 @@ use alloc::vec::Vec;
 use quireink_core::{HttpCall, HttpResponse};
 use quireink_http::{Parser, Url};
 use quireink_platform::Storage;
-use smoltcp::iface::SocketHandle;
-use smoltcp::socket::{dns, tcp};
+use smoltcp::socket::dns;
 
+use crate::link::{Link, Received};
 use crate::net::{self, Net, Resolve};
 
 /// How long a request waits for the network (e.g. while a network is
@@ -61,7 +62,7 @@ enum Phase {
     Waiting,
     Resolving(dns::QueryHandle, u16),
     Exchanging {
-        socket: SocketHandle,
+        link: Link,
         /// The head and body to send, and how much went.
         request: Vec<u8>,
         sent: usize,
@@ -127,10 +128,17 @@ impl Calls {
                 .iter()
                 .filter(|c| !matches!(c.phase, Phase::Waiting))
                 .count();
+            let secure = self
+                .calls
+                .iter()
+                .filter(|c| !matches!(c.phase, Phase::Waiting) && c.secure())
+                .count();
             let call = &mut self.calls[at];
+            // A TLS connection takes some 40 KB: one at a time.
+            let may_open = open < net::MAX_CALLS && (!call.secure() || secure == 0);
             let outcome = match net.as_deref_mut() {
                 None => Some(Err("no network")),
-                Some(net) => call.step(net, storage, open < net::MAX_CALLS),
+                Some(net) => call.step(net, storage, may_open),
             };
             match outcome {
                 None => at += 1,
@@ -154,6 +162,11 @@ impl Calls {
 }
 
 impl Call {
+    /// It goes over TLS (`https://`).
+    fn secure(&self) -> bool {
+        Url::parse(&self.url).is_some_and(|url| url.https)
+    }
+
     /// One step on; the outcome once there is one.
     fn step(
         &mut self,
@@ -170,9 +183,6 @@ impl Call {
                 let Some(url) = Url::parse(&self.url) else {
                     return Some(Err("not an address"));
                 };
-                if url.https {
-                    return Some(Err("HTTPS is not supported on this device yet"));
-                }
                 let port = url.port;
                 match net.resolve(url.host) {
                     Ok(Resolve::Done(address)) => self.connect(net, storage, address, port),
@@ -198,117 +208,95 @@ impl Call {
                 }
             }
             Phase::Exchanging {
-                socket,
+                link,
                 request,
                 sent,
                 upload,
                 parser,
             } => {
-                let socket = net.socket(*socket);
-                let mut progress = false;
-                if *sent < request.len() && socket.can_send() {
-                    match socket.send_slice(&request[*sent..]) {
-                        Ok(n) => {
-                            *sent += n;
-                            progress |= n > 0;
-                        }
-                        Err(_) => return Some(Err("connection lost")),
-                    }
-                }
-                // Then the file, a part at a time, as the socket takes it.
-                while *sent == request.len()
-                    && let Some(upload) = upload.as_mut()
-                    && upload.at < upload.size
-                    && socket.can_send()
-                {
-                    let mut part = [0u8; UPLOAD_PART];
-                    let want = (upload.size - upload.at).min(UPLOAD_PART as u64) as usize;
-                    let Ok(read) = storage.read_at(&upload.path, upload.at, &mut part[..want])
-                    else {
-                        return Some(Err("could not read the file"));
-                    };
-                    if read == 0 {
-                        return Some(Err("could not read the file"));
-                    }
-                    match socket.send_slice(&part[..read]) {
-                        Ok(0) => break,
-                        Ok(n) => {
-                            upload.at += n as u64;
-                            progress = true;
-                        }
-                        Err(_) => return Some(Err("connection lost")),
-                    }
-                }
-                let mut problem = None;
-                // Body bytes that come with the head, held until the head
-                // tells whether they are wanted (not a redirect's).
-                let mut early = Vec::new();
-                while socket.can_recv() && problem.is_none() && !parser.done() {
-                    let received = socket.recv(|data| {
-                        let had_head = parser.head().is_some();
-                        let sink = &mut self.sink;
-                        let got = &mut self.got;
-                        let max = self.call.max_response as u64;
-                        let fed = parser.feed(data, &mut |piece| {
-                            if had_head {
-                                if let Err(e) = keep(sink, got, max, piece, storage) {
-                                    problem.get_or_insert(e);
-                                }
-                            } else {
-                                early.extend_from_slice(piece);
+                let mut progress = match link.pump(net) {
+                    Ok(moved) => moved,
+                    Err(problem) => return Some(Err(problem)),
+                };
+                if link.ready(net) {
+                    // The request, then the file, as the connection takes them.
+                    while *sent < request.len() {
+                        match link.send(net, &request[*sent..]) {
+                            Ok(0) => break,
+                            Ok(n) => {
+                                *sent += n;
+                                progress = true;
                             }
-                        });
-                        if fed.is_err() {
-                            problem.get_or_insert("not an HTTP answer");
+                            Err(problem) => return Some(Err(problem)),
                         }
-                        (data.len(), ())
-                    });
-                    if received.is_err() {
-                        problem.get_or_insert("connection lost");
                     }
-                    progress = true;
-                    if let Some(head) = parser.head()
-                        && head.is_redirect()
+                    while *sent == request.len()
+                        && let Some(upload) = upload.as_mut()
+                        && upload.at < upload.size
                     {
-                        break;
+                        let mut part = [0u8; UPLOAD_PART];
+                        let want = (upload.size - upload.at).min(UPLOAD_PART as u64) as usize;
+                        let read = storage.read_at(&upload.path, upload.at, &mut part[..want]);
+                        let Ok(read @ 1..) = read else {
+                            return Some(Err("could not read the file"));
+                        };
+                        match link.send(net, &part[..read]) {
+                            Ok(0) => break,
+                            Ok(n) => {
+                                upload.at += n as u64;
+                                progress = true;
+                            }
+                            Err(problem) => return Some(Err(problem)),
+                        }
                     }
-                    if !early.is_empty() {
-                        let max = self.call.max_response as u64;
-                        if let Err(e) = keep(&mut self.sink, &mut self.got, max, &early, storage) {
+                }
+                // The answer. Body bytes that come with the head wait until
+                // the head says whether they are wanted (not a redirect's).
+                let mut problem = None;
+                let mut early = Vec::new();
+                let stop = core::cell::Cell::new(parser.done());
+                let max = self.call.max_response as u64;
+                let (sink, got) = (&mut self.sink, &mut self.got);
+                let received = link.receive(net, &mut || !stop.get(), &mut |data| {
+                    let had_head = parser.head().is_some();
+                    let fed = parser.feed(data, &mut |piece| {
+                        if had_head {
+                            if let Err(e) = keep(sink, got, max, piece, storage) {
+                                problem.get_or_insert(e);
+                            }
+                        } else {
+                            early.extend_from_slice(piece);
+                        }
+                    });
+                    if fed.is_err() {
+                        problem.get_or_insert("not an HTTP answer");
+                    }
+                    let redirect = parser.head().is_some_and(|head| head.is_redirect());
+                    if !early.is_empty() && !redirect {
+                        if let Err(e) = keep(sink, got, max, &early, storage) {
                             problem.get_or_insert(e);
                         }
                         early.clear();
                     }
-                }
+                    stop.set(problem.is_some() || redirect || parser.done());
+                });
+                let ended = match received {
+                    Ok(Received::Some(moved)) => {
+                        progress |= moved;
+                        false
+                    }
+                    Ok(Received::Closed) => true,
+                    Err(problem) => return Some(Err(problem)),
+                };
                 if let Some(problem) = problem {
                     return Some(Err(problem));
                 }
-                if let Some(head) = parser.head()
-                    && head.is_redirect()
-                {
+                if parser.head().is_some_and(|head| head.is_redirect()) {
                     return self.redirect(net);
                 }
-                let state = net.socket(match &self.phase {
-                    Phase::Exchanging { socket, .. } => *socket,
-                    _ => return None,
-                });
-                let ended = matches!(
-                    state.state(),
-                    tcp::State::CloseWait | tcp::State::Closed | tcp::State::TimeWait
-                );
-                let Phase::Exchanging {
-                    parser,
-                    sent,
-                    request,
-                    upload,
-                    ..
-                } = &mut self.phase
-                else {
-                    return None;
-                };
                 let all_sent =
                     *sent == request.len() && upload.as_ref().is_none_or(|u| u.at == u.size);
-                if parser.done() || (ended && parser.close().is_ok() && all_sent) {
+                if parser.done() || (ended && all_sent && parser.close().is_ok()) {
                     let head = parser.head().cloned().unwrap_or_default();
                     return Some(Ok(HttpResponse {
                         id: self.call.id,
@@ -325,8 +313,16 @@ impl Call {
                 if progress {
                     self.until = now + STALL_MS;
                     None
+                } else if now > self.until {
+                    log::warn!(
+                        "http: stalled, {} sent {}/{}",
+                        link.describe(net),
+                        sent,
+                        request.len()
+                    );
+                    Some(Err("timed out"))
                 } else {
-                    (now > self.until).then_some(Err("timed out"))
+                    None
                 }
             }
         }
@@ -362,11 +358,20 @@ impl Call {
         let mut request =
             quireink_http::request(&self.call.method, &url, &self.call.headers, body_len);
         request.extend_from_slice(body.unwrap_or_default());
-        let Ok(socket) = net.open((address, port)) else {
-            return Some(Err("could not connect"));
+        // The secure session first: it takes the most memory.
+        let tls = match url.https.then(|| crate::tls::Session::new(url.host)) {
+            Some(Ok(session)) => Some(alloc::boxed::Box::new(session)),
+            Some(Err(e)) => return Some(Err(e.reason())),
+            None => None,
         };
+        let socket = match net.open((address, port)) {
+            Ok(socket) => socket,
+            Err(net::Error::Memory) => return Some(Err("not enough memory for a connection")),
+            Err(_) => return Some(Err("could not connect")),
+        };
+        let link = Link::new(socket, tls);
         self.phase = Phase::Exchanging {
-            socket,
+            link,
             request,
             sent: 0,
             upload,
@@ -413,7 +418,7 @@ impl Call {
         match core::mem::replace(&mut self.phase, Phase::Waiting) {
             Phase::Waiting => {}
             Phase::Resolving(query, _) => net.forget(query),
-            Phase::Exchanging { socket, .. } => net.release(socket),
+            Phase::Exchanging { link, .. } => net.release(link.socket),
         }
     }
 
@@ -466,7 +471,14 @@ fn keep(
     match sink {
         Sink::Memory(body) => {
             let room = (max as usize).saturating_sub(body.len());
-            body.extend_from_slice(&piece[..piece.len().min(room)]);
+            let piece = &piece[..piece.len().min(room)];
+            // Growing as it comes, without failing hard where memory ends.
+            if body.try_reserve(piece.len()).is_err()
+                && body.try_reserve_exact(piece.len()).is_err()
+            {
+                return Err("the answer is too large for the memory of this device");
+            }
+            body.extend_from_slice(piece);
         }
         Sink::File { part, buf, started } => {
             if *got > max {

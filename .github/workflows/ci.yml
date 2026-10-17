@@ -193,3 +193,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: EmbarkStudios/cargo-deny-action@v2
+      - name: The X4 firmware's dependencies too
+        uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          manifest-path: shells/xteink/Cargo.toml

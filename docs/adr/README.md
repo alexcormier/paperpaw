@@ -22,6 +22,7 @@ superseded by a new record that links back.
 | [0014](0014-sockets-for-plugins.md) | Sockets for plugins | Accepted |
 | [0015](0015-colour-pictures.md) | Colour pictures | Accepted |
 | [0016](0016-network-and-wifi.md) | Network and Wi-Fi | Accepted |
+| [0017](0017-tls-on-the-x4.md) | TLS on the X4 | Accepted |
 
 ## Template
 

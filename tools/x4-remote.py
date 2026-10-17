@@ -287,6 +287,8 @@ def run(x4, step):
             print(f"heap: {used} bytes used, {free} free")
             if stack:
                 print(f"stack: {stack[0]} of {stack[1]} bytes never used")
+            if len(stack) > 2:
+                print(f"largest free block: {stack[2]} bytes")
         case ["describe"]:
             for answer in x4.ask("describe", "END")[:-1]:
                 _, role, x, y, w, h, state, *label = answer.split(" ")

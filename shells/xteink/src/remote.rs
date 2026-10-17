@@ -11,8 +11,10 @@
 //! - `describe`: what it shows, a `QI:PART <role> <x> <y> <width> <height>
 //!   <state> <label>` for each row, button or heading (state: `-`, or
 //!   `focused`, `on`, `off` joined by `+`), then `QI:END`;
-//! - `heap`: `QI:HEAP <used> <free> <stack left> <stack size>`, in bytes
-//!   (the stack: what it never used since start, see `stack::left`);
+//! - `heap`: `QI:HEAP <used> <free> <stack left> <stack size> <largest>`,
+//!   in bytes (the stack: what it never used since start, see
+//!   `stack::left`; the largest block that could be had now, of the free
+//!   memory in pieces);
 //! - `input`: `QI:INPUT <readings> <front> <side> <power> <millivolts>`, how
 //!   the buttons and the battery are read;
 //! - `profile start`, `profile stop`: notes where the processor is every
@@ -180,9 +182,10 @@ impl Remote {
             Command::Heap => {
                 let (left, size) = crate::stack::left();
                 println!(
-                    "QI:HEAP {} {} {left} {size}",
+                    "QI:HEAP {} {} {left} {size} {}",
                     esp_alloc::HEAP.used(),
-                    esp_alloc::HEAP.free()
+                    esp_alloc::HEAP.free(),
+                    largest_block()
                 );
             }
             Command::Put(size, path) => self.receive(kernel, size, &path),
@@ -350,6 +353,21 @@ fn unhex(word: &str) -> Option<String> {
     String::from_utf8(bytes).ok()
 }
 
+/// The largest block of memory that could be had now (found by asking for
+/// blocks, given back at once).
+fn largest_block() -> usize {
+    let (mut can, mut cannot) = (0, esp_alloc::HEAP.free() + 1);
+    while cannot - can > 64 {
+        let size = (can + cannot) / 2;
+        if Vec::<u8>::new().try_reserve_exact(size).is_ok() {
+            can = size;
+        } else {
+            cannot = size;
+        }
+    }
+    can
+}
+
 pub fn ok() {
     println!("QI:OK");
 }
@@ -383,14 +401,14 @@ pub fn wifi_state(state: &WifiState) {
 }
 
 /// The answer of a request asked over USB.
-pub fn http_answer(answer: &HttpResponse) {
+pub fn http_answer(answer: &HttpResponse, ms: u64) {
     let why = if answer.status == 0 {
         String::from_utf8_lossy(&answer.body).into_owned()
     } else {
         String::new()
     };
     println!(
-        "QI:HTTP {} {} saved {} heap {} {} {why}",
+        "QI:HTTP {} {} saved {} {ms} ms heap {} {} {why}",
         answer.status,
         answer.body.len(),
         answer.saved,

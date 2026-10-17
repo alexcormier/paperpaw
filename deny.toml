@@ -7,6 +7,14 @@ all-features = true
 [advisories]
 version = 2
 yanked = "deny"
+ignore = [
+    # Unmaintained, used only while building the X4 firmware, by esp-hal's
+    # crates (nothing of them is in the firmware): `paste`, a proc-macro of
+    # esp-hal, and `unsafe-libyaml`, below the build script of esp-config.
+    # To go when esp-hal moves on.
+    { id = "RUSTSEC-2024-0436", reason = "build time only, from esp-hal" },
+    { id = "RUSTSEC-2024-0449", reason = "build time only, from esp-config" },
+]
 
 [licenses]
 version = 2
@@ -29,6 +37,11 @@ allow = [
     # Hyphenation patterns only (plugins/hyphenation): the FSF all-permissive
     # license of the American English patterns.
     "FSFAP",
+    # The X4's TCP/IP stack (smoltcp): zero-clause BSD, no conditions.
+    "0BSD",
+    # Data only (the X4's TLS): Mozilla's root certificates as webpki-roots
+    # keeps them, under the permissive Community Data License Agreement.
+    "CDLA-Permissive-2.0",
 ]
 confidence-threshold = 0.9
 unused-allowed-license = "allow"
