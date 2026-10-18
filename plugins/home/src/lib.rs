@@ -386,11 +386,11 @@ impl Dashboard {
     /// Moves the focus to `to`, redrawing both targets.
     fn focus_on(&mut self, to: usize, cx: &mut Cx<'_, '_>) {
         if let Some((area, _)) = self.targets.get(self.focus) {
-            cx.request_redraw_area(grown(*area, self.style.line * 4));
+            cx.request_redraw_area(area.grow((self.style.line * 4) as u16));
         }
         self.focus = to;
         if let Some((area, _)) = self.targets.get(to) {
-            cx.request_redraw_area(grown(*area, self.style.line * 4));
+            cx.request_redraw_area(area.grow((self.style.line * 4) as u16));
         }
         cx.request_refresh(RefreshMode::Fast);
     }
@@ -507,10 +507,10 @@ impl Dashboard {
         let Some(shown) = self.items.get_mut(index) else {
             return false;
         };
-        cx.request_redraw_area(grown(shown.area, self.style.line * 4));
+        cx.request_redraw_area(shown.area.grow((self.style.line * 4) as u16));
         shown.cells = to;
         shown.area = self.geometry.rect(to);
-        cx.request_redraw_area(grown(shown.area, self.style.line * 4));
+        cx.request_redraw_area(shown.area.grow((self.style.line * 4) as u16));
         let area = shown.area;
         if let Some(target) = self.targets.get_mut(index) {
             target.0 = area;
@@ -642,17 +642,6 @@ fn item_title(env: &Env<'_>, what: &What) -> String {
     }
 }
 
-/// `r` grown by `by` on every side (for the focus frame).
-fn grown(r: Rect, by: u32) -> Rect {
-    let by = by as u16;
-    Rect::new(
-        r.x.saturating_sub(by),
-        r.y.saturating_sub(by),
-        r.width + 2 * by,
-        r.height + 2 * by,
-    )
-}
-
 fn frame_rect(canvas: &mut Canvas<'_>, r: Rect, width: u32) {
     canvas.stroke_rect(
         i32::from(r.x),
@@ -710,7 +699,7 @@ impl Screen for Dashboard {
         if self.focus_shown
             && let Some((area, _)) = self.targets.get(self.focus)
         {
-            let frame = grown(*area, self.style.line * 2);
+            let frame = area.grow((self.style.line * 2) as u16);
             frame_rect(canvas, frame, self.style.line * 3);
         }
     }
@@ -982,10 +971,12 @@ impl Screen for Dashboard {
                 };
                 if to != drag.to || !drag.moved {
                     let before = self.geometry.rect(drag.to);
-                    cx.request_redraw_area(grown(before, self.style.line * 4));
+                    cx.request_redraw_area(before.grow((self.style.line * 4) as u16));
                     drag.to = to;
                     drag.moved |= to != self.items[drag.index].cells;
-                    cx.request_redraw_area(grown(self.geometry.rect(to), self.style.line * 4));
+                    cx.request_redraw_area(
+                        self.geometry.rect(to).grow((self.style.line * 4) as u16),
+                    );
                     cx.request_refresh(RefreshMode::Fast);
                     if let Some(edit) = &mut self.edit {
                         edit.drag = Some(drag);

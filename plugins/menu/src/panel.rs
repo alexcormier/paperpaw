@@ -548,12 +548,7 @@ fn fits_segments(
 /// `area` without `margin` left and right and a little above and below.
 fn inset(area: Rect, margin: u16) -> Rect {
     let pad = (area.height - ui::button_height(area)) / 2;
-    Rect::new(
-        area.x + margin,
-        area.y + pad,
-        area.width.saturating_sub(2 * margin),
-        area.height.saturating_sub(2 * pad),
-    )
+    area.inset(margin, pad)
 }
 
 /// `count` equal parts of `area` side by side, `gap` apart.

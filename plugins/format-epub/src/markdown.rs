@@ -55,18 +55,7 @@ impl MarkdownDocument {
     }
 }
 
-/// Escapes text for HTML.
-fn escape(text: &str, out: &mut String) {
-    for c in text.chars() {
-        match c {
-            '&' => out.push_str("&amp;"),
-            '<' => out.push_str("&lt;"),
-            '>' => out.push_str("&gt;"),
-            '"' => out.push_str("&quot;"),
-            c => out.push(c),
-        }
-    }
-}
+use quireink_sdk::xml::escape;
 
 /// A line's inline markup as HTML: `**bold**`, `*italic*`, `_italic_`,
 /// `` `code` ``, `[text](url)`, `![alt](src)` (its alternative text).

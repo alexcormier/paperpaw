@@ -57,6 +57,28 @@ impl Rect {
         self.y as u32 + self.height as u32
     }
 
+    /// `self` with `dx` taken off on the left and right and `dy` on the
+    /// top and bottom; empty if nothing is left.
+    pub const fn inset(&self, dx: u16, dy: u16) -> Rect {
+        Rect::new(
+            self.x.saturating_add(dx),
+            self.y.saturating_add(dy),
+            self.width.saturating_sub(dx.saturating_mul(2)),
+            self.height.saturating_sub(dy.saturating_mul(2)),
+        )
+    }
+
+    /// `self` grown by `by` on every side (not beyond the top left
+    /// corner of the screen).
+    pub const fn grow(&self, by: u16) -> Rect {
+        Rect::new(
+            self.x.saturating_sub(by),
+            self.y.saturating_sub(by),
+            self.width.saturating_add(by.saturating_mul(2)),
+            self.height.saturating_add(by.saturating_mul(2)),
+        )
+    }
+
     pub const fn area(&self) -> u32 {
         self.width as u32 * self.height as u32
     }

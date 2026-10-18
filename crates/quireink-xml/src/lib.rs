@@ -25,6 +25,20 @@ use alloc::vec::Vec;
 
 pub use entities::decode;
 
+/// Writes `text` onto `out` safe as XML or HTML text and attribute values:
+/// `&`, `<`, `>` and `"` as entities.
+pub fn escape(text: &str, out: &mut alloc::string::String) {
+    for c in text.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            c => out.push(c),
+        }
+    }
+}
+
 /// Unfinished text runs longer than this are emitted up to their last
 /// whitespace, so long paragraphs never pile up in the buffer.
 const EAGER_TEXT: usize = 256;

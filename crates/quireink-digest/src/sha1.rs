@@ -70,10 +70,7 @@ impl Sha1 {
 
     /// The digest as 40 lower-case hex digits.
     pub fn hex(self) -> String {
-        self.finish()
-            .iter()
-            .map(|b| alloc::format!("{b:02x}"))
-            .collect()
+        crate::hex::encode(&self.finish())
     }
 
     fn compress(&mut self, block: &[u8; 64]) {

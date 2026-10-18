@@ -396,15 +396,7 @@ fn paragraphs(markup: &str, max: usize) -> Vec<String> {
 /// `text` safe in HTML.
 fn escape(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
-    for c in text.chars() {
-        match c {
-            '&' => out.push_str("&amp;"),
-            '<' => out.push_str("&lt;"),
-            '>' => out.push_str("&gt;"),
-            '"' => out.push_str("&quot;"),
-            c => out.push(c),
-        }
-    }
+    quireink_sdk::xml::escape(text, &mut out);
     out
 }
 

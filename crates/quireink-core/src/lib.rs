@@ -638,7 +638,7 @@ impl KernelBuilder {
                     problems.push(problem);
                 });
             for problem in problems {
-                kernel.warn(WarningSource::Runtime, None, problem);
+                kernel.warn_runtime(problem);
             }
             for plugin in found {
                 kernel.add_plugin(&plugin, &disabled);
@@ -705,11 +705,7 @@ impl KernelBuilder {
         }
         for (id, value) in &self.setting_defaults {
             if let Err(error) = kernel.shared.settings.set_default_from_text(id, value) {
-                kernel.warn(
-                    WarningSource::Runtime,
-                    None,
-                    format!("device default `{id}`: {error}"),
-                );
+                kernel.warn_runtime(format!("device default `{id}`: {error}"));
             }
         }
         for source in &configs {
@@ -1563,7 +1559,7 @@ impl Kernel {
         };
         if let Err(error) = saved {
             let message = format!("{}: {error}", secrets::FILE);
-            self.warn(WarningSource::Runtime, None, message);
+            self.warn_runtime(message);
         }
     }
 
@@ -2465,7 +2461,7 @@ impl Kernel {
         }
         for group in staging.setting_groups.drain(..) {
             if let Err(error) = self.shared.settings.add_group(group) {
-                self.warn(WarningSource::Runtime, None, format!("{error}"));
+                self.warn_runtime(format!("{error}"));
             }
         }
         for spec in staging.hyphenation.drain(..) {
@@ -2633,7 +2629,7 @@ impl Kernel {
             messages.push(format!("unknown action `{action}` in a key map or menu"));
         }
         for message in messages {
-            self.warn(WarningSource::Runtime, None, message);
+            self.warn_runtime(message);
         }
     }
 
@@ -2886,11 +2882,7 @@ impl Kernel {
                     handler(&env, &mut self.output.commands);
                 }
             }
-            None => self.warn(
-                WarningSource::Runtime,
-                None,
-                format!("unknown action `{action}`"),
-            ),
+            None => self.warn_runtime(format!("unknown action `{action}`")),
         }
     }
 
@@ -3014,11 +3006,7 @@ impl Kernel {
         }
         if !self.output.commands.is_empty() {
             self.output.commands.clear();
-            self.warn(
-                WarningSource::Runtime,
-                None,
-                "too many chained commands; the rest was dropped".into(),
-            );
+            self.warn_runtime("too many chained commands; the rest was dropped");
         }
     }
 
@@ -3043,11 +3031,7 @@ impl Kernel {
                 }
                 match self.registry.resolve_slot(slot.as_str()).cloned() {
                     Some(screen) => self.open(screen, Some(slot), &params),
-                    None => self.warn(
-                        WarningSource::Runtime,
-                        None,
-                        format!("no screen for slot `{slot}`"),
-                    ),
+                    None => self.warn_runtime(format!("no screen for slot `{slot}`")),
                 }
             }
             Command::OpenScreen(screen, params) => self.open(screen, None, &params),
@@ -3079,11 +3063,7 @@ impl Kernel {
                 if self.shared.firmware.is_some() {
                     self.firmware_calls.push(command);
                 } else {
-                    self.warn(
-                        WarningSource::Runtime,
-                        None,
-                        String::from("QuireInk is not this device's firmware"),
-                    );
+                    self.warn_runtime(String::from("QuireInk is not this device's firmware"));
                 }
             }
             Command::Wifi(command) => match &mut self.shared.wifi {
@@ -3093,11 +3073,9 @@ impl Kernel {
                     }
                     self.wifi_calls.push(command);
                 }
-                None => self.warn(
-                    WarningSource::Runtime,
-                    None,
-                    String::from("Wi-Fi is not managed by QuireInk on this device"),
-                ),
+                None => self.warn_runtime(String::from(
+                    "Wi-Fi is not managed by QuireInk on this device",
+                )),
             },
             Command::Screenshot(path) => {
                 // The whole screen is drawn anew, and saved as it is.
@@ -3166,7 +3144,7 @@ impl Kernel {
                     );
                 }
                 Err(error) => {
-                    self.warn(WarningSource::Runtime, None, format!("`{id}`: {error}"));
+                    self.warn_runtime(format!("`{id}`: {error}"));
                 }
             },
             Command::Redraw(mode) => {
@@ -3195,11 +3173,7 @@ impl Kernel {
 
     fn open(&mut self, id: Id, slot: Option<Id>, params: &Params) {
         let Some(spec) = self.registry.screens.get(&id) else {
-            return self.warn(
-                WarningSource::Runtime,
-                None,
-                format!("unknown screen `{id}`"),
-            );
+            return self.warn_runtime(format!("unknown screen `{id}`"));
         };
         // Made as the full screen it opens over, which an overlay shares;
         // a full screen that wants the other size is made again for it.
@@ -3253,11 +3227,7 @@ impl Kernel {
     fn bind(&mut self, layer: &str, input: &str, action: Option<Id>) {
         let valid_layer = layer == GLOBAL_KEYMAP_LAYER || Id::parse(layer).is_ok();
         if !valid_layer || !keymap::is_input(input) {
-            return self.warn(
-                WarningSource::Runtime,
-                None,
-                format!("cannot bind `{input}` in `{layer}`"),
-            );
+            return self.warn_runtime(format!("cannot bind `{input}` in `{layer}`"));
         }
         let section = format!("keymap.{layer}");
         match &action {
@@ -3749,7 +3719,7 @@ impl Kernel {
     fn set_in_scope(&mut self, id: &Id, value: quireink_sdk::SettingValue) {
         let before = self.scoped_values();
         if let Err(error) = self.shared.settings.set_in_scope(id.as_str(), value) {
-            return self.warn(WarningSource::Runtime, None, format!("`{id}`: {error}"));
+            return self.warn_runtime(format!("`{id}`: {error}"));
         }
         self.save_scope();
         self.announce_scope_changes(before);
@@ -3778,11 +3748,7 @@ impl Kernel {
             }
         }
         if storage.write(path, text.as_bytes()).is_err() {
-            self.warn(
-                WarningSource::Runtime,
-                None,
-                format!("could not save settings to {path}"),
-            );
+            self.warn_runtime(format!("could not save settings to {path}"));
         }
     }
 
@@ -3815,11 +3781,7 @@ impl Kernel {
             None => quireink_config::remove(&source, "menus", menu.as_str()),
         };
         if storage.write(CONFIG_FILE, updated.as_bytes()).is_err() {
-            self.warn(
-                WarningSource::Runtime,
-                None,
-                format!("could not save menu `{menu}` to {CONFIG_FILE}"),
-            );
+            self.warn_runtime(format!("could not save menu `{menu}` to {CONFIG_FILE}"));
         }
         self.output
             .commands
@@ -3863,11 +3825,7 @@ impl Kernel {
         .then_some(chosen.as_str());
         self.shared.fonts.set_family(family);
         for path in self.shared.fonts.load(&self.shared.storage) {
-            self.warn(
-                WarningSource::Runtime,
-                None,
-                format!("{path}: font could not be loaded"),
-            );
+            self.warn_runtime(format!("{path}: font could not be loaded"));
         }
     }
 
@@ -3877,29 +3835,17 @@ impl Kernel {
         let source = read_config(storage).unwrap_or_default();
         let updated = quireink_config::set(&source, section, key, value);
         if storage.write(CONFIG_FILE, updated.as_bytes()).is_err() {
-            self.warn(
-                WarningSource::Runtime,
-                None,
-                format!("could not save `{section}.{key}` to {CONFIG_FILE}"),
-            );
+            self.warn_runtime(format!("could not save `{section}.{key}` to {CONFIG_FILE}"));
         }
     }
 
     /// Switches a plugin for the next start (see [`Command::SetPluginEnabled`]).
     fn set_plugin_enabled(&mut self, id: &Id, enabled: bool) {
         let Some(info) = self.shared.plugins.get(id.as_str()) else {
-            return self.warn(
-                WarningSource::Runtime,
-                None,
-                format!("unknown plugin `{id}`"),
-            );
+            return self.warn_runtime(format!("unknown plugin `{id}`"));
         };
         if !enabled && !info.can_switch_off() {
-            return self.warn(
-                WarningSource::Runtime,
-                None,
-                format!("plugin `{id}` cannot be switched off"),
-            );
+            return self.warn_runtime(format!("plugin `{id}` cannot be switched off"));
         }
         if info.enabled == enabled {
             return;
@@ -3973,6 +3919,12 @@ impl Kernel {
             line,
             message,
         });
+    }
+
+    /// A warning about something that went wrong while running, of no
+    /// file or plugin in particular.
+    fn warn_runtime(&mut self, message: impl Into<String>) {
+        self.warn(WarningSource::Runtime, None, message.into());
     }
 }
 

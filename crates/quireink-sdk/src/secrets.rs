@@ -73,16 +73,7 @@ fn veil(data: &[u8]) -> Vec<u8> {
         .collect()
 }
 
-fn hex(data: &[u8]) -> String {
-    data.iter().map(|b| alloc::format!("{b:02x}")).collect()
-}
-
-fn unhex(text: &str) -> Option<Vec<u8>> {
-    (0..text.len())
-        .step_by(2)
-        .map(|i| u8::from_str_radix(text.get(i..i + 2)?, 16).ok())
-        .collect()
-}
+use quireink_digest::hex::{decode as unhex, encode as hex};
 
 impl Secrets {
     /// The value of secret `id`, if kept.

@@ -74,7 +74,7 @@ impl Md5 {
         let mut out = String::new();
         for word in self.state {
             for byte in word.to_le_bytes() {
-                out.push_str(&alloc::format!("{byte:02x}"));
+                crate::hex::push(&mut out, byte);
             }
         }
         out

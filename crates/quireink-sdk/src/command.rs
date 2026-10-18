@@ -1,3 +1,6 @@
+use alloc::string::String;
+use alloc::vec::Vec;
+
 use crate::id::Id;
 use crate::params::Params;
 use crate::settings::SettingValue;
@@ -9,16 +12,16 @@ use quireink_platform::RefreshMode;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HttpRequest {
     /// `GET`, `PUT`, `POST`, …
-    pub method: alloc::string::String,
-    pub url: alloc::string::String,
-    pub headers: alloc::vec::Vec<(alloc::string::String, alloc::string::String)>,
-    pub body: Option<alloc::string::String>,
+    pub method: String,
+    pub url: String,
+    pub headers: Vec<(String, String)>,
+    pub body: Option<String>,
     /// A file in storage to send as the body instead, e.g. a database to
     /// upload.
-    pub body_from: Option<alloc::string::String>,
+    pub body_from: Option<String>,
     /// A file in storage to write the response's body to (also large
     /// ones, e.g. a download); the reply then has no `body`.
-    pub save_to: Option<alloc::string::String>,
+    pub save_to: Option<String>,
     pub reply: Id,
     pub params: Params,
 }
@@ -28,9 +31,9 @@ impl HttpRequest {
     /// [`Event<HttpReply>`](crate::replies::HttpReply) (or an id).
     pub fn new(method: &str, url: &str, reply: impl Into<Id>) -> Self {
         Self {
-            method: alloc::string::String::from(method),
-            url: alloc::string::String::from(url),
-            headers: alloc::vec::Vec::new(),
+            method: String::from(method),
+            url: String::from(url),
+            headers: Vec::new(),
             body: None,
             body_from: None,
             save_to: None,
@@ -47,21 +50,21 @@ pub struct ServerResponse {
     /// The request's number ([`server_params::REQUEST`]).
     pub request: u32,
     pub status: u16,
-    pub content_type: alloc::string::String,
-    pub headers: alloc::vec::Vec<(alloc::string::String, alloc::string::String)>,
-    pub body: alloc::vec::Vec<u8>,
+    pub content_type: String,
+    pub headers: Vec<(String, String)>,
+    pub body: Vec<u8>,
     /// A file in storage to send as the body instead.
-    pub body_from: Option<alloc::string::String>,
+    pub body_from: Option<String>,
 }
 
 impl ServerResponse {
     /// An answer with `body` of `content_type`.
-    pub fn new(request: u32, status: u16, content_type: &str, body: alloc::vec::Vec<u8>) -> Self {
+    pub fn new(request: u32, status: u16, content_type: &str, body: Vec<u8>) -> Self {
         Self {
             request,
             status,
-            content_type: alloc::string::String::from(content_type),
-            headers: alloc::vec::Vec::new(),
+            content_type: String::from(content_type),
+            headers: Vec::new(),
             body,
             body_from: None,
         }
@@ -97,10 +100,7 @@ pub enum SocketRead {
     /// Exactly `len` bytes, written to `path` in storage as they come (a
     /// file there is replaced): the event [`socket_params::SAVED`] once
     /// they all came, so files of any size never need to fit in memory.
-    File {
-        path: alloc::string::String,
-        len: u64,
-    },
+    File { path: String, len: u64 },
 }
 
 /// Parameters of a socket's events (see [`Command::Connect`]) and of a
@@ -145,10 +145,10 @@ pub mod http_params {
 /// Text to speak aloud (see [`Command::Speak`]).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Speech {
-    pub text: alloc::string::String,
+    pub text: String,
     /// The language of the text, e.g. `de` or `en-GB`, for the voice;
     /// empty for the system's.
-    pub language: alloc::string::String,
+    pub language: String,
     /// How fast, in percent of the voice's normal speed.
     pub rate: u16,
     /// Emitted with `params` once the text has been spoken, with
@@ -163,10 +163,10 @@ pub struct Speech {
 
 impl Speech {
     /// `text` in the system's language at normal speed.
-    pub fn new(text: impl Into<alloc::string::String>, reply: Id) -> Self {
+    pub fn new(text: impl Into<String>, reply: Id) -> Self {
         Self {
             text: text.into(),
-            language: alloc::string::String::new(),
+            language: String::new(),
             rate: 100,
             reply,
             params: Params::new(),
@@ -219,11 +219,11 @@ pub enum Command {
     /// [scoped](crate::SettingSpec::scoped) settings, e.g. those of the
     /// book being read, while the screen that sent it stays open; `None`
     /// ends the scope.
-    SetScope(Option<alloc::string::String>),
+    SetScope(Option<String>),
     /// Redefines a menu with exactly these entries (actions, settings or
     /// submenus), saved in `[menus]` of `quireink.ini`; `None` returns to
     /// the entries plugins contribute.
-    SetMenu(Id, Option<alloc::vec::Vec<Id>>),
+    SetMenu(Id, Option<Vec<Id>>),
     /// Binds `input` (as in `quireink.ini`, e.g. `button.menu` or
     /// `tap.center`) in key map `layer` (a screen or slot id, or
     /// `global`) to `action`, saved in the user's `quireink.ini` and in
@@ -231,8 +231,8 @@ pub enum Command {
     /// Bind [`actions::NOTHING`](crate::builtin::actions::NOTHING) to make
     /// an input do nothing.
     Bind {
-        layer: alloc::string::String,
-        input: alloc::string::String,
+        layer: String,
+        input: String,
         action: Option<Id>,
     },
     /// Emits event `.0` with parameters `.1` at time `.2`, whatever screen
@@ -244,14 +244,14 @@ pub enum Command {
     /// screen bound to [`slots::NOTICE`](crate::builtin::slots::NOTICE),
     /// over whatever is open and without taking any input. A newer
     /// message replaces it.
-    Notify(alloc::string::String),
+    Notify(String),
     /// Restarts QuireInk, e.g. to apply switched plugins. The shell builds
     /// a new kernel; the reading position is already saved.
     Restart,
     /// Saves what the screen shows as a gray PNG at this storage path,
     /// once the frame is drawn (so a menu that ran this is closed by
     /// then); a message tells where.
-    Screenshot(alloc::string::String),
+    Screenshot(String),
     /// Keeps or removes a password or key (see
     /// [`secrets`](crate::secrets)), saved at once.
     SetSecret(crate::secrets::SecretChange),
@@ -268,7 +268,7 @@ pub enum Command {
     Sleep,
     /// Puts text on the clipboard, on devices with one also the system's,
     /// for other apps. Long text is cut at [`MAX_CLIPBOARD`] bytes.
-    SetClipboard(alloc::string::String),
+    SetClipboard(String),
     /// Serves HTTP to the local network on `port` (shells that cannot say
     /// so with a failure). Everything about the server comes as the event
     /// `events`: that it started (with its address), each request (answer
@@ -287,15 +287,12 @@ pub enum Command {
     /// also closes when the screen showing as it was opened is closed.
     Connect {
         socket: Id,
-        host: alloc::string::String,
+        host: String,
         port: u16,
         events: Id,
     },
     /// Sends bytes on a socket.
-    SocketSend {
-        socket: Id,
-        data: alloc::vec::Vec<u8>,
-    },
+    SocketSend { socket: Id, data: Vec<u8> },
     /// Asks a socket for what comes next (one read at a time).
     SocketRead { socket: Id, read: SocketRead },
     /// Closes a socket.
@@ -306,8 +303,8 @@ pub enum Command {
     /// [`socket_params::DONE`].
     Broadcast {
         id: Id,
-        ports: alloc::vec::Vec<u16>,
-        data: alloc::vec::Vec<u8>,
+        ports: Vec<u16>,
+        data: Vec<u8>,
         wait_ms: u32,
         events: Id,
     },
