@@ -1212,6 +1212,7 @@ pub fn quireink_sdk::ui::ListView::new(quireink_platform::geometry::Rect, u32) -
 pub fn quireink_sdk::ui::ListView::page(&self) -> usize
 pub fn quireink_sdk::ui::ListView::pages(&self, usize) -> usize
 pub fn quireink_sdk::ui::ListView::paging(&self, usize) -> core::option::Option<(usize, usize)>
+pub fn quireink_sdk::ui::ListView::request(&self, quireink_sdk::ui::ListChange, &mut quireink_sdk::Cx<'_, '_>)
 pub fn quireink_sdk::ui::ListView::row_rect(&self, usize) -> quireink_platform::geometry::Rect
 pub fn quireink_sdk::ui::ListView::rows(&self) -> usize
 pub struct quireink_sdk::ui::Pager
@@ -1245,6 +1246,13 @@ pub fn quireink_sdk::ui::Rows::request(&self, quireink_sdk::ui::ListChange, &mut
 pub fn quireink_sdk::ui::Rows::step(&mut self, bool) -> quireink_sdk::ui::ListChange
 pub fn quireink_sdk::ui::Rows::turn(&mut self, bool) -> quireink_sdk::ui::ListChange
 pub fn quireink_sdk::ui::Rows::visible(&self) -> alloc::vec::Vec<(usize, quireink_platform::geometry::Rect)>
+pub struct quireink_sdk::ui::Thumbnail
+impl quireink_sdk::ui::Thumbnail
+pub fn quireink_sdk::ui::Thumbnail::bytes(&self) -> usize
+pub fn quireink_sdk::ui::Thumbnail::draw(&self, &mut quireink_graphics::canvas::Canvas<'_>, u16, u16)
+pub fn quireink_sdk::ui::Thumbnail::height(&self) -> u16
+pub fn quireink_sdk::ui::Thumbnail::new(&dyn quireink_platform::storage::Storage, &quireink_document::ImageRef, u16, u16, bool) -> core::option::Option<Self>
+pub fn quireink_sdk::ui::Thumbnail::width(&self) -> u16
 pub struct quireink_sdk::ui::UiStyle
 pub quireink_sdk::ui::UiStyle::corner: u32
 pub quireink_sdk::ui::UiStyle::dark_header: bool

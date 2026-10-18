@@ -12,9 +12,12 @@ pub mod items;
 pub mod reorder;
 #[path = "rows.rs"]
 mod rows;
+#[path = "thumbnail.rs"]
+mod thumbnail;
 
 pub use reorder::{Reorder, ReorderStep};
 pub use rows::Rows;
+pub use thumbnail::Thumbnail;
 
 use crate::semantics::Role;
 
@@ -996,6 +999,8 @@ pub struct ListView {
     pub shown: bool,
     /// Items side by side in a row (a grid, e.g. of covers); 1 for a list.
     columns: u32,
+    /// The item focused before the focus last moved.
+    before: usize,
 }
 
 impl ListView {
@@ -1007,7 +1012,23 @@ impl ListView {
             active: true,
             shown: true,
             columns: 1,
+            before: 0,
         }
+    }
+
+    /// Asks for what `change` needs, for screens where the focus changes
+    /// nothing but its items: a focus moved within the page draws the item
+    /// it left and the one it came to again, nothing else (see
+    /// [`Rows::request`]); otherwise as [`ListChange::request`].
+    pub fn request(&self, change: ListChange, cx: &mut crate::Cx<'_, '_>) {
+        if change != ListChange::Focus {
+            return change.request(cx);
+        }
+        let rows = self.rows();
+        for index in [self.before, self.focus] {
+            cx.request_redraw_area(self.row_rect(index % rows));
+        }
+        cx.request_refresh(crate::RefreshMode::Fast);
     }
 
     /// A grid of `columns` items a row instead of a list (rows are then
@@ -1068,6 +1089,7 @@ impl ListView {
             // Turning pages (also by swiping or a tap on the arrows)
             // does not: on touch screens it stays hidden.
             self.shown = true;
+            self.before = self.focus;
             return ListChange::Focus;
         }
         let focus = step_focus(self.focus, delta, len);
@@ -1075,6 +1097,7 @@ impl ListView {
             return ListChange::None;
         }
         let page = self.page();
+        self.before = self.focus;
         self.focus = focus;
         if self.page() == page {
             ListChange::Focus

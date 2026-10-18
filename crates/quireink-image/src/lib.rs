@@ -106,7 +106,7 @@ pub trait ImageSink {
 }
 
 /// The gray of a colour, as e-ink shows it (ITU-R 601).
-pub(crate) fn luma(r: u32, g: u32, b: u32) -> u8 {
+pub fn luma(r: u32, g: u32, b: u32) -> u8 {
     ((r * 299 + g * 587 + b * 114 + 500) / 1000) as u8
 }
 
@@ -310,7 +310,8 @@ pub(crate) fn zeroed<T: Clone + Default>(len: usize) -> Result<alloc::vec::Vec<T
 
 /// Makes rows smaller, to a size no larger than theirs: each pixel the
 /// mean of the pixels it covers, of gray or (with three channels) RGB.
-pub(crate) struct Downscaler {
+#[derive(Debug)]
+pub struct Downscaler {
     width: u32,
     height: u32,
     channels: usize,

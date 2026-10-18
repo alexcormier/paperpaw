@@ -6,6 +6,12 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Library: the covers of a page are made small once when it is shown and
+  drawn from memory; a step of the focus draws only the two entries it
+  changes. On the X4 a step in the library draws in about 105 ms (was
+  455), a page in about 205 ms (was 650). SDK: `ui::Thumbnail` (a
+  picture made small and kept, 4 bits a pixel), `ListView::request`
+  (only the items a focus step changes).
 - X4: the folders looked up last are kept, so a file is no longer looked
   up by walking every folder from the card's root: preparing a book the
   first time takes about 2.4 s instead of 2.9.

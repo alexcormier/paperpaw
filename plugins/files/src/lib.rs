@@ -41,7 +41,7 @@ use quireink_sdk::library::listing::{Entry, Listing, UNRANKED};
 use quireink_sdk::library::{self, Book};
 use quireink_sdk::replies::Typed;
 use quireink_sdk::setting::{Setting, Text};
-use quireink_sdk::ui::{self, ListChange, ListView, UiStyle};
+use quireink_sdk::ui::{self, ListChange, ListView, Thumbnail, UiStyle};
 use quireink_sdk::{
     Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest, MenuEntry,
     Params, Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen,
@@ -282,6 +282,9 @@ struct Browser {
     first: usize,
     /// The entries of the visible page, with their cached details.
     page: Vec<(Entry, Option<Book>)>,
+    /// The covers of `page`, made small once (drawing a cover from its
+    /// file in every band of every frame took most of a page's time).
+    thumbs: Vec<Option<Thumbnail>>,
     /// Just loaded: the first `on_show` need not load again.
     fresh: bool,
     style: UiStyle,
@@ -309,6 +312,7 @@ impl Browser {
             len: 0,
             first: 0,
             page: Vec::new(),
+            thumbs: Vec::new(),
             fresh: true,
             list: list_view(env, &style, area),
             style,
@@ -377,6 +381,24 @@ impl Browser {
             })
             .collect();
         self.page = page;
+        self.thumbs = (0..self.page.len())
+            .map(|slot| self.thumb(env, slot))
+            .collect();
+    }
+
+    /// The cover of entry `slot` of the page made small, at the size it is
+    /// drawn, if it has one.
+    fn thumb(&self, env: &Env<'_>, slot: usize) -> Option<Thumbnail> {
+        let cover = self.page.get(slot)?.1.as_ref()?.cover.as_ref()?;
+        let rect = self.list.row_rect(0);
+        let place = if self.list.column_count() > 1 {
+            cell_cover(env, &self.style, rect)?
+        } else {
+            row_thumb(&self.style, rect)
+        };
+        let (w, h) = ui::fit_image(cover, place.width, place.height);
+        let color = env.device.display.format.is_color();
+        Thumbnail::new(env.storage, cover, w, h, color)
     }
 
     /// Loads the page the focus is on, if it is not loaded.
@@ -422,7 +444,8 @@ impl Browser {
             self.show_focus(&env);
             cx.wake_at(env.now);
         }
-        change.request(cx);
+        // The focus changes nothing but its items: only they are drawn.
+        self.list.request(change, cx);
     }
 
     fn open(&mut self, index: usize, cx: &mut Cx<'_, '_>) {
@@ -577,24 +600,54 @@ impl Browser {
 
 /// Draws one row: a cover (or folder) on the left, then title, progress
 /// and a note (author and format).
+/// An entry of the page as drawn: the file or folder, its details, its
+/// cover made small.
+struct Shown<'a> {
+    entry: &'a Entry,
+    book: Option<&'a Book>,
+    thumb: Option<&'a Thumbnail>,
+}
+
+/// Where a row of the list shows its cover.
+fn row_thumb(style: &UiStyle, rect: Rect) -> Rect {
+    let margin = style.margin as u16;
+    let thumb_h = rect.height.saturating_sub(style.gap as u16 * 2);
+    Rect::new(
+        rect.x + margin,
+        rect.y + (rect.height - thumb_h) / 2,
+        thumb_h * 2 / 3,
+        thumb_h,
+    )
+}
+
+/// Where a cell of the grid shows its cover, above its title's lines.
+fn cell_cover(env: &Env<'_>, style: &UiStyle, rect: Rect) -> Option<Rect> {
+    let gap = style.gap as u16;
+    let line = style.font(env)?.line_metrics(style.small).line_height as u16;
+    let width = rect.width.saturating_sub(2 * gap);
+    Some(Rect::new(
+        rect.x + gap,
+        rect.y + gap,
+        width,
+        rect.height.saturating_sub(2 * gap + 2 * line),
+    ))
+}
+
 fn draw_row(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
     style: &UiStyle,
     rect: Rect,
     focused: bool,
-    entry: &Entry,
-    book: Option<&Book>,
+    shown: Shown<'_>,
 ) {
+    let Shown {
+        entry,
+        book,
+        thumb: small,
+    } = shown;
     let fg = if focused { Color::WHITE } else { Color::BLACK };
-    let margin = style.margin as u16;
-    let thumb_h = rect.height.saturating_sub(style.gap as u16 * 2);
-    let thumb = Rect::new(
-        rect.x + margin,
-        rect.y + (rect.height - thumb_h) / 2,
-        thumb_h * 2 / 3,
-        thumb_h,
-    );
+    let thumb = row_thumb(style, rect);
     let text_x = thumb.x + thumb.width;
     let text = Rect::new(
         text_x,
@@ -617,8 +670,13 @@ fn draw_row(
         .unwrap_or(name);
     let (stem, extension) = unzipped.rsplit_once('.').unwrap_or((unzipped, ""));
     let format = extension.to_uppercase();
-    match book.and_then(|b| b.cover.as_ref()) {
-        Some(cover) => {
+    match (small, book.and_then(|b| b.cover.as_ref())) {
+        (Some(small), _) => {
+            let x = thumb.x + thumb.width.saturating_sub(small.width()) / 2;
+            let y = thumb.y + thumb.height.saturating_sub(small.height()) / 2;
+            small.draw(canvas, x, y);
+        }
+        (None, Some(cover)) => {
             let (w, h) = ui::fit_image(cover, thumb.width, thumb.height);
             let area = Rect::new(
                 thumb.x + (thumb.width - w) / 2,
@@ -628,7 +686,7 @@ fn draw_row(
             );
             ui::draw_image(canvas, env.storage, cover, area);
         }
-        None => {
+        (None, None) => {
             let title = book.and_then(|b| b.title.as_deref()).unwrap_or(stem);
             draw_placeholder(canvas, env, style, thumb, title, &format, fg);
         }
@@ -678,22 +736,20 @@ fn draw_cell(
     style: &UiStyle,
     rect: Rect,
     focused: bool,
-    entry: &Entry,
-    book: Option<&Book>,
+    shown: Shown<'_>,
 ) {
+    let Shown {
+        entry,
+        book,
+        thumb: small,
+    } = shown;
     let fg = if focused { Color::WHITE } else { Color::BLACK };
     let gap = style.gap as u16;
-    let Some(font) = style.font(env) else {
+    let (Some(font), Some(cover)) = (style.font(env), cell_cover(env, style, rect)) else {
         return;
     };
     let line = font.line_metrics(style.small).line_height as u16;
-    let width = rect.width.saturating_sub(2 * gap);
-    let cover = Rect::new(
-        rect.x + gap,
-        rect.y + gap,
-        width,
-        rect.height.saturating_sub(2 * gap + 2 * line),
-    );
+    let width = cover.width;
     let label_area =
         |n: u16| Rect::new(rect.x + gap, cover.y + cover.height + n * line, width, line);
     if entry.is_dir {
@@ -713,14 +769,18 @@ fn draw_cell(
     let name = entry.name.as_str();
     let (stem, extension) = name.rsplit_once('.').unwrap_or((name, ""));
     let title = book.and_then(|b| b.title.as_deref()).unwrap_or(stem);
-    match book.and_then(|b| b.cover.as_ref()) {
-        Some(image) => {
+    match (small, book.and_then(|b| b.cover.as_ref())) {
+        // On the line its title starts, at the bottom of its place.
+        (Some(small), _) => {
+            let y = cover.y + cover.height.saturating_sub(small.height());
+            small.draw(canvas, cover.x, y);
+        }
+        (None, Some(image)) => {
             let (w, h) = ui::fit_image(image, cover.width, cover.height);
-            // On the line its title starts, at the bottom of its place.
             let area = Rect::new(cover.x, cover.y + (cover.height - h), w, h);
             ui::draw_image(canvas, env.storage, image, area);
         }
-        None => draw_placeholder(
+        (None, None) => draw_placeholder(
             canvas,
             env,
             style,
@@ -850,15 +910,22 @@ impl Screen for Browser {
             ui::draw_message(canvas, env, &style, self.list.area, &message);
             return;
         }
-        let (first, page) = (self.first, &self.page);
+        let (first, page, thumbs) = (self.first, &self.page, &self.thumbs);
         let grid = self.list.column_count() > 1;
         self.list
             .draw(canvas, &style, len, |canvas, index, rect, focused| {
-                if let Some((entry, book)) = index.checked_sub(first).and_then(|i| page.get(i)) {
+                let slot = index.checked_sub(first);
+                if let Some((entry, book)) = slot.and_then(|i| page.get(i)) {
+                    let thumb = slot.and_then(|i| thumbs.get(i)).and_then(Option::as_ref);
+                    let shown = Shown {
+                        entry,
+                        book: book.as_ref(),
+                        thumb,
+                    };
                     if grid {
-                        draw_cell(canvas, env, &style, rect, focused, entry, book.as_ref());
+                        draw_cell(canvas, env, &style, rect, focused, shown);
                     } else {
-                        draw_row(canvas, env, &style, rect, focused, entry, book.as_ref());
+                        draw_row(canvas, env, &style, rect, focused, shown);
                     }
                 }
             });
@@ -890,6 +957,13 @@ impl Screen for Browser {
         };
         let path = self.path_of(&self.page[slot].0);
         self.page[slot].1 = Some(library::index(&env, &path));
+        if let Some(thumb) = self.thumbs.get_mut(slot) {
+            *thumb = None;
+        }
+        let made = self.thumb(&env, slot);
+        if let Some(thumb) = self.thumbs.get_mut(slot) {
+            *thumb = made;
+        }
         let index = self.first + slot;
         if index / rows == self.list.page() {
             cx.request_redraw_area(self.list.row_rect(index % rows));
