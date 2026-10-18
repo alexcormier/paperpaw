@@ -59,6 +59,9 @@ const RECENT_TITLES: Setting<bool> = Setting::new("home.recent.titles");
 const RECENT_COUNT: Setting<i64> = Setting::new("home.recent.count");
 /// Whether tools show their names below their icons.
 pub(crate) const TOOL_LABELS: Setting<bool> = Setting::new("home.tool-labels");
+/// Whether the focus shows at once where there is no touch, or only
+/// with the first press (the page seen as it is first).
+pub(crate) const FOCUS_AT_ONCE: Setting<bool> = Setting::new("home.focus-at-once");
 /// The status items of the status line's left, centre and right (ids
 /// separated by commas).
 pub(crate) const STATUS_PARTS: [Setting<Text>; 3] = [
@@ -545,7 +548,7 @@ struct Shelf {
 
 impl Widget for Shelf {
     fn update(&mut self, env: &Env<'_>) -> bool {
-        let count = env.settings.read(&RECENT_COUNT).clamp(1, MAX_COVERS as i64) as usize;
+        let count = shelf_count(env);
         let books: Vec<Book> = recent::load(env.storage, count + 1)
             .into_iter()
             .skip(1)
@@ -584,12 +587,18 @@ impl Widget for Shelf {
     fn targets(&self, env: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
         shelf_places(env, area, &self.books)
             .into_iter()
-            .map(|(place, book)| WidgetTarget {
-                area: place,
+            .map(|(cover, title, book)| WidgetTarget {
+                area: cover.union(&title),
                 command: book.open(),
             })
             .collect()
     }
+}
+
+/// How many books the row shows at most: as many as set, but no more
+/// than fit across the screen (looking each up takes time).
+fn shelf_count(env: &Env<'_>) -> usize {
+    shelf_columns(env, env.device.display.width).0
 }
 
 /// The covers a row holds at `width`, and how wide each one's place is.
@@ -628,9 +637,9 @@ fn shelf_height(env: &Env<'_>, width: u16, books: &[Book]) -> u16 {
     heading + cover + title
 }
 
-/// Where each cover goes (with its title below), with its book: as large
-/// as the area allows, the row in the middle.
-fn shelf_places<'b>(env: &Env<'_>, area: Rect, books: &'b [Book]) -> Vec<(Rect, &'b Book)> {
+/// Where each cover goes, and its title below (as wide as its column),
+/// with its book: as large as the area allows, the row in the middle.
+fn shelf_places<'b>(env: &Env<'_>, area: Rect, books: &'b [Book]) -> Vec<(Rect, Rect, &'b Book)> {
     let style = UiStyle::new(env);
     // Few books: larger covers, as many columns as books.
     let (fit, _) = shelf_columns(env, area.width);
@@ -651,8 +660,10 @@ fn shelf_places<'b>(env: &Env<'_>, area: Rect, books: &'b [Book]) -> Vec<(Rect, 
         .take(columns)
         .enumerate()
         .map(|(i, book)| {
-            let x = left + i as u16 * column + (column - w) / 2;
-            (Rect::new(x, top, w, h + title), book)
+            let start = left + i as u16 * column;
+            let cover = Rect::new(start + (column - w) / 2, top, w, h);
+            let label = Rect::new(start + gap / 2, top + h, column.saturating_sub(gap), title);
+            (cover, label, book)
         })
         .collect()
 }
@@ -681,8 +692,7 @@ fn draw_shelf(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, books: &[Book]
             gray,
         );
     }
-    for (place, Book { book, cover: image }) in shelf_places(env, area, books) {
-        let cover = Rect::new(place.x, place.y, place.width, place.height - title_h);
+    for (cover, row, Book { book, cover: image }) in shelf_places(env, area, books) {
         match image {
             Some(image) => {
                 let (w, h) = ui::fit_image(image, cover.width, cover.height);
@@ -699,8 +709,7 @@ fn draw_shelf(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, books: &[Book]
         if title_h == 0 {
             continue;
         }
-        let title = ui::fit(&font, style.small, &book.title, f32::from(place.width));
-        let row = Rect::new(place.x, cover.y + cover.height, place.width, title_h);
+        let title = ui::fit(&font, style.small, &book.title, f32::from(row.width));
         let x = align.x(row, font.measure(style.small, &title));
         ui::draw_label(canvas, &font, style.small, x, row, &title, Color::BLACK);
     }
@@ -765,9 +774,7 @@ pub(crate) fn books_shown(env: &Env<'_>, items: &[grid::Item]) -> usize {
     items
         .iter()
         .map(|item| match &item.what {
-            grid::What::Widget(id) if id == RECENT => {
-                env.settings.read(&RECENT_COUNT).clamp(1, MAX_COVERS as i64) as usize + 1
-            }
+            grid::What::Widget(id) if id == RECENT => shelf_count(env) + 1,
             grid::What::Widget(id) if id == CONTINUE => 1,
             _ => 0,
         })

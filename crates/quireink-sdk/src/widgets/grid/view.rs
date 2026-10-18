@@ -246,6 +246,12 @@ impl GridView {
         self.focus = 0;
     }
 
+    /// Whether the focus shows before the buttons are used (at first only
+    /// on devices without touch); the first press shows it otherwise.
+    pub fn set_focus_shown(&mut self, shown: bool) {
+        self.focus_shown = shown;
+    }
+
     /// Puts the focus on the first target (e.g. when another page shows).
     pub fn reset_focus(&mut self) {
         self.focus = 0;

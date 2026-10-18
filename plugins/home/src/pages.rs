@@ -103,6 +103,20 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
         .description("home.setting.tool-labels.help"),
     )?;
     r.add_setting(
+        SettingSpec::switch(
+            &crate::blocks::FOCUS_AT_ONCE,
+            "home.setting.focus-at-once",
+            false,
+        )
+        .group(groups::LOOK)
+        .section(SECTION)
+        .description("home.setting.focus-at-once.help"),
+    )?;
+    r.set_menu_need(
+        crate::blocks::FOCUS_AT_ONCE,
+        quireink_sdk::MenuNeed::NoTouch,
+    )?;
+    r.add_setting(
         SettingSpec::switch(&STATUS_BAR, "home.setting.status-bar", true)
             .group(groups::LOOK)
             .section(SECTION)

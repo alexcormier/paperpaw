@@ -1438,6 +1438,7 @@ pub fn quireink_sdk::widgets::grid::GridView::on_gesture(&mut self, quireink_sdk
 pub fn quireink_sdk::widgets::grid::GridView::on_pointer(&mut self, &quireink_platform::input::PointerEvent, &mut quireink_sdk::Cx<'_, '_>) -> quireink_sdk::widgets::grid::GridResponse
 pub fn quireink_sdk::widgets::grid::GridView::reset_focus(&mut self)
 pub fn quireink_sdk::widgets::grid::GridView::set_editing(&mut self, bool)
+pub fn quireink_sdk::widgets::grid::GridView::set_focus_shown(&mut self, bool)
 pub fn quireink_sdk::widgets::grid::GridView::set_tool_labels(&mut self, bool)
 pub fn quireink_sdk::widgets::grid::GridView::update_live(&mut self, &quireink_sdk::Env<'_>, &mut quireink_sdk::Cx<'_, '_>) -> bool
 pub fn quireink_sdk::widgets::grid::GridView::update_widget(&mut self, &str, &quireink_sdk::Env<'_>, &mut quireink_sdk::Cx<'_, '_>) -> bool

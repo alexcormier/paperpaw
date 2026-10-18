@@ -6,6 +6,14 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Home: the screen shows without the focus until the first press, also
+  on devices without touch, so it is seen as it is first; the setting
+  *Show the focus at once* brings the old way back. Opening the home
+  screen is faster: the recent books look up only as many as fit across
+  the screen (was all that were set, six by default), and on the X4 no
+  busy mark is shown after a page in grays (it took a refresh of the
+  whole screen). Titles below the covers take the width of their
+  column. SDK: `GridView::set_focus_shown`.
 - Covers made small (lists, grids) no longer count as large pictures
   that leave ghosts: a page of the library's grid refreshes quickly on
   the X4 (about 0.5 s, was a full refresh of 1.7 s); large pictures and

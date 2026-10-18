@@ -433,6 +433,9 @@ impl Screen for Dashboard {
         if drawer::tips_due(&env) {
             cx.command(Command::OpenScreen(TIPS_SCREEN, Params::new()));
         }
+        // Each time it shows, the page as it is; the focus where wanted.
+        self.grid
+            .set_focus_shown(!env.device.input.touch && env.settings.read(&blocks::FOCUS_AT_ONCE));
         self.layout(&env);
         cx.request_redraw();
         // The covers not known yet are looked up first, one a tick.

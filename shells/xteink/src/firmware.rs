@@ -371,11 +371,16 @@ impl Firmware {
             }
             // Slow work ahead: its mark is shown first, the panel
             // refreshing it while the kernel works on, then the frame the
-            // work drew.
+            // work drew. After grays a refresh drives the whole screen
+            // and takes long: the work is done without a mark then.
             if effects.proceed()
                 && let Some((area, _)) = effects.refresh()
             {
-                effects = self.show_busy(area);
+                effects = if self.state.gray_shown {
+                    self.kernel.proceed(now())
+                } else {
+                    self.show_busy(area)
+                };
                 continue;
             }
             // Pictures in grays: the whole screen, with the gray waveform;
