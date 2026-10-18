@@ -71,11 +71,14 @@ fn exchange_file(book: &str) -> String {
 }
 
 /// Where the annotations both sides had at the last exchange are kept.
+/// Named by the book's key, so that the kernel moves and removes it with
+/// the book (registered as book data).
 fn known_file(book: &str) -> String {
-    let hash = book.bytes().fold(0xcbf2_9ce4_8422_2325u64, |h, b| {
-        (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)
-    });
-    format!("{}/{hash:016x}.txt", Env::plugin_dir(PLUGIN.as_str()))
+    format!(
+        "{}/{}.txt",
+        Env::plugin_dir(PLUGIN.as_str()),
+        quireink_sdk::library::key(book)
+    )
 }
 
 /// What an annotation is known by: its kind and place.
@@ -454,7 +457,8 @@ fn exchange_book(env: &Env<'_>, book: &str, out: &mut Vec<Command>) {
     }
 }
 
-/// A book moved: KOReader's folder and what is known go along.
+/// A book moved: KOReader's folder goes along (what is known moves as
+/// book data).
 fn moved_book(env: &Env<'_>, from: &str, to: &str) {
     let storage = env.storage;
     if has_entries(storage, &sidecar(from)) {
@@ -466,7 +470,6 @@ fn moved_book(env: &Env<'_>, from: &str, to: &str) {
         );
         let _ = storage.rename(&old, &exchange_file(to));
     }
-    let _ = storage.rename(&known_file(from), &known_file(to));
 }
 
 /// The KOReader plugin.
@@ -487,6 +490,9 @@ impl Plugin for KoReader {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        // What both sides had at the last exchange, by book: moved and
+        // removed with it.
+        r.add_book_data(Env::plugin_dir(PLUGIN.as_str()), "")?;
         r.on(events::BOOK_OPENED, |env, reading, out| {
             exchange_book(env, &reading.path, out);
         })?;
