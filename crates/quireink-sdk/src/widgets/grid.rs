@@ -1,0 +1,477 @@
+//! Widgets in a grid, like a phone's home screen: an area cut into cells
+//! (columns and rows), each item taking a rectangle of them: a widget (any
+//! plugin's) or a tool (an action, shown as its icon and name). Cells left
+//! empty stay empty, so everything sits where it was put.
+//!
+//! The layout is data: a text such as
+//! `home.clock 0/0 4x1, tool:files.library 0/5` ([`parse`], [`write()`]),
+//! each item its id, its column and row, and its size in cells, kept where
+//! the plugin likes (a setting, a file). An item without a place (as
+//! plugins add them) goes into the first free cells ([`place`]), as wide as
+//! the grid and as high as it needs.
+//!
+//! [`GridView`] shows such a grid on a screen of the plugin's own, and edits
+//! it in place: drag an item to move it, by its corner to size it, tap it
+//! for its options (move or size it with the buttons, its settings, remove
+//! it). With buttons alone, the focus goes from item to item.
+//!
+//! ```ignore
+//! struct Board { grid: GridView }
+//!
+//! impl Board {
+//!     fn layout(&mut self, env: &Env<'_>) {
+//!         let geometry = Geometry::new(env, area, 4, 0);
+//!         let items = grid::parse(env.settings.read(&LAYOUT));
+//!         self.grid.layout(env, geometry, &items, &[]);
+//!     }
+//!
+//!     fn respond(&mut self, response: GridResponse, cx: &mut Cx<'_, '_>) -> Handled {
+//!         match &response {
+//!             GridResponse::Changed(items) => {
+//!                 let value = LAYOUT.value(grid::write(items).into());
+//!                 cx.command(Command::SetSetting(LAYOUT.id().clone(), value));
+//!             }
+//!             GridResponse::Editing(_) => { let env = *cx.env(); self.layout(&env) }
+//!             _ => {}
+//!         }
+//!         response.handled()
+//!     }
+//! }
+//!
+//! impl Screen for Board {
+//!     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) { self.grid.draw(canvas, env) }
+//!     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
+//!         let response = self.grid.on_action(action, cx);
+//!         self.respond(response, cx)
+//!     }
+//!     // on_pointer, on_gesture, on_event, on_timer, hint, holds_edges alike
+//! }
+//! ```
+
+mod view;
+
+use alloc::format;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
+
+use crate::ui::{self, UiStyle};
+use crate::{Canvas, Color, Env, Id, Point, Rect};
+
+pub use view::{GridResponse, GridView};
+
+/// Columns at most, and rows at most.
+pub const MAX_COLUMNS: u8 = 6;
+pub const MAX_ROWS: u8 = 12;
+/// Tools are written with this before their action's id.
+const TOOL: &str = "tool:";
+
+/// What an item shows.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum What {
+    /// A widget, by its id.
+    Widget(String),
+    /// A tool: an action, shown as its icon and name.
+    Tool(Id),
+}
+
+impl What {
+    fn text(&self) -> String {
+        match self {
+            What::Widget(id) => id.clone(),
+            What::Tool(action) => format!("{TOOL}{action}"),
+        }
+    }
+
+    /// Its name, translated: the widget's, or the action's.
+    pub fn title(&self, env: &Env<'_>) -> String {
+        let (id, key) = match self {
+            What::Widget(id) => (id.as_str(), env.widgets.title(id)),
+            What::Tool(action) => (action.as_str(), env.menus.title(action.as_str())),
+        };
+        key.map_or(id, |key| env.i18n.tr(key)).to_string()
+    }
+}
+
+/// An item of a grid: what it shows and the cells it takes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct Item {
+    pub what: What,
+    /// Its first column and row, and its width and height in cells;
+    /// `None` until it has a place (see [`place`]).
+    pub at: Option<Cells>,
+}
+
+impl Item {
+    /// An item without a place yet.
+    pub fn new(what: What) -> Self {
+        Self { what, at: None }
+    }
+
+    /// An item at `cells`.
+    pub fn placed(what: What, cells: Cells) -> Self {
+        Self {
+            what,
+            at: Some(cells),
+        }
+    }
+}
+
+/// A rectangle of cells.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Cells {
+    pub col: u8,
+    pub row: u8,
+    pub w: u8,
+    pub h: u8,
+}
+
+impl Cells {
+    pub const fn new(col: u8, row: u8, w: u8, h: u8) -> Self {
+        Self { col, row, w, h }
+    }
+
+    pub fn overlaps(&self, other: &Cells) -> bool {
+        self.col < other.col + other.w
+            && other.col < self.col + self.w
+            && self.row < other.row + other.h
+            && other.row < self.row + self.h
+    }
+
+    /// Whether it lies within a grid of `columns` by `rows`.
+    pub fn fits(&self, columns: u8, rows: u8) -> bool {
+        self.w > 0
+            && self.h > 0
+            && u16::from(self.col) + u16::from(self.w) <= u16::from(columns)
+            && u16::from(self.row) + u16::from(self.h) <= u16::from(rows)
+    }
+}
+
+/// The items of a layout as [`write()`] has them; what cannot be read is
+/// left out.
+pub fn parse(text: &str) -> Vec<Item> {
+    text.split(',')
+        .filter_map(|item| {
+            let mut parts = item.split_whitespace();
+            let id = parts.next()?;
+            let what = match id.strip_prefix(TOOL) {
+                Some(action) => What::Tool(Id::parse(action).ok()?),
+                None => What::Widget(id.to_string()),
+            };
+            let at = (|| {
+                let (col, row) = parts.next()?.split_once('/')?;
+                let (w, h) = parts.next()?.split_once('x')?;
+                Some(Cells {
+                    col: col.parse().ok()?,
+                    row: row.parse().ok()?,
+                    w: w.parse().ok()?,
+                    h: h.parse().ok()?,
+                })
+            })();
+            Some(Item { what, at })
+        })
+        .collect()
+}
+
+/// The layout of `items` as text: each item's id (a tool's action after
+/// `tool:`), its column and row, and its size in cells, separated by
+/// commas.
+pub fn write(items: &[Item]) -> String {
+    let mut out = String::new();
+    for item in items {
+        if !out.is_empty() {
+            out.push_str(", ");
+        }
+        out.push_str(&item.what.text());
+        if let Some(c) = item.at {
+            out.push_str(&format!(" {}/{} {}x{}", c.col, c.row, c.w, c.h));
+        }
+    }
+    out
+}
+
+/// The cells of a grid on this screen, and where they are.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct Geometry {
+    pub columns: u8,
+    pub rows: u8,
+    /// The area the cells fill.
+    pub area: Rect,
+    pub cell_w: u16,
+    pub cell_h: u16,
+    /// Between items.
+    pub gap: u16,
+}
+
+impl Default for Geometry {
+    fn default() -> Self {
+        Self::of(Rect::default(), 1, 1, 0)
+    }
+}
+
+impl Geometry {
+    /// The grid in `area` with `columns` (2 to [`MAX_COLUMNS`]) and `rows`
+    /// (2 to [`MAX_ROWS`]; 0: as many as make cells about as high as wide),
+    /// the style's gap between items. The gap's half is left at the area's
+    /// edges, so an area half a gap wider than the content lines items up
+    /// with it.
+    pub fn new(env: &Env<'_>, area: Rect, columns: u8, rows: u8) -> Self {
+        let columns = columns.clamp(2, MAX_COLUMNS);
+        let cell_w = area.width / u16::from(columns);
+        let rows = match rows {
+            0 => {
+                let target = (u32::from(cell_w) * 85 / 100).max(1);
+                ((u32::from(area.height) + target / 2) / target).clamp(3, u32::from(MAX_ROWS)) as u8
+            }
+            n => n.clamp(2, MAX_ROWS),
+        };
+        Self::of(area, columns, rows, UiStyle::new(env).gap as u16)
+    }
+
+    /// The grid in `area` with exactly `columns` and `rows` and `gap`.
+    pub fn of(area: Rect, columns: u8, rows: u8, gap: u16) -> Self {
+        let (columns, rows) = (columns.max(1), rows.max(1));
+        Self {
+            columns,
+            rows,
+            area,
+            cell_w: area.width / u16::from(columns),
+            cell_h: area.height / u16::from(rows),
+            gap,
+        }
+    }
+
+    /// Where the cells `c` are on the screen, the gap left around.
+    pub fn rect(&self, c: Cells) -> Rect {
+        let half = self.gap / 2;
+        Rect::new(
+            self.area.x + u16::from(c.col) * self.cell_w + half,
+            self.area.y + u16::from(c.row) * self.cell_h + half,
+            (u16::from(c.w) * self.cell_w).saturating_sub(self.gap),
+            (u16::from(c.h) * self.cell_h).saturating_sub(self.gap),
+        )
+    }
+
+    /// The cell at a point, if it is on the grid.
+    pub fn cell_at(&self, x: i32, y: i32) -> Option<(u8, u8)> {
+        let (dx, dy) = (x - i32::from(self.area.x), y - i32::from(self.area.y));
+        if dx < 0 || dy < 0 {
+            return None;
+        }
+        let col = dx / i32::from(self.cell_w.max(1));
+        let row = dy / i32::from(self.cell_h.max(1));
+        (col < i32::from(self.columns) && row < i32::from(self.rows))
+            .then_some((col as u8, row as u8))
+    }
+
+    /// The size an item gets when it has no place yet: a tool one cell, a
+    /// widget the grid's width and the rows it needs.
+    pub fn size_of(&self, env: &Env<'_>, what: &What) -> (u8, u8) {
+        match what {
+            What::Tool(_) => (1, 1),
+            What::Widget(id) => {
+                let width = (u16::from(self.columns) * self.cell_w).saturating_sub(self.gap);
+                let height = env.widgets.height(id, env, width).unwrap_or(0);
+                let rows = (u32::from(height) + u32::from(self.gap))
+                    .div_ceil(u32::from(self.cell_h.max(1)));
+                (self.columns, rows.clamp(1, u32::from(self.rows)) as u8)
+            }
+        }
+    }
+}
+
+/// The cells an item at `from` takes when a finger that came down at
+/// `start` is at `point`: moved by as many cells as the finger moved, or
+/// with `resize` (its corner taken), its corner in the cell under the
+/// finger, at least one cell. `None` off the grid.
+pub fn dragged(
+    geometry: &Geometry,
+    from: Cells,
+    start: Point,
+    point: Point,
+    resize: bool,
+) -> Option<Cells> {
+    let (col, row) = geometry.cell_at(point.x, point.y)?;
+    if resize {
+        return Some(Cells {
+            w: (col + 1).saturating_sub(from.col).max(1),
+            h: (row + 1).saturating_sub(from.row).max(1),
+            ..from
+        });
+    }
+    let (start_col, start_row) = geometry.cell_at(start.x, start.y)?;
+    let col = (i32::from(from.col) + i32::from(col) - i32::from(start_col)).max(0) as u8;
+    let row = (i32::from(from.row) + i32::from(row) - i32::from(start_row)).max(0) as u8;
+    Some(Cells { col, row, ..from })
+}
+
+/// The first free place of `w` by `h` cells among `taken`, row by row.
+pub fn free_place(geometry: &Geometry, taken: &[Cells], w: u8, h: u8) -> Option<Cells> {
+    for row in 0..geometry.rows {
+        for col in 0..geometry.columns {
+            let c = Cells { col, row, w, h };
+            if c.fits(geometry.columns, geometry.rows) && !taken.iter().any(|t| t.overlaps(&c)) {
+                return Some(c);
+            }
+        }
+    }
+    None
+}
+
+/// The first free place for `what` among `taken`: its full size, or where
+/// that has no room, narrower.
+fn room_for(env: &Env<'_>, geometry: &Geometry, taken: &[Cells], what: &What) -> Option<Cells> {
+    let (w, h) = geometry.size_of(env, what);
+    (1..=w)
+        .rev()
+        .find_map(|w| free_place(geometry, taken, w, h))
+}
+
+/// Every item with its place: those placed where they are (if they fit
+/// the grid and nothing before took the cells), the others in the first
+/// free cells. Items without room are left out.
+pub fn place(env: &Env<'_>, geometry: &Geometry, items: &[Item]) -> Vec<(Item, Cells)> {
+    let mut placed: Vec<(Item, Cells)> = Vec::new();
+    let fits = |c: &Cells, placed: &[(Item, Cells)]| {
+        c.fits(geometry.columns, geometry.rows) && !placed.iter().any(|(_, p)| p.overlaps(c))
+    };
+    // Those with a place first, so the others do not take it.
+    for item in items {
+        if let Some(c) = item.at
+            && fits(&c, &placed)
+        {
+            placed.push((item.clone(), c));
+        }
+    }
+    for item in items.iter().filter(|i| i.at.is_none()) {
+        let taken: Vec<Cells> = placed.iter().map(|(_, c)| *c).collect();
+        if let Some(c) = room_for(env, geometry, &taken, &item.what) {
+            placed.push((item.clone(), c));
+        }
+    }
+    placed
+}
+
+/// `items` with `what` added in the first free cells (a widget as wide as
+/// the grid and as high as it needs, a tool one cell), every item with
+/// its place as shown; `None` where there is no room.
+pub fn add(env: &Env<'_>, geometry: &Geometry, items: &[Item], what: What) -> Option<Vec<Item>> {
+    let placed = place(env, geometry, items);
+    let taken: Vec<Cells> = placed.iter().map(|(_, c)| *c).collect();
+    let at = room_for(env, geometry, &taken, &what)?;
+    let mut out: Vec<Item> = placed
+        .into_iter()
+        .map(|(item, cells)| Item::placed(item.what, cells))
+        .collect();
+    out.push(Item::placed(what, at));
+    Some(out)
+}
+
+/// Draws a tool: its action's icon, and below it the action's name (its
+/// translation `<title>.short` where there is one) if `label`.
+pub fn draw_tool(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, action: &Id, label: bool) {
+    let style = UiStyle::new(env);
+    let Some(font) = style.font(env) else {
+        return;
+    };
+    let line = |size: f32| font.line_metrics(size).line_height as u16;
+    let label_h = line(style.small);
+    let gap = style.gap as u16 / 2;
+    let text_room = if label { label_h + gap } else { 0 };
+    let size = (style.title * 1.6).min(f32::from(area.height.saturating_sub(text_room)) * 0.8);
+    let icon_h = line(size).min(area.height);
+    let top = area.y + area.height.saturating_sub(icon_h + text_room) / 2;
+    let icon_row = Rect::new(area.x, top, area.width, icon_h);
+    if let Some(icon) = env.menus.icon(action.as_str()) {
+        let w = ui::icon_width(env, icon, size);
+        let x = f32::from(area.x) + (f32::from(area.width) - w) / 2.0;
+        ui::draw_icon(canvas, env, icon, size, x, icon_row, Color::BLACK);
+    }
+    if !label {
+        return;
+    }
+    let title = env.menus.title(action.as_str()).unwrap_or_default();
+    let name = env
+        .i18n
+        .get(&format!("{title}.short"))
+        .unwrap_or(env.i18n.tr(title));
+    let name = ui::fit(&font, style.small, name, f32::from(area.width) - 4.0);
+    let x = f32::from(area.x) + (f32::from(area.width) - font.measure(style.small, &name)) / 2.0;
+    let row = Rect::new(
+        area.x,
+        icon_row.y + icon_row.height + gap,
+        area.width,
+        label_h,
+    );
+    ui::draw_label(canvas, &font, style.small, x, row, &name, Color::BLACK);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn grid() -> Geometry {
+        Geometry::of(Rect::new(0, 0, 400, 300), 4, 3, 10)
+    }
+
+    #[test]
+    fn layouts_are_read_and_written() {
+        let text = "home.clock 0/0 4x1, tool:core.library 1/5 1x1, stats.today";
+        let items = parse(text);
+        assert_eq!(items.len(), 3);
+        assert_eq!(items[1].what, What::Tool(Id::new_static("core.library")));
+        assert_eq!(items[0].at, Some(Cells::new(0, 0, 4, 1)));
+        assert_eq!(items[2].at, None);
+        assert_eq!(write(&items), text);
+        // Layouts written without places: places to come.
+        assert!(
+            parse("home.status, home.date")
+                .iter()
+                .all(|i| i.at.is_none())
+        );
+        // What cannot be read is left out.
+        assert_eq!(parse("tool:Not An Id, , home.date").len(), 1);
+    }
+
+    #[test]
+    fn cells_overlap_and_fit() {
+        let a = Cells::new(0, 0, 2, 2);
+        assert!(a.overlaps(&Cells::new(1, 1, 1, 1)));
+        assert!(!a.overlaps(&Cells::new(2, 0, 2, 1)));
+        assert!(a.fits(4, 6));
+        assert!(!Cells::new(3, 0, 2, 1).fits(4, 6));
+        assert!(!Cells::new(250, 0, 10, 1).fits(4, 6));
+    }
+
+    #[test]
+    fn free_places_are_found_row_by_row() {
+        let g = grid();
+        let taken = [Cells::new(0, 0, 4, 1), Cells::new(0, 1, 1, 1)];
+        assert_eq!(free_place(&g, &taken, 1, 1), Some(Cells::new(1, 1, 1, 1)));
+        assert_eq!(free_place(&g, &taken, 4, 1), Some(Cells::new(0, 2, 4, 1)));
+        assert_eq!(free_place(&g, &taken, 4, 2), None);
+        assert_eq!(g.rect(Cells::new(1, 1, 2, 1)), Rect::new(105, 105, 190, 90));
+        assert_eq!(g.cell_at(250, 150), Some((2, 1)));
+        assert_eq!(g.cell_at(450, 150), None);
+    }
+
+    #[test]
+    fn items_are_dragged_and_sized_by_cells() {
+        let g = grid();
+        let item = Cells::new(1, 0, 2, 1);
+        let at = |x, y| Point::new(x, y);
+        // Taken in its second cell, moved a cell right and down.
+        let moved = dragged(&g, item, at(250, 50), at(350, 150), false);
+        assert_eq!(moved, Some(Cells::new(2, 1, 2, 1)));
+        // Not left of the grid's edge.
+        let left = dragged(&g, item, at(250, 50), at(50, 50), false);
+        assert_eq!(left, Some(Cells { col: 0, ..item }));
+        // Its corner pulled to the third row: as high as that.
+        let sized = dragged(&g, item, at(290, 90), at(150, 250), true);
+        assert_eq!(sized, Some(Cells { w: 1, h: 3, ..item }));
+        // Off the grid: nowhere.
+        assert_eq!(dragged(&g, item, at(250, 50), at(450, 50), false), None);
+    }
+}

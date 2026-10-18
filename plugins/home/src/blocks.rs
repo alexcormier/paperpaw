@@ -656,46 +656,8 @@ fn draw_placeholder(
 /// A tool in its cells: its icon, and its name below (where shown),
 /// together in the middle.
 pub(crate) fn draw_tool(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, action: &Id) {
-    let style = UiStyle::new(env);
-    let Some(font) = style.font(env) else {
-        return;
-    };
     let labels = env.settings.read(&TOOL_LABELS);
-    let label = line_height(env, style.small);
-    let gap = style.gap as u16 / 2;
-    let text_room = if labels { label + gap } else { 0 };
-    let size = (style.title * 1.6).min(f32::from(area.height.saturating_sub(text_room)) * 0.8);
-    let icon_h = line_height(env, size).min(area.height);
-    let top = centred(area, icon_h + text_room);
-    let icon_row = Rect::new(area.x, top, area.width, icon_h);
-    if let Some(icon) = env.menus.icon(action.as_str()) {
-        let w = ui::icon_width(env, icon, size);
-        let x = f32::from(area.x) + (f32::from(area.width) - w) / 2.0;
-        ui::draw_icon(canvas, env, icon, size, x, icon_row, Color::BLACK);
-    }
-    if !labels {
-        return;
-    }
-    let title = crate::grid::tools(env)
-        .into_iter()
-        .find(|(id, _)| id == action)
-        .map(|(_, title)| title)
-        .unwrap_or_default();
-    let name = env
-        .i18n
-        .get(&format!("{title}.short"))
-        .unwrap_or(env.i18n.tr(&title))
-        .into();
-    let name: String = name;
-    let name = ui::fit(&font, style.small, &name, f32::from(area.width) - 4.0);
-    let x = f32::from(area.x) + (f32::from(area.width) - font.measure(style.small, &name)) / 2.0;
-    let row = Rect::new(
-        area.x,
-        icon_row.y + icon_row.height + gap,
-        area.width,
-        label,
-    );
-    ui::draw_label(canvas, &font, style.small, x, row, &name, Color::BLACK);
+    quireink_sdk::widgets::grid::draw_tool(canvas, env, area, action, labels);
 }
 
 /// The covers worth looking up: the current book's and the recent ones'.

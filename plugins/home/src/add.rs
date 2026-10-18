@@ -13,8 +13,8 @@ use quireink_sdk::{
     Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, Screen,
 };
 
-use crate::grid::{self, Item, What};
 use crate::pages::{self, MAX_PAGES, STATUS, STATUS_BAR, TOOLS};
+use quireink_sdk::widgets::grid::{self, What};
 
 /// Parameter: the page added to (0 the first).
 pub(crate) const PAGE: &str = "page";
@@ -62,7 +62,7 @@ impl AddScreen {
             })
             .map(|(id, title)| (What::Widget(id.as_str().to_string()), title.to_string()))
             .chain(
-                grid::tools(env)
+                pages::tools(env)
                     .into_iter()
                     .map(|(action, title)| (What::Tool(action), title)),
             )
@@ -93,29 +93,14 @@ impl AddScreen {
                     return;
                 };
                 let (_, geometry, _) = crate::frame(&env);
-                let placed = grid::place(&env, &geometry, &pages::expand(&env, items));
-                let taken: Vec<grid::Cells> = placed.iter().map(|(_, c)| *c).collect();
-                let (w, h) = geometry.size_of(&env, what);
-                let Some(at) = (1..=w)
-                    .rev()
-                    .find_map(|w| grid::free_place(&geometry, &taken, w, h))
-                else {
+                // The page as shown, every item with its place, and the new one.
+                let shown = pages::expand(&env, items);
+                let Some(added) = grid::add(&env, &geometry, &shown, what.clone()) else {
                     let message = env.i18n.tr("home.grid.no-room").to_string();
                     cx.command(Command::Notify(message));
                     return;
                 };
-                // The page as shown, every item with its place, and the new one.
-                *items = placed
-                    .into_iter()
-                    .map(|(item, cells)| Item {
-                        what: item.what,
-                        at: Some(cells),
-                    })
-                    .collect();
-                items.push(Item {
-                    what: what.clone(),
-                    at: Some(at),
-                });
+                *items = added;
             }
             Some(Row::AddPage) => all.push(Vec::new()),
             Some(Row::RemovePage) => {
@@ -160,6 +145,7 @@ impl Screen for AddScreen {
                         env.i18n.tr(title).to_string(),
                         "+",
                     ),
+                    Row::Add(_, title) => (None, env.i18n.tr(title).to_string(), "+"),
                     Row::AddPage => (
                         Some("plus"),
                         env.i18n.tr("home.edit.add-page").to_string(),

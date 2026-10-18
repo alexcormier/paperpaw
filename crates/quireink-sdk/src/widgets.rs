@@ -19,6 +19,9 @@
 //! height, and [`FILL`], the room the others leave. Screens that place
 //! widgets one below the other give each fill its share of that room
 //! ([`fill_height`]); elsewhere it is not there.
+//!
+//! Screens that show widgets in a grid, as the home screen does, use
+//! [`grid`]: its layout as data, and a view that edits it in place.
 
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
@@ -32,6 +35,8 @@ use quireink_platform::Rect;
 use crate::env::Env;
 use crate::id::Id;
 use crate::settings::{SettingGroupSpec, SettingKind, SettingSpec, SettingValue};
+
+pub mod grid;
 
 /// The height a widget needs for a width, in pixels.
 pub type WidgetHeightFn = Box<dyn Fn(&Env<'_>, u16) -> u16>;
@@ -220,6 +225,16 @@ pub fn align_setting(widget: &Id, default: Align) -> SettingSpec {
         SettingValue::Text(Cow::Borrowed(default.value())),
     )
     .group(widget.clone())
+}
+
+/// Whether widget `id` has settings of its own (a settings group with its
+/// id holding settings, see [`settings_group`]).
+pub fn has_settings(env: &Env<'_>, id: &str) -> bool {
+    env.settings.groups().any(|group| group.id.as_str() == id)
+        && env
+            .settings
+            .specs()
+            .any(|spec| env.settings.group_of(spec).as_str() == id)
 }
 
 /// Where `widget`'s text sits, by its [`align_setting`]; left without one.

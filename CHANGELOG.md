@@ -6,6 +6,12 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: `widgets::grid`, the home screen's grid for any plugin: a layout
+  of widgets and tools in cells as text (`parse`, `write`, `place`,
+  `add`), and `GridView`, which shows it on a screen of the plugin's own
+  and edits it in place (dragging, sizing, options, with buttons too).
+  The home screen uses it. Also `widgets::has_settings` and
+  `Menus::title`.
 - Home: below the page, the pencil and the dots can go, and status items
   of any plugin can come (Settings > Look). *Edit home screen* in the main
   menu edits it, with buttons only too, as a long press does.

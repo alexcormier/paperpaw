@@ -1,10 +1,12 @@
 //! The home screen's pages: each a grid of items in a setting of its own,
-//! `home.page-1` to `home.page-4` (see `grid`). The first page always
+//! `home.page-1` to `home.page-4`, their layout as
+//! `quireink_sdk::widgets::grid` writes it. The first page always
 //! shows; the others where they have items. Above the grid sits the
 //! status line, below it the page dots and the pencil.
 
 use alloc::borrow::Cow;
 use alloc::format;
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use quireink_sdk::builtin::groups;
@@ -13,9 +15,10 @@ use quireink_sdk::{
     Command, Env, Id, RegisterError, Registrar, SettingKind, SettingSpec, SettingValue,
 };
 
-use crate::SCREEN;
-use crate::grid::{self, Item, What};
+use crate::{ACTIONS, SCREEN};
+use quireink_sdk::builtin::{actions, menus};
 use quireink_sdk::setting::{Setting, Text};
+use quireink_sdk::widgets::grid::{self, Item, What};
 
 /// Pages at most.
 pub(crate) const MAX_PAGES: usize = 4;
@@ -149,13 +152,10 @@ pub(crate) fn expand(env: &Env<'_>, items: &[Item]) -> Vec<Item> {
     for item in items {
         match &item.what {
             What::Widget(id) if id == TOOLS => {
-                for (action, _) in grid::tools(env) {
+                for (action, _) in tools(env) {
                     let shown = items.iter().any(|i| i.what == What::Tool(action.clone()));
                     if !shown {
-                        out.push(Item {
-                            what: What::Tool(action),
-                            at: None,
-                        });
+                        out.push(Item::new(What::Tool(action)));
                     }
                 }
             }
@@ -183,6 +183,26 @@ pub(crate) fn store(pages: &[Vec<Item>]) -> Vec<Command> {
 /// The page whose setting is `id`, if it is one.
 pub(crate) fn page_of(id: &str) -> Option<usize> {
     (0..MAX_PAGES).find(|&i| setting(i).as_str() == id)
+}
+
+/// The tools a page may show: the shortcuts, the tools, then the
+/// settings; their action and the translation key of their name.
+pub(crate) fn tools(env: &Env<'_>) -> Vec<(Id, String)> {
+    let mut items: Vec<(Id, String)> = Vec::new();
+    for menu in [ACTIONS, menus::TOOLS] {
+        for item in env.menus.items(menu.as_str()) {
+            // A screenshot from here shows only the home screen: it is
+            // for the tools opened over a book (unless listed above).
+            let here_useless = menu == menus::TOOLS && *item.id == actions::SCREENSHOT;
+            if !item.section && !here_useless && !items.iter().any(|(id, _)| id == item.id) {
+                items.push((item.id.clone(), item.title.to_string()));
+            }
+        }
+    }
+    if !items.iter().any(|(id, _)| *id == actions::SETTINGS) {
+        items.push((actions::SETTINGS, String::from("core.action.settings")));
+    }
+    items
 }
 
 #[cfg(test)]

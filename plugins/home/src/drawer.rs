@@ -12,7 +12,7 @@ use quireink_sdk::{
     Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Rect, Screen,
 };
 
-use crate::{blocks, grid};
+use crate::{blocks, pages};
 
 /// Columns of the overview.
 const COLUMNS: u32 = 4;
@@ -40,7 +40,7 @@ impl DrawerScreen {
         let row = (u32::from(area.width) / COLUMNS * 4 / 5).max(style.row);
         Self {
             list: ListView::new(area, row).columns(COLUMNS).focus_on_keys(env),
-            tools: grid::tools(env).into_iter().map(|(id, _)| id).collect(),
+            tools: pages::tools(env).into_iter().map(|(id, _)| id).collect(),
             style,
             header,
         }

@@ -1339,6 +1339,78 @@ pub fn quireink_sdk::web::host(&str) -> &str
 pub fn quireink_sdk::web::join_url(&str, &str) -> alloc::string::String
 pub fn quireink_sdk::web::percent_decode(&str) -> alloc::string::String
 pub mod quireink_sdk::widgets
+pub mod quireink_sdk::widgets::grid
+#[non_exhaustive] pub enum quireink_sdk::widgets::grid::GridResponse
+pub quireink_sdk::widgets::grid::GridResponse::Button(u16)
+pub quireink_sdk::widgets::grid::GridResponse::Changed(alloc::vec::Vec<quireink_sdk::widgets::grid::Item>)
+pub quireink_sdk::widgets::grid::GridResponse::Editing(bool)
+pub quireink_sdk::widgets::grid::GridResponse::Handled
+pub quireink_sdk::widgets::grid::GridResponse::Ignored
+impl quireink_sdk::widgets::grid::GridResponse
+pub fn quireink_sdk::widgets::grid::GridResponse::handled(&self) -> quireink_sdk::Handled
+#[non_exhaustive] pub enum quireink_sdk::widgets::grid::What
+pub quireink_sdk::widgets::grid::What::Tool(quireink_sdk::Id)
+pub quireink_sdk::widgets::grid::What::Widget(alloc::string::String)
+impl quireink_sdk::widgets::grid::What
+pub fn quireink_sdk::widgets::grid::What::title(&self, &quireink_sdk::Env<'_>) -> alloc::string::String
+pub struct quireink_sdk::widgets::grid::Cells
+pub quireink_sdk::widgets::grid::Cells::col: u8
+pub quireink_sdk::widgets::grid::Cells::h: u8
+pub quireink_sdk::widgets::grid::Cells::row: u8
+pub quireink_sdk::widgets::grid::Cells::w: u8
+impl quireink_sdk::widgets::grid::Cells
+pub fn quireink_sdk::widgets::grid::Cells::fits(&self, u8, u8) -> bool
+pub const fn quireink_sdk::widgets::grid::Cells::new(u8, u8, u8, u8) -> Self
+pub fn quireink_sdk::widgets::grid::Cells::overlaps(&self, &quireink_sdk::widgets::grid::Cells) -> bool
+#[non_exhaustive] pub struct quireink_sdk::widgets::grid::Geometry
+pub quireink_sdk::widgets::grid::Geometry::area: quireink_platform::geometry::Rect
+pub quireink_sdk::widgets::grid::Geometry::cell_h: u16
+pub quireink_sdk::widgets::grid::Geometry::cell_w: u16
+pub quireink_sdk::widgets::grid::Geometry::columns: u8
+pub quireink_sdk::widgets::grid::Geometry::gap: u16
+pub quireink_sdk::widgets::grid::Geometry::rows: u8
+impl quireink_sdk::widgets::grid::Geometry
+pub fn quireink_sdk::widgets::grid::Geometry::cell_at(&self, i32, i32) -> core::option::Option<(u8, u8)>
+pub fn quireink_sdk::widgets::grid::Geometry::new(&quireink_sdk::Env<'_>, quireink_platform::geometry::Rect, u8, u8) -> Self
+pub fn quireink_sdk::widgets::grid::Geometry::of(quireink_platform::geometry::Rect, u8, u8, u16) -> Self
+pub fn quireink_sdk::widgets::grid::Geometry::rect(&self, quireink_sdk::widgets::grid::Cells) -> quireink_platform::geometry::Rect
+pub fn quireink_sdk::widgets::grid::Geometry::size_of(&self, &quireink_sdk::Env<'_>, &quireink_sdk::widgets::grid::What) -> (u8, u8)
+impl core::default::Default for quireink_sdk::widgets::grid::Geometry
+pub fn quireink_sdk::widgets::grid::Geometry::default() -> Self
+pub struct quireink_sdk::widgets::grid::GridView
+impl quireink_sdk::widgets::grid::GridView
+pub fn quireink_sdk::widgets::grid::GridView::draw(&self, &mut quireink_graphics::canvas::Canvas<'_>, &quireink_sdk::Env<'_>)
+pub fn quireink_sdk::widgets::grid::GridView::editing(&self) -> bool
+pub fn quireink_sdk::widgets::grid::GridView::geometry(&self) -> &quireink_sdk::widgets::grid::Geometry
+pub fn quireink_sdk::widgets::grid::GridView::hint(&self, &quireink_sdk::Id, &quireink_sdk::Env<'_>) -> quireink_sdk::Hint
+pub fn quireink_sdk::widgets::grid::GridView::holds_edges(&self) -> bool
+pub fn quireink_sdk::widgets::grid::GridView::items(&self) -> alloc::vec::Vec<quireink_sdk::widgets::grid::Item>
+pub fn quireink_sdk::widgets::grid::GridView::layout(&mut self, &quireink_sdk::Env<'_>, quireink_sdk::widgets::grid::Geometry, &[quireink_sdk::widgets::grid::Item], &[(quireink_platform::geometry::Rect, u16)])
+pub fn quireink_sdk::widgets::grid::GridView::new(&quireink_sdk::Env<'_>, quireink_sdk::Id, quireink_sdk::event::Event<quireink_sdk::ui::choice::Picked>) -> Self
+pub fn quireink_sdk::widgets::grid::GridView::on_action(&mut self, &quireink_sdk::Id, &mut quireink_sdk::Cx<'_, '_>) -> quireink_sdk::widgets::grid::GridResponse
+pub fn quireink_sdk::widgets::grid::GridView::on_event(&mut self, &quireink_sdk::Id, &quireink_sdk::Params, &mut quireink_sdk::Cx<'_, '_>) -> quireink_sdk::widgets::grid::GridResponse
+pub fn quireink_sdk::widgets::grid::GridView::on_gesture(&mut self, quireink_sdk::Gesture, &mut quireink_sdk::Cx<'_, '_>) -> quireink_sdk::widgets::grid::GridResponse
+pub fn quireink_sdk::widgets::grid::GridView::on_pointer(&mut self, &quireink_platform::input::PointerEvent, &mut quireink_sdk::Cx<'_, '_>) -> quireink_sdk::widgets::grid::GridResponse
+pub fn quireink_sdk::widgets::grid::GridView::redraw_widget(&self, &str, &mut quireink_sdk::Cx<'_, '_>) -> bool
+pub fn quireink_sdk::widgets::grid::GridView::refresh_widgets(&mut self, &quireink_sdk::Env<'_>, &mut quireink_sdk::Cx<'_, '_>) -> bool
+pub fn quireink_sdk::widgets::grid::GridView::reset_focus(&mut self)
+pub fn quireink_sdk::widgets::grid::GridView::set_editing(&mut self, bool)
+pub fn quireink_sdk::widgets::grid::GridView::set_tool_labels(&mut self, bool)
+#[non_exhaustive] pub struct quireink_sdk::widgets::grid::Item
+pub quireink_sdk::widgets::grid::Item::at: core::option::Option<quireink_sdk::widgets::grid::Cells>
+pub quireink_sdk::widgets::grid::Item::what: quireink_sdk::widgets::grid::What
+impl quireink_sdk::widgets::grid::Item
+pub fn quireink_sdk::widgets::grid::Item::new(quireink_sdk::widgets::grid::What) -> Self
+pub fn quireink_sdk::widgets::grid::Item::placed(quireink_sdk::widgets::grid::What, quireink_sdk::widgets::grid::Cells) -> Self
+pub const quireink_sdk::widgets::grid::MAX_COLUMNS: u8
+pub const quireink_sdk::widgets::grid::MAX_ROWS: u8
+pub fn quireink_sdk::widgets::grid::add(&quireink_sdk::Env<'_>, &quireink_sdk::widgets::grid::Geometry, &[quireink_sdk::widgets::grid::Item], quireink_sdk::widgets::grid::What) -> core::option::Option<alloc::vec::Vec<quireink_sdk::widgets::grid::Item>>
+pub fn quireink_sdk::widgets::grid::dragged(&quireink_sdk::widgets::grid::Geometry, quireink_sdk::widgets::grid::Cells, quireink_platform::geometry::Point, quireink_platform::geometry::Point, bool) -> core::option::Option<quireink_sdk::widgets::grid::Cells>
+pub fn quireink_sdk::widgets::grid::draw_tool(&mut quireink_graphics::canvas::Canvas<'_>, &quireink_sdk::Env<'_>, quireink_platform::geometry::Rect, &quireink_sdk::Id, bool)
+pub fn quireink_sdk::widgets::grid::free_place(&quireink_sdk::widgets::grid::Geometry, &[quireink_sdk::widgets::grid::Cells], u8, u8) -> core::option::Option<quireink_sdk::widgets::grid::Cells>
+pub fn quireink_sdk::widgets::grid::parse(&str) -> alloc::vec::Vec<quireink_sdk::widgets::grid::Item>
+pub fn quireink_sdk::widgets::grid::place(&quireink_sdk::Env<'_>, &quireink_sdk::widgets::grid::Geometry, &[quireink_sdk::widgets::grid::Item]) -> alloc::vec::Vec<(quireink_sdk::widgets::grid::Item, quireink_sdk::widgets::grid::Cells)>
+pub fn quireink_sdk::widgets::grid::write(&[quireink_sdk::widgets::grid::Item]) -> alloc::string::String
 pub enum quireink_sdk::widgets::Align
 pub quireink_sdk::widgets::Align::Center
 pub quireink_sdk::widgets::Align::Left
@@ -1379,6 +1451,7 @@ pub const quireink_sdk::widgets::SPACE_SIZES: [&str; 3]
 pub fn quireink_sdk::widgets::align(&quireink_sdk::Env<'_>, &str) -> quireink_sdk::widgets::Align
 pub fn quireink_sdk::widgets::align_setting(&quireink_sdk::Id, quireink_sdk::widgets::Align) -> quireink_sdk::SettingSpec
 pub fn quireink_sdk::widgets::fill_height(u32, u32, usize) -> u16
+pub fn quireink_sdk::widgets::has_settings(&quireink_sdk::Env<'_>, &str) -> bool
 pub fn quireink_sdk::widgets::repeatable(&str) -> bool
 pub fn quireink_sdk::widgets::settings_group(&quireink_sdk::Id, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> quireink_sdk::SettingGroupSpec
 pub type quireink_sdk::widgets::WidgetDrawFn = alloc::boxed::Box<dyn core::ops::function::Fn(&mut quireink_graphics::canvas::Canvas<'_>, &quireink_sdk::Env<'_>, quireink_platform::geometry::Rect)>
@@ -2028,6 +2101,7 @@ pub fn quireink_sdk::Menus::set_icon(&mut self, quireink_sdk::Id, alloc::borrow:
 pub fn quireink_sdk::Menus::set_need(&mut self, quireink_sdk::Id, quireink_sdk::MenuNeed)
 pub fn quireink_sdk::Menus::set_title(&mut self, quireink_sdk::Id, alloc::borrow::Cow<'static, str>)
 pub fn quireink_sdk::Menus::shrink_to_fit(&mut self)
+pub fn quireink_sdk::Menus::title(&self, &str) -> core::option::Option<&str>
 pub struct quireink_sdk::Metrics
 pub quireink_sdk::Metrics::dpi: u16
 impl quireink_sdk::Metrics

@@ -219,6 +219,12 @@ impl Menus {
         self.titles.insert(item, title);
     }
 
+    /// The label of an action or setting (a translation key), if it has
+    /// one.
+    pub fn title(&self, item: &str) -> Option<&str> {
+        self.titles.get(item).map(AsRef::as_ref)
+    }
+
     /// Gives an action or setting an icon (by name; see
     /// [`icons`](crate::icons)), wherever it is shown.
     pub fn set_icon(&mut self, item: Id, icon: Cow<'static, str>) {

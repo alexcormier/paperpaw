@@ -148,7 +148,7 @@ impl EditScreen {
                 if at + 1 < list.len() {
                     options.push("down");
                 }
-                if has_settings(&env, id) {
+                if widgets::has_settings(&env, id) {
                     options.push("settings");
                 }
                 options.push("remove");
@@ -198,16 +198,6 @@ impl EditScreen {
         Self::run(cx, commands);
         self.redraw(cx);
     }
-}
-
-/// Whether widget `id` has settings of its own (a settings group with its
-/// id, see `quireink_sdk::widgets`).
-pub(crate) fn has_settings(env: &Env<'_>, id: &str) -> bool {
-    env.settings.groups().any(|group| group.id.as_str() == id)
-        && env
-            .settings
-            .specs()
-            .any(|spec| env.settings.group_of(spec).as_str() == id)
 }
 
 impl Screen for EditScreen {
