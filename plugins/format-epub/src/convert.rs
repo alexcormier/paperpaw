@@ -528,8 +528,7 @@ impl Converter<'_> {
             Some(entered) => {
                 if let Some(id) = entered.anchor {
                     self.flush();
-                    let at = self.here();
-                    self.anchors.push_str(&alloc::format!("{id}\t{at}\n"));
+                    self.add_anchor(&id);
                 }
                 if entered.line_break && !self.text.is_empty() {
                     self.push('\n');
@@ -573,11 +572,7 @@ impl Converter<'_> {
             self.flush();
         }
         if let Some(id) = attrs.get("id") {
-            let at = self.here();
-            self.anchors.push_str(&alloc::format!("{id}\t{at}\n"));
-            if self.anchors.len() >= FLUSH_SMALL {
-                self.write_anchors();
-            }
+            self.add_anchor(&id);
             if self.links.len() >= FLUSH_SMALL {
                 self.write_links();
             }
@@ -1002,6 +997,16 @@ impl Converter<'_> {
         let failed = self.append(&self.paths.text, &self.out);
         self.failed = self.failed.take().or(failed);
         self.out.clear();
+    }
+
+    /// Notes that anchor `id` is here, written as they come (a book of
+    /// many sections would gather them all otherwise).
+    fn add_anchor(&mut self, id: &str) {
+        let at = self.here();
+        self.anchors.push_str(&alloc::format!("{id}\t{at}\n"));
+        if self.anchors.len() >= FLUSH_SMALL {
+            self.write_anchors();
+        }
     }
 
     fn write_index(&mut self) {
