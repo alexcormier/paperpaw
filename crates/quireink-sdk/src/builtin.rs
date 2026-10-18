@@ -426,6 +426,9 @@ pub mod settings {
     pub const DEVELOPER: Setting<bool> = Setting::new("core.developer");
     /// Draw everything inverted.
     pub const NIGHT_MODE: Setting<bool> = Setting::new("core.night-mode");
+    /// In night mode, pictures inverted too (else as they are, not as
+    /// negatives).
+    pub const NIGHT_PICTURES: Setting<bool> = Setting::new("core.night-pictures");
     /// How far in from the top and the bottom edge a swipe begins to count
     /// as one in from the edge, in millimetres (0: none).
     pub const EDGE_ENDS: Id = Id::new_static("core.edge-ends");

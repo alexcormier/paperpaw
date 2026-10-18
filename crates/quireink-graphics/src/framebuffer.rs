@@ -24,6 +24,8 @@ pub struct Framebuffer {
     data: Vec<u8>,
     dirty: Option<Rect>,
     inverted: bool,
+    /// Pictures stay as they are while everything else is inverted.
+    pictures_kept: bool,
     /// Saturation of RGB pixels drawn, in percent (100: as they are).
     saturation: u16,
     /// Pixels of pictures drawn since [`Framebuffer::take_pictured`].
@@ -65,6 +67,7 @@ impl Framebuffer {
             data,
             dirty: None,
             inverted: false,
+            pictures_kept: false,
             saturation: 100,
             pictured: 0,
         })
@@ -171,6 +174,17 @@ impl Framebuffer {
 
     pub fn is_inverted(&self) -> bool {
         self.inverted
+    }
+
+    /// Whether pictures stay as they are while the rest is inverted
+    /// ([`Framebuffer::set_inverted`]), e.g. photos in night mode, which
+    /// would look like negatives.
+    pub fn set_pictures_kept(&mut self, kept: bool) {
+        self.pictures_kept = kept;
+    }
+
+    pub fn pictures_kept(&self) -> bool {
+        self.pictures_kept
     }
 
     /// Draws RGB pixels (pictures) with their saturation at `percent`,
@@ -366,6 +380,12 @@ impl Framebuffer {
             }
             _ => gray,
         };
+        // Inverted once more to stay as it is, where pictures are kept.
+        let gray = if self.inverted && self.pictures_kept {
+            255 - gray
+        } else {
+            gray
+        };
         let value = self.encode(Color::gray(gray));
         self.store(x, y, value);
     }
@@ -376,7 +396,14 @@ impl Framebuffer {
         if self.format.is_color() {
             self.pictured = self.pictured.saturating_add(1);
             let rgb = saturate(rgb, self.saturation);
-            let value = self.encode(Color::rgb(rgb[0], rgb[1], rgb[2]));
+            let color = Color::rgb(rgb[0], rgb[1], rgb[2]);
+            // Inverted once more to stay as it is, where pictures are kept.
+            let color = if self.inverted && self.pictures_kept {
+                color.inverted()
+            } else {
+                color
+            };
+            let value = self.encode(color);
             self.store(x, y, value);
         } else {
             self.put_gray(x, y, Color::rgb(rgb[0], rgb[1], rgb[2]).luma());
@@ -563,6 +590,21 @@ mod tests {
         fb.fill_clipped(Rect::new(1, 0, 1, 1), Color::WHITE);
         fb.blend_pixel(1, 0, Color::BLACK, 255);
         assert_eq!(fb.view().pixel(1, 0), Color::WHITE);
+    }
+
+    #[test]
+    fn pictures_kept_as_they_are_when_inverted() {
+        let mut fb = Framebuffer::new(2, 1, PixelFormat::Gray8).unwrap();
+        fb.set_inverted(true);
+        fb.set_pictures_kept(true);
+        // A picture's dark pixel stays dark; drawn text turns.
+        fb.put_gray(0, 0, 20);
+        fb.canvas().fill_rect(1, 0, 1, 1, Color::BLACK);
+        assert_eq!(fb.view().pixel(0, 0), Color::gray(20));
+        assert_eq!(fb.view().pixel(1, 0), Color::WHITE);
+        fb.set_pictures_kept(false);
+        fb.put_gray(0, 0, 20);
+        assert_eq!(fb.view().pixel(0, 0), Color::gray(235));
     }
 
     #[test]

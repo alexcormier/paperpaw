@@ -725,6 +725,12 @@ impl KernelBuilder {
                 .settings
                 .bool(core_settings::NIGHT_MODE.as_str()),
         );
+        kernel.framebuffer.set_pictures_kept(
+            !kernel
+                .shared
+                .settings
+                .bool(core_settings::NIGHT_PICTURES.as_str()),
+        );
         if let Some(panel) = kernel.shared.device.display.color {
             kernel.framebuffer.set_saturation(panel.boost_percent());
         }
@@ -1374,9 +1380,10 @@ impl Kernel {
         let format = self.framebuffer.format();
         let bounds = self.framebuffer.bounds();
         let rows = self.framebuffer.rows();
-        let (inverted, saturation) = (
+        let (inverted, saturation, kept) = (
             self.framebuffer.is_inverted(),
             self.framebuffer.saturation(),
+            self.framebuffer.pictures_kept(),
         );
         let bits = u32::from(format.bits_per_pixel()).max(1);
         let align = self.row_align;
@@ -1386,6 +1393,7 @@ impl Kernel {
         let made = |width, height, rows, format| {
             Framebuffer::banded(width, height, rows, format).map(|mut framebuffer| {
                 framebuffer.set_inverted(inverted);
+                framebuffer.set_pictures_kept(kept);
                 framebuffer.set_saturation(saturation);
                 framebuffer
             })
@@ -1905,9 +1913,10 @@ impl Kernel {
                 }
                 None => height,
             };
-            let (inverted, saturation) = (
+            let (inverted, saturation, kept) = (
                 self.framebuffer.is_inverted(),
                 self.framebuffer.saturation(),
+                self.framebuffer.pictures_kept(),
             );
             let before = (display.width, display.height, self.framebuffer.rows());
             // The old frame goes first, the new one taking its place: beside
@@ -1922,6 +1931,7 @@ impl Kernel {
                 made.or_else(|_| Framebuffer::banded(before.0, before.1, before.2, display.format))
             {
                 framebuffer.set_inverted(inverted);
+                framebuffer.set_pictures_kept(kept);
                 framebuffer.set_saturation(saturation);
                 self.framebuffer = framebuffer;
             }
@@ -3502,6 +3512,9 @@ impl Kernel {
         } else if *id == core_settings::NIGHT_MODE {
             self.framebuffer
                 .set_inverted(self.shared.settings.bool(id.as_str()));
+        } else if *id == core_settings::NIGHT_PICTURES {
+            self.framebuffer
+                .set_pictures_kept(!self.shared.settings.bool(id.as_str()));
         }
         if *id == core_settings::KEYMAP_PRESET {
             self.rebuild_keymap();
@@ -3518,6 +3531,7 @@ impl Kernel {
         }
         if *id == core_settings::LANGUAGE
             || *id == core_settings::NIGHT_MODE
+            || *id == core_settings::NIGHT_PICTURES
             || *id == core_settings::TEXT_COLOR
             || *id == core_settings::PAPER_COLOR
             || *id == core_settings::TEXT_COLOR_OWN

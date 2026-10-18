@@ -405,6 +405,15 @@ impl Plugin for CorePlugin {
                 .description("core.setting.night-mode.help"),
         )?;
         r.add_setting(
+            SettingSpec::switch(
+                &settings::NIGHT_PICTURES,
+                "core.setting.night-pictures",
+                false,
+            )
+            .group(groups::DISPLAY)
+            .description("core.setting.night-pictures.help"),
+        )?;
+        r.add_setting(
             SettingSpec::switch(&settings::SPEAK_FOCUS, "core.setting.speak-focus", false)
                 .group(groups::SYSTEM)
                 .description("core.setting.speak-focus.help"),

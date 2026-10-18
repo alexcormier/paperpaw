@@ -255,6 +255,7 @@ pub const quireink_sdk::builtin::settings::KEYMAP_PRESET: quireink_sdk::setting:
 pub const quireink_sdk::builtin::settings::LANGUAGE: quireink_sdk::setting::Setting<quireink_sdk::setting::Text>
 pub const quireink_sdk::builtin::settings::LONG_PRESS_MS: quireink_sdk::setting::Setting<i64>
 pub const quireink_sdk::builtin::settings::NIGHT_MODE: quireink_sdk::setting::Setting<bool>
+pub const quireink_sdk::builtin::settings::NIGHT_PICTURES: quireink_sdk::setting::Setting<bool>
 pub const quireink_sdk::builtin::settings::NOTICE_SECONDS: quireink_sdk::setting::Setting<i64>
 pub const quireink_sdk::builtin::settings::OWN_PAPER: &str
 pub const quireink_sdk::builtin::settings::OWN_TEXT: &str

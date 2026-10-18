@@ -6,6 +6,9 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Night mode leaves pictures as they are (covers and photos were shown
+  as negatives); "Pictures in night mode inverted" (Display) inverts
+  them too. Graphics: `Framebuffer::set_pictures_kept`.
 - What is kept for a book (its converted chapters, position and page
   index, notes, details) moves with it and is removed with it, and
   "Clean up storage" (Settings) removes what is left of books no longer

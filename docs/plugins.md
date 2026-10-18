@@ -299,6 +299,7 @@ cargo run -p quireink-emulator -- --profile xteink-x4 --headless --script "confi
 | Services | `add_service` | Anything one plugin offers others, found with `env.services.get` |
 | Contributions | `contribute` | Additions to a point another plugin defined |
 | Translations | `add_translations` | Catalogs for any language |
+| Book data | `add_book_data` | Where the plugin keeps something for each book (named by `library::key`): moved and removed with the book, cleaned up when it is gone |
 
 Slots are how a plugin replaces another: bind your screen to
 `core.home` and it is the home screen; the user's
