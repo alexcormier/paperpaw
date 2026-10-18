@@ -470,6 +470,12 @@ impl<'a> FontHandle<'a> {
         }
     }
 
+    /// Whether this font (or its fallback) draws `ch`; without it, the
+    /// character would show as a question mark or not at all.
+    pub fn has_char(&self, ch: char) -> bool {
+        self.font.has_char(ch) || self.fallback.is_some_and(|(font, _)| font.has_char(ch))
+    }
+
     /// Horizontal advance of one character in pixels.
     pub fn advance(&self, size: f32, ch: char) -> f32 {
         self.pick(ch).0.advance(ch, size)

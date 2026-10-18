@@ -16,7 +16,7 @@ use quireink_sdk::{
 };
 
 use crate::LAYOUTS_SETTING;
-use crate::layouts::{AUTO, LAYOUTS};
+use crate::layouts::{AUTO, LAYOUTS, drawable};
 
 pub(crate) struct ChooseScreen {
     style: UiStyle,
@@ -24,9 +24,14 @@ pub(crate) struct ChooseScreen {
     list: ListView,
 }
 
-/// The rows: *Automatic*, then the built-in layouts.
-fn ids() -> impl Iterator<Item = &'static str> {
-    core::iter::once(AUTO).chain(LAYOUTS.iter().map(|l| l.id))
+/// The rows: *Automatic*, then the built-in layouts the fonts can draw.
+fn ids<'a>(env: &'a Env<'_>) -> impl Iterator<Item = &'static str> + 'a {
+    core::iter::once(AUTO).chain(
+        LAYOUTS
+            .iter()
+            .filter(move |l| drawable(env, l.letters))
+            .map(|l| l.id),
+    )
 }
 
 fn chosen<'e>(env: &Env<'e>) -> Vec<&'e str> {
@@ -54,7 +59,7 @@ impl ChooseScreen {
 
     fn toggle(&mut self, index: usize, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        let Some(id) = ids().nth(index) else {
+        let Some(id) = ids(&env).nth(index) else {
             return;
         };
         let mut chosen = chosen(&env);
@@ -84,12 +89,12 @@ impl ChooseScreen {
 impl Screen for ChooseScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
-        let len = ids().count();
+        let len = ids(env).count();
         let title = env.i18n.tr("keyboard.setting.layouts");
         self.header
             .draw(canvas, env, &style, title, None, self.list.paging(len));
         let chosen = chosen(env);
-        let rows: Vec<&str> = ids().collect();
+        let rows: Vec<&str> = ids(env).collect();
         self.list
             .draw(canvas, &style, len, |canvas, index, rect, focused| {
                 let id = rows[index];
@@ -107,7 +112,7 @@ impl Screen for ChooseScreen {
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
-        let len = ids().count();
+        let len = ids(cx.env()).count();
         let rows = self.list.rows() as isize;
         let a = action;
         let delta = if [actions::UP, actions::LEFT, actions::PREVIOUS].contains(a) {
@@ -140,7 +145,7 @@ impl Screen for ChooseScreen {
         if gesture.kind != GestureKind::Tap {
             return Handled::No;
         }
-        let len = ids().count();
+        let len = ids(cx.env()).count();
         let paging = self.list.paging(len);
         if let Some(action) = self
             .header

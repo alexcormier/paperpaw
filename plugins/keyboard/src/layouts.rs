@@ -130,14 +130,32 @@ pub(crate) fn variants(c: char) -> Option<&'static str> {
         .map(|(_, v)| *v)
 }
 
+/// Whether the device's fonts draw every letter of `letters` and their
+/// capitals: a layout in a script they lack (e.g. Cyrillic on the X4's
+/// packs) is not offered, rather than shown as question marks.
+pub(crate) fn drawable(env: &Env<'_>, letters: &str) -> bool {
+    let Some(font) = quireink_sdk::ui::UiStyle::new(env).font(env) else {
+        return true;
+    };
+    letters
+        .chars()
+        .filter(|c| !c.is_whitespace())
+        .flat_map(|c| core::iter::once(c).chain(c.to_uppercase()))
+        .all(|c| font.has_char(c))
+}
+
 /// The layouts chosen in the setting `value` (ids separated by commas),
 /// as their codes and letter rows; the UI language's layout if none.
+/// Layouts the fonts cannot draw are left out.
 pub(crate) fn chosen(env: &Env<'_>, value: &str) -> Vec<(String, Cow<'static, str>)> {
     let mut layouts: Vec<(String, Cow<'static, str>)> = Vec::new();
     for id in value.split(',').map(str::trim).filter(|id| !id.is_empty()) {
         if id == AUTO {
             layouts.push(automatic(env));
-        } else if let Some(layout) = LAYOUTS.iter().find(|l| l.id == id) {
+        } else if let Some(layout) = LAYOUTS
+            .iter()
+            .find(|l| l.id == id && drawable(env, l.letters))
+        {
             layouts.push((layout.code.to_string(), Cow::Borrowed(layout.letters)));
         }
     }
