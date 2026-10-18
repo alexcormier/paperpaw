@@ -19,7 +19,7 @@ use alloc::string::{String, ToString};
 use alloc::vec;
 use alloc::vec::Vec;
 
-use quireink_sdk::Storage;
+use quireink_sdk::{Storage, StorageError};
 use quireink_sqlite::{Database, Error};
 
 use crate::koreader::{self, KoBook, STAT, fields, stat_record};
@@ -49,6 +49,47 @@ fn open_side(storage: &dyn Storage, path: Option<&str>) -> Option<Side> {
     })
 }
 
+/// The working files of a merge, in one folder.
+struct Files {
+    /// This device's stays, the other side's, the last upload's, sorted.
+    local: String,
+    income: String,
+    cached: String,
+    /// The stays merged, by start; then in the order of the log.
+    merged: String,
+    time: String,
+    /// For sorting, and for writing the upload.
+    runs: String,
+    write: String,
+}
+
+impl Files {
+    fn in_dir(dir: &str) -> Self {
+        let path = |name: &str| format!("{dir}/{name}");
+        Self {
+            local: path("merge-local"),
+            income: path("merge-income"),
+            cached: path("merge-cached"),
+            merged: path("merge-out"),
+            time: path("merge-time"),
+            runs: path("merge-run"),
+            write: path("merge-write"),
+        }
+    }
+
+    fn remove(&self, storage: &dyn Storage) {
+        for file in [
+            &self.local,
+            &self.income,
+            &self.cached,
+            &self.merged,
+            &self.time,
+        ] {
+            let _ = storage.remove(file);
+        }
+    }
+}
+
 /// Merges the statistics database `income` (another device's, if any)
 /// into this device's statistics; `cached` is the file this device last
 /// uploaded. With `out`, writes the merged statistics there as a KOReader
@@ -62,167 +103,171 @@ pub(crate) fn merge(
 ) -> Result<Outcome, Error> {
     let income = open_side(storage, income);
     let cached = open_side(storage, cached);
-    let mut books = store::books(storage);
-    let had = |md5: &str| books.iter().any(|b| b.md5 == md5);
-    let in_side = |side: &Option<Side>, md5: &str| {
-        side.as_ref()
-            .is_some_and(|s| s.books.iter().any(|b| b.md5 == md5))
-    };
+    let books = merge_books(store::books(storage), income.as_ref(), cached.as_ref());
+    let files = Files::in_dir(dir);
+    write_local(storage, &books, &files)?;
+    write_side(storage, income.as_ref(), &books, &files.income, &files.runs)?;
+    write_side(storage, cached.as_ref(), &books, &files.cached, &files.runs)?;
+    let stays = merge_stays(storage, &files, income.is_some())?;
+    let per_book = to_time_order(storage, &books, &files)?;
+    // The new log replaces the old one.
+    store::replace_log(storage, &files.time)?;
+    store::save_books(storage, &books);
+    if let Some(out) = out {
+        write_upload(storage, out, &books, &per_book, income.as_ref(), &files)?;
+    }
+    files.remove(storage);
+    Ok(Outcome {
+        books: books.len(),
+        stays,
+    })
+}
+
+/// The books here after the merge, by id: those deleted on either side
+/// gone, the other side's added (named as there).
+fn merge_books(mut books: Vec<Book>, income: Option<&Side>, cached: Option<&Side>) -> Vec<Book> {
+    let in_income = |md5: &str| income.is_some_and(|s| s.books.iter().any(|b| b.md5 == md5));
+    let last_upload = || cached.iter().flat_map(|c| c.books.iter());
     // Deleted here: in the last upload, not here (before adding any).
-    let deleted_here: Vec<String> = cached
-        .iter()
-        .flat_map(|c| c.books.iter())
-        .filter(|b| !had(&b.md5))
+    let deleted_here: Vec<String> = last_upload()
+        .filter(|b| !books.iter().any(|ours| ours.md5 == b.md5))
         .map(|b| b.md5.clone())
         .collect();
     // Deleted there: in the last upload, not in the other side's file.
-    let deleted_there: Vec<String> = match &income {
-        Some(_) => cached
-            .iter()
-            .flat_map(|c| c.books.iter())
-            .filter(|b| !in_side(&income, &b.md5))
+    let deleted_there: Vec<String> = match income {
+        Some(_) => last_upload()
+            .filter(|b| !in_income(&b.md5))
             .map(|b| b.md5.clone())
             .collect(),
         None => Vec::new(),
     };
     books.retain(|b| !deleted_there.contains(&b.md5));
     // Books from the other side: named as there, added if new here.
-    if let Some(side) = &income {
-        for theirs in &side.books {
-            if deleted_here.contains(&theirs.md5) {
-                continue;
-            }
-            match books.iter_mut().find(|b| b.md5 == theirs.md5) {
-                Some(ours) => {
-                    ours.title.clone_from(&theirs.title);
-                    ours.authors.clone_from(&theirs.authors);
-                    if ours.language == "N/A" || ours.language.is_empty() {
-                        ours.language.clone_from(&theirs.language);
-                    }
-                    if ours.series == "N/A" || ours.series.is_empty() {
-                        ours.series.clone_from(&theirs.series);
-                    }
-                    ours.last_open = ours.last_open.max(theirs.last_open);
-                    if ours.pages == 0 {
-                        ours.pages = theirs.pages.max(0) as u32;
-                    }
-                }
-                None => {
-                    let id = books.iter().map(|b| b.id).max().unwrap_or(0) + 1;
-                    books.push(Book {
-                        id,
-                        title: theirs.title.clone(),
-                        authors: theirs.authors.clone(),
-                        md5: theirs.md5.clone(),
-                        pages: theirs.pages.max(0) as u32,
-                        language: theirs.language.clone(),
-                        series: theirs.series.clone(),
-                        last_open: theirs.last_open,
-                        path: String::new(),
-                    });
-                }
+    for theirs in income.iter().flat_map(|side| side.books.iter()) {
+        if deleted_here.contains(&theirs.md5) {
+            continue;
+        }
+        match books.iter_mut().find(|b| b.md5 == theirs.md5) {
+            Some(ours) => take_names(ours, theirs),
+            None => {
+                let id = books.iter().map(|b| b.id).max().unwrap_or(0) + 1;
+                books.push(Book {
+                    id,
+                    title: theirs.title.clone(),
+                    authors: theirs.authors.clone(),
+                    md5: theirs.md5.clone(),
+                    pages: theirs.pages.max(0) as u32,
+                    language: theirs.language.clone(),
+                    series: theirs.series.clone(),
+                    last_open: theirs.last_open,
+                    path: String::new(),
+                });
             }
         }
     }
     books.sort_by_key(|b| b.id);
-    // A side's book ids as ids here.
-    let ids = |side: &Side| -> Vec<(i64, u16)> {
-        side.books
-            .iter()
-            .filter_map(|theirs| {
-                let ours = books.iter().find(|b| b.md5 == theirs.md5)?;
-                Some((theirs.id, ours.id))
-            })
-            .collect()
-    };
+    books
+}
 
-    let path = |name: &str| format!("{dir}/{name}");
-    let (l, i, c, m, t) = (
-        path("merge-local"),
-        path("merge-income"),
-        path("merge-cached"),
-        path("merge-out"),
-        path("merge-time"),
-    );
-    let runs = path("merge-run");
+/// A book here, named as on the other side, with what that side knows
+/// and this one does not.
+fn take_names(ours: &mut Book, theirs: &KoBook) {
+    ours.title.clone_from(&theirs.title);
+    ours.authors.clone_from(&theirs.authors);
+    if ours.language == "N/A" || ours.language.is_empty() {
+        ours.language.clone_from(&theirs.language);
+    }
+    if ours.series == "N/A" || ours.series.is_empty() {
+        ours.series.clone_from(&theirs.series);
+    }
+    ours.last_open = ours.last_open.max(theirs.last_open);
+    if ours.pages == 0 {
+        ours.pages = theirs.pages.max(0) as u32;
+    }
+}
+
+/// This device's stays of the books kept, sorted.
+fn write_local(storage: &dyn Storage, books: &[Book], files: &Files) -> Result<(), Error> {
     let present = |id: u16| books.binary_search_by_key(&id, |b| b.id).is_ok();
-
-    // This device's stays.
-    let mut buffer = Vec::new();
-    storage.write(&l, &[])?;
-    let mut failed = None;
+    let mut file = Appender::new(storage, &files.local)?;
     store::scan(storage, |s| {
         if present(s.book) {
-            buffer.extend_from_slice(&stat_record([
+            file.push(&stat_record([
                 u32::from(s.book),
                 s.page,
                 s.start,
                 u32::from(s.duration),
                 s.pages,
             ]));
-            if buffer.len() >= 4096 {
-                if let Err(e) = storage.append(&l, &buffer) {
-                    failed = Some(e);
-                }
-                buffer.clear();
-            }
         }
     });
-    storage.append(&l, &buffer)?;
-    if let Some(e) = failed {
-        return Err(Error::Storage(e));
-    }
-    extsort::sort(storage, &l, &l, STAT, &runs)?;
-    // The other side's and the last upload's, with ids from here.
-    for (side, file) in [(&income, &i), (&cached, &c)] {
-        storage.write(file, &[])?;
-        let Some(side) = side else {
-            continue;
-        };
-        let map = ids(side);
-        let db = Database::open(storage, &side.path)?;
-        let mut buffer = Vec::new();
-        let mut failed = None;
-        koreader::stats(&db, |s| {
-            let Some((_, id)) = map.iter().find(|(theirs, _)| *theirs == s.book) else {
-                return;
-            };
-            let clamp = |v: i64| v.clamp(0, i64::from(u32::MAX)) as u32;
-            buffer.extend_from_slice(&stat_record([
-                u32::from(*id),
-                clamp(s.page),
-                clamp(s.start),
-                clamp(s.duration),
-                clamp(s.pages),
-            ]));
-            if buffer.len() >= 4096 {
-                if let Err(e) = storage.append(file, &buffer) {
-                    failed = Some(e);
-                }
-                buffer.clear();
-            }
-        })?;
-        storage.append(file, &buffer)?;
-        if let Some(e) = failed {
-            return Err(Error::Storage(e));
-        }
-        extsort::sort(storage, file, file, STAT, &runs)?;
-    }
+    file.finish()?;
+    Ok(extsort::sort(
+        storage,
+        &files.local,
+        &files.local,
+        STAT,
+        &files.runs,
+    )?)
+}
 
-    // The three, side by side by (book, page, start).
-    storage.write(&m, &[])?;
-    let has_income = income.is_some();
+/// A side's stays, with the ids of its books here, sorted (empty where
+/// there is no such side).
+fn write_side(
+    storage: &dyn Storage,
+    side: Option<&Side>,
+    books: &[Book],
+    path: &str,
+    runs: &str,
+) -> Result<(), Error> {
+    let mut file = Appender::new(storage, path)?;
+    let Some(side) = side else {
+        return Ok(());
+    };
+    // The side's book ids as ids here.
+    let ids: Vec<(i64, u16)> = side
+        .books
+        .iter()
+        .filter_map(|theirs| {
+            let ours = books.iter().find(|b| b.md5 == theirs.md5)?;
+            Some((theirs.id, ours.id))
+        })
+        .collect();
+    let db = Database::open(storage, &side.path)?;
+    koreader::stats(&db, |s| {
+        let Some((_, id)) = ids.iter().find(|(theirs, _)| *theirs == s.book) else {
+            return;
+        };
+        let clamp = |v: i64| v.clamp(0, i64::from(u32::MAX)) as u32;
+        file.push(&stat_record([
+            u32::from(*id),
+            clamp(s.page),
+            clamp(s.start),
+            clamp(s.duration),
+            clamp(s.pages),
+        ]));
+    })?;
+    file.finish()?;
+    Ok(extsort::sort(storage, path, path, STAT, runs)?)
+}
+
+/// The three files side by side by (book, page, start): what was deleted
+/// on either side left out, the longer of a stay on both sides kept;
+/// written by start. How many stays there are.
+fn merge_stays(storage: &dyn Storage, files: &Files, has_income: bool) -> Result<usize, Error> {
+    let mut merged = Appender::new(storage, &files.merged)?;
     let mut sources = [
-        Source::new(storage, &l),
-        Source::new(storage, &i),
-        Source::new(storage, &c),
+        Source::new(storage, &files.local),
+        Source::new(storage, &files.income),
+        Source::new(storage, &files.cached),
     ];
     let key = |r: &Vec<u8>| -> [u8; 12] {
         let mut k = [0u8; 12];
         k.copy_from_slice(&r[..12]);
         k
     };
-    let mut out_buffer = Vec::new();
+    // Whether `b` was read longer than `a`.
+    let longer = |a: &Vec<u8>, b: &Vec<u8>| fields(b)[3] > fields(a)[3];
     let mut stays = 0;
     while let Some(next) = sources.iter().filter_map(|s| s.peek().map(key)).min() {
         // Each side's record for this key, if any (duplicates within a
@@ -231,59 +276,52 @@ pub(crate) fn merge(
         for (n, source) in sources.iter_mut().enumerate() {
             while source.peek().is_some_and(|r| key(r) == next) {
                 let r = source.next().unwrap_or_default();
-                let longer = found[n]
-                    .as_ref()
-                    .is_none_or(|f| fields(&r)[3] > fields(f)[3]);
-                if longer {
+                if found[n].as_ref().is_none_or(|f| longer(f, &r)) {
                     found[n] = Some(r);
                 }
             }
         }
-        let [here, there, before] = &found;
+        let [here, there, before] = found;
         let deleted_here = before.is_some() && here.is_none();
         let deleted_there = has_income && before.is_some() && there.is_none();
         if deleted_here || deleted_there {
             continue;
         }
         let record = match (here, there) {
-            (Some(a), Some(b)) => {
-                if fields(b)[3] > fields(a)[3] {
-                    b.clone()
-                } else {
-                    a.clone()
-                }
-            }
-            (Some(a), None) => a.clone(),
-            (None, Some(b)) => b.clone(),
+            (Some(a), Some(b)) if longer(&a, &b) => b,
+            (Some(a), _) => a,
+            (None, Some(b)) => b,
             (None, None) => continue,
         };
         // In time order next: start first.
         let [book, page, start, duration, pages] = fields(&record).map(|v| v as u32);
-        out_buffer.extend_from_slice(&stat_record([start, book, page, duration, pages]));
+        merged.push(&stat_record([start, book, page, duration, pages]));
         stays += 1;
-        if out_buffer.len() >= 4096 {
-            storage.append(&m, &out_buffer)?;
-            out_buffer.clear();
-        }
     }
-    storage.append(&m, &out_buffer)?;
+    merged.finish()?;
     for source in &mut sources {
         // A read error ends a source early: better no merge than a partial.
         if let Some(e) = source.records.failed.take() {
             return Err(Error::Storage(e));
         }
     }
-    extsort::sort(storage, &m, &m, STAT, &runs)?;
+    extsort::sort(storage, &files.merged, &files.merged, STAT, &files.runs)?;
+    Ok(stays)
+}
 
-    // Back to (book, page, start, …) in time order: the new log, the
-    // upload's rows and each book's totals.
-    storage.write(&t, &[])?;
-    let mut time_order = Vec::new();
+/// Back to (book, page, start, …) in time order, for the new log and the
+/// upload's rows; each book's totals: the seconds read, and the pages
+/// read as bits.
+fn to_time_order(
+    storage: &dyn Storage,
+    books: &[Book],
+    files: &Files,
+) -> Result<Vec<(u64, Vec<u8>)>, Error> {
+    let mut time = Appender::new(storage, &files.time)?;
     let mut per_book: Vec<(u64, Vec<u8>)> = vec![(0, Vec::new()); books.len()];
-    let mut failed = None;
-    extsort::each(storage, &m, STAT, |r| {
+    extsort::each(storage, &files.merged, STAT, |r| {
         let [start, book, page, duration, pages] = fields(r).map(|v| v as u32);
-        time_order.extend_from_slice(&stat_record([book, page, start, duration, pages]));
+        time.push(&stat_record([book, page, start, duration, pages]));
         if let Ok(at) = books.binary_search_by_key(&(book as u16), |b| b.id) {
             let total = &mut per_book[at];
             total.0 += u64::from(duration);
@@ -300,54 +338,85 @@ pub(crate) fn merge(
                 total.1[byte] |= 1 << bit;
             }
         }
-        if time_order.len() >= 4096 {
-            if let Err(e) = storage.append(&t, &time_order) {
-                failed = Some(e);
-            }
-            time_order.clear();
-        }
     })?;
-    storage.append(&t, &time_order)?;
-    if let Some(e) = failed {
-        return Err(Error::Storage(e));
-    }
-    // The new log replaces the old one.
-    store::replace_log(storage, &t)?;
-    store::save_books(storage, &books);
+    time.finish()?;
+    Ok(per_book)
+}
 
-    if let Some(out) = out {
-        let theirs = |md5: &str| {
-            income
-                .as_ref()
-                .and_then(|s| s.books.iter().find(|b| b.md5 == md5))
-        };
-        let ko_books: Vec<KoBook> = books
-            .iter()
-            .zip(per_book.iter())
-            .map(|(b, (seconds, read))| KoBook {
-                id: i64::from(b.id),
-                title: b.title.clone(),
-                authors: b.authors.clone(),
-                notes: theirs(&b.md5).map_or(0, |t| t.notes),
-                last_open: b.last_open,
-                highlights: theirs(&b.md5).map_or(0, |t| t.highlights),
-                pages: i64::from(b.pages),
-                series: na(&b.series),
-                language: na(&b.language),
-                md5: b.md5.clone(),
-                total_read_time: *seconds as i64,
-                total_read_pages: read.iter().map(|x| x.count_ones()).sum::<u32>() as i64,
-            })
-            .collect();
-        koreader::write(storage, out, &ko_books, &t, &path("merge-write"))?;
+/// The merged statistics as a KOReader database at `out`, the books'
+/// notes and highlights as the other side counted them.
+fn write_upload(
+    storage: &dyn Storage,
+    out: &str,
+    books: &[Book],
+    per_book: &[(u64, Vec<u8>)],
+    income: Option<&Side>,
+    files: &Files,
+) -> Result<(), Error> {
+    let theirs = |md5: &str| income.and_then(|s| s.books.iter().find(|b| b.md5 == md5));
+    let ko_books: Vec<KoBook> = books
+        .iter()
+        .zip(per_book.iter())
+        .map(|(b, (seconds, read))| KoBook {
+            id: i64::from(b.id),
+            title: b.title.clone(),
+            authors: b.authors.clone(),
+            notes: theirs(&b.md5).map_or(0, |t| t.notes),
+            last_open: b.last_open,
+            highlights: theirs(&b.md5).map_or(0, |t| t.highlights),
+            pages: i64::from(b.pages),
+            series: na(&b.series),
+            language: na(&b.language),
+            md5: b.md5.clone(),
+            total_read_time: *seconds as i64,
+            total_read_pages: read.iter().map(|x| x.count_ones()).sum::<u32>() as i64,
+        })
+        .collect();
+    koreader::write(storage, out, &ko_books, &files.time, &files.write)
+}
+
+/// Records added to a file a few kilobytes at a time; the first error
+/// kept for the end.
+struct Appender<'s> {
+    storage: &'s dyn Storage,
+    path: &'s str,
+    buffer: Vec<u8>,
+    failed: Option<StorageError>,
+}
+
+impl<'s> Appender<'s> {
+    /// The file at `path`, emptied.
+    fn new(storage: &'s dyn Storage, path: &'s str) -> Result<Self, Error> {
+        storage.write(path, &[])?;
+        Ok(Self {
+            storage,
+            path,
+            buffer: Vec::new(),
+            failed: None,
+        })
     }
-    for file in [&l, &i, &c, &m, &t] {
-        let _ = storage.remove(file);
+
+    fn push(&mut self, record: &[u8]) {
+        self.buffer.extend_from_slice(record);
+        if self.buffer.len() >= 4096 {
+            self.flush();
+        }
     }
-    Ok(Outcome {
-        books: books.len(),
-        stays,
-    })
+
+    fn flush(&mut self) {
+        if let Err(e) = self.storage.append(self.path, &self.buffer) {
+            self.failed.get_or_insert(e);
+        }
+        self.buffer.clear();
+    }
+
+    fn finish(mut self) -> Result<(), Error> {
+        self.flush();
+        match self.failed {
+            Some(e) => Err(Error::Storage(e)),
+            None => Ok(()),
+        }
+    }
 }
 
 /// KOReader writes `N/A` for what a book does not say.
