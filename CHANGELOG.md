@@ -6,6 +6,9 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Home: the status line at the top shows the status items chosen for its
+  left, centre and right (the status line widget's settings), any
+  plugin's, as the reader's lines do.
 - QuireInk builds with Rust 1.88 and later (it said 1.85, which was too
   old); CI checks it. A short [security model](docs/security-model.md)
   says what is protected and against whom.

@@ -22,7 +22,8 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use quireink_sdk::builtin::{actions, params, slots};
+use quireink_sdk::builtin::{actions, params, screens, slots};
+use quireink_sdk::status::{StatusLine, item_ids};
 use quireink_sdk::ui::{self, UiStyle};
 use quireink_sdk::widgets::{self, Align, WidgetSpec, WidgetTarget};
 use quireink_sdk::{
@@ -56,6 +57,13 @@ const RECENT_TITLES: Setting<bool> = Setting::new("home.recent.titles");
 const RECENT_COUNT: Setting<i64> = Setting::new("home.recent.count");
 /// Whether tools show their names below their icons.
 pub(crate) const TOOL_LABELS: Setting<bool> = Setting::new("home.tool-labels");
+/// The status items of the status line's left, centre and right (ids
+/// separated by commas).
+pub(crate) const STATUS_PARTS: [Setting<Text>; 3] = [
+    Setting::new("home.status.left"),
+    Setting::new("home.status.center"),
+    Setting::new("home.status.right"),
+];
 /// Recent books shown as covers at most.
 const MAX_COVERS: usize = 8;
 
@@ -72,14 +80,7 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
         targets: None,
     };
     let mut status = widget(STATUS, "home.widget.status", status_height, draw_status);
-    status.signature = Some(Box::new(|env| {
-        let battery = env.status.battery.map_or(0, |b| b.percent);
-        format!(
-            "{}|{battery}|{}",
-            time::clock_text(env).unwrap_or_default(),
-            online(env)
-        )
-    }));
+    status.signature = Some(Box::new(status_signature));
     r.add_widget(status)?;
     let mut date = widget(DATE, "home.widget.date", date_height, draw_date);
     date.signature = Some(Box::new(date_text));
@@ -100,9 +101,24 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     }));
     r.add_widget(clock)?;
 
-    // Each widget's settings, in its own group.
+    // The status line's parts: the time on the left; Wi-Fi and the
+    // battery on the right.
+    let status = Id::new_static(STATUS);
+    r.add_setting_group(widgets::settings_group(&status, "home.widget.status"))?;
+    let parts = [
+        ("home.status.left", "core.status.clock"),
+        ("home.status.center", ""),
+        ("home.status.right", "wifi.status, core.status.battery"),
+    ];
+    for (part, (title, default)) in STATUS_PARTS.iter().zip(parts) {
+        r.add_setting(
+            SettingSpec::list(part, title, default)
+                .group(status.clone())
+                .editor(screens::STATUS_ITEMS),
+        )?;
+    }
+    // Each other widget's settings, in its own group.
     for (id, title, align) in [
-        (STATUS, "home.widget.status", Align::Left),
         (DATE, "home.widget.date", Align::Center),
         (CLOCK, "home.widget.clock", Align::Center),
         (CONTINUE, "home.widget.continue", Align::Left),
@@ -209,53 +225,35 @@ pub(crate) fn status_height(env: &Env<'_>, _: u16) -> u16 {
     line_height(env, style.small) + style.gap as u16 / 2
 }
 
+/// The status line: the status items chosen for its left, centre and
+/// right ([`STATUS_PARTS`]), any plugin's, as the reader's lines have them.
 pub(crate) fn draw_status(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     let style = UiStyle::new(env);
     let Some(font) = style.font(env) else {
         return;
     };
-    let ink = style.faint(60);
-    let align = widgets::align(env, STATUS);
-    if let Some(clock) = time::clock_text(env) {
-        let x = align.x(area, font.measure(style.small, &clock));
-        ui::draw_label(canvas, &font, style.small, x, area, &clock, ink);
-    }
-    // Wi-Fi while in a network, then the battery: at the right, or at
-    // the left where the time is at the right.
-    let size = style.small * 1.2;
-    let gap = style.gap as f32 / 3.0;
-    let wifi = online(env).then(|| ui::icon_width(env, "wifi", size));
-    let battery = env.status.battery.map(|battery| {
-        let text = env.i18n.format(
-            "home.battery",
-            &[("percent", Arg::Int(i64::from(battery.percent)))],
-        );
-        let icon = if battery.charging { "power" } else { "battery" };
-        (icon, text)
-    });
-    let battery_width = battery.as_ref().map_or(0.0, |(icon, text)| {
-        ui::icon_width(env, icon, size) + gap + font.measure(style.small, text)
-    });
-    let width = wifi.map_or(0.0, |w| w + gap * 3.0) + battery_width;
-    let mut x = if align == Align::Right {
-        f32::from(area.x)
-    } else {
-        f32::from(area.x + area.width) - width
+    let line = StatusLine {
+        area,
+        lists: STATUS_PARTS.each_ref().map(|part| env.settings.read(part)),
+        size: style.small,
+        color: style.faint(60),
+        percent: true,
     };
-    if let Some(wifi_width) = wifi {
-        ui::draw_icon(canvas, env, "wifi", size, x, area, ink);
-        x += wifi_width + gap * 3.0;
-    }
-    if let Some((icon, text)) = battery {
-        ui::draw_icon(canvas, env, icon, size, x, area, ink);
-        x += ui::icon_width(env, icon, size) + gap;
-        ui::draw_label(canvas, &font, style.small, x, area, &text, ink);
-    }
+    line.draw(canvas, env, &font, &Params::new());
 }
 
-/// Whether the device is in a Wi-Fi network (where QuireInk manages it).
-fn online(env: &Env<'_>) -> bool {
-    env.wifi.is_some_and(|w| w.state.is_online())
+/// What the status line shows now, to draw it again when it changes.
+fn status_signature(env: &Env<'_>) -> String {
+    let mut signature = String::new();
+    for part in &STATUS_PARTS {
+        for id in item_ids(env.settings.read(part)) {
+            if let Some(value) = env.status_items.value(id, env, &Params::new()) {
+                signature.push_str(&format!("{value:?}|"));
+            }
+        }
+        signature.push('/');
+    }
+    signature
 }
 
 // ---- Date ---------------------------------------------------------------
