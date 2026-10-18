@@ -16,6 +16,9 @@ change the plugin SDK.
   shows it in the status line and on the home screen; the time zone is
   chosen under Settings, System (UTC on "Auto": the X4 has none of its
   own). Gone when it is switched off, until it is online again.
+- A Wi-Fi sign in the status lines (home screen, book, quick panel)
+  while the device is in a network: the status item `wifi.status` of the
+  `wifi` plugin, before the battery by default.
 - Screens come up faster on the X4: what a screen reads while it is
   drawn in bands comes from the card once, not once per band (the home
   screen after a book: 0.3 s instead of 1.9 s to draw). Plugins get this

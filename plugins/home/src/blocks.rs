@@ -1,8 +1,8 @@
 //! The home screen's own widgets, which its pages are made of (any
 //! plugin's widgets go on them too), and its tools:
 //!
-//! - status line: the time, and the battery's charge (above the grid by
-//!   default, see `pages`);
+//! - status line: the time, Wi-Fi while in a network, and the battery's
+//!   charge (above the grid by default, see `pages`);
 //! - date: today in words;
 //! - clock: the time large, with the date;
 //! - continue reading: the book read last, with its cover and progress;
@@ -74,7 +74,11 @@ pub(crate) fn register(r: &mut dyn Registrar) -> Result<(), RegisterError> {
     let mut status = widget(STATUS, "home.widget.status", status_height, draw_status);
     status.signature = Some(Box::new(|env| {
         let battery = env.status.battery.map_or(0, |b| b.percent);
-        format!("{}|{battery}", time::clock_text(env).unwrap_or_default())
+        format!(
+            "{}|{battery}|{}",
+            time::clock_text(env).unwrap_or_default(),
+            online(env)
+        )
     }));
     r.add_widget(status)?;
     let mut date = widget(DATE, "home.widget.date", date_height, draw_date);
@@ -229,26 +233,42 @@ pub(crate) fn draw_status(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         let x = align.x(area, font.measure(style.small, &clock));
         ui::draw_label(canvas, &font, style.small, x, area, &clock, ink);
     }
-    if let Some(battery) = env.status.battery {
+    // Wi-Fi while in a network, then the battery: at the right, or at
+    // the left where the time is at the right.
+    let size = style.small * 1.2;
+    let gap = style.gap as f32 / 3.0;
+    let wifi = online(env).then(|| ui::icon_width(env, "wifi", size));
+    let battery = env.status.battery.map(|battery| {
         let text = env.i18n.format(
             "home.battery",
             &[("percent", Arg::Int(i64::from(battery.percent)))],
         );
-        let width = font.measure(style.small, &text);
         let icon = if battery.charging { "power" } else { "battery" };
-        let size = style.small * 1.2;
-        let icon_width = ui::icon_width(env, icon, size);
-        let gap = style.gap as f32 / 3.0;
-        // At the right, or at the left where the time is at the right.
-        let start = if align == Align::Right {
-            f32::from(area.x)
-        } else {
-            f32::from(area.x + area.width) - width - gap - icon_width
-        };
-        ui::draw_icon(canvas, env, icon, size, start, area, ink);
-        let x = start + icon_width + gap;
+        (icon, text)
+    });
+    let battery_width = battery.as_ref().map_or(0.0, |(icon, text)| {
+        ui::icon_width(env, icon, size) + gap + font.measure(style.small, text)
+    });
+    let width = wifi.map_or(0.0, |w| w + gap * 3.0) + battery_width;
+    let mut x = if align == Align::Right {
+        f32::from(area.x)
+    } else {
+        f32::from(area.x + area.width) - width
+    };
+    if let Some(wifi_width) = wifi {
+        ui::draw_icon(canvas, env, "wifi", size, x, area, ink);
+        x += wifi_width + gap * 3.0;
+    }
+    if let Some((icon, text)) = battery {
+        ui::draw_icon(canvas, env, icon, size, x, area, ink);
+        x += ui::icon_width(env, icon, size) + gap;
         ui::draw_label(canvas, &font, style.small, x, area, &text, ink);
     }
+}
+
+/// Whether the device is in a Wi-Fi network (where QuireInk manages it).
+fn online(env: &Env<'_>) -> bool {
+    env.wifi.is_some_and(|w| w.state.is_online())
 }
 
 // ---- Date ---------------------------------------------------------------

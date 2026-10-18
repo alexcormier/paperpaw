@@ -104,7 +104,7 @@ impl Plugin for Menu {
         let defaults = [
             "core.status.clock, core.status.date",
             "",
-            "core.status.battery",
+            "wifi.status, core.status.battery",
         ];
         let titles = ["menu.quick.left", "menu.quick.center", "menu.quick.right"];
         for ((id, title), default) in panel::QUICK_PARTS.into_iter().zip(titles).zip(defaults) {

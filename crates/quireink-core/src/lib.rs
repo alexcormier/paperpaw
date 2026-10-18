@@ -1819,6 +1819,10 @@ impl Kernel {
                     self.output
                         .commands
                         .push(Command::Emit(events::WIFI_CHANGED, Params::new()));
+                    // Status lines show it (`wifi.status`).
+                    self.output
+                        .commands
+                        .push(Command::Emit(events::STATUS_CHANGED, Params::new()));
                 }
             }
             WifiEvent::Scanned(mut networks) => {

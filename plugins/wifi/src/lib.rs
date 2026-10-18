@@ -27,7 +27,8 @@ use quireink_sdk::builtin::{events, params};
 use quireink_sdk::wifi::{self, JoinFailure, WifiCommand, WifiState};
 use quireink_sdk::{
     Arg, Command, Env, Id, Manifest, MenuNeed, Params, Plugin, RegisterError, Registrar,
-    SDK_VERSION, ScreenSpec, SettingGroupSpec, SettingKind, SettingSpec, SettingValue, Version,
+    SDK_VERSION, ScreenSpec, SettingGroupSpec, SettingKind, SettingSpec, SettingValue,
+    StatusItemSpec, StatusValue, Version,
 };
 
 use policy::{Goal, Policy};
@@ -37,6 +38,8 @@ pub const PLUGIN: Id = Id::new_static("wifi");
 pub const GROUP: Id = Id::new_static("wifi.group");
 /// The Wi-Fi page.
 pub const PAGE: Id = Id::new_static("wifi.page");
+/// The status item: the Wi-Fi sign while the device is in a network.
+pub const STATUS: Id = Id::new_static("wifi.status");
 /// The radio comes on by itself when a plugin wants the network.
 pub const ON_DEMAND: Id = Id::new_static("wifi.on-demand");
 /// How long after the last use the radio goes off.
@@ -149,6 +152,15 @@ impl Plugin for Wifi {
             page: Some(PAGE),
         })?;
         r.add_icon(GROUP, Cow::Borrowed("wifi"))?;
+        r.add_status_item(StatusItemSpec {
+            id: STATUS,
+            title: Cow::Borrowed("wifi.status.item"),
+            value: Box::new(|env, _| {
+                env.wifi
+                    .is_some_and(|w| w.state.is_online())
+                    .then_some(StatusValue::Icon(Cow::Borrowed("wifi")))
+            }),
+        })?;
         let choices = IDLE_OFF_CHOICES
             .iter()
             .map(|(id, _)| Cow::Borrowed(*id))
