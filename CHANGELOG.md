@@ -16,6 +16,9 @@ change the plugin SDK.
   shows it in the status line and on the home screen; the time zone is
   chosen under Settings, System (UTC on "Auto": the X4 has none of its
   own). Gone when it is switched off, until it is online again.
+- In lists and menus, moving on past the last entry goes round to the
+  first, and back from the first to the last (turning pages still stops
+  at the end).
 - A setting with two choices (e.g. the clock's 24 or 12 hours) switches
   at once in the settings and menus, instead of opening a list to pick
   the other one; with more choices (a plugin may add some) it opens the

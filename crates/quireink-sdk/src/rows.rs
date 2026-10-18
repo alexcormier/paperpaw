@@ -160,12 +160,19 @@ impl Rows {
         }
     }
 
-    /// Moves the focus to the next (`forward`) or previous entry.
+    /// Moves the focus to the next (`forward`) or previous entry; past
+    /// the last it goes round to the first, and back (quicker with few
+    /// buttons).
     pub fn step(&mut self, forward: bool) -> ListChange {
+        let entries = |range: core::ops::Range<usize>| range.filter(|&i| !self.is_heading(i));
         let next = if forward {
-            (self.focus + 1..self.len()).find(|&i| !self.is_heading(i))
+            entries(self.focus + 1..self.len())
+                .next()
+                .or_else(|| entries(0..self.len()).next())
         } else {
-            (0..self.focus).rev().find(|&i| !self.is_heading(i))
+            entries(0..self.focus)
+                .next_back()
+                .or_else(|| entries(0..self.len()).next_back())
         };
         next.map_or(ListChange::None, |i| self.set_focus(i))
     }
@@ -195,6 +202,21 @@ impl Rows {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn steps_go_round_past_the_ends() {
+        // A heading, two entries, a heading, one entry.
+        let headings = alloc::vec![true, false, false, true, false];
+        let mut rows = Rows::new(Rect::new(0, 0, 100, 500), alloc::vec![20; 5], headings);
+        rows.focus = 1;
+        rows.step(false);
+        assert_eq!(rows.focus, 4, "back from the first: the last");
+        rows.step(true);
+        assert_eq!(rows.focus, 1, "on from the last: the first, past the heading");
+        rows.step(true);
+        rows.step(true);
+        assert_eq!(rows.focus, 4, "over the heading between");
+    }
 
     #[test]
     fn headings_go_with_their_entries() {

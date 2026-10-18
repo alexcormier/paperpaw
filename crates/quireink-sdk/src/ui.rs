@@ -987,7 +987,9 @@ impl ListView {
         len.div_ceil(self.rows()).max(1)
     }
 
-    /// Moves the focus by `delta` rows, clamped to `0..len`.
+    /// Moves the focus by `delta` rows within `0..len`; one step past
+    /// either end goes round to the other (quicker with few buttons),
+    /// larger steps (pages) stop at the end.
     /// On touch screens, hides the focus until a button moves it: taps
     /// need no focus, and a black row nobody chose looks like a mistake.
     pub fn focus_on_keys(mut self, env: &Env<'_>) -> Self {
@@ -1006,7 +1008,13 @@ impl ListView {
             self.shown = true;
             return ListChange::Focus;
         }
-        let focus = (self.focus as isize + delta).clamp(0, len as isize - 1) as usize;
+        let last = len as isize - 1;
+        let target = self.focus as isize + delta;
+        let focus = match target {
+            t if delta.abs() == 1 && t < 0 => last,
+            t if delta.abs() == 1 && t > last => 0,
+            t => t.clamp(0, last),
+        } as usize;
         if focus == self.focus {
             return ListChange::None;
         }
@@ -1685,11 +1693,16 @@ mod tests {
         assert_eq!(list.page(), 1);
         assert_eq!(list.move_focus(100, 7), ListChange::Page);
         assert_eq!(list.focus, 6);
-        assert_eq!(list.move_focus(1, 7), ListChange::None);
         // Page 2 shows only index 6.
         assert_eq!(list.hit(Point::new(10, 150), 7), Some(6));
         assert_eq!(list.hit(Point::new(10, 250), 7), None);
         assert_eq!(list.hit(Point::new(10, 50), 7), None);
+        // One step past either end goes round; a page stops at the end.
+        assert_eq!(list.move_focus(1, 7), ListChange::Page);
+        assert_eq!(list.focus, 0);
+        assert_eq!(list.move_focus(-3, 7), ListChange::None);
+        assert_eq!(list.move_focus(-1, 7), ListChange::Page);
+        assert_eq!(list.focus, 6);
         assert_eq!(list.move_focus(1, 0), ListChange::None);
     }
 }
