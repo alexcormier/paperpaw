@@ -6,6 +6,10 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Reader: *Smooth text* (Font, off by default, where the screen has no
+  grays): book pages are shown in four grays, the letters with soft
+  edges, as pages with pictures are; on the X4 a page turns in some
+  1.9 s (0.7 s without).
 - Text on black and white panels (the X4) is fuller: a pixel at the edge
   of a letter is drawn from three eighths covered (was half), so thin
   strokes of small text keep their weight and no longer look pale. The

@@ -107,6 +107,10 @@ pub mod settings {
     pub const FONT_SIZE: Setting<i64> = Setting::new("reader.font-size");
     /// Darker text: glyphs widened by up to this many steps.
     pub const FONT_WEIGHT: Setting<i64> = Setting::new("reader.font-weight");
+    /// Book pages with smooth letters, their edges in grays, where the
+    /// panel shows black and white but can show grays with a refresh of
+    /// its own (the X4): slower and costing more battery.
+    pub const SMOOTH_TEXT: Setting<bool> = Setting::new("reader.smooth-text");
     /// Space between words in percent of the font's.
     pub const WORD_SPACING: Setting<i64> = Setting::new("reader.word-spacing");
     /// Distance between baselines in percent of the font size.
@@ -352,6 +356,9 @@ impl Plugin for Reader {
             )
             .section(setting_sections::FONT)
             .description("reader.setting.font-weight.help"),
+            flag(settings::SMOOTH_TEXT, "reader.setting.smooth-text", false)
+                .section(setting_sections::FONT)
+                .description("reader.setting.smooth-text.help"),
             int(
                 settings::WORD_SPACING,
                 "reader.setting.word-spacing",
@@ -585,6 +592,7 @@ impl Plugin for Reader {
         for item in [actions::SELECT, actions::LINKS] {
             r.set_menu_need(item, quireink_sdk::MenuNeed::NoTouch)?;
         }
+        r.set_menu_need(settings::SMOOTH_TEXT, quireink_sdk::MenuNeed::BlackAndWhite)?;
         for (item, icon) in [
             (actions::TOC, "list"),
             (actions::LINKS, "link"),

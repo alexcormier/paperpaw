@@ -90,6 +90,8 @@ pub(crate) struct ReaderScreen {
     /// The book to open once the screen says it is being prepared (the
     /// first opening takes a while).
     preparing: Option<Params>,
+    /// Pages with smooth letters (in grays, where the panel can).
+    smooth: bool,
 }
 
 impl ReaderScreen {
@@ -104,6 +106,7 @@ impl ReaderScreen {
             (Err(message), Some(params.clone()))
         };
         Self {
+            smooth: env.settings.read(&crate::settings::SMOOTH_TEXT),
             book,
             preparing,
             selection: None,
@@ -284,9 +287,12 @@ impl ReaderScreen {
 }
 
 impl Screen for ReaderScreen {
-    /// A page with pictures: in grays where the panel can.
+    /// A page with pictures, or any page with smooth letters: in grays
+    /// where the panel can.
     fn grays(&self) -> bool {
-        self.book.as_ref().is_ok_and(Book::pictured)
+        self.book
+            .as_ref()
+            .is_ok_and(|book| self.smooth || book.pictured())
     }
 
     /// *Select* opens the reading menu, so its hint says so.
@@ -821,6 +827,13 @@ impl Screen for ReaderScreen {
             // The battery, the clock format, the time zone, …
             self.status_shown.clear();
             self.update_status(cx);
+            return;
+        }
+        if id == crate::settings::SMOOTH_TEXT.as_str() {
+            // The same page, shown in grays or not from now on.
+            self.smooth = cx.env().settings.read(&crate::settings::SMOOTH_TEXT);
+            cx.request_redraw();
+            cx.request_refresh(RefreshMode::Full);
             return;
         }
         let Ok(book) = &mut self.book else {
