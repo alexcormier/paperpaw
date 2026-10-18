@@ -296,6 +296,10 @@ pub mod status_items {
     pub const CLOCK: Id = Id::new_static("core.status.clock");
     /// The battery's charge.
     pub const BATTERY: Id = Id::new_static("core.status.battery");
+    /// The battery's charge, only while it is low
+    /// ([`settings::BATTERY_LOW`](super::settings::BATTERY_LOW)): a calm
+    /// line while there is enough.
+    pub const BATTERY_LOW: Id = Id::new_static("core.status.battery-low");
     /// Today in words ([`time::date_text`](crate::time::date_text)).
     pub const DATE: Id = Id::new_static("core.status.date");
 }
@@ -345,6 +349,9 @@ pub mod settings {
     /// ([`Env::sleep`](crate::Env)). Turning pages, also by themselves,
     /// counts as use; reading aloud, downloads and servers keep it awake.
     pub const SLEEP_AFTER: Id = Id::new_static("core.sleep-after");
+    /// The charge in percent at and below which the battery counts as low
+    /// (the status item [`BATTERY_LOW`](super::status_items::BATTERY_LOW)).
+    pub const BATTERY_LOW: Id = Id::new_static("core.battery-low");
     /// How the screen is turned: one of [`ROTATIONS`], where the shell
     /// can turn it (see [`MenuNeed::Rotation`](crate::MenuNeed)).
     pub const ROTATION: Id = Id::new_static("core.rotation");

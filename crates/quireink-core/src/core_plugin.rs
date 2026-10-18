@@ -715,6 +715,33 @@ impl Plugin for CorePlugin {
                 })
             }),
         })?;
+        r.add_status_item(StatusItemSpec {
+            id: status_items::BATTERY_LOW,
+            title: Cow::Borrowed("core.status.battery-low"),
+            value: Box::new(|env, _| {
+                let low = env.settings.int(settings::BATTERY_LOW.as_str());
+                env.status
+                    .battery
+                    .filter(|b| i64::from(b.percent) <= low)
+                    .map(|b| StatusValue::Level {
+                        percent: b.percent,
+                        charging: b.charging,
+                    })
+            }),
+        })?;
+        r.add_setting(
+            SettingSpec::new(
+                settings::BATTERY_LOW,
+                "core.setting.battery-low",
+                SettingKind::Int { min: 5, max: 50 },
+                SettingValue::Int(20),
+            )
+            .group(groups::SYSTEM)
+            .unit("core.unit.percent")
+            .step(5)
+            .advanced()
+            .description("core.setting.battery-low.help"),
+        )?;
 
         r.add_keymap(Cow::Borrowed(include_str!("../keymaps/default.ini")))?;
         r.add_keymap_preset(

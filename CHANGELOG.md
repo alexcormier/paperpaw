@@ -16,6 +16,9 @@ change the plugin SDK.
   shows it in the status line and on the home screen; the time zone is
   chosen under Settings, System (UTC on "Auto": the X4 has none of its
   own). Gone when it is switched off, until it is online again.
+- A status item *Battery when low* that shows the battery only at or
+  below a level (Settings, System, advanced; 20 % by default), for a
+  calm status line while there is enough.
 - In lists and menus, moving on past the last entry goes round to the
   first, and back from the first to the last (turning pages still stops
   at the end).
