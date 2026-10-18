@@ -6,6 +6,9 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- X4: the folders looked up last are kept, so a file is no longer looked
+  up by walking every folder from the card's root: preparing a book the
+  first time takes about 2.4 s instead of 2.9.
 - Menus draw only the two rows a step of the focus changes (on the X4
   a step in the main menu draws in about 75 ms, was 155); SDK:
   `Rows::request` does so for screens where the focus changes nothing

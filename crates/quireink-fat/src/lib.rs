@@ -12,6 +12,10 @@
 //! is not looked up and written back hundreds of times. Files are replaced
 //! through a temporary file beside them, so a write cut short by an empty
 //! battery leaves the old content.
+//!
+//! The [`FOLDERS`] folders looked up last are kept too: a file opened in
+//! one is looked up there, not by walking every folder from the root again
+//! (a book's data lies five folders deep, beside those of all other books).
 
 #![no_std]
 
@@ -38,6 +42,8 @@ type FatFile<IO> = File<'static, IO, DefaultTimeProvider, LossyOemCpConverter>;
 
 /// Files kept open (each takes about a hundred bytes).
 pub const OPEN_FILES: usize = 16;
+/// Folders kept (each takes about a hundred bytes).
+pub const FOLDERS: usize = 8;
 type FatDir<IO> = Dir<'static, IO, DefaultTimeProvider, LossyOemCpConverter>;
 
 /// A file kept open.
@@ -66,6 +72,8 @@ pub struct FatStorage<IO: ReadWriteSeek + 'static> {
     fs: &'static FileSystem<IO>,
     /// The files used last, the latest last.
     open: RefCell<alloc::vec::Vec<Open<IO>>>,
+    /// The folders looked up last, the latest last, by their paths.
+    folders: RefCell<alloc::vec::Vec<(String, FatDir<IO>)>>,
 }
 
 impl<IO: ReadWriteSeek + 'static> core::fmt::Debug for FatStorage<IO> {
@@ -98,11 +106,17 @@ fn parent(path: &str) -> &str {
     path.rsplit_once('/').map_or("", |(dir, _)| dir)
 }
 
+/// The name of `path` in its folder.
+fn name(path: &str) -> &str {
+    path.rsplit_once('/').map_or(path, |(_, name)| name)
+}
+
 impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
     pub fn new(fs: &'static FileSystem<IO>) -> Self {
         Self {
             fs,
             open: RefCell::new(alloc::vec::Vec::new()),
+            folders: RefCell::new(alloc::vec::Vec::new()),
         }
     }
 
@@ -110,13 +124,36 @@ impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
         self.fs.root_dir()
     }
 
+    /// Folder `path`: kept from before, or looked up from the root and
+    /// kept.
     fn dir(&self, path: &str) -> Result<FatDir<IO>, StorageError> {
         let path = path.trim_matches('/');
         if path.is_empty() {
-            Ok(self.root())
-        } else {
-            self.root().open_dir(path).map_err(error)
+            return Ok(self.root());
         }
+        let mut folders = self.folders.borrow_mut();
+        if let Some(i) = folders.iter().position(|(p, _)| p == path) {
+            // The latest last.
+            let folder = folders.remove(i);
+            let dir = folder.1.clone();
+            folders.push(folder);
+            return Ok(dir);
+        }
+        let dir = self.root().open_dir(path).map_err(error)?;
+        if folders.len() == FOLDERS {
+            folders.remove(0);
+        }
+        folders.push((path.to_string(), dir.clone()));
+        Ok(dir)
+    }
+
+    /// Forgets the folders kept at `path` or below it (removed, renamed).
+    fn forget(&self, path: &str) {
+        let path = path.trim_matches('/');
+        let below = format!("{path}/");
+        self.folders
+            .borrow_mut()
+            .retain(|(p, _)| p != path && !p.starts_with(&below));
     }
 
     /// Runs `f` with `path` open (created first with its folders if
@@ -143,9 +180,9 @@ impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
                 }
                 let file = if create {
                     self.create_dir(parent(path))?;
-                    self.root().create_file(path)
+                    self.dir(parent(path))?.create_file(name(path))
                 } else {
-                    self.root().open_file(path)
+                    self.dir(parent(path))?.open_file(name(path))
                 }
                 .map_err(error)?;
                 open.push(Open {
@@ -207,18 +244,18 @@ impl<IO: ReadWriteSeek + 'static> Storage for FatStorage<IO> {
         check(path)?;
         self.close(path)?;
         self.create_dir(parent(path))?;
-        let temp = format!("{path}.tmp");
-        let root = self.root();
+        let dir = self.dir(parent(path))?;
+        let (name, temp) = (name(path), format!("{}.tmp", name(path)));
         {
-            let mut file = root.create_file(&temp).map_err(error)?;
+            let mut file = dir.create_file(&temp).map_err(error)?;
             file.truncate().map_err(error)?;
             Self::write_all(&mut file, data)?;
         }
-        match root.remove(path) {
+        match dir.remove(name) {
             Ok(()) | Err(fatfs::Error::NotFound) => {}
             Err(e) => return Err(error(e)),
         }
-        root.rename(&temp, &root, path).map_err(error)
+        dir.rename(&temp, &dir, name).map_err(error)
     }
 
     fn append(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
@@ -264,6 +301,7 @@ impl<IO: ReadWriteSeek + 'static> Storage for FatStorage<IO> {
     fn remove(&self, path: &str) -> Result<(), StorageError> {
         check(path)?;
         self.close(path)?;
+        self.forget(path);
         match self.root().remove(path) {
             Ok(()) | Err(fatfs::Error::NotFound) => Ok(()),
             Err(e) => Err(error(e)),
@@ -278,6 +316,8 @@ impl<IO: ReadWriteSeek + 'static> Storage for FatStorage<IO> {
         }
         self.close(from)?;
         self.close(to)?;
+        self.forget(from);
+        self.forget(to);
         self.create_dir(parent(to))?;
         let root = self.root();
         // A file there is replaced.
@@ -304,6 +344,7 @@ impl<IO: ReadWriteSeek + 'static> Storage for FatStorage<IO> {
     fn remove_dir_all(&self, path: &str) -> Result<(), StorageError> {
         check(path)?;
         self.close(path)?;
+        self.forget(path);
         let dir = match self.dir(path) {
             Ok(dir) => dir,
             Err(StorageError::NotFound) => return Ok(()),
@@ -325,6 +366,7 @@ impl<IO: ReadWriteSeek + 'static> Storage for FatStorage<IO> {
                 self.remove(&child)?;
             }
         }
+        self.forget(path);
         self.root().remove(path).map_err(error)
     }
 }
@@ -387,6 +429,39 @@ mod tests {
             .unwrap();
         assert!(s.exists(".quireink/plugins/reader/annotations.txt"));
         assert!(!s.exists("missing.txt"));
+    }
+
+    /// Folders kept from before stay right when folders are removed,
+    /// made again, renamed, or more are used than are kept.
+    #[test]
+    fn kept_folders_follow_changes() {
+        let s = storage();
+        s.write("a/b/one.txt", b"1").unwrap();
+        assert_eq!(s.size("a/b/one.txt"), Ok(1));
+        // Removed and made again under the same name: another folder.
+        s.remove_dir_all("a/b").unwrap();
+        assert_eq!(s.size("a/b/one.txt"), Err(StorageError::NotFound));
+        s.write("a/b/two.txt", b"22").unwrap();
+        assert_eq!(s.size("a/b/two.txt"), Ok(2));
+        assert_eq!(s.size("a/b/one.txt"), Err(StorageError::NotFound));
+        // Renamed: found at the new path only.
+        s.rename("a/b", "a/c").unwrap();
+        assert_eq!(s.size("a/c/two.txt"), Ok(2));
+        assert_eq!(s.size("a/b/two.txt"), Err(StorageError::NotFound));
+        s.write("a/b/three.txt", b"333").unwrap();
+        assert_eq!(names(&s, "a/b").len(), 1);
+        // More folders than are kept, used by turns.
+        for round in 0..2 {
+            for i in 0..FOLDERS * 2 {
+                let path = format!("many/f{i}/x.txt");
+                if round == 0 {
+                    s.write(&path, format!("{i}").as_bytes()).unwrap();
+                }
+                let mut buf = [0u8; 2];
+                let n = s.read_at(&path, 0, &mut buf).unwrap();
+                assert_eq!(&buf[..n], format!("{i}").as_bytes());
+            }
+        }
     }
 
     /// A disk of blocks in memory.
