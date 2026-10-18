@@ -523,6 +523,9 @@ impl KernelBuilder {
             unrendered: None,
             rendered: None,
             row_align: self.row_align,
+            band: self
+                .frame_rows
+                .map(|rows| u32::from(rows) * u32::from(display.width)),
             framebuffer,
             registry: Registry::default(),
             keymap_sources: Vec::new(),
@@ -773,6 +776,9 @@ pub struct Kernel {
     rendered: Option<Rect>,
     /// See [`KernelBuilder::row_align`].
     row_align: u16,
+    /// The pixels of a band, where frames are drawn in bands
+    /// ([`KernelBuilder::frame_rows`]): kept when the screen is turned.
+    band: Option<u32>,
     recognizer: Recognizer,
     /// Pointer ids captured by the active screen.
     captured: Vec<u8>,
@@ -1828,16 +1834,37 @@ impl Kernel {
         self.now = now;
         let display = self.shared.device.display;
         if (display.width, display.height) != (width, height) && width > 0 && height > 0 {
-            let banded = self.framebuffer.rows() < display.height;
-            let rows = if banded {
-                self.framebuffer.rows()
-            } else {
-                height
+            // Bands take as much memory as before: fewer rows where the
+            // screen got wider.
+            let rows = match self.band {
+                Some(pixels) => {
+                    let align = self.row_align;
+                    let rows = (pixels / u32::from(width)).min(u32::from(height)) as u16;
+                    (rows / align * align).max(align).min(height)
+                }
+                None => height,
             };
-            if let Ok(mut framebuffer) = Framebuffer::banded(width, height, rows, display.format) {
-                framebuffer.set_inverted(self.framebuffer.is_inverted());
-                framebuffer.set_saturation(self.framebuffer.saturation());
+            let (inverted, saturation) = (
+                self.framebuffer.is_inverted(),
+                self.framebuffer.saturation(),
+            );
+            let before = (display.width, display.height, self.framebuffer.rows());
+            // The old frame goes first, the new one taking its place: beside
+            // it, it would split the largest free block where memory is
+            // short.
+            if let Ok(none) = Framebuffer::new(1, 1, display.format) {
+                self.framebuffer = none;
+            }
+            let made = Framebuffer::banded(width, height, rows, display.format);
+            let turned = made.is_ok();
+            if let Ok(mut framebuffer) =
+                made.or_else(|_| Framebuffer::banded(before.0, before.1, before.2, display.format))
+            {
+                framebuffer.set_inverted(inverted);
+                framebuffer.set_saturation(saturation);
                 self.framebuffer = framebuffer;
+            }
+            if turned {
                 self.shared.device.display.width = width;
                 self.shared.device.display.height = height;
                 self.hint.height = self.wanted_hint_height();

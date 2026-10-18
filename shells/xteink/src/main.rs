@@ -211,6 +211,8 @@ fn kernel(storage: Box<dyn Storage>, ota: Option<&ota::Ota>) -> Kernel {
         .glyph_cache(12 * 1024)
         .frame_rows(FRAME_ROWS)
         .row_align(8)
+        // The panel takes bands turned any way (`display`).
+        .rotation(true)
         .sleep(true)
         .button_row(&buttons::ROW)
         // A full refresh takes 3.5 s on its panel: screens change fast.

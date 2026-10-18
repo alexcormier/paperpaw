@@ -11,7 +11,7 @@ use core::fmt::Write;
 use esp_hal::peripherals::USB_DEVICE;
 use esp_println::println;
 use quireink_core::{HttpResponse, JoinFailure, Kernel, WifiNetwork, WifiState};
-use quireink_platform::{DisplayInfo, FrameView};
+use quireink_platform::FrameView;
 use quireink_x4::remote::{Command, hex_bytes, part_state, runs};
 
 /// A line is never longer: `data` and 512 bytes in hexadecimal.
@@ -75,14 +75,9 @@ impl Remote {
     /// Answers a command that only asks (the screen, a screenshot, what it
     /// shows, the heap) or brings a file; the others it gives back for the
     /// main loop.
-    pub fn answer(
-        &mut self,
-        kernel: &mut Kernel,
-        display: &DisplayInfo,
-        command: Command,
-    ) -> Option<Command> {
+    pub fn answer(&mut self, kernel: &mut Kernel, command: Command) -> Option<Command> {
         match command {
-            Command::Shot => shot(kernel, display),
+            Command::Shot => shot(kernel),
             Command::Describe => describe(kernel),
             Command::Screen => {
                 let id = kernel.active_screen().map_or("", |id| id.as_str());
@@ -331,9 +326,10 @@ pub fn http_answer(answer: &HttpResponse, ms: u64) {
     );
 }
 
-/// Sends the whole screen, `display` (screens may have less of it), or
+/// Sends the whole screen, as turned (screens may have less of it), or
 /// `QI:BUSY` while changes wait to be shown (ask again).
-fn shot(kernel: &mut Kernel, display: &DisplayInfo) {
+fn shot(kernel: &mut Kernel) {
+    let display = kernel.device().display;
     let header = (
         display.width,
         display.height,

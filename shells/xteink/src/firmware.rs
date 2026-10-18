@@ -354,6 +354,17 @@ impl Firmware {
             if effects.restart() {
                 esp_hal::system::software_reset();
             }
+            // Turned (the setting): the same screens, made anew for the
+            // turned size and drawn whole, instead of what was asked.
+            let rotation = self.kernel.rotation();
+            if rotation != self.panel.rotation() {
+                self.state.sleep |= effects.sleep();
+                self.panel.set_rotation(rotation);
+                let (width, height) = self.panel.size();
+                info!("turned {rotation:?}: {width}x{height}");
+                effects = self.kernel.resize(now(), width, height);
+                continue;
+            }
             // Slow work ahead: its mark is shown first, the panel
             // refreshing it while the kernel works on, then the frame the
             // work drew.
@@ -499,9 +510,7 @@ fn heap_free() -> usize {
 impl Firmware {
     fn remote(&mut self) {
         if let Some(command) = self.remote.poll()
-            && let Some(command) =
-                self.remote
-                    .answer(&mut self.kernel, &crate::DEVICE.display, command)
+            && let Some(command) = self.remote.answer(&mut self.kernel, command)
         {
             self.remote_command(command);
         }
@@ -586,10 +595,7 @@ impl Firmware {
         let Some(command) = self.remote.poll() else {
             return false;
         };
-        match self
-            .remote
-            .answer(&mut self.kernel, &crate::DEVICE.display, command)
-        {
+        match self.remote.answer(&mut self.kernel, command) {
             None => false,
             Some(Command::Press { button, .. }) => {
                 crate::remote::ok();

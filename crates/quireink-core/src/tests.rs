@@ -2021,6 +2021,26 @@ fn turned_screens_are_made_anew_for_the_new_size() {
 }
 
 #[test]
+fn turned_bands_keep_their_memory() {
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(OverlayPlugin { log: log() })
+        .frame_rows(32)
+        .row_align(8)
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    // Wider: fewer rows a band, still whole multiples of 8.
+    kernel.resize(Instant(100), 150, 54);
+    assert_eq!((kernel.frame().width, kernel.frame().height), (150, 16));
+    let mut tops = Vec::new();
+    kernel.render(&mut |top, rows| tops.push((top, rows.height)));
+    assert_eq!(tops, [(0, 16), (16, 16), (32, 16), (48, 6)]);
+    // Back: the rows it had.
+    kernel.resize(Instant(200), 90, 90);
+    assert_eq!(kernel.frame().height, 32);
+}
+
+#[test]
 fn bands_pass_whole_aligned_rows_and_again() {
     let mut kernel = Kernel::builder(DEVICE)
         .plugin(OverlayPlugin { log: log() })

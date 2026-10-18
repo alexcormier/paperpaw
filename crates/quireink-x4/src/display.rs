@@ -22,18 +22,24 @@
 //! `x` (its gates are wired bottom to top). A byte of the controller's
 //! memory holds 8 pixels of a row (the most significant bit first; set
 //! for white), so 8 rows of the screen.
+//!
+//! Turned ([`Display::set_rotation`]), the screen is 800 × 480 on its side
+//! or 480 × 800 upside down; its rows go into the controller's memory as
+//! they lie on the panel (on its side, a row of the screen is a row of the
+//! controller's).
 
 use alloc::vec::Vec;
 
 use embedded_hal::delay::DelayNs;
 use embedded_hal::digital::{InputPin, OutputPin};
 use embedded_hal::spi::SpiDevice;
-use quireink_platform::{FrameView, PixelFormat};
+use quireink_platform::{FrameView, PixelFormat, Rotation};
 
 /// The panel, as the controller addresses it.
 pub const PANEL_WIDTH: u16 = 800;
 pub const PANEL_HEIGHT: u16 = 480;
-/// The screen QuireInk draws: upright.
+/// The screen QuireInk draws upright (see [`Display::size`] for it
+/// turned).
 pub const WIDTH: u16 = PANEL_HEIGHT;
 pub const HEIGHT: u16 = PANEL_WIDTH;
 
@@ -122,7 +128,7 @@ pub enum Error {
     Pin,
     /// The controller stayed busy too long.
     Timeout,
-    /// Rows not aligned to 8, or not the screen's width.
+    /// Rows not aligned to 8, or not the (turned) screen's width.
     Rows,
 }
 
@@ -139,6 +145,8 @@ pub struct Display<SPI, DC, RST, BUSY, D> {
     /// Nothing shown since [`Display::init`]: the controller does not know
     /// what the panel shows, so a fast refresh would compare with nothing.
     fresh: bool,
+    /// How the screen QuireInk draws is turned.
+    rotation: Rotation,
     buffer: Vec<u8>,
 }
 
@@ -159,7 +167,29 @@ where
             delay,
             powered: false,
             fresh: true,
+            rotation: Rotation::Deg0,
             buffer: Vec::new(),
+        }
+    }
+
+    /// How the screen QuireInk draws is turned, in quarter turns from
+    /// upright as the setting says: [`Rotation::Deg90`] is the X4 turned
+    /// clockwise (its buttons on the left), [`Rotation::Deg270`] the
+    /// other way. The panel keeps what it shows until bands of the turned
+    /// screen are written.
+    pub fn set_rotation(&mut self, rotation: Rotation) {
+        self.rotation = rotation;
+    }
+
+    pub fn rotation(&self) -> Rotation {
+        self.rotation
+    }
+
+    /// The width and height of the screen QuireInk draws, turned.
+    pub fn size(&self) -> (u16, u16) {
+        match self.rotation {
+            Rotation::Deg0 | Rotation::Deg180 => (WIDTH, HEIGHT),
+            Rotation::Deg90 | Rotation::Deg270 => (HEIGHT, WIDTH),
         }
     }
 
@@ -189,7 +219,7 @@ where
             &[(gates % 256) as u8, (gates / 256) as u8, 0x02],
         )?;
         self.command(cmd::BORDER, &[0x80])?;
-        self.window(0, PANEL_WIDTH)?;
+        self.window(0, PANEL_WIDTH, 0, PANEL_HEIGHT)?;
         for fill in [cmd::FILL_NEW, cmd::FILL_SHOWN] {
             self.command(fill, &[0xF7])?;
             self.wait()?;
@@ -198,11 +228,10 @@ where
         Ok(())
     }
 
-    /// The controller writes into columns `x..x + width` of every row,
-    /// row by row from the top of the screen.
-    fn window(&mut self, x: u16, width: u16) -> Result<(), Error> {
-        let last_x = x + width - 1;
-        let last_y = PANEL_HEIGHT - 1;
+    /// The controller writes into columns `x..x + width` of rows
+    /// `y..y + height`, row by row from the top.
+    fn window(&mut self, x: u16, width: u16, y: u16, height: u16) -> Result<(), Error> {
+        let (last_x, last_y) = (x + width - 1, y + height - 1);
         // X and then Y increase.
         self.command(cmd::DATA_ENTRY, &[0x03])?;
         self.command(
@@ -216,28 +245,33 @@ where
         )?;
         self.command(
             cmd::RAM_Y_RANGE,
-            &[0, 0, (last_y % 256) as u8, (last_y / 256) as u8],
+            &[
+                (y % 256) as u8,
+                (y / 256) as u8,
+                (last_y % 256) as u8,
+                (last_y / 256) as u8,
+            ],
         )?;
         self.command(cmd::RAM_X, &[(x % 256) as u8, (x / 256) as u8])?;
-        self.command(cmd::RAM_Y, &[0, 0])
+        self.command(cmd::RAM_Y, &[(y % 256) as u8, (y / 256) as u8])
     }
 
-    /// Writes upright screen rows `top..top + rows.height` (a band from
-    /// `Kernel::render`, 480 pixels wide, starting at a multiple of 8)
-    /// into `planes`. Pixels lighter than middle gray are white.
+    /// Writes screen rows `top..top + rows.height` (a band from
+    /// `Kernel::render`, the screen's width as turned, starting at a
+    /// multiple of 8) into `planes`. Pixels lighter than middle gray are
+    /// white.
     pub fn write_rows(
         &mut self,
         top: u16,
         rows: FrameView<'_>,
         planes: Planes,
     ) -> Result<(), Error> {
-        if !top.is_multiple_of(8) || top >= HEIGHT || rows.width != WIDTH || rows.height == 0 {
+        let (width, screen_height) = self.size();
+        if !top.is_multiple_of(8) || top >= screen_height || rows.width != width || rows.height == 0
+        {
             return Err(Error::Rows);
         }
-        let height = rows.height.min(HEIGHT - top);
-        // Whole bytes: rows past the band's end (only at its last byte)
-        // are white.
-        let bytes = usize::from(height.div_ceil(8));
+        let height = rows.height.min(screen_height - top);
         // Light pixels show white, dark ones black: gray formats read
         // straight from their bytes, others through their colour.
         let bpp = usize::from(rows.format.bits_per_pixel());
@@ -262,41 +296,83 @@ where
             if !plane {
                 continue;
             }
-            self.window(top, bytes as u16 * 8)?;
-            self.command(write, &[])?;
             self.buffer.clear();
-            if rows.format == PixelFormat::Mono1 {
-                self.write_mono(&rows, height, bytes)?;
-                continue;
-            }
-            for x in 0..WIDTH {
-                for byte in 0..bytes {
-                    let mut bits = 0u8;
-                    for bit in 0..8u16 {
-                        let y = byte as u16 * 8 + bit;
-                        let white = y >= height || light(x, y);
-                        if white {
-                            bits |= 0x80 >> bit;
-                        }
+            match self.rotation {
+                Rotation::Deg0 | Rotation::Deg180 => {
+                    let flip = self.rotation == Rotation::Deg180;
+                    // Whole bytes: rows past the band's end (only at its
+                    // last byte) are white.
+                    let columns = height.div_ceil(8) * 8;
+                    let x = if flip {
+                        PANEL_WIDTH - top - columns
+                    } else {
+                        top
+                    };
+                    self.window(x, columns, 0, PANEL_HEIGHT)?;
+                    self.command(write, &[])?;
+                    if rows.format == PixelFormat::Mono1 {
+                        self.write_mono(&rows, height, flip)?;
+                    } else {
+                        self.write_upright(height, flip, &light)?;
                     }
-                    self.buffer.push(bits);
                 }
-                if self.buffer.len() >= CHUNK {
-                    self.data_buffer()?;
+                Rotation::Deg90 | Rotation::Deg270 => {
+                    let clockwise = self.rotation == Rotation::Deg90;
+                    let y = if clockwise {
+                        top
+                    } else {
+                        PANEL_HEIGHT - top - height
+                    };
+                    self.window(0, PANEL_WIDTH, y, height)?;
+                    self.command(write, &[])?;
+                    self.write_side(&rows, height, clockwise, &light)?;
                 }
             }
-            self.data_buffer()?;
         }
         Ok(())
     }
 
-    /// [`Display::write_rows`] for black and white, as the X4 draws: eight
-    /// rows by eight columns at a time, turned with a few shifts where
-    /// pixel by pixel took a quarter of a page's time.
-    fn write_mono(&mut self, rows: &FrameView<'_>, height: u16, bytes: usize) -> Result<(), Error> {
+    /// An upright band, pixel by pixel: each column of the screen is a row
+    /// of the controller's, the top of the band first (upside down: the
+    /// last column first, the bottom of the band first).
+    fn write_upright(
+        &mut self,
+        height: u16,
+        flip: bool,
+        light: &dyn Fn(u16, u16) -> bool,
+    ) -> Result<(), Error> {
+        let bytes = height.div_ceil(8);
+        for i in 0..WIDTH {
+            let x = if flip { WIDTH - 1 - i } else { i };
+            for j in 0..bytes {
+                let byte = if flip { bytes - 1 - j } else { j };
+                let mut bits = 0u8;
+                for bit in 0..8u16 {
+                    let y = byte * 8 + bit;
+                    if y >= height || light(x, y) {
+                        bits |= 0x80 >> bit;
+                    }
+                }
+                self.buffer
+                    .push(if flip { bits.reverse_bits() } else { bits });
+            }
+            if self.buffer.len() >= CHUNK {
+                self.data_buffer()?;
+            }
+        }
+        self.data_buffer()
+    }
+
+    /// [`Display::write_upright`] for black and white, as the X4 draws:
+    /// eight rows by eight columns at a time, turned with a few shifts
+    /// where pixel by pixel took a quarter of a page's time.
+    fn write_mono(&mut self, rows: &FrameView<'_>, height: u16, flip: bool) -> Result<(), Error> {
+        let bytes = usize::from(height.div_ceil(8));
         // Each of eight columns' bytes, top to bottom.
         let mut columns = [0u8; 8 * (HEIGHT as usize / 8)];
-        for column in 0..usize::from(WIDTH) / 8 {
+        let blocks = usize::from(WIDTH) / 8;
+        for i in 0..blocks {
+            let column = if flip { blocks - 1 - i } else { i };
             for group in 0..bytes {
                 let mut block = [0xFFu8; 8];
                 for (i, row) in block.iter_mut().enumerate() {
@@ -313,9 +389,60 @@ where
                     columns[c * bytes + group] = byte;
                 }
             }
-            for c in 0..8 {
-                self.buffer
-                    .extend_from_slice(&columns[c * bytes..(c + 1) * bytes]);
+            for i in 0..8 {
+                let c = if flip { 7 - i } else { i };
+                let column = &columns[c * bytes..(c + 1) * bytes];
+                if flip {
+                    self.buffer
+                        .extend(column.iter().rev().map(|b| b.reverse_bits()));
+                } else {
+                    self.buffer.extend_from_slice(column);
+                }
+            }
+            if self.buffer.len() >= CHUNK {
+                self.data_buffer()?;
+            }
+        }
+        self.data_buffer()
+    }
+
+    /// A band of the screen on its side: each of its rows is a row of the
+    /// controller's, right to left (turned `clockwise`), or left to right
+    /// from the band's last row.
+    fn write_side(
+        &mut self,
+        rows: &FrameView<'_>,
+        height: u16,
+        clockwise: bool,
+        light: &dyn Fn(u16, u16) -> bool,
+    ) -> Result<(), Error> {
+        let bytes = usize::from(PANEL_WIDTH / 8);
+        for i in 0..height {
+            let y = if clockwise { i } else { height - 1 - i };
+            let at = usize::from(y) * rows.stride;
+            match rows.data.get(at..at + bytes) {
+                // Black and white: as it is, or each byte the other way.
+                Some(row) if rows.format == PixelFormat::Mono1 => {
+                    if clockwise {
+                        self.buffer
+                            .extend(row.iter().rev().map(|b| b.reverse_bits()));
+                    } else {
+                        self.buffer.extend_from_slice(row);
+                    }
+                }
+                _ => {
+                    for byte in 0..bytes {
+                        let mut bits = 0u8;
+                        for bit in 0..8 {
+                            let x = (byte * 8 + bit) as u16;
+                            let x = if clockwise { PANEL_WIDTH - 1 - x } else { x };
+                            if light(x, y) {
+                                bits |= 0x80 >> bit;
+                            }
+                        }
+                        self.buffer.push(bits);
+                    }
+                }
             }
             if self.buffer.len() >= CHUNK {
                 self.data_buffer()?;
@@ -510,7 +637,8 @@ mod tests {
 
         /// Whether the panel pixel at upright `(x, y)` is white in `plane`.
         fn white(plane: &[u8], x: u16, y: u16) -> bool {
-            plane[usize::from(x) * 100 + usize::from(y / 8)] & (0x80 >> (y % 8)) != 0
+            let (c, r) = panel_at(Rotation::Deg0, x, y);
+            plane[usize::from(r) * 100 + usize::from(c / 8)] & (0x80 >> (c % 8)) != 0
         }
     }
 
@@ -574,12 +702,28 @@ mod tests {
         fn delay_ns(&mut self, _: u32) {}
     }
 
+    /// Where screen pixel `(x, y)` lies on the panel, turned: the
+    /// controller's column and row.
+    fn panel_at(rotation: Rotation, x: u16, y: u16) -> (u16, u16) {
+        match rotation {
+            Rotation::Deg0 => (y, x),
+            Rotation::Deg90 => (PANEL_WIDTH - 1 - x, y),
+            Rotation::Deg180 => (PANEL_WIDTH - 1 - y, PANEL_HEIGHT - 1 - x),
+            Rotation::Deg270 => (x, PANEL_HEIGHT - 1 - y),
+        }
+    }
+
     /// An upright screen band in 2-bit gray, black where `ink` says.
     fn band(height: u16, ink: impl Fn(u16, u16) -> bool) -> Vec<u8> {
-        let stride = usize::from(WIDTH) / 4;
+        band_of(WIDTH, height, ink)
+    }
+
+    /// A band `width` wide in 2-bit gray, black where `ink` says.
+    fn band_of(width: u16, height: u16, ink: impl Fn(u16, u16) -> bool) -> Vec<u8> {
+        let stride = usize::from(width) / 4;
         let mut data = vec![0xFF; stride * usize::from(height)];
         for y in 0..height {
-            for x in 0..WIDTH {
+            for x in 0..width {
                 if ink(x, y) {
                     let at = usize::from(y) * stride + usize::from(x / 4);
                     data[at] &= !(0b11 << (6 - 2 * (x % 4)));
@@ -775,6 +919,90 @@ mod tests {
                 let at = usize::from(y) * usize::from(WIDTH) + usize::from(x);
                 assert_eq!(Controller::white(&c.new, x, y), expected[at], "({x}, {y})");
             }
+        }
+    }
+
+    #[test]
+    fn turned_bands_lie_on_the_panel_as_turned() {
+        // On its side is the X4 turned clockwise: the screen's top left
+        // is the upright screen's bottom left.
+        assert_eq!(
+            panel_at(Rotation::Deg90, 0, 0),
+            panel_at(Rotation::Deg0, 0, HEIGHT - 1)
+        );
+        assert_eq!(
+            panel_at(Rotation::Deg270, 0, 0),
+            panel_at(Rotation::Deg0, WIDTH - 1, 0)
+        );
+        let ink = |x: u16, y: u16| (x * 7 + y * 3).is_multiple_of(5) || x == y;
+        for rotation in [
+            Rotation::Deg0,
+            Rotation::Deg90,
+            Rotation::Deg180,
+            Rotation::Deg270,
+        ] {
+            let controller = Controller::new();
+            let mut display = Display::new(
+                Spi(controller.clone()),
+                Dc(controller.clone()),
+                Pin,
+                Busy,
+                Delay,
+            );
+            display.init().unwrap();
+            display.set_rotation(rotation);
+            let (width, height) = display.size();
+            assert_eq!(u32::from(width) * u32::from(height), 800 * 480);
+            // In gray into one plane, in black and white into the other.
+            let gray = band_of(width, 16, ink);
+            let stride = usize::from(width) / 8;
+            let mut mono = vec![0xFFu8; stride * 16];
+            for y in 0..16 {
+                for x in 0..width {
+                    if ink(x, y) {
+                        mono[usize::from(y) * stride + usize::from(x) / 8] &= !(0x80 >> (x % 8));
+                    }
+                }
+            }
+            let view = |data, format, stride| FrameView {
+                width,
+                height: 16,
+                format,
+                stride,
+                data,
+            };
+            display
+                .write_rows(96, view(&gray, PixelFormat::Gray2, stride * 2), Planes::NEW)
+                .unwrap();
+            display
+                .write_rows(96, view(&mono, PixelFormat::Mono1, stride), Planes::SHOWN)
+                .unwrap();
+            let c = controller.borrow();
+            let white = |plane: &[u8], (c, r): (u16, u16)| {
+                plane[usize::from(r) * 100 + usize::from(c / 8)] & (0x80 >> (c % 8)) != 0
+            };
+            for y in 96..112 {
+                for x in 0..width {
+                    let at = panel_at(rotation, x, y);
+                    let expected = !ink(x, y - 96);
+                    assert_eq!(white(&c.new, at), expected, "{rotation:?} ({x}, {y})");
+                    assert_eq!(white(&c.shown, at), expected, "{rotation:?} ({x}, {y})");
+                }
+            }
+            // The rest stays white.
+            for (x, y) in [(0, 95), (width - 1, 112), (width / 2, height - 1)] {
+                assert!(white(&c.new, panel_at(rotation, x, y)), "{rotation:?}");
+            }
+            drop(c);
+            let wrong = FrameView {
+                width: height,
+                ..view(&gray, PixelFormat::Gray2, stride * 2)
+            };
+            assert_eq!(
+                display.write_rows(96, wrong, Planes::NEW),
+                Err(Error::Rows),
+                "{rotation:?}: not the turned width"
+            );
         }
     }
 

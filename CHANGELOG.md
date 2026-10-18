@@ -6,6 +6,10 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- X4: the screen turns ("Turn the screen": upright, on either side,
+  upside down). Turned, the kernel draws bands of the same memory (fewer
+  rows where the screen is wider) and frees the old frame before making
+  the new one.
 - Library: the covers of a page are made small once when it is shown and
   drawn from memory; a step of the focus draws only the two entries it
   changes. On the X4 a step in the library draws in about 105 ms (was
