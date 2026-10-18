@@ -1273,6 +1273,7 @@ pub fn quireink_sdk::ui::draw_chevron(&mut quireink_graphics::canvas::Canvas<'_>
 pub fn quireink_sdk::ui::draw_header(&mut quireink_graphics::canvas::Canvas<'_>, &quireink_sdk::Env<'_>, &quireink_sdk::ui::UiStyle, quireink_platform::geometry::Rect, &str, core::option::Option<&str>)
 pub fn quireink_sdk::ui::draw_heading(&mut quireink_graphics::canvas::Canvas<'_>, &quireink_sdk::Env<'_>, &quireink_sdk::ui::UiStyle, quireink_platform::geometry::Rect, &str)
 pub fn quireink_sdk::ui::draw_icon(&mut quireink_graphics::canvas::Canvas<'_>, &quireink_sdk::Env<'_>, &str, f32, f32, quireink_platform::geometry::Rect, quireink_platform::pixel::Color) -> f32
+pub fn quireink_sdk::ui::draw_icon_button(&mut quireink_graphics::canvas::Canvas<'_>, &quireink_sdk::ui::UiStyle, quireink_platform::geometry::Rect, &str, bool, bool) -> quireink_platform::pixel::Color
 pub fn quireink_sdk::ui::draw_image(&mut quireink_graphics::canvas::Canvas<'_>, &dyn quireink_platform::storage::Storage, &quireink_document::ImageRef, quireink_platform::geometry::Rect)
 pub fn quireink_sdk::ui::draw_label(&mut quireink_graphics::canvas::Canvas<'_>, &quireink_sdk::FontHandle<'_>, f32, f32, quireink_platform::geometry::Rect, &str, quireink_platform::pixel::Color) -> f32
 pub fn quireink_sdk::ui::draw_message(&mut quireink_graphics::canvas::Canvas<'_>, &quireink_sdk::Env<'_>, &quireink_sdk::ui::UiStyle, quireink_platform::geometry::Rect, &str)

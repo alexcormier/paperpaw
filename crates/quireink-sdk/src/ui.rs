@@ -1363,6 +1363,39 @@ pub fn draw_button(
     focused: bool,
 ) {
     canvas.describe(Role::Button, label, rect, focused, on.then_some(true));
+    let Some(ink) = button_frame(canvas, style, rect, on, focused) else {
+        return;
+    };
+    let Some(font) = style.font(env) else {
+        return;
+    };
+    button_label(canvas, style, &font, rect, label, ink);
+}
+
+/// A button with a drawing of its own instead of a word (an arrow, a
+/// sign), drawn empty for the caller to draw on with the ink it returns;
+/// `name` says what it does, for screen readers and remote control.
+pub fn draw_icon_button(
+    canvas: &mut Canvas<'_>,
+    style: &UiStyle,
+    rect: Rect,
+    name: &str,
+    on: bool,
+    focused: bool,
+) -> Color {
+    canvas.describe(Role::Button, name, rect, focused, on.then_some(true));
+    button_frame(canvas, style, rect, on, focused).unwrap_or(Color::BLACK)
+}
+
+/// A button's background, border and focus frame; the ink for what goes
+/// on it.
+fn button_frame(
+    canvas: &mut Canvas<'_>,
+    style: &UiStyle,
+    rect: Rect,
+    on: bool,
+    focused: bool,
+) -> Option<Color> {
     let (back, ink) = if on {
         (Color::BLACK, Color::WHITE)
     } else {
@@ -1395,9 +1428,18 @@ pub fn draw_button(
             Color::BLACK,
         );
     }
-    let Some(font) = style.font(env) else {
-        return;
-    };
+    Some(ink)
+}
+
+/// A button's word, centred and shortened to fit.
+fn button_label(
+    canvas: &mut Canvas<'_>,
+    style: &UiStyle,
+    font: &FontHandle<'_>,
+    rect: Rect,
+    label: &str,
+    ink: Color,
+) {
     let single = label.chars().count() == 1;
     let mut size = if single { style.text } else { style.small };
     // A single character wider than the button (an `m` on a narrow key)
@@ -1417,9 +1459,9 @@ pub fn draw_button(
     } else {
         f32::from(rect.width) - 2.0 * pad
     };
-    let label = fit(&font, size, label, room);
+    let label = fit(font, size, label, room);
     let label_x = f32::from(rect.x) + (f32::from(rect.width) - font.measure(size, &label)) / 2.0;
-    draw_label(canvas, &font, size, label_x, rect, &label, ink);
+    draw_label(canvas, font, size, label_x, rect, &label, ink);
 }
 
 /// A number on a light row: its title, then `[−] value [+]` exactly as in

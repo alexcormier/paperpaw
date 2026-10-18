@@ -1,0 +1,2 @@
+screen home.dashboard
+Text "No book opened yet. Find one in the library."

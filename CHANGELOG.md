@@ -6,6 +6,9 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- The keyboard's shift, delete and space keys and the grip that moves a
+  row say what they are (screen readers, remote control); plugins draw
+  such buttons with `ui::draw_icon_button`.
 - SDK: lists move by the navigation actions with `ListView::navigate`
   (or `ui::list_step` for a focus of one's own), and
   `ListChange::request` asks for the redraw and refresh a change needs,

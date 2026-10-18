@@ -68,7 +68,7 @@ impl Reorder {
         let right = f32::from(grip.x + grip.width) - style.margin as f32;
         let x = right - icon_width(env, GRIP, size);
         let ink = if focused { Color::WHITE } else { Color::BLACK };
-        canvas.describe(Role::Button, "", grip, false, None);
+        canvas.describe(Role::Button, env.i18n.tr("core.move"), grip, false, None);
         draw_icon(canvas, env, GRIP, size, x, grip, ink);
     }
 

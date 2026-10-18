@@ -1,0 +1,11 @@
+screen menu.list
+Text "No book opened yet. Find one in the library."
+Row "Reading statistics" (focused)
+Row "Vocabulary"
+Row "Battery"
+Row "News"
+Row "Files"
+Row "Catalogs"
+Row "Wi-Fi transfer"
+Row "Calibre"
+Row "Screenshot"

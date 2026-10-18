@@ -1,0 +1,23 @@
+screen menu.panel
+Button "Only this book" (focused)
+Text "Book's font ›"
+Text "Font"
+Text "Font size"
+Text "11 pt"
+Button "−"
+Button "+"
+Text "Font weight"
+Text "+0"
+Button "−"
+Button "+"
+Text "Line spacing"
+Text "135 %"
+Button "−"
+Button "+"
+Text "Margins"
+Text "4 mm"
+Button "−"
+Button "+"
+Button "Justify text" (on)
+Button "Hyphenate words" (on)
+Button "Publisher's formatting" (on)

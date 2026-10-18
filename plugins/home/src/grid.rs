@@ -16,7 +16,7 @@ use alloc::vec::Vec;
 
 use quireink_sdk::builtin::{actions, menus};
 use quireink_sdk::ui::UiStyle;
-use quireink_sdk::{Env, Id, Rect};
+use quireink_sdk::{Env, Id, Point, Rect};
 
 use crate::ACTIONS;
 
@@ -194,6 +194,31 @@ impl Geometry {
             }
         }
     }
+}
+
+/// The cells an item at `from` takes when a finger that came down at
+/// `start` is at `point`: moved by as many cells as the finger moved, or
+/// with `resize` (its corner taken), its corner in the cell under the
+/// finger, at least one cell. `None` off the grid.
+pub(crate) fn dragged(
+    geometry: &Geometry,
+    from: Cells,
+    start: Point,
+    point: Point,
+    resize: bool,
+) -> Option<Cells> {
+    let (col, row) = geometry.cell_at(point.x, point.y)?;
+    if resize {
+        return Some(Cells {
+            w: (col + 1).saturating_sub(from.col).max(1),
+            h: (row + 1).saturating_sub(from.row).max(1),
+            ..from
+        });
+    }
+    let (start_col, start_row) = geometry.cell_at(start.x, start.y)?;
+    let col = (i32::from(from.col) + i32::from(col) - i32::from(start_col)).max(0) as u8;
+    let row = (i32::from(from.row) + i32::from(row) - i32::from(start_row)).max(0) as u8;
+    Some(Cells { col, row, ..from })
 }
 
 /// The first free place of `w` by `h` cells among `taken`, row by row.
@@ -374,5 +399,42 @@ mod tests {
         );
         assert_eq!(g.cell_at(250, 150), Some((2, 1)));
         assert_eq!(g.cell_at(450, 150), None);
+    }
+
+    #[test]
+    fn items_are_dragged_and_sized_by_cells() {
+        let g = Geometry {
+            columns: 4,
+            rows: 3,
+            area: Rect::new(0, 0, 400, 300),
+            cell_w: 100,
+            cell_h: 100,
+            gap: 10,
+        };
+        let item = Cells {
+            col: 1,
+            row: 0,
+            w: 2,
+            h: 1,
+        };
+        let at = |x, y| Point::new(x, y);
+        // Taken in its second cell, moved a cell right and down.
+        let moved = dragged(&g, item, at(250, 50), at(350, 150), false);
+        assert_eq!(
+            moved,
+            Some(Cells {
+                col: 2,
+                row: 1,
+                ..item
+            })
+        );
+        // Not left of the grid's edge.
+        let left = dragged(&g, item, at(250, 50), at(50, 50), false);
+        assert_eq!(left, Some(Cells { col: 0, ..item }));
+        // Its corner pulled to the third row: as high as that.
+        let sized = dragged(&g, item, at(290, 90), at(150, 250), true);
+        assert_eq!(sized, Some(Cells { w: 1, h: 3, ..item }));
+        // Off the grid: nowhere.
+        assert_eq!(dragged(&g, item, at(250, 50), at(450, 50), false), None);
     }
 }

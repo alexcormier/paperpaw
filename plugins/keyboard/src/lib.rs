@@ -745,12 +745,18 @@ impl KeyboardScreen {
         // Shift while on, and *OK* always: the key that ends typing stands
         // out.
         let active = (key == Key::Shift && self.shift) || key == Key::Done;
-        let label = match key {
-            Key::Shift | Key::Delete | Key::Space => String::new(),
-            _ => self.label(env, key),
+        let name = match key {
+            Key::Shift => "keyboard.shift",
+            Key::Delete => "keyboard.delete",
+            Key::Space => "keyboard.space",
+            _ => {
+                let label = self.label(env, key);
+                return ui::draw_button(canvas, env, &style, r, &label, active, focused);
+            }
         };
-        ui::draw_button(canvas, env, &style, r, &label, active, focused);
-        let ink = if active { Color::WHITE } else { Color::BLACK };
+        // The key drawn: an arrow, a space.
+        let name = env.i18n.tr(name);
+        let ink = ui::draw_icon_button(canvas, &style, r, name, active, focused);
         let size = (style.text * 0.6) as i32;
         let (cx, cy) = (
             i32::from(r.x) + i32::from(r.width) / 2,

@@ -1,0 +1,13 @@
+screen settings.list
+Heading "Settings"
+Row "Search the settings" (focused)
+Heading "Books"
+Row "Reading"
+Row "Status lines"
+Row "Library"
+Row "Reading statistics"
+Row "Progress sync"
+Heading "Device"
+Row "Display"
+Row "Controls"
+Row "Buttons and gestures"

@@ -1269,6 +1269,7 @@ name = "quireink-app"
 version = "0.4.0-dev"
 dependencies = [
  "quireink-core",
+ "quireink-platform",
  "quireink-plugin-about",
  "quireink-plugin-aids",
  "quireink-plugin-battery",
@@ -1309,6 +1310,7 @@ dependencies = [
  "quireink-plugin-wallabag",
  "quireink-plugin-wifi",
  "quireink-plugin-wikipedia",
+ "quireink-sdk",
 ]
 
 [[package]]

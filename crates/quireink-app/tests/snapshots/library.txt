@@ -1,0 +1,4 @@
+screen files.browser
+Heading "Library"
+Row "Alice's Adventures in …, A, Lewis Carroll · TXT, TXT" (focused)
+Row "Die Verwandlung, D, Franz Kafka · TXT, TXT"

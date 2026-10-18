@@ -60,5 +60,9 @@ quireink-plugin-plugin-manager.workspace = true
 quireink-plugin-reader.workspace = true
 quireink-plugin-settings.workspace = true
 
+[dev-dependencies]
+quireink-platform.workspace = true
+quireink-sdk.workspace = true
+
 [lints]
 workspace = true

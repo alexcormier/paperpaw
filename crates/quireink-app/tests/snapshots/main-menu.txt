@@ -1,0 +1,7 @@
+screen menu.list
+Text "No book opened yet. Find one in the library."
+Row "Home" (focused)
+Row "Library"
+Row "Tools"
+Row "Night mode" (off)
+Row "Settings"

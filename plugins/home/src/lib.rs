@@ -533,18 +533,7 @@ impl Dashboard {
     /// The cells an item dragged to `point` would take.
     fn dragged_to(&self, drag: &Drag, point: Point) -> Option<Cells> {
         let from = self.items.get(drag.index)?.cells;
-        let (col, row) = self.geometry.cell_at(point.x, point.y)?;
-        if drag.resize {
-            return Some(Cells {
-                w: (col + 1).saturating_sub(from.col).max(1),
-                h: (row + 1).saturating_sub(from.row).max(1),
-                ..from
-            });
-        }
-        let (start_col, start_row) = self.geometry.cell_at(drag.start.x, drag.start.y)?;
-        let col = (i32::from(from.col) + i32::from(col) - i32::from(start_col)).max(0) as u8;
-        let row = (i32::from(from.row) + i32::from(row) - i32::from(start_row)).max(0) as u8;
-        Some(Cells { col, row, ..from })
+        grid::dragged(&self.geometry, from, drag.start, point, drag.resize)
     }
 
     fn draw_footer(&self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
