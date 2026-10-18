@@ -142,13 +142,17 @@ fn main() -> ! {
     if let Some(message) = &panicked {
         warn!("the last run panicked: {message}");
     }
-    #[cfg(feature = "remote")]
-    remote::note_panic(panicked);
     // Before anything else: an update on trial that failed is undone here
     // (a restart into the firmware before it).
     let ota = ota::Ota::start(board.flash);
 
     let storage = card::mount(board.bus, board.spi, board.card_select, board.delay);
+    // For bug reports: on the card, and said over USB.
+    if let Some(message) = &panicked {
+        crash::keep(storage.as_ref(), message);
+    }
+    #[cfg(feature = "remote")]
+    remote::note_panic(panicked);
     let mut panel = board.panel;
     if let Err(e) = panel.init() {
         warn!("display: {e:?}");

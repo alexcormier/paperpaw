@@ -6,6 +6,8 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- X4: a crash is written to the card at the next start
+  (`.quireink/crashes.txt`, its version and why), for bug reports.
 - Data plugins say which version of the formats they are made for,
   `formats = 1` in `plugin.ini`; a QuireInk that reads older ones leaves
   such a plugin out and says why. Every data file QuireInk keeps has a

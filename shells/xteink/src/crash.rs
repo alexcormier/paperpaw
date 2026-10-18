@@ -2,7 +2,8 @@
 //! the message through the reset (for `boot` over USB: the log may not
 //! reach the computer, e.g. when the radio took the USB link along) and
 //! starts the X4 again, where halting would leave it on with nothing to
-//! be done until a watchdog came.
+//! be done until a watchdog came. Started again, it writes the message to
+//! the card ([`keep`]), for bug reports.
 
 use core::fmt::Write;
 
@@ -45,6 +46,28 @@ fn panic(info: &core::panic::PanicInfo<'_>) -> ! {
     // SAFETY: one core, the firmware stopped: nothing else touches it.
     unsafe { core::ptr::addr_of_mut!(LAST).write_volatile(buf) };
     esp_hal::system::software_reset()
+}
+
+/// Where panics are kept on the card, for bug reports: a line each, the
+/// version and the message.
+const FILE: &str = quireink_sdk::data_path!("crashes.txt");
+/// The file starts anew once it is this large.
+const MAX_FILE: u64 = 16 * 1024;
+
+/// Writes the last run's panic `message` to the card.
+pub fn keep(storage: &dyn quireink_platform::Storage, message: &str) {
+    let line = alloc::format!(
+        "{}\t{}\n",
+        env!("QUIREINK_VERSION"),
+        message.replace(['\n', '\t'], " ")
+    );
+    let _ = storage.create_dir(quireink_sdk::data::DIR);
+    let full = storage.size(FILE).is_ok_and(|size| size > MAX_FILE);
+    let _ = if full {
+        storage.write(FILE, line.as_bytes())
+    } else {
+        storage.append(FILE, line.as_bytes())
+    };
 }
 
 /// The last panic's message, if the last run ended in one; cleared.

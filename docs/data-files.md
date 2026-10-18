@@ -56,6 +56,7 @@ plugin converts books differently; a plugin must keep that mapping.
 | `.quireink/plugins/kosync/device.ini`, `account.ini` | kosync | ini: the device's id; the key of earlier versions (moved to the passwords and keys) | version 1 |
 | `.quireink/plugins/wallabag/articles.txt`, `finished.txt` | wallabag | an article per line: id and path; ids read to the end | version 1 |
 | `.quireink/plugins/battery/log.csv` | battery | CSV with a header | version 1 |
+| `.quireink/crashes.txt` | X4 firmware | a line per panic: the version and why, written for bug reports, never read back | |
 | `.quireink/plugins/battery/plugins.csv` | battery | CSV with a header, written for reading on a computer, never read back | |
 | `.quireink/plugins/sleep/next.txt` | sleep | the next picture, counted | version 1 |
 | `.quireink/plugins/setup/done` | setup | its presence | version 1 (the app's screen tests) |
