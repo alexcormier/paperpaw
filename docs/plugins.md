@@ -145,6 +145,12 @@ Some rules every screen should follow:
 - **Ask for redraws.** After a change, `cx.request_redraw()` (or a part
   of the screen) and `cx.request_refresh(mode)`: `Fast` for a moving
   focus, `Partial` for new content, `Full` to clear ghosting.
+- **Overlays** are screens with a `region`. One that takes the reader's
+  attention (a menu, a question) washes out what lies below it
+  (`dims_below`); one looked through (a keyboard over the field it
+  types into, a notice) does not. A screen whose content is best in
+  grays (a picture) says so (`grays`): panels with few grays then show
+  it in more, as slowly as a full refresh.
 - **Use the SDK's UI parts** (`quireink_sdk::ui`): headers, rows, lists,
   switches, numbers with − and +, messages, icons. They follow the user's
   appearance settings and line up with the rest of QuireInk.
@@ -220,7 +226,11 @@ its questions apart.
 What is known of books is a service, not a screen's: `library` has a
 book's details (title, author, series, tags, cover, progress, and
 fields plugins add with `library::set_field`), the books read last and
-the favourites, so any plugin can show or use them.
+the favourites, so any plugin can show or use them. Views of many books
+show covers made small and kept on the storage (`library::cover`, a few
+kilobytes each, not the picture) and take a book's details with the
+size a listing told (`library::listing`, `library::book_sized`): on a
+card, each file looked up again is a search through its folder.
 
 The bookmarks and highlights of books are shared: `annotations` reads
 and keeps them, and whoever changes them emits
@@ -277,7 +287,7 @@ cargo run -p quireink-emulator -- --profile xteink-x4 --headless --script "confi
 | Setting defaults | `set_setting_default` | New defaults for other plugins' settings (themes) |
 | Event handlers | `subscribe` | React to events |
 | Key maps | `add_keymap`, `add_keymap_preset` | What buttons, taps and swipes do |
-| Formats | `add_format` | Open a kind of file as a document to read |
+| Formats | `add_format` | Open a kind of file as a document to read; big pictures may be decoded when their page shows (`Document::prepare_image`) |
 | Fonts | `add_font`, `add_font_file`, `bind_font` | Fonts and the roles they fill |
 | Hyphenation | `add_hyphenation` | Patterns for a language |
 | Text filters | `add_text_filter` | Change a book's text before it is laid out |
@@ -328,7 +338,11 @@ events, and only draws in `draw` (which runs for every band of a
 frame). Register it with `WidgetSpec::new(id, title, factory)`; a widget
 with nothing to read, such as a clock, is a pair of functions
 (`WidgetSpec::drawn` with `Drawn::new(height, draw)`, and `shows` to be
-drawn again when what it shows changes). `widgets::grid` puts widgets
+drawn again when what it shows changes). A widget whose content changes
+only after events (books, settings) says so (`live` false) and is not
+read again each minute; one that can be drawn smaller says how small
+(`min_height`), so that a grid fits it where its full height has no
+room. `widgets::grid` puts widgets
 and tools in a grid as the home screen does, edited in place
 (`GridView`).
 

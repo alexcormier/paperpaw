@@ -1126,6 +1126,7 @@ pub fn quireink_sdk::ui::choice::Choice::new(&quireink_sdk::Env<'_>, &quireink_s
 impl quireink_sdk::Screen for quireink_sdk::ui::choice::Choice
 pub fn quireink_sdk::ui::choice::Choice::dims_below(&self) -> bool
 pub fn quireink_sdk::ui::choice::Choice::draw(&mut self, &mut quireink_graphics::canvas::Canvas<'_>, &quireink_sdk::Env<'_>)
+pub fn quireink_sdk::ui::choice::Choice::grays(&self) -> bool
 pub fn quireink_sdk::ui::choice::Choice::hint(&self, &quireink_sdk::Id, &quireink_sdk::Env<'_>) -> quireink_sdk::Hint
 pub fn quireink_sdk::ui::choice::Choice::holds_edges(&self) -> bool
 pub fn quireink_sdk::ui::choice::Choice::on_action(&mut self, &quireink_sdk::Id, &mut quireink_sdk::Cx<'_, '_>) -> quireink_sdk::Handled
@@ -1153,6 +1154,7 @@ pub fn quireink_sdk::ui::items::ItemsScreen::fmt(&self, &mut core::fmt::Formatte
 impl quireink_sdk::Screen for quireink_sdk::ui::items::ItemsScreen
 pub fn quireink_sdk::ui::items::ItemsScreen::dims_below(&self) -> bool
 pub fn quireink_sdk::ui::items::ItemsScreen::draw(&mut self, &mut quireink_graphics::canvas::Canvas<'_>, &quireink_sdk::Env<'_>)
+pub fn quireink_sdk::ui::items::ItemsScreen::grays(&self) -> bool
 pub fn quireink_sdk::ui::items::ItemsScreen::hint(&self, &quireink_sdk::Id, &quireink_sdk::Env<'_>) -> quireink_sdk::Hint
 pub fn quireink_sdk::ui::items::ItemsScreen::holds_edges(&self) -> bool
 pub fn quireink_sdk::ui::items::ItemsScreen::on_action(&mut self, &quireink_sdk::Id, &mut quireink_sdk::Cx<'_, '_>) -> quireink_sdk::Handled
@@ -2455,6 +2457,7 @@ pub fn quireink_sdk::Plugin::register(&self, &mut quireink_sdk::contribution::Re
 pub trait quireink_sdk::Screen
 pub fn quireink_sdk::Screen::dims_below(&self) -> bool
 pub fn quireink_sdk::Screen::draw(&mut self, &mut quireink_graphics::canvas::Canvas<'_>, &quireink_sdk::Env<'_>)
+pub fn quireink_sdk::Screen::grays(&self) -> bool
 pub fn quireink_sdk::Screen::hint(&self, &quireink_sdk::Id, &quireink_sdk::Env<'_>) -> quireink_sdk::Hint
 pub fn quireink_sdk::Screen::holds_edges(&self) -> bool
 pub fn quireink_sdk::Screen::on_action(&mut self, &quireink_sdk::Id, &mut quireink_sdk::Cx<'_, '_>) -> quireink_sdk::Handled
@@ -2468,6 +2471,7 @@ pub fn quireink_sdk::Screen::region(&self, &quireink_sdk::Env<'_>) -> core::opti
 impl quireink_sdk::Screen for quireink_sdk::ui::choice::Choice
 pub fn quireink_sdk::ui::choice::Choice::dims_below(&self) -> bool
 pub fn quireink_sdk::ui::choice::Choice::draw(&mut self, &mut quireink_graphics::canvas::Canvas<'_>, &quireink_sdk::Env<'_>)
+pub fn quireink_sdk::ui::choice::Choice::grays(&self) -> bool
 pub fn quireink_sdk::ui::choice::Choice::hint(&self, &quireink_sdk::Id, &quireink_sdk::Env<'_>) -> quireink_sdk::Hint
 pub fn quireink_sdk::ui::choice::Choice::holds_edges(&self) -> bool
 pub fn quireink_sdk::ui::choice::Choice::on_action(&mut self, &quireink_sdk::Id, &mut quireink_sdk::Cx<'_, '_>) -> quireink_sdk::Handled
@@ -2481,6 +2485,7 @@ pub fn quireink_sdk::ui::choice::Choice::region(&self, &quireink_sdk::Env<'_>) -
 impl quireink_sdk::Screen for quireink_sdk::ui::items::ItemsScreen
 pub fn quireink_sdk::ui::items::ItemsScreen::dims_below(&self) -> bool
 pub fn quireink_sdk::ui::items::ItemsScreen::draw(&mut self, &mut quireink_graphics::canvas::Canvas<'_>, &quireink_sdk::Env<'_>)
+pub fn quireink_sdk::ui::items::ItemsScreen::grays(&self) -> bool
 pub fn quireink_sdk::ui::items::ItemsScreen::hint(&self, &quireink_sdk::Id, &quireink_sdk::Env<'_>) -> quireink_sdk::Hint
 pub fn quireink_sdk::ui::items::ItemsScreen::holds_edges(&self) -> bool
 pub fn quireink_sdk::ui::items::ItemsScreen::on_action(&mut self, &quireink_sdk::Id, &mut quireink_sdk::Cx<'_, '_>) -> quireink_sdk::Handled

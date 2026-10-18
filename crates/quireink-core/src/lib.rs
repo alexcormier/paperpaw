@@ -133,6 +133,7 @@ pub enum Effect {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Effects {
     refresh: Option<(Rect, RefreshMode)>,
+    grays: bool,
     wake_at: Option<Instant>,
     restart: bool,
     sleep: bool,
@@ -150,6 +151,15 @@ impl Effects {
 
     pub fn refresh(&self) -> Option<(Rect, RefreshMode)> {
         self.refresh
+    }
+
+    /// Whether the frame is best shown in grays (the screen on top, with
+    /// nothing over it, says so: [`Screen::grays`](quireink_sdk::Screen::grays)):
+    /// shells whose panel shows more grays with a refresh of its own draw
+    /// the whole screen with [`Kernel::render_gray`] and refresh it so;
+    /// others refresh as [`Effects::refresh`] says.
+    pub fn grays(&self) -> bool {
+        self.grays
     }
 
     pub fn wake_at(&self) -> Option<Instant> {
@@ -1353,6 +1363,55 @@ impl Kernel {
     /// [`start`](Kernel::start), [`handle`](Kernel::handle) or
     /// [`tick`](Kernel::tick) whose effects contain a refresh, then refresh
     /// the panel.
+    /// Draws the whole screen again in four grays (two bits a pixel), in
+    /// bands as [`Kernel::render`] passes them, for a shell that shows a
+    /// frame's pictures in grays ([`Effects::grays`]): bands of as many
+    /// bytes as its own, which goes meanwhile. `false` where there is no
+    /// memory for it (nothing passed then).
+    pub fn render_gray(&mut self, out: &mut dyn FnMut(u16, FrameView<'_>)) -> bool {
+        use quireink_platform::PixelFormat;
+        let format = self.framebuffer.format();
+        let bounds = self.framebuffer.bounds();
+        let rows = self.framebuffer.rows();
+        let (inverted, saturation) = (
+            self.framebuffer.is_inverted(),
+            self.framebuffer.saturation(),
+        );
+        let bits = u32::from(format.bits_per_pixel()).max(1);
+        let align = self.row_align;
+        let gray_rows = (((u32::from(rows) * bits / 2) as u16) / align * align)
+            .max(align)
+            .min(bounds.height);
+        let made = |width, height, rows, format| {
+            Framebuffer::banded(width, height, rows, format).map(|mut framebuffer| {
+                framebuffer.set_inverted(inverted);
+                framebuffer.set_saturation(saturation);
+                framebuffer
+            })
+        };
+        // The band goes first, the gray one taking its place.
+        let Ok(none) = Framebuffer::new(1, 1, format) else {
+            return false;
+        };
+        self.framebuffer = none;
+        let drawn = match made(bounds.width, bounds.height, gray_rows, PixelFormat::Gray2) {
+            Ok(gray) => {
+                self.framebuffer = gray;
+                self.unrendered = Some(bounds);
+                self.render(out);
+                true
+            }
+            Err(_) => false,
+        };
+        if let Ok(none) = Framebuffer::new(1, 1, format) {
+            self.framebuffer = none;
+        }
+        if let Ok(band) = made(bounds.width, bounds.height, rows, format) {
+            self.framebuffer = band;
+        }
+        drawn
+    }
+
     pub fn render(&mut self, out: &mut dyn FnMut(u16, FrameView<'_>)) {
         let Some(region) = self.unrendered.take() else {
             return;
@@ -2579,6 +2638,10 @@ impl Kernel {
             self.invalidate(area);
         }
         let requested = self.output.refresh.take();
+        // The screen on top, nothing over it, best in grays.
+        let grays = self.stack.last().is_some_and(|top| {
+            top.screen.region(&self.shared.env(self.now)).is_none() && top.screen.grays()
+        });
         let mut effects = Effects {
             restart: mem::take(&mut self.restart),
             sleep: mem::take(&mut self.sleep),
@@ -2607,6 +2670,7 @@ impl Kernel {
             let env = self.shared.env(self.now);
             let refresh = self.shared.refresh_filters.apply(&env, refresh, screen);
             effects.refresh = Some((refresh.region, refresh.mode));
+            effects.grays = grays;
             self.shared.usage.refreshed(refresh.mode, refresh.region);
             let top = self.stack.last().map_or(meter::CORE, |s| s.id.namespace());
             self.shared

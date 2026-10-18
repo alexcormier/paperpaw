@@ -284,6 +284,11 @@ impl ReaderScreen {
 }
 
 impl Screen for ReaderScreen {
+    /// A page with pictures: in grays where the panel can.
+    fn grays(&self) -> bool {
+        self.book.as_ref().is_ok_and(Book::pictured)
+    }
+
     /// *Select* opens the reading menu, so its hint says so.
     fn hint(&self, action: &Id, env: &Env<'_>) -> quireink_sdk::Hint {
         if *action == actions::CONFIRM {

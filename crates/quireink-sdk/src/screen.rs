@@ -110,6 +110,15 @@ pub trait Screen {
         None
     }
 
+    /// Whether what it shows now is best in grays (a page with a picture,
+    /// a sleep screen's cover): where the panel has few but shows more
+    /// with a refresh of its own (the X4: four grays, as slow as a full
+    /// refresh), the whole screen is shown so while it is on top with
+    /// nothing over it. Other panels refresh as asked.
+    fn grays(&self) -> bool {
+        false
+    }
+
     /// For an overlay: whether what lies below it is washed out while it
     /// shows, so that it stands out and what it cuts through is not read
     /// as its own (menus, questions). Overlays looked through keep it as

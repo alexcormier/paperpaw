@@ -1305,6 +1305,90 @@ fn menus_follow_order_and_user_definitions() {
     );
 }
 
+/// A home screen best in grays (a picture), and the half overlay as its
+/// menu.
+struct GrayPlugin;
+
+struct GrayScreen;
+
+impl Screen for GrayScreen {
+    fn draw(&mut self, _: &mut Canvas<'_>, _: &Env<'_>) {}
+
+    fn grays(&self) -> bool {
+        true
+    }
+
+    fn on_action(&mut self, _: &Id, _: &mut Cx<'_, '_>) -> Handled {
+        Handled::No
+    }
+}
+
+impl Plugin for GrayPlugin {
+    fn manifest(&self) -> Manifest {
+        Manifest {
+            id: Id::new_static("gray"),
+            name: Cow::Borrowed("Gray"),
+            description: Cow::Borrowed(""),
+            version: Version::new(1, 0, 0),
+            sdk: SDK_VERSION,
+        }
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        r.add_screen(ScreenSpec {
+            id: Id::new_static("gray.page"),
+            title: Cow::Borrowed("page"),
+            factory: Box::new(|_, _| Box::new(GrayScreen)),
+        })?;
+        r.bind_slot(slots::HOME, Id::new_static("gray.page"), Priority::DEFAULT)?;
+        r.add_screen(ScreenSpec {
+            id: Id::new_static("gray.menu"),
+            title: Cow::Borrowed("menu"),
+            factory: Box::new(|_, _| Box::new(HalfOverlay)),
+        })?;
+        r.bind_slot(slots::MENU, Id::new_static("gray.menu"), Priority::DEFAULT)
+    }
+}
+
+#[test]
+fn screens_on_top_say_when_they_are_best_in_grays() {
+    let mut kernel = Kernel::builder(DEVICE).plugin(GrayPlugin).build().unwrap();
+    let effects = kernel.start(Instant(0));
+    assert!(effects.refresh().is_some() && effects.grays());
+    render(&mut kernel);
+    // A menu over it: not while it shows; back again once it closed.
+    let effects = press(&mut kernel, 100, "menu");
+    assert!(effects.refresh().is_some() && !effects.grays());
+    render(&mut kernel);
+    let effects = press(&mut kernel, 300, "back");
+    assert!(effects.refresh().is_some() && effects.grays());
+}
+
+#[test]
+fn frames_drawn_again_in_grays_in_bands_of_as_many_bytes() {
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(OverlayPlugin { log: log() })
+        .frame_rows(32)
+        .row_align(8)
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    render(&mut kernel);
+    let format = kernel.frame().format;
+    let bits = u32::from(format.bits_per_pixel());
+    let mut bands = Vec::new();
+    assert!(kernel.render_gray(&mut |top, rows| {
+        bands.push((top, rows.height, rows.format));
+    }));
+    // The whole screen, in two bits a pixel, bands no larger in bytes.
+    assert_eq!(bands.iter().map(|b| u32::from(b.1)).sum::<u32>(), 90);
+    assert!(bands.iter().all(|b| b.2 == PixelFormat::Gray2));
+    assert!(bands.iter().all(|b| u32::from(b.1) * 2 <= 32 * bits));
+    // Its own bands again after.
+    assert_eq!(kernel.frame().format, format);
+    assert_eq!(kernel.frame().height, 32);
+}
+
 #[test]
 fn drawn_again_whole_and_fully() {
     let mut kernel = Kernel::builder(DEVICE)

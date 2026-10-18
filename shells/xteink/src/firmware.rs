@@ -69,9 +69,9 @@ pub struct State {
     /// trying them.
     #[cfg(feature = "remote")]
     sleep_on_usb_until: Option<Instant>,
-    /// The panel shows the gray test (`gray` over USB): the next change is
-    /// shown with the whole screen drawn again.
-    #[cfg(feature = "remote")]
+    /// The panel shows grays (a frame whose pictures are best so, or the
+    /// gray test over USB): the next change is shown with the whole screen
+    /// drawn again.
     gray_shown: bool,
 }
 
@@ -378,14 +378,24 @@ impl Firmware {
                 effects = self.show_busy(area);
                 continue;
             }
-            // After the gray test, the whole screen, not only what changed.
-            #[cfg(feature = "remote")]
-            if self.state.gray_shown && effects.refresh().is_some() {
+            // Pictures in grays: the whole screen, with the gray waveform;
+            // small changes over them (the time, the battery) wait for the
+            // next page rather than refresh it all.
+            if effects.grays()
+                && let Some((area, _)) = effects.refresh()
+            {
+                let screen = self.kernel.device().display;
+                let small = u32::from(area.width) * u32::from(area.height) * 4
+                    < u32::from(screen.width) * u32::from(screen.height);
+                if !(self.state.gray_shown && small) {
+                    self.show_gray(area);
+                }
+            } else if self.state.gray_shown && effects.refresh().is_some() {
+                // After grays, the whole screen, not only what changed.
                 self.state.gray_shown = false;
                 effects = self.kernel.draw_again(now());
                 continue;
-            }
-            if let Some((area, mode)) = effects.refresh() {
+            } else if let Some((area, mode)) = effects.refresh() {
                 self.show(area, mode);
             }
             for warning in self.kernel.take_warnings() {
@@ -436,6 +446,41 @@ impl Firmware {
             now().since(worked)
         );
         next
+    }
+
+    /// Shows the whole screen in four grays, its pictures best so (see
+    /// `Effects::grays`); the next change draws it whole again. Where
+    /// there is no memory for it, as a full refresh of `area`.
+    fn show_gray(&mut self, area: Rect) {
+        power::mark(power::at::SHOWING);
+        let started = now();
+        let panel = &mut self.panel;
+        let mut failed = None;
+        let drawn = self.kernel.render_gray(&mut |top, rows| {
+            if let Err(e) = panel.write_gray_rows(top, rows) {
+                failed = Some(e);
+            }
+        });
+        if !drawn {
+            warn!("no memory for grays");
+            return self.show(area, RefreshMode::Full);
+        }
+        let written = now();
+        if let Err(e) = self.panel.refresh_gray() {
+            failed = Some(e);
+        }
+        let shown = now();
+        self.kernel.panel_busy(shown.since(written));
+        self.kernel.shown(shown);
+        self.state.gray_shown = true;
+        if let Some(e) = failed {
+            warn!("display: {e:?}");
+        }
+        info!(
+            "frame in grays: drawn in {} ms, shown in {} ms",
+            written.since(started),
+            shown.since(written)
+        );
     }
 
     /// Shows the frame changed in `area`.

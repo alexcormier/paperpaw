@@ -306,6 +306,11 @@ impl Screen for SleepScreen {
         }
     }
 
+    /// A cover or a picture: in grays where the panel can.
+    fn grays(&self) -> bool {
+        self.show != PAGE && self.image.is_some() && self.widgets.is_empty()
+    }
+
     fn on_action(&mut self, _: &Id, _: &mut Cx<'_, '_>) -> Handled {
         // Nothing to do while asleep.
         Handled::Yes

@@ -260,6 +260,12 @@ impl Book {
         }
     }
 
+    /// Whether the page shown has pictures: shown in grays where the
+    /// panel can ([`Screen::grays`](quireink_sdk::Screen::grays)).
+    pub(super) fn pictured(&self) -> bool {
+        !self.page.images.is_empty()
+    }
+
     pub(super) fn font<'a>(&self, env: &Env<'a>) -> Option<FontHandle<'a>> {
         env.fonts.role(fonts::READING.as_str())
     }

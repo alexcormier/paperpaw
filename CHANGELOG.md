@@ -6,6 +6,15 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- X4: pages with pictures and the sleep screen's cover or picture show
+  in four grays (the panel's gray waveform, as long as a full refresh);
+  lists stay black and white. The time and the battery do not refresh a
+  picture shown so; the next page does. SDK: `Screen::grays`, kernel:
+  `Effects::grays`, `Kernel::render_gray`.
+- Books: pictures are decoded when their page shows, not with their
+  chapter (`Document::prepare_image`, `image::dimensions`): on the X4 no
+  step of the background pagination of an illustrated book takes
+  seconds any more.
 - Home on the X4: the recently read shelf shows below the current book
   (it had no room at its full height and was left out). Widgets can do
   with less (`Widget::min_height`); the grid places them lower where

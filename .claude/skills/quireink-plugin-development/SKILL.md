@@ -94,6 +94,10 @@ section of `docs/plugins.md`. A plugin that should run there:
   opens, on events, on a timer), then draw from that. Skip what lies
   outside `canvas.clip()`. Widgets read what they show in `update`,
   never in `draw`.
+- **Looks files up rarely.** On a memory card each file looked up is a
+  search through its folder, tens of milliseconds on the X4: take what a
+  listing already told (sizes), keep small copies of pictures shown in
+  lists, and decode big pictures when they show, not ahead.
 - **Asks for small redraws**: the area that changed, not the whole
   screen, and the lightest refresh that looks right.
 - **Watches the stack**, which is small and not growable. No large
