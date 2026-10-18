@@ -1287,7 +1287,7 @@ impl ReaderScreen {
                 .contains(a)
                 {
                     let to = Selection {
-                        focus: Some(focus.saturating_sub(1)),
+                        focus: Some(ui::step_focus(focus, -1, items.len())),
                         ..selection
                     };
                     self.set_selection(Some(to), cx);
@@ -1300,7 +1300,7 @@ impl ReaderScreen {
                 .contains(a)
                 {
                     let to = Selection {
-                        focus: Some((focus + 1).min(items.len() - 1)),
+                        focus: Some(ui::step_focus(focus, 1, items.len())),
                         ..selection
                     };
                     self.set_selection(Some(to), cx);

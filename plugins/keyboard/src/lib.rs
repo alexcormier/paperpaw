@@ -580,9 +580,9 @@ impl KeyboardScreen {
             } else if up {
                 self.nearest(row, index, last_row)
             } else if *a == actions::RIGHT || *a == actions::NEXT {
-                (row, (index + 1).min(last))
+                (row, ui::step_focus(index, 1, last + 1))
             } else if *a == actions::LEFT || *a == actions::PREVIOUS {
-                (row, index.saturating_sub(1))
+                (row, ui::step_focus(index, -1, last + 1))
             } else {
                 return false;
             }
@@ -635,13 +635,13 @@ impl KeyboardScreen {
         let Some(popup) = &mut self.popup else {
             return Handled::No;
         };
-        let last = popup.chars.len() - 1;
+        let len = popup.chars.len();
         let focus = popup.focus.unwrap_or(0);
         let a = action;
         let to = if [actions::LEFT, actions::PREVIOUS, actions::UP].contains(a) {
-            focus.saturating_sub(1)
+            ui::step_focus(focus, -1, len)
         } else if [actions::RIGHT, actions::NEXT, actions::DOWN].contains(a) {
-            (focus + 1).min(last)
+            ui::step_focus(focus, 1, len)
         } else if *a == actions::CONFIRM {
             let c = popup.chars[focus];
             self.close_variants(cx);

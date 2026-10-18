@@ -693,9 +693,9 @@ impl Screen for LockScreen {
                 actions::NEXT_PAGE,
             ];
             if up.contains(a) {
-                self.focus = self.focus.saturating_sub(1);
+                self.focus = ui::step_focus(self.focus, -1, kinds.len());
             } else if down.contains(a) {
-                self.focus = (self.focus + 1).min(kinds.len() - 1);
+                self.focus = ui::step_focus(self.focus, 1, kinds.len());
             } else if *a == actions::CONFIRM && self.shown {
                 self.choose_kind(kinds[self.focus], cx);
                 return Handled::Yes;
@@ -730,7 +730,7 @@ impl Screen for LockScreen {
         if !self.shown {
             self.shown = true;
         } else {
-            self.focus = (self.focus as isize + delta).clamp(0, count as isize - 1) as usize;
+            self.focus = ui::step_focus(self.focus, delta, count);
         }
         self.redraw(cx);
         Handled::Yes

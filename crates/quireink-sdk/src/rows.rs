@@ -212,7 +212,10 @@ mod tests {
         rows.step(false);
         assert_eq!(rows.focus, 4, "back from the first: the last");
         rows.step(true);
-        assert_eq!(rows.focus, 1, "on from the last: the first, past the heading");
+        assert_eq!(
+            rows.focus, 1,
+            "on from the last: the first, past the heading"
+        );
         rows.step(true);
         rows.step(true);
         assert_eq!(rows.focus, 4, "over the heading between");

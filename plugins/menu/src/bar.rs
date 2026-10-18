@@ -245,8 +245,7 @@ impl BarScreen {
             // The first button press shows where the focus is.
             self.keys = true;
         } else {
-            let last = self.entries.len().saturating_sub(1) as isize;
-            self.focus = (self.focus as isize + delta).clamp(0, last) as usize;
+            self.focus = ui::step_focus(self.focus, delta, self.entries.len());
         }
         cx.request_redraw_area(self.region);
         cx.request_refresh(RefreshMode::Fast);

@@ -389,8 +389,11 @@ impl Browser {
     fn move_focus(&mut self, delta: isize, cx: &mut Cx<'_, '_>) {
         let len = self.entries.len();
         let bar = self.buttons().len();
+        // The list and the bar below it, one round: past the last button
+        // to the first entry, and back.
         self.focus = match self.focus {
             Focus::List if delta > 0 && (len == 0 || self.list.focus + 1 >= len) => Focus::Bar(0),
+            Focus::List if delta < 0 && self.list.focus == 0 => Focus::Bar(bar - 1),
             Focus::List => {
                 let change = self.list.move_focus(delta, len);
                 if change == ListChange::Page {
@@ -398,8 +401,15 @@ impl Browser {
                 }
                 Focus::List
             }
-            Focus::Bar(i) if delta > 0 => Focus::Bar((i + 1).min(bar - 1)),
-            Focus::Bar(0) => Focus::List,
+            Focus::Bar(i) if delta > 0 && i + 1 < bar => Focus::Bar(i + 1),
+            Focus::Bar(_) if delta > 0 => {
+                self.list.focus = 0;
+                Focus::List
+            }
+            Focus::Bar(0) => {
+                self.list.focus = len.saturating_sub(1);
+                Focus::List
+            }
             Focus::Bar(i) => Focus::Bar(i - 1),
         };
         self.redraw(cx);

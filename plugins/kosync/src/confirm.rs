@@ -194,11 +194,11 @@ impl Screen for ConfirmScreen {
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         let a = action;
-        let last = self.buttons.len() - 1;
+        let len = self.buttons.len();
         let focus = if *a == actions::LEFT || *a == actions::UP || *a == actions::PREVIOUS {
-            self.focus.saturating_sub(1)
+            ui::step_focus(self.focus, -1, len)
         } else if *a == actions::RIGHT || *a == actions::DOWN || *a == actions::NEXT {
-            (self.focus + 1).min(last)
+            ui::step_focus(self.focus, 1, len)
         } else if *a == actions::CONFIRM {
             self.choose(self.focus, cx);
             return Handled::Yes;

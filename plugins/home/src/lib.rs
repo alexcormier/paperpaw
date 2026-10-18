@@ -914,22 +914,14 @@ impl Screen for Dashboard {
             self.focus_on(self.focus, cx);
             return Handled::Yes;
         }
-        let last = self.targets.len() - 1;
+        let len = self.targets.len();
         let to = if *a == actions::CONFIRM {
             self.run(self.focus, cx);
             return Handled::Yes;
         } else if *a == actions::RIGHT || *a == actions::NEXT {
-            if self.focus == last {
-                0
-            } else {
-                self.focus + 1
-            }
+            ui::step_focus(self.focus, 1, len)
         } else if *a == actions::LEFT || *a == actions::PREVIOUS {
-            if self.focus == 0 {
-                last
-            } else {
-                self.focus - 1
-            }
+            ui::step_focus(self.focus, -1, len)
         } else {
             match self.vertical(*a == actions::DOWN) {
                 Some(to) => to,
