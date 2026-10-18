@@ -201,6 +201,10 @@ pub enum Command {
     ShowHints,
     /// Changes a setting; invalid values are rejected with a warning.
     SetSetting(Id, SettingValue),
+    /// Forgets the value set for a setting: its default applies again (in
+    /// the active scope, where changes go there: the scope's value, the
+    /// global one applies again). See [`Settings::reset`](crate::Settings::reset).
+    ResetSetting(Id),
     /// Redraws the current screen completely; with
     /// [`RefreshMode::Full`] the whole screen, flashing.
     Redraw(RefreshMode),

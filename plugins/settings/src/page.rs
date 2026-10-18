@@ -22,6 +22,8 @@ pub(super) enum Row {
     /// A section's heading: its title.
     Heading(String),
     Setting(Box<SettingSpec>),
+    /// Resets the page's settings to their defaults, at its end.
+    Reset,
 }
 
 #[derive(Debug)]
@@ -87,6 +89,9 @@ impl GroupPage {
                     .map(|spec| Row::Setting(Box::new(spec))),
             );
         }
+        if !specs.is_empty() {
+            entries.push(Row::Reset);
+        }
         let noted = specs.iter().any(|spec| spec.description.is_some());
         let (style, header, area) = page(env);
         let heading = ui::heading_height(env, &style);
@@ -96,6 +101,7 @@ impl GroupPage {
             .map(|e| match e {
                 Row::Heading(_) => heading,
                 Row::Setting(_) => row,
+                Row::Reset => style.row as u16,
             })
             .collect();
         let headings = entries
@@ -107,7 +113,7 @@ impl GroupPage {
             &style,
             entries.iter().filter_map(|e| match e {
                 Row::Setting(spec) => Some(&**spec),
-                Row::Heading(_) => None,
+                Row::Heading(_) | Row::Reset => None,
             }),
         );
         Self {
@@ -179,6 +185,10 @@ impl GroupPage {
 
     /// What confirming (or tapping) the focused setting does.
     pub(super) fn activate(&mut self, env: &Env<'_>, step: i64, cx: &mut Cx<'_, '_>) {
+        if matches!(self.entries.get(self.rows.focus), Some(Row::Reset)) {
+            cx.command(ask_reset(env, Some((&self.group, &self.title))));
+            return;
+        }
         let Some(spec) = self.focused() else {
             return;
         };
@@ -236,6 +246,12 @@ impl Screen for GroupPage {
                 let spec = match &entries[index] {
                     Row::Heading(title) => {
                         ui::draw_heading(canvas, env, &style, rect, title);
+                        return;
+                    }
+                    Row::Reset => {
+                        let title = env.i18n.tr("settings.reset-page");
+                        let rect = Rect::new(rect.x, rect.y, rect.width, style.row as u16);
+                        ui::draw_value_row(canvas, env, &style, rect, focused, title, "");
                         return;
                     }
                     Row::Setting(spec) => spec,
@@ -414,7 +430,14 @@ impl Screen for GroupPage {
         Handled::Yes
     }
 
-    fn on_event(&mut self, event: &Id, _: &Params, cx: &mut Cx<'_, '_>) {
+    fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
+        if let Some(picked) = CHOSEN.read(event, params) {
+            if picked.path == self.group.as_str() {
+                let env = *cx.env();
+                reset(&env, &picked, cx);
+            }
+            return;
+        }
         if *event == events::SETTING_CHANGED {
             let env = *cx.env();
             let (focus, keys, editing) = (self.rows.focus, self.keys, self.editing);

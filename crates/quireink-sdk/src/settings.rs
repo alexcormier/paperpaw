@@ -496,6 +496,28 @@ impl Settings {
         Ok(())
     }
 
+    /// Forgets the value set for `id`, so that its default applies again;
+    /// where changes of it go to the active scope
+    /// ([`Settings::goes_to_scope`]), the scope's value, so that the
+    /// global one applies again (for "only this book", the scope's values
+    /// all go, as when it is switched off).
+    pub fn reset(&mut self, id: &str) -> Result<(), SettingError> {
+        let spec = self.specs.get(id).ok_or(SettingError::Unknown)?;
+        let id = spec.id.clone();
+        if self.goes_to_scope(id.as_str()) {
+            if let Some(scope) = self.scope.as_mut() {
+                if id == crate::builtin::settings::SCOPE_ONLY {
+                    scope.clear();
+                } else {
+                    scope.remove(id.as_str());
+                }
+            }
+        } else {
+            self.values.remove(id.as_str());
+        }
+        Ok(())
+    }
+
     /// Sets a value from configuration-file text.
     pub fn set_from_text(&mut self, id: &str, text: &str) -> Result<(), SettingError> {
         let spec = self.specs.get(id).ok_or(SettingError::Unknown)?;

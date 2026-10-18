@@ -2782,6 +2782,7 @@ impl Kernel {
                 self.http
                     .request(request, network, &*self.shared.storage, out);
             }
+            Command::ResetSetting(id) => self.reset_setting(&id),
             Command::SetSetting(id, value) => match self.shared.settings.set(id.as_str(), value) {
                 Ok(()) => {
                     self.persist_setting(&id);
@@ -3134,6 +3135,34 @@ impl Kernel {
 
     /// Writes a changed setting to the configuration file on the device,
     /// keeping the rest of the file as it is.
+    /// Forgets a setting's value (see [`Command::ResetSetting`]): from the
+    /// active scope, or from the configuration file.
+    fn reset_setting(&mut self, id: &Id) {
+        let scoped = self.shared.settings.goes_to_scope(id.as_str());
+        let before = self.scoped_values();
+        if let Err(error) = self.shared.settings.reset(id.as_str()) {
+            return self.warn_runtime(format!("`{id}`: {error}"));
+        }
+        if scoped {
+            self.save_scope();
+            self.announce_scope_changes(before);
+            return;
+        }
+        if let Some((section, key)) = id.as_str().split_once('.') {
+            let storage = self.shared.storage.as_ref();
+            if let Some(source) = read_config(storage) {
+                let updated = quireink_config::remove(&source, section, key);
+                if updated != source && storage.write(CONFIG_FILE, updated.as_bytes()).is_err() {
+                    self.warn_runtime(format!("could not save `{id}` to {CONFIG_FILE}"));
+                }
+            }
+        }
+        self.setting_changed(id);
+        self.output
+            .commands
+            .push(events::SETTING_CHANGED.emit(events::SettingChanged { id: id.clone() }));
+    }
+
     fn persist_setting(&mut self, id: &Id) {
         let Some(value) = self.shared.settings.global(id.as_str()) else {
             return;

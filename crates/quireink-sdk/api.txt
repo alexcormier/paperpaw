@@ -1572,6 +1572,7 @@ pub quireink_sdk::Command::OpenScreen(quireink_sdk::Id, quireink_sdk::Params)
 pub quireink_sdk::Command::OpenSlot(quireink_sdk::Id, quireink_sdk::Params)
 pub quireink_sdk::Command::ReadClipboard(quireink_sdk::Id, quireink_sdk::Params)
 pub quireink_sdk::Command::Redraw(quireink_platform::display::RefreshMode)
+pub quireink_sdk::Command::ResetSetting(quireink_sdk::Id)
 pub quireink_sdk::Command::Respond(quireink_sdk::ServerResponse)
 pub quireink_sdk::Command::Restart
 pub quireink_sdk::Command::RunAction(quireink_sdk::Id)
@@ -2323,6 +2324,7 @@ pub fn quireink_sdk::Settings::int(&self, &str) -> i64
 pub fn quireink_sdk::Settings::is_scoped(&self, &str) -> bool
 pub fn quireink_sdk::Settings::new() -> Self
 pub fn quireink_sdk::Settings::read<T: quireink_sdk::setting::SettingType>(&self, &quireink_sdk::setting::Setting<T>) -> <T as quireink_sdk::setting::SettingType>::Value
+pub fn quireink_sdk::Settings::reset(&mut self, &str) -> core::result::Result<(), quireink_sdk::SettingError>
 pub fn quireink_sdk::Settings::scope(&self) -> core::option::Option<&quireink_sdk::collections::VecMap<quireink_sdk::Id, quireink_sdk::SettingValue>>
 pub fn quireink_sdk::Settings::scoped_value(&self, &str) -> core::option::Option<&quireink_sdk::SettingValue>
 pub fn quireink_sdk::Settings::set(&mut self, &str, quireink_sdk::SettingValue) -> core::result::Result<(), quireink_sdk::SettingError>

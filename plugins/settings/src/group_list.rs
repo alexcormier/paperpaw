@@ -15,6 +15,8 @@ pub(super) enum Link {
     Advanced,
     /// Searching the settings.
     Search,
+    /// Resetting all settings to their defaults.
+    Reset,
 }
 
 #[derive(Debug)]
@@ -104,6 +106,15 @@ impl GroupList {
                 icon: Some(String::from("eye")),
             },
         ));
+        placed.push((
+            i32::MAX,
+            true,
+            Entry {
+                link: Some(Link::Reset),
+                title: env.i18n.tr("settings.reset-all").to_string(),
+                icon: Some(String::from("refresh")),
+            },
+        ));
         placed.sort_by_key(|(order, entry, _)| (*order, *entry));
         let mut entries: Vec<Entry> = placed.into_iter().map(|(_, _, entry)| entry).collect();
         // Headings with nothing under them go.
@@ -166,6 +177,10 @@ impl GroupList {
                 cx.command(Command::set(&ADVANCED, !advanced));
             }
             Some(Link::Search) => cx.command(search::ask(cx.env())),
+            Some(Link::Reset) => {
+                let env = *cx.env();
+                cx.command(ask_reset(&env, None));
+            }
             None => {}
         }
     }
@@ -196,7 +211,7 @@ impl Screen for GroupList {
                 if *link == Link::Advanced {
                     let on = env.settings.read(&ADVANCED);
                     ui::draw_switch_row(canvas, env, &style, rect, focused, &entry.title, "", on);
-                } else if *link == Link::Search {
+                } else if *link == Link::Search || *link == Link::Reset {
                     ui::draw_value_row(canvas, env, &style, rect, focused, &entry.title, "");
                 } else {
                     ui::draw_value_row(canvas, env, &style, rect, focused, &entry.title, "›");
@@ -238,6 +253,13 @@ impl Screen for GroupList {
     }
 
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
+        if let Some(picked) = CHOSEN.read(event, params) {
+            if picked.path.is_empty() {
+                let env = *cx.env();
+                reset(&env, &picked, cx);
+            }
+            return;
+        }
         if let Some(typed) = search::ENTERED.read(event, params) {
             let text = typed.text.trim();
             if !text.is_empty() {

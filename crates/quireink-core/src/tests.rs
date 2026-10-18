@@ -1306,6 +1306,48 @@ fn menus_follow_order_and_user_definitions() {
 }
 
 #[test]
+fn settings_reset_to_their_defaults() {
+    let storage = quireink_sdk::MemoryStorage::new().with(
+        "quireink.ini",
+        "[core]
+ui-size = 12
+full-refresh-interval = 3
+",
+    );
+    let mut kernel = Kernel::builder(DEVICE)
+        .storage(storage)
+        .plugin(OverlayPlugin { log: log() })
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    let ui_size = "core.ui-size";
+    let default = kernel
+        .shared
+        .settings
+        .specs()
+        .find(|s| s.id.as_str() == ui_size)
+        .unwrap()
+        .default
+        .clone();
+    assert_ne!(kernel.shared.settings.get(ui_size), Some(&default));
+    kernel.apply(Command::ResetSetting(
+        quireink_sdk::builtin::settings::UI_SIZE.id().clone(),
+    ));
+    kernel.finish();
+    assert_eq!(kernel.shared.settings.get(ui_size), Some(&default));
+    // Gone from the file, the other setting kept.
+    let mut buf = [0u8; 256];
+    let n = kernel
+        .shared
+        .storage
+        .read_at("quireink.ini", 0, &mut buf)
+        .unwrap();
+    let file = core::str::from_utf8(&buf[..n]).unwrap();
+    assert!(!file.contains("ui-size"), "{file}");
+    assert!(file.contains("full-refresh-interval = 3"), "{file}");
+}
+
+#[test]
 fn menus_are_redefined_saved_and_reset() {
     let log = log();
     let storage = quireink_sdk::MemoryStorage::new().with(

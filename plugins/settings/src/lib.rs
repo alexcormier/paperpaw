@@ -10,6 +10,9 @@
 //!   changed) to find out what it does; settings that name a section
 //!   are listed under its heading.
 //! - Choices and languages open a list to pick from.
+//! - Each page ends with resetting its settings to their defaults, the
+//!   main page with resetting all of them (but the language); both ask
+//!   first.
 //!
 //! Changes apply immediately and are saved to `quireink.ini` by the
 //! kernel.
@@ -42,6 +45,7 @@ use quireink_sdk::builtin::{actions, events, groups, menus, params, setting_sect
 use quireink_sdk::event::Event;
 use quireink_sdk::replies::Typed;
 use quireink_sdk::setting::Setting;
+use quireink_sdk::ui::choice::{self, Choice};
 use quireink_sdk::ui::{self, ListChange, ListView, UiStyle};
 use quireink_sdk::{ActionSpec, MenuEntry};
 use quireink_sdk::{
@@ -66,6 +70,11 @@ pub const ADVANCED: Setting<bool> = Setting::new("settings.advanced");
 /// Emitted by the keyboard with a text setting's new value (parameters
 /// `id` and `text`).
 const TEXT_ENTERED: Event<Typed> = Event::new("settings.text-entered");
+
+/// Asks before settings are reset.
+const CHOICE: Id = Id::new_static("settings.choice");
+/// The answer: the group reset (its id; empty for all) and the option.
+const CHOSEN: Event<choice::Picked> = Event::new("settings.chosen");
 
 const ID: &str = "id";
 /// A setting to focus on its group's page (parameter of [`GROUP_SCREEN`]).
@@ -111,6 +120,11 @@ impl Plugin for SettingsPlugin {
                 }
                 Box::new(page)
             }),
+        })?;
+        r.add_screen(ScreenSpec {
+            id: CHOICE,
+            title: Cow::Borrowed("settings.title"),
+            factory: Box::new(|env, params| Box::new(Choice::new(env, params))),
         })?;
         r.add_screen(ScreenSpec {
             id: CHOOSE_SCREEN,
@@ -172,6 +186,48 @@ impl Plugin for SettingsPlugin {
 }
 
 /// Whether a setting is shown with the current level.
+/// Asks whether to reset the settings of `group` (all for `None`).
+fn ask_reset(env: &Env<'_>, group: Option<(&Id, &str)>) -> Command {
+    let question = match group {
+        Some((_, title)) => env.i18n.format(
+            "settings.reset-page.question",
+            &[("page", quireink_sdk::Arg::Str(title))],
+        ),
+        None => env.i18n.tr("settings.reset-all.question").to_string(),
+    };
+    let context = group.map_or("", |(id, _)| id.as_str());
+    choice::open(
+        CHOICE,
+        &CHOSEN,
+        &question,
+        context,
+        "settings.option.",
+        &["reset", "cancel"],
+    )
+}
+
+/// Resets the settings `reset` chose: of its group, or all but the
+/// language.
+fn reset(env: &Env<'_>, picked: &choice::Picked, cx: &mut Cx<'_, '_>) {
+    if picked.option != "reset" {
+        return;
+    }
+    let group = Id::parse(&picked.path).ok();
+    let language = quireink_sdk::builtin::settings::LANGUAGE;
+    for spec in env.settings.specs() {
+        let chosen = match &group {
+            Some(group) => env.settings.group_of(spec) == *group && visible(env, spec),
+            None => spec.id != *language.id(),
+        };
+        if chosen {
+            cx.command(Command::ResetSetting(spec.id.clone()));
+        }
+    }
+    cx.command(Command::Notify(
+        env.i18n.tr("settings.reset-done").to_string(),
+    ));
+}
+
 fn visible(env: &Env<'_>, spec: &SettingSpec) -> bool {
     // "Only this book" and the like mean nothing outside a scope.
     let scope_only = spec.id == quireink_sdk::builtin::settings::SCOPE_ONLY;

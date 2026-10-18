@@ -6,6 +6,11 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Settings: each page ends with "Reset to defaults", the main page with
+  "Reset all settings" (the language stays); both ask first. SDK:
+  `Command::ResetSetting`, `Settings::reset` (the value forgotten, so
+  that the default, or outside a book's own settings the global value,
+  applies again).
 - The row of hints over the buttons marks with a small hand the buttons
   that do something more when held (e.g. Back: home, Select: options),
   without growing. SDK: `ui::draw_button_hints` takes what holding each
