@@ -888,11 +888,16 @@ pub fn button_hints_height(env: &Env<'_>) -> u16 {
 /// button under it does, centred in an equal share of the width, as the
 /// buttons lie. The hint of the button `pressed` is drawn inverted, as a
 /// sign that its press is being worked on.
+/// The mark beside a button's label in the row of hints where holding
+/// the button does something too ([`draw_button_hints`]).
+pub const HOLD_ICON: &str = "hand-click";
+
 pub fn draw_button_hints(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
     area: Rect,
     hints: &[Hint],
+    held: &[bool],
     pressed: Option<usize>,
 ) {
     let style = UiStyle::new(env);
@@ -928,17 +933,34 @@ pub fn draw_button_hints(
         } else {
             Color::BLACK
         };
-        match hint {
+        // Holding the button does something too: a small hand beside its
+        // label, the two together in the middle.
+        let hold = held.get(i as usize).copied().unwrap_or(false)
+            && matches!(hint, Hint::Text(_) | Hint::Icon(_));
+        let mark = if hold {
+            icon_width(env, HOLD_ICON, style.small) + style.gap as f32 / 3.0
+        } else {
+            0.0
+        };
+        let end = match hint {
             Hint::Text(text) => {
-                let text = fit(&font, style.small, text, room);
-                let x = middle - font.measure(style.small, &text) / 2.0;
+                let text = fit(&font, style.small, text, room - mark);
+                let width = font.measure(style.small, &text);
+                let x = middle - (width + mark) / 2.0;
                 draw_label(canvas, &font, style.small, x, cell, &text, ink);
+                x + width
             }
             Hint::Icon(name) => {
-                let x = middle - icon_width(env, name, style.text) / 2.0;
+                let width = icon_width(env, name, style.text);
+                let x = middle - (width + mark) / 2.0;
                 draw_icon(canvas, env, name, style.text, x, cell, ink);
+                x + width
             }
-            Hint::Default | Hint::Hidden => {}
+            Hint::Default | Hint::Hidden => continue,
+        };
+        if hold {
+            let x = end + style.gap as f32 / 3.0;
+            draw_icon(canvas, env, HOLD_ICON, style.small, x, cell, ink);
         }
     }
 }

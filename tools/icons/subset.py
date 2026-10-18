@@ -46,7 +46,7 @@ ICONS = sorted({
     # System
     "settings", "menu-2", "dots", "dots-vertical", "info-circle", "power",
     "battery", "device-tablet", "user", "lock", "palette", "bug",
-    "hourglass",
+    "hourglass", "hand-click",
     # Controls
     "chevron-left", "chevron-right", "chevron-up", "chevron-down",
     "arrow-left", "arrow-right", "arrow-up", "arrow-down", "x", "check", "plus",

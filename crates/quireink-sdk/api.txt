@@ -1277,13 +1277,14 @@ pub fn quireink_sdk::ui::UiStyle::font<'a>(&self, &quireink_sdk::Env<'a>) -> cor
 pub fn quireink_sdk::ui::UiStyle::header_colors(&self) -> (quireink_platform::pixel::Color, quireink_platform::pixel::Color)
 pub fn quireink_sdk::ui::UiStyle::new(&quireink_sdk::Env<'_>) -> Self
 pub fn quireink_sdk::ui::UiStyle::noted_row(&self) -> u32
+pub const quireink_sdk::ui::HOLD_ICON: &str
 pub const quireink_sdk::ui::ICON_SCALE: f32
 pub const quireink_sdk::ui::NOTE_LINES: usize
 pub fn quireink_sdk::ui::button_border(&quireink_sdk::ui::UiStyle) -> u32
 pub fn quireink_sdk::ui::button_height(quireink_platform::geometry::Rect) -> u16
 pub fn quireink_sdk::ui::button_hints_height(&quireink_sdk::Env<'_>) -> u16
 pub fn quireink_sdk::ui::draw_button(&mut quireink_graphics::canvas::Canvas<'_>, &quireink_sdk::Env<'_>, &quireink_sdk::ui::UiStyle, quireink_platform::geometry::Rect, &str, bool, bool)
-pub fn quireink_sdk::ui::draw_button_hints(&mut quireink_graphics::canvas::Canvas<'_>, &quireink_sdk::Env<'_>, quireink_platform::geometry::Rect, &[quireink_sdk::Hint], core::option::Option<usize>)
+pub fn quireink_sdk::ui::draw_button_hints(&mut quireink_graphics::canvas::Canvas<'_>, &quireink_sdk::Env<'_>, quireink_platform::geometry::Rect, &[quireink_sdk::Hint], &[bool], core::option::Option<usize>)
 pub fn quireink_sdk::ui::draw_chevron(&mut quireink_graphics::canvas::Canvas<'_>, &quireink_sdk::ui::UiStyle, i32, i32, bool, quireink_platform::pixel::Color)
 pub fn quireink_sdk::ui::draw_header(&mut quireink_graphics::canvas::Canvas<'_>, &quireink_sdk::Env<'_>, &quireink_sdk::ui::UiStyle, quireink_platform::geometry::Rect, &str, core::option::Option<&str>)
 pub fn quireink_sdk::ui::draw_heading(&mut quireink_graphics::canvas::Canvas<'_>, &quireink_sdk::Env<'_>, &quireink_sdk::ui::UiStyle, quireink_platform::geometry::Rect, &str)

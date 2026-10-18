@@ -6,6 +6,10 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- The row of hints over the buttons marks with a small hand the buttons
+  that do something more when held (e.g. Back: home, Select: options),
+  without growing. SDK: `ui::draw_button_hints` takes what holding each
+  button does, `ui::HOLD_ICON`; the icon font has `hand-click`.
 - Library: buttons reach the order at the top (a stop of the focus
   between the last book and the first); Confirm there opens the
   library's menu, as a tap does. SDK: `Header::note_focused`.

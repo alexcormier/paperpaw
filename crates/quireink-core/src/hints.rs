@@ -26,6 +26,8 @@ pub(crate) struct HintRow {
     pub pressed: Option<usize>,
     /// What the row shows, as it was last drawn.
     pub shown: Vec<Hint>,
+    /// Whether holding each button does something too, as last drawn.
+    pub held: Vec<bool>,
     /// Until when the row shows over a screen that has it only on a press.
     pub until: Option<Instant>,
 }
@@ -37,6 +39,7 @@ impl HintRow {
             height: 0,
             pressed: None,
             shown: Vec::new(),
+            held: Vec::new(),
             until: None,
         }
     }
@@ -115,6 +118,27 @@ impl Kernel {
         }
         self.hint.height = height;
         self.remake_screens();
+    }
+
+    /// Whether holding each button in the row does something here: it is
+    /// bound to an action the screen on top shows.
+    pub(crate) fn current_holds(&self) -> Vec<bool> {
+        let env = self.shared.env(self.now);
+        let top = self.stack.last();
+        self.hint
+            .buttons
+            .iter()
+            .map(|button| {
+                let Some(action) = self.resolve(&InputKey::LongButton(Cow::Borrowed(button)))
+                else {
+                    return false;
+                };
+                match top.map_or(Hint::Default, |t| t.screen.hint(&action, &env)) {
+                    Hint::Default => self.default_hint(&action) != Hint::Hidden,
+                    hint => hint != Hint::Hidden,
+                }
+            })
+            .collect()
     }
 
     /// What the row of hints shows for each button in it: what the button
