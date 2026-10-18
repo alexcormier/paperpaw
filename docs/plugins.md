@@ -17,7 +17,11 @@ There are two kinds:
   time (WebAssembly, with the same API) are planned.
 
 This guide walks through a code plugin, then lists what plugins can
-contribute. The SDK's API documentation (`cargo doc -p quireink-sdk
+contribute. Working with an AI assistant: the skill in
+[`.claude/skills/quireink-plugin-development`](../.claude/skills/quireink-plugin-development/SKILL.md)
+tells it how QuireInk is built, how to try a plugin in the emulator and
+on an X4, and how to measure it; copy the folder into a plugin's own
+project (or one's own skills) to use it there. The SDK's API documentation (`cargo doc -p quireink-sdk
 --open`) has every detail.
 
 ## The sample plugin

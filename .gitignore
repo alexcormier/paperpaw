@@ -22,3 +22,7 @@ Thumbs.db
 /fuzz/corpus/
 /fuzz/artifacts/
 /fuzz/coverage/
+
+# Claude Code: the skills are shared, the rest stays one's own
+/.claude/*
+!/.claude/skills/
