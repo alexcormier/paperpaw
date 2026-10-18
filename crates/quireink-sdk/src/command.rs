@@ -212,7 +212,7 @@ pub enum Command {
     /// (see [`PluginInfo::can_switch_off`](crate::PluginInfo)).
     SetPluginEnabled(Id, bool),
     /// Makes an HTTP request (see [`HttpRequest`]); the answer comes as
-    /// the request's reply event. Check [`Env::network`](crate::Env) first.
+    /// the request's reply event. Check [`Capabilities::network`](crate::Capabilities) first.
     Http(HttpRequest),
     /// Uses the settings stored in the file at this storage path for
     /// [scoped](crate::SettingSpec::scoped) settings, e.g. those of the
@@ -263,7 +263,7 @@ pub enum Command {
     /// [`firmware`](crate::firmware). Ignored elsewhere.
     Firmware(crate::firmware::FirmwareCommand),
     /// Asks the shell to sleep once the frame is shown, where it can
-    /// ([`Env::sleep`](crate::Env)); the kernel is told when it wakes.
+    /// ([`Capabilities::sleep`](crate::Capabilities)); the kernel is told when it wakes.
     Sleep,
     /// Puts text on the clipboard, on devices with one also the system's,
     /// for other apps. Long text is cut at [`MAX_CLIPBOARD`] bytes.
@@ -319,7 +319,7 @@ pub enum Command {
     /// some systems tell the user every time an app reads the clipboard.
     ReadClipboard(Id, Params),
     /// Speaks text aloud where the device can
-    /// ([`Env::speech`](crate::Env)), instead of what is being spoken or
+    /// ([`Capabilities::speech`](crate::Capabilities)), instead of what is being spoken or
     /// after it ([`Speech::queue`]). Without speech the reply comes at
     /// once, failed. Speech stops when the screen that started it is
     /// closed.

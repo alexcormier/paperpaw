@@ -168,7 +168,7 @@ impl Plugin for CorePlugin {
                 "core.action.sleep",
                 Box::new(|env: &Env<'_>, out: &mut Vec<Command>| {
                     // The sleep screen first, if there is one, then sleep.
-                    if env.sleep && env.has_slot(&slots::SLEEP) {
+                    if env.caps.sleep && env.has_slot(&slots::SLEEP) {
                         out.push(Command::open_slot(slots::SLEEP));
                     }
                     out.push(Command::Sleep);

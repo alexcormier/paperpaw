@@ -69,7 +69,11 @@ pub struct Annotation {
 
 /// The file with the annotations of the book at `book`.
 pub fn file(book: &str) -> String {
-    format!(".quireink/annotations/{:016x}.txt", fnv1a64(book))
+    format!(
+        "{}/annotations/{:016x}.txt",
+        crate::data::DIR,
+        fnv1a64(book)
+    )
 }
 
 /// Every annotation of the book at `book`, by position.

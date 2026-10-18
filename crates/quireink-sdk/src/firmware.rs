@@ -32,7 +32,7 @@ pub use quireink_update::{
 pub const UPDATE_DIR: &str = "updates";
 /// The keys the reader chose to trust besides QuireInk's: one per line,
 /// as 64 hexadecimal digits.
-pub const TRUSTED_KEYS: &str = ".quireink/firmware-keys.txt";
+pub const TRUSTED_KEYS: &str = crate::data_path!("firmware-keys.txt");
 
 /// What the shell is told to do.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -205,7 +205,7 @@ pub fn trust(storage: &dyn Storage, key: &[u8; 32]) -> Result<(), StorageError> 
     if trusted_keys(storage).contains(key) {
         return Ok(());
     }
-    let _ = storage.create_dir(".quireink");
+    let _ = storage.create_dir(crate::data::DIR);
     let mut line = key_hex(key);
     line.push('\n');
     storage.append(TRUSTED_KEYS, line.as_bytes())

@@ -12,8 +12,49 @@ use crate::plugins::Plugins;
 use crate::settings::Settings;
 use crate::status::StatusItems;
 
+/// What the device and its shell can do: plugins offer only what works
+/// here, and menu entries that need more are left out
+/// ([`MenuNeed`](crate::MenuNeed)).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct Capabilities {
+    /// A touch screen.
+    pub touch: bool,
+    /// The network can be reached: HTTP requests
+    /// ([`Command::Http`](crate::Command::Http)), servers and connections.
+    /// Not whether it is connected now: where QuireInk manages Wi-Fi
+    /// ([`Env::wifi`]), work waits for a network a while.
+    pub network: bool,
+    /// QuireInk manages Wi-Fi itself ([`Env::wifi`]).
+    pub wifi: bool,
+    /// QuireInk is the device's firmware and updates it
+    /// ([`Env::firmware`]).
+    pub firmware: bool,
+    /// Text is spoken aloud ([`Command::Speak`](crate::Command::Speak)).
+    pub speech: bool,
+    /// QuireInk shows a screen while the device sleeps
+    /// ([`actions::SLEEP`](crate::builtin::actions::SLEEP)); where the
+    /// system sleeps on its own (Android), it shows its own.
+    pub sleep: bool,
+    /// The screen can be turned
+    /// ([`settings::ROTATION`](crate::builtin::settings::ROTATION)).
+    pub rotation: bool,
+    /// The screen is shown in the colours of
+    /// [`settings::TEXT_COLOR`](crate::builtin::settings::TEXT_COLOR) and
+    /// [`settings::PAPER_COLOR`](crate::builtin::settings::PAPER_COLOR).
+    pub colors: bool,
+    /// Buttons lie in a row below the screen, with a row of hints above
+    /// them ([`settings::BUTTON_HINTS`](crate::builtin::settings::BUTTON_HINTS)).
+    pub button_row: bool,
+    /// The system has a clipboard of its own, shared with other apps.
+    pub system_clipboard: bool,
+}
+
 /// Read-only view of the environment a plugin runs in.
+///
+/// Only the kernel makes one (fields are added in minor versions).
 #[derive(Clone, Copy)]
+#[non_exhaustive]
 pub struct Env<'a> {
     pub device: &'a DeviceInfo,
     /// Time of the event being handled.
@@ -52,11 +93,9 @@ pub struct Env<'a> {
     pub services: &'a crate::services::Services,
     /// What buttons, taps and swipes do (see [`keys`](crate::keys)).
     pub keys: &'a dyn crate::keys::KeyBindings,
-    /// Whether the device can reach the network: make HTTP requests
-    /// ([`Command::Http`](crate::Command::Http)), serve and connect. Not
-    /// whether it is connected now: where QuireInk manages Wi-Fi
-    /// ([`wifi`](Self::wifi)), work waits for a network a while.
-    pub network: bool,
+    /// What the device and its shell can do (network, speech, the sleep
+    /// screen …).
+    pub caps: Capabilities,
     /// Wi-Fi, where QuireInk manages it itself (see
     /// [`wifi`](crate::wifi)); `None` where the system does.
     pub wifi: Option<&'a crate::wifi::Wifi>,
@@ -68,13 +107,6 @@ pub struct Env<'a> {
     /// the system has a clipboard, in another app; read it with
     /// [`Command::ReadClipboard`](crate::Command::ReadClipboard).
     pub clipboard: bool,
-    /// Whether the device can speak text aloud
-    /// ([`Command::Speak`](crate::Command::Speak)).
-    pub speech: bool,
-    /// Whether QuireInk shows a screen while the device sleeps
-    /// ([`actions::SLEEP`](crate::builtin::actions::SLEEP)); where the
-    /// system sleeps on its own (Android), it shows its own.
-    pub sleep: bool,
     /// The slots some screen is bound to (see [`Env::has_slot`]).
     pub slots: &'a [crate::Id],
     /// Every screen: its id and the translation key of its name, e.g. for
@@ -90,6 +122,115 @@ pub struct Env<'a> {
     /// The device's storage. Plugins keep their own files below
     /// [`Env::plugin_dir`].
     pub storage: &'a dyn Storage,
+}
+
+/// The fields of an [`Env`], for the kernel to make one (plugins get it
+/// made).
+#[doc(hidden)]
+#[allow(missing_debug_implementations)]
+pub struct EnvParts<'a> {
+    pub device: &'a DeviceInfo,
+    /// Time of the event being handled.
+    pub now: Instant,
+    pub metrics: Metrics,
+    pub settings: &'a Settings,
+    pub i18n: &'a Translator,
+    pub fonts: &'a Fonts,
+    pub formats: &'a Formats,
+    /// Hyphenation patterns by language.
+    pub hyphenation: &'a Hyphenation,
+    pub menus: &'a Menus,
+    /// Every action, e.g. to offer them in a menu editor.
+    pub actions: &'a Actions,
+    /// Every plugin with its state, for plugin managers.
+    pub plugins: &'a Plugins,
+    /// The time of day and the battery, as far as the device knows them
+    /// (see [`time`](crate::time) for the local time).
+    pub status: &'a SystemStatus,
+    /// What the device did since QuireInk started: refreshes, input (see
+    /// [`usage`](crate::usage)).
+    pub usage: &'a crate::usage::Usage,
+    /// Items for status lines, from every plugin.
+    pub status_items: &'a StatusItems,
+    /// Filters of book text before it is laid out, from every plugin.
+    pub text_filters: &'a crate::filters::TextFilters,
+    /// Plugins' stylesheets for books, in the order of the plugins (see
+    /// [`Registrar::add_stylesheet`](crate::Registrar::add_stylesheet)).
+    pub stylesheets: &'a [alloc::borrow::Cow<'static, str>],
+    /// Widgets for screens that show them, from every plugin.
+    pub widgets: &'a crate::widgets::Widgets,
+    /// The steps of the first-run setup, from every plugin (see
+    /// [`setup`](crate::setup)).
+    pub setup: &'a crate::setup::SetupSteps,
+    /// What plugins offer each other (see [`services`](crate::services)).
+    pub services: &'a crate::services::Services,
+    /// What buttons, taps and swipes do (see [`keys`](crate::keys)).
+    pub keys: &'a dyn crate::keys::KeyBindings,
+    /// What the device and its shell can do (network, speech, the sleep
+    /// screen …).
+    pub caps: Capabilities,
+    /// Wi-Fi, where QuireInk manages it itself (see
+    /// [`wifi`](crate::wifi)); `None` where the system does.
+    pub wifi: Option<&'a crate::wifi::Wifi>,
+    /// Firmware updates, where QuireInk is the device's firmware (see
+    /// [`firmware`](crate::firmware)); `None` where it is an app.
+    pub firmware: Option<&'a crate::firmware::Firmware>,
+    /// Whether there is text on the clipboard, copied here
+    /// ([`Command::SetClipboard`](crate::Command::SetClipboard)) or, where
+    /// the system has a clipboard, in another app; read it with
+    /// [`Command::ReadClipboard`](crate::Command::ReadClipboard).
+    pub clipboard: bool,
+    /// The slots some screen is bound to (see [`Env::has_slot`]).
+    pub slots: &'a [crate::Id],
+    /// Every screen: its id and the translation key of its name, e.g. for
+    /// settings that differ per screen (what gestures do there).
+    pub screens: &'a [(crate::Id, alloc::borrow::Cow<'static, str>)],
+    /// The folders reading fonts are found in at start-up, the first one
+    /// QuireInk's own (where new fonts go); empty where the device has
+    /// only its built-in fonts.
+    pub font_dirs: &'a [alloc::string::String],
+    /// Passwords and keys, kept for every plugin in one place (see
+    /// [`secrets`](crate::secrets)).
+    pub secrets: &'a crate::secrets::Secrets,
+    /// The device's storage. Plugins keep their own files below
+    /// [`Env::plugin_dir`].
+    pub storage: &'a dyn Storage,
+}
+
+impl<'a> From<EnvParts<'a>> for Env<'a> {
+    fn from(p: EnvParts<'a>) -> Self {
+        Self {
+            device: p.device,
+            now: p.now,
+            metrics: p.metrics,
+            settings: p.settings,
+            i18n: p.i18n,
+            fonts: p.fonts,
+            formats: p.formats,
+            hyphenation: p.hyphenation,
+            menus: p.menus,
+            actions: p.actions,
+            plugins: p.plugins,
+            status: p.status,
+            usage: p.usage,
+            status_items: p.status_items,
+            text_filters: p.text_filters,
+            stylesheets: p.stylesheets,
+            widgets: p.widgets,
+            setup: p.setup,
+            services: p.services,
+            keys: p.keys,
+            caps: p.caps,
+            wifi: p.wifi,
+            firmware: p.firmware,
+            clipboard: p.clipboard,
+            slots: p.slots,
+            screens: p.screens,
+            font_dirs: p.font_dirs,
+            secrets: p.secrets,
+            storage: p.storage,
+        }
+    }
 }
 
 impl fmt::Debug for Env<'_> {
@@ -110,9 +251,10 @@ impl Env<'_> {
     }
 
     /// The directory where plugin `plugin` keeps its data, e.g.
-    /// `.quireink/plugins/reader`.
+    /// `.quireink/plugins/reader` (in QuireInk's own folder,
+    /// [`data::DIR`](crate::data::DIR)).
     pub fn plugin_dir(plugin: &str) -> alloc::string::String {
-        alloc::format!(".quireink/plugins/{plugin}")
+        alloc::format!("{}/plugins/{plugin}", crate::data::DIR)
     }
 }
 

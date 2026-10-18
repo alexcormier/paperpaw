@@ -106,7 +106,7 @@ impl AccountScreen {
 
     /// What the line below says when nothing happened yet.
     fn state_message(&self, env: &Env<'_>) -> String {
-        if !env.network {
+        if !env.caps.network {
             env.i18n.tr("kosync.no-network").to_string()
         } else if self.signed_in.is_empty() {
             env.i18n.tr("kosync.signed-out").to_string()
@@ -153,7 +153,7 @@ impl AccountScreen {
                 cx.command(Command::OpenSlot(slots::KEYBOARD, request));
             }
             Row::SignIn | Row::Create => {
-                if !env.network {
+                if !env.caps.network {
                     return self.show(cx, env.i18n.tr("kosync.no-network").to_string());
                 }
                 let Some(key) = self.key.clone().filter(|_| !self.user.is_empty()) else {

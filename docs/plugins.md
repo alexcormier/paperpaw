@@ -317,7 +317,7 @@ place for a key.
 ### The network
 
 `Command::Http` makes a request where the device has a network
-(`env.network`); the answer comes as the request's reply event, with
+(`env.caps.network`); the answer comes as the request's reply event, with
 the status and the body, or saved to a file (`save_to`) for large ones.
 Read large JSON answers as they stream with `json::stream`, so they
 need little memory. `Command::Serve` serves HTTP to the local network,

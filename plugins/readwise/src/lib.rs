@@ -166,7 +166,7 @@ fn notify(env: &Env<'_>, key: &str, out: &mut Vec<Command>) {
 /// Sends the highlights in the notes file at `path`, or asks for the
 /// token first.
 fn send(env: &Env<'_>, path: &str, out: &mut Vec<Command>) {
-    if !env.network {
+    if !env.caps.network {
         return notify(env, "readwise.no-network", out);
     }
     let Some(token) = env.secrets.get(SECRET) else {
@@ -259,7 +259,7 @@ impl Plugin for Readwise {
                     return;
                 };
                 let notes = parse(&String::from_utf8_lossy(&data));
-                if !notes.highlights.is_empty() && env.network {
+                if !notes.highlights.is_empty() && env.caps.network {
                     out.push(Command::Http(request(&notes, token)));
                 }
             }),

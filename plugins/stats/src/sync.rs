@@ -137,7 +137,7 @@ fn done(out: &mut Vec<Command>, message: String) {
 impl Sync {
     /// Starts a sync, or says why it cannot.
     pub(crate) fn start(&mut self, env: &Env<'_>, out: &mut Vec<Command>) {
-        if !env.network {
+        if !env.caps.network {
             return done(out, env.i18n.tr("stats.sync.no-network").to_string());
         }
         if env.settings.text(URL.as_str()).trim().is_empty() {

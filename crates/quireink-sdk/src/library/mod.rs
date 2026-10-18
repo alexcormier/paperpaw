@@ -32,7 +32,7 @@ use crate::hash::fnv1a64;
 use crate::{Env, Params, Storage};
 
 /// Where the library keeps what it knows.
-pub const DIR: &str = ".quireink/library";
+pub const DIR: &str = crate::data_path!("library");
 /// Books remembered for "recently read" order.
 const MAX_OPENED: usize = 100;
 /// Favourites kept at most.

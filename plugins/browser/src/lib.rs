@@ -217,7 +217,7 @@ impl BrowserScreen {
     fn load(&mut self, url: &str, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
         let host = quireink_sdk::web::host(url).to_string();
-        if !env.network {
+        if !env.caps.network {
             let message = env.i18n.tr("browser.no-network").to_string();
             return self.say(message, cx);
         }

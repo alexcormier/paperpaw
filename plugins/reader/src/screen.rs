@@ -754,7 +754,7 @@ impl ReaderScreen {
     /// that was on this page, where the device can.
     fn start_aloud(&mut self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        if !env.speech {
+        if !env.caps.speech {
             cx.command(Command::Notify(
                 env.i18n.tr("reader.aloud.unavailable").to_string(),
             ));

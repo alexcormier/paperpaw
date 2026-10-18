@@ -246,7 +246,7 @@ impl Popup {
     /// Where *Online* is in the header, if the word can be looked up
     /// online: left of the page note.
     fn online_area(&self, env: &Env<'_>, note: &str) -> Option<Rect> {
-        if !env.has_slot(&slots::LOOKUP_ONLINE) || !env.network {
+        if !env.has_slot(&slots::LOOKUP_ONLINE) || !env.caps.network {
             return None;
         }
         let font = self.style.font(env)?;

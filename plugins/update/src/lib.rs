@@ -51,8 +51,6 @@ fn read_pair(storage: &dyn Storage, name: &str) -> Option<(String, String)> {
 }
 
 pub(crate) fn write_pair(storage: &dyn Storage, name: &str, first: &str, second: &str) {
-    let _ = storage.create_dir(".quireink");
-    let _ = storage.create_dir(".quireink/plugins");
     let _ = storage.create_dir(&Env::plugin_dir(PLUGIN.as_str()));
     let _ = storage.write(&file(name), format!("{first}\n{second}\n").as_bytes());
 }

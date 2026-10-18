@@ -167,7 +167,7 @@ impl BrowseScreen {
     /// Loads feed `url`; `back` when returning to it.
     fn load(&mut self, url: &str, back: bool, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        if !env.network {
+        if !env.caps.network {
             let message = env.i18n.tr("opds.no-network").to_string();
             return self.say(message, cx);
         }
@@ -274,7 +274,7 @@ impl BrowseScreen {
                 });
                 continue;
             }
-            if !env.network {
+            if !env.caps.network {
                 return;
             }
             self.fetching = Some(i);
@@ -397,7 +397,7 @@ impl BrowseScreen {
         };
         let readable = |ext: &str| env.formats.supports(&format!("book.{ext}"));
         if let Some((book, ext)) = entry.readable_book(readable) {
-            if !env.network {
+            if !env.caps.network {
                 let message = env.i18n.tr("opds.no-network").to_string();
                 return self.say(message, cx);
             }

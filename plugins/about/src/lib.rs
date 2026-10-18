@@ -23,9 +23,11 @@ pub const PLUGIN: Id = Id::new_static("about");
 pub const OPEN: Id = Id::new_static("about.open");
 /// The licences, from `tools/licences/build.py`.
 const LICENCES: &str = include_str!("../licences.md");
-/// Where the page is written for the reader: a hidden folder, so it is
-/// no book.
-const PAGE: &str = ".quireink/about.md";
+/// Where the page is written for the reader: in the plugin's folder, so
+/// it is no book.
+fn page_path() -> alloc::string::String {
+    format!("{}/about.md", Env::plugin_dir(PLUGIN.as_str()))
+}
 
 /// The page's text.
 fn page(env: &Env<'_>) -> alloc::string::String {
@@ -56,11 +58,12 @@ impl Plugin for About {
             id: OPEN,
             title: Cow::Borrowed("about.title"),
             handler: Some(Box::new(|env: &Env<'_>, out: &mut Vec<Command>| {
-                let _ = env.storage.create_dir(".quireink");
-                if env.storage.write(PAGE, page(env).as_bytes()).is_ok() {
+                let path = page_path();
+                let _ = env.storage.create_dir(&Env::plugin_dir(PLUGIN.as_str()));
+                if env.storage.write(&path, page(env).as_bytes()).is_ok() {
                     out.push(Command::OpenSlot(
                         slots::READER,
-                        Params::new().with(params::PATH, PAGE),
+                        Params::new().with(params::PATH, path),
                     ));
                 }
             })),

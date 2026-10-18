@@ -211,7 +211,7 @@ impl Fetch {
         if self.running {
             return;
         }
-        if !env.network {
+        if !env.caps.network {
             return done(env, "wallabag.no-network", &[], out);
         }
         let (Some(password), Some(secret)) = (env.secrets.get(PASSWORD), env.secrets.get(SECRET))

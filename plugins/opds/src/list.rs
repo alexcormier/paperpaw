@@ -99,7 +99,7 @@ impl ListScreen {
                 let mut out = Vec::new();
                 if sync.running() {
                     sync.stop(&mut out);
-                } else if !env.network {
+                } else if !env.caps.network {
                     drop(sync);
                     self.message = Some(env.i18n.tr("opds.no-network").to_string());
                 } else {
@@ -156,7 +156,7 @@ impl ListScreen {
                 Params::new().with(ID, i.to_string()),
             )),
             "sync" => {
-                if !env.network {
+                if !env.caps.network {
                     self.message = Some(env.i18n.tr("opds.no-network").to_string());
                     return self.redraw(cx);
                 }

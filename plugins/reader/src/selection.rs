@@ -162,7 +162,7 @@ pub(crate) fn items(env: &Env<'_>, highlight: Option<bool>) -> Vec<Item> {
 /// Whether selected text can be translated: a translator is installed
 /// and there is a network.
 pub(crate) fn translates(env: &Env<'_>) -> bool {
-    env.network && env.has_slot(&quireink_sdk::builtin::slots::TRANSLATE)
+    env.caps.network && env.has_slot(&quireink_sdk::builtin::slots::TRANSLATE)
 }
 
 /// Where the bar is: over the status line at the bottom.

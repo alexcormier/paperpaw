@@ -1,7 +1,11 @@
 # Files on the card
 
 What QuireInk keeps on a device's storage, and how each file stays
-readable as QuireInk changes. Every file is one of three kinds:
+readable as QuireInk changes. QuireInk's own files are in `.quireink`
+(`quireink_sdk::data::DIR`), each plugin's in `.quireink/plugins/<id>`
+(`Env::plugin_dir`). These are paths in the shell's storage: a shell may
+keep the folder elsewhere than the books, e.g. in an app's own storage.
+Every file is one of three kinds:
 
 - **Data**: what the reader made or chose (settings, positions, notes,
   statistics). Every later version reads it. Its format has a version
@@ -67,7 +71,7 @@ plugin converts books differently; a plugin must keep that mapping.
 | `.quireink/plugins/stats/days.bin` | stats | the bytes of `pages.bin` it covers |
 | `.quireink/plugins/dictionary/<hash>/` | dictionary | the dictionary's `.ifo` |
 | `.quireink/plugins/opds/feed.json`, `news/headlines.txt`, `wallabag/entries.json` | their plugins | fetched again |
-| `.quireink/about.md`, `.quireink/tmp/` | about, kernel | written when needed |
+| `.quireink/plugins/about/about.md`, `.quireink/tmp/` | about, kernel | written when needed |
 
 ## Foreign
 

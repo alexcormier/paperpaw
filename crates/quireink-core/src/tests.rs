@@ -2034,12 +2034,12 @@ fn the_power_button_puts_the_device_to_sleep_where_the_shell_can() {
     // Where the system sleeps on its own (Android), nothing happens.
     let mut kernel = Kernel::builder(DEVICE).build().unwrap();
     kernel.start(Instant(0));
-    assert!(!kernel.shared.env(Instant(0)).sleep);
+    assert!(!kernel.shared.env(Instant(0)).caps.sleep);
     assert!(!press(&mut kernel, 100, "power").sleep());
     // Where the shell sleeps, it is told to.
     let mut kernel = Kernel::builder(DEVICE).sleep(true).build().unwrap();
     kernel.start(Instant(0));
-    assert!(kernel.shared.env(Instant(0)).sleep);
+    assert!(kernel.shared.env(Instant(0)).caps.sleep);
     assert!(press(&mut kernel, 100, "power").sleep());
     assert!(!press(&mut kernel, 200, "confirm").sleep());
 }
@@ -2082,7 +2082,7 @@ fn speech_goes_to_the_shell_and_stops_with_its_screen() {
         .build()
         .unwrap();
     kernel.start(Instant(0));
-    assert!(!kernel.shared.env(Instant(0)).speech);
+    assert!(!kernel.shared.env(Instant(0)).caps.speech);
     kernel.output.commands.push(speech("a"));
     kernel.run_commands();
     assert!(kernel.take_speech().is_empty());
@@ -2543,7 +2543,7 @@ fn network_work_waits_for_wifi_and_goes_on_once_online() {
     use crate::{WifiCommand, WifiEvent, WifiState};
     let log = log();
     let mut kernel = wifi_kernel(&log);
-    assert!(kernel.shared.env(Instant(0)).network);
+    assert!(kernel.shared.env(Instant(0)).caps.network);
     assert_eq!(
         kernel.shared.env(Instant(0)).wifi.unwrap().state,
         WifiState::Off

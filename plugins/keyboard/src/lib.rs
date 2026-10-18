@@ -341,7 +341,7 @@ impl KeyboardScreen {
             return Vec::new();
         };
         let mut kinds = Vec::new();
-        if env.network && env.has_slot(&slots::REMOTE_KEYBOARD) {
+        if env.caps.network && env.has_slot(&slots::REMOTE_KEYBOARD) {
             kinds.push(FieldButton::Phone);
         }
         if env.clipboard {

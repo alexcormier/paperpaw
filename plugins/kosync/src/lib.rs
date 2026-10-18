@@ -18,7 +18,7 @@
 //!   below a path (`https://example.org/kosync`) or over plain `http` in a
 //!   home network.
 //!
-//! Needs a device with network ([`Env::network`]).
+//! Needs a device with network ([`Capabilities::network`](quireink_sdk::Capabilities)).
 
 #![no_std]
 
@@ -187,7 +187,7 @@ impl State {
 
     /// Whether to sync by itself now.
     fn active(&self, env: &Env<'_>) -> bool {
-        env.network && env.settings.bool(AUTO.as_str()) && self.signed_in(env)
+        env.caps.network && env.settings.bool(AUTO.as_str()) && self.signed_in(env)
     }
 
     fn signed_in(&self, env: &Env<'_>) -> bool {
@@ -596,7 +596,7 @@ impl Plugin for Kosync {
             handler: Some(Box::new(move |env: &Env<'_>, out: &mut Vec<Command>| {
                 let mut state = s.borrow_mut();
                 state.load(env);
-                if !env.network || !state.signed_in(env) {
+                if !env.caps.network || !state.signed_in(env) {
                     out.push(Command::OpenScreen(ACCOUNT_SCREEN, Params::new()));
                     return;
                 }

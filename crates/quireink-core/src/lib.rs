@@ -69,10 +69,10 @@ use quireink_sdk::builtin::{
     settings as core_settings, slots,
 };
 use quireink_sdk::{
-    Actions, Command, Cx, Direction, Env, EventHandler, Fonts, Formats, Gesture, GestureKind,
-    Handled, Hint, Hints, Hyphenation, Id, Manifest, Menus, Metrics, Output, Params, Plugin,
-    PluginInfo, PluginState, Plugins, RegisterError, RequiredFor, SDK_VERSION, Screen, Settings,
-    StatusItems,
+    Actions, Capabilities, Command, Cx, Direction, Env, EnvParts, EventHandler, Fonts, Formats,
+    Gesture, GestureKind, Handled, Hint, Hints, Hyphenation, Id, Manifest, Menus, Metrics, Output,
+    Params, Plugin, PluginInfo, PluginState, Plugins, RegisterError, RequiredFor, SDK_VERSION,
+    Screen, Settings, StatusItems,
 };
 
 use crate::core_plugin::{CORE, CorePlugin};
@@ -245,14 +245,10 @@ pub struct KernelBuilder {
     device_keymap: Option<Cow<'static, str>>,
     user_config: Option<String>,
     glyph_cache: usize,
-    network: bool,
-    wifi: bool,
+    /// What the shell does; the device's touch, the firmware and the row
+    /// of buttons come from their own settings at the end.
+    caps: Capabilities,
     firmware: Option<Firmware>,
-    system_clipboard: bool,
-    speech: bool,
-    sleep: bool,
-    rotation: bool,
-    colors: bool,
     button_row: &'static [&'static str],
     frame_rows: Option<u16>,
     row_align: u16,
@@ -362,8 +358,8 @@ impl KernelBuilder {
     /// [`Kernel::take_wifi_calls`] and reports with [`Kernel::wifi_event`]);
     /// it implies [`network`](Self::network). See [`quireink_sdk::wifi`].
     pub fn wifi(mut self, managed: bool) -> Self {
-        self.wifi = managed;
-        self.network |= managed;
+        self.caps.wifi = managed;
+        self.caps.network |= managed;
         self
     }
 
@@ -376,7 +372,7 @@ impl KernelBuilder {
     }
 
     pub fn network(mut self, available: bool) -> Self {
-        self.network = available;
+        self.caps.network = available;
         self
     }
 
@@ -384,21 +380,21 @@ impl KernelBuilder {
     /// text (see [`Kernel::wants_clipboard`]); without, only text copied
     /// in QuireInk is pasted.
     pub fn system_clipboard(mut self, available: bool) -> Self {
-        self.system_clipboard = available;
+        self.caps.system_clipboard = available;
         self
     }
 
     /// The shell speaks text aloud (see [`Kernel::take_speech`]); without,
     /// plugins' speech fails at once.
     pub fn speech(mut self, available: bool) -> Self {
-        self.speech = available;
+        self.caps.speech = available;
         self
     }
 
     /// The shell sleeps after showing QuireInk's sleep screen (see
     /// [`Effect::Sleep`]); without, the system has its own (Android).
     pub fn sleep(mut self, available: bool) -> Self {
-        self.sleep = available;
+        self.caps.sleep = available;
         self
     }
 
@@ -406,7 +402,7 @@ impl KernelBuilder {
     /// [`settings::ROTATION`](quireink_sdk::builtin::settings::ROTATION)
     /// says (see [`Kernel::rotation`]); without, it is not offered.
     pub fn rotation(mut self, available: bool) -> Self {
-        self.rotation = available;
+        self.caps.rotation = available;
         self
     }
 
@@ -424,7 +420,7 @@ impl KernelBuilder {
     }
 
     pub fn colors(mut self, available: bool) -> Self {
-        self.colors = available;
+        self.caps.colors = available;
         self
     }
 
@@ -472,6 +468,11 @@ impl KernelBuilder {
             }),
             meter: meter.clone(),
         });
+        // What the shell said it does, and what follows from the rest.
+        let mut caps = self.caps;
+        caps.touch = self.device.input.touch;
+        caps.firmware = self.firmware.is_some();
+        caps.button_row = !self.button_row.is_empty();
         let mut kernel = Kernel {
             shared: Shared {
                 meter,
@@ -494,13 +495,11 @@ impl KernelBuilder {
                 input_filters: quireink_sdk::filters::InputFilters::new(),
                 refresh_filters: quireink_sdk::filters::RefreshFilters::new(),
                 stylesheets: Vec::new(),
-                network: self.network,
-                wifi: self.wifi.then(quireink_sdk::wifi::Wifi::default),
+                caps,
+                wifi: caps.wifi.then(quireink_sdk::wifi::Wifi::default),
                 firmware: self.firmware,
                 clipboard: String::new(),
                 system_clipboard: false,
-                speech: self.speech,
-                sleep: self.sleep,
                 slots: Vec::new(),
                 screens: Vec::new(),
                 font_dirs: Vec::new(),
@@ -555,7 +554,7 @@ impl KernelBuilder {
             sockets: sockets::Sockets::default(),
             request_bodies: Vec::new(),
             incoming: Vec::new(),
-            reads_clipboard: self.system_clipboard,
+            reads_clipboard: caps.system_clipboard,
             speech_calls: Vec::new(),
             speaking: Vec::new(),
             spoken_focus: None,
@@ -574,20 +573,7 @@ impl KernelBuilder {
             plugin_defaults: Vec::new(),
             now: Instant::default(),
         };
-        let (touch, speech) = (kernel.shared.device.input.touch, kernel.shared.speech);
-        kernel.shared.menus.set_device(touch, speech);
-        kernel.shared.menus.set_sleep(kernel.shared.sleep);
-        kernel.shared.menus.set_rotation(self.rotation);
-        kernel.shared.menus.set_colors(self.colors);
-        kernel.shared.menus.set_wifi(kernel.shared.wifi.is_some());
-        kernel
-            .shared
-            .menus
-            .set_firmware(kernel.shared.firmware.is_some());
-        kernel
-            .shared
-            .menus
-            .set_button_row(!kernel.button_row.is_empty());
+        kernel.shared.menus.set_capabilities(caps);
         // Colour screens open documents with colour pictures (ADR 0015).
         let color = kernel.shared.device.display.format.is_color();
         kernel.shared.formats.set_color(color);
@@ -936,14 +922,8 @@ impl Kernel {
             device_keymap: None,
             user_config: None,
             glyph_cache: DEFAULT_GLYPH_CACHE,
-            network: false,
-            wifi: false,
+            caps: Capabilities::default(),
             firmware: None,
-            system_clipboard: false,
-            speech: false,
-            sleep: false,
-            rotation: false,
-            colors: false,
             button_row: &[],
             frame_rows: None,
             row_align: 1,
@@ -1261,7 +1241,7 @@ impl Kernel {
     /// it ([`core_settings::SPEAK_FOCUS`]); not while something is read
     /// aloud.
     fn speak_focus(&mut self) {
-        if !self.shared.speech
+        if !self.shared.caps.speech
             || !self
                 .shared
                 .settings
@@ -1338,7 +1318,7 @@ impl Kernel {
             .shared
             .settings
             .int(core_settings::SLEEP_AFTER.as_str());
-        (self.shared.sleep && minutes > 0)
+        (self.shared.caps.sleep && minutes > 0)
             .then(|| self.last_activity.add_millis(minutes as u64 * 60_000))
     }
 
@@ -1570,7 +1550,7 @@ impl Kernel {
         self.shared.secrets.apply(change);
         let text = self.shared.secrets.encode();
         let storage = self.shared.storage.as_ref();
-        let _ = storage.create_dir(".quireink");
+        let _ = storage.create_dir(quireink_sdk::data::DIR);
         let saved = if self.shared.secrets.is_empty() {
             storage.remove(secrets::FILE).or(Ok(()))
         } else {
@@ -1676,7 +1656,7 @@ impl Kernel {
 
     /// Starts speaking for a plugin, or tells it that it cannot.
     fn speak(&mut self, speech: quireink_sdk::Speech) {
-        if !self.shared.speech {
+        if !self.shared.caps.speech {
             return self.reply_speech(speech.reply, speech.params, false);
         }
         let id = self.next_speech;
@@ -1742,7 +1722,7 @@ impl Kernel {
             let (number, ..) = self.servers.remove(at);
             self.server_calls.push(ServerCall::Stop { server: number });
         }
-        if !self.shared.network {
+        if !self.shared.caps.network {
             let params = Params::new()
                 .with(
                     quireink_sdk::builtin::params::ID,
@@ -1930,8 +1910,9 @@ impl Kernel {
                 body: true,
             } => {
                 // The body is saved as it comes, then the plugin is told.
-                let path = format!(".quireink/tmp/request-{request}");
-                let _ = self.shared.storage.create_dir(".quireink/tmp");
+                let tmp = format!("{}/tmp", quireink_sdk::data::DIR);
+                let path = format!("{tmp}/request-{request}");
+                let _ = self.shared.storage.create_dir(&tmp);
                 if self.shared.storage.write(&path, &[]).is_ok() {
                     self.request_bodies.push((request, path.clone()));
                     self.incoming.push(Incoming {
@@ -3130,7 +3111,7 @@ impl Kernel {
             Command::RunAction(action) => self.dispatch(action),
             Command::SetPluginEnabled(id, enabled) => self.set_plugin_enabled(&id, enabled),
             Command::Restart => self.restart = true,
-            Command::Sleep => self.sleep = self.shared.sleep,
+            Command::Sleep => self.sleep = self.shared.caps.sleep,
             Command::SetSecret(change) => self.set_secret(change),
             Command::Firmware(command) => {
                 if self.shared.firmware.is_some() {
@@ -3196,7 +3177,7 @@ impl Kernel {
                 let mut out = Vec::new();
                 self.sockets.command(
                     command,
-                    self.shared.network,
+                    self.shared.caps.network,
                     self.stack.len(),
                     &*self.shared.storage,
                     &mut out,
@@ -3723,7 +3704,7 @@ impl Kernel {
 
     /// Queues an HTTP request for the shell, or fails it without network.
     fn request(&mut self, request: quireink_sdk::HttpRequest) {
-        if !self.shared.network {
+        if !self.shared.caps.network {
             let params = request
                 .params
                 .with(quireink_sdk::http_params::STATUS, "0")
@@ -4083,7 +4064,8 @@ struct Shared {
     refresh_filters: quireink_sdk::filters::RefreshFilters,
     /// Plugins' stylesheets for books.
     stylesheets: Vec<Cow<'static, str>>,
-    network: bool,
+    /// What the device and its shell can do.
+    caps: Capabilities,
     /// Wi-Fi, where QuireInk manages it (see [`KernelBuilder::wifi`]).
     wifi: Option<quireink_sdk::wifi::Wifi>,
     /// Firmware updates, where QuireInk is the firmware (see
@@ -4094,10 +4076,6 @@ struct Shared {
     /// The system's clipboard has text (see
     /// [`Kernel::set_clipboard_available`]).
     system_clipboard: bool,
-    /// The shell speaks (see [`KernelBuilder::speech`]).
-    speech: bool,
-    /// The shell sleeps after the sleep screen (see [`KernelBuilder::sleep`]).
-    sleep: bool,
     /// Slots some screen is bound to.
     slots: Vec<Id>,
     /// Every screen, with the translation key of its name.
@@ -4117,7 +4095,7 @@ struct Shared {
 
 impl Shared {
     fn env(&self, now: Instant) -> Env<'_> {
-        Env {
+        Env::from(EnvParts {
             device: &self.device,
             now,
             metrics: Metrics::new(self.device.display.dpi),
@@ -4137,19 +4115,17 @@ impl Shared {
             services: &self.services,
             text_filters: &self.text_filters,
             stylesheets: &self.stylesheets,
-            network: self.network,
+            caps: self.caps,
             wifi: self.wifi.as_ref(),
             firmware: self.firmware.as_ref(),
             clipboard: self.system_clipboard || !self.clipboard.is_empty(),
-            speech: self.speech,
-            sleep: self.sleep,
             slots: &self.slots,
             screens: &self.screens,
             font_dirs: &self.font_dirs,
             secrets: &self.secrets,
             storage: self.storage.as_ref(),
             keys: &self.keymap,
-        }
+        })
     }
 }
 

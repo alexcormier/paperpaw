@@ -37,11 +37,11 @@ pub struct MenuSection {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum MenuNeed {
-    /// A device that speaks ([`Env::speech`](crate::Env)): hidden
+    /// A device that speaks ([`Capabilities::speech`](crate::Capabilities)): hidden
     /// elsewhere, also where the user listed it.
     Speech,
     /// A device where QuireInk shows the sleep screen
-    /// ([`Env::sleep`](crate::Env)), hidden elsewhere.
+    /// ([`Capabilities::sleep`](crate::Capabilities)), hidden elsewhere.
     Sleep,
     /// A device whose screen QuireInk can turn
     /// ([`settings::ROTATION`](crate::builtin::settings::ROTATION)),
@@ -95,17 +95,8 @@ pub struct Menus {
     needs: VecMap<Id, MenuNeed>,
     /// The device has a touch screen; it cannot speak; QuireInk shows
     /// its sleep screen.
-    touch: bool,
-    mute: bool,
-    sleeps: bool,
-    /// The screen can be turned.
-    turns: bool,
-    /// The shell tints the screen.
-    tints: bool,
-    /// Buttons lie in a row below the screen.
-    button_row: bool,
-    wifi: bool,
-    firmware: bool,
+    /// What the device can do, for entries with a [`MenuNeed`].
+    caps: crate::Capabilities,
 }
 
 impl Menus {
@@ -126,48 +117,9 @@ impl Menus {
         self.needs.shrink_to_fit();
     }
 
-    /// What the device offers, for entries with a [`MenuNeed`].
-    pub fn set_device(&mut self, touch: bool, speech: bool) {
-        self.touch = touch;
-        self.mute = !speech;
-    }
-
-    /// Whether QuireInk shows the sleep screen here, for entries that
-    /// need it ([`MenuNeed::Sleep`]).
-    pub fn set_sleep(&mut self, sleeps: bool) {
-        self.sleeps = sleeps;
-    }
-
-    /// Whether the screen can be turned here, for entries that need it
-    /// ([`MenuNeed::Rotation`]).
-    pub fn set_rotation(&mut self, turns: bool) {
-        self.turns = turns;
-    }
-
-    /// Whether buttons lie in a row below the screen, for entries that
-    /// need it ([`MenuNeed::ButtonRow`]).
-    pub fn set_button_row(&mut self, row: bool) {
-        self.button_row = row;
-    }
-
-    /// Whether the shell shows the screen in the colours of the settings
-    /// [`TEXT_COLOR`](crate::builtin::settings::TEXT_COLOR) and
-    /// [`PAPER_COLOR`](crate::builtin::settings::PAPER_COLOR), for entries
-    /// that need it ([`MenuNeed::Colors`]).
-    pub fn set_colors(&mut self, tints: bool) {
-        self.tints = tints;
-    }
-
-    /// Whether QuireInk manages Wi-Fi here, for entries that need it
-    /// ([`MenuNeed::Wifi`]).
-    pub fn set_wifi(&mut self, wifi: bool) {
-        self.wifi = wifi;
-    }
-
-    /// Whether QuireInk is the device's firmware, for entries that need
-    /// it ([`MenuNeed::Firmware`]).
-    pub fn set_firmware(&mut self, firmware: bool) {
-        self.firmware = firmware;
+    /// What the device can do, for entries with a [`MenuNeed`].
+    pub fn set_capabilities(&mut self, caps: crate::Capabilities) {
+        self.caps = caps;
     }
 
     /// Offers `item` only where `need` is met.
@@ -192,15 +144,16 @@ impl Menus {
     /// Whether `item` is offered here; `listed` if the user put it into
     /// the menu.
     fn offered(&self, item: &str, listed: bool) -> bool {
+        let caps = &self.caps;
         match self.needs.get(item) {
-            Some(MenuNeed::Speech) => !self.mute,
-            Some(MenuNeed::Sleep) => self.sleeps,
-            Some(MenuNeed::Rotation) => self.turns,
-            Some(MenuNeed::Colors) => self.tints,
-            Some(MenuNeed::ButtonRow) => self.button_row,
-            Some(MenuNeed::Wifi) => self.wifi,
-            Some(MenuNeed::Firmware) => self.firmware,
-            Some(MenuNeed::NoTouch) => listed || !self.touch,
+            Some(MenuNeed::Speech) => caps.speech,
+            Some(MenuNeed::Sleep) => caps.sleep,
+            Some(MenuNeed::Rotation) => caps.rotation,
+            Some(MenuNeed::Colors) => caps.colors,
+            Some(MenuNeed::ButtonRow) => caps.button_row,
+            Some(MenuNeed::Wifi) => caps.wifi,
+            Some(MenuNeed::Firmware) => caps.firmware,
+            Some(MenuNeed::NoTouch) => listed || !caps.touch,
             None => true,
         }
     }
@@ -365,7 +318,10 @@ mod tests {
         menus.set_title(Id::new_static("a.links"), Cow::Borrowed("Links"));
         menus.set_need(Id::new_static("a.links"), MenuNeed::NoTouch);
         assert_eq!(titles(&menus).last(), Some(&"Links"));
-        menus.set_device(true, false);
+        menus.set_capabilities(crate::Capabilities {
+            touch: true,
+            ..Default::default()
+        });
         assert_eq!(titles(&menus).last(), Some(&"Second"));
         // Listed by the user, it shows; one that needs speech does not.
         menus.set_need(Id::new_static("a.second"), MenuNeed::Speech);

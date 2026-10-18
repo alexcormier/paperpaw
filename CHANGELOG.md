@@ -6,6 +6,15 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: `Env` is `#[non_exhaustive]` (new fields break no plugin). What
+  the device and its shell can do is `env.caps` (`Capabilities`: touch,
+  network, Wi-Fi, firmware, speech, the sleep screen, rotation, colours,
+  the row of buttons, a system clipboard), replacing `env.network`,
+  `env.speech` and `env.sleep`; menu entries' needs are checked against
+  it (`Menus::set_capabilities`).
+- SDK: QuireInk's folder is one constant, `data::DIR`, with
+  `data_path!` for constants; the about page is written in its plugin's
+  folder.
 - Versioned data files ([data-files.md](docs/data-files.md)): every file
   QuireInk keeps on the card is listed as data, cache or another
   program's format. Data formats have a version (`quireink_sdk::data`,

@@ -152,7 +152,7 @@ fn request(feed: &Feed, index: usize, last: usize, (done, failed): (usize, usize
 /// Starts fetching feeds `from..=last`.
 fn fetch(env: &Env<'_>, from: usize, last: usize, out: &mut Vec<Command>) {
     let feeds = load(env.storage);
-    if !env.network {
+    if !env.caps.network {
         out.push(Command::Notify(env.i18n.tr("news.no-network").to_string()));
         return;
     }

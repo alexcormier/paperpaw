@@ -12,7 +12,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 /// Where the secrets are kept.
-pub const FILE: &str = ".quireink/secrets.txt";
+pub const FILE: &str = crate::data_path!("secrets.txt");
 
 /// Mixed into the stored values, so they are not read at a glance.
 const VEIL: &[u8] = b"QuireInk keeps this out of sight, not safe";

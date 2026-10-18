@@ -81,7 +81,7 @@ pub use command::{
     Command, HttpRequest, MAX_CLIPBOARD, ServerResponse, SocketRead, Speech, http_params,
     server_params, socket_params, speech_params,
 };
-pub use env::{Env, Metrics};
+pub use env::{Capabilities, Env, EnvParts, Metrics};
 pub use event::EventHandler;
 pub use fonts::{FontHandle, FontSet, FontSpec, Fonts};
 pub use formats::{FormatOpener, FormatPrepared, FormatSpec, Formats, IMAGE_FIT, OpenOptions};

@@ -25,6 +25,14 @@ use alloc::string::String;
 
 use quireink_platform::{Storage, StorageError};
 
+/// QuireInk's own folder, beside the books: settings, the library, every
+/// plugin's data ([`Env::plugin_dir`](crate::Env::plugin_dir)). A path in
+/// the shell's storage, not on a disk: a shell may keep it elsewhere than
+/// the books (e.g. in an app's own storage), as its storage maps paths.
+/// [`data_path!`](crate::data_path) names a file in it where a constant is
+/// needed.
+pub const DIR: &str = ".quireink";
+
 /// The first line of a file from version 2 on, before the number.
 pub const MARK: &str = "# format ";
 
@@ -138,10 +146,24 @@ impl Format {
     }
 }
 
+/// A path in QuireInk's own folder ([`data::DIR`](crate::data::DIR)), as
+/// a constant: `data_path!("secrets.txt")` is `.quireink/secrets.txt`.
+#[macro_export]
+macro_rules! data_path {
+    ($path:literal) => {
+        concat!(".quireink/", $path)
+    };
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::memory_storage::MemoryStorage;
+
+    #[test]
+    fn data_paths_are_in_the_folder() {
+        assert_eq!(crate::data_path!("a/b.txt"), format!("{DIR}/a/b.txt"));
+    }
 
     /// Version 2 renamed `colour` to `color`, version 3 added a section.
     const FORMAT: Format = Format::new(

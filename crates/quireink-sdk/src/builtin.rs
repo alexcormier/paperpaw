@@ -44,7 +44,7 @@ pub mod actions {
     pub const TOOLS: Id = Id::new_static("core.tools");
     /// Puts the device to sleep: shows the sleep screen (slot
     /// [`SLEEP`](super::slots::SLEEP)), then the shell sleeps until it is
-    /// woken (see [`Env::sleep`](crate::Env)). Where the system sleeps on
+    /// woken (see [`Capabilities::sleep`](crate::Capabilities)). Where the system sleeps on
     /// its own (Android), nothing sends it.
     pub const SLEEP: Id = Id::new_static("core.sleep");
     /// Opens the quick panel from the top of the screen: the menu
@@ -353,7 +353,7 @@ pub mod settings {
     pub const FLASH_SCREENS: Id = Id::new_static("core.flash-screens");
     /// Minutes without use after which the device goes to sleep by itself
     /// (`0`: never), where QuireInk puts it to sleep
-    /// ([`Env::sleep`](crate::Env)). Turning pages, also by themselves,
+    /// ([`Capabilities::sleep`](crate::Capabilities)). Turning pages, also by themselves,
     /// counts as use; reading aloud, downloads and servers keep it awake.
     pub const SLEEP_AFTER: Id = Id::new_static("core.sleep-after");
     /// The charge in percent at and below which the battery counts as low

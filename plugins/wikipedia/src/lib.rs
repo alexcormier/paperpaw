@@ -270,7 +270,7 @@ impl Screen for Summary {
         }
         self.asked = true;
         let env = *cx.env();
-        if !env.network {
+        if !env.caps.network {
             let text = env.i18n.tr("wikipedia.no-network").to_string();
             self.set_text(&env, text);
             cx.request_redraw();

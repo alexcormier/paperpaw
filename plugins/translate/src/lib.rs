@@ -248,7 +248,7 @@ impl Panel {
     /// Sends the text off with `key`, or says what is missing.
     fn ask(&mut self, env: &Env<'_>, key: &str, cx: &mut Cx<'_, '_>) {
         self.needs_key = key.is_empty();
-        let message = if !env.network {
+        let message = if !env.caps.network {
             Some("translate.no-network")
         } else if self.needs_key {
             Some("translate.needs-key")
