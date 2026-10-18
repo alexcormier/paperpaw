@@ -75,9 +75,10 @@ impl Kernel {
         }
         // The user's bindings as the file has them now.
         let source = read_config(self.shared.storage.as_ref()).unwrap_or_default();
-        self.keymap_sources
+        self.keys
+            .sources
             .retain(|(origin, _)| *origin != Origin::User);
-        self.keymap_sources.push((Origin::User, Cow::Owned(source)));
+        self.keys.sources.push((Origin::User, Cow::Owned(source)));
         self.rebuild_keymap();
     }
 
@@ -191,8 +192,8 @@ impl Kernel {
         self.hint.shown.clear();
         self.end_notice();
         self.sync_content();
-        self.unrendered = None;
-        self.rendered = None;
+        self.frame.unrendered = None;
+        self.frame.rendered = None;
         let bounds = self.framebuffer.bounds();
         self.screen_changed(bounds, false);
     }
@@ -244,7 +245,7 @@ impl Kernel {
     /// After the screen stack changed: redraw `region`, flashing for full
     /// screens and refreshing quickly when only overlays changed.
     pub(crate) fn screen_changed(&mut self, region: Rect, overlays_only: bool) {
-        self.captured.clear();
+        self.input.captured.clear();
         self.screen_timer = None;
         self.output.wake_at = None;
         self.invalidate(region);
@@ -267,9 +268,9 @@ impl Kernel {
     pub(crate) fn stop_for_closed_screens(&mut self) {
         let screens = self.stack.len();
         let out = &mut self.output.commands;
-        self.servers.stop_for_closed_screens(screens, out);
-        self.sockets.close_for_closed_screens(screens, out);
-        self.speech.stop_for_closed_screens(screens);
+        self.io.servers.stop_for_closed_screens(screens, out);
+        self.io.sockets.close_for_closed_screens(screens, out);
+        self.io.speech.stop_for_closed_screens(screens);
     }
 }
 

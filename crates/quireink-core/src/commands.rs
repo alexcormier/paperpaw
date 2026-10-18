@@ -46,8 +46,8 @@ impl Kernel {
             sleep: mem::take(&mut self.sleep),
             ..Effects::default()
         };
-        if let Some(dirty) = self.pending.take() {
-            self.unrendered = Some(self.unrendered.map_or(dirty, |u| u.union(&dirty)));
+        if let Some(dirty) = self.frame.pending.take() {
+            self.frame.unrendered = Some(self.frame.unrendered.map_or(dirty, |u| u.union(&dirty)));
             let interval = self
                 .shared
                 .settings
@@ -57,10 +57,13 @@ impl Kernel {
             let mut requested = requested.unwrap_or(RefreshMode::Partial);
             // Leaving large pictures: a fast refresh would keep their ghost.
             let area = |r: Rect| u32::from(r.width) * u32::from(r.height);
-            if self.pictures_shown && area(dirty) * 2 >= area(screen) {
+            if self.frame.pictures_shown && area(dirty) * 2 >= area(screen) {
                 requested = RefreshMode::Full;
             }
-            let (mode, region) = self.refresh.decide(requested, dirty, screen, interval);
+            let (mode, region) = self
+                .frame
+                .refresh
+                .decide(requested, dirty, screen, interval);
             let refresh = quireink_sdk::filters::Refresh {
                 mode,
                 region,
@@ -79,11 +82,15 @@ impl Kernel {
         if let Some(at) = self.output.wake_at.take() {
             self.screen_timer = Some(self.screen_timer.map_or(at, |t| t.min(at)));
         }
-        let input = self.recognizer.next_deadline(&self.thresholds());
+        let input = self.input.recognizer.next_deadline(&self.thresholds());
         let notice = self.notice.as_ref().map(|(_, until)| *until);
         let scheduled = self.scheduled.iter().map(|(at, ..)| *at).min();
         // After a screenshot is drawn, a message says where it went.
-        let shot = self.screenshot.is_some().then(|| self.now.add_millis(300));
+        let shot = self
+            .frame
+            .screenshot
+            .is_some()
+            .then(|| self.now.add_millis(300));
         effects.wake_at = [
             self.hint.until,
             input,
@@ -99,11 +106,11 @@ impl Kernel {
         .min();
         // A screen came or went: presses until it shows are dropped.
         if mem::take(&mut self.screens_changed) {
-            self.settling = true;
+            self.input.settling = true;
         }
         // What was read is kept for the frame the call drew, if any, then
         // forgotten (see `render`).
-        if self.unrendered.is_none() {
+        if self.frame.unrendered.is_none() {
             self.shared.recall.clear();
         }
         self.timed();
@@ -125,135 +132,90 @@ impl Kernel {
         }
     }
 
+    /// Carries out a command, by its kind.
     pub(crate) fn apply(&mut self, command: Command) {
         match command {
-            Command::OpenSlot(slot, params) => {
-                let open = self
-                    .stack
-                    .iter()
-                    .position(|s| s.slot.as_ref() == Some(&slot));
-                if let Some(index) = open {
-                    if params.is_empty() || self.stack[index].params == params {
-                        if index + 1 < self.stack.len() {
-                            self.close_above(index);
-                        }
-                        return;
-                    }
-                    // The slot for something else (e.g. another book):
-                    // opened anew in place of the old screen.
-                    self.close_from(index);
-                    self.stop_for_closed_screens();
-                }
-                match self.registry.resolve_slot(slot.as_str()).cloned() {
-                    Some(screen) => self.open(screen, Some(slot), &params),
-                    None => self.warn_runtime(format!("no screen for slot `{slot}`")),
-                }
-            }
+            Command::OpenSlot(slot, params) => self.open_slot_command(slot, params),
             Command::OpenScreen(screen, params) => self.open(screen, None, &params),
-            Command::Emit(event, params) => {
-                // A page turned, also by itself, is use.
-                if event == events::PAGE_TURNED {
-                    self.last_activity = self.now;
-                }
-                let env = self.shared.env(self.now);
-                for (_, plugin, handler) in
-                    self.subscriptions.iter().filter(|(id, ..)| *id == event)
-                {
-                    let _running = self.shared.meter.enter(plugin.as_str());
-                    handler(&env, &params, &mut self.output.commands);
-                }
-                for index in 0..self.stack.len() {
-                    self.with_screen(index, |screen, cx| {
-                        screen.on_event(&event, &params, cx);
-                        Handled::Yes
-                    });
-                }
-            }
-            Command::RunAction(action) => self.dispatch(action),
-            Command::SetPluginEnabled(id, enabled) => self.set_plugin_enabled(&id, enabled),
-            Command::Restart => self.restart = true,
-            Command::Sleep => self.sleep = self.shared.caps.sleep,
-            Command::SetSecret(change) => self.set_secret(change),
-            Command::Firmware(command) => {
-                if self.shared.firmware.is_some() {
-                    self.firmware_calls.push(command);
-                } else {
-                    self.warn_runtime(String::from("QuireInk is not this device's firmware"));
-                }
-            }
-            Command::Wifi(command) => match &mut self.shared.wifi {
-                Some(wifi) => {
-                    if command == WifiCommand::Scan {
-                        wifi.scanning = true;
-                    }
-                    self.wifi_calls.push(command);
-                }
-                None => self.warn_runtime(String::from(
-                    "Wi-Fi is not managed by QuireInk on this device",
-                )),
-            },
-            Command::Screenshot(path) => {
-                // The whole screen is drawn anew, and saved as it is.
-                self.screenshot = Some(path);
-                let bounds = self.framebuffer.bounds();
-                self.invalidate(bounds);
-            }
-            Command::SetClipboard(text) => {
-                self.shared.clipboard = clipped(&text);
-                self.clipboard.copy(self.shared.clipboard.clone());
-            }
-            Command::ReadClipboard(reply, params) if self.clipboard.system => {
-                self.clipboard.read(reply, params);
-            }
-            Command::ReadClipboard(reply, params) => self.reply_clipboard(reply, params),
-            Command::Speak(speech) => {
-                let (available, screens) = (self.shared.caps.speech, self.stack.len());
-                self.speech
-                    .speak(speech, available, screens, &mut self.output.commands);
-            }
-            Command::StopSpeaking => self.speech.stop(),
-            Command::Serve {
-                server,
-                port,
-                events,
-            } => {
-                let (network, screens) = (self.shared.caps.network, self.stack.len());
-                let out = &mut self.output.commands;
-                self.servers
-                    .serve(server, port, events, network, screens, out);
-            }
-            Command::StopServing(server) => self.servers.stop(&server, &mut self.output.commands),
-            Command::Respond(response) => self.servers.respond(response, &*self.shared.storage),
-            command @ (Command::Connect { .. }
-            | Command::SocketSend { .. }
-            | Command::SocketRead { .. }
-            | Command::Disconnect(_)
-            | Command::Broadcast { .. }) => {
-                self.sockets.command(
-                    command,
-                    self.shared.caps.network,
-                    self.stack.len(),
-                    &*self.shared.storage,
-                    &mut self.output.commands,
-                );
-            }
-            Command::ShowHints => self.show_hints(),
             Command::Back => {
                 if self.stack.len() > 1 {
                     self.close_above(self.stack.len() - 2);
                 }
             }
+            Command::Notify(text) => self.notify(text),
+            Command::Emit(event, params) => self.emit(&event, &params),
+            Command::RunAction(action) => self.dispatch(action),
+            Command::Schedule(event, params, at) => {
+                self.scheduled.retain(|(_, e, _)| *e != event);
+                self.scheduled.push((at, event, params));
+            }
+            Command::Restart => self.restart = true,
+            Command::Sleep => self.sleep = self.shared.caps.sleep,
+            command @ (Command::SetSetting(..)
+            | Command::ResetSetting(_)
+            | Command::SetScope(_)
+            | Command::SetPluginEnabled(..)
+            | Command::SetSecret(_)
+            | Command::SetMenu(..)
+            | Command::Bind { .. }) => self.apply_setting(command),
+            command @ (Command::Redraw(_) | Command::Screenshot(_) | Command::ShowHints) => {
+                self.apply_drawing(command);
+            }
+            command => self.apply_io(command),
+        }
+    }
+
+    /// Opens the screen bound to `slot`, or shows it again where it is
+    /// open for the same (closing what is above it).
+    fn open_slot_command(&mut self, slot: Id, params: Params) {
+        let open = self
+            .stack
+            .iter()
+            .position(|s| s.slot.as_ref() == Some(&slot));
+        if let Some(index) = open {
+            if params.is_empty() || self.stack[index].params == params {
+                if index + 1 < self.stack.len() {
+                    self.close_above(index);
+                }
+                return;
+            }
+            // The slot for something else (e.g. another book): opened anew
+            // in place of the old screen.
+            self.close_from(index);
+            self.stop_for_closed_screens();
+        }
+        match self.registry.resolve_slot(slot.as_str()).cloned() {
+            Some(screen) => self.open(screen, Some(slot), &params),
+            None => self.warn_runtime(format!("no screen for slot `{slot}`")),
+        }
+    }
+
+    /// An event to its subscribers, then to every open screen.
+    fn emit(&mut self, event: &Id, params: &Params) {
+        // A page turned, also by itself, is use.
+        if *event == events::PAGE_TURNED {
+            self.last_activity = self.now;
+        }
+        let env = self.shared.env(self.now);
+        for (_, plugin, handler) in self.subscriptions.iter().filter(|(id, ..)| id == event) {
+            let _running = self.shared.meter.enter(plugin.as_str());
+            handler(&env, params, &mut self.output.commands);
+        }
+        for index in 0..self.stack.len() {
+            self.with_screen(index, |screen, cx| {
+                screen.on_event(event, params, cx);
+                Handled::Yes
+            });
+        }
+    }
+
+    /// Settings, a book's own, plugins switched, secrets, menus and key
+    /// bindings changed.
+    fn apply_setting(&mut self, command: Command) {
+        match command {
             Command::SetSetting(id, value) if self.shared.settings.goes_to_scope(id.as_str()) => {
                 self.set_in_scope(&id, value);
             }
-            Command::SetScope(path) => self.set_scope(path),
-            Command::Http(request) => {
-                let network = self.shared.caps.network;
-                let out = &mut self.output.commands;
-                self.http
-                    .request(request, network, &*self.shared.storage, out);
-            }
-            Command::ResetSetting(id) => self.reset_setting(&id),
             Command::SetSetting(id, value) => match self.shared.settings.set(id.as_str(), value) {
                 Ok(()) => {
                     self.persist_setting(&id);
@@ -266,6 +228,23 @@ impl Kernel {
                     self.warn_runtime(format!("`{id}`: {error}"));
                 }
             },
+            Command::ResetSetting(id) => self.reset_setting(&id),
+            Command::SetScope(path) => self.set_scope(path),
+            Command::SetPluginEnabled(id, enabled) => self.set_plugin_enabled(&id, enabled),
+            Command::SetSecret(change) => self.set_secret(change),
+            Command::SetMenu(menu, entries) => self.set_menu(menu, entries),
+            Command::Bind {
+                layer,
+                input,
+                action,
+            } => self.bind(&layer, &input, action),
+            _ => {}
+        }
+    }
+
+    /// What is drawn: again, as a screenshot, the row of hints.
+    fn apply_drawing(&mut self, command: Command) {
+        match command {
             Command::Redraw(mode) => {
                 self.output.redraw = true;
                 if mode == RefreshMode::Full {
@@ -275,16 +254,77 @@ impl Kernel {
                 }
                 self.output.request_refresh(mode);
             }
-            Command::SetMenu(menu, entries) => self.set_menu(menu, entries),
-            Command::Notify(text) => self.notify(text),
-            Command::Bind {
-                layer,
-                input,
-                action,
-            } => self.bind(&layer, &input, action),
-            Command::Schedule(event, params, at) => {
-                self.scheduled.retain(|(_, e, _)| *e != event);
-                self.scheduled.push((at, event, params));
+            Command::Screenshot(path) => {
+                // The whole screen is drawn anew, and saved as it is.
+                self.frame.screenshot = Some(path);
+                let bounds = self.framebuffer.bounds();
+                self.invalidate(bounds);
+            }
+            Command::ShowHints => self.show_hints(),
+            _ => {}
+        }
+    }
+
+    /// What the shell does for the kernel: firmware, Wi-Fi, the clipboard,
+    /// speech, servers, sockets and HTTP.
+    fn apply_io(&mut self, command: Command) {
+        let (network, screens) = (self.shared.caps.network, self.stack.len());
+        let out = &mut self.output.commands;
+        match command {
+            Command::Firmware(command) => {
+                if self.shared.firmware.is_some() {
+                    self.io.firmware_calls.push(command);
+                } else {
+                    self.warn_runtime(String::from("QuireInk is not this device's firmware"));
+                }
+            }
+            Command::Wifi(command) => match &mut self.shared.wifi {
+                Some(wifi) => {
+                    if command == WifiCommand::Scan {
+                        wifi.scanning = true;
+                    }
+                    self.io.wifi_calls.push(command);
+                }
+                None => self.warn_runtime(String::from(
+                    "Wi-Fi is not managed by QuireInk on this device",
+                )),
+            },
+            Command::SetClipboard(text) => {
+                self.shared.clipboard = clipped(&text);
+                self.io.clipboard.copy(self.shared.clipboard.clone());
+            }
+            Command::ReadClipboard(reply, params) if self.io.clipboard.system => {
+                self.io.clipboard.read(reply, params);
+            }
+            Command::ReadClipboard(reply, params) => self.reply_clipboard(reply, params),
+            Command::Speak(speech) => {
+                let available = self.shared.caps.speech;
+                self.io.speech.speak(speech, available, screens, out);
+            }
+            Command::StopSpeaking => self.io.speech.stop(),
+            Command::Serve {
+                server,
+                port,
+                events,
+            } => self
+                .io
+                .servers
+                .serve(server, port, events, network, screens, out),
+            Command::StopServing(server) => self.io.servers.stop(&server, out),
+            Command::Respond(response) => self.io.servers.respond(response, &*self.shared.storage),
+            command @ (Command::Connect { .. }
+            | Command::SocketSend { .. }
+            | Command::SocketRead { .. }
+            | Command::Disconnect(_)
+            | Command::Broadcast { .. }) => {
+                self.io
+                    .sockets
+                    .command(command, network, screens, &*self.shared.storage, out);
+            }
+            Command::Http(request) => {
+                self.io
+                    .http
+                    .request(request, network, &*self.shared.storage, out)
             }
             _ => {}
         }

@@ -4,6 +4,14 @@
 #[allow(unused_imports)]
 use super::*;
 
+/// The key maps the kernel's is built from.
+#[derive(Debug, Default)]
+pub(crate) struct KeySources {
+    /// Every key map source, to rebuild the key map when the preset changes.
+    pub(crate) sources: Vec<(Origin, Cow<'static, str>)>,
+    pub(crate) presets: Vec<(Id, Cow<'static, str>)>,
+}
+
 impl Kernel {
     /// Registers `plugin`, or only lists it if the user switched it off.
     pub(crate) fn add_plugin(&mut self, plugin: &dyn Plugin, disabled: &[String]) {
@@ -195,9 +203,9 @@ impl Kernel {
         for source in staging.keymaps.drain(..) {
             // Validated by the registrar.
             self.shared.keymap.load(&source, Origin::Plugin, true);
-            self.keymap_sources.push((Origin::Plugin, source));
+            self.keys.sources.push((Origin::Plugin, source));
         }
-        self.keymap_presets.append(&mut staging.keymap_presets);
+        self.keys.presets.append(&mut staging.keymap_presets);
         for catalog in staging.catalogs.drain(..) {
             self.shared.translator.add(catalog);
         }
@@ -292,7 +300,7 @@ impl Kernel {
     /// Actions bound by any key map preset, for validation.
     pub(crate) fn preset_actions(&self) -> Vec<Id> {
         let mut all = Keymap::default();
-        for (_, source) in &self.keymap_presets {
+        for (_, source) in &self.keys.presets {
             all.load(source, Origin::Preset, true);
         }
         all.actions().cloned().collect()
@@ -307,13 +315,14 @@ impl Kernel {
             .settings
             .text(core_settings::KEYMAP_PRESET.as_str());
         if let Some((_, source)) = self
-            .keymap_presets
+            .keys
+            .presets
             .iter()
             .find(|(id, _)| id.as_str() == preset)
         {
             keymap.load(source, Origin::Preset, true);
         }
-        for (origin, source) in &self.keymap_sources {
+        for (origin, source) in &self.keys.sources {
             keymap.load(source, *origin, *origin != Origin::User);
         }
         keymap.shrink_to_fit();
@@ -390,8 +399,8 @@ impl Kernel {
     /// every kilobyte counts, and registries are not modified afterwards.
     pub(crate) fn shrink_to_fit(&mut self) {
         self.registry.shrink_to_fit();
-        self.keymap_sources.shrink_to_fit();
-        self.keymap_presets.shrink_to_fit();
+        self.keys.sources.shrink_to_fit();
+        self.keys.presets.shrink_to_fit();
         self.subscriptions.shrink_to_fit();
         self.shared.plugins.shrink_to_fit();
         self.warnings.shrink_to_fit();

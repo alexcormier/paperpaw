@@ -5,6 +5,40 @@
 #[allow(unused_imports)]
 use super::*;
 
+/// What is drawn: the parts changed, the bands, large pictures shown, a
+/// screenshot to save, the busy mark, how the panel refreshes.
+#[derive(Debug)]
+pub(crate) struct FrameState {
+    /// The part of the screen to redraw at the end of the current call.
+    pub(crate) pending: Option<Rect>,
+    /// What changed but has not been passed to [`Kernel::render`] yet.
+    pub(crate) unrendered: Option<Rect>,
+    /// What [`Kernel::render`] passed last, for [`Kernel::rerender`].
+    pub(crate) rendered: Option<Rect>,
+    /// See [`KernelBuilder::row_align`].
+    pub(crate) row_align: u16,
+    /// The pixels of a band, where frames are drawn in bands
+    /// ([`KernelBuilder::frame_rows`]): kept when the screen is turned.
+    pub(crate) band: Option<u32>,
+    /// The frame shown has large pictures (see [`PICTURES_PERCENT`]).
+    pub(crate) pictures_shown: bool,
+    /// A screenshot to save with the next frame drawn: its path.
+    pub(crate) screenshot: Option<String>,
+    /// The mark shown while slow work waits, and the hint cell it is.
+    pub(crate) mark: Option<(Rect, Option<usize>)>,
+    pub(crate) refresh: RefreshPolicy,
+}
+
+/// How long what a call opened, closed or ran takes (for the busy mark).
+#[derive(Debug, Default)]
+pub(crate) struct Timing {
+    /// What the call opened, closed or ran, and when it began (the clock's
+    /// microseconds), until the call is done.
+    pub(crate) running: Option<(String, u64)>,
+    /// How long that took the last time, in milliseconds.
+    pub(crate) durations: Vec<(String, u32)>,
+}
+
 impl Kernel {
     /// Draws everything that changed since the last call and passes it to
     /// `out` as full-width rows of pixels, top to bottom: `out(top, rows)`
@@ -28,7 +62,7 @@ impl Kernel {
             self.framebuffer.pictures_kept(),
         );
         let bits = u32::from(format.bits_per_pixel()).max(1);
-        let align = self.row_align;
+        let align = self.frame.row_align;
         let gray_rows = (((u32::from(rows) * bits / 2) as u16) / align * align)
             .max(align)
             .min(bounds.height);
@@ -48,7 +82,7 @@ impl Kernel {
         let drawn = match made(bounds.width, bounds.height, gray_rows, PixelFormat::Gray2) {
             Ok(gray) => {
                 self.framebuffer = gray;
-                self.unrendered = Some(bounds);
+                self.frame.unrendered = Some(bounds);
                 self.render(out);
                 true
             }
@@ -64,7 +98,7 @@ impl Kernel {
     }
 
     pub fn render(&mut self, out: &mut dyn FnMut(u16, FrameView<'_>)) {
-        let Some(region) = self.unrendered.take() else {
+        let Some(region) = self.frame.unrendered.take() else {
             return;
         };
         // The kernel's, but for the screens' own drawing.
@@ -78,7 +112,7 @@ impl Kernel {
         } else {
             region
         };
-        let align = self.row_align;
+        let align = self.frame.row_align;
         let first = region.y - region.y % align;
         let last = (region.bottom().div_ceil(u32::from(align)) * u32::from(align))
             .min(u32::from(bounds.height));
@@ -88,9 +122,9 @@ impl Kernel {
             region.width,
             (last - u32::from(first)) as u16,
         );
-        self.rendered = Some(region);
+        self.frame.rendered = Some(region);
         // A screenshot is written as the frame is drawn, a band at a time.
-        let shot = self.screenshot.take().filter(|_| region == bounds);
+        let shot = self.frame.screenshot.take().filter(|_| region == bounds);
         let mut writer = shot.as_deref().and_then(|path| {
             quireink_sdk::image::PngWriter::new(
                 self.shared.storage.as_ref(),
@@ -136,7 +170,7 @@ impl Kernel {
         let screen = u32::from(bounds.width) * u32::from(bounds.height);
         let big = pictured.saturating_mul(100) >= screen.saturating_mul(PICTURES_PERCENT);
         let most = u32::from(region.width) * u32::from(region.height) * 2 >= screen;
-        self.pictures_shown = big || (self.pictures_shown && !most);
+        self.frame.pictures_shown = big || (self.frame.pictures_shown && !most);
         if let Some(path) = shot {
             let key = if writer.is_some_and(|w| w.is_complete()) {
                 "core.screenshot-saved"
@@ -160,8 +194,8 @@ impl Kernel {
     /// after the refresh, before anything else changes the screen; with
     /// changes not rendered yet it does nothing.
     pub fn rerender(&mut self, out: &mut dyn FnMut(u16, FrameView<'_>)) {
-        if self.unrendered.is_none() {
-            self.unrendered = self.rendered;
+        if self.frame.unrendered.is_none() {
+            self.frame.unrendered = self.frame.rendered;
             self.render(out);
         }
     }
@@ -171,19 +205,19 @@ impl Kernel {
     /// that sends a screenshot elsewhere, e.g. over USB. While changes wait
     /// to be rendered it does nothing and returns `false`.
     pub fn capture(&mut self, out: &mut dyn FnMut(u16, FrameView<'_>)) -> bool {
-        if self.unrendered.is_some() {
+        if self.frame.unrendered.is_some() {
             return false;
         }
-        let rendered = self.rendered;
-        self.unrendered = Some(self.framebuffer.bounds());
+        let rendered = self.frame.rendered;
+        self.frame.unrendered = Some(self.framebuffer.bounds());
         self.render(out);
         // What the panel was last sent stays what rerender sends again.
-        self.rendered = rendered;
+        self.frame.rendered = rendered;
         true
     }
 
     pub(crate) fn invalidate(&mut self, region: Rect) {
-        self.pending = Some(self.pending.map_or(region, |p| p.union(&region)));
+        self.frame.pending = Some(self.frame.pending.map_or(region, |p| p.union(&region)));
     }
 
     /// Redraws `region`: the topmost full screen and every overlay above
@@ -230,7 +264,7 @@ impl Kernel {
         if let Some(row) = row
             && let Some(area) = row.intersection(&region)
         {
-            let pressed = self.mark.and_then(|(_, cell)| cell);
+            let pressed = self.frame.mark.and_then(|(_, cell)| cell);
             quireink_sdk::ui::draw_button_hints(
                 &mut canvas.clipped(area),
                 &env,
@@ -241,7 +275,7 @@ impl Kernel {
             );
         }
         // The busy mark in a corner, where no hint shows it.
-        if let Some((mark, None)) = self.mark
+        if let Some((mark, None)) = self.frame.mark
             && mark.intersection(&region).is_some()
         {
             let style = quireink_sdk::ui::UiStyle::new(&env);
@@ -315,19 +349,19 @@ impl Kernel {
             .iter()
             .find_map(|command| self.work_key(command))?;
         let started = self.shared.meter.micros()?;
-        let slow = match self.durations.iter().find(|(k, _)| *k == key) {
+        let slow = match self.timing.durations.iter().find(|(k, _)| *k == key) {
             Some((_, ms)) => *ms >= SLOW_MS,
             // Not timed yet: another screen may take long; an action is
             // taken to be quick until it was not.
             None => !key.starts_with("run:"),
         };
-        self.timing = Some((key, started));
+        self.timing.running = Some((key, started));
         if !self.busy_mark || !slow {
             return None;
         }
         let mark = self.mark_area();
         self.invalidate(mark.0);
-        self.mark = Some(mark);
+        self.frame.mark = Some(mark);
         self.withheld = mem::take(&mut self.output.commands);
         self.output.request_refresh(RefreshMode::Fast);
         let mut effects = self.finish();
@@ -368,9 +402,9 @@ impl Kernel {
         if (display.width, display.height) != (width, height) && width > 0 && height > 0 {
             // Bands take as much memory as before: fewer rows where the
             // screen got wider.
-            let rows = match self.band {
+            let rows = match self.frame.band {
                 Some(pixels) => {
-                    let align = self.row_align;
+                    let align = self.frame.row_align;
                     let rows = (pixels / u32::from(width)).min(u32::from(height)) as u16;
                     (rows / align * align).max(align).min(height)
                 }

@@ -324,57 +324,61 @@ impl KernelBuilder {
                 recall,
                 keymap: Keymap::default(),
             },
-            pending: None,
-            unrendered: None,
-            rendered: None,
-            row_align: self.row_align,
-            band: self
-                .frame_rows
-                .map(|rows| u32::from(rows) * u32::from(display.width)),
+            frame: drawing::FrameState {
+                pending: None,
+                unrendered: None,
+                rendered: None,
+                row_align: self.row_align,
+                band: self
+                    .frame_rows
+                    .map(|rows| u32::from(rows) * u32::from(display.width)),
+                pictures_shown: false,
+                screenshot: None,
+                mark: None,
+                refresh: RefreshPolicy::default(),
+            },
+            input: gestures::InputState {
+                recognizer: Recognizer::default(),
+                captured: Vec::new(),
+                edge_touch: None,
+                edge_pending: None,
+                settling: false,
+                stale_before: None,
+                shown_at: [None; 2],
+                dropped_buttons: Vec::new(),
+                dropped_pointers: Vec::new(),
+            },
+            io: network::IoState {
+                http: io::http::Http::default(),
+                servers: io::servers::Servers::default(),
+                sockets: io::sockets::Sockets::default(),
+                speech: io::speech::Speech::default(),
+                clipboard: io::clipboard::Clipboard::new(caps.system_clipboard),
+                wifi_calls: Vec::new(),
+                firmware_calls: Vec::new(),
+                network_waiting: None,
+                network_busy: false,
+            },
+            keys: plugins::KeySources::default(),
+            timing: drawing::Timing::default(),
             framebuffer,
             registry: Registry::default(),
-            keymap_sources: Vec::new(),
-            keymap_presets: Vec::new(),
             subscriptions: Vec::new(),
             screen_timer: None,
             notice: None,
             scheduled: Vec::new(),
-            recognizer: Recognizer::default(),
-            captured: Vec::new(),
-            edge_touch: None,
-            edge_pending: None,
             stack: Vec::new(),
-            refresh: RefreshPolicy::default(),
             output: Output::default(),
             warnings: Vec::new(),
             restart: false,
             sleep: false,
-            screenshot: None,
             hint: hints::HintRow::new(self.button_row),
             busy_mark: self.busy_mark,
-            mark: None,
             withheld: Vec::new(),
-            timing: None,
-            durations: Vec::new(),
-            pictures_shown: false,
             last_activity: Instant(0),
             shown_since: Instant(0),
             scope: None,
-            http: io::http::Http::default(),
-            servers: io::servers::Servers::default(),
-            sockets: io::sockets::Sockets::default(),
-            speech: io::speech::Speech::default(),
-            clipboard: io::clipboard::Clipboard::new(caps.system_clipboard),
-            wifi_calls: Vec::new(),
-            firmware_calls: Vec::new(),
-            network_waiting: None,
             screens_changed: false,
-            settling: false,
-            stale_before: None,
-            shown_at: [None; 2],
-            dropped_buttons: Vec::new(),
-            dropped_pointers: Vec::new(),
-            network_busy: false,
             plugin_defaults: Vec::new(),
             now: Instant::default(),
         })
@@ -463,7 +467,7 @@ impl Kernel {
                 problem.message.into_owned(),
             );
         }
-        self.keymap_sources.push((Origin::Device, source));
+        self.keys.sources.push((Origin::Device, source));
     }
 
     /// The choices of settings that plugins add to: key map presets and
@@ -472,7 +476,8 @@ impl Kernel {
         let mut presets: Vec<Cow<'static, str>> =
             alloc::vec![Cow::Borrowed(keymap_presets::STANDARD_NAME)];
         presets.extend(
-            self.keymap_presets
+            self.keys
+                .presets
                 .iter()
                 .map(|(id, _)| Cow::Owned(id.as_str().to_string())),
         );

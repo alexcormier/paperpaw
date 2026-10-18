@@ -4,6 +4,30 @@
 #[allow(unused_imports)]
 use super::*;
 
+/// What the shell is to do for the kernel, and what it does: HTTP,
+/// servers, sockets, speech, the clipboard, Wi-Fi, firmware updates.
+#[derive(Debug)]
+pub(crate) struct IoState {
+    /// Plugins' requests ([`Io::Http`]).
+    pub(crate) http: io::http::Http,
+    /// Plugins' servers ([`Io::Server`]).
+    pub(crate) servers: io::servers::Servers,
+    /// Plugins' sockets and broadcasts ([`Io::Socket`]).
+    pub(crate) sockets: io::sockets::Sockets,
+    /// Text spoken ([`Io::Speech`]).
+    pub(crate) speech: io::speech::Speech,
+    /// The system's clipboard ([`Io::Copy`], [`Io::ReadClipboard`]).
+    pub(crate) clipboard: io::clipboard::Clipboard,
+    /// What the shell is to do with the radio ([`Io::Wifi`]).
+    pub(crate) wifi_calls: Vec<WifiCommand>,
+    /// What the shell is to do with the firmware ([`Io::Firmware`]).
+    pub(crate) firmware_calls: Vec<FirmwareCommand>,
+    /// Since when plugins' network work has waited for a network.
+    pub(crate) network_waiting: Option<Instant>,
+    /// Something used the network at the end of the last call.
+    pub(crate) network_busy: bool,
+}
+
 impl Kernel {
     /// What happened with Wi-Fi: plugins hear of it, and network work that
     /// waited goes on once there is a network.
@@ -61,7 +85,7 @@ impl Kernel {
 
     /// Network work waiting for the shell (requests, servers, sockets).
     pub(crate) fn network_work_waiting(&self) -> bool {
-        self.http.waiting() || self.servers.waiting() || self.sockets.waiting()
+        self.io.http.waiting() || self.io.servers.waiting() || self.io.sockets.waiting()
     }
 
     /// After every call, where QuireInk manages Wi-Fi: tells plugins that
@@ -73,29 +97,30 @@ impl Kernel {
             return;
         };
         let waiting = work && !wifi.state.is_online();
-        match (waiting, self.network_waiting) {
+        match (waiting, self.io.network_waiting) {
             (true, None) => {
-                self.network_waiting = Some(self.now);
+                self.io.network_waiting = Some(self.now);
                 wifi.wanted = true;
                 self.output.commands.push(events::NETWORK_WANTED.emit(()));
             }
             (false, Some(_)) => {
-                self.network_waiting = None;
+                self.io.network_waiting = None;
                 wifi.wanted = false;
             }
             _ => {}
         }
-        let busy = self.http.busy() || self.servers.busy() || self.sockets.any();
+        let busy = self.io.http.busy() || self.io.servers.busy() || self.io.sockets.any();
         wifi.busy = busy;
-        if self.network_busy && !busy {
+        if self.io.network_busy && !busy {
             self.output.commands.push(events::NETWORK_IDLE.emit(()));
         }
-        self.network_busy = busy;
+        self.io.network_busy = busy;
     }
 
     /// When network work that waits fails, if it does not get one first.
     pub(crate) fn network_deadline(&self) -> Option<Instant> {
-        self.network_waiting
+        self.io
+            .network_waiting
             .map(|since| since.add_millis(quireink_sdk::wifi::NETWORK_WAIT_MS))
     }
 
@@ -104,16 +129,16 @@ impl Kernel {
         const REASON: &str = "no network";
         let storage = &*self.shared.storage;
         let out = &mut self.output.commands;
-        self.http.fail_waiting(REASON, storage, out);
-        self.servers.fail_waiting(REASON, out);
-        self.sockets.fail_waiting(REASON, storage, out);
-        self.network_waiting = None;
+        self.io.http.fail_waiting(REASON, storage, out);
+        self.io.servers.fail_waiting(REASON, out);
+        self.io.sockets.fail_waiting(REASON, storage, out);
+        self.io.network_waiting = None;
     }
 
     /// Whether plugins have sockets or broadcasts open, e.g. to keep
     /// polling for what they bring.
     pub fn sockets_open(&self) -> bool {
-        self.sockets.any()
+        self.io.sockets.any()
     }
 
     /// What happened with a socket or a broadcast.
@@ -121,7 +146,8 @@ impl Kernel {
         let _running = self.shared.meter.enter(meter::CORE);
         self.now = now;
         let storage = &*self.shared.storage;
-        self.sockets
+        self.io
+            .sockets
             .event(event, storage, &mut self.output.commands);
         self.finish()
     }
@@ -130,7 +156,8 @@ impl Kernel {
     pub fn server_event(&mut self, now: Instant, event: ServerEvent) -> Effects {
         self.now = now;
         let storage = &*self.shared.storage;
-        self.servers
+        self.io
+            .servers
             .event(event, storage, &mut self.output.commands);
         self.finish()
     }
@@ -140,7 +167,8 @@ impl Kernel {
         let _running = self.shared.meter.enter(meter::CORE);
         self.now = now;
         let storage = &*self.shared.storage;
-        self.http
+        self.io
+            .http
             .answer(response, storage, &mut self.output.commands);
         self.finish()
     }
@@ -150,17 +178,17 @@ impl Kernel {
     /// kernel call. Network work waits here until there is a network,
     /// where QuireInk manages Wi-Fi.
     pub fn take_io(&mut self) -> Vec<Io> {
-        let mut io: Vec<Io> = self.wifi_calls.drain(..).map(Io::Wifi).collect();
-        io.extend(self.firmware_calls.drain(..).map(Io::Firmware));
-        io.extend(self.speech.take().into_iter().map(Io::Speech));
-        io.extend(self.clipboard.take_copied().map(Io::Copy));
-        if self.clipboard.take_read() {
+        let mut io: Vec<Io> = self.io.wifi_calls.drain(..).map(Io::Wifi).collect();
+        io.extend(self.io.firmware_calls.drain(..).map(Io::Firmware));
+        io.extend(self.io.speech.take().into_iter().map(Io::Speech));
+        io.extend(self.io.clipboard.take_copied().map(Io::Copy));
+        if self.io.clipboard.take_read() {
             io.push(Io::ReadClipboard);
         }
         if self.network_ready() {
-            io.extend(self.http.take().into_iter().map(Io::Http));
-            io.extend(self.servers.take().into_iter().map(Io::Server));
-            io.extend(self.sockets.take().into_iter().map(Io::Socket));
+            io.extend(self.io.http.take().into_iter().map(Io::Http));
+            io.extend(self.io.servers.take().into_iter().map(Io::Server));
+            io.extend(self.io.sockets.take().into_iter().map(Io::Socket));
         }
         io
     }
@@ -190,7 +218,7 @@ impl Kernel {
 
     /// Whether plugins serve, e.g. to keep polling for requests.
     pub fn serving(&self) -> bool {
-        self.servers.busy()
+        self.io.servers.busy()
     }
 
     /// How an install goes: plugins hear of it.
@@ -210,13 +238,13 @@ impl Kernel {
     /// not be.
     pub fn speech_done(&mut self, now: Instant, id: u32, spoken: bool) -> Effects {
         self.now = now;
-        self.speech.done(id, spoken, &mut self.output.commands);
+        self.io.speech.done(id, spoken, &mut self.output.commands);
         self.finish()
     }
 
     /// Whether a text is being spoken, e.g. to keep watching for its end.
     pub fn speaking(&self) -> bool {
-        self.speech.speaking()
+        self.io.speech.speaking()
     }
 
     /// The system clipboard's text, for the plugins that asked for it
@@ -227,7 +255,7 @@ impl Kernel {
         if let Some(text) = text {
             self.shared.clipboard = clipped(&text);
         }
-        for (reply, params) in self.clipboard.answered() {
+        for (reply, params) in self.io.clipboard.answered() {
             self.reply_clipboard(reply, params);
         }
         self.finish()

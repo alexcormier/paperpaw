@@ -291,7 +291,8 @@ impl Kernel {
                 }
             }
         }
-        self.keymap_sources
+        self.keys
+            .sources
             .push((Origin::User, Cow::Owned(source.to_string())));
         for problem in self.shared.keymap.load(source, Origin::User, false) {
             self.warn(

@@ -5,6 +5,31 @@
 #[allow(unused_imports)]
 use super::*;
 
+/// Where input is: gestures being recognized, the edges' swipes, presses
+/// dropped while a frame was not shown yet.
+#[derive(Debug)]
+pub(crate) struct InputState {
+    pub(crate) recognizer: Recognizer,
+    /// Pointer ids captured by the active screen.
+    pub(crate) captured: Vec<u8>,
+    /// A finger that came down at an edge, followed by the kernel for a
+    /// swipe in from it (see [`keymap::InputKey::Edge`]).
+    pub(crate) edge_touch: Option<EdgeTouch>,
+    /// A swipe in from an edge on a screen with its own gestures, waiting
+    /// for the second one that applies it: the side, and until when.
+    pub(crate) edge_pending: Option<(Direction, Instant)>,
+    pub(crate) settling: bool,
+    /// Presses made before this, while another screen was coming up, are
+    /// dropped (see [`Kernel::shown`]), with their releases.
+    pub(crate) stale_before: Option<Instant>,
+    /// When the last two frames showed: presses made before the earlier
+    /// one are more than a frame behind and dropped (see
+    /// [`Kernel::shown`]).
+    pub(crate) shown_at: [Option<Instant>; 2],
+    pub(crate) dropped_buttons: Vec<&'static str>,
+    pub(crate) dropped_pointers: Vec<u8>,
+}
+
 impl Kernel {
     pub(crate) fn thresholds(&self) -> Thresholds {
         let metrics = Metrics::new(self.shared.device.display.dpi);
@@ -21,13 +46,13 @@ impl Kernel {
 
     pub(crate) fn pointer(&mut self, event: PointerEvent) {
         // Swipes in from an edge come before the screen sees the finger.
-        if let Some(touch) = self.edge_touch.filter(|t| t.id == event.id) {
+        if let Some(touch) = self.input.edge_touch.filter(|t| t.id == event.id) {
             match event.phase {
                 PointerPhase::Up => {
-                    self.edge_touch = None;
+                    self.input.edge_touch = None;
                     self.edge_lifted(touch, event.point);
                 }
-                PointerPhase::Cancel => self.edge_touch = None,
+                PointerPhase::Cancel => self.input.edge_touch = None,
                 _ => {}
             }
             return;
@@ -35,24 +60,24 @@ impl Kernel {
         // A screen may take a finger before the edges do: what it takes
         // is meant for it (a grip that moves a row, a handle), as apps on
         // phones keep such places from the system's gestures.
-        let captured = self.captured.contains(&event.id);
+        let captured = self.input.captured.contains(&event.id);
         if captured || event.phase == PointerPhase::Down {
             let handled = self.with_top(|screen, cx| screen.on_pointer(&event, cx));
             if captured {
                 if matches!(event.phase, PointerPhase::Up | PointerPhase::Cancel) {
-                    self.captured.retain(|&id| id != event.id);
+                    self.input.captured.retain(|&id| id != event.id);
                 }
                 return;
             }
             if handled == Handled::Yes {
-                self.captured.push(event.id);
+                self.input.captured.push(event.id);
                 return;
             }
         }
         if event.phase == PointerPhase::Down
             && let Some(side) = self.edge_at(event.point)
         {
-            self.edge_touch = Some(EdgeTouch {
+            self.input.edge_touch = Some(EdgeTouch {
                 id: event.id,
                 side,
                 start: event.point,
@@ -61,7 +86,7 @@ impl Kernel {
             return;
         }
         let thresholds = self.thresholds();
-        if let Some(recognized) = self.recognizer.pointer(&event, self.now, &thresholds) {
+        if let Some(recognized) = self.input.recognizer.pointer(&event, self.now, &thresholds) {
             self.recognized(recognized);
         }
     }
@@ -129,11 +154,12 @@ impl Kernel {
         if inward >= thresholds.swipe_distance as i32 && across.abs() < inward {
             if self.policy() == keymap::Policy::Own {
                 let again = self
+                    .input
                     .edge_pending
                     .take()
                     .is_some_and(|(side, until)| side == touch.side && self.now < until);
                 if !again {
-                    self.edge_pending = Some((touch.side, self.now.add_millis(3000)));
+                    self.input.edge_pending = Some((touch.side, self.now.add_millis(3000)));
                     let text = self.shared.translator.tr("core.edge-again").to_string();
                     self.output.commands.push(Command::Notify(text));
                     return;
@@ -259,35 +285,39 @@ impl Kernel {
 
     /// Whether `event` belongs to a press dropped (see [`Kernel::shown`]).
     pub(crate) fn stale(&mut self, now: Instant, event: &InputEvent) -> bool {
-        let early = self.stale_before.is_some_and(|before| now < before)
-            || self.shown_at[0].is_some_and(|before| now < before);
+        let early = self.input.stale_before.is_some_and(|before| now < before)
+            || self.input.shown_at[0].is_some_and(|before| now < before);
         match event {
             InputEvent::Button {
                 name,
                 state: ButtonState::Pressed,
             } if early => {
-                self.dropped_buttons.push(name);
+                self.input.dropped_buttons.push(name);
                 true
             }
             InputEvent::Button {
                 name,
                 state: ButtonState::Released,
-            } => match self.dropped_buttons.iter().position(|b| b == name) {
+            } => match self.input.dropped_buttons.iter().position(|b| b == name) {
                 Some(at) => {
-                    self.dropped_buttons.remove(at);
+                    self.input.dropped_buttons.remove(at);
                     true
                 }
                 None => false,
             },
             InputEvent::Pointer(p) if p.phase == PointerPhase::Down && early => {
-                self.dropped_pointers.push(p.id);
+                self.input.dropped_pointers.push(p.id);
                 true
             }
-            InputEvent::Pointer(p) => match self.dropped_pointers.iter().position(|&id| id == p.id)
+            InputEvent::Pointer(p) => match self
+                .input
+                .dropped_pointers
+                .iter()
+                .position(|&id| id == p.id)
             {
                 Some(at) => {
                     if matches!(p.phase, PointerPhase::Up | PointerPhase::Cancel) {
-                        self.dropped_pointers.remove(at);
+                        self.input.dropped_pointers.remove(at);
                     }
                     true
                 }

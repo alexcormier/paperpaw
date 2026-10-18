@@ -31,7 +31,7 @@ impl Kernel {
 
     fn take_requests(&mut self) -> Vec<HttpCall> {
         if self.network_ready() {
-            self.http.take()
+            self.io.http.take()
         } else {
             Vec::new()
         }
@@ -39,18 +39,18 @@ impl Kernel {
 
     fn take_server_calls(&mut self) -> Vec<ServerCall> {
         if self.network_ready() {
-            self.servers.take()
+            self.io.servers.take()
         } else {
             Vec::new()
         }
     }
 
     fn take_speech(&mut self) -> Vec<SpeechCall> {
-        self.speech.take()
+        self.io.speech.take()
     }
 
     fn take_wifi_calls(&mut self) -> Vec<quireink_sdk::wifi::WifiCommand> {
-        core::mem::take(&mut self.wifi_calls)
+        core::mem::take(&mut self.io.wifi_calls)
     }
 }
 
@@ -2230,7 +2230,7 @@ fn bands_pass_whole_aligned_rows_and_again() {
     assert_eq!(height, kernel.framebuffer.bounds().height);
     assert_eq!(passed(&mut kernel, true), parts);
     // With changes waiting, nothing is captured.
-    kernel.unrendered = Some(Rect::new(0, 0, 10, 10));
+    kernel.frame.unrendered = Some(Rect::new(0, 0, 10, 10));
     assert!(!kernel.capture(&mut |_, _| panic!("captured with changes waiting")));
 }
 
@@ -2589,7 +2589,7 @@ fn a_row_of_hints_names_the_buttons_below_the_screen() {
     kernel.tick(Instant(150 + 4000));
     assert_eq!(kernel.hint_row(), None);
     // Gone, the page is drawn there again.
-    assert_eq!(kernel.unrendered.map(|r| r.bottom()), Some(90));
+    assert_eq!(kernel.frame.unrendered.map(|r| r.bottom()), Some(90));
     kernel.apply(Command::ShowHints);
     kernel.finish();
     assert_eq!(kernel.hint_row(), Some(over));
@@ -2673,12 +2673,12 @@ fn leaving_a_large_picture_refreshes_in_full() {
     let effects = kernel.finish();
     assert_eq!(mode(effects), Some(RefreshMode::Partial));
     render(&mut kernel);
-    assert!(kernel.pictures_shown);
+    assert!(kernel.frame.pictures_shown);
     *shown.borrow_mut() = false;
     kernel.apply(Command::Redraw(RefreshMode::Partial));
     assert_eq!(mode(kernel.finish()), Some(RefreshMode::Full));
     render(&mut kernel);
-    assert!(!kernel.pictures_shown);
+    assert!(!kernel.frame.pictures_shown);
 }
 
 /// Writes down the network's events, and asks for Wi-Fi on when the

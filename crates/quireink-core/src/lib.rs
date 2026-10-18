@@ -286,9 +286,6 @@ pub struct Kernel {
     shared: Shared,
     framebuffer: Framebuffer,
     registry: Registry,
-    /// Every key map source, to rebuild the key map when the preset changes.
-    keymap_sources: Vec<(Origin, Cow<'static, str>)>,
-    keymap_presets: Vec<(Id, Cow<'static, str>)>,
     subscriptions: Vec<(Id, Id, EventHandler)>,
     /// When the active screen wants `on_timer`.
     screen_timer: Option<Instant>,
@@ -296,51 +293,19 @@ pub struct Kernel {
     scheduled: Vec<(Instant, Id, Params)>,
     /// The short message showing ([`Command::Notify`]) and until when.
     notice: Option<(Box<dyn Screen>, Instant)>,
-    /// The part of the screen to redraw at the end of the current call.
-    pending: Option<Rect>,
-    /// What changed but has not been passed to [`Kernel::render`] yet.
-    unrendered: Option<Rect>,
-    /// What [`Kernel::render`] passed last, for [`Kernel::rerender`].
-    rendered: Option<Rect>,
-    /// See [`KernelBuilder::row_align`].
-    row_align: u16,
-    /// The pixels of a band, where frames are drawn in bands
-    /// ([`KernelBuilder::frame_rows`]): kept when the screen is turned.
-    band: Option<u32>,
-    recognizer: Recognizer,
-    /// Pointer ids captured by the active screen.
-    captured: Vec<u8>,
-    /// A finger that came down at an edge, followed by the kernel for a
-    /// swipe in from it (see [`keymap::InputKey::Edge`]).
-    edge_touch: Option<EdgeTouch>,
-    /// A swipe in from an edge on a screen with its own gestures, waiting
-    /// for the second one that applies it: the side, and until when.
-    edge_pending: Option<(Direction, Instant)>,
     stack: Vec<ActiveScreen>,
-    refresh: RefreshPolicy,
     output: Output,
     warnings: Vec<Warning>,
     /// A restart was requested (see [`Command::Restart`]).
     restart: bool,
     /// Sleep was requested (see [`Command::Sleep`]).
     sleep: bool,
-    /// A screenshot to save with the next frame drawn: its path.
-    screenshot: Option<String>,
     /// The row of hints over the buttons below the screen.
     hint: hints::HintRow,
     /// See [`KernelBuilder::busy_mark`].
     busy_mark: bool,
-    /// The mark shown while slow work waits, and the hint cell it is.
-    mark: Option<(Rect, Option<usize>)>,
     /// The work held back while the mark is shown ([`Kernel::proceed`]).
     withheld: Vec<Command>,
-    /// What the call opened, closed or ran, and when it began (the clock's
-    /// microseconds), until the call is done.
-    timing: Option<(String, u64)>,
-    /// How long that took the last time, in milliseconds.
-    durations: Vec<(String, u32)>,
-    /// The frame shown has large pictures (see [`PICTURES_PERCENT`]).
-    pictures_shown: bool,
     /// When the device was last used (input, a page turned), for sleeping
     /// by itself ([`settings::SLEEP_AFTER`](core_settings::SLEEP_AFTER)).
     last_activity: Instant,
@@ -348,41 +313,18 @@ pub struct Kernel {
     shown_since: Instant,
     /// The active settings scope: its file and the screen that set it.
     scope: Option<(String, Option<usize>)>,
-    /// Plugins' requests ([`Io::Http`]).
-    http: io::http::Http,
-    /// Plugins' servers ([`Io::Server`]).
-    servers: io::servers::Servers,
-    /// Plugins' sockets and broadcasts ([`Io::Socket`]).
-    sockets: io::sockets::Sockets,
-    /// Text spoken ([`Io::Speech`]).
-    speech: io::speech::Speech,
-    /// The system's clipboard ([`Io::Copy`], [`Io::ReadClipboard`]).
-    clipboard: io::clipboard::Clipboard,
-    /// What the shell is to do with the radio ([`Io::Wifi`]).
-    wifi_calls: Vec<WifiCommand>,
-    /// What the shell is to do with the firmware ([`Io::Firmware`]).
-    firmware_calls: Vec<FirmwareCommand>,
-    /// Since when plugins' network work has waited for a network.
-    network_waiting: Option<Instant>,
     /// A screen was opened or closed since the last call ended; then the
     /// frame drawn for it is not shown yet (see [`Kernel::shown`]).
     screens_changed: bool,
-    settling: bool,
-    /// Presses made before this, while another screen was coming up, are
-    /// dropped (see [`Kernel::shown`]), with their releases.
-    stale_before: Option<Instant>,
-    /// When the last two frames showed: presses made before the earlier
-    /// one are more than a frame behind and dropped (see
-    /// [`Kernel::shown`]).
-    shown_at: [Option<Instant>; 2],
-    dropped_buttons: Vec<&'static str>,
-    dropped_pointers: Vec<u8>,
-    /// Something used the network at the end of the last call.
-    network_busy: bool,
     /// Setting defaults from plugins, applied once all are registered:
     /// `(plugin, setting, value)`.
     plugin_defaults: Vec<(Id, Id, Cow<'static, str>)>,
     now: Instant,
+    input: gestures::InputState,
+    io: network::IoState,
+    frame: drawing::FrameState,
+    keys: plugins::KeySources,
+    timing: drawing::Timing,
 }
 
 impl fmt::Debug for Kernel {
@@ -492,7 +434,7 @@ impl Kernel {
                 // Without a long press to tell apart, at once.
                 let long = InputKey::LongButton(Cow::Borrowed(name));
                 let at_once = self.resolve(&long).is_none();
-                if let Some(recognized) = self.recognizer.button(name, state, now, at_once) {
+                if let Some(recognized) = self.input.recognizer.button(name, state, now, at_once) {
                     self.recognized(recognized);
                 }
             }
@@ -513,7 +455,7 @@ impl Kernel {
     pub fn proceed(&mut self, now: Instant) -> Effects {
         let _running = self.shared.meter.enter(meter::CORE);
         self.now = now;
-        if let Some((area, _)) = self.mark.take() {
+        if let Some((area, _)) = self.frame.mark.take() {
             self.invalidate(area);
         }
         let mut commands = mem::take(&mut self.withheld);
@@ -542,19 +484,20 @@ impl Kernel {
     /// Notes how long the work timed took, once the call is done (with the
     /// mark shown, once it went on).
     fn timed(&mut self) {
-        if self.mark.is_some() {
+        if self.frame.mark.is_some() {
             return;
         }
-        let (Some((key, started)), Some(now)) = (self.timing.take(), self.shared.meter.micros())
+        let (Some((key, started)), Some(now)) =
+            (self.timing.running.take(), self.shared.meter.micros())
         else {
             return;
         };
         let ms = (now.saturating_sub(started) / 1000).min(u64::from(u32::MAX)) as u32;
-        self.durations.retain(|(k, _)| *k != key);
-        if self.durations.len() >= TIMED {
-            self.durations.remove(0);
+        self.timing.durations.retain(|(k, _)| *k != key);
+        if self.timing.durations.len() >= TIMED {
+            self.timing.durations.remove(0);
         }
-        self.durations.push((key, ms));
+        self.timing.durations.push((key, ms));
     }
 
     /// The frame last rendered is on the panel now, at `now` (on the
@@ -568,9 +511,9 @@ impl Kernel {
     /// line up a long tail of steps. Shells that never call it keep every
     /// press.
     pub fn shown(&mut self, now: Instant) {
-        self.shown_at = [self.shown_at[1], Some(now)];
-        if mem::take(&mut self.settling) {
-            self.stale_before = Some(now);
+        self.input.shown_at = [self.input.shown_at[1], Some(now)];
+        if mem::take(&mut self.input.settling) {
+            self.input.stale_before = Some(now);
         }
     }
 
@@ -583,7 +526,7 @@ impl Kernel {
                 .shared
                 .settings
                 .bool(core_settings::SPEAK_FOCUS.as_str())
-            || self.speech.speaking()
+            || self.io.speech.speaking()
         {
             return;
         }
@@ -600,7 +543,7 @@ impl Kernel {
                 alloc::format!("{}, {state}", part.label)
             }
         });
-        if said == self.speech.focus {
+        if said == self.io.speech.focus {
             return;
         }
         if let Some(text) = &said {
@@ -614,10 +557,11 @@ impl Kernel {
                 queue: false,
             };
             let (available, screens) = (self.shared.caps.speech, self.stack.len());
-            self.speech
+            self.io
+                .speech
                 .speak(speech, available, screens, &mut self.output.commands);
         }
-        self.speech.focus = said;
+        self.io.speech.focus = said;
     }
 
     /// Tells the kernel the time of day and the battery's charge. Shells
@@ -666,7 +610,7 @@ impl Kernel {
         if self.sleep_due().is_some_and(|at| at <= now) {
             self.last_activity = now;
             // Busy: reading aloud, downloading, serving. Else asleep.
-            if !self.speech.speaking() && !self.http.busy() && !self.servers.busy() {
+            if !self.io.speech.speaking() && !self.io.http.busy() && !self.io.servers.busy() {
                 self.output
                     .commands
                     .push(Command::RunAction(quireink_sdk::builtin::actions::SLEEP));
@@ -676,7 +620,7 @@ impl Kernel {
             self.fail_waiting_network();
         }
         let thresholds = self.thresholds();
-        for recognized in self.recognizer.tick(now, &thresholds) {
+        for recognized in self.input.recognizer.tick(now, &thresholds) {
             self.recognized(recognized);
         }
         if self.screen_timer.is_some_and(|at| at <= now) {
