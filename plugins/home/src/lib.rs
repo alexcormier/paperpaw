@@ -857,11 +857,13 @@ impl Screen for Dashboard {
                     col: step(c.col, true),
                     ..c
                 },
-                (Mode::Move, a) if *a == actions::UP => Cells {
+                // Up and down, or the page buttons where there are none
+                // (the X4's side buttons).
+                (Mode::Move, a) if *a == actions::UP || *a == actions::PREV_PAGE => Cells {
                     row: step(c.row, false),
                     ..c
                 },
-                (Mode::Move, a) if *a == actions::DOWN => Cells {
+                (Mode::Move, a) if *a == actions::DOWN || *a == actions::NEXT_PAGE => Cells {
                     row: step(c.row, true),
                     ..c
                 },
@@ -873,18 +875,27 @@ impl Screen for Dashboard {
                     w: step(c.w, true),
                     ..c
                 },
-                (Mode::Resize, a) if *a == actions::UP => Cells {
+                (Mode::Resize, a) if *a == actions::UP || *a == actions::PREV_PAGE => Cells {
                     h: step(c.h, false).max(1),
                     ..c
                 },
-                (Mode::Resize, a) if *a == actions::DOWN => Cells {
+                (Mode::Resize, a) if *a == actions::DOWN || *a == actions::NEXT_PAGE => Cells {
                     h: step(c.h, true),
                     ..c
                 },
                 _ => return Handled::No,
             };
-            if to != c && self.set_cells(index, to, cx) {
-                cx.request_refresh(RefreshMode::Fast);
+            if to != c {
+                if self.set_cells(index, to, cx) {
+                    cx.request_refresh(RefreshMode::Fast);
+                } else if to.col + to.w <= self.geometry.columns
+                    && to.row + to.h <= self.geometry.rows
+                {
+                    // Within the page, but another item is in the way:
+                    // said, so the press does not seem lost.
+                    let env = *cx.env();
+                    cx.command(Command::Notify(env.i18n.tr("home.no-room").to_string()));
+                }
             }
             return Handled::Yes;
         }

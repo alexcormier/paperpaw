@@ -38,5 +38,9 @@ fn translations_use_only_packed_characters() {
             }
         }
     }
-    assert!(missing.is_empty(), "not in the font packs:\n{}", missing.join("\n"));
+    assert!(
+        missing.is_empty(),
+        "not in the font packs:\n{}",
+        missing.join("\n")
+    );
 }

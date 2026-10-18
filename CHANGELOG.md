@@ -16,6 +16,10 @@ change the plugin SDK.
   shows it in the status line and on the home screen; the time zone is
   chosen under Settings, System (UTC on "Auto": the X4 has none of its
   own). Gone when it is switched off, until it is online again.
+- Home screen, with buttons only (X4): items are moved up and down and
+  made taller or lower with the page buttons, which the X4 has instead of
+  up and down (before, only their width could be changed); where another
+  item is in the way, a notice says so.
 - Headers are light by default (a line below the title instead of a
   black bar), calmer and as the home screen and the setup look; dark
   headers remain a choice under Appearance.
