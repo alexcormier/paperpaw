@@ -25,10 +25,12 @@ pub fn encode(bytes: &[u8]) -> String {
 /// an odd number of digits or anything else.
 pub fn decode(text: &str) -> Option<Vec<u8>> {
     let text = text.as_bytes();
-    if text.len() % 2 != 0 {
+    if !text.len().is_multiple_of(2) {
         return None;
     }
-    text.chunks_exact(2)
+    text.as_chunks::<2>()
+        .0
+        .iter()
         .map(|pair| {
             let digit = |c: u8| char::from(c).to_digit(16);
             Some((digit(pair[0])? << 4 | digit(pair[1])?) as u8)

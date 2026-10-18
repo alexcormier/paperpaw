@@ -100,7 +100,7 @@ impl StoredPack {
         }
         let mut strikes = Vec::with_capacity(count);
         let mut glyphs = None;
-        for s in table.chunks_exact(STRIKE) {
+        for s in table.as_chunks::<STRIKE>().0 {
             let n = u32_le(s, 16) as usize;
             // The same characters in every strike.
             if n > MAX_CHARS || glyphs.is_some_and(|g| g != n) {
@@ -124,7 +124,9 @@ impl StoredPack {
             return Err(FontError::Invalid);
         }
         let chars: Vec<char> = records
-            .chunks_exact(RECORD)
+            .as_chunks::<RECORD>()
+            .0
+            .iter()
             .filter_map(|r| char::from_u32(u32_le(r, 0)))
             .collect();
         if chars.len() != n || chars.windows(2).any(|w| w[0] >= w[1]) {
@@ -170,7 +172,9 @@ impl StoredPack {
                 .read_at(self.strikes[strike].glyph_table, &mut records);
             advances[strike] = Some(
                 records
-                    .chunks_exact(RECORD)
+                    .as_chunks::<RECORD>()
+                    .0
+                    .iter()
                     .map(|r| {
                         if read {
                             (i32_le(r, 4).max(0) / 4) as u16

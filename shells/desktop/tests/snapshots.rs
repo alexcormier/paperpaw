@@ -287,7 +287,9 @@ fn pixels(path: &Path) -> (u32, u32, Vec<u8>, usize) {
     let data = &data[..info.buffer_size()];
     let colourful = match info.color_type {
         png::ColorType::Rgb => data
-            .chunks_exact(3)
+            .as_chunks::<3>()
+            .0
+            .iter()
             .filter(|p| p.iter().max().unwrap() - p.iter().min().unwrap() > 24)
             .count(),
         _ => 0,
@@ -295,7 +297,9 @@ fn pixels(path: &Path) -> (u32, u32, Vec<u8>, usize) {
     let gray = match info.color_type {
         png::ColorType::Grayscale => data.to_vec(),
         png::ColorType::Rgb => data
-            .chunks_exact(3)
+            .as_chunks::<3>()
+            .0
+            .iter()
             .map(|p| {
                 ((u32::from(p[0]) * 299 + u32::from(p[1]) * 587 + u32::from(p[2]) * 114) / 1000)
                     as u8

@@ -65,7 +65,9 @@ pub(crate) fn read_block(
         let mut data = alloc::vec![0u8; run_count * convert::RUN];
         let read = storage.read_at(&paths.text, u64::from(start) + len as u64, &mut data)?;
         runs = data[..read]
-            .chunks_exact(convert::RUN)
+            .as_chunks::<{ convert::RUN }>()
+            .0
+            .iter()
             .map(|r| Run {
                 start: u32::from(u16::from_le_bytes([r[0], r[1]])),
                 end: u32::from(u16::from_le_bytes([r[2], r[3]])),

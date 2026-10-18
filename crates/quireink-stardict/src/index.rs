@@ -304,7 +304,7 @@ impl Builder {
                 if end > n {
                     break;
                 }
-                if self.entry % BLOCK == 0 {
+                if self.entry.is_multiple_of(BLOCK) {
                     let offset = u32::try_from(self.pos + p as u64)
                         .map_err(|_| malformed("index larger than 4 GiB"))?;
                     self.pending.extend_from_slice(&offset.to_le_bytes());

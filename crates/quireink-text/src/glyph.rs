@@ -23,7 +23,11 @@ impl GlyphRef<'_> {
         let Some(&byte) = self.data.get(usize::from(y) * stride + usize::from(x) / 2) else {
             return 0;
         };
-        let nibble = if x % 2 == 0 { byte >> 4 } else { byte & 0x0f };
+        let nibble = if x.is_multiple_of(2) {
+            byte >> 4
+        } else {
+            byte & 0x0f
+        };
         nibble * 17
     }
 

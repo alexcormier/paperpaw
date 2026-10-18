@@ -47,24 +47,15 @@ pub trait Blocks {
     /// command where the disk can.
     fn read_blocks(&mut self, index: u32, data: &mut [u8]) -> Result<(), DiskError> {
         (index..)
-            .zip(data.chunks_exact_mut(BLOCK))
-            .try_for_each(|(i, block)| {
-                let mut one = [0u8; BLOCK];
-                self.read_block(i, &mut one)?;
-                block.copy_from_slice(&one);
-                Ok(())
-            })
+            .zip(data.as_chunks_mut::<BLOCK>().0)
+            .try_for_each(|(i, block)| self.read_block(i, block))
     }
     /// Writes `data` (whole blocks) as blocks from `index` on, in one
     /// command where the disk can.
     fn write_blocks(&mut self, index: u32, data: &[u8]) -> Result<(), DiskError> {
         (index..)
-            .zip(data.chunks_exact(BLOCK))
-            .try_for_each(|(i, block)| {
-                let mut one = [0u8; BLOCK];
-                one.copy_from_slice(block);
-                self.write_block(i, &one)
-            })
+            .zip(data.as_chunks::<BLOCK>().0)
+            .try_for_each(|(i, block)| self.write_block(i, block))
     }
     /// Number of blocks.
     fn blocks(&mut self) -> Result<u32, DiskError>;
@@ -125,7 +116,7 @@ fn partitions<B: Blocks>(disk: &mut B, mbr: &[u8; BLOCK]) -> Result<Vec<(u64, u6
     if mbr[510..] != [0x55, 0xAA] {
         return Ok(found);
     }
-    for entry in mbr[446..510].chunks_exact(16) {
+    for entry in mbr[446..510].as_chunks::<16>().0 {
         match entry[4] {
             0 => {}
             // A protective entry: the table is a GPT.
@@ -147,7 +138,7 @@ fn gpt<B: Blocks>(disk: &mut B) -> Result<Vec<(u64, u64)>, DiskError> {
     let first_entry = u64_at(&block, 72);
     let count = u64::from(u32_at(&block, 80).min(128));
     let size = u64::from(u32_at(&block, 84));
-    if !(128..=BLOCK as u64).contains(&size) || BLOCK as u64 % size != 0 {
+    if !(128..=BLOCK as u64).contains(&size) || !(BLOCK as u64).is_multiple_of(size) {
         return Ok(found);
     }
     let per_block = BLOCK as u64 / size;

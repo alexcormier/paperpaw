@@ -196,7 +196,7 @@ pub(crate) fn replace_log(storage: &dyn Storage, file: &str) -> Result<(), Stora
         let n = storage.read_at(file, at, &mut chunk)?;
         let whole = n - n % 20;
         let mut out = Vec::with_capacity(whole / 20 * RECORD);
-        for r in chunk[..whole].chunks_exact(20) {
+        for r in chunk[..whole].as_chunks::<20>().0 {
             let v = |i: usize| u32::from_be_bytes([r[i], r[i + 1], r[i + 2], r[i + 3]]);
             let stat = PageStat {
                 book: v(0).min(u32::from(u16::MAX)) as u16,
@@ -233,7 +233,11 @@ pub(crate) fn days(storage: &dyn Storage, day_of: impl Fn(u32) -> i32) -> Vec<Da
     let (mut covered, mut days) = match data.split_first_chunk::<8>() {
         Some((head, rest)) => (
             u64::from_le_bytes(*head),
-            rest.chunks_exact(DAY).map(Day::decode).collect::<Vec<_>>(),
+            rest.as_chunks::<DAY>()
+                .0
+                .iter()
+                .map(|d| Day::decode(d))
+                .collect::<Vec<_>>(),
         ),
         None => (0, Vec::new()),
     };
@@ -251,7 +255,7 @@ pub(crate) fn days(storage: &dyn Storage, day_of: impl Fn(u32) -> i32) -> Vec<Da
     let mut at = covered;
     while let Ok(n) = storage.read_at(&log, at, &mut chunk) {
         let whole = n - n % RECORD;
-        for record in chunk[..whole].chunks_exact(RECORD) {
+        for record in chunk[..whole].as_chunks::<RECORD>().0 {
             let stat = PageStat::decode(record);
             let day = day_of(stat.start);
             match days.binary_search_by_key(&day, |d| d.day) {
@@ -293,7 +297,7 @@ pub(crate) fn scan(storage: &dyn Storage, mut visit: impl FnMut(&PageStat)) {
             return;
         };
         let whole = n - n % RECORD;
-        for record in chunk[..whole].chunks_exact(RECORD) {
+        for record in chunk[..whole].as_chunks::<RECORD>().0 {
             visit(&PageStat::decode(record));
         }
         if n < chunk.len() || whole == 0 {
@@ -320,7 +324,7 @@ pub(crate) fn scan_recent(storage: &dyn Storage, since: u32, mut visit: impl FnM
             return;
         }
         let mut older = false;
-        for record in chunk[..len].chunks_exact(RECORD).rev() {
+        for record in chunk[..len].as_chunks::<RECORD>().0.iter().rev() {
             let stat = PageStat::decode(record);
             if stat.start >= since {
                 visit(&stat);

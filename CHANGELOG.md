@@ -6,6 +6,9 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- QuireInk builds with Rust 1.88 and later (it said 1.85, which was too
+  old); CI checks it. A short [security model](docs/security-model.md)
+  says what is protected and against whom.
 - X4: a crash is written to the card at the next start
   (`.quireink/crashes.txt`, its version and why), for bug reports.
 - Data plugins say which version of the formats they are made for,

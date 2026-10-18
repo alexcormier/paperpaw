@@ -1,7 +1,8 @@
 # Security Policy
 
 QuireInk opens untrusted files (books, fonts, images) and runs third-party
-plugins, so we take security reports seriously.
+plugins, so we take security reports seriously. What it protects, and
+against whom, is in the [security model](docs/security-model.md).
 
 ## Reporting a vulnerability
 

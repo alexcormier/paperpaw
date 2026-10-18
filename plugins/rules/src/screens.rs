@@ -582,13 +582,14 @@ impl Screen for RulesScreen {
                 Condition::SwitchOff(id)
             };
             self.set_condition(condition, cx);
-        } else if *event == OPTION_CHOSEN && option == "remove" {
-            if let Some(i) = at.filter(|&i| i < self.rules.len()) {
-                self.rules.remove(i);
-                self.save(cx);
-                self.list.focus = self.list.focus.min(self.rows().len() - 1);
-                self.redraw(cx);
-            }
+        } else if *event == OPTION_CHOSEN
+            && option == "remove"
+            && let Some(i) = at.filter(|&i| i < self.rules.len())
+        {
+            self.rules.remove(i);
+            self.save(cx);
+            self.list.focus = self.list.focus.min(self.rows().len() - 1);
+            self.redraw(cx);
         }
     }
 }

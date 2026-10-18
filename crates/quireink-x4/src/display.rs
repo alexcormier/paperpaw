@@ -231,7 +231,7 @@ where
         rows: FrameView<'_>,
         planes: Planes,
     ) -> Result<(), Error> {
-        if top % 8 != 0 || top >= HEIGHT || rows.width != WIDTH || rows.height == 0 {
+        if !top.is_multiple_of(8) || top >= HEIGHT || rows.width != WIDTH || rows.height == 0 {
             return Err(Error::Rows);
         }
         let height = rows.height.min(HEIGHT - top);
@@ -625,7 +625,7 @@ mod tests {
     fn black_and_white_bands_as_gray_ones() {
         // The same ink in black and white and in gray: the same planes,
         // also for a band whose height is not a multiple of 8.
-        let ink = |x: u16, y: u16| (x * 7 + y * 3) % 5 == 0 || x == y;
+        let ink = |x: u16, y: u16| (x * 7 + y * 3).is_multiple_of(5) || x == y;
         for height in [16, 13] {
             let gray = band(height, ink);
             let stride = usize::from(WIDTH) / 8;

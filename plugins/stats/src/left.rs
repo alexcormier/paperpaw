@@ -73,7 +73,7 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
         events::PAGE_TURNED,
         Box::new(move |_, _, _| {
             turns.set(turns.get().wrapping_add(1));
-            if known.get() == Some(None) || turns.get() % RECOUNT == 0 {
+            if known.get() == Some(None) || turns.get().is_multiple_of(RECOUNT) {
                 known.set(None);
             }
         }),

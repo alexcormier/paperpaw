@@ -80,7 +80,7 @@ pub(crate) fn bars(
                 Color::gray(120),
             );
         }
-        let shown = (values.len() - 1 - i) % every == 0;
+        let shown = (values.len() - 1 - i).is_multiple_of(every);
         if let Some(label) = labels.get(i).filter(|_| shown) {
             let w = font.measure(style.small, label);
             let lx = x + bar_w / 2.0 - w / 2.0;

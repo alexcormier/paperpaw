@@ -240,10 +240,12 @@ fn button(name: &str) -> Option<&'static str> {
 
 /// Bytes written as hexadecimal, two digits each.
 pub fn hex_bytes(hex: &[u8]) -> Option<Vec<u8>> {
-    if hex.len() % 2 != 0 {
+    if !hex.len().is_multiple_of(2) {
         return None;
     }
-    hex.chunks_exact(2)
+    hex.as_chunks::<2>()
+        .0
+        .iter()
         .map(|pair| {
             let digit = |c: u8| char::from(c).to_digit(16);
             Some((digit(pair[0])? << 4 | digit(pair[1])?) as u8)

@@ -247,7 +247,9 @@ pub(crate) fn load(storage: &dyn Storage, cache: &str, book_size: u64) -> Option
         return None;
     }
     let spine = data
-        .chunks_exact(8)
+        .as_chunks::<8>()
+        .0
+        .iter()
         .map(|c| Chapter {
             record: u32::from_le_bytes([c[0], c[1], c[2], c[3]]),
             size: u32::from_le_bytes([c[4], c[5], c[6], c[7]]),

@@ -391,7 +391,7 @@ impl Plugin for Rules {
                     env,
                     book.get(),
                     out,
-                    |t| matches!(t, Trigger::Every(every) if now % u32::from(*every) == 0),
+                    |t| matches!(t, Trigger::Every(every) if now.is_multiple_of(u32::from(*every))),
                 );
                 schedule(env, out);
             }),

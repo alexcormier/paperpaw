@@ -32,6 +32,17 @@ jobs:
       # Builds without runtime font rendering use bitmap font packs.
       - run: cargo test -p quireink-text -p quireink-plugin-fonts-default --no-default-features
 
+  msrv:
+    name: Oldest Rust
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # The workspace's `rust-version`; `+1.88` wins over
+      # rust-toolchain.toml.
+      - uses: dtolnay/rust-toolchain@1.88
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo +1.88 check --workspace --all-targets
+
   sdk:
     name: SDK compatibility
     runs-on: ubuntu-latest

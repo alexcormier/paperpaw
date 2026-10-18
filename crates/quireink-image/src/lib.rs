@@ -96,7 +96,9 @@ pub trait ImageSink {
     /// as gray.
     fn row_rgb(&mut self, rgb: &[u8]) -> Result<(), ImageError> {
         let gray: alloc::vec::Vec<u8> = rgb
-            .chunks_exact(3)
+            .as_chunks::<3>()
+            .0
+            .iter()
             .map(|p| luma(u32::from(p[0]), u32::from(p[1]), u32::from(p[2])))
             .collect();
         self.row(&gray)

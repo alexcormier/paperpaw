@@ -99,12 +99,12 @@ impl Builder {
                 }
                 return;
             }
-            if path.len() == depth {
-                if let Some((mut entry, _, _)) = self.entry.take() {
-                    entry.authors = self.authors.join(" & ");
-                    if !entry.title.is_empty() && self.feed.entries.len() < MAX_ENTRIES {
-                        self.feed.entries.push(entry);
-                    }
+            if path.len() == depth
+                && let Some((mut entry, _, _)) = self.entry.take()
+            {
+                entry.authors = self.authors.join(" & ");
+                if !entry.title.is_empty() && self.feed.entries.len() < MAX_ENTRIES {
+                    self.feed.entries.push(entry);
                 }
             }
             return;
