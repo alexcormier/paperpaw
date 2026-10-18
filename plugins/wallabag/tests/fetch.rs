@@ -6,7 +6,7 @@
 
 use std::rc::Rc;
 
-use quireink_core::{HttpCall, HttpResponse, Kernel};
+use quireink_core::{HttpCall, HttpResponse, Io, Kernel};
 use quireink_platform::{ButtonState, InputEvent, Rotation};
 use quireink_plugin_wallabag::Wallabag;
 use quireink_sdk::secrets::{FILE, SecretChange, Secrets};
@@ -87,7 +87,17 @@ fn fetch(kernel: &mut Kernel, at: u64) -> Vec<HttpCall> {
             },
         );
     }
-    kernel.take_requests()
+    requests(kernel)
+}
+
+/// The requests the kernel asks the shell to make.
+fn requests(kernel: &mut Kernel) -> Vec<HttpCall> {
+    let io = kernel.take_io().into_iter();
+    io.filter_map(|io| match io {
+        Io::Http(call) => Some(call),
+        _ => None,
+    })
+    .collect()
 }
 
 fn answer(kernel: &mut Kernel, call: &HttpCall, status: u16, body: &str) -> Vec<HttpCall> {
@@ -100,7 +110,7 @@ fn answer(kernel: &mut Kernel, call: &HttpCall, status: u16, body: &str) -> Vec<
             ..HttpResponse::default()
         },
     );
-    kernel.take_requests()
+    requests(kernel)
 }
 
 #[test]

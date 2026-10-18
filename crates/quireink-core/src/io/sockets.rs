@@ -15,7 +15,7 @@ use quireink_sdk::{Command, Id, SocketNotice, SocketRead};
 /// parts.
 pub const SOCKET_PART: u32 = 64 * 1024;
 
-/// What a shell does for plugins' sockets (see `Kernel::take_socket_calls`).
+/// What a shell does for plugins' sockets ([`Io::Socket`](super::Io::Socket)).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SocketCall {
     /// Open a TCP connection; report `Connected` or `Failed`.
@@ -102,7 +102,7 @@ pub(crate) struct Sockets {
     /// Broadcasts waiting for answers: number, id, events.
     broadcasts: Vec<(u32, Id, Id)>,
     next: u32,
-    pub calls: Vec<SocketCall>,
+    calls: Vec<SocketCall>,
 }
 
 /// The command that tells a plugin `notice` on `events`.
@@ -111,6 +111,34 @@ fn emit(events: &Id, notice: SocketNotice) -> Command {
 }
 
 impl Sockets {
+    /// What the shell is to do.
+    pub fn take(&mut self) -> Vec<SocketCall> {
+        core::mem::take(&mut self.calls)
+    }
+
+    /// Whether calls wait for the shell (for a network).
+    pub fn waiting(&self) -> bool {
+        !self.calls.is_empty()
+    }
+
+    /// The calls waited too long for a network: each fails, for `reason`
+    /// (a broadcast ends).
+    pub fn fail_waiting(&mut self, reason: &str, storage: &dyn Storage, out: &mut Vec<Command>) {
+        for call in self.take() {
+            let event = match call {
+                SocketCall::Connect { socket, .. }
+                | SocketCall::Send { socket, .. }
+                | SocketCall::Read { socket, .. }
+                | SocketCall::Close { socket } => SocketEvent::Failed {
+                    socket,
+                    reason: String::from(reason),
+                },
+                SocketCall::Broadcast { broadcast, .. } => SocketEvent::Done { broadcast },
+            };
+            self.event(event, storage, out);
+        }
+    }
+
     fn number(&mut self) -> u32 {
         self.next = self.next.wrapping_add(1);
         self.next

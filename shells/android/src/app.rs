@@ -9,7 +9,7 @@ use android_activity::input::{InputEvent as AndroidInput, KeyAction, MotionActio
 use android_activity::{AndroidApp, InputStatus, MainEvent, PollEvent, WindowManagerFlags};
 use ndk::hardware_buffer_format::HardwareBufferFormat;
 use ndk::native_window::NativeWindow;
-use quireink_core::{Effects, Kernel};
+use quireink_core::{Effects, Io, Kernel};
 use quireink_fs::DirStorage;
 use quireink_graphics::Framebuffer;
 use quireink_platform::{
@@ -65,6 +65,8 @@ struct Running {
     sockets: quireink_serve::Sockets,
     /// Reading aloud.
     speech: crate::speech::Speech,
+    /// Plugins wait for the system clipboard's text.
+    clipboard_wanted: bool,
     /// The screen is kept on (while reading aloud).
     awake: bool,
     /// How the system was asked to turn the screen (see
@@ -230,7 +232,7 @@ fn android_main(app: AndroidApp) {
         state
             .servers
             .pump(|path, at, buffer| kernel.read_served(path, at, buffer).ok());
-        if state.kernel.wants_clipboard() {
+        if core::mem::take(&mut state.clipboard_wanted) {
             let text = crate::clipboard::read(&app);
             let effects = state.kernel.clipboard_text(now(), text);
             changed |= apply(state, effects);
@@ -470,6 +472,7 @@ fn start_kernel(
             quireink_serve::Sockets::new(move || waker.wake())
         },
         speech: crate::speech::Speech::new(app),
+        clipboard_wanted: false,
         awake: false,
         rotation: Rotation::Deg0,
     };
@@ -515,26 +518,26 @@ fn install_samples(app: &AndroidApp, root: &Path) {
 /// Executes the effects of a kernel call; `true` if the screen changed.
 fn apply(state: &mut Running, effects: Effects) -> bool {
     state.wake_at = effects.wake_at();
-    for mut call in state.kernel.take_requests() {
-        if let Err(e) = call.load_body(state.kernel.storage()) {
-            let failed = quireink_core::HttpResponse::failed(call.id, &e.to_string());
-            // Answered on the next round, like the network's answers.
-            state.net.answer(failed);
-            continue;
+    for io in state.kernel.take_io() {
+        match io {
+            Io::Http(mut call) => {
+                if let Err(e) = call.load_body(state.kernel.storage()) {
+                    let failed = quireink_core::HttpResponse::failed(call.id, &e.to_string());
+                    // Answered on the next round, like the network's answers.
+                    state.net.answer(failed);
+                    continue;
+                }
+                state.net.start(call);
+            }
+            Io::Copy(text) => crate::clipboard::write(&state.app, &text),
+            Io::ReadClipboard => state.clipboard_wanted = true,
+            Io::Server(call) => state.servers.apply(call),
+            Io::Socket(call) => state.sockets.apply(call),
+            Io::Speech(call) => state.speech.apply(call),
+            // The system manages Wi-Fi and the app: the kernel is built
+            // without either, so neither is asked.
+            Io::Wifi(_) | Io::Firmware(_) => {}
         }
-        state.net.start(call);
-    }
-    if let Some(text) = state.kernel.take_clipboard() {
-        crate::clipboard::write(&state.app, &text);
-    }
-    for call in state.kernel.take_server_calls() {
-        state.servers.apply(call);
-    }
-    for call in state.kernel.take_socket_calls() {
-        state.sockets.apply(call);
-    }
-    for call in state.kernel.take_speech() {
-        state.speech.apply(call);
     }
     state.restart |= effects.restart();
     // The system turns the window; its new size comes as an event.

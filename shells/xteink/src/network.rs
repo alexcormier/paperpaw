@@ -9,9 +9,11 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use quireink_core::{Effects, Kernel, ServerCall, ServerEvent, SocketCall, SocketEvent};
+use quireink_core::{
+    Effects, HttpCall, Kernel, ServerCall, ServerEvent, SocketCall, SocketEvent, WifiCommand,
+};
 #[cfg(feature = "remote")]
-use quireink_core::{HttpCall, WifiCommand, WifiEvent, WifiState};
+use quireink_core::{WifiEvent, WifiState};
 
 use crate::serve::Servers;
 use crate::sockets::Sockets;
@@ -58,6 +60,14 @@ const NO_NETWORK: &str = "no network";
 /// The numbers of requests made over USB, apart from the kernel's.
 const REMOTE_REQUESTS: u32 = 0xF000_0000;
 
+/// What the kernel asks of the network.
+pub enum NetworkIo {
+    Wifi(WifiCommand),
+    Http(HttpCall),
+    Server(ServerCall),
+    Socket(SocketCall),
+}
+
 /// Answers still to give over USB.
 #[cfg(feature = "remote")]
 #[derive(Debug, Default)]
@@ -75,6 +85,10 @@ pub struct Network {
     calls: Calls,
     servers: Servers,
     sockets: Sockets,
+    /// What the kernel asked for plugins' servers and sockets, for the
+    /// next step.
+    server_calls: Vec<ServerCall>,
+    socket_calls: Vec<SocketCall>,
     #[cfg(feature = "remote")]
     asked: Asked,
     sync: Sync,
@@ -92,6 +106,8 @@ impl Network {
             calls: Calls::default(),
             servers: Servers::default(),
             sockets: Sockets::default(),
+            server_calls: Vec::new(),
+            socket_calls: Vec::new(),
             #[cfg(feature = "remote")]
             asked: Asked::default(),
             sync: Sync::Idle { not_before: 0 },
@@ -105,20 +121,25 @@ impl Network {
         self.radio.is_on()
     }
 
+    /// What the kernel asks of the network (from `Kernel::take_io`),
+    /// carried out with the next step.
+    pub fn ask(&mut self, io: NetworkIo) {
+        match io {
+            NetworkIo::Wifi(command) => self.radio.apply(command),
+            NetworkIo::Http(call) => self.calls.add(call),
+            NetworkIo::Server(call) => self.server_calls.push(call),
+            NetworkIo::Socket(call) => self.socket_calls.push(call),
+        }
+    }
+
     /// One step: what the kernel asked, what happened, the answers. The
     /// kernel's effects for the main loop to apply.
     pub fn step(&mut self, kernel: &mut Kernel, now: Instant) -> Vec<Effects> {
         let mut effects = Vec::new();
-        for command in kernel.take_wifi_calls() {
-            self.radio.apply(command);
-        }
         for event in self.radio.poll() {
             #[cfg(feature = "remote")]
             self.answer_asked(kernel, &event);
             effects.push(kernel.wifi_event(now, event));
-        }
-        for call in kernel.take_requests() {
-            self.calls.add(call);
         }
         self.serve(kernel, now, &mut effects);
         self.sync_clock(now);
@@ -165,7 +186,7 @@ impl Network {
         let Some(net) = self.radio.net() else {
             effects.extend(self.servers.lost(kernel, now));
             effects.extend(self.sockets.lost(kernel, now));
-            for call in kernel.take_server_calls() {
+            for call in core::mem::take(&mut self.server_calls) {
                 if let ServerCall::Listen { server, .. } = call {
                     let failed = ServerEvent::Failed {
                         server,
@@ -174,7 +195,7 @@ impl Network {
                     effects.push(kernel.server_event(now, failed));
                 }
             }
-            for call in kernel.take_socket_calls() {
+            for call in core::mem::take(&mut self.socket_calls) {
                 let event = match call {
                     SocketCall::Connect { socket, .. } => SocketEvent::Failed {
                         socket,
@@ -187,10 +208,10 @@ impl Network {
             }
             return;
         };
-        for call in kernel.take_server_calls() {
+        for call in core::mem::take(&mut self.server_calls) {
             effects.extend(self.servers.apply(call, net, kernel, now));
         }
-        for call in kernel.take_socket_calls() {
+        for call in core::mem::take(&mut self.socket_calls) {
             if let Some(event) = self.sockets.apply(call, net, now) {
                 effects.push(kernel.socket_event(now, event));
             }
@@ -264,7 +285,7 @@ impl Network {
 
     /// What was asked over USB.
     #[cfg(feature = "remote")]
-    pub fn ask(&mut self, ask: Ask) {
+    pub fn ask_remote(&mut self, ask: Ask) {
         match ask {
             Ask::Scan => {
                 self.asked.scan = true;

@@ -6,6 +6,12 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Kernel: shells take everything they are to do at once,
+  `Kernel::take_io()`, as `Io` (requests, servers, sockets, speech, the
+  clipboard, the radio, the firmware), matched in full so that a shell
+  cannot forget one; the eight `take_…` methods are gone. On the X4,
+  plugins reading the clipboard or speaking no longer wait for ever.
+  Inside, each of these is a part of its own.
 - SDK: `ActionSpec::new(id, title)` with `.handler(…)` and `.hint(…)`;
   the struct is `#[non_exhaustive]`, so actions can learn more without
   breaking plugins. How the row of hints shows an action (its title, a

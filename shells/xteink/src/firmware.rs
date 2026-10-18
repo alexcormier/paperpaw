@@ -9,7 +9,9 @@
 use esp_hal::delay::Delay;
 use esp_hal::gpio::{Event, Input, Output, WakeupConfig};
 use log::{info, warn};
-use quireink_core::{Effects, FirmwareCommand, FirmwareState, InstallFailure, Kernel};
+use quireink_core::{
+    Effects, FirmwareCommand, FirmwareState, InstallFailure, Io, Kernel, SpeechCall,
+};
 use quireink_platform::{
     Battery, ButtonState, InputEvent, Instant, Rect, RefreshMode, SystemStatus,
 };
@@ -18,7 +20,7 @@ use quireink_x4::display::{Planes, Refresh};
 use quireink_x4::sent::{Check, Sent};
 
 use crate::board::Panel;
-use crate::network::Network;
+use crate::network::{Network, NetworkIo};
 use crate::ota::Ota;
 use crate::{clock, device, input, now, power, stack};
 
@@ -97,10 +99,11 @@ impl Firmware {
         power::feed();
         power::mark(power::at::LOOP);
         stack::check();
+        self.io();
         for effects in self.network.step(&mut self.kernel, now()) {
             self.apply(effects);
         }
-        self.firmware_calls();
+        self.firmware_step();
         // Not while the radio is on: its tasks run in between.
         let battery = !self.network.radio_on()
             && !installing
@@ -122,27 +125,53 @@ impl Firmware {
         Instant(self.state.kernel_time)
     }
 
-    /// Updates and restarts the kernel asked for, and how an update goes.
-    fn firmware_calls(&mut self) {
-        for command in self.kernel.take_firmware_calls() {
-            match command {
-                FirmwareCommand::Install { path } => {
-                    let state = match &mut self.ota {
-                        Some(ota) => ota.begin(self.kernel.storage(), &path),
-                        None => FirmwareState::Failed(InstallFailure::Write),
-                    };
-                    let effects = self.kernel.firmware_state(now(), state);
+    /// What the kernel asks of the X4: the network's work goes to
+    /// `network`, the firmware's is done here; speech and a system
+    /// clipboard it does not have.
+    fn io(&mut self) {
+        for io in self.kernel.take_io() {
+            match io {
+                Io::Wifi(command) => self.network.ask(NetworkIo::Wifi(command)),
+                Io::Http(call) => self.network.ask(NetworkIo::Http(call)),
+                Io::Server(call) => self.network.ask(NetworkIo::Server(call)),
+                Io::Socket(call) => self.network.ask(NetworkIo::Socket(call)),
+                Io::Firmware(command) => self.firmware(command),
+                Io::Speech(SpeechCall::Say { id, .. }) => {
+                    let effects = self.kernel.speech_done(now(), id, false);
                     self.apply(effects);
                 }
-                FirmwareCommand::Restart => {
-                    // What plugins keep is saved first.
-                    info!("restarting");
-                    let effects = self.kernel.suspend(now());
+                Io::Speech(SpeechCall::Stop) | Io::Copy(_) => {}
+                Io::ReadClipboard => {
+                    let effects = self.kernel.clipboard_text(now(), None);
                     self.apply(effects);
-                    esp_hal::system::software_reset();
                 }
             }
         }
+    }
+
+    /// An update or a restart the kernel asked for.
+    fn firmware(&mut self, command: FirmwareCommand) {
+        match command {
+            FirmwareCommand::Install { path } => {
+                let state = match &mut self.ota {
+                    Some(ota) => ota.begin(self.kernel.storage(), &path),
+                    None => FirmwareState::Failed(InstallFailure::Write),
+                };
+                let effects = self.kernel.firmware_state(now(), state);
+                self.apply(effects);
+            }
+            FirmwareCommand::Restart => {
+                // What plugins keep is saved first.
+                info!("restarting");
+                let effects = self.kernel.suspend(now());
+                self.apply(effects);
+                esp_hal::system::software_reset();
+            }
+        }
+    }
+
+    /// How an update goes.
+    fn firmware_step(&mut self) {
         if let Some(ota) = &mut self.ota
             && let Some(state) = ota.step(self.kernel.storage())
         {
@@ -501,7 +530,7 @@ impl Firmware {
         use crate::remote;
         use quireink_x4::remote::Command;
         match command {
-            Command::Network(ask) => self.network.ask(ask),
+            Command::Network(ask) => self.network.ask_remote(ask),
             Command::IdleSleep(seconds) => {
                 // At most ten minutes: the link is gone meanwhile.
                 self.state.sleep_on_usb_until = Some(Instant(now().0 + seconds.min(600) * 1000));

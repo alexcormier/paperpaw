@@ -34,7 +34,7 @@ stays sans-I/O ([ADR 0003](0003-sans-io-kernel.md)).
   uses it (`busy`). Events: `core.wifi-changed`, `core.wifi-scanned`,
   `core.wifi-failed`, `core.network-wanted`, `core.network-idle`.
 - **The kernel** (built with `KernelBuilder::wifi`) passes the commands
-  to the shell (`Kernel::take_wifi_calls`) and takes its reports
+  to the shell (`Io::Wifi`, `Kernel::take_io`) and takes its reports
   (`Kernel::wifi_event`). Network work of plugins (requests, servers,
   sockets) **waits in the kernel** while there is no network, for up to
   `NETWORK_WAIT_MS` (30 s), and goes to the shell once the state is

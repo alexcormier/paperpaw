@@ -246,7 +246,7 @@ plugin (see the sample).
 Plugins are tested with the real kernel and an in-memory storage, as the
 sample's [test](../samples/hello-plugin/tests/hello.rs) does: build a
 kernel with the plugin, send it input, look at the open screen, the
-settings, the files, the HTTP requests it makes (`Kernel::take_requests`)
+settings, the files, the HTTP requests it makes (`Kernel::take_io`)
 and answer them (`Kernel::http_response`). The emulator then shows how it
 looks and how much memory it needs on each device:
 

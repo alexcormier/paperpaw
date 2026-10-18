@@ -2,7 +2,7 @@
 
 use std::time::Instant as StdInstant;
 
-use quireink_core::{Effects, Kernel, KernelError, SpeechCall};
+use quireink_core::{Effects, Io, Kernel, KernelError, SpeechCall};
 use quireink_graphics::Framebuffer;
 use quireink_platform::{
     Battery, ButtonState, DeviceInfo, InputEvent, Instant, Rotation, SystemStatus, WallClock,
@@ -269,28 +269,36 @@ impl Device {
             let effects = budget::track(|| self.kernel.suspend(now));
             self.execute(effects);
         }
-        for mut call in self.kernel.take_requests() {
-            if let Err(e) = call.load_body(self.kernel.storage()) {
-                let now = self.now();
-                let failed = quireink_core::HttpResponse::failed(call.id, &e.to_string());
-                let effects = budget::track(|| self.kernel.http_response(now, failed));
-                self.execute(effects);
-                continue;
+        for io in self.kernel.take_io() {
+            match io {
+                Io::Http(mut call) => {
+                    if let Err(e) = call.load_body(self.kernel.storage()) {
+                        let now = self.now();
+                        let failed = quireink_core::HttpResponse::failed(call.id, &e.to_string());
+                        let effects = budget::track(|| self.kernel.http_response(now, failed));
+                        self.execute(effects);
+                        continue;
+                    }
+                    self.http.start(call);
+                }
+                Io::Server(call) => self.servers.apply(call),
+                Io::Socket(call) => self.sockets.apply(call),
+                Io::Speech(call) => self.speak(call),
+                Io::Wifi(call) => {
+                    let now = self.now();
+                    self.wifi.apply(call, now);
+                }
+                // The emulator's clipboard is the kernel's own: nothing to
+                // copy to, and it is not asked to read one.
+                Io::Copy(_) => {}
+                Io::ReadClipboard => {
+                    let now = self.now();
+                    let effects = budget::track(|| self.kernel.clipboard_text(now, None));
+                    self.execute(effects);
+                }
+                // The emulator is no device's firmware: it is not asked.
+                Io::Firmware(_) => {}
             }
-            self.http.start(call);
-        }
-        for call in self.kernel.take_server_calls() {
-            self.servers.apply(call);
-        }
-        for call in self.kernel.take_socket_calls() {
-            self.sockets.apply(call);
-        }
-        for call in self.kernel.take_speech() {
-            self.speak(call);
-        }
-        let now = self.now();
-        for call in self.kernel.take_wifi_calls() {
-            self.wifi.apply(call, now);
         }
         self.report_warnings();
         // Turned: the same screens, made anew for the turned size.

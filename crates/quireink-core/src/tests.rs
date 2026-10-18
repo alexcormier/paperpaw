@@ -18,7 +18,41 @@ use quireink_sdk::{
     Registrar, SDK_VERSION, Screen, ScreenSpec, SettingKind, SettingSpec, SettingValue, Version,
 };
 
-use crate::{Kernel, SpeechCall, WarningSource};
+use crate::{HttpCall, Io, Kernel, ServerCall, SpeechCall, WarningSource};
+
+/// What the shell is asked, one kind at a time, as the parts keep it: the
+/// tests of each part look at its own.
+impl Kernel {
+    /// A plugin's request, as [`Command::Http`] makes it.
+    fn request(&mut self, request: quireink_sdk::HttpRequest) {
+        self.output.commands.push(Command::Http(request));
+        self.run_commands();
+    }
+
+    fn take_requests(&mut self) -> Vec<HttpCall> {
+        if self.network_ready() {
+            self.http.take()
+        } else {
+            Vec::new()
+        }
+    }
+
+    fn take_server_calls(&mut self) -> Vec<ServerCall> {
+        if self.network_ready() {
+            self.servers.take()
+        } else {
+            Vec::new()
+        }
+    }
+
+    fn take_speech(&mut self) -> Vec<SpeechCall> {
+        self.speech.take()
+    }
+
+    fn take_wifi_calls(&mut self) -> Vec<quireink_sdk::wifi::WifiCommand> {
+        core::mem::take(&mut self.wifi_calls)
+    }
+}
 
 const DEVICE: DeviceInfo = DeviceInfo {
     id: "test",
@@ -1582,10 +1616,9 @@ fn copied_text_reaches_plugins_and_the_shell() {
         .extend([Command::SetClipboard(String::from("Alice")), read("a")]);
     kernel.run_commands();
     assert!(kernel.shared.env(Instant(0)).clipboard);
-    assert_eq!(kernel.take_clipboard().as_deref(), Some("Alice"));
-    assert_eq!(kernel.take_clipboard(), None);
+    assert_eq!(kernel.take_io(), [Io::Copy(String::from("Alice"))]);
+    assert_eq!(kernel.take_io(), []);
     // Without the system's clipboard, the answer comes at once.
-    assert!(!kernel.wants_clipboard());
     assert!(log.borrow().contains(&String::from("event ov.reply a")));
     // Long text is cut at a character boundary.
     let long = "ä".repeat(quireink_sdk::MAX_CLIPBOARD);
@@ -1603,10 +1636,15 @@ fn copied_text_reaches_plugins_and_the_shell() {
     assert!(kernel.shared.env(Instant(0)).clipboard);
     kernel.output.commands.push(read("b"));
     kernel.run_commands();
-    assert!(kernel.wants_clipboard());
+    // Asked once, however many wait.
+    assert_eq!(kernel.take_io(), [Io::ReadClipboard]);
+    kernel.output.commands.push(read("c"));
+    kernel.run_commands();
+    assert_eq!(kernel.take_io(), []);
     assert!(!log.borrow().contains(&String::from("event ov.reply b")));
     kernel.clipboard_text(Instant(1), Some(String::from("from another app")));
-    assert!(!kernel.wants_clipboard());
+    assert_eq!(kernel.take_io(), []);
+    assert!(log.borrow().contains(&String::from("event ov.reply c")));
     assert!(log.borrow().contains(&String::from("event ov.reply b")));
 }
 
@@ -2346,7 +2384,7 @@ fn a_row_of_hints_names_the_buttons_below_the_screen() {
     assert_eq!(kernel.hint_row(), Some(Rect::new(0, above, 90, 90 - above)));
     // Nothing to go back to; the screen's own word; arrows.
     assert_eq!(
-        kernel.hints,
+        kernel.hint.shown,
         [
             Hint::Hidden,
             Hint::Text("Go".into()),
@@ -2384,7 +2422,7 @@ fn a_row_of_hints_names_the_buttons_below_the_screen() {
     // Back from it, the home screen has the part above the row again.
     press(&mut kernel, 5000, "back");
     assert_eq!(kernel.content().height, above);
-    assert_eq!(kernel.hints[0], Hint::Hidden);
+    assert_eq!(kernel.hint.shown[0], Hint::Hidden);
 
     // Switched off: the screens are made anew for all of it.
     kernel.apply(Command::set(
@@ -2682,4 +2720,30 @@ fn settings_files_of_version_1_are_read() {
         .collect();
     assert_eq!(main, ["core.toggle-night-mode", "core.back"]);
     assert!(kernel.take_warnings().is_empty());
+}
+
+/// The shell takes everything at once: the radio first, network work only
+/// once there is a network.
+#[test]
+fn the_shell_takes_all_it_is_asked_at_once() {
+    let log = log();
+    let mut kernel = wifi_kernel(&log);
+    kernel.request(quireink_sdk::HttpRequest::new(
+        "GET",
+        "http://example.org/",
+        Id::new_static("net.reply"),
+    ));
+    kernel.finish();
+    assert_eq!(
+        kernel.take_io(),
+        [Io::Wifi(quireink_sdk::wifi::WifiCommand::On)]
+    );
+    let online = quireink_sdk::wifi::WifiState::Online {
+        ssid: String::from("Home"),
+        address: String::from("10.0.0.2"),
+    };
+    kernel.wifi_event(Instant(10), crate::WifiEvent::State(online));
+    let io = kernel.take_io();
+    assert!(matches!(io.as_slice(), [Io::Http(call)] if call.url == "http://example.org/"));
+    assert_eq!(kernel.take_io(), []);
 }

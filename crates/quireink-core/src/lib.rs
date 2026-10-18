@@ -39,14 +39,14 @@ extern crate alloc;
 
 mod core_plugin;
 mod data_plugin;
+mod hints;
 mod input;
+mod io;
 mod keymap;
 mod meter;
-mod net;
 mod recall;
 mod refresh;
 mod registry;
-mod sockets;
 #[cfg(test)]
 mod tests;
 
@@ -71,22 +71,21 @@ use quireink_sdk::builtin::{
 use quireink_sdk::event::EventData;
 use quireink_sdk::setting::{Setting, SettingType};
 use quireink_sdk::{
-    ActionHint, Actions, Capabilities, Command, Contribution, Cx, Direction, Env, EnvParts,
-    EventHandler, Fonts, Formats, Gesture, GestureKind, Handled, Hint, Hints, HttpReply,
-    Hyphenation, Id, Manifest, Menus, Metrics, Output, Params, Plugin, PluginInfo, PluginState,
-    Plugins, RegisterError, RequiredFor, SDK_VERSION, Screen, ServerNotice, Settings, StatusItems,
+    Actions, Capabilities, Command, Contribution, Cx, Direction, Env, EnvParts, EventHandler,
+    Fonts, Formats, Gesture, GestureKind, Handled, Hints, Hyphenation, Id, Manifest, Menus,
+    Metrics, Output, Params, Plugin, PluginInfo, PluginState, Plugins, RegisterError, RequiredFor,
+    SDK_VERSION, Screen, Settings, StatusItems,
 };
 
 use crate::core_plugin::{CORE, CorePlugin};
 use crate::input::{Recognized, Recognizer, Thresholds};
-use crate::keymap::{InputKey, Keymap, Origin, Zone};
-pub use crate::net::{
-    HttpCall, HttpResponse, MAX_FILE, MAX_RESPONSE, ServedFile, ServerCall, ServerEvent,
-    SpeechCall, WifiEvent,
+pub use crate::io::{
+    HttpCall, HttpResponse, Io, MAX_FILE, MAX_RESPONSE, SOCKET_PART, ServedFile, ServerCall,
+    ServerEvent, SocketCall, SocketEvent, SpeechCall, WifiEvent,
 };
+use crate::keymap::{InputKey, Keymap, Origin, Zone};
 use crate::refresh::RefreshPolicy;
 use crate::registry::{Registry, Staging};
-pub use crate::sockets::{SOCKET_PART, SocketCall, SocketEvent};
 use quireink_sdk::Registrar;
 use quireink_sdk::filters::InputVerdict;
 pub use quireink_sdk::firmware::{Firmware, FirmwareCommand, FirmwareState, InstallFailure};
@@ -363,10 +362,8 @@ impl KernelBuilder {
         self
     }
 
-    /// The shell makes HTTP requests (see [`Kernel::take_requests`]);
-    /// without, plugins' requests fail at once.
     /// QuireInk manages Wi-Fi itself on this device (the shell answers
-    /// [`Kernel::take_wifi_calls`] and reports with [`Kernel::wifi_event`]);
+    /// [`Io::Wifi`] and reports with [`Kernel::wifi_event`]);
     /// it implies [`network`](Self::network). See [`quireink_sdk::wifi`].
     pub fn wifi(mut self, managed: bool) -> Self {
         self.caps.wifi = managed;
@@ -375,27 +372,30 @@ impl KernelBuilder {
     }
 
     /// QuireInk is the device's firmware and updates it (the shell answers
-    /// [`Kernel::take_firmware_calls`] and reports with
+    /// [`Io::Firmware`] and reports with
     /// [`Kernel::firmware_state`]). See [`quireink_sdk::firmware`].
     pub fn firmware(mut self, firmware: Firmware) -> Self {
         self.firmware = Some(firmware);
         self
     }
 
+    /// The shell makes HTTP requests and serves ([`Io::Http`],
+    /// [`Io::Server`], [`Io::Socket`]); without, plugins' requests fail
+    /// at once.
     pub fn network(mut self, available: bool) -> Self {
         self.caps.network = available;
         self
     }
 
     /// The shell reads the system's clipboard when plugins ask for its
-    /// text (see [`Kernel::wants_clipboard`]); without, only text copied
+    /// text ([`Io::ReadClipboard`]); without, only text copied
     /// in QuireInk is pasted.
     pub fn system_clipboard(mut self, available: bool) -> Self {
         self.caps.system_clipboard = available;
         self
     }
 
-    /// The shell speaks text aloud (see [`Kernel::take_speech`]); without,
+    /// The shell speaks text aloud ([`Io::Speech`]); without,
     /// plugins' speech fails at once.
     pub fn speech(mut self, available: bool) -> Self {
         self.caps.speech = available;
@@ -542,36 +542,21 @@ impl KernelBuilder {
             restart: false,
             sleep: false,
             screenshot: None,
-            button_row: self.button_row,
-            hint_height: 0,
+            hint: hints::HintRow::new(self.button_row),
             busy_mark: self.busy_mark,
-            pressed: None,
             mark: None,
             withheld: Vec::new(),
             timing: None,
             durations: Vec::new(),
-            hints: Vec::new(),
-            hints_until: None,
             pictures_shown: false,
             last_activity: Instant(0),
             shown_since: Instant(0),
             scope: None,
-            requests: Vec::new(),
-            copied: None,
-            clipboard_reads: Vec::new(),
-            server_calls: Vec::new(),
-            servers: Vec::new(),
-            next_server: 0,
-            sockets: sockets::Sockets::default(),
-            request_bodies: Vec::new(),
-            incoming: Vec::new(),
-            reads_clipboard: caps.system_clipboard,
-            speech_calls: Vec::new(),
-            speaking: Vec::new(),
-            spoken_focus: None,
-            next_speech: 0,
-            awaiting: Vec::new(),
-            next_request: 0,
+            http: io::http::Http::default(),
+            servers: io::servers::Servers::default(),
+            sockets: io::sockets::Sockets::default(),
+            speech: io::speech::Speech::default(),
+            clipboard: io::clipboard::Clipboard::new(caps.system_clipboard),
             wifi_calls: Vec::new(),
             firmware_calls: Vec::new(),
             network_waiting: None,
@@ -737,22 +722,12 @@ impl KernelBuilder {
             .map(|(id, spec)| (id.clone(), spec.title.clone()))
             .collect();
         // Screens are made for the row of hints from the first one on.
-        kernel.hint_height = kernel.wanted_hint_height();
+        kernel.hint.height = kernel.wanted_hint_height();
         Ok(kernel)
     }
 }
 
 /// A screen on the navigation stack.
-/// A request to a plugin's server whose body is still coming.
-struct Incoming {
-    request: u32,
-    server: u32,
-    method: String,
-    target: String,
-    /// Where the body goes.
-    path: String,
-}
-
 struct ActiveScreen {
     id: Id,
     /// The slot it was opened for, if any.
@@ -816,15 +791,10 @@ pub struct Kernel {
     sleep: bool,
     /// A screenshot to save with the next frame drawn: its path.
     screenshot: Option<String>,
-    /// The buttons in a row below the screen (see
-    /// [`KernelBuilder::button_row`]).
-    button_row: &'static [&'static str],
-    /// The height of the row of hints above them, 0 while it is off.
-    hint_height: u16,
+    /// The row of hints over the buttons below the screen.
+    hint: hints::HintRow,
     /// See [`KernelBuilder::busy_mark`].
     busy_mark: bool,
-    /// The cell of the row of hints whose button was pressed in this call.
-    pressed: Option<usize>,
     /// The mark shown while slow work waits, and the hint cell it is.
     mark: Option<(Rect, Option<usize>)>,
     /// The work held back while the mark is shown ([`Kernel::proceed`]).
@@ -834,10 +804,6 @@ pub struct Kernel {
     timing: Option<(String, u64)>,
     /// How long that took the last time, in milliseconds.
     durations: Vec<(String, u32)>,
-    /// What the row shows, as it was last drawn.
-    hints: Vec<Hint>,
-    /// Until when the row shows over a screen that has it only on a press.
-    hints_until: Option<Instant>,
     /// The frame shown has large pictures (see [`PICTURES_PERCENT`]).
     pictures_shown: bool,
     /// When the device was last used (input, a page turned), for sleeping
@@ -847,46 +813,19 @@ pub struct Kernel {
     shown_since: Instant,
     /// The active settings scope: its file and the screen that set it.
     scope: Option<(String, Option<usize>)>,
-    /// HTTP requests for the shell to make.
-    requests: Vec<HttpCall>,
-    /// Text copied, for the shell to put on the system's clipboard.
-    copied: Option<String>,
-    /// What the shell is to do for plugins' servers.
-    server_calls: Vec<ServerCall>,
-    /// Servers running: number for the shell, id, event, and how many
-    /// screens were open when it started (it stops once fewer are).
-    servers: Vec<(u32, Id, Id, usize)>,
-    next_server: u32,
-    /// Plugins' sockets and broadcasts, and what the shell is to do for
-    /// them.
-    sockets: sockets::Sockets,
-    /// Bodies of requests not answered yet: request, file.
-    request_bodies: Vec<(u32, String)>,
-    /// Requests whose body is still coming.
-    incoming: Vec<Incoming>,
-    /// Requests for the clipboard's text, waiting for the shell: reply
-    /// event and parameters.
-    clipboard_reads: Vec<(Id, Params)>,
-    /// The shell reads the system's clipboard (see
-    /// [`KernelBuilder::system_clipboard`]).
-    reads_clipboard: bool,
-    /// What the shell is to do for speech.
-    speech_calls: Vec<SpeechCall>,
-    /// The texts being spoken, in order: number for the shell, reply event
-    /// and parameters, and how many screens were open when it started
-    /// (speech stops once fewer are).
-    speaking: Vec<(u32, Id, Params, usize)>,
-    /// What was said last of the focus ([`core_settings::SPEAK_FOCUS`]).
-    spoken_focus: Option<String>,
-    next_speech: u32,
-    /// Requests made and not answered yet: id, reply event, parameters
-    /// and where to save the body.
-    awaiting: Vec<(u32, Id, Params, Option<String>)>,
-    next_request: u32,
-    /// What the shell is to do with the radio (see [`Kernel::take_wifi_calls`]).
+    /// Plugins' requests ([`Io::Http`]).
+    http: io::http::Http,
+    /// Plugins' servers ([`Io::Server`]).
+    servers: io::servers::Servers,
+    /// Plugins' sockets and broadcasts ([`Io::Socket`]).
+    sockets: io::sockets::Sockets,
+    /// Text spoken ([`Io::Speech`]).
+    speech: io::speech::Speech,
+    /// The system's clipboard ([`Io::Copy`], [`Io::ReadClipboard`]).
+    clipboard: io::clipboard::Clipboard,
+    /// What the shell is to do with the radio ([`Io::Wifi`]).
     wifi_calls: Vec<WifiCommand>,
-    /// What the shell is to do with the firmware (see
-    /// [`Kernel::take_firmware_calls`]).
+    /// What the shell is to do with the firmware ([`Io::Firmware`]).
     firmware_calls: Vec<FirmwareCommand>,
     /// Since when plugins' network work has waited for a network.
     network_waiting: Option<Instant>,
@@ -1013,7 +952,7 @@ impl Kernel {
         if self.stale(now, &event) {
             return self.finish();
         }
-        self.pressed = None;
+        self.hint.pressed = None;
         self.now = now;
         self.last_activity = now;
         self.shared.usage.inputs = self.shared.usage.inputs.saturating_add(1);
@@ -1115,8 +1054,8 @@ impl Kernel {
 
     /// Where the busy mark goes: the pressed button's hint, or a corner.
     fn mark_area(&self) -> (Rect, Option<usize>) {
-        if let (Some(row), Some(cell)) = (self.hint_row(), self.pressed) {
-            let count = self.button_row.len().max(1) as u32;
+        if let (Some(row), Some(cell)) = (self.hint_row(), self.hint.pressed) {
+            let count = self.hint.buttons.len().max(1) as u32;
             let width = u32::from(row.width);
             let left = u32::from(row.x) + width * cell as u32 / count;
             let right = u32::from(row.x) + width * (cell as u32 + 1) / count;
@@ -1234,7 +1173,7 @@ impl Kernel {
                     &mut canvas.clipped(row),
                     &env,
                     row,
-                    &self.hints,
+                    &self.hint.shown,
                     None,
                 );
             }
@@ -1251,7 +1190,7 @@ impl Kernel {
                 .shared
                 .settings
                 .bool(core_settings::SPEAK_FOCUS.as_str())
-            || !self.speaking.is_empty()
+            || self.speech.speaking()
         {
             return;
         }
@@ -1268,21 +1207,24 @@ impl Kernel {
                 alloc::format!("{}, {state}", part.label)
             }
         });
-        if said == self.spoken_focus {
+        if said == self.speech.focus {
             return;
         }
         if let Some(text) = &said {
             let language = self.shared.translator.language().to_string();
-            self.speak(quireink_sdk::Speech {
+            let speech = quireink_sdk::Speech {
                 text: text.clone(),
                 language,
                 rate: 100,
                 reply: Id::new_static("core.focus-spoken"),
                 params: Params::new(),
                 queue: false,
-            });
+            };
+            let (available, screens) = (self.shared.caps.speech, self.stack.len());
+            self.speech
+                .speak(speech, available, screens, &mut self.output.commands);
         }
-        self.spoken_focus = said;
+        self.speech.focus = said;
     }
 
     /// Tells the kernel the time of day and the battery's charge. Shells
@@ -1331,7 +1273,7 @@ impl Kernel {
         if self.sleep_due().is_some_and(|at| at <= now) {
             self.last_activity = now;
             // Busy: reading aloud, downloading, serving. Else asleep.
-            if self.speaking.is_empty() && self.awaiting.is_empty() && self.servers.is_empty() {
+            if !self.speech.speaking() && !self.http.busy() && !self.servers.busy() {
                 self.output
                     .commands
                     .push(Command::RunAction(quireink_sdk::builtin::actions::SLEEP));
@@ -1590,12 +1532,6 @@ impl Kernel {
         mem::take(&mut self.warnings)
     }
 
-    /// Text copied since the last call, for the system's clipboard (see
-    /// [`Command::SetClipboard`]). Check after every kernel call.
-    pub fn take_clipboard(&mut self) -> Option<String> {
-        self.copied.take()
-    }
-
     /// Tells the kernel whether the system's clipboard has text, e.g. when
     /// the app comes back from another one (without reading it, which some
     /// systems announce to the user).
@@ -1603,167 +1539,40 @@ impl Kernel {
         self.shared.system_clipboard = available;
     }
 
-    /// Whether plugins wait for the system clipboard's text: read it and
-    /// pass it to [`Kernel::clipboard_text`]. Check after every kernel
-    /// call.
-    pub fn wants_clipboard(&self) -> bool {
-        !self.clipboard_reads.is_empty()
-    }
-
-    /// The system clipboard's text, for the plugins that asked for it;
-    /// `None` if it could not be read (the text copied here is used).
+    /// The system clipboard's text, for the plugins that asked for it
+    /// ([`Io::ReadClipboard`]); `None` if it could not be read (the text
+    /// copied here is used).
     pub fn clipboard_text(&mut self, now: Instant, text: Option<String>) -> Effects {
         self.now = now;
         if let Some(text) = text {
             self.shared.clipboard = clipped(&text);
         }
-        for (reply, params) in mem::take(&mut self.clipboard_reads) {
+        for (reply, params) in self.clipboard.answered() {
             self.reply_clipboard(reply, params);
         }
         self.finish()
     }
 
-    /// What to do for speech: say a text, stop. Check after every kernel
-    /// call; report the end of each text with [`Kernel::speech_done`].
-    pub fn take_speech(&mut self) -> Vec<SpeechCall> {
-        mem::take(&mut self.speech_calls)
-    }
-
     /// Whether a text is being spoken, e.g. to keep watching for its end.
     pub fn speaking(&self) -> bool {
-        !self.speaking.is_empty()
+        self.speech.speaking()
     }
 
     /// Text `id` of a [`SpeechCall::Say`] was spoken (`spoken`), or could
     /// not be.
     pub fn speech_done(&mut self, now: Instant, id: u32, spoken: bool) -> Effects {
         self.now = now;
-        if let Some(at) = self.speaking.iter().position(|(n, ..)| *n == id) {
-            let (_, reply, params, _) = self.speaking.remove(at);
-            self.reply_speech(reply, params, spoken);
-        }
+        self.speech.done(id, spoken, &mut self.output.commands);
         self.finish()
-    }
-
-    /// Emits the reply to a [`Command::Speak`].
-    fn reply_speech(&mut self, reply: Id, params: Params, spoken: bool) {
-        let params = if spoken {
-            params
-        } else {
-            params.with(quireink_sdk::speech_params::FAILED, "1")
-        };
-        self.output.commands.push(Command::Emit(reply, params));
-    }
-
-    /// Starts speaking for a plugin, or tells it that it cannot.
-    fn speak(&mut self, speech: quireink_sdk::Speech) {
-        if !self.shared.caps.speech {
-            return self.reply_speech(speech.reply, speech.params, false);
-        }
-        let id = self.next_speech;
-        self.next_speech = self.next_speech.wrapping_add(1);
-        if !speech.queue {
-            self.speaking.clear();
-        }
-        self.speaking
-            .push((id, speech.reply, speech.params, self.stack.len()));
-        self.speech_calls.push(SpeechCall::Say {
-            id,
-            text: speech.text,
-            language: speech.language,
-            rate: speech.rate,
-            queue: speech.queue,
-        });
     }
 
     /// Stops what closed screens started: servers, sockets, speech.
     fn stop_for_closed_screens(&mut self) {
-        self.stop_servers_of_closed_screens();
-        let mut out = Vec::new();
-        self.sockets
-            .close_for_closed_screens(self.stack.len(), &mut out);
-        self.output.commands.extend(out);
-        if self
-            .speaking
-            .iter()
-            .any(|(.., screens)| *screens > self.stack.len())
-        {
-            self.speaking.clear();
-            self.speech_calls.push(SpeechCall::Stop);
-        }
-    }
-
-    /// Stops server `at` and tells its plugin.
-    fn stop_server(&mut self, at: usize) {
-        let (number, server, events, _) = self.servers.remove(at);
-        self.server_calls.push(ServerCall::Stop { server: number });
-        self.tell_server(events, ServerNotice::Stopped { server });
-    }
-
-    /// Stops the servers of screens that were closed.
-    fn stop_servers_of_closed_screens(&mut self) {
-        while let Some(at) = self
-            .servers
-            .iter()
-            .position(|(.., screens)| *screens > self.stack.len())
-        {
-            self.stop_server(at);
-        }
-    }
-
-    /// Starts serving for a plugin, or tells it why not.
-    fn serve(&mut self, server: Id, port: u16, events: Id) {
-        if let Some(at) = self.servers.iter().position(|(_, id, ..)| *id == server) {
-            let (number, ..) = self.servers.remove(at);
-            self.server_calls.push(ServerCall::Stop { server: number });
-        }
-        if !self.shared.caps.network {
-            let reason = String::from("no network");
-            self.tell_server(events, ServerNotice::Failed { server, reason });
-            return;
-        }
-        self.next_server = self.next_server.wrapping_add(1);
-        let number = self.next_server;
-        self.servers
-            .push((number, server, events, self.stack.len()));
-        self.server_calls.push(ServerCall::Listen {
-            server: number,
-            port,
-        });
-    }
-
-    /// Passes a plugin's answer to the shell; a file to send goes in
-    /// parts (see [`Kernel::read_served`]).
-    fn respond(&mut self, response: quireink_sdk::ServerResponse) {
-        let mut status = response.status;
-        let mut body = response.body;
-        let mut file = None;
-        if let Some(path) = response.body_from {
-            match self.shared.storage.size(&path) {
-                Ok(size) => file = Some(ServedFile { path, size }),
-                Err(_) => {
-                    status = 404;
-                    body = b"not found".to_vec();
-                }
-            }
-        }
-        // The request's body is done with, unless the plugin moved it.
-        if let Some(at) = self
-            .request_bodies
-            .iter()
-            .position(|(r, _)| *r == response.request)
-        {
-            let (_, path) = self.request_bodies.remove(at);
-            let _ = self.shared.storage.remove(&path);
-        }
-        self.server_calls.push(ServerCall::Respond {
-            request: response.request,
-            status,
-            content_type: response.content_type,
-            headers: response.headers,
-            body,
-            file,
-        });
+        let screens = self.stack.len();
+        let out = &mut self.output.commands;
+        self.servers.stop_for_closed_screens(screens, out);
+        self.sockets.close_for_closed_screens(screens, out);
+        self.speech.stop_for_closed_screens(screens);
     }
 
     /// Reads part of a file being sent as an answer
@@ -1778,57 +1587,6 @@ impl Kernel {
         self.shared.storage.read_at(path, at, buffer)
     }
 
-    /// Tells the plugin of server `server` about a complete request.
-    fn pass_request(
-        &mut self,
-        server: u32,
-        request: u32,
-        method: String,
-        target: String,
-        body: Option<String>,
-    ) {
-        let Some((_, id, events, _)) = self.servers.iter().find(|(n, ..)| *n == server) else {
-            if let Some(path) = body {
-                self.forget_body(request, &path);
-            }
-            return;
-        };
-        let notice = ServerNotice::Request {
-            server: id.clone(),
-            request,
-            method,
-            target,
-            body_file: body,
-        };
-        self.tell_server(events.clone(), notice);
-    }
-
-    /// Tells a server's plugin `notice` on its `events`.
-    fn tell_server(&mut self, events: Id, notice: ServerNotice) {
-        self.output
-            .commands
-            .push(Command::Emit(events, notice.to_params()));
-    }
-
-    /// Removes the body of `request`, e.g. after the connection was lost.
-    fn forget_body(&mut self, request: u32, path: &str) {
-        self.request_bodies.retain(|(r, _)| *r != request);
-        let _ = self.shared.storage.remove(path);
-    }
-
-    /// Answers a request without its plugin, e.g. when its body could not
-    /// be saved.
-    fn refuse(&mut self, request: u32, status: u16, reason: &str) {
-        self.server_calls.push(ServerCall::Respond {
-            request,
-            status,
-            content_type: String::from("text/plain"),
-            headers: Vec::new(),
-            body: reason.as_bytes().to_vec(),
-            file: None,
-        });
-    }
-
     /// Answers a [`Command::ReadClipboard`] with the text known here.
     fn reply_clipboard(&mut self, reply: Id, params: Params) {
         let typed = quireink_sdk::Typed {
@@ -1840,177 +1598,48 @@ impl Kernel {
             .push(Command::Emit(reply, typed.to_params()));
     }
 
-    /// What to do for plugins' servers: listen, stop, answer requests
-    /// (report with [`Kernel::server_event`]). Check after every kernel
-    /// call.
-    pub fn take_server_calls(&mut self) -> Vec<ServerCall> {
-        if !self.network_ready() {
-            return Vec::new();
-        }
-        mem::take(&mut self.server_calls)
-    }
-
     /// Whether plugins serve, e.g. to keep polling for requests.
     pub fn serving(&self) -> bool {
-        !self.servers.is_empty()
+        self.servers.busy()
     }
 
     /// What happened with a server: started, failed, a request.
     pub fn server_event(&mut self, now: Instant, event: ServerEvent) -> Effects {
         self.now = now;
-        let events_of = |servers: &[(u32, Id, Id, usize)], number: u32| {
-            servers
-                .iter()
-                .find(|(n, ..)| *n == number)
-                .map(|(_, server, events, _)| (server.clone(), events.clone()))
-        };
-        match event {
-            ServerEvent::Started { server, address } => {
-                if let Some((server, events)) = events_of(&self.servers, server) {
-                    self.tell_server(events, ServerNotice::Started { server, address });
-                }
-            }
-            ServerEvent::Failed { server, reason } => {
-                if let Some((id, events)) = events_of(&self.servers, server) {
-                    self.servers.retain(|(n, ..)| *n != server);
-                    let server = id;
-                    self.tell_server(events, ServerNotice::Failed { server, reason });
-                }
-            }
-            ServerEvent::Request {
-                server,
-                request,
-                method,
-                target,
-                body: false,
-            } => self.pass_request(server, request, method, target, None),
-            ServerEvent::Request {
-                server,
-                request,
-                method,
-                target,
-                body: true,
-            } => {
-                // The body is saved as it comes, then the plugin is told.
-                let tmp = format!("{}/tmp", quireink_sdk::data::DIR);
-                let path = format!("{tmp}/request-{request}");
-                let _ = self.shared.storage.create_dir(&tmp);
-                if self.shared.storage.write(&path, &[]).is_ok() {
-                    self.request_bodies.push((request, path.clone()));
-                    self.incoming.push(Incoming {
-                        request,
-                        server,
-                        method,
-                        target,
-                        path,
-                    });
-                } else {
-                    self.refuse(request, 507, "cannot save the body");
-                }
-            }
-            ServerEvent::Body {
-                request,
-                data,
-                last,
-            } => {
-                let Some(at) = self.incoming.iter().position(|i| i.request == request) else {
-                    return self.finish();
-                };
-                if self
-                    .shared
-                    .storage
-                    .append(&self.incoming[at].path, &data)
-                    .is_err()
-                {
-                    let incoming = self.incoming.remove(at);
-                    self.forget_body(request, &incoming.path);
-                    self.refuse(request, 507, "the storage is full");
-                } else if last {
-                    let i = self.incoming.remove(at);
-                    self.pass_request(i.server, request, i.method, i.target, Some(i.path));
-                }
-            }
-            ServerEvent::Closed { request } => {
-                self.incoming.retain(|i| i.request != request);
-                let body = self.request_bodies.iter().find(|(r, _)| *r == request);
-                if let Some(path) = body.map(|(_, path)| path.clone()) {
-                    self.forget_body(request, &path);
-                }
-            }
-        }
+        let storage = &*self.shared.storage;
+        self.servers
+            .event(event, storage, &mut self.output.commands);
         self.finish()
     }
 
-    /// Returns the HTTP requests to make; answer each with
-    /// [`Kernel::http_response`]. Check after every kernel call.
-    pub fn take_requests(&mut self) -> Vec<HttpCall> {
-        if !self.network_ready() {
-            return Vec::new();
-        }
-        mem::take(&mut self.requests)
-    }
-
-    /// Delivers the answer to a request from [`Kernel::take_requests`].
+    /// Delivers the answer to a request ([`Io::Http`]).
     pub fn http_response(&mut self, now: Instant, response: HttpResponse) -> Effects {
         let _running = self.shared.meter.enter(meter::CORE);
         self.now = now;
-        self.answer_request(response);
+        let storage = &*self.shared.storage;
+        self.http
+            .answer(response, storage, &mut self.output.commands);
         self.finish()
     }
 
-    /// Turns a request's answer into the plugin's event.
-    fn answer_request(&mut self, response: HttpResponse) {
-        if let Some(at) = self.awaiting.iter().position(|(id, ..)| *id == response.id) {
-            let (_, event, context, save_to) = self.awaiting.remove(at);
-            let mut status = response.status;
-            let body = match save_to {
-                // Answers that are files: written where asked (a failure
-                // has its reason as the body).
-                Some(path) if response.status != 0 => {
-                    if !response.saved && self.shared.storage.write(&path, &response.body).is_err()
-                    {
-                        status = 0;
-                    }
-                    String::new()
-                }
-                _ => String::from_utf8_lossy(&response.body).into_owned(),
-            };
-            let reply = HttpReply {
-                status,
-                body,
-                etag: response.etag,
-                content_type: response.content_type,
-                final_url: response.url,
-                context,
-            };
-            self.output
-                .commands
-                .push(Command::Emit(event, reply.to_params()));
+    /// What the shell is to do: requests, servers, sockets, speech, the
+    /// clipboard, the radio, the firmware (see [`Io`]). Check after every
+    /// kernel call. Network work waits here until there is a network,
+    /// where QuireInk manages Wi-Fi.
+    pub fn take_io(&mut self) -> Vec<Io> {
+        let mut io: Vec<Io> = self.wifi_calls.drain(..).map(Io::Wifi).collect();
+        io.extend(self.firmware_calls.drain(..).map(Io::Firmware));
+        io.extend(self.speech.take().into_iter().map(Io::Speech));
+        io.extend(self.clipboard.take_copied().map(Io::Copy));
+        if self.clipboard.take_read() {
+            io.push(Io::ReadClipboard);
         }
-    }
-
-    /// What to do for plugins' sockets: connect, send, read, close,
-    /// broadcast (report with [`Kernel::socket_event`]). Check after every
-    /// kernel call.
-    pub fn take_socket_calls(&mut self) -> Vec<SocketCall> {
-        if !self.network_ready() {
-            return Vec::new();
+        if self.network_ready() {
+            io.extend(self.http.take().into_iter().map(Io::Http));
+            io.extend(self.servers.take().into_iter().map(Io::Server));
+            io.extend(self.sockets.take().into_iter().map(Io::Socket));
         }
-        mem::take(&mut self.sockets.calls)
-    }
-
-    /// What to do with the radio, where QuireInk manages Wi-Fi
-    /// ([`KernelBuilder::wifi`]); report with [`Kernel::wifi_event`].
-    /// Check after every kernel call.
-    pub fn take_wifi_calls(&mut self) -> Vec<WifiCommand> {
-        mem::take(&mut self.wifi_calls)
-    }
-
-    /// What to do with the firmware, where QuireInk is it
-    /// ([`KernelBuilder::firmware`]); report with
-    /// [`Kernel::firmware_state`]. Check after every kernel call.
-    pub fn take_firmware_calls(&mut self) -> Vec<FirmwareCommand> {
-        mem::take(&mut self.firmware_calls)
+        io
     }
 
     /// How an install goes: plugins hear of it.
@@ -2082,7 +1711,7 @@ impl Kernel {
 
     /// Network work waiting for the shell (requests, servers, sockets).
     fn network_work_waiting(&self) -> bool {
-        !self.requests.is_empty() || !self.server_calls.is_empty() || !self.sockets.calls.is_empty()
+        self.http.waiting() || self.servers.waiting() || self.sockets.waiting()
     }
 
     /// After every call, where QuireInk manages Wi-Fi: tells plugins that
@@ -2106,7 +1735,7 @@ impl Kernel {
             }
             _ => {}
         }
-        let busy = !self.awaiting.is_empty() || !self.servers.is_empty() || self.sockets.any();
+        let busy = self.http.busy() || self.servers.busy() || self.sockets.any();
         wifi.busy = busy;
         if self.network_busy && !busy {
             self.output.commands.push(events::NETWORK_IDLE.emit(()));
@@ -2123,35 +1752,11 @@ impl Kernel {
     /// Fails the network work that waited too long, as without a network.
     fn fail_waiting_network(&mut self) {
         const REASON: &str = "no network";
-        for call in mem::take(&mut self.requests) {
-            self.answer_request(HttpResponse {
-                id: call.id,
-                status: 0,
-                body: REASON.as_bytes().to_vec(),
-                ..HttpResponse::default()
-            });
-        }
-        if !mem::take(&mut self.server_calls).is_empty() {
-            for (_, server, events, _) in mem::take(&mut self.servers) {
-                let reason = String::from(REASON);
-                self.tell_server(events, ServerNotice::Failed { server, reason });
-            }
-        }
-        let mut out = Vec::new();
-        for call in mem::take(&mut self.sockets.calls) {
-            let event = match call {
-                SocketCall::Connect { socket, .. }
-                | SocketCall::Send { socket, .. }
-                | SocketCall::Read { socket, .. }
-                | SocketCall::Close { socket } => SocketEvent::Failed {
-                    socket,
-                    reason: String::from(REASON),
-                },
-                SocketCall::Broadcast { broadcast, .. } => SocketEvent::Done { broadcast },
-            };
-            self.sockets.event(event, &*self.shared.storage, &mut out);
-        }
-        self.output.commands.extend(out);
+        let storage = &*self.shared.storage;
+        let out = &mut self.output.commands;
+        self.http.fail_waiting(REASON, storage, out);
+        self.servers.fail_waiting(REASON, out);
+        self.sockets.fail_waiting(REASON, storage, out);
         self.network_waiting = None;
     }
 
@@ -2165,9 +1770,9 @@ impl Kernel {
     pub fn socket_event(&mut self, now: Instant, event: SocketEvent) -> Effects {
         let _running = self.shared.meter.enter(meter::CORE);
         self.now = now;
-        let mut out = Vec::new();
-        self.sockets.event(event, &*self.shared.storage, &mut out);
-        self.output.commands.extend(out);
+        let storage = &*self.shared.storage;
+        self.sockets
+            .event(event, storage, &mut self.output.commands);
         self.finish()
     }
 
@@ -2225,7 +1830,7 @@ impl Kernel {
                 self.framebuffer = framebuffer;
                 self.shared.device.display.width = width;
                 self.shared.device.display.height = height;
-                self.hint_height = self.wanted_hint_height();
+                self.hint.height = self.wanted_hint_height();
                 self.remake_screens();
             }
         }
@@ -2789,8 +2394,8 @@ impl Kernel {
     fn recognized(&mut self, recognized: Recognized) {
         match recognized {
             Recognized::Button { name, long } => {
-                self.pressed = self.button_row.iter().position(|b| *b == name);
-                if self.pressed.is_some() {
+                self.hint.pressed = self.hint.buttons.iter().position(|b| *b == name);
+                if self.hint.pressed.is_some() {
                     self.show_hints();
                 }
                 let name = Cow::Borrowed(name);
@@ -2805,11 +2410,11 @@ impl Kernel {
                     && let Some(row) = self.hint_row()
                     && row.contains(gesture.start)
                 {
-                    let count = self.button_row.len() as u32;
+                    let count = self.hint.buttons.len() as u32;
                     let x = u32::try_from(gesture.start.x).unwrap_or(0);
                     let cell = (x * count / u32::from(row.width).max(1)) as usize;
-                    if let Some(button) = self.button_row.get(cell) {
-                        self.pressed = Some(cell);
+                    if let Some(button) = self.hint.buttons.get(cell) {
+                        self.hint.pressed = Some(cell);
                         self.route_key(InputKey::Button(Cow::Borrowed(button)));
                     }
                     return;
@@ -2910,8 +2515,8 @@ impl Kernel {
         self.run_commands();
         if let Some(row) = self.hint_row() {
             let hints = self.current_hints();
-            if hints != self.hints {
-                self.hints = hints;
+            if hints != self.hint.shown {
+                self.hint.shown = hints;
                 self.invalidate(row);
             }
         }
@@ -2970,7 +2575,7 @@ impl Kernel {
         // After a screenshot is drawn, a message says where it went.
         let shot = self.screenshot.is_some().then(|| self.now.add_millis(300));
         effects.wake_at = [
-            self.hints_until,
+            self.hint.until,
             input,
             self.screen_timer,
             notice,
@@ -3085,44 +2690,42 @@ impl Kernel {
             }
             Command::SetClipboard(text) => {
                 self.shared.clipboard = clipped(&text);
-                self.copied = Some(self.shared.clipboard.clone());
+                self.clipboard.copy(self.shared.clipboard.clone());
             }
-            Command::ReadClipboard(reply, params) if self.reads_clipboard => {
-                self.clipboard_reads.push((reply, params));
+            Command::ReadClipboard(reply, params) if self.clipboard.system => {
+                self.clipboard.read(reply, params);
             }
             Command::ReadClipboard(reply, params) => self.reply_clipboard(reply, params),
-            Command::Speak(speech) => self.speak(speech),
-            Command::StopSpeaking => {
-                if !self.speaking.is_empty() {
-                    self.speaking.clear();
-                    self.speech_calls.push(SpeechCall::Stop);
-                }
+            Command::Speak(speech) => {
+                let (available, screens) = (self.shared.caps.speech, self.stack.len());
+                self.speech
+                    .speak(speech, available, screens, &mut self.output.commands);
             }
+            Command::StopSpeaking => self.speech.stop(),
             Command::Serve {
                 server,
                 port,
                 events,
-            } => self.serve(server, port, events),
-            Command::StopServing(server) => {
-                if let Some(at) = self.servers.iter().position(|(_, id, ..)| *id == server) {
-                    self.stop_server(at);
-                }
+            } => {
+                let (network, screens) = (self.shared.caps.network, self.stack.len());
+                let out = &mut self.output.commands;
+                self.servers
+                    .serve(server, port, events, network, screens, out);
             }
-            Command::Respond(response) => self.respond(response),
+            Command::StopServing(server) => self.servers.stop(&server, &mut self.output.commands),
+            Command::Respond(response) => self.servers.respond(response, &*self.shared.storage),
             command @ (Command::Connect { .. }
             | Command::SocketSend { .. }
             | Command::SocketRead { .. }
             | Command::Disconnect(_)
             | Command::Broadcast { .. }) => {
-                let mut out = Vec::new();
                 self.sockets.command(
                     command,
                     self.shared.caps.network,
                     self.stack.len(),
                     &*self.shared.storage,
-                    &mut out,
+                    &mut self.output.commands,
                 );
-                self.output.commands.extend(out);
             }
             Command::ShowHints => self.show_hints(),
             Command::Back => {
@@ -3134,7 +2737,12 @@ impl Kernel {
                 self.set_in_scope(&id, value);
             }
             Command::SetScope(path) => self.set_scope(path),
-            Command::Http(request) => self.request(request),
+            Command::Http(request) => {
+                let network = self.shared.caps.network;
+                let out = &mut self.output.commands;
+                self.http
+                    .request(request, network, &*self.shared.storage, out);
+            }
             Command::SetSetting(id, value) => match self.shared.settings.set(id.as_str(), value) {
                 Ok(()) => {
                     self.persist_setting(&id);
@@ -3306,101 +2914,27 @@ impl Kernel {
         Rect::new(0, 0, display.width, display.height)
     }
 
-    /// The row of hints, while it shows: below a screen that keeps it, or
-    /// over the bottom of one that has it on a press, for a while.
-    fn hint_row(&self) -> Option<Rect> {
-        let panel = self.framebuffer.bounds();
-        let top = self.shared.device.display.height;
-        if top < panel.height {
-            return Some(Rect::new(0, top, panel.width, panel.height - top));
-        }
-        let height = self.hint_height.min(panel.height / 2);
-        (height > 0 && self.hints_until.is_some_and(|until| self.now < until))
-            .then(|| Rect::new(0, panel.height - height, panel.width, height))
-    }
-
-    /// When the full screen shown has the row of hints.
-    fn base_hints(&self) -> Hints {
-        let env = self.shared.env(self.now);
-        self.stack
-            .iter()
-            .rev()
-            .find(|s| s.screen.region(&env).is_none())
-            .map_or(Hints::Shown, |s| self.registry.hints_of(&s.id))
-    }
-
-    /// Shows the row for a while over a screen that has it on a press.
-    fn show_hints(&mut self) {
-        if self.hint_height == 0 || self.base_hints() != Hints::OnPress {
-            return;
-        }
-        self.hints_until = Some(self.now.add_millis(HINTS_MS));
-        self.hints.clear();
-        self.output.request_refresh(RefreshMode::Fast);
-    }
-
-    /// Takes the row away again once its time is over: the screen below
-    /// is drawn there again.
-    fn hide_hints(&mut self) {
-        if !self.hints_until.is_some_and(|until| until <= self.now) {
-            return;
-        }
-        self.hints_until = None;
-        let panel = self.framebuffer.bounds();
-        let height = self.hint_height.min(panel.height / 2);
-        self.invalidate(Rect::new(0, panel.height - height, panel.width, height));
-        self.output.request_refresh(RefreshMode::Fast);
-    }
-
     /// The height screens have: all of the screen's, or the part above
     /// the row of hints.
     fn content_height(&self, hinted: bool) -> u16 {
         let panel = self.framebuffer.bounds().height;
-        let row = if hinted { self.hint_height } else { 0 };
+        let row = if hinted { self.hint.height } else { 0 };
         panel - row.min(panel / 2)
     }
 
     /// Sizes the content for the screen on top, after screens closed; all
     /// of the screen is drawn again if that changed it.
     fn sync_content(&mut self) {
-        self.hints_until = None;
+        self.hint.until = None;
         let before = self.shared.device.display.height;
         if let Some(hinted) = self.stack.last().map(|s| s.hinted) {
             self.shared.device.display.height = self.content_height(hinted);
         }
         if self.shared.device.display.height != before {
-            self.hints.clear();
+            self.hint.shown.clear();
             let panel = self.framebuffer.bounds();
             self.invalidate(panel);
         }
-    }
-
-    /// The height the row of hints takes: 0 where there is no row of
-    /// buttons below the screen, it is switched off or the screen is
-    /// turned (the buttons are no longer below it).
-    fn wanted_hint_height(&self) -> u16 {
-        let shown = !self.button_row.is_empty()
-            && self
-                .shared
-                .settings
-                .bool(core_settings::BUTTON_HINTS.as_str())
-            && self.rotation() == quireink_platform::Rotation::Deg0;
-        if shown {
-            quireink_sdk::ui::button_hints_height(&self.shared.env(self.now))
-        } else {
-            0
-        }
-    }
-
-    /// Makes every open screen anew when the row of hints came, went or
-    /// changed its height.
-    fn apply_hint_height(&mut self) {
-        let height = self.wanted_hint_height();
-        if height == self.hint_height {
-            return;
-        }
-        self.hint_height = height;
-        self.remake_screens();
     }
 
     /// Makes every open screen anew for the size it has now, e.g. after
@@ -3417,52 +2951,13 @@ impl Kernel {
             let _running = self.shared.meter.enter(active.id.namespace());
             active.screen = (spec.factory)(&env, &active.params);
         }
-        self.hints.clear();
+        self.hint.shown.clear();
         self.end_notice();
         self.sync_content();
         self.unrendered = None;
         self.rendered = None;
         let bounds = self.framebuffer.bounds();
         self.screen_changed(bounds, false);
-    }
-
-    /// What the row of hints shows for each button in it: what the button
-    /// runs here, as the screen on top names it.
-    fn current_hints(&self) -> Vec<Hint> {
-        use quireink_sdk::builtin::actions;
-        let env = self.shared.env(self.now);
-        let top = self.stack.last();
-        self.button_row
-            .iter()
-            .map(|button| {
-                let Some(action) = self.resolve(&InputKey::Button(Cow::Borrowed(button))) else {
-                    return Hint::Hidden;
-                };
-                match top.map_or(Hint::Default, |t| t.screen.hint(&action, &env)) {
-                    // Nowhere to go back to from the first screen.
-                    Hint::Default if action == actions::BACK && self.stack.len() < 2 => {
-                        Hint::Hidden
-                    }
-                    Hint::Default => self.default_hint(&action),
-                    hint => hint,
-                }
-            })
-            .collect()
-    }
-
-    /// How the row of hints shows an action, as the action says
-    /// ([`ActionHint`]); nothing for an action no plugin knows.
-    fn default_hint(&self, action: &Id) -> Hint {
-        let Some(spec) = self.shared.actions.get(action.as_str()) else {
-            return Hint::Hidden;
-        };
-        let translator = &self.shared.translator;
-        match &spec.hint {
-            ActionHint::Icon(icon) => Hint::Icon(icon),
-            ActionHint::Label(key) => Hint::Text(translator.tr(key).to_string()),
-            ActionHint::Hidden => Hint::Hidden,
-            _ => Hint::Text(translator.tr(&spec.title).to_string()),
-        }
     }
 
     /// Actions bound by any key map preset, for validation.
@@ -3526,7 +3021,7 @@ impl Kernel {
                 &mut canvas.clipped(area),
                 &env,
                 row,
-                &self.hints,
+                &self.hint.shown,
                 pressed,
             );
         }
@@ -3618,50 +3113,6 @@ impl Kernel {
                     .push(events::SETTING_CHANGED.emit(events::SettingChanged { id: id.clone() }));
             }
         }
-    }
-
-    /// Queues an HTTP request for the shell, or fails it without network.
-    fn request(&mut self, request: quireink_sdk::HttpRequest) {
-        if !self.shared.caps.network {
-            let reply = HttpReply::failed("no network", request.params);
-            self.output
-                .commands
-                .push(Command::Emit(request.reply, reply.to_params()));
-            return;
-        }
-        // A file to send must be there; the shell reads it.
-        if let Some(path) = &request.body_from
-            && let Err(e) = self.shared.storage.size(path)
-        {
-            let reply = HttpReply::failed(format!("{e}"), request.params);
-            self.output
-                .commands
-                .push(Command::Emit(request.reply, reply.to_params()));
-            return;
-        }
-        let body = match request.body_from {
-            Some(_) => None,
-            None => request.body.map(String::into_bytes),
-        };
-        self.next_request = self.next_request.wrapping_add(1);
-        let id = self.next_request;
-        let max_response = if request.save_to.is_some() {
-            MAX_FILE
-        } else {
-            MAX_RESPONSE
-        };
-        self.requests.push(HttpCall {
-            id,
-            method: request.method,
-            url: request.url,
-            headers: request.headers,
-            body,
-            body_from: request.body_from,
-            max_response,
-            save_to: request.save_to.clone(),
-        });
-        self.awaiting
-            .push((id, request.reply, request.params, request.save_to));
     }
 
     /// Activates the scope stored at `path` for the top screen, or ends

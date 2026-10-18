@@ -37,7 +37,7 @@ what the user is doing.
     answers that come within `wait_ms` on as events, then that it is
     done.
 - **The kernel** keeps the sockets of each plugin, numbers them for the
-  shell (`SocketCall`, `Kernel::take_socket_calls`) and turns what the
+  shell (`Io::Socket`, `Kernel::take_io`) and turns what the
   shell reports (`SocketEvent`, `Kernel::socket_event`) into the
   plugin's events. A file read is asked of the shell in parts of 64 KiB
   and each part appended to the file, so a book never needs to fit in

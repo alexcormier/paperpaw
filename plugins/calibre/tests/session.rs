@@ -8,7 +8,7 @@
 
 use std::rc::Rc;
 
-use quireink_core::{Kernel, SocketCall, SocketEvent};
+use quireink_core::{Io, Kernel, SocketCall, SocketEvent};
 use quireink_platform::{ButtonState, InputEvent, Rotation};
 use quireink_plugin_calibre::Calibre;
 use quireink_plugin_calibre::protocol::{self, frame, op};
@@ -86,7 +86,7 @@ impl Peer {
     /// answered with as much as it asks of what is on the wire.
     fn pump(&mut self, kernel: &mut Kernel) {
         loop {
-            for call in kernel.take_socket_calls() {
+            for call in socket_calls(kernel) {
                 match call {
                     SocketCall::Send { data, .. } => self.got.extend_from_slice(&data),
                     SocketCall::Close { .. } => self.closed = true,
@@ -156,7 +156,7 @@ fn a_session_with_calibre() {
     let mut kernel = kernel(&storage, CONFIG);
 
     // Looking for Calibre: a broadcast to its ports, and its answer.
-    let calls = kernel.take_socket_calls();
+    let calls = socket_calls(&mut kernel);
     let [
         SocketCall::Broadcast {
             broadcast, ports, ..
@@ -174,7 +174,7 @@ fn a_session_with_calibre() {
             data: b"calibre wireless device client (on pc);8080,9091".to_vec(),
         },
     );
-    let calls = kernel.take_socket_calls();
+    let calls = socket_calls(&mut kernel);
     let [SocketCall::Connect { socket, host, port }] = calls.as_slice() else {
         panic!("{calls:?}");
     };
@@ -285,7 +285,7 @@ fn a_path_out_of_the_library_is_dropped() {
     let storage = Shared(Rc::new(MemoryStorage::new()));
     let config = format!("{CONFIG}[calibre]\naddress = 10.0.0.2\n");
     let mut kernel = kernel(&storage, &config);
-    let calls = kernel.take_socket_calls();
+    let calls = socket_calls(&mut kernel);
     let [SocketCall::Connect { socket, host, port }] = calls.as_slice() else {
         panic!("{calls:?}");
     };
@@ -303,4 +303,14 @@ fn a_path_out_of_the_library_is_dropped() {
     assert!(!storage.exists("../outside.epub") && !storage.exists("outside.epub"));
     assert!(!storage.exists(".quireink/plugins/calibre/dropped.part"));
     assert_eq!(calibre.answers().len(), 1, "the NOOP after it was answered");
+}
+
+/// What the kernel asks the shell to do with sockets.
+fn socket_calls(kernel: &mut Kernel) -> Vec<SocketCall> {
+    let io = kernel.take_io().into_iter();
+    io.filter_map(|io| match io {
+        Io::Socket(call) => Some(call),
+        _ => None,
+    })
+    .collect()
 }
