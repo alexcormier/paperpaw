@@ -274,7 +274,9 @@ fn main() -> ! {
         // The panel refreshes on its own: a mark shows at once while slow
         // work goes on.
         .busy_mark(true)
-        .glyph_cache(0)
+        // Built-in packs are read in place; glyphs of packs on the card
+        // (other scripts) are kept here once read. Empty until one is.
+        .glyph_cache(12 * 1024)
         .frame_rows(FRAME_ROWS)
         .row_align(8)
         .sleep(true)
@@ -416,6 +418,13 @@ fn main() -> ! {
             let started = now();
             kernel_time = started.0.max(kernel_time);
             let effects = kernel.run_action(Instant(kernel_time), action);
+            sleep |= apply(&mut kernel, &mut display, effects, &mut wake_at);
+            esp_println::println!("QI:OK");
+        } else if let Some(remote::Command::Open(path)) = command {
+            kernel_time = now().0.max(kernel_time);
+            let params = quireink_sdk::Params::new().with(quireink_sdk::builtin::params::PATH, path);
+            let effects =
+                kernel.open_slot(Instant(kernel_time), quireink_sdk::builtin::slots::READER, params);
             sleep |= apply(&mut kernel, &mut display, effects, &mut wake_at);
             esp_println::println!("QI:OK");
         } else if let Some(remote::Command::Refresh(full)) = command {

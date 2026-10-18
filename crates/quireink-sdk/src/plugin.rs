@@ -111,6 +111,16 @@ pub trait Registrar {
     /// family is chosen for reading. Needs scalable font support.
     fn add_font_file(&mut self, id: Id, path: alloc::string::String) -> Result<(), RegisterError>;
 
+    /// Adds a font pack on the storage (`.qifp`) with characters font
+    /// `extends` lacks, e.g. Cyrillic for a font made for Latin; read a
+    /// glyph at a time (see [`Fonts::add_extension`](crate::fonts::Fonts::add_extension)).
+    fn add_font_extension(
+        &mut self,
+        id: Id,
+        path: alloc::string::String,
+        extends: Id,
+    ) -> Result<(), RegisterError>;
+
     /// Proposes a font for a role such as
     /// [`builtin::fonts::UI`](crate::builtin::fonts::UI).
     fn bind_font(&mut self, role: Id, font: Id, priority: Priority) -> Result<(), RegisterError>;

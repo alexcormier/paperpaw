@@ -3,6 +3,8 @@
 //! that start with `QI:`, amid its log.
 //!
 //! - `press <button>`: the button pressed and let go;
+//! - `open <path>`: opens the book at `path` (hexadecimal) in the reader
+//!   (`QI:OK`);
 //! - `run <action>`: runs an action as a button bound to it would, e.g.
 //!   `run calibre.open` to open a tool at once (`QI:OK`);
 //! - `hold <button> <ms>`: held that long, e.g. for a long press;
@@ -83,6 +85,8 @@ pub enum Command {
     Press(&'static str, u64),
     /// An action run (for the main loop, which applies what it brings).
     Run(quireink_sdk::Id),
+    /// A book opened, by its path.
+    Open(String),
     Shot,
     Screen,
     Describe,
@@ -172,7 +176,11 @@ impl Remote {
         match command {
             Command::Press(name, ms) => return Some((name, ms)),
             // The main loop does it; asked here, nothing.
-            Command::Refresh(_) | Command::IdleSleep(_) | Command::Network(_) | Command::Run(_) => {
+            Command::Refresh(_)
+            | Command::IdleSleep(_)
+            | Command::Network(_)
+            | Command::Run(_)
+            | Command::Open(_) => {
                 println!("QI:ERR refresh")
             }
             Command::Shot => {
@@ -432,6 +440,7 @@ fn parse(line: &str) -> Option<Command> {
         "heap" => Command::Heap,
         "boot" => Command::Boot,
         "run" => Command::Run(quireink_sdk::Id::parse(words.next()?).ok()?),
+        "open" => Command::Open(unhex(words.next()?)?),
         "wifi" => Command::Network(match words.next()? {
             "scan" => Ask::Scan,
             "connect" => Ask::Connect {

@@ -64,12 +64,12 @@ impl GlyphCache {
     ) -> GlyphRef<'a> {
         match font {
             Font::Bitmap(font) => font.glyph(ch, size),
+            Font::Stored(font) => self.cached(font_index, ch, size, |s| font.render(ch, s)),
             #[cfg(feature = "outline")]
             Font::Outline(font) => self.cached(font_index, ch, size, |s| font.rasterize(ch, s)),
         }
     }
 
-    #[cfg_attr(not(feature = "outline"), allow(dead_code))]
     fn cached(
         &mut self,
         font_index: u16,

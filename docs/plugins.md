@@ -348,8 +348,14 @@ plugins/large-print/
   keymap.ini     key bindings
   settings.ini   new defaults for any plugin's settings ([reader] font-size = 14)
   fonts/*.ttf    fonts to read with (also .otf, .ttc), by family
+  fonts/*.qifp   packs with letters other fonts lack, named in plugin.ini:
+                 [extends] cyrillic.qifp = fonts-default.literata
   styles.css     a stylesheet for books, after a book's own (EPUB)
 ```
+
+Packs for other scripts (`tools/script-pack.py` builds Cyrillic and
+Greek for Literata) are read a glyph at a time, so devices with little
+memory can use them ([ADR 0018](adr/0018-font-packs-for-other-scripts.md)).
 
 Copy it into the `plugins` folder of a device (or of the emulator's
 library) and restart. A plugin's `styles.css` comes after a book's own

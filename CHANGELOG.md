@@ -16,6 +16,16 @@ change the plugin SDK.
   shows it in the status line and on the home screen; the time zone is
   chosen under Settings, System (UTC on "Auto": the X4 has none of its
   own). Gone when it is switched off, until it is online again.
+- Other scripts on the X4 ([ADR 0018](docs/adr/0018-font-packs-for-other-scripts.md)):
+  font packs as data plugins on the card, read a glyph at a time, add the
+  letters the built-in fonts lack; `tools/script-pack.py` builds Cyrillic
+  and Greek (also polytonic) from Literata. With it, Russian, Ukrainian
+  and Greek books and keyboards work on the X4, menus included. Fonts ask
+  each other in turn for a character they lack.
+- Wi-Fi transfer: an upload that fails says so on the device (*Not
+  received*), instead of the last one received staying shown.
+- `Kernel::open_slot` opens a slot's screen for a shell (a file to open);
+  over USB the X4 opens a book with `open <path>`.
 - The keyboard offers only layouts whose letters the device's fonts can
   draw: on the X4 the Russian, Ukrainian and Greek ones are left out
   until a font pack for their scripts comes (they showed question marks).

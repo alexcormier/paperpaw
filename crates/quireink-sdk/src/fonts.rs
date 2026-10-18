@@ -1,4 +1,5 @@
 use alloc::borrow::Cow;
+use alloc::rc::Rc;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::cell::RefCell;
@@ -8,7 +9,7 @@ use core::ops::Range;
 use quireink_graphics::Canvas;
 use quireink_platform::{Color, Storage};
 use quireink_text::sfnt::FontInfo;
-use quireink_text::{Font, GlyphCache, LineMetrics};
+use quireink_text::{Font, GlyphCache, LineMetrics, PackSource, StoredPack};
 
 use crate::builtin::fonts as roles;
 use crate::collections::VecMap;
@@ -69,7 +70,14 @@ struct Entry {
     weight: u16,
     /// A font file on the storage, loaded only while its family is chosen.
     file: Option<String>,
+    /// For a pack that adds characters to another font (e.g. Cyrillic to
+    /// a font for Latin): that font.
+    extends: Option<Id>,
 }
+
+/// Fonts asked in turn for a character a font lacks: its extensions, the
+/// fallback font, the fallback's extensions.
+const OTHERS: usize = 4;
 
 /// Largest font file loaded.
 const MAX_FONT_FILE: u64 = 48 * 1024 * 1024;
@@ -131,6 +139,31 @@ impl Fonts {
             bold: spec.bold,
             italic: spec.italic,
             file: None,
+            extends: None,
+        });
+        Ok(())
+    }
+
+    /// Adds a font pack on the storage (`.qifp`) that adds characters to
+    /// font `extends`, e.g. Cyrillic and Greek to `fonts-default.literata`:
+    /// read a glyph at a time when drawn, so it takes almost no memory, and
+    /// asked for what that font lacks.
+    pub fn add_extension(
+        &mut self,
+        id: Id,
+        path: String,
+        extends: Id,
+    ) -> Result<(), RegisterError> {
+        self.check_new(&id)?;
+        self.entries.push(Entry {
+            id,
+            font: None,
+            family: None,
+            bold: false,
+            italic: false,
+            weight: 400,
+            file: Some(path),
+            extends: Some(extends),
         });
         Ok(())
     }
@@ -148,6 +181,7 @@ impl Fonts {
             italic: info.italic,
             weight: info.weight,
             file: Some(path),
+            extends: None,
         });
         Ok(())
     }
@@ -220,7 +254,8 @@ impl Fonts {
 
     /// Loads the files of the chosen family's faces (one per style) and
     /// frees all others; returns the files that could not be loaded.
-    pub fn load(&mut self, storage: &dyn Storage) -> Vec<String> {
+    /// Packs that extend fonts are opened too (they stay where they are).
+    pub fn load(&mut self, storage: &Rc<dyn Storage>) -> Vec<String> {
         let mut failed = Vec::new();
         let chosen = self.family.clone();
         let wanted: Vec<usize> = chosen
@@ -236,6 +271,19 @@ impl Fonts {
             let Some(path) = &entry.file else {
                 continue;
             };
+            if entry.extends.is_some() {
+                if entry.font.is_none() {
+                    let source = Rc::new(Stored {
+                        storage: storage.clone(),
+                        path: path.clone(),
+                    });
+                    match StoredPack::open(source) {
+                        Ok(pack) => entry.font = Some(Font::Stored(pack)),
+                        Err(_) => failed.push(path.clone()),
+                    }
+                }
+                continue;
+            }
             if !wanted.contains(&index) {
                 entry.font = None;
                 continue;
@@ -243,7 +291,7 @@ impl Fonts {
             if entry.font.is_some() {
                 continue;
             }
-            match read_font(storage, path) {
+            match read_font(storage.as_ref(), path) {
                 Some(font) => entry.font = Some(font),
                 None => failed.push(path.clone()),
             }
@@ -317,22 +365,50 @@ impl Fonts {
         self.cache.borrow().bytes()
     }
 
-    /// A handle of loaded entry `index`, with the fallback font for
-    /// characters it lacks.
+    /// A handle of loaded entry `index`, with the fonts asked for the
+    /// characters it lacks: its extensions, the fallback font and the
+    /// fallback's extensions.
     fn handle(&self, index: usize) -> FontHandle<'_> {
         let entry = &self.entries[index];
-        let fallback = self
-            .fallback_index()
-            .filter(|&f| f != index)
-            .and_then(|f| Some((self.entries[f].font.as_ref()?, f as u16)));
+        let mut others: [Option<(&Font, u16)>; OTHERS] = [None; OTHERS];
+        let mut add = |i: usize| {
+            let Some(font) = self.entries[i].font.as_ref() else {
+                return;
+            };
+            if i != index
+                && !others.iter().flatten().any(|(_, n)| usize::from(*n) == i)
+                && let Some(slot) = others.iter_mut().find(|o| o.is_none())
+            {
+                *slot = Some((font, i as u16));
+            }
+        };
+        for i in self.extensions_of(index) {
+            add(i);
+        }
+        if let Some(fallback) = self.fallback_index() {
+            add(fallback);
+            for i in self.extensions_of(fallback) {
+                add(i);
+            }
+        }
         FontHandle {
             id: &entry.id,
             // Handles are made for loaded fonts only.
             font: entry.font.as_ref().unwrap_or_else(|| unreachable!()),
             cache: &self.cache,
             index: index as u16,
-            fallback,
+            others,
         }
+    }
+
+    /// The loaded packs that extend entry `index`.
+    fn extensions_of(&self, index: usize) -> impl Iterator<Item = usize> + '_ {
+        let id = &self.entries[index].id;
+        self.entries
+            .iter()
+            .enumerate()
+            .filter(move |(_, e)| e.extends.as_ref() == Some(id) && e.font.is_some())
+            .map(|(i, _)| i)
     }
 
     /// The font for characters another one lacks (e.g. Cyrillic in a UI
@@ -352,6 +428,28 @@ impl Fonts {
         self.entries
             .iter()
             .position(|e| e.id.as_str() == id && e.font.is_some())
+    }
+}
+
+/// A pack on the storage, read where it is.
+struct Stored {
+    storage: Rc<dyn Storage>,
+    path: String,
+}
+
+impl PackSource for Stored {
+    fn read_at(&self, at: u64, buf: &mut [u8]) -> bool {
+        let mut done = 0;
+        while done < buf.len() {
+            match self
+                .storage
+                .read_at(&self.path, at + done as u64, &mut buf[done..])
+            {
+                Ok(0) | Err(_) => return false,
+                Ok(n) => done += n,
+            }
+        }
+        true
     }
 }
 
@@ -422,7 +520,7 @@ impl FontSet {
             font,
             cache: &self.cache,
             index: index as u16,
-            fallback: None,
+            others: [None; OTHERS],
         })
     }
 }
@@ -436,9 +534,9 @@ pub struct FontHandle<'a> {
     cache: &'a RefCell<GlyphCache>,
     /// The font's number in that cache.
     index: u16,
-    /// A font for the characters this one lacks, and its number in the
-    /// same cache.
-    fallback: Option<(&'a Font, u16)>,
+    /// Fonts for the characters this one lacks, asked in turn, and their
+    /// numbers in the same cache.
+    others: [Option<(&'a Font, u16)>; OTHERS],
 }
 
 impl fmt::Debug for FontHandle<'_> {
@@ -464,16 +562,26 @@ impl<'a> FontHandle<'a> {
     /// The font that draws `ch` and its number in the cache: this one,
     /// or the fallback if only that has it.
     fn pick(&self, ch: char) -> (&'a Font, u16) {
-        match self.fallback {
-            Some((font, index)) if !self.font.has_char(ch) && font.has_char(ch) => (font, index),
-            _ => (self.font, self.index),
+        if self.font.has_char(ch) {
+            return (self.font, self.index);
         }
+        self.others
+            .iter()
+            .flatten()
+            .find(|(font, _)| font.has_char(ch))
+            .copied()
+            .unwrap_or((self.font, self.index))
     }
 
     /// Whether this font (or its fallback) draws `ch`; without it, the
     /// character would show as a question mark or not at all.
     pub fn has_char(&self, ch: char) -> bool {
-        self.font.has_char(ch) || self.fallback.is_some_and(|(font, _)| font.has_char(ch))
+        self.font.has_char(ch)
+            || self
+                .others
+                .iter()
+                .flatten()
+                .any(|(font, _)| font.has_char(ch))
     }
 
     /// Horizontal advance of one character in pixels.
@@ -483,9 +591,10 @@ impl<'a> FontHandle<'a> {
 
     /// Width of a single line of text in pixels.
     pub fn measure(&self, size: f32, text: &str) -> f32 {
-        match self.fallback {
-            None => quireink_text::measure(self.font(), size, text),
-            Some(_) => text.chars().map(|ch| self.advance(size, ch)).sum(),
+        if self.others[0].is_none() {
+            quireink_text::measure(self.font(), size, text)
+        } else {
+            text.chars().map(|ch| self.advance(size, ch)).sum()
         }
     }
 
@@ -546,5 +655,58 @@ impl<'a> FontHandle<'a> {
             rest = &rest[end..];
         }
         pen - x
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::MemoryStorage;
+    use quireink_text::{Glyph, PackBuilder};
+
+    /// A pack holding `chars`, with empty glyphs.
+    fn pack(chars: &str) -> alloc::vec::Vec<u8> {
+        let metrics = LineMetrics {
+            ascent: 8.0,
+            descent: 2.0,
+            line_height: 12.0,
+        };
+        let mut builder = PackBuilder::new();
+        let glyphs = chars.chars().map(|c| (c, Glyph::empty(5.0))).collect();
+        builder.add_strike(10.0, metrics, glyphs);
+        builder.build()
+    }
+
+    #[test]
+    fn extensions_add_characters_read_from_storage() {
+        let storage: Rc<dyn Storage> =
+            Rc::new(MemoryStorage::new().with("plugins/cyr/fonts/latin-cyr.qifp", pack("жщ")));
+        let mut fonts = Fonts::new(4096);
+        let latin = Font::from_data(pack("ab"), &[]).unwrap();
+        fonts
+            .add(FontSpec::new(Id::new_static("a.latin"), latin))
+            .unwrap();
+        let ui = Font::from_data(pack("ab"), &[]).unwrap();
+        fonts
+            .add(FontSpec::new(Id::new_static("a.ui"), ui))
+            .unwrap();
+        fonts.propose(roles::READING, Id::new_static("a.latin"), Priority::DEFAULT);
+        fonts
+            .add_extension(
+                Id::new_static("cyr.latin-cyr"),
+                String::from("plugins/cyr/fonts/latin-cyr.qifp"),
+                Id::new_static("a.latin"),
+            )
+            .unwrap();
+        assert!(
+            !fonts.get("a.latin").unwrap().has_char('ж'),
+            "not before it is loaded"
+        );
+        assert!(fonts.load(&storage).is_empty());
+        // The font it extends, and others by way of their fallback.
+        assert!(fonts.get("a.latin").unwrap().has_char('ж'));
+        assert!(fonts.get("a.ui").unwrap().has_char('щ'));
+        assert_eq!(fonts.get("a.ui").unwrap().measure(10.0, "aж"), 10.0);
+        assert!(!fonts.get("a.ui").unwrap().has_char('ю'));
     }
 }

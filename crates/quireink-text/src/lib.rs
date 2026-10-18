@@ -24,10 +24,12 @@ mod outline;
 #[cfg_attr(not(feature = "outline"), allow(dead_code))]
 mod raster;
 pub mod sfnt;
+mod stored;
 
 pub use bitmap::{BitmapFont, PackBuilder};
 pub use cache::GlyphCache;
 pub use font::{Font, FontError, LineMetrics};
+pub use stored::{PackSource, StoredPack};
 
 /// Whether this build renders scalable (OpenType/TrueType) fonts.
 pub const OUTLINES: bool = cfg!(feature = "outline");

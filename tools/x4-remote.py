@@ -17,6 +17,7 @@ STEPS, separated by commas:
                      page-back, page-forward, power)
   long:confirm       a long press
   hold:confirm:2000  a press held so many milliseconds
+  open:books/a.epub  open a book in the reader
   run:calibre.open   run an action, as a button bound to it would (e.g. a
                      tool's, to open it at once)
   wait:500           500 ms pass
@@ -284,6 +285,8 @@ def run(x4, step):
             print(x4.ask("input", "INPUT")[-1])
         case ["run", action]:
             print(x4.ask(f"run {action}", "OK")[-1])
+        case ["open", path]:
+            print(x4.ask(f"open {path.encode().hex()}", "OK")[-1])
         case ["refresh", kind]:
             print(x4.ask(f"refresh {kind}", "OK")[-1])
         case ["heap"]:

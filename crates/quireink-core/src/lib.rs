@@ -455,7 +455,7 @@ impl KernelBuilder {
             quireink_platform::MemoryClass::Small => 16 * 1024,
             quireink_platform::MemoryClass::Large => 256 * 1024,
         }));
-        let storage = Box::new(meter::Metered {
+        let storage: alloc::rc::Rc<dyn Storage> = alloc::rc::Rc::new(meter::Metered {
             inner: Box::new(recall::Recalled {
                 inner: self.storage.unwrap_or_else(|| Box::new(NoStorage)),
                 recall: recall.clone(),
@@ -2188,6 +2188,18 @@ impl Kernel {
         self.finish()
     }
 
+    /// Opens the screen bound to `slot` with `params`, e.g. the reader with
+    /// a book's path: for a shell asked to open a file (Android's "open
+    /// with", a remote control).
+    pub fn open_slot(&mut self, now: Instant, slot: Id, params: Params) -> Effects {
+        let _running = self.shared.meter.enter(meter::CORE);
+        self.now = now;
+        self.last_activity = now;
+        self.output.commands.push(Command::OpenSlot(slot, params));
+        self.run_commands();
+        self.finish()
+    }
+
     /// Runs `action` as a button bound to it would (the screen shown has it
     /// first), e.g. asked by a shell's remote control or a test.
     pub fn run_action(&mut self, now: Instant, action: Id) -> Effects {
@@ -2449,6 +2461,15 @@ impl Kernel {
         }
         for (id, path) in staging.font_files.drain(..) {
             self.add_font_file(plugin, id, path);
+        }
+        for (id, path, extends) in staging.font_extensions.drain(..) {
+            if let Err(error) = self.shared.fonts.add_extension(id, path, extends) {
+                self.warn(
+                    WarningSource::Plugin(plugin.clone()),
+                    None,
+                    format!("{error}"),
+                );
+            }
         }
         for (role, font, priority) in staging.font_roles.drain(..) {
             self.shared.fonts.propose(role, font, priority);
@@ -3855,7 +3876,7 @@ impl Kernel {
             && self.shared.fonts.families().contains(&chosen.as_str()))
         .then_some(chosen.as_str());
         self.shared.fonts.set_family(family);
-        for path in self.shared.fonts.load(self.shared.storage.as_ref()) {
+        for path in self.shared.fonts.load(&self.shared.storage) {
             self.warn(
                 WarningSource::Runtime,
                 None,
@@ -4029,7 +4050,8 @@ struct Shared {
     font_dirs: Vec<String>,
     /// Passwords and keys (see [`quireink_sdk::secrets`]).
     secrets: quireink_sdk::secrets::Secrets,
-    storage: Box<dyn Storage>,
+    /// Shared with font packs read where they are (see `Fonts::load`).
+    storage: alloc::rc::Rc<dyn Storage>,
     /// What the storage read during the call going on (see `recall`).
     recall: alloc::rc::Rc<recall::Recall>,
     keymap: Keymap,

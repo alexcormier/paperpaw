@@ -4,6 +4,7 @@ use core::fmt;
 use crate::bitmap::BitmapFont;
 #[cfg(feature = "outline")]
 use crate::outline::OutlineFont;
+use crate::stored::StoredPack;
 
 /// Why a font could not be loaded.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -60,6 +61,8 @@ impl LineMetrics {
 #[non_exhaustive]
 pub enum Font {
     Bitmap(BitmapFont),
+    /// A pack read a glyph at a time (see [`StoredPack`]).
+    Stored(StoredPack),
     #[cfg(feature = "outline")]
     Outline(OutlineFont),
 }
@@ -89,6 +92,7 @@ impl Font {
     pub fn line_metrics(&self, size: f32) -> LineMetrics {
         match self {
             Font::Bitmap(font) => font.line_metrics(size),
+            Font::Stored(font) => font.line_metrics(size),
             #[cfg(feature = "outline")]
             Font::Outline(font) => font.line_metrics(size),
         }
@@ -97,6 +101,7 @@ impl Font {
     pub fn advance(&self, ch: char, size: f32) -> f32 {
         match self {
             Font::Bitmap(font) => font.advance(ch, size),
+            Font::Stored(font) => font.advance(ch, size),
             #[cfg(feature = "outline")]
             Font::Outline(font) => font.advance(ch, size),
         }
@@ -105,6 +110,7 @@ impl Font {
     pub fn has_char(&self, ch: char) -> bool {
         match self {
             Font::Bitmap(font) => font.has_char(ch),
+            Font::Stored(font) => font.has_char(ch),
             #[cfg(feature = "outline")]
             Font::Outline(font) => font.has_char(ch),
         }

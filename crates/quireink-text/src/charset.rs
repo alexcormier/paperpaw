@@ -15,6 +15,24 @@ pub const LATIN: &[RangeInclusive<char>] = &[
     '\u{fffd}'..='\u{fffd}', // replacement character
 ];
 
+/// Cyrillic (Russian, Ukrainian, Bulgarian, Serbian and more), for packs
+/// added to fonts made for Latin.
+#[allow(clippy::single_range_in_vec_init)] // a set of ranges, of one here
+pub const CYRILLIC: &[RangeInclusive<char>] = &['\u{400}'..='\u{4ff}'];
+
+/// Greek, modern and polytonic (Greek Extended, for older texts).
+pub const GREEK: &[RangeInclusive<char>] = &['\u{370}'..='\u{3ff}', '\u{1f00}'..='\u{1fff}'];
+
+/// A character set by name: `latin`, `cyrillic` or `greek`.
+pub fn named(name: &str) -> Option<&'static [RangeInclusive<char>]> {
+    match name {
+        "latin" => Some(LATIN),
+        "cyrillic" => Some(CYRILLIC),
+        "greek" => Some(GREEK),
+        _ => None,
+    }
+}
+
 /// All characters of `ranges`.
 pub fn chars(ranges: &[RangeInclusive<char>]) -> impl Iterator<Item = char> + Clone + '_ {
     ranges.iter().flat_map(|range| range.clone())

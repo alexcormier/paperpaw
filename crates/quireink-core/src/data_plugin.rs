@@ -9,6 +9,8 @@
 //!   keymap.ini     key bindings
 //!   settings.ini   new defaults for any plugin's settings ([reader] font-size = 14)
 //!   fonts/*.ttf    fonts to read with (also .otf, .ttc), by family
+//!   fonts/*.qifp   packs with characters other fonts lack, named in
+//!                  plugin.ini: [extends] cyrillic.qifp = fonts-default.literata
 //!   styles.css     a stylesheet for books, after a book's own
 //! ```
 //!
@@ -40,6 +42,8 @@ pub(crate) struct DataPlugin {
     settings: RefCell<Option<String>>,
     /// Paths of font files.
     fonts: RefCell<Vec<String>>,
+    /// Packs that extend other fonts: their paths and those fonts' ids.
+    extensions: RefCell<Vec<(String, String)>>,
 }
 
 impl Plugin for DataPlugin {
@@ -72,6 +76,17 @@ impl Plugin for DataPlugin {
                 }
             })?;
             r.add_font_file(id, path)?;
+        }
+        for (path, extends) in self.extensions.take() {
+            let name = slug(path.rsplit('/').next().unwrap_or(&path));
+            let id = Id::parse(&format!("{}.{name}", self.manifest.id));
+            let extends = Id::parse(&extends);
+            let (Ok(id), Ok(extends)) = (id, extends) else {
+                return Err(RegisterError::Invalid {
+                    message: Cow::Owned(format!("{path}: unusable name or font")),
+                });
+            };
+            r.add_font_extension(id, path, extends)?;
         }
         if let Some(source) = self.settings.take() {
             for entry in quireink_config::parse(&source) {
@@ -122,8 +137,9 @@ pub(crate) fn discover(
 fn load(storage: &dyn Storage, path: &str, folder: &str) -> Result<DataPlugin, String> {
     let manifest = read(storage, &format!("{path}/plugin.ini"), MAX_MANIFEST)
         .ok_or_else(|| format!("{path}: no plugin.ini"))?;
+    let source = manifest;
     let manifest =
-        parse_manifest(&manifest, folder).map_err(|e| format!("{path}/plugin.ini: {e}"))?;
+        parse_manifest(&source, folder).map_err(|e| format!("{path}/plugin.ini: {e}"))?;
     let mut translations = Vec::new();
     let catalogs = format!("{path}/i18n");
     let mut files: Vec<String> = Vec::new();
@@ -145,6 +161,7 @@ fn load(storage: &dyn Storage, path: &str, folder: &str) -> Result<DataPlugin, S
         styles: RefCell::new(read(storage, &format!("{path}/styles.css"), MAX_FILE)),
         settings: RefCell::new(read(storage, &format!("{path}/settings.ini"), MAX_FILE)),
         fonts: RefCell::new(font_files(storage, &format!("{path}/fonts"))),
+        extensions: RefCell::new(extensions(&source, path)),
     })
 }
 
@@ -205,7 +222,23 @@ pub(crate) fn font_folder(storage: &dyn Storage, dirs: &[String]) -> Option<Data
         styles: RefCell::new(None),
         settings: RefCell::new(None),
         fonts: RefCell::new(fonts),
+        extensions: RefCell::new(Vec::new()),
     })
+}
+
+/// The packs `[extends]` in a `plugin.ini` names: their paths under the
+/// plugin's `fonts` folder and the fonts they extend.
+fn extensions(source: &str, path: &str) -> Vec<(String, String)> {
+    quireink_config::parse(source)
+        .filter_map(Result::ok)
+        .filter(|entry| entry.section == "extends")
+        .map(|entry| {
+            (
+                format!("{path}/fonts/{}", entry.key),
+                entry.value.as_str().trim().to_string(),
+            )
+        })
+        .collect()
 }
 
 /// An id segment from a file name: `Book Antiqua-Bold.ttf` gives
@@ -329,6 +362,19 @@ mod tests {
         );
         assert!(font_folder(&storage, &[String::from("nothing")]).is_none());
         assert_eq!(slug("Book Antiqua-Bold.TTF"), "book-antiqua-bold");
+        // Packs that extend other fonts, named in plugin.ini.
+        let source = "[plugin]
+id = cyrillic
+[extends]
+literata.qifp = fonts-default.literata
+";
+        assert_eq!(
+            extensions(source, "plugins/cyrillic"),
+            [(
+                String::from("plugins/cyrillic/fonts/literata.qifp"),
+                String::from("fonts-default.literata")
+            )]
+        );
         assert_eq!(slug("….ttf"), "font");
     }
 }

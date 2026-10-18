@@ -20,6 +20,9 @@ pub enum Done {
     Sent(String),
     Folder(String),
     Deleted(String),
+    /// An upload that failed: said on the device too, so the last success
+    /// is not taken for it.
+    NotReceived(String),
 }
 
 /// A request to answer.
@@ -119,8 +122,11 @@ pub fn answer(
         }
         ("PUT", "/api/file") => {
             let (dir, name) = (files::parent(&target), files::name(&target));
+            let not_received = |(response, _): (ServerResponse, Option<Done>)| {
+                (response, Some(Done::NotReceived(name.to_string())))
+            };
             if name.is_empty() || !(dir.is_empty() || files::is_dir(storage, dir)) {
-                return text(400, "bad path");
+                return not_received(text(400, "bad path: the folder is not there"));
             }
             let at = files::free_path(storage, dir, name);
             let result = match request.body_file {
@@ -129,7 +135,7 @@ pub fn answer(
             };
             match result {
                 Ok(()) => ok(Some(Done::Received(files::name(&at).to_string()))),
-                Err(e) => failed(e),
+                Err(e) => not_received(failed(e)),
             }
         }
         ("POST", "/api/mkdir") if !target.is_empty() => {

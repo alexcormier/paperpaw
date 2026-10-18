@@ -186,7 +186,7 @@ impl TransferScreen {
                 let (response, done) = web::answer(env.storage, &self.key, &self.page, request);
                 cx.command(Command::Respond(response));
                 if let Some(done) = done {
-                    if !matches!(done, web::Done::Sent(_)) {
+                    if !matches!(done, web::Done::Sent(_) | web::Done::NotReceived(_)) {
                         cx.command(quireink_sdk::library::changed());
                     }
                     let (key, name) = match &done {
@@ -194,6 +194,7 @@ impl TransferScreen {
                         web::Done::Sent(name) => ("transfer.sent", name),
                         web::Done::Folder(name) => ("transfer.folder", name),
                         web::Done::Deleted(name) => ("transfer.deleted", name),
+                        web::Done::NotReceived(name) => ("transfer.not-received", name),
                     };
                     self.last = Some(env.i18n.format(key, &[("name", Arg::Str(name))]));
                     let area = self.content(&env);
