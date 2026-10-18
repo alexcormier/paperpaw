@@ -25,6 +25,7 @@ use alloc::vec::Vec;
 use quireink_sdk::Storage;
 use quireink_sdk::config;
 use quireink_sdk::document::{DocumentError, Metadata};
+use quireink_sdk::hash::fnv1a64;
 use quireink_sdk::xml::{Token, Tokenizer, decode, local_name};
 use quireink_sdk::zip::ZipArchive;
 
@@ -197,13 +198,6 @@ fn clean(text: &str) -> String {
         out.push_str(word);
     }
     out
-}
-
-/// FNV-1a, to remember manifest ids without keeping them.
-fn hash(text: &str) -> u64 {
-    text.bytes().fold(0xcbf2_9ce4_8422_2325, |hash, b| {
-        (hash ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)
-    })
 }
 
 fn read_u32(storage: &dyn Storage, path: &str, offset: u64) -> Option<u32> {
@@ -567,9 +561,9 @@ pub(crate) fn build(
                 };
                 text.clear();
             }
-            "spine" => ncx_id = attrs.get("toc").map(|v| hash(&v)),
+            "spine" => ncx_id = attrs.get("toc").map(|v| fnv1a64(v.as_bytes())),
             "meta" if attrs.get("name").as_deref() == Some("cover") => {
-                cover_id = attrs.get("content").map(|v| hash(&v));
+                cover_id = attrs.get("content").map(|v| fnv1a64(v.as_bytes()));
             }
             // Calibre's series.
             "meta" if attrs.get("name").as_deref() == Some("calibre:series") => {
@@ -602,7 +596,7 @@ pub(crate) fn build(
             "itemref" => {
                 if let Some(id) = attrs.get("idref") {
                     let position = spine_ids.len() as u32;
-                    spine_ids.push((hash(&id), position));
+                    spine_ids.push((fnv1a64(id.as_bytes()), position));
                 }
             }
             _ => {}
@@ -670,7 +664,7 @@ pub(crate) fn build(
             return;
         }
         let get = |n| attrs.get(n).unwrap_or_default();
-        let id = hash(&get("id"));
+        let id = fnv1a64(get("id").as_bytes());
         let first = spine_ids.partition_point(|&(h, _)| h < id);
         let positions = spine_ids[first..].iter().take_while(|&&(h, _)| h == id);
         let is_nav = get("properties").split_whitespace().any(|p| p == "nav");

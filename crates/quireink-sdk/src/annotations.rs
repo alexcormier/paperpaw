@@ -17,6 +17,7 @@ use alloc::vec::Vec;
 
 use crate::builtin::{events, params};
 use crate::document::Locator;
+use crate::hash::fnv1a64;
 use crate::{Command, Params, Storage};
 
 /// Longest snippet kept with an annotation, in bytes.
@@ -66,15 +67,9 @@ pub struct Annotation {
     pub note: String,
 }
 
-fn fnv(text: &str) -> u64 {
-    text.bytes().fold(0xcbf2_9ce4_8422_2325, |hash, b| {
-        (hash ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)
-    })
-}
-
 /// The file with the annotations of the book at `book`.
 pub fn file(book: &str) -> String {
-    format!(".quireink/annotations/{:016x}.txt", fnv(book))
+    format!(".quireink/annotations/{:016x}.txt", fnv1a64(book))
 }
 
 /// Every annotation of the book at `book`, by position.

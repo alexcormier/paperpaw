@@ -27,6 +27,7 @@ use core::cell::Cell;
 use quireink_sdk::document::{
     Block, Document, DocumentError, ImageRef, Link, Locator, Metadata, TocEntry,
 };
+use quireink_sdk::hash::fnv1a64;
 use quireink_sdk::image::Fit;
 use quireink_sdk::xml::{Token, Tokenizer, decode, local_name};
 use quireink_sdk::{Env, Storage};
@@ -355,12 +356,6 @@ pub(crate) fn decode_binaries(
     }
 }
 
-fn fnv(data: &[u8]) -> u64 {
-    data.iter().fold(0xcbf2_9ce4_8422_2325, |hash, &b| {
-        (hash ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)
-    })
-}
-
 /// An open FictionBook.
 #[derive(Debug)]
 pub struct Fb2Document {
@@ -405,7 +400,7 @@ impl Fb2Document {
         let mut cache = format!(
             "{}/fb2-{:016x}",
             Env::plugin_dir(PLUGIN.as_str()),
-            fnv(path.as_bytes())
+            fnv1a64(path.as_bytes())
         );
         if !styles {
             cache.push_str("/plain");
@@ -424,7 +419,7 @@ impl Fb2Document {
         let stamp = format!(
             "{}.{FB2_VERSION} {size} {:016x}\n",
             crate::package::CACHE_VERSION,
-            fnv(&head[..n])
+            fnv1a64(&head[..n])
         );
         let stamp_path = format!("{cache}/source");
         let info_path = format!("{cache}/book.txt");

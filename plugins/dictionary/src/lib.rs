@@ -25,6 +25,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use quireink_sdk::builtin::{actions, groups, params, slots};
+use quireink_sdk::hash::fnv1a64;
 use quireink_sdk::ui::{self, UiStyle};
 use quireink_sdk::{
     Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest, Params,
@@ -111,12 +112,6 @@ fn find_dictionaries(storage: &dyn Storage, folder: &str) -> Vec<String> {
     found
 }
 
-fn fnv(text: &str) -> u64 {
-    text.bytes().fold(0xcbf2_9ce4_8422_2325, |hash, b| {
-        (hash ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)
-    })
-}
-
 /// What the panel shows.
 #[derive(Debug)]
 enum State {
@@ -169,7 +164,7 @@ impl Popup {
         let folder = env.settings.text(FOLDER.as_str()).trim_matches('/');
         let cache_dir = Env::plugin_dir(PLUGIN.as_str());
         for ifo in find_dictionaries(env.storage, folder) {
-            let cache = format!("{cache_dir}/{:016x}", fnv(&ifo));
+            let cache = format!("{cache_dir}/{:016x}", fnv1a64(&ifo));
             if let Ok(dictionary) = Dictionary::open(env.storage, &ifo, &cache) {
                 popup.dictionaries.push(dictionary);
             }

@@ -41,6 +41,7 @@ pub mod firmware;
 mod fonts;
 mod formats;
 mod gesture;
+pub mod hash;
 mod hyphenation;
 pub mod icons;
 mod id;

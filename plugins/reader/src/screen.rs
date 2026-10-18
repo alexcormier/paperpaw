@@ -5,6 +5,7 @@ use alloc::vec::Vec;
 
 use quireink_sdk::builtin::{actions, events, fonts, params, slots};
 use quireink_sdk::document::{Document, DocumentError, Link, Locator};
+use quireink_sdk::hash::fnv1a64;
 use quireink_sdk::layout::{
     Face, Hyphenate, Page, PageImage, Style, Typesetter, layout_page, line_start,
 };
@@ -373,7 +374,7 @@ impl Typography {
         .then(|| language.to_string());
         let key = format!(
             "{:016x}",
-            fnv(&format!(
+            fnv1a64(format!(
                 "{}|{}|{}|{}|{}|{size}|{line_height}|{}|{}|{justify}|{width}x{height}|{}|{}|{}|{word_spacing}|{}|{whole_pages}",
                 quireink_sdk::layout::VERSION,
                 font.id(),
@@ -550,7 +551,7 @@ pub(crate) fn book_dir(path: &str) -> String {
     format!(
         "{}/books/{:016x}",
         Env::plugin_dir(PLUGIN.as_str()),
-        fnv(path)
+        fnv1a64(path)
     )
 }
 
@@ -3224,13 +3225,6 @@ fn draw_message(canvas: &mut Canvas<'_>, env: &Env<'_>, message: &str) {
 
 fn escape(text: &str) -> String {
     text.replace('\\', "\\\\").replace('"', "\\\"")
-}
-
-/// FNV-1a, for short stable ids of paths and layouts.
-fn fnv(text: &str) -> u64 {
-    text.bytes().fold(0xcbf2_9ce4_8422_2325, |hash, b| {
-        (hash ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)
-    })
 }
 
 #[cfg(test)]

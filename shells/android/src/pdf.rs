@@ -15,6 +15,7 @@ use jni::objects::{GlobalRef, JObject, JValue};
 use quireink_sdk::document::{
     Align, Block, BlockKind, Document, DocumentError, ImageRef, Locator, Metadata, OffsetMap,
 };
+use quireink_sdk::hash::fnv1a64;
 use quireink_sdk::image::{GrayFile, GrayWriter, ImageSink};
 use quireink_sdk::{Env, Storage};
 
@@ -31,13 +32,6 @@ const KEPT_PAGES: usize = 12;
 
 fn failed(what: &'static str) -> DocumentError {
     DocumentError::Malformed(what.into())
-}
-
-/// FNV-1a, for a cache folder per book.
-fn fnv(data: &[u8]) -> u64 {
-    data.iter().fold(0xcbf2_9ce4_8422_2325, |h, &b| {
-        (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)
-    })
 }
 
 /// An open PDF book.
@@ -111,7 +105,7 @@ impl PdfDocument {
         let cache = format!(
             "{}/{:016x}",
             Env::plugin_dir(crate::plugin::PLUGIN.as_str()),
-            fnv(path.as_bytes())
+            fnv1a64(path)
         );
         // Pages rendered from another file or for another screen go.
         let stamp = format!("{} {pages} {}x{}\n", storage.size(path)?, fit.0, fit.1);

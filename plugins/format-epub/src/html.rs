@@ -9,6 +9,7 @@ use alloc::vec::Vec;
 use core::cell::Cell;
 
 use quireink_sdk::document::{Block, Document, DocumentError, Link, Locator, Metadata};
+use quireink_sdk::hash::fnv1a64;
 use quireink_sdk::xml::{Token, Tokenizer, decode, local_name};
 use quireink_sdk::{Env, Storage};
 
@@ -106,12 +107,6 @@ fn scan(storage: &dyn Storage, path: &str) -> Result<Scan, DocumentError> {
     Ok(found)
 }
 
-fn fnv(data: &[u8]) -> u64 {
-    data.iter().fold(0xcbf2_9ce4_8422_2325, |hash, &b| {
-        (hash ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)
-    })
-}
-
 impl HtmlDocument {
     /// Opens an HTML file; without `styles` its CSS is ignored.
     pub fn open(storage: &dyn Storage, path: &str, styles: bool) -> Result<Self, DocumentError> {
@@ -120,7 +115,7 @@ impl HtmlDocument {
         let mut cache = format!(
             "{}/html-{:016x}",
             Env::plugin_dir(PLUGIN.as_str()),
-            fnv(path.as_bytes())
+            fnv1a64(path.as_bytes())
         );
         if !styles {
             cache.push_str("/plain");
@@ -141,7 +136,7 @@ impl HtmlDocument {
         let stamp = format!(
             "{}.{HTML_VERSION} {size} {:016x}\n",
             crate::package::CACHE_VERSION,
-            fnv(&head[..n])
+            fnv1a64(&head[..n])
         );
         let stamp_path = format!("{cache}/source");
         if quireink_sdk::read_file(storage, &stamp_path, 256).ok()

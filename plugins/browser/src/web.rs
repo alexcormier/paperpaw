@@ -147,9 +147,7 @@ pub(crate) fn keep_page(
 /// A stable name for the page at `url`, so a page shown again opens
 /// where it was left.
 pub(crate) fn page_name(url: &str) -> String {
-    let hash = url.bytes().fold(0xcbf2_9ce4_8422_2325u64, |hash, b| {
-        (hash ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)
-    });
+    let hash = quireink_sdk::hash::fnv1a64(url);
     format!("{hash:016x}.html")
 }
 

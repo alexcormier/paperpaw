@@ -6,6 +6,7 @@ use core::cell::Cell;
 use quireink_sdk::document::{
     Block, Document, DocumentError, EmbeddedFont, ImageRef, Link, Locator, Metadata, TocEntry,
 };
+use quireink_sdk::hash::fnv1a64;
 use quireink_sdk::image::Fit;
 use quireink_sdk::zip::ZipArchive;
 use quireink_sdk::{Env, Storage};
@@ -69,12 +70,6 @@ struct Known {
 
 /// A section and its printed pages: offset and label.
 type SectionPages = (u32, Vec<(u32, String)>);
-
-fn fnv(text: &str) -> u64 {
-    text.bytes().fold(0xcbf2_9ce4_8422_2325, |hash, b| {
-        (hash ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)
-    })
-}
 
 fn paths(cache: &str, section: u32) -> CachePaths {
     CachePaths {
@@ -197,7 +192,11 @@ fn origin(line: &str) -> Option<(u32, &str, u32)> {
 /// Where chapters converted without the book's styles are kept.
 /// The cache of a book.
 fn book_cache(path: &str) -> String {
-    alloc::format!("{}/{:016x}", Env::plugin_dir(PLUGIN.as_str()), fnv(path))
+    alloc::format!(
+        "{}/{:016x}",
+        Env::plugin_dir(PLUGIN.as_str()),
+        fnv1a64(path)
+    )
 }
 
 /// The cache of a book's chapters converted with its styles or not, and
@@ -220,7 +219,7 @@ fn chapters_cache(
     } else if user_css.is_empty() {
         String::from(cache)
     } else {
-        alloc::format!("{cache}/css-{:016x}", fnv(&user_css))
+        alloc::format!("{cache}/css-{:016x}", fnv1a64(&user_css))
     };
     (chapters, user_css)
 }

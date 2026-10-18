@@ -8,6 +8,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use quireink_sdk::document::{Block, Document, DocumentError, Link, Locator, Metadata, TocEntry};
+use quireink_sdk::hash::fnv1a64;
 use quireink_sdk::{Env, Storage};
 
 use crate::PLUGIN;
@@ -23,12 +24,6 @@ pub struct MarkdownDocument {
     metadata: Metadata,
 }
 
-fn fnv(data: &[u8]) -> u64 {
-    data.iter().fold(0xcbf2_9ce4_8422_2325, |hash, &b| {
-        (hash ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)
-    })
-}
-
 impl MarkdownDocument {
     pub fn open(storage: &dyn Storage, path: &str, styles: bool) -> Result<Self, DocumentError> {
         let size = storage.size(path)?;
@@ -37,10 +32,10 @@ impl MarkdownDocument {
         let dir = format!(
             "{}/md-{:016x}",
             Env::plugin_dir(PLUGIN.as_str()),
-            fnv(path.as_bytes())
+            fnv1a64(path.as_bytes())
         );
         let html_path = format!("{dir}/book.html");
-        let stamp = format!("{MD_VERSION} {size} {:016x}\n", fnv(&head[..n]));
+        let stamp = format!("{MD_VERSION} {size} {:016x}\n", fnv1a64(&head[..n]));
         let stamp_path = format!("{dir}/source");
         if quireink_sdk::read_file(storage, &stamp_path, 128).ok()
             != Some(stamp.clone().into_bytes())

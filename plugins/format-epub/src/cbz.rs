@@ -15,6 +15,7 @@ use core::cmp::Ordering;
 use quireink_sdk::document::{
     Align, Block, BlockKind, Document, DocumentError, ImageRef, Locator, Metadata, OffsetMap,
 };
+use quireink_sdk::hash::fnv1a64;
 use quireink_sdk::image::Fit;
 use quireink_sdk::xml::{Token, Tokenizer, decode, local_name};
 use quireink_sdk::zip::ZipArchive;
@@ -86,12 +87,6 @@ fn natural(a: &str, b: &str) -> Ordering {
     }
 }
 
-fn fnv(data: &[u8]) -> u64 {
-    data.iter().fold(0xcbf2_9ce4_8422_2325, |hash, &b| {
-        (hash ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)
-    })
-}
-
 impl CbzDocument {
     pub fn open(storage: &dyn Storage, path: &str) -> Result<Self, DocumentError> {
         Self::open_options(storage, path, &quireink_sdk::OpenOptions::default())
@@ -122,7 +117,7 @@ impl CbzDocument {
         let cache = format!(
             "{}/cbz-{:016x}",
             Env::plugin_dir(PLUGIN.as_str()),
-            fnv(path.as_bytes())
+            fnv1a64(path.as_bytes())
         );
         // Pictures decoded from another file of the same name go.
         let stamp = format!("{} {}\n", storage.size(path)?, pages.len());

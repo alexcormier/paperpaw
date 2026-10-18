@@ -29,6 +29,7 @@ use quireink_sdk::document::{
     Align, Block, BlockKind, Document, DocumentError, ImageRef, Locator, Metadata, OffsetMap,
     TocEntry,
 };
+use quireink_sdk::hash::fnv1a64;
 use quireink_sdk::image::{GrayFile, GrayWriter, ImageError, ImageSink};
 use quireink_sdk::{
     Env, FormatSpec, Id, Manifest, Plugin, RegisterError, Registrar, SDK_VERSION, Storage, Version,
@@ -55,12 +56,6 @@ const MAX_CHAPTERS: u64 = 1000;
 
 fn malformed(what: &'static str) -> DocumentError {
     DocumentError::Malformed(Cow::Borrowed(what))
-}
-
-fn fnv(data: &[u8]) -> u64 {
-    data.iter().fold(0xcbf2_9ce4_8422_2325, |hash, &b| {
-        (hash ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)
-    })
 }
 
 fn u16_at(data: &[u8], at: usize) -> u16 {
@@ -208,7 +203,7 @@ impl XtcDocument {
         let cache = format!(
             "{}/{:016x}",
             Env::plugin_dir(PLUGIN.as_str()),
-            fnv(path.as_bytes())
+            fnv1a64(path.as_bytes())
         );
         // Pages decoded from another file of the same name go.
         let stamp = format!("{} {pages}\n", storage.size(path)?);
