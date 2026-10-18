@@ -226,7 +226,45 @@ impl KernelBuilder {
         self
     }
 
-    pub fn build(self) -> Result<Kernel, KernelError> {
+    pub fn build(mut self) -> Result<Kernel, KernelError> {
+        let mut kernel = self.new_kernel()?;
+        kernel.read_secrets();
+        quireink_sdk::library::take_over_old(kernel.shared.storage.as_ref());
+        // The configuration file on the device, then the shell's overrides.
+        let stored = read_config(kernel.shared.storage.as_ref());
+        let user_config = self.user_config.take();
+        let configs: Vec<&str> = [stored.as_deref(), user_config.as_deref()]
+            .into_iter()
+            .flatten()
+            .collect();
+        kernel.add_plugins(
+            mem::take(&mut self.plugins),
+            mem::take(&mut self.off),
+            mem::take(&mut self.plugin_dirs),
+            mem::take(&mut self.font_dirs),
+            &configs,
+        );
+        if let Some(source) = self.device_keymap.take() {
+            kernel.load_device_keymap(source);
+        }
+        kernel.offer_choices();
+        kernel.apply_defaults(&self.setting_defaults);
+        for source in &configs {
+            kernel.apply_user_config(source);
+        }
+        kernel.set_menu_titles();
+        kernel.apply_reading_font();
+        kernel.validate();
+        kernel.rebuild_keymap();
+        kernel.apply_display_settings();
+        kernel.settle();
+        Ok(kernel)
+    }
+
+    /// The kernel with nothing registered: its frame, its storage (metered,
+    /// and what a call reads kept for the rest of it), what the shell said
+    /// it does.
+    fn new_kernel(&mut self) -> Result<Kernel, KernelError> {
         let display = self.device.display;
         let rows = self.frame_rows.unwrap_or(display.height);
         let framebuffer = Framebuffer::banded(display.width, display.height, rows, display.format)
@@ -240,7 +278,7 @@ impl KernelBuilder {
         }));
         let storage: alloc::rc::Rc<dyn Storage> = alloc::rc::Rc::new(meter::Metered {
             inner: Box::new(recall::Recalled {
-                inner: self.storage.unwrap_or_else(|| Box::new(NoStorage)),
+                inner: self.storage.take().unwrap_or_else(|| Box::new(NoStorage)),
                 recall: recall.clone(),
             }),
             meter: meter.clone(),
@@ -250,7 +288,7 @@ impl KernelBuilder {
         caps.touch = self.device.input.touch;
         caps.firmware = self.firmware.is_some();
         caps.button_row = !self.button_row.is_empty();
-        let mut kernel = Kernel {
+        Ok(Kernel {
             shared: Shared {
                 meter,
                 device: self.device,
@@ -275,7 +313,7 @@ impl KernelBuilder {
                 book_data: Vec::new(),
                 caps,
                 wifi: caps.wifi.then(quireink_sdk::wifi::Wifi::default),
-                firmware: self.firmware,
+                firmware: self.firmware.take(),
                 clipboard: String::new(),
                 system_clipboard: false,
                 slots: Vec::new(),
@@ -339,34 +377,42 @@ impl KernelBuilder {
             network_busy: false,
             plugin_defaults: Vec::new(),
             now: Instant::default(),
-        };
-        kernel.shared.menus.set_capabilities(caps);
-        // Colour screens open documents with colour pictures (ADR 0015).
-        let color = kernel.shared.device.display.format.is_color();
-        kernel.shared.formats.set_color(color);
-        // Pictures no larger than the screen shows them.
-        let display = kernel.shared.device.display;
-        let fit = quireink_sdk::image::Fit::screen(display.width.into(), display.height.into());
-        kernel.shared.formats.set_image_fit(fit);
+        })
+    }
+}
 
-        // Passwords and keys.
+/// The steps of [`KernelBuilder::build`].
+impl Kernel {
+    /// Passwords and keys, as kept on the storage.
+    fn read_secrets(&mut self) {
         if let Ok(data) = quireink_sdk::read_file(
-            kernel.shared.storage.as_ref(),
+            self.shared.storage.as_ref(),
             quireink_sdk::secrets::FILE,
             64 * 1024,
         ) {
             let text = String::from_utf8_lossy(&data);
-            kernel.shared.secrets = quireink_sdk::secrets::Secrets::decode(&text);
+            self.shared.secrets = quireink_sdk::secrets::Secrets::decode(&text);
         }
+    }
 
-        quireink_sdk::library::take_over_old(kernel.shared.storage.as_ref());
-
-        // The configuration file on the device, then the shell's overrides.
-        let stored = read_config(kernel.shared.storage.as_ref());
-        let configs: Vec<&str> = [stored.as_deref(), self.user_config.as_deref()]
-            .into_iter()
-            .flatten()
-            .collect();
+    /// The kernel's own plugin, the shell's, those of data on the storage
+    /// and of fonts in its folders, but those switched off in `configs`
+    /// or shipped off (`off`) and not switched on.
+    fn add_plugins(
+        &mut self,
+        plugins: Vec<Box<dyn Plugin>>,
+        off: Vec<String>,
+        plugin_dirs: Vec<String>,
+        font_dirs: Vec<String>,
+        configs: &[&str],
+    ) {
+        self.shared.menus.set_capabilities(self.shared.caps);
+        // Colour screens open documents with colour pictures (ADR 0015).
+        let display = self.shared.device.display;
+        self.shared.formats.set_color(display.format.is_color());
+        // Pictures no larger than the screen shows them.
+        let fit = quireink_sdk::image::Fit::screen(display.width.into(), display.height.into());
+        self.shared.formats.set_image_fit(fit);
         let mut disabled: Vec<String> = configs
             .iter()
             .flat_map(|c| plugin_switches(c, false))
@@ -376,131 +422,127 @@ impl KernelBuilder {
             .iter()
             .flat_map(|c| plugin_switches(c, true))
             .collect();
-        disabled.extend(self.off.into_iter().filter(|id| !on.contains(id)));
+        disabled.extend(off.into_iter().filter(|id| !on.contains(id)));
         let core: Box<dyn Plugin> = Box::new(CorePlugin);
-        for plugin in core::iter::once(core).chain(self.plugins) {
-            kernel.add_plugin(plugin.as_ref(), &disabled);
+        for plugin in core::iter::once(core).chain(plugins) {
+            self.add_plugin(plugin.as_ref(), &disabled);
         }
         // Data plugins from the storage, after the built-in ones.
-        let dirs = if self.plugin_dirs.is_empty() {
+        let dirs = if plugin_dirs.is_empty() {
             alloc::vec![String::from(quireink_sdk::builtin::PLUGIN_DIR)]
         } else {
-            self.plugin_dirs
+            plugin_dirs
         };
         for dir in &dirs {
             let mut problems = Vec::new();
-            let found =
-                data_plugin::discover(kernel.shared.storage.as_ref(), dir, &mut |problem| {
-                    problems.push(problem);
-                });
+            let found = data_plugin::discover(self.shared.storage.as_ref(), dir, &mut |problem| {
+                problems.push(problem);
+            });
             for problem in problems {
-                kernel.warn_runtime(problem);
+                self.warn_runtime(problem);
             }
             for plugin in found {
-                kernel.add_plugin(&plugin, &disabled);
+                self.add_plugin(&plugin, &disabled);
             }
         }
-        if !self.font_dirs.is_empty()
-            && let Some(plugin) =
-                data_plugin::font_folder(kernel.shared.storage.as_ref(), &self.font_dirs)
+        if !font_dirs.is_empty()
+            && let Some(plugin) = data_plugin::font_folder(self.shared.storage.as_ref(), &font_dirs)
         {
-            kernel.add_plugin(&plugin, &disabled);
+            self.add_plugin(&plugin, &disabled);
         }
-        kernel.shared.font_dirs = self.font_dirs;
-        kernel.find_required_plugins();
+        self.shared.font_dirs = font_dirs;
+        self.find_required_plugins();
+    }
 
-        if let Some(source) = self.device_keymap {
-            for problem in kernel.shared.keymap.load(&source, Origin::Device, true) {
-                kernel.warn(
-                    WarningSource::DeviceKeymap,
-                    Some(problem.line),
-                    problem.message.into_owned(),
-                );
-            }
-            kernel.keymap_sources.push((Origin::Device, source));
+    /// The device's own key map, under all others.
+    fn load_device_keymap(&mut self, source: Cow<'static, str>) {
+        for problem in self.shared.keymap.load(&source, Origin::Device, true) {
+            self.warn(
+                WarningSource::DeviceKeymap,
+                Some(problem.line),
+                problem.message.into_owned(),
+            );
         }
+        self.keymap_sources.push((Origin::Device, source));
+    }
+
+    /// The choices of settings that plugins add to: key map presets and
+    /// reading fonts.
+    fn offer_choices(&mut self) {
         let mut presets: Vec<Cow<'static, str>> =
             alloc::vec![Cow::Borrowed(keymap_presets::STANDARD_NAME)];
         presets.extend(
-            kernel
-                .keymap_presets
+            self.keymap_presets
                 .iter()
                 .map(|(id, _)| Cow::Owned(id.as_str().to_string())),
         );
-        kernel
-            .shared
+        self.shared
             .settings
             .set_choices(core_settings::KEYMAP_PRESET.as_str(), presets);
         let mut families: Vec<Cow<'static, str>> =
             alloc::vec![Cow::Borrowed(core_settings::DEFAULT_FONT)];
         families.extend(
-            kernel
-                .shared
+            self.shared
                 .fonts
                 .families()
                 .into_iter()
                 .map(|f| Cow::Owned(f.to_string())),
         );
-        kernel
-            .shared
+        self.shared
             .settings
             .set_choices(core_settings::READING_FONT.as_str(), families);
-        // Defaults from plugins (e.g. themes), then the device's.
-        for (plugin, id, value) in mem::take(&mut kernel.plugin_defaults) {
-            if let Err(error) = kernel
+    }
+
+    /// Defaults from plugins (e.g. themes), then the device's.
+    fn apply_defaults(&mut self, device: &[(String, String)]) {
+        for (plugin, id, value) in mem::take(&mut self.plugin_defaults) {
+            if let Err(error) = self
                 .shared
                 .settings
                 .set_default_from_text(id.as_str(), &value)
             {
-                kernel.warn(
+                self.warn(
                     WarningSource::Plugin(plugin),
                     None,
                     format!("default for `{id}`: {error}"),
                 );
             }
         }
-        for (id, value) in &self.setting_defaults {
-            if let Err(error) = kernel.shared.settings.set_default_from_text(id, value) {
-                kernel.warn_runtime(format!("device default `{id}`: {error}"));
+        for (id, value) in device {
+            if let Err(error) = self.shared.settings.set_default_from_text(id, value) {
+                self.warn_runtime(format!("device default `{id}`: {error}"));
             }
         }
-        for source in &configs {
-            kernel.apply_user_config(source);
-        }
-        kernel.set_menu_titles();
-        kernel.apply_reading_font();
-        kernel.validate();
-        kernel.rebuild_keymap();
-        let shared = &mut kernel.shared;
+    }
+
+    /// The language, night mode and colours the settings say.
+    fn apply_display_settings(&mut self) {
+        let shared = &mut self.shared;
         shared
             .translator
             .set_language(shared.settings.read(&core_settings::LANGUAGE));
-        kernel.framebuffer.set_inverted(
-            kernel
-                .shared
-                .settings
-                .bool(core_settings::NIGHT_MODE.as_str()),
-        );
-        kernel.framebuffer.set_pictures_kept(
-            !kernel
-                .shared
-                .settings
-                .bool(core_settings::NIGHT_PICTURES.as_str()),
-        );
-        if let Some(panel) = kernel.shared.device.display.color {
-            kernel.framebuffer.set_saturation(panel.boost_percent());
+        let settings = &self.shared.settings;
+        self.framebuffer
+            .set_inverted(settings.bool(core_settings::NIGHT_MODE.as_str()));
+        self.framebuffer
+            .set_pictures_kept(!settings.bool(core_settings::NIGHT_PICTURES.as_str()));
+        if let Some(panel) = self.shared.device.display.color {
+            self.framebuffer.set_saturation(panel.boost_percent());
         }
-        kernel.shrink_to_fit();
-        kernel.shared.slots = kernel.registry.bound_slots();
-        kernel.shared.screens = kernel
+    }
+
+    /// Done registering: memory given back, the slots and screens known,
+    /// the row of hints as tall as the first screen is made for.
+    fn settle(&mut self) {
+        self.shrink_to_fit();
+        self.shared.slots = self.registry.bound_slots();
+        self.shared.screens = self
             .registry
             .screens
             .iter()
             .map(|(id, spec)| (id.clone(), spec.title.clone()))
             .collect();
-        // Screens are made for the row of hints from the first one on.
-        kernel.hint.height = kernel.wanted_hint_height();
-        Ok(kernel)
+        self.hint.height = self.wanted_hint_height();
     }
 }
 
