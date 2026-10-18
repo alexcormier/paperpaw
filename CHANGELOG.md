@@ -6,6 +6,10 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- The X4's whole flash image in a release is signed too, in a signature
+  file of its own (`quireink-x4-<version>.bin.sig`), which the web
+  flasher checks before it writes (`quireink-sign sign-apart`, `check`;
+  `quireink_update::check_apart`).
 - Icon packs: `tools/icons/pack.py` builds a data plugin with the
   drawings of any Tabler icons QuireInk's icon font lacks, read a glyph
   at a time from the card; `quireink-fontgen --chars` takes code points

@@ -18,6 +18,10 @@
 //! 48 bytes, so neither the length nor the key can be changed. A device
 //! checks it with [`Check`] as it writes the image, a piece at a time, and
 //! starts the new image only if it holds.
+//!
+//! A whole flash image, as the web flasher writes it from address 0, is
+//! signed apart: its signature file (`.sig`) is the trailer alone, made
+//! and checked the same way ([`sign`], [`check_apart`]).
 
 #![no_std]
 
@@ -197,6 +201,18 @@ pub fn sign(image: &[u8], seed: &[u8; 32]) -> Result<Trailer, Problem> {
     })
 }
 
+/// Checks `image` against its signature file `signature` (the trailer
+/// alone, see the [crate documentation](crate)): the trailer if the
+/// signature holds; who signed it is for the caller to judge
+/// ([`Trailer::key`]).
+pub fn check_apart(image: &[u8], signature: &[u8]) -> Result<Trailer, Problem> {
+    let trailer = Trailer::read(signature, image.len() as u64 + TRAILER_LEN as u64)?;
+    let mut check = Check::new(&trailer)?;
+    check.absorb(image);
+    check.finish()?;
+    Ok(trailer)
+}
+
 /// The public key of the Ed25519 key made from `seed`.
 pub fn public_key(seed: &[u8; 32]) -> [u8; 32] {
     *ed25519_compact::KeyPair::from_seed(ed25519_compact::Seed::new(*seed)).pk
@@ -337,6 +353,22 @@ mod tests {
         let mut file = update(&image(10_000));
         file[10_000 + 20] ^= 1;
         assert_eq!(check(&file, 4096), Err(Problem::Signature));
+    }
+
+    #[test]
+    fn a_signature_file_holds_for_its_image_alone() {
+        let flash = image(20_000);
+        let signature = sign(&flash, &SEED).unwrap().to_bytes();
+        let trailer = check_apart(&flash, &signature).unwrap();
+        assert_eq!(trailer.key, public_key(&SEED));
+        let mut changed = flash.clone();
+        changed[12_345] ^= 1;
+        assert_eq!(check_apart(&changed, &signature), Err(Problem::Signature));
+        assert_eq!(check_apart(&flash[1..], &signature), Err(Problem::Length));
+        assert_eq!(
+            check_apart(&flash, &signature[..64]),
+            Err(Problem::NotAnUpdate)
+        );
     }
 
     #[test]

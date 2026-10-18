@@ -10,6 +10,8 @@ are reported as [SECURITY.md](../SECURITY.md) says.
 - **The firmware.** A device installs only firmware signed with
   QuireInk's key (Ed25519), checked while it is written; a new version that
   does not start cleanly is undone ([ADR 0019](adr/0019-firmware-updates.md)).
+  The image quireink.org offers for flashing in the browser is signed
+  too; the site and the browser check it before it is written.
   Further keys are trusted only by the reader's choice
   (`.quireink/firmware-keys.txt`).
 - **Passwords and keys** (Wi-Fi, catalogs, sync accounts) are kept in

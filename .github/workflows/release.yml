@@ -3,8 +3,9 @@ name: Release
 # A tag `v1.2.3` (the workspace's version) makes a GitHub release with the
 # Android app signed with the release key, the Xteink X4's firmware (one
 # image for its whole flash, which quireink.org offers for flashing in the
-# browser, and the update file signed with the firmware's key, installed
-# on the device), their checksums, and the release notes from CHANGELOG.md.
+# browser, with a signature file of its own, and the update file, both
+# signed with the firmware's key; the update is installed on the device),
+# their checksums, and the release notes from CHANGELOG.md.
 on:
   push:
     tags: ["v*"]
@@ -101,7 +102,7 @@ jobs:
           espflash save-image --chip esp32c3 --merge --skip-padding --flash-size 16mb \
             "$elf" "$GITHUB_WORKSPACE/dist/quireink-x4-$VERSION.bin"
           espflash save-image --chip esp32c3 --flash-size 16mb "$elf" "$RUNNER_TEMP/app.bin"
-      - name: Sign the update with the firmware's key
+      - name: Sign the update and the flash image with the firmware's key
         env:
           QUIREINK_SIGNING_KEY: ${{ secrets.QUIREINK_SIGNING_KEY }}
         run: |
@@ -111,6 +112,9 @@ jobs:
           fi
           cargo run --release -p quireink-sign -- sign \
             "$RUNNER_TEMP/app.bin" "dist/quireink-x4-$VERSION-update.bin"
+          # The web flasher checks the whole image against this.
+          cargo run --release -p quireink-sign -- sign-apart \
+            "dist/quireink-x4-$VERSION.bin" "dist/quireink-x4-$VERSION.bin.sig"
           cd dist
           sha256sum "quireink-x4-$VERSION.bin" > "quireink-x4-$VERSION.bin.sha256"
           sha256sum "quireink-x4-$VERSION-update.bin" > "quireink-x4-$VERSION-update.bin.sha256"
@@ -153,4 +157,5 @@ jobs:
             --title "QuireInk $VERSION" --notes-file dist/notes.md \
             "dist/quireink-$VERSION.apk" "dist/quireink-$VERSION.apk.sha256" \
             "dist/quireink-x4-$VERSION.bin" "dist/quireink-x4-$VERSION.bin.sha256" \
+            "dist/quireink-x4-$VERSION.bin.sig" \
             "dist/quireink-x4-$VERSION-update.bin" "dist/quireink-x4-$VERSION-update.bin.sha256"

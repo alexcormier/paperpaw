@@ -38,6 +38,10 @@ may leave a device that does not start.
   the reader chose to trust (their own builds), listed on the card.
   `quireink-sign` makes keys, signs images and shows what a file holds;
   releases are signed with a key kept as a secret of the repository.
+  The whole flash image the web flasher writes is signed with the same
+  key, in a signature file of its own (`.sig`, the trailer alone); the
+  website checks it when it fetches a release, and the browser again
+  before it writes.
 - **The shell installs, a plugin asks** (`quireink_sdk::firmware`): the
   shell does what `Command::Firmware` says (install a file, restart) and
   reports its progress; the `update` plugin finds update files in

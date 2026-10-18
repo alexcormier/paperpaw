@@ -23,6 +23,12 @@ USAGE:
     quireink-sign show <update.bin>
         Shows what the update holds, its signer, and whether its signature
         holds.
+    quireink-sign sign-apart <flash.bin> <flash.bin.sig> [--key <secret-key-file>]
+        Signs a whole flash image (as the web flasher writes it) with a
+        signature file of its own; the key as for sign.
+    quireink-sign check <flash.bin> <flash.bin.sig>
+        Shows the signer of a whole flash image and whether its signature
+        holds.
 ";
 
 fn main() -> ExitCode {
@@ -42,6 +48,9 @@ fn run(args: Vec<String>) -> Result<(), String> {
         ["sign", image, update] => sign(image, update, None),
         ["sign", image, update, "--key", file] => sign(image, update, Some(file)),
         ["show", update] => show(update),
+        ["sign-apart", image, signature] => sign_apart(image, signature, None),
+        ["sign-apart", image, signature, "--key", file] => sign_apart(image, signature, Some(file)),
+        ["check", image, signature] => check(image, signature),
         ["-h" | "--help"] => {
             print!("{USAGE}");
             Ok(())
@@ -64,13 +73,45 @@ fn key(file: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn sign(image: &str, update: &str, key_file: Option<&str>) -> Result<(), String> {
+/// The secret key from `key_file`, else from QUIREINK_SIGNING_KEY.
+fn secret_key(key_file: Option<&str>) -> Result<[u8; 32], String> {
     let text = match key_file {
         Some(file) => std::fs::read_to_string(file).map_err(|e| format!("{file}: {e}"))?,
         None => std::env::var("QUIREINK_SIGNING_KEY")
             .map_err(|_| "no --key and no QUIREINK_SIGNING_KEY".to_string())?,
     };
-    let seed = quireink_update::parse_key(&text).ok_or("the key is not 64 hexadecimal digits")?;
+    Ok(quireink_update::parse_key(&text).ok_or("the key is not 64 hexadecimal digits")?)
+}
+
+fn sign_apart(image: &str, signature: &str, key_file: Option<&str>) -> Result<(), String> {
+    let seed = secret_key(key_file)?;
+    let data = std::fs::read(image).map_err(|e| format!("{image}: {e}"))?;
+    let trailer = quireink_update::sign(&data, &seed).map_err(|e| format!("{image}: {e}"))?;
+    std::fs::write(signature, trailer.to_bytes()).map_err(|e| format!("{signature}: {e}"))?;
+    println!(
+        "{signature}: {} bytes signed by {}",
+        data.len(),
+        quireink_update::fingerprint(&trailer.key)
+    );
+    Ok(())
+}
+
+fn check(image: &str, signature: &str) -> Result<(), String> {
+    let data = std::fs::read(image).map_err(|e| format!("{image}: {e}"))?;
+    let sig = std::fs::read(signature).map_err(|e| format!("{signature}: {e}"))?;
+    let trailer = quireink_update::check_apart(&data, &sig).map_err(|e| format!("{image}: {e}"))?;
+    println!("image:       {} bytes", data.len());
+    println!(
+        "signer:      {} ({})",
+        quireink_update::fingerprint(&trailer.key),
+        quireink_update::key_hex(&trailer.key)
+    );
+    println!("signature:   holds");
+    Ok(())
+}
+
+fn sign(image: &str, update: &str, key_file: Option<&str>) -> Result<(), String> {
+    let seed = secret_key(key_file)?;
     let mut data = std::fs::read(image).map_err(|e| format!("{image}: {e}"))?;
     let info = AppInfo::read(&data).map_err(|e| format!("{image}: {e}"))?;
     let trailer = quireink_update::sign(&data, &seed).map_err(|e| format!("{image}: {e}"))?;
