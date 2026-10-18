@@ -478,6 +478,7 @@ impl KernelBuilder {
                 usage: quireink_sdk::usage::Usage::default(),
                 status_items: StatusItems::new(),
                 widgets: quireink_sdk::widgets::Widgets::new(),
+                setup: quireink_sdk::setup::SetupSteps::new(),
                 services: quireink_sdk::services::Services::new(),
                 text_filters: quireink_sdk::filters::TextFilters::new(),
                 input_filters: quireink_sdk::filters::InputFilters::new(),
@@ -1377,6 +1378,7 @@ impl Kernel {
         shared.hyphenation.shrink_to_fit();
         shared.status_items.shrink_to_fit();
         shared.widgets.shrink_to_fit();
+        shared.setup.shrink_to_fit();
         shared.services.shrink_to_fit();
         shared.text_filters.shrink_to_fit();
         shared.input_filters.shrink_to_fit();
@@ -2491,6 +2493,9 @@ impl Kernel {
         }
         for line in staging.status_lines.drain(..) {
             self.shared.status_items.add_line(line);
+        }
+        for step in staging.setup_steps.drain(..) {
+            self.shared.setup.add(step);
         }
         for widget in staging.widgets.drain(..) {
             self.shared.widgets.add(widget);
@@ -3996,6 +4001,7 @@ struct Shared {
     usage: quireink_sdk::usage::Usage,
     status_items: StatusItems,
     widgets: quireink_sdk::widgets::Widgets,
+    setup: quireink_sdk::setup::SetupSteps,
     services: quireink_sdk::services::Services,
     text_filters: quireink_sdk::filters::TextFilters,
     /// Filters of every input and of every refresh, from every plugin.
@@ -4049,6 +4055,7 @@ impl Shared {
             usage: &self.usage,
             status_items: &self.status_items,
             widgets: &self.widgets,
+            setup: &self.setup,
             services: &self.services,
             text_filters: &self.text_filters,
             stylesheets: &self.stylesheets,

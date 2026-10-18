@@ -41,6 +41,31 @@ struct Case {
 }
 
 const CASES: &[Case] = &[
+    // The first-run setup: its first page, and a number with a sample.
+    Case {
+        name: "x4-setup",
+        profile: "xteink-x4",
+        book: None,
+        sets: &[],
+        script: "",
+        colour: 0,
+    },
+    Case {
+        name: "x4-setup-size",
+        profile: "xteink-x4",
+        book: None,
+        sets: &[],
+        script: "page-forward,page-forward",
+        colour: 0,
+    },
+    Case {
+        name: "boox-setup",
+        profile: "boox-go-7",
+        book: None,
+        sets: &[],
+        script: "",
+        colour: 0,
+    },
     Case {
         name: "x4-home",
         profile: "xteink-x4",
@@ -227,6 +252,12 @@ fn library(case: &Case) -> PathBuf {
             let entry = entry.unwrap();
             fs::copy(entry.path(), books.join(entry.file_name())).unwrap();
         }
+    }
+    // The first-run setup only where it is what is shown.
+    if !case.name.contains("setup") {
+        let setup = dir.join(".quireink/plugins/setup");
+        fs::create_dir_all(&setup).unwrap();
+        fs::write(setup.join("done"), "").unwrap();
     }
     if let Some(book) = case.book {
         let state = dir.join(".quireink/plugins/reader");

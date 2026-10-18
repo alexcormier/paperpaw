@@ -752,6 +752,38 @@ impl Plugin for CorePlugin {
             keymap_presets::LEFT_HANDED,
             Cow::Borrowed(include_str!("../keymaps/left-handed.ini")),
         )?;
+        // The first-run setup: the language, the buttons where there is
+        // no touch, the time zone where the system has none.
+        r.add_setup_step(quireink_sdk::setup::SetupStepSpec {
+            id: Id::new_static("core.setup.language"),
+            title: Cow::Borrowed(""),
+            help: Cow::Borrowed(""),
+            order: 10,
+            page: quireink_sdk::setup::SetupPage::Setting(settings::LANGUAGE),
+            applies: None,
+        })?;
+        r.add_setup_step(quireink_sdk::setup::SetupStepSpec {
+            id: Id::new_static("core.setup.buttons"),
+            title: Cow::Borrowed(""),
+            help: Cow::Borrowed(""),
+            order: 20,
+            page: quireink_sdk::setup::SetupPage::Setting(settings::KEYMAP_PRESET),
+            applies: Some(Box::new(|env: &quireink_sdk::Env<'_>| {
+                env.device.input.buttons && !env.device.input.touch
+            })),
+        })?;
+        r.add_setup_step(quireink_sdk::setup::SetupStepSpec {
+            id: Id::new_static("core.setup.time-zone"),
+            title: Cow::Borrowed(""),
+            help: Cow::Borrowed("core.setup.time-zone.help"),
+            order: 40,
+            page: quireink_sdk::setup::SetupPage::Setting(settings::TIME_ZONE),
+            applies: Some(Box::new(|env: &quireink_sdk::Env<'_>| {
+                env.status
+                    .clock
+                    .is_none_or(|c| c.utc_offset_minutes.is_none())
+            })),
+        })?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())

@@ -180,6 +180,9 @@ pub trait Registrar {
     /// [`widgets`](crate::widgets)).
     fn add_widget(&mut self, widget: crate::widgets::WidgetSpec) -> Result<(), RegisterError>;
 
+    /// Adds a step to the first-run setup (see [`setup`](crate::setup)).
+    fn add_setup_step(&mut self, step: crate::setup::SetupStepSpec) -> Result<(), RegisterError>;
+
     /// Adds a whole status line, drawn by the plugin (see
     /// [`status`](crate::status)).
     fn add_status_line(&mut self, line: StatusLineSpec) -> Result<(), RegisterError>;

@@ -403,6 +403,16 @@ impl Plugin for Wifi {
             )?;
         }
 
+        // The first-run setup: a network to join, where QuireInk runs
+        // the radio.
+        r.add_setup_step(quireink_sdk::setup::SetupStepSpec {
+            id: Id::new_static("wifi.setup"),
+            title: Cow::Borrowed("wifi.title"),
+            help: Cow::Borrowed("wifi.setup.help"),
+            order: 50,
+            page: quireink_sdk::setup::SetupPage::Screen(PAGE),
+            applies: Some(Box::new(|env: &Env<'_>| env.wifi.is_some())),
+        })?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())

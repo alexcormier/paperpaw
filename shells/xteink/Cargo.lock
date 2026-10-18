@@ -2027,6 +2027,7 @@ dependencies = [
  "quireink-plugin-readwise",
  "quireink-plugin-rules",
  "quireink-plugin-settings",
+ "quireink-plugin-setup",
  "quireink-plugin-sleep",
  "quireink-plugin-stats",
  "quireink-plugin-transfer",
@@ -2318,6 +2319,13 @@ dependencies = [
 
 [[package]]
 name = "quireink-plugin-settings"
+version = "0.3.0"
+dependencies = [
+ "quireink-sdk",
+]
+
+[[package]]
+name = "quireink-plugin-setup"
 version = "0.3.0"
 dependencies = [
  "quireink-sdk",

@@ -126,6 +126,7 @@ pub(crate) struct Staging {
     pub(crate) status_items: Vec<StatusItemSpec>,
     pub(crate) status_lines: Vec<StatusLineSpec>,
     pub(crate) widgets: Vec<quireink_sdk::widgets::WidgetSpec>,
+    pub(crate) setup_steps: Vec<quireink_sdk::setup::SetupStepSpec>,
     pub(crate) text_filters: Vec<quireink_sdk::filters::TextFilterSpec>,
     pub(crate) input_filters: Vec<quireink_sdk::filters::InputFilterSpec>,
     pub(crate) refresh_filters: Vec<quireink_sdk::filters::RefreshFilterSpec>,
@@ -344,6 +345,16 @@ impl Registrar for PluginRegistrar<'_> {
         self.check_namespace(&widget.id)?;
         Self::check_unique(self.staging.widgets.iter().map(|w| &w.id), &widget.id)?;
         self.staging.widgets.push(widget);
+        Ok(())
+    }
+
+    fn add_setup_step(
+        &mut self,
+        step: quireink_sdk::setup::SetupStepSpec,
+    ) -> Result<(), RegisterError> {
+        self.check_namespace(&step.id)?;
+        Self::check_unique(self.staging.setup_steps.iter().map(|s| &s.id), &step.id)?;
+        self.staging.setup_steps.push(step);
         Ok(())
     }
 

@@ -140,6 +140,15 @@ impl Plugin for Lock {
                 }
             }),
         )?;
+        // The first-run setup: a lock, off unless chosen.
+        r.add_setup_step(quireink_sdk::setup::SetupStepSpec {
+            id: Id::new_static("lock.setup"),
+            title: Cow::Borrowed(""),
+            help: Cow::Borrowed(""),
+            order: 70,
+            page: quireink_sdk::setup::SetupPage::Setting(KIND),
+            applies: None,
+        })?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())

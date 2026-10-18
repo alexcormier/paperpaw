@@ -253,6 +253,7 @@ cargo run -p quireink-emulator -- --profile xteink-x4 --headless --script "confi
 | Refresh filters | `add_refresh_filter` | Change how the panel is refreshed, e.g. in full on a screen of your own |
 | Status items and lines | `add_status_item`, `add_status_line` | What status lines show |
 | Widgets | `add_widget` | Blocks for the home screen and the sleep screen |
+| Setup steps | `add_setup_step` | A page of the first-run setup: a setting to choose or a screen of the plugin's, where the device needs it |
 | Services | `add_service` | Anything one plugin offers others, found with `env.services.get` |
 | Contributions | `contribute` | Additions to a point another plugin defined |
 | Translations | `add_translations` | Catalogs for any language |

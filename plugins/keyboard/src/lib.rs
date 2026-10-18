@@ -128,6 +128,15 @@ impl Plugin for Keyboard {
             title: Cow::Borrowed("keyboard.setting.layouts"),
             factory: Box::new(|env, _| Box::new(choose::ChooseScreen::new(env))),
         })?;
+        // The first-run setup: the layouts to type with.
+        r.add_setup_step(quireink_sdk::setup::SetupStepSpec {
+            id: Id::new_static("keyboard.setup"),
+            title: Cow::Borrowed(""),
+            help: Cow::Borrowed(""),
+            order: 60,
+            page: quireink_sdk::setup::SetupPage::Setting(LAYOUTS_SETTING),
+            applies: None,
+        })?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())

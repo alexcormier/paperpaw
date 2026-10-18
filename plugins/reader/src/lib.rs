@@ -616,6 +616,15 @@ impl Plugin for Reader {
 
         r.subscribe(events::STARTED, Box::new(reopen_last_book))?;
         r.subscribe(events::BOOK_MOVED, Box::new(book_moved))?;
+        // The first-run setup: how large the text is.
+        r.add_setup_step(quireink_sdk::setup::SetupStepSpec {
+            id: Id::new_static("reader.setup.font-size"),
+            title: Cow::Borrowed(""),
+            help: Cow::Borrowed(""),
+            order: 30,
+            page: quireink_sdk::setup::SetupPage::Setting(settings::FONT_SIZE),
+            applies: None,
+        })?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())

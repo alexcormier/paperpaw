@@ -75,6 +75,9 @@ pub mod slots {
     /// [`ID`](super::params::ID), the settings of that group, e.g. a
     /// widget's own (see [`widgets`](crate::widgets)).
     pub const SETTINGS: Id = Id::new_static("core.settings");
+    /// The first-run setup (see [`setup`](crate::setup)): shown once on
+    /// the first start, and again when asked.
+    pub const SETUP: Id = Id::new_static("core.setup");
     /// Looks up a word (an overlay): opened with the parameters
     /// [`WORD`](super::params::WORD) and, if known,
     /// [`LANGUAGE`](super::params::LANGUAGE). The standard dictionary

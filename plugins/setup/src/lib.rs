@@ -1,0 +1,122 @@
+//! The first-run setup: on the first start, a short guide through the
+//! settings that matter, one a page, each with a sensible default already
+//! chosen, so *Next* is always right (PLANNING §12.7, E1).
+//!
+//! - The steps come from the plugins ([`quireink_sdk::setup`]): the
+//!   language, the buttons, the text size, the time zone, Wi-Fi, the
+//!   keyboard, the screen lock, and any other plugin's. Those this device
+//!   does not need are left out (e.g. Wi-Fi where the system runs it).
+//! - Skipped as a whole on its first page, never shown again once done
+//!   or skipped; *Set up QuireInk* in the settings opens it again.
+//! - The last page tells where books come from.
+//! - It is the screen of the slot [`slots::SETUP`], so another plugin can
+//!   replace it.
+//!
+//! Not shown on a device that was used before it came (a book was
+//! opened already).
+
+#![no_std]
+
+extern crate alloc;
+
+mod guide;
+
+use alloc::borrow::Cow;
+use alloc::boxed::Box;
+use alloc::format;
+use alloc::vec::Vec;
+
+use quireink_sdk::builtin::{events, menus, slots};
+use quireink_sdk::{
+    ActionSpec, Command, Env, Id, Manifest, MenuEntry, Params, Plugin, Priority, RegisterError,
+    Registrar, SDK_VERSION, ScreenSpec, Version, library,
+};
+
+pub const PLUGIN: Id = Id::new_static("setup");
+/// Opens the guide (from the settings).
+pub const OPEN: Id = Id::new_static("setup.open");
+/// The guide.
+pub const SCREEN: Id = Id::new_static("setup.guide");
+
+/// The file whose being there says the setup was done or skipped.
+fn done_file() -> alloc::string::String {
+    format!("{}/done", Env::plugin_dir(PLUGIN.as_str()))
+}
+
+/// Notes that the setup was done or skipped: it does not come again by
+/// itself.
+pub(crate) fn mark_done(env: &Env<'_>) {
+    let _ = env.storage.write(&done_file(), b"");
+}
+
+/// The first-run setup.
+#[derive(Debug, Default)]
+pub struct Setup;
+
+impl Plugin for Setup {
+    fn manifest(&self) -> Manifest {
+        Manifest {
+            id: PLUGIN,
+            name: Cow::Borrowed("Setup"),
+            description: Cow::Borrowed("A short guide through the settings that matter."),
+            version: Version::new(0, 1, 0),
+            sdk: SDK_VERSION,
+        }
+    }
+
+    fn register(&self, r: &mut dyn Registrar) -> Result<(), RegisterError> {
+        r.add_screen(ScreenSpec {
+            id: SCREEN,
+            title: Cow::Borrowed("setup.title"),
+            factory: Box::new(|env, _| Box::new(guide::Guide::new(env))),
+        })?;
+        r.bind_slot(slots::SETUP, SCREEN, Priority::DEFAULT)?;
+        r.add_action(ActionSpec {
+            id: OPEN,
+            title: Cow::Borrowed("setup.open"),
+            handler: Some(Box::new(|_: &Env<'_>, out: &mut Vec<Command>| {
+                out.push(Command::OpenSlot(slots::SETUP, Params::new()));
+            })),
+        })?;
+        // In the device's part of the settings, before *About*.
+        r.add_menu_entry(MenuEntry {
+            menu: menus::SETTINGS,
+            item: OPEN,
+            order: 97,
+        })?;
+        r.add_icon(OPEN, Cow::Borrowed("adjustments"))?;
+        // The first start: the guide, once.
+        r.subscribe(
+            events::STARTED,
+            Box::new(|env, _, out| {
+                if env.storage.exists(&done_file()) {
+                    return;
+                }
+                if library::opened_books(env.storage).is_empty() {
+                    out.push(Command::OpenSlot(slots::SETUP, Params::new()));
+                } else {
+                    // Used before the guide came: not a first start.
+                    mark_done(env);
+                }
+            }),
+        )?;
+        r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
+        r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    extern crate std;
+
+    use quireink_i18n::{Catalog, check};
+
+    #[test]
+    fn translations_are_complete() {
+        let en = Catalog::parse(include_str!("../i18n/en.ini")).unwrap();
+        let de = Catalog::parse(include_str!("../i18n/de.ini")).unwrap();
+        let issues = check::compare(&en, &de);
+        assert!(issues.is_empty(), "{issues:?}");
+    }
+}

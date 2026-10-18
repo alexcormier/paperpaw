@@ -16,6 +16,13 @@ change the plugin SDK.
   shows it in the status line and on the home screen; the time zone is
   chosen under Settings, System (UTC on "Auto": the X4 has none of its
   own). Gone when it is switched off, until it is online again.
+- A first-run setup (new plugin `setup`): on the first start a short
+  guide through the language, the buttons, the text size, the time zone,
+  Wi-Fi, the keyboard and the screen lock, a page each with a good
+  default chosen, so *Next* is always right; skippable, and opened again
+  from Settings (*Set up QuireInk*). Plugins add steps of their own
+  (`Registrar::add_setup_step`); steps a device does not need are left
+  out.
 - The row of hints under the screen says what the buttons do there: only
   *Back* where nothing else does anything (battery, a book's statistics,
   Wi-Fi transfer), *Menu* in a book, *Delete* while unlocking.

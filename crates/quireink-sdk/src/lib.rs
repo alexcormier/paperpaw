@@ -63,6 +63,7 @@ mod plugin;
 mod plugins;
 mod screen;
 mod settings;
+pub mod setup;
 pub mod status;
 pub mod time;
 pub mod ui;
