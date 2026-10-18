@@ -668,6 +668,39 @@ mod tests {
         builder.build()
     }
 
+    /// Any Tabler icon has a name; one the icon font lacks is drawn from
+    /// an icon pack that extends it, others stay without a drawing.
+    #[test]
+    fn icon_packs_add_icons_the_font_lacks() {
+        let zoom = crate::icons::char("zoom-in").expect("every Tabler name is known");
+        let star = crate::icons::char("star").unwrap();
+        let other = crate::icons::char("zoom-out").unwrap();
+        let mut packed = String::new();
+        packed.push(zoom);
+        let storage: Rc<dyn Storage> = Rc::new(
+            MemoryStorage::new().with("plugins/icons-zoom/fonts/icons.qifp", pack(&packed)),
+        );
+        let mut fonts = Fonts::new(4096);
+        let mut shipped = String::new();
+        shipped.push(star);
+        let icons = Font::from_data(pack(&shipped), &[]).unwrap();
+        fonts
+            .add(FontSpec::new(Id::new_static("a.icons"), icons))
+            .unwrap();
+        fonts.propose(roles::ICONS, Id::new_static("a.icons"), Priority::DEFAULT);
+        fonts
+            .add_extension(
+                Id::new_static("icons-zoom.icons"),
+                String::from("plugins/icons-zoom/fonts/icons.qifp"),
+                Id::new_static("a.icons"),
+            )
+            .unwrap();
+        assert!(fonts.load(&storage).is_empty());
+        let bound = fonts.bound(roles::ICONS.as_str()).unwrap();
+        assert!(bound.has_char(star) && bound.has_char(zoom));
+        assert!(!bound.has_char(other));
+    }
+
     #[test]
     fn extensions_add_characters_read_from_storage() {
         let storage: Rc<dyn Storage> =

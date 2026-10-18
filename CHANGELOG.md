@@ -6,6 +6,9 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Plugins name any of Tabler's icons: `quireink_sdk::icons` knows all
+  5934 names (a table in flash, about 150 KB on the X4, no memory); the
+  drawings of those the icon font lacks come from icon packs.
 - X4: opening a book for the first time could run out of memory (a
   crash, "memory allocation failed") where a chapter has blocks of many
   links or other short pieces: where each piece starts is now written as
