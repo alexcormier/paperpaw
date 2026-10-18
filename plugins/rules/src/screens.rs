@@ -348,38 +348,35 @@ impl Screen for RulesScreen {
     }
 
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
+        let answer = Answer::read(event, params);
+        if *event == TRIGGER_CHOSEN
+            || *event == TIME_ENTERED
+            || *event == DAYS_CHOSEN
+            || *event == EVERY_ENTERED
+            || *event == BATTERY_ENTERED
+            || *event == TRIGGER_PICKED
+        {
+            self.on_trigger(&answer, cx);
+        } else if *event == EFFECT_CHOSEN
+            || *event == PICKED
+            || *event == NUMBER_ENTERED
+            || *event == MESSAGE_ENTERED
+        {
+            self.on_effect(&answer, cx);
+        } else {
+            self.on_option(&answer, cx);
+        }
+    }
+}
+
+/// The answers to what the screen asked, by what they are about.
+impl RulesScreen {
+    /// When a new rule applies: chosen, a time and its days, a number,
+    /// a switch.
+    fn on_trigger(&mut self, answer: &Answer<'_>, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        // What was chosen or typed, if this is an answer.
-        let picked = [
-            &TRIGGER_CHOSEN,
-            &DAYS_CHOSEN,
-            &EFFECT_CHOSEN,
-            &OPTION_CHOSEN,
-            &CONDITION_CHOSEN,
-        ]
-        .into_iter()
-        .find_map(|e| e.read(event, params));
-        let option = picked.as_ref().map_or("", |p| p.option.as_str());
-        let at = picked.as_ref().and_then(|p| p.path.parse::<usize>().ok());
-        let typed = [
-            &TIME_ENTERED,
-            &EVERY_ENTERED,
-            &BATTERY_ENTERED,
-            &NUMBER_ENTERED,
-            &MESSAGE_ENTERED,
-            &FROM_ENTERED,
-            &TO_ENTERED,
-        ]
-        .into_iter()
-        .find_map(|e| e.read(event, params));
-        let text = typed.as_ref().map_or("", |t| t.text.as_str());
-        let ask = |cx: &mut Cx<'_, '_>, title: &str, initial: &str, reply: &Event<Typed>| {
-            cx.command(
-                ask::text(env.i18n.tr(title), reply)
-                    .initial(initial)
-                    .command(),
-            );
-        };
+        let (event, params) = (answer.event, answer.params);
+        let (option, text) = (answer.option(), answer.text());
         if *event == TRIGGER_CHOSEN {
             self.draft.trigger = match option {
                 "start" => Some(Trigger::Start),
@@ -390,9 +387,9 @@ impl Screen for RulesScreen {
                 "sleep" => Some(Trigger::Sleep),
                 "charging" => Some(Trigger::Charging),
                 "unplugged" => Some(Trigger::Unplugged),
-                "time" => return ask(cx, "rules.time-title", "22:00", &TIME_ENTERED),
-                "every" => return ask(cx, "rules.every-title", "30", &EVERY_ENTERED),
-                "battery" => return ask(cx, "rules.battery-title", "20", &BATTERY_ENTERED),
+                "time" => return ask_text(cx, "rules.time-title", "22:00", &TIME_ENTERED),
+                "every" => return ask_text(cx, "rules.every-title", "30", &EVERY_ENTERED),
+                "battery" => return ask_text(cx, "rules.battery-title", "20", &BATTERY_ENTERED),
                 "switch-on" | "switch-off" => {
                     self.draft.watch_on = option == "switch-on";
                     cx.command(Command::OpenScreen(
@@ -462,13 +459,22 @@ impl Screen for RulesScreen {
                 Trigger::SwitchOff(id)
             });
             self.ask_effect(cx);
-        } else if *event == EFFECT_CHOSEN {
+        }
+    }
+
+    /// What a new rule does: chosen, then what it acts on, a number, a
+    /// message.
+    fn on_effect(&mut self, answer: &Answer<'_>, cx: &mut Cx<'_, '_>) {
+        let env = *cx.env();
+        let (event, params) = (answer.event, answer.params);
+        let (option, text) = (answer.option(), answer.text());
+        if *event == EFFECT_CHOSEN {
             let (effect, kind) = match option {
                 "action" => ("action", ACTION),
                 "switch-on" => ("switch-on", SWITCH),
                 "switch-off" => ("switch-off", SWITCH),
                 "number" => ("number", NUMBER),
-                "message" => return ask(cx, "rules.message-title", "", &MESSAGE_ENTERED),
+                "message" => return ask_text(cx, "rules.message-title", "", &MESSAGE_ENTERED),
                 _ => return,
             };
             self.draft.effect = Some(effect);
@@ -524,7 +530,17 @@ impl Screen for RulesScreen {
             if !text.is_empty() {
                 self.finish(Effect::Message(text.to_string()), cx);
             }
-        } else if *event == OPTION_CHOSEN && option == "condition" {
+        }
+    }
+
+    /// A rule's options: its condition (chosen, its times, its switch),
+    /// or removing it.
+    fn on_option(&mut self, answer: &Answer<'_>, cx: &mut Cx<'_, '_>) {
+        let env = *cx.env();
+        let (event, params) = (answer.event, answer.params);
+        let (option, text) = (answer.option(), answer.text());
+        let at = answer.at();
+        if *event == OPTION_CHOSEN && option == "condition" {
             if let Some(i) = at.filter(|&i| i < self.rules.len()) {
                 self.draft = Draft {
                     editing: Some(i),
@@ -546,7 +562,7 @@ impl Screen for RulesScreen {
                 "not-reading" => Condition::NotReading,
                 "battery" => Condition::OnBattery,
                 "charging" => Condition::Charging,
-                "between" => return ask(cx, "rules.from-title", "22:00", &FROM_ENTERED),
+                "between" => return ask_text(cx, "rules.from-title", "22:00", &FROM_ENTERED),
                 "switch-on" | "switch-off" => {
                     self.draft.watch_on = option == "switch-on";
                     cx.command(Command::OpenScreen(
@@ -567,7 +583,7 @@ impl Screen for RulesScreen {
             };
             if *event == FROM_ENTERED {
                 self.draft.from = Some(minute);
-                return ask(cx, "rules.to-title", "06:00", &TO_ENTERED);
+                return ask_text(cx, "rules.to-title", "06:00", &TO_ENTERED);
             }
             if let Some(from) = self.draft.from.take() {
                 self.set_condition(Condition::Between { from, to: minute }, cx);
@@ -592,6 +608,69 @@ impl Screen for RulesScreen {
             self.redraw(cx);
         }
     }
+}
+
+/// An answer to what the screen asked: the option chosen (and the rule
+/// it was chosen for) or the text typed.
+struct Answer<'a> {
+    event: &'a Id,
+    params: &'a Params,
+    picked: Option<choice::Picked>,
+    typed: Option<Typed>,
+}
+
+impl<'a> Answer<'a> {
+    fn read(event: &'a Id, params: &'a Params) -> Self {
+        let picked = [
+            &TRIGGER_CHOSEN,
+            &DAYS_CHOSEN,
+            &EFFECT_CHOSEN,
+            &OPTION_CHOSEN,
+            &CONDITION_CHOSEN,
+        ]
+        .into_iter()
+        .find_map(|e| e.read(event, params));
+        let typed = [
+            &TIME_ENTERED,
+            &EVERY_ENTERED,
+            &BATTERY_ENTERED,
+            &NUMBER_ENTERED,
+            &MESSAGE_ENTERED,
+            &FROM_ENTERED,
+            &TO_ENTERED,
+        ]
+        .into_iter()
+        .find_map(|e| e.read(event, params));
+        Self {
+            event,
+            params,
+            picked,
+            typed,
+        }
+    }
+
+    fn option(&self) -> &str {
+        self.picked.as_ref().map_or("", |p| p.option.as_str())
+    }
+
+    /// The rule an option was chosen for (its index).
+    fn at(&self) -> Option<usize> {
+        self.picked.as_ref().and_then(|p| p.path.parse().ok())
+    }
+
+    fn text(&self) -> &str {
+        self.typed.as_ref().map_or("", |t| t.text.as_str())
+    }
+}
+
+/// Asks for a text, `initial` offered; it comes back as `reply`.
+fn ask_text(cx: &mut Cx<'_, '_>, title: &str, initial: &str, reply: &Event<Typed>) {
+    let env = *cx.env();
+    cx.command(
+        ask::text(env.i18n.tr(title), reply)
+            .initial(initial)
+            .command(),
+    );
 }
 
 /// The range of number setting `id`.
