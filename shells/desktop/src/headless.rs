@@ -12,6 +12,7 @@
 //! | `long-tap:240:400` | long press on the touch screen |
 //! | `swipe:400:400:100:400` | swipe from one point to another |
 //! | `wait:500` | let 500 ms pass |
+//! | `run:calibre.open` | run an action, as a button bound to it would |
 //! | `serve:20` | answer plugins' servers in real time for 20 s |
 //! | `shot:out/a.png` | save a screenshot now (the last one comes with `--screenshot`) |
 
@@ -76,6 +77,10 @@ fn run_step(device: &mut Device, step: &str) -> Result<(), String> {
             }
         }
         ["long", name] => press(device, button(device, name)?, LONG_MS),
+        ["run", action] => {
+            let action = quireink_core::sdk::Id::parse(action).map_err(|e| e.to_string())?;
+            device.run_action(action);
+        }
         ["tap", x, y] => touch(device, Point::new(number(x)?, number(y)?), None, 60),
         ["tap-on", label @ ..] if !label.is_empty() => {
             let label = label.join(":");

@@ -16,6 +16,14 @@ change the plugin SDK.
   shows it in the status line and on the home screen; the time zone is
   chosen under Settings, System (UTC on "Auto": the X4 has none of its
   own). Gone when it is switched off, until it is online again.
+- Headers are light by default (a line below the title instead of a
+  black bar), calmer and as the home screen and the setup look; dark
+  headers remain a choice under Appearance.
+- X4: texts showed question marks where the font packs lack a character
+  (arrows in the battery view, names of languages in other scripts); a
+  test now keeps every translation to the characters the packs carry.
+- The emulator's scripts can run actions (`run:stats.open`), and
+  `tools/screens.py` draws every screen for a look at all of them.
 - A first-run setup (new plugin `setup`): on the first start a short
   guide through the language, the buttons, the text size, the time zone,
   Wi-Fi, the keyboard and the screen lock, a page each with a good

@@ -153,6 +153,13 @@ impl Device {
         }
     }
 
+    /// Runs an action as a button bound to it would (scripts' `run:`).
+    pub fn run_action(&mut self, action: quireink_core::sdk::Id) {
+        let now = self.now();
+        let effects = budget::track(|| self.kernel.run_action(now, action));
+        self.execute(effects);
+    }
+
     pub fn input(&mut self, event: InputEvent) {
         let now = self.now();
         if self.asleep {

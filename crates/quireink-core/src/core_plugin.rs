@@ -415,7 +415,8 @@ impl Plugin for CorePlugin {
                     Cow::Borrowed(settings::HEADER_DARK),
                     Cow::Borrowed(settings::HEADER_LIGHT),
                 ]),
-                SettingValue::Text(Cow::Borrowed(settings::HEADER_DARK)),
+                // Light: calm, as the home screen and the setup are.
+                SettingValue::Text(Cow::Borrowed(settings::HEADER_LIGHT)),
             )
             .group(groups::LOOK)
             .description("core.setting.ui-header.help"),
