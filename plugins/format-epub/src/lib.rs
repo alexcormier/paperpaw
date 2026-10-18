@@ -713,6 +713,33 @@ mod tests {
     }
 
     #[test]
+    fn pictures_decoded_when_their_page_shows() {
+        let ch2 = String::from(
+            "<html><body><p>Vorher</p><img src=\"../images/dot.png\" alt=\"Punkt\"/></body></html>",
+        );
+        let storage = epub(ch2);
+        let doc = EpubDocument::open(&storage, "books/test.epub").unwrap();
+        let first = doc.block_at(&storage, Locator::new(1, 0)).unwrap().unwrap();
+        let block = doc
+            .block_at(&storage, Locator::new(1, first.end))
+            .unwrap()
+            .unwrap();
+        // Laid out at its size, not decoded yet.
+        assert_eq!(block.kind, BlockKind::Image);
+        let image = block.image.unwrap();
+        assert_eq!((image.width, image.height), (37, 23));
+        assert!(
+            quireink_sdk::Storage::size(&storage, &image.path).is_err(),
+            "not decoded with its chapter"
+        );
+        // Decoded when asked, before its page is drawn; then nothing to do.
+        let decoded = doc.prepare_image(&storage, &image).unwrap();
+        assert_eq!((decoded.width, decoded.height), (37, 23));
+        assert!(quireink_sdk::Storage::size(&storage, &decoded.path).is_ok());
+        assert_eq!(doc.prepare_image(&storage, &decoded), None);
+    }
+
+    #[test]
     fn decodes_images_into_the_cache() {
         let ch2 = String::from(
             "<html><body><p>Vorher</p><svg><image xlink:href=\"../images/dot.png\"/></svg>             <img src=\"../images/missing.png\" alt=\"Ein  Bild\"/><p>Nachher</p></body></html>",

@@ -189,6 +189,7 @@ impl Book {
             }
             page => page,
         };
+        book.prepare_images(env);
         book.index = Some(book.open_index(env));
         book.update_chapter(env);
         book.update_links(env);
@@ -239,11 +240,24 @@ impl Book {
         let start = self.line_start(env, self.page.start);
         if let Ok(page) = self.layout(env, start) {
             self.page = page;
+            self.prepare_images(env);
         }
         self.update_links(env);
         self.history.clear();
         self.index = Some(self.open_index(env));
         self.indexing = None;
+    }
+
+    /// Decodes the pictures of the page shown that are not yet: books
+    /// decode them when their page shows, not while pages are laid out
+    /// in the background.
+    pub(super) fn prepare_images(&mut self, env: &Env<'_>) {
+        let document = &self.document;
+        for shown in &mut self.page.images {
+            if let Some(image) = document.prepare_image(env.storage, &shown.image) {
+                shown.image = image;
+            }
+        }
     }
 
     pub(super) fn font<'a>(&self, env: &Env<'a>) -> Option<FontHandle<'a>> {
@@ -389,6 +403,7 @@ impl Book {
             self.history.push(self.page.start);
         }
         self.page = page;
+        self.prepare_images(&env);
         self.update_chapter(&env);
         self.update_links(&env);
         if self.position_changed(&env) {

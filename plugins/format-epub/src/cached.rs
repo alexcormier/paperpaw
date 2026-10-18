@@ -79,9 +79,10 @@ pub(crate) fn read_block(
     let mut text = String::from_utf8_lossy(&text).into_owned();
     let mut image = None;
     if kind == BlockKind::Image {
-        // `cache name<TAB>alternative text`, the picture in either kind.
+        // `cache name<TAB>alternative text`, the picture in either kind,
+        // or noted to be decoded when its page shows.
         let (path, alt) = text.split_once('\t').unwrap_or((&text, ""));
-        image = crate::pictures::open(storage, path, color);
+        image = crate::pictures::open_or_noted(storage, path, color);
         let alt = String::from(alt);
         if image.is_none() {
             // Not decodable: its alternative text instead.

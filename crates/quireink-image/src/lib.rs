@@ -118,6 +118,59 @@ pub enum Format {
     Gif,
 }
 
+/// The width and height of a JPEG, PNG or GIF from its first bytes
+/// (`head`), without decoding it: e.g. to lay a page out before its
+/// pictures are decoded. `None` if `head` does not say (another format,
+/// or a JPEG whose size comes after more than `head` holds).
+pub fn dimensions(head: &[u8]) -> Option<(u32, u32)> {
+    let u16_be = |at: usize| {
+        Some(u32::from(u16::from_be_bytes([
+            *head.get(at)?,
+            *head.get(at + 1)?,
+        ])))
+    };
+    let u16_le = |at: usize| {
+        Some(u32::from(u16::from_le_bytes([
+            *head.get(at)?,
+            *head.get(at + 1)?,
+        ])))
+    };
+    let u32_be = |at: usize| {
+        Some(u32::from_be_bytes([
+            *head.get(at)?,
+            *head.get(at + 1)?,
+            *head.get(at + 2)?,
+            *head.get(at + 3)?,
+        ]))
+    };
+    let size = match Format::detect(head)? {
+        Format::Png => (u32_be(16)?, u32_be(20)?),
+        Format::Gif => (u16_le(6)?, u16_le(8)?),
+        Format::Jpeg => {
+            // Segment by segment to the frame's header.
+            let mut at = 2;
+            loop {
+                if *head.get(at)? != 0xff {
+                    return None;
+                }
+                while *head.get(at)? == 0xff {
+                    at += 1;
+                }
+                let marker = *head.get(at)?;
+                at += 1;
+                match marker {
+                    0xd8 | 0x01 | 0xd0..=0xd7 => continue,
+                    0xc0..=0xcf if !matches!(marker, 0xc4 | 0xc8 | 0xcc) => {
+                        break (u16_be(at + 5)?, u16_be(at + 3)?);
+                    }
+                    _ => at += usize::try_from(u16_be(at)?).ok()?,
+                }
+            }
+        }
+    };
+    (size.0 > 0 && size.1 > 0).then_some(size)
+}
+
 impl Format {
     pub fn detect(head: &[u8]) -> Option<Format> {
         if head.starts_with(&[0xff, 0xd8]) {

@@ -494,6 +494,17 @@ pub trait Document {
         self.toc_entry(storage, index).map(|entry| entry.at)
     }
 
+    /// Makes `image` (of one of its blocks) ready to be drawn, for
+    /// documents that decode pictures when a page shows them rather than
+    /// with their chapter: the picture as decoded now (maybe at another
+    /// path), `None` if there was nothing to do or it cannot be decoded.
+    /// Readers ask before they draw a page with pictures, not while they
+    /// only lay pages out.
+    fn prepare_image(&self, storage: &dyn Storage, image: &ImageRef) -> Option<ImageRef> {
+        let _ = (storage, image);
+        None
+    }
+
     /// The cover as a small gray image in storage, decoded on first use;
     /// `None` if the book has none (or the format no covers).
     fn cover(&self, storage: &dyn Storage) -> Result<Option<ImageRef>, DocumentError> {

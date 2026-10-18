@@ -1328,11 +1328,23 @@ pub(crate) fn convert(
     let images = core::mem::take(&mut converter.images);
     let length = converter.length;
     drop(converter);
+    // Decoded when a page shows them; their sizes now, from their first
+    // bytes, for the pages to be laid out (a big picture takes seconds to
+    // decode on small devices). Those whose size the first bytes do not
+    // say, decoded now.
     if let Source::Zip { archive, .. } = source {
         for (path, base) in &images {
-            if !crate::pictures::has(storage, base, color) {
-                let file = crate::pictures::file(base, color);
-                let _ = decode_image(storage, archive, path, &file, &paths.dir, fit, color);
+            if crate::pictures::has(storage, base, color) {
+                continue;
+            }
+            match image_size(storage, archive, path) {
+                Some((width, height)) => {
+                    crate::pictures::note(storage, base, fit.size(width, height), path);
+                }
+                None => {
+                    let file = crate::pictures::file(base, color);
+                    let _ = decode_image(storage, archive, path, &file, &paths.dir, fit, color);
+                }
             }
         }
     }
@@ -1386,6 +1398,47 @@ impl quireink_sdk::image::Source for StorageSource<'_> {
 }
 
 /// A compressed entry of the archive, inflated as it is read.
+/// Bytes read from a picture to tell its size.
+const SIZE_HEAD: usize = 16 * 1024;
+
+/// The size of picture `path` of the archive, from its first bytes.
+fn image_size(storage: &dyn Storage, archive: &ZipArchive, path: &str) -> Option<(u32, u32)> {
+    let entry = archive.entry(storage, path).ok()??;
+    let mut head = Vec::new();
+    head.try_reserve_exact(SIZE_HEAD).ok()?;
+    head.resize(SIZE_HEAD, 0);
+    let mut filled = 0;
+    match archive.stored_range(storage, &entry).ok()? {
+        Some((offset, len)) => {
+            let want = (len as usize).min(SIZE_HEAD);
+            while filled < want {
+                let n = storage
+                    .read_at(
+                        archive.path(),
+                        offset + filled as u64,
+                        &mut head[filled..want],
+                    )
+                    .ok()?;
+                if n == 0 {
+                    break;
+                }
+                filled += n;
+            }
+        }
+        None => {
+            let mut reader = archive.reader(storage, &entry).ok()?;
+            while filled < SIZE_HEAD {
+                let n = reader.read(storage, &mut head[filled..]).ok()?;
+                if n == 0 {
+                    break;
+                }
+                filled += n;
+            }
+        }
+    }
+    quireink_sdk::image::dimensions(&head[..filled])
+}
+
 struct EntrySource<'a> {
     storage: &'a dyn Storage,
     reader: quireink_sdk::zip::EntryReader<'a>,

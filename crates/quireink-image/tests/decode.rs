@@ -5,7 +5,7 @@
 // Tests panic on purpose when something is wrong.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use quireink_image::{Fit, Format, ImageError, ImageSink, decode};
+use quireink_image::{Fit, Format, ImageError, ImageSink, decode, dimensions};
 
 #[derive(Default)]
 struct Collect {
@@ -451,4 +451,33 @@ fn progressive_jpeg_matches_reference_in_colour() {
     assert_eq!((image.width, image.height), (800, 1104));
     let diff = difference(&reduce_rgb(&image, 4), reference);
     assert!(diff < 4.0, "mean difference {diff}");
+}
+
+#[test]
+fn sizes_read_from_the_first_bytes_match_the_decoded() {
+    for name in [
+        "alice-cover.jpg",
+        "alice-progressive.jpg",
+        "kafka-title.jpg",
+        "alice-cover.gif",
+        "gray.png",
+        "colors-rgba.png",
+    ] {
+        let data =
+            std::fs::read(format!("{}/tests/data/{name}", env!("CARGO_MANIFEST_DIR"))).unwrap();
+        let format = Format::detect(&data).unwrap();
+        let mut sink = Collect::default();
+        let mut source = &data[..];
+        decode(format, &mut source, Fit::side(100_000), &mut sink).unwrap();
+        let head = &data[..data.len().min(16 * 1024)];
+        assert_eq!(dimensions(head), Some((sink.width, sink.height)), "{name}");
+    }
+    // Cut short before the frame's header: not known.
+    let jpeg = std::fs::read(format!(
+        "{}/tests/data/alice-cover.jpg",
+        env!("CARGO_MANIFEST_DIR")
+    ))
+    .unwrap();
+    assert_eq!(dimensions(&jpeg[..20]), None);
+    assert_eq!(dimensions(b"plain text"), None);
 }

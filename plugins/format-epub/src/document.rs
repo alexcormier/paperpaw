@@ -490,6 +490,27 @@ impl Document for EpubDocument {
             .map(|(_, label)| label.clone())
     }
 
+    fn prepare_image(&self, storage: &dyn Storage, image: &ImageRef) -> Option<ImageRef> {
+        if quireink_sdk::image::ImageFile::open(storage, &image.path).is_some() {
+            return None;
+        }
+        let base = image.path.rsplit_once('.')?.0;
+        let (dir, _) = base.rsplit_once('/')?;
+        let (_, source) = crate::pictures::noted(storage, base)?;
+        let file = crate::pictures::file(base, self.color);
+        convert::decode_image(
+            storage,
+            &self.archive,
+            &source,
+            &file,
+            dir,
+            self.image_fit,
+            self.color,
+        )
+        .ok()?;
+        crate::pictures::open(storage, base, self.color)
+    }
+
     fn cover(&self, storage: &dyn Storage) -> Result<Option<ImageRef>, DocumentError> {
         let Some(source) = &self.cover else {
             return Ok(None);
