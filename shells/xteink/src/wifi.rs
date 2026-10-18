@@ -23,7 +23,7 @@ use core::task::{Context, Poll, Waker};
 use esp_hal::peripherals::{FROM_CPU_INTR0, WIFI};
 use esp_hal::timer::timg::Timer;
 use esp_radio::wifi::scan::ScanConfig;
-use esp_radio::wifi::sta::StationConfig;
+use esp_radio::wifi::sta::{ScanMethod, StationConfig};
 use esp_radio::wifi::{
     AuthenticationMethod, AuthenticationMethodConfig, Config, ConnectionError, DisconnectReason,
     WifiController,
@@ -36,6 +36,8 @@ use crate::power::{at, mark};
 /// The longest a scan or a try to join is waited for, and to stop.
 const WAIT_MS: u64 = 15_000;
 const STOP_MS: u64 = 2_000;
+/// Tries of one access point before the next is tried.
+const JOIN_RETRIES: u8 = 2;
 /// Networks a scan reports at most.
 const SCAN_MAX: usize = 20;
 
@@ -302,9 +304,15 @@ impl Radio {
                         .map(AuthenticationMethodConfig::Wpa2Personal)
                 };
                 let config = authentication.and_then(|authentication| {
+                    // All channels, then the strongest access point: in a
+                    // network of several (a mesh), the first one heard may
+                    // be a far one that never lets the X4 in. Another one
+                    // is tried if it fails.
                     Ok(StationConfig::default()
                         .with_ssid(ssid.as_str().try_into()?)
-                        .with_authentication(authentication))
+                        .with_authentication(authentication)
+                        .with_scan_method(ScanMethod::AllChannels)
+                        .with_failure_retry_cnt(JOIN_RETRIES))
                 });
                 on.ssid = Some(ssid);
                 on.linked = false;
@@ -317,14 +325,20 @@ impl Radio {
                         return (Outcome::Joined(Err(JoinFailure::Other)), controller);
                     }
                     // Bounded: once, after flashing, no answer ever came.
+                    let started = esp_hal::time::Instant::now();
                     let joined = match within(WAIT_MS, controller.connect_async()).await {
                         Some(Ok(_)) => Ok(()),
-                        Some(Err(e)) => Err(failure(&e)),
+                        Some(Err(e)) => {
+                            log::info!("wifi: join refused: {e:?}");
+                            Err(failure(&e))
+                        }
                         None => {
+                            log::info!("wifi: join gave no answer");
                             let _ = within(STOP_MS, controller.disconnect_async()).await;
                             Err(JoinFailure::Timeout)
                         }
                     };
+                    log::info!("wifi: join took {} ms", started.elapsed().as_millis());
                     (Outcome::Joined(joined), controller)
                 })
             }
