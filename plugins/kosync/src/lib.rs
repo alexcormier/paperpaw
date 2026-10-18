@@ -5,9 +5,11 @@
 //!   the same file matches on every device.
 //! - Positions are KOReader's XPointers where the format has them (EPUB),
 //!   besides the percentage.
-//! - The progress is sent at most once a minute while reading and when the
-//!   app goes to the background; it is fetched when a book opens and when
-//!   the app comes back. If another device is further, a dialog offers to
+//! - The progress is sent at most once a minute while reading (where
+//!   QuireInk runs the radio itself, only while it is on anyway: turning
+//!   pages never keeps it on), and when a book is closed and the device
+//!   sleeps or the app goes to the background; it is fetched when a book
+//!   opens and when the app comes back. If another device is further, a dialog offers to
 //!   go there (once for each position).
 //! - *Sync progress* in the reading menu's *More* does both at once.
 //! - The account (settings → *Progress sync*) keeps the user name in the
@@ -64,6 +66,12 @@ const ACCOUNT_CHANGED: Id = Id::new_static("kosync.account-changed");
 /// Replies of the server.
 const PULLED: Id = Id::new_static("kosync.pulled");
 const PUSHED: Id = Id::new_static("kosync.pushed");
+
+/// Whether sending now keeps no radio on that would be off otherwise: the
+/// system runs Wi-Fi, or QuireInk's radio is in a network already.
+fn radio_on_anyway(env: &Env<'_>) -> bool {
+    env.wifi.is_none_or(|w| w.state.is_online())
+}
 
 /// KOReader's public server.
 const DEFAULT_SERVER: &str = "https://sync.koreader.rocks";
@@ -508,7 +516,18 @@ impl Plugin for Kosync {
                 let due = state
                     .last_push
                     .is_none_or(|at| env.now.since(at) >= PUSH_EVERY_MS);
-                if due && state.active(env) {
+                if due && state.active(env) && radio_on_anyway(env) {
+                    state.push(env, out, false);
+                }
+            }),
+        )?;
+        let s = state.clone();
+        r.subscribe(
+            events::BOOK_CLOSED,
+            Box::new(move |env, _, out| {
+                let mut state = s.borrow_mut();
+                state.load(env);
+                if state.active(env) {
                     state.push(env, out, false);
                 }
             }),
