@@ -17,8 +17,8 @@ use alloc::vec::Vec;
 use quireink_sdk::builtin::{actions, events, params, slots};
 use quireink_sdk::ui::{self, UiStyle};
 use quireink_sdk::{
-    Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, RefreshMode,
-    Screen, SettingKind, SettingSpec, SettingValue,
+    Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, MenuItem, Params, Rect,
+    RefreshMode, Screen, SettingKind, SettingSpec, SettingValue,
 };
 
 use crate::{CHOOSE_SCREEN, is_menu};
@@ -77,6 +77,167 @@ fn spec<'e>(env: &Env<'e>, id: &Id) -> Option<&'e SettingSpec> {
     env.settings.specs().find(|spec| spec.id == *id)
 }
 
+/// What a row of the panel shows, before it is placed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Line {
+    /// Switches or buttons side by side.
+    Buttons(Vec<Control>),
+    /// A number with a slider between its `−` and `+`.
+    Slider(Id),
+    /// A number's `−` and `+`, placed by its value when drawn.
+    Stepper(Id),
+    /// A choice's options side by side.
+    Segments(Id, Vec<String>),
+    /// A setting opened in its list or editor.
+    Open(Id),
+}
+
+/// The sizes the panel is laid out with.
+#[derive(Debug, Clone, Copy)]
+struct Geometry {
+    /// The screen's.
+    width: u16,
+    height: u16,
+    margin: u16,
+    gap: u16,
+    row: u16,
+    border: u16,
+    /// The labels of settings, on the left of their rows.
+    label: u16,
+    /// The head with the time, the date and the battery (hanging from
+    /// the top only).
+    head: u16,
+    /// The bar that turns pages, where there are several.
+    pager: u16,
+    /// It hangs from the top of the screen.
+    top: bool,
+}
+
+/// Where the panel's parts go.
+#[derive(Debug)]
+struct Layout {
+    rows: Vec<Row>,
+    region: Rect,
+    head: Rect,
+    per_page: usize,
+    pager: Option<Rect>,
+}
+
+/// Places `lines` on the screen: at its bottom (or top), at most
+/// [`MAX_SHARE`] of it high, in pages if they need more.
+fn layout(lines: &[Line], g: Geometry) -> Layout {
+    let gap = g.gap;
+    let room = (f32::from(g.height) * MAX_SHARE) as u16 - g.border - 2 * gap;
+    let max_rows = usize::from(room / g.row.max(1)).max(1);
+    // Too many rows: pages, with a bar to turn them.
+    let paged = lines.len() > max_rows;
+    let bar = if paged { g.pager } else { 0 };
+    let per_page = if paged {
+        usize::from((room - bar) / g.row.max(1)).max(1)
+    } else {
+        lines.len().max(1)
+    };
+    let head = if g.top { g.head } else { 0 };
+    let height = g.border + 2 * gap + head + g.row * per_page as u16 + bar;
+    let region = if g.top {
+        Rect::new(0, 0, g.width, height)
+    } else {
+        Rect::new(0, g.height - height, g.width, height)
+    };
+    // The border on the side towards the rest of the screen.
+    let inner_top = if g.top {
+        region.y + head
+    } else {
+        region.y + g.border
+    };
+    let rows = lines
+        .iter()
+        .enumerate()
+        .map(|(index, line)| {
+            let y = inner_top + gap + g.row * (index % per_page) as u16;
+            place(line, Rect::new(0, y, g.width, g.row), g)
+        })
+        .collect();
+    let pager = paged.then(|| {
+        let bottom = if g.top { g.border } else { 0 };
+        Rect::new(0, region.y + region.height - bar - bottom, g.width, bar)
+    });
+    Layout {
+        rows,
+        region,
+        head: Rect::new(
+            g.margin,
+            region.y + gap / 2,
+            g.width.saturating_sub(2 * g.margin),
+            head,
+        ),
+        per_page,
+        pager,
+    }
+}
+
+/// The controls of `line` in its row, `area`.
+fn place(line: &Line, area: Rect, g: Geometry) -> Row {
+    let inner = inset(area, g.margin);
+    let rest = Rect::new(
+        inner.x + g.label,
+        inner.y,
+        inner.width.saturating_sub(g.label),
+        inner.height,
+    );
+    let (label, controls) = match line {
+        Line::Buttons(controls) => {
+            let cells = split(inner, controls.len(), g.gap / 2);
+            (None, controls.iter().cloned().zip(cells).collect())
+        }
+        // A wide range: − slider +.
+        Line::Slider(id) => {
+            let size = ui::button_height(area);
+            let y = area.y + (area.height - size) / 2;
+            let minus = Rect::new(rest.x, y, size, size);
+            let plus = Rect::new(rest.x + rest.width - size, y, size, size);
+            let track = Rect::new(
+                minus.x + size + g.gap,
+                y,
+                rest.width.saturating_sub(2 * (size + g.gap)),
+                size,
+            );
+            let controls = alloc::vec![
+                (Control::Step(id.clone(), -1), minus),
+                (Control::Slide(id.clone()), track),
+                (Control::Step(id.clone(), 1), plus),
+            ];
+            (Some(id.clone()), controls)
+        }
+        // The − and + are placed by the value, as in menus.
+        Line::Stepper(id) => {
+            let controls = alloc::vec![
+                (Control::Step(id.clone(), -1), area),
+                (Control::Step(id.clone(), 1), area),
+            ];
+            (Some(id.clone()), controls)
+        }
+        Line::Segments(id, options) => {
+            let cells = split(rest, options.len(), g.gap / 2);
+            let controls = options
+                .iter()
+                .zip(cells)
+                .map(|(o, r)| (Control::Option(id.clone(), o.clone()), r))
+                .collect();
+            (Some(id.clone()), controls)
+        }
+        Line::Open(id) => (
+            Some(id.clone()),
+            alloc::vec![(Control::Open(id.clone()), inner)],
+        ),
+    };
+    Row {
+        area,
+        label,
+        controls,
+    }
+}
+
 impl PanelScreen {
     pub(crate) fn open(env: &Env<'_>, params: &Params) -> Self {
         let menu = params.get(params::MENU).unwrap_or_default();
@@ -85,7 +246,6 @@ impl PanelScreen {
         let display = env.device.display;
         let width = display.width;
         let margin = style.margin as u16;
-        let row_height = style.row as u16;
         let items = env.menus.items(menu);
         // Labels as wide as the longest needs, at most half the row.
         let font = style.font(env);
@@ -96,140 +256,8 @@ impl PanelScreen {
             .filter(|s| !matches!(s.kind, SettingKind::Bool))
             .map(|s| measure(env.i18n.tr(&s.title)))
             .fold(0.0, f32::max);
-        let label_width =
+        let label =
             ((longest as u16).saturating_add(style.gap as u16 * 2)).min((width - 2 * margin) / 2);
-        // As many buttons to a row as stay readable.
-        let label_of = |control: &Control| -> String {
-            match control {
-                Control::Toggle(id) => spec(env, id).map_or(String::new(), |s| {
-                    alloc::format!("• {}", env.i18n.tr(&s.title))
-                }),
-                Control::Run(id) => {
-                    let title = env
-                        .actions
-                        .get(id.as_str())
-                        .map_or(id.as_str(), |a| a.title.as_ref());
-                    env.i18n.tr(title).to_string()
-                }
-                _ => String::new(),
-            }
-        };
-        let small = |text: &str| font.as_ref().map_or(0.0, |f| f.measure(style.small, text));
-        let per_row = |group: &[Control]| -> usize {
-            let inner = f32::from(width - 2 * margin);
-            (1..=PER_ROW.min(group.len()))
-                .rev()
-                .find(|&n| {
-                    let cell = inner / n as f32 - 2.0 * style.gap as f32;
-                    group.iter().all(|c| small(&label_of(c)) <= cell)
-                })
-                .unwrap_or(1)
-        };
-
-        // Rows first at y = 0, moved into place once their number is known.
-        let mut rows: Vec<Row> = Vec::new();
-        let mut group: Vec<Control> = Vec::new();
-        let flush = |group: &mut Vec<Control>, rows: &mut Vec<Row>| {
-            if group.is_empty() {
-                return;
-            }
-            let n = per_row(group);
-            for chunk in core::mem::take(group).chunks(n) {
-                let area = Rect::new(0, 0, width, row_height);
-                let cells = split(inset(area, margin), chunk.len(), style.gap as u16 / 2);
-                rows.push(Row {
-                    area,
-                    label: None,
-                    controls: chunk.iter().cloned().zip(cells).collect(),
-                });
-            }
-        };
-        for item in &items {
-            let id = item.id.clone();
-            let setting = spec(env, &id).filter(|s| s.editor.is_none());
-            let control = match setting.map(|s| &s.kind) {
-                Some(SettingKind::Bool) => Some(Control::Toggle(id.clone())),
-                None if spec(env, &id).is_none() => Some(Control::Run(id.clone())),
-                _ => None,
-            };
-            if let Some(control) = control {
-                // Switches and buttons share rows, but not with each other.
-                let same = group.first().is_some_and(|first| {
-                    matches!(first, Control::Toggle(_)) == matches!(control, Control::Toggle(_))
-                });
-                if !group.is_empty() && (!same || group.len() == PER_ROW) {
-                    flush(&mut group, &mut rows);
-                }
-                group.push(control);
-                continue;
-            }
-            flush(&mut group, &mut rows);
-            let area = Rect::new(0, 0, width, row_height);
-            let inner = inset(area, margin);
-            let rest = Rect::new(
-                inner.x + label_width,
-                inner.y,
-                inner.width - label_width,
-                inner.height,
-            );
-            let controls = match spec(env, &id).map(|s| &s.kind) {
-                // A wide range: − slider +.
-                Some(SettingKind::Int { .. }) if setting.is_some_and(|s| s.slider) => {
-                    let size = ui::button_height(area);
-                    let y = area.y + (area.height - size) / 2;
-                    let minus = Rect::new(rest.x, y, size, size);
-                    let plus = Rect::new(rest.x + rest.width - size, y, size, size);
-                    let gap = style.gap as u16;
-                    let track = Rect::new(
-                        minus.x + size + gap,
-                        y,
-                        rest.width.saturating_sub(2 * (size + gap)),
-                        size,
-                    );
-                    alloc::vec![
-                        (Control::Step(id.clone(), -1), minus),
-                        (Control::Slide(id.clone()), track),
-                        (Control::Step(id.clone(), 1), plus),
-                    ]
-                }
-                // The − and + are placed by the value, as in menus.
-                Some(SettingKind::Int { .. }) if setting.is_some() => alloc::vec![
-                    (Control::Step(id.clone(), -1), area),
-                    (Control::Step(id.clone(), 1), area),
-                ],
-                Some(SettingKind::Choice(options))
-                    if setting.is_some() && fits_segments(env, &style, options, rest) =>
-                {
-                    let cells = split(rest, options.len(), style.gap as u16 / 2);
-                    options
-                        .iter()
-                        .zip(cells)
-                        .map(|(o, r)| (Control::Option(id.clone(), o.to_string()), r))
-                        .collect()
-                }
-                _ => alloc::vec![(Control::Open(id.clone()), inner)],
-            };
-            rows.push(Row {
-                area,
-                label: Some(id),
-                controls,
-            });
-        }
-        flush(&mut group, &mut rows);
-
-        let border = (style.line * 2).max(2) as u16;
-        let gap = style.gap as u16;
-        let room = (f32::from(display.height) * MAX_SHARE) as u16 - border - 2 * gap;
-        let max_rows = usize::from(room / row_height.max(1)).max(1);
-        // Too many rows: pages, with a bar to turn them.
-        let paged = rows.len() > max_rows;
-        let bar = if paged { ui::Pager::height(&style) } else { 0 };
-        let per_page = if paged {
-            usize::from((room - bar) / row_height.max(1)).max(1)
-        } else {
-            rows.len().max(1)
-        };
-        // Hanging from the top, the time, the date and the battery first.
         let head = if top {
             let size = env
                 .metrics
@@ -238,48 +266,123 @@ impl PanelScreen {
         } else {
             0
         };
-        let height = border + 2 * gap + head + row_height * per_page as u16 + bar;
-        let region = if top {
-            Rect::new(0, 0, width, height)
-        } else {
-            Rect::new(0, display.height - height, width, height)
-        };
-        // The border on the side towards the rest of the screen.
-        let inner_top = if top {
-            region.y + head
-        } else {
-            region.y + border
-        };
-        for (index, row) in rows.iter_mut().enumerate() {
-            let dy = inner_top + gap + row_height * (index % per_page) as u16;
-            row.area.y += dy;
-            for (_, rect) in &mut row.controls {
-                rect.y += dy;
-            }
-        }
-        let pager = paged.then(|| {
-            let bottom = if top { border } else { 0 };
-            let area = Rect::new(0, region.y + region.height - bar - bottom, width, bar);
-            ui::Pager::new(env, area)
-        });
-        Self {
-            rows,
-            style,
-            region,
+        let geometry = Geometry {
+            width,
+            height: display.height,
+            margin,
+            gap: style.gap as u16,
+            row: style.row as u16,
+            border: (style.line * 2).max(2) as u16,
+            label,
+            head,
+            pager: ui::Pager::height(&style),
             top,
-            head: Rect::new(
-                margin,
-                region.y + gap / 2,
-                width.saturating_sub(2 * margin),
-                head,
-            ),
+        };
+        let layout = layout(&lines(env, &style, &items, geometry), geometry);
+        Self {
+            rows: layout.rows,
+            style,
+            region: layout.region,
+            top,
+            head: layout.head,
             focus: (!env.device.input.touch).then_some(0),
-            per_page,
+            per_page: layout.per_page,
             page: 0,
-            pager,
+            pager: layout.pager.map(|area| ui::Pager::new(env, area)),
         }
     }
+}
 
+/// What the panel shows of `items`, row by row: switches and buttons
+/// several to a row (as many as stay readable; switches and buttons not
+/// mixed), numbers with their `−` and `+` (a slider between for those
+/// marked so), choices with few options as segments, anything else to
+/// open.
+fn lines(env: &Env<'_>, style: &UiStyle, items: &[MenuItem<'_>], g: Geometry) -> Vec<Line> {
+    let font = style.font(env);
+    let label_of = |control: &Control| -> String {
+        match control {
+            Control::Toggle(id) => spec(env, id).map_or(String::new(), |s| {
+                alloc::format!("• {}", env.i18n.tr(&s.title))
+            }),
+            Control::Run(id) => {
+                let title = env
+                    .actions
+                    .get(id.as_str())
+                    .map_or(id.as_str(), |a| a.title.as_ref());
+                env.i18n.tr(title).to_string()
+            }
+            _ => String::new(),
+        }
+    };
+    let small = |text: &str| font.as_ref().map_or(0.0, |f| f.measure(style.small, text));
+    // As many buttons to a row as stay readable.
+    let per_row = |group: &[Control]| -> usize {
+        let inner = f32::from(g.width - 2 * g.margin);
+        (1..=PER_ROW.min(group.len()))
+            .rev()
+            .find(|&n| {
+                let cell = inner / n as f32 - 2.0 * g.gap as f32;
+                group.iter().all(|c| small(&label_of(c)) <= cell)
+            })
+            .unwrap_or(1)
+    };
+    let flush = |group: &mut Vec<Control>, lines: &mut Vec<Line>| {
+        if group.is_empty() {
+            return;
+        }
+        let n = per_row(group);
+        for chunk in core::mem::take(group).chunks(n) {
+            lines.push(Line::Buttons(chunk.to_vec()));
+        }
+    };
+    // Where a setting's controls go, beside its label.
+    let inner = inset(Rect::new(0, 0, g.width, g.row), g.margin);
+    let rest = Rect::new(
+        inner.x + g.label,
+        inner.y,
+        inner.width.saturating_sub(g.label),
+        inner.height,
+    );
+    let mut lines = Vec::new();
+    let mut group: Vec<Control> = Vec::new();
+    for item in items {
+        let id = item.id.clone();
+        let setting = spec(env, &id).filter(|s| s.editor.is_none());
+        let control = match setting.map(|s| &s.kind) {
+            Some(SettingKind::Bool) => Some(Control::Toggle(id.clone())),
+            None if spec(env, &id).is_none() => Some(Control::Run(id.clone())),
+            _ => None,
+        };
+        if let Some(control) = control {
+            // Switches and buttons share rows, but not with each other.
+            let same = group.first().is_some_and(|first| {
+                matches!(first, Control::Toggle(_)) == matches!(control, Control::Toggle(_))
+            });
+            if !group.is_empty() && (!same || group.len() == PER_ROW) {
+                flush(&mut group, &mut lines);
+            }
+            group.push(control);
+            continue;
+        }
+        flush(&mut group, &mut lines);
+        let line = match spec(env, &id).map(|s| &s.kind) {
+            Some(SettingKind::Int { .. }) if setting.is_some_and(|s| s.slider) => Line::Slider(id),
+            Some(SettingKind::Int { .. }) if setting.is_some() => Line::Stepper(id),
+            Some(SettingKind::Choice(options))
+                if setting.is_some() && fits_segments(env, style, options, rest) =>
+            {
+                Line::Segments(id, options.iter().map(|o| o.to_string()).collect())
+            }
+            _ => Line::Open(id),
+        };
+        lines.push(line);
+    }
+    flush(&mut group, &mut lines);
+    lines
+}
+
+impl PanelScreen {
     fn pages(&self) -> usize {
         self.rows.len().div_ceil(self.per_page).max(1)
     }
@@ -769,5 +872,108 @@ mod slider_tests {
         assert_eq!(slider_value(0, 255, rect, 150), 129);
         assert_eq!(slider_value(0, 255, rect, 192), 255);
         assert_eq!(slider_value(0, 255, rect, 400), 255);
+    }
+}
+
+#[cfg(test)]
+mod layout_tests {
+    use super::*;
+
+    const GEOMETRY: Geometry = Geometry {
+        width: 480,
+        height: 800,
+        margin: 20,
+        gap: 10,
+        row: 60,
+        border: 2,
+        label: 150,
+        head: 40,
+        pager: 45,
+        top: false,
+    };
+
+    fn id(name: &'static str) -> Id {
+        Id::new_static(name)
+    }
+
+    #[test]
+    fn at_the_bottom_rows_follow_each_other() {
+        let lines = [Line::Stepper(id("a.size")), Line::Open(id("a.font"))];
+        let layout = layout(&lines, GEOMETRY);
+        assert_eq!(layout.region.y + layout.region.height, 800);
+        assert_eq!(layout.per_page, 2);
+        assert!(layout.pager.is_none());
+        let [first, second] = layout.rows.as_slice() else {
+            panic!("two rows");
+        };
+        assert_eq!(second.area.y, first.area.y + 60);
+        assert!(first.area.y >= layout.region.y + 2);
+        assert_eq!(first.label, Some(id("a.size")));
+    }
+
+    #[test]
+    fn from_the_top_the_head_comes_first() {
+        let g = Geometry {
+            top: true,
+            ..GEOMETRY
+        };
+        let layout = layout(&[Line::Open(id("a.font"))], g);
+        assert_eq!(layout.region.y, 0);
+        assert_eq!(layout.head.height, 40);
+        assert!(layout.rows[0].area.y >= layout.head.y + layout.head.height);
+    }
+
+    #[test]
+    fn too_many_rows_go_to_pages() {
+        let lines: Vec<Line> = (0..20).map(|_| Line::Open(id("a.font"))).collect();
+        let layout = layout(&lines, GEOMETRY);
+        assert!(layout.per_page < 20);
+        assert!(layout.region.height <= (800.0 * MAX_SHARE) as u16);
+        let pager = layout.pager.expect("a pager");
+        assert_eq!(pager.y + pager.height, 800);
+        // A row of the second page stands where the first page's first one
+        // does.
+        let second_page = &layout.rows[layout.per_page];
+        assert_eq!(second_page.area.y, layout.rows[0].area.y);
+    }
+
+    #[test]
+    fn controls_share_their_row() {
+        let buttons = Line::Buttons(alloc::vec![
+            Control::Toggle(id("a.one")),
+            Control::Toggle(id("a.two")),
+            Control::Toggle(id("a.three")),
+        ]);
+        let row = place(&buttons, Rect::new(0, 100, 480, 60), GEOMETRY);
+        assert_eq!(row.controls.len(), 3);
+        let widths: Vec<u16> = row.controls.iter().map(|(_, r)| r.width).collect();
+        assert!(widths.iter().all(|w| *w == widths[0]));
+        assert!(row.controls[2].1.x + row.controls[2].1.width <= 480 - 20);
+
+        let slider = place(
+            &Line::Slider(id("a.light")),
+            Rect::new(0, 0, 480, 60),
+            GEOMETRY,
+        );
+        let [(minus, m), (track, t), (plus, p)] = slider.controls.as_slice() else {
+            panic!("three controls");
+        };
+        assert_eq!(*minus, Control::Step(id("a.light"), -1));
+        assert_eq!(*track, Control::Slide(id("a.light")));
+        assert_eq!(*plus, Control::Step(id("a.light"), 1));
+        // Beside the label, the track between the two.
+        assert!(m.x >= 20 + 150);
+        assert!(m.x + m.width < t.x && t.x + t.width < p.x);
+
+        let segments = Line::Segments(
+            id("a.align"),
+            alloc::vec![String::from("l"), String::from("r")],
+        );
+        let row = place(&segments, Rect::new(0, 0, 480, 60), GEOMETRY);
+        assert_eq!(row.controls.len(), 2);
+        assert_eq!(
+            row.controls[1].0,
+            Control::Option(id("a.align"), String::from("r"))
+        );
     }
 }
