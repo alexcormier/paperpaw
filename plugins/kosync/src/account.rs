@@ -14,7 +14,7 @@ use quireink_sdk::ask;
 use quireink_sdk::builtin::actions;
 use quireink_sdk::event::Event;
 use quireink_sdk::replies::{HttpReply, Typed};
-use quireink_sdk::ui::{self, ListChange, ListView, UiStyle};
+use quireink_sdk::ui::{self, ListView, UiStyle};
 use quireink_sdk::{
     Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, RefreshMode,
     Screen,
@@ -225,13 +225,6 @@ impl AccountScreen {
     }
 }
 
-fn moved(change: ListChange, cx: &mut Cx<'_, '_>) {
-    if change != ListChange::None {
-        cx.request_redraw();
-        cx.request_refresh(RefreshMode::Fast);
-    }
-}
-
 impl Screen for AccountScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
@@ -282,7 +275,7 @@ impl Screen for AccountScreen {
         } else {
             return Handled::No;
         };
-        moved(self.list.move_focus(delta, rows.len()), cx);
+        self.list.move_focus(delta, rows.len()).request(cx);
         Handled::Yes
     }
 

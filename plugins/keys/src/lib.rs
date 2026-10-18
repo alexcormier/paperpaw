@@ -309,14 +309,8 @@ impl Plugin for Keys {
 fn navigate(list: &mut ListView, len: usize, action: &Id, cx: &mut Cx<'_, '_>) -> bool {
     let rows = list.rows() as isize;
     let a = action;
-    let delta = if [actions::UP, actions::LEFT, actions::PREVIOUS].contains(a) {
-        -1
-    } else if [actions::DOWN, actions::RIGHT, actions::NEXT].contains(a) {
-        1
-    } else if *a == actions::NEXT_PAGE {
-        rows
-    } else if *a == actions::PREV_PAGE {
-        -rows
+    let delta = if let Some(delta) = ui::list_step(a, rows) {
+        delta
     } else {
         return false;
     };

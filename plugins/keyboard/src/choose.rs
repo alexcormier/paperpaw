@@ -9,7 +9,7 @@ use alloc::string::ToString;
 use alloc::vec::Vec;
 
 use quireink_sdk::builtin::actions;
-use quireink_sdk::ui::{self, ListChange, ListView, UiStyle};
+use quireink_sdk::ui::{self, ListView, UiStyle};
 use quireink_sdk::{
     Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Rect, RefreshMode, Screen,
 };
@@ -114,14 +114,8 @@ impl Screen for ChooseScreen {
         let len = ids(cx.env()).count();
         let rows = self.list.rows() as isize;
         let a = action;
-        let delta = if [actions::UP, actions::LEFT, actions::PREVIOUS].contains(a) {
-            -1
-        } else if [actions::DOWN, actions::RIGHT, actions::NEXT].contains(a) {
-            1
-        } else if *a == actions::NEXT_PAGE {
-            rows
-        } else if *a == actions::PREV_PAGE {
-            -rows
+        let delta = if let Some(delta) = ui::list_step(a, rows) {
+            delta
         } else if *a == actions::CONFIRM {
             self.toggle(self.list.focus, cx);
             return Handled::Yes;
@@ -129,14 +123,7 @@ impl Screen for ChooseScreen {
             return Handled::No;
         };
         let change = self.list.move_focus(delta, len);
-        if change != ListChange::None {
-            cx.request_redraw();
-            cx.request_refresh(if change == ListChange::Page {
-                RefreshMode::Partial
-            } else {
-                RefreshMode::Fast
-            });
-        }
+        change.request(cx);
         Handled::Yes
     }
 

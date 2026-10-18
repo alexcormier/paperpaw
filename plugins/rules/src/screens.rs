@@ -309,20 +309,8 @@ impl Screen for RulesScreen {
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         let a = action;
-        if [actions::UP, actions::LEFT, actions::PREVIOUS].contains(a) {
-            self.move_focus(-1, cx);
-        } else if [actions::DOWN, actions::RIGHT, actions::NEXT].contains(a) {
-            self.move_focus(1, cx);
-        } else if *a == actions::NEXT_PAGE || *a == actions::PREV_PAGE {
-            let rows = self.list.rows() as isize;
-            self.move_focus(
-                if *a == actions::NEXT_PAGE {
-                    rows
-                } else {
-                    -rows
-                },
-                cx,
-            );
+        if let Some(delta) = ui::list_step(a, self.list.rows() as isize) {
+            self.move_focus(delta, cx);
         } else if *a == actions::CONFIRM {
             self.activate(self.list.focus, cx);
         } else if *a == actions::MENU {
@@ -706,24 +694,15 @@ impl Screen for PickScreen {
         let a = action;
         let len = self.entries.len();
         let rows = self.list.rows() as isize;
-        let delta = if [actions::UP, actions::LEFT, actions::PREVIOUS].contains(a) {
-            -1
-        } else if [actions::DOWN, actions::RIGHT, actions::NEXT].contains(a) {
-            1
-        } else if *a == actions::NEXT_PAGE {
-            rows
-        } else if *a == actions::PREV_PAGE {
-            -rows
+        let delta = if let Some(delta) = ui::list_step(a, rows) {
+            delta
         } else if *a == actions::CONFIRM {
             self.pick(self.list.focus, cx);
             return Handled::Yes;
         } else {
             return Handled::No;
         };
-        if self.list.move_focus(delta, len) != ListChange::None {
-            cx.request_redraw();
-            cx.request_refresh(RefreshMode::Fast);
-        }
+        self.list.move_focus(delta, len).request(cx);
         Handled::Yes
     }
 

@@ -24,7 +24,7 @@ use alloc::vec::Vec;
 
 use quireink_sdk::builtin::{actions, events, menus, params, slots};
 use quireink_sdk::setting::{Setting, Text};
-use quireink_sdk::ui::{self, ListChange, UiStyle};
+use quireink_sdk::ui::{self, UiStyle};
 use quireink_sdk::{
     Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest, Params, Plugin,
     Priority, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen, ScreenSpec,
@@ -271,13 +271,6 @@ impl MenuScreen {
         }
     }
 
-    fn moved(change: ListChange, cx: &mut Cx<'_, '_>) {
-        if change != ListChange::None {
-            cx.request_redraw();
-            cx.request_refresh(RefreshMode::Fast);
-        }
-    }
-
     /// Chooses item `index`: runs an action, or changes a setting.
     fn run(&mut self, index: usize, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
@@ -509,13 +502,13 @@ impl Screen for MenuScreen {
             return Handled::Yes;
         }
         if *a == actions::UP || *a == actions::LEFT || *a == actions::PREVIOUS {
-            Self::moved(self.rows.step(false), cx);
+            self.rows.step(false).request(cx);
         } else if *a == actions::DOWN || *a == actions::RIGHT || *a == actions::NEXT {
-            Self::moved(self.rows.step(true), cx);
+            self.rows.step(true).request(cx);
         } else if *a == actions::NEXT_PAGE {
-            Self::moved(self.rows.turn(true), cx);
+            self.rows.turn(true).request(cx);
         } else if *a == actions::PREV_PAGE {
-            Self::moved(self.rows.turn(false), cx);
+            self.rows.turn(false).request(cx);
         } else if *a == actions::CONFIRM {
             self.run(self.rows.focus, cx);
         } else if *a == actions::MENU {
@@ -533,7 +526,7 @@ impl Screen for MenuScreen {
         }
         if let Some(action) = self.pager.and_then(|pager| pager.tap(gesture.start)) {
             let forward = action == actions::NEXT_PAGE;
-            Self::moved(self.rows.turn(forward), cx);
+            self.rows.turn(forward).request(cx);
             return Handled::Yes;
         }
         let Some(index) = self.rows.hit(gesture.start) else {

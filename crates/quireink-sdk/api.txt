@@ -1179,6 +1179,8 @@ pub enum quireink_sdk::ui::ListChange
 pub quireink_sdk::ui::ListChange::Focus
 pub quireink_sdk::ui::ListChange::None
 pub quireink_sdk::ui::ListChange::Page
+impl quireink_sdk::ui::ListChange
+pub fn quireink_sdk::ui::ListChange::request(self, &mut quireink_sdk::Cx<'_, '_>)
 pub enum quireink_sdk::ui::ReorderStep
 pub quireink_sdk::ui::ReorderStep::Changed
 pub quireink_sdk::ui::ReorderStep::Dropped
@@ -1205,6 +1207,7 @@ pub fn quireink_sdk::ui::ListView::draw(&self, &mut quireink_graphics::canvas::C
 pub fn quireink_sdk::ui::ListView::focus_on_keys(self, &quireink_sdk::Env<'_>) -> Self
 pub fn quireink_sdk::ui::ListView::hit(&self, quireink_platform::geometry::Point, usize) -> core::option::Option<usize>
 pub fn quireink_sdk::ui::ListView::move_focus(&mut self, isize, usize) -> quireink_sdk::ui::ListChange
+pub fn quireink_sdk::ui::ListView::navigate(&mut self, &quireink_sdk::Id, usize) -> core::option::Option<quireink_sdk::ui::ListChange>
 pub fn quireink_sdk::ui::ListView::new(quireink_platform::geometry::Rect, u32) -> Self
 pub fn quireink_sdk::ui::ListView::page(&self) -> usize
 pub fn quireink_sdk::ui::ListView::pages(&self, usize) -> usize
@@ -1291,6 +1294,7 @@ pub fn quireink_sdk::ui::has_icons(&quireink_sdk::Env<'_>) -> bool
 pub fn quireink_sdk::ui::heading_height(&quireink_sdk::Env<'_>, &quireink_sdk::ui::UiStyle) -> u16
 pub fn quireink_sdk::ui::icon_room(&quireink_sdk::Env<'_>, &quireink_sdk::ui::UiStyle, bool) -> u16
 pub fn quireink_sdk::ui::icon_width(&quireink_sdk::Env<'_>, &str, f32) -> f32
+pub fn quireink_sdk::ui::list_step(&quireink_sdk::Id, isize) -> core::option::Option<isize>
 pub fn quireink_sdk::ui::next_value(&quireink_sdk::Env<'_>, &quireink_sdk::SettingSpec, i64) -> core::option::Option<quireink_sdk::SettingValue>
 pub fn quireink_sdk::ui::number_room<'a>(&quireink_sdk::Env<'_>, &quireink_sdk::ui::UiStyle, impl core::iter::traits::collect::IntoIterator<Item = &'a quireink_sdk::SettingSpec>) -> alloc::string::String
 pub fn quireink_sdk::ui::opens_screen(&quireink_sdk::Env<'_>, &quireink_sdk::SettingSpec) -> bool

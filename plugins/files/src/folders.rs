@@ -246,14 +246,7 @@ impl FolderChooser {
             let env = *cx.env();
             self.load_page(&env);
         }
-        if change != ListChange::None {
-            cx.request_redraw();
-            cx.request_refresh(if change == ListChange::Page {
-                RefreshMode::Partial
-            } else {
-                RefreshMode::Fast
-            });
-        }
+        change.request(cx);
     }
 }
 

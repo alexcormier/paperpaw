@@ -203,36 +203,6 @@ fn page(env: &Env<'_>) -> (UiStyle, ui::Header, Rect) {
     (style, header, Rect::new(0, top, display.width, height))
 }
 
-fn moved(change: ListChange, cx: &mut Cx<'_, '_>) {
-    if change != ListChange::None {
-        cx.request_redraw();
-        cx.request_refresh(if change == ListChange::Page {
-            RefreshMode::Partial
-        } else {
-            RefreshMode::Fast
-        });
-    }
-}
-
-/// Moves `list` by the navigation actions; `None` if `action` is another.
-fn navigate(list: &mut ListView, len: usize, action: &Id) -> Option<ListChange> {
-    let rows = list.rows() as isize;
-    let delta =
-        if *action == actions::UP || *action == actions::LEFT || *action == actions::PREVIOUS {
-            -1
-        } else if *action == actions::DOWN || *action == actions::RIGHT || *action == actions::NEXT
-        {
-            1
-        } else if *action == actions::NEXT_PAGE {
-            rows
-        } else if *action == actions::PREV_PAGE {
-            -rows
-        } else {
-            return None;
-        };
-    Some(list.move_focus(delta, len))
-}
-
 /// Moves the focus of `rows` (lists with headings) by the navigation
 /// actions; `None` if `action` is another. The first press on a touch
 /// screen only shows the focus (`keys`), which taps hide.
@@ -473,7 +443,7 @@ impl Screen for GroupList {
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         if let Some(change) = navigate_rows(&mut self.rows, &mut self.keys, action) {
-            moved(change, cx);
+            change.request(cx);
         } else if *action == actions::CONFIRM {
             self.choose(self.rows.focus, cx);
         } else {
@@ -837,7 +807,7 @@ impl Screen for GroupPage {
             return Handled::Yes;
         }
         if let Some(change) = navigate_rows(&mut self.rows, &mut self.keys, action) {
-            moved(change, cx);
+            change.request(cx);
         } else if *action == actions::CONFIRM {
             self.activate(&env, 1, cx);
         } else {
@@ -1028,8 +998,8 @@ impl Screen for Chooser {
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         let len = self.options.len();
-        if let Some(change) = navigate(&mut self.list, len, action) {
-            moved(change, cx);
+        if let Some(change) = self.list.navigate(action, len) {
+            change.request(cx);
         } else if *action == actions::CONFIRM {
             self.choose(self.list.focus, cx);
         } else {

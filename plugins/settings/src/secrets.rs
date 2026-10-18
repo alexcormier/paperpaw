@@ -13,7 +13,7 @@ use quireink_sdk::secrets::SecretChange;
 use quireink_sdk::ui::{self, ListView, UiStyle};
 use quireink_sdk::{Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Screen};
 
-use crate::{ID, moved, navigate, page};
+use crate::{ID, page};
 
 /// The list.
 pub(crate) const SCREEN: Id = Id::new_static("settings.secrets");
@@ -95,8 +95,8 @@ impl Screen for SecretList {
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         let len = cx.env().secrets.iter().count();
-        if let Some(change) = navigate(&mut self.list, len, action) {
-            moved(change, cx);
+        if let Some(change) = self.list.navigate(action, len) {
+            change.request(cx);
             return Handled::Yes;
         }
         if *action == actions::CONFIRM {
@@ -209,8 +209,8 @@ impl Screen for SecretPage {
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
-        if let Some(change) = navigate(&mut self.list, self.choices.len(), action) {
-            moved(change, cx);
+        if let Some(change) = self.list.navigate(action, self.choices.len()) {
+            change.request(cx);
             return Handled::Yes;
         }
         if *action == actions::CONFIRM {

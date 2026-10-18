@@ -981,6 +981,36 @@ pub enum ListChange {
     Page,
 }
 
+impl ListChange {
+    /// Asks for what the change needs, as every list does: the screen
+    /// drawn again, refreshed fast for a focus that moved and a little
+    /// more thoroughly for a new page; nothing for no change.
+    pub fn request(self, cx: &mut crate::Cx<'_, '_>) {
+        let mode = match self {
+            ListChange::None => return,
+            ListChange::Focus => crate::RefreshMode::Fast,
+            ListChange::Page => crate::RefreshMode::Partial,
+        };
+        cx.request_redraw();
+        cx.request_refresh(mode);
+    }
+}
+
+/// How far a navigation action moves a focus: one back for up, left and
+/// previous, one on for down, right and next, `page` for the next page
+/// and back for the previous one; `None` for any other action. Screens
+/// with a [`ListView`] use [`ListView::navigate`].
+pub fn list_step(action: &crate::Id, page: isize) -> Option<isize> {
+    use actions::{DOWN, LEFT, NEXT, NEXT_PAGE, PREV_PAGE, PREVIOUS, RIGHT, UP};
+    match action {
+        a if [UP, LEFT, PREVIOUS].contains(a) => Some(-1),
+        a if [DOWN, RIGHT, NEXT].contains(a) => Some(1),
+        a if *a == NEXT_PAGE => Some(page),
+        a if *a == PREV_PAGE => Some(-page),
+        _ => None,
+    }
+}
+
 /// A paged, focusable list: the basic building block of menus, the
 /// library and settings. Works with buttons (focus) and touch (hit tests).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1042,9 +1072,6 @@ impl ListView {
         len.div_ceil(self.rows()).max(1)
     }
 
-    /// Moves the focus by `delta` rows within `0..len`; one step past
-    /// either end goes round to the other (quicker with few buttons),
-    /// larger steps (pages) stop at the end.
     /// On touch screens, hides the focus until a button moves it: taps
     /// need no focus, and a black row nobody chose looks like a mistake.
     pub fn focus_on_keys(mut self, env: &Env<'_>) -> Self {
@@ -1052,6 +1079,17 @@ impl ListView {
         self
     }
 
+    /// Moves the focus by a navigation action among `len` items (see
+    /// [`list_step`]; a page is a page of the list); `None` if `action`
+    /// is another.
+    pub fn navigate(&mut self, action: &crate::Id, len: usize) -> Option<ListChange> {
+        let delta = list_step(action, self.rows() as isize)?;
+        Some(self.move_focus(delta, len))
+    }
+
+    /// Moves the focus by `delta` rows within `0..len`; one step past
+    /// either end goes round to the other (quicker with few buttons),
+    /// larger steps (pages) stop at the end.
     pub fn move_focus(&mut self, delta: isize, len: usize) -> ListChange {
         if len == 0 {
             return ListChange::None;

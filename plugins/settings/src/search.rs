@@ -11,7 +11,7 @@ use quireink_sdk::replies::Typed;
 use quireink_sdk::ui::{self, ListView, UiStyle};
 use quireink_sdk::{Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Screen};
 
-use crate::{FOCUS, GROUP_SCREEN, ID, moved, navigate, page, visible};
+use crate::{FOCUS, GROUP_SCREEN, ID, page, visible};
 
 /// The results; parameter [`params::TEXT`], what to find.
 pub(crate) const SCREEN: Id = Id::new_static("settings.search");
@@ -182,8 +182,8 @@ impl Screen for SearchScreen {
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
-        if let Some(change) = navigate(&mut self.list, self.hits.len(), action) {
-            moved(change, cx);
+        if let Some(change) = self.list.navigate(action, self.hits.len()) {
+            change.request(cx);
             return Handled::Yes;
         }
         if *action == actions::CONFIRM {

@@ -5,10 +5,9 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use quireink_sdk::builtin::{actions, params};
-use quireink_sdk::ui::{self, ListChange, ListView, UiStyle};
+use quireink_sdk::ui::{self, ListView, UiStyle};
 use quireink_sdk::{
-    Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, RefreshMode,
-    Screen,
+    Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, Screen,
 };
 
 use crate::store::{self, Book};
@@ -106,14 +105,8 @@ impl Screen for BookList {
         let len = self.books.len();
         let page = self.list.rows() as isize;
         let a = action;
-        let delta = if [actions::UP, actions::LEFT, actions::PREVIOUS].contains(a) {
-            -1
-        } else if [actions::DOWN, actions::RIGHT, actions::NEXT].contains(a) {
-            1
-        } else if *a == actions::NEXT_PAGE {
-            page
-        } else if *a == actions::PREV_PAGE {
-            -page
+        let delta = if let Some(delta) = ui::list_step(a, page) {
+            delta
         } else if *a == actions::CONFIRM {
             self.open(self.list.focus, cx);
             return Handled::Yes;
@@ -121,14 +114,7 @@ impl Screen for BookList {
             return Handled::No;
         };
         let change = self.list.move_focus(delta, len);
-        if change != ListChange::None {
-            cx.request_redraw();
-            cx.request_refresh(if change == ListChange::Page {
-                RefreshMode::Partial
-            } else {
-                RefreshMode::Fast
-            });
-        }
+        change.request(cx);
         Handled::Yes
     }
 

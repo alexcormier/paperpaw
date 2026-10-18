@@ -26,7 +26,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use quireink_sdk::builtin::{CORE_PLUGIN, actions, menus};
-use quireink_sdk::ui::{self, ListChange, ListView, UiStyle};
+use quireink_sdk::ui::{self, ListView, UiStyle};
 use quireink_sdk::{
     ActionSpec, Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
     MenuEntry, Params, Plugin, PluginInfo, PluginState, Rect, RefreshMode, RegisterError,
@@ -235,17 +235,6 @@ fn slot_key(slot: &Id) -> &'static str {
     }
 }
 
-fn moved(change: ListChange, cx: &mut Cx<'_, '_>) {
-    if change != ListChange::None {
-        cx.request_redraw();
-        cx.request_refresh(if change == ListChange::Page {
-            RefreshMode::Partial
-        } else {
-            RefreshMode::Fast
-        });
-    }
-}
-
 impl Screen for PluginList {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
@@ -350,7 +339,7 @@ impl Screen for PluginList {
         } else {
             return Handled::No;
         };
-        moved(self.list.move_focus(delta, len), cx);
+        self.list.move_focus(delta, len).request(cx);
         Handled::Yes
     }
 

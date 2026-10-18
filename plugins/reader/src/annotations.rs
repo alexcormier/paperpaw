@@ -12,9 +12,9 @@ pub(crate) use quireink_sdk::annotations::{
     Annotation, Kind, Mark, add, changed, load, marks, note_of, remove, set_note, snippet,
 };
 use quireink_sdk::builtin::{actions, params};
-use quireink_sdk::ui::{self, ListChange, ListView, UiStyle};
+use quireink_sdk::ui::{self, ListView, UiStyle};
 use quireink_sdk::{
-    Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, RefreshMode, Screen,
+    Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, Screen,
 };
 
 use crate::GOTO;
@@ -222,14 +222,8 @@ impl Screen for AnnotationsScreen {
         let len = self.len();
         let rows = self.list.rows() as isize;
         let a = action;
-        let delta = if [actions::UP, actions::LEFT, actions::PREVIOUS].contains(a) {
-            -1
-        } else if [actions::DOWN, actions::RIGHT, actions::NEXT].contains(a) {
-            1
-        } else if *a == actions::NEXT_PAGE {
-            rows
-        } else if *a == actions::PREV_PAGE {
-            -rows
+        let delta = if let Some(delta) = ui::list_step(a, rows) {
+            delta
         } else if *a == actions::CONFIRM {
             self.open_entry(self.list.focus, cx);
             return Handled::Yes;
@@ -237,14 +231,7 @@ impl Screen for AnnotationsScreen {
             return Handled::No;
         };
         let change = self.list.move_focus(delta, len);
-        if change != ListChange::None {
-            cx.request_redraw();
-            cx.request_refresh(if change == ListChange::Page {
-                RefreshMode::Partial
-            } else {
-                RefreshMode::Fast
-            });
-        }
+        change.request(cx);
         Handled::Yes
     }
 

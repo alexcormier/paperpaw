@@ -422,14 +422,7 @@ impl Browser {
             self.show_focus(&env);
             cx.wake_at(env.now);
         }
-        if change != ListChange::None {
-            cx.request_redraw();
-            cx.request_refresh(if change == ListChange::Page {
-                RefreshMode::Partial
-            } else {
-                RefreshMode::Fast
-            });
-        }
+        change.request(cx);
     }
 
     fn open(&mut self, index: usize, cx: &mut Cx<'_, '_>) {

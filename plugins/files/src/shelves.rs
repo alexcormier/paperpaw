@@ -16,7 +16,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use quireink_sdk::builtin::{actions, params, slots};
-use quireink_sdk::ui::{self, ListChange, ListView, UiStyle};
+use quireink_sdk::ui::{self, ListView, UiStyle};
 use quireink_sdk::{
     Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, RefreshMode,
     Screen, Storage, files,
@@ -371,14 +371,8 @@ impl Screen for ShelfScreen {
         let a = action;
         let len = self.len();
         let rows = self.list.rows() as isize;
-        let delta = if [actions::UP, actions::LEFT, actions::PREVIOUS].contains(a) {
-            -1
-        } else if [actions::DOWN, actions::RIGHT, actions::NEXT].contains(a) {
-            1
-        } else if *a == actions::NEXT_PAGE {
-            rows
-        } else if *a == actions::PREV_PAGE {
-            -rows
+        let delta = if let Some(delta) = ui::list_step(a, rows) {
+            delta
         } else if *a == actions::CONFIRM {
             self.activate(self.list.focus, cx);
             return Handled::Yes;
@@ -396,14 +390,7 @@ impl Screen for ShelfScreen {
             return Handled::No;
         };
         let change = self.list.move_focus(delta, len);
-        if change != ListChange::None {
-            cx.request_redraw();
-            cx.request_refresh(if change == ListChange::Page {
-                RefreshMode::Partial
-            } else {
-                RefreshMode::Fast
-            });
-        }
+        change.request(cx);
         Handled::Yes
     }
 

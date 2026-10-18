@@ -7,9 +7,9 @@ use alloc::vec::Vec;
 
 use quireink_sdk::builtin::actions;
 use quireink_sdk::setting::Setting;
-use quireink_sdk::ui::{self, ListChange, ListView, UiStyle};
+use quireink_sdk::ui::{self, ListView, UiStyle};
 use quireink_sdk::{
-    Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Rect, RefreshMode, Screen,
+    Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Rect, Screen,
 };
 
 use crate::{blocks, grid};
@@ -115,10 +115,7 @@ impl Screen for DrawerScreen {
         } else {
             return Handled::No;
         };
-        if self.list.move_focus(delta, len) != ListChange::None {
-            cx.request_redraw();
-            cx.request_refresh(RefreshMode::Fast);
-        }
+        self.list.move_focus(delta, len).request(cx);
         Handled::Yes
     }
 

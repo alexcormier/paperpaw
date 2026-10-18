@@ -282,14 +282,8 @@ impl Screen for EditScreen {
         let len = self.rows(&env).len();
         let rows = self.list.rows() as isize;
         let a = action;
-        let delta = if [actions::UP, actions::LEFT, actions::PREVIOUS].contains(a) {
-            -1
-        } else if [actions::DOWN, actions::RIGHT, actions::NEXT].contains(a) {
-            1
-        } else if *a == actions::NEXT_PAGE {
-            rows
-        } else if *a == actions::PREV_PAGE {
-            -rows
+        let delta = if let Some(delta) = ui::list_step(a, rows) {
+            delta
         } else if *a == actions::CONFIRM {
             self.choose(self.list.focus, cx);
             return Handled::Yes;
@@ -423,24 +417,15 @@ impl Screen for AddScreen {
         let len = self.widgets.len();
         let rows = self.list.rows() as isize;
         let a = action;
-        let delta = if [actions::UP, actions::LEFT, actions::PREVIOUS].contains(a) {
-            -1
-        } else if [actions::DOWN, actions::RIGHT, actions::NEXT].contains(a) {
-            1
-        } else if *a == actions::NEXT_PAGE {
-            rows
-        } else if *a == actions::PREV_PAGE {
-            -rows
+        let delta = if let Some(delta) = ui::list_step(a, rows) {
+            delta
         } else if *a == actions::CONFIRM {
             self.add(self.list.focus, cx);
             return Handled::Yes;
         } else {
             return Handled::No;
         };
-        if self.list.move_focus(delta, len) != ListChange::None {
-            cx.request_redraw();
-            cx.request_refresh(RefreshMode::Fast);
-        }
+        self.list.move_focus(delta, len).request(cx);
         Handled::Yes
     }
 

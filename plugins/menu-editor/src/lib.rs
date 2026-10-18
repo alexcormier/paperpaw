@@ -258,21 +258,8 @@ impl Frame {
     fn on_action(&mut self, action: &Id, len: usize, cx: &mut Cx<'_, '_>) -> Option<Handled> {
         let rows = self.list.rows() as isize;
         let a = action;
-        let delta = if [actions::UP, actions::LEFT, actions::PREVIOUS].contains(a) {
-            -1
-        } else if [actions::DOWN, actions::RIGHT, actions::NEXT].contains(a) {
-            1
-        } else if *a == actions::NEXT_PAGE {
-            rows
-        } else if *a == actions::PREV_PAGE {
-            -rows
-        } else {
-            return None;
-        };
-        if self.list.move_focus(delta, len) != ListChange::None {
-            cx.request_redraw();
-            cx.request_refresh(RefreshMode::Fast);
-        }
+        let delta = ui::list_step(a, rows)?;
+        self.list.move_focus(delta, len).request(cx);
         Some(Handled::Yes)
     }
 

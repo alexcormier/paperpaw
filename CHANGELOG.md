@@ -6,6 +6,10 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: lists move by the navigation actions with `ListView::navigate`
+  (or `ui::list_step` for a focus of one's own), and
+  `ListChange::request` asks for the redraw and refresh a change needs,
+  the same in every list.
 - Kernel: shells take everything they are to do at once,
   `Kernel::take_io()`, as `Io` (requests, servers, sockets, speech, the
   clipboard, the radio, the firmware), matched in full so that a shell
