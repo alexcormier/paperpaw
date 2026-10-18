@@ -223,6 +223,13 @@ impl BarScreen {
                 cx.request_redraw();
                 cx.request_refresh(RefreshMode::Fast);
             }
+            SettingKind::Choice(_) | SettingKind::Language if ui::two_options(&env, spec) => {
+                if let Some(value) = ui::next_value(&env, spec, 1) {
+                    cx.command(Command::SetSetting(id, value));
+                    cx.request_redraw();
+                    cx.request_refresh(RefreshMode::Fast);
+                }
+            }
             SettingKind::Choice(_) | SettingKind::Language => {
                 cx.command(Command::OpenScreen(
                     CHOOSE_SCREEN,

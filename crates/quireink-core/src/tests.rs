@@ -272,7 +272,11 @@ impl Plugin for Opener {
             title: Cow::Borrowed("test.screen"),
             factory: Box::new(|_, _| Box::new(OpenerScreen)),
         })?;
-        r.bind_slot(slots::HOME, Id::new_static("opener.screen"), Priority::DEFAULT)
+        r.bind_slot(
+            slots::HOME,
+            Id::new_static("opener.screen"),
+            Priority::DEFAULT,
+        )
     }
 }
 
@@ -294,7 +298,10 @@ fn slow_work_shows_the_busy_mark_first() {
     // A screen not opened before: the mark first, the work held back.
     let effects = press(&mut kernel, 100, "confirm");
     assert!(effects.proceed() && effects.refresh().is_some());
-    assert_eq!(kernel.active_screen().map(Id::as_str), Some("opener.screen"));
+    assert_eq!(
+        kernel.active_screen().map(Id::as_str),
+        Some("opener.screen")
+    );
     kernel.proceed(Instant(200));
     render(&mut kernel);
     assert_eq!(kernel.active_screen(), Some(&screens::PLACEHOLDER));

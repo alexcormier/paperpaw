@@ -686,18 +686,14 @@ impl GroupPage {
         self.spec(self.rows.focus)
     }
 
-    /// Changes a number by `step` or toggles a switch.
+    /// Changes a number by `step`, or toggles a switch or a choice of two.
     fn change(&self, env: &Env<'_>, step: i64, cx: &mut Cx<'_, '_>) {
         let Some(spec) = self.focused() else {
             return;
         };
         let current = env.settings.get(spec.id.as_str());
-        let value = match (&spec.kind, current) {
-            (SettingKind::Bool, Some(SettingValue::Bool(v))) => SettingValue::Bool(!v),
-            (SettingKind::Int { min, max }, Some(SettingValue::Int(v))) => {
-                SettingValue::Int((v + step * spec.step).clamp(*min, *max))
-            }
-            _ => return,
+        let Some(value) = ui::next_value(env, spec, step) else {
+            return;
         };
         if Some(&value) != current {
             cx.command(Command::SetSetting(spec.id.clone(), value));
@@ -730,6 +726,9 @@ impl GroupPage {
                 self.editing = true;
                 cx.request_redraw();
                 cx.request_refresh(RefreshMode::Fast);
+            }
+            SettingKind::Choice(_) | SettingKind::Language if ui::two_options(env, spec) => {
+                self.change(env, 1, cx);
             }
             SettingKind::Choice(_) | SettingKind::Language => {
                 cx.command(Command::OpenScreen(
@@ -816,9 +815,7 @@ impl Screen for GroupPage {
                     }
                     _ => {}
                 }
-                if spec.editor.is_some()
-                    || matches!(spec.kind, SettingKind::Choice(_) | SettingKind::Language)
-                {
+                if ui::opens_screen(env, spec) {
                     value.push_str(" ›");
                 }
                 ui::draw_noted_row(canvas, env, &style, rect, focused, title, &value, note);

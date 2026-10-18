@@ -1476,6 +1476,25 @@ pub fn option_name(env: &Env<'_>, spec: &SettingSpec, value: &str) -> String {
     }
 }
 
+/// Whether a choice (or the language) has just two options: choosing it
+/// switches to the other at once, as a switch does, instead of opening a
+/// list that would only offer that one (fewer presses).
+pub fn two_options(env: &Env<'_>, spec: &SettingSpec) -> bool {
+    match &spec.kind {
+        SettingKind::Choice(options) => options.len() == 2,
+        SettingKind::Language => env.i18n.languages().len() == 2,
+        _ => false,
+    }
+}
+
+/// Whether choosing the setting opens another screen (its own editor, or
+/// a list to choose from): its row shows a `›`.
+pub fn opens_screen(env: &Env<'_>, spec: &SettingSpec) -> bool {
+    spec.editor.is_some()
+        || (matches!(spec.kind, SettingKind::Choice(_) | SettingKind::Language)
+            && !two_options(env, spec))
+}
+
 /// The value after one step of the setting: a switch toggles, a number
 /// moves by `step` within its range, a choice or language moves to the
 /// next (or previous) option. `None` for text.

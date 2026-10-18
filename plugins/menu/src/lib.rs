@@ -315,8 +315,9 @@ impl MenuScreen {
                 cx.request_redraw();
                 cx.request_refresh(RefreshMode::Fast);
             }
-            // The list of the standard settings plugin.
-            SettingKind::Choice(_) | SettingKind::Language => {
+            // The list of the standard settings plugin (a choice of two
+            // switches at once, below).
+            SettingKind::Choice(_) | SettingKind::Language if !ui::two_options(&env, spec) => {
                 cx.command(Command::OpenScreen(
                     CHOOSE_SCREEN,
                     Params::new().with("id", spec.id.as_str().to_string()),
@@ -378,9 +379,7 @@ impl MenuScreen {
             }
             Some(spec) => {
                 let mut value = ui::setting_value(env, spec);
-                if spec.editor.is_some()
-                    || matches!(spec.kind, SettingKind::Choice(_) | SettingKind::Language)
-                {
+                if ui::opens_screen(env, spec) {
                     value.push_str(" ›");
                 }
                 ui::draw_value_row(canvas, env, &style, rect, focused, label, &value);
