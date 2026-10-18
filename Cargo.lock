@@ -1660,8 +1660,12 @@ dependencies = [
 name = "quireink-plugin-reader"
 version = "0.4.0-dev"
 dependencies = [
+ "quireink-core",
  "quireink-digest",
  "quireink-i18n",
+ "quireink-platform",
+ "quireink-plugin-fonts-default",
+ "quireink-plugin-format-txt",
  "quireink-sdk",
 ]
 
