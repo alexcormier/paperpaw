@@ -1,6 +1,6 @@
 ---
 name: quireink-plugin-development
-description: Helps develop QuireInk plugins (code plugins in Rust against quireink-sdk, and data plugins without code), try them in the desktop emulator and on a real Xteink X4, measure speed, heap and stack, keep within the memory of small devices, and fit QuireInk's structure and rules. Use when someone writes, ports, debugs, tests or profiles a QuireInk plugin, or asks how QuireInk is built.
+description: Helps develop QuireInk plugins (code plugins in Rust against quireink-sdk, and data plugins without code), try them in the desktop emulator and on a real Xteink X4, measure speed, heap and stack, keep within the memory of small devices, and fit QuireInk's structure and rules. Use when someone writes, ports, debugs, tests or profiles a QuireInk plugin, or asks how QuireInk is built for that. Not for changing QuireInk's own kernel, SDK or firmware: that follows CONTRIBUTING.md.
 ---
 
 # Developing QuireInk plugins
@@ -56,10 +56,18 @@ Read, in this order, and skim what is relevant to the task:
 - **Data plugins**: a folder with `plugin.ini` and files (translations,
   key maps, setting defaults, fonts, font packs, stylesheets). No code,
   they work on every device as they are.
-- **The kernel has no product features.** If a plugin cannot do
-  something, the right fix is usually in the SDK (and then every plugin
-  gains it), not a workaround in the plugin. Plugins depend on
-  `quireink-sdk` only, never on the kernel crate.
+- **Plugins build on the SDK as it is.** They depend on `quireink-sdk`
+  only, never on the kernel crate, and must run on QuireInk as readers
+  have it: never on a patched kernel or SDK.
+- **When something seems impossible**, look for the existing way first:
+  bind a slot to replace a screen, use a service or contribution point
+  another plugin offers, an input, text or refresh filter, an event, a
+  setting default. Many first-party plugins solve similar problems;
+  copy their approach. If the SDK really lacks something, do what fits
+  today in the plugin, and suggest the addition to the QuireInk project
+  (an issue saying what the plugin needs and why); changing QuireInk
+  itself is a contribution to it, under its own rules
+  (`CONTRIBUTING.md`), not part of writing a plugin.
 
 ## 3. Rules that matter on small devices
 
@@ -100,17 +108,20 @@ section of `docs/plugins.md`. A plugin that should run there:
 
 ## 4. Build and test
 
-- The checks CI runs are in `CONTRIBUTING.md` (format, clippy with
-  warnings as errors, tests, a build for the embedded target). Run them
-  before saying something is done.
+- Hold the plugin to what QuireInk holds its own code to
+  (`CONTRIBUTING.md` lists those checks): format, clippy with warnings
+  as errors, tests, and a build for the embedded target (`no_std`), so it
+  runs on the smallest device too. Run them before saying something is
+  done.
+- Build against a released SDK version and say it in the manifest
+  (`sdk`): the kernel loads the plugin only where its SDK fits. When
+  moving to a newer SDK, read the CHANGELOG for what changed.
 - Test plugins with the real kernel and in-memory storage, as the sample
   does: build a kernel with the plugin, send input, look at the screen
   shown, the settings, the files, the network requests, and answer them.
 - Screens can be checked as text (what a screen describes, part by part)
   and as pictures in the emulator; the repository's snapshot tests show
   how, and say how to update a snapshot when a change is meant.
-- A change to the SDK's public API comes with `api.txt` brought up to
-  date (the command is in `CONTRIBUTING.md`) and a CHANGELOG line.
 
 ## 5. The desktop emulator
 
@@ -132,8 +143,10 @@ section of `docs/plugins.md`. A plugin that should run there:
   `--heap-report` lists the live heap by call site; `--trace-alloc
   <bytes>` prints every allocation of at least that size with where it
   comes from (use a build with debug info for names).
-- Plugins with code are compiled into the emulator: see how the sample is
-  added (a Cargo feature of the emulator) and do the same.
+- Plugins with code are compiled into the emulator: in a local checkout,
+  add yours as the sample is added (a Cargo feature of the emulator), to
+  try it. Data plugins need no build: copy the folder into the storage
+  folder's `plugins`.
 
 ## 6. A real Xteink X4
 
@@ -143,8 +156,10 @@ Only if the user has one and wants it used. Its README is
 - **Save the stock firmware first** (the README says how), so the device
   can always go back. Flashing replaces the firmware.
 - Build and flash from `shells/xteink` (its own workspace). Plugins with
-  code are compiled in: find where the firmware installs its plugins and
-  add yours there, for a test build.
+  code are compiled in: in a local checkout, find where the firmware
+  installs its plugins and add yours there. That is a test build for
+  trying the plugin, not a change to QuireInk; keep it out of the
+  plugin.
 - `tools/x4-remote.py` drives a test build over USB (see its docstring
   and `--help`): presses buttons, runs actions, opens books, prints the
   screen's id and what it shows, takes screenshots, puts files onto the
@@ -187,13 +202,20 @@ report the numbers; never claim a speed-up from reading code alone.
 
 ## 8. Working cleanly
 
-- Put a change at the layer where it belongs; extend the SDK when a
-  plugin cannot do something well, rather than working around it.
-- Follow the surrounding code: its naming, comment style and idioms.
-  Repository texts are in English.
-- Small, focused commits with messages that say why. Keep tests, docs
-  and the CHANGELOG with the change.
+- Keep the plugin self-contained: its own ids, its files in its own
+  folder, its own translations. Use other plugins only through what they
+  publish (services, settings, events, contribution points), never
+  through their files or internals.
+- Write it as QuireInk's own plugins are written: the SDK's types and
+  helpers rather than home-made ones, the same idioms for screens,
+  lists, settings and translations, so it looks and behaves like the
+  rest and keeps working as the SDK grows.
+- Prefer replacing or adding to a part through the SDK (a slot, a menu
+  entry, a filter) over copying a first-party plugin and changing it.
+- Small, focused commits with messages that say why; tests and the
+  plugin's own documentation with the change; its version raised when
+  it is released.
 - Check both input modes, at least two languages, the smallest device's
-  memory, and the snapshots.
-- When the user must decide (product direction, a public API, anything
-  hard to undo), lay out the options with a recommendation and ask.
+  memory, and how it looks in the emulator.
+- When the user must decide (what the plugin should do, anything hard
+  to undo), lay out the options with a recommendation and ask.
