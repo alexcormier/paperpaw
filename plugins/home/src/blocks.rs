@@ -27,13 +27,13 @@ use quireink_sdk::builtin::{actions, params, screens, slots};
 use quireink_sdk::document::ImageRef;
 use quireink_sdk::status::{StatusLine, item_ids};
 use quireink_sdk::ui::{self, UiStyle};
-use quireink_sdk::widgets::{self, Align, Drawn, Widget, WidgetSpec, WidgetTarget};
+use quireink_sdk::widgets::{self, Align, Drawn, Widget, WidgetSpec, WidgetTarget, grid};
 use quireink_sdk::{
     Arg, Canvas, Color, Command, Env, Id, Params, Rect, RegisterError, Registrar, SettingSpec, time,
 };
 
 use crate::pages::{CONTINUE, DATE, RECENT, STATUS};
-use crate::{covers, recent};
+use crate::recent;
 use quireink_sdk::setting::{Setting, Text};
 
 /// The clock with the date, large.
@@ -378,7 +378,7 @@ struct Book {
 impl Book {
     fn of(env: &Env<'_>, book: recent::Recent) -> Self {
         Self {
-            cover: covers::get(env.storage, &book.path).flatten(),
+            cover: book.cover.clone().filter(|i| env.storage.exists(&i.path)),
             book,
         }
     }
@@ -397,13 +397,17 @@ struct Card {
 
 impl Widget for Card {
     fn update(&mut self, env: &Env<'_>) -> bool {
-        let book = recent::load(env.storage)
+        let book = recent::load(env.storage, 1)
             .into_iter()
             .next()
             .map(|book| Book::of(env, book));
         let changed = book != self.book;
         self.book = book;
         changed
+    }
+
+    fn live(&self) -> bool {
+        false
     }
 
     fn height(&self, env: &Env<'_>, width: u16) -> u16 {
@@ -542,9 +546,7 @@ struct Shelf {
 impl Widget for Shelf {
     fn update(&mut self, env: &Env<'_>) -> bool {
         let count = env.settings.read(&RECENT_COUNT).clamp(1, MAX_COVERS as i64) as usize;
-        let mut books = recent::load(env.storage);
-        books.retain(|b| env.storage.exists(&b.path));
-        let books: Vec<Book> = books
+        let books: Vec<Book> = recent::load(env.storage, count + 1)
             .into_iter()
             .skip(1)
             .take(count)
@@ -553,6 +555,10 @@ impl Widget for Shelf {
         let changed = books != self.books;
         self.books = books;
         changed
+    }
+
+    fn live(&self) -> bool {
+        false
     }
 
     fn height(&self, env: &Env<'_>, width: u16) -> u16 {
@@ -729,13 +735,27 @@ pub(crate) fn draw_tool(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, acti
     quireink_sdk::widgets::grid::draw_tool(canvas, env, area, action, labels);
 }
 
-/// The recent books whose covers were not looked up yet: the current
-/// book and the ones the shelf may show.
-pub(crate) fn missing_covers(env: &Env<'_>) -> Vec<String> {
-    recent::load(env.storage)
+/// How many of the recent books the widgets in `items` show: the current
+/// book, and the ones after it on the shelf.
+pub(crate) fn books_shown(env: &Env<'_>, items: &[grid::Item]) -> usize {
+    items
+        .iter()
+        .map(|item| match &item.what {
+            grid::What::Widget(id) if id == RECENT => {
+                env.settings.read(&RECENT_COUNT).clamp(1, MAX_COVERS as i64) as usize + 1
+            }
+            grid::What::Widget(id) if id == CONTINUE => 1,
+            _ => 0,
+        })
+        .max()
+        .unwrap_or(0)
+}
+
+/// The first `books` recent books whose covers were not looked up yet.
+pub(crate) fn missing_covers(env: &Env<'_>, books: usize) -> Vec<String> {
+    recent::load(env.storage, books)
         .into_iter()
-        .take(MAX_COVERS + 1)
+        .filter(|b| !b.indexed)
         .map(|b| b.path)
-        .filter(|p| env.storage.exists(p) && covers::get(env.storage, p).is_none())
         .collect()
 }

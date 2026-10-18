@@ -62,6 +62,15 @@ pub trait Widget {
         false
     }
 
+    /// Whether what it shows changes by itself (the time, the battery):
+    /// it is read anew each minute and when the device's status changes.
+    /// Widgets that show what changes only after events (books, settings)
+    /// say `false`, and are read when shown and after those events only:
+    /// reading them each minute would cost time and battery for nothing.
+    fn live(&self) -> bool {
+        true
+    }
+
     /// The height it needs at `width`, in pixels (0: nothing to show).
     fn height(&self, env: &Env<'_>, width: u16) -> u16;
 

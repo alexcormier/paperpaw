@@ -1408,6 +1408,7 @@ pub fn quireink_sdk::widgets::grid::GridView::on_pointer(&mut self, &quireink_pl
 pub fn quireink_sdk::widgets::grid::GridView::reset_focus(&mut self)
 pub fn quireink_sdk::widgets::grid::GridView::set_editing(&mut self, bool)
 pub fn quireink_sdk::widgets::grid::GridView::set_tool_labels(&mut self, bool)
+pub fn quireink_sdk::widgets::grid::GridView::update_live(&mut self, &quireink_sdk::Env<'_>, &mut quireink_sdk::Cx<'_, '_>) -> bool
 pub fn quireink_sdk::widgets::grid::GridView::update_widget(&mut self, &str, &quireink_sdk::Env<'_>, &mut quireink_sdk::Cx<'_, '_>) -> bool
 pub fn quireink_sdk::widgets::grid::GridView::update_widgets(&mut self, &quireink_sdk::Env<'_>, &mut quireink_sdk::Cx<'_, '_>) -> bool
 #[non_exhaustive] pub struct quireink_sdk::widgets::grid::Item
@@ -1471,6 +1472,7 @@ pub const quireink_sdk::widgets::SPACE_SIZES: [&str; 3]
 pub trait quireink_sdk::widgets::Widget
 pub fn quireink_sdk::widgets::Widget::draw(&self, &mut quireink_graphics::canvas::Canvas<'_>, &quireink_sdk::Env<'_>, quireink_platform::geometry::Rect)
 pub fn quireink_sdk::widgets::Widget::height(&self, &quireink_sdk::Env<'_>, u16) -> u16
+pub fn quireink_sdk::widgets::Widget::live(&self) -> bool
 pub fn quireink_sdk::widgets::Widget::targets(&self, &quireink_sdk::Env<'_>, quireink_platform::geometry::Rect) -> alloc::vec::Vec<quireink_sdk::widgets::WidgetTarget>
 pub fn quireink_sdk::widgets::Widget::update(&mut self, &quireink_sdk::Env<'_>) -> bool
 pub fn quireink_sdk::widgets::align(&quireink_sdk::Env<'_>, &str) -> quireink_sdk::widgets::Align

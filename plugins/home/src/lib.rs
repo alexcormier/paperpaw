@@ -201,6 +201,8 @@ struct Dashboard {
     plus: Rect,
     /// Recent books whose covers are to be looked up, one a tick.
     missing: Vec<String>,
+    /// How many of the recent books the page's widgets show.
+    books: usize,
 }
 
 /// The next full minute, when the clock shows another time.
@@ -271,6 +273,7 @@ impl Dashboard {
             pencil: Rect::default(),
             plus: Rect::default(),
             missing: Vec::new(),
+            books: 0,
         };
         dashboard.layout(env);
         dashboard
@@ -302,6 +305,7 @@ impl Dashboard {
         self.grid
             .set_tool_labels(env.settings.read(&blocks::TOOL_LABELS));
         self.grid.layout(env, geometry, &items, &buttons);
+        self.books = blocks::books_shown(env, &items);
         self.status = status;
         self.footer = footer;
         self.style = style;
@@ -432,7 +436,7 @@ impl Screen for Dashboard {
         self.layout(&env);
         cx.request_redraw();
         // The covers not known yet are looked up first, one a tick.
-        self.missing = blocks::missing_covers(&env);
+        self.missing = blocks::missing_covers(&env, self.books);
         self.missing.reverse();
         if self.missing.is_empty() {
             cx.wake_at(next_minute(&env));
@@ -460,7 +464,7 @@ impl Screen for Dashboard {
             if let Some(status) = self.status {
                 cx.request_redraw_area(status);
             }
-            changed = self.grid.update_widgets(&env, cx);
+            changed = self.grid.update_live(&env, cx);
             cx.wake_at(next_minute(&env));
         }
         if changed {
@@ -484,7 +488,7 @@ impl Screen for Dashboard {
             if let Some(status) = self.status {
                 cx.request_redraw_area(status);
             }
-            self.grid.update_widgets(&env, cx);
+            self.grid.update_live(&env, cx);
             cx.request_refresh(RefreshMode::Fast);
         }
     }

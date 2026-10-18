@@ -4,14 +4,7 @@
 //! only read what the library knows.
 
 use quireink_sdk::document::ImageRef;
-use quireink_sdk::{Env, Storage, library};
-
-/// The cover of `path`: `None` if not looked up yet, `Some(None)` if it
-/// has none.
-pub(crate) fn get(storage: &dyn Storage, path: &str) -> Option<Option<ImageRef>> {
-    let book = library::book(storage, path).filter(|b| b.indexed)?;
-    Some(book.cover.filter(|i| storage.exists(&i.path)))
-}
+use quireink_sdk::{Env, library};
 
 /// Looks up the cover of `path` (opening the book), for the library to
 /// keep.

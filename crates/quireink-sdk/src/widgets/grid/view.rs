@@ -271,6 +271,26 @@ impl GridView {
         self.update(env, cx, |_| true)
     }
 
+    /// The same for the widgets that change by themselves alone
+    /// ([`Widget::live`]): each minute, or when the device's status
+    /// changed.
+    pub fn update_live(&mut self, env: &Env<'_>, cx: &mut Cx<'_, '_>) -> bool {
+        let mut changed = false;
+        for shown in &mut self.items {
+            let Some(widget) = &mut shown.widget else {
+                continue;
+            };
+            if widget.live() && widget.update(env) {
+                cx.request_redraw_area(shown.area);
+                changed = true;
+            }
+        }
+        if changed && self.edit.is_none() {
+            self.target(env);
+        }
+        changed
+    }
+
     /// The same for the items showing widget `id` alone, e.g. once
     /// something they show was looked up.
     pub fn update_widget(&mut self, id: &str, env: &Env<'_>, cx: &mut Cx<'_, '_>) -> bool {

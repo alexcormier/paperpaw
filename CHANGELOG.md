@@ -6,6 +6,11 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Home: the book widgets are no longer read again each minute (on the
+  X4 that read the recent books' details from the card, about 570 ms a
+  minute, also on battery); widgets say whether they change by
+  themselves (`Widget::live`, `GridView::update_live`). Only as many
+  recent books as the widgets show are read, each once.
 - Library: a page of books takes about 150 ms of work on the X4 instead
   of 500 to 700. Covers are kept made small (`library::cover`, from
   `ui::Thumbnail::keep`/`kept`), read as 3 KB instead of 60 each; a
