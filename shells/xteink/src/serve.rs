@@ -1,0 +1,485 @@
+//! Plugins' servers (the kernel's `ServerCall`s) over the network of
+//! `net`, a step at a time from the main loop: each server has a few
+//! sockets waiting for connections, one request on each (its head read by
+//! `quireink_http::server`), passed to the kernel with its body in parts as
+//! it comes, and the plugin's answer sent back, a file read from storage
+//! as the connection takes it. So neither a large upload nor a large
+//! download needs to fit in memory.
+
+use alloc::format;
+use alloc::string::String;
+use alloc::vec::Vec;
+
+use quireink_core::{Effects, Kernel, ServedFile, ServerCall, ServerEvent};
+use quireink_http::server::{self as http, RequestHead};
+use quireink_platform::Instant;
+use smoltcp::iface::SocketHandle;
+use smoltcp::socket::tcp;
+
+use crate::net::{self, Net};
+
+/// Connections per server at a time; each socket waits for the next once
+/// its request is answered. Two, for a page and what it loads with it.
+const SLOTS: usize = 2;
+/// A connection's buffers: uploads come in, pages and files go out.
+const BUFFERS: net::Buffers = net::Buffers {
+    receive: 8 * 1024,
+    send: 4 * 1024,
+};
+/// Bytes of a request's body passed on at a time.
+const PART: usize = 16 * 1024;
+/// Ports tried after the one asked for, if it is taken.
+const MORE_PORTS: u16 = 20;
+/// How long a request's head may take to come, and its plugin to answer;
+/// how long a connection may make no progress, and take to close.
+const HEAD_MS: u64 = 30_000;
+const ANSWER_MS: u64 = 120_000;
+const STALL_MS: u64 = 30_000;
+const CLOSE_MS: u64 = 2_000;
+
+/// What a connection is at.
+enum Phase {
+    /// Waiting for a connection.
+    Listening,
+    /// Reading the request's head: what came so far.
+    Head(Vec<u8>),
+    /// Passing the body on: bytes still to come, and those gathered.
+    Body {
+        request: u32,
+        left: u64,
+        part: Vec<u8>,
+    },
+    /// The plugin has the request and is to answer.
+    Answer { request: u32 },
+    /// Sending the answer: the head (and body), then the file, if any.
+    Sending {
+        out: Vec<u8>,
+        sent: usize,
+        file: Option<ServedFile>,
+        at: u64,
+    },
+    /// Sent; waiting for the connection to close.
+    Closing,
+}
+
+struct Slot {
+    socket: SocketHandle,
+    phase: Phase,
+    /// When the phase started, or last made progress.
+    since: u64,
+}
+
+struct Server {
+    number: u32,
+    port: u16,
+    slots: Vec<Slot>,
+}
+
+/// The servers of all plugins.
+#[derive(Default)]
+pub struct Servers {
+    servers: Vec<Server>,
+    next_request: u32,
+    /// The network the servers listen on.
+    generation: u32,
+}
+
+impl Servers {
+    /// Whether data is moving (or about to): the main loop comes by again
+    /// soon.
+    pub fn moving(&self) -> bool {
+        self.servers.iter().flat_map(|s| &s.slots).any(|slot| {
+            matches!(
+                slot.phase,
+                Phase::Head(_) | Phase::Body { .. } | Phase::Sending { .. }
+            )
+        })
+    }
+
+    /// Does what the kernel asks.
+    pub fn apply(
+        &mut self,
+        call: ServerCall,
+        net: &mut Net,
+        kernel: &mut Kernel,
+        now: Instant,
+    ) -> Option<Effects> {
+        match call {
+            ServerCall::Listen { server, port } => {
+                let event = self.listen(server, port, net);
+                Some(kernel.server_event(now, event))
+            }
+            ServerCall::Stop { server } => {
+                let at = self.servers.iter().position(|s| s.number == server)?;
+                let server = self.servers.remove(at);
+                let mut effects = None;
+                for slot in server.slots {
+                    net.release(slot.socket);
+                    if let Some(request) = slot.request() {
+                        effects = Some(kernel.server_event(now, ServerEvent::Closed { request }));
+                    }
+                }
+                effects
+            }
+            ServerCall::Respond {
+                request,
+                status,
+                content_type,
+                headers,
+                body,
+                file,
+            } => {
+                let slot = self.servers.iter_mut().flat_map(|s| &mut s.slots).find(
+                    |slot| matches!(slot.phase, Phase::Answer { request: r } if r == request),
+                )?;
+                let length = file.as_ref().map_or(body.len() as u64, |f| f.size);
+                let mut out = http::response_head(status, &content_type, &headers, length);
+                out.extend_from_slice(&body);
+                slot.phase = Phase::Sending {
+                    out,
+                    sent: 0,
+                    file,
+                    at: 0,
+                };
+                slot.since = now.0;
+                None
+            }
+        }
+    }
+
+    /// Starts server `server` on `port`, or the next free port.
+    fn listen(&mut self, server: u32, port: u16, net: &mut Net) -> ServerEvent {
+        if self.servers.is_empty() {
+            self.generation = net.generation();
+        }
+        let taken = |p: u16| self.servers.iter().any(|s| s.port == p);
+        let Some(port) = (port..port.saturating_add(MORE_PORTS)).find(|&p| !taken(p)) else {
+            return ServerEvent::Failed {
+                server,
+                reason: format!("port {port} is taken"),
+            };
+        };
+        let mut slots = Vec::new();
+        for _ in 0..SLOTS {
+            match net.listen(port, BUFFERS) {
+                Ok(socket) => slots.push(Slot {
+                    socket,
+                    phase: Phase::Listening,
+                    since: 0,
+                }),
+                Err(_) => break,
+            }
+        }
+        let Some(address) = net.address() else {
+            for slot in slots {
+                net.release(slot.socket);
+            }
+            return failed(server, "no network");
+        };
+        if slots.is_empty() {
+            return failed(server, "not enough memory");
+        }
+        self.servers.push(Server {
+            number: server,
+            port,
+            slots,
+        });
+        ServerEvent::Started {
+            server,
+            address: format!("{}:{port}", address.address()),
+        }
+    }
+
+    /// The network went (or is another one now): every server fails, and
+    /// requests going on are forgotten.
+    pub fn lost(&mut self, kernel: &mut Kernel, now: Instant) -> Vec<Effects> {
+        let mut effects = Vec::new();
+        for server in core::mem::take(&mut self.servers) {
+            for request in server.slots.iter().filter_map(Slot::request) {
+                effects.push(kernel.server_event(now, ServerEvent::Closed { request }));
+            }
+            let event = failed(server.number, "the network went away");
+            effects.push(kernel.server_event(now, event));
+        }
+        effects
+    }
+
+    /// One step for every connection.
+    pub fn poll(&mut self, net: &mut Net, kernel: &mut Kernel, now: Instant) -> Vec<Effects> {
+        let mut effects = Vec::new();
+        if self.servers.is_empty() {
+            return effects;
+        }
+        if net.generation() != self.generation {
+            return self.lost(kernel, now);
+        }
+        for server in &mut self.servers {
+            for slot in &mut server.slots {
+                let mut events = Vec::new();
+                slot.step(
+                    server.number,
+                    server.port,
+                    net,
+                    kernel,
+                    now,
+                    &mut self.next_request,
+                    &mut events,
+                );
+                for event in events {
+                    effects.push(kernel.server_event(now, event));
+                }
+            }
+        }
+        effects
+    }
+}
+
+fn failed(server: u32, reason: &str) -> ServerEvent {
+    ServerEvent::Failed {
+        server,
+        reason: String::from(reason),
+    }
+}
+
+/// The connection is gone (reset, or closed before its answer).
+fn lost(socket: &tcp::Socket<'_>) -> bool {
+    !matches!(
+        socket.state(),
+        tcp::State::Established | tcp::State::CloseWait
+    )
+}
+
+impl Slot {
+    /// The request the kernel knows of on this connection, if any.
+    fn request(&self) -> Option<u32> {
+        match self.phase {
+            Phase::Body { request, .. } | Phase::Answer { request } => Some(request),
+            _ => None,
+        }
+    }
+
+    /// Ends the connection; the socket waits for the next.
+    fn again(&mut self, net: &mut Net, port: u16) {
+        net.listen_again(self.socket, port);
+        self.phase = Phase::Listening;
+    }
+
+    /// Answers at once, without the plugin (a request that cannot be
+    /// taken).
+    fn refuse(&mut self, status: u16, now: Instant) {
+        self.phase = Phase::Sending {
+            out: http::response_head(status, "text/plain", &[], 0),
+            sent: 0,
+            file: None,
+            at: 0,
+        };
+        self.since = now.0;
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn step(
+        &mut self,
+        server: u32,
+        port: u16,
+        net: &mut Net,
+        kernel: &Kernel,
+        now: Instant,
+        next_request: &mut u32,
+        events: &mut Vec<ServerEvent>,
+    ) {
+        let ms = now.0;
+        let socket = net.socket(self.socket);
+        match &mut self.phase {
+            Phase::Listening => {
+                // Connected (not while the handshake goes on).
+                if !lost(socket) {
+                    self.phase = Phase::Head(Vec::new());
+                    self.since = ms;
+                }
+            }
+            Phase::Head(head) => {
+                while socket.can_recv() && head.len() < http::MAX_REQUEST_HEAD {
+                    let room = http::MAX_REQUEST_HEAD - head.len();
+                    let got = socket.recv(|data| {
+                        let n = data.len().min(room);
+                        head.extend_from_slice(&data[..n]);
+                        (n, n)
+                    });
+                    if !matches!(got, Ok(n) if n > 0) {
+                        break;
+                    }
+                }
+                match http::parse_request(head) {
+                    Ok(None) if lost(socket) || ms > self.since + HEAD_MS => self.again(net, port),
+                    Ok(None) => {}
+                    Err(_) => self.refuse(400, now),
+                    Ok(Some((RequestHead { chunked: true, .. }, _))) => self.refuse(411, now),
+                    Ok(Some((request_head, used))) => {
+                        *next_request = next_request.wrapping_add(1);
+                        let request = *next_request;
+                        let first = head.split_off(used);
+                        let length = request_head.length;
+                        events.push(ServerEvent::Request {
+                            server,
+                            request,
+                            method: request_head.method,
+                            target: request_head.target,
+                            body: length > 0,
+                        });
+                        self.since = ms;
+                        if length == 0 {
+                            self.phase = Phase::Answer { request };
+                        } else {
+                            // What came with the head is the body's start.
+                            let take = first
+                                .len()
+                                .min(usize::try_from(length).unwrap_or(usize::MAX));
+                            let mut first = first;
+                            first.truncate(take);
+                            let left = length - take as u64;
+                            self.phase = if left == 0 {
+                                events.push(ServerEvent::Body {
+                                    request,
+                                    data: first,
+                                    last: true,
+                                });
+                                Phase::Answer { request }
+                            } else {
+                                Phase::Body {
+                                    request,
+                                    left,
+                                    part: first,
+                                }
+                            };
+                        }
+                    }
+                }
+            }
+            Phase::Body {
+                request,
+                left,
+                part,
+            } => {
+                let request = *request;
+                // Gathered into parts of [`PART`] bytes: fewer, larger
+                // writes to the card.
+                while *left > 0 && socket.can_recv() {
+                    let want = (*left).min((PART - part.len()) as u64) as usize;
+                    if part.capacity() < PART && part.try_reserve_exact(PART - part.len()).is_err()
+                    {
+                        break;
+                    }
+                    let got = socket.recv(|data| {
+                        let n = data.len().min(want);
+                        part.extend_from_slice(&data[..n]);
+                        (n, n)
+                    });
+                    let Ok(n) = got else { break };
+                    *left -= n as u64;
+                    self.since = ms;
+                    if part.len() >= PART || *left == 0 {
+                        events.push(ServerEvent::Body {
+                            request,
+                            data: core::mem::take(part),
+                            last: *left == 0,
+                        });
+                    }
+                    if n == 0 {
+                        break;
+                    }
+                }
+                if *left == 0 {
+                    self.phase = Phase::Answer { request };
+                } else if lost(socket) || ms > self.since + STALL_MS {
+                    events.push(ServerEvent::Closed { request });
+                    self.again(net, port);
+                }
+            }
+            Phase::Answer { request } => {
+                let request = *request;
+                if lost(socket) {
+                    events.push(ServerEvent::Closed { request });
+                    self.again(net, port);
+                } else if ms > self.since + ANSWER_MS {
+                    events.push(ServerEvent::Closed { request });
+                    self.refuse(503, now);
+                }
+            }
+            Phase::Sending {
+                out,
+                sent,
+                file,
+                at,
+            } => {
+                let mut ended = false;
+                while *sent < out.len() && socket.can_send() {
+                    match socket.send_slice(&out[*sent..]) {
+                        Ok(n) if n > 0 => {
+                            *sent += n;
+                            self.since = ms;
+                        }
+                        _ => break,
+                    }
+                }
+                if *sent == out.len() {
+                    if out.capacity() > 0 {
+                        // Sent: its memory is not needed while a file goes.
+                        *out = Vec::new();
+                        *sent = 0;
+                    }
+                    match file {
+                        Some(f) if *at < f.size => {
+                            while *at < f.size && socket.can_send() {
+                                let want = (f.size - *at).min(usize::MAX as u64) as usize;
+                                let read = socket.send(|room| {
+                                    let room_len = room.len().min(want);
+                                    match kernel.read_served(&f.path, *at, &mut room[..room_len]) {
+                                        Ok(n) => (n, Some(n)),
+                                        Err(_) => (0, None),
+                                    }
+                                });
+                                match read {
+                                    Ok(Some(n)) if n > 0 => {
+                                        *at += n as u64;
+                                        self.since = ms;
+                                    }
+                                    // Gone or shorter than it was: the
+                                    // connection ends early.
+                                    _ => {
+                                        ended = true;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        _ => {
+                            socket.close();
+                            self.phase = Phase::Closing;
+                            self.since = ms;
+                            return;
+                        }
+                    }
+                }
+                if ended || lost(socket) || ms > self.since + STALL_MS {
+                    self.again(net, port);
+                }
+            }
+            Phase::Closing => {
+                // Closed once all was sent; the other side closes too (or
+                // it is given up on, a while after it has everything).
+                if socket.send_queue() > 0 {
+                    // Still going out: progress keeps it waiting.
+                    if ms > self.since + STALL_MS {
+                        self.again(net, port);
+                    }
+                    return;
+                }
+                if matches!(socket.state(), tcp::State::Closed | tcp::State::TimeWait)
+                    || ms > self.since + CLOSE_MS
+                {
+                    self.again(net, port);
+                }
+            }
+        }
+    }
+}

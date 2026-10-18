@@ -1,7 +1,7 @@
 //! Everything of the network for the main loop, one step at a time: the
 //! kernel's Wi-Fi commands to the radio and what happened back, plugins'
-//! HTTP requests (`http`) and their answers, and their servers and
-//! sockets (not on the X4 yet: they fail at once, with the reason).
+//! HTTP requests (`http`) and their answers, their servers (`serve`) and
+//! sockets (`sockets`), and the clock set over the network (`clock`).
 //!
 //! What is asked over USB (`wifi …`, `http get`) goes the same way; its
 //! answers are printed once they come (see `remote`).
@@ -13,6 +13,9 @@ use quireink_core::{
     Effects, HttpCall, Kernel, ServerCall, ServerEvent, SocketCall, SocketEvent, WifiCommand,
     WifiEvent, WifiState,
 };
+
+use crate::serve::Servers;
+use crate::sockets::Sockets;
 use quireink_platform::Instant;
 
 use smoltcp::iface::SocketHandle;
@@ -47,8 +50,8 @@ enum Sync {
     },
 }
 
-/// Why plugins' servers and sockets fail here.
-const NO_SOCKETS: &str = "not supported on this device yet";
+/// Why plugins' servers and sockets fail without a network.
+const NO_NETWORK: &str = "no network";
 /// The numbers of requests made over USB, apart from the kernel's.
 const REMOTE_REQUESTS: u32 = 0xF000_0000;
 
@@ -85,6 +88,8 @@ struct Asked {
 pub struct Network {
     radio: Radio,
     calls: Calls,
+    servers: Servers,
+    sockets: Sockets,
     asked: Asked,
     sync: Sync,
     /// When the clock was last set over the network.
@@ -99,6 +104,8 @@ impl Network {
         Self {
             radio: Radio::new(parts),
             calls: Calls::default(),
+            servers: Servers::default(),
+            sockets: Sockets::default(),
             asked: Asked::default(),
             sync: Sync::Idle { not_before: 0 },
             synced: None,
@@ -125,26 +132,7 @@ impl Network {
         for call in kernel.take_requests() {
             self.calls.add(call);
         }
-        for call in kernel.take_server_calls() {
-            if let ServerCall::Listen { server, .. } = call {
-                let failed = ServerEvent::Failed {
-                    server,
-                    reason: String::from(NO_SOCKETS),
-                };
-                effects.push(kernel.server_event(now, failed));
-            }
-        }
-        for call in kernel.take_socket_calls() {
-            let event = match call {
-                SocketCall::Connect { socket, .. } => SocketEvent::Failed {
-                    socket,
-                    reason: String::from(NO_SOCKETS),
-                },
-                SocketCall::Broadcast { broadcast, .. } => SocketEvent::Done { broadcast },
-                _ => continue,
-            };
-            effects.push(kernel.socket_event(now, event));
-        }
+        self.serve(kernel, now, &mut effects);
         self.sync_clock(now);
         if self.calls.busy() {
             // Secure requests wait for the clock (their certificates' dates
@@ -168,6 +156,52 @@ impl Network {
             }
         }
         effects
+    }
+
+    /// Whether data is moving for plugins' requests, servers or sockets:
+    /// the main loop comes by again at once.
+    pub fn moving(&self) -> bool {
+        self.calls.busy() || self.servers.moving() || self.sockets.moving()
+    }
+
+    /// Plugins' servers and sockets: what the kernel asked, then a step
+    /// for each. Without a network they fail (what was open is gone).
+    fn serve(&mut self, kernel: &mut Kernel, now: Instant, effects: &mut Vec<Effects>) {
+        let Some(net) = self.radio.net() else {
+            effects.extend(self.servers.lost(kernel, now));
+            effects.extend(self.sockets.lost(kernel, now));
+            for call in kernel.take_server_calls() {
+                if let ServerCall::Listen { server, .. } = call {
+                    let failed = ServerEvent::Failed {
+                        server,
+                        reason: String::from(NO_NETWORK),
+                    };
+                    effects.push(kernel.server_event(now, failed));
+                }
+            }
+            for call in kernel.take_socket_calls() {
+                let event = match call {
+                    SocketCall::Connect { socket, .. } => SocketEvent::Failed {
+                        socket,
+                        reason: String::from(NO_NETWORK),
+                    },
+                    SocketCall::Broadcast { broadcast, .. } => SocketEvent::Done { broadcast },
+                    _ => continue,
+                };
+                effects.push(kernel.socket_event(now, event));
+            }
+            return;
+        };
+        for call in kernel.take_server_calls() {
+            effects.extend(self.servers.apply(call, net, kernel, now));
+        }
+        for call in kernel.take_socket_calls() {
+            if let Some(event) = self.sockets.apply(call, net, now) {
+                effects.push(kernel.socket_event(now, event));
+            }
+        }
+        effects.extend(self.servers.poll(net, kernel, now));
+        effects.extend(self.sockets.poll(net, kernel, now));
     }
 
     /// Sets the clock over the network when it is not known or old, once
@@ -310,7 +344,7 @@ impl Network {
 
 /// Sends an SNTP request to `address`.
 fn ask(net: &mut Net, address: smoltcp::wire::IpAddress, ms: u64) -> Sync {
-    let Ok(socket) = net.open_udp() else {
+    let Ok(socket) = net.open_udp(2, 2 * clock::MESSAGE) else {
         return Sync::Idle {
             not_before: ms + RETRY_MS,
         };

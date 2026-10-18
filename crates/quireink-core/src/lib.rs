@@ -1946,6 +1946,16 @@ impl Kernel {
         self.finish()
     }
 
+    /// Runs `action` as a button bound to it would (the screen shown has it
+    /// first), e.g. asked by a shell's remote control or a test.
+    pub fn run_action(&mut self, now: Instant, action: Id) -> Effects {
+        let _running = self.shared.meter.enter(meter::CORE);
+        self.now = now;
+        self.last_activity = now;
+        self.dispatch(action);
+        self.finish()
+    }
+
     /// The device goes to sleep or the app to the background; plugins hear
     /// [`events::SUSPEND`].
     pub fn suspend(&mut self, now: Instant) -> Effects {

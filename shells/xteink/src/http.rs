@@ -54,6 +54,14 @@ struct Upload {
     at: u64,
 }
 
+/// Requests at a time.
+pub const MAX_CALLS: usize = 2;
+/// A connection's buffers: much to receive (downloads), little to send.
+const BUFFERS: net::Buffers = net::Buffers {
+    receive: 16 * 1024,
+    send: 1024,
+};
+
 /// Bytes of a file read for sending at a time.
 const UPLOAD_PART: usize = 1024;
 
@@ -140,8 +148,7 @@ impl Calls {
                 .count();
             let call = &mut self.calls[at];
             // A TLS connection takes some 40 KB: one at a time.
-            let may_open =
-                open < net::MAX_CALLS && (!call.secure() || (secure == 0 && clock_ready));
+            let may_open = open < MAX_CALLS && (!call.secure() || (secure == 0 && clock_ready));
             let outcome = match net.as_deref_mut() {
                 None => Some(Err("no network")),
                 Some(net) => call.step(net, storage, may_open),
@@ -370,7 +377,7 @@ impl Call {
             Some(Err(e)) => return Some(Err(e.reason())),
             None => None,
         };
-        let socket = match net.open((address, port)) {
+        let socket = match net.open((address, port), BUFFERS) {
             Ok(socket) => socket,
             Err(net::Error::Memory) => return Some(Err("not enough memory for a connection")),
             Err(_) => return Some(Err("could not connect")),

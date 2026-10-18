@@ -82,5 +82,5 @@ stays sans-I/O ([ADR 0003](0003-sans-io-kernel.md)).
   page and the whole path.
 - A new platform that manages Wi-Fi implements the five commands and
   reports the state; the rest comes along.
-- Servers and sockets on the X4, HTTPS and updates over the air build on
-  this later.
+- Servers and sockets on the X4 and HTTPS ([ADR 0017](0017-tls-on-the-x4.md))
+  build on this; updates over the air will too.

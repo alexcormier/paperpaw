@@ -1,4 +1,4 @@
-//! The HTTP/1.1 client protocol, without I/O: for a shell that has its own
+//! HTTP/1.1, without I/O: for a shell that has its own
 //! network stack (the X4's, on smoltcp) and passes bytes in and out.
 //!
 //! - [`Url::parse`] splits an address; [`request`] builds what to send;
@@ -6,7 +6,9 @@
 //!   and passes the body on in pieces (by `Content-Length`, chunked, or up
 //!   to the connection's end), so a large one never needs to fit in
 //!   memory;
-//! - [`redirect`] tells where a redirect leads.
+//! - [`redirect`] tells where a redirect leads;
+//! - [`server`]: a request's head read, an answer's head made, for a
+//!   shell that serves plugins.
 //!
 //! One request per connection (`Connection: close`).
 
@@ -17,6 +19,8 @@ extern crate alloc;
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
+
+pub mod server;
 
 /// What went wrong with a response.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

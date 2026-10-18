@@ -16,6 +16,17 @@ change the plugin SDK.
   shows it in the status line and on the home screen; the time zone is
   chosen under Settings, System (UTC on "Auto": the X4 has none of its
   own). Gone when it is switched off, until it is online again.
+- Wi-Fi transfer and Calibre on the X4: plugins' servers and sockets work
+  there now (books up from a browser at about 190 KB/s, from Calibre at
+  about 110 KB/s, files down at about 140 KB/s). The transfer's address is
+  shown whole, on two lines if need be.
+- X4: joining a network with several access points (a mesh) takes the
+  strongest one, not the first one heard; joining after a start no longer
+  fails a few times first.
+- Calibre: the button row says "Try again" where it does something; the
+  screen no longer asks to press a button by a name the device has not.
+- The X4 can be told over USB to run any action (`run calibre.open`), for
+  testing a tool without finding it in the menus.
 - X4: requests fail with a reason instead of restarting the X4 when memory
   is short or in pieces; `heap` over USB also says the largest block that
   could be had.

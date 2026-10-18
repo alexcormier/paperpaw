@@ -401,27 +401,12 @@ fn write_head(
     headers: &[(String, String)],
     length: u64,
 ) -> std::io::Result<()> {
-    let reason = match status {
-        200 => "OK",
-        201 => "Created",
-        204 => "No Content",
-        400 => "Bad Request",
-        403 => "Forbidden",
-        404 => "Not Found",
-        409 => "Conflict",
-        411 => "Length Required",
-        503 => "Service Unavailable",
-        507 => "Insufficient Storage",
-        _ => "Status",
-    };
-    let mut head = format!(
-        "HTTP/1.1 {status} {reason}\r\nContent-Type: {content_type}\r\nContent-Length: {length}\r\nConnection: close\r\nCache-Control: no-store\r\n"
-    );
-    for (name, value) in headers {
-        head.push_str(&format!("{name}: {value}\r\n"));
-    }
-    head.push_str("\r\n");
-    stream.write_all(head.as_bytes())
+    stream.write_all(&quireink_http::server::response_head(
+        status,
+        content_type,
+        headers,
+        length,
+    ))
 }
 
 #[cfg(test)]

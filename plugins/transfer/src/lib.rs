@@ -160,11 +160,16 @@ impl TransferScreen {
             }
             p::FAILED => {
                 let reason = params.get(p::REASON).unwrap_or_default();
+                // Before it served, or after (e.g. the network went).
+                let key = if matches!(self.state, State::Serving { .. }) {
+                    "transfer.stopped"
+                } else {
+                    "transfer.failed"
+                };
                 self.state = State::Failed(if reason == "no network" {
                     env.i18n.tr("transfer.no-network").to_string()
                 } else {
-                    env.i18n
-                        .format("transfer.failed", &[("reason", Arg::Str(reason))])
+                    env.i18n.format(key, &[("reason", Arg::Str(reason))])
                 });
                 self.redraw(cx);
             }
@@ -268,9 +273,19 @@ pub(crate) fn draw_address(
     // Below the code: the address, the hint (up to five lines) and
     // what happened last.
     let width = f32::from(area.width - 2 * margin);
+    // The address whole, to be typed: on two lines (the host, then the
+    // rest) if it is too long for one.
+    let shown = url.strip_prefix("http://").unwrap_or(url);
+    let address: Vec<&str> = match shown.find('/') {
+        Some(at) if font.measure(style.text, shown) > width => {
+            alloc::vec![&shown[..at], &shown[at..]]
+        }
+        _ => alloc::vec![shown],
+    };
     let hint_lines = font.wrap(style.small, hint, width);
-    let text_height =
-        line + small * (hint_lines.len().min(HINT_LINES) as u16 + 1) + style.gap as u16 * 3;
+    let text_height = line * address.len() as u16
+        + small * (hint_lines.len().min(HINT_LINES) as u16 + 1)
+        + style.gap as u16 * 3;
     let room = area.height.saturating_sub(text_height + style.gap as u16);
     let side = room.min(area.width - 2 * margin);
     let mut y = area.y;
@@ -297,24 +312,26 @@ pub(crate) fn draw_address(
         y += side;
     }
     y += style.gap as u16;
-    let shown = url.strip_prefix("http://").unwrap_or(url);
     let row = |y: u16, height: u16| Rect::new(margin, y, area.width - 2 * margin, height);
     let centered = |text: &str, size: f32| {
         let text = ui::fit(&font, size, text, width);
         let x = f32::from(margin) + (width - font.measure(size, &text)) / 2.0;
         (text, x.max(f32::from(margin)))
     };
-    let (text, x) = centered(shown, style.text);
-    ui::draw_label(
-        canvas,
-        &font,
-        style.text,
-        x,
-        row(y, line),
-        &text,
-        Color::BLACK,
-    );
-    y += line + style.gap as u16;
+    for part in address {
+        let (text, x) = centered(part, style.text);
+        ui::draw_label(
+            canvas,
+            &font,
+            style.text,
+            x,
+            row(y, line),
+            &text,
+            Color::BLACK,
+        );
+        y += line;
+    }
+    y += style.gap as u16;
     for range in hint_lines.into_iter().take(HINT_LINES) {
         let (text, x) = centered(&hint[range], style.small);
         ui::draw_label(

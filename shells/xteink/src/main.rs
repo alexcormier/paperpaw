@@ -30,6 +30,8 @@ mod power;
 mod remote;
 mod roots;
 mod sent;
+mod serve;
+mod sockets;
 mod stack;
 mod tls;
 mod traced;
@@ -407,6 +409,12 @@ fn main() -> ! {
             // At most ten minutes: the link is gone meanwhile.
             sleep_on_usb_until = Some(Instant(now().0 + seconds.min(600) * 1000));
             esp_println::println!("QI:OK");
+        } else if let Some(remote::Command::Run(action)) = command {
+            let started = now();
+            kernel_time = started.0.max(kernel_time);
+            let effects = kernel.run_action(Instant(kernel_time), action);
+            sleep |= apply(&mut kernel, &mut display, effects, &mut wake_at);
+            esp_println::println!("QI:OK");
         } else if let Some(remote::Command::Refresh(full)) = command {
             let refresh = if full { Refresh::Full } else { Refresh::Fast };
             let result = display.refresh(refresh, false);
@@ -465,7 +473,15 @@ fn main() -> ! {
         // On battery the processor sleeps until there is something to do
         // or the buttons are to be read again; on USB it stays in reach of
         // the computer (see `power`).
-        let mut until = now().0 + if battery { IDLE_MS } else { POLL_MS };
+        let mut until = now().0
+            + if battery {
+                IDLE_MS
+            } else if network.moving() {
+                // Data on the way: the network is polled again at once.
+                0
+            } else {
+                POLL_MS
+            };
         if let Some(at) = wake_at {
             until = until.min(at.0);
         }

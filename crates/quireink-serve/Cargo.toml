@@ -11,6 +11,7 @@ authors.workspace = true
 
 [dependencies]
 quireink-core.workspace = true
+quireink-http.workspace = true
 
 [lints]
 workspace = true

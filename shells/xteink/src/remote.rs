@@ -3,6 +3,8 @@
 //! that start with `QI:`, amid its log.
 //!
 //! - `press <button>`: the button pressed and let go;
+//! - `run <action>`: runs an action as a button bound to it would, e.g.
+//!   `run calibre.open` to open a tool at once (`QI:OK`);
 //! - `hold <button> <ms>`: held that long, e.g. for a long press;
 //! - `shot`: the screen, as `QI:FRAME <width> <height> <bits per pixel>`,
 //!   then `QI:ROW <y> <hex>` for every row (its bytes as the frame holds
@@ -79,6 +81,8 @@ const QUIET_MS: u64 = 5000;
 pub enum Command {
     /// A button pressed, let go after so many milliseconds.
     Press(&'static str, u64),
+    /// An action run (for the main loop, which applies what it brings).
+    Run(quireink_sdk::Id),
     Shot,
     Screen,
     Describe,
@@ -168,7 +172,7 @@ impl Remote {
         match command {
             Command::Press(name, ms) => return Some((name, ms)),
             // The main loop does it; asked here, nothing.
-            Command::Refresh(_) | Command::IdleSleep(_) | Command::Network(_) => {
+            Command::Refresh(_) | Command::IdleSleep(_) | Command::Network(_) | Command::Run(_) => {
                 println!("QI:ERR refresh")
             }
             Command::Shot => {
@@ -427,6 +431,7 @@ fn parse(line: &str) -> Option<Command> {
         "describe" => Command::Describe,
         "heap" => Command::Heap,
         "boot" => Command::Boot,
+        "run" => Command::Run(quireink_sdk::Id::parse(words.next()?).ok()?),
         "wifi" => Command::Network(match words.next()? {
             "scan" => Ask::Scan,
             "connect" => Ask::Connect {

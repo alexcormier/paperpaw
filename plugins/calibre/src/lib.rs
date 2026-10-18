@@ -29,9 +29,10 @@ use quireink_sdk::json;
 use quireink_sdk::secrets::SecretChange;
 use quireink_sdk::ui::{self, UiStyle};
 use quireink_sdk::{
-    ActionSpec, Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
-    MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen,
-    ScreenSpec, SettingKind, SettingSpec, SettingValue, SocketRead, Version, socket_params as p,
+    ActionSpec, Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Hint, Id,
+    Manifest, MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION,
+    Screen, ScreenSpec, SettingKind, SettingSpec, SettingValue, SocketRead, Version,
+    socket_params as p,
 };
 
 use protocol::{Message, op};
@@ -598,13 +599,19 @@ impl Screen for CalibreScreen {
         if let Some(hint) = hint {
             line(canvas, style.small, env.i18n.tr(hint), style.faint(80));
         }
+        // How to try again: by touch, or the button (named in the row of
+        // hints under the screen, where there is one).
         if matches!(self.state, State::Ended(_)) {
             let again = if env.device.input.touch {
-                "calibre.again.touch"
+                Some("calibre.again.touch")
+            } else if ui::button_hints_height(env) == 0 {
+                Some("calibre.again.buttons")
             } else {
-                "calibre.again.buttons"
+                None
             };
-            line(canvas, style.small, env.i18n.tr(again), Color::BLACK);
+            if let Some(again) = again {
+                line(canvas, style.small, env.i18n.tr(again), Color::BLACK);
+            }
         }
         self.password_row = None;
         if self.state == State::Password {
@@ -641,6 +648,17 @@ impl Screen for CalibreScreen {
                 password,
             )));
             self.start(cx);
+        }
+    }
+
+    fn hint(&self, action: &Id, env: &Env<'_>) -> Hint {
+        if *action != actions::CONFIRM {
+            return Hint::Default;
+        }
+        match self.state {
+            State::Password => Hint::Text(env.i18n.tr("calibre.type-password").to_string()),
+            State::Ended(_) => Hint::Text(env.i18n.tr("calibre.try-again").to_string()),
+            _ => Hint::Hidden,
         }
     }
 

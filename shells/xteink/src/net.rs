@@ -2,7 +2,8 @@
 //! without an operating system) on the radio's station interface. It is
 //! polled from the main loop (QuireInk's firmware runs no async code). Its
 //! address, router and name servers come by DHCP. What goes over it is in
-//! `http`.
+//! `http` (requests), `serve` (servers) and `sockets` (plugins' own
+//! connections and broadcasts).
 
 use alloc::vec::Vec;
 use core::task::{Context, Waker};
@@ -17,13 +18,20 @@ use smoltcp::wire::{DnsQueryType, EthernetAddress, HardwareAddress, IpAddress, I
 
 /// Without an address this long after joining a network, DHCP asks anew.
 const DHCP_AGAIN_MS: u64 = 10_000;
-/// Bytes of a UDP socket's buffers (one each way).
-const UDP_BUF: usize = 256;
-/// Connections (and name lookups) at a time.
-pub const MAX_CALLS: usize = 2;
-/// Bytes buffered per connection, received and to send.
-const RECEIVE_BUF: usize = 16 * 1024;
-const SEND_BUF: usize = 1024;
+/// Name lookups at a time (requests, plugins' sockets, the clock's).
+const MAX_QUERIES: usize = 4;
+
+/// The bytes a TCP connection buffers: received, and to send. The window
+/// it offers is what it can receive, so more is faster and takes memory.
+#[derive(Debug, Clone, Copy)]
+pub struct Buffers {
+    pub receive: usize,
+    pub send: usize,
+}
+
+/// The number of a [`Net`], new each time the radio comes on: what was
+/// opened on an earlier one is gone.
+static mut GENERATION: u32 = 0;
 
 #[derive(Debug)]
 pub enum Error {
@@ -111,6 +119,7 @@ pub struct Net {
     port: u16,
     /// When DHCP was last (re)started while joined without an address.
     asked: Option<Instant>,
+    generation: u32,
 }
 
 impl Net {
@@ -123,6 +132,12 @@ impl Net {
         let stack = Stack::new(config, &mut phy, now());
         let mut sockets = SocketSet::new(Vec::new());
         let dhcp = sockets.add(dhcpv4::Socket::new());
+        // SAFETY: one core, used from the main loop only.
+        let generation = unsafe {
+            let next = &mut *core::ptr::addr_of_mut!(GENERATION);
+            *next = next.wrapping_add(1);
+            *next
+        };
         Self {
             phy,
             stack,
@@ -133,7 +148,18 @@ impl Net {
             // In the range for ports a client picks.
             port: 49152 + (rng.random() % 16000) as u16,
             asked: None,
+            generation,
         }
+    }
+
+    /// Which network this is (see [`GENERATION`]).
+    pub fn generation(&self) -> u32 {
+        self.generation
+    }
+
+    /// The local network's broadcast address, once there is an address.
+    pub fn broadcast_address(&self) -> Option<IpAddress> {
+        self.address?.broadcast().map(IpAddress::Ipv4)
     }
 
     /// The address DHCP gave, if it did yet.
@@ -190,7 +216,7 @@ impl Net {
                     None => {
                         let socket = dns::Socket::new(
                             &servers,
-                            (0..MAX_CALLS).map(|_| None).collect::<Vec<_>>(),
+                            (0..MAX_QUERIES).map(|_| None).collect::<Vec<_>>(),
                         );
                         self.dns = Some(self.sockets.add(socket));
                     }
@@ -244,12 +270,8 @@ impl Net {
 
     /// Opens a TCP connection to `to`; [`Net::socket`] then reaches it, and
     /// [`Net::release`] lets it go.
-    pub fn open(&mut self, to: (IpAddress, u16)) -> Result<SocketHandle, Error> {
-        let socket = tcp::Socket::new(
-            tcp::SocketBuffer::new(zeroed(RECEIVE_BUF)?),
-            tcp::SocketBuffer::new(zeroed(SEND_BUF)?),
-        );
-        let handle = self.sockets.add(socket);
+    pub fn open(&mut self, to: (IpAddress, u16), buffers: Buffers) -> Result<SocketHandle, Error> {
+        let handle = self.sockets.add(tcp_socket(buffers)?);
         let local = self.next_port();
         let connected =
             self.sockets
@@ -262,17 +284,37 @@ impl Net {
         Ok(handle)
     }
 
-    /// Opens a UDP socket for small datagrams (e.g. SNTP's); let it go
-    /// with [`Net::release_udp`].
-    pub fn open_udp(&mut self) -> Result<SocketHandle, Error> {
-        let buffer = |net: &mut Self| -> Result<udp::PacketBuffer<'static>, Error> {
-            let _ = net;
-            Ok(udp::PacketBuffer::new(
-                alloc::vec![udp::PacketMetadata::EMPTY; 2],
-                zeroed(UDP_BUF)?,
-            ))
+    /// Waits for a connection on `port` (from any address of the local
+    /// network); [`Net::socket`] reaches it, [`Net::listen_again`] makes it
+    /// wait for the next once done, and [`Net::release`] lets it go.
+    pub fn listen(&mut self, port: u16, buffers: Buffers) -> Result<SocketHandle, Error> {
+        let mut socket = tcp_socket(buffers)?;
+        socket.listen(port).map_err(|_| Error::Connection)?;
+        Ok(self.sockets.add(socket))
+    }
+
+    /// Ends the connection of a socket made by [`Net::listen`] at once,
+    /// and waits for the next one on `port`.
+    pub fn listen_again(&mut self, handle: SocketHandle, port: u16) {
+        self.sockets.get_mut::<tcp::Socket>(handle).abort();
+        // Sends the reset before the socket listens again.
+        self.stack.poll(now(), &mut self.phy, &mut self.sockets);
+        let _ = self.sockets.get_mut::<tcp::Socket>(handle).listen(port);
+    }
+
+    /// Opens a UDP socket for small datagrams (SNTP's, broadcasts):
+    /// `packets` of `bytes` in all, each way; let it go with
+    /// [`Net::release_udp`].
+    pub fn open_udp(&mut self, packets: usize, bytes: usize) -> Result<SocketHandle, Error> {
+        let buffer = || -> Result<udp::PacketBuffer<'static>, Error> {
+            let mut metadata = Vec::new();
+            metadata
+                .try_reserve_exact(packets)
+                .map_err(|_| Error::Memory)?;
+            metadata.resize(packets, udp::PacketMetadata::EMPTY);
+            Ok(udp::PacketBuffer::new(metadata, zeroed(bytes)?))
         };
-        let mut socket = udp::Socket::new(buffer(self)?, buffer(self)?);
+        let mut socket = udp::Socket::new(buffer()?, buffer()?);
         let local = self.next_port();
         socket.bind(local).map_err(|_| Error::Connection)?;
         Ok(self.sockets.add(socket))
@@ -308,6 +350,14 @@ impl Net {
         self.stack.poll(now(), &mut self.phy, &mut self.sockets);
         self.sockets.remove(handle);
     }
+}
+
+/// A TCP socket with `buffers`, or [`Error::Memory`].
+fn tcp_socket(buffers: Buffers) -> Result<tcp::Socket<'static>, Error> {
+    Ok(tcp::Socket::new(
+        tcp::SocketBuffer::new(zeroed(buffers.receive)?),
+        tcp::SocketBuffer::new(zeroed(buffers.send)?),
+    ))
 }
 
 /// Finding a host's address.

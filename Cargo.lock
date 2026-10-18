@@ -1746,6 +1746,7 @@ name = "quireink-serve"
 version = "0.3.0"
 dependencies = [
  "quireink-core",
+ "quireink-http",
 ]
 
 [[package]]
