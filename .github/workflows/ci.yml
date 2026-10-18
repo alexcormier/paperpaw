@@ -32,6 +32,42 @@ jobs:
       # Builds without runtime font rendering use bitmap font packs.
       - run: cargo test -p quireink-text -p quireink-plugin-fonts-default --no-default-features
 
+  sdk:
+    name: SDK compatibility
+    runs-on: ubuntu-latest
+    env:
+      # rustdoc's JSON output, for the API file; pinned so that it reads
+      # the same on every machine.
+      NIGHTLY: nightly-2026-10-17
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - run: rustup toolchain install "$NIGHTLY" --profile minimal
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-semver-checks@0.51.0,cargo-public-api@0.52.0
+      - name: No change that breaks plugins unless the version says so
+        # Against each crate's last release on crates.io; a crate joins
+        # once it has one.
+        run: |
+          packages=()
+          for crate in quireink-sdk quireink-platform quireink-graphics quireink-i18n \
+            quireink-config quireink-text quireink-document quireink-layout quireink-xml \
+            quireink-zip quireink-hyphen quireink-image quireink-update quireink-digest \
+            quireink-json quireink-qr quireink-sqlite; do
+            if curl -sfo /dev/null "https://index.crates.io/${crate:0:2}/${crate:2:2}/$crate"; then
+              packages+=(-p "$crate")
+            else
+              echo "$crate: not released yet"
+            fi
+          done
+          cargo semver-checks "${packages[@]}"
+      - name: The SDK's public API is crates/quireink-sdk/api.txt
+        run: |
+          cargo "+$NIGHTLY" public-api -p quireink-sdk -sss > api.txt
+          diff -u crates/quireink-sdk/api.txt api.txt
+
   embedded:
     name: no_std targets
     runs-on: ubuntu-latest

@@ -211,14 +211,21 @@ pub fn trust(storage: &dyn Storage, key: &[u8; 32]) -> Result<(), StorageError> 
     storage.append(TRUSTED_KEYS, line.as_bytes())
 }
 
-/// Compares versions such as `0.4.0` and `0.10.1` number by number.
+/// Compares versions such as `0.4.0` and `0.10.1` number by number; a
+/// pre-release such as `0.4.0-dev` comes before its release, as in
+/// SemVer.
 pub fn compare_versions(a: &str, b: &str) -> Ordering {
-    let numbers = |v: &str| -> Vec<u64> {
-        v.split(['.', '-', '+'])
+    let parts = |v: &str| {
+        let v = v.split('+').next().unwrap_or_default();
+        let (numbers, pre) = v.split_once('-').map_or((v, None), |(n, p)| (n, Some(p)));
+        let numbers: Vec<u64> = numbers
+            .split('.')
             .map_while(|part| part.parse().ok())
-            .collect()
+            .collect();
+        // No pre-release is the release itself, after its pre-releases.
+        (numbers, pre.is_none(), pre.map(String::from))
     };
-    numbers(a).cmp(&numbers(b))
+    parts(a).cmp(&parts(b))
 }
 
 #[cfg(test)]
@@ -289,5 +296,8 @@ mod tests {
         assert_eq!(compare_versions("0.10.0", "0.9.1"), Ordering::Greater);
         assert_eq!(compare_versions("0.4.0", "0.4.0"), Ordering::Equal);
         assert_eq!(compare_versions("0.4.0-dev", "0.4.1"), Ordering::Less);
+        assert_eq!(compare_versions("0.4.0-dev", "0.4.0"), Ordering::Less);
+        assert_eq!(compare_versions("0.4.0-dev", "0.3.0"), Ordering::Greater);
+        assert_eq!(compare_versions("0.4.0+x4", "0.4.0"), Ordering::Equal);
     }
 }

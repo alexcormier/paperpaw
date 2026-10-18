@@ -10,7 +10,7 @@ pub struct Version {
 
 /// The SDK version implemented by this crate. Plugins declare the version
 /// they were built against in their [`Manifest`](crate::Manifest).
-pub const SDK_VERSION: Version = Version::new(0, 3, 0);
+pub const SDK_VERSION: Version = Version::new(0, 4, 0);
 
 impl Version {
     pub const fn new(major: u16, minor: u16, patch: u16) -> Self {
@@ -57,7 +57,14 @@ mod tests {
 
     #[test]
     fn sdk_version_matches_crate_version() {
-        assert_eq!(Version::parse(env!("CARGO_PKG_VERSION")), Some(SDK_VERSION));
+        // Between releases the crate is the next one with `-dev`.
+        let number = |text: &str| text.parse().ok();
+        let crate_version = Version::new(
+            number(env!("CARGO_PKG_VERSION_MAJOR")).unwrap(),
+            number(env!("CARGO_PKG_VERSION_MINOR")).unwrap(),
+            number(env!("CARGO_PKG_VERSION_PATCH")).unwrap(),
+        );
+        assert_eq!(crate_version, SDK_VERSION);
     }
 
     #[test]

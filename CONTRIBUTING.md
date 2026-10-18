@@ -46,6 +46,11 @@ These keep QuireInk small, portable and extensible. Reviews check them.
 7. **SDK APIs must work over a message boundary** (serializable arguments,
    no borrowed host state kept across calls), so WebAssembly plugins can use
    them too.
+8. **The SDK changes visibly and compatibly** ([ADR 0020](docs/adr/0020-sdk-compatibility.md)):
+   a change to its public API comes with `crates/quireink-sdk/api.txt`
+   brought up to date
+   (`cargo +nightly-2026-10-17 public-api -p quireink-sdk -sss > crates/quireink-sdk/api.txt`),
+   and what goes is `#[deprecated]` first.
 
 Significant decisions are recorded as [Architecture Decision Records](docs/adr/).
 

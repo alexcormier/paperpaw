@@ -6,6 +6,12 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: its compatibility is checked. CI fails on a change that would
+  break plugins unless the version says the next release breaks
+  (`cargo-semver-checks`), and `crates/quireink-sdk/api.txt` lists its
+  public API, so every change to it shows (ADR 0020). Builds between
+  releases are the next version with `-dev`, and an update to the
+  release counts as newer.
 - SDK: typed answers. The answer to an HTTP request is an `HttpReply`
   (status, body, headers and the request's own parameters as
   `context`), what happens to a server a `ServerNotice`, to a socket a

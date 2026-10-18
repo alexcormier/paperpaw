@@ -25,6 +25,7 @@ superseded by a new record that links back.
 | [0017](0017-tls-on-the-x4.md) | TLS on the X4 | Accepted |
 | [0018](0018-font-packs-for-other-scripts.md) | Font packs for other scripts | Accepted |
 | [0019](0019-firmware-updates.md) | Firmware updates | Accepted |
+| [0020](0020-sdk-compatibility.md) | SDK compatibility | Accepted |
 
 ## Template
 
