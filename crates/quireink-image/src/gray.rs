@@ -82,7 +82,7 @@ pub(crate) fn read_all(storage: &dyn Storage, path: &str, at: u64, out: &mut [u8
 pub struct GrayWriter<'a> {
     storage: &'a dyn Storage,
     path: &'a str,
-    buffer: Vec<u8>,
+    pub(crate) buffer: Vec<u8>,
 }
 
 impl core::fmt::Debug for GrayWriter<'_> {
@@ -126,14 +126,20 @@ impl ImageSink for GrayWriter<'_> {
         header.extend_from_slice(&height.to_le_bytes());
         self.storage
             .write(self.path, &header)
-            .map_err(|_| ImageError::Io)
+            .map_err(|_| ImageError::Io)?;
+        // Room for the rows written at once, taken once: grown as rows
+        // came, the buffer went past it, and old and new were held at
+        // once (15 KB on the X4, while a book's cover was decoded).
+        self.buffer
+            .try_reserve_exact(FLUSH.max(width as usize))
+            .map_err(|_| ImageError::OutOfMemory)
     }
 
     fn row(&mut self, gray: &[u8]) -> Result<(), ImageError> {
-        self.buffer.extend_from_slice(gray);
-        if self.buffer.len() >= FLUSH {
+        if self.buffer.len() + gray.len() > self.buffer.capacity() {
             self.flush()?;
         }
+        self.buffer.extend_from_slice(gray);
         Ok(())
     }
 }

@@ -107,8 +107,10 @@ impl<'a> ColorWriter<'a> {
         Ok(())
     }
 
-    fn added(&mut self) -> Result<(), ImageError> {
-        if self.buffer.len() >= FLUSH {
+    /// Writes what is buffered first if `bytes` more would not fit the
+    /// room taken at the start.
+    fn make_room(&mut self, bytes: usize) -> Result<(), ImageError> {
+        if self.buffer.len() + bytes > self.buffer.capacity() {
             self.flush()?;
         }
         Ok(())
@@ -123,7 +125,11 @@ impl ImageSink for ColorWriter<'_> {
         header.extend_from_slice(&height.to_le_bytes());
         self.storage
             .write(self.path, &header)
-            .map_err(|_| ImageError::Io)
+            .map_err(|_| ImageError::Io)?;
+        // Room for the rows written at once, taken once (see GrayWriter).
+        self.buffer
+            .try_reserve_exact(FLUSH.max(width as usize * 3))
+            .map_err(|_| ImageError::OutOfMemory)
     }
 
     fn wants_color(&self) -> bool {
@@ -131,15 +137,17 @@ impl ImageSink for ColorWriter<'_> {
     }
 
     fn row(&mut self, gray: &[u8]) -> Result<(), ImageError> {
+        self.make_room(gray.len() * 3)?;
         for &g in gray {
             self.buffer.extend_from_slice(&[g, g, g]);
         }
-        self.added()
+        Ok(())
     }
 
     fn row_rgb(&mut self, rgb: &[u8]) -> Result<(), ImageError> {
+        self.make_room(rgb.len())?;
         self.buffer.extend_from_slice(rgb);
-        self.added()
+        Ok(())
     }
 }
 
@@ -178,6 +186,35 @@ mod tests {
         fn remove(&self, _: &str) -> Result<(), StorageError> {
             Ok(())
         }
+    }
+
+    /// The writers take the room for their rows once, at the start, and
+    /// never grow it: growing held old and new at once.
+    #[test]
+    fn writers_keep_the_room_they_took() {
+        let storage = OneFile::default();
+        let mut gray = crate::GrayWriter::new(&storage, "g.gray");
+        gray.start(700, 100).unwrap();
+        let room = gray.buffer.capacity();
+        for _ in 0..100 {
+            gray.row(&[7; 700]).unwrap();
+            assert_eq!(gray.buffer.capacity(), room);
+        }
+        gray.finish().unwrap();
+        let file = crate::GrayFile::open(&storage, "g.gray").unwrap();
+        assert_eq!((file.width, file.height), (700, 100));
+
+        let storage = OneFile::default();
+        let mut color = ColorWriter::new(&storage, "c.rgb");
+        color.start(700, 50).unwrap();
+        let room = color.buffer.capacity();
+        for _ in 0..50 {
+            color.row_rgb(&[9; 2100]).unwrap();
+            color.row(&[]).unwrap();
+            assert_eq!(color.buffer.capacity(), room);
+        }
+        color.finish().unwrap();
+        assert!(ColorFile::open(&storage, "c.rgb").is_some());
     }
 
     #[test]
