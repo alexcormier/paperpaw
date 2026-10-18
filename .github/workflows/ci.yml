@@ -103,8 +103,11 @@ jobs:
           workspaces: shells/xteink
       - name: Lint and build for the ESP32-C3
         working-directory: shells/xteink
+        # With remote control over USB, as for testing, and without, as
+        # released.
         run: |
           cargo clippy --release -- -D warnings
+          cargo clippy --release --no-default-features -- -D warnings
           cargo build --release
 
   architecture:

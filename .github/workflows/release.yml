@@ -93,8 +93,9 @@ jobs:
       # updates.
       - name: Build the firmware
         working-directory: shells/xteink
+        # Without remote control over USB, which is for testing.
         run: |
-          cargo build --release
+          cargo build --release --no-default-features
           mkdir -p "$GITHUB_WORKSPACE/dist"
           elf=target/riscv32imc-unknown-none-elf/release/quireink-xteink
           espflash save-image --chip esp32c3 --merge --skip-padding --flash-size 16mb \

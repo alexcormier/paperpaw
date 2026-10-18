@@ -17,6 +17,8 @@ use quireink_platform::{
     PixelFormat, Point, PointerEvent, PointerPhase, PointerTool, RefreshMode, Rotation, Storage,
     StorageError,
 };
+use quireink_sdk::builtin::settings;
+use quireink_sdk::library;
 
 use crate::epd::Epd;
 use crate::lights::Lights;
@@ -414,13 +416,16 @@ fn start_kernel(
             .font_dir(format!("{SHARED}/{FONTS}"))
             .font_dir(format!("{SHARED}/{KOREADER_FONTS}"))
             .font_dir(format!("{SHARED}/{SYSTEM_FONTS}"))
-            .setting_default("files.root", &format!("{SHARED}/Books"))
-            .setting_default("dictionary.folder", &format!("{SHARED}/{dictionaries}")),
+            .setting_default(&library::FOLDER, format!("{SHARED}/Books").into())
+            .setting_default(
+                &quireink_plugin_dictionary::FOLDER,
+                format!("{SHARED}/{dictionaries}").into(),
+            ),
         None => builder.storage(storage),
     };
     // The system language, unless the user chose another one.
     if let Some(language) = app.config().language() {
-        builder = builder.setting_default("core.language", &language);
+        builder = builder.setting_default(&settings::LANGUAGE, language.into());
     }
     let builder =
         quireink_app::install(builder, quireink_app::Fonts::Outline).plugin(AndroidPlugin {

@@ -47,6 +47,7 @@ pub fn paint() {
 
 /// Bytes of the stack never used since start (the depth left at its
 /// deepest), and the stack's size.
+#[cfg(feature = "remote")]
 pub fn left() -> (usize, usize) {
     let mut at = bottom();
     let sp = pointer();

@@ -42,8 +42,10 @@ pub mod at {
     pub const SHOWING: u32 = 8;
     pub const STATUS: u32 = 9;
     /// A try of light sleeps over USB ended (by starting again).
+    #[cfg(feature = "remote")]
     pub const TRIED: u32 = 10;
     /// In a long light sleep tried over USB.
+    #[cfg(feature = "remote")]
     pub const TRIED_NAP: u32 = 11;
     /// Starting the radio: its scheduler, its driver, as a station.
     pub const RADIO_SCHEDULER: u32 = 20;
@@ -203,6 +205,7 @@ pub fn feed() {
     });
 }
 
+#[cfg(feature = "remote")]
 /// One light sleep of `seconds` whatever the rest, then a new start: for
 /// trying over USB that the RTC's watchdog ends a sleep that goes on too
 /// long (it starts the X4 again before).

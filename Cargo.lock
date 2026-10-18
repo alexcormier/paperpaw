@@ -1259,6 +1259,7 @@ dependencies = [
  "quireink-fs",
  "quireink-graphics",
  "quireink-platform",
+ "quireink-plugin-dictionary",
  "quireink-sdk",
  "quireink-serve",
 ]

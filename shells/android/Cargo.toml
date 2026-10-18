@@ -24,6 +24,8 @@ quireink-fs.workspace = true
 quireink-graphics = { workspace = true, features = ["color"] }
 quireink-platform.workspace = true
 quireink-sdk.workspace = true
+# Its setting's id, for the shared dictionaries folder.
+quireink-plugin-dictionary.workspace = true
 
 [target.'cfg(target_os = "android")'.dependencies]
 android-activity = { version = "0.6", features = ["native-activity"] }

@@ -9,10 +9,9 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use quireink_core::{
-    Effects, HttpCall, Kernel, ServerCall, ServerEvent, SocketCall, SocketEvent, WifiCommand,
-    WifiEvent, WifiState,
-};
+use quireink_core::{Effects, Kernel, ServerCall, ServerEvent, SocketCall, SocketEvent};
+#[cfg(feature = "remote")]
+use quireink_core::{HttpCall, WifiCommand, WifiEvent, WifiState};
 
 use crate::serve::Servers;
 use crate::sockets::Sockets;
@@ -24,8 +23,12 @@ use smoltcp::socket::dns;
 use crate::clock;
 use crate::http::Calls;
 use crate::net::{Net, Resolve};
+#[cfg(feature = "remote")]
 use crate::remote;
 use crate::wifi::{Parts, Radio};
+#[cfg(feature = "remote")]
+use quireink_x4::remote::Ask;
+use quireink_x4::sntp;
 
 /// How often the clock is set again while online, and how long to wait
 /// after a failed try.
@@ -55,26 +58,8 @@ const NO_NETWORK: &str = "no network";
 /// The numbers of requests made over USB, apart from the kernel's.
 const REMOTE_REQUESTS: u32 = 0xF000_0000;
 
-/// What was asked over USB.
-#[derive(Debug)]
-pub enum Ask {
-    /// Networks in reach (the radio switched on).
-    Scan,
-    /// Join a network, kept with its password once joined.
-    Connect {
-        ssid: String,
-        password: String,
-    },
-    Status,
-    Off,
-    /// Fetch an address, into memory or the file `save_to`.
-    Get {
-        url: String,
-        save_to: Option<String>,
-    },
-}
-
 /// Answers still to give over USB.
+#[cfg(feature = "remote")]
 #[derive(Debug, Default)]
 struct Asked {
     scan: bool,
@@ -90,6 +75,7 @@ pub struct Network {
     calls: Calls,
     servers: Servers,
     sockets: Sockets,
+    #[cfg(feature = "remote")]
     asked: Asked,
     sync: Sync,
     /// When the clock was last set over the network.
@@ -106,6 +92,7 @@ impl Network {
             calls: Calls::default(),
             servers: Servers::default(),
             sockets: Sockets::default(),
+            #[cfg(feature = "remote")]
             asked: Asked::default(),
             sync: Sync::Idle { not_before: 0 },
             synced: None,
@@ -126,6 +113,7 @@ impl Network {
             self.radio.apply(command);
         }
         for event in self.radio.poll() {
+            #[cfg(feature = "remote")]
             self.answer_asked(kernel, &event);
             effects.push(kernel.wifi_event(now, event));
         }
@@ -143,19 +131,26 @@ impl Network {
                 .poll(self.radio.net(), kernel.storage(), clock_ready)
             {
                 if answer.id >= REMOTE_REQUESTS {
-                    let asked = self
-                        .asked
-                        .requests
-                        .iter()
-                        .position(|(id, _)| *id == answer.id);
-                    let since = asked.map(|at| self.asked.requests.remove(at).1);
-                    remote::http_answer(&answer, since.map_or(0, |at| now.0.saturating_sub(at)));
+                    #[cfg(feature = "remote")]
+                    self.answer_request(&answer, now);
                 } else {
                     effects.push(kernel.http_response(now, answer));
                 }
             }
         }
         effects
+    }
+
+    /// Answers a request made over USB.
+    #[cfg(feature = "remote")]
+    fn answer_request(&mut self, answer: &quireink_core::HttpResponse, now: Instant) {
+        let asked = self
+            .asked
+            .requests
+            .iter()
+            .position(|(id, _)| *id == answer.id);
+        let since = asked.map(|at| self.asked.requests.remove(at).1);
+        remote::http_answer(answer, since.map_or(0, |at| now.0.saturating_sub(at)));
     }
 
     /// Whether data is moving for plugins' requests, servers or sockets:
@@ -220,7 +215,7 @@ impl Network {
                 .is_none_or(|at| ms.saturating_sub(at) >= RESYNC_MS);
         self.sync = match core::mem::replace(&mut self.sync, Sync::Idle { not_before: 0 }) {
             Sync::Idle { not_before } if !due || ms < not_before => Sync::Idle { not_before },
-            Sync::Idle { .. } => match net.resolve(clock::SERVER) {
+            Sync::Idle { .. } => match net.resolve(sntp::SERVER) {
                 Ok(Resolve::Done(address)) => ask(net, address, ms),
                 Ok(Resolve::Asking(query)) => Sync::Resolving {
                     query,
@@ -241,7 +236,7 @@ impl Network {
                 let udp = net.udp(socket);
                 let mut time = None;
                 while let Ok((data, _)) = udp.recv() {
-                    time = time.or(clock::answer(data));
+                    time = time.or(sntp::answer(data));
                 }
                 if let Some(unix_ms) = time {
                     net.release_udp(socket);
@@ -268,6 +263,7 @@ impl Network {
     }
 
     /// What was asked over USB.
+    #[cfg(feature = "remote")]
     pub fn ask(&mut self, ask: Ask) {
         match ask {
             Ask::Scan => {
@@ -311,6 +307,7 @@ impl Network {
     }
 
     /// Answers what was asked over USB once it is known.
+    #[cfg(feature = "remote")]
     fn answer_asked(&mut self, kernel: &mut Kernel, event: &WifiEvent) {
         match event {
             WifiEvent::Scanned(networks) if self.asked.scan => {
@@ -344,14 +341,14 @@ impl Network {
 
 /// Sends an SNTP request to `address`.
 fn ask(net: &mut Net, address: smoltcp::wire::IpAddress, ms: u64) -> Sync {
-    let Ok(socket) = net.open_udp(2, 2 * clock::MESSAGE) else {
+    let Ok(socket) = net.open_udp(2, 2 * sntp::MESSAGE) else {
         return Sync::Idle {
             not_before: ms + RETRY_MS,
         };
     };
     if net
         .udp(socket)
-        .send_slice(&clock::request(), (address, clock::PORT))
+        .send_slice(&sntp::request(), (address, sntp::PORT))
         .is_err()
     {
         net.release_udp(socket);

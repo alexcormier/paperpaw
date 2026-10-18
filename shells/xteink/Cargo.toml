@@ -13,6 +13,14 @@ path = "src/main.rs"
 test = false
 bench = false
 
+[features]
+default = ["remote"]
+# Remote control over USB for testing on the device (`src/remote.rs`):
+# files in and out, presses, the screen, profiling. Not in released
+# firmware: it costs flash and memory, and anyone with a cable could use
+# it.
+remote = []
+
 [dependencies]
 quireink-app = { path = "../../crates/quireink-app", default-features = false, features = ["packs"] }
 quireink-core = { path = "../../crates/quireink-core" }
@@ -46,6 +54,16 @@ embassy-net-driver = "0.2"
 mbedtls-rs = "0.3"
 webpki-roots = "1"
 rand_core = "0.10"
+
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+rust_2018_idioms = { level = "warn", priority = -1 }
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+# As in the workspace: panics are visible in review.
+unwrap_used = "warn"
+expect_used = "warn"
 
 # The radio's code needs optimising for speed (Espressif: otherwise Wi-Fi
 # may fail to connect).

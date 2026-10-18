@@ -20,14 +20,17 @@ const SPARE: usize = 40 * 1024;
 /// bytes packed: a byte below 0x80 says that many bytes and one more
 /// follow as they are; one from 0x80 on, that the next byte comes as
 /// many times as its low 7 bits say, and three more.
+#[derive(Debug)]
 struct Band {
     top: u16,
     view: (u16, u16, quireink_platform::PixelFormat, usize),
     packed: Vec<u8>,
 }
 
-#[derive(Default)]
+#[derive(Debug)]
 pub struct Sent {
+    /// The heap's free bytes now.
+    heap_free: fn() -> usize,
     bands: Vec<Band>,
     size: usize,
     /// A band packed, before it is kept at its size.
@@ -87,6 +90,18 @@ fn unpack(packed: &[u8], out: &mut Vec<u8>) {
 }
 
 impl Sent {
+    /// Nothing kept yet; `heap_free` tells the heap's free bytes, so that
+    /// keeping leaves enough of it for drawing the rest of the frame.
+    pub fn new(heap_free: fn() -> usize) -> Self {
+        Self {
+            heap_free,
+            bands: Vec::new(),
+            size: 0,
+            scratch: Vec::new(),
+            lost: false,
+        }
+    }
+
     /// Keeps a band as it is sent.
     pub fn keep(&mut self, top: u16, rows: &FrameView<'_>) {
         if self.lost {
@@ -106,7 +121,7 @@ impl Sent {
         let size = self.scratch.len();
         let mut packed = Vec::new();
         if self.size + size > MAX_BYTES
-            || esp_alloc::HEAP.free() < size + SPARE
+            || (self.heap_free)() < size + SPARE
             || packed.try_reserve_exact(size).is_err()
             || self.bands.try_reserve(1).is_err()
         {
@@ -155,5 +170,104 @@ impl Sent {
             );
         }
         true
+    }
+}
+
+/// A check of the rows sent to a memory of the controller: their tops,
+/// count and bytes (FNV-1a), to compare what was sent twice.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct Check {
+    rows: u32,
+    hash: u32,
+}
+
+impl Check {
+    /// Adds a band sent from row `top`.
+    pub fn add(&mut self, top: u16, rows: &FrameView<'_>) {
+        let bytes = rows
+            .data
+            .get(..usize::from(rows.height) * rows.stride)
+            .unwrap_or(&[]);
+        let mut hash = if self.hash == 0 {
+            0x811C_9DC5
+        } else {
+            self.hash
+        };
+        for byte in top.to_le_bytes().iter().chain(bytes) {
+            hash = (hash ^ u32::from(*byte)).wrapping_mul(0x0100_0193);
+        }
+        self.hash = hash;
+        self.rows += u32::from(rows.height);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use quireink_platform::PixelFormat;
+
+    fn plenty() -> usize {
+        usize::MAX / 2
+    }
+
+    fn band(data: &[u8]) -> FrameView<'_> {
+        FrameView {
+            width: 80,
+            height: (data.len() / 10) as u16,
+            format: PixelFormat::Mono1,
+            stride: 10,
+            data,
+        }
+    }
+
+    #[test]
+    fn packs_and_unpacks_alike() {
+        let cases: [&[u8]; 5] = [
+            &[],
+            &[1, 2],
+            &[5; 300],
+            &[1, 1, 2, 2, 2, 3, 4, 4, 4, 4, 0xFF],
+            &[0x80; 131],
+        ];
+        for bytes in cases {
+            let mut packed = Vec::new();
+            pack(bytes, &mut packed);
+            let mut unpacked = Vec::new();
+            unpack(&packed, &mut unpacked);
+            assert_eq!(unpacked, bytes);
+        }
+        let mixed: Vec<u8> = (0..1000u32).map(|i| (i * 7 % 13) as u8).collect();
+        let mut packed = Vec::new();
+        pack(&mixed, &mut packed);
+        assert!(packed.len() <= mixed.len() + mixed.len() / 128 + 1);
+        let mut unpacked = Vec::new();
+        unpack(&packed, &mut unpacked);
+        assert_eq!(unpacked, mixed);
+    }
+
+    #[test]
+    fn replays_the_bands_as_sent() {
+        let first: Vec<u8> = (0..40).collect();
+        let second = [0xFF; 20];
+        let mut sent = Sent::new(plenty);
+        sent.keep(0, &band(&first));
+        sent.keep(4, &band(&second));
+        let (mut again, mut check, mut check_again) =
+            (Vec::new(), Check::default(), Check::default());
+        check.add(0, &band(&first));
+        check.add(4, &band(&second));
+        assert!(sent.replay(&mut |top, rows| {
+            again.push((top, rows.data.to_vec()));
+            check_again.add(top, &rows);
+        }));
+        assert_eq!(again, [(0, first.clone()), (4, second.to_vec())]);
+        assert_eq!(check, check_again);
+    }
+
+    #[test]
+    fn short_of_memory_it_draws_anew() {
+        let mut sent = Sent::new(|| 1024);
+        sent.keep(0, &band(&[0; 40]));
+        assert!(!sent.replay(&mut |_, _| {}));
     }
 }

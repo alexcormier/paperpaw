@@ -69,6 +69,7 @@ use quireink_sdk::builtin::{
     settings as core_settings, slots,
 };
 use quireink_sdk::event::EventData;
+use quireink_sdk::setting::{Setting, SettingType};
 use quireink_sdk::{
     Actions, Capabilities, Command, Contribution, Cx, Direction, Env, EnvParts, EventHandler,
     Fonts, Formats, Gesture, GestureKind, Handled, Hint, Hints, HttpReply, Hyphenation, Id,
@@ -333,7 +334,15 @@ impl KernelBuilder {
     /// Changes the default of a setting for this device, e.g. the
     /// two-button key map preset on a device with only two buttons. Users
     /// can still override it.
-    pub fn setting_default(mut self, id: &str, value: &str) -> Self {
+    pub fn setting_default<T: SettingType>(self, setting: &Setting<T>, value: T::Input) -> Self {
+        let text = T::write(value).to_config_text();
+        self.setting_default_text(setting.as_str(), &text)
+    }
+
+    /// As [`setting_default`](Self::setting_default), for a setting known only at run
+    /// time (e.g. from a device profile's file), its value written as in
+    /// `quireink.ini`.
+    pub fn setting_default_text(mut self, id: &str, value: &str) -> Self {
         self.setting_defaults
             .push((String::from(id), String::from(value)));
         self

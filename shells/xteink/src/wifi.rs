@@ -137,6 +137,7 @@ impl Radio {
     }
 
     /// The state last reported.
+    #[cfg(feature = "remote")]
     pub fn state(&self) -> &WifiState {
         &self.reported
     }

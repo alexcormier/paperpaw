@@ -29,7 +29,7 @@ impl Write for Cut<'_> {
 }
 
 #[panic_handler]
-fn panic(info: &core::panic::PanicInfo) -> ! {
+fn panic(info: &core::panic::PanicInfo<'_>) -> ! {
     esp_println::println!("PANIC: {info}");
     let mut buf = [0u8; 400];
     let mut cut = Cut {

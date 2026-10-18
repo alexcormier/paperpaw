@@ -170,7 +170,9 @@ impl Net {
     /// The link came up (a network was joined): DHCP asks at once, not
     /// after the waits it grew while nothing answered.
     pub fn joined(&mut self) {
-        self.sockets.get_mut::<dhcpv4::Socket>(self.dhcp).reset();
+        self.sockets
+            .get_mut::<dhcpv4::Socket<'_>>(self.dhcp)
+            .reset();
         self.asked = Some(now());
     }
 
@@ -185,7 +187,7 @@ impl Net {
             self.joined();
         }
         self.stack.poll(now(), &mut self.phy, &mut self.sockets);
-        let event = self.sockets.get_mut::<dhcpv4::Socket>(self.dhcp).poll();
+        let event = self.sockets.get_mut::<dhcpv4::Socket<'_>>(self.dhcp).poll();
         match event {
             None => {}
             Some(dhcpv4::Event::Configured(config)) => {
@@ -211,7 +213,7 @@ impl Net {
                 match self.dns {
                     Some(handle) => self
                         .sockets
-                        .get_mut::<dns::Socket>(handle)
+                        .get_mut::<dns::Socket<'_>>(handle)
                         .update_servers(&servers),
                     None => {
                         let socket = dns::Socket::new(
@@ -239,7 +241,7 @@ impl Net {
         }
         let handle = self.dns.ok_or(Error::Offline)?;
         self.sockets
-            .get_mut::<dns::Socket>(handle)
+            .get_mut::<dns::Socket<'_>>(handle)
             .start_query(self.stack.context(), name, DnsQueryType::A)
             .map(Resolve::Asking)
             .map_err(|_| Error::Name)
@@ -250,7 +252,7 @@ impl Net {
         let handle = self.dns?;
         match self
             .sockets
-            .get_mut::<dns::Socket>(handle)
+            .get_mut::<dns::Socket<'_>>(handle)
             .get_query_result(query)
         {
             Ok(addresses) => Some(addresses.first().copied().ok_or(Error::Name)),
@@ -263,7 +265,7 @@ impl Net {
     pub fn forget(&mut self, query: dns::QueryHandle) {
         if let Some(handle) = self.dns {
             self.sockets
-                .get_mut::<dns::Socket>(handle)
+                .get_mut::<dns::Socket<'_>>(handle)
                 .cancel_query(query);
         }
     }
@@ -273,10 +275,11 @@ impl Net {
     pub fn open(&mut self, to: (IpAddress, u16), buffers: Buffers) -> Result<SocketHandle, Error> {
         let handle = self.sockets.add(tcp_socket(buffers)?);
         let local = self.next_port();
-        let connected =
-            self.sockets
-                .get_mut::<tcp::Socket>(handle)
-                .connect(self.stack.context(), to, local);
+        let connected = self.sockets.get_mut::<tcp::Socket<'_>>(handle).connect(
+            self.stack.context(),
+            to,
+            local,
+        );
         if connected.is_err() {
             self.sockets.remove(handle);
             return Err(Error::Connection);
@@ -296,10 +299,10 @@ impl Net {
     /// Ends the connection of a socket made by [`Net::listen`] at once,
     /// and waits for the next one on `port`.
     pub fn listen_again(&mut self, handle: SocketHandle, port: u16) {
-        self.sockets.get_mut::<tcp::Socket>(handle).abort();
+        self.sockets.get_mut::<tcp::Socket<'_>>(handle).abort();
         // Sends the reset before the socket listens again.
         self.stack.poll(now(), &mut self.phy, &mut self.sockets);
-        let _ = self.sockets.get_mut::<tcp::Socket>(handle).listen(port);
+        let _ = self.sockets.get_mut::<tcp::Socket<'_>>(handle).listen(port);
     }
 
     /// Opens a UDP socket for small datagrams (SNTP's, broadcasts):
@@ -321,7 +324,7 @@ impl Net {
     }
 
     pub fn udp(&mut self, handle: SocketHandle) -> &mut udp::Socket<'static> {
-        self.sockets.get_mut::<udp::Socket>(handle)
+        self.sockets.get_mut::<udp::Socket<'_>>(handle)
     }
 
     pub fn release_udp(&mut self, handle: SocketHandle) {
@@ -340,12 +343,12 @@ impl Net {
     }
 
     pub fn socket(&mut self, handle: SocketHandle) -> &mut tcp::Socket<'static> {
-        self.sockets.get_mut::<tcp::Socket>(handle)
+        self.sockets.get_mut::<tcp::Socket<'_>>(handle)
     }
 
     /// Closes a connection at once and frees it.
     pub fn release(&mut self, handle: SocketHandle) {
-        self.sockets.get_mut::<tcp::Socket>(handle).abort();
+        self.sockets.get_mut::<tcp::Socket<'_>>(handle).abort();
         // Sends the reset before the socket goes.
         self.stack.poll(now(), &mut self.phy, &mut self.sockets);
         self.sockets.remove(handle);

@@ -6,6 +6,14 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- X4 firmware: released firmware leaves out remote control over USB
+  (the `remote` feature, for testing), 34 KB less. Inside, the main loop
+  is a `Firmware` with a method for each step and the pins are in one
+  board module; the USB protocol, SNTP and the frame kept for the panel
+  are in `quireink-x4`, tested on a computer.
+- Kernel: device defaults are typed, `setting_default(&SETTING, value)`;
+  `setting_default_text` takes an id and text, for settings known only
+  at run time.
 - SDK: its compatibility is checked. CI fails on a change that would
   break plugins unless the version says the next release breaks
   (`cargo-semver-checks`), and `crates/quireink-sdk/api.txt` lists its

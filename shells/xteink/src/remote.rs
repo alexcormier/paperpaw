@@ -1,64 +1,8 @@
-//! Remote control over USB, for testing on the device: a computer sends
-//! lines with commands (`tools/x4-remote` does), the X4 answers with lines
-//! that start with `QI:`, amid its log.
-//!
-//! - `press <button>`: the button pressed and let go;
-//! - `open <path>`: opens the book at `path` (hexadecimal) in the reader
-//!   (`QI:OK`);
-//! - `run <action>`: runs an action as a button bound to it would, e.g.
-//!   `run calibre.open` to open a tool at once (`QI:OK`);
-//! - `hold <button> <ms>`: held that long, e.g. for a long press;
-//! - `shot`: the screen, as `QI:FRAME <width> <height> <bits per pixel>`,
-//!   then `QI:ROW <y> <hex>` for every row (its bytes as the frame holds
-//!   them, in runs: a count from 1 to 255, then the byte) and `QI:END`;
-//! - `screen`: `QI:SCREEN <id>`, the screen shown;
-//! - `describe`: what it shows, a `QI:PART <role> <x> <y> <width> <height>
-//!   <state> <label>` for each row, button or heading (state: `-`, or
-//!   `focused`, `on`, `off` joined by `+`), then `QI:END`;
-//! - `heap`: `QI:HEAP <used> <free> <stack left> <stack size> <largest>`,
-//!   in bytes (the stack: what it never used since start, see
-//!   `stack::left`; the largest block that could be had now, of the free
-//!   memory in pieces);
-//! - `input`: `QI:INPUT <readings> <front> <side> <power> <millivolts>`, how
-//!   the buttons and the battery are read;
-//! - `profile start`, `profile stop`: notes where the processor is every
-//!   5 ms in between, sent as `QI:PC <hex> …` lines and `QI:END`;
-//! - `trace start`, `trace stop`: what is done on the storage in between,
-//!   as `QI:IO <what> <path> …` lines and `QI:END`;
-//! - `peek <address> <words>`: memory, as `QI:MEM <address> <hex words>`
-//!   lines of 16 words and `QI:END` (hexadecimal address, at most 4096
-//!   words; only the ROM, e.g. to find where its functions lie);
-//! - `refresh fast`, `refresh full`: the panel refreshed from what the
-//!   controller holds, nothing sent (`QI:OK`): whether it holds the frame;
-//! - `put <size> <path>`: a file for the storage (the SD card), answered
-//!   with `QI:READY`; then lines `data <hex>` until all its bytes came, and
-//!   `QI:OK <size>` once it is written;
-//! - `idle sleep <seconds>`: light sleep as on battery for that long
-//!   (`QI:OK`; the connection goes meanwhile), then start again;
-//! - `hang <seconds>`: hangs that long (at most a minute) without the
-//!   watchdog fed, to try that it starts the X4 again (`QI:OK` if not);
-//! - `boot`: `QI:BOOT <reason> <place> <naps>`, why the X4 last started,
-//!   where the run before was then (see `power::at`) and its light sleeps,
-//!   e.g. after a watchdog's reset or an `idle sleep`;
-//! - `nap <seconds>`: one light sleep that long (at most a minute), then a
-//!   new start, to try that the RTC's watchdog starts it again first;
-//! - `wifi scan`: switches the radio on and lists the networks in reach,
-//!   as `QI:NET <signal> <secured> <name>` lines, then `QI:END`;
-//! - `wifi connect <name> <password>`: joins that network (both in
-//!   hexadecimal, `-` for no password), answered once joined with
-//!   `QI:CONNECTED <name>` and `QI:IP <address>`, or `QI:ERR`; the
-//!   password is not shown anywhere and is kept with the passwords and
-//!   keys, where the `wifi` plugin finds it to join the network again;
-//! - `wifi status`: `QI:WIFI <off|on|joining|online> [<name> <address>]`;
-//! - `wifi off`: switches the radio off (`QI:OK`);
-//! - `http get <url> [<path>]`: fetches a plain `http://` address as
-//!   plugins' requests are made, into memory or the file `path`, answered
-//!   with `QI:HTTP <status> <bytes> saved <true|false>`, the heap and, for
-//!   a failure, why (the radio must be online);
-//! - `get <path>`: a file of the storage, as `QI:SIZE <size>`, then
-//!   `QI:DATA <hex>` lines and `QI:END` (e.g. the battery's log).
-//!
-//! Any other line is answered with `QI:ERR <line>`.
+//! Remote control over USB, for testing on the device (built with the
+//! `remote` feature): the commands of [`quireink_x4::remote`] read from
+//! the USB unit, and every `QI:` answer. What only asks (the screen, the
+//! heap, a file) is answered here; what changes the X4's state (a press,
+//! an action, the network) is the main loop's (`firmware`).
 
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -67,10 +11,8 @@ use core::fmt::Write;
 use esp_hal::peripherals::USB_DEVICE;
 use esp_println::println;
 use quireink_core::{HttpResponse, JoinFailure, Kernel, WifiNetwork, WifiState};
-
-use crate::network::Ask;
 use quireink_platform::{DisplayInfo, FrameView};
-use quireink_x4::buttons;
+use quireink_x4::remote::{Command, hex_bytes, part_state, runs};
 
 /// A line is never longer: `data` and 512 bytes in hexadecimal.
 const MAX_LINE: usize = 1100;
@@ -78,40 +20,6 @@ const MAX_LINE: usize = 1100;
 const CHUNK: usize = 4096;
 /// Without data for this long, a file is given up.
 const QUIET_MS: u64 = 5000;
-
-/// What the computer asked for.
-pub enum Command {
-    /// A button pressed, let go after so many milliseconds.
-    Press(&'static str, u64),
-    /// An action run (for the main loop, which applies what it brings).
-    Run(quireink_sdk::Id),
-    /// A book opened, by its path.
-    Open(String),
-    Shot,
-    Screen,
-    Describe,
-    Heap,
-    Input,
-    /// Profiling starts (`true`) or stops.
-    Profile(bool),
-    /// Tracing the storage starts (`true`) or stops.
-    Trace(bool),
-    /// Words of the ROM from an address.
-    Peek(u32, u32),
-    /// The panel refreshed from the controller's memory, full or fast (for
-    /// the main loop, which has the display).
-    Refresh(bool),
-    /// Light sleep while idle even on USB, for so many seconds.
-    IdleSleep(u64),
-    /// A file of so many bytes for that path.
-    Put(usize, String),
-    Get(String),
-    Boot,
-    /// About the network, for the main loop's `network`.
-    Network(crate::network::Ask),
-    Hang(u64),
-    Nap(u64),
-}
 
 /// Reads commands from USB, a line at a time.
 ///
@@ -157,35 +65,24 @@ impl Remote {
     pub fn poll(&mut self) -> Option<Command> {
         let line = self.next_line()?;
         let line = String::from_utf8_lossy(&line);
-        let command = parse(line.trim());
+        let command = quireink_x4::remote::parse(&line);
         if command.is_none() {
-            println!("QI:ERR {line}");
+            error(&line);
         }
         command
     }
 
     /// Answers a command that only asks (the screen, a screenshot, what it
-    /// shows, the heap) or brings a file; a button press it gives back for
-    /// the caller to make.
+    /// shows, the heap) or brings a file; the others it gives back for the
+    /// main loop.
     pub fn answer(
         &mut self,
         kernel: &mut Kernel,
         display: &DisplayInfo,
         command: Command,
-    ) -> Option<(&'static str, u64)> {
+    ) -> Option<Command> {
         match command {
-            Command::Press(name, ms) => return Some((name, ms)),
-            // The main loop does it; asked here, nothing.
-            Command::Refresh(_)
-            | Command::IdleSleep(_)
-            | Command::Network(_)
-            | Command::Run(_)
-            | Command::Open(_) => {
-                println!("QI:ERR refresh")
-            }
-            Command::Shot => {
-                shot(kernel, display);
-            }
+            Command::Shot => shot(kernel, display),
             Command::Describe => describe(kernel),
             Command::Screen => {
                 let id = kernel.active_screen().map_or("", |id| id.as_str());
@@ -200,14 +97,14 @@ impl Remote {
                     largest_block()
                 );
             }
-            Command::Put(size, path) => self.receive(kernel, size, &path),
+            Command::Put { size, path } => self.receive(kernel, size, &path),
             Command::Get(path) => send(kernel, &path),
             Command::Hang(seconds) => {
                 println!("QI:HANGING");
                 let until = esp_hal::time::Instant::now()
                     + esp_hal::time::Duration::from_secs(seconds.min(60));
                 while esp_hal::time::Instant::now() < until {}
-                println!("QI:OK");
+                ok();
             }
             Command::Nap(seconds) => {
                 println!("QI:NAPPING");
@@ -222,7 +119,7 @@ impl Remote {
             }
             Command::Profile(true) => {
                 crate::input::profile(true);
-                println!("QI:OK");
+                ok();
             }
             Command::Profile(false) => {
                 let places = crate::input::profile(false).unwrap_or_default();
@@ -238,7 +135,7 @@ impl Remote {
             }
             Command::Trace(true) => {
                 crate::traced::trace(true);
-                println!("QI:OK");
+                ok();
             }
             Command::Trace(false) => {
                 for line in crate::traced::trace(false).unwrap_or_default() {
@@ -246,13 +143,14 @@ impl Remote {
                 }
                 println!("QI:END");
             }
-            Command::Peek(at, count) => {
+            Command::Peek { at, words } => {
                 let mut line = String::new();
-                for start in (0..count).step_by(16) {
+                for start in (0..words).step_by(16) {
                     line.clear();
-                    for i in start..(start + 16).min(count) {
+                    for i in start..(start + 16).min(words) {
                         let address = (at + i * 4) as *const u32;
-                        // SAFETY: an aligned word of the ROM, always mapped.
+                        // SAFETY: an aligned word of the ROM (`parse` lets
+                        // no other through), always mapped.
                         let word = unsafe { core::ptr::read_volatile(address) };
                         let _ = write!(line, " {word:x}");
                     }
@@ -266,6 +164,12 @@ impl Remote {
                 let millivolts = crate::input::millivolts();
                 println!("QI:INPUT {samples} {front} {side} {power} {millivolts}");
             }
+            command @ (Command::Press { .. }
+            | Command::Run(_)
+            | Command::Open(_)
+            | Command::Refresh { .. }
+            | Command::IdleSleep(_)
+            | Command::Network(_)) => return Some(command),
         }
         None
     }
@@ -294,14 +198,11 @@ impl Remote {
                 continue;
             };
             last = millis();
-            let Some(hex) = line.strip_prefix(b"data ") else {
+            let Some(bytes) = line.strip_prefix(b"data ").and_then(hex_bytes) else {
                 return println!("QI:ERR {path}: not data");
             };
-            for pair in hex.as_chunks::<2>().0 {
-                let digit = |c: u8| char::from(c).to_digit(16).unwrap_or(0) as u8;
-                piece.push(digit(pair[0]) << 4 | digit(pair[1]));
-            }
-            got += hex.len() / 2;
+            got += bytes.len();
+            piece.extend_from_slice(&bytes);
             if piece.len() >= CHUNK || got >= size {
                 if let Err(e) = storage.append(path, &piece) {
                     return println!("QI:ERR {path}: {e:?}");
@@ -350,21 +251,6 @@ pub fn note_panic(message: Option<String>) {
     critical_section::with(|cs| PANIC.replace(cs, message));
 }
 
-/// Text sent as hexadecimal (`-` for none), so that it may hold spaces.
-fn unhex(word: &str) -> Option<String> {
-    if word == "-" {
-        return Some(String::new());
-    }
-    let bytes = word
-        .as_bytes()
-        .as_chunks::<2>()
-        .0
-        .iter()
-        .map(|pair| u8::from_str_radix(core::str::from_utf8(pair).ok()?, 16).ok())
-        .collect::<Option<Vec<u8>>>()?;
-    String::from_utf8(bytes).ok()
-}
-
 /// The largest block of memory that could be had now (found by asking for
 /// blocks, given back at once).
 fn largest_block() -> usize {
@@ -380,8 +266,24 @@ fn largest_block() -> usize {
     can
 }
 
+/// Done.
 pub fn ok() {
     println!("QI:OK");
+}
+
+/// Not now, e.g. a press while another is held.
+pub fn busy() {
+    println!("QI:BUSY");
+}
+
+/// Not understood, or not done.
+pub fn error(what: &str) {
+    println!("QI:ERR {what}");
+}
+
+/// The panel refreshed from what its controller holds, and how it went.
+pub fn refreshed(result: impl core::fmt::Debug) {
+    println!("QI:OK {result:?}");
 }
 
 /// The networks a scan asked over USB found.
@@ -400,7 +302,7 @@ pub fn connected(ssid: &str, address: &str) {
 
 /// The network asked over USB was not joined.
 pub fn not_connected(ssid: &str, reason: JoinFailure) {
-    println!("QI:ERR wifi connect {ssid}: {}", reason.as_str());
+    error(&alloc::format!("wifi connect {ssid}: {}", reason.as_str()));
 }
 
 pub fn wifi_state(state: &WifiState) {
@@ -429,93 +331,9 @@ pub fn http_answer(answer: &HttpResponse, ms: u64) {
     );
 }
 
-fn parse(line: &str) -> Option<Command> {
-    let mut words = line.split_ascii_whitespace();
-    let command = match words.next()? {
-        "press" => Command::Press(button(words.next()?)?, 60),
-        "hold" => Command::Press(button(words.next()?)?, words.next()?.parse().ok()?),
-        "shot" => Command::Shot,
-        "screen" => Command::Screen,
-        "describe" => Command::Describe,
-        "heap" => Command::Heap,
-        "boot" => Command::Boot,
-        "run" => Command::Run(quireink_sdk::Id::parse(words.next()?).ok()?),
-        "open" => Command::Open(unhex(words.next()?)?),
-        "wifi" => Command::Network(match words.next()? {
-            "scan" => Ask::Scan,
-            "connect" => Ask::Connect {
-                ssid: unhex(words.next()?)?,
-                password: unhex(words.next()?)?,
-            },
-            "status" => Ask::Status,
-            "off" => Ask::Off,
-            _ => return None,
-        }),
-        "http" => match words.next()? {
-            "get" => Command::Network(Ask::Get {
-                url: String::from(words.next()?),
-                save_to: words.next().map(String::from),
-            }),
-            _ => return None,
-        },
-        "hang" => Command::Hang(words.next()?.parse().ok()?),
-        "nap" => Command::Nap(words.next()?.parse().ok()?),
-        "input" => Command::Input,
-        "refresh" => match words.next()? {
-            "full" => Command::Refresh(true),
-            "fast" => Command::Refresh(false),
-            _ => return None,
-        },
-        "idle" => match words.next()? {
-            "sleep" => Command::IdleSleep(words.next()?.parse().ok()?),
-            _ => return None,
-        },
-        "trace" => match words.next()? {
-            "start" => Command::Trace(true),
-            "stop" => Command::Trace(false),
-            _ => return None,
-        },
-        "peek" => {
-            let at = u32::from_str_radix(words.next()?, 16).ok()?;
-            let count: u32 = words.next()?.parse().ok()?;
-            // The ROM only: reading elsewhere may fault.
-            let rom = 0x4000_0000..0x4006_0000;
-            (count <= 4096
-                && rom.contains(&at)
-                && rom.contains(&(at + count * 4 - 1))
-                && at % 4 == 0)
-                .then_some(Command::Peek(at, count))?
-        }
-        "profile" => match words.next()? {
-            "start" => Command::Profile(true),
-            "stop" => Command::Profile(false),
-            _ => return None,
-        },
-        "get" => {
-            let (_, path) = line.split_once(' ')?;
-            let path = path.trim();
-            return (!path.is_empty()).then(|| Command::Get(String::from(path)));
-        }
-        "put" => {
-            let size = words.next()?.parse().ok()?;
-            // The path is the rest of the line, spaces and all.
-            let (_, rest) = line.split_once(' ')?;
-            let path = rest.trim_start().split_once(' ')?.1.trim();
-            return (!path.is_empty()).then(|| Command::Put(size, String::from(path)));
-        }
-        _ => return None,
-    };
-    words.next().is_none().then_some(command)
-}
-
-/// The X4's button of that name.
-fn button(name: &str) -> Option<&'static str> {
-    buttons::ALL.iter().find(|b| **b == name).copied()
-}
-
-/// Sends the whole screen, `display` (screens may have less of it); `false`
-/// while changes wait to be shown (ask again).
-pub fn shot(kernel: &mut Kernel, display: &DisplayInfo) -> bool {
+/// Sends the whole screen, `display` (screens may have less of it), or
+/// `QI:BUSY` while changes wait to be shown (ask again).
+fn shot(kernel: &mut Kernel, display: &DisplayInfo) {
     let header = (
         display.width,
         display.height,
@@ -539,30 +357,14 @@ pub fn shot(kernel: &mut Kernel, display: &DisplayInfo) -> bool {
     if done {
         println!("QI:END");
     } else {
-        println!("QI:BUSY");
+        busy();
     }
-    done
 }
 
 /// Sends what the screen shows, part by part.
-pub fn describe(kernel: &mut Kernel) {
+fn describe(kernel: &mut Kernel) {
     for part in kernel.describe() {
-        let mut state = String::new();
-        for (on, word) in [
-            (part.focused, "focused"),
-            (part.on == Some(true), "on"),
-            (part.on == Some(false), "off"),
-        ] {
-            if on {
-                if !state.is_empty() {
-                    state.push('+');
-                }
-                state.push_str(word);
-            }
-        }
-        if state.is_empty() {
-            state.push('-');
-        }
+        let state = part_state(part.focused, part.on);
         let a = part.area;
         let label = part.label.replace('\n', " ");
         println!(
@@ -571,14 +373,4 @@ pub fn describe(kernel: &mut Kernel) {
         );
     }
     println!("QI:END");
-}
-
-/// `bytes` as runs of one byte, written in hexadecimal.
-fn runs(bytes: &[u8], out: &mut String) {
-    let mut rest = bytes;
-    while let Some(&byte) = rest.first() {
-        let count = rest.iter().take(255).take_while(|b| **b == byte).count();
-        let _ = write!(out, "{count:02x}{byte:02x}");
-        rest = &rest[count..];
-    }
 }

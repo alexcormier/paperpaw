@@ -7,20 +7,21 @@
 //! The same interrupt can note where the processor is each time, for
 //! finding out where the time goes ([`profile`]).
 
+#[cfg(feature = "remote")]
 use alloc::vec::Vec;
 use core::cell::RefCell;
 use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use critical_section::Mutex;
 use esp_hal::Blocking;
-use esp_hal::analog::adc::{Adc, AdcCalBasic, AdcCalCurve, AdcPin};
 use esp_hal::gpio::Input;
 use esp_hal::handler;
-use esp_hal::peripherals::{ADC1, GPIO0, GPIO1, GPIO2};
 use esp_hal::time::Duration;
 use esp_hal::timer::PeriodicTimer;
 use quireink_x4::battery;
 use quireink_x4::buttons::{Debouncer, State};
+
+use crate::board::Ladders;
 
 /// How often the buttons are read.
 const SAMPLE_MS: u64 = 5;
@@ -34,12 +35,9 @@ pub type Change = (&'static str, bool, u64);
 
 /// What the interrupt reads with, and what it found.
 pub struct Sampler {
-    pub timer: PeriodicTimer<'static, Blocking>,
-    pub adc: Adc<'static, ADC1<'static>, Blocking>,
-    pub front: AdcPin<GPIO1<'static>, ADC1<'static>, AdcCalBasic<ADC1<'static>>>,
-    pub side: AdcPin<GPIO2<'static>, ADC1<'static>, AdcCalBasic<ADC1<'static>>>,
-    pub cell: AdcPin<GPIO0<'static>, ADC1<'static>, AdcCalCurve<ADC1<'static>>>,
-    pub power: Input<'static>,
+    timer: PeriodicTimer<'static, Blocking>,
+    ladders: Ladders,
+    power: Input<'static>,
     debouncer: Debouncer,
     /// Woken by the power button, it is still down: it counts once let go.
     power_armed: bool,
@@ -52,10 +50,13 @@ pub struct Sampler {
 
 static SAMPLER: Mutex<RefCell<Option<Sampler>>> = Mutex::new(RefCell::new(None));
 /// Where the processor was at each reading, while profiling.
+#[cfg(feature = "remote")]
 static PROFILE: Mutex<RefCell<Option<Vec<u32>>>> = Mutex::new(RefCell::new(None));
 /// Places noted at most (4 bytes each): 15 s.
+#[cfg(feature = "remote")]
 const PROFILE_SAMPLES: usize = 3000;
 /// Memory left free for QuireInk while profiling.
+#[cfg(feature = "remote")]
 const PROFILE_SPARE: usize = 64 * 1024;
 /// The battery's voltage, in millivolts (0 until first read).
 static MILLIVOLTS: AtomicU32 = AtomicU32::new(0);
@@ -74,19 +75,13 @@ fn millis() -> u64 {
 impl Sampler {
     pub fn new(
         mut timer: PeriodicTimer<'static, Blocking>,
-        adc: Adc<'static, ADC1<'static>, Blocking>,
-        front: AdcPin<GPIO1<'static>, ADC1<'static>, AdcCalBasic<ADC1<'static>>>,
-        side: AdcPin<GPIO2<'static>, ADC1<'static>, AdcCalBasic<ADC1<'static>>>,
-        cell: AdcPin<GPIO0<'static>, ADC1<'static>, AdcCalCurve<ADC1<'static>>>,
+        ladders: Ladders,
         power: Input<'static>,
     ) -> Self {
         timer.set_interrupt_handler(sample);
         Self {
             timer,
-            adc,
-            front,
-            side,
-            cell,
+            ladders,
             power,
             debouncer: Debouncer::new(),
             power_armed: false,
@@ -102,12 +97,14 @@ impl Sampler {
         let now = millis();
         if self.battery_read == 0 || now - self.battery_read >= BATTERY_MS {
             self.battery_read = now;
-            if let Ok(raw) = nb::block!(self.adc.read_oneshot(&mut self.cell)) {
+            let l = &mut self.ladders;
+            if let Ok(raw) = nb::block!(l.adc.read_oneshot(&mut l.cell)) {
                 MILLIVOLTS.store(u32::from(battery::millivolts(raw)), Ordering::Relaxed);
             }
         }
-        let front = nb::block!(self.adc.read_oneshot(&mut self.front)).unwrap_or(4095);
-        let side = nb::block!(self.adc.read_oneshot(&mut self.side)).unwrap_or(4095);
+        let l = &mut self.ladders;
+        let front = nb::block!(l.adc.read_oneshot(&mut l.front)).unwrap_or(4095);
+        let side = nb::block!(l.adc.read_oneshot(&mut l.side)).unwrap_or(4095);
         // Only the interrupt writes it (the chip has no atomic adds).
         SAMPLES.store(
             SAMPLES.load(Ordering::Relaxed).wrapping_add(1),
@@ -130,14 +127,15 @@ impl Sampler {
 
 #[handler]
 fn sample() {
-    // The place the interrupt came at.
-    let pc: u32;
-    // SAFETY: reads a register, changes nothing.
-    unsafe { core::arch::asm!("csrr {0}, mepc", out(reg) pc) };
     critical_section::with(|cs| {
+        #[cfg(feature = "remote")]
         if let Some(places) = PROFILE.borrow_ref_mut(cs).as_mut()
             && places.len() < places.capacity()
         {
+            // The place the interrupt came at.
+            let pc: u32;
+            // SAFETY: reads a register, changes nothing.
+            unsafe { core::arch::asm!("csrr {0}, mepc", out(reg) pc) };
             places.push(pc);
         }
         if let Some(sampler) = SAMPLER.borrow_ref_mut(cs).as_mut() {
@@ -182,6 +180,7 @@ pub fn next() -> Option<Change> {
 
 /// Starts noting where the processor is (`true`), or stops and gives what
 /// was noted.
+#[cfg(feature = "remote")]
 pub fn profile(start: bool) -> Option<Vec<u32>> {
     critical_section::with(|cs| {
         let mut profile = PROFILE.borrow_ref_mut(cs);
@@ -204,6 +203,7 @@ pub fn millivolts() -> u16 {
 }
 
 /// Readings so far, and the last readings of the front and side ladders.
+#[cfg(feature = "remote")]
 pub fn stats() -> (u32, u16, u16) {
     let levels = LEVELS.load(Ordering::Relaxed);
     (

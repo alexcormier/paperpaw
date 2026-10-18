@@ -430,7 +430,7 @@ fn build_kernel(
         }
         builder = builder.row_align(profile.row_align);
         for (id, value) in profile.settings {
-            builder = builder.setting_default(id, value);
+            builder = builder.setting_default_text(id, value);
         }
         if let Some(config) = user_config {
             builder = builder.user_config(config);

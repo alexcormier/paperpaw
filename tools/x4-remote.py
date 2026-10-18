@@ -1,7 +1,9 @@
 """Drives QuireInk on an Xteink X4 over USB: presses its buttons, takes
 screenshots and tells what the screen shows, as the emulator's scripts do
-(see shells/desktop/src/headless.rs). The firmware's side is in
-shells/xteink/src/remote.rs.
+(see shells/desktop/src/headless.rs). The commands are described in
+crates/quireink-x4/src/remote.rs, the firmware's side is in
+shells/xteink/src/remote.rs (its `remote` feature: released firmware
+leaves it out).
 
 Usage:
   python tools/x4-remote.py [--port COM10] [--script STEPS] [--screenshot FILE]

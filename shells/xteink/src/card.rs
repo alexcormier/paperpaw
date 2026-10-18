@@ -1,10 +1,58 @@
 //! The microSD card's blocks (read and written by [`quireink_x4::card`])
 //! for QuireInk's FAT storage.
 
+use alloc::boxed::Box;
+use core::cell::RefCell;
+
 use embedded_hal::delay::DelayNs;
 use embedded_hal::digital::OutputPin;
 use embedded_hal::spi::SpiBus;
-use quireink_fat::{BLOCK, Blocks, DiskError};
+use esp_hal::delay::Delay;
+use esp_hal::gpio::Output;
+use esp_hal::spi::master::Config as SpiConfig;
+use esp_hal::time::Rate;
+use log::{info, warn};
+use quireink_fat::fatfs::{FileSystem, FsOptions};
+use quireink_fat::{BLOCK, BlockDisk, Blocks, DiskError, FatStorage, VolumeError};
+use quireink_platform::{NoStorage, Storage};
+
+use crate::board::{self, Bus};
+
+/// The card's FAT file system as QuireInk's storage, then the bus at full
+/// speed; without a card or one QuireInk cannot read, no storage.
+pub fn mount(
+    bus: &'static RefCell<Bus>,
+    spi: SpiConfig,
+    select: Output<'static>,
+    delay: Delay,
+) -> Box<dyn Storage> {
+    // A card wants clocks with nothing selected before it starts.
+    let _ = bus.borrow_mut().write(&[0xFF; 10]);
+    let sd = match quireink_x4::card::Card::new(bus, select, delay) {
+        Ok(sd) => sd,
+        Err(e) => {
+            warn!("SD card: {e:?}");
+            return Box::new(NoStorage);
+        }
+    };
+    let _ = bus
+        .borrow_mut()
+        .apply_config(&spi.with_frequency(Rate::from_mhz(board::SPI_MHZ)));
+    info!("SD card: {} MB", sd.blocks() >> 11);
+    let fs = BlockDisk::volume(Card(sd))
+        .and_then(|disk| FileSystem::new(disk, FsOptions::new()).map_err(|_| VolumeError::NoFat));
+    match fs {
+        Ok(fs) => Box::new(FatStorage::new(Box::leak(Box::new(fs)))),
+        Err(e) => {
+            match e {
+                VolumeError::ExFat => warn!("SD card: exFAT; QuireInk reads FAT32"),
+                VolumeError::NoFat => warn!("SD card: no FAT file system"),
+                VolumeError::Disk => warn!("SD card: not readable"),
+            }
+            Box::new(NoStorage)
+        }
+    }
+}
 
 /// The card, as blocks.
 pub struct Card<'a, BUS, CS, D>(pub quireink_x4::card::Card<'a, BUS, CS, D>);
@@ -20,12 +68,14 @@ impl<BUS: SpiBus, CS: OutputPin, D: DelayNs> Blocks for Card<'_, BUS, CS, D> {
 
     fn read_blocks(&mut self, index: u32, data: &mut [u8]) -> Result<(), DiskError> {
         let blocks = data.as_chunks_mut::<BLOCK>().0;
+        #[cfg(feature = "remote")]
         crate::traced::blocks(index, blocks.len() as u32, 0);
         self.0.read(index, blocks).map_err(|_| DiskError)
     }
 
     fn write_blocks(&mut self, index: u32, data: &[u8]) -> Result<(), DiskError> {
         let blocks = data.as_chunks::<BLOCK>().0;
+        #[cfg(feature = "remote")]
         crate::traced::blocks(index, 0, blocks.len() as u32);
         self.0.write(index, blocks).map_err(|_| DiskError)
     }

@@ -1834,7 +1834,7 @@ fn keymap_presets_follow_device_defaults_and_switch_at_runtime() {
     let log = log();
     let mut kernel = Kernel::builder(DEVICE)
         .plugin(TestPlugin::new("a", &log))
-        .setting_default("core.keymap-preset", "core.two-buttons")
+        .setting_default(&settings::KEYMAP_PRESET, "core.two-buttons".into())
         .build()
         .unwrap();
     assert!(kernel.take_warnings().is_empty());
@@ -1883,7 +1883,7 @@ fn keymap_presets_follow_device_defaults_and_switch_at_runtime() {
 
     // Unknown device defaults are reported.
     let mut kernel = Kernel::builder(DEVICE)
-        .setting_default("core.keymap-preset", "nope.preset")
+        .setting_default(&settings::KEYMAP_PRESET, "nope.preset".into())
         .build()
         .unwrap();
     assert_eq!(kernel.take_warnings().len(), 1);
@@ -2048,7 +2048,7 @@ fn the_power_button_puts_the_device_to_sleep_where_the_shell_can() {
 fn the_device_sleeps_by_itself_after_a_while_unused() {
     let mut kernel = Kernel::builder(DEVICE)
         .sleep(true)
-        .setting_default("core.sleep-after", "1")
+        .setting_default(&settings::SLEEP_AFTER, 1)
         .build()
         .unwrap();
     let effects = kernel.start(Instant(0));
@@ -2061,7 +2061,7 @@ fn the_device_sleeps_by_itself_after_a_while_unused() {
     // Never, where the setting says so.
     let mut kernel = Kernel::builder(DEVICE)
         .sleep(true)
-        .setting_default("core.sleep-after", "0")
+        .setting_default(&settings::SLEEP_AFTER, 0)
         .build()
         .unwrap();
     assert_eq!(kernel.start(Instant(0)).wake_at(), None);
