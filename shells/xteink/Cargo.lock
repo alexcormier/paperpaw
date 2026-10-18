@@ -642,6 +642,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "ed25519-compact"
+version = "2.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1454db4f2edb7f0e8fe0c5b375b0c978fc63244cc9f010d160e417eb10139aa8"
+
+[[package]]
 name = "either"
 version = "1.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2032,6 +2038,7 @@ dependencies = [
  "quireink-plugin-stats",
  "quireink-plugin-transfer",
  "quireink-plugin-translate",
+ "quireink-plugin-update",
  "quireink-plugin-vocabulary",
  "quireink-plugin-wallabag",
  "quireink-plugin-wifi",
@@ -2360,6 +2367,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "quireink-plugin-update"
+version = "0.3.0"
+dependencies = [
+ "quireink-sdk",
+]
+
+[[package]]
 name = "quireink-plugin-vocabulary"
 version = "0.3.0"
 dependencies = [
@@ -2401,6 +2415,7 @@ dependencies = [
  "quireink-platform",
  "quireink-sqlite",
  "quireink-text",
+ "quireink-update",
  "quireink-xml",
  "quireink-zip",
 ]
@@ -2430,6 +2445,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "quireink-update"
+version = "0.3.0"
+dependencies = [
+ "ed25519-compact",
+]
+
+[[package]]
 name = "quireink-x4"
 version = "0.3.0"
 dependencies = [
@@ -2456,6 +2478,7 @@ dependencies = [
  "esp-println",
  "esp-radio",
  "esp-rtos",
+ "esp-storage",
  "log",
  "mbedtls-rs",
  "nb 1.1.0",

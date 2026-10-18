@@ -60,6 +60,9 @@ pub struct Env<'a> {
     /// Wi-Fi, where QuireInk manages it itself (see
     /// [`wifi`](crate::wifi)); `None` where the system does.
     pub wifi: Option<&'a crate::wifi::Wifi>,
+    /// Firmware updates, where QuireInk is the device's firmware (see
+    /// [`firmware`](crate::firmware)); `None` where it is an app.
+    pub firmware: Option<&'a crate::firmware::Firmware>,
     /// Whether there is text on the clipboard, copied here
     /// ([`Command::SetClipboard`](crate::Command::SetClipboard)) or, where
     /// the system has a clipboard, in another app; read it with

@@ -5,8 +5,6 @@ The firmware for the Xteink X4 (ESP32-C3). See
 hardware parts are in [`quireink-x4`](../../crates/quireink-x4) and
 [`quireink-fat`](../../crates/quireink-fat), tested on a computer.
 
-> **Not yet run on a device.** It builds, and its parts are tested
-> against simulated hardware; the first runs on an X4 are still to come.
 > Save the stock firmware first (below), so the X4 can always go back.
 
 It is for the X4 with an SSD1677 display controller. Not for the X4 Pro,
@@ -66,7 +64,8 @@ python tools/x4-remote.py --script "page-forward,right,describe" --screenshot ou
 - Wi-Fi (ADR 0016): on when something needs the network, chosen on the
   Wi-Fi page in the settings; HTTP and HTTPS (ADR 0017) for plugins,
   downloads straight to the card.
-- To come: certificates' dates (once the time comes over the network),
-  plugins' servers and sockets (transfers, Calibre),
-  the time over the network, updates over the air, 4 gray levels, the
-  UC8179 controller of newer X4s.
+- Updates from the card (ADR 0019): two app partitions
+  (`partitions.csv`, which `espflash.toml` names), signed update files
+  made with `quireink-sign`, a failed update undone at the next start.
+- To come: 4 gray levels, the UC8179 controller of newer X4s, updates
+  fetched over the network.

@@ -1,10 +1,12 @@
 # The X4's chip: an ESP32-C3 (RISC-V). `cargo run --release` flashes it
-# with espflash (`cargo install espflash`) and shows its log.
+# with espflash (`cargo install espflash`) and shows its log. The OTA data
+# is erased, so the firmware flashed starts rather than one installed as
+# an update before.
 [build]
 target = "riscv32imc-unknown-none-elf"
 
 [target.riscv32imc-unknown-none-elf]
-runner = "espflash flash --monitor --chip esp32c3"
+runner = "espflash flash --monitor --chip esp32c3 --erase-parts otadata"
 # Frame pointers for backtraces; the linker script is in build.rs.
 rustflags = ["-C", "force-frame-pointers"]
 

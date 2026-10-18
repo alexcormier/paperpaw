@@ -65,6 +65,7 @@ pub fn install(builder: KernelBuilder, fonts: Fonts) -> KernelBuilder {
         .plugin(quireink_plugin_settings::SettingsPlugin)
         .plugin(quireink_plugin_plugin_manager::PluginManager)
         .plugin(quireink_plugin_diagnostics::Diagnostics)
+        .plugin(quireink_plugin_update::Update)
         .plugin(quireink_plugin_about::About)
         .plugin(quireink_plugin_setup::Setup)
 }

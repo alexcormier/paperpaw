@@ -86,6 +86,7 @@ use crate::refresh::RefreshPolicy;
 use crate::registry::{PluginRegistrar, Registry, Staging};
 pub use crate::sockets::{SOCKET_PART, SocketCall, SocketEvent};
 use quireink_sdk::filters::InputVerdict;
+pub use quireink_sdk::firmware::{Firmware, FirmwareCommand, FirmwareState, InstallFailure};
 pub use quireink_sdk::wifi::{JoinFailure, WifiCommand, WifiNetwork, WifiState};
 
 pub use quireink_sdk as sdk;
@@ -246,6 +247,7 @@ pub struct KernelBuilder {
     glyph_cache: usize,
     network: bool,
     wifi: bool,
+    firmware: Option<Firmware>,
     system_clipboard: bool,
     speech: bool,
     sleep: bool,
@@ -362,6 +364,14 @@ impl KernelBuilder {
     pub fn wifi(mut self, managed: bool) -> Self {
         self.wifi = managed;
         self.network |= managed;
+        self
+    }
+
+    /// QuireInk is the device's firmware and updates it (the shell answers
+    /// [`Kernel::take_firmware_calls`] and reports with
+    /// [`Kernel::firmware_state`]). See [`quireink_sdk::firmware`].
+    pub fn firmware(mut self, firmware: Firmware) -> Self {
+        self.firmware = Some(firmware);
         self
     }
 
@@ -486,6 +496,7 @@ impl KernelBuilder {
                 stylesheets: Vec::new(),
                 network: self.network,
                 wifi: self.wifi.then(quireink_sdk::wifi::Wifi::default),
+                firmware: self.firmware,
                 clipboard: String::new(),
                 system_clipboard: false,
                 speech: self.speech,
@@ -552,6 +563,7 @@ impl KernelBuilder {
             awaiting: Vec::new(),
             next_request: 0,
             wifi_calls: Vec::new(),
+            firmware_calls: Vec::new(),
             network_waiting: None,
             screens_changed: false,
             settling: false,
@@ -568,6 +580,10 @@ impl KernelBuilder {
         kernel.shared.menus.set_rotation(self.rotation);
         kernel.shared.menus.set_colors(self.colors);
         kernel.shared.menus.set_wifi(kernel.shared.wifi.is_some());
+        kernel
+            .shared
+            .menus
+            .set_firmware(kernel.shared.firmware.is_some());
         kernel
             .shared
             .menus
@@ -876,6 +892,9 @@ pub struct Kernel {
     next_request: u32,
     /// What the shell is to do with the radio (see [`Kernel::take_wifi_calls`]).
     wifi_calls: Vec<WifiCommand>,
+    /// What the shell is to do with the firmware (see
+    /// [`Kernel::take_firmware_calls`]).
+    firmware_calls: Vec<FirmwareCommand>,
     /// Since when plugins' network work has waited for a network.
     network_waiting: Option<Instant>,
     /// A screen was opened or closed since the last call ended; then the
@@ -919,6 +938,7 @@ impl Kernel {
             glyph_cache: DEFAULT_GLYPH_CACHE,
             network: false,
             wifi: false,
+            firmware: None,
             system_clipboard: false,
             speech: false,
             sleep: false,
@@ -2026,6 +2046,28 @@ impl Kernel {
         mem::take(&mut self.wifi_calls)
     }
 
+    /// What to do with the firmware, where QuireInk is it
+    /// ([`KernelBuilder::firmware`]); report with
+    /// [`Kernel::firmware_state`]. Check after every kernel call.
+    pub fn take_firmware_calls(&mut self) -> Vec<FirmwareCommand> {
+        mem::take(&mut self.firmware_calls)
+    }
+
+    /// How an install goes: plugins hear of it.
+    pub fn firmware_state(&mut self, now: Instant, state: FirmwareState) -> Effects {
+        let _running = self.shared.meter.enter(meter::CORE);
+        self.now = now;
+        if let Some(firmware) = &mut self.shared.firmware
+            && firmware.state != state
+        {
+            firmware.state = state;
+            self.output
+                .commands
+                .push(Command::Emit(events::FIRMWARE_CHANGED, Params::new()));
+        }
+        self.finish()
+    }
+
     /// What happened with Wi-Fi: plugins hear of it, and network work that
     /// waited goes on once there is a network.
     pub fn wifi_event(&mut self, now: Instant, event: WifiEvent) -> Effects {
@@ -3090,6 +3132,17 @@ impl Kernel {
             Command::Restart => self.restart = true,
             Command::Sleep => self.sleep = self.shared.sleep,
             Command::SetSecret(change) => self.set_secret(change),
+            Command::Firmware(command) => {
+                if self.shared.firmware.is_some() {
+                    self.firmware_calls.push(command);
+                } else {
+                    self.warn(
+                        WarningSource::Runtime,
+                        None,
+                        String::from("QuireInk is not this device's firmware"),
+                    );
+                }
+            }
             Command::Wifi(command) => match &mut self.shared.wifi {
                 Some(wifi) => {
                     if command == WifiCommand::Scan {
@@ -4033,6 +4086,9 @@ struct Shared {
     network: bool,
     /// Wi-Fi, where QuireInk manages it (see [`KernelBuilder::wifi`]).
     wifi: Option<quireink_sdk::wifi::Wifi>,
+    /// Firmware updates, where QuireInk is the firmware (see
+    /// [`KernelBuilder::firmware`]).
+    firmware: Option<Firmware>,
     /// Text copied here.
     clipboard: String,
     /// The system's clipboard has text (see
@@ -4083,6 +4139,7 @@ impl Shared {
             stylesheets: &self.stylesheets,
             network: self.network,
             wifi: self.wifi.as_ref(),
+            firmware: self.firmware.as_ref(),
             clipboard: self.system_clipboard || !self.clipboard.is_empty(),
             speech: self.speech,
             sleep: self.sleep,

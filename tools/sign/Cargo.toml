@@ -1,0 +1,19 @@
+[package]
+name = "quireink-sign"
+description = "Signs QuireInk firmware images as update files, makes signing keys and shows what an update file holds"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+publish = false
+
+[dependencies]
+quireink-update = { workspace = true }
+# Only for new keys.
+ed25519-compact = { version = "2.6", default-features = false, features = ["random"] }
+
+[lints]
+workspace = true

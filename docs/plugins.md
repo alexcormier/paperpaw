@@ -323,6 +323,18 @@ Read large JSON answers as they stream with `json::stream`, so they
 need little memory. `Command::Serve` serves HTTP to the local network,
 e.g. for transfers from a computer or typing on a phone.
 
+### Firmware updates
+
+Where QuireInk is the device's firmware (the X4), `env.firmware` says
+which version runs and how an install goes; elsewhere it is `None`.
+`Command::Firmware(FirmwareCommand::Install { path })` installs a
+signed update file, `FirmwareCommand::Restart` restarts into it once
+`FirmwareState::Installed`; `events::FIRMWARE_CHANGED` comes on the
+way. `firmware::Update::read` tells what a file holds before. The
+`update` plugin does all this for update files on the card; a plugin
+that fetches updates from somewhere else only needs to put the file
+there.
+
 ## Memory
 
 The smallest device, the Xteink X4, has 192 KiB of heap for everything.

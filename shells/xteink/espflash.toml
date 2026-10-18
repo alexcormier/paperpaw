@@ -1,0 +1,4 @@
+# espflash reads this for `cargo run`, `espflash flash` and `save-image`
+# in this folder.
+[idf]
+partition_table = "partitions.csv"

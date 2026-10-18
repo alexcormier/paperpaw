@@ -6,6 +6,15 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Firmware updates on the X4 ([ADR 0019](docs/adr/0019-firmware-updates.md)):
+  two app partitions (the web flasher sets them up once), an update file
+  in the folder `updates` on the card installed from Settings, *Update*
+  (or offered at start) in about 45 s, then a restart. A new firmware
+  that does not get to its first frame is undone at the next start.
+  Update files are signed (Ed25519, `quireink-update`, made with
+  `quireink-sign`): QuireInk's key is built in, one's own builds are
+  installed once their key is trusted on the device. Releases carry the
+  signed update file beside the image for the web flasher.
 - HTTPS on the X4 ([ADR 0017](docs/adr/0017-tls-on-the-x4.md)): mbedTLS
   (TLS 1.2 and 1.3), the certificate checked against Mozilla's roots,
   which stay in flash, and against the host; refused certificates fail

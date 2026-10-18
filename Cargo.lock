@@ -392,6 +392,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "edf234dd1594d6dd434a8fb8cada51ddbbc593e40e4a01556a0b31c62da2775b"
 
 [[package]]
+name = "ed25519-compact"
+version = "2.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1454db4f2edb7f0e8fe0c5b375b0c978fc63244cc9f010d160e417eb10139aa8"
+dependencies = [
+ "getrandom 0.4.3",
+]
+
+[[package]]
 name = "embedded-hal"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -552,8 +561,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "300e883d756b2e4ec94e02791f39b04b522276138852cfc41d9fb7e904106099"
 dependencies = [
  "cfg-if",
+ "js-sys",
  "libc",
  "r-efi 6.0.0",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -1291,6 +1302,7 @@ dependencies = [
  "quireink-plugin-stats",
  "quireink-plugin-transfer",
  "quireink-plugin-translate",
+ "quireink-plugin-update",
  "quireink-plugin-vocabulary",
  "quireink-plugin-wallabag",
  "quireink-plugin-wifi",
@@ -1690,6 +1702,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "quireink-plugin-update"
+version = "0.3.0"
+dependencies = [
+ "quireink-i18n",
+ "quireink-sdk",
+ "quireink-update",
+]
+
+[[package]]
 name = "quireink-plugin-vocabulary"
 version = "0.3.0"
 dependencies = [
@@ -1746,6 +1767,7 @@ dependencies = [
  "quireink-platform",
  "quireink-sqlite",
  "quireink-text",
+ "quireink-update",
  "quireink-xml",
  "quireink-zip",
 ]
@@ -1756,6 +1778,14 @@ version = "0.3.0"
 dependencies = [
  "quireink-core",
  "quireink-http",
+]
+
+[[package]]
+name = "quireink-sign"
+version = "0.3.0"
+dependencies = [
+ "ed25519-compact",
+ "quireink-update",
 ]
 
 [[package]]
@@ -1782,6 +1812,13 @@ dependencies = [
  "quireink-graphics",
  "quireink-platform",
  "skrifa",
+]
+
+[[package]]
+name = "quireink-update"
+version = "0.3.0"
+dependencies = [
+ "ed25519-compact",
 ]
 
 [[package]]

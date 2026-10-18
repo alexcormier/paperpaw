@@ -64,6 +64,9 @@ pub enum MenuNeed {
     /// A device where QuireInk manages Wi-Fi itself
     /// ([`Env::wifi`](crate::Env)), hidden elsewhere.
     Wifi,
+    /// A device whose firmware QuireInk is, updated by QuireInk
+    /// ([`Env::firmware`](crate::Env)), hidden elsewhere.
+    Firmware,
 }
 
 /// One entry of a resolved menu.
@@ -102,6 +105,7 @@ pub struct Menus {
     /// Buttons lie in a row below the screen.
     button_row: bool,
     wifi: bool,
+    firmware: bool,
 }
 
 impl Menus {
@@ -160,6 +164,12 @@ impl Menus {
         self.wifi = wifi;
     }
 
+    /// Whether QuireInk is the device's firmware, for entries that need
+    /// it ([`MenuNeed::Firmware`]).
+    pub fn set_firmware(&mut self, firmware: bool) {
+        self.firmware = firmware;
+    }
+
     /// Offers `item` only where `need` is met.
     pub fn set_need(&mut self, item: Id, need: MenuNeed) {
         self.needs.insert(item, need);
@@ -189,6 +199,7 @@ impl Menus {
             Some(MenuNeed::Colors) => self.tints,
             Some(MenuNeed::ButtonRow) => self.button_row,
             Some(MenuNeed::Wifi) => self.wifi,
+            Some(MenuNeed::Firmware) => self.firmware,
             Some(MenuNeed::NoTouch) => listed || !self.touch,
             None => true,
         }

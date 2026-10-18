@@ -37,6 +37,7 @@ mod env;
 mod event;
 pub mod files;
 pub mod filters;
+pub mod firmware;
 mod fonts;
 mod formats;
 mod gesture;

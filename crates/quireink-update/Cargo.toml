@@ -1,0 +1,20 @@
+[package]
+name = "quireink-update"
+description = "QuireInk's firmware updates: the signed update file, what its image says about itself, and the signature checked as it is read (no_std)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+categories = ["no-std", "embedded", "cryptography"]
+keywords = ["firmware", "update", "ota", "ed25519", "esp32"]
+
+[dependencies]
+# Small code (no forced inlining): on the X4 over 1 MB less, a check
+# of a few seconds per update all the same.
+ed25519-compact = { version = "2.6", default-features = false, features = ["opt_size"] }
+
+[lints]
+workspace = true

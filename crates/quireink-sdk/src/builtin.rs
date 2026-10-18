@@ -289,6 +289,10 @@ pub mod events {
     /// connection), where QuireInk manages Wi-Fi: e.g. to switch the radio
     /// off a little later.
     pub const NETWORK_IDLE: Id = Id::new_static("core.network-idle");
+    /// An install of a firmware update went on, ended or failed
+    /// ([`Firmware::state`](crate::firmware::Firmware), see
+    /// [`firmware`](crate::firmware)).
+    pub const FIRMWARE_CHANGED: Id = Id::new_static("core.firmware-changed");
 }
 
 /// Status items of the kernel (see [`status`](crate::status)).

@@ -26,6 +26,7 @@ mod input;
 mod link;
 mod net;
 mod network;
+mod ota;
 mod power;
 mod remote;
 mod roots;
@@ -55,7 +56,7 @@ use esp_hal::time::Rate;
 use esp_hal::timer::PeriodicTimer;
 use esp_hal::timer::timg::TimerGroup;
 use log::{info, warn};
-use quireink_core::{Effects, Kernel};
+use quireink_core::{Effects, FirmwareCommand, FirmwareState, InstallFailure, Kernel};
 use quireink_fat::fatfs::{FileSystem, FsOptions};
 use quireink_fat::{BlockDisk, FatStorage, VolumeError};
 use quireink_platform::{
@@ -67,7 +68,18 @@ use quireink_x4::battery;
 use quireink_x4::buttons;
 use quireink_x4::display::{self, Display, Planes, Refresh};
 
-esp_bootloader_esp_idf::esp_app_desc!();
+// QuireInk's version and which firmware this is, read from updates.
+esp_bootloader_esp_idf::esp_app_desc!(
+    env!("QUIREINK_VERSION"),
+    "quireink-xteink",
+    esp_bootloader_esp_idf::BUILD_TIME,
+    esp_bootloader_esp_idf::BUILD_DATE,
+    esp_bootloader_esp_idf::ESP_IDF_COMPATIBLE_VERSION,
+    esp_bootloader_esp_idf::MMU_PAGE_SIZE,
+    0,
+    u16::MAX,
+    esp_bootloader_esp_idf::SECURE_VERSION
+);
 
 /// Heap for QuireInk: what the emulator's X4 profile allows.
 const HEAP_SIZE: usize = 192 * 1024;
@@ -153,6 +165,9 @@ fn main() -> ! {
         warn!("the last run panicked: {message}");
     }
     remote::note_panic(panicked);
+    // Before anything else: an update on trial that failed is undone here
+    // (a restart into the firmware before it).
+    let mut ota = ota::Ota::start(p.FLASH);
 
     // One SPI bus for the display and the card, with DMA for all but
     // short transfers: the processor fed the bus a word at a time and
@@ -289,6 +304,10 @@ fn main() -> ! {
         // network joined before, for transfers and for trying things.
         .wifi(true)
         .setting_default(quireink_plugin_wifi::WHILE_CHARGING.as_str(), "true");
+    let builder = match &ota {
+        Some(ota) => builder.firmware(ota.firmware()),
+        None => builder,
+    };
     let builder = quireink_app::install(builder, quireink_app::Fonts::Packs).plugin(device::X4);
     let mut kernel = match builder.build() {
         Ok(kernel) => kernel,
@@ -307,9 +326,15 @@ fn main() -> ! {
     let mut wake_at: Option<Instant> = None;
     let effects = kernel.start(now());
     let mut sleep = apply(&mut kernel, &mut display, effects, &mut wake_at);
+    // Its first frame is shown: an update on trial started cleanly.
+    if let Some(ota) = &mut ota {
+        ota.confirm();
+    }
 
     loop {
-        if sleep {
+        // Not while an update is written: it goes on to its end.
+        let installing = ota.as_ref().is_some_and(ota::Ota::installing);
+        if sleep && !installing {
             // Plugins save what is pending; the screen stays as it is.
             let effects = kernel.suspend(now());
             apply(&mut kernel, &mut display, effects, &mut wake_at);
@@ -370,8 +395,34 @@ fn main() -> ! {
         for effects in network.step(&mut kernel, now()) {
             sleep |= apply(&mut kernel, &mut display, effects, &mut wake_at);
         }
+        for command in kernel.take_firmware_calls() {
+            match command {
+                FirmwareCommand::Install { path } => {
+                    let state = match &mut ota {
+                        Some(ota) => ota.begin(kernel.storage(), &path),
+                        None => FirmwareState::Failed(InstallFailure::Write),
+                    };
+                    let effects = kernel.firmware_state(now(), state);
+                    sleep |= apply(&mut kernel, &mut display, effects, &mut wake_at);
+                }
+                FirmwareCommand::Restart => {
+                    // What plugins keep is saved first.
+                    info!("restarting");
+                    let effects = kernel.suspend(now());
+                    apply(&mut kernel, &mut display, effects, &mut wake_at);
+                    esp_hal::system::software_reset();
+                }
+            }
+        }
+        if let Some(ota) = &mut ota
+            && let Some(state) = ota.step(kernel.storage())
+        {
+            let effects = kernel.firmware_state(now(), state);
+            sleep |= apply(&mut kernel, &mut display, effects, &mut wake_at);
+        }
         // Not while the radio is on: its tasks run in between.
         let battery = !network.radio_on()
+            && !installing
             && ((usb.is_low() && kernel.settings().bool(device::LIGHT_SLEEP.as_str()))
                 || sleep_on_usb_until.is_some());
         power::allow(battery);
@@ -422,9 +473,13 @@ fn main() -> ! {
             esp_println::println!("QI:OK");
         } else if let Some(remote::Command::Open(path)) = command {
             kernel_time = now().0.max(kernel_time);
-            let params = quireink_sdk::Params::new().with(quireink_sdk::builtin::params::PATH, path);
-            let effects =
-                kernel.open_slot(Instant(kernel_time), quireink_sdk::builtin::slots::READER, params);
+            let params =
+                quireink_sdk::Params::new().with(quireink_sdk::builtin::params::PATH, path);
+            let effects = kernel.open_slot(
+                Instant(kernel_time),
+                quireink_sdk::builtin::slots::READER,
+                params,
+            );
             sleep |= apply(&mut kernel, &mut display, effects, &mut wake_at);
             esp_println::println!("QI:OK");
         } else if let Some(remote::Command::Refresh(full)) = command {
@@ -488,8 +543,8 @@ fn main() -> ! {
         let mut until = now().0
             + if battery {
                 IDLE_MS
-            } else if network.moving() {
-                // Data on the way: the network is polled again at once.
+            } else if network.moving() || installing {
+                // Data on the way, or an update: on at once.
                 0
             } else {
                 POLL_MS

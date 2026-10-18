@@ -29,6 +29,9 @@ esp-alloc = { version = "0.11", features = ["esp32c3"] }
 esp-backtrace = { version = "0.20", features = ["esp32c3", "println"] }
 esp-println = { version = "0.18", features = ["esp32c3", "log-04"] }
 esp-bootloader-esp-idf = { version = "0.6", features = ["esp32c3"] }
+# The flash, for updates (`src/ota.rs`); with interrupts held while it is
+# written, as code runs from it.
+esp-storage = { version = "0.10", features = ["esp32c3", "critical-section"] }
 embedded-hal = "1.0"
 embedded-hal-bus = "0.3"
 log = "0.4"

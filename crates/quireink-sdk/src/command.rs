@@ -258,6 +258,10 @@ pub enum Command {
     /// ([`Env::wifi`](crate::Env)); see [`wifi`](crate::wifi). Ignored
     /// elsewhere.
     Wifi(crate::wifi::WifiCommand),
+    /// Installs a firmware update or restarts, where QuireInk is the
+    /// device's firmware ([`Env::firmware`](crate::Env)); see
+    /// [`firmware`](crate::firmware). Ignored elsewhere.
+    Firmware(crate::firmware::FirmwareCommand),
     /// Asks the shell to sleep once the frame is shown, where it can
     /// ([`Env::sleep`](crate::Env)); the kernel is told when it wakes.
     Sleep,
