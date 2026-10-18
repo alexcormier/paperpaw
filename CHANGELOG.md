@@ -16,6 +16,12 @@ change the plugin SDK.
   shows it in the status line and on the home screen; the time zone is
   chosen under Settings, System (UTC on "Auto": the X4 has none of its
   own). Gone when it is switched off, until it is online again.
+- Screens come up faster on the X4: what a screen reads while it is
+  drawn in bands comes from the card once, not once per band (the home
+  screen after a book: 0.3 s instead of 1.9 s to draw). Plugins get this
+  without any change.
+- The screen lock could not be switched off with buttons: the chosen row
+  was white on white. Its kinds are a list as in menus now.
 - Wi-Fi transfer and Calibre on the X4: plugins' servers and sockets work
   there now (books up from a browser at about 190 KB/s, from Calibre at
   about 110 KB/s, files down at about 140 KB/s). The transfer's address is

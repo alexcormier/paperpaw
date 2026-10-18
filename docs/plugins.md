@@ -131,7 +131,11 @@ Some rules every screen should follow:
   focus only once buttons are used (`ListView::focus_on_keys`).
 - **`draw` must not change state.** On small devices a frame is drawn in
   bands, so `draw` may run several times for one frame. It can skip what
-  lies outside `canvas.clip()`.
+  lies outside `canvas.clip()`. Small files and sizes it reads come from
+  the card once per frame (the kernel keeps them while it draws), but
+  work on what was read (parsing, sorting, decoding) is done again for
+  every band: keep it in the screen, made when it opens or its data
+  changes.
 - **Ask for redraws.** After a change, `cx.request_redraw()` (or a part
   of the screen) and `cx.request_refresh(mode)`: `Fast` for a moving
   focus, `Partial` for new content, `Full` to clear ghosting.

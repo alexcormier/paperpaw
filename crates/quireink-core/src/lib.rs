@@ -43,6 +43,7 @@ mod input;
 mod keymap;
 mod meter;
 mod net;
+mod recall;
 mod refresh;
 mod registry;
 mod sockets;
@@ -414,8 +415,17 @@ impl KernelBuilder {
         let framebuffer = Framebuffer::banded(display.width, display.height, rows, display.format)
             .map_err(KernelError::Graphics)?;
         let meter = meter::Meter::new(self.clock);
+        // What a call reads, kept for the rest of it (more where memory is
+        // plentiful).
+        let recall = alloc::rc::Rc::new(recall::Recall::new(match self.device.memory {
+            quireink_platform::MemoryClass::Small => 16 * 1024,
+            quireink_platform::MemoryClass::Large => 256 * 1024,
+        }));
         let storage = Box::new(meter::Metered {
-            inner: self.storage.unwrap_or_else(|| Box::new(NoStorage)),
+            inner: Box::new(recall::Recalled {
+                inner: self.storage.unwrap_or_else(|| Box::new(NoStorage)),
+                recall: recall.clone(),
+            }),
             meter: meter.clone(),
         });
         let mut kernel = Kernel {
@@ -450,6 +460,7 @@ impl KernelBuilder {
                 font_dirs: Vec::new(),
                 secrets: Default::default(),
                 storage,
+                recall,
                 keymap: Keymap::default(),
             },
             pending: None,
@@ -1243,6 +1254,8 @@ impl Kernel {
                 .format(key, &[("path", quireink_sdk::Arg::Str(&path))]);
             self.output.commands.push(Command::Notify(text));
         }
+        // Read once for all the bands; not kept past the frame.
+        self.shared.recall.clear();
     }
 
     /// Draws again what [`Kernel::render`] drew last, passing it the same
@@ -2737,6 +2750,11 @@ impl Kernel {
         .into_iter()
         .flatten()
         .min();
+        // What was read is kept for the frame the call drew, if any, then
+        // forgotten (see `render`).
+        if self.unrendered.is_none() {
+            self.shared.recall.clear();
+        }
         effects
     }
 
@@ -3750,6 +3768,8 @@ struct Shared {
     /// Passwords and keys (see [`quireink_sdk::secrets`]).
     secrets: quireink_sdk::secrets::Secrets,
     storage: Box<dyn Storage>,
+    /// What the storage read during the call going on (see `recall`).
+    recall: alloc::rc::Rc<recall::Recall>,
     keymap: Keymap,
     /// What each plugin takes.
     meter: alloc::rc::Rc<meter::Meter>,
