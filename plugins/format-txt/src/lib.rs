@@ -44,7 +44,7 @@ impl Plugin for TxtFormat {
         }
     }
 
-    fn register(&self, r: &mut dyn Registrar) -> Result<(), RegisterError> {
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_format(FormatSpec {
             id: FORMAT,
             title: Cow::Borrowed("format-txt.title"),

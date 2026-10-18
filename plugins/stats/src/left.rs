@@ -56,7 +56,7 @@ fn pages_left(context: &Params, chapter: bool) -> Option<f32> {
     Some(((end - at) / 1000.0 * pages).max(0.0))
 }
 
-pub(crate) fn register(r: &mut dyn Registrar) -> Result<(), RegisterError> {
+pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     // The speed is worked out once a book is opened (and on the first
     // use), not for every page.
     let speed_known: Rc<Cell<Option<Option<f32>>>> = Rc::new(Cell::new(None));

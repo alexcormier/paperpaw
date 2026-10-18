@@ -77,7 +77,7 @@ impl Plugin for SettingsPlugin {
         }
     }
 
-    fn register(&self, r: &mut dyn Registrar) -> Result<(), RegisterError> {
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_screen(ScreenSpec {
             id: SCREEN,
             title: Cow::Borrowed("settings.title"),

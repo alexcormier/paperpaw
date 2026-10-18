@@ -132,11 +132,7 @@ fn manifest() -> Manifest {
     }
 }
 
-fn register(
-    r: &mut dyn Registrar,
-    faces: Faces,
-    icons: &'static [u8],
-) -> Result<(), RegisterError> {
+fn register(r: &mut Registrar, faces: Faces, icons: &'static [u8]) -> Result<(), RegisterError> {
     r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
     for (id, role, data, weight) in faces {
         let font =
@@ -166,7 +162,7 @@ impl Plugin for DefaultFonts {
         manifest()
     }
 
-    fn register(&self, r: &mut dyn Registrar) -> Result<(), RegisterError> {
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         register(r, preferred::faces(), preferred::ICONS)
     }
 }
@@ -177,7 +173,7 @@ impl Plugin for DefaultFontPacks {
         manifest()
     }
 
-    fn register(&self, r: &mut dyn Registrar) -> Result<(), RegisterError> {
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         register(r, packs::faces(), packs::ICONS)
     }
 }

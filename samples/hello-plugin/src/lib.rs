@@ -47,7 +47,7 @@ impl Plugin for Hello {
         }
     }
 
-    fn register(&self, r: &mut dyn Registrar) -> Result<(), RegisterError> {
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         // Books opened since the start, counted by the event below and
         // shown by the screen.
         let opened = Rc::new(Cell::new(0u32));

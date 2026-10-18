@@ -59,7 +59,7 @@ pub(crate) const TOOL_LABELS: &str = "home.tool-labels";
 /// Recent books shown as covers at most.
 const MAX_COVERS: usize = 8;
 
-pub(crate) fn register(r: &mut dyn Registrar) -> Result<(), RegisterError> {
+pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     let widget = |id: &'static str,
                   title: &'static str,
                   height: fn(&Env<'_>, u16) -> u16,

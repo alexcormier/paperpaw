@@ -7,8 +7,8 @@ use alloc::vec::Vec;
 use quireink_i18n::Catalog;
 use quireink_sdk::collections::VecMap;
 use quireink_sdk::{
-    ActionSpec, Actions, EventHandler, FontSpec, FormatSpec, HyphenationSpec, Id, MenuEntry,
-    Priority, RegisterError, Registrar, ScreenSpec, SettingGroupSpec, SettingSpec, SlotSpec,
+    ActionSpec, Actions, Contribution, EventHandler, FontSpec, FormatSpec, HyphenationSpec, Id,
+    MenuEntry, Priority, RegisterError, ScreenSpec, SettingGroupSpec, SettingSpec, SlotSpec,
     StatusItemSpec, StatusLineSpec,
 };
 
@@ -178,315 +178,105 @@ impl Staging {
     }
 }
 
-/// The [`Registrar`] handed to a plugin.
-pub(crate) struct PluginRegistrar<'a> {
-    plugin: Id,
-    staging: &'a mut Staging,
-}
-
-impl<'a> PluginRegistrar<'a> {
-    pub(crate) fn new(plugin: Id, staging: &'a mut Staging) -> Self {
-        Self { plugin, staging }
-    }
-
-    fn check_namespace(&self, id: &Id) -> Result<(), RegisterError> {
-        if id.is_owned_by(&self.plugin) {
-            Ok(())
-        } else {
-            Err(RegisterError::Namespace { id: id.clone() })
+/// Applies the contributions `plugin` made to `staging`, checking what its
+/// registrar could not: key maps, translations, hyphenation patterns.
+pub(crate) fn stage(
+    plugin: &Id,
+    contributions: Vec<Contribution>,
+    staging: &mut Staging,
+) -> Result<(), RegisterError> {
+    for contribution in contributions {
+        match contribution {
+            Contribution::Action(action) => staging.actions.push(action),
+            Contribution::Screen(screen) => staging.screens.push(screen),
+            Contribution::Slot(slot) => staging.slots.push(slot),
+            Contribution::SlotBinding {
+                slot,
+                screen,
+                priority,
+            } => staging.candidates.push(SlotCandidate {
+                slot,
+                screen,
+                priority,
+            }),
+            Contribution::Setting(setting) => staging.settings.push(*setting),
+            Contribution::SettingGroup(group) => staging.setting_groups.push(group),
+            Contribution::SettingDefault { setting, value } => {
+                staging.setting_defaults.push((setting, value));
+            }
+            Contribution::Keymap(source) => {
+                validate_keymap(&source)?;
+                staging.keymaps.push(source);
+            }
+            Contribution::KeymapPreset { id, source } => {
+                validate_keymap(&source)?;
+                staging.keymap_presets.push((id, source));
+            }
+            Contribution::Stylesheet(css) => staging.stylesheets.push(css),
+            Contribution::Font(font) => staging.fonts.push(*font),
+            Contribution::FontFile { id, path } => staging.font_files.push((id, path)),
+            Contribution::FontExtension { id, path, extends } => {
+                staging.font_extensions.push((id, path, extends));
+            }
+            Contribution::FontBinding {
+                role,
+                font,
+                priority,
+            } => staging.font_roles.push((role, font, priority)),
+            Contribution::Format(format) => staging.formats.push(*format),
+            Contribution::Hyphenation(spec) => {
+                quireink_sdk::hyphen::Patterns::new(spec.patterns).map_err(|e| {
+                    RegisterError::Invalid {
+                        message: Cow::Owned(alloc::format!("{}: {e}", spec.id)),
+                    }
+                })?;
+                staging.hyphenation.push(spec);
+            }
+            Contribution::MenuEntry(entry) => staging.menu_entries.push(entry),
+            Contribution::MenuSection(section) => staging.menu_sections.push(section),
+            Contribution::Icon { item, icon } => staging.icons.push((item, icon)),
+            Contribution::MenuNeed { item, need } => staging.menu_needs.push((item, need)),
+            Contribution::ScreenHints { screen, hints } => {
+                staging.screen_hints.push((screen, hints));
+            }
+            Contribution::Subscription { event, handler } => {
+                staging.subscriptions.push((event, plugin.clone(), handler));
+            }
+            Contribution::StatusItem(item) => staging.status_items.push(item),
+            Contribution::StatusLine(line) => staging.status_lines.push(line),
+            Contribution::TextFilter(filter) => staging.text_filters.push(filter),
+            Contribution::InputFilter(filter) => staging.input_filters.push(filter),
+            Contribution::RefreshFilter(filter) => staging.refresh_filters.push(filter),
+            Contribution::Widget(widget) => staging.widgets.push(*widget),
+            Contribution::SetupStep(step) => staging.setup_steps.push(*step),
+            Contribution::Service { id, service } => staging.services.push((id, service)),
+            Contribution::ToPoint { point, text } => staging.contributions.push((point, text)),
+            Contribution::Translations(source) => staging.catalogs.push(catalog(source)?),
+            // A kind of a newer SDK than this kernel knows: said, not lost.
+            other => {
+                return Err(RegisterError::Invalid {
+                    message: Cow::Owned(alloc::format!(
+                        "a contribution of kind `{}` this QuireInk does not know",
+                        other.kind()
+                    )),
+                });
+            }
         }
     }
-
-    fn check_unique<'i>(
-        mut ids: impl Iterator<Item = &'i Id>,
-        id: &Id,
-    ) -> Result<(), RegisterError> {
-        if ids.any(|existing| existing == id) {
-            Err(RegisterError::Duplicate { id: id.clone() })
-        } else {
-            Ok(())
-        }
-    }
+    Ok(())
 }
 
-impl Registrar for PluginRegistrar<'_> {
-    fn plugin(&self) -> &Id {
-        &self.plugin
-    }
-
-    fn add_action(&mut self, action: ActionSpec) -> Result<(), RegisterError> {
-        self.check_namespace(&action.id)?;
-        Self::check_unique(self.staging.actions.iter().map(|a| &a.id), &action.id)?;
-        self.staging.actions.push(action);
-        Ok(())
-    }
-
-    fn add_screen(&mut self, screen: ScreenSpec) -> Result<(), RegisterError> {
-        self.check_namespace(&screen.id)?;
-        Self::check_unique(self.staging.screens.iter().map(|s| &s.id), &screen.id)?;
-        self.staging.screens.push(screen);
-        Ok(())
-    }
-
-    fn add_slot(&mut self, slot: SlotSpec) -> Result<(), RegisterError> {
-        self.check_namespace(&slot.id)?;
-        Self::check_unique(self.staging.slots.iter().map(|s| &s.id), &slot.id)?;
-        self.staging.slots.push(slot);
-        Ok(())
-    }
-
-    fn bind_slot(&mut self, slot: Id, screen: Id, priority: Priority) -> Result<(), RegisterError> {
-        self.staging.candidates.push(SlotCandidate {
-            slot,
-            screen,
-            priority,
-        });
-        Ok(())
-    }
-
-    fn add_setting(&mut self, setting: SettingSpec) -> Result<(), RegisterError> {
-        self.check_namespace(&setting.id)?;
-        Self::check_unique(self.staging.settings.iter().map(|s| &s.id), &setting.id)?;
-        self.staging.settings.push(setting);
-        Ok(())
-    }
-
-    fn add_font(&mut self, font: FontSpec) -> Result<(), RegisterError> {
-        self.check_namespace(&font.id)?;
-        Self::check_unique(self.staging.fonts.iter().map(|f| &f.id), &font.id)?;
-        self.staging.fonts.push(font);
-        Ok(())
-    }
-
-    fn add_font_extension(
-        &mut self,
-        id: Id,
-        path: alloc::string::String,
-        extends: Id,
-    ) -> Result<(), RegisterError> {
-        self.check_namespace(&id)?;
-        Self::check_unique(self.staging.font_extensions.iter().map(|(id, ..)| id), &id)?;
-        self.staging.font_extensions.push((id, path, extends));
-        Ok(())
-    }
-
-    fn add_font_file(&mut self, id: Id, path: alloc::string::String) -> Result<(), RegisterError> {
-        self.check_namespace(&id)?;
-        Self::check_unique(
-            self.staging
-                .fonts
-                .iter()
-                .map(|f| &f.id)
-                .chain(self.staging.font_files.iter().map(|(id, _)| id)),
-            &id,
-        )?;
-        self.staging.font_files.push((id, path));
-        Ok(())
-    }
-
-    fn bind_font(&mut self, role: Id, font: Id, priority: Priority) -> Result<(), RegisterError> {
-        self.staging.font_roles.push((role, font, priority));
-        Ok(())
-    }
-
-    fn add_format(&mut self, format: FormatSpec) -> Result<(), RegisterError> {
-        self.check_namespace(&format.id)?;
-        Self::check_unique(self.staging.formats.iter().map(|f| &f.id), &format.id)?;
-        self.staging.formats.push(format);
-        Ok(())
-    }
-
-    fn add_setting_group(&mut self, group: SettingGroupSpec) -> Result<(), RegisterError> {
-        self.check_namespace(&group.id)?;
-        Self::check_unique(self.staging.setting_groups.iter().map(|g| &g.id), &group.id)?;
-        self.staging.setting_groups.push(group);
-        Ok(())
-    }
-
-    fn add_hyphenation(&mut self, spec: HyphenationSpec) -> Result<(), RegisterError> {
-        self.check_namespace(&spec.id)?;
-        Self::check_unique(self.staging.hyphenation.iter().map(|h| &h.id), &spec.id)?;
-        quireink_sdk::hyphen::Patterns::new(spec.patterns).map_err(|e| RegisterError::Invalid {
-            message: Cow::Owned(alloc::format!("{}: {e}", spec.id)),
-        })?;
-        self.staging.hyphenation.push(spec);
-        Ok(())
-    }
-
-    fn add_status_item(&mut self, item: StatusItemSpec) -> Result<(), RegisterError> {
-        self.check_namespace(&item.id)?;
-        Self::check_unique(self.staging.status_items.iter().map(|i| &i.id), &item.id)?;
-        self.staging.status_items.push(item);
-        Ok(())
-    }
-
-    fn add_text_filter(
-        &mut self,
-        filter: quireink_sdk::filters::TextFilterSpec,
-    ) -> Result<(), RegisterError> {
-        self.check_namespace(&filter.id)?;
-        Self::check_unique(self.staging.text_filters.iter().map(|f| &f.id), &filter.id)?;
-        self.staging.text_filters.push(filter);
-        Ok(())
-    }
-
-    fn add_input_filter(
-        &mut self,
-        filter: quireink_sdk::filters::InputFilterSpec,
-    ) -> Result<(), RegisterError> {
-        self.check_namespace(&filter.id)?;
-        Self::check_unique(self.staging.input_filters.iter().map(|f| &f.id), &filter.id)?;
-        self.staging.input_filters.push(filter);
-        Ok(())
-    }
-
-    fn add_refresh_filter(
-        &mut self,
-        filter: quireink_sdk::filters::RefreshFilterSpec,
-    ) -> Result<(), RegisterError> {
-        self.check_namespace(&filter.id)?;
-        let ids = self.staging.refresh_filters.iter().map(|f| &f.id);
-        Self::check_unique(ids, &filter.id)?;
-        self.staging.refresh_filters.push(filter);
-        Ok(())
-    }
-
-    fn add_widget(
-        &mut self,
-        widget: quireink_sdk::widgets::WidgetSpec,
-    ) -> Result<(), RegisterError> {
-        self.check_namespace(&widget.id)?;
-        Self::check_unique(self.staging.widgets.iter().map(|w| &w.id), &widget.id)?;
-        self.staging.widgets.push(widget);
-        Ok(())
-    }
-
-    fn add_setup_step(
-        &mut self,
-        step: quireink_sdk::setup::SetupStepSpec,
-    ) -> Result<(), RegisterError> {
-        self.check_namespace(&step.id)?;
-        Self::check_unique(self.staging.setup_steps.iter().map(|s| &s.id), &step.id)?;
-        self.staging.setup_steps.push(step);
-        Ok(())
-    }
-
-    fn add_status_line(&mut self, line: StatusLineSpec) -> Result<(), RegisterError> {
-        self.check_namespace(&line.id)?;
-        Self::check_unique(self.staging.status_lines.iter().map(|l| &l.id), &line.id)?;
-        self.staging.status_lines.push(line);
-        Ok(())
-    }
-
-    fn add_menu_entry(&mut self, entry: MenuEntry) -> Result<(), RegisterError> {
-        self.staging.menu_entries.push(entry);
-        Ok(())
-    }
-
-    fn add_menu_section(
-        &mut self,
-        section: quireink_sdk::MenuSection,
-    ) -> Result<(), RegisterError> {
-        self.check_namespace(&section.id)?;
-        self.staging.menu_sections.push(section);
-        Ok(())
-    }
-
-    fn add_icon(&mut self, item: Id, icon: Cow<'static, str>) -> Result<(), RegisterError> {
-        self.staging.icons.push((item, icon));
-        Ok(())
-    }
-
-    fn set_menu_need(
-        &mut self,
-        item: Id,
-        need: quireink_sdk::MenuNeed,
-    ) -> Result<(), RegisterError> {
-        self.staging.menu_needs.push((item, need));
-        Ok(())
-    }
-
-    fn set_screen_hints(
-        &mut self,
-        screen: Id,
-        hints: quireink_sdk::Hints,
-    ) -> Result<(), RegisterError> {
-        self.staging.screen_hints.push((screen, hints));
-        Ok(())
-    }
-
-    fn subscribe(&mut self, event: Id, handler: EventHandler) -> Result<(), RegisterError> {
-        self.staging
-            .subscriptions
-            .push((event, self.plugin.clone(), handler));
-        Ok(())
-    }
-
-    fn add_keymap_preset(
-        &mut self,
-        id: Id,
-        source: Cow<'static, str>,
-    ) -> Result<(), RegisterError> {
-        self.check_namespace(&id)?;
-        Self::check_unique(self.staging.keymap_presets.iter().map(|(i, _)| i), &id)?;
-        validate_keymap(&source)?;
-        self.staging.keymap_presets.push((id, source));
-        Ok(())
-    }
-
-    fn set_setting_default(
-        &mut self,
-        setting: Id,
-        value: Cow<'static, str>,
-    ) -> Result<(), RegisterError> {
-        self.staging.setting_defaults.push((setting, value));
-        Ok(())
-    }
-
-    fn add_keymap(&mut self, source: Cow<'static, str>) -> Result<(), RegisterError> {
-        validate_keymap(&source)?;
-        self.staging.keymaps.push(source);
-        Ok(())
-    }
-
-    fn add_stylesheet(&mut self, css: Cow<'static, str>) -> Result<(), RegisterError> {
-        self.staging.stylesheets.push(css);
-        Ok(())
-    }
-
-    fn add_service(
-        &mut self,
-        id: Id,
-        service: alloc::boxed::Box<dyn core::any::Any>,
-    ) -> Result<(), RegisterError> {
-        self.check_namespace(&id)?;
-        Self::check_unique(self.staging.services.iter().map(|(s, _)| s), &id)?;
-        self.staging.services.push((id, service));
-        Ok(())
-    }
-
-    fn contribute(
-        &mut self,
-        point: Id,
-        contribution: Cow<'static, str>,
-    ) -> Result<(), RegisterError> {
-        self.staging.contributions.push((point, contribution));
-        Ok(())
-    }
-
-    fn add_translations(&mut self, source: Cow<'static, str>) -> Result<(), RegisterError> {
-        let catalog = Catalog::parse(source).map_err(|error| RegisterError::Parse {
-            line: match &error {
-                quireink_i18n::CatalogError::Syntax(e) => e.line,
-                quireink_i18n::CatalogError::UnknownPluralRule { line }
-                | quireink_i18n::CatalogError::UnexpectedSection { line } => *line,
-                _ => 0,
-            },
-            message: Cow::Owned(error.to_string()),
-        })?;
-        self.staging.catalogs.push(catalog);
-        Ok(())
-    }
+/// A translation catalog, its errors attributed to the plugin.
+pub(crate) fn catalog(source: Cow<'static, str>) -> Result<Catalog, RegisterError> {
+    Catalog::parse(source).map_err(|error| RegisterError::Parse {
+        line: match &error {
+            quireink_i18n::CatalogError::Syntax(e) => e.line,
+            quireink_i18n::CatalogError::UnknownPluralRule { line }
+            | quireink_i18n::CatalogError::UnexpectedSection { line } => *line,
+            _ => 0,
+        },
+        message: Cow::Owned(error.to_string()),
+    })
 }
 
 /// Checks a key map contribution so errors are attributed to the plugin.

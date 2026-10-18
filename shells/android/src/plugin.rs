@@ -63,7 +63,7 @@ impl Plugin for AndroidPlugin {
         }
     }
 
-    fn register(&self, r: &mut dyn Registrar) -> Result<(), RegisterError> {
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let app = self.app.clone();
         r.add_action(ActionSpec {
             id: ALLOW_STORAGE,
@@ -130,7 +130,7 @@ impl Screen for VoiceSettings {
 impl AndroidPlugin {
     /// The voice for reading aloud, with its other settings; it is
     /// chosen in the system's speech settings.
-    fn register_voice(&self, r: &mut dyn Registrar) -> Result<(), RegisterError> {
+    fn register_voice(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_setting(
             SettingSpec::new(
                 VOICE,
@@ -157,7 +157,7 @@ impl AndroidPlugin {
     /// change goes to the device.
     fn register_frontlight(
         &self,
-        r: &mut dyn Registrar,
+        r: &mut Registrar,
         frontlight: Frontlight,
     ) -> Result<(), RegisterError> {
         let lights = frontlight.lights;

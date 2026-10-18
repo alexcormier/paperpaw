@@ -101,7 +101,7 @@ impl Plugin for Keyboard {
         }
     }
 
-    fn register(&self, r: &mut dyn Registrar) -> Result<(), RegisterError> {
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         // The layout in use; the next keyboard opens with it.
         let current = Rc::new(Cell::new(0usize));
         r.add_screen(ScreenSpec {

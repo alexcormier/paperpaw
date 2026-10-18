@@ -96,7 +96,7 @@ pub(crate) const PRINTED_CONTEXT: &str = "reader.printed-page";
 /// turning automatically).
 pub(crate) const ALOUD_CONTEXT: &str = "reader.aloud";
 
-pub(crate) fn register(r: &mut dyn Registrar) -> Result<(), RegisterError> {
+pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     r.add_setting_group(SettingGroupSpec {
         id: GROUP,
         title: Cow::Borrowed("reader.group.status"),

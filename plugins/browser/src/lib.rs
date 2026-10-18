@@ -83,7 +83,7 @@ impl Plugin for Browser {
         }
     }
 
-    fn register(&self, r: &mut dyn Registrar) -> Result<(), RegisterError> {
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let session = Rc::new(RefCell::new(Session::default()));
         r.add_screen(ScreenSpec {
             id: SCREEN,

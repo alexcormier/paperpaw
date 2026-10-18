@@ -120,7 +120,7 @@ fn lines(env: &Env<'_>, numbers: &Numbers) -> (String, String) {
     (first, second)
 }
 
-pub(crate) fn register(r: &mut dyn Registrar) -> Result<(), RegisterError> {
+pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     r.add_setting(
         SettingSpec::new(
             GOAL,

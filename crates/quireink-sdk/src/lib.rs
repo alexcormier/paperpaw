@@ -33,6 +33,7 @@ pub mod annotations;
 pub mod builtin;
 pub mod collections;
 mod command;
+pub mod contribution;
 pub mod data;
 mod env;
 mod event;
@@ -81,6 +82,7 @@ pub use command::{
     Command, HttpRequest, MAX_CLIPBOARD, ServerResponse, SocketRead, Speech, http_params,
     server_params, socket_params, speech_params,
 };
+pub use contribution::{Contribution, Registrar};
 pub use env::{Capabilities, Env, EnvParts, Metrics};
 pub use event::EventHandler;
 pub use fonts::{FontHandle, FontSet, FontSpec, Fonts};
@@ -91,7 +93,7 @@ pub use id::{Id, InvalidId};
 pub use memory_storage::{MemoryStorage, read_file};
 pub use menus::{MenuEntry, MenuItem, MenuNeed, MenuSection, Menus};
 pub use params::Params;
-pub use plugin::{Manifest, Plugin, Priority, RegisterError, Registrar, SlotSpec};
+pub use plugin::{Manifest, Plugin, Priority, RegisterError, SlotSpec};
 pub use plugins::{PluginInfo, PluginState, Plugins, RequiredFor};
 pub use screen::{Cx, Handled, Hint, Hints, Output, Screen, ScreenFactory, ScreenSpec};
 pub use settings::{

@@ -140,7 +140,7 @@ impl Plugin for Wifi {
         }
     }
 
-    fn register(&self, r: &mut dyn Registrar) -> Result<(), RegisterError> {
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let policy: Shared = Rc::new(RefCell::new(Policy::default()));
 
         // The settings, on the group's own page; only where QuireInk

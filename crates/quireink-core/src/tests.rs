@@ -81,7 +81,7 @@ impl Plugin for TestPlugin {
         }
     }
 
-    fn register(&self, r: &mut dyn Registrar) -> Result<(), RegisterError> {
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let log = self.log.clone();
         let name = self.id;
         r.add_screen(ScreenSpec {
@@ -266,7 +266,7 @@ impl Plugin for Opener {
         }
     }
 
-    fn register(&self, r: &mut dyn Registrar) -> Result<(), RegisterError> {
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_screen(ScreenSpec {
             id: Id::new_static("opener.screen"),
             title: Cow::Borrowed("test.screen"),
@@ -609,7 +609,7 @@ impl Plugin for EdgeHolderPlugin {
         }
     }
 
-    fn register(&self, r: &mut dyn Registrar) -> Result<(), RegisterError> {
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let (log, holds) = (self.0.clone(), self.1);
         r.add_screen(ScreenSpec {
             id: Id::new_static("holder.screen"),
@@ -742,7 +742,7 @@ impl Plugin for FontPlugin {
         }
     }
 
-    fn register(&self, r: &mut dyn Registrar) -> Result<(), RegisterError> {
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         for name in ["fonts.serif", "fonts.sans"] {
             let mut pack = quireink_text::PackBuilder::new();
             let metrics = quireink_text::LineMetrics {
@@ -849,7 +849,7 @@ impl Plugin for LifecyclePlugin {
         }
     }
 
-    fn register(&self, r: &mut dyn Registrar) -> Result<(), RegisterError> {
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let log = self.log.clone();
         r.add_screen(ScreenSpec {
             id: Id::new_static("life.screen"),
@@ -963,7 +963,7 @@ impl Plugin for OverlayPlugin {
         }
     }
 
-    fn register(&self, r: &mut dyn Registrar) -> Result<(), RegisterError> {
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let log = self.log.clone();
         r.add_screen(ScreenSpec {
             id: Id::new_static("ov.base"),
@@ -1038,7 +1038,7 @@ impl Plugin for NoticePlugin {
         }
     }
 
-    fn register(&self, r: &mut dyn Registrar) -> Result<(), RegisterError> {
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let log = self.log.clone();
         r.add_screen(ScreenSpec {
             id: Id::new_static("nt.base"),
@@ -2169,7 +2169,7 @@ impl Plugin for ServicePlugin {
         }
     }
 
-    fn register(&self, r: &mut dyn Registrar) -> Result<(), RegisterError> {
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         if self.id == "provider" {
             r.add_service(Id::new_static("provider.greeting"), Box::new("hello"))?;
             // Not in its namespace: refused.
@@ -2231,7 +2231,7 @@ impl Plugin for FilterPlugin {
         }
     }
 
-    fn register(&self, r: &mut dyn Registrar) -> Result<(), RegisterError> {
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         use quireink_sdk::filters::{InputFilterSpec, InputVerdict, RefreshFilterSpec};
         r.add_input_filter(InputFilterSpec {
             id: Id::new_static("filter.input"),
@@ -2315,7 +2315,7 @@ impl Plugin for SizedPlugin {
         }
     }
 
-    fn register(&self, r: &mut dyn Registrar) -> Result<(), RegisterError> {
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         for (name, slot) in [("home", slots::HOME), ("reader", slots::READER)] {
             let made = self.0.clone();
             let id = Id::parse(&alloc::format!("sized.{name}")).unwrap();
@@ -2434,7 +2434,7 @@ impl Plugin for PicturePlugin {
         }
     }
 
-    fn register(&self, r: &mut dyn Registrar) -> Result<(), RegisterError> {
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let shown = self.0.clone();
         r.add_screen(ScreenSpec {
             id: Id::new_static("picture.home"),
@@ -2489,7 +2489,7 @@ impl Plugin for NetPlugin {
         }
     }
 
-    fn register(&self, r: &mut dyn Registrar) -> Result<(), RegisterError> {
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         use quireink_sdk::builtin::events;
         for event in [
             events::NETWORK_WANTED,

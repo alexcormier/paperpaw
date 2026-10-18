@@ -225,7 +225,7 @@ impl Plugin for Reader {
         }
     }
 
-    fn register(&self, r: &mut dyn Registrar) -> Result<(), RegisterError> {
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         // The page takes all of the screen; the buttons' row comes on a press.
         r.set_screen_hints(SCREEN, quireink_sdk::Hints::OnPress)?;
         r.add_screen(ScreenSpec {

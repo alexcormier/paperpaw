@@ -490,7 +490,7 @@ impl Plugin for KoReader {
         }
     }
 
-    fn register(&self, r: &mut dyn Registrar) -> Result<(), RegisterError> {
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         for event in [events::BOOK_OPENED, events::ANNOTATIONS_CHANGED] {
             r.subscribe(
                 event,

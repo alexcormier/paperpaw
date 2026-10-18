@@ -6,6 +6,12 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: `Registrar` is a struct now that collects `Contribution`s (a
+  `#[non_exhaustive]` enum, the large kinds boxed); `add_action` and the
+  rest are shorthands for `add`. Plugins take `&mut Registrar` instead of
+  `&mut dyn Registrar`. Anything can see what a plugin adds without
+  QuireInk running (`Registrar::new`, `contributions()`); the kernel
+  applies the list and checks key maps, translations and patterns then.
 - SDK: `Env` is `#[non_exhaustive]` (new fields break no plugin). What
   the device and its shell can do is `env.caps` (`Capabilities`: touch,
   network, Wi-Fi, firmware, speech, the sleep screen, rotation, colours,

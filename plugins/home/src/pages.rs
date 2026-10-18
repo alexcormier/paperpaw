@@ -49,7 +49,7 @@ pub(crate) fn setting(index: usize) -> Id {
     Id::parse(&format!("home.page-{}", index + 1)).unwrap_or(Id::new_static("home.page-1"))
 }
 
-pub(crate) fn register(r: &mut dyn Registrar) -> Result<(), RegisterError> {
+pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     for (index, default) in DEFAULTS.iter().enumerate() {
         r.add_setting(
             SettingSpec::new(

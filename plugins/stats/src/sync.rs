@@ -286,7 +286,7 @@ fn import(env: &Env<'_>) -> String {
 
 /// Registers the sync's settings, events and screen.
 pub(crate) fn register(
-    r: &mut dyn quireink_sdk::Registrar,
+    r: &mut quireink_sdk::Registrar,
     sync: SharedSync,
 ) -> Result<(), quireink_sdk::RegisterError> {
     use quireink_sdk::{ScreenSpec, SettingKind, SettingSpec};

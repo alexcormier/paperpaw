@@ -147,7 +147,7 @@ impl Plugin for Opds {
         }
     }
 
-    fn register(&self, r: &mut dyn Registrar) -> Result<(), RegisterError> {
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let state = Rc::new(RefCell::new(Sync::default()));
         let shared = state.clone();
         r.add_screen(ScreenSpec {

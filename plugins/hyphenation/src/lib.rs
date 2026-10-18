@@ -40,7 +40,7 @@ impl Plugin for Hyphenation {
         }
     }
 
-    fn register(&self, r: &mut dyn Registrar) -> Result<(), RegisterError> {
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         for (id, language, patterns) in [(ENGLISH, "en", EN), (GERMAN, "de", DE)] {
             r.add_hyphenation(HyphenationSpec {

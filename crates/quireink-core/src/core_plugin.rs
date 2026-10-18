@@ -37,7 +37,7 @@ impl Plugin for CorePlugin {
         }
     }
 
-    fn register(&self, r: &mut dyn Registrar) -> Result<(), RegisterError> {
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let screen_actions = [
             (actions::NEXT_PAGE, "core.action.next-page"),
             (actions::PREV_PAGE, "core.action.prev-page"),
@@ -860,7 +860,7 @@ fn screenshot_path(env: &Env<'_>) -> alloc::string::String {
 
 /// The widgets for room between the others: a gap of a set height, and
 /// the room left (see `quireink_sdk::widgets`).
-fn register_spaces(r: &mut dyn Registrar) -> Result<(), RegisterError> {
+fn register_spaces(r: &mut Registrar) -> Result<(), RegisterError> {
     let space = Id::new_static(widgets::SPACE);
     r.add_setting_group(widgets::settings_group(&space, "core.widget.space"))?;
     r.add_setting(

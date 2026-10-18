@@ -51,7 +51,7 @@ impl Plugin for DataPlugin {
         self.manifest.clone()
     }
 
-    fn register(&self, r: &mut dyn Registrar) -> Result<(), RegisterError> {
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         for source in self.translations.take() {
             r.add_translations(Cow::Owned(source))?;
         }

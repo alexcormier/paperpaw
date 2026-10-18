@@ -60,7 +60,7 @@ impl Plugin for MenuEditor {
         }
     }
 
-    fn register(&self, r: &mut dyn Registrar) -> Result<(), RegisterError> {
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let screens: [(Id, OpenScreen); 4] = [
             (MENUS_SCREEN, |env, _| Box::new(MenusScreen::open(env))),
             (ENTRIES_SCREEN, |env, p| {

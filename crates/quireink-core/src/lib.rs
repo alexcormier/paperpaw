@@ -69,10 +69,10 @@ use quireink_sdk::builtin::{
     settings as core_settings, slots,
 };
 use quireink_sdk::{
-    Actions, Capabilities, Command, Cx, Direction, Env, EnvParts, EventHandler, Fonts, Formats,
-    Gesture, GestureKind, Handled, Hint, Hints, Hyphenation, Id, Manifest, Menus, Metrics, Output,
-    Params, Plugin, PluginInfo, PluginState, Plugins, RegisterError, RequiredFor, SDK_VERSION,
-    Screen, Settings, StatusItems,
+    Actions, Capabilities, Command, Contribution, Cx, Direction, Env, EnvParts, EventHandler,
+    Fonts, Formats, Gesture, GestureKind, Handled, Hint, Hints, Hyphenation, Id, Manifest, Menus,
+    Metrics, Output, Params, Plugin, PluginInfo, PluginState, Plugins, RegisterError, RequiredFor,
+    SDK_VERSION, Screen, Settings, StatusItems,
 };
 
 use crate::core_plugin::{CORE, CorePlugin};
@@ -83,8 +83,9 @@ pub use crate::net::{
     SpeechCall, WifiEvent,
 };
 use crate::refresh::RefreshPolicy;
-use crate::registry::{PluginRegistrar, Registry, Staging};
+use crate::registry::{Registry, Staging};
 pub use crate::sockets::{SOCKET_PART, SocketCall, SocketEvent};
+use quireink_sdk::Registrar;
 use quireink_sdk::filters::InputVerdict;
 pub use quireink_sdk::firmware::{Firmware, FirmwareCommand, FirmwareState, InstallFailure};
 pub use quireink_sdk::wifi::{JoinFailure, WifiCommand, WifiNetwork, WifiState};
@@ -2319,8 +2320,10 @@ impl Kernel {
         }
 
         let mut staging = Staging::default();
+        let mut registrar = Registrar::new(id.clone());
         let result = plugin
-            .register(&mut PluginRegistrar::new(id.clone(), &mut staging))
+            .register(&mut registrar)
+            .and_then(|()| registry::stage(&id, registrar.into_contributions(), &mut staging))
             .and_then(|()| self.merge(&id, staging));
         match result {
             Ok(()) => self.add_plugin_info(manifest, PluginState::Running, true),
@@ -2343,14 +2346,14 @@ impl Kernel {
         if id.as_str() != id.namespace() || self.shared.plugins.get(id.as_str()).is_some() {
             return;
         }
-        let mut staging = Staging::default();
-        if SDK_VERSION.satisfies(&manifest.sdk)
-            && plugin
-                .register(&mut PluginRegistrar::new(id, &mut staging))
-                .is_ok()
-        {
-            for catalog in staging.catalogs.drain(..) {
-                self.shared.translator.add(catalog);
+        let mut registrar = Registrar::new(id);
+        if SDK_VERSION.satisfies(&manifest.sdk) && plugin.register(&mut registrar).is_ok() {
+            for contribution in registrar.into_contributions() {
+                if let Contribution::Translations(source) = contribution
+                    && let Ok(catalog) = registry::catalog(source)
+                {
+                    self.shared.translator.add(catalog);
+                }
             }
         }
         self.add_plugin_info(manifest, PluginState::Off, false);

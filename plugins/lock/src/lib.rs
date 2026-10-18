@@ -79,7 +79,7 @@ impl Plugin for Lock {
         }
     }
 
-    fn register(&self, r: &mut dyn Registrar) -> Result<(), RegisterError> {
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let locked: Locked = Rc::new(Cell::new(false));
         let shared = locked.clone();
         r.add_screen(ScreenSpec {

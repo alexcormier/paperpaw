@@ -230,7 +230,7 @@ impl Plugin for Readwise {
         }
     }
 
-    fn register(&self, r: &mut dyn Registrar) -> Result<(), RegisterError> {
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.subscribe(
             EXPORTED,
             Box::new(|env: &Env<'_>, p: &Params, out: &mut Vec<Command>| {
