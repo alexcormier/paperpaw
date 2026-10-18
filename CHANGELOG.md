@@ -6,6 +6,11 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Icon packs: `tools/icons/pack.py` builds a data plugin with the
+  drawings of any Tabler icons QuireInk's icon font lacks, read a glyph
+  at a time from the card; `quireink-fontgen --chars` takes code points
+  (`U+EA01-EA0F`). An icon without a drawing now shows nothing rather
+  than a missing character.
 - SDK: a widget is a `Widget` a screen keeps: it reads what it shows in
   `update` (when shown, each minute, after events) and only draws in
   `draw`, which may run several times a frame. `WidgetSpec::new` takes

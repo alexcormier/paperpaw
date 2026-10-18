@@ -73,6 +73,11 @@ impl Plugin for Hello {
 Every id starts with the plugin's id (`hello.open`); `core` is the
 kernel's. Titles are translation keys, translated where they are shown.
 
+Icons are named as in [Tabler Icons](https://tabler.io/icons), any of
+them (`quireink_sdk::icons` knows every name). QuireInk's icon font holds
+the ones it uses itself; for another, bring its drawing as an icon pack
+(see below), else none shows.
+
 ### Reading and changing: `Env` and commands
 
 Plugins never change the kernel's state directly. They read it through
@@ -398,6 +403,9 @@ leaves the plugin out and says why, rather than reading it wrongly.
 Packs for other scripts (`tools/script-pack.py` builds Cyrillic and
 Greek for Literata) are read a glyph at a time, so devices with little
 memory can use them ([ADR 0018](adr/0018-font-packs-for-other-scripts.md)).
+Icon packs are such packs for the icon font: `tools/icons/pack.py` builds
+one with the Tabler icons named
+(`[extends] icons.qifp = fonts-default.icons`).
 
 Copy it into the `plugins` folder of a device (or of the emulator's
 library) and restart. A plugin's `styles.css` comes after a book's own

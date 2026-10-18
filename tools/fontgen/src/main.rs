@@ -15,7 +15,8 @@ USAGE:
 OPTIONS:
     --sizes <px,...>      Pixel sizes to render (default: 20,24,28,32,36,40,48)
     --axis <tag=value>    Set a variation axis, e.g. --axis wght=700 (repeatable)
-    --chars <set,...>     Character sets: latin (default), cyrillic, greek
+    --chars <set,...>     Character sets: latin (default), cyrillic, greek,
+                          or code points: U+EA01, U+EA01-EA0F (e.g. icons)
     -h, --help            Show this help
 ";
 
@@ -80,9 +81,13 @@ fn run(args: Vec<String>) -> Result<(), String> {
         quireink_text::OutlineFont::new(data, &variations).map_err(|e| format!("{input}: {e}"))?;
     let mut ranges = Vec::new();
     for set in &sets {
-        let named = quireink_text::charset::named(set)
-            .ok_or_else(|| format!("unknown character set `{set}`"))?;
-        ranges.extend_from_slice(named);
+        if let Some(named) = quireink_text::charset::named(set) {
+            ranges.extend_from_slice(named);
+        } else if let Some(points) = quireink_text::charset::code_points(set) {
+            ranges.push(points);
+        } else {
+            return Err(format!("unknown character set `{set}`"));
+        }
     }
     let chars = quireink_text::charset::chars(&ranges);
     let pack = quireink_text::build_pack(&font, &sizes, chars);

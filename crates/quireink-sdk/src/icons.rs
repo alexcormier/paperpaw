@@ -1,14 +1,16 @@
 //! Icons by name, e.g. `books` or `settings`, drawn from the icon font
 //! bound to [`fonts::ICONS`](crate::builtin::fonts::ICONS).
 //!
-//! The names are those of [Tabler Icons](https://tabler.io/icons), of
-//! which QuireInk ships the ones it uses (see `tools/icons/subset.py`). An
-//! icon theme is a font with other drawings at the same code points, bound
-//! to the role in place of the default.
+//! The names are those of [Tabler Icons](https://tabler.io/icons), all of
+//! them known here; the icon font holds the drawings of those QuireInk
+//! uses (see `tools/icons/subset.py`), icon packs add others (font packs
+//! that extend it, see `tools/icons/pack.py`). An icon theme is a font
+//! with other drawings at the same code points, bound to the role in
+//! place of the default.
 //!
 //! Plugins give their menu entries icons by name
-//! ([`Registrar::add_icon`](crate::Registrar::add_icon)); a name the font
-//! does not know draws nothing.
+//! ([`Registrar::add_icon`](crate::Registrar::add_icon)); an icon without
+//! a drawing draws nothing.
 
 include!("icon_table.rs");
 

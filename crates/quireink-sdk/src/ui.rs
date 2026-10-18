@@ -171,10 +171,7 @@ pub fn draw_icon(
     area: Rect,
     color: Color,
 ) -> f32 {
-    let (Some(font), Some(ch)) = (
-        env.fonts.bound(crate::builtin::fonts::ICONS.as_str()),
-        crate::icons::char(name),
-    ) else {
+    let Some((font, ch)) = icon(env, name) else {
         return 0.0;
     };
     let mut text = [0u8; 4];
@@ -184,13 +181,15 @@ pub fn draw_icon(
 
 /// The width of icon `name` at `size` pixels, 0 if it cannot be drawn.
 pub fn icon_width(env: &Env<'_>, name: &str, size: f32) -> f32 {
-    match (
-        env.fonts.bound(crate::builtin::fonts::ICONS.as_str()),
-        crate::icons::char(name),
-    ) {
-        (Some(font), Some(ch)) => font.advance(size, ch),
-        _ => 0.0,
-    }
+    icon(env, name).map_or(0.0, |(font, ch)| font.advance(size, ch))
+}
+
+/// The icon font and the character of icon `name`, where it has a drawing
+/// (its own, or an icon pack's).
+fn icon<'f>(env: &Env<'f>, name: &str) -> Option<(FontHandle<'f>, char)> {
+    let font = env.fonts.bound(crate::builtin::fonts::ICONS.as_str())?;
+    let ch = crate::icons::char(name)?;
+    font.has_char(ch).then_some((font, ch))
 }
 
 /// The height of a section's heading in a list (see [`Rows`]): small
