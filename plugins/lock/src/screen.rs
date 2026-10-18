@@ -261,11 +261,16 @@ impl LockScreen {
             .collect()
     }
 
-    /// Where kind `index` is listed.
-    fn kind_row(&self, index: usize) -> Rect {
+    /// The kinds as a list, as menus show them: the focus inverted, a
+    /// line between the others.
+    fn kind_list(&self) -> ui::ListView {
         let l = &self.layout;
         let row = self.style.row as u16;
-        Rect::new(0, l.list_top + index as u16 * row, l.dots.width, row)
+        let area = Rect::new(0, l.list_top, l.dots.width, row * KINDS.len() as u16);
+        let mut list = ui::ListView::new(area, u32::from(row));
+        list.focus = self.focus;
+        list.shown = self.shown;
+        list
     }
 
     /// Kind `kind` was chosen: off at once, else the new code.
@@ -299,6 +304,9 @@ impl LockScreen {
             (Step::New, "pattern") => "lock.new-pattern",
             (Step::New, "password") => "lock.new-password",
             (Step::New, _) => "lock.new-pin",
+            (Step::Verify, "pattern") => "lock.current-pattern",
+            (Step::Verify, "password") => "lock.current-password",
+            (Step::Verify, _) => "lock.current-pin",
             (_, "pattern") => "lock.draw-pattern",
             (_, "password") => "lock.enter-password",
             _ => "lock.enter-pin",
@@ -588,23 +596,23 @@ impl Screen for LockScreen {
         }
         if self.step == Step::Choose {
             let current = code::active(env).unwrap_or_else(|| String::from("off"));
-            for (i, kind) in Self::kinds(env).into_iter().enumerate() {
-                let name = env
-                    .i18n
-                    .tr(&alloc::format!("{KIND_PREFIX}{kind}"))
-                    .to_string();
-                let focused = self.shown && self.focus == i;
-                let row = self.kind_row(i);
-                ui::draw_value_row(canvas, env, &style, row, focused, &name, "");
-                if kind == current {
-                    let size = style.text;
-                    let x = f32::from(row.x + row.width)
-                        - style.margin as f32
-                        - ui::icon_width(env, "check", size);
-                    let ink = if focused { Color::WHITE } else { Color::BLACK };
-                    ui::draw_icon(canvas, env, "check", size, x, row, ink);
-                }
-            }
+            let kinds = Self::kinds(env);
+            self.kind_list()
+                .draw(canvas, &style, kinds.len(), |canvas, i, row, focused| {
+                    let kind = kinds[i];
+                    let key = alloc::format!("{KIND_PREFIX}{kind}");
+                    let name = env.i18n.tr(&key);
+                    ui::draw_value_row(canvas, env, &style, row, focused, name, "");
+                    // The kind in use, ticked.
+                    if kind == current {
+                        let size = style.text;
+                        let x = f32::from(row.x + row.width)
+                            - style.margin as f32
+                            - ui::icon_width(env, "check", size);
+                        let ink = if focused { Color::WHITE } else { Color::BLACK };
+                        ui::draw_icon(canvas, env, "check", size, x, row, ink);
+                    }
+                });
             return;
         }
         match self.kind.as_str() {
@@ -742,8 +750,7 @@ impl Screen for LockScreen {
         self.shown = false;
         if self.step == Step::Choose {
             let kinds = Self::kinds(&env);
-            let hit = (0..kinds.len()).find(|&i| self.kind_row(i).contains(gesture.start));
-            if let Some(i) = hit {
+            if let Some(i) = self.kind_list().hit(gesture.start, kinds.len()) {
                 self.choose_kind(kinds[i], cx);
             }
             return Handled::Yes;
