@@ -190,7 +190,7 @@ impl Screen for SkimScreen {
         let track = self.track();
         let width = u32::from(track.width);
         let done = (width * self.at / 1000) as u16;
-        canvas.fill(track, Color::gray(170));
+        canvas.fill_tint(track, Color::gray(170));
         canvas.fill(
             Rect::new(track.x, track.y, done, track.height),
             Color::BLACK,

@@ -182,11 +182,8 @@ impl Overview {
                 style.faint(90),
             );
             if i > 0 {
-                canvas.fill_rect(
-                    i32::from(x),
-                    i32::from(t.y),
-                    style.line.max(1),
-                    u32::from(t.height),
+                canvas.fill_tint(
+                    Rect::new(x, t.y, style.line.max(1) as u16, t.height),
                     Color::gray(190),
                 );
             }

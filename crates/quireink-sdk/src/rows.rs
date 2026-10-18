@@ -136,7 +136,7 @@ impl Rows {
                     rect.width.saturating_sub(2 * style.margin as u16),
                     style.line as u16,
                 );
-                canvas.fill(line, Color::gray(190));
+                canvas.fill_tint(line, Color::gray(190));
             }
             draw_row(canvas, index, rect, focused);
         }

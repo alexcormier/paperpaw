@@ -6,6 +6,11 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- X4: the lines between the rows of lists, the tracks of sliders (the
+  quick panel, skimming in the reader) and the statistics' lines show:
+  light gray, they were drawn white on its black and white panel; there
+  they are now every other pixel black. SDK/graphics:
+  `Canvas::fill_tint`.
 - Settings: each page ends with "Reset to defaults", the main page with
   "Reset all settings" (the language stays); both ask first. SDK:
   `Command::ResetSetting`, `Settings::reset` (the value forgotten, so

@@ -129,6 +129,31 @@ impl<'a> Canvas<'a> {
         self.fill_rect(x, y, width, height, color);
     }
 
+    /// Fills `area` with `color` as a tint, e.g. a light line between
+    /// rows or a slider's track: on panels of black and white alone, which
+    /// would show a light gray white, every other pixel black instead (it
+    /// looks gray, as dithering does).
+    pub fn fill_tint(&mut self, area: Rect, color: Color) {
+        if self.framebuffer.format().gray_levels() != Some(2) || color.luma() < 128 {
+            return self.fill(area, color);
+        }
+        let Some(rect) = self.clip_signed(
+            i32::from(area.x),
+            i32::from(area.y),
+            u32::from(area.width),
+            u32::from(area.height),
+        ) else {
+            return;
+        };
+        for y in rect.y..rect.y + rect.height {
+            let first = rect.x + (rect.x + y) % 2;
+            for x in (first..rect.x + rect.width).step_by(2) {
+                self.framebuffer
+                    .fill_clipped(Rect::new(x, y, 1, 1), Color::BLACK);
+            }
+        }
+    }
+
     /// Draws the outline of `area`, `thickness` wide, growing inwards.
     pub fn stroke(&mut self, area: Rect, thickness: u32, color: Color) {
         let (x, y, width, height) = signed(area);
@@ -342,6 +367,30 @@ fn signed(area: Rect) -> (i32, i32, u32, u32) {
 mod tests {
     use super::*;
     use quireink_platform::PixelFormat;
+
+    #[test]
+    fn tints_stay_visible_in_black_and_white() {
+        let area = Rect::new(2, 1, 6, 2);
+        let mut mono = Framebuffer::new(10, 4, PixelFormat::Mono1).unwrap();
+        mono.canvas().clear(Color::WHITE);
+        mono.canvas().fill_tint(area, Color::gray(190));
+        let view = mono.view();
+        // Every other pixel black, in a checker; none outside.
+        for y in 0..4 {
+            for x in 0..10 {
+                let inside = area.contains(Point::new(x as i32, y as i32));
+                let black = inside && (x + y) % 2 == 0;
+                let expected = if black { Color::BLACK } else { Color::WHITE };
+                assert_eq!(view.pixel(x, y), expected, "({x}, {y})");
+            }
+        }
+        // With grays: the gray itself; dark ones black as they are.
+        let mut gray = Framebuffer::new(10, 4, PixelFormat::Gray8).unwrap();
+        gray.canvas().fill_tint(area, Color::gray(190));
+        assert_eq!(gray.view().pixel(3, 1), Color::gray(190));
+        mono.canvas().fill_tint(area, Color::gray(60));
+        assert_eq!(mono.view().pixel(3, 1), Color::BLACK);
+    }
 
     #[test]
     fn round_corners_leave_the_corners() {

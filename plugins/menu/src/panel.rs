@@ -598,7 +598,7 @@ fn draw_slider(
     let left = rect.x + knob / 2;
     let width = rect.width.saturating_sub(knob);
     let filled = (f32::from(width) * share) as u16;
-    canvas.fill(
+    canvas.fill_tint(
         Rect::new(left, mid - track / 2, width, track),
         Color::gray(170),
     );

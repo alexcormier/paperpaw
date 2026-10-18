@@ -812,7 +812,7 @@ pub fn draw_note_line(
 ) {
     let margin = style.margin as u16;
     let width = area.width.saturating_sub(2 * margin);
-    canvas.fill(
+    canvas.fill_tint(
         Rect::new(area.x + margin, area.y, width, style.line as u16),
         Color::gray(190),
     );
@@ -1203,7 +1203,7 @@ impl ListView {
                     rect.width.saturating_sub(2 * style.margin as u16),
                     style.line as u16,
                 );
-                canvas.fill(separator, Color::gray(170));
+                canvas.fill_tint(separator, Color::gray(170));
             }
             draw_row(canvas, index, rect, focused);
         }
