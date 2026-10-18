@@ -154,6 +154,10 @@ impl Screen for Choice {
         Some(self.region)
     }
 
+    fn dims_below(&self) -> bool {
+        true
+    }
+
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let r = self.region;

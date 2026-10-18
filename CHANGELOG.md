@@ -6,6 +6,11 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Menus, the quick panel and questions wash out what lies below them
+  (lighter gray; on the X4 every other pixel paper), so they stand out
+  and the lines they cut through read as background. Overlays looked
+  through (the keyboard, notices, skimming) keep it. SDK:
+  `Screen::dims_below`; graphics: `Canvas::wash`.
 - X4: the lines between the rows of lists, the tracks of sliders (the
   quick panel, skimming in the reader) and the statistics' lines show:
   light gray, they were drawn white on its black and white panel; there

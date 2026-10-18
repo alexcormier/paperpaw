@@ -154,6 +154,20 @@ impl<'a> Canvas<'a> {
         }
     }
 
+    /// Washes what is drawn in `area` out towards the paper, e.g. what
+    /// lies below a menu, so that the menu stands out (on panels of black
+    /// and white, every other pixel paper).
+    pub fn wash(&mut self, area: Rect) {
+        if let Some(rect) = self.clip_signed(
+            i32::from(area.x),
+            i32::from(area.y),
+            u32::from(area.width),
+            u32::from(area.height),
+        ) {
+            self.framebuffer.wash_clipped(rect);
+        }
+    }
+
     /// Draws the outline of `area`, `thickness` wide, growing inwards.
     pub fn stroke(&mut self, area: Rect, thickness: u32, color: Color) {
         let (x, y, width, height) = signed(area);
@@ -367,6 +381,37 @@ fn signed(area: Rect) -> (i32, i32, u32, u32) {
 mod tests {
     use super::*;
     use quireink_platform::PixelFormat;
+
+    #[test]
+    fn washed_out_towards_the_paper() {
+        let area = Rect::new(3, 0, 12, 2);
+        let mut mono = Framebuffer::new(20, 2, PixelFormat::Mono1).unwrap();
+        mono.canvas().clear(Color::BLACK);
+        mono.canvas().fill_tint(area, Color::gray(190));
+        mono.canvas().wash(area);
+        let view = mono.view();
+        for y in 0..2 {
+            for x in 0..20 {
+                let inside = area.contains(Point::new(x as i32, y as i32));
+                let paper = inside && (x + y) % 2 == 1;
+                let expected = if paper { Color::WHITE } else { Color::BLACK };
+                assert_eq!(view.pixel(x, y), expected, "({x}, {y})");
+            }
+        }
+        // In night mode the paper is black.
+        let mut night = Framebuffer::new(16, 1, PixelFormat::Mono1).unwrap();
+        night.set_inverted(true);
+        night.canvas().clear(Color::BLACK);
+        night.canvas().wash(Rect::new(0, 0, 16, 1));
+        // Stored inverted: drawn black is kept white, the paper black.
+        assert_eq!(night.view().pixel(0, 0), Color::WHITE);
+        assert_eq!(night.view().pixel(1, 0), Color::BLACK);
+        // Grays: two thirds of the way.
+        let mut gray = Framebuffer::new(4, 1, PixelFormat::Gray8).unwrap();
+        gray.canvas().clear(Color::BLACK);
+        gray.canvas().wash(Rect::new(0, 0, 4, 1));
+        assert_eq!(gray.view().pixel(0, 0), Color::gray(170));
+    }
 
     #[test]
     fn tints_stay_visible_in_black_and_white() {

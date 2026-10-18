@@ -246,6 +246,59 @@ impl Framebuffer {
         self.mark_dirty(rect);
     }
 
+    /// Washes `rect` (inside the framebuffer) out towards the paper, e.g.
+    /// what lies below a menu: two thirds of the way; on panels of black
+    /// and white, every other pixel paper (in a checker, the other one
+    /// than [`Canvas::fill_tint`](crate::Canvas::fill_tint)'s, so tinted
+    /// lines stay).
+    pub(crate) fn wash_clipped(&mut self, rect: Rect) {
+        if rect.is_empty() {
+            return;
+        }
+        if self.format.gray_levels() == Some(2) {
+            let paper = self.encode(Color::WHITE) & 1 != 0;
+            for y in rect.y..rect.bottom() as u16 {
+                let row = usize::from(y - self.top) * self.stride;
+                // Odd places: in a byte (the leftmost pixel its highest
+                // bit), those of odd x on even rows, of even x on odd.
+                let mask: u8 = if y % 2 == 0 { 0x55 } else { 0xAA };
+                let (left, right) = (rect.x, rect.right() as u16);
+                let (first, last) = (left.div_ceil(8) * 8, right / 8 * 8);
+                let paint = |data: &mut [u8], at: usize, mask: u8| {
+                    if paper {
+                        data[at] |= mask;
+                    } else {
+                        data[at] &= !mask;
+                    }
+                };
+                if first < last {
+                    for byte in usize::from(first / 8)..usize::from(last / 8) {
+                        paint(&mut self.data, row + byte, mask);
+                    }
+                }
+                let ends = if first < last {
+                    [(left, first), (last, right)]
+                } else {
+                    [(left, right), (right, right)]
+                };
+                for (from, to) in ends {
+                    for x in from..to {
+                        if (x + y) % 2 == 1 {
+                            paint(&mut self.data, row + usize::from(x / 8), 0x80 >> (x % 8));
+                        }
+                    }
+                }
+            }
+        } else {
+            for y in rect.y..rect.bottom() as u16 {
+                for x in rect.x..rect.right() as u16 {
+                    self.blend_pixel(x, y, Color::WHITE, 170);
+                }
+            }
+        }
+        self.mark_dirty(rect);
+    }
+
     /// Blends `color` with coverage `alpha` (0 to 255) over the pixel at
     /// `(x, y)`, which must lie inside the framebuffer. Does not mark the
     /// pixel dirty; callers mark whole areas.

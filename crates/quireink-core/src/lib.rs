@@ -2842,7 +2842,7 @@ impl Kernel {
         });
         let top = self.stack.len() - 1;
         let overlay = self.overlay(top);
-        self.screen_changed(self.region_of(top), overlay.is_some());
+        self.screen_changed(self.changed_region(top), overlay.is_some());
     }
 
     /// Shows `text` with the screen bound to the notice slot until the
@@ -2925,7 +2925,7 @@ impl Kernel {
         let mut region: Option<Rect> = None;
         let mut overlays_only = true;
         for i in index + 1..self.stack.len() {
-            let r = self.region_of(i);
+            let r = self.changed_region(i);
             overlays_only &= self.overlay(i).is_some();
             region = Some(region.map_or(r, |u: Rect| u.union(&r)));
         }
@@ -2943,6 +2943,17 @@ impl Kernel {
     }
 
     /// The area a screen occupies.
+    /// What opening or closing screen `index` changes: its region, or
+    /// all of the screen where it washes out what lies below it
+    /// ([`Screen::dims_below`](quireink_sdk::Screen::dims_below)).
+    fn changed_region(&self, index: usize) -> Rect {
+        if self.overlay(index).is_some() && self.stack[index].screen.dims_below() {
+            self.content()
+        } else {
+            self.region_of(index)
+        }
+    }
+
     fn region_of(&self, index: usize) -> Rect {
         self.overlay(index).unwrap_or_else(|| self.content())
     }
@@ -3040,6 +3051,13 @@ impl Kernel {
     fn redraw(&mut self, region: Rect) {
         let env = self.shared.env(self.now);
         let regions: Vec<Option<Rect>> = self.stack.iter().map(|s| s.screen.region(&env)).collect();
+        // Overlays that wash out what lies below them.
+        let dims: Vec<bool> = self
+            .stack
+            .iter()
+            .zip(&regions)
+            .map(|(s, own)| own.is_some() && s.screen.dims_below())
+            .collect();
         let base = regions.iter().rposition(Option::is_none).unwrap_or(0);
         let bounds = self.content();
         let row = self.hint_row();
@@ -3065,6 +3083,9 @@ impl Kernel {
             area = shown;
             let _running = self.shared.meter.enter(active.id.namespace());
             active.screen.draw(&mut canvas.clipped(area), &env);
+            if dims[base + index + 1..].iter().any(|d| *d) {
+                canvas.wash(area);
+            }
         }
         if let Some(row) = row
             && let Some(area) = row.intersection(&region)

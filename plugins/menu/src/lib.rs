@@ -414,6 +414,10 @@ impl Screen for MenuScreen {
         Some(self.region)
     }
 
+    fn dims_below(&self) -> bool {
+        true
+    }
+
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         canvas.fill(self.region, Color::WHITE);

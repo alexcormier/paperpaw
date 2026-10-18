@@ -110,6 +110,15 @@ pub trait Screen {
         None
     }
 
+    /// For an overlay: whether what lies below it is washed out while it
+    /// shows, so that it stands out and what it cuts through is not read
+    /// as its own (menus, questions). Overlays looked through keep it as
+    /// it is (a keyboard over the field it types into, a short notice, a
+    /// bar for skimming the book).
+    fn dims_below(&self) -> bool {
+        false
+    }
+
     /// Reacts to an action. Unhandled actions go to the action's global
     /// handler, if it has one.
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled;
