@@ -1,0 +1,238 @@
+//! Words being learnt, marked where they occur in books: a decorator
+//! (ADR 0021) finds the words of the list on each page, in the book's
+//! language, and marks them in the role `vocabulary.learning`; a tap on
+//! one looks it up.
+//!
+//! The words are read from the file only when it changed, into a
+//! [`WordSet`] for the language of the book being read.
+
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
+use core::cell::RefCell;
+
+use quireink_sdk::builtin::{events, params, slots};
+use quireink_sdk::decorations::{Decorated, DecoratorSpec, PageText};
+use quireink_sdk::words::{WordSet, fold};
+use quireink_sdk::{Command, Env, Id, Params, Storage};
+
+use crate::store;
+use crate::{LEARNING, MARK};
+
+/// The decorator.
+pub(crate) const DECORATOR: Id = Id::new_static("vocabulary.words");
+/// Bytes at the end of the file in the signature: where a word looked up
+/// again, or one more beyond the most kept, shows.
+const TAIL: usize = 64;
+
+/// The words of a language, as they were when the file had a signature.
+pub(crate) type Cache = RefCell<Option<(u64, String, WordSet)>>;
+
+/// The decorator, switched by [`MARK`], hearing taps.
+pub(crate) fn decorator() -> DecoratorSpec {
+    let cache: Cache = RefCell::new(None);
+    DecoratorSpec::new(DECORATOR, "vocabulary.decorator", move |env, page| {
+        decorate(&cache, env.storage, page)
+    })
+    .switch(&MARK)
+    .taps()
+    .signature(|env| signature(env.storage))
+}
+
+/// What the list of words is like: its size and its last bytes, which
+/// change whenever a word comes or goes.
+pub(crate) fn signature(storage: &dyn Storage) -> u64 {
+    let file = store::file();
+    let size = storage.size(&file).unwrap_or(0);
+    let mut tail = [0u8; TAIL];
+    let n = storage
+        .read_at(&file, size.saturating_sub(TAIL as u64), &mut tail)
+        .unwrap_or(0);
+    // FNV-1a over the size and the tail.
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for &b in size.to_le_bytes().iter().chain(&tail[..n]) {
+        hash = (hash ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3);
+    }
+    hash
+}
+
+/// The marks of `page`: the words of the list in its language.
+pub(crate) fn decorate(
+    cache: &Cache,
+    storage: &dyn Storage,
+    page: &PageText<'_>,
+) -> Vec<Decorated> {
+    let Ok(mut cache) = cache.try_borrow_mut() else {
+        return Vec::new();
+    };
+    let signature = signature(storage);
+    let language = primary(page.language);
+    let fresh = matches!(
+        &*cache,
+        Some((s, kept, _)) if *s == signature && kept.eq_ignore_ascii_case(language)
+    );
+    if !fresh {
+        // The old set goes before the new one is read.
+        *cache = None;
+        let words = words_in(storage, language);
+        *cache = Some((signature, language.to_string(), words));
+    }
+    match &*cache {
+        Some((_, _, words)) => words.decorate(page.words, &LEARNING),
+        None => Vec::new(),
+    }
+}
+
+/// The language without its region: `en-GB` is `en`.
+fn primary(language: &str) -> &str {
+    language.split(['-', '_']).next().unwrap_or_default().trim()
+}
+
+/// Whether a word kept in `kept` belongs to a book in `language` (both
+/// primary, see [`primary`]), whatever their case; where either is not
+/// known, it does.
+fn same_language(kept: &str, language: &str) -> bool {
+    kept.is_empty() || language.is_empty() || kept.eq_ignore_ascii_case(language)
+}
+
+/// The words of the list in `language`.
+fn words_in(storage: &dyn Storage, language: &str) -> WordSet {
+    // One string with a word a line, rather than a string for each.
+    let mut words = String::new();
+    store::each_line(storage, &store::file(), |line| {
+        let mut fields = line.splitn(3, '\t');
+        let (Some(word), Some(kept)) = (fields.next(), fields.next()) else {
+            return;
+        };
+        if same_language(primary(kept), language) {
+            words.push_str(word);
+            words.push('\n');
+        }
+    });
+    WordSet::new(words.lines())
+}
+
+/// A tap on a marked word: looks it up, in the language it was kept in.
+pub(crate) fn tapped(env: &Env<'_>, tapped: &events::DecorationTapped, out: &mut Vec<Command>) {
+    if tapped.decorator != DECORATOR {
+        return;
+    }
+    let word = tapped.text.trim_matches(|c: char| !c.is_alphanumeric());
+    if word.is_empty() {
+        return;
+    }
+    out.push(Command::OpenSlot(
+        slots::LOOKUP,
+        Params::new()
+            .with(params::WORD, word.to_string())
+            .with(params::LANGUAGE, language_of(env.storage, word)),
+    ));
+}
+
+/// The language `word` was last kept in; empty where it is not in the
+/// list.
+fn language_of(storage: &dyn Storage, word: &str) -> String {
+    let key = fold(word);
+    let mut language = String::new();
+    store::each_line(storage, &store::file(), |line| {
+        let mut fields = line.splitn(3, '\t');
+        if let (Some(kept), Some(kept_language)) = (fields.next(), fields.next())
+            && fold(kept) == key
+        {
+            language = kept_language.to_string();
+        }
+    });
+    language
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use quireink_sdk::MemoryStorage;
+    use quireink_sdk::decorations::PageWord;
+    use quireink_sdk::document::Locator;
+
+    const WORDS: &str = "Rabbit\ten\t1\t10\tbooks/alice.txt\tAlice\tThe White Rabbit.\n\
+                         white rabbit\ten-GB\t1\t10\tbooks/alice.txt\tAlice\t\n\
+                         Hase\tde\t1\t10\tbooks/hase.txt\tHase\t\n\
+                         Hatter\t\t1\t10\tbooks/alice.txt\tAlice\t\n";
+
+    fn words<'a>(texts: &[&'a str]) -> Vec<PageWord<'a>> {
+        texts
+            .iter()
+            .enumerate()
+            .map(|(n, text)| PageWord {
+                text,
+                start: Locator::new(0, n as u32 * 10),
+                end: Locator::new(0, n as u32 * 10 + text.len() as u32),
+            })
+            .collect()
+    }
+
+    fn page<'a>(language: &'a str, words: &'a [PageWord<'a>]) -> PageText<'a> {
+        PageText {
+            path: "books/alice.txt",
+            language,
+            words,
+        }
+    }
+
+    #[test]
+    fn marks_the_words_of_the_list() {
+        let storage = MemoryStorage::new().with(&store::file(), WORDS);
+        let cache = Cache::default();
+        let text = words(&[
+            "The",
+            "White",
+            "Rabbit,",
+            "the",
+            "rabbit",
+            "and",
+            "(Hatter).",
+        ]);
+        let marks = decorate(&cache, &storage, &page("EN", &text));
+        let ranges: Vec<_> = marks.iter().map(|m| (m.start, m.end)).collect();
+        assert_eq!(
+            ranges,
+            [
+                (text[1].start, text[2].end),
+                (text[4].start, text[4].end),
+                (text[6].start, text[6].end),
+            ]
+        );
+        assert!(marks.iter().all(|m| m.role == LEARNING));
+    }
+
+    #[test]
+    fn skips_words_of_other_languages() {
+        let storage = MemoryStorage::new().with(&store::file(), WORDS);
+        let cache = Cache::default();
+        let text = words(&["Der", "Hase", "und", "das", "Rabbit"]);
+        let marks = decorate(&cache, &storage, &page("de", &text));
+        assert_eq!(marks.len(), 1);
+        assert_eq!(marks[0].start, text[1].start);
+        // A book of no known language marks every word.
+        assert_eq!(decorate(&cache, &storage, &page("", &text)).len(), 2);
+    }
+
+    #[test]
+    fn reads_the_list_again_when_it_changed() {
+        let storage = MemoryStorage::new().with(&store::file(), WORDS);
+        let cache = Cache::default();
+        let text = words(&["a", "quire", "of", "ink"]);
+        assert!(decorate(&cache, &storage, &page("en", &text)).is_empty());
+        let before = signature(&storage);
+        storage
+            .append(&store::file(), b"quire\ten\t1\t1\tb\tB\t\n")
+            .unwrap_or_default();
+        assert_ne!(signature(&storage), before);
+        assert_eq!(decorate(&cache, &storage, &page("en", &text)).len(), 1);
+    }
+
+    #[test]
+    fn a_tap_looks_the_word_up_in_its_language() {
+        let storage = MemoryStorage::new().with(&store::file(), WORDS);
+        assert_eq!(language_of(&storage, "HASE"), "de");
+        assert_eq!(language_of(&storage, "rabbit!"), "en");
+        assert_eq!(language_of(&storage, "unknown"), "");
+    }
+}

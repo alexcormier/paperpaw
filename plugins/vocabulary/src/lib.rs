@@ -9,12 +9,18 @@
 //! all words for flash card programs such as Anki (word, sentence, book,
 //! separated by tabs) into the `Notes` folder beside the library.
 //!
+//! With `vocabulary.mark` on (off at first; also in the reader's menu
+//! *More*), the words are marked where they occur in books of their
+//! language, in the role `vocabulary.learning` (a dotted line under the
+//! text, as the reader likes it); a tap on one looks it up.
+//!
 //! Only the visible page of words is ever in memory.
 
 #![no_std]
 
 extern crate alloc;
 
+mod marks;
 mod store;
 
 use alloc::borrow::Cow;
@@ -24,6 +30,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use quireink_sdk::builtin::{actions, events, groups, menus, params, slots};
+use quireink_sdk::decorations::{Decoration, LineKind, add_role};
 use quireink_sdk::event::Event;
 use quireink_sdk::ui::choice::{self, Choice};
 use quireink_sdk::ui::{self, ListChange, ListView, UiStyle};
@@ -42,6 +49,10 @@ pub const PLUGIN: Id = Id::new_static("vocabulary");
 pub const OPEN: Id = Id::new_static("vocabulary.open");
 /// Setting: keep the words looked up.
 pub const COLLECT: Setting<bool> = Setting::new("vocabulary.collect");
+/// Setting: mark the words in books.
+pub const MARK: Setting<bool> = Setting::new("vocabulary.mark");
+/// The role of the words marked in books.
+pub const LEARNING: Id = Id::new_static("vocabulary.learning");
 const SCREEN: Id = Id::new_static("vocabulary.list");
 const CHOICE: Id = Id::new_static("vocabulary.choice");
 const CHOSEN: Event<choice::Picked> = Event::new("vocabulary.chosen");
@@ -79,6 +90,26 @@ impl Plugin for Vocabulary {
         r.on(events::WORD_LOOKED_UP, |env, looked_up, _| {
             record(env, looked_up);
         })?;
+        r.add_setting(
+            SettingSpec::switch(&MARK, "vocabulary.setting.mark", false)
+                .group(groups::READING)
+                .section(DICTIONARY_SECTION)
+                .description("vocabulary.setting.mark.help"),
+        )?;
+        r.add_menu_entry(MenuEntry {
+            menu: menus::READER_MORE,
+            item: MARK.id().clone(),
+            order: 40,
+        })?;
+        r.add_icon(&MARK, Cow::Borrowed("vocabulary"))?;
+        add_role(
+            r,
+            &LEARNING,
+            "vocabulary.role.learning",
+            Decoration::NONE.line(LineKind::Dotted),
+        )?;
+        r.add_decorator(marks::decorator())?;
+        r.on(events::DECORATION_TAPPED, marks::tapped)?;
         r.add_screen(ScreenSpec {
             id: SCREEN,
             title: Cow::Borrowed("vocabulary.title"),
@@ -526,5 +557,34 @@ mod tests {
         let de = Catalog::parse(include_str!("../i18n/de.ini")).unwrap();
         let issues = check::compare(&en, &de);
         assert!(issues.is_empty(), "{issues:?}");
+    }
+
+    /// Marking is off at first, switches the decorator, which hears taps,
+    /// and is in the reader's menu.
+    #[test]
+    fn marking_is_off_at_first() {
+        use quireink_sdk::contribution::Contribution;
+        use quireink_sdk::{Plugin, Registrar, SettingValue};
+
+        let plugin = super::Vocabulary;
+        let mut r = Registrar::new(plugin.manifest().id);
+        assert!(plugin.register(&mut r).is_ok());
+        let contributions = r.contributions();
+        let mark = contributions.iter().find_map(|c| match c {
+            Contribution::Setting(spec) if spec.id == *super::MARK.id() => Some(spec),
+            _ => None,
+        });
+        assert_eq!(mark.map(|s| &s.default), Some(&SettingValue::Bool(false)));
+        let decorator = contributions.iter().find_map(|c| match c {
+            Contribution::Decorator(d) => Some(d),
+            _ => None,
+        });
+        assert!(decorator.is_some_and(|d| d.taps && d.switch.as_ref() == Some(super::MARK.id())));
+        assert!(contributions.iter().any(|c| matches!(
+            c,
+            Contribution::MenuEntry(e)
+                if e.menu == quireink_sdk::builtin::menus::READER_MORE
+                    && e.item == *super::MARK.id()
+        )));
     }
 }

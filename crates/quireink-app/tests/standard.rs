@@ -81,7 +81,8 @@ impl Plugin for Probe {
         r.add_menu_entry(MenuEntry {
             menu: menus::READER_MORE,
             item: GO,
-            order: 99,
+            // First, so it is on the menu's first page however many follow.
+            order: 0,
         })?;
         // Every "Alice" on a page, wavy underlined; taps come back.
         decorations::add_role(
