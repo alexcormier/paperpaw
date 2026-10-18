@@ -683,6 +683,11 @@ impl Decorators {
         self.list.is_empty()
     }
 
+    /// The decorator `id`, e.g. for its name.
+    pub fn get(&self, id: &Id) -> Option<&DecoratorSpec> {
+        self.list.iter().find(|d| d.id == *id)
+    }
+
     pub fn shrink_to_fit(&mut self) {
         self.list.shrink_to_fit();
     }

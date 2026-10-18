@@ -4,7 +4,9 @@
 use super::*;
 
 impl Book {
-    pub(super) fn draw_page(&self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
+    /// The page's pictures and text, each word in its ink (`inks`, by the
+    /// words' order as [`Book::words`] has them; black where none).
+    pub(super) fn draw_page(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, inks: &[Option<Color>]) {
         let t = &self.typography;
         let Some(faces) = Faces::new(env, t, self.embedded.as_ref()) else {
             return;
@@ -13,23 +15,40 @@ impl Book {
         for image in &self.page.images {
             draw_image(canvas, env, t, image);
         }
+        // The words counted as `words_of` counts them: a word that goes on
+        // in the next run (e.g. bold) is one word.
+        let mut ordinal = 0usize;
         for line in &self.page.lines {
             let baseline = (t.y + line.baseline + 0.5) as i32;
             // Lines outside the part being drawn (e.g. another band).
             let top = baseline - (2.0 * t.line_height) as i32;
             let bottom = baseline + t.line_height as i32;
-            if bottom < i32::from(clip.y) || top > clip.bottom() as i32 {
-                continue;
-            }
+            let shown = bottom >= i32::from(clip.y) && top <= clip.bottom() as i32;
             let mut x = t.x + line.x;
+            let mut joined = false;
             for run in &line.runs {
                 let text = &line.text[run.start..run.end];
                 let space = faces.space(run.face) + line.word_spacing;
                 for (i, word) in text.split(' ').enumerate() {
                     if i > 0 {
                         x += space;
+                        joined = false;
                     }
-                    x += faces.draw(canvas, run.face, x, baseline, word);
+                    if word.is_empty() {
+                        continue;
+                    }
+                    if !joined {
+                        ordinal += 1;
+                    }
+                    joined = true;
+                    if !shown {
+                        x += faces.measure(run.face, word);
+                        continue;
+                    }
+                    match inks.get(ordinal - 1).copied().flatten() {
+                        Some(ink) => x += faces.draw_in(canvas, run.face, x, baseline, word, ink),
+                        None => x += faces.draw(canvas, run.face, x, baseline, word),
+                    }
                 }
             }
         }
@@ -89,25 +108,6 @@ impl Book {
         );
     }
 
-    /// Links underlined thinly, so they can be found without standing out.
-    /// Links to the web only if a browser is there to open them.
-    pub(super) fn draw_links(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, words: &[WordBox]) {
-        let web = env.has_slot(&slots::BROWSER);
-        let followed = |i: usize| {
-            self.link_of(&words[i])
-                .is_some_and(|link| web || !quireink_sdk::document::is_external(&link.href))
-        };
-        for b in selection::line_boxes(words, followed) {
-            canvas.fill_rect(
-                i32::from(b.x),
-                b.bottom() as i32 - 2,
-                u32::from(b.width),
-                1,
-                Color::gray(90),
-            );
-        }
-    }
-
     /// Where a tap sets or removes a bookmark: the top right corner.
     pub(super) fn corner_area(&self, env: &Env<'_>) -> Rect {
         let display = env.device.display;
@@ -150,8 +150,9 @@ impl Book {
         }
     }
 
-    /// Highlights behind the text: light gray, one shape per line.
-    pub(super) fn draw_highlights(
+    /// A note's sign in the right margin, beside the first line of its
+    /// highlight (the highlights themselves are marks, see `marks`).
+    pub(super) fn draw_note_signs(
         &self,
         canvas: &mut Canvas<'_>,
         env: &Env<'_>,
@@ -165,34 +166,6 @@ impl Book {
         if highlights.is_empty() {
             return;
         }
-        let boxes = selection::line_boxes(words, |i| {
-            highlights
-                .iter()
-                .any(|m| m.overlaps(words[i].start, words[i].end))
-        });
-        let underline = env.settings.read(&crate::settings::HIGHLIGHT_STYLE)
-            == crate::settings::HIGHLIGHT_UNDERLINE;
-        let line = env.metrics.tenth_mm(4).max(2);
-        for b in boxes {
-            if underline {
-                canvas.fill_rect(
-                    i32::from(b.x),
-                    b.bottom() as i32 - line as i32,
-                    u32::from(b.width),
-                    line,
-                    Color::BLACK,
-                );
-            } else {
-                canvas.fill_rect(
-                    i32::from(b.x) - 2,
-                    i32::from(b.y),
-                    u32::from(b.width) + 4,
-                    u32::from(b.height),
-                    Color::gray(205),
-                );
-            }
-        }
-        // A note's sign in the right margin, beside its first line.
         let style = UiStyle::new(env);
         let size = style.small;
         let x = self.typography.x + self.typography.width + (style.gap as f32) / 2.0;

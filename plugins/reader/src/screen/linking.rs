@@ -46,7 +46,7 @@ impl ReaderScreen {
             self.linking = None;
             return Handled::No;
         };
-        let count = book.followable(&env).len();
+        let count = book.targets(&env).len();
         if forward.contains(a) {
             match linking.focus {
                 Some(i) if i + 1 < count => {
@@ -55,7 +55,7 @@ impl ReaderScreen {
                 _ => {
                     let end = book.page.end;
                     book.show(cx, end, true);
-                    let focus = (!book.followable(&env).is_empty()).then_some(0);
+                    let focus = (!book.targets(&env).is_empty()).then_some(0);
                     self.linking = Some(Linking { focus });
                     cx.request_redraw();
                 }
@@ -69,7 +69,7 @@ impl ReaderScreen {
                     if let Some(start) = book.previous_start(&env) {
                         book.show(cx, start, false);
                     }
-                    let count = book.followable(&env).len();
+                    let count = book.targets(&env).len();
                     self.linking = Some(Linking {
                         focus: count.checked_sub(1),
                     });
@@ -77,14 +77,20 @@ impl ReaderScreen {
                 }
             }
         } else if *a == actions::CONFIRM {
-            let link = linking
+            let target = linking
                 .focus
-                .and_then(|i| book.followable(&env).get(i).copied())
-                .map(|i| book.links[i].clone());
-            let link = link.map(|l| {
-                let words = book.words(&env);
-                (l.href.clone(), link_label(book, &words, &l))
-            });
+                .and_then(|i| book.targets(&env).get(i).copied());
+            let words = book.words(&env);
+            let link = match target {
+                Some(Target::Link(i)) => book.links.get(i).cloned(),
+                Some(Target::Mark(i)) => {
+                    // The plugin answers (e.g. the word's meaning).
+                    book.tap_mark(&words, i, cx);
+                    None
+                }
+                None => None,
+            };
+            let link = link.map(|l| (l.href.clone(), link_label(book, &words, &l)));
             self.set_linking(None, cx);
             if let Some((href, label)) = link {
                 return self.open_link(&href, &label, cx);
@@ -174,8 +180,9 @@ pub(super) fn link_label(book: &Book, words: &[WordBox], link: &Link) -> String 
     label
 }
 
-/// The link being chosen, framed like selected text, and a bar at the
-/// bottom saying where it leads and what the buttons do.
+/// The link or mark being chosen, framed like selected text, and a bar at
+/// the bottom saying where it leads (or whose mark it is) and what the
+/// buttons do.
 pub(super) fn draw_linking(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
@@ -183,17 +190,12 @@ pub(super) fn draw_linking(
     words: &[WordBox],
     linking: Linking,
 ) {
-    let link = linking
+    let target = linking
         .focus
-        .and_then(|i| book.followable(env).get(i).copied())
-        .map(|i| &book.links[i]);
-    if let Some(link) = link {
+        .and_then(|i| book.targets(env).get(i).copied());
+    if let Some((start, end)) = target.and_then(|t| book.target_range(t)) {
         let line = env.metrics.tenth_mm(4).max(2);
-        let inside = |i: usize| {
-            words[i].start.section == book.page.start.section
-                && words[i].end.offset > link.start
-                && words[i].start.offset < link.end
-        };
+        let inside = |i: usize| words[i].end > start && words[i].start < end;
         for b in selection::line_boxes(words, inside) {
             canvas.stroke_rect(
                 i32::from(b.x) - 4,
@@ -218,14 +220,24 @@ pub(super) fn draw_linking(
     let Some(font) = style.font(env) else {
         return;
     };
-    let text = match link {
-        Some(link) => {
-            let place = if quireink_sdk::document::is_external(&link.href) {
-                quireink_sdk::web::host(&link.href).to_string()
+    let text = match target {
+        Some(Target::Link(i)) => {
+            let href = book.links.get(i).map_or("", |l| l.href.as_str());
+            let place = if quireink_sdk::document::is_external(href) {
+                quireink_sdk::web::host(href).to_string()
             } else {
                 env.i18n.tr("reader.link.in-book").to_string()
             };
             format!("{place} · {}", env.i18n.tr("reader.link.hint"))
+        }
+        Some(Target::Mark(i)) => {
+            // The name of the plugin's decorator, as it marks the word.
+            let name = book
+                .decorated
+                .get(i)
+                .and_then(|m| env.decorators.get(&m.decorator))
+                .map_or("", |d| env.i18n.tr(&d.title));
+            format!("{name} · {}", env.i18n.tr("reader.link.hint"))
         }
         None => env.i18n.tr("reader.link.none").to_string(),
     };

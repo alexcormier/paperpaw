@@ -1,12 +1,14 @@
 //! Plugins reach the reader through what `quireink_sdk::builtin` defines
 //! for every reader, never by the reader plugin's own ids: a probe plugin
-//! that knows only those moves the shipped reader, hears where it is and
-//! puts an entry in its menu.
+//! that knows only those moves the shipped reader, hears where it is,
+//! puts an entry in its menu, and marks words on its pages that it hears
+//! taps on (ADR 0021).
 
 // Tests panic on purpose when something is wrong.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use std::borrow::Cow;
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use quireink_core::{Effects, Kernel};
@@ -14,6 +16,7 @@ use quireink_platform::{
     DeviceInfo, DisplayInfo, InputCaps, Instant, MemoryClass, PixelFormat, Rotation,
 };
 use quireink_sdk::builtin::{actions, events, menus, params, slots};
+use quireink_sdk::decorations::{self, Decorated, Decoration, DecoratorSpec, LineKind};
 use quireink_sdk::document::Locator;
 use quireink_sdk::{
     ActionSpec, Command, Env, Id, Manifest, MemoryStorage, MenuEntry, Params, Plugin,
@@ -47,6 +50,9 @@ const GO: Id = Id::new_static("probe.go");
 /// Where the reader's page began when it last turned (`u32::MAX`: not
 /// yet).
 static PAGE_AT: AtomicU32 = AtomicU32::new(u32::MAX);
+/// The probe's role, and the words of its last mark tapped.
+const WORD: Id = Id::new_static("probe.word");
+static TAPPED: Mutex<String> = Mutex::new(String::new());
 
 /// A plugin that knows no reader, only the standard ids.
 struct Probe;
@@ -76,6 +82,27 @@ impl Plugin for Probe {
             menu: menus::READER_MORE,
             item: GO,
             order: 99,
+        })?;
+        // Every "Alice" on a page, wavy underlined; taps come back.
+        decorations::add_role(
+            r,
+            &WORD,
+            "probe.word",
+            Decoration::NONE.line(LineKind::Wavy),
+        )?;
+        r.add_decorator(
+            DecoratorSpec::new(Id::new_static("probe.alice"), "probe.alice", |_, page| {
+                let alice = |w: &&decorations::PageWord<'_>| w.text.starts_with("Alice");
+                page.words
+                    .iter()
+                    .filter(alice)
+                    .filter_map(|w| Decorated::words(core::slice::from_ref(w), &WORD))
+                    .collect()
+            })
+            .taps(),
+        )?;
+        r.on(events::DECORATION_TAPPED, |_, tapped, _| {
+            *TAPPED.lock().unwrap() = tapped.text.clone();
         })?;
         Ok(())
     }
@@ -159,4 +186,21 @@ fn a_plugin_reaches_the_reader_through_the_standard_ids() {
     app.run(menus::READER_MORE);
     let labels = app.labels();
     assert!(labels.iter().any(|l| l.contains("probe.go")), "{labels:?}");
+}
+
+#[test]
+fn a_decorators_marks_are_chosen_with_the_buttons() {
+    let mut app = App::new();
+    app.now += 100;
+    let open = Params::new().with(params::PATH, BOOK);
+    let effects = app.kernel.open_slot(Instant(app.now), slots::READER, open);
+    app.settle(effects);
+    // The book's first page names Alice; once it is drawn (decorators are
+    // asked for a page shown), the links mode stops at her, and
+    // confirming tells the probe.
+    app.kernel.render(&mut |_, _| {});
+    app.run(Id::new_static("reader.links"));
+    app.run(actions::CONFIRM);
+    let tapped = TAPPED.lock().unwrap().clone();
+    assert!(tapped.starts_with("Alice"), "tapped {tapped:?}");
 }

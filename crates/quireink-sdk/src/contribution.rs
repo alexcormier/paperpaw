@@ -107,7 +107,7 @@ pub enum Contribution {
     StatusItem(StatusItemSpec),
     StatusLine(StatusLineSpec),
     TextFilter(TextFilterSpec),
-    Decorator(crate::decorations::DecoratorSpec),
+    Decorator(Box<crate::decorations::DecoratorSpec>),
     InputFilter(InputFilterSpec),
     RefreshFilter(RefreshFilterSpec),
     Widget(Box<WidgetSpec>),
@@ -500,7 +500,7 @@ impl Registrar {
         &mut self,
         decorator: crate::decorations::DecoratorSpec,
     ) -> Result<(), RegisterError> {
-        self.add(Contribution::Decorator(decorator))
+        self.add(Contribution::Decorator(Box::new(decorator)))
     }
 
     /// Adds a filter of every input, before screens and key maps see it

@@ -132,11 +132,6 @@ pub mod settings {
     pub const ALOUD_TURN: Setting<bool> = Setting::new("reader.aloud-turn-pages");
     /// Reading aloud stops by itself after a while (a sleep timer).
     pub const ALOUD_TIMER: Setting<Text> = Setting::new("reader.aloud-timer");
-    /// How highlights look: [`HIGHLIGHT_MARKER`] (gray) or
-    /// [`HIGHLIGHT_UNDERLINE`].
-    pub const HIGHLIGHT_STYLE: Setting<Text> = Setting::new("reader.highlight-style");
-    pub const HIGHLIGHT_MARKER: &str = "reader.highlight-style.marker";
-    pub const HIGHLIGHT_UNDERLINE: &str = "reader.highlight-style.underline";
     /// Seconds between pages turned by themselves
     /// ([`actions::AUTO_TURN`](super::actions::AUTO_TURN)).
     pub const AUTO_TURN_SECONDS: Setting<i64> = Setting::new("reader.auto-turn-seconds");
@@ -402,18 +397,6 @@ impl Plugin for Reader {
             )
             .group(groups::CONTROLS)
             .description("reader.setting.corner-bookmark.help"),
-            SettingSpec::choice(
-                &settings::HIGHLIGHT_STYLE,
-                "reader.setting.highlight-style",
-                alloc::vec![
-                    Cow::Borrowed(settings::HIGHLIGHT_MARKER),
-                    Cow::Borrowed(settings::HIGHLIGHT_UNDERLINE),
-                ],
-                settings::HIGHLIGHT_MARKER,
-            )
-            .group(groups::READING)
-            .section(setting_sections::PAGE)
-            .description("reader.setting.highlight-style.help"),
             SettingSpec::number(
                 &settings::AUTO_TURN_SECONDS,
                 "reader.setting.auto-turn-seconds",

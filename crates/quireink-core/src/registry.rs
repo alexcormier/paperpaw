@@ -248,7 +248,7 @@ pub(crate) fn stage(
             Contribution::StatusItem(item) => staging.status_items.push(item),
             Contribution::StatusLine(line) => staging.status_lines.push(line),
             Contribution::TextFilter(filter) => staging.text_filters.push(filter),
-            Contribution::Decorator(decorator) => staging.decorators.push(decorator),
+            Contribution::Decorator(decorator) => staging.decorators.push(*decorator),
             Contribution::InputFilter(filter) => staging.input_filters.push(filter),
             Contribution::RefreshFilter(filter) => staging.refresh_filters.push(filter),
             Contribution::Widget(widget) => staging.widgets.push(*widget),

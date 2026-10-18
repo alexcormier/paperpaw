@@ -416,7 +416,7 @@ pub mod quireink_sdk::contribution
 #[non_exhaustive] pub enum quireink_sdk::contribution::Contribution
 pub quireink_sdk::contribution::Contribution::Action(quireink_sdk::ActionSpec)
 pub quireink_sdk::contribution::Contribution::BookData(quireink_sdk::library::BookData)
-pub quireink_sdk::contribution::Contribution::Decorator(quireink_sdk::decorations::DecoratorSpec)
+pub quireink_sdk::contribution::Contribution::Decorator(alloc::boxed::Box<quireink_sdk::decorations::DecoratorSpec>)
 pub quireink_sdk::contribution::Contribution::Font(alloc::boxed::Box<quireink_sdk::FontSpec>)
 pub quireink_sdk::contribution::Contribution::FontBinding
 pub quireink_sdk::contribution::Contribution::FontBinding::font: quireink_sdk::Id
@@ -615,6 +615,7 @@ pub struct quireink_sdk::decorations::Decorators
 impl quireink_sdk::decorations::Decorators
 pub fn quireink_sdk::decorations::Decorators::add(&mut self, quireink_sdk::decorations::DecoratorSpec)
 pub fn quireink_sdk::decorations::Decorators::decorate(&self, &quireink_sdk::Env<'_>, &quireink_sdk::decorations::PageText<'_>) -> alloc::vec::Vec<quireink_sdk::decorations::Mark>
+pub fn quireink_sdk::decorations::Decorators::get(&self, &quireink_sdk::Id) -> core::option::Option<&quireink_sdk::decorations::DecoratorSpec>
 pub fn quireink_sdk::decorations::Decorators::is_empty(&self) -> bool
 pub fn quireink_sdk::decorations::Decorators::new() -> Self
 pub fn quireink_sdk::decorations::Decorators::shrink_to_fit(&mut self)
@@ -1825,7 +1826,7 @@ pub fn quireink_sdk::Command::set<T: quireink_sdk::setting::SettingType>(&quirei
 #[non_exhaustive] pub enum quireink_sdk::Contribution
 pub quireink_sdk::Contribution::Action(quireink_sdk::ActionSpec)
 pub quireink_sdk::Contribution::BookData(quireink_sdk::library::BookData)
-pub quireink_sdk::Contribution::Decorator(quireink_sdk::decorations::DecoratorSpec)
+pub quireink_sdk::Contribution::Decorator(alloc::boxed::Box<quireink_sdk::decorations::DecoratorSpec>)
 pub quireink_sdk::Contribution::Font(alloc::boxed::Box<quireink_sdk::FontSpec>)
 pub quireink_sdk::Contribution::FontBinding
 pub quireink_sdk::Contribution::FontBinding::font: quireink_sdk::Id

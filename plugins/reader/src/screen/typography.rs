@@ -174,6 +174,19 @@ impl Faces<'_> {
         baseline: i32,
         text: &str,
     ) -> f32 {
+        self.draw_in(canvas, face, x, baseline, text, Color::BLACK)
+    }
+
+    /// Draws `text` as [`Faces::draw`] does, in `ink` (e.g. a mark's).
+    pub(super) fn draw_in(
+        &self,
+        canvas: &mut Canvas<'_>,
+        face: Face,
+        x: f32,
+        baseline: i32,
+        text: &str,
+        ink: Color,
+    ) -> f32 {
         let size = self.size(face);
         // About a pixel per step at 48 px; at least one.
         let extra = match self.weight {
@@ -182,7 +195,7 @@ impl Faces<'_> {
         };
         let font = self.font(face);
         if !face.style.small_caps() {
-            return font.draw_bolder(canvas, size, x, baseline, text, Color::BLACK, extra);
+            return font.draw_bolder(canvas, size, x, baseline, text, ink, extra);
         }
         // Lower case letters as smaller capitals.
         let mut width = 0.0;
@@ -191,19 +204,9 @@ impl Faces<'_> {
                 true => {
                     let upper = part.to_uppercase();
                     let small = size * SMALL_CAPS;
-                    font.draw_bolder(
-                        canvas,
-                        small,
-                        x + width,
-                        baseline,
-                        &upper,
-                        Color::BLACK,
-                        extra,
-                    )
+                    font.draw_bolder(canvas, small, x + width, baseline, &upper, ink, extra)
                 }
-                false => {
-                    font.draw_bolder(canvas, size, x + width, baseline, part, Color::BLACK, extra)
-                }
+                false => font.draw_bolder(canvas, size, x + width, baseline, part, ink, extra),
             };
         }
         width

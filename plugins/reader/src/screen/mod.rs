@@ -5,6 +5,7 @@ mod book;
 mod draw;
 mod hands_free;
 mod linking;
+mod marks;
 mod selecting;
 mod typography;
 mod words;
@@ -318,7 +319,7 @@ impl Screen for ReaderScreen {
     }
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
-        let book = match &self.book {
+        let book = match &mut self.book {
             Ok(book) => book,
             Err(message) => return draw_message(canvas, env, message),
         };
@@ -330,49 +331,31 @@ impl Screen for ReaderScreen {
             || book.found.is_some()
             || self.aloud.is_some()
             || !book.links.is_empty()
+            || !env.decorators.is_empty()
         {
             book.words(env)
         } else {
             Vec::new()
         };
-        book.draw_highlights(canvas, env, &words);
-        book.draw_page(canvas, env);
-        book.draw_links(canvas, env, &words);
+        book.update_decorations(env, &words);
+        let book = &*book;
+        // The sentence read aloud, where it is on this page.
+        let aloud = self
+            .aloud
+            .filter(|a| {
+                a.now.page == book.page.start
+                    && env.settings.read(&crate::settings::ALOUD_HIGHLIGHT)
+            })
+            .map(|a| (a.now.from, a.now.to));
+        let marks = book.page_marks(env, aloud, &words);
+        marks.draw_behind(canvas, env);
+        book.draw_page(canvas, env, &marks.inks);
+        marks.draw_over(canvas, env);
+        book.draw_note_signs(canvas, env, &words);
         book.draw_back(canvas, env);
         book.draw_status(canvas, env);
         if book.bookmarked() {
             book.draw_ribbon(canvas, env);
-        }
-        // The sentence read aloud, underlined like a search hit.
-        if let Some(aloud) = self.aloud
-            && aloud.now.page == book.page.start
-            && env.settings.read(&crate::settings::ALOUD_HIGHLIGHT)
-        {
-            let line = env.metrics.tenth_mm(5).max(2);
-            let sentence = aloud.now.from..aloud.now.to;
-            for b in selection::line_boxes(&words, |i| sentence.contains(&i)) {
-                canvas.fill_rect(
-                    i32::from(b.x),
-                    b.bottom() as i32 + 1,
-                    u32::from(b.width),
-                    line,
-                    Color::BLACK,
-                );
-            }
-        }
-        if let Some((start, end)) = book.found {
-            // Underlined, so it stays visible under a highlight.
-            let line = env.metrics.tenth_mm(5).max(2);
-            let found = |i: usize| words[i].end > start && words[i].start < end;
-            for b in selection::line_boxes(&words, found) {
-                canvas.fill_rect(
-                    i32::from(b.x),
-                    b.bottom() as i32 + 1,
-                    u32::from(b.width),
-                    line,
-                    Color::BLACK,
-                );
-            }
         }
         // A bar at the bottom hides the status line under it entirely.
         let bar = self.linking.is_some() || self.selection.is_some_and(|s| s.mode == Mode::Bar);
@@ -505,7 +488,7 @@ impl Screen for ReaderScreen {
         if *action == crate::actions::LINKS {
             let env = *cx.env();
             if let Ok(book) = &self.book {
-                let focus = (!book.followable(&env).is_empty()).then_some(0);
+                let focus = (!book.targets(&env).is_empty()).then_some(0);
                 self.set_linking(Some(Linking { focus }), cx);
             }
             return Handled::Yes;
@@ -661,6 +644,8 @@ impl Screen for ReaderScreen {
         let link = at(gesture.start)
             .and_then(|i| book.link_of(&words[i]))
             .map(|link| (link.href.clone(), link_label(book, &words, link)));
+        // A mark whose plugin hears taps on it.
+        let tapped = at(gesture.start).and_then(|i| book.tappable_at(&words, i));
         match (gesture.kind, self.selection) {
             (GestureKind::Tap, None)
                 if env.settings.read(&crate::settings::CORNER_BOOKMARK)
@@ -687,6 +672,12 @@ impl Screen for ReaderScreen {
             (GestureKind::Tap, None) if link.is_some() => {
                 let (href, label) = link.unwrap_or_default();
                 self.open_link(&href, &label, cx)
+            }
+            (GestureKind::Tap, None) if tapped.is_some() => {
+                if let Some(mark) = tapped {
+                    book.tap_mark(&words, mark, cx);
+                }
+                Handled::Yes
             }
             (GestureKind::LongPress, _) => match at(gesture.start) {
                 Some(word) => {

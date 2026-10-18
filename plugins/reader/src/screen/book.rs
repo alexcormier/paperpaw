@@ -85,6 +85,20 @@ pub(super) struct Book {
     pub(super) hands_free: Option<&'static str>,
     /// Its last page was reached ([`events::BOOK_FINISHED`] was emitted).
     pub(super) finished: bool,
+    /// What plugins' decorators mark on the page, and what they were
+    /// asked for: the page's start and their signature.
+    pub(super) decorated: Vec<quireink_sdk::decorations::Mark>,
+    pub(super) decorated_for: Option<(Locator, u64)>,
+}
+
+/// What the buttons choose on a page, as links are chosen: a link, or a
+/// mark whose plugin hears taps on it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Target {
+    /// Of [`Book::links`].
+    Link(usize),
+    /// Of [`Book::decorated`].
+    Mark(usize),
 }
 
 /// The position kept in a book's `progress.ini`.
@@ -176,6 +190,8 @@ impl Book {
             landed: None,
             hands_free: None,
             finished: false,
+            decorated: Vec::new(),
+            decorated_for: None,
         };
         book.chapter_marks = book.chapter_marks(env);
         book.embedded = Embedded::load(env, book.document.as_ref());
@@ -520,15 +536,38 @@ impl Book {
             .links(env.storage, start.section, start.offset, to);
     }
 
-    /// The page's links that can be followed (to the web only if a
-    /// browser is there), in reading order: indexes into `links`.
-    pub(super) fn followable(&self, env: &Env<'_>) -> Vec<usize> {
+    /// What the buttons choose on the page, in reading order: the links
+    /// that can be followed (to the web only if a browser is there) and
+    /// the marks whose plugins hear taps on them.
+    pub(super) fn targets(&self, env: &Env<'_>) -> Vec<Target> {
         let web = env.has_slot(&slots::BROWSER);
-        let mut order: Vec<usize> = (0..self.links.len())
+        let section = self.page.start.section;
+        let mut order: Vec<(Locator, Target)> = (0..self.links.len())
             .filter(|&i| web || !quireink_sdk::document::is_external(&self.links[i].href))
+            .map(|i| (Locator::new(section, self.links[i].start), Target::Link(i)))
             .collect();
-        order.sort_by_key(|&i| self.links[i].start);
-        order
+        // Marks whose plugins hear taps on them, chosen as links are.
+        order.extend(
+            self.decorated
+                .iter()
+                .enumerate()
+                .filter(|(_, m)| m.taps)
+                .map(|(i, m)| (m.start, Target::Mark(i))),
+        );
+        order.sort_by_key(|(at, _)| *at);
+        order.into_iter().map(|(_, target)| target).collect()
+    }
+
+    /// Where target `target` is on the page.
+    pub(super) fn target_range(&self, target: Target) -> Option<(Locator, Locator)> {
+        let section = self.page.start.section;
+        match target {
+            Target::Link(i) => self
+                .links
+                .get(i)
+                .map(|l| (Locator::new(section, l.start), Locator::new(section, l.end))),
+            Target::Mark(i) => self.decorated.get(i).map(|m| (m.start, m.end)),
+        }
     }
 
     /// The text at the target of link `href`, as a note shows it: the

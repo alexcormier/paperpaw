@@ -197,9 +197,11 @@ const CASES: &[Case] = &[
         name: "boox-menu-drag",
         profile: "boox-go-7",
         book: None,
-        // The main menu's first entry dragged by its grip to the fourth place.
+        // The main menu's first entry dragged by its grip to the fourth
+        // place (the editor opened by its action: where the settings list
+        // it depends on how many groups there are).
         sets: &[],
-        script: "swipe:600:1100:600:500,wait:300,tap-on:Settings,wait:300,                 tap-on:Customise menus,wait:300,tap-on:Main menu,wait:300,                 swipe:1220:159:1220:420,wait:300",
+        script: "run:menu-editor.open,wait:300,tap-on:Main menu,wait:300,                 swipe:1220:159:1220:420,wait:300",
         colour: 0,
     },
     Case {
