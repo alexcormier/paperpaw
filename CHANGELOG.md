@@ -6,6 +6,9 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Library: the covers made small are let go while a book opened from it
+  is read (on the X4 a grid of them took some 40 KB), and made again
+  from their small files when it shows again.
 - Night mode leaves pictures as they are (covers and photos were shown
   as negatives); "Pictures in night mode inverted" (Display) inverts
   them too. Graphics: `Framebuffer::set_pictures_kept`.

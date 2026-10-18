@@ -500,6 +500,10 @@ impl Browser {
             cx.request_redraw();
             cx.wake_at(env.now);
         } else {
+            // The covers made small go while the book is read: memory for
+            // it (on the X4 a grid of them takes some 40 KB). Made again
+            // from their small files when the library shows again.
+            self.thumbs = Vec::new();
             cx.command(Command::OpenSlot(
                 slots::READER,
                 Params::new().with(params::PATH, path),
