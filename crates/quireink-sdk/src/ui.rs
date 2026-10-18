@@ -925,7 +925,7 @@ pub fn draw_button_hints(
         let left = u32::from(area.x) + width * i / count;
         let right = u32::from(area.x) + width * (i + 1) / count;
         let cell = Rect::new(left as u16, row.y, (right - left) as u16, row.height);
-        let room = (right - left).saturating_sub(2 * style.gap) as f32;
+        let mut room = (right - left).saturating_sub(2 * style.gap) as f32;
         let middle = left as f32 + (right - left) as f32 / 2.0;
         let ink = if pressed == Some(i as usize) {
             canvas.fill(cell, Color::BLACK);
@@ -937,8 +937,12 @@ pub fn draw_button_hints(
         // label, the two together in the middle.
         let hold = held.get(i as usize).copied().unwrap_or(false)
             && matches!(hint, Hint::Text(_) | Hint::Icon(_));
+        // Smaller than the label, close to it, the cell's margins halved:
+        // the label keeps its room (German words are long).
+        let mark_size = style.small * 0.8;
         let mark = if hold {
-            icon_width(env, HOLD_ICON, style.small) + style.gap as f32 / 3.0
+            room += style.gap as f32;
+            icon_width(env, HOLD_ICON, mark_size) + style.gap as f32 / 4.0
         } else {
             0.0
         };
@@ -959,8 +963,8 @@ pub fn draw_button_hints(
             Hint::Default | Hint::Hidden => continue,
         };
         if hold {
-            let x = end + style.gap as f32 / 3.0;
-            draw_icon(canvas, env, HOLD_ICON, style.small, x, cell, ink);
+            let x = end + style.gap as f32 / 4.0;
+            draw_icon(canvas, env, HOLD_ICON, mark_size, x, cell, ink);
         }
     }
 }
