@@ -267,7 +267,7 @@ impl Screen for ListScreen {
                 }
             },
         );
-        ui::fill(canvas, self.status, Color::WHITE);
+        canvas.fill(self.status, Color::WHITE);
         ui::draw_note_line(
             canvas,
             env,

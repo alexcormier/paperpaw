@@ -211,7 +211,7 @@ impl Screen for Summary {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let r = self.region;
-        ui::fill(canvas, r, Color::WHITE);
+        canvas.fill(r, Color::WHITE);
         canvas.fill_rect(
             i32::from(r.x),
             i32::from(r.y),

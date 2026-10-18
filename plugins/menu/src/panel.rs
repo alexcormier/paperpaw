@@ -596,27 +596,18 @@ fn draw_slider(
     let left = rect.x + knob / 2;
     let width = rect.width.saturating_sub(knob);
     let filled = (f32::from(width) * share) as u16;
-    ui::fill(
-        canvas,
+    canvas.fill(
         Rect::new(left, mid - track / 2, width, track),
         Color::gray(170),
     );
-    ui::fill(
-        canvas,
+    canvas.fill(
         Rect::new(left, mid - track, filled, track * 2),
         Color::BLACK,
     );
     let knob_rect = Rect::new(left + filled - knob / 2, mid - knob / 2, knob, knob);
-    ui::fill(canvas, knob_rect, Color::BLACK);
+    canvas.fill(knob_rect, Color::BLACK);
     if focused {
-        canvas.stroke_rect(
-            i32::from(rect.x),
-            i32::from(rect.y),
-            u32::from(rect.width),
-            u32::from(rect.height),
-            ui::button_border(style),
-            Color::BLACK,
-        );
+        canvas.stroke(rect, ui::button_border(style), Color::BLACK);
     }
 }
 
@@ -671,7 +662,7 @@ impl Screen for PanelScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let r = self.region;
-        ui::fill(canvas, r, Color::WHITE);
+        canvas.fill(r, Color::WHITE);
         let border = (style.line * 2).max(2);
         let y = if self.top {
             i32::from(r.y + r.height) - border as i32

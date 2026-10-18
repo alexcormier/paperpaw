@@ -204,13 +204,7 @@ impl DiagnosticsScreen {
     /// "Page x of y", centred above the progress bar.
     fn draw_page_label(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, pages: u32) {
         let r = self.layout.label;
-        canvas.fill_rect(
-            i32::from(r.x),
-            i32::from(r.y),
-            u32::from(r.width),
-            u32::from(r.height),
-            Color::WHITE,
-        );
+        canvas.fill(r, Color::WHITE);
         let text = env.i18n.format(
             "diagnostics.page",
             &[

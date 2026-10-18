@@ -260,10 +260,9 @@ impl Screen for BarScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let r = self.region;
-        ui::fill(canvas, r, Color::WHITE);
+        canvas.fill(r, Color::WHITE);
         let border = (style.line * 2) as u16;
-        ui::fill(
-            canvas,
+        canvas.fill(
             Rect::new(r.x, r.y + r.height - border, r.width, border),
             Color::BLACK,
         );

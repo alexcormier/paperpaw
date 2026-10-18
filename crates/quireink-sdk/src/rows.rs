@@ -6,7 +6,7 @@
 use alloc::vec::Vec;
 use core::ops::Range;
 
-use crate::ui::{ListChange, UiStyle, fill};
+use crate::ui::{ListChange, UiStyle};
 use crate::{Canvas, Color, Point, Rect};
 
 #[derive(Debug)]
@@ -133,7 +133,7 @@ impl Rows {
                     rect.width.saturating_sub(2 * style.margin as u16),
                     style.line as u16,
                 );
-                fill(canvas, line, Color::gray(190));
+                canvas.fill(line, Color::gray(190));
             }
             draw_row(canvas, index, rect, focused);
         }

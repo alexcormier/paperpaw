@@ -122,6 +122,32 @@ impl<'a> Canvas<'a> {
         self.framebuffer.fill_clipped(self.clip, color);
     }
 
+    /// Fills `area`. The `…_rect` forms take signed coordinates, for
+    /// shapes that reach past the screen's edges.
+    pub fn fill(&mut self, area: Rect, color: Color) {
+        let (x, y, width, height) = signed(area);
+        self.fill_rect(x, y, width, height, color);
+    }
+
+    /// Draws the outline of `area`, `thickness` wide, growing inwards.
+    pub fn stroke(&mut self, area: Rect, thickness: u32, color: Color) {
+        let (x, y, width, height) = signed(area);
+        self.stroke_rect(x, y, width, height, thickness, color);
+    }
+
+    /// Fills `area` with its corners rounded by `radius` pixels.
+    pub fn fill_round(&mut self, area: Rect, radius: u32, color: Color) {
+        let (x, y, width, height) = signed(area);
+        self.fill_round_rect(x, y, width, height, radius, color);
+    }
+
+    /// Draws the outline of `area` with its corners rounded by `radius`
+    /// pixels, `thickness` wide, growing inwards.
+    pub fn stroke_round(&mut self, area: Rect, thickness: u32, radius: u32, color: Color) {
+        let (x, y, width, height) = signed(area);
+        self.stroke_round_rect(x, y, width, height, thickness, radius, color);
+    }
+
     /// Fills a rectangle given in signed coordinates.
     pub fn fill_rect(&mut self, x: i32, y: i32, width: u32, height: u32, color: Color) {
         if let Some(rect) = self.clip_signed(x, y, width, height) {
@@ -300,6 +326,16 @@ impl<'a> Canvas<'a> {
             (bottom - top) as u16,
         ))
     }
+}
+
+/// A rectangle's place and size as the signed forms take them.
+fn signed(area: Rect) -> (i32, i32, u32, u32) {
+    (
+        i32::from(area.x),
+        i32::from(area.y),
+        u32::from(area.width),
+        u32::from(area.height),
+    )
 }
 
 #[cfg(test)]

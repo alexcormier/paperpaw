@@ -240,7 +240,7 @@ impl Calendar {
                 _ => Some(40),
             };
             if let Some(gray) = shade {
-                ui::fill(canvas, inner, Color::gray(gray));
+                canvas.fill(inner, Color::gray(gray));
                 // And as a bar, an hour long at most: visible on displays
                 // without grays too.
                 let full = u32::from(inner.width) * 3 / 4;
@@ -282,23 +282,9 @@ impl Calendar {
             ui::draw_label(canvas, &font, style.small, x, text, &number, ink);
             let border = ui::button_border(&style);
             if day == self.day {
-                canvas.stroke_rect(
-                    i32::from(r.x),
-                    i32::from(r.y),
-                    u32::from(r.width),
-                    u32::from(r.height),
-                    border * 2,
-                    Color::BLACK,
-                );
+                canvas.stroke(r, border * 2, Color::BLACK);
             } else if day == self.today {
-                canvas.stroke_rect(
-                    i32::from(inner.x),
-                    i32::from(inner.y),
-                    u32::from(inner.width),
-                    u32::from(inner.height),
-                    border,
-                    style.faint(90),
-                );
+                canvas.stroke(inner, border, style.faint(90));
             }
         }
     }

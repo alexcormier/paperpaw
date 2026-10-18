@@ -46,41 +46,70 @@ pub fn measure(font: &Font, size: f32, text: &str) -> f32 {
     text.chars().map(|ch| font.advance(ch, size)).sum()
 }
 
-/// Draws one line of `text` with its baseline at `baseline` and returns the
-/// advance in pixels. Newlines are not interpreted; use [`wrap`] first.
-#[allow(clippy::too_many_arguments)]
+/// How a line of text is drawn: its font (and the font's number in the
+/// glyph cache), size and colour, and how much bolder.
+#[derive(Clone, Copy)]
+pub struct TextStyle<'a> {
+    pub font: &'a Font,
+    /// The font's number in the [`GlyphCache`].
+    pub font_index: u16,
+    pub size: f32,
+    pub color: Color,
+    /// Every glyph widened by this many pixels to the right: darker,
+    /// bolder text with any font, also bitmap packs. Advances stay as
+    /// they are.
+    pub bolder: u16,
+}
+
+impl<'a> TextStyle<'a> {
+    /// `font` (number `font_index` in the cache) at `size`, in `color`,
+    /// as bold as it is.
+    pub fn new(font: &'a Font, font_index: u16, size: f32, color: Color) -> Self {
+        Self {
+            font,
+            font_index,
+            size,
+            color,
+            bolder: 0,
+        }
+    }
+
+    /// Glyphs widened by `extra` pixels (see [`TextStyle::bolder`]).
+    pub fn bolder(mut self, extra: u16) -> Self {
+        self.bolder = extra;
+        self
+    }
+}
+
+impl core::fmt::Debug for TextStyle<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("TextStyle")
+            .field("font_index", &self.font_index)
+            .field("size", &self.size)
+            .field("color", &self.color)
+            .field("bolder", &self.bolder)
+            .finish_non_exhaustive()
+    }
+}
+
+/// Draws one line of `text` in `style` with its baseline at `baseline` and
+/// returns the advance in pixels. Newlines are not interpreted; use
+/// [`wrap`] first.
 pub fn draw_text(
     canvas: &mut Canvas<'_>,
     cache: &mut GlyphCache,
-    font_index: u16,
-    font: &Font,
-    size: f32,
+    style: &TextStyle<'_>,
     x: f32,
     baseline: i32,
     text: &str,
-    color: Color,
 ) -> f32 {
-    draw_text_bolder(
-        canvas, cache, font_index, font, size, x, baseline, text, color, 0,
-    )
-}
-
-/// Like [`draw_text`], with every glyph widened by `extra` pixels to the
-/// right: darker, bolder text with any font, also bitmap packs. Advances
-/// stay as they are.
-#[allow(clippy::too_many_arguments)]
-pub fn draw_text_bolder(
-    canvas: &mut Canvas<'_>,
-    cache: &mut GlyphCache,
-    font_index: u16,
-    font: &Font,
-    size: f32,
-    x: f32,
-    baseline: i32,
-    text: &str,
-    color: Color,
-    extra: u16,
-) -> f32 {
+    let TextStyle {
+        font,
+        font_index,
+        size,
+        color,
+        bolder: extra,
+    } = *style;
     let mut pen = x;
     for ch in text.chars() {
         let glyph = cache.glyph(font_index, font, ch, size);

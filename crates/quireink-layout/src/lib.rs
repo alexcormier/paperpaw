@@ -235,20 +235,45 @@ fn first_indent(block: &Block, style: &Style, align: Align) -> f32 {
     }
 }
 
+/// What laying out a book's pages needs, the same for each of them: the
+/// document and the storage it is read from, how wide a line is, the
+/// style, how text is measured, and how words are hyphenated, if they
+/// are.
+#[derive(Clone, Copy)]
+pub struct LayoutContext<'a> {
+    pub document: &'a dyn Document,
+    pub storage: &'a dyn Storage,
+    /// The width of a line.
+    pub width: f32,
+    pub style: &'a Style,
+    pub typesetter: &'a dyn Typesetter,
+    /// Words that do not fit at the end of a line are hyphenated with it.
+    pub hyphenate: Option<Hyphenate<'a>>,
+}
+
+impl core::fmt::Debug for LayoutContext<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("LayoutContext")
+            .field("width", &self.width)
+            .field("style", self.style)
+            .field("hyphenate", &self.hyphenate.is_some())
+            .finish_non_exhaustive()
+    }
+}
+
 /// The start of the line `at` falls in, the block laid out from its
 /// start as [`layout_page`] does: a page shown from a position kept with
 /// another layout (other fonts, a turned screen) or found by a search
 /// starts with that whole line, not inside it.
-#[allow(clippy::too_many_arguments)]
-pub fn line_start(
-    document: &dyn Document,
-    storage: &dyn Storage,
-    at: Locator,
-    width: f32,
-    style: &Style,
-    typesetter: &dyn Typesetter,
-    hyphenate: Option<Hyphenate<'_>>,
-) -> Result<Locator, DocumentError> {
+pub fn line_start(cx: &LayoutContext<'_>, at: Locator) -> Result<Locator, DocumentError> {
+    let LayoutContext {
+        document,
+        storage,
+        width,
+        style,
+        typesetter,
+        hyphenate,
+    } = *cx;
     let Some(block) = document.block_at(storage, at)? else {
         return Ok(at);
     };
@@ -276,23 +301,24 @@ pub fn line_start(
     Ok(Locator::new(at.section, block.source_offset(start)))
 }
 
-/// Lays out the page starting at `start` into a `width`×`height` content
-/// box, measuring text with `typesetter`; with `hyphenate`, words that do
-/// not fit at the end of a line are hyphenated.
+/// Lays out the page starting at `start`, `height` high, as `cx` says
+/// (see [`LayoutContext`]).
 ///
 /// Headings are set in their own face, never indented, justified or
 /// hyphenated, and never left alone at the bottom of a page.
-#[allow(clippy::too_many_arguments)]
 pub fn layout_page(
-    document: &dyn Document,
-    storage: &dyn Storage,
+    cx: &LayoutContext<'_>,
     start: Locator,
-    width: f32,
     height: f32,
-    style: &Style,
-    typesetter: &dyn Typesetter,
-    hyphenate: Option<Hyphenate<'_>>,
 ) -> Result<Page, DocumentError> {
+    let LayoutContext {
+        document,
+        storage,
+        width,
+        style,
+        typesetter,
+        hyphenate,
+    } = *cx;
     let mut page = Page {
         start,
         end: start,
@@ -564,17 +590,15 @@ mod tests {
 
     fn layout(doc: &Text, start: u32, height: f32, style: &Style) -> Page {
         let storage = quireink_document::NoStorage;
-        layout_page(
-            doc,
-            &storage,
-            Locator::new(0, start),
-            10.0,
-            height,
+        let cx = LayoutContext {
+            document: doc,
+            storage: &storage,
+            width: 10.0,
             style,
-            &Units,
-            None,
-        )
-        .unwrap()
+            typesetter: &Units,
+            hyphenate: None,
+        };
+        layout_page(&cx, Locator::new(0, start), height).unwrap()
     }
 
     #[test]
@@ -601,17 +625,15 @@ ee ff
         );
         let storage = quireink_document::NoStorage;
         let start = |offset, width| {
-            line_start(
-                &doc,
-                &storage,
-                Locator::new(0, offset),
+            let cx = LayoutContext {
+                document: &doc,
+                storage: &storage,
                 width,
-                &STYLE,
-                &Units,
-                None,
-            )
-            .unwrap()
-            .offset
+                style: &STYLE,
+                typesetter: &Units,
+                hyphenate: None,
+            };
+            line_start(&cx, Locator::new(0, offset)).unwrap().offset
         };
         // Lines of 10 units: "aaaa bbbb", "cccc dddd".
         assert_eq!(start(12, 10.0), 10, "inside \"cccc\"");

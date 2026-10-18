@@ -343,7 +343,7 @@ impl Screen for Popup {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let r = self.region;
-        ui::fill(canvas, r, Color::WHITE);
+        canvas.fill(r, Color::WHITE);
         let line = (style.line * 2).max(2);
         canvas.fill_rect(
             i32::from(r.x),

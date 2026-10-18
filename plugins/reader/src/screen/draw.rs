@@ -266,13 +266,7 @@ impl Book {
     pub(super) fn draw_status(&self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let context = self.status_context(env);
         for (area, top) in self.status_areas() {
-            canvas.fill_rect(
-                i32::from(area.x),
-                i32::from(area.y),
-                u32::from(area.width),
-                u32::from(area.height),
-                Color::WHITE,
-            );
+            canvas.fill(area, Color::WHITE);
             let id = status::current(env, top, &self.status_lines[usize::from(!top)]);
             let frame = quireink_sdk::StatusFrame {
                 area,

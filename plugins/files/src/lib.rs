@@ -776,14 +776,7 @@ fn draw_placeholder(
     format: &str,
     color: Color,
 ) {
-    canvas.stroke_rect(
-        i32::from(area.x),
-        i32::from(area.y),
-        u32::from(area.width),
-        u32::from(area.height),
-        style.line.max(2),
-        color,
-    );
+    canvas.stroke(area, style.line.max(2), color);
     let Some(font) = style.font(env) else {
         return;
     };

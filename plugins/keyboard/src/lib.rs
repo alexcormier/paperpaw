@@ -790,15 +790,8 @@ impl KeyboardScreen {
             a.width + 2 * out,
             a.height + 2 * out,
         );
-        ui::fill(canvas, frame, Color::WHITE);
-        canvas.stroke_rect(
-            i32::from(frame.x),
-            i32::from(frame.y),
-            u32::from(frame.width),
-            u32::from(frame.height),
-            border,
-            Color::BLACK,
-        );
+        canvas.fill(frame, Color::WHITE);
+        canvas.stroke(frame, border, Color::BLACK);
         for (index, c) in popup.chars.iter().enumerate() {
             let key = popup.key(index);
             let h = ui::button_height(key);
@@ -842,7 +835,7 @@ impl Screen for KeyboardScreen {
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let r = self.region;
-        ui::fill(canvas, r, Color::WHITE);
+        canvas.fill(r, Color::WHITE);
         canvas.fill_rect(
             i32::from(r.x),
             i32::from(r.y),

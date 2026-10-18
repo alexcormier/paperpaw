@@ -398,7 +398,7 @@ impl Screen for BrowseScreen {
                 ui::draw_noted_row(canvas, env, &style, rect, focused, &title, &value, &note);
             },
         );
-        ui::fill(canvas, self.status, Color::WHITE);
+        canvas.fill(self.status, Color::WHITE);
         let text = match &self.message {
             Some(message) => message.clone(),
             None if rows.is_empty() && self.loading.is_none() => {

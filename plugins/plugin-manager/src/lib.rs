@@ -265,7 +265,7 @@ impl Screen for PluginList {
         // The bar: a line above it, the hint or what a restart does, and
         // the button.
         let line = Rect::new(0, self.bar.y, self.bar.width, (style.line as u16).max(1));
-        ui::fill(canvas, line, quireink_sdk::Color::gray(150));
+        canvas.fill(line, quireink_sdk::Color::gray(150));
         let button = self.restart_button(env);
         if let Some(button) = button {
             let label = env.i18n.tr("plugin-manager.restart");

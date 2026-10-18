@@ -81,14 +81,7 @@ impl Screen for DrawerScreen {
             );
             blocks::draw_tool(canvas, env, rect, &tools[index]);
             if focused {
-                canvas.stroke_rect(
-                    i32::from(rect.x),
-                    i32::from(rect.y),
-                    u32::from(rect.width),
-                    u32::from(rect.height),
-                    style.line * 3,
-                    Color::BLACK,
-                );
+                canvas.stroke(rect, style.line * 3, Color::BLACK);
             }
         }
     }
@@ -211,7 +204,7 @@ impl Screen for TipsScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let r = self.region;
-        ui::fill(canvas, r, Color::WHITE);
+        canvas.fill(r, Color::WHITE);
         ui::stroke_round(canvas, &style, r, style.line * 2, Color::BLACK);
         let Some(font) = style.font(env) else {
             return;

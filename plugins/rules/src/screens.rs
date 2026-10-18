@@ -294,7 +294,7 @@ impl Screen for RulesScreen {
                 }
             },
         );
-        ui::fill(canvas, self.status, Color::WHITE);
+        canvas.fill(self.status, Color::WHITE);
         let text = self
             .message
             .clone()

@@ -640,18 +640,9 @@ impl<'a> FontHandle<'a> {
                 .char_indices()
                 .find(|(_, ch)| self.pick(*ch).1 != index)
                 .map_or(rest.len(), |(at, _)| at);
-            pen += quireink_text::draw_text_bolder(
-                canvas,
-                &mut cache,
-                index,
-                font,
-                size,
-                pen,
-                baseline,
-                &rest[..end],
-                color,
-                extra,
-            );
+            let style = quireink_text::TextStyle::new(font, index, size, color).bolder(extra);
+            pen +=
+                quireink_text::draw_text(canvas, &mut cache, &style, pen, baseline, &rest[..end]);
             rest = &rest[end..];
         }
         pen - x

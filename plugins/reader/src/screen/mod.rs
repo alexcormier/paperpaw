@@ -20,7 +20,7 @@ use quireink_sdk::builtin::{actions, events, fonts, params, slots};
 use quireink_sdk::document::{Document, DocumentError, Link, Locator};
 use quireink_sdk::event::EventData;
 use quireink_sdk::layout::{
-    Face, Hyphenate, Page, PageImage, Style, Typesetter, layout_page, line_start,
+    Face, Hyphenate, LayoutContext, Page, PageImage, Style, Typesetter, layout_page, line_start,
 };
 use quireink_sdk::status::context as status_context;
 use quireink_sdk::ui::{self, UiStyle};
@@ -366,7 +366,7 @@ impl Screen for ReaderScreen {
         // A bar at the bottom hides the status line under it entirely.
         let bar = self.linking.is_some() || self.selection.is_some_and(|s| s.mode == Mode::Bar);
         if let Some(status) = book.typography.status.filter(|_| bar) {
-            ui::fill(canvas, status, Color::WHITE);
+            canvas.fill(status, Color::WHITE);
         }
         if let Some(linking) = self.linking {
             draw_linking(canvas, env, book, &words, linking);

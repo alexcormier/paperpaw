@@ -6,6 +6,11 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Drawing, text and layout take their parts together: `Canvas::fill`,
+  `stroke`, `fill_round` and `stroke_round` take a `Rect` (`ui::fill` is
+  deprecated), `quireink_text::draw_text` a `TextStyle` (with `bolder`,
+  in place of `draw_text_bolder`), and `layout_page` and `line_start` a
+  `LayoutContext`.
 - The keyboard's shift, delete and space keys and the grip that moves a
   row say what they are (screen readers, remote control); plugins draw
   such buttons with `ui::draw_icon_button`.

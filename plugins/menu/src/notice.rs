@@ -65,15 +65,8 @@ impl Screen for NoticeScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let r = self.region;
-        ui::fill(canvas, r, Color::WHITE);
-        canvas.stroke_rect(
-            i32::from(r.x),
-            i32::from(r.y),
-            u32::from(r.width),
-            u32::from(r.height),
-            style.line * 2,
-            Color::BLACK,
-        );
+        canvas.fill(r, Color::WHITE);
+        canvas.stroke(r, style.line * 2, Color::BLACK);
         let Some(font) = style.font(env) else {
             return;
         };

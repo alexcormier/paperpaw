@@ -274,7 +274,7 @@ impl Screen for SleepScreen {
         match &self.image {
             Some(image) => {
                 // As large as fits, in the middle, on black.
-                ui::fill(canvas, screen, Color::BLACK);
+                canvas.fill(screen, Color::BLACK);
                 let (w, h) = ui::fit_image(image, display.width, display.height);
                 let area = Rect::new((display.width - w) / 2, (display.height - h) / 2, w, h);
                 ui::draw_image(canvas, env.storage, image, area);

@@ -270,16 +270,15 @@ impl Book {
             document: self.document.as_ref(),
             env,
         };
-        line_start(
-            &filtered,
-            env.storage,
-            at,
-            t.width,
-            &t.style,
-            &faces,
-            patterns.is_some().then_some(&hyphenate as Hyphenate<'_>),
-        )
-        .unwrap_or(at)
+        let cx = LayoutContext {
+            document: &filtered,
+            storage: env.storage,
+            width: t.width,
+            style: &t.style,
+            typesetter: &faces,
+            hyphenate: patterns.is_some().then_some(&hyphenate as Hyphenate<'_>),
+        };
+        line_start(&cx, at).unwrap_or(at)
     }
 
     pub(super) fn layout(&self, env: &Env<'_>, at: Locator) -> Result<Page, DocumentError> {
@@ -300,16 +299,15 @@ impl Book {
             document: self.document.as_ref(),
             env,
         };
-        layout_page(
-            &filtered,
-            env.storage,
-            at,
-            t.width,
-            t.height,
-            &t.style,
-            &faces,
-            patterns.is_some().then_some(&hyphenate as Hyphenate<'_>),
-        )
+        let cx = LayoutContext {
+            document: &filtered,
+            storage: env.storage,
+            width: t.width,
+            style: &t.style,
+            typesetter: &faces,
+            hyphenate: patterns.is_some().then_some(&hyphenate as Hyphenate<'_>),
+        };
+        layout_page(&cx, at, t.height)
     }
 
     pub(super) fn progress_path(&self) -> String {

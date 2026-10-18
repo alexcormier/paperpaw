@@ -416,14 +416,14 @@ impl Screen for MenuScreen {
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
-        ui::fill(canvas, self.region, Color::WHITE);
+        canvas.fill(self.region, Color::WHITE);
         let border = Rect::new(
             self.region.x,
             self.region.y,
             self.region.width,
             (style.line * 2) as u16,
         );
-        ui::fill(canvas, border, Color::BLACK);
+        canvas.fill(border, Color::BLACK);
         if style.font(env).is_none() {
             return;
         }

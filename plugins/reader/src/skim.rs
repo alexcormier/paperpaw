@@ -149,9 +149,8 @@ impl Screen for SkimScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let r = self.region;
-        ui::fill(canvas, r, Color::WHITE);
-        ui::fill(
-            canvas,
+        canvas.fill(r, Color::WHITE);
+        canvas.fill(
             Rect::new(r.x, r.y, r.width, (style.line * 2) as u16),
             Color::BLACK,
         );
@@ -191,17 +190,15 @@ impl Screen for SkimScreen {
         let track = self.track();
         let width = u32::from(track.width);
         let done = (width * self.at / 1000) as u16;
-        ui::fill(canvas, track, Color::gray(170));
-        ui::fill(
-            canvas,
+        canvas.fill(track, Color::gray(170));
+        canvas.fill(
             Rect::new(track.x, track.y, done, track.height),
             Color::BLACK,
         );
         let tick = track.height * 3;
         for &mark in self.marks.iter().filter(|&&m| m > 0 && m < 1000) {
             let tx = track.x + (width * mark / 1000) as u16;
-            ui::fill(
-                canvas,
+            canvas.fill(
                 Rect::new(
                     tx,
                     track.y + track.height / 2 - tick / 2,
@@ -214,7 +211,7 @@ impl Screen for SkimScreen {
         let knob = (self.bar.height / 2).max(8);
         let kx = (track.x + done).saturating_sub(knob / 2);
         let ky = self.bar.y + (self.bar.height - knob) / 2;
-        ui::fill(canvas, Rect::new(kx, ky, knob, knob), Color::BLACK);
+        canvas.fill(Rect::new(kx, ky, knob, knob), Color::BLACK);
         // The buttons.
         for (i, (rect, key)) in self.buttons.iter().zip(BUTTONS).enumerate() {
             let h = ui::button_height(*rect);

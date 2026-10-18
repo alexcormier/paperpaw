@@ -581,14 +581,7 @@ impl Dashboard {
                     w: 1,
                     h: 1,
                 });
-                canvas.stroke_rect(
-                    i32::from(r.x),
-                    i32::from(r.y),
-                    u32::from(r.width),
-                    u32::from(r.height),
-                    1,
-                    gray,
-                );
+                canvas.stroke(r, 1, gray);
             }
         }
     }
@@ -632,14 +625,7 @@ fn item_title(env: &Env<'_>, what: &What) -> String {
 }
 
 fn frame_rect(canvas: &mut Canvas<'_>, r: Rect, width: u32) {
-    canvas.stroke_rect(
-        i32::from(r.x),
-        i32::from(r.y),
-        u32::from(r.width),
-        u32::from(r.height),
-        width,
-        Color::BLACK,
-    );
+    canvas.stroke(r, width, Color::BLACK);
 }
 
 impl Screen for Dashboard {
@@ -652,7 +638,7 @@ impl Screen for Dashboard {
             self.draw_cells(canvas);
         }
         for shown in &self.items {
-            ui::fill(canvas, shown.area, Color::WHITE);
+            canvas.fill(shown.area, Color::WHITE);
             match &shown.item.what {
                 What::Widget(id) => env.widgets.draw(id, canvas, env, shown.area),
                 What::Tool(action) => blocks::draw_tool(canvas, env, shown.area, action),
@@ -661,13 +647,7 @@ impl Screen for Dashboard {
                 // Its frame, and the corner that sizes it.
                 frame_rect(canvas, shown.area, self.style.line.max(1));
                 let h = handle(shown.area, &self.style);
-                canvas.fill_rect(
-                    i32::from(h.x),
-                    i32::from(h.y),
-                    u32::from(h.width),
-                    u32::from(h.height),
-                    Color::BLACK,
-                );
+                canvas.fill(h, Color::BLACK);
             }
         }
         self.draw_footer(canvas, env);

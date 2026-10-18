@@ -12,7 +12,7 @@
 use alloc::vec::Vec;
 
 use crate::semantics::Role;
-use crate::ui::{ListView, UiStyle, draw_icon, fill, icon_width};
+use crate::ui::{ListView, UiStyle, draw_icon, icon_width};
 use crate::{Canvas, Color, Env, PointerEvent, PointerPhase, Rect};
 
 /// The grip's icon.
@@ -144,14 +144,7 @@ impl Reorder {
         let first = list.page() * list.rows();
         if let Some(slot) = from.checked_sub(first).filter(|&s| s < list.rows()) {
             let r = list.row_rect(slot);
-            canvas.stroke_rect(
-                i32::from(r.x),
-                i32::from(r.y),
-                u32::from(r.width),
-                u32::from(r.height),
-                style.line * 2,
-                Color::BLACK,
-            );
+            canvas.stroke(r, style.line * 2, Color::BLACK);
         }
         if to == from {
             return;
@@ -166,7 +159,7 @@ impl Reorder {
         };
         let margin = style.margin as u16;
         let bar = Rect::new(r.x + margin, y, r.width.saturating_sub(2 * margin), thick);
-        fill(canvas, bar, Color::BLACK);
+        canvas.fill(bar, Color::BLACK);
     }
 }
 

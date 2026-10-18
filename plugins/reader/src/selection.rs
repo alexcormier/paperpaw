@@ -223,7 +223,7 @@ pub(crate) fn draw_bar(
 ) {
     let style = UiStyle::new(env);
     let bar = bar_area(env, &style);
-    ui::fill(canvas, bar, Color::WHITE);
+    canvas.fill(bar, Color::WHITE);
     let line = style.line.max(2);
     canvas.fill_rect(
         i32::from(bar.x),

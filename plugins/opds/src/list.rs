@@ -294,7 +294,7 @@ impl Screen for ListScreen {
                 ui::draw_noted_row(canvas, env, &style, rect, focused, &title, &value, &note);
             },
         );
-        ui::fill(canvas, self.status, Color::WHITE);
+        canvas.fill(self.status, Color::WHITE);
         let text = self.status_text(env);
         ui::draw_note_line(canvas, env, &style, self.status, &text);
     }

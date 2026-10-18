@@ -116,9 +116,8 @@ impl Screen for FootnoteScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let r = self.region;
-        ui::fill(canvas, r, Color::WHITE);
-        ui::fill(
-            canvas,
+        canvas.fill(r, Color::WHITE);
+        canvas.fill(
             Rect::new(r.x, r.y, r.width, (style.line * 2) as u16),
             Color::BLACK,
         );

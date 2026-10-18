@@ -207,7 +207,7 @@ pub(super) fn draw_linking(
     }
     let style = UiStyle::new(env);
     let bar = selection::bar_area(env, &style);
-    ui::fill(canvas, bar, Color::WHITE);
+    canvas.fill(bar, Color::WHITE);
     canvas.fill_rect(
         i32::from(bar.x),
         i32::from(bar.y),

@@ -120,11 +120,10 @@ impl UiStyle {
     /// below.
     fn header_background(&self, canvas: &mut Canvas<'_>, area: Rect) {
         let (paper, ink) = self.header_colors();
-        fill(canvas, area, paper);
+        canvas.fill(area, paper);
         if !self.dark_header {
             let line = (self.line * 2) as u16;
-            fill(
-                canvas,
+            canvas.fill(
                 Rect::new(
                     area.x,
                     (area.y + area.height).saturating_sub(line),
@@ -252,17 +251,10 @@ pub fn draw_switch(canvas: &mut Canvas<'_>, style: &UiStyle, row: Rect, on: bool
     };
     let border = button_border(style);
     if on {
-        fill(canvas, r, ink);
+        canvas.fill(r, ink);
     } else {
-        fill(canvas, r, paper);
-        canvas.stroke_rect(
-            i32::from(r.x),
-            i32::from(r.y),
-            u32::from(r.width),
-            u32::from(r.height),
-            border,
-            ink,
-        );
+        canvas.fill(r, paper);
+        canvas.stroke(r, border, ink);
     }
     let pad = (border as u16 * 2).max(3);
     let knob = r.height.saturating_sub(2 * pad);
@@ -271,8 +263,7 @@ pub fn draw_switch(canvas: &mut Canvas<'_>, style: &UiStyle, row: Rect, on: bool
     } else {
         r.x + pad
     };
-    fill(
-        canvas,
+    canvas.fill(
         Rect::new(x, r.y + pad, knob, knob),
         if on { paper } else { ink },
     );
@@ -663,7 +654,7 @@ impl Pager {
         page: (usize, usize),
     ) {
         let a = self.area;
-        fill(canvas, a, Color::WHITE);
+        canvas.fill(a, Color::WHITE);
         canvas.fill_rect(
             i32::from(a.x) + style.margin as i32,
             i32::from(a.y),
@@ -797,8 +788,7 @@ pub fn draw_note_line(
 ) {
     let margin = style.margin as u16;
     let width = area.width.saturating_sub(2 * margin);
-    fill(
-        canvas,
+    canvas.fill(
         Rect::new(area.x + margin, area.y, width, style.line as u16),
         Color::gray(190),
     );
@@ -882,7 +872,7 @@ pub fn draw_button_hints(
     pressed: Option<usize>,
 ) {
     let style = UiStyle::new(env);
-    fill(canvas, area, Color::WHITE);
+    canvas.fill(area, Color::WHITE);
     let line = style.line.min(u32::from(area.height));
     canvas.fill_rect(
         i32::from(area.x),
@@ -909,7 +899,7 @@ pub fn draw_button_hints(
         let room = (right - left).saturating_sub(2 * style.gap) as f32;
         let middle = left as f32 + (right - left) as f32 / 2.0;
         let ink = if pressed == Some(i as usize) {
-            fill(canvas, cell, Color::BLACK);
+            canvas.fill(cell, Color::BLACK);
             Color::WHITE
         } else {
             Color::BLACK
@@ -931,14 +921,7 @@ pub fn draw_button_hints(
 
 /// Fills a rectangle with the style's corners.
 pub fn fill_round(canvas: &mut Canvas<'_>, style: &UiStyle, area: Rect, color: Color) {
-    canvas.fill_round_rect(
-        i32::from(area.x),
-        i32::from(area.y),
-        u32::from(area.width),
-        u32::from(area.height),
-        style.corner,
-        color,
-    );
+    canvas.fill_round(area, style.corner, color);
 }
 
 /// Draws a box's frame, `thickness` wide, with the style's corners.
@@ -949,26 +932,13 @@ pub fn stroke_round(
     thickness: u32,
     color: Color,
 ) {
-    canvas.stroke_round_rect(
-        i32::from(area.x),
-        i32::from(area.y),
-        u32::from(area.width),
-        u32::from(area.height),
-        thickness,
-        style.corner,
-        color,
-    );
+    canvas.stroke_round(area, thickness, style.corner, color);
 }
 
 /// Fills a rectangle.
+#[deprecated(since = "0.4.0", note = "use `Canvas::fill`")]
 pub fn fill(canvas: &mut Canvas<'_>, area: Rect, color: Color) {
-    canvas.fill_rect(
-        i32::from(area.x),
-        i32::from(area.y),
-        u32::from(area.width),
-        u32::from(area.height),
-        color,
-    );
+    canvas.fill(area, color);
 }
 
 /// What changed after moving a list's focus.
@@ -1163,7 +1133,7 @@ impl ListView {
                     rect.width.saturating_sub(2 * style.margin as u16),
                     style.line as u16,
                 );
-                fill(canvas, separator, Color::gray(170));
+                canvas.fill(separator, Color::gray(170));
             }
             draw_row(canvas, index, rect, focused);
         }
@@ -1413,7 +1383,7 @@ fn button_frame(
         // Round: the corners outside keep what is behind.
         canvas.fill_round_rect(x, y, w, h, r, back);
     } else {
-        fill(canvas, rect, back);
+        canvas.fill(rect, back);
     }
     canvas.stroke_round_rect(x, y, w, h, border, r, Color::BLACK);
     if focused {
