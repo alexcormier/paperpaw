@@ -566,6 +566,15 @@ fn ring(canvas: &mut Canvas<'_>, at: Point, r: i32, width: u32) {
 }
 
 impl Screen for LockScreen {
+    /// Unlocking, *Back* takes the last digit or dot away.
+    fn hint(&self, action: &Id, env: &Env<'_>) -> quireink_sdk::Hint {
+        if self.step == Step::Unlock && *action == actions::BACK {
+            quireink_sdk::Hint::Text(env.i18n.tr("lock.delete").to_string())
+        } else {
+            quireink_sdk::Hint::Default
+        }
+    }
+
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         canvas.clear(Color::WHITE);
         let style = self.style;

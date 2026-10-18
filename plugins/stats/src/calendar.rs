@@ -370,6 +370,15 @@ impl Calendar {
 }
 
 impl Screen for Calendar {
+    fn hint(&self, action: &Id, _: &Env<'_>) -> quireink_sdk::Hint {
+        // Days are moved through; choosing one does nothing more.
+        if *action == actions::CONFIRM {
+            quireink_sdk::Hint::Hidden
+        } else {
+            quireink_sdk::Hint::Default
+        }
+    }
+
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let title = env.i18n.tr("stats.calendar");

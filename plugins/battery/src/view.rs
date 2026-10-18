@@ -242,6 +242,11 @@ impl BatteryView {
 }
 
 impl Screen for BatteryView {
+    fn hint(&self, action: &Id, _: &Env<'_>) -> quireink_sdk::Hint {
+        // Only back does anything here.
+        quireink_sdk::Hint::only_back(action)
+    }
+
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         self.header.draw(

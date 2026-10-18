@@ -2596,6 +2596,15 @@ fn draw_linking(
 }
 
 impl Screen for ReaderScreen {
+    /// *Select* opens the reading menu, so its hint says so.
+    fn hint(&self, action: &Id, env: &Env<'_>) -> quireink_sdk::Hint {
+        if *action == actions::CONFIRM {
+            quireink_sdk::Hint::Text(env.i18n.tr("core.hint.core.menu").to_string())
+        } else {
+            quireink_sdk::Hint::Default
+        }
+    }
+
     /// The book is closed: said, where it was left.
     fn on_close(&mut self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();

@@ -65,6 +65,18 @@ pub enum Hint {
     Hidden,
 }
 
+impl Hint {
+    /// For a screen where only *Back* does anything (a page to read, a
+    /// code to scan): the other buttons' hints hidden.
+    pub fn only_back(action: &Id) -> Hint {
+        if *action == crate::builtin::actions::BACK {
+            Hint::Default
+        } else {
+            Hint::Hidden
+        }
+    }
+}
+
 /// Whether an event was consumed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Handled {

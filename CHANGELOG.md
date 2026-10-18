@@ -16,6 +16,9 @@ change the plugin SDK.
   shows it in the status line and on the home screen; the time zone is
   chosen under Settings, System (UTC on "Auto": the X4 has none of its
   own). Gone when it is switched off, until it is online again.
+- The row of hints under the screen says what the buttons do there: only
+  *Back* where nothing else does anything (battery, a book's statistics,
+  Wi-Fi transfer), *Menu* in a book, *Delete* while unlocking.
 - A status item *Battery when low* that shows the battery only at or
   below a level (Settings, System, advanced; 20 % by default), for a
   calm status line while there is enough.

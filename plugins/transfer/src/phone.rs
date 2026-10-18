@@ -201,6 +201,11 @@ fn page(env: &Env<'_>, params: &Params) -> String {
 }
 
 impl Screen for PhoneScreen {
+    fn hint(&self, action: &Id, _: &Env<'_>) -> quireink_sdk::Hint {
+        // Only back does anything here.
+        quireink_sdk::Hint::only_back(action)
+    }
+
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let title = env.i18n.tr("transfer.phone.title");
