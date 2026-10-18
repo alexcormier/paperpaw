@@ -100,6 +100,38 @@ fn book_file(path: &str) -> String {
     format!("{DIR}/books/{:016x}.ini", fnv1a64(path))
 }
 
+fn cover_file(path: &str) -> String {
+    format!("{DIR}/covers/{:016x}.thumb", fnv1a64(path))
+}
+
+/// The cover of `book` (the one at `path`) made small to fit `width` ×
+/// `height`, in colour if `color` and it has colour: kept in the library
+/// (`covers/<hash>.thumb`), so views of many books (a list, a grid) read a
+/// few kilobytes for each instead of its picture. Made anew where the
+/// book or the size asked changed.
+pub fn cover(
+    storage: &dyn Storage,
+    path: &str,
+    book: &Book,
+    width: u16,
+    height: u16,
+    color: bool,
+) -> Option<crate::ui::Thumbnail> {
+    let image = book.cover.as_ref()?;
+    let (w, h) = crate::ui::fit_image(image, width, height);
+    let stamp = fnv1a64(format!(
+        "{} {} {}x{} {w}x{h} {color}",
+        book.size, image.path, image.width, image.height
+    ));
+    let file = cover_file(path);
+    if let Some(thumb) = crate::ui::Thumbnail::kept(storage, &file, stamp) {
+        return Some(thumb);
+    }
+    let thumb = crate::ui::Thumbnail::new(storage, image, w, h, color)?;
+    thumb.keep(storage, &file, stamp);
+    Some(thumb)
+}
+
 fn opened_file() -> String {
     format!("{DIR}/opened.txt")
 }
@@ -124,7 +156,13 @@ fn read_list(storage: &dyn Storage, path: &str, max: usize) -> Vec<String> {
 /// What the library knows of the book at `path`, if it belongs to this
 /// file (not to another one of that name before).
 pub fn book(storage: &dyn Storage, path: &str) -> Option<Book> {
-    let size = storage.size(path).ok()?;
+    book_sized(storage, path, storage.size(path).ok()?)
+}
+
+/// [`book`] for a file whose size is known, e.g. from a listing
+/// ([`listing::Entry::size`]): the file is not looked up again (on a card,
+/// a search through its folder).
+pub fn book_sized(storage: &dyn Storage, path: &str, size: u64) -> Option<Book> {
     let data = crate::read_file(storage, &book_file(path), 8192).ok()?;
     let source = core::str::from_utf8(&data).ok()?;
     let mut book = Book::default();
@@ -314,6 +352,7 @@ pub fn record(env: &Env<'_>, reading: &crate::builtin::events::Reading, opened: 
 /// details, its place among the recently opened and the favourites.
 pub fn moved(storage: &dyn Storage, from: &str, to: &str) {
     let _ = storage.rename(&book_file(from), &book_file(to));
+    let _ = storage.rename(&cover_file(from), &cover_file(to));
     let replace = |list: Vec<String>| -> Vec<String> {
         list.into_iter()
             .map(|p| if p == from { to.to_string() } else { p })
@@ -413,6 +452,41 @@ mod tests {
         // Replaced by a file of another size: forgotten.
         let storage = storage.with("books/a.txt", "hello!");
         assert_eq!(super::book(&storage, "books/a.txt"), None);
+    }
+
+    #[test]
+    fn covers_made_small_are_kept_for_the_book() {
+        use quireink_image::{GrayWriter, ImageSink};
+        let storage = MemoryStorage::new().with("books/a.epub", "12345");
+        let mut writer = GrayWriter::new(&storage, "cache/cover.gray");
+        writer.start(40, 60).unwrap();
+        for y in 0..60u8 {
+            writer.row(&[y * 4; 40]).unwrap();
+        }
+        writer.finish().unwrap();
+        let mut book = Book {
+            size: 5,
+            cover: Some(ImageRef {
+                path: "cache/cover.gray".into(),
+                width: 40,
+                height: 60,
+            }),
+            ..Book::default()
+        };
+        let made = cover(&storage, "books/a.epub", &book, 20, 20, false).unwrap();
+        assert_eq!((made.width(), made.height()), (13, 20));
+        // Kept: read again without the picture.
+        storage.remove("cache/cover.gray").unwrap();
+        let kept = cover(&storage, "books/a.epub", &book, 20, 20, false).unwrap();
+        assert_eq!((kept.width(), kept.height()), (13, 20));
+        // Moved with the book.
+        moved(&storage, "books/a.epub", "books/b.epub");
+        assert!(cover(&storage, "books/b.epub", &book, 20, 20, false).is_some());
+        // Another size asked, another book of that name: made anew (here
+        // it cannot be, its picture gone).
+        assert!(cover(&storage, "books/b.epub", &book, 30, 30, false).is_none());
+        book.size = 6;
+        assert!(cover(&storage, "books/b.epub", &book, 20, 20, false).is_none());
     }
 
     #[test]

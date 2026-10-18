@@ -375,7 +375,7 @@ impl Browser {
             .into_iter()
             .map(|entry| {
                 let book = (!entry.is_dir)
-                    .then(|| library::book(env.storage, &self.path_of(&entry)))
+                    .then(|| library::book_sized(env.storage, &self.path_of(&entry), entry.size))
                     .flatten();
                 (entry, book)
             })
@@ -389,16 +389,17 @@ impl Browser {
     /// The cover of entry `slot` of the page made small, at the size it is
     /// drawn, if it has one.
     fn thumb(&self, env: &Env<'_>, slot: usize) -> Option<Thumbnail> {
-        let cover = self.page.get(slot)?.1.as_ref()?.cover.as_ref()?;
+        let (entry, book) = self.page.get(slot)?;
+        let book = book.as_ref()?;
         let rect = self.list.row_rect(0);
         let place = if self.list.column_count() > 1 {
             cell_cover(env, &self.style, rect)?
         } else {
             row_thumb(&self.style, rect)
         };
-        let (w, h) = ui::fit_image(cover, place.width, place.height);
         let color = env.device.display.format.is_color();
-        Thumbnail::new(env.storage, cover, w, h, color)
+        let path = self.path_of(entry);
+        library::cover(env.storage, &path, book, place.width, place.height, color)
     }
 
     /// Loads the page the focus is on, if it is not loaded.

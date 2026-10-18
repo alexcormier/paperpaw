@@ -131,15 +131,23 @@ impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
         if path.is_empty() {
             return Ok(self.root());
         }
-        let mut folders = self.folders.borrow_mut();
-        if let Some(i) = folders.iter().position(|(p, _)| p == path) {
-            // The latest last.
-            let folder = folders.remove(i);
-            let dir = folder.1.clone();
-            folders.push(folder);
-            return Ok(dir);
+        {
+            let mut folders = self.folders.borrow_mut();
+            if let Some(i) = folders.iter().position(|(p, _)| p == path) {
+                // The latest last.
+                let folder = folders.remove(i);
+                let dir = folder.1.clone();
+                folders.push(folder);
+                return Ok(dir);
+            }
         }
-        let dir = self.root().open_dir(path).map_err(error)?;
+        // Looked up in its folder, kept too: the folders of many books'
+        // data are not each looked up from the root.
+        let dir = self
+            .dir(parent(path))?
+            .open_dir(name(path))
+            .map_err(error)?;
+        let mut folders = self.folders.borrow_mut();
         if folders.len() == FOLDERS {
             folders.remove(0);
         }
@@ -507,6 +515,64 @@ mod tests {
         assert_eq!(back, data);
         disk.flush().unwrap();
         assert_eq!(&disk.disk().data[..4 * BLOCK], &data[..]);
+    }
+
+    /// A disk of blocks in memory that counts its commands.
+    struct Counted {
+        data: Vec<u8>,
+        commands: usize,
+    }
+
+    impl Blocks for Counted {
+        fn read_block(&mut self, index: u32, block: &mut [u8; BLOCK]) -> Result<(), DiskError> {
+            self.read_blocks(index, block)
+        }
+        fn read_blocks(&mut self, index: u32, data: &mut [u8]) -> Result<(), DiskError> {
+            self.commands += 1;
+            let at = index as usize * BLOCK;
+            data.copy_from_slice(self.data.get(at..at + data.len()).ok_or(DiskError)?);
+            Ok(())
+        }
+        fn write_block(&mut self, _: u32, _: &[u8; BLOCK]) -> Result<(), DiskError> {
+            Err(DiskError)
+        }
+        fn blocks(&mut self) -> Result<u32, DiskError> {
+            Ok((self.data.len() / BLOCK) as u32)
+        }
+    }
+
+    #[test]
+    fn blocks_read_one_after_the_other_are_read_ahead() {
+        let data: Vec<u8> = (0..40 * BLOCK)
+            .map(|i| (i / BLOCK * 7 + i % 13) as u8)
+            .collect();
+        let mut disk = BlockDisk::new(Counted {
+            data: data.clone(),
+            commands: 0,
+        })
+        .unwrap();
+        // A folder's entries, 32 bytes at a time over 12 blocks: the first
+        // block alone, then eight at once, then the rest of eight.
+        let mut entry = [0u8; 32];
+        for at in (0..12 * BLOCK).step_by(32) {
+            disk.read_exact(&mut entry).unwrap();
+            assert_eq!(&entry[..], &data[at..at + 32]);
+        }
+        assert_eq!(disk.disk().commands, 3);
+        // Here and there: a block at a time.
+        for block in [30u64, 20, 25] {
+            disk.seek(SeekFrom::Start(block * BLOCK as u64)).unwrap();
+            disk.read_exact(&mut entry).unwrap();
+            assert_eq!(&entry[..], &data[block as usize * BLOCK..][..32]);
+        }
+        assert_eq!(disk.disk().commands, 6);
+        // Not past the disk's end.
+        disk.seek(SeekFrom::Start(37 * BLOCK as u64)).unwrap();
+        let mut rest = vec![0u8; 3 * BLOCK];
+        for chunk in rest.chunks_mut(100) {
+            disk.read_exact(chunk).unwrap();
+        }
+        assert_eq!(&rest[..], &data[37 * BLOCK..]);
     }
 
     #[test]

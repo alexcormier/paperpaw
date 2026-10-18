@@ -112,7 +112,7 @@ const DEVICE: DeviceInfo = DeviceInfo {
 };
 
 /// Microseconds since start, for measuring what plugins take.
-fn micros() -> u64 {
+pub fn micros() -> u64 {
     esp_hal::time::Instant::now()
         .duration_since_epoch()
         .as_micros()

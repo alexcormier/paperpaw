@@ -20,6 +20,10 @@ pub struct Entry {
     pub is_dir: bool,
     /// Place in the sort order before names ([`UNRANKED`] for none).
     pub rank: u32,
+    /// The file's size in bytes, as the folder says (0 for folders): for
+    /// [`library::book_sized`](super::book_sized), without looking the
+    /// file up again.
+    pub size: u64,
 }
 
 /// The rank of entries ordered by name only.
@@ -31,6 +35,7 @@ impl Entry {
             name: name.to_string(),
             is_dir: true,
             rank: UNRANKED,
+            size: 0,
         }
     }
 
@@ -80,7 +85,7 @@ impl core::fmt::Debug for Listing<'_> {
 }
 
 impl Listing<'_> {
-    fn each(&self, f: &mut dyn FnMut(bool, u32, &str)) {
+    fn each(&self, f: &mut dyn FnMut(bool, u32, &str, u64)) {
         let _ = self.storage.list(self.dir, &mut |entry| {
             let shown = if entry.is_dir {
                 !is_sidecar(entry.name)
@@ -92,7 +97,7 @@ impl Listing<'_> {
                     Some(rank) if !entry.is_dir => rank(entry.name),
                     _ => UNRANKED,
                 };
-                f(entry.is_dir, rank, entry.name);
+                f(entry.is_dir, rank, entry.name, entry.size);
             }
         });
     }
@@ -116,14 +121,14 @@ impl Listing<'_> {
 
     pub fn count(&self) -> usize {
         let mut count = 0;
-        self.each(&mut |_, _, _| count += 1);
+        self.each(&mut |_, _, _, _| count += 1);
         count
     }
 
     /// Number of entries sorted before `entry`.
     pub fn rank(&self, entry: &Entry) -> usize {
         let mut rank = 0;
-        self.each(&mut |is_dir, r, name| {
+        self.each(&mut |is_dir, r, name, _| {
             if entry.cmp_to(is_dir, r, name) == Ordering::Greater {
                 rank += 1;
             }
@@ -135,7 +140,7 @@ impl Listing<'_> {
     /// order.
     pub fn after(&self, after: Option<&Entry>, n: usize) -> Vec<Entry> {
         let mut page: Vec<Entry> = Vec::with_capacity(n);
-        self.each(&mut |is_dir, rank, name| {
+        self.each(&mut |is_dir, rank, name, size| {
             if n == 0 || after.is_some_and(|a| a.cmp_to(is_dir, rank, name) != Ordering::Less) {
                 return;
             }
@@ -149,6 +154,7 @@ impl Listing<'_> {
                     name: name.to_string(),
                     is_dir,
                     rank,
+                    size,
                 },
             );
             page.truncate(n);
@@ -160,7 +166,7 @@ impl Listing<'_> {
     /// order.
     pub fn before(&self, before: Option<&Entry>, n: usize) -> Vec<Entry> {
         let mut page: Vec<Entry> = Vec::with_capacity(n + 1);
-        self.each(&mut |is_dir, rank, name| {
+        self.each(&mut |is_dir, rank, name, size| {
             if n == 0 || before.is_some_and(|b| b.cmp_to(is_dir, rank, name) != Ordering::Greater) {
                 return;
             }
@@ -174,6 +180,7 @@ impl Listing<'_> {
                     name: name.to_string(),
                     is_dir,
                     rank,
+                    size,
                 },
             );
             if page.len() > n {
@@ -332,6 +339,7 @@ mod tests {
                             name: n.clone(),
                             is_dir: false,
                             rank: UNRANKED,
+                            size: 0,
                         })
                         .collect::<Vec<_>>()
                 )
@@ -343,6 +351,7 @@ mod tests {
             name: expected[13].clone(),
             is_dir: false,
             rank: UNRANKED,
+            size: 0,
         };
         let (first, page) = listing.page_of(&target, rows);
         assert_eq!(first, 12);

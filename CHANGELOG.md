@@ -6,6 +6,14 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Library: a page of books takes about 150 ms of work on the X4 instead
+  of 500 to 700. Covers are kept made small (`library::cover`, from
+  `ui::Thumbnail::keep`/`kept`), read as 3 KB instead of 60 each; a
+  listing's entries carry their sizes (`Entry::size`,
+  `library::book_sized`), so a book is not looked up again for them.
+- X4: blocks of the card read one after the other are read eight at a
+  time (a folder searched takes a third of the time), and a folder is
+  looked up from its kept parent rather than from the root.
 - X4: the screen turns ("Turn the screen": upright, on either side,
   upside down). Turned, the kernel draws bands of the same memory (fewer
   rows where the screen is wider) and frees the old frame before making

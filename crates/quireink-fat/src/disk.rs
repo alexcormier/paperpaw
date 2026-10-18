@@ -20,6 +20,11 @@ use fatfs::{IoBase, Read, Seek, SeekFrom, Write};
 pub const BLOCK: usize = 512;
 /// Blocks kept in memory.
 pub const SLOTS: usize = 24;
+/// Blocks read at once where they are read one after the other (a
+/// folder's entries, a file read in small parts): a card answers each
+/// command after a wait, so one command for eight blocks takes about a
+/// third of the time of eight.
+pub const AHEAD: usize = 8;
 
 /// The disk failed to read or write a block.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -159,6 +164,14 @@ fn gpt<B: Blocks>(disk: &mut B) -> Result<Vec<(u64, u64)>, DiskError> {
     Ok(found)
 }
 
+/// `len` zero bytes, if there is memory for them.
+fn zeroed(len: usize) -> Option<Vec<u8>> {
+    let mut data = Vec::new();
+    data.try_reserve_exact(len).ok()?;
+    data.resize(len, 0);
+    Some(data)
+}
+
 /// A block kept in memory.
 #[derive(Debug, Clone, Copy)]
 struct Slot {
@@ -191,6 +204,8 @@ pub struct BlockDisk<B: Blocks> {
     slots: Box<[Slot]>,
     /// Uses so far, to find the block used longest ago.
     uses: u32,
+    /// The block used last, to see blocks used one after the other.
+    last: Option<u32>,
 }
 
 impl<B: Blocks> BlockDisk<B> {
@@ -241,29 +256,64 @@ impl<B: Blocks> BlockDisk<B> {
             size: u64::from(blocks) * BLOCK as u64,
             slots: vec![EMPTY; SLOTS].into_boxed_slice(),
             uses: 0,
+            last: None,
         }
     }
 
     /// The slot holding block `index`, read into the one used longest ago
     /// (written back first if it changed); `read` false for a block about
     /// to be written whole.
+    ///
+    /// Read after the block before it, it is read with the ones after it
+    /// that are not kept, up to [`AHEAD`], in one command.
     fn load(&mut self, index: u32, read: bool) -> Result<usize, DiskError> {
         self.uses = self.uses.wrapping_add(1);
+        let next = self.last.and_then(|last| last.checked_add(1)) == Some(index);
+        self.last = Some(index);
         if let Some(i) = self.slots.iter().position(|s| s.index == Some(index)) {
             self.slots[i].used = self.uses;
             return Ok(i);
         }
-        let i = (0..SLOTS)
-            .min_by_key(|&i| self.slots[i].index.map_or(0, |_| self.slots[i].used))
-            .unwrap_or(0);
-        self.write_back(i)?;
+        if read && next {
+            let end = u64::from(self.first) + self.size / BLOCK as u64;
+            let left = end.saturating_sub(u64::from(index)) as usize;
+            let ahead = self.passing(index, AHEAD.min(left));
+            if ahead > 1
+                && let Some(mut data) = zeroed(ahead * BLOCK)
+            {
+                self.disk.read_blocks(index, &mut data)?;
+                let mut first = 0;
+                for (k, block) in data.as_chunks::<BLOCK>().0.iter().enumerate() {
+                    let i = self.oldest()?;
+                    let slot = &mut self.slots[i];
+                    slot.data = *block;
+                    slot.index = Some(index + k as u32);
+                    slot.used = self.uses;
+                    if k == 0 {
+                        first = i;
+                    }
+                }
+                return Ok(first);
+            }
+        }
+        let i = self.oldest()?;
         let slot = &mut self.slots[i];
-        slot.index = None;
         if read {
             self.disk.read_block(index, &mut slot.data)?;
         }
         slot.index = Some(index);
         slot.used = self.uses;
+        Ok(i)
+    }
+
+    /// The slot used longest ago, emptied (written back first if it
+    /// changed).
+    fn oldest(&mut self) -> Result<usize, DiskError> {
+        let i = (0..SLOTS)
+            .min_by_key(|&i| self.slots[i].index.map_or(0, |_| self.slots[i].used))
+            .unwrap_or(0);
+        self.write_back(i)?;
+        self.slots[i].index = None;
         Ok(i)
     }
 

@@ -550,7 +550,9 @@ impl Firmware {
                     return remote::error(&action);
                 };
                 let at = self.kernel_now();
+                let started = now();
                 let effects = self.kernel.run_action(at, id);
+                info!("{action}: {} ms", now().since(started));
                 self.apply(effects);
                 remote::ok();
             }
@@ -573,6 +575,7 @@ impl Firmware {
                 }
                 let at = self.kernel_now();
                 let state = ButtonState::Pressed;
+                let started = now();
                 let effects = self.kernel.handle(
                     at,
                     InputEvent::Button {
@@ -580,6 +583,7 @@ impl Firmware {
                         state,
                     },
                 );
+                info!("{button} pressed: {} ms", now().since(started));
                 self.apply(effects);
                 self.state.held = Some((button, Instant(now().0 + ms)));
             }

@@ -760,6 +760,7 @@ pub struct quireink_sdk::library::listing::Entry
 pub quireink_sdk::library::listing::Entry::is_dir: bool
 pub quireink_sdk::library::listing::Entry::name: alloc::string::String
 pub quireink_sdk::library::listing::Entry::rank: u32
+pub quireink_sdk::library::listing::Entry::size: u64
 impl quireink_sdk::library::listing::Entry
 pub fn quireink_sdk::library::listing::Entry::folder(&str) -> Self
 pub struct quireink_sdk::library::listing::Listing<'a>
@@ -802,7 +803,9 @@ pub quireink_sdk::library::Provided::title: core::option::Option<alloc::string::
 pub const quireink_sdk::library::DIR: &str
 pub const quireink_sdk::library::FOLDER: quireink_sdk::setting::Setting<quireink_sdk::setting::Text>
 pub fn quireink_sdk::library::book(&dyn quireink_platform::storage::Storage, &str) -> core::option::Option<quireink_sdk::library::Book>
+pub fn quireink_sdk::library::book_sized(&dyn quireink_platform::storage::Storage, &str, u64) -> core::option::Option<quireink_sdk::library::Book>
 pub fn quireink_sdk::library::changed() -> quireink_sdk::Command
+pub fn quireink_sdk::library::cover(&dyn quireink_platform::storage::Storage, &str, &quireink_sdk::library::Book, u16, u16, bool) -> core::option::Option<quireink_sdk::ui::Thumbnail>
 pub fn quireink_sdk::library::favourites(&dyn quireink_platform::storage::Storage) -> alloc::vec::Vec<alloc::string::String>
 pub fn quireink_sdk::library::folder<'e>(&quireink_sdk::Env<'e>) -> &'e str
 pub fn quireink_sdk::library::index(&quireink_sdk::Env<'_>, &str) -> quireink_sdk::library::Book
@@ -1251,6 +1254,8 @@ impl quireink_sdk::ui::Thumbnail
 pub fn quireink_sdk::ui::Thumbnail::bytes(&self) -> usize
 pub fn quireink_sdk::ui::Thumbnail::draw(&self, &mut quireink_graphics::canvas::Canvas<'_>, u16, u16)
 pub fn quireink_sdk::ui::Thumbnail::height(&self) -> u16
+pub fn quireink_sdk::ui::Thumbnail::keep(&self, &dyn quireink_platform::storage::Storage, &str, u64) -> bool
+pub fn quireink_sdk::ui::Thumbnail::kept(&dyn quireink_platform::storage::Storage, &str, u64) -> core::option::Option<Self>
 pub fn quireink_sdk::ui::Thumbnail::new(&dyn quireink_platform::storage::Storage, &quireink_document::ImageRef, u16, u16, bool) -> core::option::Option<Self>
 pub fn quireink_sdk::ui::Thumbnail::width(&self) -> u16
 pub struct quireink_sdk::ui::UiStyle

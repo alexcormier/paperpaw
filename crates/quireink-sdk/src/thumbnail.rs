@@ -9,6 +9,11 @@ use quireink_platform::Storage;
 
 /// Bytes of the picture's rows read at a time.
 const ROWS_BYTES: usize = 8192;
+/// A thumbnail kept on the storage ([`Thumbnail::keep`]): this, its
+/// width and height (2 bytes each, little-endian), whether in colour (1),
+/// its stamp (8), then its pixels.
+const MAGIC: &[u8; 4] = b"QIT1";
+const HEADER: usize = 17;
 
 /// A picture made small once and kept in memory, to draw it again and
 /// again without reading the storage: covers in a list, drawn in every
@@ -96,6 +101,58 @@ impl Thumbnail {
             color: sink.color,
             pixels: sink.pixels,
         })
+    }
+
+    /// The thumbnail kept at `path` by [`Thumbnail::keep`] with `stamp`,
+    /// if it is there: e.g. a cover in a list, read as a few kilobytes
+    /// instead of the picture.
+    pub fn kept(storage: &dyn Storage, path: &str, stamp: u64) -> Option<Self> {
+        let mut header = [0u8; HEADER];
+        if storage.read_at(path, 0, &mut header).ok()? != HEADER || &header[..4] != MAGIC {
+            return None;
+        }
+        let mut kept_stamp = [0u8; 8];
+        kept_stamp.copy_from_slice(&header[9..]);
+        if u64::from_le_bytes(kept_stamp) != stamp {
+            return None;
+        }
+        let width = u16::from_le_bytes([header[4], header[5]]);
+        let height = u16::from_le_bytes([header[6], header[7]]);
+        let color = header[8] == 1;
+        let row = if color {
+            usize::from(width) * 3
+        } else {
+            usize::from(width).div_ceil(2)
+        };
+        let mut pixels = Vec::new();
+        pixels.try_reserve_exact(row * usize::from(height)).ok()?;
+        pixels.resize(row * usize::from(height), 0);
+        if storage.read_at(path, HEADER as u64, &mut pixels).ok()? != pixels.len() {
+            return None;
+        }
+        Some(Self {
+            width,
+            height,
+            color,
+            pixels,
+        })
+    }
+
+    /// Keeps it at `path` with `stamp`, what it was made of and for (e.g.
+    /// a hash of the picture's file and the size asked), for
+    /// [`Thumbnail::kept`]; whether it was kept.
+    pub fn keep(&self, storage: &dyn Storage, path: &str, stamp: u64) -> bool {
+        let mut data = Vec::new();
+        if data.try_reserve_exact(HEADER + self.pixels.len()).is_err() {
+            return false;
+        }
+        data.extend_from_slice(MAGIC);
+        data.extend_from_slice(&self.width.to_le_bytes());
+        data.extend_from_slice(&self.height.to_le_bytes());
+        data.push(u8::from(self.color));
+        data.extend_from_slice(&stamp.to_le_bytes());
+        data.extend_from_slice(&self.pixels);
+        storage.write(path, &data).is_ok()
     }
 
     pub fn width(&self) -> u16 {
@@ -266,6 +323,30 @@ mod tests {
         thumb.draw(&mut canvas.clipped(Rect::new(0, 0, 40, 8)), 5, 5);
         assert_eq!(frame.view().pixel(5, 7), Color::BLACK);
         assert_eq!(frame.view().pixel(5, 9), Color::WHITE);
+    }
+
+    #[test]
+    fn kept_and_read_again_with_its_stamp() {
+        let storage = MemoryStorage::new();
+        let image = picture(&storage);
+        let made = Thumbnail::new(&storage, &image, 21, 10, false).unwrap();
+        assert!(made.keep(&storage, "p.thumb", 7));
+        assert_eq!(
+            storage.size("p.thumb").unwrap() as usize,
+            HEADER + made.bytes()
+        );
+        // Read from its own file, the picture gone.
+        storage.remove("p.gray").unwrap();
+        let read = Thumbnail::kept(&storage, "p.thumb", 7).unwrap();
+        assert_eq!(
+            (read.width, read.height, read.color, &read.pixels),
+            (made.width, made.height, made.color, &made.pixels)
+        );
+        // Another stamp, a broken file, none: not kept.
+        assert!(Thumbnail::kept(&storage, "p.thumb", 8).is_none());
+        storage.write("p.thumb", b"QIT1").unwrap();
+        assert!(Thumbnail::kept(&storage, "p.thumb", 7).is_none());
+        assert!(Thumbnail::kept(&storage, "none.thumb", 7).is_none());
     }
 
     #[test]
