@@ -6,6 +6,9 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Home: below the page, the pencil and the dots can go, and status items
+  of any plugin can come (Settings > Look). *Edit home screen* in the main
+  menu edits it, with buttons only too, as a long press does.
 - Home: the status line at the top shows the status items chosen for its
   left, centre and right (the status line widget's settings), any
   plugin's, as the reader's lines do.

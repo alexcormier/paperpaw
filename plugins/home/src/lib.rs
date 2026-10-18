@@ -11,8 +11,9 @@
 //! - **Targets**: what an item does when tapped (open a book, a tool).
 //!   With buttons, left and right (or up and down) go from target to
 //!   target and confirm runs it; the first press shows where the focus is.
-//! - **Editing**: the pencil below the page (reached with the buttons too)
-//!   or a long press shows the grid: drag an item to move it, by its
+//! - **Editing**: the pencil below the page (reached with the buttons too),
+//!   a long press or *Edit home screen* in the main menu (`home.edit-pages`,
+//!   also where the pencil is switched off) shows the grid: drag an item to move it, by its
 //!   corner to size it; tap it for its options (move or size it with the
 //!   buttons, its settings, remove it). *Add* lists what can be added,
 //!   and adds or removes pages (see `add`).
@@ -70,6 +71,9 @@ pub(crate) const LIST_ADD_SCREEN: Id = Id::new_static("home.add-to-list");
 pub(crate) const CHOICE: Id = Id::new_static("home.choice");
 /// Every tool at once (swipe up on the home screen).
 pub const ALL_TOOLS: Id = Id::new_static("home.all-tools");
+/// Edits the home screen's pages: in the main menu, so that buttons alone
+/// reach it, also without the pencil.
+pub const EDIT_PAGES: Id = Id::new_static("home.edit-pages");
 const DRAWER_SCREEN: Id = Id::new_static("home.drawer");
 const TIPS_SCREEN: Id = Id::new_static("home.tips");
 /// An item's options were chosen.
@@ -137,6 +141,22 @@ impl Plugin for Home {
             ),
         )?;
         r.add_icon(ALL_TOOLS, Cow::Borrowed("apps"))?;
+        // Shown, the home screen edits itself; from elsewhere it opens
+        // editing.
+        r.add_action(
+            quireink_sdk::ActionSpec::new(EDIT_PAGES, "home.edit-pages").handler(
+                |_: &Env<'_>, out: &mut Vec<Command>| {
+                    let params = Params::new().with(params::MODE, "edit");
+                    out.push(Command::OpenSlot(slots::HOME, params));
+                },
+            ),
+        )?;
+        r.add_icon(EDIT_PAGES, Cow::Borrowed("pencil"))?;
+        r.add_menu_entry(MenuEntry {
+            menu: quireink_sdk::builtin::menus::MAIN,
+            item: EDIT_PAGES,
+            order: 40,
+        })?;
         // As on phones: up on the home screen shows every tool.
         r.add_keymap(Cow::Borrowed(
             "[keymap.core.home]\nswipe.up = home.all-tools\n",
@@ -275,7 +295,10 @@ fn frame(env: &Env<'_>) -> (Option<Rect>, Geometry, Rect) {
 impl Dashboard {
     fn new(env: &Env<'_>, params: &Params) -> Self {
         // Opened to edit a page (from its setting).
-        let editing = params.get(params::ID).and_then(pages::page_of);
+        let editing = params.get(params::ID).and_then(pages::page_of).or_else(|| {
+            // Opened by *Edit home screen*.
+            (params.get(params::MODE) == Some("edit")).then_some(0)
+        });
         let (status, geometry, footer) = frame(env);
         let mut dashboard = Self {
             style: UiStyle::new(env),
@@ -346,8 +369,8 @@ impl Dashboard {
                     .push((shown.area, Target::Run(Command::RunAction(action.clone())))),
             }
         }
-        // The pencil (done, when editing) at the right of the footer; add
-        // at the left when editing.
+        // The pencil (done, when editing) at the right of the footer, if
+        // it is wanted; add at the left when editing.
         let margin = style.margin as u16;
         let side = footer.height;
         self.pencil = Rect::new(display.width - margin - side, footer.y, side, side);
@@ -355,11 +378,13 @@ impl Dashboard {
         if editing {
             self.targets.push((self.plus, Target::Add));
         }
-        self.targets.push((self.pencil, Target::Edit));
+        if editing || env.settings.read(&pages::FOOTER_PENCIL) {
+            self.targets.push((self.pencil, Target::Edit));
+        }
         self.status = status;
         self.geometry = geometry;
         self.footer = footer;
-        self.focus = self.focus.min(self.targets.len() - 1);
+        self.focus = self.focus.min(self.targets.len().saturating_sub(1));
         self.style = style;
     }
 
@@ -539,8 +564,25 @@ impl Dashboard {
     fn draw_footer(&self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let f = self.footer;
+        let editing = self.edit.is_some();
+        // Status items at the left, where adding goes while editing.
+        if !editing {
+            let font = style.font(env);
+            if let Some(font) = font {
+                let margin = style.margin as u16;
+                let width = (f.width / 2).saturating_sub(margin + style.gap as u16 * 3);
+                let line = quireink_sdk::status::StatusLine {
+                    area: Rect::new(margin, f.y, width, f.height),
+                    lists: [env.settings.read(&pages::FOOTER_ITEMS), "", ""],
+                    size: style.small,
+                    color: style.faint(60),
+                    percent: true,
+                };
+                line.draw(canvas, env, &font, &Params::new());
+            }
+        }
         // A dot a page, the current one filled.
-        if self.pages > 1 {
+        if self.pages > 1 && (editing || env.settings.read(&pages::FOOTER_DOTS)) {
             let dot = (style.gap * 2 / 3).max(6);
             let spacing = dot * 2;
             let total = dot * self.pages as u32 + (spacing - dot) * (self.pages as u32 - 1);
@@ -561,10 +603,10 @@ impl Dashboard {
             let x = f32::from(area.x) + (f32::from(area.width) - w) / 2.0;
             ui::draw_icon(canvas, env, name, size, x, area, ink);
         };
-        if self.edit.is_some() {
+        if editing {
             icon("plus", self.plus, Color::BLACK);
             icon("check", self.pencil, Color::BLACK);
-        } else {
+        } else if env.settings.read(&pages::FOOTER_PENCIL) {
             icon("pencil", self.pencil, style.faint(60));
         }
     }
@@ -784,6 +826,10 @@ impl Screen for Dashboard {
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         let a = action;
+        if *a == EDIT_PAGES {
+            self.set_editing(self.edit.is_none(), cx);
+            return Handled::Yes;
+        }
         // Moving or sizing an item with the buttons.
         if let Some(Edit { mode, .. }) = self.edit
             && mode != Mode::Choose

@@ -3,5 +3,6 @@ Text "No book opened yet. Find one in the library."
 Row "Home" (focused)
 Row "Library"
 Row "Tools"
+Row "Edit home screen"
 Row "Night mode" (off)
 Row "Settings"

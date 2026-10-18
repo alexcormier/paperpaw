@@ -15,7 +15,7 @@ use quireink_sdk::{
 
 use crate::SCREEN;
 use crate::grid::{self, Item, What};
-use quireink_sdk::setting::Setting;
+use quireink_sdk::setting::{Setting, Text};
 
 /// Pages at most.
 pub(crate) const MAX_PAGES: usize = 4;
@@ -27,6 +27,11 @@ pub(crate) const COLUMNS: Setting<i64> = Setting::new("home.columns");
 pub(crate) const ROWS: Setting<i64> = Setting::new("home.rows");
 /// Whether the status line shows above the grid.
 pub(crate) const STATUS_BAR: Setting<bool> = Setting::new("home.status-bar");
+/// Below the page: the pencil that edits it, the dots of the pages, and
+/// status items of any plugin.
+pub(crate) const FOOTER_PENCIL: Setting<bool> = Setting::new("home.footer.pencil");
+pub(crate) const FOOTER_DOTS: Setting<bool> = Setting::new("home.footer.dots");
+pub(crate) const FOOTER_ITEMS: Setting<Text> = Setting::new("home.footer.items");
 
 /// The built-in widgets (see `blocks`).
 pub(crate) const STATUS: &str = "home.status";
@@ -99,6 +104,25 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
             .group(groups::LOOK)
             .section(SECTION)
             .description("home.setting.status-bar.help"),
+    )?;
+    r.add_setting(
+        SettingSpec::switch(&FOOTER_PENCIL, "home.setting.footer-pencil", true)
+            .group(groups::LOOK)
+            .section(SECTION)
+            .description("home.setting.footer-pencil.help"),
+    )?;
+    r.add_setting(
+        SettingSpec::switch(&FOOTER_DOTS, "home.setting.footer-dots", true)
+            .group(groups::LOOK)
+            .section(SECTION)
+            .description("home.setting.footer-dots.help"),
+    )?;
+    r.add_setting(
+        SettingSpec::list(&FOOTER_ITEMS, "home.setting.footer-items", "")
+            .group(groups::LOOK)
+            .section(SECTION)
+            .editor(quireink_sdk::builtin::screens::STATUS_ITEMS)
+            .description("home.setting.footer-items.help"),
     )?;
     Ok(())
 }
