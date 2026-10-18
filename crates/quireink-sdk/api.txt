@@ -1755,6 +1755,19 @@ pub fn quireink_sdk::wifi::forget(&str) -> quireink_sdk::secrets::SecretChange
 pub fn quireink_sdk::wifi::keep(&str, &str) -> quireink_sdk::secrets::SecretChange
 pub fn quireink_sdk::wifi::known(&quireink_sdk::secrets::Secrets) -> alloc::vec::Vec<(alloc::string::String, alloc::string::String)>
 pub fn quireink_sdk::wifi::secret_id(&str) -> alloc::string::String
+pub mod quireink_sdk::words
+pub struct quireink_sdk::words::WordSet
+impl quireink_sdk::words::WordSet
+pub fn quireink_sdk::words::WordSet::contains(&self, &str) -> bool
+pub fn quireink_sdk::words::WordSet::decorate(&self, &[quireink_sdk::decorations::PageWord<'_>], &quireink_sdk::Id) -> alloc::vec::Vec<quireink_sdk::decorations::Decorated>
+pub fn quireink_sdk::words::WordSet::find(&self, &[quireink_sdk::decorations::PageWord<'_>]) -> alloc::vec::Vec<core::ops::range::Range<usize>>
+pub fn quireink_sdk::words::WordSet::is_empty(&self) -> bool
+pub fn quireink_sdk::words::WordSet::iter(&self) -> impl core::iter::traits::iterator::Iterator<Item = &str> + '_
+pub fn quireink_sdk::words::WordSet::len(&self) -> usize
+pub fn quireink_sdk::words::WordSet::new<S: core::convert::AsRef<str>>(impl core::iter::traits::collect::IntoIterator<Item = S>) -> Self
+impl<S: core::convert::AsRef<str>> core::iter::traits::collect::FromIterator<S> for quireink_sdk::words::WordSet
+pub fn quireink_sdk::words::WordSet::from_iter<I: core::iter::traits::collect::IntoIterator<Item = S>>(I) -> Self
+pub fn quireink_sdk::words::fold(&str) -> alloc::string::String
 pub mod quireink_sdk::xml
 pub use quireink_sdk::xml::<<quireink_xml::*>>
 pub mod quireink_sdk::zip

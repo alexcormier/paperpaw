@@ -18,8 +18,13 @@ change the plugin SDK.
   (`Decoration`, `Tone`, `LineKind`, `add_role`, `draw_behind`,
   `draw_over`, `DecoratorSpec`, `Decorators`), `Registrar::add_decorator`,
   `Env::decorators`, `events::DECORATION_TAPPED`, `groups::MARKS`,
-  `roles`; graphics: `Canvas::fill_shaded`. The setting
+  `roles`, `words::WordSet` (whole words and phrases, many at once,
+  without regard to case); graphics: `Canvas::fill_shaded`. The setting
   `reader.highlight-style` is gone (the highlight role's settings).
+- Vocabulary: the words looked up can be marked where they occur in
+  books of their language (*Mark vocabulary* in the reader's *More*,
+  off by default); a tap on one, or choosing it with the buttons, looks
+  it up again.
 - A reader can be replaced in full: plugins reach it only through what
   the SDK defines for every reader, no longer through the shipped
   reader's ids. SDK: `events::GOTO` (`Goto`), `events::TEXT_CHOSEN`
