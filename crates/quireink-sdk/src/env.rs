@@ -48,6 +48,8 @@ pub struct Capabilities {
     pub button_row: bool,
     /// The system has a clipboard of its own, shared with other apps.
     pub system_clipboard: bool,
+    /// The panel shows black and white alone (no grays), e.g. the X4.
+    pub black_and_white: bool,
 }
 
 /// Read-only view of the environment a plugin runs in.

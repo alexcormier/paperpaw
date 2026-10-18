@@ -286,6 +286,7 @@ impl KernelBuilder {
         // What the shell said it does, and what follows from the rest.
         let mut caps = self.caps;
         caps.touch = self.device.input.touch;
+        caps.black_and_white = display.format == quireink_platform::PixelFormat::Mono1;
         caps.firmware = self.firmware.is_some();
         caps.button_row = !self.button_row.is_empty();
         Ok(Kernel {
@@ -531,6 +532,7 @@ impl Kernel {
             .set_inverted(settings.bool(core_settings::NIGHT_MODE.as_str()));
         self.framebuffer
             .set_pictures_kept(!settings.bool(core_settings::NIGHT_PICTURES.as_str()));
+        self.framebuffer.set_mono_coverage(mono_coverage(settings));
         if let Some(panel) = self.shared.device.display.color {
             self.framebuffer.set_saturation(panel.boost_percent());
         }

@@ -86,7 +86,7 @@ use quireink_sdk::{
 };
 
 pub use crate::builder::KernelBuilder;
-use crate::config::{plugin_switches, read_config};
+use crate::config::{mono_coverage, plugin_switches, read_config};
 use crate::core_plugin::{CORE, CorePlugin};
 use crate::input::{Recognized, Recognizer, Thresholds};
 pub use crate::io::{

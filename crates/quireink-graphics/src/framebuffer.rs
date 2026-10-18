@@ -6,8 +6,9 @@ use crate::GraphicsError;
 use crate::canvas::Canvas;
 
 /// From what coverage (of 255) a pixel at an edge takes the colour drawn
-/// in black and white: three eighths.
-const MONO_COVERAGE: u8 = 96;
+/// in black and white, at first: three eighths (see
+/// [`Framebuffer::set_mono_coverage`]).
+pub const MONO_COVERAGE: u8 = 96;
 
 /// Pixels in a device's native format, plus dirty-region tracking.
 ///
@@ -30,6 +31,9 @@ pub struct Framebuffer {
     inverted: bool,
     /// Pictures stay as they are while everything else is inverted.
     pictures_kept: bool,
+    /// From what coverage an edge pixel takes the colour, in black and
+    /// white.
+    mono_coverage: u8,
     /// Saturation of RGB pixels drawn, in percent (100: as they are).
     saturation: u16,
     /// Pixels of pictures drawn since [`Framebuffer::take_pictured`].
@@ -75,6 +79,7 @@ impl Framebuffer {
             dirty: None,
             inverted: false,
             pictures_kept: false,
+            mono_coverage: MONO_COVERAGE,
             saturation: 100,
             pictured: 0,
             counting: true,
@@ -193,6 +198,17 @@ impl Framebuffer {
 
     pub fn pictures_kept(&self) -> bool {
         self.pictures_kept
+    }
+
+    /// In black and white: from what coverage (1 to 255) a pixel at the
+    /// edge of a letter or a shape takes the colour drawn; lower draws
+    /// text fuller ([`MONO_COVERAGE`] at first, 128 is half).
+    pub fn set_mono_coverage(&mut self, alpha: u8) {
+        self.mono_coverage = alpha.max(1);
+    }
+
+    pub fn mono_coverage(&self) -> u8 {
+        self.mono_coverage
     }
 
     /// Draws RGB pixels (pictures) with their saturation at `percent`,
@@ -325,11 +341,11 @@ impl Framebuffer {
     /// `(x, y)`, which must lie inside the framebuffer. Does not mark the
     /// pixel dirty; callers mark whole areas.
     pub(crate) fn blend_pixel(&mut self, x: u16, y: u16, color: Color, alpha: u8) {
-        // In black and white, a pixel at an edge takes the colour from
-        // somewhat less than half covered: thin strokes of small text keep
-        // their weight instead of breaking up.
+        // In black and white, a pixel at an edge takes the colour from a
+        // part covered (somewhat less than half at first): thin strokes
+        // of small text keep their weight instead of breaking up.
         if self.format == PixelFormat::Mono1 {
-            if alpha >= MONO_COVERAGE {
+            if alpha >= self.mono_coverage {
                 let encoded = self.encode(color);
                 self.store(x, y, encoded);
             }

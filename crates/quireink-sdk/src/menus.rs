@@ -67,6 +67,10 @@ pub enum MenuNeed {
     /// A device whose firmware QuireInk is, updated by QuireInk
     /// ([`Env::firmware`](crate::Env)), hidden elsewhere.
     Firmware,
+    /// A device whose panel shows black and white alone
+    /// ([`Capabilities::black_and_white`](crate::Capabilities)), hidden
+    /// elsewhere.
+    BlackAndWhite,
 }
 
 /// One entry of a resolved menu.
@@ -153,6 +157,7 @@ impl Menus {
             Some(MenuNeed::ButtonRow) => caps.button_row,
             Some(MenuNeed::Wifi) => caps.wifi,
             Some(MenuNeed::Firmware) => caps.firmware,
+            Some(MenuNeed::BlackAndWhite) => caps.black_and_white,
             Some(MenuNeed::NoTouch) => listed || !caps.touch,
             None => true,
         }

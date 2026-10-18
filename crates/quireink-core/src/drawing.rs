@@ -56,10 +56,11 @@ impl Kernel {
         let format = self.framebuffer.format();
         let bounds = self.framebuffer.bounds();
         let rows = self.framebuffer.rows();
-        let (inverted, saturation, kept) = (
+        let (inverted, saturation, kept, coverage) = (
             self.framebuffer.is_inverted(),
             self.framebuffer.saturation(),
             self.framebuffer.pictures_kept(),
+            self.framebuffer.mono_coverage(),
         );
         let bits = u32::from(format.bits_per_pixel()).max(1);
         let align = self.frame.row_align;
@@ -71,6 +72,7 @@ impl Kernel {
                 framebuffer.set_inverted(inverted);
                 framebuffer.set_pictures_kept(kept);
                 framebuffer.set_saturation(saturation);
+                framebuffer.set_mono_coverage(coverage);
                 framebuffer
             })
         };
@@ -410,10 +412,11 @@ impl Kernel {
                 }
                 None => height,
             };
-            let (inverted, saturation, kept) = (
+            let (inverted, saturation, kept, coverage) = (
                 self.framebuffer.is_inverted(),
                 self.framebuffer.saturation(),
                 self.framebuffer.pictures_kept(),
+                self.framebuffer.mono_coverage(),
             );
             let before = (display.width, display.height, self.framebuffer.rows());
             // The old frame goes first, the new one taking its place: beside
@@ -430,6 +433,7 @@ impl Kernel {
                 framebuffer.set_inverted(inverted);
                 framebuffer.set_pictures_kept(kept);
                 framebuffer.set_saturation(saturation);
+                framebuffer.set_mono_coverage(coverage);
                 self.framebuffer = framebuffer;
             }
             if turned {

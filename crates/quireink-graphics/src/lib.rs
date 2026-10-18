@@ -13,7 +13,7 @@ mod canvas;
 mod framebuffer;
 
 pub use canvas::{Canvas, Described, Role};
-pub use framebuffer::Framebuffer;
+pub use framebuffer::{Framebuffer, MONO_COVERAGE};
 
 use core::fmt;
 use quireink_platform::PixelFormat;

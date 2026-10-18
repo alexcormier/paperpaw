@@ -429,6 +429,16 @@ pub mod settings {
     /// In night mode, pictures inverted too (else as they are, not as
     /// negatives).
     pub const NIGHT_PICTURES: Setting<bool> = Setting::new("core.night-pictures");
+    /// How full text is on panels of black and white alone
+    /// ([`MenuNeed::BlackAndWhite`](crate::MenuNeed)): from what part
+    /// covered a pixel at the edge of a letter is drawn, one of
+    /// [`MONO_TEXT_LEVELS`] (half, three eighths, a quarter).
+    pub const MONO_TEXT: Setting<Text> = Setting::new("core.mono-text");
+    pub const MONO_TEXT_LEVELS: [&str; 3] = [
+        "core.mono-text.light",
+        "core.mono-text.normal",
+        "core.mono-text.full",
+    ];
     /// How far in from the top and the bottom edge a swipe begins to count
     /// as one in from the edge, in millimetres (0: none).
     pub const EDGE_ENDS: Id = Id::new_static("core.edge-ends");

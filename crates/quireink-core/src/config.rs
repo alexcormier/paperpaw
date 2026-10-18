@@ -197,6 +197,9 @@ impl Kernel {
         } else if *id == core_settings::NIGHT_PICTURES {
             self.framebuffer
                 .set_pictures_kept(!self.shared.settings.bool(id.as_str()));
+        } else if *id == core_settings::MONO_TEXT {
+            self.framebuffer
+                .set_mono_coverage(mono_coverage(&self.shared.settings));
         }
         if *id == core_settings::KEYMAP_PRESET {
             self.rebuild_keymap();
@@ -214,6 +217,7 @@ impl Kernel {
         if *id == core_settings::LANGUAGE
             || *id == core_settings::NIGHT_MODE
             || *id == core_settings::NIGHT_PICTURES
+            || *id == core_settings::MONO_TEXT
             || *id == core_settings::TEXT_COLOR
             || *id == core_settings::PAPER_COLOR
             || *id == core_settings::TEXT_COLOR_OWN
@@ -351,4 +355,18 @@ pub(crate) fn plugin_switches(source: &str, on: bool) -> Vec<String> {
         .filter(|entry| entry.section == "plugins" && entry.value.as_bool() == Some(on))
         .map(|entry| String::from(entry.key))
         .collect()
+}
+
+/// From what coverage an edge pixel is drawn in black and white, by the
+/// setting [`core_settings::MONO_TEXT`].
+pub(crate) fn mono_coverage(settings: &Settings) -> u8 {
+    let level = settings.text(core_settings::MONO_TEXT.as_str());
+    match core_settings::MONO_TEXT_LEVELS
+        .iter()
+        .position(|l| *l == level)
+    {
+        Some(0) => 128,
+        Some(2) => 64,
+        _ => quireink_graphics::MONO_COVERAGE,
+    }
 }

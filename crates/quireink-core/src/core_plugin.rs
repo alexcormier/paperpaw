@@ -475,6 +475,20 @@ fn register_general_settings(r: &mut Registrar) -> Result<(), RegisterError> {
         .description("core.setting.night-pictures.help"),
     )?;
     r.add_setting(
+        SettingSpec::choice(
+            &settings::MONO_TEXT,
+            "core.setting.mono-text",
+            settings::MONO_TEXT_LEVELS
+                .iter()
+                .map(|l| Cow::Borrowed(*l))
+                .collect(),
+            settings::MONO_TEXT_LEVELS[1],
+        )
+        .group(groups::DISPLAY)
+        .description("core.setting.mono-text.help"),
+    )?;
+    r.set_menu_need(settings::MONO_TEXT, quireink_sdk::MenuNeed::BlackAndWhite)?;
+    r.add_setting(
         SettingSpec::switch(&settings::SPEAK_FOCUS, "core.setting.speak-focus", false)
             .group(groups::SYSTEM)
             .description("core.setting.speak-focus.help"),

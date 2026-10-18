@@ -254,6 +254,8 @@ pub const quireink_sdk::builtin::settings::HEADER_LIGHT: &str
 pub const quireink_sdk::builtin::settings::KEYMAP_PRESET: quireink_sdk::setting::Setting<quireink_sdk::setting::Text>
 pub const quireink_sdk::builtin::settings::LANGUAGE: quireink_sdk::setting::Setting<quireink_sdk::setting::Text>
 pub const quireink_sdk::builtin::settings::LONG_PRESS_MS: quireink_sdk::setting::Setting<i64>
+pub const quireink_sdk::builtin::settings::MONO_TEXT: quireink_sdk::setting::Setting<quireink_sdk::setting::Text>
+pub const quireink_sdk::builtin::settings::MONO_TEXT_LEVELS: [&str; 3]
 pub const quireink_sdk::builtin::settings::NIGHT_MODE: quireink_sdk::setting::Setting<bool>
 pub const quireink_sdk::builtin::settings::NIGHT_PICTURES: quireink_sdk::setting::Setting<bool>
 pub const quireink_sdk::builtin::settings::NOTICE_SECONDS: quireink_sdk::setting::Setting<i64>
@@ -1731,6 +1733,7 @@ pub enum quireink_sdk::Level
 pub quireink_sdk::Level::Advanced
 pub quireink_sdk::Level::Basic
 #[non_exhaustive] pub enum quireink_sdk::MenuNeed
+pub quireink_sdk::MenuNeed::BlackAndWhite
 pub quireink_sdk::MenuNeed::ButtonRow
 pub quireink_sdk::MenuNeed::Colors
 pub quireink_sdk::MenuNeed::Firmware
@@ -1865,6 +1868,7 @@ pub fn quireink_sdk::Actions::iter(&self) -> impl core::iter::traits::iterator::
 pub fn quireink_sdk::Actions::new() -> Self
 pub fn quireink_sdk::Actions::shrink_to_fit(&mut self)
 #[non_exhaustive] pub struct quireink_sdk::Capabilities
+pub quireink_sdk::Capabilities::black_and_white: bool
 pub quireink_sdk::Capabilities::button_row: bool
 pub quireink_sdk::Capabilities::colors: bool
 pub quireink_sdk::Capabilities::firmware: bool
