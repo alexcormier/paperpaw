@@ -71,6 +71,7 @@ mod version;
 pub mod web;
 pub mod widgets;
 pub mod wifi;
+pub mod words;
 
 pub use action::{ActionHandler, ActionHint, ActionSpec, Actions};
 pub use command::{
