@@ -32,6 +32,9 @@
 //!   functions lie);
 //! - `refresh fast`, `refresh full`: the panel refreshed from what the
 //!   controller holds, nothing sent (`QI:OK`): whether it holds the frame;
+//! - `gray [<path>]`: four grays on the panel to judge them, with the
+//!   decoded gray picture at `path` (hexadecimal) below; then the screen
+//!   is drawn again (`QI:OK`);
 //! - `put <size> <path>`: a file for the storage (the SD card), answered
 //!   with `QI:READY`; then lines `data <hex>` until all its bytes came, and
 //!   `QI:OK <size>` once it is written;
@@ -107,6 +110,8 @@ pub enum Command {
     Refresh {
         full: bool,
     },
+    /// Four grays on the panel, with a decoded gray picture if named.
+    Gray(Option<String>),
     /// Light sleep while idle even on USB, for so many seconds.
     IdleSleep(u64),
     /// A file of so many bytes for that path.
@@ -181,6 +186,10 @@ pub fn parse(line: &str) -> Option<Command> {
         },
         "hang" => Command::Hang(words.next()?.parse().ok()?),
         "nap" => Command::Nap(words.next()?.parse().ok()?),
+        "gray" => Command::Gray(match words.next() {
+            Some(path) => Some(unhex(path)?),
+            None => None,
+        }),
         "refresh" => Command::Refresh {
             full: on_off(words.next()?, "full", "fast")?,
         },

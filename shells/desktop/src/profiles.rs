@@ -89,8 +89,11 @@ pub const PROFILES: &[Profile] = &[
             buttons::BACK,
             buttons::POWER,
         ],
-        // Unverified: ESP32-C3 SRAM left after firmware, stacks and drivers.
-        heap_budget: Some(192 * KIB),
+        // The firmware's heap: 192 KiB, and 64 KiB in the memory the boot
+        // loader used (two regions: no block larger than 192 KiB). The
+        // same things take about a fifth more here (pointers of 8 bytes,
+        // not 4), so the emulator runs out a little before the X4 would.
+        heap_budget: Some(256 * KIB),
         glyph_cache: 0,
         font_packs: true,
         // 96 of 800 rows: 11.3 KiB instead of 94 KiB, nine bands a frame.
@@ -107,7 +110,7 @@ pub const PROFILES: &[Profile] = &[
         wifi: true,
         sleep: true,
         button_row: &X4_ROW,
-        summary: "ESP32-C3, 4.3\" 800x480, buttons only, 192 KiB heap budget",
+        summary: "ESP32-C3, 4.3\" 800x480, buttons only, 256 KiB heap budget",
     },
     Profile {
         device: DeviceInfo {

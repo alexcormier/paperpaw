@@ -23,6 +23,11 @@
 //! memory holds 8 pixels of a row (the most significant bit first; set
 //! for white), so 8 rows of the screen.
 //!
+//! In four grays ([`Display::write_gray_rows`], [`Display::refresh_gray`]),
+//! the two memories hold the two bits of each pixel's gray, shown with the
+//! stock firmware's gray waveform; the next refresh then drives every
+//! pixel again.
+//!
 //! Turned ([`Display::set_rotation`]), the screen is 800 × 480 on its side
 //! or 480 × 800 upside down; its rows go into the controller's memory as
 //! they lie on the panel (on its side, a row of the screen is a row of the
@@ -62,9 +67,35 @@ fn transpose8(rows: [u8; 8]) -> [u8; 8] {
     x.to_be_bytes()
 }
 
+/// The stock firmware's waveform for four grays (V3.1.9, as the FreeInk SDK
+/// records it from the OpenX4 community SDK, MIT licence): 105 bytes of
+/// phases, timing and frame rate, then the gate voltage, the three source
+/// voltages and VCOM.
+const GRAY_LUT: [u8; 110] = [
+    0x00, 0x4A, 0x88, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, //
+    0x80, 0x62, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, //
+    0x88, 0x60, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, //
+    0xA8, 0x44, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, //
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, //
+    0x08, 0x0B, 0x02, 0x03, 0x00, //
+    0x0C, 0x02, 0x07, 0x02, 0x00, //
+    0x01, 0x00, 0x02, 0x00, 0x00, //
+    0x00, 0x00, 0x00, 0x00, 0x00, //
+    0x00, 0x00, 0x00, 0x00, 0x00, //
+    0x00, 0x00, 0x00, 0x00, 0x00, //
+    0x00, 0x00, 0x00, 0x00, 0x00, //
+    0x00, 0x00, 0x00, 0x00, 0x00, //
+    0x00, 0x00, 0x00, 0x00, 0x00, //
+    0x00, 0x00, 0x00, 0x00, 0x01, //
+    0x22, 0x22, 0x22, 0x22, 0x22, //
+    0x17, 0x41, 0xA8, 0x32, 0x30,
+];
+
 /// The controller's commands used here.
 mod cmd {
     pub const DRIVER_OUTPUT: u8 = 0x01;
+    pub const GATE_VOLTAGE: u8 = 0x03;
+    pub const SOURCE_VOLTAGE: u8 = 0x04;
     pub const BOOSTER_SOFT_START: u8 = 0x0C;
     pub const DEEP_SLEEP: u8 = 0x10;
     pub const DATA_ENTRY: u8 = 0x11;
@@ -76,6 +107,8 @@ mod cmd {
     pub const UPDATE_CONTROL_2: u8 = 0x22;
     pub const WRITE_NEW: u8 = 0x24;
     pub const WRITE_SHOWN: u8 = 0x26;
+    pub const WRITE_VCOM: u8 = 0x2C;
+    pub const WRITE_LUT: u8 = 0x32;
     pub const BORDER: u8 = 0x3C;
     pub const RAM_X_RANGE: u8 = 0x44;
     pub const RAM_Y_RANGE: u8 = 0x45;
@@ -147,6 +180,9 @@ pub struct Display<SPI, DC, RST, BUSY, D> {
     fresh: bool,
     /// How the screen QuireInk draws is turned.
     rotation: Rotation,
+    /// The panel shows grays ([`Display::refresh_gray`]): the next refresh
+    /// drives every pixel.
+    gray: bool,
     buffer: Vec<u8>,
 }
 
@@ -168,6 +204,7 @@ where
             powered: false,
             fresh: true,
             rotation: Rotation::Deg0,
+            gray: false,
             buffer: Vec::new(),
         }
     }
@@ -293,43 +330,106 @@ where
             (planes.new, cmd::WRITE_NEW),
             (planes.shown, cmd::WRITE_SHOWN),
         ] {
-            if !plane {
-                continue;
-            }
-            self.buffer.clear();
-            match self.rotation {
-                Rotation::Deg0 | Rotation::Deg180 => {
-                    let flip = self.rotation == Rotation::Deg180;
-                    // Whole bytes: rows past the band's end (only at its
-                    // last byte) are white.
-                    let columns = height.div_ceil(8) * 8;
-                    let x = if flip {
-                        PANEL_WIDTH - top - columns
-                    } else {
-                        top
-                    };
-                    self.window(x, columns, 0, PANEL_HEIGHT)?;
-                    self.command(write, &[])?;
-                    if rows.format == PixelFormat::Mono1 {
-                        self.write_mono(&rows, height, flip)?;
-                    } else {
-                        self.write_upright(height, flip, &light)?;
-                    }
-                }
-                Rotation::Deg90 | Rotation::Deg270 => {
-                    let clockwise = self.rotation == Rotation::Deg90;
-                    let y = if clockwise {
-                        top
-                    } else {
-                        PANEL_HEIGHT - top - height
-                    };
-                    self.window(0, PANEL_WIDTH, y, height)?;
-                    self.command(write, &[])?;
-                    self.write_side(&rows, height, clockwise, &light)?;
-                }
+            if plane {
+                // Rows past the band's end are white.
+                self.write_plane(top, &rows, height, write, &light, true)?;
             }
         }
         Ok(())
+    }
+
+    /// Writes screen rows `top..top + rows.height` (as [`Display::write_rows`]
+    /// takes them) in four grays, 2 bits a pixel ([`PixelFormat::Gray2`],
+    /// 0 black, 3 white), into both memories: the low bit into *new*, the
+    /// high one into *shown*, as the gray waveform reads them. Shown with
+    /// [`Display::refresh_gray`].
+    pub fn write_gray_rows(&mut self, top: u16, rows: FrameView<'_>) -> Result<(), Error> {
+        let (width, screen_height) = self.size();
+        if !top.is_multiple_of(8)
+            || top >= screen_height
+            || rows.width != width
+            || rows.height == 0
+            || rows.format != PixelFormat::Gray2
+        {
+            return Err(Error::Rows);
+        }
+        let height = rows.height.min(screen_height - top);
+        // The waveform's levels run the other way: 3 is black.
+        let level = |x: u16, y: u16| {
+            let at = usize::from(y) * rows.stride + usize::from(x / 4);
+            let byte = rows.data.get(at).copied().unwrap_or(0xFF);
+            3 - ((byte >> (6 - 2 * (x % 4))) & 0b11)
+        };
+        let low = |x: u16, y: u16| level(x, y) & 1 != 0;
+        let high = |x: u16, y: u16| level(x, y) & 2 != 0;
+        // Rows past the band's end are white (0).
+        self.write_plane(top, &rows, height, cmd::WRITE_NEW, &low, false)?;
+        self.write_plane(top, &rows, height, cmd::WRITE_SHOWN, &high, false)
+    }
+
+    /// Shows the grays written by [`Display::write_gray_rows`], with the stock
+    /// firmware's gray waveform (about as long as a full refresh). The next
+    /// refresh drives every pixel (a half refresh), as after
+    /// [`Display::init`].
+    pub fn refresh_gray(&mut self) -> Result<(), Error> {
+        self.command(cmd::WRITE_LUT, &GRAY_LUT[..105])?;
+        self.command(cmd::GATE_VOLTAGE, &GRAY_LUT[105..106])?;
+        self.command(cmd::SOURCE_VOLTAGE, &GRAY_LUT[106..109])?;
+        self.command(cmd::WRITE_VCOM, &GRAY_LUT[109..110])?;
+        self.command(cmd::BORDER, &[0xC0])?;
+        // Both memories count; the loaded waveform, not the panel's own.
+        self.command(cmd::UPDATE_CONTROL_1, &[0x00])?;
+        self.command(cmd::UPDATE_CONTROL_2, &[0xCC])?;
+        self.command(cmd::ACTIVATE, &[])?;
+        self.powered = true;
+        self.fresh = false;
+        self.gray = true;
+        self.wait()
+    }
+
+    /// Writes one memory: the window for screen rows `top..top + height` as
+    /// the screen is turned, then each pixel's bit (`bit`; black and white
+    /// rows the quick way), `pad` for rows past the band's end.
+    fn write_plane(
+        &mut self,
+        top: u16,
+        rows: &FrameView<'_>,
+        height: u16,
+        write: u8,
+        bit: &dyn Fn(u16, u16) -> bool,
+        pad: bool,
+    ) -> Result<(), Error> {
+        self.buffer.clear();
+        match self.rotation {
+            Rotation::Deg0 | Rotation::Deg180 => {
+                let flip = self.rotation == Rotation::Deg180;
+                // Whole bytes.
+                let columns = height.div_ceil(8) * 8;
+                let x = if flip {
+                    PANEL_WIDTH - top - columns
+                } else {
+                    top
+                };
+                self.window(x, columns, 0, PANEL_HEIGHT)?;
+                self.command(write, &[])?;
+                if rows.format == PixelFormat::Mono1 {
+                    self.write_mono(rows, height, flip)
+                } else {
+                    self.write_upright(height, flip, bit, pad)
+                }
+            }
+            Rotation::Deg90 | Rotation::Deg270 => {
+                let clockwise = self.rotation == Rotation::Deg90;
+                let y = if clockwise {
+                    top
+                } else {
+                    PANEL_HEIGHT - top - height
+                };
+                self.window(0, PANEL_WIDTH, y, height)?;
+                self.command(write, &[])?;
+                self.write_side(rows, height, clockwise, bit)
+            }
+        }
     }
 
     /// An upright band, pixel by pixel: each column of the screen is a row
@@ -340,6 +440,7 @@ where
         height: u16,
         flip: bool,
         light: &dyn Fn(u16, u16) -> bool,
+        pad: bool,
     ) -> Result<(), Error> {
         let bytes = height.div_ceil(8);
         for i in 0..WIDTH {
@@ -349,7 +450,7 @@ where
                 let mut bits = 0u8;
                 for bit in 0..8u16 {
                     let y = byte * 8 + bit;
-                    if y >= height || light(x, y) {
+                    if if y >= height { pad } else { light(x, y) } {
                         bits |= 0x80 >> bit;
                     }
                 }
@@ -479,8 +580,14 @@ where
     /// waiting for it: the processor works on meanwhile (the bus is free
     /// for the card). [`Display::wait`] before anything else is sent.
     pub fn start_refresh(&mut self, refresh: Refresh, power_off: bool) -> Result<(), Error> {
-        let refresh = if self.fresh { Refresh::Half } else { refresh };
+        // After grays, every pixel is driven back to black or white.
+        let refresh = if self.fresh || (self.gray && refresh == Refresh::Fast) {
+            Refresh::Half
+        } else {
+            refresh
+        };
         self.fresh = false;
+        self.gray = false;
         // A fast refresh compares with the frame shown; the others
         // drive every pixel.
         let compare = if refresh == Refresh::Fast { 0x00 } else { 0x40 };
@@ -1004,6 +1111,75 @@ mod tests {
                 "{rotation:?}: not the turned width"
             );
         }
+    }
+
+    #[test]
+    fn four_grays_go_into_both_memories() {
+        let controller = Controller::new();
+        let mut display = Display::new(
+            Spi(controller.clone()),
+            Dc(controller.clone()),
+            Pin,
+            Busy,
+            Delay,
+        );
+        display.init().unwrap();
+        // Columns of the four grays, black on the left.
+        let stride = usize::from(WIDTH) / 4;
+        let mut data = vec![0u8; stride * 8];
+        for y in 0..8 {
+            for x in 0..WIDTH {
+                let level = (x / 120) as u8;
+                data[y * stride + usize::from(x / 4)] |= level << (6 - 2 * (x % 4));
+            }
+        }
+        let rows = FrameView {
+            width: WIDTH,
+            height: 8,
+            format: PixelFormat::Gray2,
+            stride,
+            data: &data,
+        };
+        display.write_gray_rows(16, rows).unwrap();
+        let c = controller.borrow();
+        // The waveform's levels: black 11, dark gray 10, light gray 01,
+        // white 00 (a set bit is "white" to the tests' reading).
+        for (x, high, low) in [
+            (0, true, true),
+            (130, true, false),
+            (250, false, true),
+            (470, false, false),
+        ] {
+            assert_eq!(Controller::white(&c.new, x, 20), low, "low bit at {x}");
+            assert_eq!(Controller::white(&c.shown, x, 20), high, "high bit at {x}");
+        }
+        drop(c);
+        let mono = vec![0xFFu8; usize::from(WIDTH) / 8 * 8];
+        let mono = FrameView {
+            width: WIDTH,
+            height: 8,
+            format: PixelFormat::Mono1,
+            stride: usize::from(WIDTH) / 8,
+            data: &mono,
+        };
+        assert_eq!(
+            display.write_gray_rows(16, mono),
+            Err(Error::Rows),
+            "not gray"
+        );
+        // The gray waveform loaded, both memories read; then a half refresh
+        // drives every pixel again, also where a fast one was asked for.
+        display.refresh(Refresh::Fast, false).unwrap();
+        display.refresh_gray().unwrap();
+        display.refresh(Refresh::Fast, false).unwrap();
+        display.refresh(Refresh::Fast, false).unwrap();
+        let c = controller.borrow();
+        assert_eq!(c.first[usize::from(cmd::WRITE_LUT)], GRAY_LUT[0]);
+        let sequences: Vec<(u8, u8)> = c.refreshes.clone();
+        assert_eq!(
+            sequences,
+            [(0x40, 0xD7), (0x00, 0xCC), (0x40, 0xD7), (0x00, 0xFC)]
+        );
     }
 
     #[test]

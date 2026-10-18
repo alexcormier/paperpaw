@@ -163,6 +163,7 @@ impl Remote {
             | Command::Run(_)
             | Command::Open(_)
             | Command::Refresh { .. }
+            | Command::Gray(_)
             | Command::IdleSleep(_)
             | Command::Network(_)) => return Some(command),
         }

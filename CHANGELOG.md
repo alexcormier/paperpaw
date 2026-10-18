@@ -6,6 +6,12 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- X4: the display driver shows four grays (`write_gray_rows`,
+  `refresh_gray`, with the stock firmware's gray waveform); over USB,
+  `gray` shows bars, a gradient and a cover in them to judge the panel.
+  Not yet used for pictures. Kernel: `draw_again`.
+- Emulator: the X4 profile has the X4's 256 KiB of heap (192 KiB and the
+  64 KiB the boot loader used), not 192.
 - Menus, the quick panel and questions wash out what lies below them
   (lighter gray; on the X4 every other pixel paper), so they stand out
   and the lines they cut through read as background. Overlays looked

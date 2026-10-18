@@ -386,7 +386,7 @@ there.
 
 ## Memory
 
-The smallest device, the Xteink X4, has 192 KiB of heap for everything.
+The smallest device, the Xteink X4, has 256 KiB of heap for everything.
 A plugin that should run there:
 
 - keeps little in memory: lists in files, read as they are needed;

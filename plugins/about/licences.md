@@ -20,6 +20,8 @@ Bundled hyphenation patterns (plugins/hyphenation/patterns) come from the hyph-u
 
 Their notices are in plugins/hyphenation/patterns/README.md.
 
+The Xteink X4's waveform for four grays (crates/quireink-x4/src/display.rs, GRAY_LUT) comes from the OpenX4 E-Paper Community SDK (https://github.com/open-x4-epaper/community-sdk), as the FreeInk SDK (https://github.com/Free-Ink/freeink-sdk) records it, both licensed under the MIT License; original e-paper driver authorship is credited to CidVonHighwind.
+
 ## QuireInk: Apache License 2.0
 
 Apache License Version 2.0, January 2004 http://www.apache.org/licenses/

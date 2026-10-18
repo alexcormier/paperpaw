@@ -1306,6 +1306,21 @@ fn menus_follow_order_and_user_definitions() {
 }
 
 #[test]
+fn drawn_again_whole_and_fully() {
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(OverlayPlugin { log: log() })
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    render(&mut kernel);
+    let effects = kernel.draw_again(Instant(100));
+    assert_eq!(
+        effects.refresh(),
+        Some((Rect::new(0, 0, 90, 90), RefreshMode::Full))
+    );
+}
+
+#[test]
 fn settings_reset_to_their_defaults() {
     let storage = quireink_sdk::MemoryStorage::new().with(
         "quireink.ini",

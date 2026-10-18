@@ -69,6 +69,10 @@ pub struct State {
     /// trying them.
     #[cfg(feature = "remote")]
     sleep_on_usb_until: Option<Instant>,
+    /// The panel shows the gray test (`gray` over USB): the next change is
+    /// shown with the whole screen drawn again.
+    #[cfg(feature = "remote")]
+    gray_shown: bool,
 }
 
 impl Firmware {
@@ -374,6 +378,13 @@ impl Firmware {
                 effects = self.show_busy(area);
                 continue;
             }
+            // After the gray test, the whole screen, not only what changed.
+            #[cfg(feature = "remote")]
+            if self.state.gray_shown && effects.refresh().is_some() {
+                self.state.gray_shown = false;
+                effects = self.kernel.draw_again(now());
+                continue;
+            }
             if let Some((area, mode)) = effects.refresh() {
                 self.show(area, mode);
             }
@@ -563,6 +574,18 @@ impl Firmware {
                 let reader = quireink_sdk::builtin::slots::READER;
                 let effects = self.kernel.open_slot(at, reader, params);
                 self.apply(effects);
+                remote::ok();
+            }
+            Command::Gray(picture) => {
+                let shown = crate::gray_test::show(
+                    &mut self.panel,
+                    self.kernel.storage(),
+                    picture.as_deref(),
+                );
+                if let Err(e) = shown {
+                    warn!("display: {e:?}");
+                }
+                self.state.gray_shown = true;
                 remote::ok();
             }
             Command::Refresh { full } => {

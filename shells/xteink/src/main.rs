@@ -26,6 +26,8 @@ mod clock;
 mod crash;
 mod device;
 mod firmware;
+#[cfg(feature = "remote")]
+mod gray_test;
 mod http;
 mod input;
 mod link;
