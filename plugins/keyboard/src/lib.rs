@@ -189,10 +189,12 @@ fn rows(letters: &str, layer: Layer, switch: bool) -> Vec<Vec<Slot>> {
                 Layer::Letters
             };
             let mut bottom = alloc::vec![(Key::Layer(other), 3)];
+            // The key to the next layout as wide as the one to symbols, so
+            // its code fits.
             if switch && layer == Layer::Letters {
-                bottom.push((Key::NextLayout, 2));
+                bottom.push((Key::NextLayout, 3));
             }
-            let space = if bottom.len() > 1 { 8 } else { 10 };
+            let space = if bottom.len() > 1 { 7 } else { 10 };
             bottom.extend([
                 (Key::Char(','), 2),
                 (Key::Space, space),
@@ -742,7 +744,9 @@ impl KeyboardScreen {
             h,
         );
         let focused = self.focus == Some((row, index));
-        let active = key == Key::Shift && self.shift;
+        // Shift while on, and *OK* always: the key that ends typing stands
+        // out.
+        let active = (key == Key::Shift && self.shift) || key == Key::Done;
         let label = match key {
             Key::Shift | Key::Delete | Key::Space => String::new(),
             _ => self.label(env, key),

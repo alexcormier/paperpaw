@@ -16,6 +16,12 @@ change the plugin SDK.
   shows it in the status line and on the home screen; the time zone is
   chosen under Settings, System (UTC on "Auto": the X4 has none of its
   own). Gone when it is switched off, until it is online again.
+- Keyboard: no key shows only "…" any more. Narrow buttons keep less
+  room at their sides, a letter wider than its key (an `m` on the X4's
+  German layout) is set smaller, *OK* is black and plain to see, the key
+  to symbols says `123`, and the key to the next layout is wide enough
+  for its code. Checked with every Latin layout. Hints in German say
+  *Wählen*, which fits.
 - Home screen, with buttons only (X4): items are moved up and down and
   made taller or lower with the page buttons, which the X4 has instead of
   up and down (before, only their width could be changed); where another

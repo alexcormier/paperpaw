@@ -1306,12 +1306,23 @@ pub fn draw_button(
         return;
     };
     let single = label.chars().count() == 1;
-    let size = if single { style.text } else { style.small };
-    // A single character (− or +) is never shortened.
+    let mut size = if single { style.text } else { style.small };
+    // A single character wider than the button (an `m` on a narrow key)
+    // is set smaller rather than shortened to nothing.
+    if single {
+        let width = font.measure(size, label);
+        let room = f32::from(rect.width) * 0.8;
+        if width > room && width > 0.0 {
+            size *= room / width;
+        }
+    }
+    // A single character (− or +) is never shortened; narrow buttons (a
+    // keyboard's keys) keep less room at their sides, so short words fit.
+    let pad = (style.gap as f32).min(f32::from(rect.width) / 12.0);
     let room = if single {
         f32::from(rect.width)
     } else {
-        f32::from(rect.width) - 2.0 * style.gap as f32
+        f32::from(rect.width) - 2.0 * pad
     };
     let label = fit(&font, size, label, room);
     let label_x = f32::from(rect.x) + (f32::from(rect.width) - font.measure(size, &label)) / 2.0;
