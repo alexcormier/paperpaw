@@ -103,9 +103,10 @@ unsafe impl GlobalAlloc for BudgetAllocator {
                 // Untracked, so printing does not count against the budget.
                 let tracking = TRACKING.with(|t| t.replace(false));
                 eprintln!(
-                    "alloc {:>7} B, heap {:>6.1} KiB",
+                    "alloc {:>7} B, heap {:>6.1} KiB  {}",
                     layout.size(),
-                    live as f64 / 1024.0
+                    live as f64 / 1024.0,
+                    site_of(&Backtrace::force_capture(), 2)
                 );
                 TRACKING.with(|t| t.set(tracking));
             }

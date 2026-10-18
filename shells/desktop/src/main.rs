@@ -39,7 +39,7 @@ OPTIONS:
                           (default: samples/library)
     --screenshot-dir <d>  Where F12 saves screenshots (default: out)
     --heap-budget <KiB>   Override the profile's heap budget (`none` = unlimited)
-    --trace-alloc <bytes> Print every kernel allocation of at least this size
+    --trace-alloc <bytes> Print every kernel allocation of at least this size, with where
     --heap-report         After a headless run, list the live heap by call site
     -h, --help            Show this help
 

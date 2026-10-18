@@ -6,6 +6,12 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- X4: opening a book for the first time could run out of memory (a
+  crash, "memory allocation failed") where a chapter has blocks of many
+  links or other short pieces: where each piece starts is now written as
+  it comes. The first opening of a book with a large cover peaks some
+  5 KiB lower.
+- Emulator: `--trace-alloc` says where each allocation comes from.
 - The X4's whole flash image in a release is signed too, in a signature
   file of its own (`quireink-x4-<version>.bin.sig`), which the web
   flasher checks before it writes (`quireink-sign sign-apart`, `check`;

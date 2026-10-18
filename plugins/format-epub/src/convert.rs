@@ -919,16 +919,25 @@ impl Converter<'_> {
         if self.positions.len() >= FLUSH_SMALL {
             self.write_positions();
         }
-        for origin in self.origins.iter().take_while(|o| (o.at as usize) < len) {
-            self.xpointers.push_str(&alloc::format!(
+        // Written as they come: a block of many origins (e.g. a list of
+        // links) would grow the buffer far past its size otherwise.
+        let origins = self
+            .origins
+            .iter()
+            .take_while(|o| (o.at as usize) < len)
+            .count();
+        for i in 0..origins {
+            let origin = &self.origins[i];
+            let line = alloc::format!(
                 "{}\t{}\t{}\n",
                 self.length + HEADER + origin.at,
                 origin.node,
                 origin.char
-            ));
-        }
-        if self.xpointers.len() >= FLUSH_SMALL {
-            self.write_xpointers();
+            );
+            self.xpointers.push_str(&line);
+            if self.xpointers.len() >= FLUSH_SMALL {
+                self.write_xpointers();
+            }
         }
         let indent = self.indent.unwrap_or(NO_INDENT);
         let space = if self.continues {
@@ -1558,6 +1567,93 @@ mod tests {
             }
         });
         found.unwrap()
+    }
+
+    /// A storage that notes the largest piece appended to a file.
+    struct Spy {
+        inner: quireink_sdk::MemoryStorage,
+        watched: String,
+        largest: core::cell::Cell<usize>,
+    }
+
+    impl Storage for Spy {
+        fn read_at(
+            &self,
+            path: &str,
+            offset: u64,
+            buf: &mut [u8],
+        ) -> Result<usize, quireink_sdk::StorageError> {
+            self.inner.read_at(path, offset, buf)
+        }
+        fn size(&self, path: &str) -> Result<u64, quireink_sdk::StorageError> {
+            self.inner.size(path)
+        }
+        fn write(&self, path: &str, data: &[u8]) -> Result<(), quireink_sdk::StorageError> {
+            self.inner.write(path, data)
+        }
+        fn append(&self, path: &str, data: &[u8]) -> Result<(), quireink_sdk::StorageError> {
+            if path == self.watched {
+                self.largest.set(self.largest.get().max(data.len()));
+            }
+            self.inner.append(path, data)
+        }
+        fn list(
+            &self,
+            dir: &str,
+            visit: &mut dyn FnMut(quireink_sdk::DirEntry<'_>),
+        ) -> Result<(), quireink_sdk::StorageError> {
+            self.inner.list(dir, visit)
+        }
+        fn remove(&self, path: &str) -> Result<(), quireink_sdk::StorageError> {
+            self.inner.remove(path)
+        }
+    }
+
+    /// A block of many text nodes (here a list of links in one
+    /// paragraph) writes where each one starts in pieces of about
+    /// FLUSH_SMALL, not all at once: memory stays small however long the
+    /// block is.
+    #[test]
+    fn origins_are_written_as_they_come() {
+        let mut page = String::from("<html><body><p>");
+        for i in 0..400 {
+            page.push_str(&alloc::format!("<a href=\"#n{i}\">{i}</a> "));
+        }
+        page.push_str("</p></body></html>");
+        let paths = CachePaths {
+            dir: String::from("c"),
+            text: String::from("c/0.txt"),
+            index: String::from("c/0.idx"),
+            anchors: String::from("c/0.anc"),
+            links: String::from("c/0.lnk"),
+            positions: String::from("c/0.pos"),
+            xpointers: String::from("c/0.xpt"),
+            end: String::from("c/0.end"),
+        };
+        let storage = Spy {
+            inner: quireink_sdk::MemoryStorage::new().with("page.html", page.as_str()),
+            watched: paths.xpointers.clone(),
+            largest: core::cell::Cell::new(0),
+        };
+        let source = Source::Html {
+            path: "page.html",
+            focus: None,
+            base: None,
+        };
+        convert(
+            &storage,
+            &source,
+            &paths,
+            css::Rules::default(),
+            false,
+            false,
+            Fit::side(300),
+        )
+        .unwrap();
+        let written = storage.inner.size(&paths.xpointers).unwrap() as usize;
+        assert!(written > 4 * FLUSH_SMALL, "{written} bytes of origins");
+        let largest = storage.largest.get();
+        assert!(largest < 2 * FLUSH_SMALL, "{largest} bytes at once");
     }
 
     #[test]
