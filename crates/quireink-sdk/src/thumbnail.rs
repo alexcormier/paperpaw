@@ -5,21 +5,61 @@ use alloc::vec::Vec;
 use quireink_document::ImageRef;
 use quireink_graphics::Canvas;
 use quireink_image::{ColorFile, Downscaler, GrayFile, ImageError, ImageFile, ImageSink, luma};
-use quireink_platform::Storage;
+use quireink_platform::{PixelFormat, Storage};
 
 /// Bytes of the picture's rows read at a time.
 const ROWS_BYTES: usize = 8192;
 /// A thumbnail kept on the storage ([`Thumbnail::keep`]): this, its
-/// width and height (2 bytes each, little-endian), whether in colour (1),
+/// width and height (2 bytes each, little-endian), its bits a pixel (1),
 /// its stamp (8), then its pixels.
-const MAGIC: &[u8; 4] = b"QIT1";
+const MAGIC: &[u8; 4] = b"QIT2";
 const HEADER: usize = 17;
+
+/// How a thumbnail keeps its pixels, by the panel it is shown on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Depth {
+    /// Black and white, ordered dithered as such a panel shows it: eight
+    /// pixels a byte, the first in the high bit, set for white.
+    Mono,
+    /// Sixteen grays: two pixels a byte, the first in the high bits.
+    Gray,
+    /// Red, green, blue.
+    Rgb,
+}
+
+impl Depth {
+    fn bits(self) -> u8 {
+        match self {
+            Depth::Mono => 1,
+            Depth::Gray => 4,
+            Depth::Rgb => 24,
+        }
+    }
+
+    fn of_bits(bits: u8) -> Option<Depth> {
+        [Depth::Mono, Depth::Gray, Depth::Rgb]
+            .into_iter()
+            .find(|d| d.bits() == bits)
+    }
+
+    /// The bytes of a row `width` pixels wide.
+    fn row(self, width: u16) -> usize {
+        let width = usize::from(width);
+        match self {
+            Depth::Mono => width.div_ceil(8),
+            Depth::Gray => width.div_ceil(2),
+            Depth::Rgb => width * 3,
+        }
+    }
+}
 
 /// A picture made small once and kept in memory, to draw it again and
 /// again without reading the storage: covers in a list, drawn in every
-/// band of every frame. Gray at 4 bits a pixel (a cover of 70 by 100
-/// pixels takes 3.5 KB), or in colour, 3 bytes a pixel, where asked for
-/// and the picture has colour.
+/// band of every frame. Kept as the panel shows it ([`Thumbnail::new`]):
+/// in black and white, dithered, for panels of black and white alone (a
+/// cover of 70 by 100 pixels takes under 1 KB), in sixteen grays
+/// otherwise (3.5 KB), in colour where the panel has colour and the
+/// picture too.
 ///
 /// [`draw_image`](crate::ui::draw_image) reads a picture's rows from the
 /// storage each time it is drawn; a thumbnail reads it once, when made
@@ -29,26 +69,30 @@ const HEADER: usize = 17;
 pub struct Thumbnail {
     width: u16,
     height: u16,
-    color: bool,
-    /// Gray: two pixels a byte, the first in the high bits, each row
-    /// whole bytes. Colour: red, green, blue.
+    depth: Depth,
     pixels: Vec<u8>,
 }
 
 impl Thumbnail {
     /// `image` made `width` × `height` (at most its own size; pass a size
     /// that keeps its proportions, e.g. from
-    /// [`fit_image`](crate::ui::fit_image)), in colour if `color` and the
-    /// image has colour. `None` if it cannot be read or there is no
-    /// memory for it.
+    /// [`fit_image`](crate::ui::fit_image)), as a panel of `format` shows
+    /// it. `None` if it cannot be read or there is no memory for it.
     pub fn new(
         storage: &dyn Storage,
         image: &ImageRef,
         width: u16,
         height: u16,
-        color: bool,
+        format: PixelFormat,
     ) -> Option<Self> {
         let file = ImageFile::open(storage, &image.path)?;
+        let depth = if format.is_color() && file.color {
+            Depth::Rgb
+        } else if format.gray_levels() == Some(2) {
+            Depth::Mono
+        } else {
+            Depth::Gray
+        };
         let channels = if file.color { 3 } else { 1 };
         let mut scaler = Downscaler::new(
             file.width,
@@ -58,9 +102,10 @@ impl Thumbnail {
         )
         .ok()?;
         let mut sink = Pack {
-            color: color && file.color,
+            depth,
             width: 0,
             height: 0,
+            rows: 0,
             pixels: Vec::new(),
         };
         sink.start(scaler.out_width(), scaler.out_height()).ok()?;
@@ -98,7 +143,7 @@ impl Thumbnail {
         Some(Self {
             width: sink.width,
             height: sink.height,
-            color: sink.color,
+            depth,
             pixels: sink.pixels,
         })
     }
@@ -118,22 +163,18 @@ impl Thumbnail {
         }
         let width = u16::from_le_bytes([header[4], header[5]]);
         let height = u16::from_le_bytes([header[6], header[7]]);
-        let color = header[8] == 1;
-        let row = if color {
-            usize::from(width) * 3
-        } else {
-            usize::from(width).div_ceil(2)
-        };
+        let depth = Depth::of_bits(header[8])?;
+        let len = depth.row(width) * usize::from(height);
         let mut pixels = Vec::new();
-        pixels.try_reserve_exact(row * usize::from(height)).ok()?;
-        pixels.resize(row * usize::from(height), 0);
+        pixels.try_reserve_exact(len).ok()?;
+        pixels.resize(len, 0);
         if storage.read_at(path, HEADER as u64, &mut pixels).ok()? != pixels.len() {
             return None;
         }
         Some(Self {
             width,
             height,
-            color,
+            depth,
             pixels,
         })
     }
@@ -149,7 +190,7 @@ impl Thumbnail {
         data.extend_from_slice(MAGIC);
         data.extend_from_slice(&self.width.to_le_bytes());
         data.extend_from_slice(&self.height.to_le_bytes());
-        data.push(u8::from(self.color));
+        data.push(self.depth.bits());
         data.extend_from_slice(&stamp.to_le_bytes());
         data.extend_from_slice(&self.pixels);
         storage.write(path, &data).is_ok()
@@ -179,21 +220,33 @@ impl Thumbnail {
             return;
         }
         let width = usize::from(self.width);
-        if self.color {
+        let stride = self.depth.row(self.width);
+        if self.depth == Depth::Rgb {
             for row_y in first..last {
-                let at = (row_y - top) as usize * width * 3;
-                canvas.draw_rgb_row(i32::from(x), row_y as i32, &self.pixels[at..at + width * 3]);
+                let at = (row_y - top) as usize * stride;
+                canvas.draw_rgb_row(i32::from(x), row_y as i32, &self.pixels[at..at + stride]);
             }
             return;
         }
-        let packed = width.div_ceil(2);
         let mut row = alloc::vec![0u8; width];
         for row_y in first..last {
-            let at = (row_y - top) as usize * packed;
+            let at = (row_y - top) as usize * stride;
+            let bytes = &self.pixels[at..at + stride];
             for (i, out) in row.iter_mut().enumerate() {
-                let byte = self.pixels[at + i / 2];
-                let level = if i % 2 == 0 { byte >> 4 } else { byte & 0x0F };
-                *out = level * 17;
+                *out = match self.depth {
+                    Depth::Mono => {
+                        if bytes[i / 8] & (0x80 >> (i % 8)) != 0 {
+                            255
+                        } else {
+                            0
+                        }
+                    }
+                    _ => {
+                        let byte = bytes[i / 2];
+                        let level = if i % 2 == 0 { byte >> 4 } else { byte & 0x0F };
+                        level * 17
+                    }
+                };
             }
             canvas.draw_gray_row(i32::from(x), row_y as i32, &row);
         }
@@ -202,26 +255,52 @@ impl Thumbnail {
 
 /// Packs the rows of a picture made small.
 struct Pack {
-    color: bool,
+    depth: Depth,
     width: u16,
     height: u16,
+    /// Rows packed so far.
+    rows: u16,
     pixels: Vec<u8>,
 }
 
 impl Pack {
     fn push_gray(&mut self, gray: impl Iterator<Item = u8>) {
-        let mut high = None;
-        for g in gray {
-            // To 16 levels, rounded.
-            let level = (u16::from(g) * 15 + 127) / 255;
-            match high.take() {
-                None => high = Some(level as u8),
-                Some(h) => self.pixels.push(h << 4 | level as u8),
+        if self.depth == Depth::Mono {
+            /// 4×4 Bayer matrix, as the framebuffer dithers.
+            const BAYER: [[i32; 4]; 4] =
+                [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
+            let y = usize::from(self.rows % 4);
+            let mut byte = 0u8;
+            let mut n = 0;
+            for (x, g) in gray.enumerate() {
+                let offset = (2 * BAYER[y][x % 4] - 15) * 255 / 32;
+                if i32::from(g) + offset >= 128 {
+                    byte |= 0x80 >> n;
+                }
+                n += 1;
+                if n == 8 {
+                    self.pixels.push(byte);
+                    (byte, n) = (0, 0);
+                }
+            }
+            if n > 0 {
+                self.pixels.push(byte);
+            }
+        } else {
+            let mut high = None;
+            for g in gray {
+                // To 16 levels, rounded.
+                let level = (u16::from(g) * 15 + 127) / 255;
+                match high.take() {
+                    None => high = Some(level as u8),
+                    Some(h) => self.pixels.push(h << 4 | level as u8),
+                }
+            }
+            if let Some(h) = high {
+                self.pixels.push(h << 4);
             }
         }
-        if let Some(h) = high {
-            self.pixels.push(h << 4);
-        }
+        self.rows += 1;
     }
 }
 
@@ -233,18 +312,14 @@ impl ImageSink for Pack {
         );
         self.width = w;
         self.height = h;
-        let bytes = if self.color {
-            usize::from(w) * 3
-        } else {
-            usize::from(w).div_ceil(2)
-        } * usize::from(h);
+        let bytes = self.depth.row(w) * usize::from(h);
         self.pixels
             .try_reserve_exact(bytes)
             .map_err(|_| ImageError::OutOfMemory)
     }
 
     fn row(&mut self, gray: &[u8]) -> Result<(), ImageError> {
-        if self.color {
+        if self.depth == Depth::Rgb {
             for &g in gray {
                 self.pixels.extend_from_slice(&[g, g, g]);
             }
@@ -255,11 +330,11 @@ impl ImageSink for Pack {
     }
 
     fn wants_color(&self) -> bool {
-        self.color
+        self.depth == Depth::Rgb
     }
 
     fn row_rgb(&mut self, rgb: &[u8]) -> Result<(), ImageError> {
-        if self.color {
+        if self.depth == Depth::Rgb {
             self.pixels.extend_from_slice(rgb);
         } else {
             let gray = rgb
@@ -301,7 +376,7 @@ mod tests {
     fn made_small_once_and_drawn_from_memory() {
         let storage = MemoryStorage::new();
         let image = picture(&storage);
-        let thumb = Thumbnail::new(&storage, &image, 21, 10, false).unwrap();
+        let thumb = Thumbnail::new(&storage, &image, 21, 10, PixelFormat::Gray8).unwrap();
         assert_eq!((thumb.width(), thumb.height()), (21, 10));
         // Two pixels a byte, rows whole bytes.
         assert_eq!(thumb.bytes(), 11 * 10);
@@ -329,7 +404,7 @@ mod tests {
     fn kept_and_read_again_with_its_stamp() {
         let storage = MemoryStorage::new();
         let image = picture(&storage);
-        let made = Thumbnail::new(&storage, &image, 21, 10, false).unwrap();
+        let made = Thumbnail::new(&storage, &image, 21, 10, PixelFormat::Gray8).unwrap();
         assert!(made.keep(&storage, "p.thumb", 7));
         assert_eq!(
             storage.size("p.thumb").unwrap() as usize,
@@ -339,14 +414,33 @@ mod tests {
         storage.remove("p.gray").unwrap();
         let read = Thumbnail::kept(&storage, "p.thumb", 7).unwrap();
         assert_eq!(
-            (read.width, read.height, read.color, &read.pixels),
-            (made.width, made.height, made.color, &made.pixels)
+            (read.width, read.height, read.depth, &read.pixels),
+            (made.width, made.height, made.depth, &made.pixels)
         );
         // Another stamp, a broken file, none: not kept.
         assert!(Thumbnail::kept(&storage, "p.thumb", 8).is_none());
         storage.write("p.thumb", b"QIT1").unwrap();
         assert!(Thumbnail::kept(&storage, "p.thumb", 7).is_none());
         assert!(Thumbnail::kept(&storage, "none.thumb", 7).is_none());
+    }
+
+    #[test]
+    fn kept_in_black_and_white_for_such_panels() {
+        let storage = MemoryStorage::new();
+        let image = picture(&storage);
+        let thumb = Thumbnail::new(&storage, &image, 21, 10, PixelFormat::Mono1).unwrap();
+        // Eight pixels a byte, rows whole bytes: a quarter of the grays.
+        assert_eq!(thumb.bytes(), 3 * 10);
+        assert!(thumb.keep(&storage, "m.thumb", 1));
+        let read = Thumbnail::kept(&storage, "m.thumb", 1).unwrap();
+        assert_eq!((read.depth, read.bytes()), (Depth::Mono, 30));
+        let mut frame = Framebuffer::new(30, 12, PixelFormat::Mono1).unwrap();
+        let mut canvas = frame.canvas();
+        canvas.clear(Color::WHITE);
+        read.draw(&mut canvas, 2, 1);
+        let view = frame.view();
+        assert_eq!(view.pixel(2, 1), Color::BLACK);
+        assert_eq!(view.pixel(22, 10), Color::WHITE);
     }
 
     #[test]
@@ -357,6 +451,6 @@ mod tests {
             width: 10,
             height: 10,
         };
-        assert!(Thumbnail::new(&storage, &image, 5, 5, false).is_none());
+        assert!(Thumbnail::new(&storage, &image, 5, 5, PixelFormat::Gray8).is_none());
     }
 }

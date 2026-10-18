@@ -6,6 +6,11 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Covers made small are kept as the panel shows them: in black and white,
+  dithered, on panels of black and white alone (a quarter of the memory:
+  a grid of covers on the X4 takes some 20 KB, was 90), in grays or in
+  colour elsewhere. SDK: `ui::Thumbnail::new` and `library::cover` take
+  the panel's `PixelFormat`.
 - Library: the covers made small are let go while a book opened from it
   is read (on the X4 a grid of them took some 40 KB), and made again
   from their small files when it shows again.

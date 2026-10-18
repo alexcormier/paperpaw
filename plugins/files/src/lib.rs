@@ -397,9 +397,9 @@ impl Browser {
         } else {
             row_thumb(&self.style, rect)
         };
-        let color = env.device.display.format.is_color();
+        let format = env.device.display.format;
         let path = self.path_of(entry);
-        library::cover(env.storage, &path, book, place.width, place.height, color)
+        library::cover(env.storage, &path, book, place.width, place.height, format)
     }
 
     /// Loads the page the focus is on, if it is not loaded.

@@ -242,7 +242,7 @@ fn cover_file(path: &str) -> String {
 }
 
 /// The cover of `book` (the one at `path`) made small to fit `width` ×
-/// `height`, in colour if `color` and it has colour: kept in the library
+/// `height`, as a panel of `format` shows it: kept in the library
 /// (`covers/<hash>.thumb`), so views of many books (a list, a grid) read a
 /// few kilobytes for each instead of its picture. Made anew where the
 /// book or the size asked changed.
@@ -252,19 +252,19 @@ pub fn cover(
     book: &Book,
     width: u16,
     height: u16,
-    color: bool,
+    format: quireink_platform::PixelFormat,
 ) -> Option<crate::ui::Thumbnail> {
     let image = book.cover.as_ref()?;
     let (w, h) = crate::ui::fit_image(image, width, height);
     let stamp = fnv1a64(format!(
-        "{} {} {}x{} {w}x{h} {color}",
+        "{} {} {}x{} {w}x{h} {format:?}",
         book.size, image.path, image.width, image.height
     ));
     let file = cover_file(path);
     if let Some(thumb) = crate::ui::Thumbnail::kept(storage, &file, stamp) {
         return Some(thumb);
     }
-    let thumb = crate::ui::Thumbnail::new(storage, image, w, h, color)?;
+    let thumb = crate::ui::Thumbnail::new(storage, image, w, h, format)?;
     thumb.keep(storage, &file, stamp);
     Some(thumb)
 }
@@ -632,20 +632,66 @@ mod tests {
             }),
             ..Book::default()
         };
-        let made = cover(&storage, "books/a.epub", &book, 20, 20, false).unwrap();
+        let made = cover(
+            &storage,
+            "books/a.epub",
+            &book,
+            20,
+            20,
+            quireink_platform::PixelFormat::Gray8,
+        )
+        .unwrap();
         assert_eq!((made.width(), made.height()), (13, 20));
         // Kept: read again without the picture.
         storage.remove("cache/cover.gray").unwrap();
-        let kept = cover(&storage, "books/a.epub", &book, 20, 20, false).unwrap();
+        let kept = cover(
+            &storage,
+            "books/a.epub",
+            &book,
+            20,
+            20,
+            quireink_platform::PixelFormat::Gray8,
+        )
+        .unwrap();
         assert_eq!((kept.width(), kept.height()), (13, 20));
         // Moved with the book.
         moved(&storage, "books/a.epub", "books/b.epub");
-        assert!(cover(&storage, "books/b.epub", &book, 20, 20, false).is_some());
+        assert!(
+            cover(
+                &storage,
+                "books/b.epub",
+                &book,
+                20,
+                20,
+                quireink_platform::PixelFormat::Gray8
+            )
+            .is_some()
+        );
         // Another size asked, another book of that name: made anew (here
         // it cannot be, its picture gone).
-        assert!(cover(&storage, "books/b.epub", &book, 30, 30, false).is_none());
+        assert!(
+            cover(
+                &storage,
+                "books/b.epub",
+                &book,
+                30,
+                30,
+                quireink_platform::PixelFormat::Gray8
+            )
+            .is_none()
+        );
         book.size = 6;
-        assert!(cover(&storage, "books/b.epub", &book, 20, 20, false).is_none());
+        assert!(
+            cover(
+                &storage,
+                "books/b.epub",
+                &book,
+                20,
+                20,
+                quireink_platform::PixelFormat::Gray8
+            )
+            .is_none()
+        );
     }
 
     #[test]
