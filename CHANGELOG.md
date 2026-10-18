@@ -6,6 +6,14 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Reading: *Home* is in the menu's bar, last: from the first entry one
+  press back reaches it (it was under *More*, at the end of a list).
+- Buttons pressed quickly while the device is busy wait at most a frame:
+  five presses in a row on a slow screen no longer run five times one
+  after the other.
+- Screens below a menu or another overlay are drawn only where it leaves
+  them to be seen: moving in the main menu over the home screen no
+  longer draws the home screen's widgets again.
 - SDK: `widgets::grid`, the home screen's grid for any plugin: a layout
   of widgets and tools in cells as text (`parse`, `write`, `place`,
   `add`), and `GridView`, which shows it on a screen of the plugin's own

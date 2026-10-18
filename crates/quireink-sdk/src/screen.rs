@@ -92,7 +92,9 @@ pub enum Handled {
 /// the kernel refreshes exactly that region.
 pub trait Screen {
     /// Draws the screen. For full screens the canvas has been cleared to
-    /// white; overlays paint their own background.
+    /// white; overlays paint their own background, all of their
+    /// [`region`](Self::region): where an overlay covers all of the part
+    /// drawn, the screens below it are not drawn.
     ///
     /// The canvas is clipped to the part being drawn. On small devices a
     /// frame is drawn in bands, so `draw` may run several times per frame

@@ -288,7 +288,13 @@ impl GridView {
             self.draw_cells(canvas);
         }
         let line = self.style.line.max(1);
+        let clip = canvas.clip();
         for shown in &self.items {
+            // Widgets may read what they show from the storage: those
+            // outside the part drawn are left (e.g. under a menu).
+            if shown.area.intersection(&clip).is_none() {
+                continue;
+            }
             canvas.fill(shown.area, Color::WHITE);
             match &shown.item.what {
                 What::Widget(id) => env.widgets.draw(id, canvas, env, shown.area),

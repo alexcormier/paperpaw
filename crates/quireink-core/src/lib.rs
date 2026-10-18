@@ -563,6 +563,7 @@ impl KernelBuilder {
             screens_changed: false,
             settling: false,
             stale_before: None,
+            shown_at: [None; 2],
             dropped_buttons: Vec::new(),
             dropped_pointers: Vec::new(),
             network_busy: false,
@@ -836,6 +837,10 @@ pub struct Kernel {
     /// Presses made before this, while another screen was coming up, are
     /// dropped (see [`Kernel::shown`]), with their releases.
     stale_before: Option<Instant>,
+    /// When the last two frames showed: presses made before the earlier
+    /// one are more than a frame behind and dropped (see
+    /// [`Kernel::shown`]).
+    shown_at: [Option<Instant>; 2],
     dropped_buttons: Vec<&'static str>,
     dropped_pointers: Vec<u8>,
     /// Something used the network at the end of the last call.
@@ -1090,10 +1095,14 @@ impl Kernel {
     /// clock the input's times are on): shells call it after each refresh.
     /// After a screen was opened or closed, presses made before it showed
     /// are dropped: pressing again while nothing seems to happen means
-    /// "nothing happened", not "do it once more". Presses on the same
-    /// screen (turning pages quickly) are kept. Shells that never call it
-    /// keep every press.
+    /// "nothing happened", not "do it once more". On the same screen
+    /// (turning pages, moving a focus quickly) presses wait at most a
+    /// frame: one made before the frame before the last showed is
+    /// dropped, so that pressing on while the device is slow does not
+    /// line up a long tail of steps. Shells that never call it keep every
+    /// press.
     pub fn shown(&mut self, now: Instant) {
+        self.shown_at = [self.shown_at[1], Some(now)];
         if mem::take(&mut self.settling) {
             self.stale_before = Some(now);
         }
@@ -1101,7 +1110,8 @@ impl Kernel {
 
     /// Whether `event` belongs to a press dropped (see [`Kernel::shown`]).
     fn stale(&mut self, now: Instant, event: &InputEvent) -> bool {
-        let early = self.stale_before.is_some_and(|before| now < before);
+        let early = self.stale_before.is_some_and(|before| now < before)
+            || self.shown_at[0].is_some_and(|before| now < before);
         match event {
             InputEvent::Button {
                 name,
@@ -3006,10 +3016,23 @@ impl Kernel {
         let mut canvas = self.framebuffer.canvas();
         let mut canvas = canvas.clipped(region);
         canvas.clear(Color::WHITE);
-        for (active, own) in self.stack[base..].iter_mut().zip(&regions[base..]) {
-            let Some(area) = own.unwrap_or(bounds).intersection(&region) else {
+        for (index, (active, own)) in self.stack[base..]
+            .iter_mut()
+            .zip(&regions[base..])
+            .enumerate()
+        {
+            let Some(mut area) = own.unwrap_or(bounds).intersection(&region) else {
                 continue;
             };
+            // Less what the overlays above it cover: overlays paint all
+            // of their region, so what lies below would not show (e.g.
+            // the home screen under a menu whose focus moved: only the
+            // rows above the menu, as frames are drawn in whole rows).
+            let mut above = regions[base + index + 1..].iter().flatten();
+            let Some(shown) = above.try_fold(area, |area, cover| uncovered(area, *cover)) else {
+                continue;
+            };
+            area = shown;
             let _running = self.shared.meter.enter(active.id.namespace());
             active.screen.draw(&mut canvas.clipped(area), &env);
         }
@@ -3490,4 +3513,32 @@ fn quireink_text_outlines() -> bool {
 /// a settings scope.
 fn screen_key(screen: &ActiveScreen) -> usize {
     core::ptr::from_ref::<dyn Screen>(screen.screen.as_ref()).cast::<()>() as usize
+}
+
+/// The part of `area` that `cover` leaves to be seen, as a rectangle:
+/// `None` if it covers all of it; less the rows it covers at the top or
+/// the bottom where it is as wide; else all of `area`.
+fn uncovered(area: Rect, cover: Rect) -> Option<Rect> {
+    let Some(common) = area.intersection(&cover) else {
+        return Some(area);
+    };
+    if common == area {
+        return None;
+    }
+    if common.x != area.x || common.width != area.width {
+        return Some(area);
+    }
+    if common.y == area.y {
+        let top = common.bottom() as u16;
+        return Some(Rect::new(
+            area.x,
+            top,
+            area.width,
+            (area.bottom() - common.bottom()) as u16,
+        ));
+    }
+    if common.bottom() == area.bottom() {
+        return Some(Rect::new(area.x, area.y, area.width, common.y - area.y));
+    }
+    Some(area)
 }

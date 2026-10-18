@@ -542,6 +542,9 @@ impl Plugin for Reader {
             (MENU, actions::QUICK_SETTINGS, 50),
             (MENU, core_settings::NIGHT_MODE.into(), 60),
             (MENU, MORE_MENU, 70),
+            // Last, so that one press back from the first entry reaches
+            // it: home from a book without a further list.
+            (MENU, core_actions::HOME, 80),
             (LAYOUT_MENU, core_settings::SCOPE_ONLY.into(), 1),
             (LAYOUT_MENU, core_settings::READING_FONT.into(), 5),
             (LAYOUT_MENU, settings::FONT_SIZE.into(), 10),
@@ -556,7 +559,6 @@ impl Plugin for Reader {
             (MORE_MENU, actions::AUTO_TURN, 17),
             (MORE_MENU, actions::SELECT, 20),
             (MORE_MENU, actions::LINKS, 25),
-            (MORE_MENU, core_actions::HOME, 40),
             (MORE_MENU, core_actions::SETTINGS, 50),
         ];
         for (menu, item, order) in entries {

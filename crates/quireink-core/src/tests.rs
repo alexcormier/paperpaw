@@ -361,10 +361,19 @@ fn presses_while_a_screen_comes_up_are_dropped() {
     // Pressed after it showed: taken.
     press(&mut kernel, 1200, "page-forward");
     kernel.shown(Instant(2000));
-    // Turning pages on the same screen keeps every press, also one made
-    // before the last page showed.
+    // Turning pages on the same screen keeps a press made before the
+    // last page showed: a frame behind.
     press(&mut kernel, 1500, "page-forward");
     assert_eq!(*log.borrow(), ["a:core.next-page", "a:core.next-page"]);
+    // Two frames behind: dropped, so that quick presses on a slow screen
+    // do not line up.
+    kernel.shown(Instant(3000));
+    press(&mut kernel, 1800, "page-forward");
+    press(&mut kernel, 2500, "page-forward");
+    assert_eq!(
+        *log.borrow(),
+        ["a:core.next-page", "a:core.next-page", "a:core.next-page"]
+    );
 }
 
 #[test]
@@ -1035,7 +1044,8 @@ fn overlays_redraw_only_their_region_and_close_on_outside_taps() {
         effects.refresh(),
         Some((Rect::new(0, 45, 90, 45), RefreshMode::Partial))
     );
-    assert_eq!(*log.borrow(), ["draw base 90x45"]);
+    // The overlay covers all that is drawn: the base below is not drawn.
+    assert!(log.borrow().is_empty(), "{:?}", log.borrow());
     assert_eq!(kernel.frame().pixel(0, 60), Color::BLACK);
     assert_eq!(kernel.frame().pixel(0, 10), Color::WHITE);
 
@@ -1207,7 +1217,8 @@ fn screens_below_overlays_redraw_themselves() {
     log.borrow_mut().clear();
 
     // The base screen changes while the overlay is open: the whole screen
-    // is drawn again, the overlay on top.
+    // is drawn again, the base where the overlay leaves it, the overlay
+    // on top.
     kernel.apply(Command::Emit(
         Id::new_static("ov.changed"),
         quireink_sdk::Params::new(),
@@ -1218,7 +1229,7 @@ fn screens_below_overlays_redraw_themselves() {
         Some(Rect::new(0, 0, 90, 90))
     );
     render(&mut kernel);
-    assert_eq!(*log.borrow(), ["event ov.changed ", "draw base 90x90"]);
+    assert_eq!(*log.borrow(), ["event ov.changed ", "draw base 90x45"]);
     assert_eq!(kernel.frame().pixel(0, 60), Color::BLACK);
 }
 
@@ -2766,4 +2777,20 @@ fn the_shell_takes_all_it_is_asked_at_once() {
     let io = kernel.take_io();
     assert!(matches!(io.as_slice(), [Io::Http(call)] if call.url == "http://example.org/"));
     assert_eq!(kernel.take_io(), []);
+}
+
+#[test]
+fn overlays_leave_the_rows_they_do_not_cover() {
+    let uncovered = crate::uncovered;
+    let part = Rect::new(0, 260, 480, 100);
+    // A menu from 270 down: the ten rows above it.
+    let menu = Rect::new(0, 270, 480, 530);
+    assert_eq!(uncovered(part, menu), Some(Rect::new(0, 260, 480, 10)));
+    // A bar at the top down to 300: the rows below it.
+    let bar = Rect::new(0, 0, 480, 300);
+    assert_eq!(uncovered(part, bar), Some(Rect::new(0, 300, 480, 60)));
+    // All of it covered; none of it; a narrower one: all.
+    assert_eq!(uncovered(part, Rect::new(0, 200, 480, 600)), None);
+    assert_eq!(uncovered(part, Rect::new(0, 500, 480, 100)), Some(part));
+    assert_eq!(uncovered(part, Rect::new(40, 200, 400, 600)), Some(part));
 }
