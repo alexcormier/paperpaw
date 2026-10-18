@@ -458,6 +458,10 @@ pub fn draw_header(
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Header {
     pub area: Rect,
+    /// The note right of the title has the focus (drawn white on black),
+    /// for screens where buttons move the focus to it, e.g. a sort order
+    /// that opens a menu as a tap on it does.
+    pub note_focused: bool,
     /// Shows the back arrow.
     back: bool,
     /// Shows arrows for paging.
@@ -479,6 +483,7 @@ impl Header {
         let touch = env.device.input.touch;
         Self {
             area: Rect::new(0, 0, env.device.display.width, style.header as u16),
+            note_focused: false,
             back: back && touch,
             arrows: touch,
         }
@@ -572,9 +577,26 @@ impl Header {
         let mut canvas = canvas.clipped(t);
         let note = note.map(|n| fit(&font, style.small, n, f32::from(t.width) / 2.0));
         if let Some(note) = note.as_deref() {
-            right -= font.measure(style.small, note);
-            draw_label(&mut canvas, &font, style.small, right, t, note, ink);
-            right -= margin;
+            let width = font.measure(style.small, note);
+            right -= width;
+            // Focused: white on black, a little room around it.
+            let pad = style.gap as f32 / 2.0;
+            let high = font.line_metrics(style.small).line_height as u16 + style.gap as u16;
+            let around = Rect::new(
+                (right - pad) as u16,
+                t.y + t.height.saturating_sub(high) / 2,
+                (width + 2.0 * pad) as u16,
+                high,
+            );
+            canvas.describe(Role::Button, note, around, self.note_focused, None);
+            let note_ink = if self.note_focused {
+                fill_round(&mut canvas, style, around, ink);
+                style.header_colors().0
+            } else {
+                ink
+            };
+            draw_label(&mut canvas, &font, style.small, right, t, note, note_ink);
+            right -= margin + pad;
         }
         let title = fit(&font, style.title, title, right - f32::from(t.x));
         draw_label(

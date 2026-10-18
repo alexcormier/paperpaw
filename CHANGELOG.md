@@ -6,6 +6,9 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Library: buttons reach the order at the top (a stop of the focus
+  between the last book and the first); Confirm there opens the
+  library's menu, as a tap does. SDK: `Header::note_focused`.
 - Home: the book widgets are no longer read again each minute (on the
   X4 that read the recent books' details from the card, about 570 ms a
   minute, also on battery); widgets say whether they change by

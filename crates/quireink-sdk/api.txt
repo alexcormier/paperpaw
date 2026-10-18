@@ -1192,6 +1192,7 @@ pub quireink_sdk::ui::ReorderStep::Dropped::to: usize
 pub quireink_sdk::ui::ReorderStep::Same
 pub struct quireink_sdk::ui::Header
 pub quireink_sdk::ui::Header::area: quireink_platform::geometry::Rect
+pub quireink_sdk::ui::Header::note_focused: bool
 impl quireink_sdk::ui::Header
 pub fn quireink_sdk::ui::Header::draw(&self, &mut quireink_graphics::canvas::Canvas<'_>, &quireink_sdk::Env<'_>, &quireink_sdk::ui::UiStyle, &str, core::option::Option<&str>, core::option::Option<(usize, usize)>)
 pub fn quireink_sdk::ui::Header::new(&quireink_sdk::Env<'_>, &quireink_sdk::ui::UiStyle, bool) -> Self

@@ -439,6 +439,45 @@ impl Browser {
         }
     }
 
+    /// Moves the focus by `delta` (`row` a row of the grid). The order at
+    /// the top is a stop between the last entry and the first, so that
+    /// buttons reach the menu as a tap on it does.
+    fn step(&mut self, delta: isize, row: isize, cx: &mut Cx<'_, '_>) {
+        let len = self.len;
+        let rows = self.list.rows();
+        let single = delta.abs() <= row.max(1);
+        let focus = self.list.focus;
+        let off_top = delta < 0 && (focus as isize) < -delta;
+        let off_end = delta > 0 && focus + 1 == len;
+        if self.header.note_focused {
+            // Back into the list: at its first entry, or its last.
+            self.header.note_focused = false;
+            self.list.active = true;
+            cx.request_redraw_area(self.header.area);
+            if single {
+                let to = if delta > 0 { 0 } else { len.saturating_sub(1) };
+                let page = self.list.page();
+                self.list.focus = to;
+                if self.list.page() == page {
+                    cx.request_redraw_area(self.list.row_rect(to % rows));
+                    cx.request_refresh(RefreshMode::Fast);
+                } else {
+                    self.moved(ListChange::Page, cx);
+                }
+                return;
+            }
+        } else if single && self.list.shown && len > 0 && (off_top || off_end) {
+            self.header.note_focused = true;
+            self.list.active = false;
+            cx.request_redraw_area(self.header.area);
+            cx.request_redraw_area(self.list.row_rect(focus % rows));
+            cx.request_refresh(RefreshMode::Fast);
+            return;
+        }
+        let change = self.list.move_focus(delta, len);
+        self.moved(change, cx);
+    }
+
     fn moved(&mut self, change: ListChange, cx: &mut Cx<'_, '_>) {
         if change == ListChange::Page {
             let env = *cx.env();
@@ -974,7 +1013,6 @@ impl Screen for Browser {
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
-        let len = self.len;
         let rows = self.list.rows() as isize;
         let a = action;
         // In a grid, up and down go a row of covers.
@@ -995,8 +1033,9 @@ impl Screen for Browser {
             None
         };
         if let Some(delta) = delta {
-            let change = self.list.move_focus(delta, len);
-            self.moved(change, cx);
+            self.step(delta, row, cx);
+        } else if *a == core_actions::CONFIRM && self.header.note_focused {
+            Self::open_menu(cx);
         } else if *a == core_actions::CONFIRM {
             self.open(self.list.focus, cx);
         } else if *a == core_actions::MENU {
