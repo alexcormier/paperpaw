@@ -172,7 +172,11 @@ impl Dictzip {
     ) -> Result<(), Error> {
         let mut offset = self.data + self.chunks[chunk];
         let mut remaining = self.chunks[chunk + 1] - self.chunks[chunk];
-        let mut decoder = alloc::boxed::Box::new(DecompressorOxide::new());
+        // Made in place: built as a value, its 10 KB would go over the
+        // stack first.
+        let mut decoders: alloc::vec::Vec<DecompressorOxide> = alloc::vec::Vec::new();
+        decoders.resize_with(1, DecompressorOxide::default);
+        let decoder = &mut decoders[0];
         let mut window = vec![0u8; WINDOW];
         let mut input = vec![0u8; INPUT];
         let (mut start, mut stop, mut position, mut produced) = (0usize, 0usize, 0usize, 0u64);
@@ -191,13 +195,8 @@ impl Dictzip {
             // Chunks end with a flush, not with the end of the stream, so
             // the decoder is always told that more may follow.
             let flags = inflate_flags::TINFL_FLAG_HAS_MORE_INPUT;
-            let (status, consumed, written) = decompress(
-                &mut decoder,
-                &input[start..stop],
-                &mut window,
-                position,
-                flags,
-            );
+            let (status, consumed, written) =
+                decompress(decoder, &input[start..stop], &mut window, position, flags);
             start += consumed;
             if written > 0 {
                 if !sink(produced, &window[position..position + written]) {

@@ -194,6 +194,9 @@ impl Lzw {
     }
 }
 
+// Not inlined into `decode`: each format's frame on the stack alone,
+// not all three together.
+#[inline(never)]
 pub(crate) fn decode(
     reader: &mut Reader<'_>,
     fit: Fit,

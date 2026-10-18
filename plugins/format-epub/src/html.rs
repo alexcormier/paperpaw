@@ -131,12 +131,11 @@ impl HtmlDocument {
             end: format!("{cache}/0.end"),
         };
         // Converted again when the file or the cache format changed.
-        let mut head = [0u8; 4096];
-        let n = storage.read_at(path, 0, &mut head)?;
+        let head = crate::head(storage, path)?;
         let stamp = format!(
             "{}.{HTML_VERSION} {size} {:016x}\n",
             crate::package::CACHE_VERSION,
-            fnv1a64(&head[..n])
+            fnv1a64(&head)
         );
         let stamp_path = format!("{cache}/source");
         if quireink_sdk::read_file(storage, &stamp_path, 256).ok()

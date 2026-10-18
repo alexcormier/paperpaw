@@ -358,7 +358,9 @@ impl ZipArchive {
                 decoder
                     .try_reserve_exact(1)
                     .map_err(|_| ZipError::OutOfMemory)?;
-                decoder.push(DecompressorOxide::new());
+                // Made in place: built as a value first, its 10 KB would
+                // be on the stack, deep in the opening of a book.
+                decoder.resize_with(1, DecompressorOxide::default);
                 // A power of two (required for a wrapping window) that holds
                 // the whole entry, or the full deflate history.
                 let window_len = (entry.size as usize).next_power_of_two().clamp(64, WINDOW);

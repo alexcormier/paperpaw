@@ -236,6 +236,18 @@ impl Plugin for CbzFormat {
     }
 }
 
+/// The first bytes of `path`, at most 4 KB: to know a file again, or what
+/// it is. On the heap: books are opened deep in the stack.
+pub(crate) fn head(
+    storage: &dyn quireink_sdk::Storage,
+    path: &str,
+) -> Result<alloc::vec::Vec<u8>, quireink_sdk::StorageError> {
+    let mut head = vec![0u8; 4096];
+    let n = storage.read_at(path, 0, &mut head)?;
+    head.truncate(n);
+    Ok(head)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

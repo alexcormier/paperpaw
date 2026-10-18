@@ -24,17 +24,19 @@ pub(crate) struct Huffman {
     values: Vec<u8>,
     /// The codes of up to [`FAST_BITS`] bits by the next bits: their
     /// length times 256 plus their value, 0 where a longer code begins.
-    fast: [u16; 1 << FAST_BITS],
+    /// On the heap: eight tables of them in a frame took 4 KB of stack,
+    /// and were moved whole from there.
+    fast: Vec<u16>,
 }
 
 /// Bits of the codes looked up at once.
 const FAST_BITS: u32 = 8;
 
 impl Huffman {
-    fn new(counts: &[u8; 16], values: Vec<u8>) -> Self {
+    fn new(counts: &[u8; 16], values: Vec<u8>) -> Result<Self, ImageError> {
         let mut max_code = [-1i32; 18];
         let mut offset = [0i32; 17];
-        let mut fast = [0u16; 1 << FAST_BITS];
+        let mut fast: Vec<u16> = crate::zeroed(1 << FAST_BITS)?;
         let (mut code, mut k) = (0i32, 0i32);
         for len in 1..=16 {
             let count = i32::from(counts[len - 1]);
@@ -59,12 +61,12 @@ impl Huffman {
         }
         // Sentinel: longer codes do not exist.
         max_code[17] = i32::MAX;
-        Self {
+        Ok(Self {
             max_code,
             offset,
             values,
             fast,
-        }
+        })
     }
 }
 
@@ -331,6 +333,9 @@ pub(crate) fn dc_level(dc: i32) -> u8 {
     (((tmp * 1448 + (1 << 13)) >> 14) + 128).clamp(0, 255) as u8
 }
 
+// Not inlined into `decode`: each format's frame on the stack alone,
+// not all three together.
+#[inline(never)]
 pub(crate) fn decode(
     reader: &mut Reader<'_>,
     fit: Fit,
@@ -494,7 +499,7 @@ pub(crate) fn read_huffman(
         }
         let mut values = zeroed(total)?;
         reader.fill(&mut values)?;
-        let table = Some(Huffman::new(&counts, values));
+        let table = Some(Huffman::new(&counts, values)?);
         let index = usize::from(tc_th & 3);
         if tc_th >> 4 == 0 {
             dc_tables[index] = table;

@@ -218,6 +218,9 @@ impl Rows<'_> {
     }
 }
 
+// Not inlined into `decode`: each format's frame on the stack alone,
+// not all three together.
+#[inline(never)]
 pub(crate) fn decode(
     reader: &mut Reader<'_>,
     fit: Fit,
@@ -323,11 +326,9 @@ pub(crate) fn decode(
                     decoder
                         .try_reserve_exact(1)
                         .map_err(|_| ImageError::OutOfMemory)?;
-                    // Written where it stays: pushed, its 11 KB went over the
-                    // stack first.
-                    decoder.spare_capacity_mut()[0].write(DecompressorOxide::new());
-                    // SAFETY: the one element reserved was just written.
-                    unsafe { decoder.set_len(1) };
+                    // Made in place: pushed, its 11 KB went over the stack
+                    // first.
+                    decoder.resize_with(1, DecompressorOxide::default);
                     window = zeroed(WINDOW)?;
                 }
                 let Some(state) = rows.as_mut() else {

@@ -395,8 +395,7 @@ impl Fb2Document {
         let (styles, color) = (options.publisher_styles, options.color);
         let image_fit = options.image_fit;
         let size = storage.size(path)?;
-        let mut head = [0u8; 4096];
-        let n = storage.read_at(path, 0, &mut head)?;
+        let head = crate::head(storage, path)?;
         let mut cache = format!(
             "{}/fb2-{:016x}",
             Env::plugin_dir(PLUGIN.as_str()),
@@ -419,7 +418,7 @@ impl Fb2Document {
         let stamp = format!(
             "{}.{FB2_VERSION} {size} {:016x}\n",
             crate::package::CACHE_VERSION,
-            fnv1a64(&head[..n])
+            fnv1a64(&head)
         );
         let stamp_path = format!("{cache}/source");
         let info_path = format!("{cache}/book.txt");
@@ -437,9 +436,7 @@ impl Fb2Document {
         } else {
             path.to_string()
         };
-        let mut head = [0u8; 4096];
-        let n = storage.read_at(&file, 0, &mut head)?;
-        let encoding = detect(&head[..n]);
+        let encoding = detect(&crate::head(storage, &file)?);
         let found = match fresh.then(|| load_info(storage, &info_path)).flatten() {
             Some(found) => found,
             None => {
