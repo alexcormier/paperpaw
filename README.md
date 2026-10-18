@@ -88,7 +88,7 @@ swipe.up = core.menu
 
 [menus]
 # Redefine any menu: which actions, in which order.
-reader.menu = reader.font-larger, reader.font-smaller, core.toggle-night-mode, core.home
+core.reader-menu = reader.font-larger, reader.font-smaller, core.toggle-night-mode, core.home
 
 [plugins]
 # Switch any plugin off by its id (or use Settings → Plugins).

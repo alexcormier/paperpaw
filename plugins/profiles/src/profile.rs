@@ -16,11 +16,7 @@ use crate::PLUGIN;
 
 /// The settings a profile keeps: everything about reading, the display
 /// and the status lines.
-const GROUPS: [Id; 3] = [
-    groups::READING,
-    groups::DISPLAY,
-    Id::new_static("reader.group.status"),
-];
+const GROUPS: [Id; 3] = [groups::READING, groups::DISPLAY, groups::STATUS_LINES];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Profile {
@@ -180,12 +176,12 @@ mod tests {
                 name: String::from("Night"),
                 values: Vec::from([
                     (Id::new_static("core.night-mode"), String::from("on")),
-                    (Id::new_static("reader.font-size"), String::from("12")),
+                    (Id::new_static("core.font-size"), String::from("12")),
                 ]),
             },
             Profile {
                 name: String::from("Large [print]"),
-                values: Vec::from([(Id::new_static("reader.font-size"), String::from("18"))]),
+                values: Vec::from([(Id::new_static("core.font-size"), String::from("18"))]),
             },
         ];
         save(&storage, &profiles);

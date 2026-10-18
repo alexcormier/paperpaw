@@ -330,14 +330,14 @@ mod tests {
         let mut keymap = Keymap::default();
         let problems = keymap.load(
             "[keymap.global]\nbutton.confirm = core.confirm\ntap.center = core.menu\n\
-             [keymap.reader.screen]\nbutton.confirm = reader.bookmark\n",
+             [keymap.core.reader]\nbutton.confirm = example.bookmark\n",
             Origin::Plugin,
             true,
         );
         assert!(problems.is_empty(), "{problems:?}");
 
         let global = ["global"];
-        let reader = ["reader.screen", "global"];
+        let reader = ["core.reader", "global"];
         let confirm = button("confirm");
         assert_eq!(
             keymap.resolve(&global, &confirm).map(Id::as_str),
@@ -345,7 +345,7 @@ mod tests {
         );
         assert_eq!(
             keymap.resolve(&reader, &confirm).map(Id::as_str),
-            Some("reader.bookmark")
+            Some("example.bookmark")
         );
         assert_eq!(
             keymap

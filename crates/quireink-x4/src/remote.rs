@@ -364,9 +364,9 @@ mod tests {
             Some(Command::Open(String::from("/a b")))
         );
         assert_eq!(
-            parse("set reader.font-size 3132"),
+            parse("set core.font-size 3132"),
             Some(Command::Set {
-                id: String::from("reader.font-size"),
+                id: String::from("core.font-size"),
                 value: String::from("12")
             })
         );

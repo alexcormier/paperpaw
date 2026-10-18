@@ -46,8 +46,6 @@ const SCREEN: Id = Id::new_static("vocabulary.list");
 const CHOICE: Id = Id::new_static("vocabulary.choice");
 const CHOSEN: Event<choice::Picked> = Event::new("vocabulary.chosen");
 const OPTION_LABELS: &str = "vocabulary.option.";
-/// The reader's event for going to a place in the open book.
-const READER_GOTO: Id = Id::new_static("reader.goto");
 /// The dictionary's settings (see the `dictionary` plugin).
 const DICTIONARY_SECTION: &str = "dictionary.section";
 /// The folder exports go to, beside the library (as the reader's notes).
@@ -502,13 +500,10 @@ impl Screen for WordsScreen {
                     slots::READER,
                     Params::new().with(params::PATH, word.path.clone()),
                 ));
-                cx.command(Command::Emit(
-                    READER_GOTO,
-                    Params::new()
-                        .with(params::PATH, word.path.clone())
-                        .with(params::SECTION, format!("{}", word.section))
-                        .with(params::OFFSET, format!("{}", word.offset)),
-                ));
+                cx.command(events::GOTO.emit(events::Goto::new(
+                    word.path.clone(),
+                    quireink_sdk::document::Locator::new(word.section, word.offset),
+                )));
             }
             "delete" => {
                 store::remove(env.storage, n);

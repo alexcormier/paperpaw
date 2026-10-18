@@ -3,7 +3,7 @@
 //! The search screen reads the book block by block in the background, so
 //! the list fills while one waits and input stays responsive; at most
 //! [`MAX_HITS`] hits are kept, each with a short snippet. Choosing a hit
-//! emits [`GOTO`](crate::GOTO) with the start and end of the match, so the
+//! emits `core.goto` with the start and end of the match, so the
 //! reader shows its page and marks it.
 
 use alloc::boxed::Box;
@@ -18,8 +18,7 @@ use quireink_sdk::{
     Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, RefreshMode, Screen,
 };
 
-use crate::toc::locator_params;
-use crate::{END_OFFSET, END_SECTION, GOTO};
+use quireink_sdk::builtin::events;
 
 /// Most hits kept; more are counted as "100+".
 const MAX_HITS: usize = 100;
@@ -160,12 +159,9 @@ impl SearchScreen {
     fn open_hit(&self, index: usize, cx: &mut Cx<'_, '_>) {
         if let Some(hit) = self.hits.get(index) {
             cx.command(Command::Back);
-            cx.command(Command::Emit(
-                GOTO,
-                locator_params(&self.path, hit.start)
-                    .with(END_SECTION, format!("{}", hit.end.section))
-                    .with(END_OFFSET, format!("{}", hit.end.offset)),
-            ));
+            cx.command(
+                events::GOTO.emit(events::Goto::new(self.path.clone(), hit.start).marking(hit.end)),
+            );
         }
     }
 }

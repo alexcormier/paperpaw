@@ -12,20 +12,19 @@
 //!
 //! It reads the Markdown the reader writes (see [`parse`]), so it works
 //! with any reader that writes the same and emits
-//! `reader.notes-exported`.
+//! `core.notes-exported`.
 
 #![no_std]
 
 extern crate alloc;
 
 use alloc::borrow::Cow;
-use alloc::boxed::Box;
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use quireink_json as json;
-use quireink_sdk::builtin::params;
+use quireink_sdk::builtin::{events, params};
 use quireink_sdk::event::Event;
 use quireink_sdk::replies::{HttpReply, Typed};
 use quireink_sdk::secrets::SecretChange;
@@ -37,9 +36,6 @@ use quireink_sdk::{
 pub const PLUGIN: Id = Id::new_static("readwise");
 /// The access token, among the passwords and keys.
 pub const SECRET: &str = "readwise.token";
-/// The reader's event after notes were exported: parameter `path`, the
-/// Markdown file.
-const EXPORTED: Id = Id::new_static("reader.notes-exported");
 /// The token, entered on the keyboard; parameter `path` goes along.
 const TOKEN_ENTERED: Event<Typed> = Event::new("readwise.token-entered");
 /// Readwise's answer; parameter `count`, the highlights sent.
@@ -232,14 +228,10 @@ impl Plugin for Readwise {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.subscribe(
-            EXPORTED,
-            Box::new(|env: &Env<'_>, p: &Params, out: &mut Vec<Command>| {
-                if let Some(path) = p.get(params::PATH) {
-                    send(env, path, out);
-                }
-            }),
-        )?;
+        // Any reader's notes, once exported as Markdown.
+        r.on(events::NOTES_EXPORTED, |env, exported, out| {
+            send(env, &exported.path, out);
+        })?;
         r.on(TOKEN_ENTERED, |env, typed, out| {
             let token = typed.text.trim();
             if token.is_empty() {

@@ -37,9 +37,6 @@ quireink_sdk::event_data! {
     }
 }
 
-/// The reader's event to show a position.
-const GOTO: Id = Id::new_static("reader.goto");
-
 #[derive(Debug)]
 pub(crate) struct ConfirmScreen {
     style: UiStyle,
@@ -137,13 +134,10 @@ impl ConfirmScreen {
             .filter(|x| !x.is_empty())
             .and_then(|x| document.locate_xpointer(env.storage, x))
             .unwrap_or_else(|| at_progress(&*document, *percentage));
-        cx.command(Command::Emit(
-            GOTO,
-            Params::new()
-                .with(params::PATH, path.clone())
-                .with(params::SECTION, format!("{}", at.section))
-                .with(params::OFFSET, format!("{}", at.offset)),
-        ));
+        cx.command(
+            quireink_sdk::builtin::events::GOTO
+                .emit(quireink_sdk::builtin::events::Goto::new(path.clone(), at)),
+        );
     }
 }
 

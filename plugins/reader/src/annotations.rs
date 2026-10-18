@@ -1,7 +1,8 @@
 //! The screen that lists the bookmarks and highlights of a book (kept by
 //! [`quireink_sdk::annotations`]). The list ends with *Export as
 //! Markdown*: a file in `Notes` beside the library folder, then the event
-//! [`EXPORTED`] for plugins that take it further (a notes app, a sync).
+//! `core.notes-exported` for plugins that take it further (a notes app, a
+//! sync).
 //! While reading, only the positions are held in memory.
 
 use alloc::format;
@@ -17,13 +18,8 @@ use quireink_sdk::{
     Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, Screen,
 };
 
-use crate::GOTO;
-use crate::toc::locator_params;
+use quireink_sdk::builtin::events;
 
-/// Emitted after the notes of a book were exported: parameters `path`
-/// (the Markdown file) and `title` (the book's). Plugins read the file
-/// (e.g. `readwise`), so its form (see [`markdown`]) stays as it is.
-pub const EXPORTED: Id = Id::new_static("reader.notes-exported");
 /// Where exported notes go, beside the library folder.
 const NOTES: &str = "Notes";
 
@@ -129,12 +125,12 @@ impl AnnotationsScreen {
         let text = markdown(&env, &title, &author, &self.annotations);
         let message = match env.storage.write(&file, text.as_bytes()) {
             Ok(()) => {
-                cx.command(Command::Emit(
-                    EXPORTED,
-                    Params::new()
-                        .with(params::PATH, file.clone())
-                        .with(params::TITLE, title),
-                ));
+                // Plugins read the file (e.g. `readwise`), so its form
+                // (see [`markdown`]) stays as it is.
+                cx.command(events::NOTES_EXPORTED.emit(events::NotesExported {
+                    path: file.clone(),
+                    title,
+                }));
                 env.i18n.format(
                     "reader.exported",
                     &[("path", quireink_sdk::Arg::Str(&file))],
@@ -159,10 +155,9 @@ impl AnnotationsScreen {
         }
         if let Some(annotation) = self.annotations.get(index) {
             cx.command(Command::Back);
-            cx.command(Command::Emit(
-                GOTO,
-                locator_params(&self.path, annotation.mark.start),
-            ));
+            cx.command(
+                events::GOTO.emit(events::Goto::new(self.path.clone(), annotation.mark.start)),
+            );
         }
     }
 }

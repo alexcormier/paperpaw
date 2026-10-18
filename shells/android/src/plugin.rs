@@ -23,17 +23,16 @@ pub const PDF: Id = Id::new_static("android.pdf");
 /// The voice that reads aloud: opens the system's speech settings.
 pub const VOICE: Setting<Text> = Setting::new("android.voice");
 const VOICE_SCREEN: Id = Id::new_static("android.voice-screen");
-/// The reader's settings for reading aloud (see the `reader` plugin).
-const ALOUD_SECTION: &str = "reader.section.aloud";
+/// The settings for reading aloud, every reader's.
+const ALOUD_SECTION: &str = quireink_sdk::builtin::setting_sections::ALOUD;
 /// Frontlight brightness (0 switches it off).
 pub const FRONTLIGHT: Setting<i64> = Setting::new("android.frontlight");
 /// Frontlight colour temperature (higher is warmer).
 pub const WARMTH: Setting<i64> = Setting::new("android.warmth");
 /// The home screen's shortcuts (see the `home` plugin).
 const HOME_ACTIONS: Id = Id::new_static("home.actions");
-/// The reader's menu (see the `reader` plugin).
-/// The reader's quick panel (font, layout and light).
-const READER_PANEL: Id = Id::new_static("reader.layout");
+/// The reader's panel of font and layout, every reader's.
+const READER_PANEL: Id = quireink_sdk::builtin::menus::READER_PANEL;
 
 /// The device's frontlight and its levels when QuireInk started.
 #[derive(Clone, Copy)]

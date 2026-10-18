@@ -355,6 +355,20 @@ fn register_screens(r: &mut Registrar) -> Result<(), RegisterError> {
 /// The main menu, the tools, the quick panel and the settings' sections
 /// and groups.
 fn register_menus(r: &mut Registrar) -> Result<(), RegisterError> {
+    // Every reader's submenu "More" (`menus::READER_MORE`): a submenu is
+    // an action named like its menu, which the menu shows as a submenu
+    // and which opens the menu when bound to a key.
+    r.add_action(
+        ActionSpec::new(menus::READER_MORE, "core.action.reader-more").handler(Box::new(
+            |_: &Env<'_>, out: &mut Vec<Command>| {
+                out.push(Command::OpenSlot(
+                    slots::MENU,
+                    Params::new().with(params::MENU, menus::READER_MORE.as_str()),
+                ));
+            },
+        )),
+    )?;
+    r.add_icon(menus::READER_MORE, Cow::Borrowed("dots"))?;
     // A short main menu; the tools plugins bring are one entry, so it
     // stays the same however many there are.
     r.add_menu_entry(MenuEntry {
@@ -425,6 +439,7 @@ fn register_menus(r: &mut Registrar) -> Result<(), RegisterError> {
     for (id, title, order, icon) in [
         (groups::READING, "core.group.reading", 10, "book"),
         (groups::LIBRARY, "core.group.library", 20, "books"),
+        (groups::STATUS_LINES, "core.group.status", 15, "layout"),
         (groups::DISPLAY, "core.group.display", 60, "contrast"),
         (groups::CONTROLS, "core.group.controls", 70, "adjustments"),
         (groups::SYSTEM, "core.group.system", 90, "device-tablet"),
@@ -762,6 +777,14 @@ fn register_reading_settings(r: &mut Registrar) -> Result<(), RegisterError> {
         .section(setting_sections::FONT)
         .scoped()
         .description("core.setting.reading-font.help"),
+    )?;
+    r.add_setting(
+        SettingSpec::number(&settings::FONT_SIZE, "core.setting.font-size", 6, 40, 11)
+            .group(groups::READING)
+            .section(setting_sections::FONT)
+            .unit("core.unit.pt")
+            .scoped()
+            .description("core.setting.font-size.help"),
     )?;
     r.add_setting(
         SettingSpec::switch(&settings::SCOPE_ONLY, "core.setting.scope-only", false)

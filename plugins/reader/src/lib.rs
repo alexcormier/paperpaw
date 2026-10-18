@@ -12,6 +12,12 @@
 //!   *Back* returns to where a link was followed from.
 //! - Emits the standard events `core.book-opened` and `core.page-turned`,
 //!   so other plugins (home screen, statistics, sync, …) follow the reading.
+//! - Offers what every reader offers (see `quireink_sdk::builtin`): its
+//!   menus (`menus::READER`, `READER_MORE`, `READER_PANEL`, `SELECTION`),
+//!   the events `core.goto`, `core.text-chosen` and `core.notes-exported`,
+//!   the font size `core.font-size`, the status lines' group, key bindings
+//!   on the slot's layer (`[keymap.core.reader]`). Other plugins know no
+//!   more of it.
 //!
 //! It is bound to the `core.reader` slot; any other plugin can replace it.
 
@@ -36,8 +42,8 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use quireink_sdk::builtin::{
-    actions as core_actions, events, groups, params, setting_sections, settings as core_settings,
-    slots,
+    actions as core_actions, events, groups, menus, params, setting_sections,
+    settings as core_settings, slots,
 };
 use quireink_sdk::event::Event;
 use quireink_sdk::replies::Typed;
@@ -54,20 +60,9 @@ pub const TOC_SCREEN: Id = Id::new_static("reader.toc");
 /// The bookmarks and highlights of a book; parameter `path`.
 pub const ANNOTATIONS_SCREEN: Id = Id::new_static("reader.annotations");
 /// The actions offered for selected text, as a menu: plugins add their own
-/// with `Registrar::add_menu_entry`, users reorder them in `[menus]`.
-pub const SELECTION_MENU: Id = Id::new_static("reader.selection");
-/// Emitted when a plugin's action is chosen for selected text, with the
-/// parameters `action` (the action's id), `text`, `language`, `path`,
-/// `section` and `offset` (the start) and `end-section` and `end-offset`.
-/// The plugin whose action it is reacts; e.g. a "Share" or "Translate"
-/// action needs no more than a menu entry and a subscription. Afterwards
-/// the action itself runs as usual, so any action can be listed.
-pub const TEXT_CHOSEN: Id = Id::new_static("reader.text-chosen");
-/// Parameters of [`TEXT_CHOSEN`].
-pub const ACTION: &str = "action";
-pub const TEXT: &str = "text";
-pub const END_SECTION: &str = "end-section";
-pub const END_OFFSET: &str = "end-offset";
+/// with `Registrar::add_menu_entry`, users reorder them in `[menus]`. The
+/// standard one, so plugins need not know this reader.
+pub const SELECTION_MENU: Id = menus::SELECTION;
 /// Search results for a book; parameters `path` and `text`.
 pub const SEARCH_SCREEN: Id = Id::new_static("reader.search-results");
 /// The keyboard's replies: what to search for, which page to go to.
@@ -77,14 +72,10 @@ const PAGE_ENTERED: Event<Typed> = Event::new("reader.page-entered");
 const NOTE_ENTERED: Event<Typed> = Event::new("reader.note-entered");
 /// Font and layout, shown as a panel ([`actions::QUICK_SETTINGS`]), and
 /// the submenu "More" of [`MENU`]: menus like any other, so plugins add
-/// entries and users redefine them in `[menus]` or the menu editor.
-pub const LAYOUT_MENU: Id = Id::new_static("reader.layout");
-pub const MORE_MENU: Id = Id::new_static("reader.more");
-/// Asks the reader to show a position. Parameters: `path` (the book),
-/// `section` and `offset`; with `end-section` and `end-offset` the text up
-/// to there is marked (e.g. a search hit). Emitted by the table of contents; bookmark or
-/// search plugins can use it too.
-pub const GOTO: Id = Id::new_static("reader.goto");
+/// entries and users redefine them in `[menus]` or the menu editor. The
+/// standard ones.
+pub const LAYOUT_MENU: Id = menus::READER_PANEL;
+pub const MORE_MENU: Id = menus::READER_MORE;
 /// Follows a link of the open book: parameters `path` and `href`.
 pub const FOLLOW: Id = Id::new_static("reader.follow");
 /// The reply when a page has been read aloud; parameter `path`.
@@ -103,8 +94,8 @@ pub mod settings {
 
     use quireink_sdk::setting::{Setting, Text};
 
-    /// Font size in points.
-    pub const FONT_SIZE: Setting<i64> = Setting::new("reader.font-size");
+    /// Font size in points: the standard one, registered by the kernel.
+    pub use quireink_sdk::builtin::settings::FONT_SIZE;
     /// Darker text: glyphs widened by up to this many steps.
     pub const FONT_WEIGHT: Setting<i64> = Setting::new("reader.font-weight");
     /// Book pages with smooth letters, their edges in grays, where the
@@ -152,8 +143,8 @@ pub mod settings {
 }
 
 /// The reader's menu (`core.menu` on the reader screen). Any plugin can
-/// add entries; users can redefine it in `[menus]`.
-pub const MENU: Id = Id::new_static("reader.menu");
+/// add entries; users can redefine it in `[menus]`. The standard one.
+pub const MENU: Id = menus::READER;
 
 /// Actions of the reader.
 pub mod actions {
@@ -332,14 +323,6 @@ impl Plugin for Reader {
         };
         for setting in [
             int(
-                settings::FONT_SIZE,
-                "reader.setting.font-size",
-                (6, 40, 11),
-                "core.unit.pt",
-            )
-            .section(setting_sections::FONT)
-            .description("reader.setting.font-size.help"),
-            int(
                 settings::LINE_SPACING,
                 "reader.setting.line-spacing",
                 (100, 250, 135),
@@ -453,21 +436,21 @@ impl Plugin for Reader {
             .group(groups::READING)
             .unit("core.unit.percent")
             .step(10)
-            .section("reader.section.aloud")
+            .section(setting_sections::ALOUD)
             .description("reader.setting.aloud-speed.help"),
             flag(
                 settings::ALOUD_HIGHLIGHT,
                 "reader.setting.aloud-highlight",
                 true,
             )
-            .section("reader.section.aloud")
+            .section(setting_sections::ALOUD)
             .description("reader.setting.aloud-highlight.help"),
             flag(
                 settings::ALOUD_TURN,
                 "reader.setting.aloud-turn-pages",
                 true,
             )
-            .section("reader.section.aloud")
+            .section(setting_sections::ALOUD)
             .description("reader.setting.aloud-turn-pages.help"),
             SettingSpec::choice(
                 &settings::ALOUD_TIMER,
@@ -479,7 +462,7 @@ impl Plugin for Reader {
                 aloud::TIMER_CHOICES[0],
             )
             .group(groups::READING)
-            .section("reader.section.aloud")
+            .section(setting_sections::ALOUD)
             .description("reader.setting.aloud-timer.help"),
         ] {
             r.add_setting(setting)?;
@@ -514,18 +497,6 @@ impl Plugin for Reader {
         for (id, title, handler) in handlers {
             r.add_action(quireink_sdk::ActionSpec::new(id, title).handler(handler))?;
         }
-        // A submenu is an action named like its menu: the menu shows it as
-        // a submenu, and bound to a key it opens the menu.
-        r.add_action(
-            quireink_sdk::ActionSpec::new(MORE_MENU, "reader.more").handler(
-                |_: &Env<'_>, out: &mut Vec<Command>| {
-                    out.push(Command::OpenSlot(
-                        slots::MENU,
-                        Params::new().with(params::MENU, String::from(MORE_MENU.as_str())),
-                    ));
-                },
-            ),
-        )?;
         // Font and layout as a panel of controls: changes show at once.
         r.add_action(
             quireink_sdk::ActionSpec::new(actions::QUICK_SETTINGS, "reader.layout").handler(
@@ -541,7 +512,7 @@ impl Plugin for Reader {
         // turn pages, as swipes do, rather than going back; two fingers
         // apart or together make the text larger or smaller.
         r.add_keymap(Cow::Borrowed(
-            "[keymap.reader.screen]\ntap.bottom = reader.quick-settings\n\
+            "[keymap.core.reader]\ntap.bottom = reader.quick-settings\n\
              edge.left = core.prev-page\nedge.right = core.next-page\n\
              pinch.out = reader.font-larger\npinch.in = reader.font-smaller\n",
         ))?;
@@ -600,7 +571,6 @@ impl Plugin for Reader {
             (actions::GO_TO_PAGE, "hash"),
             (actions::ANNOTATIONS, "bookmarks"),
             (actions::QUICK_SETTINGS, "typography"),
-            (MORE_MENU, "dots"),
             (actions::TOGGLE_BOOKMARK, "bookmark"),
             (actions::SELECT, "highlight"),
             (actions::READ_ALOUD, "volume"),

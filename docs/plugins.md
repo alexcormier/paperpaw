@@ -207,9 +207,10 @@ the plugin is built; screens get every event too and read one with
 `EVENT.read(event, params)` in `Screen::on_event`. Standard ones are in
 `builtin::events`: started, a setting changed, a book opened, a page
 turned, a book moved, books came into the library or left it, its
-bookmarks or highlights changed, a word looked up, the device suspends
-or resumes. Plugins define their own the same way (the reader's
-`reader.notes-exported`, for example), and `Command::Schedule` emits
+bookmarks or highlights changed, a word looked up, a place in the open
+book to show, text chosen, notes exported, the device suspends or
+resumes. Plugins define their own the same way (in their namespace),
+and `Command::Schedule` emits
 one at a time of day. Underneath, what events carry travels as named
 strings (`Params`): events known only at run time are heard by id with
 `r.subscribe`.
@@ -307,6 +308,27 @@ Slots are how a plugin replaces another: bind your screen to
 `builtin::slots`, built-in menus in `builtin::menus`: the main menu
 (`core.main`), its tools (`core.tools`) and the settings' pages
 (`core.settings-pages`).
+
+### What every reader offers
+
+A plugin that works with books never names the reader plugin: it uses
+what `builtin` defines for every reader, so a reader of one's own (bound
+to `core.reader`) replaces the shipped one in full.
+
+| What | Standard | |
+|---|---|---|
+| Show a place in the open book, a part marked | `events::GOTO` (`Goto`) | readers take it; tables of contents, bookmarks, search and syncs send it |
+| Text chosen, and the action chosen for it | `menus::SELECTION`, `events::TEXT_CHOSEN` | add an action to the menu, hear the event |
+| Notes exported as Markdown | `events::NOTES_EXPORTED` | for notes apps and syncs |
+| The reader's menus | `menus::READER`, `READER_MORE`, `READER_PANEL` | add entries there |
+| Font size | `settings::FONT_SIZE` | the kernel's setting, which readers read |
+| Status lines' settings | `groups::STATUS_LINES` | the group readers put them in |
+| Reading aloud's settings | `setting_sections::ALOUD` | the section readers and shells put them in |
+| Key bindings while reading | the layer `[keymap.core.reader]` | the slot's layer, whichever screen fills it |
+
+A reader in turn sends the reading events (`BOOK_OPENED`, `PAGE_TURNED`,
+`BOOK_CLOSED`, `BOOK_FINISHED`), takes `GOTO`, and offers its actions
+in these menus.
 
 ### Services and points of your own
 

@@ -167,6 +167,21 @@ pub mod menus {
     /// The quick panel ([`actions::QUICK_PANEL`](super::actions::QUICK_PANEL)):
     /// switches and controls for quick changes, from every plugin.
     pub const QUICK: Id = Id::new_static("core.quick");
+    /// The reader's menu, while a book is open (whichever plugin is the
+    /// reader, [`slots::READER`](super::slots::READER)): plugins add what
+    /// belongs to reading.
+    pub const READER: Id = Id::new_static("core.reader-menu");
+    /// The reader's submenu "More": what is used less often (statistics,
+    /// syncing a book, profiles).
+    pub const READER_MORE: Id = Id::new_static("core.reader-more");
+    /// The reader's panel of font and layout, shown over the page; plugins
+    /// add controls such as the light.
+    pub const READER_PANEL: Id = Id::new_static("core.reader-panel");
+    /// What can be done with text chosen in a book (look it up, share,
+    /// translate): plugins add their actions; when one is chosen, the
+    /// reader sends [`events::TEXT_CHOSEN`](super::events::TEXT_CHOSEN),
+    /// then runs it.
+    pub const SELECTION: Id = Id::new_static("core.selection-menu");
 }
 
 /// Standard parameter names.
@@ -298,6 +313,89 @@ pub mod events {
     }
 
     crate::event_data! {
+        /// A place in a book to show ([`GOTO`]): where it begins, and
+        /// where a part to mark ends (e.g. a search hit), if any.
+        pub struct Goto {
+            /// The book.
+            pub path: String,
+            pub section: u32,
+            pub offset: u32,
+            pub end_section: Option<u32>,
+            pub end_offset: Option<u32>,
+        }
+    }
+
+    impl Goto {
+        /// Place `at` in the book at `path`, nothing marked.
+        pub fn new(path: impl Into<String>, at: Locator) -> Self {
+            Self {
+                path: path.into(),
+                section: at.section,
+                offset: at.offset,
+                end_section: None,
+                end_offset: None,
+            }
+        }
+
+        /// The same place, with the text up to `end` marked.
+        pub fn marking(mut self, end: Locator) -> Self {
+            self.end_section = Some(end.section);
+            self.end_offset = Some(end.offset);
+            self
+        }
+
+        /// Where it begins.
+        pub fn at(&self) -> Locator {
+            Locator::new(self.section, self.offset)
+        }
+
+        /// Where the part to mark ends, if one is.
+        pub fn end(&self) -> Option<Locator> {
+            Some(Locator::new(self.end_section?, self.end_offset?))
+        }
+    }
+
+    crate::event_data! {
+        /// Text chosen in a book, and the action chosen for it
+        /// ([`TEXT_CHOSEN`]).
+        pub struct TextChosen {
+            /// The action, from [`menus::SELECTION`](super::menus::SELECTION).
+            pub action: Id,
+            pub text: String,
+            /// The book's language, e.g. `de`.
+            pub language: String,
+            /// The book, and where the text begins and ends.
+            pub path: String,
+            pub section: u32,
+            pub offset: u32,
+            pub end_section: u32,
+            pub end_offset: u32,
+        }
+    }
+
+    impl TextChosen {
+        /// Where the text begins.
+        pub fn start(&self) -> Locator {
+            Locator::new(self.section, self.offset)
+        }
+
+        /// Just after its end.
+        pub fn end(&self) -> Locator {
+            Locator::new(self.end_section, self.end_offset)
+        }
+    }
+
+    crate::event_data! {
+        /// A book's notes, exported ([`NOTES_EXPORTED`]).
+        pub struct NotesExported {
+            /// The file written (Markdown).
+            pub path: String,
+            /// The book's title.
+            pub title: String,
+        }
+    }
+
+    crate::event_data! {
         /// The menu that was redefined or reset ([`MENU_CHANGED`]).
         pub struct MenuChanged {
             pub id: Id,
@@ -349,6 +447,19 @@ pub mod events {
     /// Readers show them anew, syncs pass them on.
     pub const ANNOTATIONS_CHANGED: Event<AnnotationsChanged> =
         Event::new("core.annotations-changed");
+    /// Asks the reader to show a place in the book it has open ([`Goto`]);
+    /// any reader takes it. Sent by the table of contents, bookmarks,
+    /// search, syncs of the reading position.
+    pub const GOTO: Event<Goto> = Event::new("core.goto");
+    /// A book's notes were exported as a file ([`NotesExported`]), for
+    /// plugins that take them further (a notes app, a sync). Readers send
+    /// it; its form is Markdown.
+    pub const NOTES_EXPORTED: Event<NotesExported> = Event::new("core.notes-exported");
+    /// An action was chosen for text chosen in a book ([`TextChosen`]),
+    /// just before it runs: the plugin whose action it is reacts (e.g. a
+    /// "Share" action needs no more than a menu entry in
+    /// [`menus::SELECTION`](super::menus::SELECTION) and this event).
+    pub const TEXT_CHOSEN: Event<TextChosen> = Event::new("core.text-chosen");
     /// A word of a book was looked up ([`WordLookedUp`]).
     pub const WORD_LOOKED_UP: Event<WordLookedUp> = Event::new("core.word-looked-up");
     /// A menu was redefined or reset ([`MenuChanged`]).
@@ -594,6 +705,9 @@ pub mod settings {
     /// The font family for reading: [`DEFAULT_FONT`] (the plugins'
     /// choice) or one of the registered families.
     pub const READING_FONT: Setting<Text> = Setting::new("core.reading-font");
+    /// The size of a book's text, in points; each book may have its own
+    /// ([`SCOPE_ONLY`]). Every reader reads it.
+    pub const FONT_SIZE: Setting<i64> = Setting::new("core.font-size");
     /// The value of [`READING_FONT`] for the plugins' choice.
     pub const DEFAULT_FONT: &str = "core.font.default";
     /// `core.clock.24h` or `core.clock.12h`.
@@ -650,6 +764,9 @@ pub mod groups {
     /// How menus and lists look: text size, margins, rows, lines, headers.
     /// Themes (data plugins) set its defaults.
     pub const LOOK: Id = Id::new_static("core.group.look");
+    /// The status lines above and below a book's text (what they show,
+    /// their size); the reader puts its settings for them here.
+    pub const STATUS_LINES: Id = Id::new_static("core.group.status");
     /// Settings whose plugin names no registered group.
     pub const OTHER: Id = Id::new_static("core.group.other");
     /// For developers: measuring, trying, finding faults. Its settings show
@@ -682,9 +799,12 @@ pub mod setting_sections {
     pub const PAGE: &str = "core.setting-section.page";
     /// What happens when reading: books opened again, bookmarks.
     pub const BEHAVIOUR: &str = "core.setting-section.behaviour";
+    /// Reading aloud: its speed, what is marked, turning the pages
+    /// (shells add the voice).
+    pub const ALOUD: &str = "core.setting-section.aloud";
 
     /// The standard parts in their order.
-    pub const ORDER: [&str; 3] = [FONT, PAGE, BEHAVIOUR];
+    pub const ORDER: [&str; 4] = [FONT, PAGE, BEHAVIOUR, ALOUD];
 }
 
 /// Sections of the main menu ([`menus::MAIN`]): plugins put their
@@ -725,6 +845,36 @@ pub const GLOBAL_KEYMAP_LAYER: &str = "global";
 #[cfg(test)]
 mod tests {
     use super::settings::*;
+    use crate::document::Locator;
+    use crate::event::EventData;
+
+    #[test]
+    fn standard_events_carry_what_they_say() {
+        use super::events::{Goto, TextChosen};
+        let goto = Goto::new("books/a.epub", Locator::new(3, 120));
+        assert_eq!(goto.end(), None);
+        let back = Goto::from_params(&goto.to_params()).unwrap();
+        assert_eq!((back.at(), back.end()), (Locator::new(3, 120), None));
+        let marked = goto.marking(Locator::new(3, 140));
+        let back = Goto::from_params(&marked.to_params()).unwrap();
+        assert_eq!(back.end(), Some(Locator::new(3, 140)));
+        let chosen = TextChosen {
+            action: crate::Id::new_static("share.send"),
+            text: "Alice".into(),
+            language: "en".into(),
+            path: "books/a.epub".into(),
+            section: 1,
+            offset: 10,
+            end_section: 1,
+            end_offset: 15,
+        };
+        let back = TextChosen::from_params(&chosen.to_params()).unwrap();
+        assert_eq!(back, chosen);
+        assert_eq!(
+            (back.start(), back.end()),
+            (Locator::new(1, 10), Locator::new(1, 15))
+        );
+    }
 
     #[test]
     fn every_colour_but_ones_own_is_known() {

@@ -749,20 +749,16 @@ impl Screen for ReaderScreen {
             self.follow(&href, cx);
             return;
         }
-        if *event == crate::GOTO
-            && this_book
-            && let Some(at) = crate::toc::locator_of(params)
+        if let Some(goto) = events::GOTO.read(event, params)
+            && goto.path == book.path
         {
             // Another page: no text stays selected.
             self.selection = None;
             let env = *cx.env();
+            let at = goto.at();
             let start = book.page_start(&env, at);
             book.jump(cx, start);
-            let end = params
-                .get(crate::END_SECTION)
-                .zip(params.get(crate::END_OFFSET))
-                .and_then(|(s, o)| Some(Locator::new(s.parse().ok()?, o.parse().ok()?)));
-            if let Some(end) = end {
+            if let Some(end) = goto.end() {
                 book.found = Some((at, end));
                 cx.request_redraw();
             }

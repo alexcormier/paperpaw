@@ -45,8 +45,6 @@ const CHOICE: Id = Id::new_static("profiles.choice");
 const NAMED: Event<Typed> = Event::new("profiles.named");
 const RENAMED: Event<Typed> = Event::new("profiles.renamed");
 const CHOSEN: Event<choice::Picked> = Event::new("profiles.chosen");
-/// The reader's menu with more entries.
-const READER_MORE: Id = Id::new_static("reader.more");
 
 /// Applies `profile` and says so.
 fn apply(env: &Env<'_>, profile: &Profile, out: &mut Vec<Command>) {
@@ -102,7 +100,7 @@ impl Plugin for Profiles {
                 }
             },
         ))?;
-        for (menu, order) in [(READER_MORE, 15), (menus::SETTINGS, 205)] {
+        for (menu, order) in [(menus::READER_MORE, 15), (menus::SETTINGS, 205)] {
             r.add_menu_entry(MenuEntry {
                 menu,
                 item: OPEN,

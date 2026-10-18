@@ -220,7 +220,7 @@ fn kernel(storage: Box<dyn Storage>, ota: Option<&ota::Ota>) -> Kernel {
         // A full refresh takes 3.5 s on its panel: screens change fast.
         .setting_default(&settings::FLASH_SCREENS, false)
         .setting_default(&settings::UI_SIZE, 9)
-        .setting_default(&quireink_plugin_reader::settings::FONT_SIZE, 9)
+        .setting_default(&settings::FONT_SIZE, 9)
         // QuireInk switches the radio (`network`); on USB it stays on in a
         // network joined before, for transfers and for trying things.
         .wifi(true)

@@ -27,15 +27,15 @@ use quireink_sdk::builtin::{fonts, params, screens};
 use quireink_sdk::status::{StatusFrame, StatusLine, StatusValue, context, item_ids};
 use quireink_sdk::ui::UiStyle;
 use quireink_sdk::{
-    Arg, Canvas, Env, Id, Params, RegisterError, Registrar, SettingGroupSpec, SettingKind,
-    SettingSpec, SettingValue, StatusItemSpec, StatusLineSpec, Storage,
+    Arg, Canvas, Env, Id, Params, RegisterError, Registrar, SettingKind, SettingSpec, SettingValue,
+    StatusItemSpec, StatusLineSpec, Storage,
 };
 
 use crate::PLUGIN;
 use quireink_sdk::setting::Setting;
 
-/// The settings group of the status lines.
-pub const GROUP: Id = Id::new_static("reader.group.status");
+/// The settings group of the status lines (the kernel's).
+pub const GROUP: Id = quireink_sdk::builtin::groups::STATUS_LINES;
 
 /// The battery's charge in percent beside its symbol.
 pub const PERCENT: Setting<bool> = Setting::new("reader.status.battery-percent");
@@ -98,13 +98,6 @@ pub(crate) const PRINTED_CONTEXT: &str = "reader.printed-page";
 pub(crate) const ALOUD_CONTEXT: &str = "reader.aloud";
 
 pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
-    r.add_setting_group(SettingGroupSpec {
-        id: GROUP,
-        title: Cow::Borrowed("reader.group.status"),
-        order: 15,
-        page: None,
-    })?;
-    r.add_icon(GROUP, Cow::Borrowed("layout"))?;
     // The chapter, the time and the battery with the page (and Wi-Fi
     // while it is in use).
     let defaults = [

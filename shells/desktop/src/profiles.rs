@@ -103,7 +103,7 @@ pub const PROFILES: &[Profile] = &[
         // A 4.3" screen: smaller text, so menus and pages hold enough.
         settings: &[
             ("core.ui-size", "9"),
-            ("reader.font-size", "9"),
+            ("core.font-size", "9"),
             ("core.flash-screens", "false"),
         ],
         speech: false,
@@ -150,7 +150,7 @@ pub const PROFILES: &[Profile] = &[
         // A 4.3" screen: smaller text, so menus and pages hold enough.
         settings: &[
             ("core.ui-size", "9"),
-            ("reader.font-size", "9"),
+            ("core.font-size", "9"),
             ("core.flash-screens", "false"),
         ],
         speech: false,

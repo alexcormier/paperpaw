@@ -562,7 +562,7 @@ impl Plugin for Kosync {
             },
         ))?;
         r.add_menu_entry(MenuEntry {
-            menu: Id::new_static("reader.more"),
+            menu: quireink_sdk::builtin::menus::READER_MORE,
             item: SYNC_NOW,
             order: 25,
         })?;

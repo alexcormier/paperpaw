@@ -6,6 +6,21 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- A reader can be replaced in full: plugins reach it only through what
+  the SDK defines for every reader, no longer through the shipped
+  reader's ids. SDK: `events::GOTO` (`Goto`), `events::TEXT_CHOSEN`
+  (`TextChosen`), `events::NOTES_EXPORTED` (`NotesExported`),
+  `menus::READER`, `READER_MORE`, `READER_PANEL`, `SELECTION`,
+  `settings::FONT_SIZE` (registered by the kernel), `groups::STATUS_LINES`,
+  `setting_sections::ALOUD`; key bindings while reading on the slot's
+  layer `[keymap.core.reader]`. Changed ids: `reader.goto` is
+  `core.goto`, `reader.notes-exported` is `core.notes-exported`,
+  `reader.text-chosen` is `core.text-chosen`, `reader.font-size` is
+  `core.font-size` (set again once), the menus `reader.menu`,
+  `reader.more`, `reader.layout` and `reader.selection` are
+  `core.reader-menu`, `core.reader-more`, `core.reader-panel` and
+  `core.selection-menu`, key bindings in `[keymap.reader.screen]` go to
+  `[keymap.core.reader]`.
 - Reader: *Smooth text* (Font, off by default, where the screen has no
   grays): book pages are shown in four grays, the letters with soft
   edges, as pages with pictures are; on the X4 a page turns in some

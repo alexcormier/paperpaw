@@ -1,7 +1,7 @@
 //! The table of contents screen.
 //!
 //! Lists the document's chapters with the current one focused; choosing an
-//! entry emits [`GOTO`](crate::GOTO), which the reader (or any other
+//! entry emits `core.goto`, which the reader (or any other
 //! plugin) handles, and closes the list. Only the visible page of entries
 //! is held in memory, so long tables of contents work on small devices.
 //!
@@ -21,7 +21,7 @@ use quireink_sdk::{
     Screen,
 };
 
-use crate::GOTO;
+use quireink_sdk::builtin::events;
 
 /// Parameters carrying a position.
 pub(crate) const SECTION: &str = "section";
@@ -225,7 +225,7 @@ impl TocScreen {
         };
         if let Some(at) = target {
             cx.command(Command::Back);
-            cx.command(Command::Emit(GOTO, locator_params(&self.path, at)));
+            cx.command(events::GOTO.emit(events::Goto::new(self.path.clone(), at)));
         }
     }
 

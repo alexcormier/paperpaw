@@ -44,7 +44,7 @@ impl ReaderScreen {
     }
 
     /// Does what a bar item stands for. Items of other plugins are
-    /// announced with the selected text (event [`crate::TEXT_CHOSEN`]).
+    /// announced with the selected text (event `core.text-chosen`).
     pub(super) fn activate(&mut self, item: &Id, cx: &mut Cx<'_, '_>) {
         if *item == crate::actions::READ_FROM
             && let (Ok(book), Some(selection)) = (&self.book, self.selection)
@@ -192,15 +192,16 @@ impl ReaderScreen {
                     .command(),
             );
         } else if *item != crate::actions::CANCEL {
-            cx.command(Command::Emit(
-                crate::TEXT_CHOSEN,
-                crate::toc::locator_params(&book.path, start)
-                    .with(crate::ACTION, item.as_str().to_string())
-                    .with(crate::TEXT, text)
-                    .with(params::LANGUAGE, book.language.clone())
-                    .with(crate::END_SECTION, format!("{}", end.section))
-                    .with(crate::END_OFFSET, format!("{}", end.offset)),
-            ));
+            cx.command(events::TEXT_CHOSEN.emit(events::TextChosen {
+                action: item.clone(),
+                text,
+                language: book.language.clone(),
+                path: book.path.clone(),
+                section: start.section,
+                offset: start.offset,
+                end_section: end.section,
+                end_offset: end.offset,
+            }));
             // Then the action runs as usual (after the selection is gone),
             // so any action works here, e.g. the night mode.
             cx.command(Command::RunAction(item.clone()));

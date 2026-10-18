@@ -57,8 +57,6 @@ const POLICIES: [&str; 3] = [
     "core.gestures.own",
     "core.gestures.off",
 ];
-/// The reader's screen: bindings that apply while reading.
-const READING: &str = "reader.screen";
 
 const BUTTONS: [&str; 10] = [
     "page-forward",
@@ -124,7 +122,7 @@ fn places(env: &Env<'_>) -> Vec<Place> {
         ),
         place(
             "keys.place.reading",
-            &[READING, slots::READER.as_str(), GLOBAL_KEYMAP_LAYER],
+            &[slots::READER.as_str(), GLOBAL_KEYMAP_LAYER],
         ),
         place(
             "keys.place.library",
@@ -135,9 +133,8 @@ fn places(env: &Env<'_>) -> Vec<Place> {
     let mut tools: Vec<Place> = env
         .screens
         .iter()
-        .filter(|(id, _)| {
-            id.as_str() != READING && env.keys.bound(&[id.as_str()], POLICY).is_some()
-        })
+        // The reader binds on its slot's layer, which is a place already.
+        .filter(|(id, _)| env.keys.bound(&[id.as_str()], POLICY).is_some())
         .map(|(id, title)| Place {
             title: env.i18n.tr(title).to_string(),
             layers: Vec::from([id.as_str().to_string(), GLOBAL_KEYMAP_LAYER.to_string()]),
@@ -727,7 +724,13 @@ fn group_of(env: &Env<'_>, id: &Id) -> usize {
         return 0;
     }
     let in_menu = |menu: &str| env.menus.items(menu).iter().any(|item| item.id == id);
-    if name.starts_with("reader.") || in_menu("reader.menu") || in_menu("reader.more") {
+    let reading = [
+        menus::READER,
+        menus::READER_MORE,
+        menus::READER_PANEL,
+        menus::SELECTION,
+    ];
+    if reading.iter().any(|menu| in_menu(menu.as_str())) {
         return 1;
     }
     if in_menu(menus::TOOLS.as_str()) || in_menu("home.actions") {
