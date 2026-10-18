@@ -99,7 +99,7 @@ impl Plugin for CorePlugin {
         ] {
             r.add_action(ActionSpec::new(Id::new_static(id), title))?;
         }
-        let handled: [(Id, &'static str, ActionHandler); 14] = [
+        let handled: [(Id, &'static str, ActionHandler); 15] = [
             (
                 actions::REFRESH_SCREEN,
                 "core.action.refresh-screen",
@@ -168,6 +168,23 @@ impl Plugin for CorePlugin {
                 }),
             ),
             (
+                actions::CLEAN_UP,
+                "core.action.clean-up",
+                Box::new(|env: &Env<'_>, out: &mut Vec<Command>| {
+                    // What is kept for books no longer on the storage.
+                    let books = library::book_keys(env.storage, env.formats);
+                    let keep = |key: &str| {
+                        u64::from_str_radix(key, 16).is_ok_and(|k| books.binary_search(&k).is_ok())
+                    };
+                    let removed = library::clean_up(env.storage, env.book_data, &keep);
+                    let text = env.i18n.format(
+                        "core.cleaned-up",
+                        &[("count", quireink_sdk::Arg::Int(i64::from(removed)))],
+                    );
+                    out.push(Command::Notify(text));
+                }),
+            ),
+            (
                 actions::SCREENSHOT,
                 "core.action.screenshot",
                 Box::new(|env: &Env<'_>, out: &mut Vec<Command>| {
@@ -212,9 +229,26 @@ impl Plugin for CorePlugin {
         r.on(events::PAGE_TURNED, |env, reading, _| {
             library::record(env, reading, false);
         })?;
+        // What plugins keep for a book follows it: moved, removed.
         r.on(events::BOOK_MOVED, |env, moved, _| {
             library::moved(env.storage, &moved.from, &moved.path);
+            library::move_data(env.storage, env.book_data, &moved.from, &moved.path);
         })?;
+        r.on(events::BOOK_REMOVED, |env, removed, _| {
+            library::removed(env.storage, &removed.path);
+            library::remove_data(env.storage, env.book_data, &removed.path);
+        })?;
+        // The notes of books are the kernel's.
+        r.add_book_data(quireink_sdk::data_path!("annotations"), "")?;
+        r.add_book_data(alloc::format!("{}/books", library::DIR), "")?;
+        r.add_book_data(alloc::format!("{}/covers", library::DIR), "")?;
+        // In the device's part of the settings, before *About*.
+        r.add_menu_entry(quireink_sdk::MenuEntry {
+            menu: menus::SETTINGS,
+            item: actions::CLEAN_UP,
+            order: 98,
+        })?;
+        r.add_icon(actions::CLEAN_UP, Cow::Borrowed("trash"))?;
         for (id, title, handler) in handled {
             let hint = match &id {
                 id if *id == actions::BACK => label("core.hint.core.back"),

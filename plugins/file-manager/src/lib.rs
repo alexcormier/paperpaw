@@ -356,8 +356,17 @@ impl Browser {
                 ));
             }
             "delete-yes" => {
+                // The books in it, said gone once it is: what is kept
+                // for them goes too.
+                let mut books = Vec::new();
+                quireink_sdk::library::books_in(env.storage, env.formats, path, &mut |book| {
+                    books.push(String::from(book));
+                });
                 let deleted = ops::delete(env.storage, path);
                 if deleted.is_ok() {
+                    for path in books {
+                        cx.command(events::BOOK_REMOVED.emit(events::BookRemoved { path }));
+                    }
                     cx.command(quireink_sdk::library::changed());
                 }
                 self.message = deleted.err().map(|e| error(&env, e));

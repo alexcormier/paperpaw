@@ -40,6 +40,10 @@ pub mod actions {
     /// Saves what the screen shows as a picture, in `Screenshots` beside
     /// the library ([`Command::Screenshot`](crate::Command::Screenshot)).
     pub const SCREENSHOT: Id = Id::new_static("core.screenshot");
+    /// Removes what plugins kept for books no longer on the storage
+    /// ([`Registrar::add_book_data`](crate::Registrar::add_book_data)),
+    /// e.g. deleted from a computer.
+    pub const CLEAN_UP: Id = Id::new_static("core.clean-up");
     /// Opens the tools menu ([`menus::TOOLS`](super::menus::TOOLS)).
     pub const TOOLS: Id = Id::new_static("core.tools");
     /// Puts the device to sleep: shows the sleep screen (slot
@@ -252,6 +256,14 @@ pub mod events {
     }
 
     crate::event_data! {
+        /// A book that was deleted ([`BOOK_REMOVED`]).
+        pub struct BookRemoved {
+            /// Its path, where it was.
+            pub path: String,
+        }
+    }
+
+    crate::event_data! {
         /// A book that was moved or renamed ([`BOOK_MOVED`]).
         pub struct BookMoved {
             /// Its old path.
@@ -322,6 +334,11 @@ pub mod events {
     /// A book file was moved or renamed ([`BookMoved`]). Plugins that keep
     /// data by a book's path move it along (progress, notes, statistics).
     pub const BOOK_MOVED: Event<BookMoved> = Event::new("core.book-moved");
+    /// A book file was deleted ([`BookRemoved`]): what plugins keep for it
+    /// goes ([`Registrar::add_book_data`](crate::Registrar::add_book_data)
+    /// folders by the kernel; other data by the plugin). Whoever deletes a
+    /// book emits it.
+    pub const BOOK_REMOVED: Event<BookRemoved> = Event::new("core.book-removed");
     /// Books came into the library or left it (received, downloaded,
     /// copied, deleted): views of the library read it again. Plugins that
     /// change the library emit it ([`library::changed`](crate::library::changed));

@@ -95,6 +95,8 @@ impl Plugin for EpubFormat {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        // What is converted of each book, moved and removed with it.
+        r.add_book_data(quireink_sdk::Env::plugin_dir(PLUGIN.as_str()), "")?;
         r.add_format(FormatSpec {
             id: FORMAT,
             title: Cow::Borrowed("format-epub.title"),
@@ -126,6 +128,8 @@ impl Plugin for HtmlFormat {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        // What is converted of each book, moved and removed with it.
+        r.add_book_data(quireink_sdk::Env::plugin_dir(PLUGIN.as_str()), "html-")?;
         r.add_format(FormatSpec {
             id: HTML,
             title: Cow::Borrowed("format-html.title"),
@@ -160,6 +164,8 @@ impl Plugin for Fb2Format {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        // What is converted of each book, moved and removed with it.
+        r.add_book_data(quireink_sdk::Env::plugin_dir(PLUGIN.as_str()), "fb2-")?;
         r.add_format(FormatSpec {
             id: FB2,
             title: Cow::Borrowed("format-fb2.title"),
@@ -190,6 +196,8 @@ impl Plugin for MarkdownFormat {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        // What is converted of each book, moved and removed with it.
+        r.add_book_data(quireink_sdk::Env::plugin_dir(PLUGIN.as_str()), "md-")?;
         r.add_format(FormatSpec {
             id: MARKDOWN,
             title: Cow::Borrowed("format-markdown.title"),
@@ -220,6 +228,8 @@ impl Plugin for CbzFormat {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        // What is converted of each book, moved and removed with it.
+        r.add_book_data(quireink_sdk::Env::plugin_dir(PLUGIN.as_str()), "cbz-")?;
         r.add_format(FormatSpec {
             id: CBZ,
             title: Cow::Borrowed("format-cbz.title"),

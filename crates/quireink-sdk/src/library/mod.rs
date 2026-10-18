@@ -96,12 +96,149 @@ impl Book {
     }
 }
 
+/// The key that names what is kept for the book at `path`: 16
+/// hexadecimal digits of its hash. Folders of [`BookData`] name their
+/// entries by it.
+pub fn key(path: &str) -> String {
+    format!("{:016x}", fnv1a64(path))
+}
+
+/// A folder where a plugin keeps something for each book, named by the
+/// book's [`key`] after `prefix`, alone or followed by `.` and more (a
+/// file or a folder): `cache/0123456789abcdef`, `epub-0123…/`,
+/// `0123….ini`. Registered with
+/// [`Registrar::add_book_data`](crate::Registrar::add_book_data), the
+/// kernel moves it with its book ([`move_data`]), removes it with it
+/// ([`remove_data`]) and when its book is no longer there ([`clean_up`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BookData {
+    pub folder: alloc::borrow::Cow<'static, str>,
+    pub prefix: alloc::borrow::Cow<'static, str>,
+}
+
+impl BookData {
+    /// The book key entry `name` of the folder is named by, if it is one
+    /// of these, and what follows it.
+    pub fn key_of<'n>(&self, name: &'n str) -> Option<(&'n str, &'n str)> {
+        let rest = name.strip_prefix(&*self.prefix)?;
+        let key = rest.get(..16)?;
+        let tail = &rest[16..];
+        let hex = key.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'));
+        (hex && (tail.is_empty() || tail.starts_with('.'))).then_some((key, tail))
+    }
+
+    /// The entries of the folder that are kept for books: name, whether a
+    /// folder.
+    fn entries(&self, storage: &dyn Storage) -> Vec<(String, bool)> {
+        let mut entries = Vec::new();
+        let _ = storage.list(&self.folder, &mut |entry| {
+            if self.key_of(entry.name).is_some() {
+                entries.push((String::from(entry.name), entry.is_dir));
+            }
+        });
+        entries
+    }
+}
+
+/// Moves what is kept for the book `from` in folders `data` to `to`.
+pub fn move_data(storage: &dyn Storage, data: &[BookData], from: &str, to: &str) {
+    let (old, new) = (key(from), key(to));
+    for folder in data {
+        for (name, _) in folder.entries(storage) {
+            if let Some((found, tail)) = folder.key_of(&name)
+                && found == old
+            {
+                let to = format!("{}/{}{new}{tail}", folder.folder, folder.prefix);
+                let _ = storage.rename(&format!("{}/{name}", folder.folder), &to);
+            }
+        }
+    }
+}
+
+/// Removes what is kept for the book at `path` in folders `data`.
+pub fn remove_data(storage: &dyn Storage, data: &[BookData], path: &str) {
+    let gone = key(path);
+    clean(storage, data, &|key| key != gone);
+}
+
+/// Removes what is kept in folders `data` for books whose key `keep` does
+/// not keep; how many entries went.
+pub fn clean_up(storage: &dyn Storage, data: &[BookData], keep: &dyn Fn(&str) -> bool) -> u32 {
+    clean(storage, data, keep)
+}
+
+fn clean(storage: &dyn Storage, data: &[BookData], keep: &dyn Fn(&str) -> bool) -> u32 {
+    let mut removed = 0;
+    for folder in data {
+        for (name, is_dir) in folder.entries(storage) {
+            let Some((key, _)) = folder.key_of(&name) else {
+                continue;
+            };
+            if keep(key) {
+                continue;
+            }
+            let path = format!("{}/{name}", folder.folder);
+            let done = if is_dir {
+                storage.remove_dir_all(&path)
+            } else {
+                storage.remove(&path)
+            };
+            removed += u32::from(done.is_ok());
+        }
+    }
+    removed
+}
+
+/// The keys ([`key`]) of every book on the storage (every file a format
+/// plugin opens, in any folder but QuireInk's own), sorted: what
+/// [`clean_up`] keeps.
+pub fn book_keys(storage: &dyn Storage, formats: &crate::Formats) -> Vec<u64> {
+    let mut keys = Vec::new();
+    books_in(storage, formats, "", &mut |path| keys.push(fnv1a64(path)));
+    keys.sort_unstable();
+    keys
+}
+
+/// Every book in `folder` and the folders in it (every file a format
+/// plugin opens; not in hidden folders), by its path; the book itself if
+/// `folder` is one. E.g. to say they are gone before a folder is deleted.
+pub fn books_in(
+    storage: &dyn Storage,
+    formats: &crate::Formats,
+    folder: &str,
+    found: &mut dyn FnMut(&str),
+) {
+    let folder = folder.trim_matches('/');
+    let name = folder.rsplit('/').next().unwrap_or(folder);
+    if !folder.is_empty() && formats.supports(name) && storage.size(folder).is_ok() {
+        return found(folder);
+    }
+    let mut folders = alloc::vec![String::from(folder)];
+    while let Some(folder) = folders.pop() {
+        let _ = storage.list(&folder, &mut |entry| {
+            if entry.name.starts_with('.') {
+                return;
+            }
+            let path = if folder.is_empty() {
+                String::from(entry.name)
+            } else {
+                format!("{folder}/{}", entry.name)
+            };
+            if entry.is_dir {
+                folders.push(path);
+            } else if formats.supports(entry.name) {
+                found(&path);
+            }
+        });
+    }
+}
+
 fn book_file(path: &str) -> String {
-    format!("{DIR}/books/{:016x}.ini", fnv1a64(path))
+    format!("{DIR}/books/{}.ini", key(path))
 }
 
 fn cover_file(path: &str) -> String {
-    format!("{DIR}/covers/{:016x}.thumb", fnv1a64(path))
+    format!("{DIR}/covers/{}.thumb", key(path))
 }
 
 /// The cover of `book` (the one at `path`) made small to fit `width` ×
@@ -353,6 +490,15 @@ pub fn record(env: &Env<'_>, reading: &crate::builtin::events::Reading, opened: 
 pub fn moved(storage: &dyn Storage, from: &str, to: &str) {
     let _ = storage.rename(&book_file(from), &book_file(to));
     let _ = storage.rename(&cover_file(from), &cover_file(to));
+    // A cover kept by a format's data for the book moves with it too
+    // ([`BookData`]): the details name it where it is now.
+    if let Some(mut book) = book(storage, to)
+        && let Some(cover) = book.cover.as_mut()
+        && cover.path.contains(&key(from))
+    {
+        cover.path = cover.path.replace(&key(from), &key(to));
+        save(storage, to, &book);
+    }
     let replace = |list: Vec<String>| -> Vec<String> {
         list.into_iter()
             .map(|p| if p == from { to.to_string() } else { p })
@@ -361,6 +507,19 @@ pub fn moved(storage: &dyn Storage, from: &str, to: &str) {
     let opened = replace(opened_books(storage));
     let _ = storage.write(&opened_file(), opened.join("\n").as_bytes());
     let favourites = replace(favourites(storage));
+    let _ = storage.write(&favourites_file(), favourites.join("\n").as_bytes());
+}
+
+/// Forgets the book at `path`, deleted: its details, its cover made
+/// small, its place among the recently opened and the favourites.
+pub fn removed(storage: &dyn Storage, path: &str) {
+    let _ = storage.remove(&book_file(path));
+    let _ = storage.remove(&cover_file(path));
+    let without =
+        |list: Vec<String>| -> Vec<String> { list.into_iter().filter(|p| p != path).collect() };
+    let opened = without(opened_books(storage));
+    let _ = storage.write(&opened_file(), opened.join("\n").as_bytes());
+    let favourites = without(favourites(storage));
     let _ = storage.write(&favourites_file(), favourites.join("\n").as_bytes());
 }
 
@@ -487,6 +646,110 @@ mod tests {
         assert!(cover(&storage, "books/b.epub", &book, 30, 30, false).is_none());
         book.size = 6;
         assert!(cover(&storage, "books/b.epub", &book, 20, 20, false).is_none());
+    }
+
+    #[test]
+    fn what_is_kept_for_a_book_follows_it() {
+        let (a, b) = ("books/a.epub", "books/b.epub");
+        let (ka, kb) = (key(a), key(b));
+        let storage = MemoryStorage::new()
+            .with(a, "book")
+            .with(&format!("cache/{ka}/0.txt"), "chapter")
+            .with(&format!("cache/cbz-{ka}/source"), "x")
+            .with(&format!("cache/{ka}.ini"), "x")
+            .with("cache/other.txt", "not a book's")
+            .with(&format!("cache/{ka}x"), "not a key");
+        let data = [
+            BookData {
+                folder: "cache".into(),
+                prefix: "".into(),
+            },
+            BookData {
+                folder: "cache".into(),
+                prefix: "cbz-".into(),
+            },
+        ];
+        assert_eq!(
+            data[0].key_of(&format!("{ka}.ini")),
+            Some((ka.as_str(), ".ini"))
+        );
+        assert_eq!(data[0].key_of("other.txt"), None);
+        // Moved: every entry of its key, by the new one.
+        move_data(&storage, &data, a, b);
+        assert!(storage.exists(&format!("cache/{kb}/0.txt")));
+        assert!(storage.exists(&format!("cache/cbz-{kb}/source")));
+        assert!(storage.exists(&format!("cache/{kb}.ini")));
+        assert!(!storage.exists(&format!("cache/{ka}.ini")));
+        // Removed: all of it; the rest stays.
+        remove_data(&storage, &data, b);
+        assert!(!storage.exists(&format!("cache/{kb}/0.txt")));
+        assert!(!storage.exists(&format!("cache/{kb}.ini")));
+        assert!(storage.exists("cache/other.txt"));
+        assert!(storage.exists(&format!("cache/{ka}x")));
+        // Cleaned up: what is kept for books no longer there.
+        let c = "books/c.txt";
+        let storage = storage
+            .with(c, "text")
+            .with(&format!("cache/{}.ini", key(c)), "x");
+        let _ = storage.write(&format!("cache/{ka}.ini"), b"left over");
+        let mut formats = crate::Formats::new();
+        formats
+            .add(crate::FormatSpec {
+                id: crate::Id::new_static("test.txt"),
+                title: alloc::borrow::Cow::Borrowed("TXT"),
+                extensions: alloc::vec![
+                    alloc::borrow::Cow::Borrowed("txt"),
+                    alloc::borrow::Cow::Borrowed("epub")
+                ],
+                open: alloc::boxed::Box::new(|_, _, _| {
+                    Err(crate::document::DocumentError::UnsupportedFormat)
+                }),
+                prepared: None,
+            })
+            .unwrap();
+        let books = book_keys(&storage, &formats);
+        let keep =
+            |k: &str| u64::from_str_radix(k, 16).is_ok_and(|k| books.binary_search(&k).is_ok());
+        // The epub at a is there, c too: nothing goes; a gone, its data goes.
+        assert_eq!(clean_up(&storage, &data, &keep), 0);
+        storage.remove(a).unwrap();
+        let books = book_keys(&storage, &formats);
+        let keep =
+            |k: &str| u64::from_str_radix(k, 16).is_ok_and(|k| books.binary_search(&k).is_ok());
+        assert_eq!(clean_up(&storage, &data, &keep), 1);
+        assert!(storage.exists(&format!("cache/{}.ini", key(c))));
+        // The books in a folder, or the book itself.
+        let mut found = Vec::new();
+        books_in(&storage, &formats, "books", &mut |p| {
+            found.push(String::from(p))
+        });
+        assert_eq!(found, [c]);
+        found.clear();
+        books_in(&storage, &formats, c, &mut |p| found.push(String::from(p)));
+        assert_eq!(found, [c]);
+    }
+
+    #[test]
+    fn removed_books_are_forgotten() {
+        let storage = MemoryStorage::new().with("books/a.txt", "hello");
+        save(
+            &storage,
+            "books/a.txt",
+            &Book {
+                size: 5,
+                ..Book::default()
+            },
+        );
+        set_favourite(&storage, "books/a.txt", true);
+        let _ = storage.write(
+            &opened_file(),
+            b"books/a.txt
+books/b.txt",
+        );
+        removed(&storage, "books/a.txt");
+        assert!(book(&storage, "books/a.txt").is_none());
+        assert!(favourites(&storage).is_empty());
+        assert_eq!(opened_books(&storage), ["books/b.txt"]);
     }
 
     #[test]

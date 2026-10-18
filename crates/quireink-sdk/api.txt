@@ -77,6 +77,7 @@ pub fn quireink_sdk::ask::text(impl core::convert::Into<alloc::string::String>, 
 pub mod quireink_sdk::builtin
 pub mod quireink_sdk::builtin::actions
 pub const quireink_sdk::builtin::actions::BACK: quireink_sdk::Id
+pub const quireink_sdk::builtin::actions::CLEAN_UP: quireink_sdk::Id
 pub const quireink_sdk::builtin::actions::CONFIRM: quireink_sdk::Id
 pub const quireink_sdk::builtin::actions::DOWN: quireink_sdk::Id
 pub const quireink_sdk::builtin::actions::HOME: quireink_sdk::Id
@@ -109,6 +110,11 @@ pub quireink_sdk::builtin::events::BookMoved::path: alloc::string::String
 impl quireink_sdk::event::EventData for quireink_sdk::builtin::events::BookMoved
 pub fn quireink_sdk::builtin::events::BookMoved::from_params(&quireink_sdk::Params) -> core::option::Option<Self>
 pub fn quireink_sdk::builtin::events::BookMoved::to_params(&self) -> quireink_sdk::Params
+pub struct quireink_sdk::builtin::events::BookRemoved
+pub quireink_sdk::builtin::events::BookRemoved::path: alloc::string::String
+impl quireink_sdk::event::EventData for quireink_sdk::builtin::events::BookRemoved
+pub fn quireink_sdk::builtin::events::BookRemoved::from_params(&quireink_sdk::Params) -> core::option::Option<Self>
+pub fn quireink_sdk::builtin::events::BookRemoved::to_params(&self) -> quireink_sdk::Params
 pub struct quireink_sdk::builtin::events::MenuChanged
 pub quireink_sdk::builtin::events::MenuChanged::id: quireink_sdk::Id
 impl quireink_sdk::event::EventData for quireink_sdk::builtin::events::MenuChanged
@@ -155,6 +161,7 @@ pub const quireink_sdk::builtin::events::BOOK_CLOSED: quireink_sdk::event::Event
 pub const quireink_sdk::builtin::events::BOOK_FINISHED: quireink_sdk::event::Event<quireink_sdk::builtin::events::Reading>
 pub const quireink_sdk::builtin::events::BOOK_MOVED: quireink_sdk::event::Event<quireink_sdk::builtin::events::BookMoved>
 pub const quireink_sdk::builtin::events::BOOK_OPENED: quireink_sdk::event::Event<quireink_sdk::builtin::events::Reading>
+pub const quireink_sdk::builtin::events::BOOK_REMOVED: quireink_sdk::event::Event<quireink_sdk::builtin::events::BookRemoved>
 pub const quireink_sdk::builtin::events::FIRMWARE_CHANGED: quireink_sdk::event::Event<()>
 pub const quireink_sdk::builtin::events::LIBRARY_CHANGED: quireink_sdk::event::Event<()>
 pub const quireink_sdk::builtin::events::MENU_CHANGED: quireink_sdk::event::Event<quireink_sdk::builtin::events::MenuChanged>
@@ -338,6 +345,7 @@ pub use quireink_sdk::config::<<quireink_config::*>>
 pub mod quireink_sdk::contribution
 #[non_exhaustive] pub enum quireink_sdk::contribution::Contribution
 pub quireink_sdk::contribution::Contribution::Action(quireink_sdk::ActionSpec)
+pub quireink_sdk::contribution::Contribution::BookData(quireink_sdk::library::BookData)
 pub quireink_sdk::contribution::Contribution::Font(alloc::boxed::Box<quireink_sdk::FontSpec>)
 pub quireink_sdk::contribution::Contribution::FontBinding
 pub quireink_sdk::contribution::Contribution::FontBinding::font: quireink_sdk::Id
@@ -405,6 +413,7 @@ pub struct quireink_sdk::contribution::Registrar
 impl quireink_sdk::contribution::Registrar
 pub fn quireink_sdk::contribution::Registrar::add(&mut self, quireink_sdk::contribution::Contribution) -> core::result::Result<(), quireink_sdk::RegisterError>
 pub fn quireink_sdk::contribution::Registrar::add_action(&mut self, quireink_sdk::ActionSpec) -> core::result::Result<(), quireink_sdk::RegisterError>
+pub fn quireink_sdk::contribution::Registrar::add_book_data(&mut self, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> core::result::Result<(), quireink_sdk::RegisterError>
 pub fn quireink_sdk::contribution::Registrar::add_font(&mut self, quireink_sdk::FontSpec) -> core::result::Result<(), quireink_sdk::RegisterError>
 pub fn quireink_sdk::contribution::Registrar::add_font_extension(&mut self, quireink_sdk::Id, alloc::string::String, quireink_sdk::Id) -> core::result::Result<(), quireink_sdk::RegisterError>
 pub fn quireink_sdk::contribution::Registrar::add_font_file(&mut self, quireink_sdk::Id, alloc::string::String) -> core::result::Result<(), quireink_sdk::RegisterError>
@@ -500,6 +509,9 @@ pub fn quireink_sdk::builtin::events::AnnotationsChanged::to_params(&self) -> qu
 impl quireink_sdk::event::EventData for quireink_sdk::builtin::events::BookMoved
 pub fn quireink_sdk::builtin::events::BookMoved::from_params(&quireink_sdk::Params) -> core::option::Option<Self>
 pub fn quireink_sdk::builtin::events::BookMoved::to_params(&self) -> quireink_sdk::Params
+impl quireink_sdk::event::EventData for quireink_sdk::builtin::events::BookRemoved
+pub fn quireink_sdk::builtin::events::BookRemoved::from_params(&quireink_sdk::Params) -> core::option::Option<Self>
+pub fn quireink_sdk::builtin::events::BookRemoved::to_params(&self) -> quireink_sdk::Params
 impl quireink_sdk::event::EventData for quireink_sdk::builtin::events::MenuChanged
 pub fn quireink_sdk::builtin::events::MenuChanged::from_params(&quireink_sdk::Params) -> core::option::Option<Self>
 pub fn quireink_sdk::builtin::events::MenuChanged::to_params(&self) -> quireink_sdk::Params
@@ -794,6 +806,11 @@ pub quireink_sdk::library::Book::title: core::option::Option<alloc::string::Stri
 impl quireink_sdk::library::Book
 pub fn quireink_sdk::library::Book::field(&self, &str) -> core::option::Option<&str>
 pub fn quireink_sdk::library::Book::title_or<'a>(&'a self, &'a str) -> &'a str
+pub struct quireink_sdk::library::BookData
+pub quireink_sdk::library::BookData::folder: alloc::borrow::Cow<'static, str>
+pub quireink_sdk::library::BookData::prefix: alloc::borrow::Cow<'static, str>
+impl quireink_sdk::library::BookData
+pub fn quireink_sdk::library::BookData::key_of<'n>(&self, &'n str) -> core::option::Option<(&'n str, &'n str)>
 pub struct quireink_sdk::library::Provided
 pub quireink_sdk::library::Provided::author: core::option::Option<alloc::string::String>
 pub quireink_sdk::library::Provided::series: core::option::Option<alloc::string::String>
@@ -803,17 +820,24 @@ pub quireink_sdk::library::Provided::title: core::option::Option<alloc::string::
 pub const quireink_sdk::library::DIR: &str
 pub const quireink_sdk::library::FOLDER: quireink_sdk::setting::Setting<quireink_sdk::setting::Text>
 pub fn quireink_sdk::library::book(&dyn quireink_platform::storage::Storage, &str) -> core::option::Option<quireink_sdk::library::Book>
+pub fn quireink_sdk::library::book_keys(&dyn quireink_platform::storage::Storage, &quireink_sdk::Formats) -> alloc::vec::Vec<u64>
 pub fn quireink_sdk::library::book_sized(&dyn quireink_platform::storage::Storage, &str, u64) -> core::option::Option<quireink_sdk::library::Book>
+pub fn quireink_sdk::library::books_in(&dyn quireink_platform::storage::Storage, &quireink_sdk::Formats, &str, &mut dyn core::ops::function::FnMut(&str))
 pub fn quireink_sdk::library::changed() -> quireink_sdk::Command
+pub fn quireink_sdk::library::clean_up(&dyn quireink_platform::storage::Storage, &[quireink_sdk::library::BookData], &dyn core::ops::function::Fn(&str) -> bool) -> u32
 pub fn quireink_sdk::library::cover(&dyn quireink_platform::storage::Storage, &str, &quireink_sdk::library::Book, u16, u16, bool) -> core::option::Option<quireink_sdk::ui::Thumbnail>
 pub fn quireink_sdk::library::favourites(&dyn quireink_platform::storage::Storage) -> alloc::vec::Vec<alloc::string::String>
 pub fn quireink_sdk::library::folder<'e>(&quireink_sdk::Env<'e>) -> &'e str
 pub fn quireink_sdk::library::index(&quireink_sdk::Env<'_>, &str) -> quireink_sdk::library::Book
 pub fn quireink_sdk::library::indexed(&quireink_sdk::Env<'_>, &str) -> quireink_sdk::library::Book
+pub fn quireink_sdk::library::key(&str) -> alloc::string::String
+pub fn quireink_sdk::library::move_data(&dyn quireink_platform::storage::Storage, &[quireink_sdk::library::BookData], &str, &str)
 pub fn quireink_sdk::library::moved(&dyn quireink_platform::storage::Storage, &str, &str)
 pub fn quireink_sdk::library::opened_books(&dyn quireink_platform::storage::Storage) -> alloc::vec::Vec<alloc::string::String>
 pub fn quireink_sdk::library::provide(&dyn quireink_platform::storage::Storage, &str, quireink_sdk::library::Provided)
 pub fn quireink_sdk::library::record(&quireink_sdk::Env<'_>, &quireink_sdk::builtin::events::Reading, bool)
+pub fn quireink_sdk::library::remove_data(&dyn quireink_platform::storage::Storage, &[quireink_sdk::library::BookData], &str)
+pub fn quireink_sdk::library::removed(&dyn quireink_platform::storage::Storage, &str)
 pub fn quireink_sdk::library::save(&dyn quireink_platform::storage::Storage, &str, &quireink_sdk::library::Book)
 pub fn quireink_sdk::library::set_favourite(&dyn quireink_platform::storage::Storage, &str, bool)
 pub fn quireink_sdk::library::set_field(&dyn quireink_platform::storage::Storage, &str, &str, &str)
@@ -1610,6 +1634,7 @@ pub fn quireink_sdk::Command::open_slot(quireink_sdk::Id) -> quireink_sdk::Comma
 pub fn quireink_sdk::Command::set<T: quireink_sdk::setting::SettingType>(&quireink_sdk::setting::Setting<T>, <T as quireink_sdk::setting::SettingType>::Input) -> quireink_sdk::Command
 #[non_exhaustive] pub enum quireink_sdk::Contribution
 pub quireink_sdk::Contribution::Action(quireink_sdk::ActionSpec)
+pub quireink_sdk::Contribution::BookData(quireink_sdk::library::BookData)
 pub quireink_sdk::Contribution::Font(alloc::boxed::Box<quireink_sdk::FontSpec>)
 pub quireink_sdk::Contribution::FontBinding
 pub quireink_sdk::Contribution::FontBinding::font: quireink_sdk::Id
@@ -1865,6 +1890,7 @@ pub fn quireink_sdk::Cx<'a, 'e>::request_refresh(&mut self, quireink_platform::d
 pub fn quireink_sdk::Cx<'a, 'e>::wake_at(&mut self, quireink_platform::input::Instant)
 #[non_exhaustive] pub struct quireink_sdk::Env<'a>
 pub quireink_sdk::Env::actions: &'a quireink_sdk::Actions
+pub quireink_sdk::Env::book_data: &'a [quireink_sdk::library::BookData]
 pub quireink_sdk::Env::caps: quireink_sdk::Capabilities
 pub quireink_sdk::Env::clipboard: bool
 pub quireink_sdk::Env::device: &'a quireink_platform::DeviceInfo
@@ -2202,6 +2228,7 @@ pub struct quireink_sdk::Registrar
 impl quireink_sdk::contribution::Registrar
 pub fn quireink_sdk::contribution::Registrar::add(&mut self, quireink_sdk::contribution::Contribution) -> core::result::Result<(), quireink_sdk::RegisterError>
 pub fn quireink_sdk::contribution::Registrar::add_action(&mut self, quireink_sdk::ActionSpec) -> core::result::Result<(), quireink_sdk::RegisterError>
+pub fn quireink_sdk::contribution::Registrar::add_book_data(&mut self, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> core::result::Result<(), quireink_sdk::RegisterError>
 pub fn quireink_sdk::contribution::Registrar::add_font(&mut self, quireink_sdk::FontSpec) -> core::result::Result<(), quireink_sdk::RegisterError>
 pub fn quireink_sdk::contribution::Registrar::add_font_extension(&mut self, quireink_sdk::Id, alloc::string::String, quireink_sdk::Id) -> core::result::Result<(), quireink_sdk::RegisterError>
 pub fn quireink_sdk::contribution::Registrar::add_font_file(&mut self, quireink_sdk::Id, alloc::string::String) -> core::result::Result<(), quireink_sdk::RegisterError>
@@ -2418,6 +2445,9 @@ pub fn quireink_sdk::builtin::events::AnnotationsChanged::to_params(&self) -> qu
 impl quireink_sdk::event::EventData for quireink_sdk::builtin::events::BookMoved
 pub fn quireink_sdk::builtin::events::BookMoved::from_params(&quireink_sdk::Params) -> core::option::Option<Self>
 pub fn quireink_sdk::builtin::events::BookMoved::to_params(&self) -> quireink_sdk::Params
+impl quireink_sdk::event::EventData for quireink_sdk::builtin::events::BookRemoved
+pub fn quireink_sdk::builtin::events::BookRemoved::from_params(&quireink_sdk::Params) -> core::option::Option<Self>
+pub fn quireink_sdk::builtin::events::BookRemoved::to_params(&self) -> quireink_sdk::Params
 impl quireink_sdk::event::EventData for quireink_sdk::builtin::events::MenuChanged
 pub fn quireink_sdk::builtin::events::MenuChanged::from_params(&quireink_sdk::Params) -> core::option::Option<Self>
 pub fn quireink_sdk::builtin::events::MenuChanged::to_params(&self) -> quireink_sdk::Params

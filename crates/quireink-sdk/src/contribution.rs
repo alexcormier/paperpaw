@@ -68,6 +68,7 @@ pub enum Contribution {
         source: Cow<'static, str>,
     },
     Stylesheet(Cow<'static, str>),
+    BookData(crate::library::BookData),
     Font(Box<FontSpec>),
     FontFile {
         id: Id,
@@ -138,6 +139,7 @@ impl Contribution {
             Contribution::Keymap(_) => "keymap",
             Contribution::KeymapPreset { .. } => "keymap-preset",
             Contribution::Stylesheet(_) => "stylesheet",
+            Contribution::BookData(_) => "book data",
             Contribution::Font(_) => "font",
             Contribution::FontFile { .. } => "font-file",
             Contribution::FontExtension { .. } => "font-extension",
@@ -315,6 +317,23 @@ impl Registrar {
     /// apart; see [`Env::stylesheets`](crate::Env).
     pub fn add_stylesheet(&mut self, css: Cow<'static, str>) -> Result<(), RegisterError> {
         self.add(Contribution::Stylesheet(css))
+    }
+
+    /// A folder where the plugin keeps something for each book, named by
+    /// the book's key ([`library::key`](crate::library::key)) after
+    /// `prefix` (alone, or followed by `.` and more, a file or a folder):
+    /// the kernel moves it with its book, removes it with it and cleans up
+    /// what is left of books no longer there
+    /// ([`library::BookData`](crate::library::BookData)).
+    pub fn add_book_data(
+        &mut self,
+        folder: impl Into<Cow<'static, str>>,
+        prefix: impl Into<Cow<'static, str>>,
+    ) -> Result<(), RegisterError> {
+        self.add(Contribution::BookData(crate::library::BookData {
+            folder: folder.into(),
+            prefix: prefix.into(),
+        }))
     }
 
     /// Adds a key map preset (same format as [`Registrar::add_keymap`]) that

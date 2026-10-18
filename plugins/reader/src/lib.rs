@@ -230,6 +230,12 @@ impl Plugin for Reader {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        // Each book's position, page index and own settings, moved and
+        // removed with it.
+        r.add_book_data(
+            alloc::format!("{}/books", Env::plugin_dir(PLUGIN.as_str())),
+            "",
+        )?;
         // The page takes all of the screen; the buttons' row comes on a press.
         r.set_screen_hints(SCREEN, quireink_sdk::Hints::OnPress)?;
         r.add_screen(ScreenSpec {
@@ -618,14 +624,10 @@ fn state_path() -> String {
     alloc::format!("{}/state.ini", Env::plugin_dir(PLUGIN.as_str()))
 }
 
-/// A book was moved: its data folder (position, notes, its own settings)
-/// goes along, and so does the last book read.
+/// A book was moved: the last book read follows it (its data folder
+/// moves with it, as the kernel moves registered book data).
 fn book_moved(env: &Env<'_>, moved: &events::BookMoved) {
     let (from, to) = (moved.from.as_str(), moved.path.as_str());
-    let _ = env
-        .storage
-        .rename(&screen::book_dir(from), &screen::book_dir(to));
-    quireink_sdk::annotations::moved(env.storage, from, to);
     if last_book(env).as_deref() == Some(from) {
         screen::remember_last(env.storage, to);
     }

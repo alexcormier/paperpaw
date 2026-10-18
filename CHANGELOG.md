@@ -6,6 +6,14 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- What is kept for a book (its converted chapters, position and page
+  index, notes, details) moves with it and is removed with it, and
+  "Clean up storage" (Settings) removes what is left of books no longer
+  there. Moving a book no longer converts it anew. SDK:
+  `Registrar::add_book_data`, `library::{key, BookData, move_data,
+  remove_data, clean_up, book_keys, books_in, removed}`,
+  `events::BOOK_REMOVED`, `actions::CLEAN_UP`; the file manager says
+  which books it deleted.
 - X4: pages with pictures and the sleep screen's cover or picture show
   in four grays (the panel's gray waveform, as long as a full refresh);
   lists stay black and white. The time and the battery do not refresh a

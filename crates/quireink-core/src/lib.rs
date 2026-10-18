@@ -516,6 +516,7 @@ impl KernelBuilder {
                 input_filters: quireink_sdk::filters::InputFilters::new(),
                 refresh_filters: quireink_sdk::filters::RefreshFilters::new(),
                 stylesheets: Vec::new(),
+                book_data: Vec::new(),
                 caps,
                 wifi: caps.wifi.then(quireink_sdk::wifi::Wifi::default),
                 firmware: self.firmware,
@@ -2213,6 +2214,7 @@ impl Kernel {
             self.shared.widgets.add(widget);
         }
         self.shared.stylesheets.append(&mut staging.stylesheets);
+        self.shared.book_data.append(&mut staging.book_data);
         for (id, service) in staging.services.drain(..) {
             self.shared.services.add(id, service);
         }
@@ -3582,6 +3584,8 @@ struct Shared {
     refresh_filters: quireink_sdk::filters::RefreshFilters,
     /// Plugins' stylesheets for books.
     stylesheets: Vec<Cow<'static, str>>,
+    /// Folders of what plugins keep for each book.
+    book_data: Vec<quireink_sdk::library::BookData>,
     /// What the device and its shell can do.
     caps: Capabilities,
     /// Wi-Fi, where QuireInk manages it (see [`KernelBuilder::wifi`]).
@@ -3633,6 +3637,7 @@ impl Shared {
             services: &self.services,
             text_filters: &self.text_filters,
             stylesheets: &self.stylesheets,
+            book_data: &self.book_data,
             caps: self.caps,
             wifi: self.wifi.as_ref(),
             firmware: self.firmware.as_ref(),

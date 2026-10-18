@@ -132,6 +132,7 @@ pub(crate) struct Staging {
     pub(crate) input_filters: Vec<quireink_sdk::filters::InputFilterSpec>,
     pub(crate) refresh_filters: Vec<quireink_sdk::filters::RefreshFilterSpec>,
     pub(crate) stylesheets: Vec<Cow<'static, str>>,
+    pub(crate) book_data: Vec<quireink_sdk::library::BookData>,
     pub(crate) services: Vec<(Id, alloc::boxed::Box<dyn core::any::Any>)>,
     pub(crate) contributions: Vec<(Id, Cow<'static, str>)>,
 }
@@ -213,6 +214,7 @@ pub(crate) fn stage(
                 staging.keymap_presets.push((id, source));
             }
             Contribution::Stylesheet(css) => staging.stylesheets.push(css),
+            Contribution::BookData(data) => staging.book_data.push(data),
             Contribution::Font(font) => staging.fonts.push(*font),
             Contribution::FontFile { id, path } => staging.font_files.push((id, path)),
             Contribution::FontExtension { id, path, extends } => {

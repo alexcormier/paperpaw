@@ -84,6 +84,9 @@ pub struct Env<'a> {
     /// Plugins' stylesheets for books, in the order of the plugins (see
     /// [`Registrar::add_stylesheet`](crate::Registrar::add_stylesheet)).
     pub stylesheets: &'a [alloc::borrow::Cow<'static, str>],
+    /// Folders of what plugins keep for each book
+    /// ([`Registrar::add_book_data`](crate::Registrar::add_book_data)).
+    pub book_data: &'a [crate::library::BookData],
     /// Widgets for screens that show them, from every plugin.
     pub widgets: &'a crate::widgets::Widgets,
     /// The steps of the first-run setup, from every plugin (see
@@ -157,6 +160,9 @@ pub struct EnvParts<'a> {
     /// Plugins' stylesheets for books, in the order of the plugins (see
     /// [`Registrar::add_stylesheet`](crate::Registrar::add_stylesheet)).
     pub stylesheets: &'a [alloc::borrow::Cow<'static, str>],
+    /// Folders of what plugins keep for each book
+    /// ([`Registrar::add_book_data`](crate::Registrar::add_book_data)).
+    pub book_data: &'a [crate::library::BookData],
     /// Widgets for screens that show them, from every plugin.
     pub widgets: &'a crate::widgets::Widgets,
     /// The steps of the first-run setup, from every plugin (see
@@ -216,6 +222,7 @@ impl<'a> From<EnvParts<'a>> for Env<'a> {
             status_items: p.status_items,
             text_filters: p.text_filters,
             stylesheets: p.stylesheets,
+            book_data: p.book_data,
             widgets: p.widgets,
             setup: p.setup,
             services: p.services,
