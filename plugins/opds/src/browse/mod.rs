@@ -6,6 +6,9 @@
 //! *Back* returns to the feed before, and from the first to the list of
 //! catalogs.
 
+mod covers;
+mod downloads;
+
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -28,48 +31,22 @@ use crate::feed::{self, Feed, Search};
 use crate::sync::book_name;
 use crate::{CHOICE, ID, OPTION_LABELS, PLUGIN, URL, request};
 
+use self::covers::*;
+use self::downloads::*;
+
 /// Replies: a feed, a search description, a book, the words to search
 /// for, a choice made.
 const LOADED: Event<HttpReply> = Event::new("opds.loaded");
+
 const DESCRIBED: Event<HttpReply> = Event::new("opds.described");
-const DOWNLOADED: Event<HttpReply> = Event::new("opds.downloaded");
+
 const TERMS: Event<Typed> = Event::new("opds.terms");
+
 const CHOSEN: Event<choice::Picked> = Event::new("opds.read");
-/// The answer with a cover.
-const COVER: Event<HttpReply> = Event::new("opds.cover");
-/// Parameter: the entry a cover belongs to.
-const ENTRY: &str = "entry";
-/// Parameter: the file name a download gets.
-const NAME: &str = "name";
-/// Parameter: the authors of a download, as the catalog names them.
-const AUTHORS: &str = "authors";
 
 fn feed_path() -> String {
     format!(
         "{}/browse.xml",
-        quireink_sdk::Env::plugin_dir(PLUGIN.as_str())
-    )
-}
-
-fn cover_download_path() -> String {
-    format!(
-        "{}/cover.tmp",
-        quireink_sdk::Env::plugin_dir(PLUGIN.as_str())
-    )
-}
-
-/// Where the cover from `url` is kept, decoded.
-fn cover_path(url: &str) -> String {
-    format!(
-        "{}/covers/{}.gray",
-        quireink_sdk::Env::plugin_dir(PLUGIN.as_str()),
-        quireink_digest::md5::of(url)
-    )
-}
-
-fn download_path() -> String {
-    format!(
-        "{}/download.tmp",
         quireink_sdk::Env::plugin_dir(PLUGIN.as_str())
     )
 }
@@ -244,97 +221,6 @@ impl BrowseScreen {
         self.next_cover(cx);
     }
 
-    /// The row of entry `i`, if it is on the page shown.
-    fn row_of(&self, i: usize) -> Option<usize> {
-        let row = self.rows().iter().position(|r| *r == Row::Entry(i))?;
-        let rows = self.list.rows();
-        (row / rows == self.list.page()).then_some(row % rows)
-    }
-
-    /// Loads the cover of the next entry on the page shown that has one
-    /// and lacks it; covers kept from before need no download.
-    fn next_cover(&mut self, cx: &mut Cx<'_, '_>) {
-        if !self.with_covers || self.fetching.is_some() {
-            return;
-        }
-        let env = *cx.env();
-        for i in 0..self.feed.entries.len() {
-            if self.covers[i].is_some() || self.failed.contains(&i) || self.row_of(i).is_none() {
-                continue;
-            }
-            let Some(url) = self.feed.entries[i].thumbnail.clone() else {
-                continue;
-            };
-            let kept = cover_path(&url);
-            if let Some(file) = quireink_sdk::image::ImageFile::open(env.storage, &kept) {
-                self.covers[i] = Some(ImageRef {
-                    path: file.path,
-                    width: file.width,
-                    height: file.height,
-                });
-                continue;
-            }
-            if !env.caps.network {
-                return;
-            }
-            self.fetching = Some(i);
-            let params = Params::new()
-                .with(URL, url.clone())
-                .with(ENTRY, i.to_string());
-            cx.command(Command::Http(request(
-                &self.catalog,
-                &url,
-                cover_download_path(),
-                &COVER,
-                params,
-            )));
-            return;
-        }
-        // Covers found in the cache show at once.
-        self.redraw(cx);
-    }
-
-    /// A cover arrived: decoded and kept, then the next one.
-    fn cover_loaded(&mut self, reply: &HttpReply, cx: &mut Cx<'_, '_>) {
-        let env = *cx.env();
-        let i = reply
-            .context
-            .get(ENTRY)
-            .and_then(|i| i.parse::<usize>().ok());
-        let url = reply.context.get(URL).unwrap_or_default().to_string();
-        let Some(i) = i.filter(|&i| self.fetching == Some(i) && i < self.covers.len()) else {
-            return;
-        };
-        self.fetching = None;
-        let tmp = cover_download_path();
-        let side = self.style.noted_row();
-        let image = (200..300)
-            .contains(&reply.status)
-            .then(|| {
-                let color = env.device.display.format.is_color();
-                quireink_sdk::image::picture_from_file(
-                    env.storage,
-                    &tmp,
-                    &cover_path(&url),
-                    quireink_sdk::image::Fit::side(side),
-                    color,
-                )
-            })
-            .flatten();
-        let _ = env.storage.remove(&tmp);
-        match image {
-            Some(image) => {
-                self.covers[i] = Some(image);
-                if let Some(row) = self.row_of(i) {
-                    cx.request_redraw_area(self.list.row_rect(row));
-                    cx.request_refresh(RefreshMode::Fast);
-                }
-            }
-            None => self.failed.push(i),
-        }
-        self.next_cover(cx);
-    }
-
     /// Asks for the words to search for, once the address is known.
     fn search(&mut self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
@@ -382,92 +268,6 @@ impl BrowseScreen {
                 self.say(message, cx);
             }
         }
-    }
-
-    /// Downloads entry `i`'s book, or opens the feed it leads to.
-    fn open(&mut self, i: usize, cx: &mut Cx<'_, '_>) {
-        let env = *cx.env();
-        let Some(entry) = self.feed.entries.get(i) else {
-            return;
-        };
-        let readable = |ext: &str| env.formats.supports(&format!("book.{ext}"));
-        if let Some((book, ext)) = entry.readable_book(readable) {
-            if !env.caps.network {
-                let message = env.i18n.tr("opds.no-network").to_string();
-                return self.say(message, cx);
-            }
-            let name = book_name(entry, &book.url, ext);
-            let params = Params::new()
-                .with(URL, book.url.clone())
-                .with(NAME, name.clone())
-                .with(params::TITLE, entry.title.clone())
-                .with(AUTHORS, entry.authors.clone());
-            cx.command(Command::Http(request(
-                &self.catalog,
-                &book.url,
-                download_path(),
-                &DOWNLOADED,
-                params,
-            )));
-            let message = env
-                .i18n
-                .format("opds.downloading", &[("title", Arg::Str(&entry.title))]);
-            return self.say(message, cx);
-        }
-        if let Some(url) = entry.feed.clone() {
-            return self.load(&url, false, cx);
-        }
-        let message = env.i18n.tr("opds.no-format").to_string();
-        self.say(message, cx);
-    }
-
-    fn downloaded(&mut self, reply: &HttpReply, cx: &mut Cx<'_, '_>) {
-        let env = *cx.env();
-        let url = reply.context.get(URL).unwrap_or_default().to_string();
-        let tmp = download_path();
-        if !self.answered(reply, &url, cx) {
-            let _ = env.storage.remove(&tmp);
-            return;
-        }
-        // The catalog's folder, for order on the device.
-        let dir = self.catalog.sync_folder(&env);
-        let name = reply.context.get(NAME).unwrap_or("download").to_string();
-        let _ = env.storage.create_dir(&dir);
-        let target = files::free_path(env.storage, &dir, &name);
-        if files::move_to(env.storage, &tmp, &target).is_err() {
-            let _ = env.storage.remove(&tmp);
-            let message = env.i18n.tr("opds.cannot-save").to_string();
-            return self.say(message, cx);
-        }
-        cx.command(quireink_sdk::library::changed());
-        // What the catalog says of it, for books that say nothing.
-        let first = |authors: &str| authors.split(" & ").next().map(String::from);
-        quireink_sdk::library::provide(
-            env.storage,
-            &target,
-            quireink_sdk::library::Provided {
-                title: reply.context.get(params::TITLE).map(String::from),
-                author: reply.context.get(AUTHORS).and_then(first),
-                ..Default::default()
-            },
-        );
-        self.message = None;
-        let text = env.i18n.format(
-            "opds.saved",
-            &[
-                ("name", Arg::Str(files::name(&target))),
-                ("folder", Arg::Str(&dir)),
-            ],
-        );
-        cx.command(choice::open(
-            CHOICE,
-            &CHOSEN,
-            &text,
-            &target,
-            OPTION_LABELS,
-            &["read", "ok"],
-        ));
-        self.redraw(cx);
     }
 
     fn activate(&mut self, index: usize, cx: &mut Cx<'_, '_>) {

@@ -17,6 +17,10 @@ quireink-sdk.workspace = true
 
 [dev-dependencies]
 quireink-i18n.workspace = true
+quireink-core.workspace = true
+quireink-platform.workspace = true
+quireink-plugin-fonts-default = { workspace = true, features = ["packs"] }
+quireink-plugin-format-epub.workspace = true
 
 [lints]
 workspace = true
