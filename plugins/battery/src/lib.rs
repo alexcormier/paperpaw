@@ -23,16 +23,17 @@ use core::cell::RefCell;
 use quireink_sdk::builtin::{events, groups, menus};
 use quireink_sdk::{
     ActionSpec, Command, Env, Id, Manifest, MenuEntry, Params, Plugin, RegisterError, Registrar,
-    SDK_VERSION, ScreenSpec, SettingKind, SettingSpec, SettingValue, Version, time,
+    SDK_VERSION, ScreenSpec, SettingSpec, Version, time,
 };
 
 use log::{Kind, Reading};
+use quireink_sdk::setting::Setting;
 
 pub const PLUGIN: Id = Id::new_static("battery");
 /// Records the battery's use.
-pub const ENABLED: Id = Id::new_static("battery.enabled");
+pub const ENABLED: Setting<bool> = Setting::new("battery.enabled");
 /// Shows what each plugin took (for developers).
-pub const BY_PLUGIN: Id = Id::new_static("battery.by-plugin");
+pub const BY_PLUGIN: Setting<bool> = Setting::new("battery.by-plugin");
 /// Opens the view.
 pub const OPEN: Id = Id::new_static("battery.open");
 const SCREEN: Id = Id::new_static("battery.screen");
@@ -88,7 +89,7 @@ fn append(env: &Env<'_>, name: &str, old: &str, header: &str, text: &str) {
 
 /// Adds a line to the log, and what each plugin took when due.
 fn record(env: &Env<'_>, state: &mut State, kind: Kind) {
-    if !env.settings.bool(ENABLED.as_str()) {
+    if !env.settings.read(&ENABLED) {
         return;
     }
     let now = reading(env, state);
@@ -139,24 +140,14 @@ impl Plugin for Battery {
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let state: Shared = Rc::new(RefCell::new(State::default()));
         r.add_setting(
-            SettingSpec::new(
-                ENABLED,
-                "battery.setting.enabled",
-                SettingKind::Bool,
-                SettingValue::Bool(true),
-            )
-            .group(groups::SYSTEM)
-            .description("battery.setting.enabled.help"),
+            SettingSpec::switch(&ENABLED, "battery.setting.enabled", true)
+                .group(groups::SYSTEM)
+                .description("battery.setting.enabled.help"),
         )?;
         r.add_setting(
-            SettingSpec::new(
-                BY_PLUGIN,
-                "battery.setting.by-plugin",
-                SettingKind::Bool,
-                SettingValue::Bool(true),
-            )
-            .group(groups::DEVELOPER)
-            .description("battery.setting.by-plugin.help"),
+            SettingSpec::switch(&BY_PLUGIN, "battery.setting.by-plugin", true)
+                .group(groups::DEVELOPER)
+                .description("battery.setting.by-plugin.help"),
         )?;
 
         // Recording: a time awake from start-up or waking to sleep.

@@ -22,14 +22,14 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use quireink_sdk::builtin::{actions, groups, menus, params, slots};
+use quireink_sdk::setting::Setting;
 use quireink_sdk::ui::choice::{self, Choice};
 use quireink_sdk::ui::{self, ListChange, ListView, UiStyle};
 use quireink_sdk::web::{clean_name, host};
 use quireink_sdk::{
     ActionSpec, Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, HttpRequest, Id,
     Manifest, MemoryClass, MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar,
-    SDK_VERSION, Screen, ScreenSpec, SettingKind, SettingSpec, SettingValue, Storage, Version,
-    http_params,
+    SDK_VERSION, Screen, ScreenSpec, SettingSpec, Storage, Version, http_params,
 };
 
 pub const PLUGIN: Id = Id::new_static("news");
@@ -38,7 +38,7 @@ pub const OPEN: Id = Id::new_static("news.open");
 /// Fetches all feeds.
 pub const FETCH: Id = Id::new_static("news.fetch");
 /// Articles kept of each feed.
-pub const ARTICLES: Id = Id::new_static("news.articles");
+pub const ARTICLES: Setting<i64> = Setting::new("news.articles");
 const SCREEN: Id = Id::new_static("news.list");
 const CHOICE: Id = Id::new_static("news.choice");
 const CHOSEN: Id = Id::new_static("news.chosen");
@@ -47,8 +47,6 @@ const FETCHED: Id = Id::new_static("news.fetched");
 /// The address of a new feed, from the keyboard.
 const ADDED: Id = Id::new_static("news.added");
 const OPTION_LABELS: &str = "news.option.";
-/// The folder chooser of the `files` plugin, if installed.
-const LIBRARY: &str = "files.root";
 const FOLDER: &str = "News";
 /// Parameters of a fetch: the feed being fetched, the last to fetch,
 /// and how many were fetched and failed so far.
@@ -101,7 +99,7 @@ fn short_title(title: &str) -> String {
 
 /// The folder of the news: `News` in the library.
 fn folder(env: &Env<'_>) -> String {
-    let library = env.settings.text(LIBRARY).trim_matches('/');
+    let library = quireink_sdk::library::folder(env);
     if library.is_empty() {
         String::from(FOLDER)
     } else {
@@ -184,7 +182,7 @@ fn fetched(env: &Env<'_>, params: &Params, out: &mut Vec<Command>) {
         } else {
             MAX_TEXT
         };
-        let articles = env.settings.int(ARTICLES.as_str()).clamp(1, 200) as usize;
+        let articles = env.settings.read(&ARTICLES).clamp(1, 200) as usize;
         let _ = env.storage.create_dir(&folder(env));
         let tmp = data("page.tmp");
         let converted =
@@ -345,16 +343,11 @@ impl Plugin for News {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_setting(
-            SettingSpec::new(
-                ARTICLES,
-                "news.setting.articles",
-                SettingKind::Int { min: 5, max: 200 },
-                SettingValue::Int(30),
-            )
-            .group(groups::LIBRARY)
-            .step(5)
-            .advanced()
-            .description("news.setting.articles.help"),
+            SettingSpec::number(&ARTICLES, "news.setting.articles", 5, 200, 30)
+                .group(groups::LIBRARY)
+                .step(5)
+                .advanced()
+                .description("news.setting.articles.help"),
         )?;
         r.add_screen(ScreenSpec {
             id: SCREEN,

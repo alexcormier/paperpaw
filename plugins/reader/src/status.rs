@@ -32,17 +32,18 @@ use quireink_sdk::{
 };
 
 use crate::PLUGIN;
+use quireink_sdk::setting::Setting;
 
 /// The settings group of the status lines.
 pub const GROUP: Id = Id::new_static("reader.group.status");
 
 /// The battery's charge in percent beside its symbol.
-pub const PERCENT: Id = Id::new_static("reader.status.battery-percent");
+pub const PERCENT: Setting<bool> = Setting::new("reader.status.battery-percent");
 /// Text size of the status lines, in points.
-pub const SIZE: Id = Id::new_static("reader.status.size");
+pub const SIZE: Setting<i64> = Setting::new("reader.status.size");
 /// How far the status lines sit from the edge of the screen, in tenths of
 /// a millimetre: closer than the text's margin, so the text has the room.
-pub const EDGE: Id = Id::new_static("reader.status.edge");
+pub const EDGE: Setting<i64> = Setting::new("reader.status.edge");
 /// The status lines to switch between, above and below the text (ids
 /// separated by commas; the first shows at first).
 pub const LINES: [Id; 2] = [
@@ -123,27 +124,17 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
         "reader.status.bottom-right",
     ];
     r.add_setting(
-        SettingSpec::new(
-            SIZE,
-            "reader.status.size",
-            SettingKind::Int { min: 5, max: 16 },
-            SettingValue::Int(6),
-        )
-        .group(GROUP)
-        .unit("core.unit.pt")
-        .description("reader.status.size.help"),
+        SettingSpec::number(&SIZE, "reader.status.size", 5, 16, 6)
+            .group(GROUP)
+            .unit("core.unit.pt")
+            .description("reader.status.size.help"),
     )?;
     r.add_setting(
-        SettingSpec::new(
-            EDGE,
-            "reader.status.edge",
-            SettingKind::Int { min: 0, max: 150 },
-            SettingValue::Int(15),
-        )
-        .group(GROUP)
-        .unit("core.unit.tenth-mm")
-        .step(5)
-        .description("reader.status.edge.help"),
+        SettingSpec::number(&EDGE, "reader.status.edge", 0, 150, 15)
+            .group(GROUP)
+            .unit("core.unit.tenth-mm")
+            .step(5)
+            .description("reader.status.edge.help"),
     )?;
     // Below the text: the items, the progress bar, nothing; above: none.
     let line_defaults = [
@@ -178,14 +169,9 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_setting(spec)?;
     }
     r.add_setting(
-        SettingSpec::new(
-            PERCENT,
-            "reader.status.battery-percent",
-            SettingKind::Bool,
-            SettingValue::Bool(true),
-        )
-        .group(GROUP)
-        .description("reader.status.battery-percent.help"),
+        SettingSpec::switch(&PERCENT, "reader.status.battery-percent", true)
+            .group(GROUP)
+            .description("reader.status.battery-percent.help"),
     )?;
     r.add_status_line(StatusLineSpec {
         id: lines::ITEMS,
@@ -199,7 +185,7 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
                 lists: lists(env, frame.top),
                 size: frame.size,
                 color: frame.color,
-                percent: env.settings.bool(PERCENT.as_str()),
+                percent: env.settings.read(&PERCENT),
             };
             line.draw(canvas, env, &font, frame.context);
         }),
@@ -281,8 +267,7 @@ pub(crate) fn lists<'e>(env: &Env<'e>, top: bool) -> [&'e str; 3] {
 
 /// The text size of status lines in pixels.
 pub(crate) fn size(env: &Env<'_>) -> f32 {
-    env.metrics
-        .pt(env.settings.int(SIZE.as_str()).clamp(5, 16) as f32)
+    env.metrics.pt(env.settings.read(&SIZE).clamp(5, 16) as f32)
 }
 
 /// The height of a status line's place.

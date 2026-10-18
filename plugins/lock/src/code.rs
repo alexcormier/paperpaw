@@ -36,7 +36,7 @@ pub(crate) fn hash(salt: &str, code: &str) -> String {
 /// The kind of the lock in use (`pin`, `pattern`, `password`): one whose
 /// code is kept and that the setting names.
 pub(crate) fn active(env: &Env<'_>) -> Option<String> {
-    let setting = env.settings.text(KIND.as_str());
+    let setting = env.settings.read(&KIND);
     let kind = setting.strip_prefix(KIND_PREFIX).unwrap_or(setting);
     let stored = env.secrets.get(SECRET)?;
     let (stored_kind, _) = stored.split_once(':')?;

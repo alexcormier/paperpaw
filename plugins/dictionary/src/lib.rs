@@ -26,11 +26,12 @@ use alloc::vec::Vec;
 
 use quireink_digest::fnv1a64;
 use quireink_sdk::builtin::{actions, groups, params, slots};
+use quireink_sdk::setting::{Setting, Text};
 use quireink_sdk::ui::{self, UiStyle};
 use quireink_sdk::{
     Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest, Params,
     Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen, ScreenSpec,
-    SettingKind, SettingSpec, SettingValue, Storage, Version,
+    SettingSpec, Storage, Version,
 };
 use quireink_stardict::{Builder, Dictionary};
 
@@ -38,7 +39,7 @@ pub const PLUGIN: Id = Id::new_static("dictionary");
 /// The panel with the definitions; parameters `word` and `language`.
 pub const POPUP: Id = Id::new_static("dictionary.popup");
 /// The folder searched for dictionaries.
-pub const FOLDER: Id = Id::new_static("dictionary.folder");
+pub const FOLDER: Setting<Text> = Setting::new("dictionary.folder");
 /// The folder chooser of the `files` plugin, if installed.
 const CHOOSE_FOLDER: Id = Id::new_static("files.choose-folder");
 
@@ -70,16 +71,11 @@ impl Plugin for DictionaryPlugin {
         })?;
         r.bind_slot(slots::LOOKUP, POPUP, Priority::DEFAULT)?;
         r.add_setting(
-            SettingSpec::new(
-                FOLDER,
-                "dictionary.setting.folder",
-                SettingKind::Text,
-                SettingValue::Text(Cow::Borrowed("dictionaries")),
-            )
-            .group(groups::READING)
-            .section("dictionary.section")
-            .editor(CHOOSE_FOLDER)
-            .description("dictionary.setting.folder.help"),
+            SettingSpec::text(&FOLDER, "dictionary.setting.folder", "dictionaries")
+                .group(groups::READING)
+                .section("dictionary.section")
+                .editor(CHOOSE_FOLDER)
+                .description("dictionary.setting.folder.help"),
         )?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
@@ -161,7 +157,7 @@ impl Popup {
             style,
             region: Rect::new(0, top, display.width, display.height - top),
         };
-        let folder = env.settings.text(FOLDER.as_str()).trim_matches('/');
+        let folder = env.settings.read(&FOLDER).trim_matches('/');
         let cache_dir = Env::plugin_dir(PLUGIN.as_str());
         for ifo in find_dictionaries(env.storage, folder) {
             let cache = format!("{cache_dir}/{:016x}", fnv1a64(&ifo));

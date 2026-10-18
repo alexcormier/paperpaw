@@ -18,18 +18,19 @@ use alloc::vec::Vec;
 use core::cell::Cell;
 
 use quireink_sdk::builtin::{actions, events, groups, menus};
+use quireink_sdk::setting::{Setting, Text};
 use quireink_sdk::ui::{self, UiStyle};
 use quireink_sdk::{
     ActionSpec, Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
     MenuEntry, Params, Plugin, Rect, RegisterError, Registrar, SDK_VERSION, Screen, ScreenSpec,
-    SettingKind, SettingSpec, SettingValue, Version,
+    SettingSpec, Version,
 };
 
 /// Ids start with the plugin's id: `hello.…`.
 pub const PLUGIN: Id = Id::new_static("hello");
 pub const OPEN: Id = Id::new_static("hello.open");
 pub const SCREEN: Id = Id::new_static("hello.screen");
-pub const NAME: Id = Id::new_static("hello.name");
+pub const NAME: Setting<Text> = Setting::new("hello.name");
 
 /// The plugin. State shared between its parts lives in `Rc`s it hands to
 /// them when it registers.
@@ -77,14 +78,9 @@ impl Plugin for Hello {
 
         // The setting: shown in the settings, saved by the kernel.
         r.add_setting(
-            SettingSpec::new(
-                NAME,
-                "hello.setting.name",
-                SettingKind::Text,
-                SettingValue::Text(Cow::Borrowed("")),
-            )
-            .group(groups::OTHER)
-            .description("hello.setting.name.help"),
+            SettingSpec::text(&NAME, "hello.setting.name", "")
+                .group(groups::OTHER)
+                .description("hello.setting.name.help"),
         )?;
 
         // The event: every reader emits it when a book opens.
@@ -119,7 +115,7 @@ impl HelloScreen {
     }
 
     fn greeting(&self, env: &Env<'_>) -> alloc::string::String {
-        let name = match env.settings.text(NAME.as_str()).trim() {
+        let name = match env.settings.read(&NAME).trim() {
             "" => env.i18n.tr("hello.someone"),
             name => name,
         };

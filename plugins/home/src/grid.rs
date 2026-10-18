@@ -139,7 +139,7 @@ impl Geometry {
             .int(crate::pages::COLUMNS.as_str())
             .clamp(2, i64::from(MAX_COLUMNS))) as u8;
         let cell_w = area.width / u16::from(columns);
-        let rows = match env.settings.int(crate::pages::ROWS.as_str()) {
+        let rows = match env.settings.read(&crate::pages::ROWS) {
             0 => {
                 let target = (u32::from(cell_w) * 85 / 100).max(1);
                 ((u32::from(area.height) + target / 2) / target).clamp(3, u32::from(MAX_ROWS)) as u8

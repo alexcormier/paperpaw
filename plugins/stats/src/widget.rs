@@ -13,17 +13,17 @@ use alloc::vec::Vec;
 use quireink_sdk::ui::{self, UiStyle};
 use quireink_sdk::widgets::{self, Align, WidgetSpec};
 use quireink_sdk::{
-    Arg, Canvas, Color, Env, Id, Rect, RegisterError, Registrar, SettingKind, SettingSpec,
-    SettingValue,
+    Arg, Canvas, Color, Env, Id, Rect, RegisterError, Registrar, SettingSpec, SettingValue,
 };
 
 use crate::{fmt, overview, store};
+use quireink_sdk::setting::{Setting, Text};
 
 pub(crate) const TODAY: Id = Id::new_static("stats.widget.today");
 /// The last seven days as bars.
 pub(crate) const WEEK: Id = Id::new_static("stats.widget.week");
 /// Setting: minutes a day to read, or none.
-pub(crate) const GOAL: Id = Id::new_static("stats.goal");
+pub(crate) const GOAL: Setting<Text> = Setting::new("stats.goal");
 /// Choices of [`GOAL`]: minutes, `off` for none.
 const GOALS: [&str; 12] = [
     "stats.goal.off",
@@ -122,11 +122,11 @@ fn lines(env: &Env<'_>, numbers: &Numbers) -> (String, String) {
 
 pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     r.add_setting(
-        SettingSpec::new(
-            GOAL,
+        SettingSpec::choice(
+            &GOAL,
             "stats.setting.goal",
-            SettingKind::Choice(GOALS.iter().map(|g| Cow::Borrowed(*g)).collect()),
-            SettingValue::Text(Cow::Borrowed(GOALS[0])),
+            GOALS.iter().map(|g| Cow::Borrowed(*g)).collect(),
+            GOALS[0],
         )
         .group(crate::GROUP)
         .description("stats.setting.goal.help"),

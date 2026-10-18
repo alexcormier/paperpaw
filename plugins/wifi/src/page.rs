@@ -11,7 +11,7 @@ use quireink_sdk::ui::{self, ListChange, ListView, UiStyle};
 use quireink_sdk::wifi::{self, WifiCommand, WifiNetwork, WifiState};
 use quireink_sdk::{
     Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Hint, Id, Params, Rect,
-    RefreshMode, Screen, SettingValue,
+    RefreshMode, Screen,
 };
 
 use crate::{IDLE_OFF, IDLE_OFF_CHOICES, ON_DEMAND, PASSWORD_ENTERED, Shared, WHILE_CHARGING};
@@ -183,20 +183,17 @@ impl WifiPage {
                 } else {
                     WHILE_CHARGING
                 };
-                let on = env.settings.bool(id.as_str());
-                cx.command(Command::SetSetting(id, SettingValue::Bool(!on)));
+                let on = env.settings.read(&id);
+                cx.command(Command::set(&id, !on));
             }
             Row::IdleOff => {
-                let now = env.settings.text(IDLE_OFF.as_str());
+                let now = env.settings.read(&IDLE_OFF);
                 let at = IDLE_OFF_CHOICES
                     .iter()
                     .position(|(choice, _)| *choice == now)
                     .unwrap_or(0);
                 let next = IDLE_OFF_CHOICES[(at + 1) % IDLE_OFF_CHOICES.len()].0;
-                cx.command(Command::SetSetting(
-                    IDLE_OFF,
-                    SettingValue::Text(Cow::Borrowed(next)),
-                ));
+                cx.command(Command::set(&IDLE_OFF, Cow::Borrowed(next)));
             }
         }
         Self::changed(cx);
@@ -311,7 +308,7 @@ impl Screen for WifiPage {
                         rect,
                         focused,
                         tr("wifi.setting.idle-off"),
-                        tr(env.settings.text(IDLE_OFF.as_str())),
+                        tr(env.settings.read(&IDLE_OFF)),
                         tr("wifi.setting.idle-off.help"),
                     ),
                 }

@@ -41,20 +41,21 @@ use quireink_json as json;
 use quireink_sdk::builtin::{events, params};
 use quireink_sdk::document::Locator;
 use quireink_sdk::secrets::SecretChange;
+use quireink_sdk::setting::{Setting, Text};
 use quireink_sdk::{
     ActionSpec, Arg, Command, Env, HttpRequest, Id, Instant, Manifest, MenuEntry, Params, Plugin,
-    RegisterError, Registrar, SDK_VERSION, ScreenSpec, SettingGroupSpec, SettingKind, SettingSpec,
-    SettingValue, Version, http_params,
+    RegisterError, Registrar, SDK_VERSION, ScreenSpec, SettingGroupSpec, SettingSpec, Version,
+    http_params,
 };
 
 pub const PLUGIN: Id = Id::new_static("kosync");
 /// The account's user name (empty when signed out); edited on the account
 /// screen.
-pub const USER: Id = Id::new_static("kosync.user");
+pub const USER: Setting<Text> = Setting::new("kosync.user");
 /// The sync server.
-pub const SERVER: Id = Id::new_static("kosync.server");
+pub const SERVER: Setting<Text> = Setting::new("kosync.server");
 /// Send and fetch the progress by itself.
-pub const AUTO: Id = Id::new_static("kosync.auto");
+pub const AUTO: Setting<bool> = Setting::new("kosync.auto");
 /// Sends the progress of the open book and fetches the latest now.
 pub const SYNC_NOW: Id = Id::new_static("kosync.sync-now");
 
@@ -187,11 +188,11 @@ impl State {
 
     /// Whether to sync by itself now.
     fn active(&self, env: &Env<'_>) -> bool {
-        env.caps.network && env.settings.bool(AUTO.as_str()) && self.signed_in(env)
+        env.caps.network && env.settings.read(&AUTO) && self.signed_in(env)
     }
 
     fn signed_in(&self, env: &Env<'_>) -> bool {
-        !env.settings.text(USER.as_str()).is_empty() && key(env).is_some()
+        !env.settings.read(&USER).is_empty() && key(env).is_some()
     }
 
     fn digest(&mut self, env: &Env<'_>, path: &str) -> Option<String> {
@@ -213,7 +214,7 @@ impl State {
         reply: Id,
         params: Params,
     ) -> Option<Command> {
-        let user = env.settings.text(USER.as_str());
+        let user = env.settings.read(&USER);
         let auth = Some((user, key(env)?));
         Some(Command::Http(server_request(
             env, method, path, body, reply, params, auth,
@@ -283,7 +284,7 @@ fn device_name(env: &Env<'_>) -> String {
 
 /// The server's base URL.
 pub(crate) fn server(env: &Env<'_>) -> String {
-    normalize_server(env.settings.text(SERVER.as_str()))
+    normalize_server(env.settings.read(&SERVER))
 }
 
 /// A server address as entered, as a base URL: `https://` unless another
@@ -434,29 +435,14 @@ impl Plugin for Kosync {
         })?;
         r.add_icon(GROUP, Cow::Borrowed("refresh"))?;
         for spec in [
-            SettingSpec::new(
-                USER,
-                "kosync.setting.user",
-                SettingKind::Text,
-                SettingValue::Text(Cow::Borrowed("")),
-            )
-            .editor(ACCOUNT_SCREEN)
-            .description("kosync.setting.user.help"),
-            SettingSpec::new(
-                AUTO,
-                "kosync.setting.auto",
-                SettingKind::Bool,
-                SettingValue::Bool(true),
-            )
-            .description("kosync.setting.auto.help"),
-            SettingSpec::new(
-                SERVER,
-                "kosync.setting.server",
-                SettingKind::Text,
-                SettingValue::Text(Cow::Borrowed(DEFAULT_SERVER)),
-            )
-            .advanced()
-            .description("kosync.setting.server.help"),
+            SettingSpec::text(&USER, "kosync.setting.user", "")
+                .editor(ACCOUNT_SCREEN)
+                .description("kosync.setting.user.help"),
+            SettingSpec::switch(&AUTO, "kosync.setting.auto", true)
+                .description("kosync.setting.auto.help"),
+            SettingSpec::text(&SERVER, "kosync.setting.server", DEFAULT_SERVER)
+                .advanced()
+                .description("kosync.setting.server.help"),
         ] {
             r.add_setting(spec.group(GROUP))?;
         }

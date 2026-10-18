@@ -25,11 +25,12 @@ use quireink_sdk::{
 use quireink_sdk::secrets::SecretChange;
 
 use crate::merge::{self, Outcome};
+use quireink_sdk::setting::{Setting, Text};
 
 /// The folder (its address) and the user; the password is kept with the
 /// other passwords and keys (see `quireink_sdk::secrets`) as [`SECRET`].
-pub const URL: Id = Id::new_static("stats.webdav-url");
-pub const USER: Id = Id::new_static("stats.webdav-user");
+pub const URL: Setting<Text> = Setting::new("stats.webdav-url");
+pub const USER: Setting<Text> = Setting::new("stats.webdav-user");
 pub(crate) const SCREEN: Id = Id::new_static("stats.sync");
 /// The password.
 pub(crate) const SECRET: &str = "stats.webdav";
@@ -115,8 +116,8 @@ pub(crate) fn move_password(env: &Env<'_>, out: &mut Vec<Command>) {
 }
 
 fn request(env: &Env<'_>, method: &str, reply: Id) -> HttpRequest {
-    let url = format!("{}/{FILE}", folder(env.settings.text(URL.as_str())));
-    let user = env.settings.text(USER.as_str());
+    let url = format!("{}/{FILE}", folder(env.settings.read(&URL)));
+    let user = env.settings.read(&USER);
     let mut request = HttpRequest::new(method, &url, reply);
     if !user.is_empty() {
         request.headers.push((
@@ -140,7 +141,7 @@ impl Sync {
         if !env.caps.network {
             return done(out, env.i18n.tr("stats.sync.no-network").to_string());
         }
-        if env.settings.text(URL.as_str()).trim().is_empty() {
+        if env.settings.read(&URL).trim().is_empty() {
             return done(out, env.i18n.tr("stats.sync.no-folder").to_string());
         }
         self.running = true;
@@ -289,7 +290,7 @@ pub(crate) fn register(
     r: &mut quireink_sdk::Registrar,
     sync: SharedSync,
 ) -> Result<(), quireink_sdk::RegisterError> {
-    use quireink_sdk::{ScreenSpec, SettingKind, SettingSpec};
+    use quireink_sdk::{ScreenSpec, SettingSpec};
     r.subscribe(
         quireink_sdk::builtin::events::STARTED,
         alloc::boxed::Box::new(|env: &Env<'_>, _: &Params, out: &mut Vec<Command>| {
@@ -297,26 +298,16 @@ pub(crate) fn register(
         }),
     )?;
     r.add_setting(
-        SettingSpec::new(
-            URL,
-            "stats.setting.sync",
-            SettingKind::Text,
-            SettingValue::Text(Cow::Borrowed("")),
-        )
-        .editor(SCREEN)
-        .group(crate::GROUP)
-        .description("stats.setting.sync.help"),
+        SettingSpec::text(&URL, "stats.setting.sync", "")
+            .editor(SCREEN)
+            .group(crate::GROUP)
+            .description("stats.setting.sync.help"),
     )?;
     r.add_setting(
-        SettingSpec::new(
-            USER,
-            "stats.sync.user",
-            SettingKind::Text,
-            SettingValue::Text(Cow::Borrowed("")),
-        )
-        .group(crate::GROUP)
-        .editor(SCREEN)
-        .advanced(),
+        SettingSpec::text(&USER, "stats.sync.user", "")
+            .group(crate::GROUP)
+            .editor(SCREEN)
+            .advanced(),
     )?;
     let s = sync.clone();
     r.subscribe(
@@ -408,13 +399,13 @@ impl SyncScreen {
         match row {
             Row::Folder => cx.command(keyboard(
                 "stats.sync.folder",
-                env.settings.text(URL.as_str()).to_string(),
+                env.settings.read(&URL).to_string(),
                 URL_ENTERED,
                 None,
             )),
             Row::User => cx.command(keyboard(
                 "stats.sync.user",
-                env.settings.text(USER.as_str()).to_string(),
+                env.settings.read(&USER).to_string(),
                 USER_ENTERED,
                 None,
             )),
@@ -459,14 +450,11 @@ impl Screen for SyncScreen {
             |canvas, index, rect, focused| {
                 let (title, value) = match rows[index] {
                     Row::Folder => {
-                        let url = folder(env.settings.text(URL.as_str()));
+                        let url = folder(env.settings.read(&URL));
                         let shown = url.strip_prefix("https://").unwrap_or(&url).to_string();
                         ("stats.sync.folder", shown)
                     }
-                    Row::User => (
-                        "stats.sync.user",
-                        env.settings.text(USER.as_str()).to_string(),
-                    ),
+                    Row::User => ("stats.sync.user", env.settings.read(&USER).to_string()),
                     Row::Password => (
                         "stats.sync.password",
                         String::from(if has_password {
@@ -532,11 +520,11 @@ impl Screen for SyncScreen {
         let text = params.get(params::TEXT).unwrap_or_default();
         if *event == URL_ENTERED {
             let value = SettingValue::Text(Cow::Owned(folder(text)));
-            cx.command(Command::SetSetting(URL, value));
+            cx.command(Command::SetSetting(URL.into(), value));
             self.list.focus = 1;
         } else if *event == USER_ENTERED {
             let value = SettingValue::Text(Cow::Owned(text.trim().to_string()));
-            cx.command(Command::SetSetting(USER, value));
+            cx.command(Command::SetSetting(USER.into(), value));
             self.list.focus = 2;
         } else if *event == PASSWORD_ENTERED {
             cx.command(save_password(text));

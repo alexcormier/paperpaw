@@ -20,16 +20,16 @@ use alloc::vec::Vec;
 use quireink_sdk::builtin::groups;
 use quireink_sdk::document::{Block, BlockKind, Run, TextStyle};
 use quireink_sdk::filters::TextFilterSpec;
+use quireink_sdk::setting::{Setting, Text};
 use quireink_sdk::{
-    Env, Id, Manifest, Plugin, RegisterError, Registrar, SDK_VERSION, SettingKind, SettingSpec,
-    SettingValue, Version,
+    Env, Id, Manifest, Plugin, RegisterError, Registrar, SDK_VERSION, SettingSpec, Version,
 };
 
 pub const PLUGIN: Id = Id::new_static("aids");
 /// Setting: the first half of every word in bold.
-pub const BOLD_BEGINNINGS: Id = Id::new_static("aids.bold-beginnings");
+pub const BOLD_BEGINNINGS: Setting<bool> = Setting::new("aids.bold-beginnings");
 /// Setting: words to replace, `from = to; …`.
-pub const REPLACE: Id = Id::new_static("aids.replace");
+pub const REPLACE: Setting<Text> = Setting::new("aids.replace");
 const SECTION: &str = "aids.section";
 
 /// The pairs of a replacement list: `from = to` separated by `;`.
@@ -134,37 +134,27 @@ impl Plugin for Aids {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_setting(
-            SettingSpec::new(
-                BOLD_BEGINNINGS,
-                "aids.setting.bold-beginnings",
-                SettingKind::Bool,
-                SettingValue::Bool(false),
-            )
-            .group(groups::READING)
-            .section(SECTION)
-            .description("aids.setting.bold-beginnings.help"),
+            SettingSpec::switch(&BOLD_BEGINNINGS, "aids.setting.bold-beginnings", false)
+                .group(groups::READING)
+                .section(SECTION)
+                .description("aids.setting.bold-beginnings.help"),
         )?;
         r.add_setting(
-            SettingSpec::new(
-                REPLACE,
-                "aids.setting.replace",
-                SettingKind::Text,
-                SettingValue::Text(Cow::Borrowed("")),
-            )
-            .group(groups::READING)
-            .section(SECTION)
-            .description("aids.setting.replace.help"),
+            SettingSpec::text(&REPLACE, "aids.setting.replace", "")
+                .group(groups::READING)
+                .section(SECTION)
+                .description("aids.setting.replace.help"),
         )?;
         r.add_text_filter(TextFilterSpec {
             id: Id::new_static("aids.bold"),
             title: Cow::Borrowed("aids.setting.bold-beginnings"),
             filter: Box::new(|env: &Env<'_>, block: &mut Block| {
-                if env.settings.bool(BOLD_BEGINNINGS.as_str()) {
+                if env.settings.read(&BOLD_BEGINNINGS) {
                     bold_beginnings(block);
                 }
             }),
             signature: Box::new(|env: &Env<'_>| {
-                if env.settings.bool(BOLD_BEGINNINGS.as_str()) {
+                if env.settings.read(&BOLD_BEGINNINGS) {
                     String::from("on")
                 } else {
                     String::new()
@@ -175,14 +165,12 @@ impl Plugin for Aids {
             id: Id::new_static("aids.replace"),
             title: Cow::Borrowed("aids.setting.replace"),
             filter: Box::new(|env: &Env<'_>, block: &mut Block| {
-                let list = pairs(env.settings.text(REPLACE.as_str()));
+                let list = pairs(env.settings.read(&REPLACE));
                 if !list.is_empty() {
                     replace(block, &list);
                 }
             }),
-            signature: Box::new(|env: &Env<'_>| {
-                env.settings.text(REPLACE.as_str()).trim().to_string()
-            }),
+            signature: Box::new(|env: &Env<'_>| env.settings.read(&REPLACE).trim().to_string()),
         })?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;

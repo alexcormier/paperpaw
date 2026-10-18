@@ -58,7 +58,7 @@ impl AddScreen {
                 // above it where shown.
                 !widgets::repeatable(id)
                     && id != TOOLS
-                    && !(id == STATUS && env.settings.bool(STATUS_BAR.as_str()))
+                    && !(id == STATUS && env.settings.read(&STATUS_BAR))
             })
             .map(|(id, title)| (What::Widget(id.as_str().to_string()), title.to_string()))
             .chain(

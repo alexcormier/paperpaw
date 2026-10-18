@@ -8,11 +8,12 @@ use quireink_sdk::builtin::{events, groups, menus, params};
 use quireink_sdk::document::Document;
 use quireink_sdk::{
     ActionSpec, Canvas, Command, Cx, Env, FormatSpec, Handled, Id, Manifest, MenuEntry, MenuNeed,
-    Params, Plugin, Rect, RegisterError, Registrar, SDK_VERSION, Screen, ScreenSpec, SettingKind,
-    SettingSpec, SettingValue, Version,
+    Params, Plugin, Rect, RegisterError, Registrar, SDK_VERSION, Screen, ScreenSpec, SettingSpec,
+    Version,
 };
 
 use crate::lights::Lights;
+use quireink_sdk::setting::{Setting, Text};
 
 pub const PLUGIN: Id = Id::new_static("android");
 /// Asks for access to the shared storage, where the books are.
@@ -20,14 +21,14 @@ pub const ALLOW_STORAGE: Id = Id::new_static("android.allow-storage");
 /// PDF books, rendered by the system (see `pdf`).
 pub const PDF: Id = Id::new_static("android.pdf");
 /// The voice that reads aloud: opens the system's speech settings.
-pub const VOICE: Id = Id::new_static("android.voice");
+pub const VOICE: Setting<Text> = Setting::new("android.voice");
 const VOICE_SCREEN: Id = Id::new_static("android.voice-screen");
 /// The reader's settings for reading aloud (see the `reader` plugin).
 const ALOUD_SECTION: &str = "reader.section.aloud";
 /// Frontlight brightness (0 switches it off).
-pub const FRONTLIGHT: Id = Id::new_static("android.frontlight");
+pub const FRONTLIGHT: Setting<i64> = Setting::new("android.frontlight");
 /// Frontlight colour temperature (higher is warmer).
-pub const WARMTH: Id = Id::new_static("android.warmth");
+pub const WARMTH: Setting<i64> = Setting::new("android.warmth");
 /// The home screen's shortcuts (see the `home` plugin).
 const HOME_ACTIONS: Id = Id::new_static("home.actions");
 /// The reader's menu (see the `reader` plugin).
@@ -132,16 +133,11 @@ impl AndroidPlugin {
     /// chosen in the system's speech settings.
     fn register_voice(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_setting(
-            SettingSpec::new(
-                VOICE,
-                "android.voice",
-                SettingKind::Text,
-                SettingValue::Text(Cow::Borrowed("")),
-            )
-            .group(groups::READING)
-            .section(ALOUD_SECTION)
-            .editor(VOICE_SCREEN)
-            .description("android.voice.help"),
+            SettingSpec::text(&VOICE, "android.voice", "")
+                .group(groups::READING)
+                .section(ALOUD_SECTION)
+                .editor(VOICE_SCREEN)
+                .description("android.voice.help"),
         )?;
         r.set_menu_need(VOICE, MenuNeed::Speech)?;
         let app = self.app.clone();
@@ -162,14 +158,12 @@ impl AndroidPlugin {
     ) -> Result<(), RegisterError> {
         let lights = frontlight.lights;
         r.add_setting(
-            SettingSpec::new(
-                FRONTLIGHT,
+            SettingSpec::number(
+                &FRONTLIGHT,
                 "android.frontlight",
-                SettingKind::Int {
-                    min: 0,
-                    max: i64::from(lights.max_brightness),
-                },
-                SettingValue::Int(i64::from(frontlight.brightness)),
+                0,
+                i64::from(lights.max_brightness),
+                i64::from(frontlight.brightness),
             )
             .group(groups::DISPLAY)
             .description("android.frontlight.help")
@@ -178,14 +172,12 @@ impl AndroidPlugin {
         let mut items = vec![FRONTLIGHT];
         if lights.has_warmth() {
             r.add_setting(
-                SettingSpec::new(
-                    WARMTH,
+                SettingSpec::number(
+                    &WARMTH,
                     "android.warmth",
-                    SettingKind::Int {
-                        min: 0,
-                        max: i64::from(lights.max_warmth),
-                    },
-                    SettingValue::Int(i64::from(frontlight.warmth)),
+                    0,
+                    i64::from(lights.max_warmth),
+                    i64::from(frontlight.warmth),
                 )
                 .group(groups::DISPLAY)
                 .description("android.warmth.help")
@@ -199,7 +191,7 @@ impl AndroidPlugin {
             for (menu, order) in [(READER_PANEL, -10), (menus::MAIN, 82), (menus::QUICK, 20)] {
                 r.add_menu_entry(MenuEntry {
                     menu,
-                    item: item.clone(),
+                    item: item.clone().into(),
                     order: order + n as i16,
                 })?;
             }
@@ -236,8 +228,8 @@ impl AndroidPlugin {
                 for (id, level) in levels {
                     let level = i64::from(level);
                     let known = env.settings.get(id.as_str()).is_some();
-                    if known && env.settings.int(id.as_str()) != level {
-                        out.push(Command::SetSetting(id, SettingValue::Int(level)));
+                    if known && env.settings.read(&id) != level {
+                        out.push(Command::set(&id, level));
                     }
                 }
             }),

@@ -29,28 +29,29 @@ use alloc::vec::Vec;
 use quireink_sdk::builtin::{events, groups, slots};
 use quireink_sdk::document::ImageRef;
 use quireink_sdk::library;
+use quireink_sdk::setting::{Setting, Text};
 use quireink_sdk::ui::{self, UiStyle};
 use quireink_sdk::{
     Canvas, Color, Command, Cx, Env, Handled, Id, Manifest, MenuNeed, Params, Plugin, Priority,
-    Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen, ScreenSpec, SettingKind,
-    SettingSpec, SettingValue, Version,
+    Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen, ScreenSpec, SettingSpec,
+    Version,
 };
 
 pub const PLUGIN: Id = Id::new_static("sleep");
 /// What the sleep screen shows: one of [`COVER`], [`PICTURE`],
 /// [`MESSAGE`], [`PAGE`].
-pub const SHOW: Id = Id::new_static("sleep.show");
+pub const SHOW: Setting<Text> = Setting::new("sleep.show");
 pub const COVER: &str = "sleep.show.cover";
 pub const PICTURE: &str = "sleep.show.picture";
 pub const MESSAGE: &str = "sleep.show.message";
 pub const PAGE: &str = "sleep.show.page";
 pub const WIDGETS: &str = "sleep.show.widgets";
 /// The widgets shown with [`WIDGETS`], ids separated by commas.
-pub const WIDGET_LIST: Id = Id::new_static("sleep.widgets");
+pub const WIDGET_LIST: Setting<Text> = Setting::new("sleep.widgets");
 /// The home screen's editor of lists of widgets, if installed.
 const EDIT_WIDGETS: Id = Id::new_static("home.edit");
 /// The folder of the pictures.
-pub const FOLDER: Id = Id::new_static("sleep.folder");
+pub const FOLDER: Setting<Text> = Setting::new("sleep.folder");
 const SCREEN: Id = Id::new_static("sleep.screen");
 const SECTION: &str = "sleep.section";
 /// The folder chooser of the `files` plugin, if installed.
@@ -79,41 +80,31 @@ impl Plugin for Sleep {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_setting(
-            SettingSpec::new(
-                SHOW,
+            SettingSpec::choice(
+                &SHOW,
                 "sleep.setting.show",
-                SettingKind::Choice(
-                    [COVER, PICTURE, WIDGETS, MESSAGE, PAGE]
-                        .into_iter()
-                        .map(Cow::Borrowed)
-                        .collect(),
-                ),
-                SettingValue::Text(Cow::Borrowed(COVER)),
+                [COVER, PICTURE, WIDGETS, MESSAGE, PAGE]
+                    .into_iter()
+                    .map(Cow::Borrowed)
+                    .collect(),
+                COVER,
             )
             .group(groups::DISPLAY)
             .section(SECTION)
             .description("sleep.setting.show.help"),
         )?;
         r.add_setting(
-            SettingSpec::new(
-                FOLDER,
-                "sleep.setting.folder",
-                SettingKind::Text,
-                SettingValue::Text(Cow::Borrowed("sleep")),
-            )
-            .group(groups::DISPLAY)
-            .section(SECTION)
-            .editor(CHOOSE_FOLDER)
-            .description("sleep.setting.folder.help"),
+            SettingSpec::text(&FOLDER, "sleep.setting.folder", "sleep")
+                .group(groups::DISPLAY)
+                .section(SECTION)
+                .editor(CHOOSE_FOLDER)
+                .description("sleep.setting.folder.help"),
         )?;
         r.add_setting(
-            SettingSpec::new(
-                WIDGET_LIST,
+            SettingSpec::list(
+                &WIDGET_LIST,
                 "sleep.setting.widgets",
-                SettingKind::List,
-                SettingValue::Text(Cow::Borrowed(
-                    "home.date, home.continue, stats.widget.today, home.recent",
-                )),
+                "home.date, home.continue, stats.widget.today, home.recent",
             )
             .group(groups::DISPLAY)
             .section(SECTION)
@@ -203,7 +194,7 @@ fn draw_widgets(canvas: &mut Canvas<'_>, env: &Env<'_>) -> bool {
     let mut placed: Vec<(&str, Option<u16>)> = Vec::new();
     let mut total = 0u16;
     let mut shown = 0;
-    for id in quireink_sdk::status::item_ids(env.settings.text(WIDGET_LIST.as_str())) {
+    for id in quireink_sdk::status::item_ids(env.settings.read(&WIDGET_LIST)) {
         if id == quireink_sdk::widgets::FILL {
             placed.push((id, None));
             continue;
@@ -255,7 +246,7 @@ struct SleepScreen {
 
 impl SleepScreen {
     fn new(env: &Env<'_>) -> Self {
-        let show = env.settings.text(SHOW.as_str()).to_string();
+        let show = env.settings.read(&SHOW).to_string();
         let image = match show.as_str() {
             PICTURE => picture(env),
             MESSAGE | PAGE | WIDGETS => None,

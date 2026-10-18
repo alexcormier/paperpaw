@@ -41,18 +41,19 @@ use alloc::vec::Vec;
 use core::cell::Cell;
 
 use quireink_sdk::builtin::{actions, groups, params, slots};
+use quireink_sdk::setting::{Setting, Text};
 use quireink_sdk::ui::{self, UiStyle};
 use quireink_sdk::{
     Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest, Params, Plugin,
     Priority, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen, ScreenSpec,
-    SettingKind, SettingSpec, SettingValue, Version,
+    SettingSpec, Version,
 };
 
 pub const PLUGIN: Id = Id::new_static("keyboard");
 pub const SCREEN: Id = Id::new_static("keyboard.screen");
 /// The layouts to type with: ids separated by commas, in the order the
 /// layout key switches through them.
-pub const LAYOUTS_SETTING: Id = Id::new_static("keyboard.layouts");
+pub const LAYOUTS_SETTING: Setting<Text> = Setting::new("keyboard.layouts");
 const CHOOSE_SCREEN: Id = Id::new_static("keyboard.choose");
 /// The clipboard's text, asked for by *Paste*.
 const PASTED: Id = Id::new_static("keyboard.pasted");
@@ -113,15 +114,10 @@ impl Plugin for Keyboard {
         })?;
         r.bind_slot(slots::KEYBOARD, SCREEN, Priority::DEFAULT)?;
         r.add_setting(
-            SettingSpec::new(
-                LAYOUTS_SETTING,
-                "keyboard.setting.layouts",
-                SettingKind::List,
-                SettingValue::Text(Cow::Borrowed(layouts::AUTO)),
-            )
-            .group(groups::SYSTEM)
-            .editor(CHOOSE_SCREEN)
-            .description("keyboard.setting.layouts.help"),
+            SettingSpec::list(&LAYOUTS_SETTING, "keyboard.setting.layouts", layouts::AUTO)
+                .group(groups::SYSTEM)
+                .editor(CHOOSE_SCREEN)
+                .description("keyboard.setting.layouts.help"),
         )?;
         r.add_screen(ScreenSpec {
             id: CHOOSE_SCREEN,
@@ -134,7 +130,7 @@ impl Plugin for Keyboard {
             title: Cow::Borrowed(""),
             help: Cow::Borrowed(""),
             order: 60,
-            page: quireink_sdk::setup::SetupPage::Setting(LAYOUTS_SETTING),
+            page: quireink_sdk::setup::SetupPage::Setting(LAYOUTS_SETTING.into()),
             applies: None,
         })?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
@@ -271,7 +267,7 @@ impl KeyboardScreen {
         } else {
             Layer::Letters
         };
-        let layouts = layouts::chosen(env, env.settings.text(LAYOUTS_SETTING.as_str()));
+        let layouts = layouts::chosen(env, env.settings.read(&LAYOUTS_SETTING));
         if current.get() >= layouts.len() {
             current.set(0);
         }

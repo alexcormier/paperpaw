@@ -37,11 +37,12 @@ use quireink_sdk::builtin::{events, groups, menus, params};
 use quireink_sdk::ui::choice::Choice;
 use quireink_sdk::{
     ActionSpec, Command, Env, HttpRequest, Id, Manifest, MenuEntry, Params, Plugin, RegisterError,
-    Registrar, SDK_VERSION, ScreenSpec, SettingKind, SettingSpec, SettingValue, Version,
+    Registrar, SDK_VERSION, ScreenSpec, SettingSpec, Version,
 };
 
 use crate::catalogs::Catalog;
 use crate::sync::Sync;
+use quireink_sdk::setting::Setting;
 
 pub const PLUGIN: Id = Id::new_static("opds");
 /// Opens the list of catalogs.
@@ -61,7 +62,7 @@ const ID: &str = params::ID;
 
 const USER_AGENT: &str = "QuireInk/0.1 (e-reader)";
 /// Setting: covers in the lists of catalogs (on devices with the memory).
-const COVERS: Id = Id::new_static("opds.covers");
+const COVERS: Setting<bool> = Setting::new("opds.covers");
 
 /// A request to a catalog, with its credentials.
 fn request(
@@ -215,27 +216,17 @@ impl Plugin for Opds {
             )?;
         }
         r.add_setting(
-            SettingSpec::new(
-                COVERS,
-                "opds.setting.covers",
-                SettingKind::Bool,
-                SettingValue::Bool(true),
-            )
-            .group(groups::LIBRARY)
-            .section("opds.section")
-            .description("opds.setting.covers.help"),
+            SettingSpec::switch(&COVERS, "opds.setting.covers", true)
+                .group(groups::LIBRARY)
+                .section("opds.section")
+                .description("opds.setting.covers.help"),
         )?;
         r.add_setting(
-            SettingSpec::new(
-                sync::LIMIT,
-                "opds.setting.limit",
-                SettingKind::Int { min: 10, max: 1000 },
-                SettingValue::Int(50),
-            )
-            .group(groups::LIBRARY)
-            .section("opds.section")
-            .step(10)
-            .description("opds.setting.limit.help"),
+            SettingSpec::number(&sync::LIMIT, "opds.setting.limit", 10, 1000, 50)
+                .group(groups::LIBRARY)
+                .section("opds.section")
+                .step(10)
+                .description("opds.setting.limit.help"),
         )?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;

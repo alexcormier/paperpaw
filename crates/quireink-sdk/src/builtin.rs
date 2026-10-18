@@ -327,15 +327,16 @@ pub mod screens {
 /// Global settings.
 pub mod settings {
     use crate::Id;
+    use crate::setting::{Setting, Text};
 
     /// UI language tag, e.g. `en` or `de`.
-    pub const LANGUAGE: Id = Id::new_static("core.language");
+    pub const LANGUAGE: Setting<Text> = Setting::new("core.language");
     /// Developer options: the settings of
     /// [`groups::DEVELOPER`](super::groups::DEVELOPER) show, and plugins may
     /// show what only developers need (e.g. what each plugin took).
-    pub const DEVELOPER: Id = Id::new_static("core.developer");
+    pub const DEVELOPER: Setting<bool> = Setting::new("core.developer");
     /// Draw everything inverted.
-    pub const NIGHT_MODE: Id = Id::new_static("core.night-mode");
+    pub const NIGHT_MODE: Setting<bool> = Setting::new("core.night-mode");
     /// How far in from the top and the bottom edge a swipe begins to count
     /// as one in from the edge, in millimetres (0: none).
     pub const EDGE_ENDS: Id = Id::new_static("core.edge-ends");
@@ -343,29 +344,29 @@ pub mod settings {
     pub const EDGE_SIDES: Id = Id::new_static("core.edge-sides");
     /// Say what the buttons move to (a row, a button), where the device
     /// speaks: for using QuireInk without seeing the screen.
-    pub const SPEAK_FOCUS: Id = Id::new_static("core.speak-focus");
+    pub const SPEAK_FOCUS: Setting<bool> = Setting::new("core.speak-focus");
     /// Partial refreshes between two full refreshes; `0` disables full
     /// refreshes for ghosting removal.
-    pub const FULL_REFRESH_INTERVAL: Id = Id::new_static("core.full-refresh-interval");
+    pub const FULL_REFRESH_INTERVAL: Setting<i64> = Setting::new("core.full-refresh-interval");
     /// Whether another screen opening flashes the panel (a full refresh,
     /// no traces of the last one, but slow on some panels); else it counts
     /// as a page turn towards [`FULL_REFRESH_INTERVAL`].
-    pub const FLASH_SCREENS: Id = Id::new_static("core.flash-screens");
+    pub const FLASH_SCREENS: Setting<bool> = Setting::new("core.flash-screens");
     /// Minutes without use after which the device goes to sleep by itself
     /// (`0`: never), where QuireInk puts it to sleep
     /// ([`Capabilities::sleep`](crate::Capabilities)). Turning pages, also by themselves,
     /// counts as use; reading aloud, downloads and servers keep it awake.
-    pub const SLEEP_AFTER: Id = Id::new_static("core.sleep-after");
+    pub const SLEEP_AFTER: Setting<i64> = Setting::new("core.sleep-after");
     /// The charge in percent at and below which the battery counts as low
     /// (the status item [`BATTERY_LOW`](super::status_items::BATTERY_LOW)).
-    pub const BATTERY_LOW: Id = Id::new_static("core.battery-low");
+    pub const BATTERY_LOW: Setting<i64> = Setting::new("core.battery-low");
     /// How the screen is turned: one of [`ROTATIONS`], where the shell
     /// can turn it (see [`MenuNeed::Rotation`](crate::MenuNeed)).
-    pub const ROTATION: Id = Id::new_static("core.rotation");
+    pub const ROTATION: Setting<Text> = Setting::new("core.rotation");
     /// Whether a row below the screen shows what the buttons under it do,
     /// where a device has buttons in a row there (see
     /// [`MenuNeed::ButtonRow`](crate::MenuNeed)).
-    pub const BUTTON_HINTS: Id = Id::new_static("core.button-hints");
+    pub const BUTTON_HINTS: Setting<bool> = Setting::new("core.button-hints");
     /// The values of [`ROTATION`]: upright, on its side (landscape),
     /// upside down, on its other side.
     pub const ROTATIONS: [&str; 4] = [
@@ -460,11 +461,11 @@ pub mod settings {
     /// Width of lines and borders, in tenths of a millimetre.
     pub const UI_LINES: Id = Id::new_static("core.ui-lines");
     /// Headers dark ([`HEADER_DARK`]) or light ([`HEADER_LIGHT`]).
-    pub const UI_HEADER: Id = Id::new_static("core.ui-header");
+    pub const UI_HEADER: Setting<Text> = Setting::new("core.ui-header");
     pub const HEADER_DARK: &str = "core.header.dark";
     pub const HEADER_LIGHT: &str = "core.header.light";
     /// Corners of highlights, buttons and boxes: one of [`CORNERS`].
-    pub const UI_CORNERS: Id = Id::new_static("core.ui-corners");
+    pub const UI_CORNERS: Setting<Text> = Setting::new("core.ui-corners");
     /// The values of [`UI_CORNERS`]: square, slightly rounded, round.
     pub const CORNERS: [&str; 3] = [
         "core.corners.square",
@@ -473,33 +474,33 @@ pub mod settings {
     ];
     /// Gray text such as hints and notes: as it is, or black for strong
     /// contrast ([`CONTRAST_STRONG`]), e.g. on screens with few grays.
-    pub const UI_CONTRAST: Id = Id::new_static("core.ui-contrast");
+    pub const UI_CONTRAST: Setting<Text> = Setting::new("core.ui-contrast");
     pub const CONTRAST_NORMAL: &str = "core.contrast.normal";
     pub const CONTRAST_STRONG: &str = "core.contrast.strong";
     /// How long short messages show, in seconds.
-    pub const NOTICE_SECONDS: Id = Id::new_static("core.notice-seconds");
+    pub const NOTICE_SECONDS: Setting<i64> = Setting::new("core.notice-seconds");
     /// Milliseconds a button or finger must be held for a long press.
-    pub const LONG_PRESS_MS: Id = Id::new_static("core.long-press-ms");
+    pub const LONG_PRESS_MS: Setting<i64> = Setting::new("core.long-press-ms");
     /// Base size of user interface text in points; UI metrics scale with it.
-    pub const UI_SIZE: Id = Id::new_static("core.ui-size");
+    pub const UI_SIZE: Setting<i64> = Setting::new("core.ui-size");
     /// The active key map preset (see [`keymap_presets`](super::keymap_presets)).
-    pub const KEYMAP_PRESET: Id = Id::new_static("core.keymap-preset");
+    pub const KEYMAP_PRESET: Setting<Text> = Setting::new("core.keymap-preset");
     /// Scoped settings changed now apply to the active scope only, e.g.
     /// the open book ("Only this book"); switching it off returns the
     /// scope to the global values.
-    pub const SCOPE_ONLY: Id = Id::new_static("core.scope-only");
+    pub const SCOPE_ONLY: Setting<bool> = Setting::new("core.scope-only");
     /// The font family for reading: [`DEFAULT_FONT`] (the plugins'
     /// choice) or one of the registered families.
-    pub const READING_FONT: Id = Id::new_static("core.reading-font");
+    pub const READING_FONT: Setting<Text> = Setting::new("core.reading-font");
     /// The value of [`READING_FONT`] for the plugins' choice.
     pub const DEFAULT_FONT: &str = "core.font.default";
     /// `core.clock.24h` or `core.clock.12h`.
-    pub const CLOCK_FORMAT: Id = Id::new_static("core.clock-format");
+    pub const CLOCK_FORMAT: Setting<Text> = Setting::new("core.clock-format");
     /// The time zone: `core.tz.auto` (the system's) or one of
     /// [`time::TIME_ZONES`](crate::time::TIME_ZONES).
-    pub const TIME_ZONE: Id = Id::new_static("core.time-zone");
+    pub const TIME_ZONE: Setting<Text> = Setting::new("core.time-zone");
     /// A POSIX `TZ` rule that overrides [`TIME_ZONE`] when not empty.
-    pub const TIME_ZONE_RULE: Id = Id::new_static("core.time-zone-rule");
+    pub const TIME_ZONE_RULE: Setting<Text> = Setting::new("core.time-zone-rule");
 }
 
 /// Key map presets: named sets of bindings users switch between, e.g. for

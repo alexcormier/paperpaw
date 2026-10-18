@@ -4,14 +4,14 @@
 use alloc::borrow::Cow;
 
 use quireink_sdk::builtin::groups;
+use quireink_sdk::setting::Setting;
 use quireink_sdk::{
-    Id, Manifest, Plugin, RegisterError, Registrar, SDK_VERSION, SettingKind, SettingSpec,
-    SettingValue, Version,
+    Id, Manifest, Plugin, RegisterError, Registrar, SDK_VERSION, SettingSpec, Version,
 };
 
 pub const PLUGIN: Id = Id::new_static("x4");
 /// The processor sleeps lightly while idle on battery (see `power`).
-pub const LIGHT_SLEEP: Id = Id::new_static("x4.light-sleep");
+pub const LIGHT_SLEEP: Setting<bool> = Setting::new("x4.light-sleep");
 
 #[derive(Debug, Default)]
 pub struct X4;
@@ -29,14 +29,9 @@ impl Plugin for X4 {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_setting(
-            SettingSpec::new(
-                LIGHT_SLEEP,
-                "x4.light-sleep",
-                SettingKind::Bool,
-                SettingValue::Bool(true),
-            )
-            .group(groups::DEVELOPER)
-            .description("x4.light-sleep.help"),
+            SettingSpec::switch(&LIGHT_SLEEP, "x4.light-sleep", true)
+                .group(groups::DEVELOPER)
+                .description("x4.light-sleep.help"),
         )?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;

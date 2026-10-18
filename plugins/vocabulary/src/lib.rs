@@ -30,16 +30,17 @@ use quireink_sdk::widgets;
 use quireink_sdk::{
     ActionSpec, Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
     MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen,
-    ScreenSpec, SettingKind, SettingSpec, SettingValue, Version,
+    ScreenSpec, SettingSpec, Version,
 };
 
+use quireink_sdk::setting::Setting;
 use store::Word;
 
 pub const PLUGIN: Id = Id::new_static("vocabulary");
 /// Opens the list of words.
 pub const OPEN: Id = Id::new_static("vocabulary.open");
 /// Setting: keep the words looked up.
-pub const COLLECT: Id = Id::new_static("vocabulary.collect");
+pub const COLLECT: Setting<bool> = Setting::new("vocabulary.collect");
 const SCREEN: Id = Id::new_static("vocabulary.list");
 const CHOICE: Id = Id::new_static("vocabulary.choice");
 const CHOSEN: Id = Id::new_static("vocabulary.chosen");
@@ -71,15 +72,10 @@ impl Plugin for Vocabulary {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_setting(
-            SettingSpec::new(
-                COLLECT,
-                "vocabulary.setting.collect",
-                SettingKind::Bool,
-                SettingValue::Bool(true),
-            )
-            .group(groups::READING)
-            .section(DICTIONARY_SECTION)
-            .description("vocabulary.setting.collect.help"),
+            SettingSpec::switch(&COLLECT, "vocabulary.setting.collect", true)
+                .group(groups::READING)
+                .section(DICTIONARY_SECTION)
+                .description("vocabulary.setting.collect.help"),
         )?;
         r.subscribe(
             events::WORD_LOOKED_UP,
@@ -213,7 +209,7 @@ fn draw_word(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
 
 /// Keeps a word looked up, if wanted.
 fn record(env: &Env<'_>, params: &Params) {
-    if !env.settings.bool(COLLECT.as_str()) {
+    if !env.settings.read(&COLLECT) {
         return;
     }
     let word = params.get(params::WORD).unwrap_or_default().trim();
@@ -237,7 +233,7 @@ fn record(env: &Env<'_>, params: &Params) {
 
 /// The folder exports go to: `Notes` beside the library folder.
 fn notes_dir(env: &Env<'_>) -> String {
-    let library = env.settings.text("files.root").trim_matches('/');
+    let library = quireink_sdk::library::folder(env);
     let parent = quireink_sdk::files::parent(library);
     if parent.is_empty() {
         String::from(NOTES)

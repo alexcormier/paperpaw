@@ -33,6 +33,18 @@ use quireink_digest::fnv1a64;
 
 /// Where the library keeps what it knows.
 pub const DIR: &str = crate::data_path!("library");
+
+/// The library folder, where books are kept (e.g. `books`): the `files`
+/// plugin offers it in its settings, and every plugin that puts books
+/// somewhere reads it ([`folder`]).
+pub const FOLDER: crate::setting::Setting<crate::setting::Text> =
+    crate::setting::Setting::new("files.root");
+
+/// The library folder ([`FOLDER`]) as a path in the storage, without
+/// slashes around it (`""` for the storage's top).
+pub fn folder<'e>(env: &Env<'e>) -> &'e str {
+    env.settings.read(&FOLDER).trim_matches('/')
+}
 /// Books remembered for "recently read" order.
 const MAX_OPENED: usize = 100;
 /// Favourites kept at most.

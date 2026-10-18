@@ -141,11 +141,10 @@ impl Plugin for Home {
             "[keymap.core.home]\nswipe.up = home.all-tools\n",
         ))?;
         r.add_setting(
-            quireink_sdk::SettingSpec::new(
-                drawer::TIPS_SETTING,
+            quireink_sdk::SettingSpec::switch(
+                &drawer::TIPS_SETTING,
                 "home.setting.gesture-tips",
-                quireink_sdk::SettingKind::Bool,
-                quireink_sdk::SettingValue::Bool(true),
+                true,
             )
             .group(quireink_sdk::builtin::groups::LOOK)
             .advanced()
@@ -252,7 +251,7 @@ fn frame(env: &Env<'_>) -> (Option<Rect>, Geometry, Rect) {
         footer_height,
     );
     let mut top = gap / 2;
-    let status = env.settings.bool(pages::STATUS_BAR.as_str()).then(|| {
+    let status = env.settings.read(&pages::STATUS_BAR).then(|| {
         let height = blocks::status_height(env, display.width);
         let r = Rect::new(
             margin,

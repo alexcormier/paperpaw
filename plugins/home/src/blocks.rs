@@ -26,36 +26,36 @@ use quireink_sdk::builtin::{actions, params, slots};
 use quireink_sdk::ui::{self, UiStyle};
 use quireink_sdk::widgets::{self, Align, WidgetSpec, WidgetTarget};
 use quireink_sdk::{
-    Arg, Canvas, Color, Command, Env, Id, Params, Rect, RegisterError, Registrar, SettingKind,
-    SettingSpec, SettingValue, time,
+    Arg, Canvas, Color, Command, Env, Id, Params, Rect, RegisterError, Registrar, SettingSpec, time,
 };
 
 use crate::pages::{CONTINUE, DATE, RECENT, STATUS};
 use crate::{covers, recent};
+use quireink_sdk::setting::{Setting, Text};
 
 /// The clock with the date, large.
 pub const CLOCK: &str = "home.clock";
 /// Whether the clock shows the date below the time.
-const CLOCK_DATE: &str = "home.clock.date";
+const CLOCK_DATE: Setting<bool> = Setting::new("home.clock.date");
 /// How large the clock is: one of [`SIZES`] or [`FIT`].
-const CLOCK_SIZE: &str = "home.clock.size";
+const CLOCK_SIZE: Setting<Text> = Setting::new("home.clock.size");
 /// How large the date is: one of [`SIZES`].
-const DATE_SIZE: &str = "home.date.size";
+const DATE_SIZE: Setting<Text> = Setting::new("home.date.size");
 /// Text sizes a widget may choose.
 const SIZES: [&str; 3] = ["home.size.small", "home.size.medium", "home.size.large"];
 /// As large as the widget's cells allow.
 const FIT: &str = "home.size.fit";
 /// Whether the continue card shows the cover, the progress, its frame.
-const CARD_COVER: &str = "home.continue.cover";
-const CARD_PROGRESS: &str = "home.continue.progress";
-const CARD_FRAME: &str = "home.continue.frame";
+const CARD_COVER: Setting<bool> = Setting::new("home.continue.cover");
+const CARD_PROGRESS: Setting<bool> = Setting::new("home.continue.progress");
+const CARD_FRAME: Setting<bool> = Setting::new("home.continue.frame");
 /// Whether the recent books show their heading and their titles, how many
 /// there are at most.
-const RECENT_HEADING: &str = "home.recent.heading";
-const RECENT_TITLES: &str = "home.recent.titles";
-const RECENT_COUNT: &str = "home.recent.count";
+const RECENT_HEADING: Setting<bool> = Setting::new("home.recent.heading");
+const RECENT_TITLES: Setting<bool> = Setting::new("home.recent.titles");
+const RECENT_COUNT: Setting<i64> = Setting::new("home.recent.count");
 /// Whether tools show their names below their icons.
-pub(crate) const TOOL_LABELS: &str = "home.tool-labels";
+pub(crate) const TOOL_LABELS: Setting<bool> = Setting::new("home.tool-labels");
 /// Recent books shown as covers at most.
 const MAX_COVERS: usize = 8;
 
@@ -112,83 +112,70 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_setting_group(widgets::settings_group(&id, title))?;
         r.add_setting(widgets::align_setting(&id, align))?;
     }
-    let choice = |id: &'static str,
+    let choice = |setting: &Setting<Text>,
                   title: &'static str,
                   group: &'static str,
                   values: &[&'static str],
                   default: &'static str| {
-        SettingSpec::new(
-            Id::new_static(id),
-            title,
-            SettingKind::Choice(values.iter().map(|v| Cow::Borrowed(*v)).collect()),
-            SettingValue::Text(Cow::Borrowed(default)),
-        )
-        .group(Id::new_static(group))
+        let values = values.iter().map(|v| Cow::Borrowed(*v)).collect();
+        SettingSpec::choice(setting, title, values, default).group(Id::new_static(group))
     };
-    let switch = |id: &'static str, title: &'static str, group: &'static str, default: bool| {
-        SettingSpec::new(
-            Id::new_static(id),
-            title,
-            SettingKind::Bool,
-            SettingValue::Bool(default),
-        )
-        .group(Id::new_static(group))
+    let switch = |setting: &Setting<bool>, title: &'static str, group: &'static str, default| {
+        SettingSpec::switch(setting, title, default).group(Id::new_static(group))
     };
     let clock_sizes = [SIZES[0], SIZES[1], SIZES[2], FIT];
     r.add_setting(choice(
-        CLOCK_SIZE,
+        &CLOCK_SIZE,
         "home.setting.size",
         CLOCK,
         &clock_sizes,
         FIT,
     ))?;
-    r.add_setting(switch(CLOCK_DATE, "home.setting.clock-date", CLOCK, true))?;
+    r.add_setting(switch(&CLOCK_DATE, "home.setting.clock-date", CLOCK, true))?;
     r.add_setting(choice(
-        DATE_SIZE,
+        &DATE_SIZE,
         "home.setting.size",
         DATE,
         &SIZES,
         SIZES[1],
     ))?;
     r.add_setting(switch(
-        CARD_COVER,
+        &CARD_COVER,
         "home.setting.card-cover",
         CONTINUE,
         true,
     ))?;
     r.add_setting(switch(
-        CARD_PROGRESS,
+        &CARD_PROGRESS,
         "home.setting.card-progress",
         CONTINUE,
         true,
     ))?;
     r.add_setting(switch(
-        CARD_FRAME,
+        &CARD_FRAME,
         "home.setting.card-frame",
         CONTINUE,
         true,
     ))?;
     r.add_setting(switch(
-        RECENT_HEADING,
+        &RECENT_HEADING,
         "home.setting.recent-heading",
         RECENT,
         true,
     ))?;
     r.add_setting(switch(
-        RECENT_TITLES,
+        &RECENT_TITLES,
         "home.setting.recent-titles",
         RECENT,
         true,
     ))?;
     r.add_setting(
-        SettingSpec::new(
-            Id::new_static(RECENT_COUNT),
+        SettingSpec::number(
+            &RECENT_COUNT,
             "home.setting.recent-count",
-            SettingKind::Int {
-                min: 1,
-                max: MAX_COVERS as i64,
-            },
-            SettingValue::Int(6),
+            1,
+            MAX_COVERS as i64,
+            6,
         )
         .group(Id::new_static(RECENT)),
     )?;
@@ -283,13 +270,13 @@ fn date_height(env: &Env<'_>, _: u16) -> u16 {
         return 0;
     }
     let style = UiStyle::new(env);
-    line_height(env, sized(&style, env.settings.text(DATE_SIZE)))
+    line_height(env, sized(&style, env.settings.read(&DATE_SIZE)))
 }
 
 fn draw_date(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     let style = UiStyle::new(env);
     if let Some(font) = style.font(env) {
-        let size = sized(&style, env.settings.text(DATE_SIZE));
+        let size = sized(&style, env.settings.read(&DATE_SIZE));
         let date = ui::fit(&font, size, &date_text(env), f32::from(area.width));
         let x = widgets::align(env, DATE).x(area, font.measure(size, &date));
         ui::draw_label(canvas, &font, size, x, area, &date, Color::BLACK);
@@ -300,7 +287,7 @@ fn draw_date(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
 
 /// The clock's size in `area`: as set, or as large as fits.
 fn clock_size(env: &Env<'_>, style: &UiStyle, area: Option<Rect>) -> f32 {
-    let value = env.settings.text(CLOCK_SIZE);
+    let value = env.settings.read(&CLOCK_SIZE);
     if value != FIT {
         return sized(style, value) * 1.4;
     }
@@ -311,7 +298,7 @@ fn clock_size(env: &Env<'_>, style: &UiStyle, area: Option<Rect>) -> f32 {
         return style.title * 2.2;
     };
     // The digits fill the height left by the date, and fit the width.
-    let date = if env.settings.bool(CLOCK_DATE) {
+    let date = if env.settings.read(&CLOCK_DATE) {
         f32::from(line_height(env, style.small))
     } else {
         0.0
@@ -325,7 +312,7 @@ fn clock_size(env: &Env<'_>, style: &UiStyle, area: Option<Rect>) -> f32 {
 
 fn clock_height(env: &Env<'_>, _: u16) -> u16 {
     let style = UiStyle::new(env);
-    let date = if env.settings.bool(CLOCK_DATE) {
+    let date = if env.settings.read(&CLOCK_DATE) {
         line_height(env, style.small)
     } else {
         0
@@ -340,7 +327,7 @@ fn draw_clock(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     };
     let size = clock_size(env, &style, Some(area));
     let big = line_height(env, size);
-    let with_date = env.settings.bool(CLOCK_DATE);
+    let with_date = env.settings.read(&CLOCK_DATE);
     let small = if with_date {
         line_height(env, style.small)
     } else {
@@ -392,7 +379,7 @@ fn draw_card(canvas: &mut Canvas<'_>, env: &Env<'_>, r: Rect) {
     let Some(font) = style.font(env) else {
         return;
     };
-    let framed = env.settings.bool(CARD_FRAME);
+    let framed = env.settings.read(&CARD_FRAME);
     let line = if framed { style.line * 2 } else { 0 };
     if framed {
         ui::stroke_round(canvas, &style, r, line, Color::BLACK);
@@ -410,7 +397,7 @@ fn draw_card(canvas: &mut Canvas<'_>, env: &Env<'_>, r: Rect) {
     };
     let cover = env
         .settings
-        .bool(CARD_COVER)
+        .read(&CARD_COVER)
         .then(|| covers::get(env.storage, &book.path).flatten())
         .flatten();
     let r = match cover {
@@ -425,7 +412,7 @@ fn draw_card(canvas: &mut Canvas<'_>, env: &Env<'_>, r: Rect) {
     };
     let pad = style.margin as f32 / 2.0 + line as f32;
     let inner = f32::from(r.width) - 2.0 * pad;
-    let progress = env.settings.bool(CARD_PROGRESS);
+    let progress = env.settings.read(&CARD_PROGRESS);
     // The lines of text, together in the middle.
     let label_h = line_height(env, style.small);
     // Long titles in the body size rather than cut short.
@@ -503,7 +490,7 @@ fn draw_card(canvas: &mut Canvas<'_>, env: &Env<'_>, r: Rect) {
 
 /// The recent books after the current one, as many as set.
 fn shelf_books(env: &Env<'_>) -> Vec<recent::Recent> {
-    let count = env.settings.int(RECENT_COUNT).clamp(1, MAX_COVERS as i64) as usize;
+    let count = env.settings.read(&RECENT_COUNT).clamp(1, MAX_COVERS as i64) as usize;
     let mut books = recent::load(env.storage);
     books.retain(|b| env.storage.exists(&b.path));
     books.into_iter().skip(1).take(count).collect()
@@ -511,7 +498,7 @@ fn shelf_books(env: &Env<'_>) -> Vec<recent::Recent> {
 
 /// The covers a row holds at `width`, and how wide each one's place is.
 fn shelf_columns(env: &Env<'_>, width: u16) -> (usize, u16) {
-    let count = env.settings.int(RECENT_COUNT).clamp(1, MAX_COVERS as i64) as u32;
+    let count = env.settings.read(&RECENT_COUNT).clamp(1, MAX_COVERS as i64) as u32;
     let columns = (u32::from(width) / env.metrics.mm(18).max(1)).clamp(1, count);
     (columns as usize, width / columns as u16)
 }
@@ -521,12 +508,12 @@ fn shelf_columns(env: &Env<'_>, width: u16) -> (usize, u16) {
 fn shelf_labels(env: &Env<'_>) -> (u16, u16) {
     let style = UiStyle::new(env);
     let label = line_height(env, style.small);
-    let heading = if env.settings.bool(RECENT_HEADING) {
+    let heading = if env.settings.read(&RECENT_HEADING) {
         label + style.gap as u16 / 2
     } else {
         0
     };
-    let title = if env.settings.bool(RECENT_TITLES) {
+    let title = if env.settings.read(&RECENT_TITLES) {
         label
     } else {
         0
@@ -682,7 +669,7 @@ pub(crate) fn draw_tool(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, acti
     let Some(font) = style.font(env) else {
         return;
     };
-    let labels = env.settings.bool(TOOL_LABELS);
+    let labels = env.settings.read(&TOOL_LABELS);
     let label = line_height(env, style.small);
     let gap = style.gap as u16 / 2;
     let text_room = if labels { label + gap } else { 0 };

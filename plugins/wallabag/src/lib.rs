@@ -32,12 +32,13 @@ use quireink_json as json;
 use quireink_json::stream::{self, Event};
 use quireink_sdk::builtin::{actions, events, groups, menus, params, slots};
 use quireink_sdk::secrets::SecretChange;
+use quireink_sdk::setting::{Setting, Text};
 use quireink_sdk::ui::{self, ListChange, ListView, UiStyle};
 use quireink_sdk::web::{clean_name, encode};
 use quireink_sdk::{
     ActionSpec, Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, HttpRequest, Id,
     Manifest, MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION,
-    Screen, ScreenSpec, SettingKind, SettingSpec, SettingValue, Version, http_params,
+    Screen, ScreenSpec, SettingSpec, Version, http_params,
 };
 
 pub const PLUGIN: Id = Id::new_static("wallabag");
@@ -46,9 +47,9 @@ pub const OPEN: Id = Id::new_static("wallabag.open");
 /// Fetches the articles.
 pub const FETCH: Id = Id::new_static("wallabag.fetch");
 /// The server's address, the user name and the API client's ID.
-pub const SERVER: Id = Id::new_static("wallabag.server");
-pub const USER: Id = Id::new_static("wallabag.user");
-pub const CLIENT: Id = Id::new_static("wallabag.client-id");
+pub const SERVER: Setting<Text> = Setting::new("wallabag.server");
+pub const USER: Setting<Text> = Setting::new("wallabag.user");
+pub const CLIENT: Setting<Text> = Setting::new("wallabag.client-id");
 /// The password and the API client's secret, among the passwords and
 /// keys.
 pub const PASSWORD: &str = "wallabag.password";
@@ -65,8 +66,6 @@ const DONE: Id = Id::new_static("wallabag.done");
 const ENTERED: Id = Id::new_static("wallabag.entered");
 const FIELD: &str = "field";
 const ARTICLE: &str = "article";
-/// The folder chooser of the `files` plugin, if installed.
-const LIBRARY: &str = "files.root";
 const FOLDER: &str = "Wallabag";
 /// Unread articles fetched at most.
 const MAX_ARTICLES: usize = 30;
@@ -80,7 +79,7 @@ fn data(name: &str) -> String {
 
 /// The folder of the articles: `Wallabag` in the library.
 fn folder(env: &Env<'_>) -> String {
-    let library = env.settings.text(LIBRARY).trim_matches('/');
+    let library = quireink_sdk::library::folder(env);
     if library.is_empty() {
         String::from(FOLDER)
     } else {
@@ -219,10 +218,7 @@ impl Fetch {
         else {
             return done(env, "wallabag.setup-needed", &[], out);
         };
-        let (user, client) = (
-            env.settings.text(USER.as_str()),
-            env.settings.text(CLIENT.as_str()),
-        );
+        let (user, client) = (env.settings.read(&USER), env.settings.read(&CLIENT));
         if server(env).is_empty() || user.is_empty() || client.is_empty() {
             return done(env, "wallabag.setup-needed", &[], out);
         }
@@ -453,14 +449,9 @@ impl Plugin for Wallabag {
             (USER, "wallabag.user"),
             (CLIENT, "wallabag.client-id"),
         ] {
-            let mut spec = SettingSpec::new(
-                id.clone(),
-                title,
-                SettingKind::Text,
-                SettingValue::Text(Cow::Borrowed("")),
-            )
-            .group(groups::LIBRARY)
-            .editor(SCREEN);
+            let mut spec = SettingSpec::text(&id, title, "")
+                .group(groups::LIBRARY)
+                .editor(SCREEN);
             if id == SERVER {
                 spec = spec.description("wallabag.server.help");
             } else {
@@ -580,8 +571,7 @@ fn entered(p: &Params, out: &mut Vec<Command>) {
         return;
     };
     let text = p.get(params::TEXT).unwrap_or_default().trim();
-    let setting =
-        |id: Id| Command::SetSetting(id, SettingValue::Text(Cow::Owned(text.to_string())));
+    let setting = |id: Setting<Text>| Command::set(&id, Cow::Owned(text.to_string()));
     let secret = |id: &str, label: &str| {
         Command::SetSecret(if text.is_empty() {
             SecretChange::remove(id)
@@ -639,9 +629,9 @@ impl SetupScreen {
             return;
         }
         let (text, password) = match row {
-            Row::Server => (env.settings.text(SERVER.as_str()), false),
-            Row::User => (env.settings.text(USER.as_str()), false),
-            Row::Client => (env.settings.text(CLIENT.as_str()), false),
+            Row::Server => (env.settings.read(&SERVER), false),
+            Row::User => (env.settings.read(&USER), false),
+            Row::Client => (env.settings.read(&CLIENT), false),
             _ => ("", true),
         };
         let mut request = Params::new()
@@ -679,8 +669,8 @@ impl Screen for SetupScreen {
                         let url = server(env);
                         url.strip_prefix("https://").unwrap_or(&url).to_string()
                     }
-                    Row::User => env.settings.text(USER.as_str()).to_string(),
-                    Row::Client => env.settings.text(CLIENT.as_str()).to_string(),
+                    Row::User => env.settings.read(&USER).to_string(),
+                    Row::Client => env.settings.read(&CLIENT).to_string(),
                     Row::Password => kept(PASSWORD).to_string(),
                     Row::Secret => kept(SECRET).to_string(),
                     Row::Fetch => String::from("›"),

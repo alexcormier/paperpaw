@@ -31,11 +31,11 @@ use quireink_sdk::ui::{self, UiStyle};
 use quireink_sdk::{
     ActionSpec, Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Hint, Id,
     Manifest, MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION,
-    Screen, ScreenSpec, SettingKind, SettingSpec, SettingValue, SocketRead, Version,
-    socket_params as p,
+    Screen, ScreenSpec, SettingSpec, SocketRead, Version, socket_params as p,
 };
 
 use protocol::{Message, op};
+use quireink_sdk::setting::{Setting, Text};
 
 pub const PLUGIN: Id = Id::new_static("calibre");
 /// Opens the connection screen.
@@ -46,13 +46,11 @@ const FIND: Id = Id::new_static("calibre.find");
 const EVENTS: Id = Id::new_static("calibre.events");
 const PASSWORD_TYPED: Id = Id::new_static("calibre.password-typed");
 /// Calibre's address, if it is not found by itself: `host` or `host:port`.
-pub const ADDRESS: Id = Id::new_static("calibre.address");
+pub const ADDRESS: Setting<Text> = Setting::new("calibre.address");
 /// The password set in Calibre, kept as a secret.
 const PASSWORD: &str = "calibre.password";
 /// How long to wait for Calibre's answer to the broadcast.
 const FIND_MS: u32 = 3000;
-/// The library folder (the `files` plugin's setting).
-const LIBRARY: &str = "files.root";
 /// Space reported to Calibre: storages do not say how much is free, and
 /// Calibre refuses to send to a device it thinks full.
 const SPACE: u64 = 64 << 30;
@@ -112,15 +110,10 @@ impl Plugin for Calibre {
         })?;
         r.add_icon(OPEN, Cow::Borrowed("transfer"))?;
         r.add_setting(
-            SettingSpec::new(
-                ADDRESS,
-                "calibre.setting.address",
-                SettingKind::Text,
-                SettingValue::Text(Cow::Borrowed("")),
-            )
-            .group(groups::LIBRARY)
-            .description("calibre.setting.address.help")
-            .advanced(),
+            SettingSpec::text(&ADDRESS, "calibre.setting.address", "")
+                .group(groups::LIBRARY)
+                .description("calibre.setting.address.help")
+                .advanced(),
         )?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
@@ -197,7 +190,7 @@ impl CalibreScreen {
         let env = *cx.env();
         self.framing = protocol::Framing::default();
         self.coming = None;
-        let address = env.settings.text(ADDRESS.as_str()).trim();
+        let address = env.settings.read(&ADDRESS).trim();
         if address.is_empty() {
             self.state = State::Finding;
             cx.command(Command::Broadcast {
@@ -526,7 +519,7 @@ impl CalibreScreen {
 
 /// The library folder, where Calibre's books go.
 fn library_folder<'e>(env: &Env<'e>) -> &'e str {
-    env.settings.text(LIBRARY).trim_matches('/')
+    quireink_sdk::library::folder(env)
 }
 
 impl Screen for CalibreScreen {

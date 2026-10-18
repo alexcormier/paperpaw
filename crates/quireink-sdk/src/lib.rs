@@ -57,6 +57,7 @@ mod screen;
 pub mod secrets;
 pub mod semantics;
 pub mod services;
+pub mod setting;
 mod settings;
 pub mod setup;
 pub mod status;
@@ -87,6 +88,7 @@ pub use params::Params;
 pub use plugin::{Manifest, Plugin, Priority, RegisterError, SlotSpec};
 pub use plugins::{PluginInfo, PluginState, Plugins, RequiredFor};
 pub use screen::{Cx, Handled, Hint, Hints, Output, Screen, ScreenFactory, ScreenSpec};
+pub use setting::{Setting, Text};
 pub use settings::{
     Level, SettingError, SettingGroupSpec, SettingKind, SettingSpec, SettingValue, Settings,
 };

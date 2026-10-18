@@ -25,12 +25,13 @@ use alloc::vec::Vec;
 use quireink_json as json;
 use quireink_sdk::builtin::{actions, groups, params, slots};
 use quireink_sdk::secrets::SecretChange;
+use quireink_sdk::setting::{Setting, Text};
 use quireink_sdk::ui::{self, UiStyle};
 use quireink_sdk::web::encode;
 use quireink_sdk::{
     Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, HttpRequest, Id, Manifest,
     Params, Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen,
-    ScreenSpec, SettingKind, SettingSpec, SettingValue, Version, http_params,
+    ScreenSpec, SettingSpec, Version, http_params,
 };
 
 pub const PLUGIN: Id = Id::new_static("translate");
@@ -38,7 +39,7 @@ pub const PLUGIN: Id = Id::new_static("translate");
 pub const KEY: Id = Id::new_static("translate.deepl-key");
 /// The language translated into: [`AUTO`] (QuireInk's) or one of
 /// [`LANGUAGES`].
-pub const TO: Id = Id::new_static("translate.to");
+pub const TO: Setting<Text> = Setting::new("translate.to");
 pub const AUTO: &str = "translate.to.auto";
 const SCREEN: Id = Id::new_static("translate.panel");
 const SECTION: &str = "translate.section";
@@ -168,16 +169,14 @@ impl Plugin for Translate {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_setting(
-            SettingSpec::new(
-                TO,
+            SettingSpec::choice(
+                &TO,
                 "translate.setting.to",
-                SettingKind::Choice(
-                    core::iter::once(AUTO)
-                        .chain(LANGUAGES.iter().copied())
-                        .map(Cow::Borrowed)
-                        .collect(),
-                ),
-                SettingValue::Text(Cow::Borrowed(AUTO)),
+                core::iter::once(AUTO)
+                    .chain(LANGUAGES.iter().copied())
+                    .map(Cow::Borrowed)
+                    .collect(),
+                AUTO,
             )
             .group(groups::READING)
             .section(SECTION)
@@ -262,7 +261,7 @@ impl Panel {
             cx.request_redraw();
             return;
         }
-        let to = target(env.settings.text(TO.as_str()), env.i18n.language());
+        let to = target(env.settings.read(&TO), env.i18n.language());
         cx.command(Command::Http(request(key, &self.original, &to)));
     }
 

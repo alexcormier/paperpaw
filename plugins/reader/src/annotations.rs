@@ -64,7 +64,7 @@ pub(crate) fn markdown(env: &Env<'_>, title: &str, author: &str, all: &[Annotati
 
 /// The folder notes are exported to: `Notes` beside the library folder.
 fn notes_dir(env: &Env<'_>) -> String {
-    let library = env.settings.text("files.root").trim_matches('/');
+    let library = quireink_sdk::library::folder(env);
     let parent = quireink_sdk::files::parent(library);
     if parent.is_empty() {
         String::from(NOTES)

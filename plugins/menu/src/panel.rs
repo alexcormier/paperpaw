@@ -22,6 +22,7 @@ use quireink_sdk::{
 };
 
 use crate::{CHOOSE_SCREEN, is_menu};
+use quireink_sdk::setting::Setting;
 
 /// Most switches or buttons in one row.
 const PER_ROW: usize = 3;
@@ -232,7 +233,7 @@ impl PanelScreen {
         let head = if top {
             let size = env
                 .metrics
-                .pt(env.settings.int(QUICK_SIZE.as_str()).clamp(6, 24) as f32);
+                .pt(env.settings.read(&QUICK_SIZE).clamp(6, 24) as f32);
             (size * 1.6) as u16 + style.gap as u16
         } else {
             0
@@ -744,7 +745,7 @@ fn draw_head(
         lists,
         size: env
             .metrics
-            .pt(env.settings.int(QUICK_SIZE.as_str()).clamp(6, 24) as f32),
+            .pt(env.settings.read(&QUICK_SIZE).clamp(6, 24) as f32),
         color: Color::BLACK,
         percent: true,
     };
@@ -758,7 +759,7 @@ pub(crate) const QUICK_PARTS: [Id; 3] = [
     Id::new_static("menu.quick.right"),
 ];
 /// The size of the quick panel's head, in points.
-pub(crate) const QUICK_SIZE: Id = Id::new_static("menu.quick.size");
+pub(crate) const QUICK_SIZE: Setting<i64> = Setting::new("menu.quick.size");
 
 #[cfg(test)]
 mod slider_tests {

@@ -12,7 +12,6 @@ use quireink_sdk::builtin::actions;
 use quireink_sdk::ui::{self, ListChange, ListView, UiStyle};
 use quireink_sdk::{
     Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Rect, RefreshMode, Screen,
-    SettingValue,
 };
 
 use crate::LAYOUTS_SETTING;
@@ -77,9 +76,9 @@ impl ChooseScreen {
                 chosen.push(AUTO);
             }
         }
-        cx.command(Command::SetSetting(
-            LAYOUTS_SETTING,
-            SettingValue::Text(Cow::Owned(chosen.join(", "))),
+        cx.command(Command::set(
+            &LAYOUTS_SETTING,
+            Cow::Owned(chosen.join(", ")),
         ));
         cx.request_redraw();
         cx.request_refresh(RefreshMode::Fast);

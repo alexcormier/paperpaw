@@ -64,7 +64,7 @@ pub struct UiStyle {
 impl UiStyle {
     pub fn new(env: &Env<'_>) -> Self {
         let m = env.metrics;
-        let base = env.settings.int(settings::UI_SIZE.as_str()).clamp(6, 40) as f32;
+        let base = env.settings.read(&settings::UI_SIZE).clamp(6, 40) as f32;
         let text = m.pt(base);
         let line_height = env
             .fonts

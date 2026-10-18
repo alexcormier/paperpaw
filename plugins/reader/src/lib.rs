@@ -39,9 +39,10 @@ use quireink_sdk::builtin::{
     actions as core_actions, events, groups, params, setting_sections, settings as core_settings,
     slots,
 };
+use quireink_sdk::setting::Setting;
 use quireink_sdk::{
     Command, Env, Id, Manifest, Params, Plugin, Priority, RegisterError, Registrar, SDK_VERSION,
-    ScreenSpec, SettingKind, SettingSpec, SettingValue, Version,
+    ScreenSpec, SettingSpec, Version,
 };
 
 pub const PLUGIN: Id = Id::new_static("reader");
@@ -97,50 +98,51 @@ pub const FOOTNOTE_SCREEN: Id = Id::new_static("reader.footnote");
 
 /// Settings of the reader.
 pub mod settings {
-    use quireink_sdk::Id;
+
+    use quireink_sdk::setting::{Setting, Text};
 
     /// Font size in points.
-    pub const FONT_SIZE: Id = Id::new_static("reader.font-size");
+    pub const FONT_SIZE: Setting<i64> = Setting::new("reader.font-size");
     /// Darker text: glyphs widened by up to this many steps.
-    pub const FONT_WEIGHT: Id = Id::new_static("reader.font-weight");
+    pub const FONT_WEIGHT: Setting<i64> = Setting::new("reader.font-weight");
     /// Space between words in percent of the font's.
-    pub const WORD_SPACING: Id = Id::new_static("reader.word-spacing");
+    pub const WORD_SPACING: Setting<i64> = Setting::new("reader.word-spacing");
     /// Distance between baselines in percent of the font size.
-    pub const LINE_SPACING: Id = Id::new_static("reader.line-spacing");
+    pub const LINE_SPACING: Setting<i64> = Setting::new("reader.line-spacing");
     /// Page margins in millimetres.
-    pub const MARGIN: Id = Id::new_static("reader.margin");
-    pub const JUSTIFY: Id = Id::new_static("reader.justify");
+    pub const MARGIN: Setting<i64> = Setting::new("reader.margin");
+    pub const JUSTIFY: Setting<bool> = Setting::new("reader.justify");
     /// Indent first lines instead of spacing paragraphs apart.
-    pub const INDENT: Id = Id::new_static("reader.indent");
+    pub const INDENT: Setting<bool> = Setting::new("reader.indent");
     /// Reopen the last book at start-up.
-    pub const OPEN_LAST: Id = Id::new_static("reader.open-last");
+    pub const OPEN_LAST: Setting<bool> = Setting::new("reader.open-last");
     /// Notes shown over the page ([`FOOTNOTES_POPUP`]) or jumped to
     /// ([`FOOTNOTES_JUMP`]).
-    pub const FOOTNOTES: Id = Id::new_static("reader.footnotes");
+    pub const FOOTNOTES: Setting<Text> = Setting::new("reader.footnotes");
     pub const FOOTNOTES_POPUP: &str = "reader.footnotes.popup";
     pub const FOOTNOTES_JUMP: &str = "reader.footnotes.jump";
     /// Hyphenate words at line ends, in the book's language.
-    pub const HYPHENATE: Id = Id::new_static("reader.hyphenate");
+    pub const HYPHENATE: Setting<bool> = Setting::new("reader.hyphenate");
     /// Apply the book's own styles (an EPUB's CSS).
-    pub const PUBLISHER_STYLES: Id = Id::new_static("reader.publisher-styles");
+    pub const PUBLISHER_STYLES: Setting<bool> = Setting::new("reader.publisher-styles");
     /// A tap on the top right corner sets or removes a bookmark.
-    pub const CORNER_BOOKMARK: Id = Id::new_static("reader.corner-bookmark");
+    pub const CORNER_BOOKMARK: Setting<bool> = Setting::new("reader.corner-bookmark");
     /// How fast books are read aloud, in percent of the voice's speed.
-    pub const ALOUD_SPEED: Id = Id::new_static("reader.aloud-speed");
+    pub const ALOUD_SPEED: Setting<i64> = Setting::new("reader.aloud-speed");
     /// The sentence read aloud is underlined.
-    pub const ALOUD_HIGHLIGHT: Id = Id::new_static("reader.aloud-highlight");
+    pub const ALOUD_HIGHLIGHT: Setting<bool> = Setting::new("reader.aloud-highlight");
     /// Reading aloud turns the pages; else it stops at the page's end.
-    pub const ALOUD_TURN: Id = Id::new_static("reader.aloud-turn-pages");
+    pub const ALOUD_TURN: Setting<bool> = Setting::new("reader.aloud-turn-pages");
     /// Reading aloud stops by itself after a while (a sleep timer).
-    pub const ALOUD_TIMER: Id = Id::new_static("reader.aloud-timer");
+    pub const ALOUD_TIMER: Setting<Text> = Setting::new("reader.aloud-timer");
     /// How highlights look: [`HIGHLIGHT_MARKER`] (gray) or
     /// [`HIGHLIGHT_UNDERLINE`].
-    pub const HIGHLIGHT_STYLE: Id = Id::new_static("reader.highlight-style");
+    pub const HIGHLIGHT_STYLE: Setting<Text> = Setting::new("reader.highlight-style");
     pub const HIGHLIGHT_MARKER: &str = "reader.highlight-style.marker";
     pub const HIGHLIGHT_UNDERLINE: &str = "reader.highlight-style.underline";
     /// Seconds between pages turned by themselves
     /// ([`actions::AUTO_TURN`](super::actions::AUTO_TURN)).
-    pub const AUTO_TURN_SECONDS: Id = Id::new_static("reader.auto-turn-seconds");
+    pub const AUTO_TURN_SECONDS: Setting<i64> = Setting::new("reader.auto-turn-seconds");
 }
 
 /// The reader's menu (`core.menu` on the reader screen). Any plugin can
@@ -314,21 +316,15 @@ impl Plugin for Reader {
             })?;
         }
 
-        let int = |id, key: &'static str, (min, max, default), unit: &'static str| {
-            SettingSpec::new(
-                id,
-                key,
-                SettingKind::Int { min, max },
-                SettingValue::Int(default),
-            )
-            .group(groups::READING)
-            .unit(unit)
-            // Each book may have its own.
-            .scoped()
-        };
-        let flag = |id, key: &'static str, default| {
-            SettingSpec::new(id, key, SettingKind::Bool, SettingValue::Bool(default))
+        let int = |id: Setting<i64>, key: &'static str, (min, max, default), unit: &'static str| {
+            SettingSpec::number(&id, key, min, max, default)
                 .group(groups::READING)
+                .unit(unit)
+                // Each book may have its own.
+                .scoped()
+        };
+        let flag = |id: Setting<bool>, key: &'static str, default| {
+            SettingSpec::switch(&id, key, default).group(groups::READING)
         };
         for setting in [
             int(
@@ -397,14 +393,14 @@ impl Plugin for Reader {
             flag(settings::OPEN_LAST, "reader.setting.open-last", true)
                 .section(setting_sections::BEHAVIOUR)
                 .description("reader.setting.open-last.help"),
-            SettingSpec::new(
-                settings::FOOTNOTES,
+            SettingSpec::choice(
+                &settings::FOOTNOTES,
                 "reader.setting.footnotes",
-                SettingKind::Choice(alloc::vec![
+                alloc::vec![
                     Cow::Borrowed(settings::FOOTNOTES_POPUP),
                     Cow::Borrowed(settings::FOOTNOTES_JUMP),
-                ]),
-                SettingValue::Text(Cow::Borrowed(settings::FOOTNOTES_POPUP)),
+                ],
+                settings::FOOTNOTES_POPUP,
             )
             .group(groups::READING)
             .section(setting_sections::BEHAVIOUR)
@@ -416,34 +412,36 @@ impl Plugin for Reader {
             )
             .group(groups::CONTROLS)
             .description("reader.setting.corner-bookmark.help"),
-            SettingSpec::new(
-                settings::HIGHLIGHT_STYLE,
+            SettingSpec::choice(
+                &settings::HIGHLIGHT_STYLE,
                 "reader.setting.highlight-style",
-                SettingKind::Choice(alloc::vec![
+                alloc::vec![
                     Cow::Borrowed(settings::HIGHLIGHT_MARKER),
                     Cow::Borrowed(settings::HIGHLIGHT_UNDERLINE),
-                ]),
-                SettingValue::Text(Cow::Borrowed(settings::HIGHLIGHT_MARKER)),
+                ],
+                settings::HIGHLIGHT_MARKER,
             )
             .group(groups::READING)
             .section(setting_sections::PAGE)
             .description("reader.setting.highlight-style.help"),
-            SettingSpec::new(
-                settings::AUTO_TURN_SECONDS,
+            SettingSpec::number(
+                &settings::AUTO_TURN_SECONDS,
                 "reader.setting.auto-turn-seconds",
-                SettingKind::Int { min: 5, max: 600 },
-                SettingValue::Int(30),
+                5,
+                600,
+                30,
             )
             .group(groups::READING)
             .unit("core.unit.seconds")
             .step(5)
             .section(setting_sections::BEHAVIOUR)
             .description("reader.setting.auto-turn-seconds.help"),
-            SettingSpec::new(
-                settings::ALOUD_SPEED,
+            SettingSpec::number(
+                &settings::ALOUD_SPEED,
                 "reader.setting.aloud-speed",
-                SettingKind::Int { min: 50, max: 300 },
-                SettingValue::Int(100),
+                50,
+                300,
+                100,
             )
             .group(groups::READING)
             .unit("core.unit.percent")
@@ -464,16 +462,14 @@ impl Plugin for Reader {
             )
             .section("reader.section.aloud")
             .description("reader.setting.aloud-turn-pages.help"),
-            SettingSpec::new(
-                settings::ALOUD_TIMER,
+            SettingSpec::choice(
+                &settings::ALOUD_TIMER,
                 "reader.setting.aloud-timer",
-                SettingKind::Choice(
-                    aloud::TIMER_CHOICES
-                        .iter()
-                        .map(|c| Cow::Borrowed(*c))
-                        .collect(),
-                ),
-                SettingValue::Text(Cow::Borrowed(aloud::TIMER_CHOICES[0])),
+                aloud::TIMER_CHOICES
+                    .iter()
+                    .map(|c| Cow::Borrowed(*c))
+                    .collect(),
+                aloud::TIMER_CHOICES[0],
             )
             .group(groups::READING)
             .section("reader.section.aloud")
@@ -484,11 +480,8 @@ impl Plugin for Reader {
 
         let font_step = |step: i64| -> quireink_sdk::ActionHandler {
             Box::new(move |env: &Env<'_>, out: &mut Vec<Command>| {
-                let size = env.settings.int(settings::FONT_SIZE.as_str()) + step;
-                out.push(Command::SetSetting(
-                    settings::FONT_SIZE,
-                    SettingValue::Int(size.clamp(6, 40)),
-                ));
+                let size = env.settings.read(&settings::FONT_SIZE) + step;
+                out.push(Command::set(&settings::FONT_SIZE, size.clamp(6, 40)));
             })
         };
         let handlers: [(Id, &'static str, quireink_sdk::ActionHandler); 3] = [
@@ -506,11 +499,8 @@ impl Plugin for Reader {
                 actions::TOGGLE_JUSTIFY,
                 "reader.action.toggle-justify",
                 Box::new(|env: &Env<'_>, out: &mut Vec<Command>| {
-                    let justify = env.settings.bool(settings::JUSTIFY.as_str());
-                    out.push(Command::SetSetting(
-                        settings::JUSTIFY,
-                        SettingValue::Bool(!justify),
-                    ));
+                    let justify = env.settings.read(&settings::JUSTIFY);
+                    out.push(Command::set(&settings::JUSTIFY, !justify));
                 }),
             ),
         ];
@@ -560,17 +550,17 @@ impl Plugin for Reader {
             (MENU, actions::READ_ALOUD, 30),
             (MENU, actions::ANNOTATIONS, 40),
             (MENU, actions::QUICK_SETTINGS, 50),
-            (MENU, core_settings::NIGHT_MODE, 60),
+            (MENU, core_settings::NIGHT_MODE.into(), 60),
             (MENU, MORE_MENU, 70),
-            (LAYOUT_MENU, core_settings::SCOPE_ONLY, 1),
-            (LAYOUT_MENU, core_settings::READING_FONT, 5),
-            (LAYOUT_MENU, settings::FONT_SIZE, 10),
-            (LAYOUT_MENU, settings::FONT_WEIGHT, 15),
-            (LAYOUT_MENU, settings::LINE_SPACING, 20),
-            (LAYOUT_MENU, settings::MARGIN, 30),
-            (LAYOUT_MENU, settings::JUSTIFY, 40),
-            (LAYOUT_MENU, settings::HYPHENATE, 50),
-            (LAYOUT_MENU, settings::PUBLISHER_STYLES, 60),
+            (LAYOUT_MENU, core_settings::SCOPE_ONLY.into(), 1),
+            (LAYOUT_MENU, core_settings::READING_FONT.into(), 5),
+            (LAYOUT_MENU, settings::FONT_SIZE.into(), 10),
+            (LAYOUT_MENU, settings::FONT_WEIGHT.into(), 15),
+            (LAYOUT_MENU, settings::LINE_SPACING.into(), 20),
+            (LAYOUT_MENU, settings::MARGIN.into(), 30),
+            (LAYOUT_MENU, settings::JUSTIFY.into(), 40),
+            (LAYOUT_MENU, settings::HYPHENATE.into(), 50),
+            (LAYOUT_MENU, settings::PUBLISHER_STYLES.into(), 60),
             (MORE_MENU, actions::TOGGLE_BOOKMARK, 10),
             (MORE_MENU, actions::SKIM_BOOK, 15),
             (MORE_MENU, actions::AUTO_TURN, 17),
@@ -587,10 +577,10 @@ impl Plugin for Reader {
         for item in [
             actions::READ_ALOUD,
             actions::READ_FROM,
-            settings::ALOUD_SPEED,
-            settings::ALOUD_HIGHLIGHT,
-            settings::ALOUD_TURN,
-            settings::ALOUD_TIMER,
+            settings::ALOUD_SPEED.into(),
+            settings::ALOUD_HIGHLIGHT.into(),
+            settings::ALOUD_TURN.into(),
+            settings::ALOUD_TIMER.into(),
         ] {
             r.set_menu_need(item, quireink_sdk::MenuNeed::Speech)?;
         }
@@ -622,7 +612,7 @@ impl Plugin for Reader {
             title: Cow::Borrowed(""),
             help: Cow::Borrowed(""),
             order: 30,
-            page: quireink_sdk::setup::SetupPage::Setting(settings::FONT_SIZE),
+            page: quireink_sdk::setup::SetupPage::Setting(settings::FONT_SIZE.into()),
             applies: None,
         })?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
@@ -667,7 +657,7 @@ fn last_in(text: &str) -> Option<String> {
 }
 
 fn reopen_last_book(env: &Env<'_>, _: &Params, out: &mut Vec<Command>) {
-    if !env.settings.bool(settings::OPEN_LAST.as_str()) {
+    if !env.settings.read(&settings::OPEN_LAST) {
         return;
     }
     if let Some(path) = last_book(env)

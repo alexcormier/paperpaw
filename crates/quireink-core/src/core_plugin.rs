@@ -178,11 +178,8 @@ impl Plugin for CorePlugin {
                 actions::TOGGLE_NIGHT_MODE,
                 "core.action.toggle-night-mode",
                 Box::new(|env: &Env<'_>, out: &mut Vec<Command>| {
-                    let night = env.settings.bool(settings::NIGHT_MODE.as_str());
-                    out.push(Command::SetSetting(
-                        settings::NIGHT_MODE,
-                        SettingValue::Bool(!night),
-                    ));
+                    let night = env.settings.read(&settings::NIGHT_MODE);
+                    out.push(Command::set(&settings::NIGHT_MODE, !night));
                 }),
             ),
         ];
@@ -263,7 +260,7 @@ impl Plugin for CorePlugin {
             (actions::HOME, 10, "home"),
             (actions::LIBRARY, 20, "books"),
             (actions::TOOLS, 30, "apps"),
-            (settings::NIGHT_MODE, 85, "moon"),
+            (settings::NIGHT_MODE.into(), 85, "moon"),
             (actions::SETTINGS, 90, "settings"),
         ] {
             r.add_menu_entry(MenuEntry {
@@ -277,8 +274,8 @@ impl Plugin for CorePlugin {
         // The quick panel: what is changed often, whatever is open; plugins
         // add their own (the light, …).
         for (item, order) in [
-            (settings::NIGHT_MODE, 10),
-            (settings::ROTATION, 40),
+            (settings::NIGHT_MODE.into(), 10),
+            (settings::ROTATION.into(), 40),
             (actions::REFRESH_SCREEN, 50),
             (actions::SCREENSHOT, 60),
             (actions::SLEEP, 70),
@@ -338,45 +335,29 @@ impl Plugin for CorePlugin {
         }
 
         r.add_setting(
-            SettingSpec::new(
-                settings::DEVELOPER,
-                "core.setting.developer",
-                SettingKind::Bool,
-                SettingValue::Bool(false),
-            )
-            .group(groups::SYSTEM)
-            .advanced()
-            .description("core.setting.developer.help"),
+            SettingSpec::switch(&settings::DEVELOPER, "core.setting.developer", false)
+                .group(groups::SYSTEM)
+                .advanced()
+                .description("core.setting.developer.help"),
         )?;
         r.add_setting(
-            SettingSpec::new(
-                settings::LANGUAGE,
+            SettingSpec::language(
+                &settings::LANGUAGE,
                 "core.setting.language",
-                SettingKind::Language,
-                SettingValue::Text(Cow::Borrowed(quireink_i18n::FALLBACK_LANGUAGE)),
+                quireink_i18n::FALLBACK_LANGUAGE,
             )
             .group(groups::SYSTEM)
             .description("core.setting.language.help"),
         )?;
         r.add_setting(
-            SettingSpec::new(
-                settings::NIGHT_MODE,
-                "core.setting.night-mode",
-                SettingKind::Bool,
-                SettingValue::Bool(false),
-            )
-            .group(groups::DISPLAY)
-            .description("core.setting.night-mode.help"),
+            SettingSpec::switch(&settings::NIGHT_MODE, "core.setting.night-mode", false)
+                .group(groups::DISPLAY)
+                .description("core.setting.night-mode.help"),
         )?;
         r.add_setting(
-            SettingSpec::new(
-                settings::SPEAK_FOCUS,
-                "core.setting.speak-focus",
-                SettingKind::Bool,
-                SettingValue::Bool(false),
-            )
-            .group(groups::SYSTEM)
-            .description("core.setting.speak-focus.help"),
+            SettingSpec::switch(&settings::SPEAK_FOCUS, "core.setting.speak-focus", false)
+                .group(groups::SYSTEM)
+                .description("core.setting.speak-focus.help"),
         )?;
         r.set_menu_need(settings::SPEAK_FOCUS, quireink_sdk::MenuNeed::Speech)?;
         for (id, title, default, max) in [
@@ -397,54 +378,46 @@ impl Plugin for CorePlugin {
             )?;
         }
         r.add_setting(
-            SettingSpec::new(
-                settings::UI_SIZE,
-                "core.setting.ui-size",
-                SettingKind::Int { min: 7, max: 24 },
-                SettingValue::Int(9),
-            )
-            .group(groups::LOOK)
-            .unit("core.unit.pt")
-            .description("core.setting.ui-size.help"),
+            SettingSpec::number(&settings::UI_SIZE, "core.setting.ui-size", 7, 24, 9)
+                .group(groups::LOOK)
+                .unit("core.unit.pt")
+                .description("core.setting.ui-size.help"),
         )?;
         r.add_setting(
-            SettingSpec::new(
-                settings::UI_HEADER,
+            SettingSpec::choice(
+                &settings::UI_HEADER,
                 "core.setting.ui-header",
-                SettingKind::Choice(alloc::vec![
+                alloc::vec![
                     Cow::Borrowed(settings::HEADER_DARK),
                     Cow::Borrowed(settings::HEADER_LIGHT),
-                ]),
-                // Light: calm, as the home screen and the setup are.
-                SettingValue::Text(Cow::Borrowed(settings::HEADER_LIGHT)),
+                ],
+                settings::HEADER_LIGHT,
             )
             .group(groups::LOOK)
             .description("core.setting.ui-header.help"),
         )?;
         r.add_setting(
-            SettingSpec::new(
-                settings::UI_CORNERS,
+            SettingSpec::choice(
+                &settings::UI_CORNERS,
                 "core.setting.ui-corners",
-                SettingKind::Choice(
-                    settings::CORNERS
-                        .iter()
-                        .map(|c| Cow::Borrowed(*c))
-                        .collect(),
-                ),
-                SettingValue::Text(Cow::Borrowed(settings::CORNERS[0])),
+                settings::CORNERS
+                    .iter()
+                    .map(|c| Cow::Borrowed(*c))
+                    .collect(),
+                settings::CORNERS[0],
             )
             .group(groups::LOOK)
             .description("core.setting.ui-corners.help"),
         )?;
         r.add_setting(
-            SettingSpec::new(
-                settings::UI_CONTRAST,
+            SettingSpec::choice(
+                &settings::UI_CONTRAST,
                 "core.setting.ui-contrast",
-                SettingKind::Choice(alloc::vec![
+                alloc::vec![
                     Cow::Borrowed(settings::CONTRAST_NORMAL),
                     Cow::Borrowed(settings::CONTRAST_STRONG),
-                ]),
-                SettingValue::Text(Cow::Borrowed(settings::CONTRAST_NORMAL)),
+                ],
+                settings::CONTRAST_NORMAL,
             )
             .group(groups::LOOK)
             .description("core.setting.ui-contrast.help"),
@@ -490,22 +463,22 @@ impl Plugin for CorePlugin {
             )?;
         }
         r.add_setting(
-            SettingSpec::new(
-                settings::KEYMAP_PRESET,
+            SettingSpec::choice(
+                &settings::KEYMAP_PRESET,
                 "core.setting.keymap-preset",
-                // The kernel fills in the registered presets.
-                SettingKind::Choice(alloc::vec![Cow::Borrowed(keymap_presets::STANDARD_NAME)]),
-                SettingValue::Text(Cow::Borrowed(keymap_presets::STANDARD_NAME)),
+                alloc::vec![Cow::Borrowed(keymap_presets::STANDARD_NAME)],
+                keymap_presets::STANDARD_NAME,
             )
             .group(groups::CONTROLS)
             .description("core.setting.keymap-preset.help"),
         )?;
         r.add_setting(
-            SettingSpec::new(
-                settings::FULL_REFRESH_INTERVAL,
+            SettingSpec::number(
+                &settings::FULL_REFRESH_INTERVAL,
                 "core.setting.full-refresh-interval",
-                SettingKind::Int { min: 0, max: 1000 },
-                SettingValue::Int(6),
+                0,
+                1000,
+                6,
             )
             .group(groups::DISPLAY)
             .advanced()
@@ -513,22 +486,18 @@ impl Plugin for CorePlugin {
             .description("core.setting.full-refresh-interval.help"),
         )?;
         r.add_setting(
-            SettingSpec::new(
-                settings::FLASH_SCREENS,
-                "core.setting.flash-screens",
-                SettingKind::Bool,
-                SettingValue::Bool(true),
-            )
-            .group(groups::DISPLAY)
-            .advanced()
-            .description("core.setting.flash-screens.help"),
+            SettingSpec::switch(&settings::FLASH_SCREENS, "core.setting.flash-screens", true)
+                .group(groups::DISPLAY)
+                .advanced()
+                .description("core.setting.flash-screens.help"),
         )?;
         r.add_setting(
-            SettingSpec::new(
-                settings::SLEEP_AFTER,
+            SettingSpec::number(
+                &settings::SLEEP_AFTER,
                 "core.setting.sleep-after",
-                SettingKind::Int { min: 0, max: 120 },
-                SettingValue::Int(10),
+                0,
+                120,
+                10,
             )
             .group(groups::SYSTEM)
             .unit("core.unit.minutes")
@@ -537,30 +506,23 @@ impl Plugin for CorePlugin {
         )?;
         r.set_menu_need(settings::SLEEP_AFTER, quireink_sdk::MenuNeed::Sleep)?;
         r.add_setting(
-            SettingSpec::new(
-                settings::ROTATION,
+            SettingSpec::choice(
+                &settings::ROTATION,
                 "core.setting.rotation",
-                SettingKind::Choice(
-                    settings::ROTATIONS
-                        .iter()
-                        .map(|r| Cow::Borrowed(*r))
-                        .collect(),
-                ),
-                SettingValue::Text(Cow::Borrowed(settings::ROTATIONS[0])),
+                settings::ROTATIONS
+                    .iter()
+                    .map(|r| Cow::Borrowed(*r))
+                    .collect(),
+                settings::ROTATIONS[0],
             )
             .group(groups::DISPLAY)
             .description("core.setting.rotation.help"),
         )?;
         r.set_menu_need(settings::ROTATION, quireink_sdk::MenuNeed::Rotation)?;
         r.add_setting(
-            SettingSpec::new(
-                settings::BUTTON_HINTS,
-                "core.setting.button-hints",
-                SettingKind::Bool,
-                SettingValue::Bool(true),
-            )
-            .group(groups::CONTROLS)
-            .description("core.setting.button-hints.help"),
+            SettingSpec::switch(&settings::BUTTON_HINTS, "core.setting.button-hints", true)
+                .group(groups::CONTROLS)
+                .description("core.setting.button-hints.help"),
         )?;
         r.set_menu_need(settings::BUTTON_HINTS, quireink_sdk::MenuNeed::ButtonRow)?;
         register_spaces(r)?;
@@ -609,11 +571,12 @@ impl Plugin for CorePlugin {
             r.set_menu_need(own, quireink_sdk::MenuNeed::Colors)?;
         }
         r.add_setting(
-            SettingSpec::new(
-                settings::NOTICE_SECONDS,
+            SettingSpec::number(
+                &settings::NOTICE_SECONDS,
                 "core.setting.notice-seconds",
-                SettingKind::Int { min: 1, max: 60 },
-                SettingValue::Int(4),
+                1,
+                60,
+                4,
             )
             .group(groups::DISPLAY)
             .advanced()
@@ -621,14 +584,12 @@ impl Plugin for CorePlugin {
             .description("core.setting.notice-seconds.help"),
         )?;
         r.add_setting(
-            SettingSpec::new(
-                settings::LONG_PRESS_MS,
+            SettingSpec::number(
+                &settings::LONG_PRESS_MS,
                 "core.setting.long-press-ms",
-                SettingKind::Int {
-                    min: 200,
-                    max: 3000,
-                },
-                SettingValue::Int(500),
+                200,
+                3000,
+                500,
             )
             .group(groups::CONTROLS)
             .advanced()
@@ -637,12 +598,11 @@ impl Plugin for CorePlugin {
         )?;
 
         r.add_setting(
-            SettingSpec::new(
-                settings::READING_FONT,
+            SettingSpec::choice(
+                &settings::READING_FONT,
                 "core.setting.reading-font",
-                // The kernel fills in the registered families.
-                SettingKind::Choice(alloc::vec![Cow::Borrowed(settings::DEFAULT_FONT)]),
-                SettingValue::Text(Cow::Borrowed(settings::DEFAULT_FONT)),
+                alloc::vec![Cow::Borrowed(settings::DEFAULT_FONT)],
+                settings::DEFAULT_FONT,
             )
             .group(groups::READING)
             .section(setting_sections::FONT)
@@ -650,51 +610,33 @@ impl Plugin for CorePlugin {
             .description("core.setting.reading-font.help"),
         )?;
         r.add_setting(
-            SettingSpec::new(
-                settings::SCOPE_ONLY,
-                "core.setting.scope-only",
-                SettingKind::Bool,
-                SettingValue::Bool(false),
-            )
-            .group(groups::READING)
-            .scoped()
-            .description("core.setting.scope-only.help"),
+            SettingSpec::switch(&settings::SCOPE_ONLY, "core.setting.scope-only", false)
+                .group(groups::READING)
+                .scoped()
+                .description("core.setting.scope-only.help"),
         )?;
         // The time of day and the battery, for status lines.
         r.add_setting(
-            SettingSpec::new(
-                settings::CLOCK_FORMAT,
+            SettingSpec::choice(
+                &settings::CLOCK_FORMAT,
                 "core.setting.clock-format",
-                SettingKind::Choice(alloc::vec![
-                    Cow::Borrowed(CLOCK_24H),
-                    Cow::Borrowed(CLOCK_12H)
-                ]),
-                SettingValue::Text(Cow::Borrowed(CLOCK_24H)),
+                alloc::vec![Cow::Borrowed(CLOCK_24H), Cow::Borrowed(CLOCK_12H)],
+                CLOCK_24H,
             )
             .group(groups::SYSTEM),
         )?;
         let mut zones = alloc::vec![Cow::Borrowed(AUTO)];
         zones.extend(TIME_ZONES.iter().map(|(id, _)| Cow::Borrowed(*id)));
         r.add_setting(
-            SettingSpec::new(
-                settings::TIME_ZONE,
-                "core.setting.time-zone",
-                SettingKind::Choice(zones),
-                SettingValue::Text(Cow::Borrowed(AUTO)),
-            )
-            .group(groups::SYSTEM)
-            .description("core.setting.time-zone.help"),
+            SettingSpec::choice(&settings::TIME_ZONE, "core.setting.time-zone", zones, AUTO)
+                .group(groups::SYSTEM)
+                .description("core.setting.time-zone.help"),
         )?;
         r.add_setting(
-            SettingSpec::new(
-                settings::TIME_ZONE_RULE,
-                "core.setting.time-zone-rule",
-                SettingKind::Text,
-                SettingValue::Text(Cow::Borrowed("")),
-            )
-            .group(groups::SYSTEM)
-            .advanced()
-            .description("core.setting.time-zone-rule.help"),
+            SettingSpec::text(&settings::TIME_ZONE_RULE, "core.setting.time-zone-rule", "")
+                .group(groups::SYSTEM)
+                .advanced()
+                .description("core.setting.time-zone-rule.help"),
         )?;
         r.add_status_item(StatusItemSpec {
             id: status_items::CLOCK,
@@ -720,7 +662,7 @@ impl Plugin for CorePlugin {
             id: status_items::BATTERY_LOW,
             title: Cow::Borrowed("core.status.battery-low"),
             value: Box::new(|env, _| {
-                let low = env.settings.int(settings::BATTERY_LOW.as_str());
+                let low = env.settings.read(&settings::BATTERY_LOW);
                 env.status
                     .battery
                     .filter(|b| i64::from(b.percent) <= low)
@@ -731,11 +673,12 @@ impl Plugin for CorePlugin {
             }),
         })?;
         r.add_setting(
-            SettingSpec::new(
-                settings::BATTERY_LOW,
+            SettingSpec::number(
+                &settings::BATTERY_LOW,
                 "core.setting.battery-low",
-                SettingKind::Int { min: 5, max: 50 },
-                SettingValue::Int(20),
+                5,
+                50,
+                20,
             )
             .group(groups::SYSTEM)
             .unit("core.unit.percent")
@@ -760,7 +703,7 @@ impl Plugin for CorePlugin {
             title: Cow::Borrowed(""),
             help: Cow::Borrowed(""),
             order: 10,
-            page: quireink_sdk::setup::SetupPage::Setting(settings::LANGUAGE),
+            page: quireink_sdk::setup::SetupPage::Setting(settings::LANGUAGE.into()),
             applies: None,
         })?;
         r.add_setup_step(quireink_sdk::setup::SetupStepSpec {
@@ -768,7 +711,7 @@ impl Plugin for CorePlugin {
             title: Cow::Borrowed(""),
             help: Cow::Borrowed(""),
             order: 20,
-            page: quireink_sdk::setup::SetupPage::Setting(settings::KEYMAP_PRESET),
+            page: quireink_sdk::setup::SetupPage::Setting(settings::KEYMAP_PRESET.into()),
             applies: Some(Box::new(|env: &quireink_sdk::Env<'_>| {
                 env.device.input.buttons && !env.device.input.touch
             })),
@@ -778,7 +721,7 @@ impl Plugin for CorePlugin {
             title: Cow::Borrowed(""),
             help: Cow::Borrowed("core.setup.time-zone.help"),
             order: 40,
-            page: quireink_sdk::setup::SetupPage::Setting(settings::TIME_ZONE),
+            page: quireink_sdk::setup::SetupPage::Setting(settings::TIME_ZONE.into()),
             applies: Some(Box::new(|env: &quireink_sdk::Env<'_>| {
                 env.status
                     .clock
@@ -829,7 +772,7 @@ impl Screen for PlaceholderScreen {
 /// Where a screenshot goes: `Screenshots` beside the library folder,
 /// named by the time ("QuireInk 2026-10-15 17-30-05.png").
 fn screenshot_path(env: &Env<'_>) -> alloc::string::String {
-    let library = env.settings.text("files.root").trim_matches('/');
+    let library = quireink_sdk::library::folder(env);
     let parent = quireink_sdk::files::parent(library);
     let dir = if parent.is_empty() {
         alloc::string::String::from("Screenshots")
@@ -864,16 +807,14 @@ fn register_spaces(r: &mut Registrar) -> Result<(), RegisterError> {
     let space = Id::new_static(widgets::SPACE);
     r.add_setting_group(widgets::settings_group(&space, "core.widget.space"))?;
     r.add_setting(
-        SettingSpec::new(
-            Id::new_static(widgets::SPACE_SIZE),
+        SettingSpec::choice(
+            &widgets::SPACE_SIZE,
             "core.setting.space-size",
-            SettingKind::Choice(
-                widgets::SPACE_SIZES
-                    .iter()
-                    .map(|s| Cow::Borrowed(*s))
-                    .collect(),
-            ),
-            SettingValue::Text(Cow::Borrowed(widgets::SPACE_SIZES[1])),
+            widgets::SPACE_SIZES
+                .iter()
+                .map(|s| Cow::Borrowed(*s))
+                .collect(),
+            widgets::SPACE_SIZES[1],
         )
         .group(space.clone())
         .description("core.setting.space-size.help"),
@@ -882,7 +823,7 @@ fn register_spaces(r: &mut Registrar) -> Result<(), RegisterError> {
         id: space,
         title: Cow::Borrowed("core.widget.space"),
         height: Box::new(|env, _| {
-            let size = env.settings.text(widgets::SPACE_SIZE);
+            let size = env.settings.read(&widgets::SPACE_SIZE);
             let mm = match widgets::SPACE_SIZES.iter().position(|s| *s == size) {
                 Some(0) => 4,
                 Some(2) => 20,

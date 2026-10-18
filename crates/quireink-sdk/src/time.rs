@@ -298,11 +298,11 @@ fn civil_from_days(days: i64) -> (i32, u8, u8) {
 
 /// The time zone chosen in the settings; `None` for the system's.
 fn chosen_zone(env: &Env<'_>) -> Option<TimeZone> {
-    let rule = env.settings.text(settings::TIME_ZONE_RULE.as_str()).trim();
+    let rule = env.settings.read(&settings::TIME_ZONE_RULE).trim();
     if !rule.is_empty() {
         return TimeZone::parse(rule);
     }
-    let zone = env.settings.text(settings::TIME_ZONE.as_str());
+    let zone = env.settings.read(&settings::TIME_ZONE);
     TIME_ZONES
         .iter()
         .find(|(id, _)| *id == zone)
@@ -355,7 +355,7 @@ pub fn next_minute(env: &Env<'_>) -> Option<Instant> {
 /// (setting `core.clock-format`).
 pub fn clock_text(env: &Env<'_>) -> Option<String> {
     let t = local_time(env)?;
-    if env.settings.text(settings::CLOCK_FORMAT.as_str()) == CLOCK_12H {
+    if env.settings.read(&settings::CLOCK_FORMAT) == CLOCK_12H {
         let hour = match t.hour % 12 {
             0 => 12,
             h => h,

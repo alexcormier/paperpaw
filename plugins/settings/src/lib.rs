@@ -35,6 +35,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use quireink_sdk::builtin::{actions, events, groups, menus, params, setting_sections, slots};
+use quireink_sdk::setting::Setting;
 use quireink_sdk::ui::{self, ListChange, ListView, UiStyle};
 use quireink_sdk::{ActionSpec, MenuEntry};
 use quireink_sdk::{
@@ -51,7 +52,7 @@ pub const GROUP_SCREEN: Id = Id::new_static("settings.group");
 /// Picks a value of a choice or language setting; parameter `id`.
 pub const CHOOSE_SCREEN: Id = Id::new_static("settings.choose");
 /// Show advanced settings too.
-pub const ADVANCED: Id = Id::new_static("settings.advanced");
+pub const ADVANCED: Setting<bool> = Setting::new("settings.advanced");
 /// Emitted by the keyboard with a text setting's new value (parameters
 /// `id` and `text`).
 const TEXT_ENTERED: Id = Id::new_static("settings.text-entered");
@@ -141,14 +142,9 @@ impl Plugin for SettingsPlugin {
         r.subscribe(secrets::ENTERED, Box::new(secrets::entered))?;
         r.bind_slot(slots::SETTINGS, SCREEN, Priority::DEFAULT)?;
         r.add_setting(
-            SettingSpec::new(
-                ADVANCED,
-                "settings.advanced",
-                SettingKind::Bool,
-                SettingValue::Bool(false),
-            )
-            .group(groups::SYSTEM)
-            .description("settings.advanced.help"),
+            SettingSpec::switch(&ADVANCED, "settings.advanced", false)
+                .group(groups::SYSTEM)
+                .description("settings.advanced.help"),
         )?;
         r.subscribe(
             TEXT_ENTERED,
@@ -188,7 +184,7 @@ fn visible(env: &Env<'_>, spec: &SettingSpec) -> bool {
             .settings
             .bool(quireink_sdk::builtin::settings::DEVELOPER.as_str());
     }
-    spec.level == Level::Basic || env.settings.bool(ADVANCED.as_str())
+    spec.level == Level::Basic || env.settings.read(&ADVANCED)
 }
 
 /// The header, list area and list for a screen; rows have notes if
@@ -435,8 +431,8 @@ impl GroupList {
             }
             Some(Link::Page(action)) => cx.command(Command::RunAction(action.clone())),
             Some(Link::Advanced) => {
-                let advanced = cx.env().settings.bool(ADVANCED.as_str());
-                cx.command(Command::SetSetting(ADVANCED, SettingValue::Bool(!advanced)));
+                let advanced = cx.env().settings.read(&ADVANCED);
+                cx.command(Command::set(&ADVANCED, !advanced));
             }
             Some(Link::Search) => cx.command(search::ask(cx.env())),
             None => {}
@@ -467,7 +463,7 @@ impl Screen for GroupList {
                 let icon = entry.icon.as_deref();
                 let rect = ui::draw_row_icon(canvas, env, &style, rect, room, icon, ink);
                 if *link == Link::Advanced {
-                    let on = env.settings.bool(ADVANCED.as_str());
+                    let on = env.settings.read(&ADVANCED);
                     ui::draw_switch_row(canvas, env, &style, rect, focused, &entry.title, "", on);
                 } else if *link == Link::Search {
                     ui::draw_value_row(canvas, env, &style, rect, focused, &entry.title, "");

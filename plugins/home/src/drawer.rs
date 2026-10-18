@@ -6,6 +6,7 @@
 use alloc::vec::Vec;
 
 use quireink_sdk::builtin::actions;
+use quireink_sdk::setting::Setting;
 use quireink_sdk::ui::{self, ListChange, ListView, UiStyle};
 use quireink_sdk::{
     Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Rect, RefreshMode, Screen,
@@ -152,11 +153,11 @@ impl Screen for DrawerScreen {
 }
 
 /// Whether the hint on gestures shows (once; switched off when shown).
-pub(crate) const TIPS_SETTING: Id = Id::new_static("home.gesture-tips");
+pub(crate) const TIPS_SETTING: Setting<bool> = Setting::new("home.gesture-tips");
 
 /// Whether the hint on gestures is due: on touch screens, until shown.
 pub(crate) fn tips_due(env: &Env<'_>) -> bool {
-    env.device.input.touch && env.settings.bool(TIPS_SETTING.as_str())
+    env.device.input.touch && env.settings.read(&TIPS_SETTING)
 }
 
 /// The hint on the gestures, in a box in the middle of the screen: what
@@ -207,10 +208,7 @@ impl Screen for TipsScreen {
 
     /// Shown once: switched off as it shows.
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
-        cx.command(Command::SetSetting(
-            TIPS_SETTING,
-            quireink_sdk::SettingValue::Bool(false),
-        ));
+        cx.command(Command::set(&TIPS_SETTING, false));
     }
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {

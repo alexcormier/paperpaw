@@ -383,14 +383,28 @@ impl Registrar {
     /// Gives an action or setting an icon by name (see
     /// [`icons`](crate::icons)), shown with it in menus. Any item may get
     /// one, e.g. by an icon theme; the last registered wins.
-    pub fn add_icon(&mut self, item: Id, icon: Cow<'static, str>) -> Result<(), RegisterError> {
-        self.add(Contribution::Icon { item, icon })
+    pub fn add_icon(
+        &mut self,
+        item: impl Into<Id>,
+        icon: Cow<'static, str>,
+    ) -> Result<(), RegisterError> {
+        self.add(Contribution::Icon {
+            item: item.into(),
+            icon,
+        })
     }
 
     /// Offers an action or setting in menus only on devices that meet
     /// `need`, e.g. reading aloud only where the device can speak.
-    pub fn set_menu_need(&mut self, item: Id, need: MenuNeed) -> Result<(), RegisterError> {
-        self.add(Contribution::MenuNeed { item, need })
+    pub fn set_menu_need(
+        &mut self,
+        item: impl Into<Id>,
+        need: MenuNeed,
+    ) -> Result<(), RegisterError> {
+        self.add(Contribution::MenuNeed {
+            item: item.into(),
+            need,
+        })
     }
 
     /// When `screen` shows the row of hints for the buttons below it

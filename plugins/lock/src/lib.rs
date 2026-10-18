@@ -29,9 +29,10 @@ use alloc::vec::Vec;
 use core::cell::Cell;
 
 use quireink_sdk::builtin::{events, groups};
+use quireink_sdk::setting::{Setting, Text};
 use quireink_sdk::{
     ActionSpec, Command, Env, Id, Manifest, Params, Plugin, RegisterError, Registrar, SDK_VERSION,
-    ScreenSpec, SettingKind, SettingSpec, SettingValue, Version,
+    ScreenSpec, SettingSpec, Version,
 };
 
 pub const PLUGIN: Id = Id::new_static("lock");
@@ -39,9 +40,9 @@ pub const PLUGIN: Id = Id::new_static("lock");
 pub const NOW: Id = Id::new_static("lock.now");
 /// The kind of lock: `lock.kind.off`, `…pin`, `…pattern` or `…password`
 /// (ids, as choices are, translated to their names).
-pub const KIND: Id = Id::new_static("lock.kind");
+pub const KIND: Setting<Text> = Setting::new("lock.kind");
 /// Whether the lock is asked for when the device wakes up.
-pub const ON_WAKE: Id = Id::new_static("lock.on-wake");
+pub const ON_WAKE: Setting<bool> = Setting::new("lock.on-wake");
 const SCREEN: Id = Id::new_static("lock.screen");
 
 /// Whether the device is locked: shared by the plugin's handlers and its
@@ -90,31 +91,24 @@ impl Plugin for Lock {
             }),
         })?;
         r.add_setting(
-            SettingSpec::new(
-                KIND,
+            SettingSpec::choice(
+                &KIND,
                 "lock.setting.kind",
-                SettingKind::Choice(
-                    KINDS
-                        .iter()
-                        .map(|k| Cow::Owned(alloc::format!("{KIND_PREFIX}{k}")))
-                        .collect(),
-                ),
-                SettingValue::Text(Cow::Borrowed("lock.kind.off")),
+                KINDS
+                    .iter()
+                    .map(|k| Cow::Owned(alloc::format!("{KIND_PREFIX}{k}")))
+                    .collect(),
+                "lock.kind.off",
             )
             .group(groups::SYSTEM)
             .description("lock.setting.kind.help")
             .editor(SCREEN),
         )?;
         r.add_setting(
-            SettingSpec::new(
-                ON_WAKE,
-                "lock.setting.on-wake",
-                SettingKind::Bool,
-                SettingValue::Bool(true),
-            )
-            .group(groups::SYSTEM)
-            .advanced()
-            .description("lock.setting.on-wake.help"),
+            SettingSpec::switch(&ON_WAKE, "lock.setting.on-wake", true)
+                .group(groups::SYSTEM)
+                .advanced()
+                .description("lock.setting.on-wake.help"),
         )?;
         let now = locked.clone();
         r.add_action(ActionSpec {
@@ -135,7 +129,7 @@ impl Plugin for Lock {
         r.subscribe(
             events::RESUME,
             Box::new(move |env: &Env<'_>, _: &Params, out: &mut Vec<Command>| {
-                if env.settings.bool(ON_WAKE.as_str()) {
+                if env.settings.read(&ON_WAKE) {
                     lock(env, &locked, out);
                 }
             }),
@@ -146,7 +140,7 @@ impl Plugin for Lock {
             title: Cow::Borrowed(""),
             help: Cow::Borrowed(""),
             order: 70,
-            page: quireink_sdk::setup::SetupPage::Setting(KIND),
+            page: quireink_sdk::setup::SetupPage::Setting(KIND.into()),
             applies: None,
         })?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;

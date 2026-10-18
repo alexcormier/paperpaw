@@ -65,7 +65,7 @@ fn uses_book_fonts(env: &Env<'_>) -> bool {
     // Embedded fonts take hundreds of kilobytes: not on small devices.
     quireink_sdk::text::OUTLINES
         && env.device.memory != quireink_sdk::MemoryClass::Small
-        && env.settings.text(READING_FONT.as_str()) == DEFAULT_FONT
+        && env.settings.read(&READING_FONT) == DEFAULT_FONT
 }
 
 impl Embedded {
@@ -319,14 +319,14 @@ impl Typography {
     fn new(env: &Env<'_>, font: &FontHandle<'_>, language: &str, whole_pages: bool) -> Self {
         let settings = env.settings;
         let m = env.metrics;
-        let size = m.pt(settings.int(FONT_SIZE.as_str()) as f32);
-        let weight = settings.int(FONT_WEIGHT.as_str()).clamp(0, 4) as u8;
-        let word_spacing = settings.int(WORD_SPACING.as_str()).clamp(50, 200) as f32 / 100.0;
+        let size = m.pt(settings.read(&FONT_SIZE) as f32);
+        let weight = settings.read(&FONT_WEIGHT).clamp(0, 4) as u8;
+        let word_spacing = settings.read(&WORD_SPACING).clamp(50, 200) as f32 / 100.0;
         let metrics = font.line_metrics(size);
         let natural = metrics.ascent + metrics.descent;
-        let line_height = (size * settings.int(LINE_SPACING.as_str()) as f32 / 100.0).max(natural);
-        let indent = settings.bool(INDENT.as_str());
-        let justify = settings.bool(JUSTIFY.as_str());
+        let line_height = (size * settings.read(&LINE_SPACING) as f32 / 100.0).max(natural);
+        let indent = settings.read(&INDENT);
+        let justify = settings.read(&JUSTIFY);
         let ascent = metrics.ascent + (line_height - natural) / 2.0;
         let style = Style {
             paragraph_spacing: if indent { 0.0 } else { line_height * 0.6 },
@@ -339,7 +339,7 @@ impl Typography {
         let margin = if whole_pages {
             0.0
         } else {
-            m.mm(settings.int(MARGIN.as_str()).max(0) as u32) as f32
+            m.mm(settings.read(&MARGIN).max(0) as u32) as f32
         };
         let status_height = status::height(env);
         let (top, bottom) = if whole_pages {
@@ -351,7 +351,7 @@ impl Typography {
         // Status lines sit close to the edge, in the text's margin; the
         // text keeps its margin, and never runs up to a status line, also
         // on pages it fills to the last pixel.
-        let edge = m.tenth_mm(settings.int(status::EDGE.as_str()).clamp(0, 150) as u32) as f32;
+        let edge = m.tenth_mm(settings.read(&status::EDGE).clamp(0, 150) as u32) as f32;
         let status_gap = m.mm(2) as f32;
         let status_room = status_height + status_gap;
         let screen = f32::from(display.height);
@@ -369,9 +369,8 @@ impl Typography {
         let line = |y: f32| Rect::new(margin as u16, y as u16, width as u16, status_height as u16);
         let top_status = top.then(|| line(edge));
         let status = bottom.then(|| line(screen - edge - status_height));
-        let hyphenation = (settings.bool(HYPHENATE.as_str())
-            && env.hyphenation.get(language).is_some())
-        .then(|| language.to_string());
+        let hyphenation = (settings.read(&HYPHENATE) && env.hyphenation.get(language).is_some())
+            .then(|| language.to_string());
         let key = format!(
             "{:016x}",
             fnv1a64(format!(
@@ -384,7 +383,7 @@ impl Typography {
                 style.indent,
                 style.paragraph_spacing,
                 hyphenation.as_deref().unwrap_or("-"),
-                settings.bool(crate::settings::PUBLISHER_STYLES.as_str()),
+                settings.read(&crate::settings::PUBLISHER_STYLES),
                 uses_book_fonts(env),
                 env.text_filters.signature(env),
             ))
@@ -786,7 +785,7 @@ impl ReaderScreen {
         let Ok(book) = &self.book else {
             return;
         };
-        let turn = env.settings.bool(crate::settings::ALOUD_TURN.as_str());
+        let turn = env.settings.read(&crate::settings::ALOUD_TURN);
         let (now, text) = book.sentence(&env, &book.page, from, turn);
         book.speak(&env, text, false, cx);
         let next = book.following(&env, &now, turn).map(|(next, text)| {
@@ -838,7 +837,7 @@ impl ReaderScreen {
         let Ok(book) = &self.book else {
             return;
         };
-        if !env.settings.bool(crate::settings::ALOUD_HIGHLIGHT.as_str()) {
+        if !env.settings.read(&crate::settings::ALOUD_HIGHLIGHT) {
             return;
         }
         let words = book.words(&env);
@@ -878,7 +877,7 @@ impl ReaderScreen {
             ));
             return;
         }
-        let turn = env.settings.bool(crate::settings::ALOUD_TURN.as_str());
+        let turn = env.settings.read(&crate::settings::ALOUD_TURN);
         let Some(next) = aloud.next else {
             // The end of the book, or of the page.
             self.aloud = None;
@@ -1386,8 +1385,8 @@ impl ReaderScreen {
     /// reader shows notes that way, else follows it.
     fn open_link(&mut self, href: &str, label: &str, cx: &mut Cx<'_, '_>) -> Handled {
         let env = *cx.env();
-        let popup = env.settings.text(crate::settings::FOOTNOTES.as_str())
-            == crate::settings::FOOTNOTES_POPUP;
+        let popup =
+            env.settings.read(&crate::settings::FOOTNOTES) == crate::settings::FOOTNOTES_POPUP;
         if popup
             && !quireink_sdk::document::is_external(href)
             && crate::footnote::note_like(label)
@@ -2351,7 +2350,7 @@ impl Book {
                 .iter()
                 .any(|m| m.overlaps(words[i].start, words[i].end))
         });
-        let underline = env.settings.text(crate::settings::HIGHLIGHT_STYLE.as_str())
+        let underline = env.settings.read(&crate::settings::HIGHLIGHT_STYLE)
             == crate::settings::HIGHLIGHT_UNDERLINE;
         let line = env.metrics.tenth_mm(4).max(2);
         for b in boxes {
@@ -2647,7 +2646,7 @@ impl Screen for ReaderScreen {
         // The sentence read aloud, underlined like a search hit.
         if let Some(aloud) = self.aloud
             && aloud.now.page == book.page.start
-            && env.settings.bool(crate::settings::ALOUD_HIGHLIGHT.as_str())
+            && env.settings.read(&crate::settings::ALOUD_HIGHLIGHT)
         {
             let line = env.metrics.tenth_mm(5).max(2);
             let sentence = aloud.now.from..aloud.now.to;
@@ -2934,7 +2933,7 @@ impl Screen for ReaderScreen {
         // bookmark corner or the way back are).
         if let (GestureKind::Tap, None, Ok(book)) = (gesture.kind, self.selection, &self.book) {
             let p = gesture.start;
-            let corner = env.settings.bool(crate::settings::CORNER_BOOKMARK.as_str())
+            let corner = env.settings.read(&crate::settings::CORNER_BOOKMARK)
                 && book.corner_area(&env).contains(p);
             let back = book.back_area(&env).is_some_and(|a| a.contains(p));
             if !corner
@@ -2965,7 +2964,7 @@ impl Screen for ReaderScreen {
             .map(|link| (link.href.clone(), link_label(book, &words, link)));
         match (gesture.kind, self.selection) {
             (GestureKind::Tap, None)
-                if env.settings.bool(crate::settings::CORNER_BOOKMARK.as_str())
+                if env.settings.read(&crate::settings::CORNER_BOOKMARK)
                     && book.corner_area(&env).contains(gesture.start) =>
             {
                 self.toggle_bookmark(cx);
@@ -3134,11 +3133,9 @@ impl Screen for ReaderScreen {
         };
         let id = params.get(params::ID).unwrap_or_default();
         // The book's fonts are loaded with it.
-        let reopen = [
-            crate::settings::PUBLISHER_STYLES,
-            quireink_sdk::builtin::settings::READING_FONT,
-        ];
-        if *event == events::SETTING_CHANGED && reopen.iter().any(|r| r.as_str() == id) {
+        let reopen = id == crate::settings::PUBLISHER_STYLES.as_str()
+            || id == quireink_sdk::builtin::settings::READING_FONT.as_str();
+        if *event == events::SETTING_CHANGED && reopen {
             // Another conversion of the book: open it again where it was.
             let env = *cx.env();
             let path = book.path.clone();

@@ -27,11 +27,11 @@ use quireink_sdk::builtin::{events, params};
 use quireink_sdk::wifi::{self, JoinFailure, WifiCommand, WifiState};
 use quireink_sdk::{
     Arg, Command, Env, Id, Manifest, MenuNeed, Params, Plugin, RegisterError, Registrar,
-    SDK_VERSION, ScreenSpec, SettingGroupSpec, SettingKind, SettingSpec, SettingValue,
-    StatusItemSpec, StatusValue, Version,
+    SDK_VERSION, ScreenSpec, SettingGroupSpec, SettingSpec, StatusItemSpec, StatusValue, Version,
 };
 
 use policy::{Goal, Policy};
+use quireink_sdk::setting::{Setting, Text};
 
 pub const PLUGIN: Id = Id::new_static("wifi");
 /// The settings group, shown as the Wi-Fi page.
@@ -41,11 +41,11 @@ pub const PAGE: Id = Id::new_static("wifi.page");
 /// The status item: the Wi-Fi sign while the device is in a network.
 pub const STATUS: Id = Id::new_static("wifi.status");
 /// The radio comes on by itself when a plugin wants the network.
-pub const ON_DEMAND: Id = Id::new_static("wifi.on-demand");
+pub const ON_DEMAND: Setting<bool> = Setting::new("wifi.on-demand");
 /// How long after the last use the radio goes off.
-pub const IDLE_OFF: Id = Id::new_static("wifi.idle-off");
+pub const IDLE_OFF: Setting<Text> = Setting::new("wifi.idle-off");
 /// The radio stays on (in the network joined before) while charging.
-pub const WHILE_CHARGING: Id = Id::new_static("wifi.while-charging");
+pub const WHILE_CHARGING: Setting<bool> = Setting::new("wifi.while-charging");
 /// The keyboard's answer: a network's password.
 pub(crate) const PASSWORD_ENTERED: Id = Id::new_static("wifi.password-entered");
 /// The timer to switch the radio off.
@@ -70,11 +70,11 @@ pub(crate) type Shared = Rc<RefCell<Policy>>;
 
 /// The radio stays on now: charging, and the user wants that.
 fn charging_keeps_it(env: &Env<'_>) -> bool {
-    env.settings.bool(WHILE_CHARGING.as_str()) && env.status.battery.is_some_and(|b| b.charging)
+    env.settings.read(&WHILE_CHARGING) && env.status.battery.is_some_and(|b| b.charging)
 }
 
 fn idle_seconds(env: &Env<'_>) -> u64 {
-    let choice = env.settings.text(IDLE_OFF.as_str());
+    let choice = env.settings.read(&IDLE_OFF);
     IDLE_OFF_CHOICES
         .iter()
         .find(|(id, _)| *id == choice)
@@ -166,27 +166,17 @@ impl Plugin for Wifi {
             .map(|(id, _)| Cow::Borrowed(*id))
             .collect();
         for spec in [
-            SettingSpec::new(
-                ON_DEMAND,
-                "wifi.setting.on-demand",
-                SettingKind::Bool,
-                SettingValue::Bool(true),
-            )
-            .description("wifi.setting.on-demand.help"),
-            SettingSpec::new(
-                IDLE_OFF,
+            SettingSpec::switch(&ON_DEMAND, "wifi.setting.on-demand", true)
+                .description("wifi.setting.on-demand.help"),
+            SettingSpec::choice(
+                &IDLE_OFF,
                 "wifi.setting.idle-off",
-                SettingKind::Choice(choices),
-                SettingValue::Text(Cow::Borrowed("wifi.idle-off.1m")),
+                choices,
+                "wifi.idle-off.1m",
             )
             .description("wifi.setting.idle-off.help"),
-            SettingSpec::new(
-                WHILE_CHARGING,
-                "wifi.setting.while-charging",
-                SettingKind::Bool,
-                SettingValue::Bool(false),
-            )
-            .description("wifi.setting.while-charging.help"),
+            SettingSpec::switch(&WHILE_CHARGING, "wifi.setting.while-charging", false)
+                .description("wifi.setting.while-charging.help"),
         ] {
             let id = spec.id.clone();
             r.add_setting(spec.group(GROUP))?;
@@ -207,7 +197,7 @@ impl Plugin for Wifi {
                 let Some(wifi) = env.wifi else {
                     return;
                 };
-                if !env.settings.bool(ON_DEMAND.as_str()) {
+                if !env.settings.read(&ON_DEMAND) {
                     return;
                 }
                 let known = wifi::known(env.secrets);

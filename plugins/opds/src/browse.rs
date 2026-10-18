@@ -133,7 +133,7 @@ impl BrowseScreen {
             message: None,
             covers: Vec::new(),
             with_covers: env.device.memory == MemoryClass::Large
-                && env.settings.bool(crate::COVERS.as_str()),
+                && env.settings.read(&crate::COVERS),
             fetching: None,
             failed: Vec::new(),
             catalog,

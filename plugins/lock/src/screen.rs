@@ -16,7 +16,7 @@ use quireink_sdk::semantics::Role;
 use quireink_sdk::ui::{self, UiStyle};
 use quireink_sdk::{
     Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Instant, Metrics,
-    Params, Point, PointerEvent, PointerPhase, Rect, RefreshMode, Screen, SettingValue,
+    Params, Point, PointerEvent, PointerPhase, Rect, RefreshMode, Screen,
 };
 
 use crate::{KIND, KIND_PREFIX, KINDS, Locked, SCREEN, code};
@@ -278,10 +278,7 @@ impl LockScreen {
         let env = *cx.env();
         if kind == "off" {
             cx.command(code::forget());
-            cx.command(Command::SetSetting(
-                KIND,
-                SettingValue::Text("lock.kind.off".into()),
-            ));
+            cx.command(Command::set(&KIND, "lock.kind.off".into()));
             cx.command(Command::Notify(env.i18n.tr("lock.removed").to_string()));
             cx.command(Command::Back);
             return;
@@ -354,10 +351,8 @@ impl LockScreen {
             Step::Confirm(first) => {
                 if entered == first {
                     cx.command(code::keep(&env, &self.kind, &entered));
-                    cx.command(Command::SetSetting(
-                        KIND,
-                        SettingValue::Text(alloc::format!("{KIND_PREFIX}{}", self.kind).into()),
-                    ));
+                    let kind = alloc::format!("{KIND_PREFIX}{}", self.kind);
+                    cx.command(Command::set(&KIND, kind.into()));
                     cx.command(Command::Notify(env.i18n.tr("lock.done").to_string()));
                     cx.command(Command::Back);
                     return;

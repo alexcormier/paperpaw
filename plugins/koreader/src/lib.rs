@@ -47,7 +47,8 @@ const MAX_FILE: usize = 4 << 20;
 /// Most text taken from a book for a highlight.
 const MAX_TEXT: usize = 4096;
 /// The reader's setting for how highlights look.
-const HIGHLIGHT_STYLE: &str = "reader.highlight-style";
+const HIGHLIGHT_STYLE: quireink_sdk::Setting<quireink_sdk::Text> =
+    quireink_sdk::Setting::new("reader.highlight-style");
 const UNDERLINE: &str = "reader.highlight-style.underline";
 
 /// KOReader's folder for the book at `book`: `Book.sdr` beside it.
@@ -444,7 +445,7 @@ fn exchange_book(env: &Env<'_>, book: &str, out: &mut Vec<Command>) {
         doc: doc.as_ref(),
         now: time::unix_seconds(env).unwrap_or(0),
         local: &local,
-        drawer: if env.settings.text(HIGHLIGHT_STYLE) == UNDERLINE {
+        drawer: if env.settings.read(&HIGHLIGHT_STYLE) == UNDERLINE {
             "underscore"
         } else {
             "lighten"

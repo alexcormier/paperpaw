@@ -44,19 +44,19 @@ use quireink_digest::md5;
 use quireink_sdk::builtin::{events, menus, params};
 use quireink_sdk::{
     ActionSpec, Command, Env, Id, Manifest, MenuEntry, Params, Plugin, RegisterError, Registrar,
-    SDK_VERSION, ScreenSpec, SettingGroupSpec, SettingKind, SettingSpec, SettingValue, Version,
-    time,
+    SDK_VERSION, ScreenSpec, SettingGroupSpec, SettingSpec, Version, time,
 };
 
+use quireink_sdk::setting::Setting;
 use store::{Book, PageStat};
 
 pub const PLUGIN: Id = Id::new_static("stats");
 /// Records reading.
-pub const ENABLED: Id = Id::new_static("stats.enabled");
+pub const ENABLED: Setting<bool> = Setting::new("stats.enabled");
 /// Stays on a page shorter than this many seconds are not counted.
-pub const MIN_SECONDS: Id = Id::new_static("stats.min-seconds");
+pub const MIN_SECONDS: Setting<i64> = Setting::new("stats.min-seconds");
 /// Stays on a page count at most this many seconds.
-pub const MAX_SECONDS: Id = Id::new_static("stats.max-seconds");
+pub const MAX_SECONDS: Setting<i64> = Setting::new("stats.max-seconds");
 /// Opens the overview.
 pub const OPEN: Id = Id::new_static("stats.open");
 
@@ -118,8 +118,8 @@ impl State {
         let Some(since) = session.since.take() else {
             return;
         };
-        let min = env.settings.int(MIN_SECONDS.as_str());
-        let max = env.settings.int(MAX_SECONDS.as_str());
+        let min = env.settings.read(&MIN_SECONDS);
+        let max = env.settings.read(&MAX_SECONDS);
         let duration = counted(now - since, min, max);
         if duration > 0 && since > 0 {
             store::append(
@@ -262,25 +262,15 @@ impl Plugin for Stats {
             page: None,
         })?;
         r.add_icon(GROUP, Cow::Borrowed("chart-bar"))?;
-        let seconds = |id, title: &'static str, (min, max, default), step| {
-            SettingSpec::new(
-                id,
-                title,
-                SettingKind::Int { min, max },
-                SettingValue::Int(default),
-            )
-            .unit("stats.unit.seconds")
-            .step(step)
-            .advanced()
+        let seconds = |id: Setting<i64>, title: &'static str, (min, max, default), step| {
+            SettingSpec::number(&id, title, min, max, default)
+                .unit("stats.unit.seconds")
+                .step(step)
+                .advanced()
         };
         for spec in [
-            SettingSpec::new(
-                ENABLED,
-                "stats.setting.enabled",
-                SettingKind::Bool,
-                SettingValue::Bool(true),
-            )
-            .description("stats.setting.enabled.help"),
+            SettingSpec::switch(&ENABLED, "stats.setting.enabled", true)
+                .description("stats.setting.enabled.help"),
             seconds(MIN_SECONDS, "stats.setting.min", (1, 60, 5), 1)
                 .description("stats.setting.min.help"),
             seconds(MAX_SECONDS, "stats.setting.max", (30, 600, 120), 10)
@@ -415,7 +405,7 @@ impl Plugin for Stats {
 }
 
 fn enabled(env: &Env<'_>) -> bool {
-    env.settings.bool(ENABLED.as_str())
+    env.settings.read(&ENABLED)
 }
 
 #[cfg(test)]

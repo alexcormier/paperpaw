@@ -23,6 +23,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use quireink_sdk::builtin::{actions, events, menus, params, slots};
+use quireink_sdk::setting::{Setting, Text};
 use quireink_sdk::ui::{self, ListChange, UiStyle};
 use quireink_sdk::{
     Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest, Params, Plugin,
@@ -37,7 +38,7 @@ pub const PANEL: Id = Id::new_static("menu.panel");
 /// Shows short messages (`core.notice`).
 pub const NOTICE: Id = Id::new_static("menu.notice");
 /// How menus look: a list ([`STYLE_LIST`]) or tiles ([`STYLE_TILES`]).
-pub const STYLE: Id = Id::new_static("menu.style");
+pub const STYLE: Setting<Text> = Setting::new("menu.style");
 pub const STYLE_LIST: &str = "menu.style.list";
 pub const STYLE_TILES: &str = "menu.style.tiles";
 
@@ -400,7 +401,7 @@ impl MenuScreen {
 /// Whether the menu in `params` opens as tiles: the user wants them, it
 /// is a menu of its own (not a submenu) and every entry has an icon.
 fn tiles(env: &Env<'_>, params: &Params) -> bool {
-    if env.settings.text(STYLE.as_str()) != STYLE_TILES || params.get(DEPTH).is_some() {
+    if env.settings.read(&STYLE) != STYLE_TILES || params.get(DEPTH).is_some() {
         return false;
     }
     let items = env

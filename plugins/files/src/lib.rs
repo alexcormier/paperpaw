@@ -37,28 +37,29 @@ use quireink_sdk::builtin::{
 use quireink_sdk::files;
 use quireink_sdk::library::listing::{Entry, Listing, UNRANKED};
 use quireink_sdk::library::{self, Book};
+use quireink_sdk::setting::{Setting, Text};
 use quireink_sdk::ui::{self, ListChange, ListView, UiStyle};
 use quireink_sdk::{
     Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest, MenuEntry,
     Params, Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen,
-    ScreenSpec, SettingKind, SettingSpec, SettingValue, Version,
+    ScreenSpec, SettingSpec, Version,
 };
 
 pub const PLUGIN: Id = Id::new_static("files");
 pub const SCREEN: Id = Id::new_static("files.browser");
 /// The library folder, relative to the storage root.
-pub const ROOT: Id = Id::new_static("files.root");
+pub const ROOT: Setting<Text> = quireink_sdk::library::FOLDER;
 /// The order of books: [`SORT_RECENT`] or [`SORT_NAME`].
-pub const SORT: Id = Id::new_static("files.sort");
+pub const SORT: Setting<Text> = Setting::new("files.sort");
 /// Recently read books first, then the others by name.
 pub const SORT_RECENT: &str = "files.sort.recent";
 /// By file name.
 pub const SORT_NAME: &str = "files.sort.name";
 /// The folder finished books are moved to (by the book's options).
-pub const ARCHIVE: Id = Id::new_static("files.archive");
+pub const ARCHIVE: Setting<Text> = Setting::new("files.archive");
 /// How books are shown: as a list ([`VIEW_LIST`]) or a grid of covers
 /// ([`VIEW_COVERS`]).
-pub const VIEW: Id = Id::new_static("files.view");
+pub const VIEW: Setting<Text> = Setting::new("files.view");
 pub const VIEW_LIST: &str = "files.view.list";
 pub const VIEW_COVERS: &str = "files.view.covers";
 /// Chooses a folder for the setting named by the parameter `id`.
@@ -160,50 +161,34 @@ impl Plugin for Files {
         r.bind_slot(slots::HOME, SCREEN, Priority::FALLBACK)?;
         r.bind_slot(slots::LIBRARY, SCREEN, Priority::DEFAULT)?;
         r.add_setting(
-            SettingSpec::new(
-                ROOT,
-                "files.setting.root",
-                SettingKind::Text,
-                SettingValue::Text(Cow::Borrowed("books")),
-            )
-            .group(groups::LIBRARY)
-            .editor(CHOOSE_FOLDER)
-            .description("files.setting.root.help"),
+            SettingSpec::text(&ROOT, "files.setting.root", "books")
+                .group(groups::LIBRARY)
+                .editor(CHOOSE_FOLDER)
+                .description("files.setting.root.help"),
         )?;
         r.add_setting(
-            SettingSpec::new(
-                ARCHIVE,
-                "files.setting.archive",
-                SettingKind::Text,
-                SettingValue::Text(Cow::Borrowed("books/Archive")),
-            )
-            .group(groups::LIBRARY)
-            .editor(CHOOSE_FOLDER)
-            .advanced()
-            .description("files.setting.archive.help"),
+            SettingSpec::text(&ARCHIVE, "files.setting.archive", "books/Archive")
+                .group(groups::LIBRARY)
+                .editor(CHOOSE_FOLDER)
+                .advanced()
+                .description("files.setting.archive.help"),
         )?;
         r.add_setting(
-            SettingSpec::new(
-                VIEW,
+            SettingSpec::choice(
+                &VIEW,
                 "files.setting.view",
-                SettingKind::Choice(alloc::vec![
-                    Cow::Borrowed(VIEW_LIST),
-                    Cow::Borrowed(VIEW_COVERS),
-                ]),
-                SettingValue::Text(Cow::Borrowed(VIEW_LIST)),
+                alloc::vec![Cow::Borrowed(VIEW_LIST), Cow::Borrowed(VIEW_COVERS),],
+                VIEW_LIST,
             )
             .group(groups::LIBRARY)
             .description("files.setting.view.help"),
         )?;
         r.add_setting(
-            SettingSpec::new(
-                SORT,
+            SettingSpec::choice(
+                &SORT,
                 "files.setting.sort",
-                SettingKind::Choice(alloc::vec![
-                    Cow::Borrowed(SORT_RECENT),
-                    Cow::Borrowed(SORT_NAME),
-                ]),
-                SettingValue::Text(Cow::Borrowed(SORT_RECENT)),
+                alloc::vec![Cow::Borrowed(SORT_RECENT), Cow::Borrowed(SORT_NAME),],
+                SORT_RECENT,
             )
             .group(groups::LIBRARY)
             .description("files.setting.sort.help"),
@@ -263,12 +248,12 @@ impl Plugin for Files {
             })?;
         }
         for (item, order) in [
-            (SORT, 10),
-            (VIEW, 10),
+            (Id::from(SORT), 10),
+            (VIEW.into(), 10),
             (SEARCH, 11),
             (SHELVES_MENU, 12),
-            (ROOT, 20),
-            (core_settings::NIGHT_MODE, 30),
+            (ROOT.into(), 20),
+            (core_settings::NIGHT_MODE.into(), 30),
             (core_actions::SETTINGS, 40),
             (core_actions::HOME, 50),
         ] {
@@ -341,7 +326,7 @@ impl Browser {
 
     /// The folder's entries, in the chosen order.
     fn listing<'a>(&'a self, env: &'a Env<'_>, rank: &'a dyn Fn(&str) -> u32) -> Listing<'a> {
-        let by_recent = env.settings.text(SORT.as_str()) != SORT_NAME;
+        let by_recent = env.settings.read(&SORT) != SORT_NAME;
         Listing {
             storage: env.storage,
             formats: env.formats,
@@ -519,7 +504,7 @@ impl Browser {
             "info",
         ];
         // Not for books already in the archive.
-        let archive = env.settings.text(ARCHIVE.as_str()).trim_matches('/');
+        let archive = env.settings.read(&ARCHIVE).trim_matches('/');
         if !archive.is_empty() && files::parent(&path) != archive {
             options.push("archive");
         }
@@ -679,7 +664,7 @@ fn draw_row(
 /// The library's list, or its grid of covers ([`VIEW`]): as many columns
 /// as covers about 3 cm wide fit, at least three.
 fn list_view(env: &Env<'_>, style: &UiStyle, area: Rect) -> ListView {
-    if env.settings.text(VIEW.as_str()) != VIEW_COVERS {
+    if env.settings.read(&VIEW) != VIEW_COVERS {
         return ListView::new(area, style.noted_row()).focus_on_keys(env);
     }
     // Covers line up with the margins, as text does.
@@ -866,7 +851,7 @@ impl Screen for Browser {
             self.dir.rsplit('/').next().unwrap_or_default().to_string()
         };
         // The order, which the menu changes (also by tapping the header).
-        let order = env.i18n.tr(env.settings.text(SORT.as_str()));
+        let order = env.i18n.tr(env.settings.read(&SORT));
         let note = format!("{order} ›");
         self.header.draw(
             canvas,
@@ -1039,7 +1024,7 @@ impl Screen for Browser {
             // The UI size, the order or the library folder may have
             // changed; a new library folder is shown from its top.
             let env = *cx.env();
-            let root = env.settings.text(ROOT.as_str()).trim_matches('/');
+            let root = env.settings.read(&ROOT).trim_matches('/');
             let dir = if root == self.root {
                 self.dir.clone()
             } else {

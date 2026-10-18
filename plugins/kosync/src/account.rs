@@ -14,7 +14,7 @@ use quireink_sdk::builtin::{actions, params, slots};
 use quireink_sdk::ui::{self, ListChange, ListView, UiStyle};
 use quireink_sdk::{
     Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, RefreshMode,
-    Screen, SettingValue, http_params,
+    Screen, http_params,
 };
 
 use quireink_digest::md5;
@@ -75,7 +75,7 @@ impl AccountScreen {
             // Right below the rows, a few lines high.
             ((style.row * 3) as u16).min(display.height.saturating_sub(note_top)),
         );
-        let signed_in = env.settings.text(USER.as_str()).to_string();
+        let signed_in = env.settings.read(&USER).to_string();
         let mut screen = Self {
             style,
             header,
@@ -203,10 +203,7 @@ impl AccountScreen {
     fn sign_out(&mut self, cx: &mut Cx<'_, '_>) {
         cx.command(save_key(None));
         self.signed_in.clear();
-        cx.command(Command::SetSetting(
-            USER,
-            SettingValue::Text(Cow::Borrowed("")),
-        ));
+        cx.command(Command::set(&USER, Cow::Borrowed("")));
         cx.command(Command::Emit(ACCOUNT_CHANGED, Params::new()));
     }
 
@@ -219,8 +216,7 @@ impl AccountScreen {
             let key = self.key.clone().unwrap_or_default();
             cx.command(save_key(Some(&key)));
             self.signed_in = self.user.clone();
-            let user = SettingValue::Text(Cow::Owned(self.user.clone()));
-            cx.command(Command::SetSetting(USER, user));
+            cx.command(Command::set(&USER, Cow::Owned(self.user.clone())));
             cx.command(Command::Emit(ACCOUNT_CHANGED, Params::new()));
             let message = self.state_message(&env);
             return self.show(cx, message);
@@ -328,8 +324,7 @@ impl Screen for AccountScreen {
                 if changed {
                     self.sign_out(cx);
                 }
-                let value = SettingValue::Text(Cow::Owned(url.clone()));
-                cx.command(Command::SetSetting(SERVER, value));
+                cx.command(Command::set(&SERVER, Cow::Owned(url.clone())));
                 let key = if changed {
                     "kosync.server-changed"
                 } else {

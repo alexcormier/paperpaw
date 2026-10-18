@@ -27,16 +27,17 @@ use quireink_sdk::ui::{self, ListChange, ListView, UiStyle};
 use quireink_sdk::{
     ActionSpec, Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
     MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen,
-    ScreenSpec, SettingKind, SettingSpec, SettingValue, Version,
+    ScreenSpec, SettingSpec, Version,
 };
 
 use quireink_sdk::files::{self as ops, Entry};
+use quireink_sdk::setting::Setting;
 
 pub const PLUGIN: Id = Id::new_static("file-manager");
 /// Opens the file manager.
 pub const OPEN: Id = Id::new_static("file-manager.open");
 /// Shows files and folders starting with `.`.
-pub const HIDDEN: Id = Id::new_static("file-manager.hidden");
+pub const HIDDEN: Setting<bool> = Setting::new("file-manager.hidden");
 const SCREEN: Id = Id::new_static("file-manager.browser");
 const CHOICE: Id = Id::new_static("file-manager.choice");
 /// Replies of the choice overlay and the keyboard.
@@ -86,15 +87,10 @@ impl Plugin for FileManager {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_setting(
-            SettingSpec::new(
-                HIDDEN,
-                "file-manager.setting.hidden",
-                SettingKind::Bool,
-                SettingValue::Bool(false),
-            )
-            .group(groups::SYSTEM)
-            .advanced()
-            .description("file-manager.setting.hidden.help"),
+            SettingSpec::switch(&HIDDEN, "file-manager.setting.hidden", false)
+                .group(groups::SYSTEM)
+                .advanced()
+                .description("file-manager.setting.hidden.help"),
         )?;
         r.add_screen(ScreenSpec {
             id: SCREEN,
@@ -170,7 +166,7 @@ impl Browser {
     }
 
     fn load(&mut self, env: &Env<'_>) {
-        let hidden = env.settings.bool(HIDDEN.as_str());
+        let hidden = env.settings.read(&HIDDEN);
         match ops::list(env.storage, &self.dir, hidden) {
             Ok(entries) => self.entries = entries,
             Err(e) => {

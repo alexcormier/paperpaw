@@ -6,6 +6,7 @@ use core::fmt;
 use crate::collections::VecMap;
 use crate::id::Id;
 use crate::plugin::RegisterError;
+use crate::setting::{Setting, Text};
 
 /// A setting's value.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -119,13 +120,13 @@ impl SettingSpec {
     /// A basic setting in the [`OTHER`](crate::builtin::groups::OTHER)
     /// group; see the builder methods for the rest.
     pub fn new(
-        id: Id,
+        id: impl Into<Id>,
         title: impl Into<Cow<'static, str>>,
         kind: SettingKind,
         default: SettingValue,
     ) -> Self {
         Self {
-            id,
+            id: id.into(),
             title: title.into(),
             kind,
             default,
@@ -140,6 +141,94 @@ impl SettingSpec {
             section: None,
             secret: false,
         }
+    }
+
+    /// A switch, on or off (see [`setting`](crate::setting)).
+    pub fn switch(
+        setting: &Setting<bool>,
+        title: impl Into<Cow<'static, str>>,
+        default: bool,
+    ) -> Self {
+        Self::new(
+            setting,
+            title,
+            SettingKind::Bool,
+            SettingValue::Bool(default),
+        )
+    }
+
+    /// A whole number from `min` to `max`.
+    pub fn number(
+        setting: &Setting<i64>,
+        title: impl Into<Cow<'static, str>>,
+        min: i64,
+        max: i64,
+        default: i64,
+    ) -> Self {
+        Self::new(
+            setting,
+            title,
+            SettingKind::Int { min, max },
+            SettingValue::Int(default),
+        )
+    }
+
+    /// One of `options`, each the translation key of its name.
+    pub fn choice(
+        setting: &Setting<Text>,
+        title: impl Into<Cow<'static, str>>,
+        options: Vec<Cow<'static, str>>,
+        default: impl Into<Cow<'static, str>>,
+    ) -> Self {
+        Self::new(
+            setting,
+            title,
+            SettingKind::Choice(options),
+            SettingValue::Text(default.into()),
+        )
+    }
+
+    /// Text, typed in.
+    pub fn text(
+        setting: &Setting<Text>,
+        title: impl Into<Cow<'static, str>>,
+        default: impl Into<Cow<'static, str>>,
+    ) -> Self {
+        Self::new(
+            setting,
+            title,
+            SettingKind::Text,
+            SettingValue::Text(default.into()),
+        )
+    }
+
+    /// A language, one of the installed translations' (or `auto`).
+    pub fn language(
+        setting: &Setting<Text>,
+        title: impl Into<Cow<'static, str>>,
+        default: impl Into<Cow<'static, str>>,
+    ) -> Self {
+        Self::new(
+            setting,
+            title,
+            SettingKind::Language,
+            SettingValue::Text(default.into()),
+        )
+    }
+
+    /// Ids separated by commas, chosen on the setting's editor screen
+    /// ([`SettingKind::List`]).
+    pub fn list(
+        setting: &Setting<Text>,
+        title: impl Into<Cow<'static, str>>,
+        default: impl Into<Cow<'static, str>>,
+    ) -> Self {
+        Self::new(
+            setting,
+            title,
+            SettingKind::List,
+            SettingValue::Text(default.into()),
+        )
     }
 
     /// Puts the setting into a part of its group (see
@@ -436,7 +525,16 @@ impl Settings {
             && (id == only.as_str() || scope.get(only.as_str()) == Some(&SettingValue::Bool(true)))
     }
 
-    /// The value of a boolean setting; `false` if unknown.
+    /// The value of `setting` (see [`setting`](crate::setting)); the
+    /// type's empty value if it is unknown.
+    pub fn read<T: crate::setting::SettingType>(
+        &self,
+        setting: &crate::setting::Setting<T>,
+    ) -> T::Value<'_> {
+        T::read(self.get(setting.as_str()))
+    }
+
+    /// The value of a boolean setting by its id; `false` if unknown.
     pub fn bool(&self, id: &str) -> bool {
         matches!(self.get(id), Some(SettingValue::Bool(true)))
     }
@@ -500,7 +598,7 @@ mod tests {
         let mut values = VecMap::new();
         values.insert(Id::new_static("a.size"), SettingValue::Int(20));
         values.insert(Id::new_static("a.other"), SettingValue::Int(30));
-        values.insert(SCOPE_ONLY, SettingValue::Bool(true));
+        values.insert(SCOPE_ONLY.into(), SettingValue::Bool(true));
         s.set_scope(Some(values));
         assert_eq!(s.int("a.size"), 20);
         assert!(s.is_scoped("a.size"));

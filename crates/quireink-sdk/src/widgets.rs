@@ -142,7 +142,8 @@ pub const SPACE: &str = "core.space";
 /// height is 0, screens that place widgets give it the rest.
 pub const FILL: &str = "core.fill";
 /// The height of [`SPACE`]: one of [`SPACE_SIZES`].
-pub const SPACE_SIZE: &str = "core.space.size";
+pub const SPACE_SIZE: crate::setting::Setting<crate::setting::Text> =
+    crate::setting::Setting::new("core.space.size");
 /// The values of [`SPACE_SIZE`]: small, medium, large.
 pub const SPACE_SIZES: [&str; 3] = ["core.space.small", "core.space.medium", "core.space.large"];
 

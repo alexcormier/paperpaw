@@ -6,6 +6,15 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: typed settings. A `Setting<T>` (`bool`, `i64` or `Text`) names a
+  setting and the type of its value; `env.settings.read(&SIZE)` reads
+  it, `Command::set(&SIZE, 12)` changes it, `SettingSpec::switch`,
+  `number`, `choice`, `language`, `list` and `text` declare it with a
+  default of its type. Settings by their ids stay for those only known
+  at run time. The library folder is `library::FOLDER` and
+  `library::folder(env)` for every plugin, no longer `"files.root"`
+  spelled out in nine places. Registrar methods that name an item take
+  `impl Into<Id>`.
 - SDK: its helpers are crates of their own, so a change to one does not
   change the SDK: `quireink-digest` (MD5, SHA-1, FNV-1a), `quireink-json`,
   `quireink-qr`; plugins that read SQLite use `quireink-sqlite`.

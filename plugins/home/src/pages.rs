@@ -15,17 +15,18 @@ use quireink_sdk::{
 
 use crate::SCREEN;
 use crate::grid::{self, Item, What};
+use quireink_sdk::setting::Setting;
 
 /// Pages at most.
 pub(crate) const MAX_PAGES: usize = 4;
 const SECTION: &str = "home.section";
 
 /// Columns of the grid.
-pub(crate) const COLUMNS: Id = Id::new_static("home.columns");
+pub(crate) const COLUMNS: Setting<i64> = Setting::new("home.columns");
 /// Rows of the grid; 0: as many as make cells about as high as wide.
-pub(crate) const ROWS: Id = Id::new_static("home.rows");
+pub(crate) const ROWS: Setting<i64> = Setting::new("home.rows");
 /// Whether the status line shows above the grid.
-pub(crate) const STATUS_BAR: Id = Id::new_static("home.status-bar");
+pub(crate) const STATUS_BAR: Setting<bool> = Setting::new("home.status-bar");
 
 /// The built-in widgets (see `blocks`).
 pub(crate) const STATUS: &str = "home.status";
@@ -66,54 +67,38 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
         )?;
     }
     r.add_setting(
-        SettingSpec::new(
-            COLUMNS,
+        SettingSpec::number(
+            &COLUMNS,
             "home.setting.columns",
-            SettingKind::Int {
-                min: 2,
-                max: i64::from(grid::MAX_COLUMNS),
-            },
-            SettingValue::Int(4),
+            2,
+            i64::from(grid::MAX_COLUMNS),
+            4,
         )
         .group(groups::LOOK)
         .section(SECTION)
         .description("home.setting.columns.help"),
     )?;
     r.add_setting(
-        SettingSpec::new(
-            ROWS,
-            "home.setting.rows",
-            SettingKind::Int {
-                min: 0,
-                max: i64::from(grid::MAX_ROWS),
-            },
-            SettingValue::Int(0),
-        )
-        .group(groups::LOOK)
-        .section(SECTION)
-        .description("home.setting.rows.help"),
+        SettingSpec::number(&ROWS, "home.setting.rows", 0, i64::from(grid::MAX_ROWS), 0)
+            .group(groups::LOOK)
+            .section(SECTION)
+            .description("home.setting.rows.help"),
     )?;
     r.add_setting(
-        SettingSpec::new(
-            Id::new_static(crate::blocks::TOOL_LABELS),
+        SettingSpec::switch(
+            &crate::blocks::TOOL_LABELS,
             "home.setting.tool-labels",
-            SettingKind::Bool,
-            SettingValue::Bool(true),
+            true,
         )
         .group(groups::LOOK)
         .section(SECTION)
         .description("home.setting.tool-labels.help"),
     )?;
     r.add_setting(
-        SettingSpec::new(
-            STATUS_BAR,
-            "home.setting.status-bar",
-            SettingKind::Bool,
-            SettingValue::Bool(true),
-        )
-        .group(groups::LOOK)
-        .section(SECTION)
-        .description("home.setting.status-bar.help"),
+        SettingSpec::switch(&STATUS_BAR, "home.setting.status-bar", true)
+            .group(groups::LOOK)
+            .section(SECTION)
+            .description("home.setting.status-bar.help"),
     )?;
     Ok(())
 }
@@ -153,7 +138,7 @@ pub(crate) fn expand(env: &Env<'_>, items: &[Item]) -> Vec<Item> {
             What::Widget(id)
                 if id == widgets::SPACE
                     || id == widgets::FILL
-                    || (id == STATUS && env.settings.bool(STATUS_BAR.as_str())) => {}
+                    || (id == STATUS && env.settings.read(&STATUS_BAR)) => {}
             What::Widget(id) if !env.widgets.has(id) => {}
             _ => out.push(item.clone()),
         }

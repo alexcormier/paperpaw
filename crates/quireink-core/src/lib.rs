@@ -712,7 +712,7 @@ impl KernelBuilder {
         let shared = &mut kernel.shared;
         shared
             .translator
-            .set_language(shared.settings.text(core_settings::LANGUAGE.as_str()));
+            .set_language(shared.settings.read(&core_settings::LANGUAGE));
         kernel.framebuffer.set_inverted(
             kernel
                 .shared
@@ -945,7 +945,7 @@ impl Kernel {
     pub fn rotation(&self) -> quireink_platform::Rotation {
         use quireink_platform::Rotation;
         use quireink_sdk::builtin::settings;
-        let value = self.shared.settings.text(settings::ROTATION.as_str());
+        let value = self.shared.settings.read(&settings::ROTATION);
         match settings::ROTATIONS.iter().position(|r| *r == value) {
             Some(1) => Rotation::Deg90,
             Some(2) => Rotation::Deg180,

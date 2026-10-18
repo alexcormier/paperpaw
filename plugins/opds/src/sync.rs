@@ -21,6 +21,7 @@ use quireink_sdk::{Command, Env, HttpRequest, Id, Params, files, http_params};
 
 use crate::catalogs::Catalog;
 use crate::{PLUGIN, feed};
+use quireink_sdk::setting::Setting;
 
 /// Answers to the sync's requests.
 pub(crate) const FEED_LOADED: Id = Id::new_static("opds.sync-feed");
@@ -28,7 +29,7 @@ pub(crate) const BOOK_LOADED: Id = Id::new_static("opds.sync-book");
 /// Emitted whenever a sync gets on or ends, for screens to show.
 pub(crate) const CHANGED: Id = Id::new_static("opds.sync-changed");
 /// Setting: the most books a catalog gets in one sync.
-pub(crate) const LIMIT: Id = Id::new_static("opds.sync-limit");
+pub(crate) const LIMIT: Setting<i64> = Setting::new("opds.sync-limit");
 
 /// Pages of a catalog's list read in one sync, at most.
 const MAX_PAGES: usize = 50;
@@ -154,7 +155,7 @@ impl Sync {
         if let Some(report) = &mut self.report {
             report.catalog = catalog.name.clone();
         }
-        let limit = env.settings.int(LIMIT.as_str()).max(1) as usize;
+        let limit = env.settings.read(&LIMIT).max(1) as usize;
         let run = Run {
             number: self.runs,
             folder: catalog.sync_folder(env),

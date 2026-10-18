@@ -423,7 +423,7 @@ fn main() -> ! {
         // Not while the radio is on: its tasks run in between.
         let battery = !network.radio_on()
             && !installing
-            && ((usb.is_low() && kernel.settings().bool(device::LIGHT_SLEEP.as_str()))
+            && ((usb.is_low() && kernel.settings().read(&device::LIGHT_SLEEP))
                 || sleep_on_usb_until.is_some());
         power::allow(battery);
         let at = now();

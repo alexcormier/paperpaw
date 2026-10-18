@@ -14,9 +14,6 @@ use quireink_sdk::{Arg, Command, Env};
 
 use crate::PLUGIN;
 
-/// The library folder setting of the standard library.
-const LIBRARY: &str = "files.root";
-
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub(crate) struct Catalog {
     pub name: String,
@@ -49,7 +46,7 @@ impl Catalog {
         if !self.folder.trim().is_empty() {
             return self.folder.trim().trim_matches('/').to_string();
         }
-        let library = env.settings.text(LIBRARY).trim_matches('/');
+        let library = quireink_sdk::library::folder(env);
         let name = clean_name(&self.name, 60).unwrap_or_else(|| String::from("OPDS"));
         if library.is_empty() {
             name

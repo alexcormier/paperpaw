@@ -181,7 +181,7 @@ impl BatteryView {
         let developer = env
             .settings
             .bool(quireink_sdk::builtin::settings::DEVELOPER.as_str())
-            && env.settings.bool(crate::BY_PLUGIN.as_str());
+            && env.settings.read(&crate::BY_PLUGIN);
         let mut shown: Vec<_> = env
             .usage
             .plugins

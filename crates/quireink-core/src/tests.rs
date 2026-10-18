@@ -506,7 +506,7 @@ fn long_tap_toggles_night_mode() {
     let effects = kernel.handle(Instant(1000), down);
     assert_eq!(effects.wake_at(), Some(Instant(1500)));
     let effects = kernel.tick(Instant(1500));
-    assert!(kernel.settings().bool(settings::NIGHT_MODE.as_str()));
+    assert!(kernel.settings().read(&settings::NIGHT_MODE));
     assert_eq!(effects.refresh().map(|r| r.1), Some(RefreshMode::Full));
     render(&mut kernel);
     assert_eq!(kernel.frame().pixel(0, 0), Color::BLACK);
@@ -2392,9 +2392,9 @@ fn a_row_of_hints_names_the_buttons_below_the_screen() {
     assert_eq!(kernel.hints[0], Hint::Hidden);
 
     // Switched off: the screens are made anew for all of it.
-    kernel.apply(Command::SetSetting(
-        quireink_sdk::builtin::settings::BUTTON_HINTS,
-        quireink_sdk::SettingValue::Bool(false),
+    kernel.apply(Command::set(
+        &quireink_sdk::builtin::settings::BUTTON_HINTS,
+        false,
     ));
     kernel.finish();
     assert_eq!(made.borrow().last(), Some(&("home", 90)));

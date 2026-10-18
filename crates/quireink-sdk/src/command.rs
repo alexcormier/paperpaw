@@ -332,6 +332,14 @@ pub enum Command {
 pub const MAX_CLIPBOARD: usize = 4096;
 
 impl Command {
+    /// Changes `setting` to `value` (see [`setting`](crate::setting)).
+    pub fn set<T: crate::setting::SettingType>(
+        setting: &crate::setting::Setting<T>,
+        value: T::Input,
+    ) -> Command {
+        Command::SetSetting(setting.id().clone(), T::write(value))
+    }
+
     /// Opens a slot without parameters.
     pub fn open_slot(slot: Id) -> Command {
         Command::OpenSlot(slot, Params::new())

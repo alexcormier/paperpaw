@@ -334,7 +334,7 @@ impl Screen for ShelfScreen {
         }
         if self.walk.is_none() && !self.walked {
             let env = *cx.env();
-            self.walk = Some(Walk::start(env.storage, env.settings.text(ROOT.as_str())));
+            self.walk = Some(Walk::start(env.storage, env.settings.read(&ROOT)));
             cx.wake_at(env.now);
         }
     }

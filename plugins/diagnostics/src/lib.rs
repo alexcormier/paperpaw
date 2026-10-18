@@ -19,16 +19,17 @@ use alloc::borrow::Cow;
 use alloc::boxed::Box;
 
 use quireink_sdk::builtin::{actions, fonts, groups, slots};
+use quireink_sdk::setting::Setting;
 use quireink_sdk::{
     ActionSpec, Arg, Canvas, Color, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest, Metrics,
     Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen, ScreenSpec,
-    SettingKind, SettingSpec, SettingValue, Version,
+    SettingSpec, Version,
 };
 
 pub const PLUGIN: Id = Id::new_static("diagnostics");
 pub const SCREEN: Id = Id::new_static("diagnostics.screen");
 pub const RESET: Id = Id::new_static("diagnostics.reset");
-pub const PAGES: Id = Id::new_static("diagnostics.pages");
+pub const PAGES: Setting<i64> = Setting::new("diagnostics.pages");
 
 /// The diagnostics plugin.
 #[derive(Debug, Default)]
@@ -60,18 +61,10 @@ impl Plugin for Diagnostics {
             handler: None,
         })?;
         r.add_setting(
-            SettingSpec::new(
-                PAGES,
-                "diagnostics.setting.pages",
-                SettingKind::Int {
-                    min: 1,
-                    max: 10_000,
-                },
-                SettingValue::Int(20),
-            )
-            .group(groups::SYSTEM)
-            .advanced()
-            .description("diagnostics.setting.pages.help"),
+            SettingSpec::number(&PAGES, "diagnostics.setting.pages", 1, 10_000, 20)
+                .group(groups::SYSTEM)
+                .advanced()
+                .description("diagnostics.setting.pages.help"),
         )?;
         r.add_keymap(Cow::Borrowed(include_str!("../keymap.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;

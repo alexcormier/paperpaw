@@ -54,8 +54,6 @@ const CHOSEN: Id = Id::new_static("browser.chosen");
 /// Translation keys of the choices: this, then the option.
 const OPTION_LABELS: &str = "browser.option.";
 
-/// The library folder setting of the standard library.
-const LIBRARY: &str = "files.root";
 /// Where other downloads go.
 const DOWNLOADS: &str = "Downloads";
 
@@ -305,7 +303,7 @@ impl BrowserScreen {
                 self.show(Entry::new(&title, &url), cx);
             }
             Kind::Book => {
-                let dir = env.settings.text(LIBRARY).trim_matches('/').to_string();
+                let dir = quireink_sdk::library::folder(&env).to_string();
                 self.save(&tmp, &dir, &url, "browser.saved-book", true, cx);
             }
             Kind::Font => match env.font_dirs.first() {
