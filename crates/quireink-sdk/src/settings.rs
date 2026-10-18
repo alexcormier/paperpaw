@@ -789,4 +789,3 @@ mod tests {
         assert!(matches!(s.define(bad), Err(RegisterError::Invalid { .. })));
     }
 }
-

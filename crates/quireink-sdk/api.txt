@@ -2181,26 +2181,21 @@ pub quireink_sdk::SettingGroupSpec::id: quireink_sdk::Id
 pub quireink_sdk::SettingGroupSpec::order: i32
 pub quireink_sdk::SettingGroupSpec::page: core::option::Option<quireink_sdk::Id>
 pub quireink_sdk::SettingGroupSpec::title: alloc::borrow::Cow<'static, str>
-pub struct quireink_sdk::SettingSpec
+#[non_exhaustive] pub struct quireink_sdk::SettingSpec
 pub quireink_sdk::SettingSpec::default: quireink_sdk::SettingValue
 pub quireink_sdk::SettingSpec::description: core::option::Option<alloc::borrow::Cow<'static, str>>
-pub quireink_sdk::SettingSpec::editor: core::option::Option<quireink_sdk::Id>
 pub quireink_sdk::SettingSpec::group: quireink_sdk::Id
 pub quireink_sdk::SettingSpec::id: quireink_sdk::Id
 pub quireink_sdk::SettingSpec::kind: quireink_sdk::SettingKind
 pub quireink_sdk::SettingSpec::level: quireink_sdk::Level
 pub quireink_sdk::SettingSpec::scoped: bool
-pub quireink_sdk::SettingSpec::secret: bool
-pub quireink_sdk::SettingSpec::section: core::option::Option<alloc::borrow::Cow<'static, str>>
-pub quireink_sdk::SettingSpec::slider: bool
-pub quireink_sdk::SettingSpec::step: i64
 pub quireink_sdk::SettingSpec::title: alloc::borrow::Cow<'static, str>
-pub quireink_sdk::SettingSpec::unit: core::option::Option<alloc::borrow::Cow<'static, str>>
 impl quireink_sdk::SettingSpec
 pub fn quireink_sdk::SettingSpec::advanced(self) -> Self
 pub fn quireink_sdk::SettingSpec::choice(&quireink_sdk::setting::Setting<quireink_sdk::setting::Text>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, alloc::vec::Vec<alloc::borrow::Cow<'static, str>>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
 pub fn quireink_sdk::SettingSpec::description(self, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
 pub fn quireink_sdk::SettingSpec::editor(self, quireink_sdk::Id) -> Self
+pub fn quireink_sdk::SettingSpec::extra(&self) -> &quireink_sdk::settings::SettingExtra
 pub fn quireink_sdk::SettingSpec::group(self, quireink_sdk::Id) -> Self
 pub fn quireink_sdk::SettingSpec::language(&quireink_sdk::setting::Setting<quireink_sdk::setting::Text>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
 pub fn quireink_sdk::SettingSpec::list(&quireink_sdk::setting::Setting<quireink_sdk::setting::Text>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
