@@ -276,6 +276,7 @@ impl Slot {
         self.since = now.0;
     }
 
+    /// One step of the connection, by its phase.
     #[allow(clippy::too_many_arguments)]
     fn step(
         &mut self,
@@ -287,199 +288,253 @@ impl Slot {
         next_request: &mut u32,
         events: &mut Vec<ServerEvent>,
     ) {
-        let ms = now.0;
-        let socket = net.socket(self.socket);
-        match &mut self.phase {
+        match self.phase {
             Phase::Listening => {
                 // Connected (not while the handshake goes on).
-                if !lost(socket) {
+                if !lost(net.socket(self.socket)) {
                     self.phase = Phase::Head(Vec::new());
-                    self.since = ms;
+                    self.since = now.0;
                 }
             }
-            Phase::Head(head) => {
-                while socket.can_recv() && head.len() < http::MAX_REQUEST_HEAD {
-                    let room = http::MAX_REQUEST_HEAD - head.len();
-                    let got = socket.recv(|data| {
-                        let n = data.len().min(room);
-                        head.extend_from_slice(&data[..n]);
-                        (n, n)
-                    });
-                    if !matches!(got, Ok(n) if n > 0) {
-                        break;
-                    }
-                }
-                match http::parse_request(head) {
-                    Ok(None) if lost(socket) || ms > self.since + HEAD_MS => self.again(net, port),
-                    Ok(None) => {}
-                    Err(_) => self.refuse(400, now),
-                    Ok(Some((RequestHead { chunked: true, .. }, _))) => self.refuse(411, now),
-                    Ok(Some((request_head, used))) => {
-                        *next_request = next_request.wrapping_add(1);
-                        let request = *next_request;
-                        let first = head.split_off(used);
-                        let length = request_head.length;
-                        events.push(ServerEvent::Request {
-                            server,
-                            request,
-                            method: request_head.method,
-                            target: request_head.target,
-                            body: length > 0,
-                        });
-                        self.since = ms;
-                        if length == 0 {
-                            self.phase = Phase::Answer { request };
-                        } else {
-                            // What came with the head is the body's start.
-                            let take = first
-                                .len()
-                                .min(usize::try_from(length).unwrap_or(usize::MAX));
-                            let mut first = first;
-                            first.truncate(take);
-                            let left = length - take as u64;
-                            self.phase = if left == 0 {
-                                events.push(ServerEvent::Body {
-                                    request,
-                                    data: first,
-                                    last: true,
-                                });
-                                Phase::Answer { request }
-                            } else {
-                                Phase::Body {
-                                    request,
-                                    left,
-                                    part: first,
-                                }
-                            };
-                        }
-                    }
-                }
-            }
-            Phase::Body {
-                request,
-                left,
-                part,
-            } => {
-                let request = *request;
-                // Gathered into parts of [`PART`] bytes: fewer, larger
-                // writes to the card.
-                while *left > 0 && socket.can_recv() {
-                    let want = (*left).min((PART - part.len()) as u64) as usize;
-                    if part.capacity() < PART && part.try_reserve_exact(PART - part.len()).is_err()
-                    {
-                        break;
-                    }
-                    let got = socket.recv(|data| {
-                        let n = data.len().min(want);
-                        part.extend_from_slice(&data[..n]);
-                        (n, n)
-                    });
-                    let Ok(n) = got else { break };
-                    *left -= n as u64;
-                    self.since = ms;
-                    if part.len() >= PART || *left == 0 {
-                        events.push(ServerEvent::Body {
-                            request,
-                            data: core::mem::take(part),
-                            last: *left == 0,
-                        });
-                    }
-                    if n == 0 {
-                        break;
-                    }
-                }
-                if *left == 0 {
-                    self.phase = Phase::Answer { request };
-                } else if lost(socket) || ms > self.since + STALL_MS {
-                    events.push(ServerEvent::Closed { request });
-                    self.again(net, port);
-                }
-            }
+            Phase::Head(_) => self.read_head(server, port, net, now, next_request, events),
+            Phase::Body { .. } => self.read_body(port, net, now.0, events),
             Phase::Answer { request } => {
-                let request = *request;
-                if lost(socket) {
+                if lost(net.socket(self.socket)) {
                     events.push(ServerEvent::Closed { request });
                     self.again(net, port);
-                } else if ms > self.since + ANSWER_MS {
+                } else if now.0 > self.since + ANSWER_MS {
                     events.push(ServerEvent::Closed { request });
                     self.refuse(503, now);
                 }
             }
-            Phase::Sending {
-                out,
-                sent,
-                file,
-                at,
-            } => {
-                let mut ended = false;
-                while *sent < out.len() && socket.can_send() {
-                    match socket.send_slice(&out[*sent..]) {
-                        Ok(n) if n > 0 => {
-                            *sent += n;
-                            self.since = ms;
-                        }
-                        _ => break,
-                    }
-                }
-                if *sent == out.len() {
-                    if out.capacity() > 0 {
-                        // Sent: its memory is not needed while a file goes.
-                        *out = Vec::new();
-                        *sent = 0;
-                    }
-                    match file {
-                        Some(f) if *at < f.size => {
-                            while *at < f.size && socket.can_send() {
-                                let want = (f.size - *at).min(usize::MAX as u64) as usize;
-                                let read = socket.send(|room| {
-                                    let room_len = room.len().min(want);
-                                    match kernel.read_served(&f.path, *at, &mut room[..room_len]) {
-                                        Ok(n) => (n, Some(n)),
-                                        Err(_) => (0, None),
-                                    }
-                                });
-                                match read {
-                                    Ok(Some(n)) if n > 0 => {
-                                        *at += n as u64;
-                                        self.since = ms;
-                                    }
-                                    // Gone or shorter than it was: the
-                                    // connection ends early.
-                                    _ => {
-                                        ended = true;
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                        _ => {
-                            socket.close();
-                            self.phase = Phase::Closing;
-                            self.since = ms;
-                            return;
-                        }
-                    }
-                }
-                if ended || lost(socket) || ms > self.since + STALL_MS {
-                    self.again(net, port);
-                }
+            Phase::Sending { .. } => self.send(port, net, kernel, now.0),
+            Phase::Closing => self.close(port, net, now.0),
+        }
+    }
+
+    /// Reads the request's head; once it is whole, the plugin hears of the
+    /// request.
+    fn read_head(
+        &mut self,
+        server: u32,
+        port: u16,
+        net: &mut Net,
+        now: Instant,
+        next_request: &mut u32,
+        events: &mut Vec<ServerEvent>,
+    ) {
+        let socket = net.socket(self.socket);
+        let Phase::Head(head) = &mut self.phase else {
+            return;
+        };
+        while socket.can_recv() && head.len() < http::MAX_REQUEST_HEAD {
+            let room = http::MAX_REQUEST_HEAD - head.len();
+            let got = socket.recv(|data| {
+                let n = data.len().min(room);
+                head.extend_from_slice(&data[..n]);
+                (n, n)
+            });
+            if !matches!(got, Ok(n) if n > 0) {
+                break;
             }
-            Phase::Closing => {
-                // Closed once all was sent; the other side closes too (or
-                // it is given up on, a while after it has everything).
-                if socket.send_queue() > 0 {
-                    // Still going out: progress keeps it waiting.
-                    if ms > self.since + STALL_MS {
-                        self.again(net, port);
-                    }
-                    return;
-                }
-                if matches!(socket.state(), tcp::State::Closed | tcp::State::TimeWait)
-                    || ms > self.since + CLOSE_MS
-                {
-                    self.again(net, port);
-                }
+        }
+        match http::parse_request(head) {
+            Ok(None) if lost(socket) || now.0 > self.since + HEAD_MS => self.again(net, port),
+            Ok(None) => {}
+            Err(_) => self.refuse(400, now),
+            Ok(Some((RequestHead { chunked: true, .. }, _))) => self.refuse(411, now),
+            Ok(Some((request_head, used))) => {
+                *next_request = next_request.wrapping_add(1);
+                let first = head.split_off(used);
+                self.begin(server, *next_request, request_head, first, now.0, events);
             }
         }
     }
+
+    /// A request whose head came, `first` what came after it: the plugin
+    /// hears of it, and of its body as far as it came.
+    fn begin(
+        &mut self,
+        server: u32,
+        request: u32,
+        head: RequestHead,
+        mut first: Vec<u8>,
+        ms: u64,
+        events: &mut Vec<ServerEvent>,
+    ) {
+        let length = head.length;
+        events.push(ServerEvent::Request {
+            server,
+            request,
+            method: head.method,
+            target: head.target,
+            body: length > 0,
+        });
+        self.since = ms;
+        if length == 0 {
+            self.phase = Phase::Answer { request };
+            return;
+        }
+        // What came with the head is the body's start.
+        first.truncate(
+            first
+                .len()
+                .min(usize::try_from(length).unwrap_or(usize::MAX)),
+        );
+        let left = length - first.len() as u64;
+        self.phase = if left == 0 {
+            events.push(ServerEvent::Body {
+                request,
+                data: first,
+                last: true,
+            });
+            Phase::Answer { request }
+        } else {
+            Phase::Body {
+                request,
+                left,
+                part: first,
+            }
+        };
+    }
+
+    /// Passes the body on, gathered into parts of [`PART`] bytes: fewer,
+    /// larger writes to the card.
+    fn read_body(&mut self, port: u16, net: &mut Net, ms: u64, events: &mut Vec<ServerEvent>) {
+        let socket = net.socket(self.socket);
+        let Phase::Body {
+            request,
+            left,
+            part,
+        } = &mut self.phase
+        else {
+            return;
+        };
+        let request = *request;
+        while *left > 0 && socket.can_recv() {
+            let want = (*left).min((PART - part.len()) as u64) as usize;
+            if part.capacity() < PART && part.try_reserve_exact(PART - part.len()).is_err() {
+                break;
+            }
+            let got = socket.recv(|data| {
+                let n = data.len().min(want);
+                part.extend_from_slice(&data[..n]);
+                (n, n)
+            });
+            let Ok(n) = got else { break };
+            *left -= n as u64;
+            self.since = ms;
+            if part.len() >= PART || *left == 0 {
+                events.push(ServerEvent::Body {
+                    request,
+                    data: core::mem::take(part),
+                    last: *left == 0,
+                });
+            }
+            if n == 0 {
+                break;
+            }
+        }
+        if *left == 0 {
+            self.phase = Phase::Answer { request };
+        } else if lost(socket) || ms > self.since + STALL_MS {
+            events.push(ServerEvent::Closed { request });
+            self.again(net, port);
+        }
+    }
+
+    /// Sends the answer's head (and body), then the file, if any; closes
+    /// once all went.
+    fn send(&mut self, port: u16, net: &mut Net, kernel: &Kernel, ms: u64) {
+        let socket = net.socket(self.socket);
+        let Phase::Sending {
+            out,
+            sent,
+            file,
+            at,
+        } = &mut self.phase
+        else {
+            return;
+        };
+        let mut ended = false;
+        while *sent < out.len() && socket.can_send() {
+            match socket.send_slice(&out[*sent..]) {
+                Ok(n) if n > 0 => {
+                    *sent += n;
+                    self.since = ms;
+                }
+                _ => break,
+            }
+        }
+        if *sent == out.len() {
+            if out.capacity() > 0 {
+                // Sent: its memory is not needed while a file goes.
+                *out = Vec::new();
+                *sent = 0;
+            }
+            match file {
+                Some(f) if *at < f.size => {
+                    ended = !send_file(socket, kernel, f, at, &mut self.since, ms);
+                }
+                _ => {
+                    socket.close();
+                    self.phase = Phase::Closing;
+                    self.since = ms;
+                    return;
+                }
+            }
+        }
+        if ended || lost(socket) || ms > self.since + STALL_MS {
+            self.again(net, port);
+        }
+    }
+
+    /// Closed once all was sent; the other side closes too (or it is given
+    /// up on, a while after it has everything).
+    fn close(&mut self, port: u16, net: &mut Net, ms: u64) {
+        let socket = net.socket(self.socket);
+        if socket.send_queue() > 0 {
+            // Still going out: progress keeps it waiting.
+            if ms > self.since + STALL_MS {
+                self.again(net, port);
+            }
+            return;
+        }
+        if matches!(socket.state(), tcp::State::Closed | tcp::State::TimeWait)
+            || ms > self.since + CLOSE_MS
+        {
+            self.again(net, port);
+        }
+    }
+}
+
+/// As much of `file` from `at` on as the socket takes, `since` set when
+/// some went; false where the file is gone or shorter than it was (the
+/// connection ends early).
+fn send_file(
+    socket: &mut tcp::Socket<'_>,
+    kernel: &Kernel,
+    file: &ServedFile,
+    at: &mut u64,
+    since: &mut u64,
+    ms: u64,
+) -> bool {
+    while *at < file.size && socket.can_send() {
+        let want = (file.size - *at).min(usize::MAX as u64) as usize;
+        let read = socket.send(|room| {
+            let room_len = room.len().min(want);
+            match kernel.read_served(&file.path, *at, &mut room[..room_len]) {
+                Ok(n) => (n, Some(n)),
+                Err(_) => (0, None),
+            }
+        });
+        match read {
+            Ok(Some(n)) if n > 0 => {
+                *at += n as u64;
+                *since = ms;
+            }
+            _ => return false,
+        }
+    }
+    true
 }
