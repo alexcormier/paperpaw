@@ -9,6 +9,11 @@
 //!   (`QI:OK`);
 //! - `run <action>`: runs an action as a button bound to it would, e.g.
 //!   `run calibre.open` to open a tool at once (`QI:OK`);
+//! - `set <setting> <value>`: sets a setting as the settings screen would,
+//!   the value as configuration files write it, in hexadecimal (`QI:OK`,
+//!   or `QI:ERR` and why);
+//! - `setting <setting>`: `QI:SETTING <value>`, as configuration files
+//!   write it;
 //! - `hold <button> <ms>`: held that long, e.g. for a long press;
 //! - `shot`: the screen, as `QI:FRAME <width> <height> <bits per pixel>`,
 //!   then `QI:ROW <y> <hex>` for every row (its bytes as the frame holds
@@ -92,6 +97,14 @@ pub enum Command {
     Run(String),
     /// A book opened, by its path.
     Open(String),
+    /// A setting set, by its id, to a value as configuration files write
+    /// it.
+    Set {
+        id: String,
+        value: String,
+    },
+    /// A setting's value asked for, by its id.
+    Setting(String),
     Shot,
     Screen,
     Describe,
@@ -167,6 +180,11 @@ pub fn parse(line: &str) -> Option<Command> {
         "input" => Command::Input,
         "run" => Command::Run(String::from(words.next()?)),
         "open" => Command::Open(unhex(words.next()?)?),
+        "set" => Command::Set {
+            id: String::from(words.next()?),
+            value: unhex(words.next().unwrap_or(""))?,
+        },
+        "setting" => Command::Setting(String::from(words.next()?)),
         "wifi" => Command::Network(match words.next()? {
             "scan" => Ask::Scan,
             "connect" => Ask::Connect {
@@ -344,6 +362,24 @@ mod tests {
         assert_eq!(
             parse("open 2f612062"),
             Some(Command::Open(String::from("/a b")))
+        );
+        assert_eq!(
+            parse("set reader.font-size 3132"),
+            Some(Command::Set {
+                id: String::from("reader.font-size"),
+                value: String::from("12")
+            })
+        );
+        assert_eq!(
+            parse("set core.time-zone-rule"),
+            Some(Command::Set {
+                id: String::from("core.time-zone-rule"),
+                value: String::new()
+            })
+        );
+        assert_eq!(
+            parse("setting core.night-mode"),
+            Some(Command::Setting(String::from("core.night-mode")))
         );
     }
 

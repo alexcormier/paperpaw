@@ -739,6 +739,33 @@ impl Kernel {
         self.finish()
     }
 
+    /// Sets setting `id` from its text as configuration files write it
+    /// (`on`, `12`, a choice's value), as the settings screen would: saved,
+    /// what follows from it done, plugins told. E.g. for a shell's remote
+    /// control or a test; why not, where the setting is unknown or the
+    /// text no value of it.
+    pub fn set_setting(
+        &mut self,
+        now: Instant,
+        id: &str,
+        text: &str,
+    ) -> Result<Effects, &'static str> {
+        let spec = self
+            .shared
+            .settings
+            .specs()
+            .find(|spec| spec.id.as_str() == id)
+            .ok_or("no such setting")?;
+        let value = spec.kind.parse(text).ok_or("not a value of this setting")?;
+        let id = spec.id.clone();
+        let _running = self.shared.meter.enter(meter::CORE);
+        self.now = now;
+        self.last_activity = now;
+        self.output.commands.push(Command::SetSetting(id, value));
+        self.run_commands();
+        Ok(self.finish())
+    }
+
     /// The device goes to sleep or the app to the background; plugins hear
     /// [`events::SUSPEND`].
     pub fn suspend(&mut self, now: Instant) -> Effects {

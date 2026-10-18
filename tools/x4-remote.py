@@ -22,6 +22,9 @@ STEPS, separated by commas:
   open:books/a.epub  open a book in the reader
   run:calibre.open   run an action, as a button bound to it would (e.g. a
                      tool's, to open it at once)
+  set:core.night-mode=on   set a setting, as the settings screen would (the
+                     value as configuration files write it)
+  setting:reader.font-size print a setting's value
   wait:500           500 ms pass
   screen             print the screen's id
   describe           print what the screen shows, part by part
@@ -291,6 +294,12 @@ def run(x4, step):
             print(x4.ask(f"run {action}", "OK")[-1])
         case ["open", path]:
             print(x4.ask(f"open {path.encode().hex()}", "OK")[-1])
+        case ["set", *rest] if "=" in ":".join(rest):
+            # Values may hold `:` (`22:00`).
+            setting, value = ":".join(rest).split("=", 1)
+            print(x4.ask(f"set {setting} {value.encode().hex()}", "OK")[-1])
+        case ["setting", setting]:
+            print(x4.ask(f"setting {setting}", "SETTING")[-1].split(" ", 1)[-1])
         case ["gray"]:
             print(x4.ask("gray", "OK")[-1])
         case ["gray", path]:

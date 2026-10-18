@@ -617,6 +617,17 @@ impl Firmware {
                 self.apply(effects);
                 remote::ok();
             }
+            Command::Set { id, value } => {
+                let at = self.kernel_now();
+                match self.kernel.set_setting(at, &id, &value) {
+                    Ok(effects) => {
+                        info!("{id} = {value}");
+                        self.apply(effects);
+                        remote::ok();
+                    }
+                    Err(why) => remote::error(why),
+                }
+            }
             Command::Open(path) => {
                 let at = self.kernel_now();
                 let params =

@@ -159,8 +159,13 @@ impl Remote {
                 let millivolts = crate::input::millivolts();
                 println!("QI:INPUT {samples} {front} {side} {power} {millivolts}");
             }
+            Command::Setting(id) => match kernel.settings().get(&id) {
+                Some(value) => println!("QI:SETTING {}", value.to_config_text()),
+                None => error("no such setting"),
+            },
             command @ (Command::Press { .. }
             | Command::Run(_)
+            | Command::Set { .. }
             | Command::Open(_)
             | Command::Refresh { .. }
             | Command::Gray(_)
