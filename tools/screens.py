@@ -4,7 +4,7 @@ alike and calm). The sample books are the library; the setup counts as
 done.
 
 Usage:
-    python tools/screens.py OUT_DIR [PROFILE ...]
+    python tools/screens.py OUT_DIR [--lang de] [PROFILE ...]
 
 PROFILE defaults to xteink-x4 and boox-go-7. Builds the emulator first
 (cargo build -p quireink-emulator).
@@ -70,7 +70,13 @@ def main():
         sys.exit(__doc__)
     out = Path(sys.argv[1])
     out.mkdir(parents=True, exist_ok=True)
-    profiles = sys.argv[2:] or ["xteink-x4", "boox-go-7"]
+    args = sys.argv[2:]
+    lang = None
+    if "--lang" in args:
+        at = args.index("--lang")
+        lang = args[at + 1]
+        del args[at:at + 2]
+    profiles = args or ["xteink-x4", "boox-go-7"]
     subprocess.run(["cargo", "build", "-q", "-p", "quireink-emulator"], cwd=ROOT, check=True)
     for profile in profiles:
         for name, script, sets in SCREENS:
@@ -83,6 +89,8 @@ def main():
                        "--set", "home.gesture-tips=false"]
             if not book:
                 command += ["--set", "reader.open-last=false"]
+            if lang:
+                command += ["--set", f"core.language={lang}"]
             if script:
                 command += ["--script", script]
             for setting in sets:

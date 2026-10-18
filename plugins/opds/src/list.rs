@@ -294,27 +294,8 @@ impl Screen for ListScreen {
             },
         );
         ui::fill(canvas, self.status, Color::WHITE);
-        if let Some(font) = style.font(env) {
-            let line = Rect::new(
-                self.status.x + style.margin as u16,
-                self.status.y,
-                self.status.width.saturating_sub(2 * style.margin as u16),
-                style.line as u16,
-            );
-            ui::fill(canvas, line, Color::gray(190));
-            let text = self.status_text(env);
-            let width = f32::from(self.status.width) - 2.0 * style.margin as f32;
-            let text = ui::fit(&font, style.small, &text, width);
-            ui::draw_label(
-                canvas,
-                &font,
-                style.small,
-                style.margin as f32,
-                self.status,
-                &text,
-                style.faint(60),
-            );
-        }
+        let text = self.status_text(env);
+        ui::draw_note_line(canvas, env, &style, self.status, &text);
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {

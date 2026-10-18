@@ -16,6 +16,11 @@ change the plugin SDK.
   shows it in the status line and on the home screen; the time zone is
   chosen under Settings, System (UTC on "Auto": the X4 has none of its
   own). Gone when it is switched off, until it is online again.
+- Notes at the bottom of a screen (what a tap or a hold does) wrap to
+  two lines instead of being cut (`ui::draw_note_line`, used by catalogs,
+  rules and profiles); German labels that were cut are shorter (*Fortschritt
+  abgleichen*, *Einstellungen suchen*). Every screen was looked at in
+  German too (`tools/screens.py --lang de`).
 - Keyboard: no key shows only "…" any more. Narrow buttons keep less
   room at their sides, a letter wider than its key (an `m` on the X4's
   German layout) is set smaller, *OK* is black and plain to see, the key

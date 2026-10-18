@@ -271,26 +271,12 @@ impl Screen for ListScreen {
             },
         );
         ui::fill(canvas, self.status, Color::WHITE);
-        let Some(font) = style.font(env) else {
-            return;
-        };
-        let line = Rect::new(
-            self.status.x + style.margin as u16,
-            self.status.y,
-            self.status.width.saturating_sub(2 * style.margin as u16),
-            style.line as u16,
-        );
-        ui::fill(canvas, line, Color::gray(190));
-        let width = f32::from(self.status.width) - 2.0 * style.margin as f32;
-        let text = ui::fit(&font, style.small, env.i18n.tr("profiles.hint"), width);
-        ui::draw_label(
+        ui::draw_note_line(
             canvas,
-            &font,
-            style.small,
-            style.margin as f32,
+            env,
+            &style,
             self.status,
-            &text,
-            style.faint(60),
+            env.i18n.tr("profiles.hint"),
         );
     }
 

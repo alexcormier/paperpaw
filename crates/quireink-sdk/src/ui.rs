@@ -785,6 +785,61 @@ pub fn draw_message(
     }
 }
 
+/// A note at the bottom of a screen (what a tap or a hold does there, or
+/// what just happened): a light line above it, then `text` in small gray
+/// letters, wrapped to two lines (the last one shortened if need be).
+pub fn draw_note_line(
+    canvas: &mut Canvas<'_>,
+    env: &Env<'_>,
+    style: &UiStyle,
+    area: Rect,
+    text: &str,
+) {
+    let margin = style.margin as u16;
+    let width = area.width.saturating_sub(2 * margin);
+    fill(
+        canvas,
+        Rect::new(area.x + margin, area.y, width, style.line as u16),
+        Color::gray(190),
+    );
+    let Some(font) = style.font(env) else {
+        return;
+    };
+    let top = area.y + style.line as u16;
+    let height = area.height.saturating_sub(style.line as u16);
+    let line = font.line_metrics(style.small).line_height;
+    let room = f32::from(width);
+    let mut lines = font.wrap(style.small, text, room);
+    let fits = ((f32::from(height) / line) as usize).clamp(1, 2);
+    let cut = lines.len() > fits;
+    lines.truncate(fits);
+    let count = lines.len();
+    let mut y = f32::from(top) + (f32::from(height) - line * count as f32).max(0.0) / 2.0;
+    for (n, range) in lines.into_iter().enumerate() {
+        let shown = if cut && n + 1 == count {
+            fit(
+                &font,
+                style.small,
+                &format!("{} …", text[range.start..].trim_end()),
+                room,
+            )
+        } else {
+            text[range].to_string()
+        };
+        let row = Rect::new(area.x + margin, y as u16, width, line as u16);
+        draw_label(
+            canvas,
+            &font,
+            style.small,
+            f32::from(row.x),
+            row,
+            &shown,
+            style.faint(60),
+        );
+        y += line;
+    }
+}
+
 /// `text` shortened with an ellipsis to fit `width` pixels.
 pub fn fit(font: &FontHandle<'_>, size: f32, text: &str, width: f32) -> String {
     if font.measure(size, text) <= width {
