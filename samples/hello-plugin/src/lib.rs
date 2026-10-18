@@ -84,12 +84,9 @@ impl Plugin for Hello {
         )?;
 
         // The event: every reader emits it when a book opens.
-        r.subscribe(
-            events::BOOK_OPENED,
-            Box::new(move |_: &Env<'_>, _: &Params, _: &mut Vec<Command>| {
-                opened.set(opened.get() + 1);
-            }),
-        )?;
+        r.on(events::BOOK_OPENED, move |_, _reading, _| {
+            opened.set(opened.get() + 1);
+        })?;
 
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
