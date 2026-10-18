@@ -362,7 +362,7 @@ impl Guide {
                     return;
                 };
                 let with_id = || Params::new().with(params::ID, spec.id.as_str().to_string());
-                if let Some(editor) = &spec.editor {
+                if let Some(editor) = &spec.extra().editor {
                     cx.command(Command::OpenScreen(editor.clone(), with_id()));
                 } else if matches!(spec.kind, SettingKind::Bool) || ui::two_options(&env, spec) {
                     self.change(1, cx);
@@ -464,7 +464,7 @@ impl Guide {
                         + (f32::from(between.width) - font.measure(style.title, &label)) / 2.0;
                     ui::draw_label(canvas, &font, style.title, x, between, &label, Color::BLACK);
                     // A sample of the text at that size, where it is one.
-                    if spec.unit.as_deref() == Some("core.unit.pt") {
+                    if spec.extra().unit.as_deref() == Some("core.unit.pt") {
                         let size = env.metrics.pt(env.settings.int(spec.id.as_str()) as f32);
                         let top = minus.y + minus.height + style.gap as u16;
                         let sample = Rect::new(

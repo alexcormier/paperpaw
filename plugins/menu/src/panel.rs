@@ -348,7 +348,7 @@ fn lines(env: &Env<'_>, style: &UiStyle, items: &[MenuItem<'_>], g: Geometry) ->
     let mut group: Vec<Control> = Vec::new();
     for item in items {
         let id = item.id.clone();
-        let setting = spec(env, &id).filter(|s| s.editor.is_none());
+        let setting = spec(env, &id).filter(|s| s.extra().editor.is_none());
         let control = match setting.map(|s| &s.kind) {
             Some(SettingKind::Bool) => Some(Control::Toggle(id.clone())),
             None if spec(env, &id).is_none() => Some(Control::Run(id.clone())),
@@ -367,7 +367,9 @@ fn lines(env: &Env<'_>, style: &UiStyle, items: &[MenuItem<'_>], g: Geometry) ->
         }
         flush(&mut group, &mut lines);
         let line = match spec(env, &id).map(|s| &s.kind) {
-            Some(SettingKind::Int { .. }) if setting.is_some_and(|s| s.slider) => Line::Slider(id),
+            Some(SettingKind::Int { .. }) if setting.is_some_and(|s| s.extra().slider) => {
+                Line::Slider(id)
+            }
             Some(SettingKind::Int { .. }) if setting.is_some() => Line::Stepper(id),
             Some(SettingKind::Choice(options))
                 if setting.is_some() && fits_segments(env, style, options, rest) =>
@@ -469,7 +471,7 @@ impl PanelScreen {
             Control::Slide(_) => {}
             Control::Open(id) => {
                 let screen = spec(&env, id)
-                    .and_then(|s| s.editor.clone())
+                    .and_then(|s| s.extra().editor.clone())
                     .unwrap_or(CHOOSE_SCREEN);
                 cx.command(Command::OpenScreen(
                     screen,

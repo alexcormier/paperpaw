@@ -1,4 +1,5 @@
 use alloc::borrow::Cow;
+use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt;
@@ -79,8 +80,11 @@ impl SettingValue {
     }
 }
 
-/// A setting contribution.
+/// A setting contribution, made with [`SettingSpec::new`] or the typed
+/// constructors ([`SettingSpec::switch`] and the others) and the builder
+/// methods.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct SettingSpec {
     /// `<plugin>.<name>`; in configuration files written as `[<plugin>] <name> = …`.
     pub id: Id,
@@ -94,14 +98,23 @@ pub struct SettingSpec {
     pub level: Level,
     /// Translation key of a short help text.
     pub description: Option<Cow<'static, str>>,
+    /// May differ per scope, e.g. per book (see [`Settings::scope`]).
+    pub scoped: bool,
+    /// What few settings have ([`SettingSpec::extra`]), kept apart: the
+    /// others take less memory.
+    extra: Option<Box<SettingExtra>>,
+}
+
+/// What few settings have (see [`SettingSpec::extra`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct SettingExtra {
     /// Translation key that formats a number with its unit, with plural
     /// forms, e.g. `core.unit.pt.other = {count} pt`.
     pub unit: Option<Cow<'static, str>>,
     /// A screen that edits the value, opened with the parameter `id` (the
     /// setting's id), e.g. a folder chooser for a path.
     pub editor: Option<Id>,
-    /// May differ per scope, e.g. per book (see [`Settings::scope`]).
-    pub scoped: bool,
     /// How much one step changes a number (e.g. 10 for percentages).
     pub step: i64,
     /// A number better set by eye than by its value, such as a light's
@@ -115,6 +128,16 @@ pub struct SettingSpec {
     /// rather than edited.
     pub secret: bool,
 }
+
+/// The extra of settings without one.
+static NO_EXTRA: SettingExtra = SettingExtra {
+    unit: None,
+    editor: None,
+    step: 1,
+    slider: false,
+    section: None,
+    secret: false,
+};
 
 impl SettingSpec {
     /// A basic setting in the [`OTHER`](crate::builtin::groups::OTHER)
@@ -133,14 +156,19 @@ impl SettingSpec {
             group: crate::builtin::groups::OTHER,
             level: Level::Basic,
             description: None,
-            unit: None,
-            editor: None,
             scoped: false,
-            step: 1,
-            slider: false,
-            section: None,
-            secret: false,
+            extra: None,
         }
+    }
+
+    /// Its unit, editor, step, slider, section and whether it is a secret
+    /// (the defaults for a setting that sets none of them).
+    pub fn extra(&self) -> &SettingExtra {
+        self.extra.as_deref().unwrap_or(&NO_EXTRA)
+    }
+
+    fn extra_mut(&mut self) -> &mut SettingExtra {
+        self.extra.get_or_insert_with(|| Box::new(NO_EXTRA.clone()))
     }
 
     /// A switch, on or off (see [`setting`](crate::setting)).
@@ -234,25 +262,25 @@ impl SettingSpec {
     /// Puts the setting into a part of its group (see
     /// [`SettingSpec::section`]).
     pub fn section(mut self, key: impl Into<Cow<'static, str>>) -> Self {
-        self.section = Some(key.into());
+        self.extra_mut().section = Some(key.into());
         self
     }
 
     /// A number set with a slider in panels (see [`SettingSpec::slider`]).
     pub fn slider(mut self) -> Self {
-        self.slider = true;
+        self.extra_mut().slider = true;
         self
     }
 
     /// A secret, such as an API key (see [`SettingSpec::secret`]).
     pub fn secret(mut self) -> Self {
-        self.secret = true;
+        self.extra_mut().secret = true;
         self
     }
 
     /// How much one step (a `+` or `−`) changes a number.
     pub fn step(mut self, step: i64) -> Self {
-        self.step = step.max(1);
+        self.extra_mut().step = step.max(1);
         self
     }
 
@@ -279,13 +307,13 @@ impl SettingSpec {
     }
 
     pub fn unit(mut self, key: impl Into<Cow<'static, str>>) -> Self {
-        self.unit = Some(key.into());
+        self.extra_mut().unit = Some(key.into());
         self
     }
 
     /// Edited on its own screen (see [`SettingSpec::editor`]).
     pub fn editor(mut self, screen: Id) -> Self {
-        self.editor = Some(screen);
+        self.extra_mut().editor = Some(screen);
         self
     }
 }
@@ -334,16 +362,55 @@ impl fmt::Display for SettingError {
 
 impl core::error::Error for SettingError {}
 
+/// The settings' specs in registration order, found by id through an
+/// index sorted by it: each id kept once.
+#[derive(Debug, Default)]
+struct Specs {
+    list: Vec<SettingSpec>,
+    /// Places in `list`, sorted by the specs' ids.
+    by_id: Vec<u16>,
+}
+
+impl Specs {
+    /// Where `id` is in `by_id`, or would go.
+    fn find(&self, id: &str) -> Result<usize, usize> {
+        self.by_id
+            .binary_search_by(|&at| self.list[usize::from(at)].id.as_str().cmp(id))
+    }
+
+    fn get(&self, id: &str) -> Option<&SettingSpec> {
+        let at = self.find(id).ok()?;
+        Some(&self.list[usize::from(self.by_id[at])])
+    }
+
+    fn get_mut(&mut self, id: &str) -> Option<&mut SettingSpec> {
+        let at = self.find(id).ok()?;
+        Some(&mut self.list[usize::from(self.by_id[at])])
+    }
+
+    /// Adds `spec`, whose id is not there yet.
+    fn insert(&mut self, spec: SettingSpec) {
+        let Err(at) = self.find(spec.id.as_str()) else {
+            return;
+        };
+        self.by_id.insert(at, self.list.len() as u16);
+        self.list.push(spec);
+    }
+
+    fn shrink_to_fit(&mut self) {
+        self.list.shrink_to_fit();
+        self.by_id.shrink_to_fit();
+    }
+}
+
 /// All registered settings and their current values.
 ///
 /// Plugins receive it read-only through [`Env`](crate::Env) and change values
 /// with [`Command::SetSetting`](crate::Command::SetSetting).
 #[derive(Debug, Default)]
 pub struct Settings {
-    specs: VecMap<Id, SettingSpec>,
+    specs: Specs,
     values: VecMap<Id, SettingValue>,
-    /// Ids in registration order, for settings UIs.
-    order: Vec<Id>,
     /// Groups by order.
     groups: Vec<SettingGroupSpec>,
     /// The values of the active scope (e.g. the open book), if any.
@@ -359,7 +426,6 @@ impl Settings {
     pub fn shrink_to_fit(&mut self) {
         self.specs.shrink_to_fit();
         self.values.shrink_to_fit();
-        self.order.shrink_to_fit();
         self.groups.shrink_to_fit();
     }
 
@@ -392,7 +458,7 @@ impl Settings {
 
     /// Registers a setting. Its default must be valid.
     pub fn define(&mut self, spec: SettingSpec) -> Result<(), RegisterError> {
-        if self.specs.contains_key(&spec.id) {
+        if self.specs.get(spec.id.as_str()).is_some() {
             return Err(RegisterError::Duplicate { id: spec.id });
         }
         if !spec.kind.accepts(&spec.default) {
@@ -400,8 +466,7 @@ impl Settings {
                 message: Cow::Borrowed("default value does not match the setting kind"),
             });
         }
-        self.order.push(spec.id.clone());
-        self.specs.insert(spec.id.clone(), spec);
+        self.specs.insert(spec);
         Ok(())
     }
 
@@ -558,7 +623,7 @@ impl Settings {
     /// All settings in registration order: plugins registered first come
     /// first, each in the order it declared its settings.
     pub fn specs(&self) -> impl Iterator<Item = &SettingSpec> {
-        self.order.iter().filter_map(|id| self.specs.get(id))
+        self.specs.list.iter()
     }
 }
 
@@ -718,11 +783,10 @@ mod tests {
             s.define(spec.clone()),
             Err(RegisterError::Duplicate { .. })
         ));
-        let bad = SettingSpec {
-            id: Id::new_static("test.bad"),
-            default: SettingValue::Int(1),
-            ..spec
-        };
+        let mut bad = spec;
+        bad.id = Id::new_static("test.bad");
+        bad.default = SettingValue::Int(1);
         assert!(matches!(s.define(bad), Err(RegisterError::Invalid { .. })));
     }
 }
+

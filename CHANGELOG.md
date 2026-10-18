@@ -6,6 +6,11 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: a setting's unit, editor, step, slider, section and whether it is
+  a secret are read with `SettingSpec::extra()` (they are kept apart, so
+  that the settings take less memory: some 8 KiB less on the X4);
+  `SettingSpec` is `#[non_exhaustive]`, made with its constructors and
+  builder methods as before.
 - HTML, FictionBook, Markdown and comic books are plugins of their own
   (`format-html`, `format-fb2`, `format-markdown`, `format-cbz`), no
   longer part of the EPUB plugin: each can be switched off or replaced

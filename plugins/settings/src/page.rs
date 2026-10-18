@@ -59,7 +59,7 @@ impl GroupPage {
         // then the others as they come.
         let mut sections: Vec<Option<&str>> = Vec::new();
         for spec in &specs {
-            let section = spec.section.as_deref();
+            let section = spec.extra().section.as_deref();
             if !sections.contains(&section) {
                 sections.push(section);
             }
@@ -82,7 +82,7 @@ impl GroupPage {
             entries.extend(
                 specs
                     .iter()
-                    .filter(|spec| spec.section.as_deref() == *section)
+                    .filter(|spec| spec.extra().section.as_deref() == *section)
                     .cloned()
                     .map(|spec| Row::Setting(Box::new(spec))),
             );
@@ -182,7 +182,7 @@ impl GroupPage {
         let Some(spec) = self.focused() else {
             return;
         };
-        if let Some(editor) = &spec.editor {
+        if let Some(editor) = &spec.extra().editor {
             cx.command(Command::OpenScreen(
                 editor.clone(),
                 Params::new().with(ID, spec.id.as_str().to_string()),
@@ -209,7 +209,7 @@ impl GroupPage {
             SettingKind::Text => {
                 let question = ask::text(env.i18n.tr(&spec.title), &TEXT_ENTERED)
                     .with(ID, spec.id.as_str().to_string());
-                let question = if spec.secret {
+                let question = if spec.extra().secret {
                     question.password()
                 } else {
                     question.initial(ui::setting_value(env, spec))
@@ -270,7 +270,7 @@ impl Screen for GroupPage {
                         }
                         return;
                     }
-                    SettingKind::Bool if spec.editor.is_none() => {
+                    SettingKind::Bool if spec.extra().editor.is_none() => {
                         let on = env.settings.bool(spec.id.as_str());
                         ui::draw_switch_row(canvas, env, &style, rect, focused, title, note, on);
                         return;

@@ -1290,7 +1290,7 @@ pub fn number_room<'a>(
             continue;
         };
         for v in [min, max] {
-            let text = match &spec.unit {
+            let text = match &spec.extra().unit {
                 Some(unit) => env.i18n.plural(unit, v, &[]),
                 None => format!("{v}"),
             };
@@ -1556,11 +1556,11 @@ fn plain_setting_value(env: &Env<'_>, spec: &SettingSpec) -> String {
     match env.settings.get(spec.id.as_str()) {
         Some(SettingValue::Bool(true)) => env.i18n.tr("settings.on").to_string(),
         Some(SettingValue::Bool(false)) => env.i18n.tr("settings.off").to_string(),
-        Some(SettingValue::Int(v)) => match &spec.unit {
+        Some(SettingValue::Int(v)) => match &spec.extra().unit {
             Some(unit) => env.i18n.plural(unit, *v, &[]),
             None => format!("{v}"),
         },
-        Some(SettingValue::Text(v)) if spec.secret && !v.is_empty() => "••••••".to_string(),
+        Some(SettingValue::Text(v)) if spec.extra().secret && !v.is_empty() => "••••••".to_string(),
         Some(SettingValue::Text(v)) => option_name(env, spec, v),
         None => String::new(),
     }
@@ -1624,7 +1624,7 @@ pub fn two_options(env: &Env<'_>, spec: &SettingSpec) -> bool {
 /// Whether choosing the setting opens another screen (its own editor, or
 /// a list to choose from): its row shows a `›`.
 pub fn opens_screen(env: &Env<'_>, spec: &SettingSpec) -> bool {
-    spec.editor.is_some()
+    spec.extra().editor.is_some()
         || (matches!(spec.kind, SettingKind::Choice(_) | SettingKind::Language)
             && !two_options(env, spec))
 }
@@ -1646,7 +1646,7 @@ pub fn next_value(env: &Env<'_>, spec: &SettingSpec, step: i64) -> Option<Settin
     Some(match (&spec.kind, current) {
         (SettingKind::Bool, SettingValue::Bool(v)) => SettingValue::Bool(!v),
         (SettingKind::Int { min, max }, SettingValue::Int(v)) => {
-            SettingValue::Int((v + step * spec.step).clamp(*min, *max))
+            SettingValue::Int((v + step * spec.extra().step).clamp(*min, *max))
         }
         (SettingKind::Choice(options), SettingValue::Text(v)) => {
             let options: Vec<&str> = options.iter().map(|o| o.as_ref()).collect();

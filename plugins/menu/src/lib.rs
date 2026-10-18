@@ -296,7 +296,7 @@ impl MenuScreen {
             cx.command(Command::RunAction(id.clone()));
             return;
         };
-        if let Some(editor) = &spec.editor {
+        if let Some(editor) = &spec.extra().editor {
             cx.command(Command::OpenScreen(
                 editor.clone(),
                 Params::new().with("id", spec.id.as_str().to_string()),
