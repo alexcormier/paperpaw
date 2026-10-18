@@ -71,10 +71,10 @@ use quireink_sdk::builtin::{
 use quireink_sdk::event::EventData;
 use quireink_sdk::setting::{Setting, SettingType};
 use quireink_sdk::{
-    Actions, Capabilities, Command, Contribution, Cx, Direction, Env, EnvParts, EventHandler,
-    Fonts, Formats, Gesture, GestureKind, Handled, Hint, Hints, HttpReply, Hyphenation, Id,
-    Manifest, Menus, Metrics, Output, Params, Plugin, PluginInfo, PluginState, Plugins,
-    RegisterError, RequiredFor, SDK_VERSION, Screen, ServerNotice, Settings, StatusItems,
+    ActionHint, Actions, Capabilities, Command, Contribution, Cx, Direction, Env, EnvParts,
+    EventHandler, Fonts, Formats, Gesture, GestureKind, Handled, Hint, Hints, HttpReply,
+    Hyphenation, Id, Manifest, Menus, Metrics, Output, Params, Plugin, PluginInfo, PluginState,
+    Plugins, RegisterError, RequiredFor, SDK_VERSION, Screen, ServerNotice, Settings, StatusItems,
 };
 
 use crate::core_plugin::{CORE, CorePlugin};
@@ -3450,31 +3450,19 @@ impl Kernel {
             .collect()
     }
 
-    /// What an action is called in the row of hints: arrows for moving,
-    /// short words for the rest.
+    /// How the row of hints shows an action, as the action says
+    /// ([`ActionHint`]); nothing for an action no plugin knows.
     fn default_hint(&self, action: &Id) -> Hint {
-        use quireink_sdk::builtin::actions;
-        let icon = match action {
-            a if *a == actions::LEFT => Some("chevron-left"),
-            a if *a == actions::RIGHT => Some("chevron-right"),
-            a if *a == actions::UP || *a == actions::PREV_PAGE => Some("chevron-up"),
-            a if *a == actions::DOWN || *a == actions::NEXT_PAGE => Some("chevron-down"),
-            a if *a == actions::NOTHING => return Hint::Hidden,
-            _ => None,
+        let Some(spec) = self.shared.actions.get(action.as_str()) else {
+            return Hint::Hidden;
         };
-        if let Some(icon) = icon {
-            return Hint::Icon(icon);
-        }
         let translator = &self.shared.translator;
-        let own = format!("core.hint.{}", action.as_str());
-        let text = match translator.get(&own) {
-            Some(text) => text.to_string(),
-            None => match self.shared.actions.get(action.as_str()) {
-                Some(spec) => translator.tr(&spec.title).to_string(),
-                None => return Hint::Hidden,
-            },
-        };
-        Hint::Text(text)
+        match &spec.hint {
+            ActionHint::Icon(icon) => Hint::Icon(icon),
+            ActionHint::Label(key) => Hint::Text(translator.tr(key).to_string()),
+            ActionHint::Hidden => Hint::Hidden,
+            _ => Hint::Text(translator.tr(&spec.title).to_string()),
+        }
     }
 
     /// Actions bound by any key map preset, for validation.

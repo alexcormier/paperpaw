@@ -1437,6 +1437,11 @@ pub mod quireink_sdk::zip
 pub use quireink_sdk::zip::<<quireink_zip::*>>
 pub macro quireink_sdk::data_path!
 pub macro quireink_sdk::event_data!
+#[non_exhaustive] pub enum quireink_sdk::ActionHint
+pub quireink_sdk::ActionHint::Hidden
+pub quireink_sdk::ActionHint::Icon(&'static str)
+pub quireink_sdk::ActionHint::Label(alloc::borrow::Cow<'static, str>)
+pub quireink_sdk::ActionHint::Title
 #[non_exhaustive] pub enum quireink_sdk::Command
 pub quireink_sdk::Command::Back
 pub quireink_sdk::Command::Bind
@@ -1703,10 +1708,15 @@ pub type quireink_sdk::setting::Text::Input = alloc::borrow::Cow<'static, str>
 pub type quireink_sdk::setting::Text::Value<'a> = &'a str
 pub fn quireink_sdk::setting::Text::read(core::option::Option<&quireink_sdk::SettingValue>) -> &str
 pub fn quireink_sdk::setting::Text::write(alloc::borrow::Cow<'static, str>) -> quireink_sdk::SettingValue
-pub struct quireink_sdk::ActionSpec
+#[non_exhaustive] pub struct quireink_sdk::ActionSpec
 pub quireink_sdk::ActionSpec::handler: core::option::Option<quireink_sdk::ActionHandler>
+pub quireink_sdk::ActionSpec::hint: quireink_sdk::ActionHint
 pub quireink_sdk::ActionSpec::id: quireink_sdk::Id
 pub quireink_sdk::ActionSpec::title: alloc::borrow::Cow<'static, str>
+impl quireink_sdk::ActionSpec
+pub fn quireink_sdk::ActionSpec::handler(self, impl core::ops::function::Fn(&quireink_sdk::Env<'_>, &mut alloc::vec::Vec<quireink_sdk::Command>) + 'static) -> Self
+pub fn quireink_sdk::ActionSpec::hint(self, quireink_sdk::ActionHint) -> Self
+pub fn quireink_sdk::ActionSpec::new(impl core::convert::Into<quireink_sdk::Id>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
 impl core::fmt::Debug for quireink_sdk::ActionSpec
 pub fn quireink_sdk::ActionSpec::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct quireink_sdk::Actions

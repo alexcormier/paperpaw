@@ -59,13 +59,9 @@ impl Plugin for Hello {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_action(ActionSpec {
-            id: OPEN,
-            title: Cow::Borrowed("hello.title"),
-            handler: Some(Box::new(|_: &Env<'_>, out: &mut Vec<Command>| {
-                out.push(Command::OpenScreen(SCREEN, Params::new()));
-            })),
-        })?;
+        r.add_action(ActionSpec::new(OPEN, "hello.title").handler(|_, out| {
+            out.push(Command::OpenScreen(SCREEN, Params::new()));
+        }))?;
         r.add_menu_entry(MenuEntry { menu: menus::TOOLS, item: OPEN, order: 90 })?;
         r.add_icon(OPEN, Cow::Borrowed("star"))?;
         // … the screen, a setting, an event, translations

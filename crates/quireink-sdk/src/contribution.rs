@@ -543,11 +543,7 @@ mod tests {
     use super::*;
 
     fn action(id: &'static str) -> ActionSpec {
-        ActionSpec {
-            id: Id::new_static(id),
-            title: Cow::Borrowed("x"),
-            handler: None,
-        }
+        ActionSpec::new(Id::new_static(id), "x")
     }
 
     #[test]

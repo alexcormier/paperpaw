@@ -14,7 +14,6 @@ extern crate alloc;
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::rc::Rc;
-use alloc::vec::Vec;
 use core::cell::Cell;
 
 use quireink_sdk::builtin::{actions, events, groups, menus};
@@ -54,13 +53,9 @@ impl Plugin for Hello {
         let opened = Rc::new(Cell::new(0u32));
 
         // The action: what a menu entry, a button or a gesture runs.
-        r.add_action(ActionSpec {
-            id: OPEN,
-            title: Cow::Borrowed("hello.title"),
-            handler: Some(Box::new(|_: &Env<'_>, out: &mut Vec<Command>| {
-                out.push(Command::OpenScreen(SCREEN, Params::new()));
-            })),
-        })?;
+        r.add_action(ActionSpec::new(OPEN, "hello.title").handler(|_, out| {
+            out.push(Command::OpenScreen(SCREEN, Params::new()));
+        }))?;
         r.add_menu_entry(MenuEntry {
             menu: menus::TOOLS,
             item: OPEN,

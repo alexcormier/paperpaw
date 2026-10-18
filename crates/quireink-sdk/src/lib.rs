@@ -71,7 +71,7 @@ pub mod web;
 pub mod widgets;
 pub mod wifi;
 
-pub use action::{ActionHandler, ActionSpec, Actions};
+pub use action::{ActionHandler, ActionHint, ActionSpec, Actions};
 pub use command::{
     Command, HttpRequest, MAX_CLIPBOARD, ServerResponse, SocketRead, Speech, http_params,
     server_params, socket_params, speech_params,

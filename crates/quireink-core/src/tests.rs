@@ -95,11 +95,10 @@ impl Plugin for TestPlugin {
             }),
         })?;
         r.bind_slot(slots::HOME, self.screen_id(), self.priority)?;
-        r.add_action(ActionSpec {
-            id: Id::parse(&alloc::format!("{}.special", self.id)).unwrap(),
-            title: Cow::Borrowed("test.special"),
-            handler: None,
-        })?;
+        r.add_action(ActionSpec::new(
+            Id::parse(&alloc::format!("{}.special", self.id)).unwrap(),
+            "test.special",
+        ))?;
         r.add_setting(SettingSpec::new(
             Id::parse(&alloc::format!("{}.level", self.id)).unwrap(),
             "test.level",
@@ -110,11 +109,7 @@ impl Plugin for TestPlugin {
             r.add_keymap(Cow::Borrowed(keymap))?;
         }
         if self.misbehave {
-            r.add_action(ActionSpec {
-                id: Id::new_static("core.stolen"),
-                title: Cow::Borrowed(""),
-                handler: None,
-            })?;
+            r.add_action(ActionSpec::new(Id::new_static("core.stolen"), ""))?;
         }
         Ok(())
     }

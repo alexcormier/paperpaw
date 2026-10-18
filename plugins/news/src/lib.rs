@@ -359,20 +359,16 @@ impl Plugin for News {
             title: Cow::Borrowed("news.title"),
             factory: Box::new(|env, params| Box::new(Choice::new(env, params))),
         })?;
-        r.add_action(ActionSpec {
-            id: OPEN,
-            title: Cow::Borrowed("news.title"),
-            handler: Some(Box::new(|_: &Env<'_>, out: &mut Vec<Command>| {
+        r.add_action(ActionSpec::new(OPEN, "news.title").handler(
+            |_: &Env<'_>, out: &mut Vec<Command>| {
                 out.push(Command::OpenScreen(SCREEN, Params::new()));
-            })),
-        })?;
-        r.add_action(ActionSpec {
-            id: FETCH,
-            title: Cow::Borrowed("news.fetch"),
-            handler: Some(Box::new(|env: &Env<'_>, out: &mut Vec<Command>| {
+            },
+        ))?;
+        r.add_action(ActionSpec::new(FETCH, "news.fetch").handler(
+            |env: &Env<'_>, out: &mut Vec<Command>| {
                 fetch(env, 0, usize::MAX, out);
-            })),
-        })?;
+            },
+        ))?;
         r.on(FETCHED, fetched)?;
         r.add_menu_entry(MenuEntry {
             menu: menus::TOOLS,

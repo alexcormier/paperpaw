@@ -243,11 +243,7 @@ impl Plugin for Reader {
             title: Cow::Borrowed("reader.toc"),
             factory: Box::new(|env, params| Box::new(toc::TocScreen::open(env, params))),
         })?;
-        r.add_action(quireink_sdk::ActionSpec {
-            id: actions::TOC,
-            title: Cow::Borrowed("reader.toc"),
-            handler: None,
-        })?;
+        r.add_action(quireink_sdk::ActionSpec::new(actions::TOC, "reader.toc"))?;
         r.add_screen(ScreenSpec {
             id: ANNOTATIONS_SCREEN,
             title: Cow::Borrowed("reader.annotations"),
@@ -294,11 +290,7 @@ impl Plugin for Reader {
             (actions::CANCEL, "reader.select.cancel"),
             (actions::MORE, "reader.select.more"),
         ] {
-            r.add_action(quireink_sdk::ActionSpec {
-                id,
-                title: Cow::Borrowed(title),
-                handler: None,
-            })?;
+            r.add_action(quireink_sdk::ActionSpec::new(id, title))?;
         }
         // The bar for selected text; plugins add to it.
         for (item, order) in [
@@ -507,35 +499,31 @@ impl Plugin for Reader {
             ),
         ];
         for (id, title, handler) in handlers {
-            r.add_action(quireink_sdk::ActionSpec {
-                id,
-                title: Cow::Borrowed(title),
-                handler: Some(handler),
-            })?;
+            r.add_action(quireink_sdk::ActionSpec::new(id, title).handler(handler))?;
         }
         // A submenu is an action named like its menu: the menu shows it as
         // a submenu, and bound to a key it opens the menu.
-        r.add_action(quireink_sdk::ActionSpec {
-            id: MORE_MENU,
-            title: Cow::Borrowed("reader.more"),
-            handler: Some(Box::new(|_: &Env<'_>, out: &mut Vec<Command>| {
-                out.push(Command::OpenSlot(
-                    slots::MENU,
-                    Params::new().with(params::MENU, String::from(MORE_MENU.as_str())),
-                ));
-            })),
-        })?;
+        r.add_action(
+            quireink_sdk::ActionSpec::new(MORE_MENU, "reader.more").handler(
+                |_: &Env<'_>, out: &mut Vec<Command>| {
+                    out.push(Command::OpenSlot(
+                        slots::MENU,
+                        Params::new().with(params::MENU, String::from(MORE_MENU.as_str())),
+                    ));
+                },
+            ),
+        )?;
         // Font and layout as a panel of controls: changes show at once.
-        r.add_action(quireink_sdk::ActionSpec {
-            id: actions::QUICK_SETTINGS,
-            title: Cow::Borrowed("reader.layout"),
-            handler: Some(Box::new(|_: &Env<'_>, out: &mut Vec<Command>| {
-                out.push(Command::OpenSlot(
-                    slots::PANEL,
-                    Params::new().with(params::MENU, String::from(LAYOUT_MENU.as_str())),
-                ));
-            })),
-        })?;
+        r.add_action(
+            quireink_sdk::ActionSpec::new(actions::QUICK_SETTINGS, "reader.layout").handler(
+                |_: &Env<'_>, out: &mut Vec<Command>| {
+                    out.push(Command::OpenSlot(
+                        slots::PANEL,
+                        Params::new().with(params::MENU, String::from(LAYOUT_MENU.as_str())),
+                    ));
+                },
+            ),
+        )?;
         // A tap at the bottom of a page opens it. Swipes in from the sides
         // turn pages, as swipes do, rather than going back; two fingers
         // apart or together make the text larger or smaller.

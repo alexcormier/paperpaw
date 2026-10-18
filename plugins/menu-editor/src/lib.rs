@@ -76,13 +76,11 @@ impl Plugin for MenuEditor {
                 factory: Box::new(open),
             })?;
         }
-        r.add_action(ActionSpec {
-            id: OPEN,
-            title: Cow::Borrowed("menu-editor.title"),
-            handler: Some(Box::new(|_: &Env<'_>, out: &mut Vec<Command>| {
+        r.add_action(ActionSpec::new(OPEN, "menu-editor.title").handler(
+            |_: &Env<'_>, out: &mut Vec<Command>| {
                 out.push(Command::OpenScreen(MENUS_SCREEN, Params::new()));
-            })),
-        })?;
+            },
+        ))?;
         r.add_menu_entry(MenuEntry {
             menu: menus::SETTINGS,
             item: OPEN,

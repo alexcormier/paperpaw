@@ -128,13 +128,11 @@ impl Plugin for SettingsPlugin {
             title: Cow::Borrowed("settings.secrets"),
             factory: Box::new(|env, params| Box::new(secrets::SecretPage::new(env, params))),
         })?;
-        r.add_action(ActionSpec {
-            id: secrets::OPEN,
-            title: Cow::Borrowed("settings.secrets"),
-            handler: Some(Box::new(|_: &Env<'_>, out: &mut Vec<Command>| {
+        r.add_action(ActionSpec::new(secrets::OPEN, "settings.secrets").handler(
+            |_: &Env<'_>, out: &mut Vec<Command>| {
                 out.push(Command::OpenScreen(secrets::SCREEN, Params::new()));
-            })),
-        })?;
+            },
+        ))?;
         // In the device's part, after the system.
         r.add_menu_entry(MenuEntry {
             menu: menus::SETTINGS,

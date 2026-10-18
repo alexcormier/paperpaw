@@ -15,8 +15,8 @@ use quireink_sdk::library;
 use quireink_sdk::time::{self, AUTO, CLOCK_12H, CLOCK_24H, TIME_ZONES};
 use quireink_sdk::widgets::{self, WidgetSpec};
 use quireink_sdk::{
-    ActionHandler, ActionSpec, Canvas, Color, Command, Cx, Env, Handled, Id, Manifest, MenuEntry,
-    Params, Plugin, Priority, RegisterError, Registrar, SDK_VERSION, Screen, ScreenSpec,
+    ActionHandler, ActionHint, ActionSpec, Canvas, Color, Command, Cx, Env, Handled, Id, Manifest,
+    MenuEntry, Params, Plugin, Priority, RegisterError, Registrar, SDK_VERSION, Screen, ScreenSpec,
     SettingGroupSpec, SettingKind, SettingSpec, SettingValue, SlotSpec, StatusItemSpec,
     StatusValue,
 };
@@ -38,21 +38,46 @@ impl Plugin for CorePlugin {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        // In the row of hints: arrows for moving, short words for the rest.
         let screen_actions = [
-            (actions::NEXT_PAGE, "core.action.next-page"),
-            (actions::PREV_PAGE, "core.action.prev-page"),
-            (actions::UP, "core.action.up"),
-            (actions::DOWN, "core.action.down"),
-            (actions::LEFT, "core.action.left"),
-            (actions::RIGHT, "core.action.right"),
-            (actions::CONFIRM, "core.action.confirm"),
+            (
+                actions::NEXT_PAGE,
+                "core.action.next-page",
+                ActionHint::Icon("chevron-down"),
+            ),
+            (
+                actions::PREV_PAGE,
+                "core.action.prev-page",
+                ActionHint::Icon("chevron-up"),
+            ),
+            (
+                actions::UP,
+                "core.action.up",
+                ActionHint::Icon("chevron-up"),
+            ),
+            (
+                actions::DOWN,
+                "core.action.down",
+                ActionHint::Icon("chevron-down"),
+            ),
+            (
+                actions::LEFT,
+                "core.action.left",
+                ActionHint::Icon("chevron-left"),
+            ),
+            (
+                actions::RIGHT,
+                "core.action.right",
+                ActionHint::Icon("chevron-right"),
+            ),
+            (
+                actions::CONFIRM,
+                "core.action.confirm",
+                label("core.hint.core.confirm"),
+            ),
         ];
-        for (id, title) in screen_actions {
-            r.add_action(ActionSpec {
-                id,
-                title: Cow::Borrowed(title),
-                handler: None,
-            })?;
+        for (id, title, hint) in screen_actions {
+            r.add_action(ActionSpec::new(id, title).hint(hint))?;
         }
 
         let open = |slot: Id| -> ActionHandler {
@@ -72,11 +97,7 @@ impl Plugin for CorePlugin {
             ("core.gestures.own", "core.gestures.own"),
             ("core.gestures.off", "core.gestures.off"),
         ] {
-            r.add_action(ActionSpec {
-                id: Id::new_static(id),
-                title: Cow::Borrowed(title),
-                handler: None,
-            })?;
+            r.add_action(ActionSpec::new(Id::new_static(id), title))?;
         }
         let handled: [(Id, &'static str, ActionHandler); 14] = [
             (
@@ -195,11 +216,14 @@ impl Plugin for CorePlugin {
             library::moved(env.storage, &moved.from, &moved.path);
         })?;
         for (id, title, handler) in handled {
-            r.add_action(ActionSpec {
-                id,
-                title: Cow::Borrowed(title),
-                handler: Some(handler),
-            })?;
+            let hint = match &id {
+                id if *id == actions::BACK => label("core.hint.core.back"),
+                id if *id == actions::MENU => label("core.hint.core.menu"),
+                id if *id == actions::HOME => label("core.hint.core.home"),
+                id if *id == actions::NOTHING => ActionHint::Hidden,
+                _ => ActionHint::Title,
+            };
+            r.add_action(ActionSpec::new(id, title).handler(handler).hint(hint))?;
         }
 
         for (id, title) in [
@@ -837,6 +861,11 @@ fn register_spaces(r: &mut Registrar) -> Result<(), RegisterError> {
         targets: None,
     })?;
     Ok(())
+}
+
+/// A hint that is a word of its own (a translation key).
+fn label(key: &'static str) -> ActionHint {
+    ActionHint::Label(Cow::Borrowed(key))
 }
 
 #[cfg(test)]

@@ -71,13 +71,11 @@ impl Plugin for Setup {
             factory: Box::new(|env, _| Box::new(guide::Guide::new(env))),
         })?;
         r.bind_slot(slots::SETUP, SCREEN, Priority::DEFAULT)?;
-        r.add_action(ActionSpec {
-            id: OPEN,
-            title: Cow::Borrowed("setup.open"),
-            handler: Some(Box::new(|_: &Env<'_>, out: &mut Vec<Command>| {
+        r.add_action(ActionSpec::new(OPEN, "setup.open").handler(
+            |_: &Env<'_>, out: &mut Vec<Command>| {
                 out.push(Command::OpenSlot(slots::SETUP, Params::new()));
-            })),
-        })?;
+            },
+        ))?;
         // In the device's part of the settings, before *About*.
         r.add_menu_entry(MenuEntry {
             menu: menus::SETTINGS,

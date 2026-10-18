@@ -111,13 +111,11 @@ impl Plugin for Lock {
                 .description("lock.setting.on-wake.help"),
         )?;
         let now = locked.clone();
-        r.add_action(ActionSpec {
-            id: NOW,
-            title: Cow::Borrowed("lock.now"),
-            handler: Some(Box::new(move |env: &Env<'_>, out: &mut Vec<Command>| {
+        r.add_action(ActionSpec::new(NOW, "lock.now").handler(
+            move |env: &Env<'_>, out: &mut Vec<Command>| {
                 lock(env, &now, out);
-            })),
-        })?;
+            },
+        ))?;
         r.add_icon(NOW, Cow::Borrowed("lock"))?;
         let start = locked.clone();
         r.on(events::STARTED, move |env, _, out| {

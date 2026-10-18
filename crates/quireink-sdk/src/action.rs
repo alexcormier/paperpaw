@@ -16,11 +16,48 @@ pub type ActionHandler = Box<dyn Fn(&Env<'_>, &mut Vec<Command>)>;
 ///
 /// Actions without a handler are *screen actions*: their meaning depends on
 /// the active screen (e.g. `core.next-page` in a reader vs. in a list).
+///
+/// ```
+/// use quireink_sdk::{ActionHint, ActionSpec, Command, Id};
+///
+/// const OPEN: Id = Id::new_static("demo.open");
+/// let spec = ActionSpec::new(OPEN, "demo.open")
+///     .handler(|_, out| out.push(Command::Back))
+///     .hint(ActionHint::Label("demo.open.short".into()));
+/// ```
+#[non_exhaustive]
 pub struct ActionSpec {
     pub id: Id,
     /// Translation key of the action's display name (for key map editors).
     pub title: Cow<'static, str>,
     pub handler: Option<ActionHandler>,
+    /// How the row of hints shows it where a screen leaves that to the
+    /// action ([`Hint::Default`](crate::Hint::Default)).
+    pub hint: ActionHint,
+}
+
+impl ActionSpec {
+    /// A screen action `id`, called `title` (a translation key).
+    pub fn new(id: impl Into<Id>, title: impl Into<Cow<'static, str>>) -> Self {
+        Self {
+            id: id.into(),
+            title: title.into(),
+            handler: None,
+            hint: ActionHint::Title,
+        }
+    }
+
+    /// What it does where the screen shown does not take it.
+    pub fn handler(mut self, handler: impl Fn(&Env<'_>, &mut Vec<Command>) + 'static) -> Self {
+        self.handler = Some(Box::new(handler));
+        self
+    }
+
+    /// How the row of hints shows it.
+    pub fn hint(mut self, hint: ActionHint) -> Self {
+        self.hint = hint;
+        self
+    }
 }
 
 impl fmt::Debug for ActionSpec {
@@ -29,8 +66,26 @@ impl fmt::Debug for ActionSpec {
             .field("id", &self.id)
             .field("title", &self.title)
             .field("handler", &self.handler.is_some())
+            .field("hint", &self.hint)
             .finish()
     }
+}
+
+/// How the row of hints below the screen shows an action, unless the
+/// screen says otherwise ([`Screen::hint`](crate::Screen::hint)).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ActionHint {
+    /// Its title.
+    #[default]
+    Title,
+    /// A word shorter than its title (a translation key), e.g. *Select*
+    /// for confirming.
+    Label(Cow<'static, str>),
+    /// An icon ([`icons`](crate::icons)), e.g. an arrow for moving.
+    Icon(&'static str),
+    /// Nothing, e.g. for an action that does nothing.
+    Hidden,
 }
 
 /// Every registered action, e.g. for menu and key map editors.

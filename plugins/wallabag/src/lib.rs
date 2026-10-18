@@ -472,21 +472,17 @@ impl Plugin for Wallabag {
             title: Cow::Borrowed("wallabag.title"),
             factory: Box::new(|env, _| Box::new(SetupScreen::new(env))),
         })?;
-        r.add_action(ActionSpec {
-            id: OPEN,
-            title: Cow::Borrowed("wallabag.title"),
-            handler: Some(Box::new(|_: &Env<'_>, out: &mut Vec<Command>| {
+        r.add_action(ActionSpec::new(OPEN, "wallabag.title").handler(
+            |_: &Env<'_>, out: &mut Vec<Command>| {
                 out.push(Command::OpenScreen(SCREEN, Params::new()));
-            })),
-        })?;
+            },
+        ))?;
         let s = state.clone();
-        r.add_action(ActionSpec {
-            id: FETCH,
-            title: Cow::Borrowed("wallabag.fetch"),
-            handler: Some(Box::new(move |env: &Env<'_>, out: &mut Vec<Command>| {
+        r.add_action(ActionSpec::new(FETCH, "wallabag.fetch").handler(
+            move |env: &Env<'_>, out: &mut Vec<Command>| {
                 s.borrow_mut().start(env, out);
-            })),
-        })?;
+            },
+        ))?;
         r.add_menu_entry(MenuEntry {
             menu: menus::TOOLS,
             item: OPEN,

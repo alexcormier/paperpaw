@@ -129,13 +129,13 @@ impl Plugin for Home {
             title: Cow::Borrowed("home.tips.title"),
             factory: Box::new(|env, _| Box::new(drawer::TipsScreen::new(env))),
         })?;
-        r.add_action(quireink_sdk::ActionSpec {
-            id: ALL_TOOLS,
-            title: Cow::Borrowed("home.drawer"),
-            handler: Some(Box::new(|_: &Env<'_>, out: &mut Vec<Command>| {
-                out.push(Command::OpenScreen(DRAWER_SCREEN, Params::new()));
-            })),
-        })?;
+        r.add_action(
+            quireink_sdk::ActionSpec::new(ALL_TOOLS, "home.drawer").handler(
+                |_: &Env<'_>, out: &mut Vec<Command>| {
+                    out.push(Command::OpenScreen(DRAWER_SCREEN, Params::new()));
+                },
+            ),
+        )?;
         r.add_icon(ALL_TOOLS, Cow::Borrowed("apps"))?;
         // As on phones: up on the home screen shows every tool.
         r.add_keymap(Cow::Borrowed(

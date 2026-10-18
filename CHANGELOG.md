@@ -6,6 +6,11 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: `ActionSpec::new(id, title)` with `.handler(…)` and `.hint(…)`;
+  the struct is `#[non_exhaustive]`, so actions can learn more without
+  breaking plugins. How the row of hints shows an action (its title, a
+  word of its own, an icon or nothing) is the action's `ActionHint`,
+  no longer decided by the kernel.
 - X4 firmware: released firmware leaves out remote control over USB
   (the `remote` feature, for testing), 34 KB less. Inside, the main loop
   is a `Firmware` with a method for each step and the pins are in one

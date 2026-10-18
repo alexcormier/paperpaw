@@ -546,10 +546,8 @@ impl Plugin for Kosync {
 
         // "Sync progress" in the reading menu's "More".
         let s = state;
-        r.add_action(ActionSpec {
-            id: SYNC_NOW,
-            title: Cow::Borrowed("kosync.sync-now"),
-            handler: Some(Box::new(move |env: &Env<'_>, out: &mut Vec<Command>| {
+        r.add_action(ActionSpec::new(SYNC_NOW, "kosync.sync-now").handler(
+            move |env: &Env<'_>, out: &mut Vec<Command>| {
                 let mut state = s.borrow_mut();
                 state.load(env);
                 if !env.caps.network || !state.signed_in(env) {
@@ -561,8 +559,8 @@ impl Plugin for Kosync {
                 };
                 state.push(env, out, true);
                 state.pull(env, out, &path, true);
-            })),
-        })?;
+            },
+        ))?;
         r.add_menu_entry(MenuEntry {
             menu: Id::new_static("reader.more"),
             item: SYNC_NOW,

@@ -55,11 +55,7 @@ impl Plugin for Diagnostics {
             factory: Box::new(|env, _| Box::new(DiagnosticsScreen::new(env))),
         })?;
         r.bind_slot(slots::HOME, SCREEN, Priority::FALLBACK)?;
-        r.add_action(ActionSpec {
-            id: RESET,
-            title: Cow::Borrowed("diagnostics.action.reset"),
-            handler: None,
-        })?;
+        r.add_action(ActionSpec::new(RESET, "diagnostics.action.reset"))?;
         r.add_setting(
             SettingSpec::number(&PAGES, "diagnostics.setting.pages", 1, 10_000, 20)
                 .group(groups::SYSTEM)

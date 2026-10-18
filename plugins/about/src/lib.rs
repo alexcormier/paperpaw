@@ -8,7 +8,6 @@
 extern crate alloc;
 
 use alloc::borrow::Cow;
-use alloc::boxed::Box;
 use alloc::format;
 use alloc::vec::Vec;
 
@@ -54,10 +53,8 @@ impl Plugin for About {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_action(ActionSpec {
-            id: OPEN,
-            title: Cow::Borrowed("about.title"),
-            handler: Some(Box::new(|env: &Env<'_>, out: &mut Vec<Command>| {
+        r.add_action(ActionSpec::new(OPEN, "about.title").handler(
+            |env: &Env<'_>, out: &mut Vec<Command>| {
                 let path = page_path();
                 let _ = env.storage.create_dir(&Env::plugin_dir(PLUGIN.as_str()));
                 if env.storage.write(&path, page(env).as_bytes()).is_ok() {
@@ -66,8 +63,8 @@ impl Plugin for About {
                         Params::new().with(params::PATH, path),
                     ));
                 }
-            })),
-        })?;
+            },
+        ))?;
         // In the device's part of the settings, last.
         r.add_menu_entry(MenuEntry {
             menu: menus::SETTINGS,

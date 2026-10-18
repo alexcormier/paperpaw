@@ -107,13 +107,11 @@ impl Plugin for Update {
             title: Cow::Borrowed("update.title"),
             factory: Box::new(|env, _| Box::new(page::UpdatePage::new(env))),
         })?;
-        r.add_action(ActionSpec {
-            id: OPEN,
-            title: Cow::Borrowed("update.title"),
-            handler: Some(Box::new(|_: &Env<'_>, out: &mut Vec<Command>| {
+        r.add_action(ActionSpec::new(OPEN, "update.title").handler(
+            |_: &Env<'_>, out: &mut Vec<Command>| {
                 out.push(Command::OpenScreen(PAGE, Params::new()));
-            })),
-        })?;
+            },
+        ))?;
         // In the device's part of the settings, before *About*.
         r.add_menu_entry(MenuEntry {
             menu: menus::SETTINGS,

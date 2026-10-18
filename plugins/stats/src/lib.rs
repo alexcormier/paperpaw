@@ -343,10 +343,8 @@ impl Plugin for Stats {
             factory: Box::new(|env, params| Box::new(book::BookView::new(env, params))),
         })?;
         let s = state;
-        r.add_action(ActionSpec {
-            id: OPEN,
-            title: Cow::Borrowed("stats.title"),
-            handler: Some(Box::new(move |env: &Env<'_>, out: &mut Vec<Command>| {
+        r.add_action(ActionSpec::new(OPEN, "stats.title").handler(
+            move |env: &Env<'_>, out: &mut Vec<Command>| {
                 // Recorded so far, so the views include the current page.
                 if let Some(now) = time::unix_seconds(env) {
                     let mut state = s.borrow_mut();
@@ -361,8 +359,8 @@ impl Plugin for Stats {
                     None => Params::new(),
                 };
                 out.push(Command::OpenScreen(OVERVIEW, params));
-            })),
-        })?;
+            },
+        ))?;
         for (menu, order) in [(menus::TOOLS, 35), (Id::new_static("reader.more"), 30)] {
             r.add_menu_entry(MenuEntry {
                 menu,

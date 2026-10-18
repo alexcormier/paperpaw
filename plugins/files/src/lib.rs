@@ -147,16 +147,16 @@ impl Plugin for Files {
                 "star",
             ),
         ] {
-            r.add_action(quireink_sdk::ActionSpec {
-                id: action.clone(),
-                title: Cow::Borrowed(title),
-                handler: Some(Box::new(move |_: &Env<'_>, out: &mut Vec<Command>| {
-                    out.push(Command::OpenScreen(
-                        SHELF_SCREEN,
-                        Params::new().with(params::MODE, mode),
-                    ));
-                })),
-            })?;
+            r.add_action(
+                quireink_sdk::ActionSpec::new(action.clone(), title).handler(
+                    move |_: &Env<'_>, out: &mut Vec<Command>| {
+                        out.push(Command::OpenScreen(
+                            SHELF_SCREEN,
+                            Params::new().with(params::MODE, mode),
+                        ));
+                    },
+                ),
+            )?;
             r.add_icon(action, Cow::Borrowed(icon))?;
         }
         r.bind_slot(slots::CHOOSE_FOLDER, CHOOSE_FOLDER, Priority::DEFAULT)?;
@@ -196,13 +196,15 @@ impl Plugin for Files {
             .group(groups::LIBRARY)
             .description("files.setting.sort.help"),
         )?;
-        r.add_action(quireink_sdk::ActionSpec {
-            id: SEARCH,
-            title: Cow::Borrowed("files.search"),
-            handler: Some(Box::new(|env: &Env<'_>, out: &mut Vec<Command>| {
-                out.push(ask::text(env.i18n.tr("files.search.prompt"), &SEARCH_ENTERED).command());
-            })),
-        })?;
+        r.add_action(
+            quireink_sdk::ActionSpec::new(SEARCH, "files.search").handler(
+                |env: &Env<'_>, out: &mut Vec<Command>| {
+                    out.push(
+                        ask::text(env.i18n.tr("files.search.prompt"), &SEARCH_ENTERED).command(),
+                    );
+                },
+            ),
+        )?;
         r.add_icon(SEARCH, Cow::Borrowed("search"))?;
         r.on(SEARCH_ENTERED, |_, typed, out| {
             let text = typed.text.trim();
@@ -216,16 +218,16 @@ impl Plugin for Files {
             }
         })?;
         // The shelves as a submenu: an action named like its menu.
-        r.add_action(quireink_sdk::ActionSpec {
-            id: SHELVES_MENU,
-            title: Cow::Borrowed("files.shelves"),
-            handler: Some(Box::new(|_: &Env<'_>, out: &mut Vec<Command>| {
-                out.push(Command::OpenSlot(
-                    slots::MENU,
-                    Params::new().with(params::MENU, String::from(SHELVES_MENU.as_str())),
-                ));
-            })),
-        })?;
+        r.add_action(
+            quireink_sdk::ActionSpec::new(SHELVES_MENU, "files.shelves").handler(
+                |_: &Env<'_>, out: &mut Vec<Command>| {
+                    out.push(Command::OpenSlot(
+                        slots::MENU,
+                        Params::new().with(params::MENU, String::from(SHELVES_MENU.as_str())),
+                    ));
+                },
+            ),
+        )?;
         r.add_icon(SHELVES_MENU, Cow::Borrowed("books"))?;
         for (item, order) in [
             (FAVOURITES, 5),

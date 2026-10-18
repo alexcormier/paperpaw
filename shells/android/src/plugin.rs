@@ -66,13 +66,13 @@ impl Plugin for AndroidPlugin {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let app = self.app.clone();
-        r.add_action(ActionSpec {
-            id: ALLOW_STORAGE,
-            title: Cow::Borrowed("android.allow-storage"),
-            handler: Some(Box::new(move |_: &Env<'_>, _: &mut Vec<Command>| {
-                crate::access::request(&app);
-            })),
-        })?;
+        r.add_action(
+            ActionSpec::new(ALLOW_STORAGE, "android.allow-storage").handler(
+                move |_: &Env<'_>, _: &mut Vec<Command>| {
+                    crate::access::request(&app);
+                },
+            ),
+        )?;
         if !self.shared_storage {
             // First on the home screen until access is granted.
             r.add_menu_entry(MenuEntry {

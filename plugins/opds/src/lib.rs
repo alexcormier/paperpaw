@@ -173,21 +173,17 @@ impl Plugin for Opds {
             title: Cow::Borrowed("opds.title"),
             factory: Box::new(|env, params| Box::new(Choice::new(env, params))),
         })?;
-        r.add_action(ActionSpec {
-            id: OPEN,
-            title: Cow::Borrowed("opds.title"),
-            handler: Some(Box::new(|_: &Env<'_>, out: &mut Vec<Command>| {
+        r.add_action(ActionSpec::new(OPEN, "opds.title").handler(
+            |_: &Env<'_>, out: &mut Vec<Command>| {
                 out.push(Command::OpenScreen(LIST_SCREEN, Params::new()));
-            })),
-        })?;
+            },
+        ))?;
         let shared = state.clone();
-        r.add_action(ActionSpec {
-            id: SYNC,
-            title: Cow::Borrowed("opds.sync-all"),
-            handler: Some(Box::new(move |env: &Env<'_>, out: &mut Vec<Command>| {
+        r.add_action(ActionSpec::new(SYNC, "opds.sync-all").handler(
+            move |env: &Env<'_>, out: &mut Vec<Command>| {
                 shared.borrow_mut().start(env, marked(env), out);
-            })),
-        })?;
+            },
+        ))?;
         r.add_menu_entry(MenuEntry {
             menu: menus::TOOLS,
             item: OPEN,
