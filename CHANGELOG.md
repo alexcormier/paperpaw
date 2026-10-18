@@ -6,6 +6,13 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Covers are decoded as large as the screen shows them in a grid (three
+  eighths of its longer side, at least 300 pixels): on large screens
+  they no longer stay smaller than the places of books without a cover.
+  The library reads books' details again once for it. SDK:
+  `OpenOptions::cover_fit`, `cover_fit`, `COVER_FIT`.
+- Library: the order, the view and the library folder have icons in the
+  library's menu, as its other rows.
 - Covers made small are kept as the panel shows them: in black and white,
   dithered, on panels of black and white alone (a quarter of the memory:
   a grid of covers on the X4 takes some 20 KB, was 90), in grays or in

@@ -42,6 +42,7 @@ pub struct CbzDocument {
     color: bool,
     /// Pages decoded at most this large.
     image_fit: Fit,
+    cover_fit: Fit,
 }
 
 /// Whether `name` is a picture QuireInk shows.
@@ -143,6 +144,7 @@ impl CbzDocument {
             metadata,
             color: options.color,
             image_fit: options.image_fit,
+            cover_fit: options.cover_fit,
         })
     }
 
@@ -283,8 +285,8 @@ impl Document for CbzDocument {
     }
 
     fn cover(&self, storage: &dyn Storage) -> Result<Option<ImageRef>, DocumentError> {
-        let cache = format!("{}/cover", self.cache);
-        Ok(self.picture(storage, 0, &cache, convert::COVER_FIT))
+        let cache = format!("{}/cover-{}", self.cache, self.cover_fit.long);
+        Ok(self.picture(storage, 0, &cache, self.cover_fit))
     }
 }
 

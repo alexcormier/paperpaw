@@ -135,8 +135,6 @@ pub(crate) struct CachePaths {
 /// Images are decoded at most this large where the screen does not say
 /// (see `OpenOptions::image_fit`); readers scale them to the page.
 pub(crate) const IMAGE_FIT: Fit = quireink_sdk::IMAGE_FIT;
-/// A decoded cover: enough for the library and home screen.
-pub(crate) const COVER_FIT: Fit = Fit::side(300);
 
 pub(crate) fn encode_kind(kind: BlockKind) -> (u8, u8) {
     match kind {

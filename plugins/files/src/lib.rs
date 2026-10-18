@@ -206,6 +206,14 @@ impl Plugin for Files {
             ),
         )?;
         r.add_icon(SEARCH, Cow::Borrowed("search"))?;
+        // The menu's settings, with icons as its other rows.
+        for (setting, icon) in [
+            (Id::from(SORT), "sort-ascending"),
+            (VIEW.into(), "layout"),
+            (ROOT.into(), "folder"),
+        ] {
+            r.add_icon(setting, Cow::Borrowed(icon))?;
+        }
         r.on(SEARCH_ENTERED, |_, typed, out| {
             let text = typed.text.trim();
             if !text.is_empty() {

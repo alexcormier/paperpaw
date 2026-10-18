@@ -2170,11 +2170,13 @@ pub fn quireink_sdk::Metrics::pt(&self, f32) -> f32
 pub const fn quireink_sdk::Metrics::tenth_mm(&self, u32) -> u32
 #[non_exhaustive] pub struct quireink_sdk::OpenOptions
 pub quireink_sdk::OpenOptions::color: bool
+pub quireink_sdk::OpenOptions::cover_fit: quireink_image::Fit
 pub quireink_sdk::OpenOptions::css: alloc::string::String
 pub quireink_sdk::OpenOptions::image_fit: quireink_image::Fit
 pub quireink_sdk::OpenOptions::publisher_styles: bool
 impl quireink_sdk::OpenOptions
 pub fn quireink_sdk::OpenOptions::color(self, bool) -> Self
+pub fn quireink_sdk::OpenOptions::cover_fit(self, quireink_image::Fit) -> Self
 pub fn quireink_sdk::OpenOptions::css(self, alloc::string::String) -> Self
 pub fn quireink_sdk::OpenOptions::image_fit(self, quireink_image::Fit) -> Self
 pub fn quireink_sdk::OpenOptions::publisher_styles(self, bool) -> Self
@@ -2428,6 +2430,7 @@ pub fn quireink_sdk::Version::parse(&str) -> core::option::Option<quireink_sdk::
 pub fn quireink_sdk::Version::satisfies(&self, &quireink_sdk::Version) -> bool
 impl core::fmt::Display for quireink_sdk::Version
 pub fn quireink_sdk::Version::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub const quireink_sdk::COVER_FIT: quireink_image::Fit
 pub const quireink_sdk::IMAGE_FIT: quireink_image::Fit
 pub const quireink_sdk::MAX_CLIPBOARD: usize
 pub const quireink_sdk::SDK_VERSION: quireink_sdk::Version
@@ -2527,6 +2530,7 @@ pub fn quireink_sdk::ui::items::ItemsScreen::on_pointer(&mut self, &quireink_pla
 pub fn quireink_sdk::ui::items::ItemsScreen::on_show(&mut self, &mut quireink_sdk::Cx<'_, '_>)
 pub fn quireink_sdk::ui::items::ItemsScreen::on_timer(&mut self, &mut quireink_sdk::Cx<'_, '_>)
 pub fn quireink_sdk::ui::items::ItemsScreen::region(&self, &quireink_sdk::Env<'_>) -> core::option::Option<quireink_platform::geometry::Rect>
+pub fn quireink_sdk::cover_fit(quireink_image::Fit) -> quireink_image::Fit
 pub fn quireink_sdk::read_file(&dyn quireink_platform::storage::Storage, &str, usize) -> core::result::Result<alloc::vec::Vec<u8>, quireink_platform::storage::StorageError>
 pub type quireink_sdk::ActionHandler = alloc::boxed::Box<dyn core::ops::function::Fn(&quireink_sdk::Env<'_>, &mut alloc::vec::Vec<quireink_sdk::Command>)>
 pub type quireink_sdk::EventHandler = alloc::boxed::Box<dyn core::ops::function::Fn(&quireink_sdk::Env<'_>, &quireink_sdk::Params, &mut alloc::vec::Vec<quireink_sdk::Command>)>

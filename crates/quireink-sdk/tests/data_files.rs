@@ -32,7 +32,9 @@ fn library_records_and_lists() {
             include_str!("../testdata/opened.txt.v1"),
         );
     let book = library::book(&storage, "books/a.epub").expect("the record of books/a.epub");
-    assert!(book.indexed);
+    // Written by an older version of the details (3): read, and to be
+    // read again from the book (`docs/data-files.md`).
+    assert!(!book.indexed);
     assert_eq!(book.title.as_deref(), Some("Anna Karenina"));
     assert_eq!(book.author.as_deref(), Some("Leo Tolstoy"));
     assert_eq!(book.series.as_deref(), Some("  Classics "));

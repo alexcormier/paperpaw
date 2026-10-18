@@ -35,10 +35,23 @@ pub struct OpenOptions {
     /// The size pictures are decoded to at most: as large as they show on
     /// the screen, so a small device does not decode what it cannot show.
     pub image_fit: Fit,
+    /// The size covers are decoded to at most ([`Document::cover`](crate::document::Document::cover)):
+    /// as large as lists and the home screen show them.
+    pub cover_fit: Fit,
 }
 
 /// The size of pictures where the screen does not say otherwise.
 pub const IMAGE_FIT: Fit = Fit::side(1600);
+
+/// The size of covers where the screen does not say otherwise.
+pub const COVER_FIT: Fit = Fit::side(300);
+
+/// The size of covers on a screen whose pictures fit `screen`: three
+/// eighths of its longer side (about as a grid of covers shows them), at
+/// least [`COVER_FIT`].
+pub fn cover_fit(screen: Fit) -> Fit {
+    Fit::side((screen.long * 3 / 8).max(COVER_FIT.long))
+}
 
 impl Default for OpenOptions {
     fn default() -> Self {
@@ -47,6 +60,7 @@ impl Default for OpenOptions {
             css: String::new(),
             color: false,
             image_fit: IMAGE_FIT,
+            cover_fit: COVER_FIT,
         }
     }
 }
@@ -72,6 +86,12 @@ impl OpenOptions {
     /// With pictures decoded no larger than `fit` allows.
     pub fn image_fit(mut self, fit: Fit) -> Self {
         self.image_fit = fit;
+        self
+    }
+
+    /// With covers decoded no larger than `fit` allows.
+    pub fn cover_fit(mut self, fit: Fit) -> Self {
+        self.cover_fit = fit;
         self
     }
 }
@@ -133,7 +153,11 @@ impl Formats {
     /// screen shows them.
     pub fn options(&self) -> OpenOptions {
         let fit = self.image_fit.map_or(IMAGE_FIT, |f| f.min(IMAGE_FIT));
-        OpenOptions::default().color(self.color).image_fit(fit)
+        let covers = self.image_fit.map_or(COVER_FIT, cover_fit);
+        OpenOptions::default()
+            .color(self.color)
+            .image_fit(fit)
+            .cover_fit(covers)
     }
 
     /// Releases unused capacity once registration is complete.

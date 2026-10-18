@@ -49,8 +49,9 @@ const MAX_OPENED: usize = 100;
 /// Favourites kept at most.
 const MAX_FAVOURITES: usize = 500;
 /// What the details hold; books read with another version are read
-/// again (2 added the series, 3 the tags).
-const DETAILS: u32 = 3;
+/// again (2 added the series, 3 the tags, 4 covers as large as the
+/// screen shows them).
+const DETAILS: u32 = 4;
 
 /// What the library knows of a book.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]

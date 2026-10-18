@@ -372,6 +372,8 @@ pub struct Fb2Document {
     color: bool,
     /// Pictures decoded at most this large.
     image_fit: Fit,
+    /// The cover decoded at most this large.
+    cover_fit: Fit,
     /// Size of the file: the length until it is converted.
     size: u32,
     length: Cell<u32>,
@@ -393,7 +395,7 @@ impl Fb2Document {
         options: &quireink_sdk::OpenOptions,
     ) -> Result<Self, DocumentError> {
         let (styles, color) = (options.publisher_styles, options.color);
-        let image_fit = options.image_fit;
+        let (image_fit, cover_fit) = (options.image_fit, options.cover_fit);
         let size = storage.size(path)?;
         let head = crate::head(storage, path)?;
         let mut cache = format!(
@@ -464,6 +466,7 @@ impl Fb2Document {
             styles,
             color,
             image_fit,
+            cover_fit,
             size: u32::try_from(size).unwrap_or(u32::MAX - 1),
             length: Cell::new(UNKNOWN),
         })
@@ -640,13 +643,13 @@ impl Document for Fb2Document {
         let Some(id) = &self.cover else {
             return Ok(None);
         };
-        let base = format!("{}/cover", self.paths.dir);
+        let base = format!("{}/cover-{}", self.paths.dir, self.cover_fit.long);
         let cache = crate::pictures::file(&base, self.color);
         decode_binaries(
             storage,
             &self.path,
             self.encoding,
-            &[(id.clone(), cache, convert::COVER_FIT)],
+            &[(id.clone(), cache, self.cover_fit)],
             &self.paths.dir,
             self.color,
         )?;

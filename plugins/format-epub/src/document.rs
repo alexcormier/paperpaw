@@ -45,6 +45,8 @@ pub struct EpubDocument {
     color: bool,
     /// Pictures decoded at most this large.
     image_fit: Fit,
+    /// The cover decoded at most this large.
+    cover_fit: Fit,
     /// Archive path of the cover image.
     cover: Option<String>,
     /// One's own stylesheets for this book (see [`user_css`]), applied
@@ -240,7 +242,14 @@ impl EpubDocument {
         path: &str,
         styles: bool,
     ) -> Result<Self, DocumentError> {
-        Self::open_styled(storage, path, styles, "", false, convert::IMAGE_FIT)
+        Self::open_styled(
+            storage,
+            path,
+            styles,
+            "",
+            false,
+            (convert::IMAGE_FIT, quireink_sdk::COVER_FIT),
+        )
     }
 
     /// Opens a book as `options` say: with its styles or not, and with
@@ -256,7 +265,7 @@ impl EpubDocument {
             options.publisher_styles,
             &options.css,
             options.color,
-            options.image_fit,
+            (options.image_fit, options.cover_fit),
         )
     }
 
@@ -285,7 +294,7 @@ impl EpubDocument {
         styles: bool,
         plugin_css: &str,
         color: bool,
-        image_fit: Fit,
+        (image_fit, cover_fit): (Fit, Fit),
     ) -> Result<Self, DocumentError> {
         let archive = ZipArchive::open(storage, path).map_err(package::error)?;
         let cache = book_cache(path);
@@ -320,6 +329,7 @@ impl EpubDocument {
             styles,
             color,
             image_fit,
+            cover_fit,
             user_css,
             pages: core::cell::RefCell::new(None),
             known: core::cell::RefCell::new(None),
@@ -515,7 +525,8 @@ impl Document for EpubDocument {
         let Some(source) = &self.cover else {
             return Ok(None);
         };
-        let base = alloc::format!("{}/cover", self.cache);
+        // Named by its size: decoded anew for a screen that shows it larger.
+        let base = alloc::format!("{}/cover-{}", self.cache, self.cover_fit.long);
         if !crate::pictures::has(storage, &base, self.color) {
             convert::decode_image(
                 storage,
@@ -523,7 +534,7 @@ impl Document for EpubDocument {
                 source,
                 &crate::pictures::file(&base, self.color),
                 &self.cache,
-                convert::COVER_FIT,
+                self.cover_fit,
                 self.color,
             )?;
         }
