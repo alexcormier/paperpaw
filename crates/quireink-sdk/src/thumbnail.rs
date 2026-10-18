@@ -210,8 +210,13 @@ impl Thumbnail {
     }
 
     /// Draws it with its top left corner at `x`, `y`: the rows inside the
-    /// canvas clip only.
+    /// canvas clip only. A picture made small: it does not count as a
+    /// large one that leaves ghosts ([`Canvas::small_pictures`]).
     pub fn draw(&self, canvas: &mut Canvas<'_>, x: u16, y: u16) {
+        canvas.small_pictures(|canvas| self.draw_rows(canvas, x, y));
+    }
+
+    fn draw_rows(&self, canvas: &mut Canvas<'_>, x: u16, y: u16) {
         let clip = canvas.clip();
         let top = u32::from(y);
         let first = top.max(u32::from(clip.y));

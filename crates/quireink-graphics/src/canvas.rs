@@ -154,6 +154,16 @@ impl<'a> Canvas<'a> {
         }
     }
 
+    /// Draws small pictures with `draw` (e.g. covers in a list): they do
+    /// not count as pictures that leave ghosts on e-paper, which a full
+    /// refresh clears after large ones
+    /// ([`Framebuffer::take_pictured`]).
+    pub fn small_pictures(&mut self, draw: impl FnOnce(&mut Canvas<'_>)) {
+        let was = self.framebuffer.set_counting(false);
+        draw(self);
+        self.framebuffer.set_counting(was);
+    }
+
     /// Washes what is drawn in `area` out towards the paper, e.g. what
     /// lies below a menu, so that the menu stands out (on panels of black
     /// and white, every other pixel paper).
@@ -411,6 +421,18 @@ mod tests {
         gray.canvas().clear(Color::BLACK);
         gray.canvas().wash(Rect::new(0, 0, 4, 1));
         assert_eq!(gray.view().pixel(0, 0), Color::gray(170));
+    }
+
+    #[test]
+    fn small_pictures_do_not_count() {
+        let mut fb = Framebuffer::new(10, 2, PixelFormat::Gray8).unwrap();
+        fb.canvas().draw_gray_row(0, 0, &[100; 10]);
+        fb.canvas()
+            .small_pictures(|canvas| canvas.draw_gray_row(0, 1, &[100; 10]));
+        assert_eq!(fb.take_pictured(), 10);
+        // Counted again after.
+        fb.canvas().draw_gray_row(0, 1, &[100; 4]);
+        assert_eq!(fb.take_pictured(), 4);
     }
 
     #[test]

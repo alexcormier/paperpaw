@@ -6,6 +6,11 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Covers made small (lists, grids) no longer count as large pictures
+  that leave ghosts: a page of the library's grid refreshes quickly on
+  the X4 (about 0.5 s, was a full refresh of 1.7 s); large pictures and
+  the periodic full refresh stay as they were. Graphics:
+  `Canvas::small_pictures`.
 - Covers are decoded as large as the screen shows them in a grid (three
   eighths of its longer side, at least 300 pixels): on large screens
   they no longer stay smaller than the places of books without a cover.

@@ -30,6 +30,9 @@ pub struct Framebuffer {
     saturation: u16,
     /// Pixels of pictures drawn since [`Framebuffer::take_pictured`].
     pictured: u32,
+    /// Pictures drawn now count there (not small ones, see
+    /// [`Canvas::small_pictures`](crate::Canvas::small_pictures)).
+    counting: bool,
 }
 
 impl Framebuffer {
@@ -70,6 +73,7 @@ impl Framebuffer {
             pictures_kept: false,
             saturation: 100,
             pictured: 0,
+            counting: true,
         })
     }
 
@@ -365,8 +369,14 @@ impl Framebuffer {
         core::mem::take(&mut self.pictured)
     }
 
+    /// Whether pictures drawn from now count as pictures
+    /// ([`Framebuffer::take_pictured`]); the earlier setting.
+    pub(crate) fn set_counting(&mut self, counting: bool) -> bool {
+        core::mem::replace(&mut self.counting, counting)
+    }
+
     pub(crate) fn put_gray(&mut self, x: u16, y: u16, gray: u8) {
-        self.pictured = self.pictured.saturating_add(1);
+        self.pictured = self.pictured.saturating_add(u32::from(self.counting));
         /// 4×4 Bayer matrix.
         const BAYER: [[u8; 4]; 4] = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
         let gray = match self.format.gray_levels() {
@@ -394,7 +404,7 @@ impl Framebuffer {
     /// formats; on gray ones to its gray, as [`Framebuffer::put_gray`].
     pub(crate) fn put_rgb(&mut self, x: u16, y: u16, rgb: [u8; 3]) {
         if self.format.is_color() {
-            self.pictured = self.pictured.saturating_add(1);
+            self.pictured = self.pictured.saturating_add(u32::from(self.counting));
             let rgb = saturate(rgb, self.saturation);
             let color = Color::rgb(rgb[0], rgb[1], rgb[2]);
             // Inverted once more to stay as it is, where pictures are kept.
