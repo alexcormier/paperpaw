@@ -1,14 +1,17 @@
 //! [`GridView`]: a grid of widgets and tools on a screen, edited in place.
 
+use alloc::boxed::Box;
 use alloc::format;
-use alloc::string::{String, ToString};
+use alloc::string::ToString;
 use alloc::vec::Vec;
+use core::fmt;
 
 use super::{Cells, Geometry, Item, What, dragged, draw_tool};
 use crate::builtin::{actions, params, slots};
 use crate::event::Event;
 use crate::ui::choice::{self, Picked};
 use crate::ui::{self, UiStyle};
+use crate::widgets::Widget;
 use crate::{
     Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Hint, Id, Params, Point,
     PointerEvent, PointerPhase, Rect, RefreshMode,
@@ -46,13 +49,23 @@ impl GridResponse {
     }
 }
 
-/// An item on the grid: where it is and what it showed when drawn.
-#[derive(Debug)]
+/// An item on the grid: where it is, and its widget, which keeps what it
+/// shows.
 struct Shown {
     item: Item,
     cells: Cells,
     area: Rect,
-    shown: Option<String>,
+    widget: Option<Box<dyn Widget>>,
+}
+
+impl fmt::Debug for Shown {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Shown")
+            .field("item", &self.item)
+            .field("cells", &self.cells)
+            .field("area", &self.area)
+            .finish_non_exhaustive()
+    }
 }
 
 /// What editing is doing.
@@ -153,6 +166,7 @@ impl GridView {
     /// Places `items` in `geometry` (those without room are kept, not
     /// shown), with the screen's own `buttons` after them (their area and
     /// a number the screen knows them by, see [`GridResponse::Button`]).
+    /// The widgets are made anew, what they show read.
     pub fn layout(
         &mut self,
         env: &Env<'_>,
@@ -170,8 +184,8 @@ impl GridView {
         self.items = placed
             .into_iter()
             .map(|(item, cells)| Shown {
-                shown: match &item.what {
-                    What::Widget(id) => env.widgets.signature(id, env),
+                widget: match &item.what {
+                    What::Widget(id) => env.widgets.make(id, env),
                     What::Tool(_) => None,
                 },
                 area: geometry.rect(cells),
@@ -193,14 +207,15 @@ impl GridView {
                 self.targets.push((shown.area, Target::Item(index)));
                 continue;
             }
-            match &shown.item.what {
-                What::Widget(id) => {
-                    for target in env.widgets.targets(id, env, shown.area) {
+            match (&shown.item.what, &shown.widget) {
+                (What::Widget(_), Some(widget)) => {
+                    for target in widget.targets(env, shown.area) {
                         self.targets
                             .push((target.area, Target::Run(target.command)));
                     }
                 }
-                What::Tool(action) => self
+                (What::Widget(_), None) => {}
+                (What::Tool(action), _) => self
                     .targets
                     .push((shown.area, Target::Run(Command::RunAction(action.clone())))),
             }
@@ -248,33 +263,34 @@ impl GridView {
         items
     }
 
-    /// Asks to draw the items showing widget `id` again; `false` if none
-    /// does.
-    pub fn redraw_widget(&self, id: &str, cx: &mut Cx<'_, '_>) -> bool {
-        let mut any = false;
-        for shown in &self.items {
-            if matches!(&shown.item.what, What::Widget(w) if w == id) {
-                cx.request_redraw_area(shown.area);
-                any = true;
-            }
-        }
-        any
+    /// Has the widgets read what they show anew (see
+    /// [`Widget::update`]; call it about each minute and after events
+    /// that may change them) and draws those whose content changed again;
+    /// `true` if any did.
+    pub fn update_widgets(&mut self, env: &Env<'_>, cx: &mut Cx<'_, '_>) -> bool {
+        self.update(env, cx, |_| true)
     }
 
-    /// Asks to draw the widgets whose content changed again (call it from
-    /// the screen's timer, e.g. each minute); `true` if any did.
-    pub fn refresh_widgets(&mut self, env: &Env<'_>, cx: &mut Cx<'_, '_>) -> bool {
+    /// The same for the items showing widget `id` alone, e.g. once
+    /// something they show was looked up.
+    pub fn update_widget(&mut self, id: &str, env: &Env<'_>, cx: &mut Cx<'_, '_>) -> bool {
+        self.update(env, cx, |shown| shown == id)
+    }
+
+    fn update(&mut self, env: &Env<'_>, cx: &mut Cx<'_, '_>, which: impl Fn(&str) -> bool) -> bool {
         let mut changed = false;
         for shown in &mut self.items {
-            let What::Widget(id) = &shown.item.what else {
+            let (What::Widget(id), Some(widget)) = (&shown.item.what, &mut shown.widget) else {
                 continue;
             };
-            let now = env.widgets.signature(id, env);
-            if now.is_some() && now != shown.shown {
-                shown.shown = now;
+            if which(id) && widget.update(env) {
                 cx.request_redraw_area(shown.area);
                 changed = true;
             }
+        }
+        // Their targets may have changed with them.
+        if changed && self.edit.is_none() {
+            self.target(env);
         }
         changed
     }
@@ -290,15 +306,17 @@ impl GridView {
         let line = self.style.line.max(1);
         let clip = canvas.clip();
         for shown in &self.items {
-            // Widgets may read what they show from the storage: those
-            // outside the part drawn are left (e.g. under a menu).
+            // Those outside the part drawn are left (e.g. under a menu).
             if shown.area.intersection(&clip).is_none() {
                 continue;
             }
             canvas.fill(shown.area, Color::WHITE);
-            match &shown.item.what {
-                What::Widget(id) => env.widgets.draw(id, canvas, env, shown.area),
-                What::Tool(action) => draw_tool(canvas, env, shown.area, action, self.labels),
+            match (&shown.item.what, &shown.widget) {
+                (What::Widget(_), Some(widget)) => widget.draw(canvas, env, shown.area),
+                (What::Widget(_), None) => {}
+                (What::Tool(action), _) => {
+                    draw_tool(canvas, env, shown.area, action, self.labels);
+                }
             }
             if editing {
                 canvas.stroke(shown.area, line, Color::BLACK);

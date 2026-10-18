@@ -1391,11 +1391,11 @@ pub fn quireink_sdk::widgets::grid::GridView::on_action(&mut self, &quireink_sdk
 pub fn quireink_sdk::widgets::grid::GridView::on_event(&mut self, &quireink_sdk::Id, &quireink_sdk::Params, &mut quireink_sdk::Cx<'_, '_>) -> quireink_sdk::widgets::grid::GridResponse
 pub fn quireink_sdk::widgets::grid::GridView::on_gesture(&mut self, quireink_sdk::Gesture, &mut quireink_sdk::Cx<'_, '_>) -> quireink_sdk::widgets::grid::GridResponse
 pub fn quireink_sdk::widgets::grid::GridView::on_pointer(&mut self, &quireink_platform::input::PointerEvent, &mut quireink_sdk::Cx<'_, '_>) -> quireink_sdk::widgets::grid::GridResponse
-pub fn quireink_sdk::widgets::grid::GridView::redraw_widget(&self, &str, &mut quireink_sdk::Cx<'_, '_>) -> bool
-pub fn quireink_sdk::widgets::grid::GridView::refresh_widgets(&mut self, &quireink_sdk::Env<'_>, &mut quireink_sdk::Cx<'_, '_>) -> bool
 pub fn quireink_sdk::widgets::grid::GridView::reset_focus(&mut self)
 pub fn quireink_sdk::widgets::grid::GridView::set_editing(&mut self, bool)
 pub fn quireink_sdk::widgets::grid::GridView::set_tool_labels(&mut self, bool)
+pub fn quireink_sdk::widgets::grid::GridView::update_widget(&mut self, &str, &quireink_sdk::Env<'_>, &mut quireink_sdk::Cx<'_, '_>) -> bool
+pub fn quireink_sdk::widgets::grid::GridView::update_widgets(&mut self, &quireink_sdk::Env<'_>, &mut quireink_sdk::Cx<'_, '_>) -> bool
 #[non_exhaustive] pub struct quireink_sdk::widgets::grid::Item
 pub quireink_sdk::widgets::grid::Item::at: core::option::Option<quireink_sdk::widgets::grid::Cells>
 pub quireink_sdk::widgets::grid::Item::what: quireink_sdk::widgets::grid::What
@@ -1419,13 +1419,22 @@ impl quireink_sdk::widgets::Align
 pub fn quireink_sdk::widgets::Align::of(&str) -> Self
 pub fn quireink_sdk::widgets::Align::value(self) -> &'static str
 pub fn quireink_sdk::widgets::Align::x(self, quireink_platform::geometry::Rect, f32) -> f32
-pub struct quireink_sdk::widgets::WidgetSpec
-pub quireink_sdk::widgets::WidgetSpec::draw: quireink_sdk::widgets::WidgetDrawFn
-pub quireink_sdk::widgets::WidgetSpec::height: quireink_sdk::widgets::WidgetHeightFn
+pub struct quireink_sdk::widgets::Drawn
+pub quireink_sdk::widgets::Drawn::draw: fn(&mut quireink_graphics::canvas::Canvas<'_>, &quireink_sdk::Env<'_>, quireink_platform::geometry::Rect)
+pub quireink_sdk::widgets::Drawn::height: fn(&quireink_sdk::Env<'_>, u16) -> u16
+pub quireink_sdk::widgets::Drawn::shows: core::option::Option<fn(&quireink_sdk::Env<'_>) -> alloc::string::String>
+impl quireink_sdk::widgets::Drawn
+pub fn quireink_sdk::widgets::Drawn::new(fn(&quireink_sdk::Env<'_>, u16) -> u16, fn(&mut quireink_graphics::canvas::Canvas<'_>, &quireink_sdk::Env<'_>, quireink_platform::geometry::Rect)) -> Self
+pub fn quireink_sdk::widgets::Drawn::shows(self, fn(&quireink_sdk::Env<'_>) -> alloc::string::String) -> Self
+impl core::fmt::Debug for quireink_sdk::widgets::Drawn
+pub fn quireink_sdk::widgets::Drawn::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub struct quireink_sdk::widgets::WidgetSpec
+pub quireink_sdk::widgets::WidgetSpec::factory: quireink_sdk::widgets::WidgetFactory
 pub quireink_sdk::widgets::WidgetSpec::id: quireink_sdk::Id
-pub quireink_sdk::widgets::WidgetSpec::signature: core::option::Option<quireink_sdk::widgets::WidgetSignatureFn>
-pub quireink_sdk::widgets::WidgetSpec::targets: core::option::Option<quireink_sdk::widgets::WidgetTargetsFn>
 pub quireink_sdk::widgets::WidgetSpec::title: alloc::borrow::Cow<'static, str>
+impl quireink_sdk::widgets::WidgetSpec
+pub fn quireink_sdk::widgets::WidgetSpec::drawn(quireink_sdk::Id, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, quireink_sdk::widgets::Drawn) -> Self
+pub fn quireink_sdk::widgets::WidgetSpec::new(quireink_sdk::Id, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, impl core::ops::function::Fn(&quireink_sdk::Env<'_>) -> alloc::boxed::Box<dyn quireink_sdk::widgets::Widget> + 'static) -> Self
 impl core::fmt::Debug for quireink_sdk::widgets::WidgetSpec
 pub fn quireink_sdk::widgets::WidgetSpec::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct quireink_sdk::widgets::WidgetTarget
@@ -1434,30 +1443,29 @@ pub quireink_sdk::widgets::WidgetTarget::command: quireink_sdk::Command
 pub struct quireink_sdk::widgets::Widgets
 impl quireink_sdk::widgets::Widgets
 pub fn quireink_sdk::widgets::Widgets::add(&mut self, quireink_sdk::widgets::WidgetSpec)
-pub fn quireink_sdk::widgets::Widgets::draw(&self, &str, &mut quireink_graphics::canvas::Canvas<'_>, &quireink_sdk::Env<'_>, quireink_platform::geometry::Rect)
 pub fn quireink_sdk::widgets::Widgets::has(&self, &str) -> bool
-pub fn quireink_sdk::widgets::Widgets::height(&self, &str, &quireink_sdk::Env<'_>, u16) -> core::option::Option<u16>
 pub fn quireink_sdk::widgets::Widgets::iter(&self) -> impl core::iter::traits::iterator::Iterator<Item = (&quireink_sdk::Id, &str)>
+pub fn quireink_sdk::widgets::Widgets::make(&self, &str, &quireink_sdk::Env<'_>) -> core::option::Option<alloc::boxed::Box<dyn quireink_sdk::widgets::Widget>>
 pub fn quireink_sdk::widgets::Widgets::new() -> Self
 pub fn quireink_sdk::widgets::Widgets::shrink_to_fit(&mut self)
-pub fn quireink_sdk::widgets::Widgets::signature(&self, &str, &quireink_sdk::Env<'_>) -> core::option::Option<alloc::string::String>
-pub fn quireink_sdk::widgets::Widgets::targets(&self, &str, &quireink_sdk::Env<'_>, quireink_platform::geometry::Rect) -> alloc::vec::Vec<quireink_sdk::widgets::WidgetTarget>
 pub fn quireink_sdk::widgets::Widgets::title(&self, &str) -> core::option::Option<&str>
 pub const quireink_sdk::widgets::ALIGNMENTS: [&str; 3]
 pub const quireink_sdk::widgets::FILL: &str
 pub const quireink_sdk::widgets::SPACE: &str
 pub const quireink_sdk::widgets::SPACE_SIZE: quireink_sdk::setting::Setting<quireink_sdk::setting::Text>
 pub const quireink_sdk::widgets::SPACE_SIZES: [&str; 3]
+pub trait quireink_sdk::widgets::Widget
+pub fn quireink_sdk::widgets::Widget::draw(&self, &mut quireink_graphics::canvas::Canvas<'_>, &quireink_sdk::Env<'_>, quireink_platform::geometry::Rect)
+pub fn quireink_sdk::widgets::Widget::height(&self, &quireink_sdk::Env<'_>, u16) -> u16
+pub fn quireink_sdk::widgets::Widget::targets(&self, &quireink_sdk::Env<'_>, quireink_platform::geometry::Rect) -> alloc::vec::Vec<quireink_sdk::widgets::WidgetTarget>
+pub fn quireink_sdk::widgets::Widget::update(&mut self, &quireink_sdk::Env<'_>) -> bool
 pub fn quireink_sdk::widgets::align(&quireink_sdk::Env<'_>, &str) -> quireink_sdk::widgets::Align
 pub fn quireink_sdk::widgets::align_setting(&quireink_sdk::Id, quireink_sdk::widgets::Align) -> quireink_sdk::SettingSpec
 pub fn quireink_sdk::widgets::fill_height(u32, u32, usize) -> u16
 pub fn quireink_sdk::widgets::has_settings(&quireink_sdk::Env<'_>, &str) -> bool
 pub fn quireink_sdk::widgets::repeatable(&str) -> bool
 pub fn quireink_sdk::widgets::settings_group(&quireink_sdk::Id, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> quireink_sdk::SettingGroupSpec
-pub type quireink_sdk::widgets::WidgetDrawFn = alloc::boxed::Box<dyn core::ops::function::Fn(&mut quireink_graphics::canvas::Canvas<'_>, &quireink_sdk::Env<'_>, quireink_platform::geometry::Rect)>
-pub type quireink_sdk::widgets::WidgetHeightFn = alloc::boxed::Box<dyn core::ops::function::Fn(&quireink_sdk::Env<'_>, u16) -> u16>
-pub type quireink_sdk::widgets::WidgetSignatureFn = alloc::boxed::Box<dyn core::ops::function::Fn(&quireink_sdk::Env<'_>) -> alloc::string::String>
-pub type quireink_sdk::widgets::WidgetTargetsFn = alloc::boxed::Box<dyn core::ops::function::Fn(&quireink_sdk::Env<'_>, quireink_platform::geometry::Rect) -> alloc::vec::Vec<quireink_sdk::widgets::WidgetTarget>>
+pub type quireink_sdk::widgets::WidgetFactory = alloc::boxed::Box<dyn core::ops::function::Fn(&quireink_sdk::Env<'_>) -> alloc::boxed::Box<dyn quireink_sdk::widgets::Widget>>
 pub mod quireink_sdk::wifi
 pub enum quireink_sdk::wifi::JoinFailure
 pub quireink_sdk::wifi::JoinFailure::NotFound

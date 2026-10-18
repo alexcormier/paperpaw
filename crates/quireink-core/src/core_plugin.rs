@@ -13,7 +13,7 @@ use quireink_sdk::builtin::{
 };
 use quireink_sdk::library;
 use quireink_sdk::time::{self, AUTO, CLOCK_12H, CLOCK_24H, TIME_ZONES};
-use quireink_sdk::widgets::{self, WidgetSpec};
+use quireink_sdk::widgets::{self, Drawn, WidgetSpec};
 use quireink_sdk::{
     ActionHandler, ActionHint, ActionSpec, Canvas, Color, Command, Cx, Env, Handled, Id, Manifest,
     MenuEntry, Params, Plugin, Priority, RegisterError, Registrar, SDK_VERSION, Screen, ScreenSpec,
@@ -835,31 +835,26 @@ fn register_spaces(r: &mut Registrar) -> Result<(), RegisterError> {
         .group(space.clone())
         .description("core.setting.space-size.help"),
     )?;
-    r.add_widget(WidgetSpec {
-        id: space,
-        title: Cow::Borrowed("core.widget.space"),
-        height: Box::new(|env, _| {
-            let size = env.settings.read(&widgets::SPACE_SIZE);
-            let mm = match widgets::SPACE_SIZES.iter().position(|s| *s == size) {
-                Some(0) => 4,
-                Some(2) => 20,
-                _ => 10,
-            };
-            env.metrics.mm(mm).min(u32::from(u16::MAX)) as u16
-        }),
-        draw: Box::new(|_, _, _| {}),
-        signature: None,
-        targets: None,
-    })?;
-    r.add_widget(WidgetSpec {
-        id: Id::new_static(widgets::FILL),
-        title: Cow::Borrowed("core.widget.fill"),
-        // Screens that place widgets give it the room left.
-        height: Box::new(|_, _| 0),
-        draw: Box::new(|_, _, _| {}),
-        signature: None,
-        targets: None,
-    })?;
+    let space_height = |env: &Env<'_>, _| {
+        let size = env.settings.read(&widgets::SPACE_SIZE);
+        let mm = match widgets::SPACE_SIZES.iter().position(|s| *s == size) {
+            Some(0) => 4,
+            Some(2) => 20,
+            _ => 10,
+        };
+        env.metrics.mm(mm).min(u32::from(u16::MAX)) as u16
+    };
+    r.add_widget(WidgetSpec::drawn(
+        space,
+        "core.widget.space",
+        Drawn::new(space_height, |_, _, _| {}),
+    ))?;
+    // Screens that place widgets give it the room left.
+    r.add_widget(WidgetSpec::drawn(
+        Id::new_static(widgets::FILL),
+        "core.widget.fill",
+        Drawn::new(|_, _| 0, |_, _, _| {}),
+    ))?;
     Ok(())
 }
 

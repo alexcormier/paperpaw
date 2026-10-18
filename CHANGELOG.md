@@ -6,6 +6,15 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: a widget is a `Widget` a screen keeps: it reads what it shows in
+  `update` (when shown, each minute, after events) and only draws in
+  `draw`, which may run several times a frame. `WidgetSpec::new` takes
+  its factory, `WidgetSpec::drawn` a pair of functions for widgets with
+  nothing to read (`Drawn`, which replaces `signature` with `shows`);
+  `Widgets::make` makes one. The home screen, the sleep screen and the
+  widgets of the statistics, news and vocabulary plugins work so: on
+  the X4 a step in the main menu over the home screen drew in about
+  0.15 s instead of 0.5 s.
 - Reading: *Home* is in the menu's bar, last: from the first entry one
   press back reaches it (it was under *More*, at the end of a list).
 - Buttons pressed quickly while the device is busy wait at most a frame:

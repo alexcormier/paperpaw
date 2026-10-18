@@ -107,21 +107,11 @@ impl Plugin for Vocabulary {
             "vocabulary.widget.word",
         ))?;
         r.add_setting(widgets::align_setting(&WORD_WIDGET, widgets::Align::Left))?;
-        r.add_widget(widgets::WidgetSpec {
-            id: WORD_WIDGET,
-            title: Cow::Borrowed("vocabulary.widget.word"),
-            height: Box::new(word_height),
-            draw: Box::new(draw_word),
-            signature: Some(Box::new(|env| {
-                word_of_the_day(env).map_or(String::new(), |w| w.word)
-            })),
-            targets: Some(Box::new(|_, area| {
-                alloc::vec![widgets::WidgetTarget {
-                    area,
-                    command: Command::RunAction(OPEN),
-                }]
-            })),
-        })?;
+        r.add_widget(widgets::WidgetSpec::new(
+            WORD_WIDGET,
+            "vocabulary.widget.word",
+            |_| Box::new(WordWidget::default()),
+        ))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())
@@ -144,10 +134,42 @@ fn word_of_the_day(env: &Env<'_>) -> Option<Word> {
         .map(|(_, word)| word)
 }
 
-fn word_height(env: &Env<'_>, _: u16) -> u16 {
-    if store::count(env.storage) == 0 {
-        return 0;
+/// The word of the day, read when updated.
+#[derive(Default)]
+struct WordWidget {
+    word: Option<Word>,
+}
+
+impl widgets::Widget for WordWidget {
+    fn update(&mut self, env: &Env<'_>) -> bool {
+        let word = word_of_the_day(env);
+        let changed = word != self.word;
+        self.word = word;
+        changed
     }
+
+    fn height(&self, env: &Env<'_>, width: u16) -> u16 {
+        if self.word.is_none() {
+            return 0;
+        }
+        word_height(env, width)
+    }
+
+    fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
+        if let Some(word) = &self.word {
+            draw_word(canvas, env, area, word);
+        }
+    }
+
+    fn targets(&self, _: &Env<'_>, area: Rect) -> Vec<widgets::WidgetTarget> {
+        alloc::vec![widgets::WidgetTarget {
+            area,
+            command: Command::RunAction(OPEN),
+        }]
+    }
+}
+
+fn word_height(env: &Env<'_>, _: u16) -> u16 {
     let style = UiStyle::new(env);
     let Some(font) = style.font(env) else {
         return 0;
@@ -158,9 +180,9 @@ fn word_height(env: &Env<'_>, _: u16) -> u16 {
 }
 
 /// "Word of the day", the word, and its sentence (two lines at most).
-fn draw_word(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
+fn draw_word(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, word: &Word) {
     let style = UiStyle::new(env);
-    let (Some(font), Some(word)) = (style.font(env), word_of_the_day(env)) else {
+    let Some(font) = style.font(env) else {
         return;
     };
     let small = font.line_metrics(style.small).line_height as u16;

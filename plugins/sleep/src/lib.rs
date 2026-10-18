@@ -31,6 +31,7 @@ use quireink_sdk::document::ImageRef;
 use quireink_sdk::library;
 use quireink_sdk::setting::{Setting, Text};
 use quireink_sdk::ui::{self, UiStyle};
+use quireink_sdk::widgets::Widget;
 use quireink_sdk::{
     Canvas, Color, Command, Cx, Env, Handled, Id, Manifest, MenuNeed, Params, Plugin, Priority,
     Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen, ScreenSpec, SettingSpec,
@@ -179,38 +180,42 @@ fn picture(env: &Env<'_>) -> Option<ImageRef> {
 }
 
 /// The widgets of [`WIDGET_LIST`] between the margins, together in the
-/// middle of the screen, or where free spaces push them; `false` if none
-/// shows.
-fn draw_widgets(canvas: &mut Canvas<'_>, env: &Env<'_>) -> bool {
+/// middle of the screen, or where free spaces push them: each with where
+/// it goes, what it shows read (none if none shows).
+fn place_widgets(env: &Env<'_>) -> Vec<(Box<dyn Widget>, Rect)> {
     let style = UiStyle::new(env);
     let display = env.device.display;
     let margin = style.margin as u16;
     let gap = style.gap as u16;
     let width = display.width.saturating_sub(2 * margin);
     // Free spaces (`None`) share the room the others leave.
-    let mut placed: Vec<(&str, Option<u16>)> = Vec::new();
+    let mut made: Vec<Option<(Box<dyn Widget>, u16)>> = Vec::new();
     let mut total = 0u16;
     let mut shown = 0;
     for id in quireink_sdk::status::item_ids(env.settings.read(&WIDGET_LIST)) {
         if id == quireink_sdk::widgets::FILL {
-            placed.push((id, None));
+            made.push(None);
             continue;
         }
-        let Some(height) = env.widgets.height(id, env, width).filter(|h| *h > 0) else {
+        let Some(widget) = env.widgets.make(id, env) else {
             continue;
         };
+        let height = widget.height(env, width);
+        if height == 0 {
+            continue;
+        }
         let added = height + if shown == 0 { 0 } else { gap * 2 };
         if total + added > display.height {
             break;
         }
         total += added;
         shown += 1;
-        placed.push((id, Some(height)));
+        made.push(Some((widget, height)));
     }
     if shown == 0 {
-        return false;
+        return Vec::new();
     }
-    let fills = placed.iter().filter(|(_, h)| h.is_none()).count();
+    let fills = made.iter().filter(|m| m.is_none()).count();
     let fill =
         quireink_sdk::widgets::fill_height(u32::from(display.height), u32::from(total), fills);
     let mut y = if fills == 0 {
@@ -218,27 +223,27 @@ fn draw_widgets(canvas: &mut Canvas<'_>, env: &Env<'_>) -> bool {
     } else {
         0
     };
-    let mut drawn = 0;
-    for (id, height) in placed {
-        let Some(height) = height else {
+    let mut placed = Vec::new();
+    for made in made {
+        let Some((widget, height)) = made else {
             y += fill;
             continue;
         };
-        if drawn > 0 {
+        if !placed.is_empty() {
             y += gap * 2;
         }
-        let area = Rect::new(margin, y, width, height);
-        env.widgets.draw(id, canvas, env, area);
+        placed.push((widget, Rect::new(margin, y, width, height)));
         y += height;
-        drawn += 1;
     }
-    true
+    placed
 }
 
 /// What the screen shows while the device sleeps.
 struct SleepScreen {
     show: String,
     image: Option<ImageRef>,
+    /// The widgets shown, where they go.
+    widgets: Vec<(Box<dyn Widget>, Rect)>,
 }
 
 impl SleepScreen {
@@ -249,7 +254,16 @@ impl SleepScreen {
             MESSAGE | PAGE | WIDGETS => None,
             _ => cover(env),
         };
-        Self { show, image }
+        let widgets = if show == WIDGETS {
+            place_widgets(env)
+        } else {
+            Vec::new()
+        };
+        Self {
+            show,
+            image,
+            widgets,
+        }
     }
 }
 
@@ -265,7 +279,10 @@ impl Screen for SleepScreen {
         }
         let display = env.device.display;
         let screen = Rect::new(0, 0, display.width, display.height);
-        if self.show == WIDGETS && draw_widgets(canvas, env) {
+        if !self.widgets.is_empty() {
+            for (widget, area) in &self.widgets {
+                widget.draw(canvas, env, *area);
+            }
             return;
         }
         match &self.image {

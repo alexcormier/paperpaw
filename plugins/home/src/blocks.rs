@@ -14,7 +14,8 @@
 //! parts it shows. Widgets fill the cells they are given.
 //!
 //! Widgets draw what is stored (covers once looked up, see `covers`),
-//! never opening books themselves, so drawing stays quick.
+//! never opening books themselves, and read it when the home screen
+//! updates them, not as they are drawn, so drawing stays quick.
 
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
@@ -23,9 +24,10 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use quireink_sdk::builtin::{actions, params, screens, slots};
+use quireink_sdk::document::ImageRef;
 use quireink_sdk::status::{StatusLine, item_ids};
 use quireink_sdk::ui::{self, UiStyle};
-use quireink_sdk::widgets::{self, Align, WidgetSpec, WidgetTarget};
+use quireink_sdk::widgets::{self, Align, Drawn, Widget, WidgetSpec, WidgetTarget};
 use quireink_sdk::{
     Arg, Canvas, Color, Command, Env, Id, Params, Rect, RegisterError, Registrar, SettingSpec, time,
 };
@@ -68,38 +70,31 @@ pub(crate) const STATUS_PARTS: [Setting<Text>; 3] = [
 const MAX_COVERS: usize = 8;
 
 pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
-    let widget = |id: &'static str,
-                  title: &'static str,
-                  height: fn(&Env<'_>, u16) -> u16,
-                  draw: fn(&mut Canvas<'_>, &Env<'_>, Rect)| WidgetSpec {
-        id: Id::new_static(id),
-        title: Cow::Borrowed(title),
-        height: Box::new(height),
-        draw: Box::new(draw),
-        signature: None,
-        targets: None,
-    };
-    let mut status = widget(STATUS, "home.widget.status", status_height, draw_status);
-    status.signature = Some(Box::new(status_signature));
-    r.add_widget(status)?;
-    let mut date = widget(DATE, "home.widget.date", date_height, draw_date);
-    date.signature = Some(Box::new(date_text));
-    r.add_widget(date)?;
-    let mut card = widget(CONTINUE, "home.widget.continue", card_height, draw_card);
-    card.targets = Some(Box::new(card_targets));
-    r.add_widget(card)?;
-    let mut shelf = widget(RECENT, "home.widget.recent", shelf_height, draw_shelf);
-    shelf.targets = Some(Box::new(shelf_targets));
-    r.add_widget(shelf)?;
-    let mut clock = widget(CLOCK, "home.widget.clock", clock_height, draw_clock);
-    clock.signature = Some(Box::new(|env| {
-        format!(
-            "{}|{}",
-            time::clock_text(env).unwrap_or_default(),
-            date_text(env)
-        )
-    }));
-    r.add_widget(clock)?;
+    r.add_widget(WidgetSpec::drawn(
+        Id::new_static(STATUS),
+        "home.widget.status",
+        Drawn::new(status_height, draw_status).shows(status_signature),
+    ))?;
+    r.add_widget(WidgetSpec::drawn(
+        Id::new_static(DATE),
+        "home.widget.date",
+        Drawn::new(date_height, draw_date).shows(date_text),
+    ))?;
+    r.add_widget(WidgetSpec::new(
+        Id::new_static(CONTINUE),
+        "home.widget.continue",
+        |_| Box::new(Card::default()),
+    ))?;
+    r.add_widget(WidgetSpec::new(
+        Id::new_static(RECENT),
+        "home.widget.recent",
+        |_| Box::new(Shelf::default()),
+    ))?;
+    r.add_widget(WidgetSpec::drawn(
+        Id::new_static(CLOCK),
+        "home.widget.clock",
+        Drawn::new(clock_height, draw_clock).shows(clock_shows),
+    ))?;
 
     // The status line's parts: the time on the left; Wi-Fi and the
     // battery on the right.
@@ -283,6 +278,15 @@ fn draw_date(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
 
 // ---- Clock ----------------------------------------------------------------
 
+/// What the clock shows: the time and the date.
+fn clock_shows(env: &Env<'_>) -> String {
+    format!(
+        "{}|{}",
+        time::clock_text(env).unwrap_or_default(),
+        date_text(env)
+    )
+}
+
 /// The clock's size in `area`: as set, or as large as fits.
 fn clock_size(env: &Env<'_>, style: &UiStyle, area: Option<Rect>) -> f32 {
     let value = env.settings.read(&CLOCK_SIZE);
@@ -364,15 +368,62 @@ fn card_height(env: &Env<'_>, _: u16) -> u16 {
     (UiStyle::new(env).row as f32 * 3.0) as u16
 }
 
-fn card_targets(env: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
-    let command = match recent::load(env.storage).into_iter().next() {
-        Some(book) => Command::OpenSlot(slots::READER, Params::new().with(params::PATH, book.path)),
-        None => Command::RunAction(actions::LIBRARY),
-    };
-    alloc::vec![WidgetTarget { area, command }]
+/// A book a widget shows, and its cover if it has one (looked up already).
+#[derive(Debug, Clone, PartialEq)]
+struct Book {
+    book: recent::Recent,
+    cover: Option<ImageRef>,
 }
 
-fn draw_card(canvas: &mut Canvas<'_>, env: &Env<'_>, r: Rect) {
+impl Book {
+    fn of(env: &Env<'_>, book: recent::Recent) -> Self {
+        Self {
+            cover: covers::get(env.storage, &book.path).flatten(),
+            book,
+        }
+    }
+
+    fn open(&self) -> Command {
+        let params = Params::new().with(params::PATH, self.book.path.clone());
+        Command::OpenSlot(slots::READER, params)
+    }
+}
+
+/// The book read last; the library before any was read.
+#[derive(Debug, Default)]
+struct Card {
+    book: Option<Book>,
+}
+
+impl Widget for Card {
+    fn update(&mut self, env: &Env<'_>) -> bool {
+        let book = recent::load(env.storage)
+            .into_iter()
+            .next()
+            .map(|book| Book::of(env, book));
+        let changed = book != self.book;
+        self.book = book;
+        changed
+    }
+
+    fn height(&self, env: &Env<'_>, width: u16) -> u16 {
+        card_height(env, width)
+    }
+
+    fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
+        draw_card(canvas, env, area, self.book.as_ref());
+    }
+
+    fn targets(&self, _: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
+        let command = self
+            .book
+            .as_ref()
+            .map_or(Command::RunAction(actions::LIBRARY), Book::open);
+        alloc::vec![WidgetTarget { area, command }]
+    }
+}
+
+fn draw_card(canvas: &mut Canvas<'_>, env: &Env<'_>, r: Rect, shown: Option<&Book>) {
     let style = UiStyle::new(env);
     let Some(font) = style.font(env) else {
         return;
@@ -382,7 +433,7 @@ fn draw_card(canvas: &mut Canvas<'_>, env: &Env<'_>, r: Rect) {
     if framed {
         ui::stroke_round(canvas, &style, r, line, Color::BLACK);
     }
-    let Some(book) = recent::load(env.storage).into_iter().next() else {
+    let Some(Book { book, cover }) = shown else {
         ui::draw_message(canvas, env, &style, r, env.i18n.tr("home.nothing-read"));
         return;
     };
@@ -393,16 +444,12 @@ fn draw_card(canvas: &mut Canvas<'_>, env: &Env<'_>, r: Rect) {
     } else {
         0
     };
-    let cover = env
-        .settings
-        .read(&CARD_COVER)
-        .then(|| covers::get(env.storage, &book.path).flatten())
-        .flatten();
+    let cover = cover.as_ref().filter(|_| env.settings.read(&CARD_COVER));
     let r = match cover {
         Some(cover) => {
-            let (w, h) = ui::fit_image(&cover, r.width / 3, r.height.saturating_sub(2 * inset));
+            let (w, h) = ui::fit_image(cover, r.width / 3, r.height.saturating_sub(2 * inset));
             let area = Rect::new(r.x + inset, r.y + (r.height - h) / 2, w, h);
-            ui::draw_image(canvas, env.storage, &cover, area);
+            ui::draw_image(canvas, env.storage, cover, area);
             let shift = inset + w;
             Rect::new(r.x + shift, r.y, r.width.saturating_sub(shift), r.height)
         }
@@ -487,11 +534,44 @@ fn draw_card(canvas: &mut Canvas<'_>, env: &Env<'_>, r: Rect) {
 // ---- Recently read ----------------------------------------------------------
 
 /// The recent books after the current one, as many as set.
-fn shelf_books(env: &Env<'_>) -> Vec<recent::Recent> {
-    let count = env.settings.read(&RECENT_COUNT).clamp(1, MAX_COVERS as i64) as usize;
-    let mut books = recent::load(env.storage);
-    books.retain(|b| env.storage.exists(&b.path));
-    books.into_iter().skip(1).take(count).collect()
+#[derive(Debug, Default)]
+struct Shelf {
+    books: Vec<Book>,
+}
+
+impl Widget for Shelf {
+    fn update(&mut self, env: &Env<'_>) -> bool {
+        let count = env.settings.read(&RECENT_COUNT).clamp(1, MAX_COVERS as i64) as usize;
+        let mut books = recent::load(env.storage);
+        books.retain(|b| env.storage.exists(&b.path));
+        let books: Vec<Book> = books
+            .into_iter()
+            .skip(1)
+            .take(count)
+            .map(|book| Book::of(env, book))
+            .collect();
+        let changed = books != self.books;
+        self.books = books;
+        changed
+    }
+
+    fn height(&self, env: &Env<'_>, width: u16) -> u16 {
+        shelf_height(env, width, &self.books)
+    }
+
+    fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
+        draw_shelf(canvas, env, area, &self.books);
+    }
+
+    fn targets(&self, env: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
+        shelf_places(env, area, &self.books)
+            .into_iter()
+            .map(|(place, book)| WidgetTarget {
+                area: place,
+                command: book.open(),
+            })
+            .collect()
+    }
 }
 
 /// The covers a row holds at `width`, and how wide each one's place is.
@@ -519,8 +599,8 @@ fn shelf_labels(env: &Env<'_>) -> (u16, u16) {
     (heading, title)
 }
 
-fn shelf_height(env: &Env<'_>, width: u16) -> u16 {
-    if shelf_books(env).is_empty() {
+fn shelf_height(env: &Env<'_>, width: u16, books: &[Book]) -> u16 {
+    if books.is_empty() {
         return 0;
     }
     let style = UiStyle::new(env);
@@ -532,9 +612,8 @@ fn shelf_height(env: &Env<'_>, width: u16) -> u16 {
 
 /// Where each cover goes (with its title below), with its book: as large
 /// as the area allows, the row in the middle.
-fn shelf_places(env: &Env<'_>, area: Rect) -> Vec<(Rect, recent::Recent)> {
+fn shelf_places<'b>(env: &Env<'_>, area: Rect, books: &'b [Book]) -> Vec<(Rect, &'b Book)> {
     let style = UiStyle::new(env);
-    let books = shelf_books(env);
     // Few books: larger covers, as many columns as books.
     let (fit, _) = shelf_columns(env, area.width);
     let columns = books.len().clamp(1, fit);
@@ -550,7 +629,7 @@ fn shelf_places(env: &Env<'_>, area: Rect) -> Vec<(Rect, recent::Recent)> {
     let left = area.x + (area.width.saturating_sub(row_w)) / 2;
     let top = area.y + heading + room.saturating_sub(h) / 2;
     books
-        .into_iter()
+        .iter()
         .take(columns)
         .enumerate()
         .map(|(i, book)| {
@@ -560,23 +639,13 @@ fn shelf_places(env: &Env<'_>, area: Rect) -> Vec<(Rect, recent::Recent)> {
         .collect()
 }
 
-fn shelf_targets(env: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
-    shelf_places(env, area)
-        .into_iter()
-        .map(|(place, book)| WidgetTarget {
-            area: place,
-            command: Command::OpenSlot(slots::READER, Params::new().with(params::PATH, book.path)),
-        })
-        .collect()
-}
-
-fn draw_shelf(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
+fn draw_shelf(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, books: &[Book]) {
     let style = UiStyle::new(env);
     let Some(font) = style.font(env) else {
         return;
     };
     // Nothing read before the current book: nothing to show.
-    if shelf_books(env).is_empty() {
+    if books.is_empty() {
         return;
     }
     let (heading, title_h) = shelf_labels(env);
@@ -594,18 +663,18 @@ fn draw_shelf(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
             gray,
         );
     }
-    for (place, book) in shelf_places(env, area) {
+    for (place, Book { book, cover: image }) in shelf_places(env, area, books) {
         let cover = Rect::new(place.x, place.y, place.width, place.height - title_h);
-        match covers::get(env.storage, &book.path).flatten() {
+        match image {
             Some(image) => {
-                let (w, h) = ui::fit_image(&image, cover.width, cover.height);
+                let (w, h) = ui::fit_image(image, cover.width, cover.height);
                 let at = Rect::new(
                     cover.x + (cover.width - w) / 2,
                     cover.y + cover.height - h,
                     w,
                     h,
                 );
-                ui::draw_image(canvas, env.storage, &image, at);
+                ui::draw_image(canvas, env.storage, image, at);
             }
             None => draw_placeholder(canvas, env, &style, cover, &book.title),
         }
@@ -660,12 +729,13 @@ pub(crate) fn draw_tool(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, acti
     quireink_sdk::widgets::grid::draw_tool(canvas, env, area, action, labels);
 }
 
-/// The covers worth looking up: the current book's and the recent ones'.
-pub(crate) fn wanted_covers(env: &Env<'_>) -> Vec<String> {
+/// The recent books whose covers were not looked up yet: the current
+/// book and the ones the shelf may show.
+pub(crate) fn missing_covers(env: &Env<'_>) -> Vec<String> {
     recent::load(env.storage)
         .into_iter()
         .take(MAX_COVERS + 1)
         .map(|b| b.path)
-        .filter(|p| env.storage.exists(p))
+        .filter(|p| env.storage.exists(p) && covers::get(env.storage, p).is_none())
         .collect()
 }

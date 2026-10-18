@@ -44,7 +44,14 @@
 //!         let response = self.grid.on_action(action, cx);
 //!         self.respond(response, cx)
 //!     }
-//!     // on_pointer, on_gesture, on_event, on_timer, hint, holds_edges alike
+//!     fn on_timer(&mut self, cx: &mut Cx<'_, '_>) {
+//!         let env = *cx.env();
+//!         if self.grid.update_widgets(&env, cx) {
+//!             cx.request_refresh(RefreshMode::Fast);
+//!         }
+//!         cx.wake_at(env.now.add_millis(60_000));
+//!     }
+//!     // on_pointer, on_gesture, on_event, hint, holds_edges as on_action
 //! }
 //! ```
 
@@ -267,13 +274,17 @@ impl Geometry {
     }
 
     /// The size an item gets when it has no place yet: a tool one cell, a
-    /// widget the grid's width and the rows it needs.
+    /// widget the grid's width and the rows it needs (made to measure it,
+    /// what it shows read).
     pub fn size_of(&self, env: &Env<'_>, what: &What) -> (u8, u8) {
         match what {
             What::Tool(_) => (1, 1),
             What::Widget(id) => {
                 let width = (u16::from(self.columns) * self.cell_w).saturating_sub(self.gap);
-                let height = env.widgets.height(id, env, width).unwrap_or(0);
+                let height = env
+                    .widgets
+                    .make(id, env)
+                    .map_or(0, |widget| widget.height(env, width));
                 let rows = (u32::from(height) + u32::from(self.gap))
                     .div_ceil(u32::from(self.cell_h.max(1)));
                 (self.columns, rows.clamp(1, u32::from(self.rows)) as u8)

@@ -196,3 +196,17 @@ fn reading_and_its_menus() {
     app.run(Id::new_static("reader.quick-settings"));
     app.check("reader-layout");
 }
+
+/// The home screen's widgets read what they show when it shows again:
+/// after reading, the book read is the one to continue.
+#[test]
+fn home_shows_the_book_read_last() {
+    let mut app = App::new();
+    assert!(app.described().contains("No book opened yet"));
+    app.open_book();
+    app.run(actions::HOME);
+    let shown = app.described();
+    assert!(shown.starts_with("screen home.dashboard"), "{shown}");
+    assert!(shown.contains("Continue reading"), "{shown}");
+    assert!(shown.contains("Alice"), "{shown}");
+}

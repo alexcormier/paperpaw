@@ -4,6 +4,12 @@
 //! [`Registrar::add_widget`](crate::Registrar::add_widget); screens let
 //! the user choose which to show and where.
 //!
+//! A screen that shows a widget makes it ([`Widgets::make`]) and keeps
+//! it: the widget reads what it shows when the screen updates it (when
+//! it shows, about each minute, after events), and draws from that, so
+//! drawing stays quick ([`Widget`]). Widgets with nothing to read, such
+//! as a clock, are a pair of functions ([`WidgetSpec::drawn`]).
+//!
 //! A widget may have targets: places that do something when tapped, which
 //! buttons reach one after the other too (see [`WidgetTarget`]).
 //!
@@ -38,15 +44,40 @@ use crate::settings::{SettingGroupSpec, SettingKind, SettingSpec, SettingValue};
 
 pub mod grid;
 
-/// The height a widget needs for a width, in pixels.
-pub type WidgetHeightFn = Box<dyn Fn(&Env<'_>, u16) -> u16>;
-/// Draws a widget into its area (cleared before).
-pub type WidgetDrawFn = Box<dyn Fn(&mut Canvas<'_>, &Env<'_>, Rect)>;
-/// What a widget shows now, as text: screens redraw it when it changes
-/// (they look each minute).
-pub type WidgetSignatureFn = Box<dyn Fn(&Env<'_>) -> String>;
-/// The targets of a widget drawn in an area, in reading order.
-pub type WidgetTargetsFn = Box<dyn Fn(&Env<'_>, Rect) -> Vec<WidgetTarget>>;
+/// A widget as a screen shows it: made for that screen by its spec
+/// ([`WidgetSpec`]), it keeps what it shows.
+///
+/// What it shows is read in [`update`](Self::update), when the screen
+/// asks: when it shows the widget, about each minute, and after events
+/// that may change it (e.g. the library or a setting changed). Drawing
+/// then only draws: a frame may be drawn in bands, so
+/// [`draw`](Self::draw) runs several times for it and reads nothing from
+/// the storage (but pictures, which are drawn from their files).
+pub trait Widget {
+    /// Reads what it shows anew; `true` if that changed since it was
+    /// last read, so that the screen draws it again. Widgets with nothing
+    /// to read keep the default: nothing changes.
+    fn update(&mut self, env: &Env<'_>) -> bool {
+        let _ = env;
+        false
+    }
+
+    /// The height it needs at `width`, in pixels (0: nothing to show).
+    fn height(&self, env: &Env<'_>, width: u16) -> u16;
+
+    /// Draws it into `area` (cleared before), from what it read.
+    fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect);
+
+    /// The places in it that do something, drawn in `area`, in reading
+    /// order; without them it only shows something.
+    fn targets(&self, env: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
+        let _ = (env, area);
+        Vec::new()
+    }
+}
+
+/// Makes a widget for a screen that shows it.
+pub type WidgetFactory = Box<dyn Fn(&Env<'_>) -> Box<dyn Widget>>;
 
 /// A place in a widget that does something: a tap on it, or confirm
 /// once buttons moved the focus there, runs `command`.
@@ -56,17 +87,36 @@ pub struct WidgetTarget {
     pub command: crate::Command,
 }
 
-/// A widget contribution.
+/// A widget contribution: its id, its name and how it is made.
+#[non_exhaustive]
 pub struct WidgetSpec {
     pub id: Id,
     /// Translation key of its name, e.g. "Clock".
     pub title: Cow<'static, str>,
-    pub height: WidgetHeightFn,
-    pub draw: WidgetDrawFn,
-    /// Without one, a widget is drawn when its screen is.
-    pub signature: Option<WidgetSignatureFn>,
-    /// Without them, a widget only shows something.
-    pub targets: Option<WidgetTargetsFn>,
+    pub factory: WidgetFactory,
+}
+
+impl WidgetSpec {
+    /// A widget of a type of its own ([`Widget`]), made by `factory`.
+    pub fn new(
+        id: Id,
+        title: impl Into<Cow<'static, str>>,
+        factory: impl Fn(&Env<'_>) -> Box<dyn Widget> + 'static,
+    ) -> Self {
+        Self {
+            id,
+            title: title.into(),
+            factory: Box::new(factory),
+        }
+    }
+
+    /// A widget with nothing of its own to read: it draws from the
+    /// settings, the clock and the like (see [`Drawn`]).
+    pub fn drawn(id: Id, title: impl Into<Cow<'static, str>>, drawn: Drawn) -> Self {
+        Self::new(id, title, move |_| {
+            Box::new(DrawnWidget { drawn, shown: None })
+        })
+    }
 }
 
 impl fmt::Debug for WidgetSpec {
@@ -75,6 +125,73 @@ impl fmt::Debug for WidgetSpec {
             .field("id", &self.id)
             .field("title", &self.title)
             .finish_non_exhaustive()
+    }
+}
+
+/// A widget that only draws, as functions ([`WidgetSpec::drawn`]): for
+/// widgets with nothing to read from the storage, such as a clock.
+#[derive(Clone, Copy)]
+pub struct Drawn {
+    /// The height it needs for a width.
+    pub height: fn(&Env<'_>, u16) -> u16,
+    /// Draws it into its area.
+    pub draw: fn(&mut Canvas<'_>, &Env<'_>, Rect),
+    /// What it shows now, as text (e.g. the time): when that changes, it
+    /// is drawn again. Without it, it is drawn when its screen is.
+    pub shows: Option<fn(&Env<'_>) -> String>,
+}
+
+impl Drawn {
+    /// A widget `height` high, drawn by `draw`.
+    pub fn new(
+        height: fn(&Env<'_>, u16) -> u16,
+        draw: fn(&mut Canvas<'_>, &Env<'_>, Rect),
+    ) -> Self {
+        Self {
+            height,
+            draw,
+            shows: None,
+        }
+    }
+
+    /// Drawn again when what `shows` says changes.
+    pub fn shows(self, shows: fn(&Env<'_>) -> String) -> Self {
+        Self {
+            shows: Some(shows),
+            ..self
+        }
+    }
+}
+
+impl fmt::Debug for Drawn {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Drawn").finish_non_exhaustive()
+    }
+}
+
+/// A [`Drawn`] widget on a screen.
+struct DrawnWidget {
+    drawn: Drawn,
+    shown: Option<String>,
+}
+
+impl Widget for DrawnWidget {
+    fn update(&mut self, env: &Env<'_>) -> bool {
+        let Some(shows) = self.drawn.shows else {
+            return false;
+        };
+        let now = Some(shows(env));
+        let changed = self.shown.is_some() && now != self.shown;
+        self.shown = now;
+        changed
+    }
+
+    fn height(&self, env: &Env<'_>, width: u16) -> u16 {
+        (self.drawn.height)(env, width)
+    }
+
+    fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
+        (self.drawn.draw)(canvas, env, area);
     }
 }
 
@@ -111,33 +228,18 @@ impl Widgets {
         self.get(id).map(|w| w.title.as_ref())
     }
 
-    /// The height widget `id` needs at `width`; `None` if there is none.
-    pub fn height(&self, id: &str, env: &Env<'_>, width: u16) -> Option<u16> {
-        self.get(id).map(|w| (w.height)(env, width))
-    }
-
-    /// Draws widget `id` in `area`.
-    pub fn draw(&self, id: &str, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
-        if let Some(widget) = self.get(id) {
-            (widget.draw)(canvas, env, area);
-        }
-    }
-
-    /// The targets of widget `id` drawn in `area` (see [`WidgetTarget`]).
-    pub fn targets(&self, id: &str, env: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
-        self.get(id)
-            .and_then(|w| w.targets.as_ref())
-            .map_or_else(Vec::new, |targets| targets(env, area))
-    }
-
     /// Whether widget `id` exists.
     pub fn has(&self, id: &str) -> bool {
         self.get(id).is_some()
     }
 
-    /// What widget `id` shows now (see [`WidgetSignatureFn`]).
-    pub fn signature(&self, id: &str, env: &Env<'_>) -> Option<String> {
-        self.get(id)?.signature.as_ref().map(|s| s(env))
+    /// Widget `id` for a screen, what it shows read; `None` if there is
+    /// none. Screens keep it while they show it and
+    /// [`update`](Widget::update) it.
+    pub fn make(&self, id: &str, env: &Env<'_>) -> Option<Box<dyn Widget>> {
+        let mut widget = (self.get(id)?.factory)(env);
+        widget.update(env);
+        Some(widget)
     }
 }
 

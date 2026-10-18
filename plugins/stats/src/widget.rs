@@ -11,7 +11,7 @@ use alloc::string::ToString;
 use alloc::vec::Vec;
 
 use quireink_sdk::ui::{self, UiStyle};
-use quireink_sdk::widgets::{self, Align, WidgetSpec};
+use quireink_sdk::widgets::{self, Align, Widget, WidgetSpec, WidgetTarget};
 use quireink_sdk::{
     Arg, Canvas, Color, Env, Id, Rect, RegisterError, Registrar, SettingSpec, SettingValue,
 };
@@ -52,6 +52,7 @@ fn goal(env: &Env<'_>) -> Option<u64> {
 }
 
 /// What the widget shows.
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct Numbers {
     today: u64,
     pages: u32,
@@ -164,51 +165,79 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     )?;
     r.add_setting_group(widgets::settings_group(&TODAY, "stats.widget.today"))?;
     r.add_setting(widgets::align_setting(&TODAY, Align::Left))?;
-    r.add_widget(WidgetSpec {
-        id: TODAY,
-        title: Cow::Borrowed("stats.widget.today"),
-        height: Box::new(|env, _| {
-            let style = UiStyle::new(env);
-            let Some(font) = style.font(env) else {
-                return 0;
-            };
-            let small = font.line_metrics(style.small).line_height;
-            let text = font.line_metrics(style.title).line_height;
-            let bar = goal(env).map_or(0.0, |_| bar_band(env));
-            (small * 2.0 + text + bar) as u16
-        }),
-        draw: Box::new(draw),
-        signature: Some(Box::new(|env| {
-            let Some(numbers) = numbers(env) else {
-                return String::new();
-            };
-            let (a, b) = lines(env, &numbers);
-            format!("{a}|{b}|{}", progress(env, &numbers))
-        })),
-        targets: None,
-    })?;
-    r.add_widget(WidgetSpec {
-        id: WEEK,
-        title: Cow::Borrowed("stats.widget.week"),
-        height: Box::new(|env, _| {
-            let style = UiStyle::new(env);
-            let Some(font) = style.font(env) else {
-                return 0;
-            };
-            let small = font.line_metrics(style.small).line_height;
-            (small * 2.0 + style.row as f32 * 1.4) as u16
-        }),
-        draw: Box::new(draw_week),
-        signature: Some(Box::new(|env| {
-            week(env).iter().map(|(_, s)| format!("{s},")).collect()
-        })),
-        targets: Some(Box::new(|_, area| {
-            alloc::vec![quireink_sdk::widgets::WidgetTarget {
-                area,
-                command: quireink_sdk::Command::RunAction(crate::OPEN),
-            }]
-        })),
-    })
+    r.add_widget(WidgetSpec::new(TODAY, "stats.widget.today", |_| {
+        Box::new(Today::default())
+    }))?;
+    r.add_widget(WidgetSpec::new(WEEK, "stats.widget.week", |_| {
+        Box::new(Week::default())
+    }))
+}
+
+/// "Read today": its numbers, read from the statistics when updated.
+#[derive(Default)]
+struct Today {
+    numbers: Option<Numbers>,
+}
+
+impl Widget for Today {
+    fn update(&mut self, env: &Env<'_>) -> bool {
+        let numbers = numbers(env);
+        let changed = numbers != self.numbers;
+        self.numbers = numbers;
+        changed
+    }
+
+    fn height(&self, env: &Env<'_>, _: u16) -> u16 {
+        let style = UiStyle::new(env);
+        let Some(font) = style.font(env) else {
+            return 0;
+        };
+        let small = font.line_metrics(style.small).line_height;
+        let text = font.line_metrics(style.title).line_height;
+        let bar = goal(env).map_or(0.0, |_| bar_band(env));
+        (small * 2.0 + text + bar) as u16
+    }
+
+    fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
+        if let Some(numbers) = &self.numbers {
+            draw(canvas, env, area, numbers);
+        }
+    }
+}
+
+/// The last seven days as bars, read from the statistics when updated.
+#[derive(Default)]
+struct Week {
+    days: Vec<(u8, u64)>,
+}
+
+impl Widget for Week {
+    fn update(&mut self, env: &Env<'_>) -> bool {
+        let days = week(env);
+        let changed = days != self.days;
+        self.days = days;
+        changed
+    }
+
+    fn height(&self, env: &Env<'_>, _: u16) -> u16 {
+        let style = UiStyle::new(env);
+        let Some(font) = style.font(env) else {
+            return 0;
+        };
+        let small = font.line_metrics(style.small).line_height;
+        (small * 2.0 + style.row as f32 * 1.4) as u16
+    }
+
+    fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
+        draw_week(canvas, env, area, &self.days);
+    }
+
+    fn targets(&self, _: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
+        alloc::vec![WidgetTarget {
+            area,
+            command: quireink_sdk::Command::RunAction(crate::OPEN),
+        }]
+    }
 }
 
 /// The last seven days, oldest first: each day's weekday and seconds read.
@@ -231,12 +260,11 @@ fn week(env: &Env<'_>) -> Vec<(u8, u64)> {
 
 /// "Last 7 days · 3 h 20 min", then a bar a day with its weekday below;
 /// the daily goal, if set, as a line across.
-fn draw_week(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
+fn draw_week(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, days: &[(u8, u64)]) {
     let style = UiStyle::new(env);
     let Some(font) = style.font(env) else {
         return;
     };
-    let days = week(env);
     if days.is_empty() {
         return;
     }
@@ -320,19 +348,16 @@ fn bar_band(env: &Env<'_>) -> f32 {
     env.metrics.mm(3) as f32
 }
 
-fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
+fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, numbers: &Numbers) {
     let style = UiStyle::new(env);
     let Some(font) = style.font(env) else {
-        return;
-    };
-    let Some(numbers) = numbers(env) else {
         return;
     };
     let small = font.line_metrics(style.small).line_height as u16;
     let text = font.line_metrics(style.title).line_height as u16;
     let align = widgets::align(env, TODAY.as_str());
     let x = |size: f32, text: &str| align.x(area, font.measure(size, text));
-    let (first, second) = lines(env, &numbers);
+    let (first, second) = lines(env, numbers);
     let row = |y: u16, h: u16| Rect::new(area.x, y, area.width, h);
     let gray = style.faint(80);
     let label = env.i18n.tr("stats.today");
@@ -363,7 +388,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         let top = i32::from(y + (band - height as u16) / 2);
         let width = u32::from(area.width);
         canvas.stroke_rect(i32::from(area.x), top, width, height, line, Color::BLACK);
-        let filled = (u64::from(width) * progress(env, &numbers) / 1000) as u32;
+        let filled = (u64::from(width) * progress(env, numbers) / 1000) as u32;
         canvas.fill_rect(i32::from(area.x), top, filled, height, Color::BLACK);
         y += band;
     }

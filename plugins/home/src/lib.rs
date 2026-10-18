@@ -43,6 +43,7 @@ mod recent;
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::format;
+use alloc::string::String;
 use alloc::vec::Vec;
 
 use quireink_sdk::builtin::{actions, events, params, slots};
@@ -198,6 +199,13 @@ struct Dashboard {
     footer: Rect,
     pencil: Rect,
     plus: Rect,
+    /// Recent books whose covers are to be looked up, one a tick.
+    missing: Vec<String>,
+}
+
+/// The next full minute, when the clock shows another time.
+fn next_minute(env: &Env<'_>) -> quireink_sdk::Instant {
+    quireink_sdk::time::next_minute(env).unwrap_or(env.now.add_millis(60_000))
 }
 
 /// Where the parts of the home screen go: the status line, the grid, the
@@ -262,6 +270,7 @@ impl Dashboard {
             footer,
             pencil: Rect::default(),
             plus: Rect::default(),
+            missing: Vec::new(),
         };
         dashboard.layout(env);
         dashboard
@@ -422,29 +431,37 @@ impl Screen for Dashboard {
         }
         self.layout(&env);
         cx.request_redraw();
-        cx.wake_at(env.now);
+        // The covers not known yet are looked up first, one a tick.
+        self.missing = blocks::missing_covers(&env);
+        self.missing.reverse();
+        if self.missing.is_empty() {
+            cx.wake_at(next_minute(&env));
+        } else {
+            cx.wake_at(env.now);
+        }
     }
 
-    /// Redraws widgets whose content changed (the time each minute) and
-    /// looks up the covers not known yet, one a time.
+    /// Looks up the covers not known yet, one a tick; then, each minute,
+    /// updates the widgets (the time) and draws those that changed.
     fn on_timer(&mut self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        if let Some(status) = self.status {
-            cx.request_redraw_area(status);
-        }
-        let mut changed = self.grid.refresh_widgets(&env, cx);
-        let missing = blocks::wanted_covers(&env)
-            .into_iter()
-            .find(|path| covers::get(env.storage, path).is_none());
-        if let Some(path) = missing {
+        let mut changed = false;
+        if let Some(path) = self.missing.pop() {
             if covers::look_up(&env, &path).is_some() {
-                changed |= self.grid.redraw_widget(pages::CONTINUE, cx);
-                changed |= self.grid.redraw_widget(pages::RECENT, cx);
+                changed |= self.grid.update_widget(pages::CONTINUE, &env, cx);
+                changed |= self.grid.update_widget(pages::RECENT, &env, cx);
             }
-            cx.wake_at(env.now.add_millis(20));
+            if self.missing.is_empty() {
+                cx.wake_at(next_minute(&env));
+            } else {
+                cx.wake_at(env.now.add_millis(20));
+            }
         } else {
-            let next = quireink_sdk::time::next_minute(&env).unwrap_or(env.now.add_millis(60_000));
-            cx.wake_at(next);
+            if let Some(status) = self.status {
+                cx.request_redraw_area(status);
+            }
+            changed = self.grid.update_widgets(&env, cx);
+            cx.wake_at(next_minute(&env));
         }
         if changed {
             cx.request_refresh(RefreshMode::Fast);
@@ -453,12 +470,22 @@ impl Screen for Dashboard {
 
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
         let response = self.grid.on_event(event, params, cx);
+        let env = *cx.env();
         if response != GridResponse::Ignored {
             self.respond(response, cx);
-        } else if *event == events::SETTING_CHANGED || *event == events::STATUS_CHANGED {
-            let env = *cx.env();
+        } else if *event == events::SETTING_CHANGED
+            || *event == events::LIBRARY_CHANGED
+            || *event == events::BOOK_MOVED
+        {
+            // The widgets made anew, what they show read again.
             self.layout(&env);
             cx.request_redraw();
+        } else if *event == events::STATUS_CHANGED {
+            if let Some(status) = self.status {
+                cx.request_redraw_area(status);
+            }
+            self.grid.update_widgets(&env, cx);
+            cx.request_refresh(RefreshMode::Fast);
         }
     }
 
