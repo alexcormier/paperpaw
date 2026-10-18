@@ -185,23 +185,15 @@ impl Plugin for CorePlugin {
         ];
         // The library service follows the reading, whichever plugins
         // show it.
-        r.subscribe(
-            events::BOOK_OPENED,
-            Box::new(|env, params, _| library::record(env, params, true)),
-        )?;
-        r.subscribe(
-            events::PAGE_TURNED,
-            Box::new(|env, params, _| library::record(env, params, false)),
-        )?;
-        r.subscribe(
-            events::BOOK_MOVED,
-            Box::new(|env, params, _| {
-                if let (Some(from), Some(to)) = (params.get(params::FROM), params.get(params::PATH))
-                {
-                    library::moved(env.storage, from, to);
-                }
-            }),
-        )?;
+        r.on(events::BOOK_OPENED, |env, reading, _| {
+            library::record(env, reading, true);
+        })?;
+        r.on(events::PAGE_TURNED, |env, reading, _| {
+            library::record(env, reading, false);
+        })?;
+        r.on(events::BOOK_MOVED, |env, moved, _| {
+            library::moved(env.storage, &moved.from, &moved.path);
+        })?;
         for (id, title, handler) in handled {
             r.add_action(ActionSpec {
                 id,

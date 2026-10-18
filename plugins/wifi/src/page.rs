@@ -323,12 +323,10 @@ impl Screen for WifiPage {
     }
 
     fn on_event(&mut self, event: &Id, _: &Params, cx: &mut Cx<'_, '_>) {
-        let ours = [
-            events::WIFI_CHANGED,
-            events::WIFI_SCANNED,
-            events::SETTING_CHANGED,
-        ];
-        if !ours.contains(event) {
+        let ours = *event == events::WIFI_CHANGED
+            || *event == events::WIFI_SCANNED
+            || *event == events::SETTING_CHANGED;
+        if !ours {
             return;
         }
         // Switched on here: the networks to choose from.

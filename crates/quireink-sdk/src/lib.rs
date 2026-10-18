@@ -36,7 +36,7 @@ mod command;
 pub mod contribution;
 pub mod data;
 mod env;
-mod event;
+pub mod event;
 pub mod files;
 pub mod filters;
 pub mod firmware;
@@ -76,7 +76,7 @@ pub use command::{
 };
 pub use contribution::{Contribution, Registrar};
 pub use env::{Capabilities, Env, EnvParts, Metrics};
-pub use event::EventHandler;
+pub use event::{Event, EventData, EventHandler};
 pub use fonts::{FontHandle, FontSet, FontSpec, Fonts};
 pub use formats::{FormatOpener, FormatPrepared, FormatSpec, Formats, IMAGE_FIT, OpenOptions};
 pub use gesture::{Direction, Gesture, GestureKind};

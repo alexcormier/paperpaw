@@ -337,16 +337,12 @@ pub(crate) fn server_request(
 }
 
 /// The position in the parameters of a reading event.
-fn position(params: &Params) -> Option<Position> {
-    let number = |key| params.get(key).and_then(|v| v.parse::<u32>().ok());
-    Some(Position {
-        path: params.get(params::PATH)?.to_string(),
-        at: Locator::new(number(params::SECTION)?, number(params::OFFSET)?),
-        progress: params
-            .get(params::PROGRESS)
-            .and_then(|p| p.parse::<f64>().ok())
-            .map_or(0.0, |p| p / 100.0),
-    })
+fn position(reading: &events::Reading) -> Position {
+    Position {
+        path: reading.path.clone(),
+        at: reading.at(),
+        progress: f64::from(reading.progress) / 100.0,
+    }
 }
 
 /// The translation key telling why a request with HTTP status `status`
@@ -457,56 +453,43 @@ impl Plugin for Kosync {
             factory: Box::new(|env, params| Box::new(confirm::ConfirmScreen::new(env, params))),
         })?;
 
-        r.subscribe(
-            events::STARTED,
-            Box::new(|env: &Env<'_>, _: &Params, out: &mut Vec<Command>| move_key(env, out)),
-        )?;
+        r.on(events::STARTED, |env, _, out| move_key(env, out))?;
         let s = state.clone();
-        r.subscribe(
-            events::BOOK_OPENED,
-            Box::new(move |env, params, out| {
-                let mut state = s.borrow_mut();
-                state.load(env);
-                let Some(position) = position(params) else {
-                    return;
-                };
-                let active = state.active(env);
-                // Another book: the last one's position first.
-                let other = state
-                    .current
-                    .as_ref()
-                    .is_some_and(|c| c.path != position.path);
-                if active && other {
-                    state.push(env, out, false);
-                }
-                let path = position.path.clone();
-                state.current = Some(position);
-                let recent = state
-                    .last_pull
-                    .as_ref()
-                    .is_some_and(|(p, at)| *p == path && env.now.since(*at) < PULL_EVERY_MS);
-                if active && !recent {
-                    state.pull(env, out, &path, false);
-                }
-            }),
-        )?;
+        r.on(events::BOOK_OPENED, move |env, reading, out| {
+            let mut state = s.borrow_mut();
+            state.load(env);
+            let position = position(reading);
+            let active = state.active(env);
+            // Another book: the last one's position first.
+            let other = state
+                .current
+                .as_ref()
+                .is_some_and(|c| c.path != position.path);
+            if active && other {
+                state.push(env, out, false);
+            }
+            let path = position.path.clone();
+            state.current = Some(position);
+            let recent = state
+                .last_pull
+                .as_ref()
+                .is_some_and(|(p, at)| *p == path && env.now.since(*at) < PULL_EVERY_MS);
+            if active && !recent {
+                state.pull(env, out, &path, false);
+            }
+        })?;
         let s = state.clone();
-        r.subscribe(
-            events::PAGE_TURNED,
-            Box::new(move |env, params, out| {
-                let mut state = s.borrow_mut();
-                state.load(env);
-                if let Some(position) = position(params) {
-                    state.current = Some(position);
-                }
-                let due = state
-                    .last_push
-                    .is_none_or(|at| env.now.since(at) >= PUSH_EVERY_MS);
-                if due && state.active(env) && radio_on_anyway(env) {
-                    state.push(env, out, false);
-                }
-            }),
-        )?;
+        r.on(events::PAGE_TURNED, move |env, reading, out| {
+            let mut state = s.borrow_mut();
+            state.load(env);
+            state.current = Some(position(reading));
+            let due = state
+                .last_push
+                .is_none_or(|at| env.now.since(at) >= PUSH_EVERY_MS);
+            if due && state.active(env) && radio_on_anyway(env) {
+                state.push(env, out, false);
+            }
+        })?;
         let s = state.clone();
         r.subscribe(
             events::BOOK_CLOSED,
@@ -519,29 +502,23 @@ impl Plugin for Kosync {
             }),
         )?;
         let s = state.clone();
-        r.subscribe(
-            events::SUSPEND,
-            Box::new(move |env, _, out| {
-                let mut state = s.borrow_mut();
-                state.load(env);
-                if state.active(env) {
-                    state.push(env, out, false);
-                }
-            }),
-        )?;
+        r.on(events::SUSPEND, move |env, _, out| {
+            let mut state = s.borrow_mut();
+            state.load(env);
+            if state.active(env) {
+                state.push(env, out, false);
+            }
+        })?;
         let s = state.clone();
-        r.subscribe(
-            events::RESUME,
-            Box::new(move |env, _, out| {
-                // Maybe read on another device meanwhile.
-                let mut state = s.borrow_mut();
-                state.load(env);
-                let path = state.current.as_ref().map(|c| c.path.clone());
-                if let Some(path) = path.filter(|_| state.active(env)) {
-                    state.pull(env, out, &path, false);
-                }
-            }),
-        )?;
+        r.on(events::RESUME, move |env, _, out| {
+            // Maybe read on another device meanwhile.
+            let mut state = s.borrow_mut();
+            state.load(env);
+            let path = state.current.as_ref().map(|c| c.path.clone());
+            if let Some(path) = path.filter(|_| state.active(env)) {
+                state.pull(env, out, &path, false);
+            }
+        })?;
         let s = state.clone();
         r.subscribe(
             confirm::DECLINED,
@@ -621,15 +598,19 @@ mod tests {
 
     #[test]
     fn positions_come_from_reading_events() {
-        let params = Params::new()
-            .with(params::PATH, "books/a.epub")
-            .with(params::PROGRESS, "42.5")
-            .with(params::SECTION, "3")
-            .with(params::OFFSET, "120");
-        let found = position(&params).unwrap();
+        let reading = quireink_sdk::builtin::events::Reading {
+            path: "books/a.epub".into(),
+            title: String::new(),
+            progress: 42.5,
+            section: 3,
+            offset: 120,
+            page: None,
+            pages: None,
+        };
+        let found = position(&reading);
+        assert_eq!(found.path, "books/a.epub");
         assert_eq!(found.at, Locator::new(3, 120));
-        assert!((found.progress - 0.425).abs() < 1e-9);
-        assert!(position(&Params::new().with(params::PATH, "a")).is_none());
+        assert!((found.progress - 0.425).abs() < 1e-6);
     }
 
     #[test]

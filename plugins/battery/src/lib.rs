@@ -163,16 +163,13 @@ impl Plugin for Battery {
             )?;
         }
         let s = state.clone();
-        r.subscribe(
-            events::BATTERY_MEASURED,
-            Box::new(move |env, _, _| {
-                let mut state = s.borrow_mut();
-                if !state.awake {
-                    record(env, &mut state, Kind::Start);
-                }
-                record(env, &mut state, Kind::Sample);
-            }),
-        )?;
+        r.on(events::BATTERY_MEASURED, move |env, _, _| {
+            let mut state = s.borrow_mut();
+            if !state.awake {
+                record(env, &mut state, Kind::Start);
+            }
+            record(env, &mut state, Kind::Sample);
+        })?;
         let s = state.clone();
         r.subscribe(
             events::PAGE_TURNED,

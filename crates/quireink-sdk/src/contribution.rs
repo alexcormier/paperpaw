@@ -429,11 +429,35 @@ impl Registrar {
         self.add(Contribution::Hyphenation(spec))
     }
 
-    /// Subscribes to an event, e.g.
-    /// [`builtin::events::STARTED`](crate::builtin::events::STARTED) or one
-    /// defined by another plugin.
-    pub fn subscribe(&mut self, event: Id, handler: EventHandler) -> Result<(), RegisterError> {
-        self.add(Contribution::Subscription { event, handler })
+    /// Subscribes to an event by its id, with what it carries as named
+    /// strings, e.g. for events known only at run time; [`Registrar::on`]
+    /// hears an [`Event`](crate::event::Event) with its data.
+    pub fn subscribe(
+        &mut self,
+        event: impl Into<Id>,
+        handler: EventHandler,
+    ) -> Result<(), RegisterError> {
+        self.add(Contribution::Subscription {
+            event: event.into(),
+            handler,
+        })
+    }
+
+    /// Hears `event` with what it carries (see [`event`](crate::event)):
+    /// `handler` is not called for an emit of it that lacks what it needs.
+    pub fn on<P: crate::event::EventData>(
+        &mut self,
+        event: crate::event::Event<P>,
+        handler: impl Fn(&crate::Env<'_>, &P, &mut Vec<crate::Command>) + 'static,
+    ) -> Result<(), RegisterError> {
+        self.subscribe(
+            event.id().clone(),
+            Box::new(move |env, params, out| {
+                if let Some(data) = P::from_params(params) {
+                    handler(env, &data, out);
+                }
+            }),
+        )
     }
 
     /// Adds an item that status lines can show, e.g. a clock or the

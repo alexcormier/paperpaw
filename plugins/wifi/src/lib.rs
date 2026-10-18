@@ -191,111 +191,98 @@ impl Plugin for Wifi {
 
         // A plugin wants the network.
         let p = policy.clone();
-        r.subscribe(
-            events::NETWORK_WANTED,
-            Box::new(move |env, _, out| {
-                let Some(wifi) = env.wifi else {
-                    return;
-                };
-                if !env.settings.read(&ON_DEMAND) {
-                    return;
-                }
-                let known = wifi::known(env.secrets);
-                if known.is_empty() {
-                    out.push(Command::Notify(env.i18n.tr("wifi.no-saved").into()));
-                }
-                wifi_commands(out, p.borrow_mut().wanted(&wifi.state, &known));
-            }),
-        )?;
+        r.on(events::NETWORK_WANTED, move |env, _, out| {
+            let Some(wifi) = env.wifi else {
+                return;
+            };
+            if !env.settings.read(&ON_DEMAND) {
+                return;
+            }
+            let known = wifi::known(env.secrets);
+            if known.is_empty() {
+                out.push(Command::Notify(env.i18n.tr("wifi.no-saved").into()));
+            }
+            wifi_commands(out, p.borrow_mut().wanted(&wifi.state, &known));
+        })?;
 
         // The radio's state changed.
         let p = policy.clone();
-        r.subscribe(
-            events::WIFI_CHANGED,
-            Box::new(move |env, _, out| {
-                let Some(wifi) = env.wifi else {
-                    return;
-                };
-                let mut policy = p.borrow_mut();
-                if let WifiState::Online { ssid, .. } = &wifi.state
-                    && let Some((pending, password)) = policy.pending.take()
-                {
-                    if pending == *ssid {
-                        out.push(Command::SetSecret(wifi::keep(&pending, &password)));
-                    } else {
-                        policy.pending = Some((pending, password));
-                    }
+        r.on(events::WIFI_CHANGED, move |env, _, out| {
+            let Some(wifi) = env.wifi else {
+                return;
+            };
+            let mut policy = p.borrow_mut();
+            if let WifiState::Online { ssid, .. } = &wifi.state
+                && let Some((pending, password)) = policy.pending.take()
+            {
+                if pending == *ssid {
+                    out.push(Command::SetSecret(wifi::keep(&pending, &password)));
+                } else {
+                    policy.pending = Some((pending, password));
                 }
-                wifi_commands(out, policy.changed(&wifi.state));
-                // On and in no network while charging keeps it on (e.g.
-                // switched on again, or a network left): join one.
-                if wifi.state == WifiState::On
-                    && policy.goal == Goal::Nothing
-                    && charging_keeps_it(env)
-                    && !wifi::known(env.secrets).is_empty()
-                {
-                    wifi_commands(out, policy.retry());
-                }
-                // On, with nothing to do (e.g. joined, nothing waits).
-                if !wifi.busy && !wifi.wanted {
-                    schedule_off(env, &policy, out);
-                }
-            }),
-        )?;
+            }
+            wifi_commands(out, policy.changed(&wifi.state));
+            // On and in no network while charging keeps it on (e.g.
+            // switched on again, or a network left): join one.
+            if wifi.state == WifiState::On
+                && policy.goal == Goal::Nothing
+                && charging_keeps_it(env)
+                && !wifi::known(env.secrets).is_empty()
+            {
+                wifi_commands(out, policy.retry());
+            }
+            // On, with nothing to do (e.g. joined, nothing waits).
+            if !wifi.busy && !wifi.wanted {
+                schedule_off(env, &policy, out);
+            }
+        })?;
 
         // Networks found.
         let p = policy.clone();
-        r.subscribe(
-            events::WIFI_SCANNED,
-            Box::new(move |env, _, out| {
-                let Some(wifi) = env.wifi else {
-                    return;
-                };
-                let known = wifi::known(env.secrets);
-                let mut policy = p.borrow_mut();
-                match policy.scanned(&wifi.networks, &known) {
-                    Some(commands) => wifi_commands(out, commands),
-                    None => {
-                        policy.goal = Goal::Nothing;
-                        if wifi.wanted {
-                            out.push(Command::Notify(env.i18n.tr("wifi.none-in-reach").into()));
-                        }
-                        schedule_retry(env, &policy, out);
+        r.on(events::WIFI_SCANNED, move |env, _, out| {
+            let Some(wifi) = env.wifi else {
+                return;
+            };
+            let known = wifi::known(env.secrets);
+            let mut policy = p.borrow_mut();
+            match policy.scanned(&wifi.networks, &known) {
+                Some(commands) => wifi_commands(out, commands),
+                None => {
+                    policy.goal = Goal::Nothing;
+                    if wifi.wanted {
+                        out.push(Command::Notify(env.i18n.tr("wifi.none-in-reach").into()));
                     }
+                    schedule_retry(env, &policy, out);
                 }
-            }),
-        )?;
+            }
+        })?;
 
         // Joining a network failed.
         let p = policy.clone();
-        r.subscribe(
-            events::WIFI_FAILED,
-            Box::new(move |env, params, out| {
-                let Some(wifi) = env.wifi else {
-                    return;
-                };
-                let ssid = params.get(params::ID).unwrap_or_default();
-                let reason = JoinFailure::parse(params.get(params::REASON).unwrap_or_default());
-                let known = wifi::known(env.secrets);
-                let mut policy = p.borrow_mut();
-                let chosen = matches!(policy.goal, Goal::Chosen { .. });
-                match policy.failed(ssid, &wifi.networks, &known) {
-                    Some(commands) if !commands.is_empty() => wifi_commands(out, commands),
-                    // The last try (or the user's choice): say why.
-                    result => {
-                        if result.is_none() {
-                            policy.goal = Goal::Nothing;
-                            schedule_retry(env, &policy, out);
-                        }
-                        // Said when the user waits for it, not for tries
-                        // in the background.
-                        if chosen || wifi.wanted {
-                            out.push(Command::Notify(failure_text(env, ssid, reason)));
-                        }
+        r.on(events::WIFI_FAILED, move |env, failed, out| {
+            let Some(wifi) = env.wifi else {
+                return;
+            };
+            let (ssid, reason) = (failed.ssid.as_str(), failed.reason);
+            let known = wifi::known(env.secrets);
+            let mut policy = p.borrow_mut();
+            let chosen = matches!(policy.goal, Goal::Chosen { .. });
+            match policy.failed(ssid, &wifi.networks, &known) {
+                Some(commands) if !commands.is_empty() => wifi_commands(out, commands),
+                // The last try (or the user's choice): say why.
+                result => {
+                    if result.is_none() {
+                        policy.goal = Goal::Nothing;
+                        schedule_retry(env, &policy, out);
+                    }
+                    // Said when the user waits for it, not for tries
+                    // in the background.
+                    if chosen || wifi.wanted {
+                        out.push(Command::Notify(failure_text(env, ssid, reason)));
                     }
                 }
-            }),
-        )?;
+            }
+        })?;
 
         // The password typed for a network.
         let p = policy.clone();
@@ -316,10 +303,9 @@ impl Plugin for Wifi {
 
         // Nothing uses the network: off a while later.
         let p = policy.clone();
-        r.subscribe(
-            events::NETWORK_IDLE,
-            Box::new(move |env, _, out| schedule_off(env, &p.borrow(), out)),
-        )?;
+        r.on(events::NETWORK_IDLE, move |env, _, out| {
+            schedule_off(env, &p.borrow(), out)
+        })?;
         let p = policy.clone();
         r.subscribe(
             IDLE_CHECK,

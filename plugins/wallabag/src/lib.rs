@@ -153,15 +153,12 @@ fn save_finished(env: &Env<'_>, ids: &[String]) {
 }
 
 /// Notes an article read to the end, from the reader's page turns.
-fn page_turned(env: &Env<'_>, p: &Params) {
-    let Some(path) = p.get(params::PATH) else {
-        return;
-    };
-    let number = |key| p.get(key).and_then(|v| v.parse::<f64>().ok());
+fn page_turned(env: &Env<'_>, reading: &events::Reading) {
+    let path = reading.path.as_str();
     // On the last page, or near the end where pages are not counted yet.
-    let read = match (number(params::PAGE), number(params::PAGES)) {
+    let read = match (reading.page, reading.pages) {
         (Some(page), Some(pages)) => page >= pages,
-        _ => number(params::PROGRESS).is_some_and(|p| p >= READ),
+        _ => f64::from(reading.progress) >= READ,
     };
     if !read || !path.starts_with(&folder(env)) {
         return;
@@ -502,10 +499,9 @@ impl Plugin for Wallabag {
                 }),
             )?;
         }
-        r.subscribe(
-            events::PAGE_TURNED,
-            Box::new(|env: &Env<'_>, p: &Params, _: &mut Vec<Command>| page_turned(env, p)),
-        )?;
+        r.on(events::PAGE_TURNED, |env, reading, _| {
+            page_turned(env, reading)
+        })?;
         r.subscribe(
             ENTERED,
             Box::new(|_: &Env<'_>, p: &Params, out: &mut Vec<Command>| entered(p, out)),

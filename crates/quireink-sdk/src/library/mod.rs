@@ -25,10 +25,9 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use crate::builtin::params;
 use crate::config;
 use crate::document::ImageRef;
-use crate::{Env, Params, Storage};
+use crate::{Env, Storage};
 use quireink_digest::fnv1a64;
 
 /// Where the library keeps what it knows.
@@ -283,10 +282,8 @@ pub fn set_field(storage: &dyn Storage, path: &str, id: &str, value: &str) {
 /// Records a reading event (`core.book-opened`, `core.page-turned`): the
 /// book's progress, its title until it is read from the book, and for an
 /// opened book its place in the "recently read" order.
-pub fn record(env: &Env<'_>, params: &Params, opened: bool) {
-    let Some(path) = params.get(params::PATH) else {
-        return;
-    };
+pub fn record(env: &Env<'_>, reading: &crate::builtin::events::Reading, opened: bool) {
+    let path = reading.path.as_str();
     let storage = env.storage;
     if opened {
         let mut list = opened_books(storage);
@@ -295,16 +292,11 @@ pub fn record(env: &Env<'_>, params: &Params, opened: bool) {
         list.truncate(MAX_OPENED);
         let _ = storage.write(&opened_file(), list.join("\n").as_bytes());
     }
-    let progress = params
-        .get(params::PROGRESS)
-        .and_then(|p| p.parse::<f32>().ok())
-        .map(|p| (p + 0.5).clamp(0.0, 100.0) as u8);
+    let progress = Some((reading.progress + 0.5).clamp(0.0, 100.0) as u8);
     let mut book = book_or_new(storage, path);
     let mut changed = false;
-    if let Some(title) = params.get(params::TITLE)
-        && !book.indexed
-        && book.title.as_deref() != Some(title)
-    {
+    let title = reading.title.as_str();
+    if !title.is_empty() && !book.indexed && book.title.as_deref() != Some(title) {
         book.title = Some(title.to_string());
         changed = true;
     }
@@ -380,10 +372,7 @@ pub fn take_over_old(storage: &dyn Storage) {
 /// The command that tells everyone books came into the library or left
 /// it ([`events::LIBRARY_CHANGED`](crate::builtin::events::LIBRARY_CHANGED)).
 pub fn changed() -> crate::Command {
-    crate::Command::Emit(
-        crate::builtin::events::LIBRARY_CHANGED,
-        crate::Params::new(),
-    )
+    crate::builtin::events::LIBRARY_CHANGED.emit(())
 }
 
 #[cfg(test)]

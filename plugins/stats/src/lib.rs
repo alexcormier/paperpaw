@@ -87,16 +87,14 @@ type Shared = Rc<RefCell<State>>;
 /// The page and the number of pages of a reading event: as the reader
 /// counted them, else the progress in tenths of a percent of 1000 pages
 /// (KOReader rescales pages to the book's count when it sums them).
-fn page_of(params: &Params) -> Option<(u32, u32)> {
-    let number = |key| params.get(key).and_then(|v| v.parse::<u32>().ok());
-    if let (Some(page), Some(pages)) = (number(params::PAGE), number(params::PAGES))
+fn page_of(reading: &events::Reading) -> (u32, u32) {
+    if let (Some(page), Some(pages)) = (reading.page, reading.pages)
         && pages > 0
     {
-        return Some((page.clamp(1, pages), pages));
+        return (page.clamp(1, pages), pages);
     }
-    let progress: f32 = params.get(params::PROGRESS)?.parse().ok()?;
-    let page = (progress * 10.0) as u32 + 1;
-    Some((page.clamp(1, 1000), 1000))
+    let page = (reading.progress * 10.0) as u32 + 1;
+    (page.clamp(1, 1000), 1000)
 }
 
 /// How long a stay counts: nothing if shorter than the minimum, at most
@@ -162,10 +160,8 @@ impl State {
     }
 
     /// A book is shown: the same one again (after a menu), or another.
-    fn open(&mut self, env: &Env<'_>, now: i64, params: &Params) {
-        let (Some(path), Some(at)) = (params.get(params::PATH), page_of(params)) else {
-            return;
-        };
+    fn open(&mut self, env: &Env<'_>, now: i64, reading: &events::Reading) {
+        let (path, at) = (reading.path.as_str(), page_of(reading));
         if self.session.as_ref().is_some_and(|s| s.path == path) {
             return self.turn(env, now, at);
         }
@@ -281,69 +277,46 @@ impl Plugin for Stats {
 
         // Recording.
         let s = state.clone();
-        r.subscribe(
-            events::BOOK_OPENED,
-            Box::new(move |env, params, _| {
-                if let Some(now) = time::unix_seconds(env).filter(|_| enabled(env)) {
-                    s.borrow_mut().open(env, now, params);
-                }
-            }),
-        )?;
+        r.on(events::BOOK_OPENED, move |env, reading, _| {
+            if let Some(now) = time::unix_seconds(env).filter(|_| enabled(env)) {
+                s.borrow_mut().open(env, now, reading);
+            }
+        })?;
         let s = state.clone();
-        r.subscribe(
-            events::PAGE_TURNED,
-            Box::new(move |env, params, _| {
-                let mut state = s.borrow_mut();
-                let same = state
-                    .session
-                    .as_ref()
-                    .is_some_and(|session| params.get(params::PATH) == Some(&session.path));
-                if let (Some(now), Some(at), true) = (
-                    time::unix_seconds(env),
-                    page_of(params),
-                    same && enabled(env),
-                ) {
-                    state.turn(env, now, at);
-                }
-            }),
-        )?;
-        r.subscribe(
-            events::BOOK_MOVED,
-            Box::new(|env, params, _| {
-                let (Some(from), Some(to)) = (params.get(params::FROM), params.get(params::PATH))
-                else {
-                    return;
-                };
-                let mut books = store::books(env.storage);
-                let mut changed = false;
-                for book in books.iter_mut().filter(|b| b.path == from) {
-                    book.path = to.to_string();
-                    changed = true;
-                }
-                if changed {
-                    store::save_books(env.storage, &books);
-                }
-            }),
-        )?;
+        r.on(events::PAGE_TURNED, move |env, reading, _| {
+            let mut state = s.borrow_mut();
+            let same = state
+                .session
+                .as_ref()
+                .is_some_and(|session| reading.path == session.path);
+            if let (Some(now), true) = (time::unix_seconds(env), same && enabled(env)) {
+                state.turn(env, now, page_of(reading));
+            }
+        })?;
+        r.on(events::BOOK_MOVED, |env, moved, _| {
+            let mut books = store::books(env.storage);
+            let mut changed = false;
+            for book in books.iter_mut().filter(|b| b.path == moved.from) {
+                book.path = moved.path.clone();
+                changed = true;
+            }
+            if changed {
+                store::save_books(env.storage, &books);
+            }
+        })?;
         let s = state.clone();
-        r.subscribe(
-            events::SUSPEND,
-            Box::new(move |env, _, _| {
-                if let Some(now) = time::unix_seconds(env) {
-                    s.borrow_mut().finish_page(env, now);
-                }
-            }),
-        )?;
+        r.on(events::SUSPEND, move |env, _, _| {
+            if let Some(now) = time::unix_seconds(env) {
+                s.borrow_mut().finish_page(env, now);
+            }
+        })?;
         let s = state.clone();
-        r.subscribe(
-            events::RESUME,
-            Box::new(move |env, _, _| {
-                let mut state = s.borrow_mut();
-                if let (Some(session), Some(now)) = (&mut state.session, time::unix_seconds(env)) {
-                    session.since.get_or_insert(now);
-                }
-            }),
-        )?;
+        r.on(events::RESUME, move |env, _, _| {
+            let mut state = s.borrow_mut();
+            if let (Some(session), Some(now)) = (&mut state.session, time::unix_seconds(env)) {
+                session.since.get_or_insert(now);
+            }
+        })?;
 
         // Sharing with KOReader.
         sync::register(r, Rc::new(RefCell::new(sync::Sync::default())))?;
@@ -432,13 +405,22 @@ mod tests {
 
     #[test]
     fn pages_come_from_the_reader_or_the_progress() {
-        let counted = Params::new()
-            .with(params::PAGE, "12")
-            .with(params::PAGES, "300")
-            .with(params::PROGRESS, "4.0");
-        assert_eq!(page_of(&counted), Some((12, 300)));
-        let estimated = Params::new().with(params::PROGRESS, "42.5");
-        assert_eq!(page_of(&estimated), Some((426, 1000)));
-        assert_eq!(page_of(&Params::new()), None);
+        let counted = quireink_sdk::builtin::events::Reading {
+            path: "books/a.epub".into(),
+            title: String::new(),
+            progress: 4.0,
+            section: 3,
+            offset: 120,
+            page: Some(12),
+            pages: Some(300),
+        };
+        assert_eq!(page_of(&counted), (12, 300));
+        let estimated = quireink_sdk::builtin::events::Reading {
+            page: None,
+            pages: None,
+            progress: 42.5,
+            ..counted
+        };
+        assert_eq!(page_of(&estimated), (426, 1000));
     }
 }

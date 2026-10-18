@@ -77,10 +77,9 @@ impl Plugin for Vocabulary {
                 .section(DICTIONARY_SECTION)
                 .description("vocabulary.setting.collect.help"),
         )?;
-        r.subscribe(
-            events::WORD_LOOKED_UP,
-            Box::new(|env, params, _| record(env, params)),
-        )?;
+        r.on(events::WORD_LOOKED_UP, |env, looked_up, _| {
+            record(env, looked_up);
+        })?;
         r.add_screen(ScreenSpec {
             id: SCREEN,
             title: Cow::Borrowed("vocabulary.title"),
@@ -208,25 +207,24 @@ fn draw_word(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
 }
 
 /// Keeps a word looked up, if wanted.
-fn record(env: &Env<'_>, params: &Params) {
+fn record(env: &Env<'_>, looked_up: &events::WordLookedUp) {
     if !env.settings.read(&COLLECT) {
         return;
     }
-    let word = params.get(params::WORD).unwrap_or_default().trim();
+    let word = looked_up.word.trim();
     if word.is_empty() {
         return;
     }
-    let number = |key| params.get(key).and_then(|n| n.parse().ok()).unwrap_or(0);
     store::add(
         env.storage,
         &Word {
             word: word.to_string(),
-            language: params.get(params::LANGUAGE).unwrap_or_default().to_string(),
-            section: number(params::SECTION),
-            offset: number(params::OFFSET),
-            path: params.get(params::PATH).unwrap_or_default().to_string(),
-            title: params.get(params::TITLE).unwrap_or_default().to_string(),
-            sentence: params.get(params::TEXT).unwrap_or_default().to_string(),
+            language: looked_up.language.clone(),
+            section: looked_up.section,
+            offset: looked_up.offset,
+            path: looked_up.path.clone(),
+            title: looked_up.title.clone(),
+            sentence: looked_up.text.clone(),
         },
     );
 }

@@ -604,8 +604,8 @@ impl Plugin for Reader {
             r.add_icon(item, Cow::Borrowed(icon))?;
         }
 
-        r.subscribe(events::STARTED, Box::new(reopen_last_book))?;
-        r.subscribe(events::BOOK_MOVED, Box::new(book_moved))?;
+        r.on(events::STARTED, |env, (), out| reopen_last_book(env, out))?;
+        r.on(events::BOOK_MOVED, |env, moved, _| book_moved(env, moved))?;
         // The first-run setup: how large the text is.
         r.add_setup_step(quireink_sdk::setup::SetupStepSpec {
             id: Id::new_static("reader.setup.font-size"),
@@ -628,10 +628,8 @@ fn state_path() -> String {
 
 /// A book was moved: its data folder (position, notes, its own settings)
 /// goes along, and so does the last book read.
-fn book_moved(env: &Env<'_>, params: &Params, _: &mut Vec<Command>) {
-    let (Some(from), Some(to)) = (params.get(params::FROM), params.get(params::PATH)) else {
-        return;
-    };
+fn book_moved(env: &Env<'_>, moved: &events::BookMoved) {
+    let (from, to) = (moved.from.as_str(), moved.path.as_str());
     let _ = env
         .storage
         .rename(&screen::book_dir(from), &screen::book_dir(to));
@@ -656,7 +654,7 @@ fn last_in(text: &str) -> Option<String> {
         .map(|e| String::from(e.value.as_str()))
 }
 
-fn reopen_last_book(env: &Env<'_>, _: &Params, out: &mut Vec<Command>) {
+fn reopen_last_book(env: &Env<'_>, out: &mut Vec<Command>) {
     if !env.settings.read(&settings::OPEN_LAST) {
         return;
     }

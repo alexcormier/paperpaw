@@ -653,12 +653,7 @@ fn tell_moved(env: &Env<'_>, from: &str, to: &str, cx: &mut Cx<'_, '_>) {
     let mut told = 0;
     while let Some((from, to)) = pending.pop() {
         if !ops::is_dir(env.storage, &to) {
-            cx.command(Command::Emit(
-                events::BOOK_MOVED,
-                Params::new()
-                    .with(params::FROM, from)
-                    .with(params::PATH, to),
-            ));
+            cx.command(events::BOOK_MOVED.emit(events::BookMoved { from, path: to }));
             told += 1;
             continue;
         }

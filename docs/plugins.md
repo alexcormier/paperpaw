@@ -182,19 +182,25 @@ settings: see [Passwords and keys](#passwords-and-keys).
 ### Events
 
 ```rust
-r.subscribe(events::BOOK_OPENED, Box::new(move |env, params, out| {
+r.on(events::BOOK_OPENED, move |env, reading, out| {
     opened.set(opened.get() + 1);
-}))?;
+    // reading.path, reading.title, reading.progress, reading.at() …
+})?;
 ```
 
-The kernel and plugins emit events with parameters; any plugin can
-listen. Standard ones are in `builtin::events`: started, a setting
-changed, a book opened, a page turned, a book moved, books came into
-the library or left it, its bookmarks or highlights changed, a word
-looked up, the device suspends or resumes.
-Plugins define their own (the reader's `reader.notes-exported`, for
-example), and `Command::Schedule` emits one at a time of day. Open
-screens get every event too (`Screen::on_event`).
+The kernel and plugins emit events; any plugin can listen. An `Event<P>`
+names an event and what it carries, a struct made with `event_data!`,
+so emitting (`EVENT.emit(data)`) and hearing (`r.on`) are checked as
+the plugin is built; screens get every event too and read one with
+`EVENT.read(event, params)` in `Screen::on_event`. Standard ones are in
+`builtin::events`: started, a setting changed, a book opened, a page
+turned, a book moved, books came into the library or left it, its
+bookmarks or highlights changed, a word looked up, the device suspends
+or resumes. Plugins define their own the same way (the reader's
+`reader.notes-exported`, for example), and `Command::Schedule` emits
+one at a time of day. Underneath, what events carry travels as named
+strings (`Params`): events known only at run time are heard by id with
+`r.subscribe`.
 
 What is known of books is a service, not a screen's: `library` has a
 book's details (title, author, series, tags, cover, progress, and

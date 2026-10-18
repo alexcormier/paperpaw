@@ -86,20 +86,17 @@ impl Plugin for Setup {
         })?;
         r.add_icon(OPEN, Cow::Borrowed("adjustments"))?;
         // The first start: the guide, once.
-        r.subscribe(
-            events::STARTED,
-            Box::new(|env, _, out| {
-                if env.storage.exists(&done_file()) {
-                    return;
-                }
-                if library::opened_books(env.storage).is_empty() {
-                    out.push(Command::OpenSlot(slots::SETUP, Params::new()));
-                } else {
-                    // Used before the guide came: not a first start.
-                    mark_done(env);
-                }
-            }),
-        )?;
+        r.on(events::STARTED, |env, _, out| {
+            if env.storage.exists(&done_file()) {
+                return;
+            }
+            if library::opened_books(env.storage).is_empty() {
+                out.push(Command::OpenSlot(slots::SETUP, Params::new()));
+            } else {
+                // Used before the guide came: not a first start.
+                mark_done(env);
+            }
+        })?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())

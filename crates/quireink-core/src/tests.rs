@@ -2492,11 +2492,11 @@ impl Plugin for NetPlugin {
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         use quireink_sdk::builtin::events;
         for event in [
-            events::NETWORK_WANTED,
-            events::NETWORK_IDLE,
-            events::WIFI_CHANGED,
-            events::WIFI_SCANNED,
-            events::WIFI_FAILED,
+            Id::from(events::NETWORK_WANTED),
+            events::NETWORK_IDLE.into(),
+            events::WIFI_CHANGED.into(),
+            events::WIFI_SCANNED.into(),
+            events::WIFI_FAILED.into(),
             Id::new_static("net.reply"),
         ] {
             let log = self.0.clone();

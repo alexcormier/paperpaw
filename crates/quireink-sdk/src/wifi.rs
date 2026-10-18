@@ -125,6 +125,16 @@ pub enum JoinFailure {
     Other,
 }
 
+impl crate::event::ParamValue for JoinFailure {
+    fn to_param(&self) -> String {
+        String::from(self.as_str())
+    }
+
+    fn from_param(text: &str) -> Option<Self> {
+        Some(Self::parse(text))
+    }
+}
+
 impl JoinFailure {
     pub fn as_str(self) -> &'static str {
         match self {

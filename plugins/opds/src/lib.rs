@@ -193,12 +193,9 @@ impl Plugin for Opds {
         })?;
         r.add_icon(OPEN, Cow::Borrowed("cloud-download"))?;
         r.add_icon(SYNC, Cow::Borrowed("refresh"))?;
-        r.subscribe(
-            events::STARTED,
-            Box::new(|env: &Env<'_>, _: &Params, out: &mut Vec<Command>| {
-                catalogs::move_passwords(env, out);
-            }),
-        )?;
+        r.on(events::STARTED, |env, _, out| {
+            catalogs::move_passwords(env, out);
+        })?;
         for (event, book) in [(sync::FEED_LOADED, false), (sync::BOOK_LOADED, true)] {
             let shared = state.clone();
             r.subscribe(

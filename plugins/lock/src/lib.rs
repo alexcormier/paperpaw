@@ -120,20 +120,14 @@ impl Plugin for Lock {
         })?;
         r.add_icon(NOW, Cow::Borrowed("lock"))?;
         let start = locked.clone();
-        r.subscribe(
-            events::STARTED,
-            Box::new(move |env: &Env<'_>, _: &Params, out: &mut Vec<Command>| {
-                lock(env, &start, out);
-            }),
-        )?;
-        r.subscribe(
-            events::RESUME,
-            Box::new(move |env: &Env<'_>, _: &Params, out: &mut Vec<Command>| {
-                if env.settings.read(&ON_WAKE) {
-                    lock(env, &locked, out);
-                }
-            }),
-        )?;
+        r.on(events::STARTED, move |env, _, out| {
+            lock(env, &start, out);
+        })?;
+        r.on(events::RESUME, move |env, _, out| {
+            if env.settings.read(&ON_WAKE) {
+                lock(env, &locked, out);
+            }
+        })?;
         // The first-run setup: a lock, off unless chosen.
         r.add_setup_step(quireink_sdk::setup::SetupStepSpec {
             id: Id::new_static("lock.setup"),

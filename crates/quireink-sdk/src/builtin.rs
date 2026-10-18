@@ -213,86 +213,158 @@ pub mod params {
 
 /// Events emitted by the kernel.
 pub mod events {
+    use alloc::string::String;
+
     use crate::Id;
+    use crate::document::Locator;
+    use crate::event::Event;
+
+    crate::event_data! {
+        /// Where a book is being read ([`BOOK_OPENED`], [`PAGE_TURNED`],
+        /// [`BOOK_CLOSED`], [`BOOK_FINISHED`]).
+        pub struct Reading {
+            /// The book.
+            pub path: String,
+            pub title: String,
+            /// How far in it, in percent.
+            pub progress: f32,
+            /// The page's start ([`Reading::at`]).
+            pub section: u32,
+            pub offset: u32,
+            /// The page and the pages, once the reader counted them.
+            pub page: Option<u32>,
+            pub pages: Option<u32>,
+        }
+    }
+
+    impl Reading {
+        /// The page's start.
+        pub fn at(&self) -> Locator {
+            Locator::new(self.section, self.offset)
+        }
+    }
+
+    crate::event_data! {
+        /// Which setting changed ([`SETTING_CHANGED`]).
+        pub struct SettingChanged {
+            pub id: Id,
+        }
+    }
+
+    crate::event_data! {
+        /// A book that was moved or renamed ([`BOOK_MOVED`]).
+        pub struct BookMoved {
+            /// Its old path.
+            pub from: String,
+            /// Its new one.
+            pub path: String,
+        }
+    }
+
+    crate::event_data! {
+        /// The book whose annotations changed ([`ANNOTATIONS_CHANGED`]).
+        pub struct AnnotationsChanged {
+            pub path: String,
+        }
+    }
+
+    crate::event_data! {
+        /// A word looked up in a book ([`WORD_LOOKED_UP`]).
+        pub struct WordLookedUp {
+            pub word: String,
+            /// The book's language, e.g. `de`.
+            pub language: String,
+            /// The sentence the word is in.
+            pub text: String,
+            /// The book.
+            pub path: String,
+            pub title: String,
+            /// Where the word is.
+            pub section: u32,
+            pub offset: u32,
+        }
+    }
+
+    crate::event_data! {
+        /// The menu that was redefined or reset ([`MENU_CHANGED`]).
+        pub struct MenuChanged {
+            pub id: Id,
+        }
+    }
+
+    crate::event_data! {
+        /// A network that could not be joined ([`WIFI_FAILED`]).
+        pub struct WifiFailed {
+            pub ssid: String,
+            pub reason: crate::wifi::JoinFailure,
+        }
+    }
 
     /// After the home screen has been opened at start-up. Plugins use it to
     /// e.g. reopen the last book.
-    pub const STARTED: Id = Id::new_static("core.started");
-    /// After a setting changed; parameter [`ID`](super::params::ID).
-    pub const SETTING_CHANGED: Id = Id::new_static("core.setting-changed");
-    /// A book was opened for reading. Every reader plugin emits it, so home
-    /// screens, statistics or sync plugins work with any reader. Parameters
-    /// [`PATH`](super::params::PATH), [`TITLE`](super::params::TITLE),
-    /// [`PROGRESS`](super::params::PROGRESS) and the position,
-    /// [`SECTION`](super::params::SECTION) and
-    /// [`OFFSET`](super::params::OFFSET). Not for documents in hidden
-    /// folders ([`files::is_hidden`](crate::files::is_hidden)), e.g. web
-    /// pages: they are no books.
-    pub const BOOK_OPENED: Id = Id::new_static("core.book-opened");
-    /// The reader moved to another page; same parameters as
-    /// [`BOOK_OPENED`].
-    pub const PAGE_TURNED: Id = Id::new_static("core.page-turned");
+    pub const STARTED: Event<()> = Event::new("core.started");
+    /// After a setting changed: which ([`SettingChanged`]).
+    pub const SETTING_CHANGED: Event<SettingChanged> = Event::new("core.setting-changed");
+    /// A book was opened for reading ([`Reading`]). Every reader plugin
+    /// emits it, so home screens, statistics or sync plugins work with any
+    /// reader. Not for documents in hidden folders
+    /// ([`files::is_hidden`](crate::files::is_hidden)), e.g. web pages:
+    /// they are no books.
+    pub const BOOK_OPENED: Event<Reading> = Event::new("core.book-opened");
+    /// The reader moved to another page ([`Reading`]).
+    pub const PAGE_TURNED: Event<Reading> = Event::new("core.page-turned");
     /// The book read was closed (the reader left, or another book
-    /// opened); same parameters as [`BOOK_OPENED`], where it was left.
-    pub const BOOK_CLOSED: Id = Id::new_static("core.book-closed");
-    /// The last page of a book was reached, once each time it is opened;
-    /// same parameters as [`BOOK_OPENED`].
-    pub const BOOK_FINISHED: Id = Id::new_static("core.book-finished");
-    /// A book file was moved or renamed: parameters
-    /// [`FROM`](super::params::FROM) (the old path) and
-    /// [`PATH`](super::params::PATH) (the new one). Plugins that keep data
-    /// by a book's path move it along (progress, notes, statistics).
-    pub const BOOK_MOVED: Id = Id::new_static("core.book-moved");
+    /// opened): where it was left ([`Reading`]).
+    pub const BOOK_CLOSED: Event<Reading> = Event::new("core.book-closed");
+    /// The last page of a book was reached, once each time it is opened
+    /// ([`Reading`]).
+    pub const BOOK_FINISHED: Event<Reading> = Event::new("core.book-finished");
+    /// A book file was moved or renamed ([`BookMoved`]). Plugins that keep
+    /// data by a book's path move it along (progress, notes, statistics).
+    pub const BOOK_MOVED: Event<BookMoved> = Event::new("core.book-moved");
     /// Books came into the library or left it (received, downloaded,
     /// copied, deleted): views of the library read it again. Plugins that
     /// change the library emit it ([`library::changed`](crate::library::changed));
     /// a move is [`BOOK_MOVED`].
-    pub const LIBRARY_CHANGED: Id = Id::new_static("core.library-changed");
+    pub const LIBRARY_CHANGED: Event<()> = Event::new("core.library-changed");
     /// The bookmarks or highlights of a book changed
-    /// ([`annotations`](crate::annotations)): parameter
-    /// [`PATH`](super::params::PATH). Readers show them anew, syncs pass
-    /// them on.
-    pub const ANNOTATIONS_CHANGED: Id = Id::new_static("core.annotations-changed");
-    /// A word of a book was looked up: parameters
-    /// [`WORD`](super::params::WORD), [`LANGUAGE`](super::params::LANGUAGE),
-    /// [`TEXT`](super::params::TEXT) (its sentence), the book's
-    /// [`PATH`](super::params::PATH) and [`TITLE`](super::params::TITLE),
-    /// and where the word is ([`SECTION`](super::params::SECTION),
-    /// [`OFFSET`](super::params::OFFSET)).
-    pub const WORD_LOOKED_UP: Id = Id::new_static("core.word-looked-up");
-    /// A menu was redefined or reset; parameter [`ID`](super::params::ID).
-    pub const MENU_CHANGED: Id = Id::new_static("core.menu-changed");
+    /// ([`annotations`](crate::annotations), [`AnnotationsChanged`]).
+    /// Readers show them anew, syncs pass them on.
+    pub const ANNOTATIONS_CHANGED: Event<AnnotationsChanged> =
+        Event::new("core.annotations-changed");
+    /// A word of a book was looked up ([`WordLookedUp`]).
+    pub const WORD_LOOKED_UP: Event<WordLookedUp> = Event::new("core.word-looked-up");
+    /// A menu was redefined or reset ([`MenuChanged`]).
+    pub const MENU_CHANGED: Event<MenuChanged> = Event::new("core.menu-changed");
     /// The device goes to sleep or the app to the background: a moment to
     /// save or send what is pending.
-    pub const SUSPEND: Id = Id::new_static("core.suspend");
+    pub const SUSPEND: Event<()> = Event::new("core.suspend");
     /// Back from [`SUSPEND`].
-    pub const RESUME: Id = Id::new_static("core.resume");
+    pub const RESUME: Event<()> = Event::new("core.resume");
     /// The battery or the time zone changed; status lines redraw.
-    pub const STATUS_CHANGED: Id = Id::new_static("core.status-changed");
+    pub const STATUS_CHANGED: Event<()> = Event::new("core.status-changed");
     /// The battery was measured again ([`Env::status`](crate::Env::status)),
     /// about once a minute where the device measures it: for plugins that
     /// record its use. Nothing need be drawn anew.
-    pub const BATTERY_MEASURED: Id = Id::new_static("core.battery-measured");
+    pub const BATTERY_MEASURED: Event<()> = Event::new("core.battery-measured");
     /// The Wi-Fi state changed ([`Env::wifi`](crate::Env), see
     /// [`wifi`](crate::wifi)).
-    pub const WIFI_CHANGED: Id = Id::new_static("core.wifi-changed");
+    pub const WIFI_CHANGED: Event<()> = Event::new("core.wifi-changed");
     /// Networks were found ([`Wifi::networks`](crate::wifi::Wifi)).
-    pub const WIFI_SCANNED: Id = Id::new_static("core.wifi-scanned");
-    /// Joining a network failed: parameters [`ID`](super::params::ID) (the
-    /// network) and [`REASON`](super::params::REASON) (a
-    /// [`JoinFailure`](crate::wifi::JoinFailure)).
-    pub const WIFI_FAILED: Id = Id::new_static("core.wifi-failed");
+    pub const WIFI_SCANNED: Event<()> = Event::new("core.wifi-scanned");
+    /// Joining a network failed ([`WifiFailed`]).
+    pub const WIFI_FAILED: Event<WifiFailed> = Event::new("core.wifi-failed");
     /// A plugin's request, server or connection waits for the network,
     /// where QuireInk manages Wi-Fi and is in none: e.g. to join one.
-    pub const NETWORK_WANTED: Id = Id::new_static("core.network-wanted");
+    pub const NETWORK_WANTED: Event<()> = Event::new("core.network-wanted");
     /// Nothing uses the network any more (no request, server or
     /// connection), where QuireInk manages Wi-Fi: e.g. to switch the radio
     /// off a little later.
-    pub const NETWORK_IDLE: Id = Id::new_static("core.network-idle");
+    pub const NETWORK_IDLE: Event<()> = Event::new("core.network-idle");
     /// An install of a firmware update went on, ended or failed
     /// ([`Firmware::state`](crate::firmware::Firmware), see
     /// [`firmware`](crate::firmware)).
-    pub const FIRMWARE_CHANGED: Id = Id::new_static("core.firmware-changed");
+    pub const FIRMWARE_CHANGED: Event<()> = Event::new("core.firmware-changed");
 }
 
 /// Status items of the kernel (see [`status`](crate::status)).

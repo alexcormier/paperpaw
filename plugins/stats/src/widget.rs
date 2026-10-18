@@ -133,12 +133,10 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     )?;
     // A goal set shows on the home screen: the widget goes onto its first
     // page, after the book being read, if no page shows it yet.
-    r.subscribe(
+    r.on(
         quireink_sdk::builtin::events::SETTING_CHANGED,
-        Box::new(|env, params, out| {
-            if params.get(quireink_sdk::builtin::params::ID) != Some(GOAL.as_str())
-                || goal(env).is_none()
-            {
+        |env, changed, out| {
+            if changed.id != GOAL || goal(env).is_none() {
                 return;
             }
             let pages: [&str; 4] = ["home.page-1", "home.page-2", "home.page-3", "home.page-4"];
@@ -162,7 +160,7 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
                     SettingValue::Text(Cow::Owned(ids.join(", "))),
                 ));
             }
-        }),
+        },
     )?;
     r.add_setting_group(widgets::settings_group(&TODAY, "stats.widget.today"))?;
     r.add_setting(widgets::align_setting(&TODAY, Align::Left))?;

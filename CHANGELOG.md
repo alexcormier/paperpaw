@@ -6,6 +6,13 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: typed events. An `Event<P>` names an event and what it carries (a
+  struct made with `event_data!`); `r.on(EVENT, |env, data, out| …)`
+  hears it, `EVENT.emit(data)` emits it, `EVENT.read(event, params)`
+  reads it on a screen. Every built-in event is one: the reading events
+  carry `Reading` (path, title, progress, position, page), a move
+  `BookMoved`, a changed setting `SettingChanged`, and so on.
+  `r.subscribe` takes any id, for events known only at run time.
 - SDK: typed settings. A `Setting<T>` (`bool`, `i64` or `Text`) names a
   setting and the type of its value; `env.settings.read(&SIZE)` reads
   it, `Command::set(&SIZE, 12)` changes it, `SettingSpec::switch`,

@@ -22,18 +22,16 @@ extern crate alloc;
 pub mod lua;
 
 use alloc::borrow::Cow;
-use alloc::boxed::Box;
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
 use quireink_sdk::annotations::{self, Annotation, Kind, Mark};
-use quireink_sdk::builtin::{events, params};
+use quireink_sdk::builtin::events;
 use quireink_sdk::document::{Document, Locator};
 use quireink_sdk::time::{self, LocalTime};
 use quireink_sdk::{
-    Command, Env, Id, Manifest, Params, Plugin, RegisterError, Registrar, SDK_VERSION, Storage,
-    Version,
+    Command, Env, Id, Manifest, Plugin, RegisterError, Registrar, SDK_VERSION, Storage, Version,
 };
 
 use lua::{Table, Value};
@@ -457,10 +455,7 @@ fn exchange_book(env: &Env<'_>, book: &str, out: &mut Vec<Command>) {
 }
 
 /// A book moved: KOReader's folder and what is known go along.
-fn moved(env: &Env<'_>, p: &Params, _: &mut Vec<Command>) {
-    let (Some(from), Some(to)) = (p.get(params::FROM), p.get(params::PATH)) else {
-        return;
-    };
+fn moved_book(env: &Env<'_>, from: &str, to: &str) {
     let storage = env.storage;
     if has_entries(storage, &sidecar(from)) {
         let _ = storage.rename(&sidecar(from), &sidecar(to));
@@ -492,17 +487,15 @@ impl Plugin for KoReader {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        for event in [events::BOOK_OPENED, events::ANNOTATIONS_CHANGED] {
-            r.subscribe(
-                event,
-                Box::new(|env: &Env<'_>, p: &Params, out: &mut Vec<Command>| {
-                    if let Some(book) = p.get(params::PATH) {
-                        exchange_book(env, book, out);
-                    }
-                }),
-            )?;
-        }
-        r.subscribe(events::BOOK_MOVED, Box::new(moved))?;
+        r.on(events::BOOK_OPENED, |env, reading, out| {
+            exchange_book(env, &reading.path, out);
+        })?;
+        r.on(events::ANNOTATIONS_CHANGED, |env, changed, out| {
+            exchange_book(env, &changed.path, out);
+        })?;
+        r.on(events::BOOK_MOVED, |env, moved, _| {
+            moved_book(env, &moved.from, &moved.path);
+        })?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())

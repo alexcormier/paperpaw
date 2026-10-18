@@ -122,14 +122,11 @@ impl Plugin for Update {
         })?;
         r.set_menu_need(OPEN, MenuNeed::Firmware)?;
         r.add_icon(OPEN, Cow::Borrowed("download"))?;
-        r.subscribe(
-            events::STARTED,
-            Box::new(|env, _, out| {
-                if let Some(firmware) = env.firmware {
-                    started(env, firmware, out);
-                }
-            }),
-        )?;
+        r.on(events::STARTED, |env, _, out| {
+            if let Some(firmware) = env.firmware {
+                started(env, firmware, out);
+            }
+        })?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())

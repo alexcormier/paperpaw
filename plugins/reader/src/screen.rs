@@ -6,6 +6,7 @@ use alloc::vec::Vec;
 use quireink_digest::fnv1a64;
 use quireink_sdk::builtin::{actions, events, fonts, params, slots};
 use quireink_sdk::document::{Document, DocumentError, Link, Locator};
+use quireink_sdk::event::EventData;
 use quireink_sdk::layout::{
     Face, Hyphenate, Page, PageImage, Style, Typesetter, layout_page, line_start,
 };
@@ -990,17 +991,15 @@ impl ReaderScreen {
                         .with(params::WORD, phrase.to_string())
                         .with(params::LANGUAGE, book.language.clone()),
                 ));
-                cx.command(Command::Emit(
-                    events::WORD_LOOKED_UP,
-                    Params::new()
-                        .with(params::WORD, phrase.to_string())
-                        .with(params::LANGUAGE, book.language.clone())
-                        .with(params::TEXT, sentence(&words, lo, hi))
-                        .with(params::PATH, book.path.clone())
-                        .with(params::TITLE, book.title.clone())
-                        .with(params::SECTION, format!("{}", start.section))
-                        .with(params::OFFSET, format!("{}", start.offset)),
-                ));
+                cx.command(events::WORD_LOOKED_UP.emit(events::WordLookedUp {
+                    word: phrase.to_string(),
+                    language: book.language.clone(),
+                    text: sentence(&words, lo, hi),
+                    path: book.path.clone(),
+                    title: book.title.clone(),
+                    section: start.section,
+                    offset: start.offset,
+                }));
             }
             return;
         }
@@ -1555,21 +1554,26 @@ impl Book {
 
     /// Parameters of the standard reading events; the page and the number
     /// of pages once they are counted.
-    fn event_params(&self, env: &Env<'_>) -> Params {
-        let mut params = Params::new()
-            .with(params::PATH, self.path.clone())
-            .with(params::TITLE, self.title.clone())
-            .with(params::PROGRESS, format!("{:.1}", self.percent()))
-            .with(params::SECTION, format!("{}", self.page.start.section))
-            .with(params::OFFSET, format!("{}", self.page.start.offset));
-        if let Some(index) = self.index.as_ref().filter(|i| i.is_complete())
-            && let Some((page, true)) = index.locate(env.storage, self.page.start)
-        {
-            params = params
-                .with(params::PAGE, format!("{}", page + 1))
-                .with(params::PAGES, format!("{}", index.pages()));
+    /// Where the book is read, for [`events::BOOK_OPENED`] and the others.
+    fn reading(&self, env: &Env<'_>) -> events::Reading {
+        let counted = self
+            .index
+            .as_ref()
+            .filter(|i| i.is_complete())
+            .and_then(|index| match index.locate(env.storage, self.page.start) {
+                Some((page, true)) => Some((page + 1, index.pages())),
+                _ => None,
+            });
+        events::Reading {
+            path: self.path.clone(),
+            title: self.title.clone(),
+            // One decimal, as written before.
+            progress: (self.percent() * 10.0 + 0.5) as u32 as f32 / 10.0,
+            section: self.page.start.section,
+            offset: self.page.start.offset,
+            page: counted.map(|(page, _)| page),
+            pages: counted.map(|(_, pages)| pages),
         }
-        params
     }
 
     fn open_index(&self, env: &Env<'_>) -> PageIndex {
@@ -1747,14 +1751,11 @@ impl Book {
             cx.wake_at(env.now.add_millis(SAVE_EVERY_MS));
         }
         if !self.web() {
-            cx.command(Command::Emit(events::PAGE_TURNED, self.event_params(&env)));
+            cx.command(events::PAGE_TURNED.emit(self.reading(&env)));
             // The last page: the book is read to the end.
             if !self.finished && self.document.progress(self.page.end) >= 0.999 {
                 self.finished = true;
-                cx.command(Command::Emit(
-                    events::BOOK_FINISHED,
-                    self.event_params(&env),
-                ));
+                cx.command(events::BOOK_FINISHED.emit(self.reading(&env)));
             }
         }
         cx.request_redraw();
@@ -2386,7 +2387,8 @@ impl Book {
     /// What status items get to know about the book.
     fn status_context(&self, env: &Env<'_>) -> Params {
         let mut context = self
-            .event_params(env)
+            .reading(env)
+            .to_params()
             .with(status_context::PAGE, self.position_label(env));
         if let Some((_, _, chapter)) = &self.chapter
             && !chapter.is_empty()
@@ -2613,7 +2615,7 @@ impl Screen for ReaderScreen {
         if let Ok(book) = &self.book
             && !book.web()
         {
-            cx.command(Command::Emit(events::BOOK_CLOSED, book.event_params(&env)));
+            cx.command(events::BOOK_CLOSED.emit(book.reading(&env)));
         }
     }
 
@@ -2733,8 +2735,7 @@ impl Screen for ReaderScreen {
                 book.dir
             ))));
             if !book.web() {
-                let params = book.event_params(cx.env());
-                cx.command(Command::Emit(events::BOOK_OPENED, params));
+                cx.command(events::BOOK_OPENED.emit(book.reading(cx.env())));
             }
             let now = cx.env().now;
             cx.wake_at(now);
@@ -2880,10 +2881,10 @@ impl Screen for ReaderScreen {
                 .as_ref()
                 .map(|(_, _, title)| title.clone())
                 .unwrap_or_default();
-            let event = book.event_params(&env);
-            let page = match (event.get(params::PAGE), event.get(params::PAGES)) {
+            let reading = book.reading(&env);
+            let page = match (reading.page, reading.pages) {
                 (Some(page), Some(pages)) => format!("{page} / {pages}"),
-                _ => format!("{} %", event.get(params::PROGRESS).unwrap_or("0")),
+                _ => format!("{} %", reading.progress),
             };
             // Pictures of pages: no text to search, hear or set.
             let mut hide: Vec<Id> = Vec::new();
@@ -3030,7 +3031,10 @@ impl Screen for ReaderScreen {
             return;
         }
         // Changed elsewhere too, e.g. by a sync.
-        if *event == events::ANNOTATIONS_CHANGED && this_book {
+        if events::ANNOTATIONS_CHANGED
+            .read(event, params)
+            .is_some_and(|a| a.path == book.path)
+        {
             let marks = annotations::marks(cx.env().storage, &book.path);
             if marks != book.marks {
                 book.marks = marks;
@@ -3113,15 +3117,12 @@ impl Screen for ReaderScreen {
             }
             return;
         }
-        let font_changed = *event == events::SETTING_CHANGED
-            && params.get(params::ID)
-                == Some(quireink_sdk::builtin::settings::READING_FONT.as_str());
+        // Which setting changed, if one did.
+        let changed = events::SETTING_CHANGED.read(event, params).map(|c| c.id);
+        let id = changed.as_ref().map_or("", Id::as_str);
+        let font_changed = id == quireink_sdk::builtin::settings::READING_FONT.as_str();
         if *event == events::STATUS_CHANGED
-            || *event == events::SETTING_CHANGED
-                && !font_changed
-                && params
-                    .get(params::ID)
-                    .is_some_and(|id| id.starts_with("core."))
+            || changed.is_some() && !font_changed && id.starts_with("core.")
         {
             // The battery, the clock format, the time zone, …
             self.status_shown.clear();
@@ -3131,11 +3132,10 @@ impl Screen for ReaderScreen {
         let Ok(book) = &mut self.book else {
             return;
         };
-        let id = params.get(params::ID).unwrap_or_default();
         // The book's fonts are loaded with it.
         let reopen = id == crate::settings::PUBLISHER_STYLES.as_str()
             || id == quireink_sdk::builtin::settings::READING_FONT.as_str();
-        if *event == events::SETTING_CHANGED && reopen {
+        if changed.is_some() && reopen {
             // Another conversion of the book: open it again where it was.
             let env = *cx.env();
             let path = book.path.clone();
@@ -3149,7 +3149,7 @@ impl Screen for ReaderScreen {
         let affects_layout = font_changed
             || filters
             || id.starts_with("reader.") && id != crate::settings::OPEN_LAST.as_str();
-        if *event == events::SETTING_CHANGED && affects_layout {
+        if changed.is_some() && affects_layout {
             self.selection = None;
             let env = *cx.env();
             book.relayout(&env);

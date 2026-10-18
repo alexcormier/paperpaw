@@ -997,9 +997,7 @@ impl Kernel {
         self.now = now;
         self.last_activity = now;
         self.output.commands.push(Command::open_slot(slots::HOME));
-        self.output
-            .commands
-            .push(Command::Emit(events::STARTED, Params::new()));
+        self.output.commands.push(events::STARTED.emit(()));
         self.finish()
     }
 
@@ -1301,14 +1299,10 @@ impl Kernel {
         // every reading.
         let shown = |s: &SystemStatus| s.battery.map(|b| (b.percent, b.charging));
         if shown(&old) != shown(&status) || offset(&old) != offset(&status) || jumped {
-            self.output
-                .commands
-                .push(Command::Emit(events::STATUS_CHANGED, Params::new()));
+            self.output.commands.push(events::STATUS_CHANGED.emit(()));
         }
         if status.battery.is_some() {
-            self.output
-                .commands
-                .push(Command::Emit(events::BATTERY_MEASURED, Params::new()));
+            self.output.commands.push(events::BATTERY_MEASURED.emit(()));
         }
         self.finish()
     }
@@ -2043,9 +2037,7 @@ impl Kernel {
             && firmware.state != state
         {
             firmware.state = state;
-            self.output
-                .commands
-                .push(Command::Emit(events::FIRMWARE_CHANGED, Params::new()));
+            self.output.commands.push(events::FIRMWARE_CHANGED.emit(()));
         }
         self.finish()
     }
@@ -2065,13 +2057,9 @@ impl Kernel {
                         wifi.scanning = false;
                     }
                     wifi.state = state;
-                    self.output
-                        .commands
-                        .push(Command::Emit(events::WIFI_CHANGED, Params::new()));
+                    self.output.commands.push(events::WIFI_CHANGED.emit(()));
                     // Status lines show it (`wifi.status`).
-                    self.output
-                        .commands
-                        .push(Command::Emit(events::STATUS_CHANGED, Params::new()));
+                    self.output.commands.push(events::STATUS_CHANGED.emit(()));
                 }
             }
             WifiEvent::Scanned(mut networks) => {
@@ -2088,17 +2076,12 @@ impl Kernel {
                 });
                 wifi.networks = networks;
                 wifi.scanning = false;
-                self.output
-                    .commands
-                    .push(Command::Emit(events::WIFI_SCANNED, Params::new()));
+                self.output.commands.push(events::WIFI_SCANNED.emit(()));
             }
             WifiEvent::Failed { ssid, reason } => {
-                let params = Params::new()
-                    .with(quireink_sdk::builtin::params::ID, ssid)
-                    .with(quireink_sdk::builtin::params::REASON, reason.as_str());
                 self.output
                     .commands
-                    .push(Command::Emit(events::WIFI_FAILED, params));
+                    .push(events::WIFI_FAILED.emit(events::WifiFailed { ssid, reason }));
             }
         }
         self.finish()
@@ -2131,9 +2114,7 @@ impl Kernel {
             (true, None) => {
                 self.network_waiting = Some(self.now);
                 wifi.wanted = true;
-                self.output
-                    .commands
-                    .push(Command::Emit(events::NETWORK_WANTED, Params::new()));
+                self.output.commands.push(events::NETWORK_WANTED.emit(()));
             }
             (false, Some(_)) => {
                 self.network_waiting = None;
@@ -2144,9 +2125,7 @@ impl Kernel {
         let busy = !self.awaiting.is_empty() || !self.servers.is_empty() || self.sockets.any();
         wifi.busy = busy;
         if self.network_busy && !busy {
-            self.output
-                .commands
-                .push(Command::Emit(events::NETWORK_IDLE, Params::new()));
+            self.output.commands.push(events::NETWORK_IDLE.emit(()));
         }
         self.network_busy = busy;
     }
@@ -2240,9 +2219,7 @@ impl Kernel {
         let _running = self.shared.meter.enter(meter::CORE);
         self.now = now;
         self.shared.usage.sleeps = self.shared.usage.sleeps.saturating_add(1);
-        self.output
-            .commands
-            .push(Command::Emit(events::SUSPEND, Params::new()));
+        self.output.commands.push(events::SUSPEND.emit(()));
         let effects = self.finish();
         // What plugins saved, and what storage kept back, written.
         let _ = self.shared.storage.sync();
@@ -2282,9 +2259,7 @@ impl Kernel {
         self.last_activity = now;
         // The time asleep is no screen's.
         self.shown_since = now;
-        self.output
-            .commands
-            .push(Command::Emit(events::RESUME, Params::new()));
+        self.output.commands.push(events::RESUME.emit(()));
         self.finish()
     }
 
@@ -3202,10 +3177,9 @@ impl Kernel {
                 Ok(()) => {
                     self.persist_setting(&id);
                     self.setting_changed(&id);
-                    self.output.commands.push(Command::Emit(
-                        events::SETTING_CHANGED,
-                        Params::new().with(builtin_params::ID, id.as_str().to_string()),
-                    ));
+                    self.output.commands.push(
+                        events::SETTING_CHANGED.emit(events::SettingChanged { id: id.clone() }),
+                    );
                 }
                 Err(error) => {
                     self.warn(WarningSource::Runtime, None, format!("`{id}`: {error}"));
@@ -3697,10 +3671,9 @@ impl Kernel {
         for (id, old) in before {
             if self.shared.settings.get(id.as_str()) != old.as_ref() {
                 self.setting_changed(&id);
-                self.output.commands.push(Command::Emit(
-                    events::SETTING_CHANGED,
-                    Params::new().with(builtin_params::ID, id.as_str().to_string()),
-                ));
+                self.output
+                    .commands
+                    .push(events::SETTING_CHANGED.emit(events::SettingChanged { id: id.clone() }));
             }
         }
     }
@@ -3804,10 +3777,9 @@ impl Kernel {
         self.announce_scope_changes(before);
         // The switch itself is not a scoped value others see change.
         if *id == core_settings::SCOPE_ONLY {
-            self.output.commands.push(Command::Emit(
-                events::SETTING_CHANGED,
-                Params::new().with(builtin_params::ID, id.as_str().to_string()),
-            ));
+            self.output
+                .commands
+                .push(events::SETTING_CHANGED.emit(events::SettingChanged { id: id.clone() }));
         }
     }
 
@@ -3871,10 +3843,9 @@ impl Kernel {
                 format!("could not save menu `{menu}` to {CONFIG_FILE}"),
             );
         }
-        self.output.commands.push(Command::Emit(
-            events::MENU_CHANGED,
-            Params::new().with(builtin_params::ID, menu.as_str().to_string()),
-        ));
+        self.output
+            .commands
+            .push(events::MENU_CHANGED.emit(events::MenuChanged { id: menu.clone() }));
     }
 
     /// Adds a font file of `plugin`, described by its header.

@@ -558,12 +558,10 @@ impl Browser {
                 let target = files::free_path(env.storage, &archive, files::name(path));
                 match files::move_to(env.storage, path, &target) {
                     Ok(()) => {
-                        cx.command(Command::Emit(
-                            events::BOOK_MOVED,
-                            Params::new()
-                                .with(params::FROM, path.to_string())
-                                .with(params::PATH, target),
-                        ));
+                        cx.command(events::BOOK_MOVED.emit(events::BookMoved {
+                            from: path.to_string(),
+                            path: target,
+                        }));
                         cx.command(Command::Notify(env.i18n.tr("files.archived").to_string()));
                     }
                     Err(_) => cx.command(Command::Notify(

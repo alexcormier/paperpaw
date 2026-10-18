@@ -15,9 +15,9 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use crate::builtin::{events, params};
+use crate::builtin::events;
 use crate::document::Locator;
-use crate::{Command, Params, Storage};
+use crate::{Command, Storage};
 use quireink_digest::fnv1a64;
 
 /// Longest snippet kept with an annotation, in bytes.
@@ -252,10 +252,9 @@ pub fn moved(storage: &dyn Storage, from: &str, to: &str) {
 
 /// The event telling that the annotations of the book at `book` changed.
 pub fn changed(book: &str) -> Command {
-    Command::Emit(
-        events::ANNOTATIONS_CHANGED,
-        Params::new().with(params::PATH, book.to_string()),
-    )
+    events::ANNOTATIONS_CHANGED.emit(events::AnnotationsChanged {
+        path: book.to_string(),
+    })
 }
 
 #[cfg(test)]

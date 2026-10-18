@@ -32,7 +32,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::cell::Cell;
 
-use quireink_sdk::builtin::{events, menus, params};
+use quireink_sdk::builtin::{events, menus};
 use quireink_sdk::ui::choice::Choice;
 use quireink_sdk::{
     ActionSpec, Arg, Command, Env, Id, Manifest, MenuEntry, Params, Plugin, RegisterError,
@@ -334,18 +334,19 @@ impl Plugin for Rules {
         r.add_icon(OPEN, Cow::Borrowed("clock"))?;
         let reading: Reading = Rc::new(Cell::new(false));
         let book = reading.clone();
-        r.subscribe(
-            events::STARTED,
-            Box::new(move |env: &Env<'_>, _: &Params, out: &mut Vec<Command>| {
-                run(env, book.get(), out, |t| *t == Trigger::Start);
-                schedule(env, out);
-            }),
-        )?;
+        r.on(events::STARTED, move |env, _, out| {
+            run(env, book.get(), out, |t| *t == Trigger::Start);
+            schedule(env, out);
+        })?;
         for (event, trigger, open) in [
-            (events::BOOK_OPENED, Trigger::BookOpened, Some(true)),
-            (events::BOOK_CLOSED, Trigger::BookClosed, Some(false)),
-            (events::BOOK_FINISHED, Trigger::BookFinished, None),
-            (events::SUSPEND, Trigger::Sleep, None),
+            (
+                Id::from(events::BOOK_OPENED),
+                Trigger::BookOpened,
+                Some(true),
+            ),
+            (events::BOOK_CLOSED.into(), Trigger::BookClosed, Some(false)),
+            (events::BOOK_FINISHED.into(), Trigger::BookFinished, None),
+            (events::SUSPEND.into(), Trigger::Sleep, None),
         ] {
             let book = reading.clone();
             r.subscribe(
@@ -359,14 +360,11 @@ impl Plugin for Rules {
             )?;
         }
         let book = reading.clone();
-        r.subscribe(
-            events::RESUME,
-            Box::new(move |env: &Env<'_>, _: &Params, out: &mut Vec<Command>| {
-                run(env, book.get(), out, |t| *t == Trigger::Resume);
-                // The clock may have moved on while asleep.
-                schedule(env, out);
-            }),
-        )?;
+        r.on(events::RESUME, move |env, _, out| {
+            run(env, book.get(), out, |t| *t == Trigger::Resume);
+            // The clock may have moved on while asleep.
+            schedule(env, out);
+        })?;
         let book = reading.clone();
         r.subscribe(
             TIME,
@@ -404,42 +402,32 @@ impl Plugin for Rules {
         // charging beginning or ending, compare with it.
         let battery: Rc<Cell<Option<(u8, bool)>>> = Rc::new(Cell::new(None));
         let book = reading.clone();
-        r.subscribe(
-            events::STATUS_CHANGED,
-            Box::new(move |env: &Env<'_>, _: &Params, out: &mut Vec<Command>| {
-                let Some(now) = env.status.battery.map(|b| (b.percent, b.charging)) else {
-                    return;
-                };
-                let Some((was, was_charging)) = battery.replace(Some(now)) else {
-                    return;
-                };
-                run(env, book.get(), out, |t| match t {
-                    Trigger::BatteryBelow(mark) => was >= *mark && now.0 < *mark,
-                    Trigger::Charging => !was_charging && now.1,
-                    Trigger::Unplugged => was_charging && !now.1,
-                    _ => false,
-                });
-            }),
-        )?;
-        r.subscribe(
-            events::SETTING_CHANGED,
-            Box::new(
-                move |env: &Env<'_>, params: &Params, out: &mut Vec<Command>| {
-                    let Some(id) = params.get(params::ID) else {
-                        return;
-                    };
-                    let Some(SettingValue::Bool(on)) = env.settings.get(id) else {
-                        return;
-                    };
-                    let on = *on;
-                    run(env, reading.get(), out, |t| match t {
-                        Trigger::SwitchOn(s) => on && s.as_str() == id,
-                        Trigger::SwitchOff(s) => !on && s.as_str() == id,
-                        _ => false,
-                    });
-                },
-            ),
-        )?;
+        r.on(events::STATUS_CHANGED, move |env, _, out| {
+            let Some(now) = env.status.battery.map(|b| (b.percent, b.charging)) else {
+                return;
+            };
+            let Some((was, was_charging)) = battery.replace(Some(now)) else {
+                return;
+            };
+            run(env, book.get(), out, |t| match t {
+                Trigger::BatteryBelow(mark) => was >= *mark && now.0 < *mark,
+                Trigger::Charging => !was_charging && now.1,
+                Trigger::Unplugged => was_charging && !now.1,
+                _ => false,
+            });
+        })?;
+        r.on(events::SETTING_CHANGED, move |env, changed, out| {
+            let id = changed.id.as_str();
+            let Some(SettingValue::Bool(on)) = env.settings.get(id) else {
+                return;
+            };
+            let on = *on;
+            run(env, reading.get(), out, |t| match t {
+                Trigger::SwitchOn(s) => on && s.as_str() == id,
+                Trigger::SwitchOff(s) => !on && s.as_str() == id,
+                _ => false,
+            });
+        })?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())
