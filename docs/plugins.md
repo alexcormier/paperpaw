@@ -314,6 +314,19 @@ its documentation (for example one line per entry); others add to it
 with `r.contribute(point, text)`, and the plugin reads
 `env.services.contributions(point)`, each with the plugin it came from.
 
+### Widgets
+
+A widget is a [`Widget`] a screen makes and keeps
+(`env.widgets.make`): it reads what it shows in `update`, which the
+screen calls when it shows the widget, about each minute and after
+events, and only draws in `draw` (which runs for every band of a
+frame). Register it with `WidgetSpec::new(id, title, factory)`; a widget
+with nothing to read, such as a clock, is a pair of functions
+(`WidgetSpec::drawn` with `Drawn::new(height, draw)`, and `shows` to be
+drawn again when what it shows changes). `widgets::grid` puts widgets
+and tools in a grid as the home screen does, edited in place
+(`GridView`).
+
 ### Widgets with settings
 
 A widget may have settings of its own, such as where its text sits. Put
@@ -419,6 +432,7 @@ large print and an airy theme.
 [`Env`]: ../crates/quireink-sdk/src/env.rs
 [`Command`]: ../crates/quireink-sdk/src/command.rs
 [`Screen`]: ../crates/quireink-sdk/src/screen.rs
+[`Widget`]: ../crates/quireink-sdk/src/widgets.rs
 
 Other protocols go over sockets ([ADR 0014](adr/0014-sockets-for-plugins.md)):
 `Command::Connect` opens a TCP connection, `Command::SocketSend` sends,
