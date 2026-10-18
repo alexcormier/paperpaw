@@ -2667,3 +2667,24 @@ fn wifi_commands_are_ignored_where_the_system_manages_it() {
     ));
     assert_eq!(kernel.take_requests().len(), 1);
 }
+
+/// `quireink.ini` as version 1 wrote it stays readable (see
+/// `docs/data-files.md`).
+#[test]
+fn settings_files_of_version_1_are_read() {
+    let storage = quireink_sdk::MemoryStorage::new()
+        .with("quireink.ini", include_str!("../testdata/quireink.ini.v1"));
+    let mut kernel = Kernel::builder(DEVICE).storage(storage).build().unwrap();
+    assert_eq!(kernel.settings().int("core.ui-size"), 12);
+    assert!(kernel.settings().bool("core.night-mode"));
+    assert!(kernel.shared.menus.is_customized("core.main"));
+    let main: Vec<&str> = kernel
+        .shared
+        .menus
+        .ids("core.main")
+        .into_iter()
+        .map(Id::as_str)
+        .collect();
+    assert_eq!(main, ["core.toggle-night-mode", "core.back"]);
+    assert!(kernel.take_warnings().is_empty());
+}

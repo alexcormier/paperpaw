@@ -1,0 +1,20 @@
+[book.1]
+title = "Anna Karenina"
+authors = "Leo Tolstoy\nRosamund Bartlett"
+md5 = 0f343b0931126a20f133d67c2b018a3b
+pages = 864
+language = "ru"
+series = ""
+last-open = 1760000000
+path = "books/Anna Karenina.epub"
+
+[book.2]
+title = "Short \"stories\""
+authors = ""
+md5 = 9e107d9d372bb6826bd81d3542a419d6
+pages = 12
+language = ""
+series = ""
+last-open = 1760003600
+path = "books/short.txt"
+

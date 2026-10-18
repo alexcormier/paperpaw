@@ -273,9 +273,10 @@ fn parse_unicode_escape(s: &str) -> Option<(char, usize)> {
 /// Returns `source` with `key` in `section` set to `value`.
 ///
 /// Edits as little as possible, so hand-written files keep their comments,
-/// order and formatting: an existing entry's line is replaced, a new entry
-/// goes after the section's last entry, and a missing section is appended.
-/// Values that need it are quoted and escaped.
+/// order and formatting: an existing entry's line is replaced (the last
+/// one, if the key is there more than once: it is the one read), a new
+/// entry goes after the section's last entry, and a missing section is
+/// appended. Values that need it are quoted and escaped.
 pub fn set(source: &str, section: &str, key: &str, value: &str) -> String {
     let line = alloc::format!("{key} = {}", quote(value));
     let lines: alloc::vec::Vec<&str> = source.lines().collect();
@@ -283,6 +284,7 @@ pub fn set(source: &str, section: &str, key: &str, value: &str) -> String {
     let mut section_found = false;
     let mut last_entry_of_section: Option<usize> = None;
     let mut header_of_section: Option<usize> = None;
+    let mut entry: Option<usize> = None;
     for (i, raw) in lines.iter().enumerate() {
         let text = raw.trim();
         if let Some(name) = text.strip_prefix('[').and_then(|t| t.strip_suffix(']')) {
@@ -298,12 +300,15 @@ pub fn set(source: &str, section: &str, key: &str, value: &str) -> String {
         }
         if let Some((k, _)) = text.split_once('=') {
             if k.trim() == key {
-                let mut out = alloc::vec::Vec::from(&lines[..]);
-                out[i] = &line;
-                return join(&out);
+                entry = Some(i);
             }
             last_entry_of_section = Some(i);
         }
+    }
+    if let Some(i) = entry {
+        let mut out = alloc::vec::Vec::from(&lines[..]);
+        out[i] = &line;
+        return join(&out);
     }
     if section_found {
         let at = last_entry_of_section.or(header_of_section).unwrap_or(0) + 1;
@@ -352,9 +357,10 @@ fn join(lines: &[&str]) -> String {
     out
 }
 
-/// Quotes a value if it would not survive unquoted (leading or trailing
-/// spaces, empty, or starting with a quote).
-fn quote(value: &str) -> Cow<'_, str> {
+/// A value as written in a file: quoted and escaped if it would not
+/// survive unquoted (leading or trailing spaces, empty, starting with a
+/// quote, or more than one line), as it is otherwise.
+pub fn quote(value: &str) -> Cow<'_, str> {
     let plain = !value.is_empty()
         && value.trim() == value
         && !value.starts_with('"')
@@ -475,6 +481,20 @@ a = 1
         let appended = set(source, "files", "root", " my books ");
         assert!(appended.ends_with("font-size = 11\n\n[files]\nroot = \" my books \"\n"));
         assert_eq!(set("", "a", "b", "c"), "[a]\nb = c\n");
+        // A key there twice (by hand, or its section twice): the last one
+        // is read, so it is the one changed.
+        let twice = "[core]\nlanguage = en\n[reader]\nx = 1\n[core]\nlanguage = fr\n";
+        let changed = set(twice, "core", "language", "de");
+        assert_eq!(
+            changed,
+            "[core]\nlanguage = en\n[reader]\nx = 1\n[core]\nlanguage = de\n"
+        );
+        let read = parse(&changed)
+            .filter_map(Result::ok)
+            .filter(|e| e.key == "language")
+            .last()
+            .unwrap();
+        assert_eq!(read.value.as_str(), "de");
         // The result parses back to the new values.
         let entry = parse(&appended).last().unwrap().unwrap();
         assert_eq!(entry.value.as_str(), " my books ");

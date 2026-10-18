@@ -6,6 +6,19 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Versioned data files ([data-files.md](docs/data-files.md)): every file
+  QuireInk keeps on the card is listed as data, cache or another
+  program's format. Data formats have a version (`quireink_sdk::data`,
+  `# format 2` as the first line), are upgraded as they are read, and are
+  never written over by an older QuireInk (after going back to an older
+  update). Files of the current formats are kept in `testdata` folders
+  and read by the tests. Profiles are kept as a proper ini file now (names
+  with spaces and brackets survive); older files are read and upgraded.
+- `quireink-config`: changing a key there more than once (by hand)
+  changes the entry that is read, the last; `quote()` is public and the
+  reader and statistics use it (a book path with a line break broke the
+  reader's file).
+- One FNV-1a (`quireink_sdk::hash::fnv1a64`) instead of fifteen copies.
 - Firmware updates on the X4 ([ADR 0019](docs/adr/0019-firmware-updates.md)):
   two app partitions (the web flasher sets them up once), an update file
   in the folder `updates` on the card installed from Settings, *Update*

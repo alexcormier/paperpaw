@@ -120,23 +120,6 @@ fn path(name: &str) -> String {
     format!("{}/{name}", dir())
 }
 
-/// A value for the configuration format, quoted with escapes.
-fn quoted(text: &str) -> String {
-    let mut out = String::from("\"");
-    for c in text.chars() {
-        match c {
-            '"' => out.push_str("\\\""),
-            '\\' => out.push_str("\\\\"),
-            '\n' => out.push_str("\\n"),
-            '\t' => out.push_str("\\t"),
-            c if c.is_control() => {}
-            c => out.push(c),
-        }
-    }
-    out.push('"');
-    out
-}
-
 /// The books, by id.
 pub(crate) fn books(storage: &dyn Storage) -> Vec<Book> {
     let Ok(data) = quireink_sdk::read_file(storage, &path("books.ini"), 1 << 20) else {
@@ -183,14 +166,14 @@ pub(crate) fn save_books(storage: &dyn Storage, books: &[Book]) {
         text.push_str(&format!(
             "[book.{}]\ntitle = {}\nauthors = {}\nmd5 = {}\npages = {}\nlanguage = {}\nseries = {}\nlast-open = {}\npath = {}\n\n",
             b.id,
-            quoted(&b.title),
-            quoted(&b.authors),
+            quireink_sdk::config::quote(&b.title),
+            quireink_sdk::config::quote(&b.authors),
             b.md5,
             b.pages,
-            quoted(&b.language),
-            quoted(&b.series),
+            quireink_sdk::config::quote(&b.language),
+            quireink_sdk::config::quote(&b.series),
             b.last_open,
-            quoted(&b.path),
+            quireink_sdk::config::quote(&b.path),
         ));
     }
     let _ = storage.write(&path("books.ini"), text.as_bytes());
@@ -356,6 +339,47 @@ pub(crate) fn scan_recent(storage: &dyn Storage, since: u32, mut visit: impl FnM
 mod tests {
     use super::*;
     use quireink_sdk::MemoryStorage;
+
+    /// The files as version 1 wrote them stay readable (see
+    /// `docs/data-files.md`).
+    #[test]
+    fn files_of_version_1_are_read() {
+        let storage = MemoryStorage::new()
+            .with(&path("books.ini"), include_str!("../testdata/books.ini.v1"))
+            .with(
+                &path("pages.bin"),
+                include_bytes!("../testdata/pages.bin.v1").to_vec(),
+            );
+        let books = books(&storage);
+        assert_eq!(books.len(), 2);
+        assert_eq!(books[0].title, "Anna Karenina");
+        assert_eq!(books[0].authors, "Leo Tolstoy\nRosamund Bartlett");
+        assert_eq!(books[0].md5, "0f343b0931126a20f133d67c2b018a3b");
+        assert_eq!((books[0].pages, books[0].last_open), (864, 1_760_000_000));
+        assert_eq!(books[0].path, "books/Anna Karenina.epub");
+        assert_eq!(books[1].title, "Short \"stories\"");
+        let mut stays = Vec::new();
+        scan(&storage, |s| stays.push(*s));
+        assert_eq!(
+            stays,
+            [
+                PageStat {
+                    book: 1,
+                    page: 5,
+                    start: 1_760_000_000,
+                    duration: 42,
+                    pages: 864
+                },
+                PageStat {
+                    book: 2,
+                    page: 1,
+                    start: 1_760_003_600,
+                    duration: 65000,
+                    pages: 12
+                },
+            ]
+        );
+    }
 
     fn stat(book: u16, page: u32, start: u32, duration: u16) -> PageStat {
         PageStat {

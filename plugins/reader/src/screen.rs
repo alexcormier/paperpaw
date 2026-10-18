@@ -536,14 +536,22 @@ fn sentence(words: &[WordBox], lo: usize, hi: usize) -> String {
         .join(" ")
 }
 
+/// The position kept in a book's `progress.ini`.
+fn position_in(text: &str) -> Option<Locator> {
+    let (mut section, mut offset) = (None, None);
+    for entry in quireink_sdk::config::parse(text).filter_map(Result::ok) {
+        match (entry.section, entry.key) {
+            ("progress", "section") => section = entry.value.as_u32(),
+            ("progress", "offset") => offset = entry.value.as_u32(),
+            _ => {}
+        }
+    }
+    Some(Locator::new(section?, offset?))
+}
+
 /// Remembers `path` as the book read last (reopened at start-up).
 pub(crate) fn remember_last(storage: &dyn quireink_sdk::Storage, path: &str) {
-    let state = format!(
-        "[reader]
-last = \"{}\"
-",
-        escape(path)
-    );
+    let state = format!("[reader]\nlast = {}\n", quireink_sdk::config::quote(path));
     let _ = storage.write(&state_path(), state.as_bytes());
 }
 
@@ -1661,16 +1669,7 @@ impl Book {
 
     fn saved_position(&self, env: &Env<'_>) -> Option<Locator> {
         let data = quireink_sdk::read_file(env.storage, &self.progress_path(), 4096).ok()?;
-        let text = core::str::from_utf8(&data).ok()?;
-        let (mut section, mut offset) = (None, None);
-        for entry in quireink_sdk::config::parse(text).filter_map(Result::ok) {
-            match (entry.section, entry.key) {
-                ("progress", "section") => section = entry.value.as_u32(),
-                ("progress", "offset") => offset = entry.value.as_u32(),
-                _ => {}
-            }
-        }
-        Some(Locator::new(section?, offset?))
+        position_in(core::str::from_utf8(&data).ok()?)
     }
 
     fn percent(&self) -> f32 {
@@ -3223,13 +3222,19 @@ fn draw_message(canvas: &mut Canvas<'_>, env: &Env<'_>, message: &str) {
     }
 }
 
-fn escape(text: &str) -> String {
-    text.replace('\\', "\\\\").replace('"', "\\\"")
-}
-
 #[cfg(test)]
 mod tests {
     use alloc::vec::Vec;
+
+    /// The position as version 1 wrote it stays readable (see
+    /// `docs/data-files.md`).
+    #[test]
+    fn positions_of_version_1_are_read() {
+        assert_eq!(
+            super::position_in(include_str!("../testdata/progress.ini.v1")),
+            Some(quireink_sdk::document::Locator::new(7, 1234))
+        );
+    }
 
     #[test]
     fn small_caps_split_lower_case() {

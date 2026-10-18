@@ -33,6 +33,7 @@ pub mod annotations;
 pub mod builtin;
 pub mod collections;
 mod command;
+pub mod data;
 mod env;
 mod event;
 pub mod files;

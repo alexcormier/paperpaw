@@ -654,10 +654,15 @@ fn book_moved(env: &Env<'_>, params: &Params, _: &mut Vec<Command>) {
 /// The book read last, as remembered.
 fn last_book(env: &Env<'_>) -> Option<String> {
     let data = quireink_sdk::read_file(env.storage, &state_path(), 4096).ok()?;
-    let text = core::str::from_utf8(&data).ok()?;
+    last_in(core::str::from_utf8(&data).ok()?)
+}
+
+/// The book kept in `state.ini`.
+fn last_in(text: &str) -> Option<String> {
     quireink_sdk::config::parse(text)
         .filter_map(Result::ok)
-        .find(|e| e.section == "reader" && e.key == "last")
+        .filter(|e| e.section == "reader" && e.key == "last")
+        .last()
         .map(|e| String::from(e.value.as_str()))
 }
 
@@ -678,6 +683,16 @@ fn reopen_last_book(env: &Env<'_>, _: &Params, out: &mut Vec<Command>) {
 #[cfg(test)]
 mod tests {
     use quireink_i18n::{Catalog, check};
+
+    /// The last book as version 1 wrote it stays readable (see
+    /// `docs/data-files.md`).
+    #[test]
+    fn the_last_book_of_version_1_is_read() {
+        assert_eq!(
+            super::last_in(include_str!("../testdata/state.ini.v1")).as_deref(),
+            Some("books/\"Quoted\" title.epub")
+        );
+    }
 
     #[test]
     fn translations_are_complete() {

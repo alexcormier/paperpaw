@@ -1,12 +1,15 @@
-//! Profiles: named sets of setting values, kept in the plugin's folder as
-//! sections of an ini file (`[Night]`, then `id = value` lines), with the
-//! name of the profile applied last.
+//! Profiles: named sets of setting values, kept in the plugin's folder in
+//! `profiles.ini` (a section per profile with its name and the settings'
+//! values by their ids, see [`FORMAT`]), with the name of the profile
+//! applied last.
 
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use quireink_sdk::builtin::{groups, settings};
+use quireink_sdk::config;
+use quireink_sdk::data::Format;
 use quireink_sdk::{Command, Env, Id, SettingKind, Storage};
 
 use crate::PLUGIN;
@@ -26,18 +29,20 @@ pub(crate) struct Profile {
     pub values: Vec<(Id, String)>,
 }
 
+/// `profiles.ini`. Version 2: a section `[profile.1]` and so on per
+/// profile, its `name` and the settings' values by their ids. Version 1
+/// had the name as the section (`[Night]`), which an ini file cannot hold
+/// with spaces.
+pub(crate) const FORMAT: Format = Format::new(2, &[upgrade_names]);
+
 fn path() -> String {
     format!("{}/profiles.ini", Env::plugin_dir(PLUGIN.as_str()))
 }
 
-fn last_path() -> String {
-    format!("{}/last.txt", Env::plugin_dir(PLUGIN.as_str()))
-}
-
-pub(crate) fn load(storage: &dyn Storage) -> Vec<Profile> {
-    let data = quireink_sdk::read_file(storage, &path(), 64 * 1024).unwrap_or_default();
+/// Version 1 to 2: the names out of the section headers.
+fn upgrade_names(v1: &str) -> String {
     let mut profiles: Vec<Profile> = Vec::new();
-    for line in String::from_utf8_lossy(&data).lines() {
+    for line in v1.lines() {
         let line = line.trim();
         if let Some(name) = line.strip_prefix('[').and_then(|l| l.strip_suffix(']')) {
             profiles.push(Profile {
@@ -51,21 +56,67 @@ pub(crate) fn load(storage: &dyn Storage) -> Vec<Profile> {
             profile.values.push((id, value.trim().to_string()));
         }
     }
-    profiles
+    text(&profiles)
+}
+
+/// The profiles as the file's text (without its version).
+fn text(profiles: &[Profile]) -> String {
+    let mut text = String::new();
+    for (i, profile) in profiles.iter().enumerate() {
+        if i > 0 {
+            text.push('\n');
+        }
+        text.push_str(&format!("[profile.{}]\n", i + 1));
+        text.push_str(&format!("name = {}\n", config::quote(&profile.name)));
+        for (id, value) in &profile.values {
+            text.push_str(&format!("{id} = {}\n", config::quote(value)));
+        }
+    }
+    text
+}
+
+fn last_path() -> String {
+    format!("{}/last.txt", Env::plugin_dir(PLUGIN.as_str()))
+}
+
+pub(crate) fn load(storage: &dyn Storage) -> Vec<Profile> {
+    let Ok(Some(text)) = FORMAT.load(storage, &path(), 64 * 1024) else {
+        return Vec::new();
+    };
+    parse(&text)
+}
+
+/// The profiles of the file's text (in this version).
+fn parse(text: &str) -> Vec<Profile> {
+    let mut profiles: Vec<(&str, Profile)> = Vec::new();
+    for entry in config::parse(text).filter_map(Result::ok) {
+        if !entry.section.starts_with("profile.") {
+            continue;
+        }
+        if profiles.last().is_none_or(|(s, _)| *s != entry.section) {
+            profiles.push((
+                entry.section,
+                Profile {
+                    name: String::new(),
+                    values: Vec::new(),
+                },
+            ));
+        }
+        let Some((_, profile)) = profiles.last_mut() else {
+            continue;
+        };
+        let value = entry.value.as_str().into_owned();
+        if entry.key == "name" {
+            profile.name = value;
+        } else if let Ok(id) = Id::parse(entry.key) {
+            profile.values.push((id, value));
+        }
+    }
+    profiles.into_iter().map(|(_, p)| p).collect()
 }
 
 pub(crate) fn save(storage: &dyn Storage, profiles: &[Profile]) {
-    let mut text = String::new();
-    for profile in profiles {
-        let name = profile.name.replace(['[', ']'], " ");
-        let name = name.split_whitespace().collect::<Vec<_>>().join(" ");
-        text.push_str(&format!("[{name}]\n"));
-        for (id, value) in &profile.values {
-            text.push_str(&format!("{id} = {}\n", value.replace(['\n', '\r'], " ")));
-        }
-        text.push('\n');
-    }
-    let _ = storage.write(&path(), text.as_bytes());
+    let _ = FORMAT.save(storage, &path(), &text(profiles));
 }
 
 /// The name of the profile applied last.
@@ -139,9 +190,34 @@ mod tests {
         ];
         save(&storage, &profiles);
         let loaded = load(&storage);
-        assert_eq!(loaded[0], profiles[0]);
-        assert_eq!(loaded[1].name, "Large print", "brackets would end the name");
+        assert_eq!(loaded, profiles, "names with brackets and spaces too");
         set_last(&storage, "Night");
         assert_eq!(last(&storage), "Night");
+    }
+
+    #[test]
+    fn files_of_version_1_are_read() {
+        let storage = MemoryStorage::new().with(
+            &path(),
+            include_str!("../testdata/profiles.ini.v1")
+                .as_bytes()
+                .to_vec(),
+        );
+        let loaded = load(&storage);
+        assert_eq!(loaded.len(), 2);
+        assert_eq!(loaded[0].name, "Night");
+        assert_eq!(
+            loaded[0].values,
+            [
+                (Id::new_static("core.night-mode"), String::from("on")),
+                (Id::new_static("reader.font-size"), String::from("12")),
+            ]
+        );
+        assert_eq!(loaded[1].name, "Large print");
+        // Saved again, it is version 2.
+        save(&storage, &loaded);
+        let text = quireink_sdk::read_file(&storage, &path(), 4096).unwrap();
+        assert!(text.starts_with(b"# format 2\n[profile.1]\nname = Night\n"));
+        assert_eq!(load(&storage), loaded);
     }
 }
