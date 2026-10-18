@@ -61,7 +61,7 @@ use core::mem;
 use quireink_graphics::{Framebuffer, GraphicsError};
 use quireink_i18n::Translator;
 use quireink_platform::{
-    Color, DeviceInfo, FrameView, InputEvent, Instant, NoStorage, Point, PointerEvent,
+    ButtonState, Color, DeviceInfo, FrameView, InputEvent, Instant, NoStorage, Point, PointerEvent,
     PointerPhase, Rect, RefreshMode, Storage, SystemStatus,
 };
 use quireink_sdk::builtin::{
@@ -512,6 +512,11 @@ impl KernelBuilder {
             next_request: 0,
             wifi_calls: Vec::new(),
             network_waiting: None,
+            screens_changed: false,
+            settling: false,
+            stale_before: None,
+            dropped_buttons: Vec::new(),
+            dropped_pointers: Vec::new(),
             network_busy: false,
             plugin_defaults: Vec::new(),
             now: Instant::default(),
@@ -819,6 +824,15 @@ pub struct Kernel {
     wifi_calls: Vec<WifiCommand>,
     /// Since when plugins' network work has waited for a network.
     network_waiting: Option<Instant>,
+    /// A screen was opened or closed since the last call ended; then the
+    /// frame drawn for it is not shown yet (see [`Kernel::shown`]).
+    screens_changed: bool,
+    settling: bool,
+    /// Presses made before this, while another screen was coming up, are
+    /// dropped (see [`Kernel::shown`]), with their releases.
+    stale_before: Option<Instant>,
+    dropped_buttons: Vec<&'static str>,
+    dropped_pointers: Vec<u8>,
     /// Something used the network at the end of the last call.
     network_busy: bool,
     /// Setting defaults from plugins, applied once all are registered:
@@ -936,6 +950,9 @@ impl Kernel {
     /// Handles an input event.
     pub fn handle(&mut self, now: Instant, event: InputEvent) -> Effects {
         let _running = self.shared.meter.enter(meter::CORE);
+        if self.stale(now, &event) {
+            return self.finish();
+        }
         self.now = now;
         self.last_activity = now;
         self.shared.usage.inputs = self.shared.usage.inputs.saturating_add(1);
@@ -969,6 +986,58 @@ impl Kernel {
         self.run_commands();
         self.speak_focus();
         self.finish()
+    }
+
+    /// The frame last rendered is on the panel now, at `now` (on the
+    /// clock the input's times are on): shells call it after each refresh.
+    /// After a screen was opened or closed, presses made before it showed
+    /// are dropped: pressing again while nothing seems to happen means
+    /// "nothing happened", not "do it once more". Presses on the same
+    /// screen (turning pages quickly) are kept. Shells that never call it
+    /// keep every press.
+    pub fn shown(&mut self, now: Instant) {
+        if mem::take(&mut self.settling) {
+            self.stale_before = Some(now);
+        }
+    }
+
+    /// Whether `event` belongs to a press dropped (see [`Kernel::shown`]).
+    fn stale(&mut self, now: Instant, event: &InputEvent) -> bool {
+        let early = self.stale_before.is_some_and(|before| now < before);
+        match event {
+            InputEvent::Button {
+                name,
+                state: ButtonState::Pressed,
+            } if early => {
+                self.dropped_buttons.push(name);
+                true
+            }
+            InputEvent::Button {
+                name,
+                state: ButtonState::Released,
+            } => match self.dropped_buttons.iter().position(|b| b == name) {
+                Some(at) => {
+                    self.dropped_buttons.remove(at);
+                    true
+                }
+                None => false,
+            },
+            InputEvent::Pointer(p) if p.phase == PointerPhase::Down && early => {
+                self.dropped_pointers.push(p.id);
+                true
+            }
+            InputEvent::Pointer(p) => match self.dropped_pointers.iter().position(|&id| id == p.id)
+            {
+                Some(at) => {
+                    if matches!(p.phase, PointerPhase::Up | PointerPhase::Cancel) {
+                        self.dropped_pointers.remove(at);
+                    }
+                    true
+                }
+                None => false,
+            },
+            _ => false,
+        }
     }
 
     /// What the screens shown are, part by part (rows, buttons, headings
@@ -2754,6 +2823,10 @@ impl Kernel {
         .into_iter()
         .flatten()
         .min();
+        // A screen came or went: presses until it shows are dropped.
+        if mem::take(&mut self.screens_changed) {
+            self.settling = true;
+        }
         // What was read is kept for the frame the call drew, if any, then
         // forgotten (see `render`).
         if self.unrendered.is_none() {
@@ -2959,6 +3032,7 @@ impl Kernel {
         let running = self.shared.meter.enter(id.namespace());
         let screen = (spec.factory)(&self.shared.env(self.now), params);
         drop(running);
+        self.screens_changed = true;
         self.stack.push(ActiveScreen {
             id,
             slot,
@@ -3045,6 +3119,7 @@ impl Kernel {
                 Handled::Yes
             });
             self.stack.truncate(i);
+            self.screens_changed = true;
         }
         self.sync_content();
     }

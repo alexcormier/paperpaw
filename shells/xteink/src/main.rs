@@ -572,6 +572,7 @@ where
         }
         let shown = now();
         kernel.panel_busy(shown.since(drawn));
+        kernel.shown(shown);
         {
             // After every refresh, both memories again hold the frame now
             // shown, as the stock firmware does: the refresh may leave the

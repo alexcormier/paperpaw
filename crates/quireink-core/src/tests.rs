@@ -234,6 +234,29 @@ fn highest_priority_wins_and_user_config_overrides() {
 }
 
 #[test]
+fn presses_while_a_screen_comes_up_are_dropped() {
+    let log = log();
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(TestPlugin::new("a", &log))
+        .build()
+        .unwrap();
+    // The home screen came up; the panel showed it at 1000.
+    kernel.start(Instant(0));
+    render(&mut kernel);
+    kernel.shown(Instant(1000));
+    // Pressed while it came up: dropped, its release too.
+    press(&mut kernel, 500, "page-forward");
+    assert!(log.borrow().is_empty());
+    // Pressed after it showed: taken.
+    press(&mut kernel, 1200, "page-forward");
+    kernel.shown(Instant(2000));
+    // Turning pages on the same screen keeps every press, also one made
+    // before the last page showed.
+    press(&mut kernel, 1500, "page-forward");
+    assert_eq!(*log.borrow(), ["a:core.next-page", "a:core.next-page"]);
+}
+
+#[test]
 fn buttons_route_through_key_map_to_screen_and_handlers() {
     let log = log();
     let mut kernel = Kernel::builder(DEVICE)

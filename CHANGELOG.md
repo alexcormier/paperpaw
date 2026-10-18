@@ -16,6 +16,10 @@ change the plugin SDK.
   shows it in the status line and on the home screen; the time zone is
   chosen under Settings, System (UTC on "Auto": the X4 has none of its
   own). Gone when it is switched off, until it is online again.
+- Pressing again while another screen comes up no longer runs those
+  presses afterwards (on the X4 they could jump far ahead): presses made
+  before the new screen shows are dropped. Turning pages quickly keeps
+  every press. Shells say when a frame shows (`Kernel::shown`).
 - Progress sync (kosync) no longer keeps the X4's radio on while
   reading: turning pages sends the position only while the radio is on
   anyway; it is sent when the book is closed and when the device sleeps.
