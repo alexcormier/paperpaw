@@ -1,6 +1,6 @@
 ---
 name: quireink-plugin-development
-description: Helps develop QuireInk plugins (code plugins in Rust against quireink-sdk, and data plugins without code), try them in the desktop emulator and on a real Xteink X4, measure speed, heap and stack, keep within the memory of small devices, and fit QuireInk's structure and rules. Use when someone writes, ports, debugs, tests or profiles a QuireInk plugin, or asks how QuireInk is built for that. Not for changing QuireInk's own kernel, SDK or firmware: that follows CONTRIBUTING.md.
+description: Helps write a plugin for QuireInk as it is, without changing QuireInk (a community plugin, usually in its own repository): code plugins in Rust against the released quireink-sdk and data plugins without code; trying them in the desktop emulator and on a real Xteink X4; measuring speed, heap and stack; keeping within the memory of small devices. Use when someone writes, ports, debugs, tests or profiles such a plugin. Not for work on QuireInk itself (its kernel, SDK, firmware or its own plugins in plugins/), where extending the SDK is the rule: that follows CONTRIBUTING.md.
 ---
 
 # Developing QuireInk plugins
@@ -15,6 +15,14 @@ truth is; it names no versions. **Before relying on any name, flag,
 number or path below, check it against the repository** (the docs, the
 SDK's API, `--help` of the tools). Where they disagree, the repository
 wins; tell the user if this skill looks out of date.
+
+## Who this is for
+
+Authors of plugins for QuireInk as readers have it, who do not change
+QuireInk. Working on QuireInk itself (its kernel, SDK, firmware or its
+own plugins in `plugins/`) is different: there, a plugin that cannot do
+something well is a reason to extend the SDK, and `CONTRIBUTING.md` is
+the guide. The limits below apply only to plugin authors.
 
 ## 1. Find the current state first
 
