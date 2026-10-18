@@ -154,7 +154,7 @@ impl Effects {
     }
 
     /// Whether the frame is best shown in grays (the screen on top, with
-    /// nothing over it, says so: [`Screen::grays`](quireink_sdk::Screen::grays)):
+    /// nothing over it, says so: [`Screen::grays`]):
     /// shells whose panel shows more grays with a refresh of its own draw
     /// the whole screen with [`Kernel::render_gray`] and refresh it so;
     /// others refresh as [`Effects::refresh`] says.
