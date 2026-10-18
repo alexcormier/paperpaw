@@ -1667,6 +1667,10 @@ pub fn next_value(env: &Env<'_>, spec: &SettingSpec, step: i64) -> Option<Settin
 /// rows inside the canvas clip are read. Grays are dithered on two-level
 /// panels; colour shows as colour on colour screens, as gray elsewhere.
 pub fn draw_image(canvas: &mut Canvas<'_>, storage: &dyn Storage, image: &ImageRef, area: Rect) {
+    // Frames are drawn in bands: nothing read for those it is not in.
+    if area.intersection(&canvas.clip()).is_none() {
+        return;
+    }
     if let Some(file) = crate::image::ColorFile::open(storage, &image.path) {
         return draw_color_image(canvas, storage, &file, area);
     }
