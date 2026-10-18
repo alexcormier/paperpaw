@@ -142,4 +142,20 @@ mod tests {
         let issues = check::compare(&en, &de);
         assert!(issues.is_empty(), "{issues:?}");
     }
+
+    /// What version 1 wrote stays readable (see `docs/data-files.md`).
+    #[test]
+    fn pairs_of_version_1_are_read() {
+        let storage = quireink_sdk::MemoryStorage::new().with(
+            &super::file(super::INSTALLING),
+            include_str!("../testdata/installing.txt.v1"),
+        );
+        assert_eq!(
+            super::read_pair(&storage, super::INSTALLING),
+            Some((
+                alloc::string::String::from("updates/quireink-x4-0.4.0.bin"),
+                alloc::string::String::from("0.4.0")
+            ))
+        );
+    }
 }

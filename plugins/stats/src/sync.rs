@@ -112,16 +112,20 @@ pub(crate) fn move_password(env: &Env<'_>, out: &mut Vec<Command>) {
     let Ok(data) = quireink_sdk::read_file(env.storage, &path, 4096) else {
         return;
     };
-    let text = core::str::from_utf8(&data).unwrap_or_default();
-    let old = quireink_sdk::config::parse(text)
-        .filter_map(Result::ok)
-        .find(|e| e.key == "password")
-        .map(|e| e.value.as_str().into_owned())
-        .unwrap_or_default();
+    let old = old_password(core::str::from_utf8(&data).unwrap_or_default());
     if !old.is_empty() && env.secrets.get(SECRET).is_none() {
         out.push(save_password(&old));
     }
     let _ = env.storage.remove(&path);
+}
+
+/// The password in the `webdav.ini` of earlier versions.
+fn old_password(text: &str) -> String {
+    quireink_sdk::config::parse(text)
+        .filter_map(Result::ok)
+        .find(|e| e.key == "password")
+        .map(|e| e.value.as_str().into_owned())
+        .unwrap_or_default()
 }
 
 fn request(env: &Env<'_>, method: &str, reply: &Event<HttpReply>) -> HttpRequest {
@@ -548,5 +552,12 @@ mod tests {
             "https://cloud.example.org/dav/KOReader"
         );
         assert_eq!(folder("http://nas:8080/dav"), "http://nas:8080/dav");
+    }
+
+    /// What version 1 wrote stays readable (see `docs/data-files.md`).
+    #[test]
+    fn the_password_of_version_1_is_found() {
+        let text = include_str!("../testdata/webdav.ini.v1");
+        assert_eq!(super::old_password(text), "secret 1");
     }
 }

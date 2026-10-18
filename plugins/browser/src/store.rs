@@ -125,4 +125,17 @@ mod tests {
         assert_eq!(loaded, history);
         assert_eq!(loaded[1].title, "A B");
     }
+
+    /// What version 1 wrote stays readable (see `docs/data-files.md`).
+    #[test]
+    fn lists_of_version_1_are_read() {
+        let storage = quireink_sdk::MemoryStorage::new().with(
+            &super::bookmarks_path(),
+            include_str!("../testdata/bookmarks.txt.v1"),
+        );
+        let entries = super::load(&storage, &super::bookmarks_path()).unwrap();
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].title, "Wikipedia");
+        assert_eq!(entries[1].url, "https://www.gutenberg.org/");
+    }
 }

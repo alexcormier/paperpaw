@@ -1,0 +1,4 @@
+time 22:00	switch-on	core.night-mode	on	
+time 07:00 62	switch-off	core.night-mode	on	always
+battery-below 20	message	Battery low	off	not-reading
+book	set	reader.font-size=12	on	between 08:00 17:00

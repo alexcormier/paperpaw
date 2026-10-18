@@ -202,4 +202,18 @@ mod tests {
         assert!(secret_id("https://a").starts_with(SECRETS));
         assert_ne!(secret_id("https://a"), secret_id("https://b"));
     }
+
+    /// What version 1 wrote stays readable (see `docs/data-files.md`).
+    #[test]
+    fn catalogs_of_version_1_are_read() {
+        let catalogs = super::parse(include_str!("../testdata/catalogs.txt.v1"));
+        assert_eq!(catalogs.len(), 3);
+        assert_eq!(catalogs[0].name, "Project Gutenberg");
+        assert!(!catalogs[0].sync && !catalogs[0].webdav);
+        assert_eq!(catalogs[1].user, "reader");
+        assert_eq!(catalogs[1].folder, "Calibre");
+        assert!(catalogs[1].sync && !catalogs[1].webdav);
+        assert!(catalogs[2].sync && catalogs[2].webdav);
+        assert!(catalogs.iter().all(|c| c.password.is_empty()));
+    }
 }

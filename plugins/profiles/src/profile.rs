@@ -220,4 +220,12 @@ mod tests {
         assert!(text.starts_with(b"# format 2\n[profile.1]\nname = Night\n"));
         assert_eq!(load(&storage), loaded);
     }
+
+    /// What version 1 wrote stays readable (see `docs/data-files.md`).
+    #[test]
+    fn the_last_profile_of_version_1_is_read() {
+        let storage = quireink_sdk::MemoryStorage::new()
+            .with(&super::last_path(), include_str!("../testdata/last.txt.v1"));
+        assert_eq!(super::last(&storage), "Night reading");
+    }
 }

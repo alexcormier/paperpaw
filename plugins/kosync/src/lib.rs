@@ -128,8 +128,8 @@ fn key<'a>(env: &Env<'a>) -> Option<&'a str> {
     env.secrets.get(SECRET).filter(|k| !k.is_empty())
 }
 
-fn read_value(env: &Env<'_>, file: &str, key: &str) -> Option<String> {
-    let data = quireink_sdk::read_file(env.storage, file, 4096).ok()?;
+fn read_value(storage: &dyn quireink_sdk::Storage, file: &str, key: &str) -> Option<String> {
+    let data = quireink_sdk::read_file(storage, file, 4096).ok()?;
     let text = core::str::from_utf8(&data).ok()?;
     quireink_sdk::config::parse(text)
         .filter_map(Result::ok)
@@ -153,7 +153,7 @@ pub(crate) fn save_key(key: Option<&str>) -> Command {
 /// other passwords and keys.
 fn move_key(env: &Env<'_>, out: &mut Vec<Command>) {
     let file = format!("{}/account.ini", dir());
-    let Some(old) = read_value(env, &file, "key") else {
+    let Some(old) = read_value(env.storage, &file, "key") else {
         return;
     };
     if !old.is_empty() && key(env).is_none() {
@@ -172,7 +172,7 @@ impl State {
             return;
         }
         let device = format!("{}/device.ini", dir());
-        self.device_id = match read_value(env, &device, "id") {
+        self.device_id = match read_value(env.storage, &device, "id") {
             Some(id) => id,
             None => {
                 // Different on each installation: the time and where memory
@@ -631,5 +631,22 @@ mod tests {
         assert_eq!(failure("0"), "kosync.unreachable");
         assert_eq!(failure("401"), "kosync.wrong");
         assert_eq!(failure("500"), "kosync.server-error");
+    }
+
+    /// What version 1 wrote stays readable (see `docs/data-files.md`).
+    #[test]
+    fn files_of_version_1_are_read() {
+        let storage = quireink_sdk::MemoryStorage::new()
+            .with("device.ini", include_str!("../testdata/device.ini.v1"))
+            .with("account.ini", include_str!("../testdata/account.ini.v1"));
+        assert_eq!(
+            super::read_value(&storage, "device.ini", "id").as_deref(),
+            Some("0123456789ABCDEF0123456789ABCDEF")
+        );
+        // Kept by earlier versions; moved to the passwords and keys.
+        assert_eq!(
+            super::read_value(&storage, "account.ini", "key").as_deref(),
+            Some("5f4dcc3b5aa765d61d8327deb882cf99")
+        );
     }
 }

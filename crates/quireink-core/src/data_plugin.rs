@@ -4,7 +4,7 @@
 //!
 //! ```text
 //! plugins/large-print/
-//!   plugin.ini     [plugin] id, name, description, version
+//!   plugin.ini     [plugin] id, name, description, version, formats
 //!   i18n/*.ini     translation catalogs (also whole new languages)
 //!   keymap.ini     key bindings
 //!   settings.ini   new defaults for any plugin's settings ([reader] font-size = 14)
@@ -31,6 +31,12 @@ use quireink_sdk::{Id, Manifest, Plugin, RegisterError, Registrar, SDK_VERSION, 
 const MAX_FILE: usize = 64 * 1024;
 /// Largest `plugin.ini`.
 const MAX_MANIFEST: usize = 4 * 1024;
+/// The version of the formats of data plugins this QuireInk reads (its
+/// `plugin.ini`, translations, key maps, `settings.ini`, styles). A
+/// plugin says which it is made for with `formats` in `[plugin]` (1 if
+/// it does not); one made for a later version is not loaded, rather than
+/// read wrongly.
+pub(crate) const FORMATS: u32 = 1;
 
 /// A plugin made of data files.
 pub(crate) struct DataPlugin {
@@ -270,6 +276,7 @@ fn read(storage: &dyn Storage, path: &str, max: usize) -> Option<String> {
 /// folder's name; the version to 0.1.0.
 fn parse_manifest(source: &str, folder: &str) -> Result<Manifest, String> {
     let (mut id, mut name, mut description, mut version) = (None, None, None, None);
+    let mut formats = None;
     for entry in quireink_config::parse(source) {
         let entry = entry.map_err(|e| e.to_string())?;
         if entry.section != "plugin" {
@@ -281,7 +288,19 @@ fn parse_manifest(source: &str, folder: &str) -> Result<Manifest, String> {
             "name" => name = Some(value),
             "description" => description = Some(value),
             "version" => version = Some(value),
+            "formats" => formats = Some(value),
             _ => {}
+        }
+    }
+    if let Some(text) = formats {
+        let made_for: u32 = text
+            .trim()
+            .parse()
+            .map_err(|_| format!("invalid formats `{text}`"))?;
+        if made_for > FORMATS {
+            return Err(format!(
+                "made for a later QuireInk (formats {made_for}; this one reads {FORMATS})"
+            ));
         }
     }
     let id = id.unwrap_or_else(|| folder.to_string());
@@ -376,5 +395,15 @@ literata.qifp = fonts-default.literata
             )]
         );
         assert_eq!(slug("….ttf"), "font");
+    }
+
+    #[test]
+    fn plugins_made_for_later_formats_are_left_out() {
+        let ini = |formats: &str| format!("[plugin]\nname = Large print\n{formats}");
+        assert!(parse_manifest(&ini(""), "large").is_ok());
+        assert!(parse_manifest(&ini("formats = 1\n"), "large").is_ok());
+        let later = parse_manifest(&ini("formats = 2\n"), "large").unwrap_err();
+        assert!(later.contains("later QuireInk"), "{later}");
+        assert!(parse_manifest(&ini("formats = new\n"), "large").is_err());
     }
 }

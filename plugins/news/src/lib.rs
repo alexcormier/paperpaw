@@ -657,4 +657,18 @@ mod tests {
         assert_eq!(loaded[0].name, "Example news");
         assert_eq!(loaded[1].shown(), "other.org");
     }
+
+    /// What version 1 wrote stays readable (see `docs/data-files.md`).
+    #[test]
+    fn feeds_of_version_1_are_read() {
+        let storage = MemoryStorage::new().with(
+            &super::data("feeds.txt"),
+            include_str!("../testdata/feeds.txt.v1"),
+        );
+        let feeds = super::load(&storage);
+        assert_eq!(feeds.len(), 2);
+        assert_eq!(feeds[0].url, "https://www.tagesschau.de/xml/rss2/");
+        assert_eq!(feeds[0].name, "Tagesschau");
+        assert_eq!(feeds[1].name, "");
+    }
 }

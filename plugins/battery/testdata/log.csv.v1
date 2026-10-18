@@ -1,0 +1,4 @@
+kind,ms,millivolts,percent,charging,fast,partial,full,kilopixels,inputs,panel_ms,pages,unix
+start,0,4100,95,0,0,0,0,0,0,0,0,
+sample,61000,4048,87,0,3,10,1,4800,30,9000,12,1791967260
+end,122000,4031,85,0,5,20,2,9600,60,18000,25,1791967321

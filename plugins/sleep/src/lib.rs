@@ -161,10 +161,7 @@ fn picture(env: &Env<'_>) -> Option<ImageRef> {
     }
     pictures.sort_unstable();
     // One after the other, from where the last sleep left off.
-    let next = quireink_sdk::read_file(env.storage, &data("next.txt"), 32)
-        .ok()
-        .and_then(|n| String::from_utf8(n).ok()?.trim().parse::<usize>().ok())
-        .unwrap_or(0);
+    let next = next_picture(env.storage);
     let name = &pictures[next % pictures.len()];
     let _ = env
         .storage
@@ -307,6 +304,14 @@ impl Screen for SleepScreen {
     }
 }
 
+/// Which picture comes next, counted on from the first (`next.txt`).
+fn next_picture(storage: &dyn quireink_sdk::Storage) -> usize {
+    quireink_sdk::read_file(storage, &data("next.txt"), 32)
+        .ok()
+        .and_then(|n| String::from_utf8(n).ok()?.trim().parse::<usize>().ok())
+        .unwrap_or(0)
+}
+
 #[cfg(test)]
 mod tests {
     use quireink_i18n::{Catalog, check};
@@ -317,5 +322,15 @@ mod tests {
         let de = Catalog::parse(include_str!("../i18n/de.ini")).unwrap();
         let issues = check::compare(&en, &de);
         assert!(issues.is_empty(), "{issues:?}");
+    }
+
+    /// What version 1 wrote stays readable (see `docs/data-files.md`).
+    #[test]
+    fn the_next_picture_of_version_1_is_read() {
+        let storage = quireink_sdk::MemoryStorage::new().with(
+            &super::data("next.txt"),
+            include_str!("../testdata/next.txt.v1"),
+        );
+        assert_eq!(super::next_picture(&storage), 7);
     }
 }

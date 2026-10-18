@@ -1,0 +1,4 @@
+[webdav]
+url = https://cloud.example.org/remote.php/dav/files/me/
+user = me
+password = "secret 1"

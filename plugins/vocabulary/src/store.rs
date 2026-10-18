@@ -256,4 +256,26 @@ mod tests {
         assert_eq!(first[0].1.word, "w1");
         assert_eq!(range(&storage, MAX_WORDS - 1, MAX_WORDS)[0].1.word, "new");
     }
+
+    /// What version 1 wrote stays readable (see `docs/data-files.md`).
+    #[test]
+    fn words_of_version_1_are_read() {
+        let storage = quireink_sdk::MemoryStorage::new()
+            .with(&super::file(), include_str!("../testdata/words.txt.v1"));
+        let mut words = alloc::vec::Vec::new();
+        super::each_line(&storage, &super::file(), |line| {
+            words.extend(super::Word::parse(line));
+        });
+        assert_eq!(words.len(), 2);
+        assert_eq!(words[0].word, "Gregor");
+        assert_eq!(words[0].language, "de");
+        assert_eq!((words[0].section, words[0].offset), (2, 1234));
+        assert_eq!(words[0].title, "Die Verwandlung");
+        assert_eq!(
+            words[0].sentence,
+            "Als Gregor Samsa eines Morgens erwachte."
+        );
+        assert_eq!(words[1].path, "books/alice.txt");
+        assert_eq!(words[1].sentence, "");
+    }
 }

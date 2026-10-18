@@ -381,7 +381,7 @@ A data plugin is a folder:
 
 ```text
 plugins/large-print/
-  plugin.ini     [plugin] id, name, description, version
+  plugin.ini     [plugin] id, name, description, version, formats
   i18n/*.ini     translation catalogs (also whole new languages)
   keymap.ini     key bindings
   settings.ini   new defaults for any plugin's settings ([reader] font-size = 14)
@@ -390,6 +390,10 @@ plugins/large-print/
                  [extends] cyrillic.qifp = fonts-default.literata
   styles.css     a stylesheet for books, after a book's own (EPUB)
 ```
+
+`formats` says which version of these files' formats the plugin is made
+for (1 now, and if it is left out); a QuireInk that reads an older one
+leaves the plugin out and says why, rather than reading it wrongly.
 
 Packs for other scripts (`tools/script-pack.py` builds Cyrillic and
 Greek for Literata) are read a glyph at a time, so devices with little

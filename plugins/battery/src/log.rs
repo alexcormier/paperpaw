@@ -468,4 +468,20 @@ mod tests {
         assert_eq!(totals.per_100_pages(), Some(5.0));
         assert_eq!(totals.hours_left(80), Some(16.0));
     }
+
+    /// What version 1 wrote stays readable (see `docs/data-files.md`).
+    #[test]
+    fn logs_of_version_1_are_read() {
+        let storage = quireink_sdk::MemoryStorage::new()
+            .with("battery/log.csv", include_str!("../testdata/log.csv.v1"));
+        let sessions = Sessions::read(&storage, "battery");
+        // One time awake, from its start to its end.
+        let session = sessions.ended.first().expect("a time awake");
+        assert_eq!(session.first.ms, 0);
+        assert_eq!(session.last.ms, 122_000);
+        assert_eq!(session.last.millivolts, Some(4031));
+        assert_eq!(session.last.usage.refreshes, [5, 20, 2]);
+        assert_eq!(session.last.pages, 25);
+        assert_eq!(session.last.unix, Some(1_791_967_321));
+    }
 }

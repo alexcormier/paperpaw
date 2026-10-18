@@ -300,4 +300,14 @@ mod tests {
         assert_eq!(compare_versions("0.4.0-dev", "0.3.0"), Ordering::Greater);
         assert_eq!(compare_versions("0.4.0+x4", "0.4.0"), Ordering::Equal);
     }
+
+    /// What version 1 wrote stays readable (see `docs/data-files.md`).
+    #[test]
+    fn trusted_keys_of_version_1_are_read() {
+        let storage = MemoryStorage::new().with(
+            TRUSTED_KEYS,
+            include_str!("../testdata/firmware-keys.txt.v1"),
+        );
+        assert_eq!(trusted_keys(&storage), [[0x12; 32], [0xAB; 32]]);
+    }
 }

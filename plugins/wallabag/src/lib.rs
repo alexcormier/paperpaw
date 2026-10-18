@@ -119,8 +119,8 @@ struct Article {
 }
 
 /// The articles fetched, kept as `id<TAB>path` lines.
-fn articles(env: &Env<'_>) -> Vec<Article> {
-    let Ok(data) = quireink_sdk::read_file(env.storage, &data("articles.txt"), 64 * 1024) else {
+fn articles(storage: &dyn quireink_sdk::Storage) -> Vec<Article> {
+    let Ok(data) = quireink_sdk::read_file(storage, &data("articles.txt"), 64 * 1024) else {
         return Vec::new();
     };
     String::from_utf8_lossy(&data)
@@ -144,8 +144,8 @@ fn save_articles(env: &Env<'_>, list: &[Article]) {
 }
 
 /// The ids of articles read to the end, to archive.
-fn finished(env: &Env<'_>) -> Vec<String> {
-    quireink_sdk::read_file(env.storage, &data("finished.txt"), 16 * 1024)
+fn finished(storage: &dyn quireink_sdk::Storage) -> Vec<String> {
+    quireink_sdk::read_file(storage, &data("finished.txt"), 16 * 1024)
         .map(|d| {
             String::from_utf8_lossy(&d)
                 .lines()
@@ -172,10 +172,10 @@ fn page_turned(env: &Env<'_>, reading: &events::Reading) {
     if !read || !path.starts_with(&folder(env)) {
         return;
     }
-    let Some(article) = articles(env).into_iter().find(|a| a.path == path) else {
+    let Some(article) = articles(env.storage).into_iter().find(|a| a.path == path) else {
         return;
     };
-    let mut ids = finished(env);
+    let mut ids = finished(env.storage);
     if !ids.contains(&article.id) {
         ids.push(article.id);
         save_finished(env, &ids);
@@ -273,8 +273,8 @@ impl Fetch {
             return done(env, key, &[], out);
         };
         self.token = token;
-        let fetched = articles(env);
-        self.archive = finished(env)
+        let fetched = articles(env.storage);
+        self.archive = finished(env.storage)
             .into_iter()
             .filter(|id| fetched.iter().any(|a| a.id == *id))
             .collect();
@@ -351,12 +351,12 @@ impl Fetch {
         }
         let unread = unread(env.storage);
         // Those archived or deleted elsewhere go.
-        for article in articles(env) {
+        for article in articles(env.storage) {
             if !unread.iter().any(|(id, _)| *id == article.id) {
                 remove_article(env, &article.id);
             }
         }
-        let fetched = articles(env);
+        let fetched = articles(env.storage);
         self.downloads = unread
             .into_iter()
             .filter(|(id, _)| !fetched.iter().any(|a| a.id == *id))
@@ -380,7 +380,7 @@ impl Fetch {
         }
         if Self::ok(reply).is_some() && env.storage.rename(&tmp, &path).is_ok() {
             self.fetched += 1;
-            let mut list = articles(env);
+            let mut list = articles(env.storage);
             list.push(Article { id, path });
             save_articles(env, &list);
         } else {
@@ -415,13 +415,13 @@ fn unread(storage: &dyn quireink_sdk::Storage) -> Vec<(String, String)> {
 
 /// Removes an article's book and what is noted about it.
 fn remove_article(env: &Env<'_>, id: &str) {
-    let mut list = articles(env);
+    let mut list = articles(env.storage);
     if let Some(at) = list.iter().position(|a| a.id == id) {
         let article = list.remove(at);
         let _ = env.storage.remove(&article.path);
         save_articles(env, &list);
     }
-    let mut ids = finished(env);
+    let mut ids = finished(env.storage);
     if let Some(at) = ids.iter().position(|f| f == id) {
         ids.remove(at);
         save_finished(env, &ids);
@@ -769,5 +769,24 @@ mod tests {
             }
         }
         assert_eq!(Row::of(""), None);
+    }
+
+    /// What version 1 wrote stays readable (see `docs/data-files.md`).
+    #[test]
+    fn lists_of_version_1_are_read() {
+        let storage = quireink_sdk::MemoryStorage::new()
+            .with(
+                &super::data("articles.txt"),
+                include_str!("../testdata/articles.txt.v1"),
+            )
+            .with(
+                &super::data("finished.txt"),
+                include_str!("../testdata/finished.txt.v1"),
+            );
+        let articles = super::articles(&storage);
+        assert_eq!(articles.len(), 2);
+        assert_eq!(articles[0].id, "123");
+        assert_eq!(articles[1].path, "Wallabag/456 E-ink at night.epub");
+        assert_eq!(super::finished(&storage), ["123"]);
     }
 }

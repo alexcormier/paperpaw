@@ -2722,6 +2722,26 @@ fn settings_files_of_version_1_are_read() {
     assert!(kernel.take_warnings().is_empty());
 }
 
+/// A book's own settings (`settings.ini` in its folder) as version 1
+/// wrote them stay readable (see `docs/data-files.md`).
+#[test]
+fn book_settings_of_version_1_are_read() {
+    let path = ".quireink/plugins/reader/books/0000000000000001/settings.ini";
+    let storage = quireink_sdk::MemoryStorage::new()
+        .with(path, include_str!("../testdata/book-settings.ini.v1"));
+    let mut kernel = Kernel::builder(DEVICE).storage(storage).build().unwrap();
+    kernel.set_scope(Some(String::from(path)));
+    let settings = &kernel.shared.settings;
+    assert_eq!(
+        settings.scoped_value(settings::SCOPE_ONLY.as_str()),
+        Some(&SettingValue::Bool(true))
+    );
+    assert_eq!(
+        settings.scoped_value(settings::READING_FONT.as_str()),
+        Some(&SettingValue::Text(Cow::Borrowed(settings::DEFAULT_FONT)))
+    );
+}
+
 /// The shell takes everything at once: the radio first, network work only
 /// once there is a network.
 #[test]

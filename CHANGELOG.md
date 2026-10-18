@@ -6,6 +6,10 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Data plugins say which version of the formats they are made for,
+  `formats = 1` in `plugin.ini`; a QuireInk that reads older ones leaves
+  such a plugin out and says why. Every data file QuireInk keeps has a
+  file of its version in `testdata`, read by the tests.
 - SDK: a setting's unit, editor, step, slider, section and whether it is
   a secret are read with `SettingSpec::extra()` (they are kept apart, so
   that the settings take less memory: some 8 KiB less on the X4);

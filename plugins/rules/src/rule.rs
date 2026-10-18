@@ -399,4 +399,47 @@ mod tests {
         assert_eq!(minutes_until(1330, 1320), 24 * 60 - 10);
         assert_eq!(minutes_until(1320, 1320), 24 * 60, "just done: tomorrow");
     }
+
+    /// What version 1 wrote stays readable (see `docs/data-files.md`).
+    #[test]
+    fn rules_of_version_1_are_read() {
+        let storage = MemoryStorage::new().with(&path(), include_str!("../testdata/rules.txt.v1"));
+        let rules = load(&storage);
+        let night = Id::new_static("core.night-mode");
+        assert_eq!(rules.len(), 4);
+        assert_eq!(
+            rules[0].trigger,
+            Trigger::Time {
+                minute: 22 * 60,
+                days: EVERY_DAY
+            }
+        );
+        assert_eq!(rules[0].effect, Effect::Switch(night.clone(), true));
+        assert_eq!(rules[0].condition, Condition::Always);
+        assert_eq!(
+            rules[1].trigger,
+            Trigger::Time {
+                minute: 7 * 60,
+                days: WEEKDAYS
+            }
+        );
+        assert_eq!(rules[1].effect, Effect::Switch(night, false));
+        assert_eq!(
+            rules[2].effect,
+            Effect::Message(String::from("Battery low"))
+        );
+        assert!(!rules[2].on);
+        assert_eq!(rules[2].condition, Condition::NotReading);
+        assert_eq!(
+            rules[3].effect,
+            Effect::Number(Id::new_static("reader.font-size"), 12)
+        );
+        assert_eq!(
+            rules[3].condition,
+            Condition::Between {
+                from: 8 * 60,
+                to: 17 * 60
+            }
+        );
+    }
 }
