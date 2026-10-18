@@ -14,17 +14,29 @@
 
 include!("icon_table.rs");
 
+/// The name of icon `index` (in the order of [`ICONS`]).
+fn name(index: usize) -> &'static str {
+    let start = index.checked_sub(1).map_or(0, |i| ICONS[i].0 as usize);
+    &NAMES[start..ICONS[index].0 as usize]
+}
+
 /// The character of icon `name` in the icon font.
 pub fn char(name: &str) -> Option<char> {
-    ICONS
-        .binary_search_by(|(n, _)| (*n).cmp(name))
-        .ok()
-        .map(|at| ICONS[at].1)
+    let (mut low, mut high) = (0, ICONS.len());
+    while low < high {
+        let middle = (low + high) / 2;
+        match self::name(middle).cmp(name) {
+            core::cmp::Ordering::Less => low = middle + 1,
+            core::cmp::Ordering::Greater => high = middle,
+            core::cmp::Ordering::Equal => return Some(ICONS[middle].1),
+        }
+    }
+    None
 }
 
 /// The names of all icons, sorted.
 pub fn names() -> impl Iterator<Item = &'static str> {
-    ICONS.iter().map(|(name, _)| *name)
+    (0..ICONS.len()).map(name)
 }
 
 #[cfg(test)]
@@ -33,10 +45,15 @@ mod tests {
 
     #[test]
     fn icons_are_found_by_name() {
-        assert!(ICONS.windows(2).all(|w| w[0].0 < w[1].0), "sorted");
+        let all: alloc::vec::Vec<&str> = names().collect();
+        assert!(all.windows(2).all(|w| w[0] < w[1]), "sorted");
         assert_eq!(char("home"), Some('\u{eac1}'));
         assert!(char("books").is_some());
+        // The first and the last.
+        assert_eq!(char(all[0]), Some(ICONS[0].1));
+        assert_eq!(char(all[all.len() - 1]), Some(ICONS[ICONS.len() - 1].1));
         assert_eq!(char("no-such-icon"), None);
-        assert!(names().count() > 50);
+        assert_eq!(char(""), None);
+        assert!(all.len() > 5000);
     }
 }
