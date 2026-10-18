@@ -292,6 +292,7 @@ cargo run -p quireink-emulator -- --profile xteink-x4 --headless --script "confi
 | Fonts | `add_font`, `add_font_file`, `bind_font` | Fonts and the roles they fill |
 | Hyphenation | `add_hyphenation` | Patterns for a language |
 | Text filters | `add_text_filter` | Change a book's text before it is laid out |
+| Decorators | `add_decorator` | Mark words on book pages (a background, a line, a frame), drawn the same by every reader |
 | Input filters | `add_input_filter` | See every button and finger first: pass it, take it, or run an action instead |
 | Refresh filters | `add_refresh_filter` | Change how the panel is refreshed, e.g. in full on a screen of your own |
 | Status items and lines | `add_status_item`, `add_status_line` | What status lines show |
@@ -351,6 +352,57 @@ A point is an id a plugin names, with what a contribution there is in
 its documentation (for example one line per entry); others add to it
 with `r.contribute(point, text)`, and the plugin reads
 `env.services.contributions(point)`, each with the plugin it came from.
+
+### Marks in the text
+
+A plugin marks words on book pages with a decorator (ADR 0021): it gets
+the words of a page with their places in the book and gives back ranges,
+each with a *role*. The reader draws them; the plugin knows neither the
+reader nor the panel.
+
+```rust
+use quireink_sdk::decorations::{self, Decorated, Decoration, DecoratorSpec, LineKind};
+
+const LEARNING: Id = Id::new_static("vocabulary.learning");
+
+// The role: its look is settings (Settings, Marks in the text), the
+// plugin gives the default; themes and users change it.
+decorations::add_role(r, &LEARNING, "vocabulary.role.learning",
+    Decoration::NONE.line(LineKind::Dotted))?;
+r.add_decorator(
+    DecoratorSpec::new(Id::new_static("vocabulary.words"), "vocabulary.decorator",
+        |env, page| {
+            page.words
+                .iter()
+                .filter(|w| is_learnt(env, w.text))
+                .filter_map(|w| Decorated::words(core::slice::from_ref(w), &LEARNING))
+                .collect()
+        })
+    .switch(&MARK)          // a bool setting turns it on and off
+    .taps()                 // taps on its marks come back
+    .signature(|env| words_changed(env)),
+)?;
+r.on(events::DECORATION_TAPPED, |env, tapped, out| { /* tapped.text */ })?;
+```
+
+- A `Decoration` is a background, the text's ink, a line under the text
+  (solid, dotted, dashed, wavy, double) with its tone and thickness, a
+  frame, struck through; tones are named, and each panel shows them as
+  well as it can (colours, or their lightness, dithered where there are
+  few grays).
+- Each aspect of a role is a setting of its own (`<role>.background`,
+  `.ink`, `.line`, `.line-tone`, `.thickness`, `.frame`, `.struck`), so
+  profiles, rules and themes set them like any other.
+- Decorators are asked once a page is laid out, and again when their
+  signature changes (their data, their settings): keep it cheap, and
+  never work on a whole book.
+- Where marks meet on a word, the earlier decorator (by `order`) wins an
+  aspect both set; the rest combine.
+- The reader's own marks are roles too: `roles::HIGHLIGHT`, `LINK`,
+  `SEARCH_HIT`, `ALOUD`. A reader of one's own draws all marks with
+  `decorations::draw_behind` and `draw_over`.
+- What changes widths (bold, a larger size) is a text filter instead: it
+  lays the page out again.
 
 ### Widgets
 

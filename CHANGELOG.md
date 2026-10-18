@@ -6,6 +6,20 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Marks in the text (ADR 0021): plugins mark words on book pages through
+  decorators, drawn the same by every reader. How a mark looks is
+  settings, one per aspect (background, text, a line under the text that
+  is solid, dotted, dashed, wavy or double, its tone and thickness, a
+  frame, struck through), under *Marks in the text*; highlights, links,
+  search hits and the sentence read aloud are such roles too. Highlights
+  are visible on black and white panels (dithered; they were white
+  before). A tap on a mark whose plugin hears taps goes to it; with the
+  buttons, *Links and marks* reaches them. SDK: `decorations`
+  (`Decoration`, `Tone`, `LineKind`, `add_role`, `draw_behind`,
+  `draw_over`, `DecoratorSpec`, `Decorators`), `Registrar::add_decorator`,
+  `Env::decorators`, `events::DECORATION_TAPPED`, `groups::MARKS`,
+  `roles`; graphics: `Canvas::fill_shaded`. The setting
+  `reader.highlight-style` is gone (the highlight role's settings).
 - A reader can be replaced in full: plugins reach it only through what
   the SDK defines for every reader, no longer through the shipped
   reader's ids. SDK: `events::GOTO` (`Goto`), `events::TEXT_CHOSEN`
