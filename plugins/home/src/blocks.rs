@@ -721,9 +721,21 @@ fn draw_placeholder(
     let pad = style.gap as f32 / 2.0;
     let width = f32::from(area.width) - 2.0 * pad;
     let line = font.line_metrics(style.small).line_height;
-    let lines = font.wrap(style.small, title, width);
     let fits = ((f32::from(area.height) - 2.0 * pad) / line).max(1.0) as usize;
-    for (n, range) in lines.into_iter().take(fits).enumerate() {
+    // Broken between words only; a word longer than a line shortened.
+    let mut lines: Vec<String> = Vec::new();
+    for word in title.split_whitespace() {
+        let joined = lines.last().map(|last| format!("{last} {word}"));
+        match joined {
+            Some(joined) if font.measure(style.small, &joined) <= width => {
+                if let Some(last) = lines.last_mut() {
+                    *last = joined;
+                }
+            }
+            _ => lines.push(ui::fit(&font, style.small, word, width)),
+        }
+    }
+    for (n, text) in lines.iter().take(fits).enumerate() {
         let y = area.y + pad as u16 + (n as f32 * line) as u16;
         let row = Rect::new(area.x, y, area.width, line as u16);
         ui::draw_label(
@@ -732,7 +744,7 @@ fn draw_placeholder(
             style.small,
             f32::from(area.x) + pad,
             row,
-            &title[range],
+            text,
             Color::BLACK,
         );
     }
