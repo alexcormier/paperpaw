@@ -136,7 +136,45 @@ pub fn partial(storage: &dyn Storage, path: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::MemoryStorage;
+    use alloc::vec::Vec;
+    use quireink_platform::{DirEntry, StorageError};
+
+    /// One file in memory.
+    struct MemoryStorage(Vec<u8>);
+
+    impl MemoryStorage {
+        fn new() -> Self {
+            Self(Vec::new())
+        }
+
+        fn with(self, _: &str, data: Vec<u8>) -> Self {
+            Self(data)
+        }
+    }
+
+    impl Storage for MemoryStorage {
+        fn read_at(&self, _: &str, offset: u64, buf: &mut [u8]) -> Result<usize, StorageError> {
+            let start = (offset as usize).min(self.0.len());
+            let n = buf.len().min(self.0.len() - start);
+            buf[..n].copy_from_slice(&self.0[start..start + n]);
+            Ok(n)
+        }
+        fn size(&self, _: &str) -> Result<u64, StorageError> {
+            Ok(self.0.len() as u64)
+        }
+        fn write(&self, _: &str, _: &[u8]) -> Result<(), StorageError> {
+            Err(StorageError::Unsupported)
+        }
+        fn append(&self, _: &str, _: &[u8]) -> Result<(), StorageError> {
+            Err(StorageError::Unsupported)
+        }
+        fn list(&self, _: &str, _: &mut dyn FnMut(DirEntry<'_>)) -> Result<(), StorageError> {
+            Ok(())
+        }
+        fn remove(&self, _: &str) -> Result<(), StorageError> {
+            Err(StorageError::Unsupported)
+        }
+    }
 
     #[test]
     fn known_digests() {

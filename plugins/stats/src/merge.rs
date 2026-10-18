@@ -20,7 +20,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use quireink_sdk::Storage;
-use quireink_sdk::sqlite::{Database, Error};
+use quireink_sqlite::{Database, Error};
 
 use crate::koreader::{self, KoBook, STAT, fields, stat_record};
 use crate::store::{self, Book};

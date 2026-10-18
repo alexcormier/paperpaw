@@ -27,7 +27,7 @@ extern crate alloc;
 mod account;
 mod confirm;
 
-use quireink_sdk::md5;
+use quireink_digest::md5;
 
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
@@ -37,9 +37,9 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::cell::RefCell;
 
+use quireink_json as json;
 use quireink_sdk::builtin::{events, params};
 use quireink_sdk::document::Locator;
-use quireink_sdk::json;
 use quireink_sdk::secrets::SecretChange;
 use quireink_sdk::{
     ActionSpec, Arg, Command, Env, HttpRequest, Id, Instant, Manifest, MenuEntry, Params, Plugin,

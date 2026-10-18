@@ -60,7 +60,7 @@ fn cover_path(url: &str) -> String {
     format!(
         "{}/covers/{}.gray",
         quireink_sdk::Env::plugin_dir(PLUGIN.as_str()),
-        quireink_sdk::md5::of(url)
+        quireink_digest::md5::of(url)
     )
 }
 

@@ -12,10 +12,10 @@ use std::cell::RefCell;
 use android_activity::AndroidApp;
 use jni::JNIEnv;
 use jni::objects::{GlobalRef, JObject, JValue};
+use quireink_digest::fnv1a64;
 use quireink_sdk::document::{
     Align, Block, BlockKind, Document, DocumentError, ImageRef, Locator, Metadata, OffsetMap,
 };
-use quireink_sdk::hash::fnv1a64;
 use quireink_sdk::image::{GrayFile, GrayWriter, ImageSink};
 use quireink_sdk::{Env, Storage};
 

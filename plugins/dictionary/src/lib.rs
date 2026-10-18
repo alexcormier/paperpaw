@@ -24,8 +24,8 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
+use quireink_digest::fnv1a64;
 use quireink_sdk::builtin::{actions, groups, params, slots};
-use quireink_sdk::hash::fnv1a64;
 use quireink_sdk::ui::{self, UiStyle};
 use quireink_sdk::{
     Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest, Params,

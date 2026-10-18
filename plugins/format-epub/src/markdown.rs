@@ -7,8 +7,8 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
+use quireink_digest::fnv1a64;
 use quireink_sdk::document::{Block, Document, DocumentError, Link, Locator, Metadata, TocEntry};
-use quireink_sdk::hash::fnv1a64;
 use quireink_sdk::{Env, Storage};
 
 use crate::PLUGIN;

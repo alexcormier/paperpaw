@@ -3,9 +3,9 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
+use quireink_digest::fnv1a64;
 use quireink_sdk::builtin::{actions, events, fonts, params, slots};
 use quireink_sdk::document::{Document, DocumentError, Link, Locator};
-use quireink_sdk::hash::fnv1a64;
 use quireink_sdk::layout::{
     Face, Hyphenate, Page, PageImage, Style, Typesetter, layout_page, line_start,
 };

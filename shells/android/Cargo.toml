@@ -16,6 +16,7 @@ name = "quireink"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+quireink-digest.workspace = true
 quireink-app = { workspace = true, features = ["outline"] }
 quireink-core = { workspace = true, features = ["color", "outline"] }
 quireink-serve.workspace = true

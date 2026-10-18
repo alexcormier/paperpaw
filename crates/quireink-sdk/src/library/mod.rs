@@ -28,8 +28,8 @@ use alloc::vec::Vec;
 use crate::builtin::params;
 use crate::config;
 use crate::document::ImageRef;
-use crate::hash::fnv1a64;
 use crate::{Env, Params, Storage};
+use quireink_digest::fnv1a64;
 
 /// Where the library keeps what it knows.
 pub const DIR: &str = crate::data_path!("library");

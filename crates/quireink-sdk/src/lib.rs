@@ -43,29 +43,20 @@ pub mod firmware;
 mod fonts;
 mod formats;
 mod gesture;
-pub mod hash;
 mod hyphenation;
 pub mod icons;
 mod id;
-pub mod json;
 pub mod keys;
 pub mod library;
-pub mod md5;
-pub mod qr;
-pub mod secrets;
-pub mod semantics;
-pub mod services;
-pub mod sha1;
-/// Reading and writing SQLite database files.
-pub mod sqlite {
-    pub use quireink_sqlite::*;
-}
 mod memory_storage;
 mod menus;
 mod params;
 mod plugin;
 mod plugins;
 mod screen;
+pub mod secrets;
+pub mod semantics;
+pub mod services;
 mod settings;
 pub mod setup;
 pub mod status;

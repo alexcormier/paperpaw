@@ -23,8 +23,8 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
+use quireink_qr::QrCode;
 use quireink_sdk::builtin::{actions, menus, params, slots};
-use quireink_sdk::qr::QrCode;
 use quireink_sdk::ui::{self, UiStyle};
 use quireink_sdk::{
     ActionSpec, Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
@@ -210,7 +210,7 @@ impl TransferScreen {
 /// A key for this transfer: hard to guess for others in the network,
 /// short enough to type.
 pub(crate) fn key(env: &Env<'_>) -> String {
-    let mut hash = quireink_sdk::md5::Md5::new();
+    let mut hash = quireink_digest::md5::Md5::new();
     hash.update(env.device.id.as_bytes());
     hash.update(&env.now.0.to_le_bytes());
     if let Some(seconds) = quireink_sdk::time::unix_seconds(env) {

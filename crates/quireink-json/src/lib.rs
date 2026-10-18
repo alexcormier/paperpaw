@@ -2,6 +2,10 @@
 //! numbers (e.g. a sync server's, an encyclopedia's summary). Nested
 //! values are skipped, or taken as they are written ([`raw_member`]).
 
+#![no_std]
+
+extern crate alloc;
+
 pub mod stream;
 
 use alloc::string::String;

@@ -40,11 +40,12 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::cell::RefCell;
 
+use quireink_digest::md5;
 use quireink_sdk::builtin::{events, menus, params};
 use quireink_sdk::{
     ActionSpec, Command, Env, Id, Manifest, MenuEntry, Params, Plugin, RegisterError, Registrar,
     SDK_VERSION, ScreenSpec, SettingGroupSpec, SettingKind, SettingSpec, SettingValue, Version,
-    md5, time,
+    time,
 };
 
 use store::{Book, PageStat};

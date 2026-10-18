@@ -11,6 +11,8 @@ authors.workspace = true
 categories = ["no-std"]
 
 [dependencies]
+quireink-json.workspace = true
+quireink-digest.workspace = true
 quireink-sdk.workspace = true
 
 [dev-dependencies]

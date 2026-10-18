@@ -11,8 +11,8 @@
 use alloc::format;
 use alloc::string::{String, ToString};
 
+use quireink_qr::QrCode;
 use quireink_sdk::builtin::{actions, params};
-use quireink_sdk::qr::QrCode;
 use quireink_sdk::ui::{self, UiStyle};
 use quireink_sdk::{
     Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, RefreshMode,

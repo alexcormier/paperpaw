@@ -73,7 +73,7 @@ const SECRETS: &str = "opds.";
 
 /// The id of the password of the catalog at `url`.
 fn secret_id(url: &str) -> String {
-    let digest = quireink_sdk::md5::of(url);
+    let digest = quireink_digest::md5::of(url);
     format!("{SECRETS}{}", &digest[..16])
 }
 

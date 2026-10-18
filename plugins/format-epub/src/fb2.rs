@@ -24,10 +24,10 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::cell::Cell;
 
+use quireink_digest::fnv1a64;
 use quireink_sdk::document::{
     Block, Document, DocumentError, ImageRef, Link, Locator, Metadata, TocEntry,
 };
-use quireink_sdk::hash::fnv1a64;
 use quireink_sdk::image::Fit;
 use quireink_sdk::xml::{Token, Tokenizer, decode, local_name};
 use quireink_sdk::{Env, Storage};

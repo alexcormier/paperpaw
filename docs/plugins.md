@@ -319,7 +319,8 @@ place for a key.
 `Command::Http` makes a request where the device has a network
 (`env.caps.network`); the answer comes as the request's reply event, with
 the status and the body, or saved to a file (`save_to`) for large ones.
-Read large JSON answers as they stream with `json::stream`, so they
+Read large JSON answers as they stream with `quireink_json::stream`
+(the crate `quireink-json`), so they
 need little memory. `Command::Serve` serves HTTP to the local network,
 e.g. for transfers from a computer or typing on a phone.
 

@@ -6,6 +6,9 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: its helpers are crates of their own, so a change to one does not
+  change the SDK: `quireink-digest` (MD5, SHA-1, FNV-1a), `quireink-json`,
+  `quireink-qr`; plugins that read SQLite use `quireink-sqlite`.
 - SDK: `Registrar` is a struct now that collects `Contribution`s (a
   `#[non_exhaustive]` enum, the large kinds boxed); `add_action` and the
   rest are shorthands for `add`. Plugins take `&mut Registrar` instead of
@@ -33,7 +36,7 @@ change the plugin SDK.
   changes the entry that is read, the last; `quote()` is public and the
   reader and statistics use it (a book path with a line break broke the
   reader's file).
-- One FNV-1a (`quireink_sdk::hash::fnv1a64`) instead of fifteen copies.
+- One FNV-1a (`quireink_digest::fnv1a64`) instead of fifteen copies.
 - Firmware updates on the X4 ([ADR 0019](docs/adr/0019-firmware-updates.md)):
   two app partitions (the web flasher sets them up once), an update file
   in the folder `updates` on the card installed from Settings, *Update*

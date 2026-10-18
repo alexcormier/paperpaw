@@ -11,8 +11,8 @@
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
+use quireink_json::stream::{self, Event};
 use quireink_sdk::Storage;
-use quireink_sdk::json::stream::{self, Event};
 use quireink_sdk::web::join_url;
 
 use crate::feed::{Book, Entry, Feed, MAX_ENTRIES, Search};

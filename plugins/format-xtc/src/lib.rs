@@ -25,11 +25,11 @@ use alloc::string::{String, ToString};
 use alloc::vec;
 use alloc::vec::Vec;
 
+use quireink_digest::fnv1a64;
 use quireink_sdk::document::{
     Align, Block, BlockKind, Document, DocumentError, ImageRef, Locator, Metadata, OffsetMap,
     TocEntry,
 };
-use quireink_sdk::hash::fnv1a64;
 use quireink_sdk::image::{GrayFile, GrayWriter, ImageError, ImageSink};
 use quireink_sdk::{
     Env, FormatSpec, Id, Manifest, Plugin, RegisterError, Registrar, SDK_VERSION, Storage, Version,

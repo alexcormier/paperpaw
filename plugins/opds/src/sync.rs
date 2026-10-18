@@ -15,8 +15,9 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
+use quireink_digest::md5;
 use quireink_sdk::web::{clean_name, file_name};
-use quireink_sdk::{Command, Env, HttpRequest, Id, Params, files, http_params, md5};
+use quireink_sdk::{Command, Env, HttpRequest, Id, Params, files, http_params};
 
 use crate::catalogs::Catalog;
 use crate::{PLUGIN, feed};

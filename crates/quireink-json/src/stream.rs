@@ -4,7 +4,7 @@
 //! bytes.
 //!
 //! ```
-//! use quireink_sdk::json::stream::{Event, Parser};
+//! use quireink_json::stream::{Event, Parser};
 //!
 //! let mut titles = Vec::new();
 //! let mut parser = Parser::default();

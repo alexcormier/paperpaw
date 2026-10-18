@@ -24,8 +24,8 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
+use quireink_json as json;
 use quireink_sdk::builtin::{actions, groups, menus, params, slots};
-use quireink_sdk::json;
 use quireink_sdk::secrets::SecretChange;
 use quireink_sdk::ui::{self, UiStyle};
 use quireink_sdk::{
@@ -416,7 +416,7 @@ impl CalibreScreen {
                             .remove(&quireink_sdk::files::join(library_folder(&env), &path));
                     }
                     let uuid = library::forget(env.storage, &lpath).unwrap_or_default();
-                    let reply = format!("{{\"uuid\": {}}}", quireink_sdk::json::string(&uuid));
+                    let reply = format!("{{\"uuid\": {}}}", quireink_json::string(&uuid));
                     self.send(op::OK, &reply, cx);
                 }
                 cx.command(quireink_sdk::library::changed());

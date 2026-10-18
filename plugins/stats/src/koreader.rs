@@ -6,7 +6,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use quireink_sdk::Storage;
-use quireink_sdk::sqlite::{
+use quireink_sqlite::{
     Database, Error, SchemaEntry, Value, Writer, compare_records, encode_record,
 };
 

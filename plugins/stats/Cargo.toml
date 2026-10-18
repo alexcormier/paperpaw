@@ -11,6 +11,8 @@ authors.workspace = true
 categories = ["no-std"]
 
 [dependencies]
+quireink-digest.workspace = true
+quireink-sqlite.workspace = true
 quireink-sdk.workspace = true
 
 [dev-dependencies]

@@ -9,7 +9,7 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::json;
+use quireink_json as json;
 
 /// The ports Calibre listens on for a device looking for it.
 pub const BROADCAST_PORTS: [u16; 5] = [54982, 48123, 39001, 44044, 59678];
@@ -163,7 +163,7 @@ pub fn initialization(device: &Device<'_>) -> String {
     let extensions: Vec<String> = device.extensions.iter().map(|e| json::string(e)).collect();
     let hash = match device.password {
         Some(password) if !device.challenge.is_empty() => {
-            let mut sha = quireink_sdk::sha1::Sha1::new();
+            let mut sha = quireink_digest::sha1::Sha1::new();
             sha.update(password.as_bytes());
             sha.update(device.challenge.as_bytes());
             sha.hex()
@@ -291,7 +291,7 @@ mod tests {
             version: "1",
         };
         let answer = initialization(&device);
-        let expected = quireink_sdk::sha1::hex(b"secret2026-10-16T12:00:00");
+        let expected = quireink_digest::sha1::hex(b"secret2026-10-16T12:00:00");
         assert_eq!(text(&answer, "passwordHash"), Some(expected));
         assert_eq!(strings(&answer, "acceptedExtensions"), ["epub", "txt"]);
         assert_eq!(text(&answer, "canStreamBooks").as_deref(), Some("true"));

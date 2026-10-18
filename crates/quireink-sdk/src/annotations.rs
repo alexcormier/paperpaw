@@ -17,8 +17,8 @@ use alloc::vec::Vec;
 
 use crate::builtin::{events, params};
 use crate::document::Locator;
-use crate::hash::fnv1a64;
 use crate::{Command, Params, Storage};
+use quireink_digest::fnv1a64;
 
 /// Longest snippet kept with an annotation, in bytes.
 const MAX_TEXT: usize = 240;

@@ -11,6 +11,7 @@ authors.workspace = true
 categories = ["no-std", "text-processing"]
 
 [dependencies]
+quireink-digest.workspace = true
 quireink-sdk.workspace = true
 # WOFF fonts: their tables are zlib-compressed.
 miniz_oxide = { version = "0.8", default-features = false, features = ["with-alloc"] }

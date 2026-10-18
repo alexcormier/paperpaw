@@ -17,13 +17,14 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
+use quireink_json as json;
 use quireink_sdk::builtin::{actions, params, slots};
 use quireink_sdk::ui::{self, UiStyle};
 use quireink_sdk::web::encode;
 use quireink_sdk::{
     Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, HttpRequest, Id, Manifest,
     Params, Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen,
-    ScreenSpec, Version, http_params, json,
+    ScreenSpec, Version, http_params,
 };
 
 pub const PLUGIN: Id = Id::new_static("wikipedia");

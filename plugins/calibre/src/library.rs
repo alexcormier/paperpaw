@@ -7,7 +7,7 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::md5::Md5;
+use quireink_digest::md5::Md5;
 use quireink_sdk::{Env, Storage};
 
 use crate::PLUGIN;

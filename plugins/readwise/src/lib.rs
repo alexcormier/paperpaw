@@ -24,11 +24,12 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
+use quireink_json as json;
 use quireink_sdk::builtin::{params, slots};
 use quireink_sdk::secrets::SecretChange;
 use quireink_sdk::{
     Arg, Command, Env, HttpRequest, Id, Manifest, Params, Plugin, RegisterError, Registrar,
-    SDK_VERSION, Version, http_params, json,
+    SDK_VERSION, Version, http_params,
 };
 
 pub const PLUGIN: Id = Id::new_static("readwise");

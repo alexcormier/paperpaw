@@ -22,10 +22,10 @@ use alloc::borrow::Cow;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
+use quireink_digest::fnv1a64;
 use quireink_sdk::Storage;
 use quireink_sdk::config;
 use quireink_sdk::document::{DocumentError, Metadata};
-use quireink_sdk::hash::fnv1a64;
 use quireink_sdk::xml::{Token, Tokenizer, decode, local_name};
 use quireink_sdk::zip::ZipArchive;
 

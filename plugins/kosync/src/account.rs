@@ -17,7 +17,8 @@ use quireink_sdk::{
     Screen, SettingValue, http_params,
 };
 
-use quireink_sdk::{json, md5};
+use quireink_digest::md5;
+use quireink_json as json;
 
 use crate::{
     ACCOUNT_CHANGED, SERVER, USER, normalize_server, save_key, server, server_label, server_request,

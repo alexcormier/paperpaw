@@ -5,8 +5,8 @@
 use alloc::format;
 use alloc::string::{String, ToString};
 
+use quireink_digest::sha1::Sha1;
 use quireink_sdk::secrets::SecretChange;
-use quireink_sdk::sha1::Sha1;
 use quireink_sdk::{Command, Env};
 
 use crate::{KIND, KIND_PREFIX};
@@ -30,7 +30,7 @@ pub(crate) fn hash(salt: &str, code: &str) -> String {
         sha.update(&digest);
         digest = sha.finish();
     }
-    quireink_sdk::sha1::hex(&digest)
+    quireink_digest::sha1::hex(&digest)
 }
 
 /// The kind of the lock in use (`pin`, `pattern`, `password`): one whose

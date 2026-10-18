@@ -11,6 +11,7 @@ authors.workspace = true
 categories = ["no-std"]
 
 [dependencies]
+quireink-digest.workspace = true
 quireink-sdk.workspace = true
 quireink-stardict.workspace = true
 

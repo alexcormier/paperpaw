@@ -5,6 +5,10 @@
 //! and version information, Reed-Solomon error correction over GF(256),
 //! interleaved blocks and the mask with the lowest penalty.
 
+#![no_std]
+
+extern crate alloc;
+
 use alloc::vec;
 use alloc::vec::Vec;
 

@@ -12,10 +12,10 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::cmp::Ordering;
 
+use quireink_digest::fnv1a64;
 use quireink_sdk::document::{
     Align, Block, BlockKind, Document, DocumentError, ImageRef, Locator, Metadata, OffsetMap,
 };
-use quireink_sdk::hash::fnv1a64;
 use quireink_sdk::image::Fit;
 use quireink_sdk::xml::{Token, Tokenizer, decode, local_name};
 use quireink_sdk::zip::ZipArchive;

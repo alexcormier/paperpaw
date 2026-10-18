@@ -147,7 +147,7 @@ pub(crate) fn decode_kind(kind: u8, level: u8) -> BlockKind {
 /// The cache name of the image at `archive_path`, without its kind (see
 /// `pictures`).
 pub(crate) fn image_path(dir: &str, archive_path: &str) -> String {
-    let hash = quireink_sdk::hash::fnv1a64(archive_path);
+    let hash = quireink_digest::fnv1a64(archive_path);
     alloc::format!("{dir}/img-{hash:016x}")
 }
 

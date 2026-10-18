@@ -12,7 +12,7 @@
 //! `quireink_sdk::secrets`).
 //!
 //! The list of articles is read as it streams from storage (see
-//! `quireink_sdk::json::stream`) and each book is written straight to
+//! `quireink_json::stream`) and each book is written straight to
 //! storage, so this works on small devices too. Shipped switched off:
 //! switch it on in the plugins.
 
@@ -28,15 +28,16 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::cell::RefCell;
 
+use quireink_json as json;
+use quireink_json::stream::{self, Event};
 use quireink_sdk::builtin::{actions, events, groups, menus, params, slots};
-use quireink_sdk::json::stream::{self, Event};
 use quireink_sdk::secrets::SecretChange;
 use quireink_sdk::ui::{self, ListChange, ListView, UiStyle};
 use quireink_sdk::web::{clean_name, encode};
 use quireink_sdk::{
     ActionSpec, Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, HttpRequest, Id,
     Manifest, MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION,
-    Screen, ScreenSpec, SettingKind, SettingSpec, SettingValue, Version, http_params, json,
+    Screen, ScreenSpec, SettingKind, SettingSpec, SettingValue, Version, http_params,
 };
 
 pub const PLUGIN: Id = Id::new_static("wallabag");
