@@ -6,6 +6,10 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- HTML, FictionBook, Markdown and comic books are plugins of their own
+  (`format-html`, `format-fb2`, `format-markdown`, `format-cbz`), no
+  longer part of the EPUB plugin: each can be switched off or replaced
+  alone.
 - Drawing, text and layout take their parts together: `Canvas::fill`,
   `stroke`, `fill_round` and `stroke_round` take a `Rect` (`ui::fill` is
   deprecated), `quireink_text::draw_text` a `TextStyle` (with `bolder`,

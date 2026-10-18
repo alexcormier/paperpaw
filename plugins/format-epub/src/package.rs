@@ -507,6 +507,40 @@ pub(crate) fn build(
     cache: &str,
     book_size: u64,
 ) -> Result<Package, DocumentError> {
+    let opf_path = package_path(storage, archive)?;
+    let opf = read_metadata(storage, archive, &opf_path)?;
+    let items = read_manifest(storage, archive, &opf_path, &opf)?;
+    // The spine's ids are done with.
+    let Opf {
+        metadata,
+        identifier,
+        ..
+    } = opf;
+    let toc_len = write_toc(
+        storage,
+        archive,
+        cache,
+        &items.spine,
+        items.nav.as_deref(),
+        items.ncx.as_deref(),
+    )?;
+    write_spine(storage, cache, &items.spine)?;
+    write_styles(storage, archive, cache, &items.stylesheets, &identifier)?;
+    let sections = items.spine.len();
+    let cover = items.cover.as_deref();
+    write_ini(
+        storage, cache, &metadata, sections, toc_len, cover, book_size,
+    )?;
+    Ok(Package {
+        metadata,
+        spine: items.spine,
+        toc_len,
+        cover: items.cover,
+    })
+}
+
+/// Where the package document is (`META-INF/container.xml` says).
+fn package_path(storage: &dyn Storage, archive: &ZipArchive) -> Result<String, DocumentError> {
     // container.xml → path of the OPF package document.
     let mut opf_path = None;
     tokenize(storage, archive, "META-INF/container.xml", &mut |token| {
@@ -518,8 +552,29 @@ pub(crate) fn build(
         }
     })?;
     let opf_path = opf_path.ok_or(malformed("no package document"))?;
-    let opf_dir = String::from(dir_of(&opf_path));
+    Ok(opf_path)
+}
 
+/// What the first pass over the package document finds.
+struct Opf {
+    metadata: Metadata,
+    /// The spine's ids (hashed: 8 bytes each), sorted, with their places
+    /// in it.
+    spine_ids: Vec<(u64, u32)>,
+    /// The NCX's id, as the spine names it.
+    ncx_id: Option<u64>,
+    /// EPUB 2's cover, as `<meta name="cover">` names it.
+    cover_id: Option<u64>,
+    /// The unique identifier, the key of obfuscated fonts.
+    identifier: String,
+}
+
+/// First pass: metadata and the spine.
+fn read_metadata(
+    storage: &dyn Storage,
+    archive: &ZipArchive,
+    opf_path: &str,
+) -> Result<Opf, DocumentError> {
     // First pass: metadata and the spine's ids (hashed: 8 bytes each).
     let mut metadata = Metadata::default();
     let mut spine_ids: Vec<(u64, u32)> = Vec::new();
@@ -534,7 +589,7 @@ pub(crate) fn build(
     // EPUB 3 series: `<meta property="belongs-to-collection" id="c">`, its
     // number in `<meta refines="#c" property="group-position">`.
     let mut collection_id: Option<String> = None;
-    tokenize(storage, archive, &opf_path, &mut |token| match token {
+    tokenize(storage, archive, opf_path, &mut |token| match token {
         Token::Start {
             name,
             attrs,
@@ -645,7 +700,36 @@ pub(crate) fn build(
         _ => {}
     })?;
     spine_ids.sort_unstable();
+    Ok(Opf {
+        metadata,
+        spine_ids,
+        ncx_id,
+        cover_id,
+        identifier,
+    })
+}
 
+/// What the second pass keeps of the manifest.
+struct Items {
+    /// The chapters, in reading order.
+    spine: Vec<Chapter>,
+    /// The EPUB 3 navigation document.
+    nav: Option<String>,
+    /// The EPUB 2 NCX.
+    ncx: Option<String>,
+    stylesheets: Vec<String>,
+    cover: Option<String>,
+}
+
+/// Second pass: the manifest's items the first pass asks for.
+fn read_manifest(
+    storage: &dyn Storage,
+    archive: &ZipArchive,
+    opf_path: &str,
+    opf: &Opf,
+) -> Result<Items, DocumentError> {
+    let opf_dir = String::from(dir_of(opf_path));
+    let (spine_ids, ncx_id, cover_id) = (&opf.spine_ids, opf.ncx_id, opf.cover_id);
     // Second pass: the manifest items the spine refers to, the navigation
     // document and the NCX. Nothing else of the manifest is kept.
     let mut chapters: Vec<Option<Chapter>> = alloc::vec![None; spine_ids.len()];
@@ -656,7 +740,7 @@ pub(crate) fn build(
     // EPUB 3 `cover-image` wins over EPUB 2's `<meta name="cover">`.
     let mut cover: Option<(bool, String)> = None;
     let mut failed = None;
-    tokenize(storage, archive, &opf_path, &mut |token| {
+    tokenize(storage, archive, opf_path, &mut |token| {
         let Token::Start { name, attrs, .. } = token else {
             return;
         };
@@ -714,12 +798,29 @@ pub(crate) fn build(
     if let Some(e) = failed {
         return Err(e);
     }
-    drop(spine_ids);
     let spine: Vec<Chapter> = chapters.into_iter().flatten().collect();
     if spine.is_empty() {
         return Err(malformed("empty spine"));
     }
+    Ok(Items {
+        spine,
+        nav,
+        ncx: ncx.or(ncx_by_type),
+        stylesheets,
+        cover: cover.map(|(_, path)| path),
+    })
+}
 
+/// Writes the table of contents and the printed pages; how many entries
+/// the contents have.
+fn write_toc(
+    storage: &dyn Storage,
+    archive: &ZipArchive,
+    cache: &str,
+    spine: &[Chapter],
+    nav: Option<&str>,
+    ncx: Option<&str>,
+) -> Result<u32, DocumentError> {
     // Table of contents: EPUB 3 navigation document, else (or if it has no
     // entries) the EPUB 2 NCX.
     let mut toc = TocWriter::new(storage, cache)?;
@@ -734,7 +835,7 @@ pub(crate) fn build(
         };
     let pages_path = path(cache, "pages.txt");
     storage.write(&pages_path, &[])?;
-    if let Some(nav) = &nav {
+    if let Some(nav) = nav {
         let mut pages = String::new();
         let mut add_page = |label: String, file: &str, fragment: Option<&str>| {
             let (Ok(Some(entry)), Some(fragment)) = (archive.entry(storage, file), fragment) else {
@@ -762,27 +863,39 @@ pub(crate) fn build(
         );
         let _ = storage.append(&pages_path, pages.as_bytes());
     }
-    let ncx = ncx.or(ncx_by_type);
-    if let Some(ncx) = &ncx
+    if let Some(ncx) = ncx
         && toc.count == 0
     {
         let _ = read_ncx(storage, archive, ncx, &mut |t, l, f, fr| {
             add(&mut toc, t, l, f, fr)
         });
     }
-    let toc_len = toc.finish()?;
+    toc.finish()
+}
 
+/// Writes where the chapters are in the archive.
+fn write_spine(storage: &dyn Storage, cache: &str, spine: &[Chapter]) -> Result<(), DocumentError> {
     let mut spine_data = Vec::with_capacity(spine.len() * 8);
-    for chapter in &spine {
+    for chapter in spine {
         spine_data.extend_from_slice(&chapter.record.to_le_bytes());
         spine_data.extend_from_slice(&chapter.size.to_le_bytes());
     }
     storage.write(&path(cache, "spine.bin"), &spine_data)?;
     drop(spine_data);
+    Ok(())
+}
 
+/// Writes the book's styles and its fonts.
+fn write_styles(
+    storage: &dyn Storage,
+    archive: &ZipArchive,
+    cache: &str,
+    stylesheets: &[String],
+    identifier: &str,
+) -> Result<(), DocumentError> {
     // Stylesheets, one at a time; a damaged one is skipped.
     let mut rules = css::Rules::default();
-    for path in &stylesheets {
+    for path in stylesheets {
         let mut parser = css::Parser::new(dir_of(path));
         let Ok(Some(entry)) = archive.entry(storage, path) else {
             continue;
@@ -803,9 +916,21 @@ pub(crate) fn build(
         });
     }
     storage.write(&path(cache, "styles.txt"), rules.encode().as_bytes())?;
-    write_fonts(storage, archive, cache, &rules.faces, &identifier)?;
+    write_fonts(storage, archive, cache, &rules.faces, identifier)?;
     drop(rules);
+    Ok(())
+}
 
+/// Writes what is known of the book, for opening it again quickly.
+fn write_ini(
+    storage: &dyn Storage,
+    cache: &str,
+    metadata: &Metadata,
+    sections: usize,
+    toc_len: u32,
+    cover: Option<&str>,
+    book_size: u64,
+) -> Result<(), DocumentError> {
     let mut ini = String::new();
     let mut set = |section: &str, key: &str, value: &str| {
         ini = config::set(&ini, section, key, value);
@@ -824,7 +949,7 @@ pub(crate) fn build(
     if let Some(index) = &metadata.series_index {
         set("book", "series-index", index);
     }
-    set("book", "sections", &spine.len().to_string());
+    set("book", "sections", &sections.to_string());
     set("book", "toc", &toc_len.to_string());
     for (i, author) in metadata.authors.iter().enumerate() {
         set("book", &alloc::format!("author.{}", i + 1), author);
@@ -835,18 +960,11 @@ pub(crate) fn build(
     if let Some(description) = &metadata.description {
         set("book", "description", description);
     }
-    let cover = cover.map(|(_, path)| path);
-    if let Some(cover) = &cover {
+    if let Some(cover) = cover {
         set("book", "cover", cover);
     }
     storage.write(&path(cache, "package.ini"), ini.as_bytes())?;
-
-    Ok(Package {
-        metadata,
-        spine,
-        toc_len,
-        cover,
-    })
+    Ok(())
 }
 
 type AddToc<'a> = dyn FnMut(String, u8, &str, Option<&str>) + 'a;

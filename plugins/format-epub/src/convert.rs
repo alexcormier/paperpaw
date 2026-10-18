@@ -36,8 +36,9 @@
 //! browsers do (see [`Source::Html`]), and FictionBooks, their elements
 //! read as the HTML ones they look like (see [`Source::Fb2`]).
 
+use alloc::boxed::Box;
 use alloc::rc::Rc;
-use alloc::string::{String, ToString};
+use alloc::string::String;
 use alloc::vec::Vec;
 
 use quireink_sdk::Storage;
@@ -93,17 +94,28 @@ pub(crate) enum Source<'a> {
     },
 }
 
-/// Where a FictionBook's converter is.
+/// A markup read as HTML, as FictionBook is (see `crate::fb2`): the HTML
+/// element each of its elements is read as, and what entering one asks of
+/// the converter. XHTML needs none.
+pub(crate) trait Dialect {
+    /// Element `tag` entered.
+    fn enter(&mut self, tag: &str, attrs: &quireink_sdk::xml::Attrs<'_>) -> Entered;
+    /// Element `tag` left: the HTML element it was read as.
+    fn leave(&mut self, tag: &str) -> String;
+    /// Where the picture `href` points is kept as, if not as a path
+    /// relative to the chapter.
+    fn picture(&self, href: &str) -> Option<String>;
+}
+
+/// An element of a [`Dialect`] entered.
 #[derive(Debug, Default)]
-struct Fb2State {
-    /// Depth of nested sections.
-    depth: u32,
-    /// Inside a `<title>`.
-    in_title: bool,
-    /// Inside the notes (`<body name="notes">`).
-    notes: bool,
-    /// Section titles met so far, for their anchors.
-    titles: u32,
+pub(crate) struct Entered {
+    /// The HTML element it is read as.
+    pub name: String,
+    /// An anchor to set where it begins (e.g. for the contents).
+    pub anchor: Option<String>,
+    /// A line break first, if text came before it in the block.
+    pub line_break: bool,
 }
 
 /// Paths of a chapter's cache files.
@@ -290,8 +302,8 @@ struct Converter<'a> {
     /// Reading HTML: the page's address, if known (else `None` for
     /// EPUB chapters and HTML without one).
     html: Option<Html>,
-    /// Reading a FictionBook.
-    fb2: Option<Fb2State>,
+    /// Reading markup that is not HTML, e.g. a FictionBook.
+    dialect: Option<Box<dyn Dialect>>,
     /// Pending `<n>.pos` lines.
     positions: String,
     /// Pending `<n>.xpt` lines.
@@ -411,10 +423,9 @@ impl Converter<'_> {
     /// An image block for `href` (relative to the chapter; in a
     /// FictionBook, `#` and a binary's id).
     fn image(&mut self, href: &str, alt: &str) {
-        let path = if self.fb2.is_some() {
-            href.trim_start_matches('#').to_string()
-        } else {
-            crate::package::resolve(&self.base, href).0
+        let path = match self.dialect.as_ref().and_then(|d| d.picture(href)) {
+            Some(path) => path,
+            None => crate::package::resolve(&self.base, href).0,
         };
         let cache = image_path(&self.paths.dir, &path);
         self.flush();
@@ -508,76 +519,24 @@ impl Converter<'_> {
         })
     }
 
-    /// A FictionBook element entered: the HTML element it is read as.
-    fn fb2_enter(&mut self, tag: &str, attrs: &quireink_sdk::xml::Attrs<'_>) -> String {
-        let Some(fb2) = &mut self.fb2 else {
-            return tag.to_string();
-        };
-        match tag {
-            "body" => fb2.notes = attrs.get("name").as_deref() == Some("notes"),
-            "section" => fb2.depth += 1,
-            "title" => {
-                fb2.in_title = true;
-                if !fb2.notes && fb2.depth > 0 {
-                    // Where the contents entry leads.
-                    let id = alloc::format!("{}{}", crate::fb2::TOC_ANCHOR, fb2.titles);
-                    fb2.titles += 1;
-                    self.flush();
-                    let at = self.here();
-                    self.anchors.push_str(&alloc::format!("{id}\t{at}\n"));
-                }
-            }
-            // The lines of a title.
-            "p" if fb2.in_title && !self.text.is_empty() => self.push('\n'),
-            _ => {}
-        }
-        self.fb2_name(tag)
-    }
-
-    /// A FictionBook element left: the HTML element it was read as.
-    fn fb2_leave(&mut self, tag: &str) -> String {
-        let name = self.fb2_name(tag);
-        if let Some(fb2) = &mut self.fb2 {
-            match tag {
-                "section" => fb2.depth = fb2.depth.saturating_sub(1),
-                "title" => fb2.in_title = false,
-                _ => {}
-            }
-        }
-        name
-    }
-
-    /// The HTML element a FictionBook element is read as.
-    fn fb2_name(&self, tag: &str) -> String {
-        let Some(fb2) = &self.fb2 else {
-            return tag.to_string();
-        };
-        let name = match tag {
-            "description" | "binary" | "stylesheet" => "head",
-            "title" => {
-                return alloc::format!("h{}", (fb2.depth + 1).min(6));
-            }
-            "p" if fb2.in_title => "span",
-            "subtitle" => "h5",
-            "epigraph" | "cite" => "blockquote",
-            "poem" | "stanza" => "div",
-            "v" | "text-author" | "empty-line" => "p",
-            "emphasis" => "i",
-            "strong" => "b",
-            "strikethrough" => "s",
-            tag => tag,
-        };
-        name.to_string()
-    }
-
     fn start(&mut self, name: &str, attrs: quireink_sdk::xml::Attrs<'_>, self_closing: bool) {
         let _ = self_closing;
         self.end_node();
         let tag = local_name(name).to_ascii_lowercase();
-        let tag = if self.fb2.is_some() {
-            self.fb2_enter(&tag, &attrs)
-        } else {
-            tag
+        let entered = self.dialect.as_mut().map(|d| d.enter(&tag, &attrs));
+        let tag = match entered {
+            Some(entered) => {
+                if let Some(id) = entered.anchor {
+                    self.flush();
+                    let at = self.here();
+                    self.anchors.push_str(&alloc::format!("{id}\t{at}\n"));
+                }
+                if entered.line_break && !self.text.is_empty() {
+                    self.push('\n');
+                }
+                entered.name
+            }
+            None => tag,
         };
         let props = if self.hidden == 0 {
             element_props(&tag, &attrs, &mut self.rules, self.styles)
@@ -744,10 +703,9 @@ impl Converter<'_> {
     fn end(&mut self, name: &str) {
         self.end_node();
         let tag = local_name(name).to_ascii_lowercase();
-        let tag = if self.fb2.is_some() {
-            self.fb2_leave(&tag)
-        } else {
-            tag
+        let tag = match self.dialect.as_mut() {
+            Some(dialect) => dialect.leave(&tag),
+            None => tag,
         };
         let Some(open) = self.stack.iter().rposition(|f| f.tag == tag) else {
             return;
@@ -1240,7 +1198,10 @@ pub(crate) fn convert(
             base: base.map(String::from),
         }),
     };
-    let fb2 = matches!(source, Source::Fb2 { .. }).then(Fb2State::default);
+    let dialect: Option<Box<dyn Dialect>> = match source {
+        Source::Fb2 { .. } => Some(Box::new(crate::fb2::Fb2Dialect::default())),
+        _ => None,
+    };
     let _ = storage.remove(&paths.end);
     for path in [
         &paths.text,
@@ -1288,7 +1249,7 @@ pub(crate) fn convert(
         // A page with reading matter shows nothing outside it.
         hidden: u32::from(html.as_ref().is_some_and(|h| h.focus.is_some())),
         html,
-        fb2,
+        dialect,
         pre: 0,
         space: false,
         space_style: TextStyle::REGULAR,

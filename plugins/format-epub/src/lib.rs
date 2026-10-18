@@ -15,7 +15,9 @@
 //! the same way, showing only a page's reading matter (see
 //! [`HtmlDocument`]), Markdown (`.md`, see [`MarkdownDocument`]),
 //! FictionBooks (`.fb2`, see [`Fb2Document`]) and comic book archives
-//! (`.cbz`, see [`CbzDocument`]).
+//! (`.cbz`, see [`CbzDocument`]): each a plugin of its own, so that it can
+//! be switched off or replaced alone ([`HtmlFormat`], [`MarkdownFormat`],
+//! [`Fb2Format`], [`CbzFormat`]).
 
 #![no_std]
 
@@ -51,31 +53,45 @@ pub use markdown::MarkdownDocument;
 
 pub const PLUGIN: Id = Id::new_static("format-epub");
 pub const FORMAT: Id = Id::new_static("format-epub.epub");
-/// HTML files, e.g. web pages.
-pub const HTML: Id = Id::new_static("format-epub.html");
-/// FictionBook 2.
-pub const FB2: Id = Id::new_static("format-epub.fb2");
-/// Comic book archives.
-pub const CBZ: Id = Id::new_static("format-epub.cbz");
-/// Markdown.
-pub const MARKDOWN: Id = Id::new_static("format-epub.markdown");
 
-/// The EPUB format plugin.
+/// HTML files, e.g. web pages: the plugin and its format.
+pub const HTML_PLUGIN: Id = Id::new_static("format-html");
+pub const HTML: Id = Id::new_static("format-html.html");
+/// FictionBook 2.
+pub const FB2_PLUGIN: Id = Id::new_static("format-fb2");
+pub const FB2: Id = Id::new_static("format-fb2.fb2");
+/// Comic book archives.
+pub const CBZ_PLUGIN: Id = Id::new_static("format-cbz");
+pub const CBZ: Id = Id::new_static("format-cbz.cbz");
+/// Markdown.
+pub const MARKDOWN_PLUGIN: Id = Id::new_static("format-markdown");
+pub const MARKDOWN: Id = Id::new_static("format-markdown.markdown");
+
+/// A plugin's manifest: its id, its name and what it does.
+fn manifest(id: Id, name: &'static str, description: &'static str) -> Manifest {
+    Manifest {
+        id,
+        name: Cow::Borrowed(name),
+        description: Cow::Borrowed(description),
+        version: Version::new(0, 1, 0),
+        sdk: SDK_VERSION,
+    }
+}
+
+/// EPUB books. HTML, FictionBook, Markdown and comic books are plugins of
+/// their own ([`HtmlFormat`], [`Fb2Format`], [`MarkdownFormat`],
+/// [`CbzFormat`]), so each can be switched off or replaced alone; they
+/// share the conversion of this crate.
 #[derive(Debug, Default)]
 pub struct EpubFormat;
 
 impl Plugin for EpubFormat {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: PLUGIN,
-            name: Cow::Borrowed("EPUB"),
-            description: Cow::Borrowed(
-                "Opens EPUB books with their styles, table of contents and images, and web pages \
-                 (HTML).",
-            ),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-        }
+        manifest(
+            PLUGIN,
+            "EPUB",
+            "Opens EPUB books with their styles, table of contents and images.",
+        )
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
@@ -89,9 +105,30 @@ impl Plugin for EpubFormat {
             }),
             prepared: Some(Box::new(EpubDocument::prepared)),
         })?;
+        r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
+        r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
+        Ok(())
+    }
+}
+
+/// HTML files (`.html`, `.htm`, `.xhtml`), e.g. saved web pages: only a
+/// page's reading matter (see [`HtmlDocument`]).
+#[derive(Debug, Default)]
+pub struct HtmlFormat;
+
+impl Plugin for HtmlFormat {
+    fn manifest(&self) -> Manifest {
+        manifest(
+            HTML_PLUGIN,
+            "HTML",
+            "Opens web pages saved as files, showing only what is to be read.",
+        )
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_format(FormatSpec {
             id: HTML,
-            title: Cow::Borrowed("format-epub.html"),
+            title: Cow::Borrowed("format-html.title"),
             extensions: vec![
                 Cow::Borrowed("html"),
                 Cow::Borrowed("htm"),
@@ -103,9 +140,29 @@ impl Plugin for EpubFormat {
             }),
             prepared: None,
         })?;
+        r.add_translations(Cow::Borrowed(include_str!("../i18n/html/en.ini")))?;
+        r.add_translations(Cow::Borrowed(include_str!("../i18n/html/de.ini")))?;
+        Ok(())
+    }
+}
+
+/// FictionBooks (`.fb2`, `.fb2.zip`, see [`Fb2Document`]).
+#[derive(Debug, Default)]
+pub struct Fb2Format;
+
+impl Plugin for Fb2Format {
+    fn manifest(&self) -> Manifest {
+        manifest(
+            FB2_PLUGIN,
+            "FictionBook",
+            "Opens FictionBook books (.fb2, also zipped).",
+        )
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_format(FormatSpec {
             id: FB2,
-            title: Cow::Borrowed("format-epub.fb2"),
+            title: Cow::Borrowed("format-fb2.title"),
             extensions: vec![Cow::Borrowed("fb2"), Cow::Borrowed("fb2.zip")],
             open: Box::new(|storage, path, options| {
                 Fb2Document::open_options(storage, path, options)
@@ -113,9 +170,29 @@ impl Plugin for EpubFormat {
             }),
             prepared: None,
         })?;
+        r.add_translations(Cow::Borrowed(include_str!("../i18n/fb2/en.ini")))?;
+        r.add_translations(Cow::Borrowed(include_str!("../i18n/fb2/de.ini")))?;
+        Ok(())
+    }
+}
+
+/// Markdown (`.md`, `.markdown`, see [`MarkdownDocument`]).
+#[derive(Debug, Default)]
+pub struct MarkdownFormat;
+
+impl Plugin for MarkdownFormat {
+    fn manifest(&self) -> Manifest {
+        manifest(
+            MARKDOWN_PLUGIN,
+            "Markdown",
+            "Opens Markdown files (.md), e.g. notes.",
+        )
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_format(FormatSpec {
             id: MARKDOWN,
-            title: Cow::Borrowed("format-epub.markdown"),
+            title: Cow::Borrowed("format-markdown.title"),
             extensions: vec![Cow::Borrowed("md"), Cow::Borrowed("markdown")],
             open: Box::new(|storage, path, options| {
                 MarkdownDocument::open(storage, path, options.publisher_styles)
@@ -123,9 +200,29 @@ impl Plugin for EpubFormat {
             }),
             prepared: None,
         })?;
+        r.add_translations(Cow::Borrowed(include_str!("../i18n/markdown/en.ini")))?;
+        r.add_translations(Cow::Borrowed(include_str!("../i18n/markdown/de.ini")))?;
+        Ok(())
+    }
+}
+
+/// Comic book archives (`.cbz`, see [`CbzDocument`]).
+#[derive(Debug, Default)]
+pub struct CbzFormat;
+
+impl Plugin for CbzFormat {
+    fn manifest(&self) -> Manifest {
+        manifest(
+            CBZ_PLUGIN,
+            "Comic books",
+            "Opens comic book archives (.cbz), a picture a page.",
+        )
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_format(FormatSpec {
             id: CBZ,
-            title: Cow::Borrowed("format-epub.cbz"),
+            title: Cow::Borrowed("format-cbz.title"),
             extensions: vec![Cow::Borrowed("cbz")],
             open: Box::new(|storage, path, options| {
                 CbzDocument::open_options(storage, path, options)
@@ -133,8 +230,8 @@ impl Plugin for EpubFormat {
             }),
             prepared: None,
         })?;
-        r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
-        r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
+        r.add_translations(Cow::Borrowed(include_str!("../i18n/cbz/en.ini")))?;
+        r.add_translations(Cow::Borrowed(include_str!("../i18n/cbz/de.ini")))?;
         Ok(())
     }
 }
@@ -151,10 +248,32 @@ mod tests {
 
     #[test]
     fn translations_are_complete() {
-        let en = Catalog::parse(include_str!("../i18n/en.ini")).unwrap();
-        let de = Catalog::parse(include_str!("../i18n/de.ini")).unwrap();
-        let issues = check::compare(&en, &de);
-        assert!(issues.is_empty(), "{issues:?}");
+        for (en, de) in [
+            (
+                include_str!("../i18n/en.ini"),
+                include_str!("../i18n/de.ini"),
+            ),
+            (
+                include_str!("../i18n/html/en.ini"),
+                include_str!("../i18n/html/de.ini"),
+            ),
+            (
+                include_str!("../i18n/fb2/en.ini"),
+                include_str!("../i18n/fb2/de.ini"),
+            ),
+            (
+                include_str!("../i18n/markdown/en.ini"),
+                include_str!("../i18n/markdown/de.ini"),
+            ),
+            (
+                include_str!("../i18n/cbz/en.ini"),
+                include_str!("../i18n/cbz/de.ini"),
+            ),
+        ] {
+            let (en, de) = (Catalog::parse(en).unwrap(), Catalog::parse(de).unwrap());
+            let issues = check::compare(&en, &de);
+            assert!(issues.is_empty(), "{issues:?}");
+        }
     }
 
     const CONTAINER: &str = r#"<?xml version="1.0"?>

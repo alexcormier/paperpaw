@@ -31,6 +31,10 @@ pub fn install(builder: KernelBuilder, fonts: Fonts) -> KernelBuilder {
     builder
         .plugin(quireink_plugin_format_txt::TxtFormat)
         .plugin(quireink_plugin_format_epub::EpubFormat)
+        .plugin(quireink_plugin_format_epub::HtmlFormat)
+        .plugin(quireink_plugin_format_epub::Fb2Format)
+        .plugin(quireink_plugin_format_epub::MarkdownFormat)
+        .plugin(quireink_plugin_format_epub::CbzFormat)
         .plugin(quireink_plugin_format_xtc::XtcFormat)
         .plugin(quireink_plugin_hyphenation::Hyphenation)
         .plugin(quireink_plugin_dictionary::DictionaryPlugin)

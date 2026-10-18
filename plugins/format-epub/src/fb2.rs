@@ -696,6 +696,82 @@ static CP1252: [char; 128] = [
     'û', 'ü', 'ý', 'þ', 'ÿ',
 ];
 
+/// A FictionBook read as HTML: sections are headings by their depth,
+/// their titles get anchors for the contents ([`TOC_ANCHOR`]), and
+/// pictures are the book's `<binary>` elements by their ids.
+#[derive(Debug, Default)]
+pub(crate) struct Fb2Dialect {
+    /// Depth of nested sections.
+    depth: u32,
+    /// Inside a `<title>`.
+    in_title: bool,
+    /// Inside the notes (`<body name="notes">`).
+    notes: bool,
+    /// Section titles met so far, for their anchors.
+    titles: u32,
+}
+
+impl Fb2Dialect {
+    /// The HTML element a FictionBook element is read as.
+    fn name(&self, tag: &str) -> String {
+        let name = match tag {
+            "description" | "binary" | "stylesheet" => "head",
+            "title" => return format!("h{}", (self.depth + 1).min(6)),
+            "p" if self.in_title => "span",
+            "subtitle" => "h5",
+            "epigraph" | "cite" => "blockquote",
+            "poem" | "stanza" => "div",
+            "v" | "text-author" | "empty-line" => "p",
+            "emphasis" => "i",
+            "strong" => "b",
+            "strikethrough" => "s",
+            tag => tag,
+        };
+        name.to_string()
+    }
+}
+
+impl crate::convert::Dialect for Fb2Dialect {
+    fn enter(
+        &mut self,
+        tag: &str,
+        attrs: &quireink_sdk::xml::Attrs<'_>,
+    ) -> crate::convert::Entered {
+        let mut entered = crate::convert::Entered::default();
+        match tag {
+            "body" => self.notes = attrs.get("name").as_deref() == Some("notes"),
+            "section" => self.depth += 1,
+            "title" => {
+                self.in_title = true;
+                if !self.notes && self.depth > 0 {
+                    // Where the contents entry leads.
+                    entered.anchor = Some(format!("{TOC_ANCHOR}{}", self.titles));
+                    self.titles += 1;
+                }
+            }
+            // The lines of a title.
+            "p" if self.in_title => entered.line_break = true,
+            _ => {}
+        }
+        entered.name = self.name(tag);
+        entered
+    }
+
+    fn leave(&mut self, tag: &str) -> String {
+        let name = self.name(tag);
+        match tag {
+            "section" => self.depth = self.depth.saturating_sub(1),
+            "title" => self.in_title = false,
+            _ => {}
+        }
+        name
+    }
+
+    fn picture(&self, href: &str) -> Option<String> {
+        Some(href.trim_start_matches('#').to_string())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
