@@ -40,12 +40,13 @@ use core::cell::RefCell;
 use quireink_json as json;
 use quireink_sdk::builtin::{events, params};
 use quireink_sdk::document::Locator;
+use quireink_sdk::event::Event;
+use quireink_sdk::replies::HttpReply;
 use quireink_sdk::secrets::SecretChange;
 use quireink_sdk::setting::{Setting, Text};
 use quireink_sdk::{
     ActionSpec, Arg, Command, Env, HttpRequest, Id, Instant, Manifest, MenuEntry, Params, Plugin,
     RegisterError, Registrar, SDK_VERSION, ScreenSpec, SettingGroupSpec, SettingSpec, Version,
-    http_params,
 };
 
 pub const PLUGIN: Id = Id::new_static("kosync");
@@ -63,10 +64,10 @@ const GROUP: Id = Id::new_static("kosync.group");
 const ACCOUNT_SCREEN: Id = Id::new_static("kosync.account");
 const CONFIRM_SCREEN: Id = Id::new_static("kosync.confirm");
 /// Emitted by the account screen when one signed in or out.
-const ACCOUNT_CHANGED: Id = Id::new_static("kosync.account-changed");
+const ACCOUNT_CHANGED: Event = Event::new("kosync.account-changed");
 /// Replies of the server.
-const PULLED: Id = Id::new_static("kosync.pulled");
-const PUSHED: Id = Id::new_static("kosync.pushed");
+const PULLED: Event<HttpReply> = Event::new("kosync.pulled");
+const PUSHED: Event<HttpReply> = Event::new("kosync.pushed");
 
 /// Whether sending now keeps no radio on that would be off otherwise: the
 /// system runs Wi-Fi, or QuireInk's radio is in a network already.
@@ -211,7 +212,7 @@ impl State {
         method: &str,
         path: &str,
         body: Option<String>,
-        reply: Id,
+        reply: &Event<HttpReply>,
         params: Params,
     ) -> Option<Command> {
         let user = env.settings.read(&USER);
@@ -248,7 +249,7 @@ impl State {
         );
         let params = Params::new().with(params::PATH, position.path.clone());
         let target = "/syncs/progress";
-        if let Some(command) = self.request(env, "PUT", target, Some(body), PUSHED, params) {
+        if let Some(command) = self.request(env, "PUT", target, Some(body), &PUSHED, params) {
             out.push(command);
             self.sent = Some(position);
             self.last_push = Some(env.now);
@@ -270,7 +271,7 @@ impl State {
             .with(LOCAL, format!("{local}"))
             .with(MANUAL, if manual { "1" } else { "0" });
         let target = format!("/syncs/progress/{digest}");
-        if let Some(command) = self.request(env, "GET", &target, None, PULLED, params) {
+        if let Some(command) = self.request(env, "GET", &target, None, &PULLED, params) {
             out.push(command);
             self.last_pull = Some((path.to_string(), env.now));
         }
@@ -313,7 +314,7 @@ pub(crate) fn server_request(
     method: &str,
     path: &str,
     body: Option<String>,
-    reply: Id,
+    reply: &Event<HttpReply>,
     params: Params,
     auth: Option<(&str, &str)>,
 ) -> HttpRequest {
@@ -362,23 +363,25 @@ fn message(env: &Env<'_>, key: &str, status: &str) -> Command {
 }
 
 /// Handles the server's answer to a fetch.
-fn pulled(state: &State, env: &Env<'_>, params: &Params, out: &mut Vec<Command>) {
-    let manual = params.get(MANUAL) == Some("1");
-    let path = params.get(params::PATH).unwrap_or_default();
+fn pulled(state: &State, env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+    let manual = reply.context.get(MANUAL) == Some("1");
+    let path = reply.context.get(params::PATH).unwrap_or_default();
     // The book was closed meanwhile.
     if state.current.as_ref().is_none_or(|c| c.path != path) {
         return;
     }
-    let status = params.get(http_params::STATUS).unwrap_or("0");
-    if status != "200" {
+    let status = reply.status.to_string();
+    let status = status.as_str();
+    if reply.status != 200 {
         if manual {
             out.push(message(env, failure(status), status));
         }
         return;
     }
-    let body = json::object(params.get(http_params::BODY).unwrap_or_default());
+    let body = json::object(&reply.body);
     let remote = json::number(&body, "percentage").unwrap_or(0.0);
-    let local: f64 = params
+    let local: f64 = reply
+        .context
         .get(LOCAL)
         .and_then(|l| l.parse().ok())
         .unwrap_or(0.0);
@@ -520,36 +523,26 @@ impl Plugin for Kosync {
             }
         })?;
         let s = state.clone();
-        r.subscribe(
-            confirm::DECLINED,
-            Box::new(move |_, params, _| {
-                let path = params.get(params::PATH).unwrap_or_default();
-                let progress = params.get(confirm::PERCENTAGE).unwrap_or_default();
-                s.borrow_mut().declined = Some((path.to_string(), progress.to_string()));
-            }),
-        )?;
+        r.on(confirm::DECLINED, move |_, declined, _| {
+            s.borrow_mut().declined = Some((declined.path.clone(), declined.percentage.clone()));
+        })?;
         let s = state.clone();
-        r.subscribe(
-            ACCOUNT_CHANGED,
-            Box::new(move |_, _, _| s.borrow_mut().loaded = false),
-        )?;
+        r.on(ACCOUNT_CHANGED, move |_, (), _| {
+            s.borrow_mut().loaded = false
+        })?;
         let s = state.clone();
-        r.subscribe(
-            PUSHED,
-            Box::new(move |_, params, _| {
-                // Not sent after all: again with the next page.
-                if params.get(http_params::STATUS) != Some("200") {
-                    let mut state = s.borrow_mut();
-                    state.sent = None;
-                    state.last_push = None;
-                }
-            }),
-        )?;
+        r.on(PUSHED, move |_, reply, _| {
+            // Not sent after all: again with the next page.
+            if reply.status != 200 {
+                let mut state = s.borrow_mut();
+                state.sent = None;
+                state.last_push = None;
+            }
+        })?;
         let s = state.clone();
-        r.subscribe(
-            PULLED,
-            Box::new(move |env, params, out| pulled(&s.borrow(), env, params, out)),
-        )?;
+        r.on(PULLED, move |env, reply, out| {
+            pulled(&s.borrow(), env, reply, out)
+        })?;
 
         // "Sync progress" in the reading menu's "More".
         let s = state;

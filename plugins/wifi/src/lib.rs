@@ -24,6 +24,8 @@ use alloc::vec::Vec;
 use core::cell::RefCell;
 
 use quireink_sdk::builtin::{events, params};
+use quireink_sdk::event::Event;
+use quireink_sdk::replies::Typed;
 use quireink_sdk::wifi::{self, JoinFailure, WifiCommand, WifiState};
 use quireink_sdk::{
     Arg, Command, Env, Id, Manifest, MenuNeed, Params, Plugin, RegisterError, Registrar,
@@ -47,7 +49,7 @@ pub const IDLE_OFF: Setting<Text> = Setting::new("wifi.idle-off");
 /// The radio stays on (in the network joined before) while charging.
 pub const WHILE_CHARGING: Setting<bool> = Setting::new("wifi.while-charging");
 /// The keyboard's answer: a network's password.
-pub(crate) const PASSWORD_ENTERED: Id = Id::new_static("wifi.password-entered");
+pub(crate) const PASSWORD_ENTERED: Event<Typed> = Event::new("wifi.password-entered");
 /// The timer to switch the radio off.
 const IDLE_CHECK: Id = Id::new_static("wifi.idle-check");
 /// The timer to try the networks joined before again.
@@ -286,20 +288,16 @@ impl Plugin for Wifi {
 
         // The password typed for a network.
         let p = policy.clone();
-        r.subscribe(
-            PASSWORD_ENTERED,
-            Box::new(move |env, params, out| {
-                let (Some(wifi), Some(ssid), Some(password)) =
-                    (env.wifi, params.get(params::ID), params.get(params::TEXT))
-                else {
-                    return;
-                };
-                let mut policy = p.borrow_mut();
-                policy.pending = Some((String::from(ssid), String::from(password)));
-                let commands = policy.choose(&wifi.state, ssid, password);
-                wifi_commands(out, commands);
-            }),
-        )?;
+        r.on(PASSWORD_ENTERED, move |env, typed, out| {
+            let (Some(wifi), Some(ssid)) = (env.wifi, typed.context.get(params::ID)) else {
+                return;
+            };
+            let password = typed.text.as_str();
+            let mut policy = p.borrow_mut();
+            policy.pending = Some((String::from(ssid), String::from(password)));
+            let commands = policy.choose(&wifi.state, ssid, password);
+            wifi_commands(out, commands);
+        })?;
 
         // Nothing uses the network: off a while later.
         let p = policy.clone();

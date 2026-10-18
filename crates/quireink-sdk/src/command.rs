@@ -24,8 +24,9 @@ pub struct HttpRequest {
 }
 
 impl HttpRequest {
-    /// A request without headers or body.
-    pub fn new(method: &str, url: &str, reply: Id) -> Self {
+    /// A request without headers or body; its answer comes as `reply`, an
+    /// [`Event<HttpReply>`](crate::replies::HttpReply) (or an id).
+    pub fn new(method: &str, url: &str, reply: impl Into<Id>) -> Self {
         Self {
             method: alloc::string::String::from(method),
             url: alloc::string::String::from(url),
@@ -33,7 +34,7 @@ impl HttpRequest {
             body: None,
             body_from: None,
             save_to: None,
-            reply,
+            reply: reply.into(),
             params: Params::new(),
         }
     }
@@ -315,7 +316,7 @@ pub enum Command {
     /// Asks for the text on the clipboard (see
     /// [`Env::clipboard`](crate::Env)). It comes as the event `.0` with
     /// the parameters `.1` plus `text` ([`params::TEXT`](crate::builtin::params::TEXT)),
-    /// empty if there is none. Read it only when the user asks to paste:
+    /// empty if there is none: a [`Typed`](crate::replies::Typed). Read it only when the user asks to paste:
     /// some systems tell the user every time an app reads the clipboard.
     ReadClipboard(Id, Params),
     /// Speaks text aloud where the device can

@@ -34,7 +34,10 @@ use alloc::boxed::Box;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
+use quireink_sdk::ask;
 use quireink_sdk::builtin::{actions, events, groups, menus, params, setting_sections, slots};
+use quireink_sdk::event::Event;
+use quireink_sdk::replies::Typed;
 use quireink_sdk::setting::Setting;
 use quireink_sdk::ui::{self, ListChange, ListView, UiStyle};
 use quireink_sdk::{ActionSpec, MenuEntry};
@@ -55,7 +58,7 @@ pub const CHOOSE_SCREEN: Id = Id::new_static("settings.choose");
 pub const ADVANCED: Setting<bool> = Setting::new("settings.advanced");
 /// Emitted by the keyboard with a text setting's new value (parameters
 /// `id` and `text`).
-const TEXT_ENTERED: Id = Id::new_static("settings.text-entered");
+const TEXT_ENTERED: Event<Typed> = Event::new("settings.text-entered");
 
 const ID: &str = "id";
 /// A setting to focus on its group's page (parameter of [`GROUP_SCREEN`]).
@@ -139,27 +142,24 @@ impl Plugin for SettingsPlugin {
             order: 95,
         })?;
         r.add_icon(secrets::OPEN, Cow::Borrowed("lock"))?;
-        r.subscribe(secrets::ENTERED, Box::new(secrets::entered))?;
+        r.on(secrets::ENTERED, secrets::entered)?;
         r.bind_slot(slots::SETTINGS, SCREEN, Priority::DEFAULT)?;
         r.add_setting(
             SettingSpec::switch(&ADVANCED, "settings.advanced", false)
                 .group(groups::SYSTEM)
                 .description("settings.advanced.help"),
         )?;
-        r.subscribe(
-            TEXT_ENTERED,
-            Box::new(|env: &Env<'_>, params: &Params, out: &mut Vec<Command>| {
-                let id = params.get(ID).and_then(|id| Id::parse(id).ok());
-                if let (Some(id), Some(text)) = (id, params.get(params::TEXT))
-                    && env.settings.get(id.as_str()).is_some()
-                {
-                    out.push(Command::SetSetting(
-                        id,
-                        SettingValue::Text(Cow::Owned(text.trim().to_string())),
-                    ));
-                }
-            }),
-        )?;
+        r.on(TEXT_ENTERED, |env, typed, out| {
+            let id = typed.context.get(ID).and_then(|id| Id::parse(id).ok());
+            if let Some(id) = id
+                && env.settings.get(id.as_str()).is_some()
+            {
+                out.push(Command::SetSetting(
+                    id,
+                    SettingValue::Text(Cow::Owned(typed.text.trim().to_string())),
+                ));
+            }
+        })?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())
@@ -507,8 +507,8 @@ impl Screen for GroupList {
     }
 
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
-        if *event == search::ENTERED {
-            let text = params.get(params::TEXT).unwrap_or_default().trim();
+        if let Some(typed) = search::ENTERED.read(event, params) {
+            let text = typed.text.trim();
             if !text.is_empty() {
                 cx.command(Command::OpenScreen(
                     search::SCREEN,
@@ -733,22 +733,14 @@ impl GroupPage {
                 ));
             }
             SettingKind::Text => {
-                cx.command(Command::OpenSlot(
-                    slots::KEYBOARD,
-                    Params::new()
-                        .with(params::TITLE, env.i18n.tr(&spec.title).to_string())
-                        .with(
-                            params::TEXT,
-                            if spec.secret {
-                                String::new()
-                            } else {
-                                ui::setting_value(env, spec)
-                            },
-                        )
-                        .with(params::MODE, if spec.secret { "password" } else { "text" })
-                        .with(params::REPLY, TEXT_ENTERED.as_str())
-                        .with(ID, spec.id.as_str().to_string()),
-                ));
+                let question = ask::text(env.i18n.tr(&spec.title), &TEXT_ENTERED)
+                    .with(ID, spec.id.as_str().to_string());
+                let question = if spec.secret {
+                    question.password()
+                } else {
+                    question.initial(ui::setting_value(env, spec))
+                };
+                cx.command(question.command());
             }
             _ => {}
         }

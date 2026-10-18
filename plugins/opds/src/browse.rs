@@ -10,30 +10,33 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
+use quireink_sdk::ask;
 use quireink_sdk::builtin::{actions, params, slots};
 use quireink_sdk::document::ImageRef;
+use quireink_sdk::event::Event;
+use quireink_sdk::replies::{HttpReply, Typed};
 use quireink_sdk::ui::choice;
 use quireink_sdk::ui::{self, ListChange, ListView, UiStyle};
 use quireink_sdk::web::host;
 use quireink_sdk::{
     Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, MemoryClass, Params,
-    Rect, RefreshMode, Screen, files, http_params,
+    Rect, RefreshMode, Screen, files,
 };
 
 use crate::catalogs::{self, Catalog};
 use crate::feed::{self, Feed, Search};
-use crate::sync::{book_name, status};
+use crate::sync::book_name;
 use crate::{CHOICE, ID, OPTION_LABELS, PLUGIN, URL, request};
 
 /// Replies: a feed, a search description, a book, the words to search
 /// for, a choice made.
-const LOADED: Id = Id::new_static("opds.loaded");
-const DESCRIBED: Id = Id::new_static("opds.described");
-const DOWNLOADED: Id = Id::new_static("opds.downloaded");
-const TERMS: Id = Id::new_static("opds.terms");
-const CHOSEN: Id = Id::new_static("opds.read");
+const LOADED: Event<HttpReply> = Event::new("opds.loaded");
+const DESCRIBED: Event<HttpReply> = Event::new("opds.described");
+const DOWNLOADED: Event<HttpReply> = Event::new("opds.downloaded");
+const TERMS: Event<Typed> = Event::new("opds.terms");
+const CHOSEN: Event<choice::Picked> = Event::new("opds.read");
 /// The answer with a cover.
-const COVER: Id = Id::new_static("opds.cover");
+const COVER: Event<HttpReply> = Event::new("opds.cover");
 /// Parameter: the entry a cover belongs to.
 const ENTRY: &str = "entry";
 /// Parameter: the file name a download gets.
@@ -181,16 +184,16 @@ impl BrowseScreen {
             &self.catalog,
             url,
             feed_path(),
-            LOADED,
+            &LOADED,
             params,
         )));
     }
 
     /// Tells why an answer did not come, if it did not; `true` if it
     /// came.
-    fn answered(&mut self, params: &Params, url: &str, cx: &mut Cx<'_, '_>) -> bool {
+    fn answered(&mut self, reply: &HttpReply, url: &str, cx: &mut Cx<'_, '_>) -> bool {
         let env = *cx.env();
-        let status = status(params);
+        let status = reply.status;
         let host = Arg::Str(host(url));
         let message = match status {
             200..=299 => return true,
@@ -205,21 +208,18 @@ impl BrowseScreen {
         false
     }
 
-    fn loaded(&mut self, params: &Params, cx: &mut Cx<'_, '_>) {
+    fn loaded(&mut self, reply: &HttpReply, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        let requested = params.get(URL).unwrap_or_default().to_string();
+        let requested = reply.context.get(URL).unwrap_or_default().to_string();
         let Some((url, back)) = self.loading.clone().filter(|(url, _)| *url == requested) else {
             return;
         };
         self.loading = None;
-        if !self.answered(params, &url, cx) {
+        if !self.answered(reply, &url, cx) {
             let _ = env.storage.remove(&feed_path());
             return;
         }
-        let base = params
-            .get(http_params::FINAL_URL)
-            .unwrap_or(&url)
-            .to_string();
+        let base = reply.final_url.as_deref().unwrap_or(&url).to_string();
         let feed = crate::read_list(&self.catalog, env.storage, &feed_path(), &base);
         let _ = env.storage.remove(&feed_path());
         if feed.entries.is_empty() && feed.title.is_empty() {
@@ -285,7 +285,7 @@ impl BrowseScreen {
                 &self.catalog,
                 &url,
                 cover_download_path(),
-                COVER,
+                &COVER,
                 params,
             )));
             return;
@@ -295,10 +295,13 @@ impl BrowseScreen {
     }
 
     /// A cover arrived: decoded and kept, then the next one.
-    fn cover_loaded(&mut self, params: &Params, cx: &mut Cx<'_, '_>) {
+    fn cover_loaded(&mut self, reply: &HttpReply, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        let i = params.get(ENTRY).and_then(|i| i.parse::<usize>().ok());
-        let url = params.get(URL).unwrap_or_default().to_string();
+        let i = reply
+            .context
+            .get(ENTRY)
+            .and_then(|i| i.parse::<usize>().ok());
+        let url = reply.context.get(URL).unwrap_or_default().to_string();
         let Some(i) = i.filter(|&i| self.fetching == Some(i) && i < self.covers.len()) else {
             return;
         };
@@ -306,7 +309,7 @@ impl BrowseScreen {
         let tmp = cover_download_path();
         let side = self.style.noted_row();
         let image = (200..300)
-            .contains(&status(params))
+            .contains(&reply.status)
             .then(|| {
                 let color = env.device.display.format.is_color();
                 quireink_sdk::image::picture_from_file(
@@ -344,7 +347,7 @@ impl BrowseScreen {
                     &self.catalog,
                     &url,
                     feed_path(),
-                    DESCRIBED,
+                    &DESCRIBED,
                     Params::new().with(URL, url.clone()),
                 )));
                 let message = env
@@ -355,25 +358,17 @@ impl BrowseScreen {
             (None, None) => return,
         };
         self.template = Some(template);
-        cx.command(Command::OpenSlot(
-            slots::KEYBOARD,
-            Params::new()
-                .with(params::TITLE, env.i18n.tr("opds.search").to_string())
-                .with(params::REPLY, TERMS.as_str()),
-        ));
+        cx.command(ask::text(env.i18n.tr("opds.search"), &TERMS).command());
     }
 
-    fn described(&mut self, params: &Params, cx: &mut Cx<'_, '_>) {
+    fn described(&mut self, reply: &HttpReply, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        let url = params.get(URL).unwrap_or_default().to_string();
-        if !self.answered(params, &url, cx) {
+        let url = reply.context.get(URL).unwrap_or_default().to_string();
+        if !self.answered(reply, &url, cx) {
             let _ = env.storage.remove(&feed_path());
             return;
         }
-        let base = params
-            .get(http_params::FINAL_URL)
-            .unwrap_or(&url)
-            .to_string();
+        let base = reply.final_url.as_deref().unwrap_or(&url).to_string();
         let template = feed::search_template(env.storage, &feed_path(), &base);
         let _ = env.storage.remove(&feed_path());
         match template {
@@ -411,7 +406,7 @@ impl BrowseScreen {
                 &self.catalog,
                 &book.url,
                 download_path(),
-                DOWNLOADED,
+                &DOWNLOADED,
                 params,
             )));
             let message = env
@@ -426,17 +421,17 @@ impl BrowseScreen {
         self.say(message, cx);
     }
 
-    fn downloaded(&mut self, params: &Params, cx: &mut Cx<'_, '_>) {
+    fn downloaded(&mut self, reply: &HttpReply, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        let url = params.get(URL).unwrap_or_default().to_string();
+        let url = reply.context.get(URL).unwrap_or_default().to_string();
         let tmp = download_path();
-        if !self.answered(params, &url, cx) {
+        if !self.answered(reply, &url, cx) {
             let _ = env.storage.remove(&tmp);
             return;
         }
         // The catalog's folder, for order on the device.
         let dir = self.catalog.sync_folder(&env);
-        let name = params.get(NAME).unwrap_or("download").to_string();
+        let name = reply.context.get(NAME).unwrap_or("download").to_string();
         let _ = env.storage.create_dir(&dir);
         let target = files::free_path(env.storage, &dir, &name);
         if files::move_to(env.storage, &tmp, &target).is_err() {
@@ -451,8 +446,8 @@ impl BrowseScreen {
             env.storage,
             &target,
             quireink_sdk::library::Provided {
-                title: params.get(params::TITLE).map(String::from),
-                author: params.get(AUTHORS).and_then(first),
+                title: reply.context.get(params::TITLE).map(String::from),
+                author: reply.context.get(AUTHORS).and_then(first),
                 ..Default::default()
             },
         );
@@ -466,7 +461,7 @@ impl BrowseScreen {
         );
         cx.command(choice::open(
             CHOICE,
-            CHOSEN,
+            &CHOSEN,
             &text,
             &target,
             OPTION_LABELS,
@@ -669,24 +664,24 @@ impl Screen for BrowseScreen {
     }
 
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
-        if *event == LOADED {
-            self.loaded(params, cx);
-        } else if *event == COVER {
-            self.cover_loaded(params, cx);
-        } else if *event == DESCRIBED {
-            self.described(params, cx);
-        } else if *event == DOWNLOADED {
-            self.downloaded(params, cx);
-        } else if *event == TERMS {
-            let terms = params.get(params::TEXT).unwrap_or_default().trim();
+        if let Some(reply) = LOADED.read(event, params) {
+            self.loaded(&reply, cx);
+        } else if let Some(reply) = COVER.read(event, params) {
+            self.cover_loaded(&reply, cx);
+        } else if let Some(reply) = DESCRIBED.read(event, params) {
+            self.described(&reply, cx);
+        } else if let Some(reply) = DOWNLOADED.read(event, params) {
+            self.downloaded(&reply, cx);
+        } else if let Some(typed) = TERMS.read(event, params) {
+            let terms = typed.text.trim();
             if let (false, Some(template)) = (terms.is_empty(), &self.template) {
                 let url = feed::search_url(template, terms);
                 self.load(&url, false, cx);
             }
-        } else if *event == CHOSEN
-            && params.get(choice::OPTION) == Some("read")
-            && let Some(path) = params.get(params::PATH)
+        } else if let Some(picked) = CHOSEN.read(event, params)
+            && picked.option == "read"
         {
+            let path = picked.path;
             cx.command(Command::OpenSlot(
                 slots::READER,
                 Params::new().with(params::PATH, path.to_string()),

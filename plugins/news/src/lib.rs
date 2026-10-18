@@ -21,7 +21,10 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
+use quireink_sdk::ask;
 use quireink_sdk::builtin::{actions, groups, menus, params, slots};
+use quireink_sdk::event::Event;
+use quireink_sdk::replies::{HttpReply, Typed};
 use quireink_sdk::setting::Setting;
 use quireink_sdk::ui::choice::{self, Choice};
 use quireink_sdk::ui::{self, ListChange, ListView, UiStyle};
@@ -29,7 +32,7 @@ use quireink_sdk::web::{clean_name, host};
 use quireink_sdk::{
     ActionSpec, Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, HttpRequest, Id,
     Manifest, MemoryClass, MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar,
-    SDK_VERSION, Screen, ScreenSpec, SettingSpec, Storage, Version, http_params,
+    SDK_VERSION, Screen, ScreenSpec, SettingSpec, Storage, Version,
 };
 
 pub const PLUGIN: Id = Id::new_static("news");
@@ -41,11 +44,11 @@ pub const FETCH: Id = Id::new_static("news.fetch");
 pub const ARTICLES: Setting<i64> = Setting::new("news.articles");
 const SCREEN: Id = Id::new_static("news.list");
 const CHOICE: Id = Id::new_static("news.choice");
-const CHOSEN: Id = Id::new_static("news.chosen");
+const CHOSEN: Event<choice::Picked> = Event::new("news.chosen");
 /// A feed's answer.
-const FETCHED: Id = Id::new_static("news.fetched");
+const FETCHED: Event<HttpReply> = Event::new("news.fetched");
 /// The address of a new feed, from the keyboard.
-const ADDED: Id = Id::new_static("news.added");
+const ADDED: Event<Typed> = Event::new("news.added");
 const OPTION_LABELS: &str = "news.option.";
 const FOLDER: &str = "News";
 /// Parameters of a fetch: the feed being fetched, the last to fetch,
@@ -164,18 +167,15 @@ fn fetch(env: &Env<'_>, from: usize, last: usize, out: &mut Vec<Command>) {
 }
 
 /// A feed answered: made into its book, then the next one.
-fn fetched(env: &Env<'_>, params: &Params, out: &mut Vec<Command>) {
-    let number = |key| params.get(key).and_then(|n| n.parse::<usize>().ok());
+fn fetched(env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+    let number = |key| reply.context.get(key).and_then(|n| n.parse::<usize>().ok());
     let (Some(index), Some(last)) = (number(INDEX), number(LAST)) else {
         return;
     };
     let mut done = number(DONE).unwrap_or(0);
     let mut failed = number(FAILED).unwrap_or(0);
     let mut feeds = load(env.storage);
-    let ok = params
-        .get(http_params::STATUS)
-        .and_then(|s| s.parse::<u16>().ok())
-        .is_some_and(|s| (200..300).contains(&s));
+    let ok = reply.ok();
     let made = feeds.get(index).filter(|_| ok).and_then(|feed| {
         let max_text = if env.device.memory == MemoryClass::Small {
             MAX_TEXT_SMALL
@@ -373,7 +373,7 @@ impl Plugin for News {
                 fetch(env, 0, usize::MAX, out);
             })),
         })?;
-        r.subscribe(FETCHED, Box::new(fetched))?;
+        r.on(FETCHED, fetched)?;
         r.add_menu_entry(MenuEntry {
             menu: menus::TOOLS,
             item: OPEN,
@@ -451,13 +451,11 @@ impl FeedsScreen {
             return;
         }
         if row == self.feeds.len() + 1 {
-            cx.command(Command::OpenSlot(
-                slots::KEYBOARD,
-                Params::new()
-                    .with(params::TITLE, env.i18n.tr("news.address").to_string())
-                    .with(params::TEXT, "https://")
-                    .with(params::REPLY, ADDED.as_str()),
-            ));
+            cx.command(
+                ask::text(env.i18n.tr("news.address"), &ADDED)
+                    .initial("https://")
+                    .command(),
+            );
             return;
         }
         let index = row - 1;
@@ -481,7 +479,7 @@ impl FeedsScreen {
         };
         cx.command(choice::open(
             CHOICE,
-            CHOSEN,
+            &CHOSEN,
             &feed.shown(),
             &format!("{}", row - 1),
             OPTION_LABELS,
@@ -592,12 +590,8 @@ impl Screen for FeedsScreen {
 
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        if *event == ADDED {
-            let url = params
-                .get(params::TEXT)
-                .unwrap_or_default()
-                .trim()
-                .to_string();
+        if let Some(typed) = ADDED.read(event, params) {
+            let url = typed.text.trim().to_string();
             if !(url.starts_with("http://") || url.starts_with("https://")) || url.len() < 10 {
                 cx.command(Command::Notify(env.i18n.tr("news.bad-address").to_string()));
                 return;
@@ -612,14 +606,11 @@ impl Screen for FeedsScreen {
             let index = self.feeds.len() - 1;
             fetch_into(&env, index, index, cx);
             self.redraw(cx);
-        } else if *event == CHOSEN {
-            let Some(index) = params
-                .get(params::PATH)
-                .and_then(|n| n.parse::<usize>().ok())
-            else {
+        } else if let Some(picked) = CHOSEN.read(event, params) {
+            let Ok(index) = picked.path.parse::<usize>() else {
                 return;
             };
-            match params.get(choice::OPTION).unwrap_or_default() {
+            match picked.option.as_str() {
                 "open" => self.open(index + 1, cx),
                 "fetch" => fetch_into(&env, index, index, cx),
                 "remove" if index < self.feeds.len() => {

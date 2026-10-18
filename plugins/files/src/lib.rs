@@ -31,12 +31,15 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
+use quireink_sdk::ask;
 use quireink_sdk::builtin::{
     actions as core_actions, events, groups, params, settings as core_settings, slots,
 };
+use quireink_sdk::event::Event;
 use quireink_sdk::files;
 use quireink_sdk::library::listing::{Entry, Listing, UNRANKED};
 use quireink_sdk::library::{self, Book};
+use quireink_sdk::replies::Typed;
 use quireink_sdk::setting::{Setting, Text};
 use quireink_sdk::ui::{self, ListChange, ListView, UiStyle};
 use quireink_sdk::{
@@ -75,10 +78,10 @@ pub const FAVOURITES: Id = Id::new_static("files.favourites");
 /// Searches the library (asks for words on the keyboard).
 pub const SEARCH: Id = Id::new_static("files.search");
 /// The keyboard's reply with the words.
-const SEARCH_ENTERED: Id = Id::new_static("files.search-entered");
+const SEARCH_ENTERED: Event<Typed> = Event::new("files.search-entered");
 /// What can be done with a book (held in the list).
 const CHOICE: Id = Id::new_static("files.choice");
-const CHOSEN: Id = Id::new_static("files.book-chosen");
+const CHOSEN: Event<quireink_sdk::ui::choice::Picked> = Event::new("files.book-chosen");
 /// Book information; parameter `path`.
 pub const INFO_SCREEN: Id = Id::new_static("files.info");
 /// The submenu with the views above ("Shelves").
@@ -197,32 +200,21 @@ impl Plugin for Files {
             id: SEARCH,
             title: Cow::Borrowed("files.search"),
             handler: Some(Box::new(|env: &Env<'_>, out: &mut Vec<Command>| {
-                out.push(Command::OpenSlot(
-                    slots::KEYBOARD,
-                    Params::new()
-                        .with(
-                            params::TITLE,
-                            env.i18n.tr("files.search.prompt").to_string(),
-                        )
-                        .with(params::REPLY, SEARCH_ENTERED.as_str()),
-                ));
+                out.push(ask::text(env.i18n.tr("files.search.prompt"), &SEARCH_ENTERED).command());
             })),
         })?;
         r.add_icon(SEARCH, Cow::Borrowed("search"))?;
-        r.subscribe(
-            SEARCH_ENTERED,
-            Box::new(|_, params, out| {
-                let text = params.get(params::TEXT).unwrap_or_default().trim();
-                if !text.is_empty() {
-                    out.push(Command::OpenScreen(
-                        SHELF_SCREEN,
-                        Params::new()
-                            .with(params::MODE, shelves::MODE_SEARCH)
-                            .with(params::TEXT, text.to_string()),
-                    ));
-                }
-            }),
-        )?;
+        r.on(SEARCH_ENTERED, |_, typed, out| {
+            let text = typed.text.trim();
+            if !text.is_empty() {
+                out.push(Command::OpenScreen(
+                    SHELF_SCREEN,
+                    Params::new()
+                        .with(params::MODE, shelves::MODE_SEARCH)
+                        .with(params::TEXT, text.to_string()),
+                ));
+            }
+        })?;
         // The shelves as a submenu: an action named like its menu.
         r.add_action(quireink_sdk::ActionSpec {
             id: SHELVES_MENU,
@@ -516,7 +508,7 @@ impl Browser {
             .unwrap_or_else(|| entry.name.clone());
         cx.command(quireink_sdk::ui::choice::open(
             CHOICE,
-            CHOSEN,
+            &CHOSEN,
             &title,
             &path,
             "files.option.",
@@ -999,12 +991,8 @@ impl Screen for Browser {
     }
 
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
-        if *event == CHOSEN {
-            let path = params.get(params::PATH).unwrap_or_default().to_string();
-            let option = params
-                .get(quireink_sdk::ui::choice::OPTION)
-                .unwrap_or_default();
-            self.chosen(option, &path, cx);
+        if let Some(picked) = CHOSEN.read(event, params) {
+            self.chosen(&picked.option, &picked.path, cx);
             return;
         }
         if *event == events::LIBRARY_CHANGED {

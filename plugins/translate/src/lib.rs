@@ -24,6 +24,8 @@ use alloc::vec::Vec;
 
 use quireink_json as json;
 use quireink_sdk::builtin::{actions, groups, params, slots};
+use quireink_sdk::event::Event;
+use quireink_sdk::replies::{HttpReply, Typed};
 use quireink_sdk::secrets::SecretChange;
 use quireink_sdk::setting::{Setting, Text};
 use quireink_sdk::ui::{self, UiStyle};
@@ -31,7 +33,7 @@ use quireink_sdk::web::encode;
 use quireink_sdk::{
     Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, HttpRequest, Id, Manifest,
     Params, Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen,
-    ScreenSpec, SettingSpec, Version, http_params,
+    ScreenSpec, SettingSpec, Version,
 };
 
 pub const PLUGIN: Id = Id::new_static("translate");
@@ -44,9 +46,9 @@ pub const AUTO: &str = "translate.to.auto";
 const SCREEN: Id = Id::new_static("translate.panel");
 const SECTION: &str = "translate.section";
 /// The answer to the translation request.
-const ANSWERED: Id = Id::new_static("translate.answered");
+const ANSWERED: Event<HttpReply> = Event::new("translate.answered");
 /// The key, entered on the keyboard.
-const KEY_ENTERED: Id = Id::new_static("translate.key-entered");
+const KEY_ENTERED: Event<Typed> = Event::new("translate.key-entered");
 /// Longest text sent at once, in characters.
 const MAX_CHARS: usize = 3000;
 
@@ -267,23 +269,17 @@ impl Panel {
 
     /// Asks for the key on the keyboard.
     fn ask_key(&self, env: &Env<'_>, cx: &mut Cx<'_, '_>) {
-        cx.command(Command::OpenSlot(
-            slots::KEYBOARD,
-            Params::new()
-                .with(params::TITLE, env.i18n.tr("translate.key").to_string())
-                .with(params::MODE, "password")
-                .with(params::REPLY, KEY_ENTERED.as_str()),
-        ));
+        cx.command(
+            quireink_sdk::ask::text(env.i18n.tr("translate.key"), &KEY_ENTERED)
+                .password()
+                .command(),
+        );
     }
 
     /// DeepL answered: the translation, or why not.
-    fn answered(&mut self, env: &Env<'_>, params: &Params) {
-        let status: u16 = params
-            .get(http_params::STATUS)
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(0);
-        let body = params.get(http_params::BODY).unwrap_or_default();
-        let key = match status {
+    fn answered(&mut self, env: &Env<'_>, reply: &HttpReply) {
+        let body = reply.body.as_str();
+        let key = match reply.status {
             200..=299 => match translation(body) {
                 Some(text) => return self.set_text(env, text),
                 None => "translate.failed",
@@ -424,14 +420,10 @@ impl Screen for Panel {
 
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        if *event == ANSWERED {
-            self.answered(&env, params);
-        } else if *event == KEY_ENTERED {
-            let key = params
-                .get(params::TEXT)
-                .unwrap_or_default()
-                .trim()
-                .to_string();
+        if let Some(reply) = ANSWERED.read(event, params) {
+            self.answered(&env, &reply);
+        } else if let Some(typed) = KEY_ENTERED.read(event, params) {
+            let key = typed.text.trim().to_string();
             if key.is_empty() {
                 return;
             }

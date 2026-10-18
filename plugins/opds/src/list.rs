@@ -8,7 +8,10 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::cell::RefCell;
 
-use quireink_sdk::builtin::{actions, params, slots};
+use quireink_sdk::ask;
+use quireink_sdk::builtin::actions;
+use quireink_sdk::event::Event;
+use quireink_sdk::replies::Typed;
 use quireink_sdk::ui::choice;
 use quireink_sdk::ui::{self, ListChange, ListView, UiStyle};
 use quireink_sdk::web::host;
@@ -22,8 +25,8 @@ use crate::sync::{self, Report, Sync};
 use crate::{BROWSE_SCREEN, CHOICE, EDIT_SCREEN, ID, OPTION_LABELS};
 
 /// Replies: the address of a new catalog, a choice made.
-const ADDRESS: Id = Id::new_static("opds.address");
-const CHOSEN: Id = Id::new_static("opds.chosen");
+const ADDRESS: Event<Typed> = Event::new("opds.address");
+const CHOSEN: Event<choice::Picked> = Event::new("opds.chosen");
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Row {
@@ -114,13 +117,11 @@ impl ListScreen {
                 BROWSE_SCREEN,
                 Params::new().with(ID, i.to_string()),
             )),
-            Some(Row::Add) => cx.command(Command::OpenSlot(
-                slots::KEYBOARD,
-                Params::new()
-                    .with(params::TITLE, env.i18n.tr("opds.address").to_string())
-                    .with(params::TEXT, "https://")
-                    .with(params::REPLY, ADDRESS.as_str()),
-            )),
+            Some(Row::Add) => cx.command(
+                ask::text(env.i18n.tr("opds.address"), &ADDRESS)
+                    .initial("https://")
+                    .command(),
+            ),
             None => {}
         }
     }
@@ -133,7 +134,7 @@ impl ListScreen {
         let title = self.catalogs[i].name.clone();
         cx.command(choice::open(
             CHOICE,
-            CHOSEN,
+            &CHOSEN,
             &title,
             &i.to_string(),
             OPTION_LABELS,
@@ -360,8 +361,8 @@ impl Screen for ListScreen {
 
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        if *event == ADDRESS {
-            let text = params.get(params::TEXT).unwrap_or_default().trim();
+        if let Some(typed) = ADDRESS.read(event, params) {
+            let text = typed.text.trim();
             if text.is_empty() || text == "https://" {
                 return;
             }
@@ -377,10 +378,8 @@ impl Screen for ListScreen {
                 EDIT_SCREEN,
                 Params::new().with(ID, i.to_string()),
             ));
-        } else if *event == CHOSEN {
-            let context = params.get(params::PATH).unwrap_or_default().to_string();
-            let option = params.get(choice::OPTION).unwrap_or_default().to_string();
-            self.chosen(&context, &option, cx);
+        } else if let Some(picked) = CHOSEN.read(event, params) {
+            self.chosen(&picked.path, &picked.option, cx);
         } else if *event == sync::CHANGED {
             self.message = None;
             self.redraw(cx);

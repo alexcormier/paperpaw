@@ -10,11 +10,14 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::builtin::{actions, params, slots};
+use quireink_sdk::ask;
+use quireink_sdk::builtin::actions;
+use quireink_sdk::event::Event;
+use quireink_sdk::replies::{HttpReply, Typed};
 use quireink_sdk::ui::{self, ListChange, ListView, UiStyle};
 use quireink_sdk::{
     Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, RefreshMode,
-    Screen, http_params,
+    Screen,
 };
 
 use quireink_digest::md5;
@@ -25,11 +28,11 @@ use crate::{
 };
 
 /// Replies of the keyboard and the server.
-const SERVER_ENTERED: Id = Id::new_static("kosync.server-entered");
-const USER_ENTERED: Id = Id::new_static("kosync.user-entered");
-const PASSWORD_ENTERED: Id = Id::new_static("kosync.password-entered");
-const AUTHORIZED: Id = Id::new_static("kosync.authorized");
-const CREATED: Id = Id::new_static("kosync.created");
+const SERVER_ENTERED: Event<Typed> = Event::new("kosync.server-entered");
+const USER_ENTERED: Event<Typed> = Event::new("kosync.user-entered");
+const PASSWORD_ENTERED: Event<Typed> = Event::new("kosync.password-entered");
+const AUTHORIZED: Event<HttpReply> = Event::new("kosync.authorized");
+const CREATED: Event<HttpReply> = Event::new("kosync.created");
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Row {
@@ -130,29 +133,21 @@ impl AccountScreen {
     fn activate(&mut self, row: Row, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
         match row {
-            Row::Server => {
-                let request = Params::new()
-                    .with(params::TITLE, env.i18n.tr("kosync.server").to_string())
-                    .with(params::TEXT, server(&env))
-                    .with(params::REPLY, SERVER_ENTERED.as_str());
-                cx.command(Command::OpenSlot(slots::KEYBOARD, request));
-            }
-            Row::User | Row::Password => {
-                let (title, reply) = if row == Row::User {
-                    ("kosync.user", USER_ENTERED)
-                } else {
-                    ("kosync.password", PASSWORD_ENTERED)
-                };
-                let mut request = Params::new()
-                    .with(params::TITLE, env.i18n.tr(title).to_string())
-                    .with(params::REPLY, reply.as_str());
-                if row == Row::User {
-                    request = request.with(params::TEXT, self.user.clone());
-                } else {
-                    request = request.with(params::MODE, "password");
-                }
-                cx.command(Command::OpenSlot(slots::KEYBOARD, request));
-            }
+            Row::Server => cx.command(
+                ask::text(env.i18n.tr("kosync.server"), &SERVER_ENTERED)
+                    .initial(server(&env))
+                    .command(),
+            ),
+            Row::User => cx.command(
+                ask::text(env.i18n.tr("kosync.user"), &USER_ENTERED)
+                    .initial(self.user.clone())
+                    .command(),
+            ),
+            Row::Password => cx.command(
+                ask::text(env.i18n.tr("kosync.password"), &PASSWORD_ENTERED)
+                    .password()
+                    .command(),
+            ),
             Row::SignIn | Row::Create => {
                 if !env.caps.network {
                     return self.show(cx, env.i18n.tr("kosync.no-network").to_string());
@@ -167,7 +162,7 @@ impl AccountScreen {
                         "GET",
                         "/users/auth",
                         None,
-                        AUTHORIZED,
+                        &AUTHORIZED,
                         Params::new(),
                         auth,
                     )
@@ -182,7 +177,7 @@ impl AccountScreen {
                         "POST",
                         "/users/create",
                         Some(body),
-                        CREATED,
+                        &CREATED,
                         Params::new(),
                         None,
                     )
@@ -204,7 +199,7 @@ impl AccountScreen {
         cx.command(save_key(None));
         self.signed_in.clear();
         cx.command(Command::set(&USER, Cow::Borrowed("")));
-        cx.command(Command::Emit(ACCOUNT_CHANGED, Params::new()));
+        cx.command(ACCOUNT_CHANGED.emit(()));
     }
 
     /// The server's answer to signing in or creating the account.
@@ -217,7 +212,7 @@ impl AccountScreen {
             cx.command(save_key(Some(&key)));
             self.signed_in = self.user.clone();
             cx.command(Command::set(&USER, Cow::Owned(self.user.clone())));
-            cx.command(Command::Emit(ACCOUNT_CHANGED, Params::new()));
+            cx.command(ACCOUNT_CHANGED.emit(()));
             let message = self.state_message(&env);
             return self.show(cx, message);
         }
@@ -315,10 +310,8 @@ impl Screen for AccountScreen {
     }
 
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
-        let text = params.get(params::TEXT).unwrap_or_default();
-        let status = params.get(http_params::STATUS).unwrap_or("0");
-        if *event == SERVER_ENTERED {
-            let url = normalize_server(text);
+        if let Some(typed) = SERVER_ENTERED.read(event, params) {
+            let url = normalize_server(&typed.text);
             if url != server(cx.env()) {
                 let changed = !self.signed_in.is_empty();
                 if changed {
@@ -335,17 +328,17 @@ impl Screen for AccountScreen {
             }
             // Next: the user name.
             self.list.focus = 1;
-        } else if *event == USER_ENTERED {
-            self.user = text.trim().to_string();
+        } else if let Some(typed) = USER_ENTERED.read(event, params) {
+            self.user = typed.text.trim().to_string();
             // Next: the password.
             self.list.focus = 2;
-        } else if *event == PASSWORD_ENTERED {
-            self.key = (!text.is_empty()).then(|| md5::of(text));
+        } else if let Some(typed) = PASSWORD_ENTERED.read(event, params) {
+            self.key = (!typed.text.is_empty()).then(|| md5::of(&typed.text));
             self.list.focus = 3;
-        } else if *event == AUTHORIZED {
-            return self.answered(false, status, cx);
-        } else if *event == CREATED {
-            return self.answered(true, status, cx);
+        } else if let Some(reply) = AUTHORIZED.read(event, params) {
+            return self.answered(false, &reply.status.to_string(), cx);
+        } else if let Some(reply) = CREATED.read(event, params) {
+            return self.answered(true, &reply.status.to_string(), cx);
         } else {
             return;
         }

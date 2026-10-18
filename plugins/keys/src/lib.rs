@@ -25,7 +25,10 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
+use quireink_sdk::ask;
 use quireink_sdk::builtin::{GLOBAL_KEYMAP_LAYER, actions, menus, params, slots};
+use quireink_sdk::event::Event;
+use quireink_sdk::replies::Typed;
 use quireink_sdk::ui::{self, ListChange, ListView, Rows, UiStyle};
 use quireink_sdk::{
     ActionSpec, Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
@@ -45,7 +48,7 @@ const PICKED: Id = Id::new_static("keys.picked");
 /// A place was chosen: parameter `id`, its index.
 const PLACED: Id = Id::new_static("keys.placed");
 /// The search words typed: parameter `text`.
-const SEARCHED: Id = Id::new_static("keys.searched");
+const SEARCHED: Event<Typed> = Event::new("keys.searched");
 const INPUT: &str = "input";
 /// How a place takes gestures, as written in key maps.
 const POLICY: &str = "gestures.policy";
@@ -847,13 +850,11 @@ impl PickScreen {
         let id = match self.entries.get(index) {
             Some(Pick::Search) => {
                 let env = *cx.env();
-                cx.command(Command::OpenSlot(
-                    slots::KEYBOARD,
-                    Params::new()
-                        .with(params::TITLE, env.i18n.tr("keys.search").to_string())
-                        .with(params::TEXT, self.query.clone())
-                        .with(params::REPLY, SEARCHED.as_str().to_string()),
-                ));
+                cx.command(
+                    ask::text(env.i18n.tr("keys.search"), &SEARCHED)
+                        .initial(self.query.clone())
+                        .command(),
+                );
                 return;
             }
             Some(Pick::Standard) => None,
@@ -963,12 +964,8 @@ impl Screen for PickScreen {
     }
 
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
-        if *event == SEARCHED {
-            self.query = params
-                .get(params::TEXT)
-                .unwrap_or_default()
-                .trim()
-                .to_string();
+        if let Some(typed) = SEARCHED.read(event, params) {
+            self.query = typed.text.trim().to_string();
             let env = *cx.env();
             self.build(&env);
             cx.request_redraw();

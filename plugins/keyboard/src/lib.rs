@@ -40,7 +40,10 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::cell::Cell;
 
+use quireink_sdk::ask;
 use quireink_sdk::builtin::{actions, groups, params, slots};
+use quireink_sdk::event::{Event, EventData};
+use quireink_sdk::replies::Typed;
 use quireink_sdk::setting::{Setting, Text};
 use quireink_sdk::ui::{self, UiStyle};
 use quireink_sdk::{
@@ -56,9 +59,9 @@ pub const SCREEN: Id = Id::new_static("keyboard.screen");
 pub const LAYOUTS_SETTING: Setting<Text> = Setting::new("keyboard.layouts");
 const CHOOSE_SCREEN: Id = Id::new_static("keyboard.choose");
 /// The clipboard's text, asked for by *Paste*.
-const PASTED: Id = Id::new_static("keyboard.pasted");
+const PASTED: Event<Typed> = Event::new("keyboard.pasted");
 /// The text typed on another device, asked for by *Phone*.
-const REMOTE_TEXT: Id = Id::new_static("keyboard.remote-text");
+const REMOTE_TEXT: Event<Typed> = Event::new("keyboard.remote-text");
 
 /// Longest text the keyboard accepts, in characters.
 const MAX_CHARS: usize = 200;
@@ -376,14 +379,13 @@ impl KeyboardScreen {
                 } else {
                     self.text.clone()
                 };
-                let mut params = Params::new()
-                    .with(params::TITLE, self.title.clone())
-                    .with(params::TEXT, text)
-                    .with(params::REPLY, REMOTE_TEXT.as_str());
-                if self.password {
-                    params = params.with(params::MODE, "password");
-                }
-                cx.command(Command::OpenSlot(slots::REMOTE_KEYBOARD, params));
+                let question = ask::text(self.title.clone(), &REMOTE_TEXT).initial(text);
+                let question = if self.password {
+                    question.password()
+                } else {
+                    question
+                };
+                cx.command(question.remote_command());
             }
         }
     }
@@ -500,7 +502,7 @@ impl KeyboardScreen {
 
     /// Asks for the clipboard's text ([`PASTED`] brings it).
     fn paste(&mut self, cx: &mut Cx<'_, '_>) {
-        cx.command(Command::ReadClipboard(PASTED, Params::new()));
+        cx.command(Command::ReadClipboard(PASTED.into(), Params::new()));
     }
 
     /// Inserts pasted text: one line, digits only for numbers.
@@ -555,11 +557,11 @@ impl KeyboardScreen {
             .get(params::REPLY)
             .and_then(|r| Id::parse(r).ok())
         {
-            let params = self
-                .params
-                .clone()
-                .with(params::TEXT, core::mem::take(&mut self.text));
-            cx.command(Command::Emit(reply, params));
+            let typed = Typed {
+                text: core::mem::take(&mut self.text),
+                context: self.params.clone(),
+            };
+            cx.command(Command::Emit(reply, typed.to_params()));
         }
     }
 
@@ -894,12 +896,12 @@ impl Screen for KeyboardScreen {
     }
 
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
-        if *event == PASTED {
-            self.pasted(params.get(params::TEXT).unwrap_or_default(), cx);
-        } else if *event == REMOTE_TEXT {
+        if let Some(pasted) = PASTED.read(event, params) {
+            self.pasted(&pasted.text, cx);
+        } else if let Some(typed) = REMOTE_TEXT.read(event, params) {
             // Typed on the phone with the text so far: it replaces it.
             self.text.clear();
-            self.pasted(params.get(params::TEXT).unwrap_or_default(), cx);
+            self.pasted(&typed.text, cx);
         }
     }
 

@@ -16,16 +16,18 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use quireink_digest::md5;
+use quireink_sdk::event::Event;
+use quireink_sdk::replies::HttpReply;
 use quireink_sdk::web::{clean_name, file_name};
-use quireink_sdk::{Command, Env, HttpRequest, Id, Params, files, http_params};
+use quireink_sdk::{Command, Env, HttpRequest, Id, Params, files};
 
 use crate::catalogs::Catalog;
 use crate::{PLUGIN, feed};
 use quireink_sdk::setting::Setting;
 
 /// Answers to the sync's requests.
-pub(crate) const FEED_LOADED: Id = Id::new_static("opds.sync-feed");
-pub(crate) const BOOK_LOADED: Id = Id::new_static("opds.sync-book");
+pub(crate) const FEED_LOADED: Event<HttpReply> = Event::new("opds.sync-feed");
+pub(crate) const BOOK_LOADED: Event<HttpReply> = Event::new("opds.sync-book");
 /// Emitted whenever a sync gets on or ends, for screens to show.
 pub(crate) const CHANGED: Id = Id::new_static("opds.sync-changed");
 /// Setting: the most books a catalog gets in one sync.
@@ -174,7 +176,7 @@ impl Sync {
         out.push(Command::Emit(CHANGED, Params::new()));
     }
 
-    fn request(&self, url: &str, save_to: String, reply: Id) -> Option<HttpRequest> {
+    fn request(&self, url: &str, save_to: String, reply: &Event<HttpReply>) -> Option<HttpRequest> {
         let run = self.run.as_ref()?;
         let params = Params::new().with(RUN, run.number.to_string());
         Some(crate::request(&run.catalog, url, save_to, reply, params))
@@ -192,26 +194,26 @@ impl Sync {
                 &run.catalog,
                 url,
                 feed_path(),
-                FEED_LOADED,
+                &FEED_LOADED,
                 params,
             )));
         }
     }
 
     /// Whether `params` answer a request of the run going on.
-    fn current(&self, params: &Params) -> bool {
-        let number = params.get(RUN).and_then(|n| n.parse::<u32>().ok());
+    fn current(&self, reply: &HttpReply) -> bool {
+        let number = reply.context.get(RUN).and_then(|n| n.parse::<u32>().ok());
         self.run
             .as_ref()
             .is_some_and(|run| Some(run.number) == number)
     }
 
     /// A page of the catalog's list arrived.
-    pub(crate) fn feed_loaded(&mut self, env: &Env<'_>, params: &Params, out: &mut Vec<Command>) {
-        if !self.current(params) {
+    pub(crate) fn feed_loaded(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+        if !self.current(reply) {
             return;
         }
-        let status = status(params);
+        let status = reply.status;
         if !(200..300).contains(&status) {
             let _ = env.storage.remove(&feed_path());
             let first = self.run.as_ref().is_some_and(|run| run.pages.len() <= 1);
@@ -220,9 +222,10 @@ impl Sync {
             }
             return self.next_catalog(env, out);
         }
-        let base = params
-            .get(http_params::FINAL_URL)
-            .or(params.get(crate::URL))
+        let base = reply
+            .final_url
+            .as_deref()
+            .or(reply.context.get(crate::URL))
             .unwrap_or_default()
             .to_string();
         let Some(catalog) = self.run.as_ref().map(|run| run.catalog.clone()) else {
@@ -284,7 +287,7 @@ impl Sync {
         }
         if let Some(item) = run.queue.front() {
             let (url, id) = (item.url.clone(), item.id.clone());
-            if let Some(mut request) = self.request(&url, book_path(), BOOK_LOADED) {
+            if let Some(mut request) = self.request(&url, book_path(), &BOOK_LOADED) {
                 request.params = request.params.with(crate::ID, id);
                 out.push(Command::Http(request));
             }
@@ -297,8 +300,8 @@ impl Sync {
     }
 
     /// A book arrived.
-    pub(crate) fn book_loaded(&mut self, env: &Env<'_>, params: &Params, out: &mut Vec<Command>) {
-        if !self.current(params) {
+    pub(crate) fn book_loaded(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+        if !self.current(reply) {
             return;
         }
         let Some(run) = &mut self.run else {
@@ -308,7 +311,7 @@ impl Sync {
             return;
         };
         let tmp = book_path();
-        let stored = (200..300).contains(&status(params)) && {
+        let stored = (200..300).contains(&reply.status) && {
             let _ = env.storage.create_dir(&run.folder);
             let target = files::free_path(env.storage, &run.folder, &item.name);
             files::move_to(env.storage, &tmp, &target).is_ok()
@@ -346,14 +349,6 @@ impl Sync {
             }
         }
     }
-}
-
-/// The status of an answer; 0 if there was none.
-pub(crate) fn status(params: &Params) -> u16 {
-    params
-        .get(http_params::STATUS)
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(0)
 }
 
 /// The file name for a book: its authors and title, else the name in its

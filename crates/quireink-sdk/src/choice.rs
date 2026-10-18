@@ -2,9 +2,9 @@
 //! do with a file or whether to delete it.
 //!
 //! A plugin registers it as a screen of its own and opens it with
-//! [`open`]; the choice comes back as the plugin's reply event, with the
-//! context it was opened for ([`params::PATH`]) and the [`OPTION`]
-//! chosen. Tapping outside, or *Back*, chooses nothing.
+//! [`open`]; the choice comes back as the plugin's reply event, a
+//! [`Picked`] with the context it was opened for and the option chosen.
+//! Tapping outside, or *Back*, chooses nothing.
 //!
 //! ```ignore
 //! r.add_screen(ScreenSpec {
@@ -27,6 +27,16 @@ use crate::{
 
 /// The option chosen.
 pub const OPTION: &str = "option";
+
+crate::event_data! {
+    /// What was chosen: the option, for the context the choice was
+    /// opened for.
+    pub struct Picked {
+        /// The context ([`open`]'s `context`).
+        pub path: alloc::string::String,
+        pub option: alloc::string::String,
+    }
+}
 const OPTIONS: &str = "options";
 /// Translation keys of the options: this, then the option.
 const LABELS: &str = "labels";
@@ -36,10 +46,10 @@ const TITLE_LINES: usize = 3;
 /// Opens the choice overlay `screen` with `title` and `options`, each
 /// shown as the translation of `labels` followed by the option (e.g.
 /// `file-manager.option.` and `delete`). The choice comes back as the
-/// event `reply` with `context` as [`params::PATH`].
+/// event `reply` ([`Picked`]).
 pub fn open(
     screen: Id,
-    reply: Id,
+    reply: &crate::event::Event<Picked>,
     title: &str,
     context: &str,
     labels: &str,
@@ -50,7 +60,7 @@ pub fn open(
         Params::new()
             .with(params::TITLE, title.to_string())
             .with(params::PATH, context.to_string())
-            .with(params::REPLY, reply.as_str().to_string())
+            .with(params::REPLY, reply.as_str())
             .with(LABELS, labels.to_string())
             .with(OPTIONS, options.join(",")),
     )

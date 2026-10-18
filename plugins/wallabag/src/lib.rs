@@ -29,8 +29,10 @@ use alloc::vec::Vec;
 use core::cell::RefCell;
 
 use quireink_json as json;
-use quireink_json::stream::{self, Event};
-use quireink_sdk::builtin::{actions, events, groups, menus, params, slots};
+use quireink_json::stream::{self, Event as Json};
+use quireink_sdk::builtin::{actions, events, groups, menus, params};
+use quireink_sdk::event::Event;
+use quireink_sdk::replies::{HttpReply, Typed};
 use quireink_sdk::secrets::SecretChange;
 use quireink_sdk::setting::{Setting, Text};
 use quireink_sdk::ui::{self, ListChange, ListView, UiStyle};
@@ -38,7 +40,7 @@ use quireink_sdk::web::{clean_name, encode};
 use quireink_sdk::{
     ActionSpec, Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, HttpRequest, Id,
     Manifest, MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION,
-    Screen, ScreenSpec, SettingSpec, Version, http_params,
+    Screen, ScreenSpec, SettingSpec, Version,
 };
 
 pub const PLUGIN: Id = Id::new_static("wallabag");
@@ -56,14 +58,21 @@ pub const PASSWORD: &str = "wallabag.password";
 pub const SECRET: &str = "wallabag.client-secret";
 const SCREEN: Id = Id::new_static("wallabag.setup");
 /// Answers: the token, an archived article, the list, a book.
-const TOKEN: Id = Id::new_static("wallabag.token");
-const ARCHIVED: Id = Id::new_static("wallabag.archived");
-const LISTED: Id = Id::new_static("wallabag.listed");
-const DOWNLOADED: Id = Id::new_static("wallabag.downloaded");
+const TOKEN: Event<HttpReply> = Event::new("wallabag.token");
+const ARCHIVED: Event<HttpReply> = Event::new("wallabag.archived");
+const LISTED: Event<HttpReply> = Event::new("wallabag.listed");
+const DOWNLOADED: Event<HttpReply> = Event::new("wallabag.downloaded");
 /// Emitted with a message (`text`) when a fetch ends.
-const DONE: Id = Id::new_static("wallabag.done");
+const DONE: Event<Finished> = Event::new("wallabag.done");
+
+quireink_sdk::event_data! {
+    /// How a fetch ended ([`DONE`]), in words.
+    struct Finished {
+        text: String,
+    }
+}
 /// Typed on the keyboard; parameter `field`.
-const ENTERED: Id = Id::new_static("wallabag.entered");
+const ENTERED: Event<Typed> = Event::new("wallabag.entered");
 const FIELD: &str = "field";
 const ARTICLE: &str = "article";
 const FOLDER: &str = "Wallabag";
@@ -190,7 +199,13 @@ struct Fetch {
 type Shared = Rc<RefCell<Fetch>>;
 
 impl Fetch {
-    fn request(&self, env: &Env<'_>, method: &str, path: &str, reply: Id) -> HttpRequest {
+    fn request(
+        &self,
+        env: &Env<'_>,
+        method: &str,
+        path: &str,
+        reply: &Event<HttpReply>,
+    ) -> HttpRequest {
         let mut request = HttpRequest::new(method, &format!("{}{path}", server(env)), reply);
         request.headers.push((
             String::from("Authorization"),
@@ -224,7 +239,7 @@ impl Fetch {
             ..Self::default()
         };
         let mut request =
-            HttpRequest::new("POST", &format!("{}/oauth/v2/token", server(env)), TOKEN);
+            HttpRequest::new("POST", &format!("{}/oauth/v2/token", server(env)), &TOKEN);
         request.headers.push((
             String::from("Content-Type"),
             String::from("application/x-www-form-urlencoded"),
@@ -242,21 +257,17 @@ impl Fetch {
         out.push(Command::Http(request));
     }
 
-    fn ok(p: &Params) -> Option<u16> {
-        p.get(http_params::STATUS)
-            .and_then(|s| s.parse::<u16>().ok())
-            .filter(|s| (200..300).contains(s))
+    fn ok(reply: &HttpReply) -> Option<u16> {
+        reply.ok().then_some(reply.status)
     }
 
-    fn token(&mut self, env: &Env<'_>, p: &Params, out: &mut Vec<Command>) {
-        let token = Self::ok(p).and_then(|_| {
-            let body = p.get(http_params::BODY).unwrap_or_default();
-            json::text(&json::object(body), "access_token").map(String::from)
-        });
+    fn token(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+        let token = Self::ok(reply)
+            .and_then(|_| json::text(&json::object(&reply.body), "access_token").map(String::from));
         let Some(token) = token else {
             self.running = false;
-            let key = match p.get(http_params::STATUS) {
-                Some("0") | None => "wallabag.unreachable",
+            let key = match reply.status {
+                0 => "wallabag.unreachable",
                 _ => "wallabag.bad-login",
             };
             return done(env, key, &[], out);
@@ -274,7 +285,7 @@ impl Fetch {
     fn next(&mut self, env: &Env<'_>, out: &mut Vec<Command>) {
         if let Some(id) = self.archive.pop() {
             let mut request =
-                self.request(env, "PATCH", &format!("/api/entries/{id}.json"), ARCHIVED);
+                self.request(env, "PATCH", &format!("/api/entries/{id}.json"), &ARCHIVED);
             request.headers.push((
                 String::from("Content-Type"),
                 String::from("application/x-www-form-urlencoded"),
@@ -288,7 +299,7 @@ impl Fetch {
             let path = format!(
                 "/api/entries.json?archive=0&detail=metadata&sort=created&order=desc&perPage={MAX_ARTICLES}"
             );
-            let mut request = self.request(env, "GET", &path, LISTED);
+            let mut request = self.request(env, "GET", &path, &LISTED);
             request.save_to = Some(data("entries.json"));
             out.push(Command::Http(request));
             return;
@@ -298,7 +309,7 @@ impl Fetch {
                 env,
                 "GET",
                 &format!("/api/entries/{id}/export.epub"),
-                DOWNLOADED,
+                &DOWNLOADED,
             );
             request.save_to = Some(data("article.tmp"));
             request.params = Params::new().with(ARTICLE, id).with(params::TITLE, title);
@@ -320,9 +331,9 @@ impl Fetch {
         done(env, key, &args, out);
     }
 
-    fn archived(&mut self, env: &Env<'_>, p: &Params, out: &mut Vec<Command>) {
-        let id = p.get(ARTICLE).unwrap_or_default();
-        if Self::ok(p).is_some() {
+    fn archived(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+        let id = reply.context.get(ARTICLE).unwrap_or_default();
+        if Self::ok(reply).is_some() {
             self.archived += 1;
             remove_article(env, id);
         } else {
@@ -331,8 +342,8 @@ impl Fetch {
         self.next(env, out);
     }
 
-    fn listed(&mut self, env: &Env<'_>, p: &Params, out: &mut Vec<Command>) {
-        if Self::ok(p).is_none() {
+    fn listed(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+        if Self::ok(reply).is_none() {
             self.failed += 1;
             self.downloads.clear();
             self.listed = true;
@@ -356,10 +367,10 @@ impl Fetch {
         self.next(env, out);
     }
 
-    fn downloaded(&mut self, env: &Env<'_>, p: &Params, out: &mut Vec<Command>) {
+    fn downloaded(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
         let tmp = data("article.tmp");
-        let id = p.get(ARTICLE).unwrap_or_default().to_string();
-        let title = p.get(params::TITLE).unwrap_or_default();
+        let id = reply.context.get(ARTICLE).unwrap_or_default().to_string();
+        let title = reply.context.get(params::TITLE).unwrap_or_default();
         let dir = folder(env);
         let _ = env.storage.create_dir(&dir);
         let name = clean_name(title, 80).unwrap_or_else(|| id.clone());
@@ -367,7 +378,7 @@ impl Fetch {
         if env.storage.exists(&path) {
             path = format!("{dir}/{name} ({id}).epub");
         }
-        if Self::ok(p).is_some() && env.storage.rename(&tmp, &path).is_ok() {
+        if Self::ok(reply).is_some() && env.storage.rename(&tmp, &path).is_ok() {
             self.fetched += 1;
             let mut list = articles(env);
             list.push(Article { id, path });
@@ -385,8 +396,8 @@ fn unread(storage: &dyn quireink_sdk::Storage) -> Vec<(String, String)> {
     let mut items: Vec<(String, String)> = Vec::new();
     let item = ["_embedded", "items", "[]"];
     stream::read_file(storage, &data("entries.json"), &mut |event| match event {
-        Event::Open(path) if path == item => items.push((String::new(), String::new())),
-        Event::Value(path, value) if path.len() == 4 && path[..3] == item => {
+        Json::Open(path) if path == item => items.push((String::new(), String::new())),
+        Json::Value(path, value) if path.len() == 4 && path[..3] == item => {
             if let Some(last) = items.last_mut() {
                 match path[3].as_str() {
                     "id" => last.0 = value.to_string(),
@@ -421,7 +432,7 @@ fn remove_article(env: &Env<'_>, id: &str) {
 fn done(env: &Env<'_>, key: &str, args: &[(&str, Arg<'_>)], out: &mut Vec<Command>) {
     let text = env.i18n.format(key, args);
     out.push(Command::Notify(text.clone()));
-    out.push(Command::Emit(DONE, Params::new().with(params::TEXT, text)));
+    out.push(DONE.emit(Finished { text }));
 }
 
 /// The Wallabag plugin.
@@ -483,8 +494,8 @@ impl Plugin for Wallabag {
         })?;
         r.add_icon(OPEN, Cow::Borrowed("bookmarks"))?;
         r.add_icon(FETCH, Cow::Borrowed("refresh"))?;
-        type Step = fn(&mut Fetch, &Env<'_>, &Params, &mut Vec<Command>);
-        let steps: [(Id, Step); 4] = [
+        type Step = fn(&mut Fetch, &Env<'_>, &HttpReply, &mut Vec<Command>);
+        let steps: [(Event<HttpReply>, Step); 4] = [
             (TOKEN, Fetch::token),
             (ARCHIVED, Fetch::archived),
             (LISTED, Fetch::listed),
@@ -492,20 +503,14 @@ impl Plugin for Wallabag {
         ];
         for (event, step) in steps {
             let s = state.clone();
-            r.subscribe(
-                event,
-                Box::new(move |env: &Env<'_>, p: &Params, out: &mut Vec<Command>| {
-                    step(&mut s.borrow_mut(), env, p, out);
-                }),
-            )?;
+            r.on(event, move |env, reply, out| {
+                step(&mut s.borrow_mut(), env, reply, out);
+            })?;
         }
         r.on(events::PAGE_TURNED, |env, reading, _| {
             page_turned(env, reading)
         })?;
-        r.subscribe(
-            ENTERED,
-            Box::new(|_: &Env<'_>, p: &Params, out: &mut Vec<Command>| entered(p, out)),
-        )?;
+        r.on(ENTERED, |_, typed, out| entered(typed, out))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())
@@ -562,11 +567,11 @@ impl Row {
 }
 
 /// Keeps what was typed for a row of the set-up.
-fn entered(p: &Params, out: &mut Vec<Command>) {
-    let Some(row) = p.get(FIELD).and_then(Row::of) else {
+fn entered(typed: &Typed, out: &mut Vec<Command>) {
+    let Some(row) = typed.context.get(FIELD).and_then(Row::of) else {
         return;
     };
-    let text = p.get(params::TEXT).unwrap_or_default().trim();
+    let text = typed.text.trim();
     let setting = |id: Setting<Text>| Command::set(&id, Cow::Owned(text.to_string()));
     let secret = |id: &str, label: &str| {
         Command::SetSecret(if text.is_empty() {
@@ -630,15 +635,15 @@ impl SetupScreen {
             Row::Client => (env.settings.read(&CLIENT), false),
             _ => ("", true),
         };
-        let mut request = Params::new()
-            .with(params::TITLE, env.i18n.tr(row.title()).to_string())
-            .with(params::TEXT, text.to_string())
-            .with(params::REPLY, ENTERED.as_str())
+        let question = quireink_sdk::ask::text(env.i18n.tr(row.title()), &ENTERED)
+            .initial(text)
             .with(FIELD, row.field());
-        if password {
-            request = request.with(params::MODE, "password");
-        }
-        cx.command(Command::OpenSlot(slots::KEYBOARD, request));
+        let question = if password {
+            question.password()
+        } else {
+            question
+        };
+        cx.command(question.command());
     }
 }
 
@@ -715,11 +720,11 @@ impl Screen for SetupScreen {
     }
 
     fn on_event(&mut self, event: &Id, p: &Params, cx: &mut Cx<'_, '_>) {
-        if *event == DONE {
-            self.message = p.get(params::TEXT).unwrap_or_default().to_string();
-        } else if *event == ENTERED {
+        if let Some(finished) = DONE.read(event, p) {
+            self.message = finished.text;
+        } else if let Some(typed) = ENTERED.read(event, p) {
             // On to the next row.
-            if let Some(row) = p.get(FIELD).and_then(Row::of) {
+            if let Some(row) = typed.context.get(FIELD).and_then(Row::of) {
                 let at = ROWS.iter().position(|r| *r == row).unwrap_or(0);
                 self.list.focus = (at + 1).min(ROWS.len() - 1);
             }

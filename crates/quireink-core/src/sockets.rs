@@ -4,13 +4,12 @@
 //! to storage in parts as they come.
 
 use alloc::format;
-use alloc::string::{String, ToString};
+use alloc::string::String;
 use alloc::vec::Vec;
 
 use quireink_platform::Storage;
-use quireink_sdk::builtin::params;
-use quireink_sdk::socket_params as p;
-use quireink_sdk::{Command, Id, Params, SocketRead};
+use quireink_sdk::event::EventData;
+use quireink_sdk::{Command, Id, SocketNotice, SocketRead};
 
 /// The most a shell is asked to read at once; a file read goes in such
 /// parts.
@@ -106,11 +105,9 @@ pub(crate) struct Sockets {
     pub calls: Vec<SocketCall>,
 }
 
-fn notice(events: &Id, id: &Id, kind: &str) -> (Id, Params) {
-    let params = Params::new()
-        .with(params::ID, id.as_str().to_string())
-        .with(p::KIND, kind);
-    (events.clone(), params)
+/// The command that tells a plugin `notice` on `events`.
+fn emit(events: &Id, notice: SocketNotice) -> Command {
+    Command::Emit(events.clone(), notice.to_params())
 }
 
 impl Sockets {
@@ -146,8 +143,8 @@ impl Sockets {
                     self.calls.push(SocketCall::Close { socket: old.number });
                 }
                 if !network {
-                    let (events, params) = notice(&events, &socket, p::FAILED);
-                    out.push(Command::Emit(events, params.with(p::REASON, "no network")));
+                    let reason = String::from("no network");
+                    out.push(emit(&events, SocketNotice::Failed { socket, reason }));
                     return;
                 }
                 let number = self.number();
@@ -179,11 +176,8 @@ impl Sockets {
                 };
                 let s = &mut self.sockets[at];
                 if s.reading.is_some() {
-                    let (events, params) = notice(&s.events, &s.id, p::FAILED);
-                    out.push(Command::Emit(
-                        events,
-                        params.with(p::REASON, "already reading"),
-                    ));
+                    let reason = String::from("already reading");
+                    out.push(s.notice(|socket| SocketNotice::Failed { socket, reason }));
                     return;
                 }
                 let max = match read {
@@ -193,16 +187,12 @@ impl Sockets {
                     }
                     SocketRead::File { path, len } => {
                         if let Err(e) = storage.write(&path, &[]) {
-                            let (events, params) = notice(&s.events, &s.id, p::FAILED);
-                            out.push(Command::Emit(
-                                events,
-                                params.with(p::REASON, format!("{e}")),
-                            ));
+                            let reason = format!("{e}");
+                            out.push(s.notice(|socket| SocketNotice::Failed { socket, reason }));
                             return;
                         }
                         if len == 0 {
-                            let (events, params) = notice(&s.events, &s.id, p::SAVED);
-                            out.push(Command::Emit(events, params.with(p::PATH, path)));
+                            out.push(s.notice(|socket| SocketNotice::Saved { socket, path }));
                             return;
                         }
                         let max = len.min(u64::from(SOCKET_PART)) as u32;
@@ -228,8 +218,8 @@ impl Sockets {
                 events,
             } => {
                 if !network {
-                    let (events, params) = notice(&events, &id, p::DONE);
-                    out.push(Command::Emit(events, params.with(p::REASON, "no network")));
+                    let reason = String::from("no network");
+                    out.push(emit(&events, SocketNotice::Done { socket: id, reason }));
                     return;
                 }
                 let number = self.number();
@@ -253,11 +243,8 @@ impl Sockets {
         self.calls.push(SocketCall::Close {
             socket: socket.number,
         });
-        let (events, mut params) = notice(&socket.events, &socket.id, p::CLOSED);
-        if let Some(reason) = reason {
-            params = params.with(p::REASON, reason);
-        }
-        out.push(Command::Emit(events, params));
+        let reason = reason.unwrap_or_default();
+        out.push(socket.notice(|socket| SocketNotice::Closed { socket, reason }));
     }
 
     /// Closes the sockets opened while more than `screens` screens were
@@ -278,15 +265,13 @@ impl Sockets {
         match event {
             SocketEvent::Connected { socket } => {
                 if let Some(s) = self.sockets.iter().find(|s| s.number == socket) {
-                    let (events, params) = event_of(s, p::CONNECTED);
-                    out.push(Command::Emit(events, params));
+                    out.push(s.notice(|socket| SocketNotice::Connected { socket }));
                 }
             }
             SocketEvent::Failed { socket, reason } => {
                 if let Some(at) = self.sockets.iter().position(|s| s.number == socket) {
                     let s = self.sockets.remove(at);
-                    let (events, params) = event_of(&s, p::FAILED);
-                    out.push(Command::Emit(events, params.with(p::REASON, reason)));
+                    out.push(s.notice(|socket| SocketNotice::Failed { socket, reason }));
                 }
             }
             SocketEvent::Data { socket, data } => {
@@ -303,19 +288,16 @@ impl Sockets {
                 if let Some((_, id, events)) =
                     self.broadcasts.iter().find(|(n, ..)| *n == broadcast)
                 {
-                    let (events, params) = notice(events, id, p::ANSWER);
                     let text = String::from_utf8_lossy(&data).into_owned();
-                    out.push(Command::Emit(
-                        events,
-                        params.with(p::FROM, from).with(p::TEXT, text),
-                    ));
+                    let socket = id.clone();
+                    out.push(emit(events, SocketNotice::Answer { socket, text, from }));
                 }
             }
             SocketEvent::Done { broadcast } => {
                 if let Some(at) = self.broadcasts.iter().position(|(n, ..)| *n == broadcast) {
-                    let (_, id, events) = self.broadcasts.remove(at);
-                    let (events, params) = notice(&events, &id, p::DONE);
-                    out.push(Command::Emit(events, params));
+                    let (_, socket, events) = self.broadcasts.remove(at);
+                    let reason = String::new();
+                    out.push(emit(&events, SocketNotice::Done { socket, reason }));
                 }
             }
         }
@@ -332,9 +314,8 @@ impl Sockets {
         let s = &mut self.sockets[at];
         match s.reading.take() {
             Some(Reading::Text) => {
-                let (events, params) = event_of(s, p::RECEIVED);
                 let text = String::from_utf8_lossy(&data).into_owned();
-                out.push(Command::Emit(events, params.with(p::TEXT, text)));
+                out.push(s.notice(|socket| SocketNotice::Received { socket, text }));
             }
             Some(Reading::File { path, left }) => {
                 if data.is_empty() {
@@ -347,8 +328,7 @@ impl Sockets {
                 }
                 let left = left.saturating_sub(data.len() as u64);
                 if left == 0 {
-                    let (events, params) = event_of(s, p::SAVED);
-                    out.push(Command::Emit(events, params.with(p::PATH, path)));
+                    out.push(s.notice(|socket| SocketNotice::Saved { socket, path }));
                 } else {
                     let max = left.min(u64::from(SOCKET_PART)) as u32;
                     s.reading = Some(Reading::File { path, left });
@@ -364,14 +344,19 @@ impl Sockets {
     }
 }
 
-fn event_of(socket: &Socket, kind: &str) -> (Id, Params) {
-    notice(&socket.events, &socket.id, kind)
+impl Socket {
+    /// The command that tells its plugin the notice `make` makes of its id.
+    fn notice(&self, make: impl FnOnce(Id) -> SocketNotice) -> Command {
+        emit(&self.events, make(self.id.clone()))
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use quireink_sdk::MemoryStorage;
+    use quireink_sdk::builtin::params;
+    use quireink_sdk::socket_params as p;
 
     const EVENTS: Id = Id::new_static("test.socket-events");
     const SOCKET: Id = Id::new_static("test.socket");

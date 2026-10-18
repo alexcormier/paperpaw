@@ -10,6 +10,7 @@ use alloc::vec::Vec;
 
 use quireink_sdk::builtin::{actions, params};
 use quireink_sdk::document::{Document, Locator};
+use quireink_sdk::event::Event;
 use quireink_sdk::ui::{self, UiStyle};
 use quireink_sdk::{
     Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect,
@@ -25,7 +26,16 @@ pub(crate) const XPOINTER: &str = "xpointer";
 
 /// Emitted when the user stays, with the book's path and [`PERCENTAGE`]:
 /// that position is not offered again.
-pub(crate) const DECLINED: Id = Id::new_static("kosync.declined");
+pub(crate) const DECLINED: Event<Declined> = Event::new("kosync.declined");
+
+quireink_sdk::event_data! {
+    /// The book and the position on another device the user stayed away
+    /// from ([`DECLINED`]).
+    pub(crate) struct Declined {
+        pub(crate) path: String,
+        pub(crate) percentage: String,
+    }
+}
 
 /// The reader's event to show a position.
 const GOTO: Id = Id::new_static("reader.goto");
@@ -109,10 +119,10 @@ impl ConfirmScreen {
         cx.command(Command::Back);
         if index != 0 {
             if let Some((path, _, percentage)) = &self.offer {
-                let params = Params::new()
-                    .with(params::PATH, path.clone())
-                    .with(PERCENTAGE, format!("{percentage}"));
-                cx.command(Command::Emit(DECLINED, params));
+                cx.command(DECLINED.emit(Declined {
+                    path: path.clone(),
+                    percentage: format!("{percentage}"),
+                }));
             }
             return;
         }

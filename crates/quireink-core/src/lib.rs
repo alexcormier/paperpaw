@@ -68,11 +68,12 @@ use quireink_sdk::builtin::{
     CONFIG_FILE, GLOBAL_KEYMAP_LAYER, events, keymap_presets, params as builtin_params,
     settings as core_settings, slots,
 };
+use quireink_sdk::event::EventData;
 use quireink_sdk::{
     Actions, Capabilities, Command, Contribution, Cx, Direction, Env, EnvParts, EventHandler,
-    Fonts, Formats, Gesture, GestureKind, Handled, Hint, Hints, Hyphenation, Id, Manifest, Menus,
-    Metrics, Output, Params, Plugin, PluginInfo, PluginState, Plugins, RegisterError, RequiredFor,
-    SDK_VERSION, Screen, Settings, StatusItems,
+    Fonts, Formats, Gesture, GestureKind, Handled, Hint, Hints, HttpReply, Hyphenation, Id,
+    Manifest, Menus, Metrics, Output, Params, Plugin, PluginInfo, PluginState, Plugins,
+    RegisterError, RequiredFor, SDK_VERSION, Screen, ServerNotice, Settings, StatusItems,
 };
 
 use crate::core_plugin::{CORE, CorePlugin};
@@ -1689,15 +1690,9 @@ impl Kernel {
 
     /// Stops server `at` and tells its plugin.
     fn stop_server(&mut self, at: usize) {
-        let (number, id, events, _) = self.servers.remove(at);
+        let (number, server, events, _) = self.servers.remove(at);
         self.server_calls.push(ServerCall::Stop { server: number });
-        let params = Params::new()
-            .with(quireink_sdk::builtin::params::ID, id.as_str().to_string())
-            .with(
-                quireink_sdk::server_params::KIND,
-                quireink_sdk::server_params::STOPPED,
-            );
-        self.output.commands.push(Command::Emit(events, params));
+        self.tell_server(events, ServerNotice::Stopped { server });
     }
 
     /// Stops the servers of screens that were closed.
@@ -1718,17 +1713,8 @@ impl Kernel {
             self.server_calls.push(ServerCall::Stop { server: number });
         }
         if !self.shared.caps.network {
-            let params = Params::new()
-                .with(
-                    quireink_sdk::builtin::params::ID,
-                    server.as_str().to_string(),
-                )
-                .with(
-                    quireink_sdk::server_params::KIND,
-                    quireink_sdk::server_params::FAILED,
-                )
-                .with(quireink_sdk::server_params::REASON, "no network");
-            self.output.commands.push(Command::Emit(events, params));
+            let reason = String::from("no network");
+            self.tell_server(events, ServerNotice::Failed { server, reason });
             return;
         }
         self.next_server = self.next_server.wrapping_add(1);
@@ -1796,25 +1782,27 @@ impl Kernel {
         target: String,
         body: Option<String>,
     ) {
-        use quireink_sdk::server_params as p;
         let Some((_, id, events, _)) = self.servers.iter().find(|(n, ..)| *n == server) else {
             if let Some(path) = body {
                 self.forget_body(request, &path);
             }
             return;
         };
-        let mut params = Params::new()
-            .with(quireink_sdk::builtin::params::ID, id.as_str().to_string())
-            .with(p::KIND, p::REQUEST)
-            .with(p::REQUEST, format!("{request}"))
-            .with(p::METHOD, method)
-            .with(p::TARGET, target);
-        if let Some(path) = body {
-            params = params.with(p::BODY_FILE, path);
-        }
+        let notice = ServerNotice::Request {
+            server: id.clone(),
+            request,
+            method,
+            target,
+            body_file: body,
+        };
+        self.tell_server(events.clone(), notice);
+    }
+
+    /// Tells a server's plugin `notice` on its `events`.
+    fn tell_server(&mut self, events: Id, notice: ServerNotice) {
         self.output
             .commands
-            .push(Command::Emit(events.clone(), params));
+            .push(Command::Emit(events, notice.to_params()));
     }
 
     /// Removes the body of `request`, e.g. after the connection was lost.
@@ -1838,11 +1826,13 @@ impl Kernel {
 
     /// Answers a [`Command::ReadClipboard`] with the text known here.
     fn reply_clipboard(&mut self, reply: Id, params: Params) {
-        let text = self.shared.clipboard.clone();
-        self.output.commands.push(Command::Emit(
-            reply,
-            params.with(quireink_sdk::builtin::params::TEXT, text),
-        ));
+        let typed = quireink_sdk::Typed {
+            text: self.shared.clipboard.clone(),
+            context: params,
+        };
+        self.output
+            .commands
+            .push(Command::Emit(reply, typed.to_params()));
     }
 
     /// What to do for plugins' servers: listen, stop, answer requests
@@ -1862,7 +1852,6 @@ impl Kernel {
 
     /// What happened with a server: started, failed, a request.
     pub fn server_event(&mut self, now: Instant, event: ServerEvent) -> Effects {
-        use quireink_sdk::server_params as p;
         self.now = now;
         let events_of = |servers: &[(u32, Id, Id, usize)], number: u32| {
             servers
@@ -1872,22 +1861,15 @@ impl Kernel {
         };
         match event {
             ServerEvent::Started { server, address } => {
-                if let Some((id, events)) = events_of(&self.servers, server) {
-                    let params = Params::new()
-                        .with(quireink_sdk::builtin::params::ID, id.as_str().to_string())
-                        .with(p::KIND, p::STARTED)
-                        .with(p::ADDRESS, address);
-                    self.output.commands.push(Command::Emit(events, params));
+                if let Some((server, events)) = events_of(&self.servers, server) {
+                    self.tell_server(events, ServerNotice::Started { server, address });
                 }
             }
             ServerEvent::Failed { server, reason } => {
                 if let Some((id, events)) = events_of(&self.servers, server) {
                     self.servers.retain(|(n, ..)| *n != server);
-                    let params = Params::new()
-                        .with(quireink_sdk::builtin::params::ID, id.as_str().to_string())
-                        .with(p::KIND, p::FAILED)
-                        .with(p::REASON, reason);
-                    self.output.commands.push(Command::Emit(events, params));
+                    let server = id;
+                    self.tell_server(events, ServerNotice::Failed { server, reason });
                 }
             }
             ServerEvent::Request {
@@ -1974,34 +1956,31 @@ impl Kernel {
     /// Turns a request's answer into the plugin's event.
     fn answer_request(&mut self, response: HttpResponse) {
         if let Some(at) = self.awaiting.iter().position(|(id, ..)| *id == response.id) {
-            let (_, reply, params, save_to) = self.awaiting.remove(at);
-            let mut status = format!("{}", response.status);
-            let mut params = match save_to {
+            let (_, event, context, save_to) = self.awaiting.remove(at);
+            let mut status = response.status;
+            let body = match save_to {
                 // Answers that are files: written where asked (a failure
                 // has its reason as the body).
                 Some(path) if response.status != 0 => {
                     if !response.saved && self.shared.storage.write(&path, &response.body).is_err()
                     {
-                        status = String::from("0");
+                        status = 0;
                     }
-                    params
+                    String::new()
                 }
-                _ => {
-                    let body = String::from_utf8_lossy(&response.body).into_owned();
-                    params.with(quireink_sdk::http_params::BODY, body)
-                }
+                _ => String::from_utf8_lossy(&response.body).into_owned(),
             };
-            params = params.with(quireink_sdk::http_params::STATUS, status);
-            if let Some(etag) = response.etag {
-                params = params.with(quireink_sdk::http_params::ETAG, etag);
-            }
-            if let Some(content_type) = response.content_type {
-                params = params.with(quireink_sdk::http_params::CONTENT_TYPE, content_type);
-            }
-            if let Some(url) = response.url {
-                params = params.with(quireink_sdk::http_params::FINAL_URL, url);
-            }
-            self.output.commands.push(Command::Emit(reply, params));
+            let reply = HttpReply {
+                status,
+                body,
+                etag: response.etag,
+                content_type: response.content_type,
+                final_url: response.url,
+                context,
+            };
+            self.output
+                .commands
+                .push(Command::Emit(event, reply.to_params()));
         }
     }
 
@@ -2148,13 +2127,9 @@ impl Kernel {
             });
         }
         if !mem::take(&mut self.server_calls).is_empty() {
-            use quireink_sdk::server_params as p;
-            for (_, id, events, _) in mem::take(&mut self.servers) {
-                let params = Params::new()
-                    .with(quireink_sdk::builtin::params::ID, id.as_str().to_string())
-                    .with(p::KIND, p::FAILED)
-                    .with(p::REASON, REASON);
-                self.output.commands.push(Command::Emit(events, params));
+            for (_, server, events, _) in mem::take(&mut self.servers) {
+                let reason = String::from(REASON);
+                self.tell_server(events, ServerNotice::Failed { server, reason });
             }
         }
         let mut out = Vec::new();
@@ -3681,26 +3656,20 @@ impl Kernel {
     /// Queues an HTTP request for the shell, or fails it without network.
     fn request(&mut self, request: quireink_sdk::HttpRequest) {
         if !self.shared.caps.network {
-            let params = request
-                .params
-                .with(quireink_sdk::http_params::STATUS, "0")
-                .with(quireink_sdk::http_params::BODY, "no network");
+            let reply = HttpReply::failed("no network", request.params);
             self.output
                 .commands
-                .push(Command::Emit(request.reply, params));
+                .push(Command::Emit(request.reply, reply.to_params()));
             return;
         }
         // A file to send must be there; the shell reads it.
         if let Some(path) = &request.body_from
             && let Err(e) = self.shared.storage.size(path)
         {
-            let params = request
-                .params
-                .with(quireink_sdk::http_params::STATUS, "0")
-                .with(quireink_sdk::http_params::BODY, format!("{e}"));
+            let reply = HttpReply::failed(format!("{e}"), request.params);
             self.output
                 .commands
-                .push(Command::Emit(request.reply, params));
+                .push(Command::Emit(request.reply, reply.to_params()));
             return;
         }
         let body = match request.body_from {

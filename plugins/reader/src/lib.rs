@@ -39,6 +39,8 @@ use quireink_sdk::builtin::{
     actions as core_actions, events, groups, params, setting_sections, settings as core_settings,
     slots,
 };
+use quireink_sdk::event::Event;
+use quireink_sdk::replies::Typed;
 use quireink_sdk::setting::Setting;
 use quireink_sdk::{
     Command, Env, Id, Manifest, Params, Plugin, Priority, RegisterError, Registrar, SDK_VERSION,
@@ -69,10 +71,10 @@ pub const END_OFFSET: &str = "end-offset";
 /// Search results for a book; parameters `path` and `text`.
 pub const SEARCH_SCREEN: Id = Id::new_static("reader.search-results");
 /// The keyboard's replies: what to search for, which page to go to.
-const SEARCH_ENTERED: Id = Id::new_static("reader.search-entered");
-const PAGE_ENTERED: Id = Id::new_static("reader.page-entered");
+const SEARCH_ENTERED: Event<Typed> = Event::new("reader.search-entered");
+const PAGE_ENTERED: Event<Typed> = Event::new("reader.page-entered");
 /// The keyboard's reply with a note on a highlight.
-const NOTE_ENTERED: Id = Id::new_static("reader.note-entered");
+const NOTE_ENTERED: Event<Typed> = Event::new("reader.note-entered");
 /// Font and layout, shown as a panel ([`actions::QUICK_SETTINGS`]), and
 /// the submenu "More" of [`MENU`]: menus like any other, so plugins add
 /// entries and users redefine them in `[menus]` or the menu editor.

@@ -14,6 +14,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use quireink_sdk::builtin::{actions, events, params, slots};
+use quireink_sdk::event::Event;
 use quireink_sdk::status::item_ids;
 use quireink_sdk::ui::choice;
 use quireink_sdk::ui::{self, ListChange, ListView, Reorder, ReorderStep, UiStyle};
@@ -26,7 +27,7 @@ use quireink_sdk::{
 use crate::{CHOICE, LIST_ADD_SCREEN};
 
 /// A widget's options were chosen.
-const CHOSEN: Id = Id::new_static("home.edit-chosen");
+const CHOSEN: Event<choice::Picked> = Event::new("home.edit-chosen");
 const OPTION_LABELS: &str = "home.edit.";
 
 /// What is edited: a setting that lists widgets.
@@ -157,7 +158,7 @@ impl EditScreen {
                     .map_or(id.as_str(), |t| env.i18n.tr(t));
                 cx.command(choice::open(
                     CHOICE,
-                    CHOSEN,
+                    &CHOSEN,
                     title,
                     &format!("{at}"),
                     OPTION_LABELS,
@@ -325,10 +326,9 @@ impl Screen for EditScreen {
     }
 
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
-        if *event == CHOSEN {
-            let option = params.get(choice::OPTION).unwrap_or_default().to_string();
-            if let Some(at) = params.get(params::PATH).and_then(|p| p.parse().ok()) {
-                self.chosen(&option, at, cx);
+        if let Some(picked) = CHOSEN.read(event, params) {
+            if let Ok(at) = picked.path.parse() {
+                self.chosen(&picked.option, at, cx);
             }
         } else if *event == events::SETTING_CHANGED {
             self.redraw(cx);

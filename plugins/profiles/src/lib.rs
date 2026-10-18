@@ -20,7 +20,10 @@ use alloc::boxed::Box;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::builtin::{actions, menus, params, slots};
+use quireink_sdk::ask;
+use quireink_sdk::builtin::{actions, menus, params};
+use quireink_sdk::event::Event;
+use quireink_sdk::replies::Typed;
 use quireink_sdk::ui::choice::{self, Choice};
 use quireink_sdk::ui::{self, ListChange, ListView, UiStyle};
 use quireink_sdk::{
@@ -39,9 +42,9 @@ pub const NEXT: Id = Id::new_static("profiles.next");
 const LIST_SCREEN: Id = Id::new_static("profiles.list");
 const CHOICE: Id = Id::new_static("profiles.choice");
 /// Replies: a name for a new profile, a new name, an option.
-const NAMED: Id = Id::new_static("profiles.named");
-const RENAMED: Id = Id::new_static("profiles.renamed");
-const CHOSEN: Id = Id::new_static("profiles.chosen");
+const NAMED: Event<Typed> = Event::new("profiles.named");
+const RENAMED: Event<Typed> = Event::new("profiles.renamed");
+const CHOSEN: Event<choice::Picked> = Event::new("profiles.chosen");
 /// The reader's menu with more entries.
 const READER_MORE: Id = Id::new_static("reader.more");
 
@@ -166,16 +169,14 @@ impl ListScreen {
         cx.request_refresh(RefreshMode::Fast);
     }
 
-    fn ask_name(&self, cx: &mut Cx<'_, '_>, reply: Id, text: &str, context: &str) {
+    fn ask_name(&self, cx: &mut Cx<'_, '_>, reply: &Event<Typed>, text: &str, context: &str) {
         let env = *cx.env();
-        cx.command(Command::OpenSlot(
-            slots::KEYBOARD,
-            Params::new()
-                .with(params::TITLE, env.i18n.tr("profiles.name").to_string())
-                .with(params::TEXT, text.to_string())
+        cx.command(
+            ask::text(env.i18n.tr("profiles.name"), reply)
+                .initial(text)
                 .with(params::PATH, context.to_string())
-                .with(params::REPLY, reply.as_str()),
-        ));
+                .command(),
+        );
     }
 
     fn activate(&mut self, index: usize, cx: &mut Cx<'_, '_>) {
@@ -194,7 +195,7 @@ impl ListScreen {
                     "profiles.default-name",
                     &[("number", Arg::Int(self.profiles.len() as i64 + 1))],
                 );
-                self.ask_name(cx, NAMED, &name, "");
+                self.ask_name(cx, &NAMED, &name, "");
             }
             None => {}
         }
@@ -206,7 +207,7 @@ impl ListScreen {
         };
         cx.command(choice::open(
             CHOICE,
-            CHOSEN,
+            &CHOSEN,
             &self.profiles[i].name,
             &i.to_string(),
             "profiles.option.",
@@ -333,12 +334,14 @@ impl Screen for ListScreen {
 
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        let index = params
-            .get(params::PATH)
-            .and_then(|p| p.parse::<usize>().ok())
-            .filter(|&i| i < self.profiles.len());
-        if *event == NAMED {
-            let Some(name) = clean(params.get(params::TEXT).unwrap_or_default()) else {
+        let index = |context: &str| {
+            context
+                .parse::<usize>()
+                .ok()
+                .filter(|&i| i < self.profiles.len())
+        };
+        if let Some(typed) = NAMED.read(event, params) {
+            let Some(name) = clean(&typed.text) else {
                 return;
             };
             self.profiles.retain(|p| p.name != name);
@@ -354,18 +357,17 @@ impl Screen for ListScreen {
                     .format("profiles.saved", &[("name", Arg::Str(&name))]),
             ));
             self.redraw(cx);
-        } else if *event == RENAMED {
-            if let (Some(i), Some(name)) =
-                (index, clean(params.get(params::TEXT).unwrap_or_default()))
-            {
+        } else if let Some(typed) = RENAMED.read(event, params) {
+            let at = index(typed.context.get(params::PATH).unwrap_or_default());
+            if let (Some(i), Some(name)) = (at, clean(&typed.text)) {
                 self.profiles[i].name = name;
                 self.save(&env);
                 self.redraw(cx);
             }
-        } else if *event == CHOSEN
-            && let Some(i) = index
+        } else if let Some(picked) = CHOSEN.read(event, params)
+            && let Some(i) = index(&picked.path)
         {
-            match params.get(choice::OPTION).unwrap_or_default() {
+            match picked.option.as_str() {
                 "update" => {
                     self.profiles[i].values = profile::capture(&env);
                     self.save(&env);
@@ -378,7 +380,7 @@ impl Screen for ListScreen {
                 }
                 "rename" => {
                     let name = self.profiles[i].name.clone();
-                    self.ask_name(cx, RENAMED, &name, &i.to_string());
+                    self.ask_name(cx, &RENAMED, &name, &i.to_string());
                 }
                 "remove" => {
                     self.profiles.remove(i);

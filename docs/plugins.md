@@ -202,6 +202,15 @@ one at a time of day. Underneath, what events carry travels as named
 strings (`Params`): events known only at run time are heard by id with
 `r.subscribe`.
 
+Answers come as events too, typed in `replies`: a plugin names the
+event it wants, e.g. `const FETCHED: Event<HttpReply> =
+Event::new("news.fetched")`, and passes it with the request. To ask
+the reader, `ask::text("Server", &ENTERED).initial(url).command()`
+opens the keyboard and brings back a `Typed`, `ask::folder` a
+`Chosen`, and `choice::open` a `Picked`. What the plugin added
+(`.with(key, value)`) comes back as the answer's `context`, to tell
+its questions apart.
+
 What is known of books is a service, not a screen's: `library` has a
 book's details (title, author, series, tags, cover, progress, and
 fields plugins add with `library::set_field`), the books read last and
@@ -334,12 +343,15 @@ place for a key.
 ### The network
 
 `Command::Http` makes a request where the device has a network
-(`env.caps.network`); the answer comes as the request's reply event, with
-the status and the body, or saved to a file (`save_to`) for large ones.
+(`env.caps.network`); the answer comes as the request's reply event, an
+`HttpReply` with the status and the body, or saved to a file (`save_to`)
+for large ones.
 Read large JSON answers as they stream with `quireink_json::stream`
 (the crate `quireink-json`), so they
 need little memory. `Command::Serve` serves HTTP to the local network,
-e.g. for transfers from a computer or typing on a phone.
+e.g. for transfers from a computer or typing on a phone; what happens
+to it comes as `ServerNotice`s, and to sockets (`Command::Connect`,
+`Command::Broadcast`) as `SocketNotice`s.
 
 ### Firmware updates
 

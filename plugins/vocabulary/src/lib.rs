@@ -24,6 +24,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use quireink_sdk::builtin::{actions, events, groups, menus, params, slots};
+use quireink_sdk::event::Event;
 use quireink_sdk::ui::choice::{self, Choice};
 use quireink_sdk::ui::{self, ListChange, ListView, UiStyle};
 use quireink_sdk::widgets;
@@ -43,7 +44,7 @@ pub const OPEN: Id = Id::new_static("vocabulary.open");
 pub const COLLECT: Setting<bool> = Setting::new("vocabulary.collect");
 const SCREEN: Id = Id::new_static("vocabulary.list");
 const CHOICE: Id = Id::new_static("vocabulary.choice");
-const CHOSEN: Id = Id::new_static("vocabulary.chosen");
+const CHOSEN: Event<choice::Picked> = Event::new("vocabulary.chosen");
 const OPTION_LABELS: &str = "vocabulary.option.";
 /// The reader's event for going to a place in the open book.
 const READER_GOTO: Id = Id::new_static("reader.goto");
@@ -332,7 +333,7 @@ impl WordsScreen {
         options.push("delete");
         cx.command(choice::open(
             CHOICE,
-            CHOSEN,
+            &CHOSEN,
             &word.word,
             &format!("{n}"),
             OPTION_LABELS,
@@ -464,20 +465,17 @@ impl Screen for WordsScreen {
     }
 
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
-        if *event != CHOSEN {
+        let Some(picked) = CHOSEN.read(event, params) else {
             return;
-        }
+        };
         let env = *cx.env();
-        let Some(n) = params
-            .get(params::PATH)
-            .and_then(|n| n.parse::<usize>().ok())
-        else {
+        let Ok(n) = picked.path.parse::<usize>() else {
             return;
         };
         let Some((_, _, word)) = self.visible.iter().find(|(_, i, _)| *i == n).cloned() else {
             return;
         };
-        match params.get(choice::OPTION).unwrap_or_default() {
+        match picked.option.as_str() {
             "look-up" => cx.command(Command::OpenSlot(
                 slots::LOOKUP,
                 Params::new()

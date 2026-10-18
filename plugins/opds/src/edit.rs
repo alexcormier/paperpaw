@@ -5,7 +5,10 @@
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::builtin::{actions, params, slots};
+use quireink_sdk::ask;
+use quireink_sdk::builtin::{actions, slots};
+use quireink_sdk::event::Event;
+use quireink_sdk::replies::{Chosen, Typed};
 use quireink_sdk::ui::{self, ListChange, ListView, UiStyle};
 use quireink_sdk::{
     Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, RefreshMode, Screen,
@@ -15,9 +18,9 @@ use crate::ID;
 use crate::catalogs::{self, Catalog};
 
 /// The keyboard's reply with a field's new text.
-const ENTERED: Id = Id::new_static("opds.entered");
+const ENTERED: Event<Typed> = Event::new("opds.entered");
 /// The folder chooser's reply.
-const FOLDER_CHOSEN: Id = Id::new_static("opds.folder-chosen");
+const FOLDER_CHOSEN: Event<Chosen> = Event::new("opds.folder-chosen");
 /// Parameter of the reply: which field.
 const FIELD: &str = "field";
 
@@ -146,24 +149,20 @@ impl EditScreen {
             return;
         }
         if field == Field::Folder && env.has_slot(&slots::CHOOSE_FOLDER) {
-            cx.command(Command::OpenSlot(
-                slots::CHOOSE_FOLDER,
-                Params::new()
-                    .with(params::REPLY, FOLDER_CHOSEN.as_str())
-                    .with(params::TEXT, self.catalog.sync_folder(&env)),
-            ));
+            cx.command(
+                ask::folder(&FOLDER_CHOSEN)
+                    .start(self.catalog.sync_folder(&env))
+                    .command(),
+            );
             return;
         }
-        let mut request = Params::new()
-            .with(params::TITLE, env.i18n.tr(field.key()).to_string())
-            .with(params::REPLY, ENTERED.as_str())
-            .with(FIELD, field.key());
-        request = match field {
-            Field::Password => request.with(params::MODE, "password"),
-            Field::Folder => request.with(params::TEXT, self.catalog.sync_folder(&env)),
-            _ => request.with(params::TEXT, self.value(&env, field)),
+        let question = ask::text(env.i18n.tr(field.key()), &ENTERED).with(FIELD, field.key());
+        let question = match field {
+            Field::Password => question.password(),
+            Field::Folder => question.initial(self.catalog.sync_folder(&env)),
+            _ => question.initial(self.value(&env, field)),
         };
-        cx.command(Command::OpenSlot(slots::KEYBOARD, request));
+        cx.command(question.command());
     }
 
     fn move_focus(&mut self, delta: isize, cx: &mut Cx<'_, '_>) {
@@ -247,21 +246,21 @@ impl Screen for EditScreen {
 
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        if *event == FOLDER_CHOSEN {
-            let folder = params.get(params::PATH).unwrap_or_default();
+        if let Some(chosen) = FOLDER_CHOSEN.read(event, params) {
+            let folder = chosen.path.as_str();
             self.catalog.folder = folder.trim_matches('/').to_string();
             self.save(&env, cx);
             cx.request_redraw();
             cx.request_refresh(RefreshMode::Fast);
             return;
         }
-        if *event != ENTERED {
-            return;
-        }
-        let Some(field) = params.get(FIELD).and_then(Field::of) else {
+        let Some(typed) = ENTERED.read(event, params) else {
             return;
         };
-        let text = params.get(params::TEXT).unwrap_or_default();
+        let Some(field) = typed.context.get(FIELD).and_then(Field::of) else {
+            return;
+        };
+        let text = typed.text.as_str();
         let trimmed = text.trim().to_string();
         let c = &mut self.catalog;
         match field {

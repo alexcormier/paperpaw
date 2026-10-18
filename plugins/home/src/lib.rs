@@ -46,6 +46,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use quireink_sdk::builtin::{actions, events, params, slots};
+use quireink_sdk::event::Event;
 use quireink_sdk::ui::choice::{self, Choice};
 use quireink_sdk::ui::{self, UiStyle};
 use quireink_sdk::{
@@ -72,7 +73,7 @@ pub const ALL_TOOLS: Id = Id::new_static("home.all-tools");
 const DRAWER_SCREEN: Id = Id::new_static("home.drawer");
 const TIPS_SCREEN: Id = Id::new_static("home.tips");
 /// An item's options were chosen.
-const CHOSEN: Id = Id::new_static("home.item-chosen");
+const CHOSEN: Event<choice::Picked> = Event::new("home.item-chosen");
 
 /// The home screen plugin.
 #[derive(Debug, Default)]
@@ -459,7 +460,7 @@ impl Dashboard {
         let title = item_title(&env, &shown.item.what);
         cx.command(choice::open(
             CHOICE,
-            CHOSEN,
+            &CHOSEN,
             &title,
             &format!("{index}"),
             "home.grid.",
@@ -770,12 +771,9 @@ impl Screen for Dashboard {
     }
 
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
-        if *event == CHOSEN {
-            let option = params.get(choice::OPTION).unwrap_or_default();
-            let Some(index) = params
-                .get(params::PATH)
-                .and_then(|p| p.parse::<usize>().ok())
-            else {
+        if let Some(picked) = CHOSEN.read(event, params) {
+            let option = picked.option.as_str();
+            let Ok(index) = picked.path.parse::<usize>() else {
                 return;
             };
             if index >= self.items.len() {

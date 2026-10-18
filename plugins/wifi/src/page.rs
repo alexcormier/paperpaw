@@ -6,7 +6,7 @@ use alloc::borrow::Cow;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::builtin::{actions, events, params, slots};
+use quireink_sdk::builtin::{actions, events, params};
 use quireink_sdk::ui::{self, ListChange, ListView, UiStyle};
 use quireink_sdk::wifi::{self, WifiCommand, WifiNetwork, WifiState};
 use quireink_sdk::{
@@ -158,14 +158,12 @@ impl WifiPage {
                     let title = env
                         .i18n
                         .format("wifi.password", &[("ssid", Arg::Str(&network.ssid))]);
-                    cx.command(Command::OpenSlot(
-                        slots::KEYBOARD,
-                        Params::new()
-                            .with(params::TITLE, title)
-                            .with(params::MODE, "password")
-                            .with(params::REPLY, PASSWORD_ENTERED.as_str().to_string())
-                            .with(params::ID, network.ssid.clone()),
-                    ));
+                    cx.command(
+                        quireink_sdk::ask::text(title, &PASSWORD_ENTERED)
+                            .password()
+                            .with(params::ID, network.ssid.clone())
+                            .command(),
+                    );
                 } else {
                     policy.pending = Some((network.ssid.clone(), String::new()));
                     for command in policy.choose(&wifi.state, &network.ssid, "") {

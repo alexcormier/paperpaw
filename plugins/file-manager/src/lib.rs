@@ -21,7 +21,10 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
+use quireink_sdk::ask;
 use quireink_sdk::builtin::{actions, events, groups, menus, params, slots};
+use quireink_sdk::event::Event;
+use quireink_sdk::replies::Typed;
 use quireink_sdk::ui::choice::{self, Choice};
 use quireink_sdk::ui::{self, ListChange, ListView, UiStyle};
 use quireink_sdk::{
@@ -41,9 +44,9 @@ pub const HIDDEN: Setting<bool> = Setting::new("file-manager.hidden");
 const SCREEN: Id = Id::new_static("file-manager.browser");
 const CHOICE: Id = Id::new_static("file-manager.choice");
 /// Replies of the choice overlay and the keyboard.
-const CHOSEN: Id = Id::new_static("file-manager.chosen");
-const RENAMED: Id = Id::new_static("file-manager.renamed");
-const FOLDER_NAMED: Id = Id::new_static("file-manager.folder-named");
+const CHOSEN: Event<choice::Picked> = Event::new("file-manager.chosen");
+const RENAMED: Event<Typed> = Event::new("file-manager.renamed");
+const FOLDER_NAMED: Event<Typed> = Event::new("file-manager.folder-named");
 /// Translation keys of the choices: this, then the option.
 const OPTION_LABELS: &str = "file-manager.option.";
 
@@ -256,7 +259,7 @@ impl Browser {
         options.extend(["rename", "move", "copy", "delete"]);
         cx.command(choice::open(
             CHOICE,
-            CHOSEN,
+            &CHOSEN,
             &entry.name,
             &path,
             OPTION_LABELS,
@@ -267,15 +270,9 @@ impl Browser {
     fn press(&mut self, button: Button, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
         match button {
-            Button::NewFolder => cx.command(Command::OpenSlot(
-                slots::KEYBOARD,
-                Params::new()
-                    .with(
-                        params::TITLE,
-                        env.i18n.tr("file-manager.new-folder").to_string(),
-                    )
-                    .with(params::REPLY, FOLDER_NAMED.as_str()),
-            )),
+            Button::NewFolder => cx.command(
+                ask::text(env.i18n.tr("file-manager.new-folder"), &FOLDER_NAMED).command(),
+            ),
             Button::Cancel => {
                 self.picked = None;
                 self.message = None;
@@ -327,17 +324,12 @@ impl Browser {
                 slots::READER,
                 Params::new().with(params::PATH, path.to_string()),
             )),
-            "rename" => cx.command(Command::OpenSlot(
-                slots::KEYBOARD,
-                Params::new()
-                    .with(
-                        params::TITLE,
-                        env.i18n.tr("file-manager.rename").to_string(),
-                    )
-                    .with(params::TEXT, name)
+            "rename" => cx.command(
+                ask::text(env.i18n.tr("file-manager.rename"), &RENAMED)
+                    .initial(name)
                     .with(params::PATH, path.to_string())
-                    .with(params::REPLY, RENAMED.as_str()),
-            )),
+                    .command(),
+            ),
             "move" | "copy" => {
                 let copy = option == "copy";
                 self.picked = Some(Picked {
@@ -358,7 +350,7 @@ impl Browser {
                     .format("file-manager.delete-question", &[("name", Arg::Str(&name))]);
                 cx.command(choice::open(
                     CHOICE,
-                    CHOSEN,
+                    &CHOSEN,
                     &title,
                     path,
                     OPTION_LABELS,
@@ -586,12 +578,15 @@ impl Screen for Browser {
 
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        let text = params.get(params::TEXT).unwrap_or_default();
-        let path = params.get(params::PATH).unwrap_or_default().to_string();
-        if *event == CHOSEN {
-            let option = params.get(choice::OPTION).unwrap_or_default().to_string();
-            self.chosen(&option, &path, cx);
-        } else if *event == RENAMED {
+        if let Some(picked) = CHOSEN.read(event, params) {
+            self.chosen(&picked.option, &picked.path, cx);
+        } else if let Some(typed) = RENAMED.read(event, params) {
+            let path = typed
+                .context
+                .get(params::PATH)
+                .unwrap_or_default()
+                .to_string();
+            let text = typed.text.as_str();
             let Some(name) = valid_name(text) else {
                 self.message = Some(env.i18n.tr("file-manager.error.invalid").to_string());
                 return self.redraw(cx);
@@ -614,7 +609,8 @@ impl Screen for Browser {
                 self.list.focus = at;
             }
             self.redraw(cx);
-        } else if *event == FOLDER_NAMED {
+        } else if let Some(typed) = FOLDER_NAMED.read(event, params) {
+            let text = typed.text.as_str();
             let Some(name) = valid_name(text) else {
                 if !text.trim().is_empty() {
                     self.message = Some(env.i18n.tr("file-manager.error.invalid").to_string());

@@ -16,7 +16,10 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::builtin::{actions, params, slots};
+use quireink_sdk::ask;
+use quireink_sdk::builtin::{actions, params};
+use quireink_sdk::event::{Event, EventData};
+use quireink_sdk::replies::{Chosen, Typed};
 use quireink_sdk::ui::{self, ListChange, ListView, UiStyle};
 use quireink_sdk::{
     Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, RefreshMode, Screen,
@@ -28,7 +31,7 @@ use quireink_sdk::library::listing::{Entry, Listing};
 /// The setting the chosen folder is written to.
 pub(crate) const ID: &str = "id";
 /// The keyboard's reply with a new folder's name.
-const NAMED: Id = Id::new_static("files.folder-named");
+const NAMED: Event<Typed> = Event::new("files.folder-named");
 
 /// What a row does.
 enum Row<'a> {
@@ -181,17 +184,15 @@ impl FolderChooser {
                     cx.command(Command::SetSetting(id, value));
                 }
                 if let Some((reply, params)) = &self.reply {
-                    let params = params.clone().with(params::PATH, self.dir.clone());
-                    cx.command(Command::Emit(reply.clone(), params));
+                    let chosen = Chosen {
+                        path: self.dir.clone(),
+                        context: params.clone(),
+                    };
+                    cx.command(Command::Emit(reply.clone(), chosen.to_params()));
                 }
             }
             Some(Row::New) => {
-                cx.command(Command::OpenSlot(
-                    slots::KEYBOARD,
-                    Params::new()
-                        .with(params::TITLE, env.i18n.tr("files.choose.new").to_string())
-                        .with(params::REPLY, NAMED.as_str()),
-                ));
+                cx.command(ask::text(env.i18n.tr("files.choose.new"), &NAMED).command());
             }
             Some(Row::Up) => {
                 self.up(cx);
@@ -327,11 +328,11 @@ impl Screen for FolderChooser {
     }
 
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
-        if *event != NAMED {
+        let Some(typed) = NAMED.read(event, params) else {
             return;
-        }
+        };
         let env = *cx.env();
-        let name = params.get(params::TEXT).unwrap_or_default();
+        let name = typed.text.as_str();
         let name: String = name
             .chars()
             .filter(|c| !matches!(c, '/' | '\\' | ':') && !c.is_control())

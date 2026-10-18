@@ -34,6 +34,8 @@ use alloc::vec::Vec;
 use core::cell::RefCell;
 
 use quireink_sdk::builtin::{events, groups, menus, params};
+use quireink_sdk::event::Event;
+use quireink_sdk::replies::HttpReply;
 use quireink_sdk::ui::choice::Choice;
 use quireink_sdk::{
     ActionSpec, Command, Env, HttpRequest, Id, Manifest, MenuEntry, Params, Plugin, RegisterError,
@@ -69,7 +71,7 @@ fn request(
     catalog: &Catalog,
     url: &str,
     save_to: String,
-    reply: Id,
+    reply: &Event<HttpReply>,
     params: Params,
 ) -> HttpRequest {
     let mut request = HttpRequest {
@@ -92,7 +94,7 @@ fn list_request(
     catalog: &Catalog,
     url: &str,
     save_to: String,
-    reply: Id,
+    reply: &Event<HttpReply>,
     params: Params,
 ) -> HttpRequest {
     let mut request = request(catalog, url, save_to, reply, params);
@@ -196,22 +198,14 @@ impl Plugin for Opds {
         r.on(events::STARTED, |env, _, out| {
             catalogs::move_passwords(env, out);
         })?;
-        for (event, book) in [(sync::FEED_LOADED, false), (sync::BOOK_LOADED, true)] {
-            let shared = state.clone();
-            r.subscribe(
-                event,
-                Box::new(
-                    move |env: &Env<'_>, params: &Params, out: &mut Vec<Command>| {
-                        let mut sync = shared.borrow_mut();
-                        if book {
-                            sync.book_loaded(env, params, out);
-                        } else {
-                            sync.feed_loaded(env, params, out);
-                        }
-                    },
-                ),
-            )?;
-        }
+        let shared = state.clone();
+        r.on(sync::FEED_LOADED, move |env, reply, out| {
+            shared.borrow_mut().feed_loaded(env, reply, out);
+        })?;
+        let shared = state.clone();
+        r.on(sync::BOOK_LOADED, move |env, reply, out| {
+            shared.borrow_mut().book_loaded(env, reply, out);
+        })?;
         r.add_setting(
             SettingSpec::switch(&COVERS, "opds.setting.covers", true)
                 .group(groups::LIBRARY)

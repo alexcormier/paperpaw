@@ -5,7 +5,9 @@
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::builtin::{actions, menus, params, slots};
+use quireink_sdk::builtin::{actions, menus, params};
+use quireink_sdk::event::Event;
+use quireink_sdk::replies::Typed;
 use quireink_sdk::ui::{self, ListView, UiStyle};
 use quireink_sdk::{Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Screen};
 
@@ -14,16 +16,11 @@ use crate::{FOCUS, GROUP_SCREEN, ID, moved, navigate, page, visible};
 /// The results; parameter [`params::TEXT`], what to find.
 pub(crate) const SCREEN: Id = Id::new_static("settings.search");
 /// Emitted by the keyboard with what to find.
-pub(crate) const ENTERED: Id = Id::new_static("settings.search-entered");
+pub(crate) const ENTERED: Event<Typed> = Event::new("settings.search-entered");
 
 /// Asks for what to find.
 pub(crate) fn ask(env: &Env<'_>) -> Command {
-    Command::OpenSlot(
-        slots::KEYBOARD,
-        Params::new()
-            .with(params::TITLE, env.i18n.tr("settings.search").to_string())
-            .with(params::REPLY, ENTERED.as_str()),
-    )
+    quireink_sdk::ask::text(env.i18n.tr("settings.search"), &ENTERED).command()
 }
 
 /// Where a result leads.

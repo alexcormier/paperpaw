@@ -6,6 +6,13 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: typed answers. The answer to an HTTP request is an `HttpReply`
+  (status, body, headers and the request's own parameters as
+  `context`), what happens to a server a `ServerNotice`, to a socket a
+  `SocketNotice`, what the reader typed a `Typed`, the folder chosen a
+  `Chosen`, the option picked a `choice::Picked`. `ask::text` and
+  `ask::folder` ask for them; `HttpRequest::new` and `choice::open`
+  take the `Event` that brings the answer.
 - SDK: typed events. An `Event<P>` names an event and what it carries (a
   struct made with `event_data!`); `r.on(EVENT, |env, data, out| …)`
   hears it, `EVENT.emit(data)` emits it, `EVENT.read(event, params)`

@@ -15,11 +15,13 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::cell::RefCell;
 
-use quireink_sdk::builtin::{actions, params, slots};
+use quireink_sdk::builtin::actions;
+use quireink_sdk::event::Event;
+use quireink_sdk::replies::{HttpReply, Typed};
 use quireink_sdk::ui::{self, ListChange, ListView, UiStyle};
 use quireink_sdk::{
     Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, HttpRequest, Id, Params, Rect,
-    RefreshMode, Screen, SettingValue, http_params,
+    RefreshMode, Screen,
 };
 
 use quireink_sdk::secrets::SecretChange;
@@ -35,13 +37,20 @@ pub(crate) const SCREEN: Id = Id::new_static("stats.sync");
 /// The password.
 pub(crate) const SECRET: &str = "stats.webdav";
 
-const DOWNLOADED: Id = Id::new_static("stats.downloaded");
-const UPLOADED: Id = Id::new_static("stats.uploaded");
+const DOWNLOADED: Event<HttpReply> = Event::new("stats.downloaded");
+const UPLOADED: Event<HttpReply> = Event::new("stats.uploaded");
 /// Emitted with a message (`text`) when a sync or import ends.
-pub(crate) const DONE: Id = Id::new_static("stats.sync-done");
-const URL_ENTERED: Id = Id::new_static("stats.url-entered");
-const USER_ENTERED: Id = Id::new_static("stats.user-entered");
-const PASSWORD_ENTERED: Id = Id::new_static("stats.password-entered");
+pub(crate) const DONE: Event<Finished> = Event::new("stats.sync-done");
+
+quireink_sdk::event_data! {
+    /// How a sync ended ([`DONE`]), in words.
+    pub(crate) struct Finished {
+        pub(crate) text: String,
+    }
+}
+const URL_ENTERED: Event<Typed> = Event::new("stats.url-entered");
+const USER_ENTERED: Event<Typed> = Event::new("stats.user-entered");
+const PASSWORD_ENTERED: Event<Typed> = Event::new("stats.password-entered");
 
 /// The file's name in the folder, as KOReader names it.
 const FILE: &str = "statistics.sqlite3";
@@ -115,7 +124,7 @@ pub(crate) fn move_password(env: &Env<'_>, out: &mut Vec<Command>) {
     let _ = env.storage.remove(&path);
 }
 
-fn request(env: &Env<'_>, method: &str, reply: Id) -> HttpRequest {
+fn request(env: &Env<'_>, method: &str, reply: &Event<HttpReply>) -> HttpRequest {
     let url = format!("{}/{FILE}", folder(env.settings.read(&URL)));
     let user = env.settings.read(&USER);
     let mut request = HttpRequest::new(method, &url, reply);
@@ -129,10 +138,7 @@ fn request(env: &Env<'_>, method: &str, reply: Id) -> HttpRequest {
 }
 
 fn done(out: &mut Vec<Command>, message: String) {
-    out.push(Command::Emit(
-        DONE,
-        Params::new().with(params::TEXT, message),
-    ));
+    out.push(DONE.emit(Finished { text: message }));
 }
 
 impl Sync {
@@ -146,22 +152,21 @@ impl Sync {
         }
         self.running = true;
         self.attempt += 1;
-        let mut get = request(env, "GET", DOWNLOADED);
+        let mut get = request(env, "GET", &DOWNLOADED);
         get.save_to = Some(file("incoming.sqlite3"));
         out.push(Command::Http(get));
     }
 
     /// The other side's file is here (or not): merge, then upload.
-    pub(crate) fn downloaded(&mut self, env: &Env<'_>, params: &Params, out: &mut Vec<Command>) {
+    pub(crate) fn downloaded(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
         if !self.running {
             return;
         }
-        let status = params.get(http_params::STATUS).unwrap_or("0");
-        let income = match status {
-            "200" => Some(file("incoming.sqlite3")),
+        let income = match reply.status {
+            200 => Some(file("incoming.sqlite3")),
             // None yet: this is the first.
-            "404" => None,
-            _ => return self.fail(env, status, out),
+            404 => None,
+            status => return self.fail(env, &status.to_string(), out),
         };
         let cached = file(&format!("{FILE}.sync"));
         let cached = env.storage.exists(&cached).then_some(cached);
@@ -185,9 +190,9 @@ impl Sync {
                 .format("stats.sync.failed", &[("reason", Arg::Str(&reason))]);
             return done(out, text);
         }
-        let mut put = request(env, "PUT", UPLOADED);
+        let mut put = request(env, "PUT", &UPLOADED);
         put.body_from = Some(upload);
-        if let Some(etag) = params.get(http_params::ETAG) {
+        if let Some(etag) = &reply.etag {
             // A weak validator does not match strongly (as KOReader does).
             let etag = etag.trim_start_matches("W/").trim_start_matches("w/");
             put.headers
@@ -201,12 +206,12 @@ impl Sync {
     }
 
     /// The merged file is up (or someone was faster).
-    pub(crate) fn uploaded(&mut self, env: &Env<'_>, params: &Params, out: &mut Vec<Command>) {
+    pub(crate) fn uploaded(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
         if !self.running {
             return;
         }
-        let status = params.get(http_params::STATUS).unwrap_or("0");
-        match status.parse::<u16>().unwrap_or(0) {
+        let status = reply.status.to_string();
+        match reply.status {
             200..=299 => {
                 // What was uploaded is what the next sync compares with.
                 let upload = file(FILE);
@@ -233,7 +238,7 @@ impl Sync {
                 self.running = false;
                 self.start(env, out);
             }
-            _ => self.fail(env, status, out),
+            _ => self.fail(env, &status, out),
         }
     }
 
@@ -291,12 +296,9 @@ pub(crate) fn register(
     sync: SharedSync,
 ) -> Result<(), quireink_sdk::RegisterError> {
     use quireink_sdk::{ScreenSpec, SettingSpec};
-    r.subscribe(
-        quireink_sdk::builtin::events::STARTED,
-        alloc::boxed::Box::new(|env: &Env<'_>, _: &Params, out: &mut Vec<Command>| {
-            move_password(env, out)
-        }),
-    )?;
+    r.on(quireink_sdk::builtin::events::STARTED, |env, (), out| {
+        move_password(env, out);
+    })?;
     r.add_setting(
         SettingSpec::text(&URL, "stats.setting.sync", "")
             .editor(SCREEN)
@@ -310,15 +312,13 @@ pub(crate) fn register(
             .advanced(),
     )?;
     let s = sync.clone();
-    r.subscribe(
-        DOWNLOADED,
-        alloc::boxed::Box::new(move |env, params, out| s.borrow_mut().downloaded(env, params, out)),
-    )?;
+    r.on(DOWNLOADED, move |env, reply, out| {
+        s.borrow_mut().downloaded(env, reply, out);
+    })?;
     let s = sync.clone();
-    r.subscribe(
-        UPLOADED,
-        alloc::boxed::Box::new(move |env, params, out| s.borrow_mut().uploaded(env, params, out)),
-    )?;
+    r.on(UPLOADED, move |env, reply, out| {
+        s.borrow_mut().uploaded(env, reply, out);
+    })?;
     r.add_screen(ScreenSpec {
         id: SCREEN,
         title: Cow::Borrowed("stats.sync.title"),
@@ -386,34 +386,32 @@ impl SyncScreen {
 
     fn activate(&mut self, row: Row, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        let keyboard = |title: &str, text: String, reply: Id, mode: Option<&str>| {
-            let mut request = Params::new()
-                .with(params::TITLE, env.i18n.tr(title).to_string())
-                .with(params::TEXT, text)
-                .with(params::REPLY, reply.as_str());
-            if let Some(mode) = mode {
-                request = request.with(params::MODE, mode.to_string());
+        let keyboard = |title: &str, text: String, reply: &Event<Typed>, password: bool| {
+            let question = quireink_sdk::ask::text(env.i18n.tr(title), reply).initial(text);
+            if password {
+                question.password().command()
+            } else {
+                question.command()
             }
-            Command::OpenSlot(slots::KEYBOARD, request)
         };
         match row {
             Row::Folder => cx.command(keyboard(
                 "stats.sync.folder",
                 env.settings.read(&URL).to_string(),
-                URL_ENTERED,
-                None,
+                &URL_ENTERED,
+                false,
             )),
             Row::User => cx.command(keyboard(
                 "stats.sync.user",
                 env.settings.read(&USER).to_string(),
-                USER_ENTERED,
-                None,
+                &USER_ENTERED,
+                false,
             )),
             Row::Password => cx.command(keyboard(
                 "stats.sync.password",
                 String::new(),
-                PASSWORD_ENTERED,
-                Some("password"),
+                &PASSWORD_ENTERED,
+                true,
             )),
             Row::SyncNow => {
                 if self.sync.borrow().running {
@@ -517,20 +515,20 @@ impl Screen for SyncScreen {
     }
 
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
-        let text = params.get(params::TEXT).unwrap_or_default();
-        if *event == URL_ENTERED {
-            let value = SettingValue::Text(Cow::Owned(folder(text)));
-            cx.command(Command::SetSetting(URL.into(), value));
+        if let Some(typed) = URL_ENTERED.read(event, params) {
+            cx.command(Command::set(&URL, Cow::Owned(folder(&typed.text))));
             self.list.focus = 1;
-        } else if *event == USER_ENTERED {
-            let value = SettingValue::Text(Cow::Owned(text.trim().to_string()));
-            cx.command(Command::SetSetting(USER.into(), value));
+        } else if let Some(typed) = USER_ENTERED.read(event, params) {
+            cx.command(Command::set(
+                &USER,
+                Cow::Owned(typed.text.trim().to_string()),
+            ));
             self.list.focus = 2;
-        } else if *event == PASSWORD_ENTERED {
-            cx.command(save_password(text));
+        } else if let Some(typed) = PASSWORD_ENTERED.read(event, params) {
+            cx.command(save_password(&typed.text));
             self.list.focus = 3;
-        } else if *event == DONE {
-            return self.show(text.to_string(), cx);
+        } else if let Some(finished) = DONE.read(event, params) {
+            return self.show(finished.text, cx);
         } else {
             return;
         }

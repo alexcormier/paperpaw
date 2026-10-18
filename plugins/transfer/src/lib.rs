@@ -24,12 +24,14 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use quireink_qr::QrCode;
-use quireink_sdk::builtin::{actions, menus, params, slots};
+use quireink_sdk::builtin::{actions, menus, slots};
+use quireink_sdk::event::Event;
+use quireink_sdk::replies::ServerNotice;
 use quireink_sdk::ui::{self, UiStyle};
 use quireink_sdk::{
     ActionSpec, Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
     MenuEntry, Params, Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION,
-    Screen, ScreenSpec, Version, server_params as p,
+    Screen, ScreenSpec, Version,
 };
 
 pub const PLUGIN: Id = Id::new_static("transfer");
@@ -37,7 +39,7 @@ pub const PLUGIN: Id = Id::new_static("transfer");
 pub const OPEN: Id = Id::new_static("transfer.open");
 const SCREEN: Id = Id::new_static("transfer.screen");
 const SERVER: Id = Id::new_static("transfer.server");
-const SERVER_EVENT: Id = Id::new_static("transfer.server-event");
+const SERVER_EVENT: Event<ServerNotice> = Event::new("transfer.server-event");
 /// Typing on a phone for the keyboard.
 const PHONE_SCREEN: Id = Id::new_static("transfer.phone");
 
@@ -148,18 +150,16 @@ impl TransferScreen {
         Rect::new(0, top, display.width, display.height.saturating_sub(top))
     }
 
-    fn on_server_event(&mut self, params: &Params, cx: &mut Cx<'_, '_>) {
+    fn on_server_event(&mut self, notice: ServerNotice, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        match params.get(p::KIND).unwrap_or_default() {
-            p::STARTED => {
-                let address = params.get(p::ADDRESS).unwrap_or_default();
+        match notice {
+            ServerNotice::Started { address, .. } => {
                 let url = format!("http://{address}/?k={}", self.key);
                 let qr = QrCode::new(url.as_bytes());
                 self.state = State::Serving { url, qr };
                 self.redraw(cx);
             }
-            p::FAILED => {
-                let reason = params.get(p::REASON).unwrap_or_default();
+            ServerNotice::Failed { reason, .. } => {
                 // Before it served, or after (e.g. the network went).
                 let key = if matches!(self.state, State::Serving { .. }) {
                     "transfer.stopped"
@@ -169,19 +169,22 @@ impl TransferScreen {
                 self.state = State::Failed(if reason == "no network" {
                     env.i18n.tr("transfer.no-network").to_string()
                 } else {
-                    env.i18n.format(key, &[("reason", Arg::Str(reason))])
+                    env.i18n.format(key, &[("reason", Arg::Str(&reason))])
                 });
                 self.redraw(cx);
             }
-            p::REQUEST => {
+            ServerNotice::Request {
+                request,
+                method,
+                target,
+                body_file,
+                ..
+            } => {
                 let request = web::Request {
-                    number: params
-                        .get(p::REQUEST)
-                        .and_then(|n| n.parse().ok())
-                        .unwrap_or(0),
-                    method: params.get(p::METHOD).unwrap_or_default(),
-                    target: params.get(p::TARGET).unwrap_or_default(),
-                    body_file: params.get(p::BODY_FILE),
+                    number: request,
+                    method: &method,
+                    target: &target,
+                    body_file: body_file.as_deref(),
                 };
                 let (response, done) = web::answer(env.storage, &self.key, &self.page, request);
                 cx.command(Command::Respond(response));
@@ -406,7 +409,7 @@ impl Screen for TransferScreen {
             cx.command(Command::Serve {
                 server: SERVER,
                 port: PORT,
-                events: SERVER_EVENT,
+                events: SERVER_EVENT.into(),
             });
         }
     }
@@ -432,8 +435,10 @@ impl Screen for TransferScreen {
     }
 
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
-        if *event == SERVER_EVENT && params.get(params::ID) == Some(SERVER.as_str()) {
-            self.on_server_event(params, cx);
+        if let Some(notice) = SERVER_EVENT.read(event, params)
+            && *notice.server() == SERVER
+        {
+            self.on_server_event(notice, cx);
         }
     }
 }

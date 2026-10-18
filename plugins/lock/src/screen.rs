@@ -11,7 +11,10 @@
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::builtin::{actions, params, slots};
+use quireink_sdk::ask;
+use quireink_sdk::builtin::actions;
+use quireink_sdk::event::Event;
+use quireink_sdk::replies::Typed;
 use quireink_sdk::semantics::Role;
 use quireink_sdk::ui::{self, UiStyle};
 use quireink_sdk::{
@@ -26,7 +29,7 @@ use crate::{KIND, KIND_PREFIX, KINDS, Locked, SCREEN, code};
 pub(crate) const MODE: &str = "mode";
 pub(crate) const UNLOCK: &str = "unlock";
 /// Reply: the password typed.
-const TYPED: Id = Id::new_static("lock.typed");
+const TYPED: Event<Typed> = Event::new("lock.typed");
 
 /// The shortest code.
 const MIN_LENGTH: usize = 4;
@@ -243,13 +246,11 @@ impl LockScreen {
     fn ask_password(&mut self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
         self.asked = true;
-        cx.command(Command::OpenSlot(
-            slots::KEYBOARD,
-            Params::new()
-                .with(params::TITLE, env.i18n.tr(self.title_key()).to_string())
-                .with(params::MODE, "password")
-                .with(params::REPLY, TYPED.as_str()),
-        ));
+        cx.command(
+            ask::text(env.i18n.tr(self.title_key()), &TYPED)
+                .password()
+                .command(),
+        );
     }
 
     /// The kinds offered; patterns only where fingers draw them.
@@ -827,8 +828,8 @@ impl Screen for LockScreen {
     }
 
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
-        if *event == TYPED {
-            let text = params.get(params::TEXT).unwrap_or_default().to_string();
+        if let Some(typed) = TYPED.read(event, params) {
+            let text = typed.text;
             self.submit(text, cx);
         }
     }

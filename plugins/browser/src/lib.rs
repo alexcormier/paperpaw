@@ -29,14 +29,17 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::cell::RefCell;
 
+use quireink_sdk::ask;
 use quireink_sdk::builtin::{actions, menus, params, slots};
+use quireink_sdk::event::Event;
 use quireink_sdk::files;
+use quireink_sdk::replies::{HttpReply, Typed};
 use quireink_sdk::ui::choice::{self, Choice};
 use quireink_sdk::ui::{self, ListChange, ListView, UiStyle};
 use quireink_sdk::{
     ActionSpec, Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, HttpRequest, Id,
     Manifest, MenuEntry, Params, Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar,
-    SDK_VERSION, Screen, ScreenSpec, Version, http_params,
+    SDK_VERSION, Screen, ScreenSpec, Version,
 };
 
 use crate::store::Entry;
@@ -48,9 +51,9 @@ pub const OPEN: Id = Id::new_static("browser.open");
 const SCREEN: Id = Id::new_static("browser.screen");
 const CHOICE: Id = Id::new_static("browser.choice");
 /// Replies: the address typed, a page loaded, a choice made.
-const ADDRESS: Id = Id::new_static("browser.address");
-const LOADED: Id = Id::new_static("browser.loaded");
-const CHOSEN: Id = Id::new_static("browser.chosen");
+const ADDRESS: Event<Typed> = Event::new("browser.address");
+const LOADED: Event<HttpReply> = Event::new("browser.loaded");
+const CHOSEN: Event<choice::Picked> = Event::new("browser.chosen");
 /// Translation keys of the choices: this, then the option.
 const OPTION_LABELS: &str = "browser.option.";
 
@@ -203,12 +206,7 @@ impl BrowserScreen {
     /// Asks for an address or words to search for.
     fn ask(&self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        cx.command(Command::OpenSlot(
-            slots::KEYBOARD,
-            Params::new()
-                .with(params::TITLE, env.i18n.tr("browser.address").to_string())
-                .with(params::REPLY, ADDRESS.as_str()),
-        ));
+        cx.command(ask::text(env.i18n.tr("browser.address"), &ADDRESS).command());
     }
 
     /// Loads `url`; what it is decides where it goes once it is there.
@@ -255,21 +253,20 @@ impl BrowserScreen {
     }
 
     /// An answer arrived for `url`.
-    fn loaded(&mut self, params: &Params, cx: &mut Cx<'_, '_>) {
+    fn loaded(&mut self, reply: &HttpReply, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        let requested = params.get(params::URL).unwrap_or_default().to_string();
+        let requested = reply
+            .context
+            .get(params::URL)
+            .unwrap_or_default()
+            .to_string();
         if self.loading.as_deref() != Some(requested.as_str()) {
             return;
         }
         self.loading = None;
-        let url = params
-            .get(http_params::FINAL_URL)
-            .map_or(requested.clone(), ToString::to_string);
+        let url = reply.final_url.clone().unwrap_or(requested);
         let host = quireink_sdk::web::host(&url).to_string();
-        let status: u16 = params
-            .get(http_params::STATUS)
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(0);
+        let status = reply.status;
         let tmp = download_path();
         if status == 0 {
             let message = env
@@ -279,7 +276,7 @@ impl BrowserScreen {
         }
         let mut head = [0u8; 512];
         let n = env.storage.read_at(&tmp, 0, &mut head).unwrap_or(0);
-        let kind = web::kind(params.get(http_params::CONTENT_TYPE), &url, &head[..n]);
+        let kind = web::kind(reply.content_type.as_deref(), &url, &head[..n]);
         // Error pages are shown like pages; other errors are told.
         if status >= 400 && kind != Kind::Page {
             let _ = env.storage.remove(&tmp);
@@ -356,7 +353,7 @@ impl BrowserScreen {
             self.message = None;
             cx.command(choice::open(
                 CHOICE,
-                CHOSEN,
+                &CHOSEN,
                 &text,
                 &format!("read:{target}"),
                 OPTION_LABELS,
@@ -396,7 +393,7 @@ impl BrowserScreen {
             .unwrap_or_default();
         cx.command(choice::open(
             CHOICE,
-            CHOSEN,
+            &CHOSEN,
             &title,
             &context,
             OPTION_LABELS,
@@ -622,19 +619,16 @@ impl Screen for BrowserScreen {
     }
 
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
-        if *event == ADDRESS {
-            let text = params.get(params::TEXT).unwrap_or_default();
-            if !text.trim().is_empty() {
+        if let Some(typed) = ADDRESS.read(event, params) {
+            if !typed.text.trim().is_empty() {
                 self.session.borrow_mut().pages.clear();
-                let url = web::address(text);
+                let url = web::address(&typed.text);
                 self.load(&url, cx);
             }
-        } else if *event == LOADED {
-            self.loaded(params, cx);
-        } else if *event == CHOSEN {
-            let context = params.get(params::PATH).unwrap_or_default().to_string();
-            let option = params.get(choice::OPTION).unwrap_or_default().to_string();
-            self.chosen(&context, &option, cx);
+        } else if let Some(reply) = LOADED.read(event, params) {
+            self.loaded(&reply, cx);
+        } else if let Some(picked) = CHOSEN.read(event, params) {
+            self.chosen(&picked.path, &picked.option, cx);
         }
     }
 }

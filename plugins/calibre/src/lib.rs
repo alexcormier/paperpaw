@@ -25,13 +25,15 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use quireink_json as json;
-use quireink_sdk::builtin::{actions, groups, menus, params, slots};
+use quireink_sdk::builtin::{actions, groups, menus};
+use quireink_sdk::event::Event;
+use quireink_sdk::replies::{SocketNotice, Typed};
 use quireink_sdk::secrets::SecretChange;
 use quireink_sdk::ui::{self, UiStyle};
 use quireink_sdk::{
     ActionSpec, Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Hint, Id,
     Manifest, MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION,
-    Screen, ScreenSpec, SettingSpec, SocketRead, Version, socket_params as p,
+    Screen, ScreenSpec, SettingSpec, SocketRead, Version,
 };
 
 use protocol::{Message, op};
@@ -43,8 +45,8 @@ pub const OPEN: Id = Id::new_static("calibre.open");
 const SCREEN: Id = Id::new_static("calibre.screen");
 const SOCKET: Id = Id::new_static("calibre.socket");
 const FIND: Id = Id::new_static("calibre.find");
-const EVENTS: Id = Id::new_static("calibre.events");
-const PASSWORD_TYPED: Id = Id::new_static("calibre.password-typed");
+const EVENTS: Event<SocketNotice> = Event::new("calibre.events");
+const PASSWORD_TYPED: Event<Typed> = Event::new("calibre.password-typed");
 /// Calibre's address, if it is not found by itself: `host` or `host:port`.
 pub const ADDRESS: Setting<Text> = Setting::new("calibre.address");
 /// The password set in Calibre, kept as a secret.
@@ -198,7 +200,7 @@ impl CalibreScreen {
                 ports: protocol::BROADCAST_PORTS.to_vec(),
                 data: b"hello".to_vec(),
                 wait_ms: FIND_MS,
-                events: EVENTS,
+                events: EVENTS.into(),
             });
         } else {
             let (host, port) = match address.rsplit_once(':') {
@@ -218,7 +220,7 @@ impl CalibreScreen {
             socket: SOCKET,
             host: host.to_string(),
             port,
-            events: EVENTS,
+            events: EVENTS.into(),
         });
     }
 
@@ -245,20 +247,17 @@ impl CalibreScreen {
         });
     }
 
-    fn on_socket(&mut self, params: &Params, cx: &mut Cx<'_, '_>) {
+    fn on_socket(&mut self, notice: SocketNotice, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        let reason = params.get(p::REASON).unwrap_or_default();
-        match params.get(p::KIND).unwrap_or_default() {
-            p::ANSWER if self.state == State::Finding => {
-                let text = params.get(p::TEXT).unwrap_or_default();
-                if let Some(port) = protocol::port_of_answer(text) {
-                    self.name = protocol::name_of_answer(text).map(String::from);
-                    let host = params.get(p::FROM).unwrap_or_default().to_string();
-                    self.connect(&host, port, cx);
+        match notice {
+            SocketNotice::Answer { text, from, .. } if self.state == State::Finding => {
+                if let Some(port) = protocol::port_of_answer(&text) {
+                    self.name = protocol::name_of_answer(&text).map(String::from);
+                    self.connect(&from, port, cx);
                     self.redraw(cx);
                 }
             }
-            p::DONE if self.state == State::Finding => {
+            SocketNotice::Done { reason, .. } if self.state == State::Finding => {
                 let text = if reason == "no network" {
                     env.i18n.tr("calibre.no-network")
                 } else {
@@ -266,18 +265,17 @@ impl CalibreScreen {
                 };
                 self.end(text.to_string(), cx);
             }
-            p::CONNECTED => {
+            SocketNotice::Connected { .. } => {
                 self.state = State::Connected;
                 self.read_on(cx);
                 self.redraw(cx);
             }
-            p::RECEIVED => {
-                let text = params.get(p::TEXT).unwrap_or_default();
+            SocketNotice::Received { text, .. } => {
                 if text.is_empty() {
                     let ended = env.i18n.tr("calibre.closed").to_string();
                     return self.end(ended, cx);
                 }
-                match self.framing.feed(text) {
+                match self.framing.feed(&text) {
                     Ok(Some(message)) => self.handle(message, cx),
                     Ok(None) => self.read_on(cx),
                     Err(_) => {
@@ -287,7 +285,7 @@ impl CalibreScreen {
                     }
                 }
             }
-            p::SAVED => {
+            SocketNotice::Saved { path, .. } => {
                 match self.coming.take() {
                     Some(coming) => {
                         let _ = env.storage.remove(&coming.path);
@@ -304,16 +302,16 @@ impl CalibreScreen {
                     }
                     // A book dropped (its path led out of the library).
                     None => {
-                        if let Some(path) = params.get(p::PATH) {
-                            let _ = env.storage.remove(path);
-                        }
+                        let _ = env.storage.remove(&path);
                     }
                 }
                 self.state = State::Connected;
                 self.read_on(cx);
                 self.redraw(cx);
             }
-            p::CLOSED | p::FAILED if params.get(params::ID) == Some(SOCKET.as_str()) => {
+            SocketNotice::Closed { socket, reason } | SocketNotice::Failed { socket, reason }
+                if socket == SOCKET =>
+            {
                 if let Some(coming) = self.coming.take() {
                     let _ = env.storage.remove(&coming.part);
                 }
@@ -322,7 +320,7 @@ impl CalibreScreen {
                         env.i18n.tr("calibre.closed").to_string()
                     } else {
                         env.i18n
-                            .format("calibre.failed", &[("reason", Arg::Str(reason))])
+                            .format("calibre.failed", &[("reason", Arg::Str(&reason))])
                     };
                     self.end(text, cx);
                 }
@@ -502,11 +500,11 @@ impl CalibreScreen {
 
     fn type_password(&self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        let request = Params::new()
-            .with(params::TITLE, env.i18n.tr("calibre.password").to_string())
-            .with(params::MODE, "password")
-            .with(params::REPLY, PASSWORD_TYPED.as_str());
-        cx.command(Command::OpenSlot(slots::KEYBOARD, request));
+        cx.command(
+            quireink_sdk::ask::text(env.i18n.tr("calibre.password"), &PASSWORD_TYPED)
+                .password()
+                .command(),
+        );
     }
 
     /// The area below the header.
@@ -630,15 +628,15 @@ impl Screen for CalibreScreen {
     }
 
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
-        if *event == EVENTS {
-            self.on_socket(params, cx);
-        } else if *event == PASSWORD_TYPED
-            && let Some(password) = params.get(params::TEXT).filter(|t| !t.is_empty())
+        if let Some(notice) = EVENTS.read(event, params) {
+            self.on_socket(notice, cx);
+        } else if let Some(typed) = PASSWORD_TYPED.read(event, params)
+            && !typed.text.is_empty()
         {
             cx.command(Command::SetSecret(SecretChange::keep(
                 PASSWORD,
                 "calibre.password",
-                password,
+                &typed.text,
             )));
             self.start(cx);
         }

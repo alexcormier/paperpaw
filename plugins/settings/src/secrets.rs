@@ -6,7 +6,9 @@
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::builtin::{actions, params, slots};
+use quireink_sdk::builtin::actions;
+use quireink_sdk::event::Event;
+use quireink_sdk::replies::Typed;
 use quireink_sdk::secrets::SecretChange;
 use quireink_sdk::ui::{self, ListView, UiStyle};
 use quireink_sdk::{Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Screen};
@@ -21,17 +23,17 @@ pub(crate) const SECRET_SCREEN: Id = Id::new_static("settings.secret");
 pub(crate) const OPEN: Id = Id::new_static("settings.secrets.open");
 /// Emitted by the keyboard with a secret typed anew (parameters `id` and
 /// `text`).
-pub(crate) const ENTERED: Id = Id::new_static("settings.secret-entered");
+pub(crate) const ENTERED: Event<Typed> = Event::new("settings.secret-entered");
 
 /// How a kept secret shows.
 const HIDDEN: &str = "••••••";
 
 /// Keeps a secret typed anew.
-pub(crate) fn entered(env: &Env<'_>, p: &Params, out: &mut Vec<Command>) {
-    let (Some(id), Some(text)) = (p.get(ID), p.get(params::TEXT)) else {
+pub(crate) fn entered(env: &Env<'_>, typed: &Typed, out: &mut Vec<Command>) {
+    let Some(id) = typed.context.get(ID) else {
         return;
     };
-    let text = text.trim();
+    let text = typed.text.trim();
     if !text.is_empty() && env.secrets.get(id).is_some() {
         out.push(Command::SetSecret(SecretChange::keep(id, "", text)));
     }
@@ -168,14 +170,12 @@ impl SecretPage {
 
     fn choose(&self, index: usize, cx: &mut Cx<'_, '_>) {
         match self.choices.get(index) {
-            Some(Choice::Change) => cx.command(Command::OpenSlot(
-                slots::KEYBOARD,
-                Params::new()
-                    .with(params::TITLE, self.title.clone())
-                    .with(params::MODE, "password")
-                    .with(params::REPLY, ENTERED.as_str())
-                    .with(ID, self.id.clone()),
-            )),
+            Some(Choice::Change) => cx.command(
+                quireink_sdk::ask::text(self.title.clone(), &ENTERED)
+                    .password()
+                    .with(ID, self.id.clone())
+                    .command(),
+            ),
             Some(Choice::Remove) => {
                 cx.command(Command::SetSecret(SecretChange::remove(&self.id)));
                 cx.command(Command::Back);

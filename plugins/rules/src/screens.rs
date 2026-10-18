@@ -12,8 +12,11 @@
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
+use quireink_sdk::ask;
 use quireink_sdk::builtin::settings::SCOPE_ONLY;
-use quireink_sdk::builtin::{actions, params, slots};
+use quireink_sdk::builtin::{actions, params};
+use quireink_sdk::event::Event;
+use quireink_sdk::replies::Typed;
 use quireink_sdk::ui::choice;
 use quireink_sdk::ui::{self, ListChange, ListView, UiStyle};
 use quireink_sdk::{
@@ -26,11 +29,11 @@ use crate::{CHOICE, PICK_SCREEN, effect_text, trigger_text, when_text};
 
 /// Replies: a trigger, a time, an effect, an action or switch picked, a
 /// rule's option.
-const TRIGGER_CHOSEN: Id = Id::new_static("rules.trigger-chosen");
-const TIME_ENTERED: Id = Id::new_static("rules.time-entered");
-const DAYS_CHOSEN: Id = Id::new_static("rules.days-chosen");
-const EVERY_ENTERED: Id = Id::new_static("rules.every-entered");
-const BATTERY_ENTERED: Id = Id::new_static("rules.battery-entered");
+const TRIGGER_CHOSEN: Event<choice::Picked> = Event::new("rules.trigger-chosen");
+const TIME_ENTERED: Event<Typed> = Event::new("rules.time-entered");
+const DAYS_CHOSEN: Event<choice::Picked> = Event::new("rules.days-chosen");
+const EVERY_ENTERED: Event<Typed> = Event::new("rules.every-entered");
+const BATTERY_ENTERED: Event<Typed> = Event::new("rules.battery-entered");
 /// The switch a trigger watches was picked.
 const TRIGGER_PICKED: Id = Id::new_static("rules.trigger-picked");
 /// The triggers offered, in this order.
@@ -54,18 +57,18 @@ const TRIGGERS: [&str; 13] = [
 const DAYS: [&str; 10] = [
     "every", "weekdays", "weekends", "1", "2", "3", "4", "5", "6", "0",
 ];
-const EFFECT_CHOSEN: Id = Id::new_static("rules.effect-chosen");
+const EFFECT_CHOSEN: Event<choice::Picked> = Event::new("rules.effect-chosen");
 /// What a rule may do, in this order.
 const EFFECTS: [&str; 5] = ["action", "switch-on", "switch-off", "number", "message"];
 const PICKED: Id = Id::new_static("rules.picked");
-const NUMBER_ENTERED: Id = Id::new_static("rules.number-entered");
-const MESSAGE_ENTERED: Id = Id::new_static("rules.message-entered");
-const OPTION_CHOSEN: Id = Id::new_static("rules.option-chosen");
+const NUMBER_ENTERED: Event<Typed> = Event::new("rules.number-entered");
+const MESSAGE_ENTERED: Event<Typed> = Event::new("rules.message-entered");
+const OPTION_CHOSEN: Event<choice::Picked> = Event::new("rules.option-chosen");
 /// A rule's condition was chosen; for times between, the first and the
 /// second time entered; for a switch, which one.
-const CONDITION_CHOSEN: Id = Id::new_static("rules.condition-chosen");
-const FROM_ENTERED: Id = Id::new_static("rules.from-entered");
-const TO_ENTERED: Id = Id::new_static("rules.to-entered");
+const CONDITION_CHOSEN: Event<choice::Picked> = Event::new("rules.condition-chosen");
+const FROM_ENTERED: Event<Typed> = Event::new("rules.from-entered");
+const TO_ENTERED: Event<Typed> = Event::new("rules.to-entered");
 const CONDITION_PICKED: Id = Id::new_static("rules.condition-picked");
 /// The conditions offered, in this order.
 const CONDITIONS: [&str; 8] = [
@@ -177,7 +180,7 @@ impl RulesScreen {
                 self.draft = Draft::default();
                 cx.command(choice::open(
                     CHOICE,
-                    TRIGGER_CHOSEN,
+                    &TRIGGER_CHOSEN,
                     env.i18n.tr("rules.when"),
                     "",
                     "rules.trigger.",
@@ -196,7 +199,7 @@ impl RulesScreen {
         let title = trigger_text(&env, &self.rules[i].trigger);
         cx.command(choice::open(
             CHOICE,
-            OPTION_CHOSEN,
+            &OPTION_CHOSEN,
             &title,
             &i.to_string(),
             "rules.option.",
@@ -245,7 +248,7 @@ impl RulesScreen {
         let env = *cx.env();
         cx.command(choice::open(
             CHOICE,
-            EFFECT_CHOSEN,
+            &EFFECT_CHOSEN,
             env.i18n.tr("rules.what"),
             "",
             "rules.effect.",
@@ -358,15 +361,36 @@ impl Screen for RulesScreen {
 
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        let option = params.get(choice::OPTION).unwrap_or_default();
-        let ask = |cx: &mut Cx<'_, '_>, title: &str, text: &str, reply: Id| {
-            cx.command(Command::OpenSlot(
-                slots::KEYBOARD,
-                Params::new()
-                    .with(params::TITLE, env.i18n.tr(title).to_string())
-                    .with(params::TEXT, text.to_string())
-                    .with(params::REPLY, reply.as_str()),
-            ));
+        // What was chosen or typed, if this is an answer.
+        let picked = [
+            &TRIGGER_CHOSEN,
+            &DAYS_CHOSEN,
+            &EFFECT_CHOSEN,
+            &OPTION_CHOSEN,
+            &CONDITION_CHOSEN,
+        ]
+        .into_iter()
+        .find_map(|e| e.read(event, params));
+        let option = picked.as_ref().map_or("", |p| p.option.as_str());
+        let at = picked.as_ref().and_then(|p| p.path.parse::<usize>().ok());
+        let typed = [
+            &TIME_ENTERED,
+            &EVERY_ENTERED,
+            &BATTERY_ENTERED,
+            &NUMBER_ENTERED,
+            &MESSAGE_ENTERED,
+            &FROM_ENTERED,
+            &TO_ENTERED,
+        ]
+        .into_iter()
+        .find_map(|e| e.read(event, params));
+        let text = typed.as_ref().map_or("", |t| t.text.as_str());
+        let ask = |cx: &mut Cx<'_, '_>, title: &str, initial: &str, reply: &Event<Typed>| {
+            cx.command(
+                ask::text(env.i18n.tr(title), reply)
+                    .initial(initial)
+                    .command(),
+            );
         };
         if *event == TRIGGER_CHOSEN {
             self.draft.trigger = match option {
@@ -378,9 +402,9 @@ impl Screen for RulesScreen {
                 "sleep" => Some(Trigger::Sleep),
                 "charging" => Some(Trigger::Charging),
                 "unplugged" => Some(Trigger::Unplugged),
-                "time" => return ask(cx, "rules.time-title", "22:00", TIME_ENTERED),
-                "every" => return ask(cx, "rules.every-title", "30", EVERY_ENTERED),
-                "battery" => return ask(cx, "rules.battery-title", "20", BATTERY_ENTERED),
+                "time" => return ask(cx, "rules.time-title", "22:00", &TIME_ENTERED),
+                "every" => return ask(cx, "rules.every-title", "30", &EVERY_ENTERED),
+                "battery" => return ask(cx, "rules.battery-title", "20", &BATTERY_ENTERED),
                 "switch-on" | "switch-off" => {
                     self.draft.watch_on = option == "switch-on";
                     cx.command(Command::OpenScreen(
@@ -395,12 +419,12 @@ impl Screen for RulesScreen {
             };
             self.ask_effect(cx);
         } else if *event == TIME_ENTERED {
-            match rule::parse_time(params.get(params::TEXT).unwrap_or_default()) {
+            match rule::parse_time(text) {
                 Some(minute) => {
                     self.draft.minute = Some(minute);
                     cx.command(choice::open(
                         CHOICE,
-                        DAYS_CHOSEN,
+                        &DAYS_CHOSEN,
                         env.i18n.tr("rules.days-title"),
                         "",
                         "rules.days.",
@@ -424,9 +448,7 @@ impl Screen for RulesScreen {
                 self.ask_effect(cx);
             }
         } else if *event == EVERY_ENTERED || *event == BATTERY_ENTERED {
-            let number = params
-                .get(params::TEXT)
-                .and_then(|t| t.trim().trim_end_matches('%').trim().parse::<u16>().ok());
+            let number = text.trim().trim_end_matches('%').trim().parse::<u16>().ok();
             let trigger = match number {
                 Some(m) if *event == EVERY_ENTERED && (1..=24 * 60).contains(&m) => {
                     Trigger::Every(m)
@@ -458,7 +480,7 @@ impl Screen for RulesScreen {
                 "switch-on" => ("switch-on", SWITCH),
                 "switch-off" => ("switch-off", SWITCH),
                 "number" => ("number", NUMBER),
-                "message" => return ask(cx, "rules.message-title", "", MESSAGE_ENTERED),
+                "message" => return ask(cx, "rules.message-title", "", &MESSAGE_ENTERED),
                 _ => return,
             };
             self.draft.effect = Some(effect);
@@ -490,13 +512,7 @@ impl Screen for RulesScreen {
                     );
                     let now = env.settings.int(id.as_str()).to_string();
                     self.draft.number = Some(id);
-                    cx.command(Command::OpenSlot(
-                        slots::KEYBOARD,
-                        Params::new()
-                            .with(params::TITLE, title)
-                            .with(params::TEXT, now)
-                            .with(params::REPLY, NUMBER_ENTERED.as_str()),
-                    ));
+                    cx.command(ask::text(title, &NUMBER_ENTERED).initial(now).command());
                     return;
                 }
             };
@@ -505,9 +521,7 @@ impl Screen for RulesScreen {
             let Some(id) = self.draft.number.clone() else {
                 return;
             };
-            let value = params
-                .get(params::TEXT)
-                .and_then(|t| t.trim().trim_end_matches('%').trim().parse::<i64>().ok());
+            let value = text.trim().trim_end_matches('%').trim().parse::<i64>().ok();
             match (value, range(&env, &id)) {
                 (Some(v), Some((min, max))) if (min..=max).contains(&v) => {
                     self.finish(Effect::Number(id, v), cx);
@@ -518,14 +532,11 @@ impl Screen for RulesScreen {
                 }
             }
         } else if *event == MESSAGE_ENTERED {
-            let text = params.get(params::TEXT).unwrap_or_default().trim();
+            let text = text.trim();
             if !text.is_empty() {
                 self.finish(Effect::Message(text.to_string()), cx);
             }
         } else if *event == OPTION_CHOSEN && option == "condition" {
-            let at = params
-                .get(params::PATH)
-                .and_then(|p| p.parse::<usize>().ok());
             if let Some(i) = at.filter(|&i| i < self.rules.len()) {
                 self.draft = Draft {
                     editing: Some(i),
@@ -533,7 +544,7 @@ impl Screen for RulesScreen {
                 };
                 cx.command(choice::open(
                     CHOICE,
-                    CONDITION_CHOSEN,
+                    &CONDITION_CHOSEN,
                     env.i18n.tr("rules.only-if"),
                     "",
                     "rules.condition.",
@@ -547,7 +558,7 @@ impl Screen for RulesScreen {
                 "not-reading" => Condition::NotReading,
                 "battery" => Condition::OnBattery,
                 "charging" => Condition::Charging,
-                "between" => return ask(cx, "rules.from-title", "22:00", FROM_ENTERED),
+                "between" => return ask(cx, "rules.from-title", "22:00", &FROM_ENTERED),
                 "switch-on" | "switch-off" => {
                     self.draft.watch_on = option == "switch-on";
                     cx.command(Command::OpenScreen(
@@ -562,14 +573,13 @@ impl Screen for RulesScreen {
             };
             self.set_condition(condition, cx);
         } else if *event == FROM_ENTERED || *event == TO_ENTERED {
-            let Some(minute) = rule::parse_time(params.get(params::TEXT).unwrap_or_default())
-            else {
+            let Some(minute) = rule::parse_time(text) else {
                 cx.command(Command::Notify(env.i18n.tr("rules.bad-time").to_string()));
                 return;
             };
             if *event == FROM_ENTERED {
                 self.draft.from = Some(minute);
-                return ask(cx, "rules.to-title", "06:00", TO_ENTERED);
+                return ask(cx, "rules.to-title", "06:00", &TO_ENTERED);
             }
             if let Some(from) = self.draft.from.take() {
                 self.set_condition(Condition::Between { from, to: minute }, cx);
@@ -585,9 +595,6 @@ impl Screen for RulesScreen {
             };
             self.set_condition(condition, cx);
         } else if *event == OPTION_CHOSEN && option == "remove" {
-            let at = params
-                .get(params::PATH)
-                .and_then(|p| p.parse::<usize>().ok());
             if let Some(i) = at.filter(|&i| i < self.rules.len()) {
                 self.rules.remove(i);
                 self.save(cx);

@@ -4,6 +4,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use quireink_digest::fnv1a64;
+use quireink_sdk::ask;
 use quireink_sdk::builtin::{actions, events, fonts, params, slots};
 use quireink_sdk::document::{Document, DocumentError, Link, Locator};
 use quireink_sdk::event::EventData;
@@ -1096,13 +1097,12 @@ impl ReaderScreen {
             book.marks = annotations::marks(env.storage, &book.path);
             cx.command(annotations::changed(&book.path));
             let note = annotations::note_of(env.storage, &book.path, at);
-            cx.command(Command::OpenSlot(
-                slots::KEYBOARD,
-                crate::toc::locator_params(&book.path, at)
-                    .with(params::TITLE, env.i18n.tr("reader.note.prompt").to_string())
-                    .with(params::TEXT, note)
-                    .with(params::REPLY, crate::NOTE_ENTERED.as_str()),
-            ));
+            cx.command(
+                ask::text(env.i18n.tr("reader.note.prompt"), &crate::NOTE_ENTERED)
+                    .context(&crate::toc::locator_params(&book.path, at))
+                    .initial(note)
+                    .command(),
+            );
         } else if *item != crate::actions::CANCEL {
             cx.command(Command::Emit(
                 crate::TEXT_CHOSEN,
@@ -1350,15 +1350,9 @@ impl ReaderScreen {
         let Ok(book) = &self.book else {
             return;
         };
-        let request = Params::new().with(params::PATH, book.path.clone());
-        let request = if *action == crate::actions::SEARCH {
-            request
-                .with(
-                    params::TITLE,
-                    env.i18n.tr("reader.search.prompt").to_string(),
-                )
-                .with(params::TEXT, self.last_search.clone())
-                .with(params::REPLY, crate::SEARCH_ENTERED.as_str())
+        let question = if *action == crate::actions::SEARCH {
+            ask::text(env.i18n.tr("reader.search.prompt"), &crate::SEARCH_ENTERED)
+                .initial(self.last_search.clone())
         } else {
             let (pages, complete) = book
                 .index
@@ -1372,12 +1366,9 @@ impl ReaderScreen {
             let title = env
                 .i18n
                 .format(key, &[("pages", Arg::Int(i64::from(pages)))]);
-            request
-                .with(params::TITLE, title)
-                .with(params::MODE, "number")
-                .with(params::REPLY, crate::PAGE_ENTERED.as_str())
+            ask::text(title, &crate::PAGE_ENTERED).number()
         };
-        cx.command(Command::OpenSlot(slots::KEYBOARD, request));
+        cx.command(question.with(params::PATH, book.path.clone()).command());
     }
 
     /// Opens a link: a note over the page if it looks like one and the
@@ -3075,12 +3066,12 @@ impl Screen for ReaderScreen {
             self.skim(&to, cx);
             return;
         }
-        if *event == crate::NOTE_ENTERED
+        if let Some(typed) = crate::NOTE_ENTERED.read(event, params)
             && this_book
-            && let Some(at) = crate::toc::locator_of(params)
+            && let Some(at) = crate::toc::locator_of(&typed.context)
         {
             let env = *cx.env();
-            let note = params.get(params::TEXT).unwrap_or_default();
+            let note = typed.text.as_str();
             let now = quireink_sdk::time::unix_seconds(&env).unwrap_or(0);
             annotations::set_note(env.storage, &book.path, at, note, now);
             book.marks = annotations::marks(env.storage, &book.path);
@@ -3088,8 +3079,10 @@ impl Screen for ReaderScreen {
             cx.request_redraw();
             return;
         }
-        if *event == crate::SEARCH_ENTERED && this_book {
-            let text = params.get(params::TEXT).unwrap_or_default().trim();
+        if let Some(typed) = crate::SEARCH_ENTERED.read(event, params)
+            && this_book
+        {
+            let text = typed.text.trim();
             if !text.is_empty() {
                 self.last_search = text.to_string();
                 cx.command(Command::OpenScreen(
@@ -3101,11 +3094,11 @@ impl Screen for ReaderScreen {
             }
             return;
         }
-        if *event == crate::PAGE_ENTERED && this_book {
+        if let Some(typed) = crate::PAGE_ENTERED.read(event, params)
+            && this_book
+        {
             let env = *cx.env();
-            let number = params
-                .get(params::TEXT)
-                .and_then(|t| t.trim().parse::<u32>().ok());
+            let number = typed.text.trim().parse::<u32>().ok();
             if let (Some(number), Some(index)) = (number, &book.index)
                 && index.pages() > 0
             {

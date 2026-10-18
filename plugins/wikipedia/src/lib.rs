@@ -19,18 +19,20 @@ use alloc::vec::Vec;
 
 use quireink_json as json;
 use quireink_sdk::builtin::{actions, params, slots};
+use quireink_sdk::event::Event;
+use quireink_sdk::replies::HttpReply;
 use quireink_sdk::ui::{self, UiStyle};
 use quireink_sdk::web::encode;
 use quireink_sdk::{
     Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, HttpRequest, Id, Manifest,
     Params, Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen,
-    ScreenSpec, Version, http_params,
+    ScreenSpec, Version,
 };
 
 pub const PLUGIN: Id = Id::new_static("wikipedia");
 const SCREEN: Id = Id::new_static("wikipedia.lookup");
 /// The answer to the summary request.
-const ANSWERED: Id = Id::new_static("wikipedia.answered");
+const ANSWERED: Event<HttpReply> = Event::new("wikipedia.answered");
 
 /// The wiki's language for `language` (`en-GB` → `en`).
 fn wiki(language: &str) -> String {
@@ -179,14 +181,10 @@ impl Summary {
     }
 
     /// The summary arrived: its title and text, or why not.
-    fn answered(&mut self, env: &Env<'_>, params: &Params) {
-        let status: u16 = params
-            .get(http_params::STATUS)
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(0);
-        let text = match status {
+    fn answered(&mut self, env: &Env<'_>, reply: &HttpReply) {
+        let text = match reply.status {
             200..=299 => {
-                let members = json::object(params.get(http_params::BODY).unwrap_or_default());
+                let members = json::object(&reply.body);
                 match json::text(&members, "extract").filter(|t| !t.trim().is_empty()) {
                     Some(extract) => {
                         if let Some(title) = json::text(&members, "title") {
@@ -290,9 +288,9 @@ impl Screen for Summary {
     }
 
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
-        if *event == ANSWERED {
+        if let Some(reply) = ANSWERED.read(event, params) {
             let env = *cx.env();
-            self.answered(&env, params);
+            self.answered(&env, &reply);
             cx.request_redraw();
             cx.request_refresh(RefreshMode::Partial);
         }

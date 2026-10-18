@@ -277,6 +277,12 @@ impl<P: EventData> From<Event<P>> for Id {
     }
 }
 
+impl<P: EventData> From<&Event<P>> for Id {
+    fn from(event: &Event<P>) -> Id {
+        event.id.clone()
+    }
+}
+
 impl<P: EventData> PartialEq<Id> for Event<P> {
     fn eq(&self, other: &Id) -> bool {
         self.id == *other

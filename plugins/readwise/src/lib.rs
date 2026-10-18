@@ -25,11 +25,13 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use quireink_json as json;
-use quireink_sdk::builtin::{params, slots};
+use quireink_sdk::builtin::params;
+use quireink_sdk::event::Event;
+use quireink_sdk::replies::{HttpReply, Typed};
 use quireink_sdk::secrets::SecretChange;
 use quireink_sdk::{
     Arg, Command, Env, HttpRequest, Id, Manifest, Params, Plugin, RegisterError, Registrar,
-    SDK_VERSION, Version, http_params,
+    SDK_VERSION, Version,
 };
 
 pub const PLUGIN: Id = Id::new_static("readwise");
@@ -39,9 +41,9 @@ pub const SECRET: &str = "readwise.token";
 /// Markdown file.
 const EXPORTED: Id = Id::new_static("reader.notes-exported");
 /// The token, entered on the keyboard; parameter `path` goes along.
-const TOKEN_ENTERED: Id = Id::new_static("readwise.token-entered");
+const TOKEN_ENTERED: Event<Typed> = Event::new("readwise.token-entered");
 /// Readwise's answer; parameter `count`, the highlights sent.
-const SENT: Id = Id::new_static("readwise.sent");
+const SENT: Event<HttpReply> = Event::new("readwise.sent");
 const COUNT: &str = "count";
 /// Longest notes file read.
 const MAX_FILE: usize = 256 * 1024;
@@ -172,14 +174,12 @@ fn send(env: &Env<'_>, path: &str, out: &mut Vec<Command>) {
     }
     let Some(token) = env.secrets.get(SECRET) else {
         notify(env, "readwise.needs-token", out);
-        out.push(Command::OpenSlot(
-            slots::KEYBOARD,
-            Params::new()
-                .with(params::TITLE, env.i18n.tr("readwise.token").to_string())
-                .with(params::MODE, "password")
-                .with(params::REPLY, TOKEN_ENTERED.as_str())
-                .with(params::PATH, path.to_string()),
-        ));
+        out.push(
+            quireink_sdk::ask::text(env.i18n.tr("readwise.token"), &TOKEN_ENTERED)
+                .password()
+                .with(params::PATH, path.to_string())
+                .command(),
+        );
         return;
     };
     let Ok(data) = quireink_sdk::read_file(env.storage, path, MAX_FILE) else {
@@ -193,14 +193,14 @@ fn send(env: &Env<'_>, path: &str, out: &mut Vec<Command>) {
 }
 
 /// Readwise answered.
-fn sent(env: &Env<'_>, p: &Params, out: &mut Vec<Command>) {
-    let status: u16 = p
-        .get(http_params::STATUS)
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(0);
-    match status {
+fn sent(env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+    match reply.status {
         200..=299 => {
-            let count: i64 = p.get(COUNT).and_then(|c| c.parse().ok()).unwrap_or(0);
+            let count: i64 = reply
+                .context
+                .get(COUNT)
+                .and_then(|c| c.parse().ok())
+                .unwrap_or(0);
             let text = env
                 .i18n
                 .plural("readwise.sent", count, &[("count", Arg::Int(count))]);
@@ -240,32 +240,29 @@ impl Plugin for Readwise {
                 }
             }),
         )?;
-        r.subscribe(
-            TOKEN_ENTERED,
-            Box::new(|env: &Env<'_>, p: &Params, out: &mut Vec<Command>| {
-                let token = p.get(params::TEXT).unwrap_or_default().trim();
-                if token.is_empty() {
-                    return;
-                }
-                out.push(Command::SetSecret(SecretChange::keep(
-                    SECRET,
-                    "readwise.token",
-                    token,
-                )));
-                // Not kept yet while this runs: sent with it directly.
-                let Some(path) = p.get(params::PATH) else {
-                    return;
-                };
-                let Ok(data) = quireink_sdk::read_file(env.storage, path, MAX_FILE) else {
-                    return;
-                };
-                let notes = parse(&String::from_utf8_lossy(&data));
-                if !notes.highlights.is_empty() && env.caps.network {
-                    out.push(Command::Http(request(&notes, token)));
-                }
-            }),
-        )?;
-        r.subscribe(SENT, Box::new(sent))?;
+        r.on(TOKEN_ENTERED, |env, typed, out| {
+            let token = typed.text.trim();
+            if token.is_empty() {
+                return;
+            }
+            out.push(Command::SetSecret(SecretChange::keep(
+                SECRET,
+                "readwise.token",
+                token,
+            )));
+            // Not kept yet while this runs: sent with it directly.
+            let Some(path) = typed.context.get(params::PATH) else {
+                return;
+            };
+            let Ok(data) = quireink_sdk::read_file(env.storage, path, MAX_FILE) else {
+                return;
+            };
+            let notes = parse(&String::from_utf8_lossy(&data));
+            if !notes.highlights.is_empty() && env.caps.network {
+                out.push(Command::Http(request(&notes, token)));
+            }
+        })?;
+        r.on(SENT, sent)?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())
