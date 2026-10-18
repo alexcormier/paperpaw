@@ -59,6 +59,11 @@ impl Meter {
         self.clock.map_or(0, |clock| clock())
     }
 
+    /// The clock's microseconds, where the shell gave one.
+    pub(crate) fn micros(&self) -> Option<u64> {
+        self.clock.map(|clock| clock())
+    }
+
     /// The row of `plugin`, added the first time.
     fn index(&self, plugin: &str) -> usize {
         let mut table = self.table.borrow_mut();

@@ -50,6 +50,7 @@ pub(crate) const ICONS: &[(&str, char)] = &[
     ("hash", '\u{eabc}'),
     ("highlight", '\u{ef3f}'),
     ("home", '\u{eac1}'),
+    ("hourglass", '\u{ef93}'),
     ("info-circle", '\u{eac5}'),
     ("keyboard", '\u{ebd6}'),
     ("language", '\u{ebbe}'),

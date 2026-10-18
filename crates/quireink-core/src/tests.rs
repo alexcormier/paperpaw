@@ -233,6 +233,81 @@ fn highest_priority_wins_and_user_config_overrides() {
     assert_eq!(kernel.active_screen().map(Id::as_str), Some("low.screen"));
 }
 
+/// Opens the placeholder screen on *confirm*: a screen change to time.
+struct Opener;
+
+struct OpenerScreen;
+
+impl Screen for OpenerScreen {
+    fn draw(&mut self, canvas: &mut Canvas<'_>, _: &Env<'_>) {
+        canvas.fill_rect(0, 0, 10, 10, Color::BLACK);
+    }
+
+    fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
+        if *action == actions::CONFIRM {
+            cx.command(Command::OpenScreen(
+                screens::PLACEHOLDER,
+                quireink_sdk::Params::new(),
+            ));
+            return Handled::Yes;
+        }
+        Handled::No
+    }
+}
+
+impl Plugin for Opener {
+    fn manifest(&self) -> Manifest {
+        Manifest {
+            id: Id::new_static("opener"),
+            name: Cow::Borrowed("Opener"),
+            description: Cow::Borrowed(""),
+            version: Version::new(1, 0, 0),
+            sdk: SDK_VERSION,
+        }
+    }
+
+    fn register(&self, r: &mut dyn Registrar) -> Result<(), RegisterError> {
+        r.add_screen(ScreenSpec {
+            id: Id::new_static("opener.screen"),
+            title: Cow::Borrowed("test.screen"),
+            factory: Box::new(|_, _| Box::new(OpenerScreen)),
+        })?;
+        r.bind_slot(slots::HOME, Id::new_static("opener.screen"), Priority::DEFAULT)
+    }
+}
+
+/// A clock that stands still: all work takes no time.
+fn still_clock() -> u64 {
+    1_000_000
+}
+
+#[test]
+fn slow_work_shows_the_busy_mark_first() {
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(Opener)
+        .busy_mark(true)
+        .clock(still_clock)
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    render(&mut kernel);
+    // A screen not opened before: the mark first, the work held back.
+    let effects = press(&mut kernel, 100, "confirm");
+    assert!(effects.proceed() && effects.refresh().is_some());
+    assert_eq!(kernel.active_screen().map(Id::as_str), Some("opener.screen"));
+    kernel.proceed(Instant(200));
+    render(&mut kernel);
+    assert_eq!(kernel.active_screen(), Some(&screens::PLACEHOLDER));
+    // Back, also not timed yet; then opening again, known to be quick:
+    // no mark.
+    assert!(press(&mut kernel, 300, "back").proceed());
+    kernel.proceed(Instant(400));
+    render(&mut kernel);
+    let effects = press(&mut kernel, 500, "confirm");
+    assert!(!effects.proceed());
+    assert_eq!(kernel.active_screen(), Some(&screens::PLACEHOLDER));
+}
+
 #[test]
 fn presses_while_a_screen_comes_up_are_dropped() {
     let log = log();

@@ -271,6 +271,9 @@ fn main() -> ! {
     let builder = Kernel::builder(DEVICE)
         .storage_boxed(Box::new(traced::Traced(storage)))
         .clock(micros)
+        // The panel refreshes on its own: a mark shows at once while slow
+        // work goes on.
+        .busy_mark(true)
         .glyph_cache(0)
         .frame_rows(FRAME_ROWS)
         .row_align(8)
@@ -538,6 +541,46 @@ where
 {
     if effects.restart() {
         esp_hal::system::software_reset();
+    }
+    // Slow work ahead: its mark is shown first, the panel refreshing it
+    // while the kernel works on, then the frame the work drew.
+    if effects.proceed()
+        && let Some((area, _)) = effects.refresh()
+    {
+        power::mark(power::at::SHOWING);
+        let mut sent = sent::Sent::default();
+        kernel.render(&mut |top, rows| {
+            if let Err(e) = display.write_rows(top, rows, Planes::NEW) {
+                warn!("display: {e:?}");
+            }
+            sent.keep(top, &rows);
+        });
+        let started = now();
+        let refreshing = display.start_refresh(Refresh::Fast, false).is_ok();
+        let next = kernel.proceed(now());
+        let worked = now();
+        if refreshing && let Err(e) = display.wait() {
+            warn!("display: {e:?}");
+        }
+        // As after every refresh, both memories hold what is shown.
+        let kept = sent.replay(&mut |top, rows| {
+            if let Err(e) = display.write_rows(top, rows, Planes::BOTH) {
+                warn!("display: {e:?}");
+            }
+        });
+        if !kept {
+            warn!("busy mark not kept");
+        }
+        info!(
+            "mark {},{} {}x{}: work took {} ms, waited {} ms more",
+            area.x,
+            area.y,
+            area.width,
+            area.height,
+            worked.since(started),
+            now().since(worked)
+        );
+        return apply(kernel, display, next, wake_at);
     }
     if let Some((area, mode)) = effects.refresh() {
         power::mark(power::at::SHOWING);

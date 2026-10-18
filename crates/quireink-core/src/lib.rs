@@ -98,6 +98,15 @@ const MAX_COMMAND_ROUNDS: usize = 16;
 const PICTURES_PERCENT: u32 = 15;
 /// How long the row of hints shows on a screen that has it on a press.
 const HINTS_MS: u64 = 4000;
+/// Work that took this long last time (opening a screen, before it is
+/// drawn) shows the busy mark first (see `KernelBuilder::busy_mark`):
+/// about as long as the panel takes to show the mark, which it does
+/// meanwhile, so the mark costs next to nothing.
+const SLOW_MS: u32 = 400;
+/// The sign of the busy mark where no hint shows it.
+const BUSY_ICON: &str = "hourglass";
+/// What was timed is remembered for this many things at most.
+const TIMED: usize = 24;
 /// Default memory for glyphs rasterized at runtime.
 const DEFAULT_GLYPH_CACHE: usize = 32 * 1024;
 
@@ -124,9 +133,18 @@ pub struct Effects {
     wake_at: Option<Instant>,
     restart: bool,
     sleep: bool,
+    proceed: bool,
 }
 
 impl Effects {
+    /// Whether the kernel showed the busy mark and holds the work back:
+    /// the shell starts showing the mark (`refresh`), then calls
+    /// [`Kernel::proceed`] while the panel refreshes (see
+    /// [`KernelBuilder::busy_mark`]).
+    pub fn proceed(&self) -> bool {
+        self.proceed
+    }
+
     pub fn refresh(&self) -> Option<(Rect, RefreshMode)> {
         self.refresh
     }
@@ -147,7 +165,11 @@ impl Effects {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.refresh.is_none() && self.wake_at.is_none() && !self.restart && !self.sleep
+        self.refresh.is_none()
+            && self.wake_at.is_none()
+            && !self.restart
+            && !self.sleep
+            && !self.proceed
     }
 
     pub fn iter(&self) -> impl Iterator<Item = Effect> {
@@ -234,6 +256,7 @@ pub struct KernelBuilder {
     row_align: u16,
     storage: Option<Box<dyn Storage>>,
     clock: Option<fn() -> u64>,
+    busy_mark: bool,
     setting_defaults: Vec<(String, String)>,
     plugin_dirs: Vec<String>,
     font_dirs: Vec<String>,
@@ -291,6 +314,17 @@ impl KernelBuilder {
 
     /// A monotonic clock in microseconds, for measuring the time each
     /// plugin's code takes ([`quireink_sdk::usage::PluginUsage`]).
+    /// Shows a mark at once when an input opens or closes a screen that
+    /// took long the last time (or was not opened yet), before the work:
+    /// the pressed button's hint inverted, or a sign in the corner. For
+    /// shells whose panel refreshes on its own while the processor works
+    /// (the X4's), which handle [`Effects::proceed`]; it needs the
+    /// [`clock`](KernelBuilder::clock) to know what is slow.
+    pub fn busy_mark(mut self, on: bool) -> Self {
+        self.busy_mark = on;
+        self
+    }
+
     pub fn clock(mut self, clock: fn() -> u64) -> Self {
         self.clock = Some(clock);
         self
@@ -488,6 +522,12 @@ impl KernelBuilder {
             screenshot: None,
             button_row: self.button_row,
             hint_height: 0,
+            busy_mark: self.busy_mark,
+            pressed: None,
+            mark: None,
+            withheld: Vec::new(),
+            timing: None,
+            durations: Vec::new(),
             hints: Vec::new(),
             hints_until: None,
             pictures_shown: false,
@@ -771,6 +811,19 @@ pub struct Kernel {
     button_row: &'static [&'static str],
     /// The height of the row of hints above them, 0 while it is off.
     hint_height: u16,
+    /// See [`KernelBuilder::busy_mark`].
+    busy_mark: bool,
+    /// The cell of the row of hints whose button was pressed in this call.
+    pressed: Option<usize>,
+    /// The mark shown while slow work waits, and the hint cell it is.
+    mark: Option<(Rect, Option<usize>)>,
+    /// The work held back while the mark is shown ([`Kernel::proceed`]).
+    withheld: Vec<Command>,
+    /// What the call opened, closed or ran, and when it began (the clock's
+    /// microseconds), until the call is done.
+    timing: Option<(String, u64)>,
+    /// How long that took the last time, in milliseconds.
+    durations: Vec<(String, u32)>,
     /// What the row shows, as it was last drawn.
     hints: Vec<Hint>,
     /// Until when the row shows over a screen that has it only on a press.
@@ -875,6 +928,7 @@ impl Kernel {
             row_align: 1,
             storage: None,
             clock: None,
+            busy_mark: false,
             setting_defaults: Vec::new(),
             plugin_dirs: Vec::new(),
             font_dirs: Vec::new(),
@@ -953,6 +1007,7 @@ impl Kernel {
         if self.stale(now, &event) {
             return self.finish();
         }
+        self.pressed = None;
         self.now = now;
         self.last_activity = now;
         self.shared.usage.inputs = self.shared.usage.inputs.saturating_add(1);
@@ -982,10 +1037,108 @@ impl Kernel {
             InputEvent::Pointer(pointer) => self.pointer(pointer),
             _ => {}
         }
+        if let Some(effects) = self.mark_if_slow() {
+            return effects;
+        }
         // The screens as the input left them, to say where the focus is.
         self.run_commands();
         self.speak_focus();
         self.finish()
+    }
+
+    /// Goes on with the work an input started, once the shell began showing
+    /// the busy mark ([`Effects::proceed`]).
+    pub fn proceed(&mut self, now: Instant) -> Effects {
+        let _running = self.shared.meter.enter(meter::CORE);
+        self.now = now;
+        if let Some((area, _)) = self.mark.take() {
+            self.invalidate(area);
+        }
+        let mut commands = mem::take(&mut self.withheld);
+        commands.append(&mut self.output.commands);
+        self.output.commands = commands;
+        self.run_commands();
+        self.speak_focus();
+        self.finish()
+    }
+
+    /// What the commands of an input start that may be slow: a screen
+    /// opened or closed, or an action run; the key its time is kept by.
+    fn work_key(&self, command: &Command) -> Option<String> {
+        match command {
+            Command::OpenSlot(slot, _) => Some(format!("slot:{slot}")),
+            Command::OpenScreen(screen, _) => Some(format!("screen:{screen}")),
+            Command::Back => {
+                let below = self.stack.len().checked_sub(2)?;
+                Some(format!("back:{}", self.stack[below].id))
+            }
+            Command::RunAction(action) => Some(format!("run:{action}")),
+            _ => None,
+        }
+    }
+
+    /// Times what the input started, and shows the busy mark first if it
+    /// was slow the last time (or is a screen not opened yet), holding the
+    /// work back until [`Kernel::proceed`].
+    fn mark_if_slow(&mut self) -> Option<Effects> {
+        let key = self
+            .output
+            .commands
+            .iter()
+            .find_map(|command| self.work_key(command))?;
+        let started = self.shared.meter.micros()?;
+        let slow = match self.durations.iter().find(|(k, _)| *k == key) {
+            Some((_, ms)) => *ms >= SLOW_MS,
+            // Not timed yet: another screen may take long; an action is
+            // taken to be quick until it was not.
+            None => !key.starts_with("run:"),
+        };
+        self.timing = Some((key, started));
+        if !self.busy_mark || !slow {
+            return None;
+        }
+        let mark = self.mark_area();
+        self.invalidate(mark.0);
+        self.mark = Some(mark);
+        self.withheld = mem::take(&mut self.output.commands);
+        self.output.request_refresh(RefreshMode::Fast);
+        let mut effects = self.finish();
+        effects.proceed = true;
+        Some(effects)
+    }
+
+    /// Where the busy mark goes: the pressed button's hint, or a corner.
+    fn mark_area(&self) -> (Rect, Option<usize>) {
+        if let (Some(row), Some(cell)) = (self.hint_row(), self.pressed) {
+            let count = self.button_row.len().max(1) as u32;
+            let width = u32::from(row.width);
+            let left = u32::from(row.x) + width * cell as u32 / count;
+            let right = u32::from(row.x) + width * (cell as u32 + 1) / count;
+            let area = Rect::new(left as u16, row.y, (right - left) as u16, row.height);
+            return (area, Some(cell));
+        }
+        let metrics = quireink_sdk::Metrics::new(self.shared.device.display.dpi);
+        let bounds = self.framebuffer.bounds();
+        let size = (metrics.mm(9) as u16).min(bounds.width / 4);
+        (Rect::new(bounds.width - size, 0, size, size), None)
+    }
+
+    /// Notes how long the work timed took, once the call is done (with the
+    /// mark shown, once it went on).
+    fn timed(&mut self) {
+        if self.mark.is_some() {
+            return;
+        }
+        let (Some((key, started)), Some(now)) = (self.timing.take(), self.shared.meter.micros())
+        else {
+            return;
+        };
+        let ms = (now.saturating_sub(started) / 1000).min(u64::from(u32::MAX)) as u32;
+        self.durations.retain(|(k, _)| *k != key);
+        if self.durations.len() >= TIMED {
+            self.durations.remove(0);
+        }
+        self.durations.push((key, ms));
     }
 
     /// The frame last rendered is on the panel now, at `now` (on the
@@ -1076,6 +1229,7 @@ impl Kernel {
                     &env,
                     row,
                     &self.hints,
+                    None,
                 );
             }
         }
@@ -2628,7 +2782,8 @@ impl Kernel {
     fn recognized(&mut self, recognized: Recognized) {
         match recognized {
             Recognized::Button { name, long } => {
-                if self.button_row.contains(&name) {
+                self.pressed = self.button_row.iter().position(|b| *b == name);
+                if self.pressed.is_some() {
                     self.show_hints();
                 }
                 let name = Cow::Borrowed(name);
@@ -2647,6 +2802,7 @@ impl Kernel {
                     let x = u32::try_from(gesture.start.x).unwrap_or(0);
                     let cell = (x * count / u32::from(row.width).max(1)) as usize;
                     if let Some(button) = self.button_row.get(cell) {
+                        self.pressed = Some(cell);
                         self.route_key(InputKey::Button(Cow::Borrowed(button)));
                     }
                     return;
@@ -2832,6 +2988,7 @@ impl Kernel {
         if self.unrendered.is_none() {
             self.shared.recall.clear();
         }
+        self.timed();
         effects
     }
 
@@ -3385,7 +3542,27 @@ impl Kernel {
         if let Some(row) = row
             && let Some(area) = row.intersection(&region)
         {
-            quireink_sdk::ui::draw_button_hints(&mut canvas.clipped(area), &env, row, &self.hints);
+            let pressed = self.mark.and_then(|(_, cell)| cell);
+            quireink_sdk::ui::draw_button_hints(
+                &mut canvas.clipped(area),
+                &env,
+                row,
+                &self.hints,
+                pressed,
+            );
+        }
+        // The busy mark in a corner, where no hint shows it.
+        if let Some((mark, None)) = self.mark
+            && mark.intersection(&region).is_some()
+        {
+            let style = quireink_sdk::ui::UiStyle::new(&env);
+            let mut canvas = canvas.clipped(mark);
+            quireink_sdk::ui::fill_round(&mut canvas, &style, mark, Color::BLACK);
+            let size = f32::from(mark.height) * 0.6;
+            let x = f32::from(mark.x)
+                + (f32::from(mark.width) - quireink_sdk::ui::icon_width(&env, BUSY_ICON, size))
+                    / 2.0;
+            quireink_sdk::ui::draw_icon(&mut canvas, &env, BUSY_ICON, size, x, mark, Color::WHITE);
         }
         // A message over everything.
         if let Some((notice, _)) = &mut self.notice

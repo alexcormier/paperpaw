@@ -817,8 +817,15 @@ pub fn button_hints_height(env: &Env<'_>) -> u16 {
 
 /// The row of hints below the screen: a line above it, then what each
 /// button under it does, centred in an equal share of the width, as the
-/// buttons lie.
-pub fn draw_button_hints(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, hints: &[Hint]) {
+/// buttons lie. The hint of the button `pressed` is drawn inverted, as a
+/// sign that its press is being worked on.
+pub fn draw_button_hints(
+    canvas: &mut Canvas<'_>,
+    env: &Env<'_>,
+    area: Rect,
+    hints: &[Hint],
+    pressed: Option<usize>,
+) {
     let style = UiStyle::new(env);
     fill(canvas, area, Color::WHITE);
     let line = style.line.min(u32::from(area.height));
@@ -846,15 +853,21 @@ pub fn draw_button_hints(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, hin
         let cell = Rect::new(left as u16, row.y, (right - left) as u16, row.height);
         let room = (right - left).saturating_sub(2 * style.gap) as f32;
         let middle = left as f32 + (right - left) as f32 / 2.0;
+        let ink = if pressed == Some(i as usize) {
+            fill(canvas, cell, Color::BLACK);
+            Color::WHITE
+        } else {
+            Color::BLACK
+        };
         match hint {
             Hint::Text(text) => {
                 let text = fit(&font, style.small, text, room);
                 let x = middle - font.measure(style.small, &text) / 2.0;
-                draw_label(canvas, &font, style.small, x, cell, &text, Color::BLACK);
+                draw_label(canvas, &font, style.small, x, cell, &text, ink);
             }
             Hint::Icon(name) => {
                 let x = middle - icon_width(env, name, style.text) / 2.0;
-                draw_icon(canvas, env, name, style.text, x, cell, Color::BLACK);
+                draw_icon(canvas, env, name, style.text, x, cell, ink);
             }
             Hint::Default | Hint::Hidden => {}
         }

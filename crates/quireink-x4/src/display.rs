@@ -344,6 +344,14 @@ where
     /// sequence (`1C`, without the temperature) left text on some pages
     /// behind: a page turned showed the page before under its number.
     pub fn refresh(&mut self, refresh: Refresh, power_off: bool) -> Result<(), Error> {
+        self.start_refresh(refresh, power_off)?;
+        self.wait()
+    }
+
+    /// Starts showing the new frame as [`Display::refresh`] does, without
+    /// waiting for it: the processor works on meanwhile (the bus is free
+    /// for the card). [`Display::wait`] before anything else is sent.
+    pub fn start_refresh(&mut self, refresh: Refresh, power_off: bool) -> Result<(), Error> {
         let refresh = if self.fresh { Refresh::Half } else { refresh };
         self.fresh = false;
         // A fast refresh compares with the frame shown; the others
@@ -366,7 +374,7 @@ where
         self.command(cmd::ACTIVATE, &[])?;
         // The full and half sequences power down at their end (0x03).
         self.powered = sequence & 0x03 == 0;
-        self.wait()
+        Ok(())
     }
 
     /// Puts the controller into deep sleep, the picture staying; [`init`]
@@ -394,8 +402,9 @@ where
         Ok(())
     }
 
-    /// Waits while the controller is busy (its busy pin high).
-    fn wait(&mut self) -> Result<(), Error> {
+    /// Waits while the controller is busy (its busy pin high), e.g. with a
+    /// refresh started by [`Display::start_refresh`].
+    pub fn wait(&mut self) -> Result<(), Error> {
         for _ in 0..BUSY_TIMEOUT_MS {
             if !self.busy.is_high().map_err(|_| Error::Pin)? {
                 return Ok(());

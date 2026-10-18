@@ -16,6 +16,12 @@ change the plugin SDK.
   shows it in the status line and on the home screen; the time zone is
   chosen under Settings, System (UTC on "Auto": the X4 has none of its
   own). Gone when it is switched off, until it is online again.
+- A press that starts slow work shows at once that it was taken: the
+  pressed button's hint turns black (or an hourglass shows in a corner)
+  while the work goes on, on the X4 at no cost to it. Only where that
+  work took 0.4 s or more the last time; quick screens come up as before.
+- The icon font has an hourglass; any of Tabler's icons can be added by
+  name (`tools/icons/subset.py`).
 - Pressing again while another screen comes up no longer runs those
   presses afterwards (on the X4 they could jump far ahead): presses made
   before the new screen shows are dropped. Turning pages quickly keeps
