@@ -277,17 +277,27 @@ impl Geometry {
     /// widget the grid's width and the rows it needs (made to measure it,
     /// what it shows read).
     pub fn size_of(&self, env: &Env<'_>, what: &What) -> (u8, u8) {
+        let (w, h, _) = self.sizes_of(env, what);
+        (w, h)
+    }
+
+    /// [`Geometry::size_of`], and the fewest rows it can do with
+    /// ([`Widget::min_height`](crate::widgets::Widget::min_height)).
+    fn sizes_of(&self, env: &Env<'_>, what: &What) -> (u8, u8, u8) {
         match what {
-            What::Tool(_) => (1, 1),
+            What::Tool(_) => (1, 1, 1),
             What::Widget(id) => {
                 let width = (u16::from(self.columns) * self.cell_w).saturating_sub(self.gap);
-                let height = env
-                    .widgets
-                    .make(id, env)
-                    .map_or(0, |widget| widget.height(env, width));
-                let rows = (u32::from(height) + u32::from(self.gap))
-                    .div_ceil(u32::from(self.cell_h.max(1)));
-                (self.columns, rows.clamp(1, u32::from(self.rows)) as u8)
+                let (height, least) = env.widgets.make(id, env).map_or((0, 0), |widget| {
+                    let height = widget.height(env, width);
+                    (height, widget.min_height(env, width).min(height))
+                });
+                let rows = |height: u16| {
+                    (u32::from(height) + u32::from(self.gap))
+                        .div_ceil(u32::from(self.cell_h.max(1)))
+                        .clamp(1, u32::from(self.rows)) as u8
+                };
+                (self.columns, rows(height), rows(least))
             }
         }
     }
@@ -332,12 +342,20 @@ pub fn free_place(geometry: &Geometry, taken: &[Cells], w: u8, h: u8) -> Option<
 }
 
 /// The first free place for `what` among `taken`: its full size, or where
-/// that has no room, narrower.
+/// that has no room, narrower, then lower (down to what it can do with).
 fn room_for(env: &Env<'_>, geometry: &Geometry, taken: &[Cells], what: &What) -> Option<Cells> {
-    let (w, h) = geometry.size_of(env, what);
-    (1..=w)
-        .rev()
-        .find_map(|w| free_place(geometry, taken, w, h))
+    let (w, h, least) = geometry.sizes_of(env, what);
+    room_of(geometry, taken, w, h, least)
+}
+
+/// The first free place of `w` × `h` cells among `taken`, or where that
+/// has no room, narrower, then lower down to `least` rows.
+fn room_of(geometry: &Geometry, taken: &[Cells], w: u8, h: u8, least: u8) -> Option<Cells> {
+    (least.min(h)..=h).rev().find_map(|h| {
+        (1..=w)
+            .rev()
+            .find_map(|w| free_place(geometry, taken, w, h))
+    })
 }
 
 /// Every item with its place: those placed where they are (if they fit
@@ -454,6 +472,18 @@ mod tests {
         assert!(a.fits(4, 6));
         assert!(!Cells::new(3, 0, 2, 1).fits(4, 6));
         assert!(!Cells::new(250, 0, 10, 1).fits(4, 6));
+    }
+
+    #[test]
+    fn widgets_shrink_to_the_room_left_down_to_their_least() {
+        let g = grid();
+        // One row of three left: a widget of three rows that can do with
+        // one gets it; one that needs two does not.
+        let taken = [Cells::new(0, 0, 4, 2)];
+        assert_eq!(room_of(&g, &taken, 4, 3, 1), Some(Cells::new(0, 2, 4, 1)));
+        assert_eq!(room_of(&g, &taken, 4, 3, 2), None);
+        // With room, its full height.
+        assert_eq!(room_of(&g, &[], 4, 2, 1), Some(Cells::new(0, 0, 4, 2)));
     }
 
     #[test]

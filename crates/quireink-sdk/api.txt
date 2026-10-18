@@ -1477,6 +1477,7 @@ pub trait quireink_sdk::widgets::Widget
 pub fn quireink_sdk::widgets::Widget::draw(&self, &mut quireink_graphics::canvas::Canvas<'_>, &quireink_sdk::Env<'_>, quireink_platform::geometry::Rect)
 pub fn quireink_sdk::widgets::Widget::height(&self, &quireink_sdk::Env<'_>, u16) -> u16
 pub fn quireink_sdk::widgets::Widget::live(&self) -> bool
+pub fn quireink_sdk::widgets::Widget::min_height(&self, &quireink_sdk::Env<'_>, u16) -> u16
 pub fn quireink_sdk::widgets::Widget::targets(&self, &quireink_sdk::Env<'_>, quireink_platform::geometry::Rect) -> alloc::vec::Vec<quireink_sdk::widgets::WidgetTarget>
 pub fn quireink_sdk::widgets::Widget::update(&mut self, &quireink_sdk::Env<'_>) -> bool
 pub fn quireink_sdk::widgets::align(&quireink_sdk::Env<'_>, &str) -> quireink_sdk::widgets::Align

@@ -565,6 +565,18 @@ impl Widget for Shelf {
         shelf_height(env, width, &self.books)
     }
 
+    /// Covers a third as high, where there is less room.
+    fn min_height(&self, env: &Env<'_>, width: u16) -> u16 {
+        let (heading, title) = shelf_labels(env);
+        let full = shelf_height(env, width, &self.books);
+        let covers = full.saturating_sub(heading + title);
+        if full == 0 {
+            0
+        } else {
+            heading + title + covers / 3
+        }
+    }
+
     fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         draw_shelf(canvas, env, area, &self.books);
     }

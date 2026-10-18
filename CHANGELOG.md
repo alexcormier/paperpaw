@@ -6,6 +6,10 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Home on the X4: the recently read shelf shows below the current book
+  (it had no room at its full height and was left out). Widgets can do
+  with less (`Widget::min_height`); the grid places them lower where
+  their full height has no room; the shelf's covers then shrink.
 - X4: the display driver shows four grays (`write_gray_rows`,
   `refresh_gray`, with the stock firmware's gray waveform); over USB,
   `gray` shows bars, a gradient and a cover in them to judge the panel.

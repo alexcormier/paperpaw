@@ -74,6 +74,14 @@ pub trait Widget {
     /// The height it needs at `width`, in pixels (0: nothing to show).
     fn height(&self, env: &Env<'_>, width: u16) -> u16;
 
+    /// The least height it can do with at `width`, drawn smaller (e.g.
+    /// covers in a row): where its full [`height`](Self::height) has no
+    /// room, it is placed in less, down to this. Widgets that cannot
+    /// shrink keep the default, their full height.
+    fn min_height(&self, env: &Env<'_>, width: u16) -> u16 {
+        self.height(env, width)
+    }
+
     /// Draws it into `area` (cleared before), from what it read.
     fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect);
 
