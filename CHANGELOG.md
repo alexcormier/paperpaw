@@ -6,6 +6,9 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Text on black and white panels (the X4) is fuller: a pixel at the edge
+  of a letter is drawn from three eighths covered (was half), so thin
+  strokes of small text keep their weight and no longer look pale.
 - Home: the screen shows without the focus until the first press, also
   on devices without touch, so it is seen as it is first; the setting
   *Show the focus at once* brings the old way back. Opening the home

@@ -5,6 +5,10 @@ use quireink_platform::{Color, FrameView, PixelFormat, Rect};
 use crate::GraphicsError;
 use crate::canvas::Canvas;
 
+/// From what coverage (of 255) a pixel at an edge takes the colour drawn
+/// in black and white: three eighths.
+const MONO_COVERAGE: u8 = 96;
+
 /// Pixels in a device's native format, plus dirty-region tracking.
 ///
 /// A framebuffer holds either the whole screen or a *band* of rows
@@ -321,6 +325,16 @@ impl Framebuffer {
     /// `(x, y)`, which must lie inside the framebuffer. Does not mark the
     /// pixel dirty; callers mark whole areas.
     pub(crate) fn blend_pixel(&mut self, x: u16, y: u16, color: Color, alpha: u8) {
+        // In black and white, a pixel at an edge takes the colour from
+        // somewhat less than half covered: thin strokes of small text keep
+        // their weight instead of breaking up.
+        if self.format == PixelFormat::Mono1 {
+            if alpha >= MONO_COVERAGE {
+                let encoded = self.encode(color);
+                self.store(x, y, encoded);
+            }
+            return;
+        }
         // Gray formats mix in gray: every glyph's edge comes here, and on
         // small devices the round through red, green and blue is felt.
         if alpha != 255
