@@ -501,14 +501,19 @@ impl Screen for MenuScreen {
             cx.request_refresh(RefreshMode::Fast);
             return Handled::Yes;
         }
+        // The focus changes nothing but its rows: only they are drawn.
         if *a == actions::UP || *a == actions::LEFT || *a == actions::PREVIOUS {
-            self.rows.step(false).request(cx);
+            let change = self.rows.step(false);
+            self.rows.request(change, cx);
         } else if *a == actions::DOWN || *a == actions::RIGHT || *a == actions::NEXT {
-            self.rows.step(true).request(cx);
+            let change = self.rows.step(true);
+            self.rows.request(change, cx);
         } else if *a == actions::NEXT_PAGE {
-            self.rows.turn(true).request(cx);
+            let change = self.rows.turn(true);
+            self.rows.request(change, cx);
         } else if *a == actions::PREV_PAGE {
-            self.rows.turn(false).request(cx);
+            let change = self.rows.turn(false);
+            self.rows.request(change, cx);
         } else if *a == actions::CONFIRM {
             self.run(self.rows.focus, cx);
         } else if *a == actions::MENU {

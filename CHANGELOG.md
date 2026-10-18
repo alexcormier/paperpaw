@@ -6,6 +6,10 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Menus draw only the two rows a step of the focus changes (on the X4
+  a step in the main menu draws in about 75 ms, was 155); SDK:
+  `Rows::request` does so for screens where the focus changes nothing
+  else.
 - X4: opening a book for the first time overflowed the stack or ran out
   of memory (the X4 started again on the book before). Fixed at the
   causes: inflate states and JPEG tables are no longer built on the

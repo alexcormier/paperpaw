@@ -18,6 +18,8 @@ pub struct Rows {
     pages: Vec<(Option<usize>, Range<usize>)>,
     /// The focused row; never a heading while there are entries.
     pub focus: usize,
+    /// The row focused before the focus last moved.
+    before: usize,
 }
 
 impl Rows {
@@ -53,6 +55,7 @@ impl Rows {
             headings,
             pages,
             focus,
+            before: focus,
         }
     }
 
@@ -139,6 +142,23 @@ impl Rows {
         }
     }
 
+    /// Asks for what `change` needs, for screens where the focus changes
+    /// nothing but the rows: a focus moved within the page draws the row
+    /// it left and the one it came to again, nothing else (a step in a
+    /// menu on the X4: a third of the drawing); otherwise as
+    /// [`ListChange::request`].
+    pub fn request(&self, change: ListChange, cx: &mut crate::Cx<'_, '_>) {
+        if change != ListChange::Focus {
+            return change.request(cx);
+        }
+        for index in [self.before, self.focus] {
+            if let Some(rect) = self.rect_of(index) {
+                cx.request_redraw_area(rect);
+            }
+        }
+        cx.request_refresh(crate::RefreshMode::Fast);
+    }
+
     /// The entry at `point`, if any (headings are not hit).
     pub fn hit(&self, point: Point) -> Option<usize> {
         self.visible()
@@ -152,6 +172,7 @@ impl Rows {
             return ListChange::None;
         }
         let page = self.page_of(self.focus);
+        self.before = self.focus;
         self.focus = focus;
         if self.page_of(focus) == page {
             ListChange::Focus

@@ -1241,6 +1241,7 @@ pub fn quireink_sdk::ui::Rows::len(&self) -> usize
 pub fn quireink_sdk::ui::Rows::new(quireink_platform::geometry::Rect, alloc::vec::Vec<u16>, alloc::vec::Vec<bool>) -> Self
 pub fn quireink_sdk::ui::Rows::paging(&self) -> (usize, usize)
 pub fn quireink_sdk::ui::Rows::rect_of(&self, usize) -> core::option::Option<quireink_platform::geometry::Rect>
+pub fn quireink_sdk::ui::Rows::request(&self, quireink_sdk::ui::ListChange, &mut quireink_sdk::Cx<'_, '_>)
 pub fn quireink_sdk::ui::Rows::step(&mut self, bool) -> quireink_sdk::ui::ListChange
 pub fn quireink_sdk::ui::Rows::turn(&mut self, bool) -> quireink_sdk::ui::ListChange
 pub fn quireink_sdk::ui::Rows::visible(&self) -> alloc::vec::Vec<(usize, quireink_platform::geometry::Rect)>
