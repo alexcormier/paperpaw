@@ -192,6 +192,11 @@ impl TipsScreen {
 }
 
 impl Screen for TipsScreen {
+    /// Only *Back* shows: nothing else does more than close it.
+    fn hint(&self, action: &Id, _: &Env<'_>) -> quireink_sdk::Hint {
+        quireink_sdk::Hint::only_back(action)
+    }
+
     fn region(&self, _: &Env<'_>) -> Option<Rect> {
         Some(self.region)
     }

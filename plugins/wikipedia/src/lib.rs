@@ -204,6 +204,15 @@ impl Summary {
 }
 
 impl Screen for Summary {
+    /// *Select* closes it; the arrows scroll.
+    fn hint(&self, action: &Id, env: &Env<'_>) -> quireink_sdk::Hint {
+        if *action == actions::CONFIRM {
+            quireink_sdk::Hint::Text(env.i18n.tr("core.hint.close").to_string())
+        } else {
+            quireink_sdk::Hint::Default
+        }
+    }
+
     fn region(&self, _: &Env<'_>) -> Option<Rect> {
         Some(self.region)
     }

@@ -339,6 +339,16 @@ impl Panel {
 }
 
 impl Screen for Panel {
+    /// *Select* closes it, or asks for the key while there is none; the
+    /// arrows scroll.
+    fn hint(&self, action: &Id, env: &Env<'_>) -> quireink_sdk::Hint {
+        if *action == actions::CONFIRM && !self.needs_key {
+            quireink_sdk::Hint::Text(env.i18n.tr("core.hint.close").to_string())
+        } else {
+            quireink_sdk::Hint::Default
+        }
+    }
+
     fn region(&self, _: &Env<'_>) -> Option<Rect> {
         Some(self.region)
     }
