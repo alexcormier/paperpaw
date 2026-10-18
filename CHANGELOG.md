@@ -6,6 +6,11 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- X4: opening a book for the first time overflowed the stack or ran out
+  of memory (the X4 started again on the book before). Fixed at the
+  causes: inflate states and JPEG tables are no longer built on the
+  stack, pictures are written with a buffer taken once, the icon names
+  stay in flash. A first opening now leaves about 14 KB of the stack.
 - Plugins name any of Tabler's icons: `quireink_sdk::icons` knows all
   5934 names (a table in flash, about 150 KB on the X4, no memory); the
   drawings of those the icon font lacks come from icon packs.
