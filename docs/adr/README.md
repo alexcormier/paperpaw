@@ -26,6 +26,7 @@ superseded by a new record that links back.
 | [0018](0018-font-packs-for-other-scripts.md) | Font packs for other scripts | Accepted |
 | [0019](0019-firmware-updates.md) | Firmware updates | Accepted |
 | [0020](0020-sdk-compatibility.md) | SDK compatibility | Accepted |
+| [0021](0021-decorations.md) | Decorations of text | Accepted |
 
 ## Template
 

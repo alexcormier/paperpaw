@@ -308,6 +308,7 @@ impl KernelBuilder {
                 setup: quireink_sdk::setup::SetupSteps::new(),
                 services: quireink_sdk::services::Services::new(),
                 text_filters: quireink_sdk::filters::TextFilters::new(),
+                decorators: quireink_sdk::decorations::Decorators::new(),
                 input_filters: quireink_sdk::filters::InputFilters::new(),
                 refresh_filters: quireink_sdk::filters::RefreshFilters::new(),
                 stylesheets: Vec::new(),

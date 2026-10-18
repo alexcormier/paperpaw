@@ -115,6 +115,21 @@ pub quireink_sdk::builtin::events::BookRemoved::path: alloc::string::String
 impl quireink_sdk::event::EventData for quireink_sdk::builtin::events::BookRemoved
 pub fn quireink_sdk::builtin::events::BookRemoved::from_params(&quireink_sdk::Params) -> core::option::Option<Self>
 pub fn quireink_sdk::builtin::events::BookRemoved::to_params(&self) -> quireink_sdk::Params
+pub struct quireink_sdk::builtin::events::DecorationTapped
+pub quireink_sdk::builtin::events::DecorationTapped::decorator: quireink_sdk::Id
+pub quireink_sdk::builtin::events::DecorationTapped::end_offset: u32
+pub quireink_sdk::builtin::events::DecorationTapped::end_section: u32
+pub quireink_sdk::builtin::events::DecorationTapped::offset: u32
+pub quireink_sdk::builtin::events::DecorationTapped::path: alloc::string::String
+pub quireink_sdk::builtin::events::DecorationTapped::role: quireink_sdk::Id
+pub quireink_sdk::builtin::events::DecorationTapped::section: u32
+pub quireink_sdk::builtin::events::DecorationTapped::text: alloc::string::String
+impl quireink_sdk::builtin::events::DecorationTapped
+pub fn quireink_sdk::builtin::events::DecorationTapped::end(&self) -> quireink_document::Locator
+pub fn quireink_sdk::builtin::events::DecorationTapped::start(&self) -> quireink_document::Locator
+impl quireink_sdk::event::EventData for quireink_sdk::builtin::events::DecorationTapped
+pub fn quireink_sdk::builtin::events::DecorationTapped::from_params(&quireink_sdk::Params) -> core::option::Option<Self>
+pub fn quireink_sdk::builtin::events::DecorationTapped::to_params(&self) -> quireink_sdk::Params
 pub struct quireink_sdk::builtin::events::Goto
 pub quireink_sdk::builtin::events::Goto::end_offset: core::option::Option<u32>
 pub quireink_sdk::builtin::events::Goto::end_section: core::option::Option<u32>
@@ -197,6 +212,7 @@ pub const quireink_sdk::builtin::events::BOOK_FINISHED: quireink_sdk::event::Eve
 pub const quireink_sdk::builtin::events::BOOK_MOVED: quireink_sdk::event::Event<quireink_sdk::builtin::events::BookMoved>
 pub const quireink_sdk::builtin::events::BOOK_OPENED: quireink_sdk::event::Event<quireink_sdk::builtin::events::Reading>
 pub const quireink_sdk::builtin::events::BOOK_REMOVED: quireink_sdk::event::Event<quireink_sdk::builtin::events::BookRemoved>
+pub const quireink_sdk::builtin::events::DECORATION_TAPPED: quireink_sdk::event::Event<quireink_sdk::builtin::events::DecorationTapped>
 pub const quireink_sdk::builtin::events::FIRMWARE_CHANGED: quireink_sdk::event::Event<()>
 pub const quireink_sdk::builtin::events::GOTO: quireink_sdk::event::Event<quireink_sdk::builtin::events::Goto>
 pub const quireink_sdk::builtin::events::LIBRARY_CHANGED: quireink_sdk::event::Event<()>
@@ -228,6 +244,7 @@ pub const quireink_sdk::builtin::groups::DEVELOPER: quireink_sdk::Id
 pub const quireink_sdk::builtin::groups::DISPLAY: quireink_sdk::Id
 pub const quireink_sdk::builtin::groups::LIBRARY: quireink_sdk::Id
 pub const quireink_sdk::builtin::groups::LOOK: quireink_sdk::Id
+pub const quireink_sdk::builtin::groups::MARKS: quireink_sdk::Id
 pub const quireink_sdk::builtin::groups::OTHER: quireink_sdk::Id
 pub const quireink_sdk::builtin::groups::READING: quireink_sdk::Id
 pub const quireink_sdk::builtin::groups::STATUS_LINES: quireink_sdk::Id
@@ -266,6 +283,11 @@ pub const quireink_sdk::builtin::params::TEXT: &str
 pub const quireink_sdk::builtin::params::TITLE: &str
 pub const quireink_sdk::builtin::params::URL: &str
 pub const quireink_sdk::builtin::params::WORD: &str
+pub mod quireink_sdk::builtin::roles
+pub const quireink_sdk::builtin::roles::ALOUD: quireink_sdk::Id
+pub const quireink_sdk::builtin::roles::HIGHLIGHT: quireink_sdk::Id
+pub const quireink_sdk::builtin::roles::LINK: quireink_sdk::Id
+pub const quireink_sdk::builtin::roles::SEARCH_HIT: quireink_sdk::Id
 pub mod quireink_sdk::builtin::screens
 pub const quireink_sdk::builtin::screens::PLACEHOLDER: quireink_sdk::Id
 pub const quireink_sdk::builtin::screens::STATUS_ITEMS: quireink_sdk::Id
@@ -394,6 +416,7 @@ pub mod quireink_sdk::contribution
 #[non_exhaustive] pub enum quireink_sdk::contribution::Contribution
 pub quireink_sdk::contribution::Contribution::Action(quireink_sdk::ActionSpec)
 pub quireink_sdk::contribution::Contribution::BookData(quireink_sdk::library::BookData)
+pub quireink_sdk::contribution::Contribution::Decorator(quireink_sdk::decorations::DecoratorSpec)
 pub quireink_sdk::contribution::Contribution::Font(alloc::boxed::Box<quireink_sdk::FontSpec>)
 pub quireink_sdk::contribution::Contribution::FontBinding
 pub quireink_sdk::contribution::Contribution::FontBinding::font: quireink_sdk::Id
@@ -462,6 +485,7 @@ impl quireink_sdk::contribution::Registrar
 pub fn quireink_sdk::contribution::Registrar::add(&mut self, quireink_sdk::contribution::Contribution) -> core::result::Result<(), quireink_sdk::RegisterError>
 pub fn quireink_sdk::contribution::Registrar::add_action(&mut self, quireink_sdk::ActionSpec) -> core::result::Result<(), quireink_sdk::RegisterError>
 pub fn quireink_sdk::contribution::Registrar::add_book_data(&mut self, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> core::result::Result<(), quireink_sdk::RegisterError>
+pub fn quireink_sdk::contribution::Registrar::add_decorator(&mut self, quireink_sdk::decorations::DecoratorSpec) -> core::result::Result<(), quireink_sdk::RegisterError>
 pub fn quireink_sdk::contribution::Registrar::add_font(&mut self, quireink_sdk::FontSpec) -> core::result::Result<(), quireink_sdk::RegisterError>
 pub fn quireink_sdk::contribution::Registrar::add_font_extension(&mut self, quireink_sdk::Id, alloc::string::String, quireink_sdk::Id) -> core::result::Result<(), quireink_sdk::RegisterError>
 pub fn quireink_sdk::contribution::Registrar::add_font_file(&mut self, quireink_sdk::Id, alloc::string::String) -> core::result::Result<(), quireink_sdk::RegisterError>
@@ -516,6 +540,111 @@ pub fn quireink_sdk::data::Format::version_of(&str) -> u32
 pub const quireink_sdk::data::DIR: &str
 pub const quireink_sdk::data::MARK: &str
 pub type quireink_sdk::data::Upgrade = fn(&str) -> alloc::string::String
+pub mod quireink_sdk::decorations
+#[non_exhaustive] pub enum quireink_sdk::decorations::LineKind
+pub quireink_sdk::decorations::LineKind::Dashed
+pub quireink_sdk::decorations::LineKind::Dotted
+pub quireink_sdk::decorations::LineKind::Double
+pub quireink_sdk::decorations::LineKind::Solid
+pub quireink_sdk::decorations::LineKind::Wavy
+impl quireink_sdk::decorations::LineKind
+pub const quireink_sdk::decorations::LineKind::ALL: [quireink_sdk::decorations::LineKind; 5]
+pub fn quireink_sdk::decorations::LineKind::from_id(&str) -> core::option::Option<quireink_sdk::decorations::LineKind>
+pub fn quireink_sdk::decorations::LineKind::id(self) -> &'static str
+#[non_exhaustive] pub enum quireink_sdk::decorations::Tone
+pub quireink_sdk::decorations::Tone::Black
+pub quireink_sdk::decorations::Tone::Blue
+pub quireink_sdk::decorations::Tone::DarkGray
+pub quireink_sdk::decorations::Tone::Gray
+pub quireink_sdk::decorations::Tone::Green
+pub quireink_sdk::decorations::Tone::LightGray
+pub quireink_sdk::decorations::Tone::Orange
+pub quireink_sdk::decorations::Tone::Pink
+pub quireink_sdk::decorations::Tone::Red
+pub quireink_sdk::decorations::Tone::White
+pub quireink_sdk::decorations::Tone::Yellow
+impl quireink_sdk::decorations::Tone
+pub const quireink_sdk::decorations::Tone::ALL: [quireink_sdk::decorations::Tone; 11]
+pub fn quireink_sdk::decorations::Tone::color(self) -> quireink_platform::pixel::Color
+pub fn quireink_sdk::decorations::Tone::from_id(&str) -> core::option::Option<quireink_sdk::decorations::Tone>
+pub fn quireink_sdk::decorations::Tone::id(self) -> &'static str
+pub struct quireink_sdk::decorations::Decorated
+pub quireink_sdk::decorations::Decorated::end: quireink_document::Locator
+pub quireink_sdk::decorations::Decorated::role: quireink_sdk::Id
+pub quireink_sdk::decorations::Decorated::start: quireink_document::Locator
+impl quireink_sdk::decorations::Decorated
+pub fn quireink_sdk::decorations::Decorated::words(&[quireink_sdk::decorations::PageWord<'_>], &quireink_sdk::Id) -> core::option::Option<quireink_sdk::decorations::Decorated>
+#[non_exhaustive] pub struct quireink_sdk::decorations::Decoration
+pub quireink_sdk::decorations::Decoration::background: core::option::Option<quireink_sdk::decorations::Tone>
+pub quireink_sdk::decorations::Decoration::frame: bool
+pub quireink_sdk::decorations::Decoration::ink: core::option::Option<quireink_sdk::decorations::Tone>
+pub quireink_sdk::decorations::Decoration::line: core::option::Option<quireink_sdk::decorations::LineKind>
+pub quireink_sdk::decorations::Decoration::line_tone: core::option::Option<quireink_sdk::decorations::Tone>
+pub quireink_sdk::decorations::Decoration::struck: bool
+pub quireink_sdk::decorations::Decoration::thickness: u8
+impl quireink_sdk::decorations::Decoration
+pub const quireink_sdk::decorations::Decoration::NONE: quireink_sdk::decorations::Decoration
+pub const fn quireink_sdk::decorations::Decoration::background(self, quireink_sdk::decorations::Tone) -> Self
+pub fn quireink_sdk::decorations::Decoration::combined(self, quireink_sdk::decorations::Decoration) -> quireink_sdk::decorations::Decoration
+pub const fn quireink_sdk::decorations::Decoration::frame(self) -> Self
+pub const fn quireink_sdk::decorations::Decoration::ink(self, quireink_sdk::decorations::Tone) -> Self
+pub fn quireink_sdk::decorations::Decoration::ink_color(&self) -> core::option::Option<quireink_platform::pixel::Color>
+pub fn quireink_sdk::decorations::Decoration::is_none(&self) -> bool
+pub const fn quireink_sdk::decorations::Decoration::line(self, quireink_sdk::decorations::LineKind) -> Self
+pub const fn quireink_sdk::decorations::Decoration::line_tone(self, quireink_sdk::decorations::Tone) -> Self
+pub fn quireink_sdk::decorations::Decoration::of_role(&quireink_sdk::Env<'_>, &quireink_sdk::Id) -> quireink_sdk::decorations::Decoration
+pub const fn quireink_sdk::decorations::Decoration::struck(self) -> Self
+pub const fn quireink_sdk::decorations::Decoration::thickness(self, u8) -> Self
+#[non_exhaustive] pub struct quireink_sdk::decorations::DecoratorSpec
+pub quireink_sdk::decorations::DecoratorSpec::decorate: quireink_sdk::decorations::DecorateFn
+pub quireink_sdk::decorations::DecoratorSpec::id: quireink_sdk::Id
+pub quireink_sdk::decorations::DecoratorSpec::order: i16
+pub quireink_sdk::decorations::DecoratorSpec::signature: quireink_sdk::decorations::DecoratorSignatureFn
+pub quireink_sdk::decorations::DecoratorSpec::switch: core::option::Option<quireink_sdk::Id>
+pub quireink_sdk::decorations::DecoratorSpec::taps: bool
+pub quireink_sdk::decorations::DecoratorSpec::title: alloc::borrow::Cow<'static, str>
+impl quireink_sdk::decorations::DecoratorSpec
+pub fn quireink_sdk::decorations::DecoratorSpec::new(quireink_sdk::Id, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, impl core::ops::function::Fn(&quireink_sdk::Env<'_>, &quireink_sdk::decorations::PageText<'_>) -> alloc::vec::Vec<quireink_sdk::decorations::Decorated> + 'static) -> Self
+pub fn quireink_sdk::decorations::DecoratorSpec::order(self, i16) -> Self
+pub fn quireink_sdk::decorations::DecoratorSpec::signature(self, impl core::ops::function::Fn(&quireink_sdk::Env<'_>) -> u64 + 'static) -> Self
+pub fn quireink_sdk::decorations::DecoratorSpec::switch(self, &quireink_sdk::setting::Setting<bool>) -> Self
+pub fn quireink_sdk::decorations::DecoratorSpec::taps(self) -> Self
+impl core::fmt::Debug for quireink_sdk::decorations::DecoratorSpec
+pub fn quireink_sdk::decorations::DecoratorSpec::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct quireink_sdk::decorations::Decorators
+impl quireink_sdk::decorations::Decorators
+pub fn quireink_sdk::decorations::Decorators::add(&mut self, quireink_sdk::decorations::DecoratorSpec)
+pub fn quireink_sdk::decorations::Decorators::decorate(&self, &quireink_sdk::Env<'_>, &quireink_sdk::decorations::PageText<'_>) -> alloc::vec::Vec<quireink_sdk::decorations::Mark>
+pub fn quireink_sdk::decorations::Decorators::is_empty(&self) -> bool
+pub fn quireink_sdk::decorations::Decorators::new() -> Self
+pub fn quireink_sdk::decorations::Decorators::shrink_to_fit(&mut self)
+pub fn quireink_sdk::decorations::Decorators::signature(&self, &quireink_sdk::Env<'_>) -> u64
+pub struct quireink_sdk::decorations::Mark
+pub quireink_sdk::decorations::Mark::decorator: quireink_sdk::Id
+pub quireink_sdk::decorations::Mark::end: quireink_document::Locator
+pub quireink_sdk::decorations::Mark::role: quireink_sdk::Id
+pub quireink_sdk::decorations::Mark::start: quireink_document::Locator
+pub quireink_sdk::decorations::Mark::taps: bool
+impl quireink_sdk::decorations::Mark
+pub fn quireink_sdk::decorations::Mark::overlaps(&self, quireink_document::Locator, quireink_document::Locator) -> bool
+pub struct quireink_sdk::decorations::PageText<'a>
+pub quireink_sdk::decorations::PageText::language: &'a str
+pub quireink_sdk::decorations::PageText::path: &'a str
+pub quireink_sdk::decorations::PageText::words: &'a [quireink_sdk::decorations::PageWord<'a>]
+pub struct quireink_sdk::decorations::PageWord<'a>
+pub quireink_sdk::decorations::PageWord::end: quireink_document::Locator
+pub quireink_sdk::decorations::PageWord::start: quireink_document::Locator
+pub quireink_sdk::decorations::PageWord::text: &'a str
+pub const quireink_sdk::decorations::AS_IS: &str
+pub const quireink_sdk::decorations::NONE: &str
+pub const quireink_sdk::decorations::THICKNESS: u8
+pub fn quireink_sdk::decorations::add_role(&mut quireink_sdk::contribution::Registrar, &quireink_sdk::Id, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, quireink_sdk::decorations::Decoration) -> core::result::Result<(), quireink_sdk::RegisterError>
+pub fn quireink_sdk::decorations::combine(impl core::iter::traits::collect::IntoIterator<Item = quireink_sdk::decorations::Decoration>) -> quireink_sdk::decorations::Decoration
+pub fn quireink_sdk::decorations::draw_behind(&mut quireink_graphics::canvas::Canvas<'_>, &quireink_sdk::Env<'_>, &[quireink_platform::geometry::Rect], &quireink_sdk::decorations::Decoration)
+pub fn quireink_sdk::decorations::draw_over(&mut quireink_graphics::canvas::Canvas<'_>, &quireink_sdk::Env<'_>, &[quireink_platform::geometry::Rect], &quireink_sdk::decorations::Decoration)
+pub fn quireink_sdk::decorations::join_boxes(impl core::iter::traits::collect::IntoIterator<Item = (usize, quireink_platform::geometry::Rect)>) -> alloc::vec::Vec<quireink_platform::geometry::Rect>
+pub type quireink_sdk::decorations::DecorateFn = alloc::boxed::Box<dyn core::ops::function::Fn(&quireink_sdk::Env<'_>, &quireink_sdk::decorations::PageText<'_>) -> alloc::vec::Vec<quireink_sdk::decorations::Decorated>>
+pub type quireink_sdk::decorations::DecoratorSignatureFn = alloc::boxed::Box<dyn core::ops::function::Fn(&quireink_sdk::Env<'_>) -> u64>
 pub mod quireink_sdk::document
 pub use quireink_sdk::document::<<quireink_document::*>>
 pub mod quireink_sdk::event
@@ -560,6 +689,9 @@ pub fn quireink_sdk::builtin::events::BookMoved::to_params(&self) -> quireink_sd
 impl quireink_sdk::event::EventData for quireink_sdk::builtin::events::BookRemoved
 pub fn quireink_sdk::builtin::events::BookRemoved::from_params(&quireink_sdk::Params) -> core::option::Option<Self>
 pub fn quireink_sdk::builtin::events::BookRemoved::to_params(&self) -> quireink_sdk::Params
+impl quireink_sdk::event::EventData for quireink_sdk::builtin::events::DecorationTapped
+pub fn quireink_sdk::builtin::events::DecorationTapped::from_params(&quireink_sdk::Params) -> core::option::Option<Self>
+pub fn quireink_sdk::builtin::events::DecorationTapped::to_params(&self) -> quireink_sdk::Params
 impl quireink_sdk::event::EventData for quireink_sdk::builtin::events::Goto
 pub fn quireink_sdk::builtin::events::Goto::from_params(&quireink_sdk::Params) -> core::option::Option<Self>
 pub fn quireink_sdk::builtin::events::Goto::to_params(&self) -> quireink_sdk::Params
@@ -1693,6 +1825,7 @@ pub fn quireink_sdk::Command::set<T: quireink_sdk::setting::SettingType>(&quirei
 #[non_exhaustive] pub enum quireink_sdk::Contribution
 pub quireink_sdk::Contribution::Action(quireink_sdk::ActionSpec)
 pub quireink_sdk::Contribution::BookData(quireink_sdk::library::BookData)
+pub quireink_sdk::Contribution::Decorator(quireink_sdk::decorations::DecoratorSpec)
 pub quireink_sdk::Contribution::Font(alloc::boxed::Box<quireink_sdk::FontSpec>)
 pub quireink_sdk::Contribution::FontBinding
 pub quireink_sdk::Contribution::FontBinding::font: quireink_sdk::Id
@@ -1953,6 +2086,7 @@ pub quireink_sdk::Env::actions: &'a quireink_sdk::Actions
 pub quireink_sdk::Env::book_data: &'a [quireink_sdk::library::BookData]
 pub quireink_sdk::Env::caps: quireink_sdk::Capabilities
 pub quireink_sdk::Env::clipboard: bool
+pub quireink_sdk::Env::decorators: &'a quireink_sdk::decorations::Decorators
 pub quireink_sdk::Env::device: &'a quireink_platform::DeviceInfo
 pub quireink_sdk::Env::firmware: core::option::Option<&'a quireink_sdk::firmware::Firmware>
 pub quireink_sdk::Env::font_dirs: &'a [alloc::string::String]
@@ -2291,6 +2425,7 @@ impl quireink_sdk::contribution::Registrar
 pub fn quireink_sdk::contribution::Registrar::add(&mut self, quireink_sdk::contribution::Contribution) -> core::result::Result<(), quireink_sdk::RegisterError>
 pub fn quireink_sdk::contribution::Registrar::add_action(&mut self, quireink_sdk::ActionSpec) -> core::result::Result<(), quireink_sdk::RegisterError>
 pub fn quireink_sdk::contribution::Registrar::add_book_data(&mut self, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> core::result::Result<(), quireink_sdk::RegisterError>
+pub fn quireink_sdk::contribution::Registrar::add_decorator(&mut self, quireink_sdk::decorations::DecoratorSpec) -> core::result::Result<(), quireink_sdk::RegisterError>
 pub fn quireink_sdk::contribution::Registrar::add_font(&mut self, quireink_sdk::FontSpec) -> core::result::Result<(), quireink_sdk::RegisterError>
 pub fn quireink_sdk::contribution::Registrar::add_font_extension(&mut self, quireink_sdk::Id, alloc::string::String, quireink_sdk::Id) -> core::result::Result<(), quireink_sdk::RegisterError>
 pub fn quireink_sdk::contribution::Registrar::add_font_file(&mut self, quireink_sdk::Id, alloc::string::String) -> core::result::Result<(), quireink_sdk::RegisterError>
@@ -2511,6 +2646,9 @@ pub fn quireink_sdk::builtin::events::BookMoved::to_params(&self) -> quireink_sd
 impl quireink_sdk::event::EventData for quireink_sdk::builtin::events::BookRemoved
 pub fn quireink_sdk::builtin::events::BookRemoved::from_params(&quireink_sdk::Params) -> core::option::Option<Self>
 pub fn quireink_sdk::builtin::events::BookRemoved::to_params(&self) -> quireink_sdk::Params
+impl quireink_sdk::event::EventData for quireink_sdk::builtin::events::DecorationTapped
+pub fn quireink_sdk::builtin::events::DecorationTapped::from_params(&quireink_sdk::Params) -> core::option::Option<Self>
+pub fn quireink_sdk::builtin::events::DecorationTapped::to_params(&self) -> quireink_sdk::Params
 impl quireink_sdk::event::EventData for quireink_sdk::builtin::events::Goto
 pub fn quireink_sdk::builtin::events::Goto::from_params(&quireink_sdk::Params) -> core::option::Option<Self>
 pub fn quireink_sdk::builtin::events::Goto::to_params(&self) -> quireink_sdk::Params

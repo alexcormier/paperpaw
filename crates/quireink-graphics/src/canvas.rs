@@ -154,6 +154,17 @@ impl<'a> Canvas<'a> {
         }
     }
 
+    /// Fills `area` with `color` as a shade, e.g. behind marked text: where
+    /// the panel has few grays (black and white alone, four), ordered
+    /// dithered by its lightness, so a light gray stays a light pattern
+    /// the text reads well on; in colour where the panel has colour.
+    pub fn fill_shaded(&mut self, area: Rect, color: Color) {
+        let (x, y, width, height) = signed(area);
+        if let Some(rect) = self.clip_signed(x, y, width, height) {
+            self.framebuffer.shade_clipped(rect, color);
+        }
+    }
+
     /// Draws small pictures with `draw` (e.g. covers in a list): they do
     /// not count as pictures that leave ghosts on e-paper, which a full
     /// refresh clears after large ones
@@ -421,6 +432,36 @@ mod tests {
         gray.canvas().clear(Color::BLACK);
         gray.canvas().wash(Rect::new(0, 0, 4, 1));
         assert_eq!(gray.view().pixel(0, 0), Color::gray(170));
+    }
+
+    #[test]
+    fn shades_keep_their_lightness_in_black_and_white() {
+        let count = |format, gray: u8| {
+            let mut fb = Framebuffer::new(16, 16, format).unwrap();
+            fb.canvas()
+                .fill_shaded(Rect::new(0, 0, 16, 16), Color::gray(gray));
+            let view = fb.view();
+            (0..16)
+                .flat_map(|y| (0..16).map(move |x| (x, y)))
+                .filter(|&(x, y)| view.pixel(x, y) == Color::BLACK)
+                .count()
+        };
+        // A light gray: a few black pixels, not none (it would vanish) and
+        // not half (text on it would be hard to read).
+        let light = count(PixelFormat::Mono1, 205);
+        assert!((20..=70).contains(&light), "{light} of 256");
+        assert!(count(PixelFormat::Mono1, 90) > light);
+        assert_eq!(count(PixelFormat::Mono1, 255), 0);
+        // Where there are enough grays, the gray itself.
+        let mut gray = Framebuffer::new(2, 1, PixelFormat::Gray8).unwrap();
+        gray.canvas()
+            .fill_shaded(Rect::new(0, 0, 2, 1), Color::gray(205));
+        assert_eq!(gray.view().pixel(1, 0), Color::gray(205));
+        // Not a picture.
+        let mut mono = Framebuffer::new(8, 8, PixelFormat::Mono1).unwrap();
+        mono.canvas()
+            .fill_shaded(Rect::new(0, 0, 8, 8), Color::gray(128));
+        assert_eq!(mono.take_pictured(), 0);
     }
 
     #[test]

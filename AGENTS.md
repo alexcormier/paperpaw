@@ -17,3 +17,9 @@ There are two kinds of work here; tell which one a task is.
 
 [docs/plugins.md](docs/plugins.md) explains how plugins are written, for
 both.
+
+Where a task falls into parts that do not depend on each other (a new
+module, a plugin, documentation, tests beside an API that is settled),
+let several agents work on them in parallel, each in its own worktree,
+and bring their work together after; parts that change the same files
+or wait for each other's API stay in one hand.

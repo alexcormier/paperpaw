@@ -830,6 +830,8 @@ struct Shared {
     setup: quireink_sdk::setup::SetupSteps,
     services: quireink_sdk::services::Services,
     text_filters: quireink_sdk::filters::TextFilters,
+    /// Marks on the words of book pages, from every plugin.
+    decorators: quireink_sdk::decorations::Decorators,
     /// Filters of every input and of every refresh, from every plugin.
     input_filters: quireink_sdk::filters::InputFilters,
     refresh_filters: quireink_sdk::filters::RefreshFilters,
@@ -887,6 +889,7 @@ impl Shared {
             setup: &self.setup,
             services: &self.services,
             text_filters: &self.text_filters,
+            decorators: &self.decorators,
             stylesheets: &self.stylesheets,
             book_data: &self.book_data,
             caps: self.caps,

@@ -184,6 +184,22 @@ pub mod menus {
     pub const SELECTION: Id = Id::new_static("core.selection-menu");
 }
 
+/// The roles of decorations every reader draws (see
+/// [`decorations`](crate::decorations)): the kernel adds them, so their
+/// looks are settings like any role's.
+pub mod roles {
+    use crate::Id;
+
+    /// One's own highlights.
+    pub const HIGHLIGHT: Id = Id::new_static("core.highlight");
+    /// Links in a book.
+    pub const LINK: Id = Id::new_static("core.link");
+    /// A search hit gone to.
+    pub const SEARCH_HIT: Id = Id::new_static("core.search-hit");
+    /// The sentence being read aloud.
+    pub const ALOUD: Id = Id::new_static("core.aloud");
+}
+
 /// Standard parameter names.
 pub mod params {
     /// A storage path, e.g. of the book to open.
@@ -386,6 +402,36 @@ pub mod events {
     }
 
     crate::event_data! {
+        /// A decorated word that was tapped, or chosen with the buttons
+        /// ([`DECORATION_TAPPED`]): the decorator's mark it is in.
+        pub struct DecorationTapped {
+            /// The decorator, and the role of its mark.
+            pub decorator: Id,
+            pub role: Id,
+            /// The words of the mark, as on the page.
+            pub text: String,
+            /// The book, and where the mark begins and ends.
+            pub path: String,
+            pub section: u32,
+            pub offset: u32,
+            pub end_section: u32,
+            pub end_offset: u32,
+        }
+    }
+
+    impl DecorationTapped {
+        /// Where the mark begins.
+        pub fn start(&self) -> Locator {
+            Locator::new(self.section, self.offset)
+        }
+
+        /// Just after its end.
+        pub fn end(&self) -> Locator {
+            Locator::new(self.end_section, self.end_offset)
+        }
+    }
+
+    crate::event_data! {
         /// A book's notes, exported ([`NOTES_EXPORTED`]).
         pub struct NotesExported {
             /// The file written (Markdown).
@@ -460,6 +506,10 @@ pub mod events {
     /// "Share" action needs no more than a menu entry in
     /// [`menus::SELECTION`](super::menus::SELECTION) and this event).
     pub const TEXT_CHOSEN: Event<TextChosen> = Event::new("core.text-chosen");
+    /// A word a decorator marked was tapped, or chosen with the buttons
+    /// ([`DecorationTapped`]); sent for decorators that take taps (see
+    /// [`decorations`](crate::decorations)), whose plugin answers.
+    pub const DECORATION_TAPPED: Event<DecorationTapped> = Event::new("core.decoration-tapped");
     /// A word of a book was looked up ([`WordLookedUp`]).
     pub const WORD_LOOKED_UP: Event<WordLookedUp> = Event::new("core.word-looked-up");
     /// A menu was redefined or reset ([`MenuChanged`]).
@@ -764,6 +814,9 @@ pub mod groups {
     /// How menus and lists look: text size, margins, rows, lines, headers.
     /// Themes (data plugins) set its defaults.
     pub const LOOK: Id = Id::new_static("core.group.look");
+    /// Marks in the text: the looks of the roles of decorations (see
+    /// [`decorations`](crate::decorations)), a section per role.
+    pub const MARKS: Id = Id::new_static("core.group.marks");
     /// The status lines above and below a book's text (what they show,
     /// their size); the reader puts its settings for them here.
     pub const STATUS_LINES: Id = Id::new_static("core.group.status");

@@ -107,6 +107,7 @@ pub enum Contribution {
     StatusItem(StatusItemSpec),
     StatusLine(StatusLineSpec),
     TextFilter(TextFilterSpec),
+    Decorator(crate::decorations::DecoratorSpec),
     InputFilter(InputFilterSpec),
     RefreshFilter(RefreshFilterSpec),
     Widget(Box<WidgetSpec>),
@@ -155,6 +156,7 @@ impl Contribution {
             Contribution::StatusItem(_) => "status-item",
             Contribution::StatusLine(_) => "status-line",
             Contribution::TextFilter(_) => "text-filter",
+            Contribution::Decorator(_) => "decorator",
             Contribution::InputFilter(_) => "input-filter",
             Contribution::RefreshFilter(_) => "refresh-filter",
             Contribution::Widget(_) => "widget",
@@ -186,6 +188,7 @@ impl Contribution {
             Contribution::StatusItem(i) => &i.id,
             Contribution::StatusLine(l) => &l.id,
             Contribution::TextFilter(f) => &f.id,
+            Contribution::Decorator(d) => &d.id,
             Contribution::InputFilter(f) => &f.id,
             Contribution::RefreshFilter(f) => &f.id,
             Contribution::Widget(w) => &w.id,
@@ -489,6 +492,15 @@ impl Registrar {
     /// [`filters`](crate::filters)).
     pub fn add_text_filter(&mut self, filter: TextFilterSpec) -> Result<(), RegisterError> {
         self.add(Contribution::TextFilter(filter))
+    }
+
+    /// Adds a decorator: marks on the words of book pages, drawn by every
+    /// reader (see [`decorations`](crate::decorations)).
+    pub fn add_decorator(
+        &mut self,
+        decorator: crate::decorations::DecoratorSpec,
+    ) -> Result<(), RegisterError> {
+        self.add(Contribution::Decorator(decorator))
     }
 
     /// Adds a filter of every input, before screens and key maps see it

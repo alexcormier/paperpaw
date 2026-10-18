@@ -36,6 +36,7 @@ pub mod collections;
 mod command;
 pub mod contribution;
 pub mod data;
+pub mod decorations;
 mod env;
 pub mod event;
 pub mod files;

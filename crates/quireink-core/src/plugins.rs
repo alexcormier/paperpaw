@@ -288,6 +288,9 @@ impl Kernel {
         for filter in staging.text_filters.drain(..) {
             self.shared.text_filters.add(filter);
         }
+        for decorator in staging.decorators.drain(..) {
+            self.shared.decorators.add(decorator);
+        }
         for filter in staging.input_filters.drain(..) {
             self.shared.input_filters.add(filter);
         }
@@ -416,6 +419,7 @@ impl Kernel {
         shared.setup.shrink_to_fit();
         shared.services.shrink_to_fit();
         shared.text_filters.shrink_to_fit();
+        shared.decorators.shrink_to_fit();
         shared.input_filters.shrink_to_fit();
         shared.refresh_filters.shrink_to_fit();
         shared.stylesheets.shrink_to_fit();

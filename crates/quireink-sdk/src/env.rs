@@ -83,6 +83,9 @@ pub struct Env<'a> {
     pub status_items: &'a StatusItems,
     /// Filters of book text before it is laid out, from every plugin.
     pub text_filters: &'a crate::filters::TextFilters,
+    /// Marks on the words of book pages, from every plugin (see
+    /// [`decorations`](crate::decorations)).
+    pub decorators: &'a crate::decorations::Decorators,
     /// Plugins' stylesheets for books, in the order of the plugins (see
     /// [`Registrar::add_stylesheet`](crate::Registrar::add_stylesheet)).
     pub stylesheets: &'a [alloc::borrow::Cow<'static, str>],
@@ -159,6 +162,9 @@ pub struct EnvParts<'a> {
     pub status_items: &'a StatusItems,
     /// Filters of book text before it is laid out, from every plugin.
     pub text_filters: &'a crate::filters::TextFilters,
+    /// Marks on the words of book pages, from every plugin (see
+    /// [`decorations`](crate::decorations)).
+    pub decorators: &'a crate::decorations::Decorators,
     /// Plugins' stylesheets for books, in the order of the plugins (see
     /// [`Registrar::add_stylesheet`](crate::Registrar::add_stylesheet)).
     pub stylesheets: &'a [alloc::borrow::Cow<'static, str>],
@@ -223,6 +229,7 @@ impl<'a> From<EnvParts<'a>> for Env<'a> {
             usage: p.usage,
             status_items: p.status_items,
             text_filters: p.text_filters,
+            decorators: p.decorators,
             stylesheets: p.stylesheets,
             book_data: p.book_data,
             widgets: p.widgets,

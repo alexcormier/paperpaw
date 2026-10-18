@@ -407,9 +407,24 @@ impl Framebuffer {
 
     pub(crate) fn put_gray(&mut self, x: u16, y: u16, gray: u8) {
         self.pictured = self.pictured.saturating_add(u32::from(self.counting));
+        let gray = self.dithered(x, y, gray);
+        // Inverted once more to stay as it is, where pictures are kept.
+        let gray = if self.inverted && self.pictures_kept {
+            255 - gray
+        } else {
+            gray
+        };
+        let value = self.encode(Color::gray(gray));
+        self.store(x, y, value);
+    }
+
+    /// `gray` at `(x, y)` with the offset of an ordered dither where the
+    /// format has few gray levels (as is elsewhere), so areas of a gray
+    /// between them show as a pattern of the levels around it.
+    fn dithered(&self, x: u16, y: u16, gray: u8) -> u8 {
         /// 4×4 Bayer matrix.
         const BAYER: [[u8; 4]; 4] = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
-        let gray = match self.format.gray_levels() {
+        match self.format.gray_levels() {
             // The threshold's offset, ((t + 0.5) / 16 - 0.5) of a level's
             // step (255 / (levels - 1)), in whole numbers: chips without
             // floating point reckon it for every pixel of a picture.
@@ -419,15 +434,24 @@ impl Framebuffer {
                 (i32::from(gray) + offset).clamp(0, 255) as u8
             }
             _ => gray,
-        };
-        // Inverted once more to stay as it is, where pictures are kept.
-        let gray = if self.inverted && self.pictures_kept {
-            255 - gray
-        } else {
-            gray
-        };
-        let value = self.encode(Color::gray(gray));
-        self.store(x, y, value);
+        }
+    }
+
+    /// Fills `rect` (inside the band) with `color`, ordered dithered where
+    /// the format has few grays (a light gray stays visible as a light
+    /// pattern rather than turning white); colour formats get the colour.
+    /// It is no picture (see [`Framebuffer::take_pictured`]).
+    pub(crate) fn shade_clipped(&mut self, rect: Rect, color: Color) {
+        if !matches!(self.format.gray_levels(), Some(2..=16)) {
+            return self.fill_clipped(rect, color);
+        }
+        let luma = color.luma();
+        for y in rect.y..rect.bottom() as u16 {
+            for x in rect.x..rect.right() as u16 {
+                let value = self.encode(Color::gray(self.dithered(x, y, luma)));
+                self.store(x, y, value);
+            }
+        }
     }
 
     /// Sets the pixel at `(x, y)` (inside the band) to `rgb` on colour

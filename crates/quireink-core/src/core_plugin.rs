@@ -50,6 +50,7 @@ impl Plugin for CorePlugin {
         register_spaces(r)?;
         register_colors(r)?;
         register_reading_settings(r)?;
+        register_marks(r)?;
         register_time_and_battery(r)?;
         register_keymaps_and_setup(r)?;
         Ok(())
@@ -440,6 +441,7 @@ fn register_menus(r: &mut Registrar) -> Result<(), RegisterError> {
         (groups::READING, "core.group.reading", 10, "book"),
         (groups::LIBRARY, "core.group.library", 20, "books"),
         (groups::STATUS_LINES, "core.group.status", 15, "layout"),
+        (groups::MARKS, "core.group.marks", 17, "highlight"),
         (groups::DISPLAY, "core.group.display", 60, "contrast"),
         (groups::CONTROLS, "core.group.controls", 70, "adjustments"),
         (groups::SYSTEM, "core.group.system", 90, "device-tablet"),
@@ -792,6 +794,42 @@ fn register_reading_settings(r: &mut Registrar) -> Result<(), RegisterError> {
             .scoped()
             .description("core.setting.scope-only.help"),
     )?;
+    Ok(())
+}
+
+/// The roles of the marks every reader draws: highlights, links, a
+/// search hit, the sentence read aloud (see `quireink_sdk::decorations`).
+fn register_marks(r: &mut Registrar) -> Result<(), RegisterError> {
+    use quireink_sdk::builtin::roles;
+    use quireink_sdk::decorations::{Decoration, LineKind, Tone, add_role};
+    let roles = [
+        (
+            roles::HIGHLIGHT,
+            "core.role.highlight",
+            Decoration::NONE.background(Tone::LightGray),
+        ),
+        (
+            roles::LINK,
+            "core.role.link",
+            Decoration::NONE
+                .line(LineKind::Solid)
+                .line_tone(Tone::DarkGray)
+                .thickness(1),
+        ),
+        (
+            roles::SEARCH_HIT,
+            "core.role.search-hit",
+            Decoration::NONE.line(LineKind::Solid).thickness(5),
+        ),
+        (
+            roles::ALOUD,
+            "core.role.aloud",
+            Decoration::NONE.line(LineKind::Solid).thickness(5),
+        ),
+    ];
+    for (role, title, look) in roles {
+        add_role(r, &role, title, look)?;
+    }
     Ok(())
 }
 
