@@ -775,6 +775,10 @@ pub mod settings {
     pub const DEFAULT_FONT: &str = "core.font.default";
     /// `core.clock.24h` or `core.clock.12h`.
     pub const CLOCK_FORMAT: Setting<Text> = Setting::new("core.clock-format");
+    /// The first day of the week, one of
+    /// [`time::WEEK_STARTS`](crate::time::WEEK_STARTS); read it with
+    /// [`time::week_start`](crate::time::week_start).
+    pub const WEEK_START: Setting<Text> = Setting::new("core.week-start");
     /// The time zone: `core.tz.auto` (the system's) or one of
     /// [`time::TIME_ZONES`](crate::time::TIME_ZONES).
     pub const TIME_ZONE: Setting<Text> = Setting::new("core.time-zone");

@@ -16,7 +16,7 @@ use super::{chosen, frame_height, ui};
 
 const ID: Id = Id::new_static("widgets.calendar");
 
-/// The values of the week start setting: as the language has it, Monday,
+/// The values of the week start setting: as set for the device, Monday,
 /// Sunday.
 pub(super) const WEEK_STARTS: [&str; 3] = [
     "widgets.week-start.auto",
@@ -109,12 +109,12 @@ pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
 }
 
 /// The first day of the week, 0 (Sunday) or 1 (Monday), as `widget`'s
-/// setting `week-start` says, or the language has it.
+/// setting `week-start` says, or as set for the device.
 pub(super) fn week_start(env: &Env<'_>, widget: &str) -> u8 {
     match chosen(env, widget, "week-start") {
         "sunday" => 0,
         "monday" => 1,
-        _ => u8::from(env.i18n.tr("widgets.week-start") != "0"),
+        _ => quireink_sdk::time::week_start(env),
     }
 }
 

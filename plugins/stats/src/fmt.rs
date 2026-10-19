@@ -126,14 +126,10 @@ pub(crate) fn month<'a>(env: &Env<'a>, month: u8) -> &'a str {
     env.i18n.tr(KEYS[usize::from(month.clamp(1, 12) - 1)])
 }
 
-/// The first day of the week: 1 for Monday (most of Europe), 0 for
-/// Sunday, as the language has it.
+/// The first day of the week: 1 for Monday, 0 for Sunday, as set for
+/// the device.
 pub(crate) fn week_start(env: &Env<'_>) -> u8 {
-    if env.i18n.tr("stats.week-start") == "0" {
-        0
-    } else {
-        1
-    }
+    quireink_sdk::time::week_start(env)
 }
 
 #[cfg(test)]

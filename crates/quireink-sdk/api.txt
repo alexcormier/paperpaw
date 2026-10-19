@@ -356,6 +356,7 @@ pub const quireink_sdk::builtin::settings::UI_LINES: quireink_sdk::Id
 pub const quireink_sdk::builtin::settings::UI_MARGIN: quireink_sdk::Id
 pub const quireink_sdk::builtin::settings::UI_ROW: quireink_sdk::Id
 pub const quireink_sdk::builtin::settings::UI_SIZE: quireink_sdk::setting::Setting<i64>
+pub const quireink_sdk::builtin::settings::WEEK_START: quireink_sdk::setting::Setting<quireink_sdk::setting::Text>
 pub fn quireink_sdk::builtin::settings::parse_rgb(&str) -> core::option::Option<[u8; 3]>
 pub fn quireink_sdk::builtin::settings::rgb(&str) -> core::option::Option<[u8; 3]>
 pub mod quireink_sdk::builtin::settings_sections
@@ -1338,12 +1339,14 @@ pub const quireink_sdk::time::AUTO: &str
 pub const quireink_sdk::time::CLOCK_12H: &str
 pub const quireink_sdk::time::CLOCK_24H: &str
 pub const quireink_sdk::time::TIME_ZONES: &[(&str, &str)]
+pub const quireink_sdk::time::WEEK_STARTS: [&str; 3]
 pub fn quireink_sdk::time::clock_text(&quireink_sdk::Env<'_>) -> core::option::Option<alloc::string::String>
 pub fn quireink_sdk::time::date_text(&quireink_sdk::Env<'_>) -> core::option::Option<alloc::string::String>
 pub fn quireink_sdk::time::local_seconds(&quireink_sdk::Env<'_>, i64) -> i64
 pub fn quireink_sdk::time::local_time(&quireink_sdk::Env<'_>) -> core::option::Option<quireink_sdk::time::LocalTime>
 pub fn quireink_sdk::time::next_minute(&quireink_sdk::Env<'_>) -> core::option::Option<quireink_platform::input::Instant>
 pub fn quireink_sdk::time::unix_seconds(&quireink_sdk::Env<'_>) -> core::option::Option<i64>
+pub fn quireink_sdk::time::week_start(&quireink_sdk::Env<'_>) -> u8
 pub mod quireink_sdk::ui
 pub mod quireink_sdk::ui::choice
 pub struct quireink_sdk::ui::choice::Choice

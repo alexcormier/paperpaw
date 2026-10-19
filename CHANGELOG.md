@@ -6,6 +6,10 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- *First day of the week* (System): Monday, Sunday, or as the language
+  has it (Monday in English and German). The statistics' weeks and every
+  calendar follow it (a calendar widget may choose its own). SDK:
+  `settings::WEEK_START`, `time::WEEK_STARTS`, `time::week_start`.
 - Many new widgets for the home screen (C26), each with settings of its
   own: what it shows, its style, its size and alignment, and a frame
   (none, a line, a light card, a dark card with light text) that every

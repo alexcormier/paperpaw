@@ -193,3 +193,19 @@ fn every_widget_can_be_shaped() {
         "widgets without settings or a frame: {missing:?}"
     );
 }
+
+#[test]
+fn one_week_start_for_all() {
+    use quireink_sdk::builtin::settings::WEEK_START;
+    use quireink_sdk::time::WEEK_STARTS;
+    let mut app = App::new(X4, "en");
+    assert_eq!(app.kernel.settings().read(&WEEK_START), WEEK_STARTS[0]);
+    app.set(WEEK_START.as_str(), "core.week.sunday");
+    assert_eq!(app.kernel.settings().read(&WEEK_START), "core.week.sunday");
+    // The calendars follow it, drawn as before.
+    app.set(
+        "home.page-1",
+        "widgets.calendar 0/0 4x3, stats.widget.calendar 0/3 4x3",
+    );
+    assert!(app.draw());
+}

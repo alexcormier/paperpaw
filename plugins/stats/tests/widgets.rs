@@ -194,8 +194,9 @@ fn the_days_show_as_bars_with_their_weekdays() {
         "stats.widget.week 0/0 4x2",
         "widget.week.period = stats.period.week",
     );
-    // From Sunday, as English weeks start: 65 + 18 + 41 + 23 minutes.
-    assert!(shown.contains("This week: 2 h 27 min"), "{shown}");
+    // From Monday, the device's first day of the week (by default as
+    // the language has it): the last three days.
+    assert!(shown.contains("This week: 1 h 22 min"), "{shown}");
 }
 
 #[test]

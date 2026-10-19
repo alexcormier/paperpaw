@@ -838,6 +838,15 @@ fn register_time_and_battery(r: &mut Registrar) -> Result<(), RegisterError> {
         )
         .group(groups::SYSTEM),
     )?;
+    r.add_setting(
+        SettingSpec::choice(
+            &settings::WEEK_START,
+            "core.setting.week-start",
+            quireink_sdk::Choices::Fixed(&quireink_sdk::time::WEEK_STARTS),
+            quireink_sdk::time::WEEK_STARTS[0],
+        )
+        .group(groups::SYSTEM),
+    )?;
     let mut zones = alloc::vec![Cow::Borrowed(AUTO)];
     zones.extend(TIME_ZONES.iter().map(|(id, _)| Cow::Borrowed(*id)));
     r.add_setting(

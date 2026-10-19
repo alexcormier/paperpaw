@@ -396,6 +396,22 @@ pub fn date_text(env: &Env<'_>) -> Option<String> {
 }
 
 /// The values of `core.clock-format`.
+/// The values of the first day of the week
+/// ([`WEEK_START`](crate::builtin::settings::WEEK_START)): as the
+/// language has it, Monday, Sunday.
+pub const WEEK_STARTS: [&str; 3] = ["core.week.auto", "core.week.monday", "core.week.sunday"];
+
+/// The first day of the week, 0 (Sunday) or 1 (Monday), as set or, where
+/// set to the language's habit, as the translation `core.week-start-day`
+/// says. Every calendar and week of a plugin starts there.
+pub fn week_start(env: &Env<'_>) -> u8 {
+    match env.settings.read(&crate::builtin::settings::WEEK_START) {
+        "core.week.sunday" => 0,
+        "core.week.monday" => 1,
+        _ => u8::from(env.i18n.tr("core.week-start-day") != "0"),
+    }
+}
+
 pub const CLOCK_24H: &str = "core.clock.24h";
 pub const CLOCK_12H: &str = "core.clock.12h";
 
