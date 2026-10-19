@@ -762,6 +762,18 @@ fn register_colors(r: &mut Registrar) -> Result<(), RegisterError> {
 
 /// The reading font, and whether a book's settings are its own.
 fn register_reading_settings(r: &mut Registrar) -> Result<(), RegisterError> {
+    // The status lines' font: the menus', the book's or one of its own
+    // (the families are offered once all fonts are known).
+    r.add_setting(
+        SettingSpec::choice(
+            &settings::STATUS_FONT,
+            "core.setting.status-font",
+            quireink_sdk::Choices::Fixed(&[settings::STATUS_FONT_UI, settings::STATUS_FONT_BOOK]),
+            settings::STATUS_FONT_UI,
+        )
+        .group(groups::STATUS_LINES)
+        .description("core.setting.status-font.help"),
+    )?;
     r.add_setting(
         SettingSpec::choice(
             &settings::READING_FONT,

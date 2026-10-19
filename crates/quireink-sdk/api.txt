@@ -244,6 +244,7 @@ pub const quireink_sdk::builtin::fonts::READING: quireink_sdk::Id
 pub const quireink_sdk::builtin::fonts::READING_BOLD: quireink_sdk::Id
 pub const quireink_sdk::builtin::fonts::READING_BOLD_ITALIC: quireink_sdk::Id
 pub const quireink_sdk::builtin::fonts::READING_ITALIC: quireink_sdk::Id
+pub const quireink_sdk::builtin::fonts::STATUS: quireink_sdk::Id
 pub const quireink_sdk::builtin::fonts::UI: quireink_sdk::Id
 pub mod quireink_sdk::builtin::groups
 pub const quireink_sdk::builtin::groups::CONTROLS: quireink_sdk::Id
@@ -344,6 +345,9 @@ pub const quireink_sdk::builtin::settings::ROTATIONS: [&str; 4]
 pub const quireink_sdk::builtin::settings::SCOPE_ONLY: quireink_sdk::setting::Setting<bool>
 pub const quireink_sdk::builtin::settings::SLEEP_AFTER: quireink_sdk::setting::Setting<i64>
 pub const quireink_sdk::builtin::settings::SPEAK_FOCUS: quireink_sdk::setting::Setting<bool>
+pub const quireink_sdk::builtin::settings::STATUS_FONT: quireink_sdk::setting::Setting<quireink_sdk::setting::Text>
+pub const quireink_sdk::builtin::settings::STATUS_FONT_BOOK: &str
+pub const quireink_sdk::builtin::settings::STATUS_FONT_UI: &str
 pub const quireink_sdk::builtin::settings::TEXT_COLOR: quireink_sdk::Id
 pub const quireink_sdk::builtin::settings::TEXT_COLORS: [&str; 9]
 pub const quireink_sdk::builtin::settings::TEXT_COLOR_OWN: quireink_sdk::Id
@@ -2336,6 +2340,7 @@ pub fn quireink_sdk::Fonts::new(usize) -> Self
 pub fn quireink_sdk::Fonts::propose(&mut self, quireink_sdk::Id, quireink_sdk::Id, quireink_sdk::Priority)
 pub fn quireink_sdk::Fonts::role(&self, &str) -> core::option::Option<quireink_sdk::FontHandle<'_>>
 pub fn quireink_sdk::Fonts::set_family(&mut self, core::option::Option<&str>)
+pub fn quireink_sdk::Fonts::set_status(&mut self, &str)
 pub fn quireink_sdk::Fonts::shrink_to_fit(&mut self)
 pub fn quireink_sdk::Fonts::user_bound(&self, &str) -> bool
 impl core::fmt::Debug for quireink_sdk::Fonts

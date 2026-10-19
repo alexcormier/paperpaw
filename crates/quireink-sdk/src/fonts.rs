@@ -95,6 +95,9 @@ pub struct Fonts {
     user: VecMap<Id, Id>,
     /// The family chosen for reading.
     family: Option<String>,
+    /// What the status lines are in: a value of
+    /// [`STATUS_FONT`](crate::builtin::settings::STATUS_FONT).
+    status: Option<String>,
     cache: RefCell<GlyphCache>,
 }
 
@@ -118,6 +121,7 @@ impl Fonts {
             candidates: Vec::new(),
             user: VecMap::new(),
             family: None,
+            status: None,
             cache: RefCell::new(GlyphCache::new(cache_bytes)),
         }
     }
@@ -234,6 +238,39 @@ impl Fonts {
         self.family = family.map(String::from);
     }
 
+    /// Chooses what the status lines are in ([`roles::STATUS`]): a value
+    /// of [`STATUS_FONT`](crate::builtin::settings::STATUS_FONT), as the
+    /// menus, as the book or a family's name. Call [`Fonts::load`]
+    /// afterwards for font files.
+    pub fn set_status(&mut self, choice: &str) {
+        self.status = Some(String::from(choice));
+    }
+
+    /// The family of its own the status lines are in, if one is chosen.
+    fn status_family(&self) -> Option<&str> {
+        use crate::builtin::settings::{STATUS_FONT_BOOK, STATUS_FONT_UI};
+        self.status
+            .as_deref()
+            .filter(|s| *s != STATUS_FONT_UI && *s != STATUS_FONT_BOOK)
+    }
+
+    /// The face for the status lines: the user's binding, else as chosen
+    /// ([`Fonts::set_status`]), else the menus'.
+    fn status_face(&self) -> Option<FontHandle<'_>> {
+        use crate::builtin::settings::STATUS_FONT_BOOK;
+        if let Some(font) = self.user.get(roles::STATUS.as_str()) {
+            return self.get(font.as_str());
+        }
+        let own = self
+            .status_family()
+            .and_then(|family| self.best_face(family, false, false, true))
+            .map(|index| self.handle(index));
+        let book = (self.status.as_deref() == Some(STATUS_FONT_BOOK))
+            .then(|| self.role(roles::READING.as_str()))
+            .flatten();
+        own.or(book).or_else(|| self.role(roles::UI.as_str()))
+    }
+
     /// The entry of `family` best for a regular, bold, italic or bold
     /// italic face: that style, the weight closest to 400 or 700; among
     /// equals the first.
@@ -258,7 +295,7 @@ impl Fonts {
     pub fn load(&mut self, storage: &Rc<dyn Storage>) -> Vec<String> {
         let mut failed = Vec::new();
         let chosen = self.family.clone();
-        let wanted: Vec<usize> = chosen
+        let mut wanted: Vec<usize> = chosen
             .as_deref()
             .map(|family| {
                 [(false, false), (true, false), (false, true), (true, true)]
@@ -267,6 +304,13 @@ impl Fonts {
                     .collect()
             })
             .unwrap_or_default();
+        // The status lines' family of their own: its regular face.
+        if let Some(index) = self
+            .status_family()
+            .and_then(|family| self.best_face(family, false, false, false))
+        {
+            wanted.push(index);
+        }
         for (index, entry) in self.entries.iter_mut().enumerate() {
             let Some(path) = &entry.file else {
                 continue;
@@ -331,6 +375,9 @@ impl Fonts {
     /// The font bound to `role`: the user's choice, else the chosen
     /// family's face, else the best proposal, else the first font.
     pub fn role(&self, role: &str) -> Option<FontHandle<'_>> {
+        if role == roles::STATUS.as_str() {
+            return self.status_face();
+        }
         let user = self.user.get(role).and_then(|id| self.get(id.as_str()));
         let first = || {
             self.entries

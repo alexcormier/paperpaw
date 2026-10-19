@@ -204,6 +204,9 @@ impl Kernel {
         if *id == core_settings::KEYMAP_PRESET {
             self.rebuild_keymap();
         }
+        if *id == core_settings::STATUS_FONT {
+            self.apply_status_font();
+        }
         if *id == core_settings::READING_FONT {
             self.apply_reading_font();
         }

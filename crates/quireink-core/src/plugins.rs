@@ -401,6 +401,20 @@ impl Kernel {
         }
     }
 
+    /// Chooses what the status lines are in from `core.status-font` and
+    /// loads its files.
+    pub(crate) fn apply_status_font(&mut self) {
+        let chosen = self
+            .shared
+            .settings
+            .text(core_settings::STATUS_FONT.as_str())
+            .to_string();
+        self.shared.fonts.set_status(&chosen);
+        for path in self.shared.fonts.load(&self.shared.storage) {
+            self.warn_runtime(format!("{path}: font could not be loaded"));
+        }
+    }
+
     /// Releases memory reserved while plugins registered: on small devices
     /// every kilobyte counts, and registries are not modified afterwards.
     pub(crate) fn shrink_to_fit(&mut self) {

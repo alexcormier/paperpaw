@@ -6,6 +6,10 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- The status lines while reading have a font of their own (*Status
+  lines → Font*): as the menus (as before), as the book, or any font
+  installed. SDK: `fonts::STATUS` (readers draw their status lines in
+  it), `settings::STATUS_FONT`, `Fonts::set_status`.
 - The same widget can be on the home screen more than once, each in a
   look of its own: every widget added has its own settings (its frame,
   size, what it shows), set from its *Settings* in the editor. Pages made
