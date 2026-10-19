@@ -20,8 +20,9 @@ use quireink_sdk::widgets::{self, Align, Frame, Look, Size, Widget, WidgetSpec, 
 use quireink_sdk::{Canvas, Color, Command, Env, Id, Rect, RegisterError, Registrar};
 
 use super::{
-    Generation, catalog_stamp, draw_line, each_book, frame_height, look_settings, part, path_hash,
+    Generation, add_settings, catalog_stamp, draw_line, each_book, frame_height, path_hash,
 };
+use quireink_sdk::SettingSpec;
 
 pub(crate) const ID: Id = Id::new_static(WIDGET);
 /// Its id, as text.
@@ -37,21 +38,46 @@ const LABELS: [&str; 4] = [
     "widgets.library.unread",
 ];
 
-pub(crate) fn register(r: &mut Registrar, generation: &Generation) -> Result<(), RegisterError> {
-    look_settings(
-        r,
-        &ID,
-        "widgets.library",
-        Align::Center,
-        Frame::None,
-        Size::Fit,
+/// Its settings, kept in the program.
+static SETTINGS: [SettingSpec; 9] = [
+    widgets::align_spec("widgets.library.align", ID, Align::Center),
+    widgets::frame_spec("widgets.library.frame", ID, Frame::None),
+    widgets::size_spec("widgets.library.size", ID, Size::Fit, true),
+    widgets::part_spec(
+        "widgets.library.books",
+        ID,
+        "widgets.books.part.books",
         true,
-    )?;
-    for name in PARTS {
-        part(r, &ID, name, true)?;
-    }
-    part(r, &ID, "bar", true)?;
-    part(r, &ID, "caption", false)?;
+    ),
+    widgets::part_spec(
+        "widgets.library.finished",
+        ID,
+        "widgets.books.part.finished",
+        true,
+    ),
+    widgets::part_spec(
+        "widgets.library.reading",
+        ID,
+        "widgets.books.part.reading",
+        true,
+    ),
+    widgets::part_spec(
+        "widgets.library.unread",
+        ID,
+        "widgets.books.part.unread",
+        true,
+    ),
+    widgets::part_spec("widgets.library.bar", ID, "widgets.books.part.bar", true),
+    widgets::part_spec(
+        "widgets.library.caption",
+        ID,
+        "widgets.books.part.caption",
+        false,
+    ),
+];
+
+pub(crate) fn register(r: &mut Registrar, generation: &Generation) -> Result<(), RegisterError> {
+    add_settings(r, &ID, "widgets.library", &SETTINGS)?;
     let kept: Kept = Rc::default();
     let generation = generation.clone();
     r.add_widget(

@@ -35,10 +35,10 @@ use quireink_sdk::builtin::{events, params, slots};
 use quireink_sdk::document::ImageRef;
 use quireink_sdk::library::{self, catalog};
 use quireink_sdk::ui::{self, UiStyle};
-use quireink_sdk::widgets::{self, Align, Frame, Look, Size, line_height};
+use quireink_sdk::widgets::{self, Align, Look, line_height};
 use quireink_sdk::{
     Arg, Canvas, Color, Command, Env, FontHandle, Id, Params, Point, Rect, RegisterError,
-    Registrar, SettingKind, SettingSpec, SettingValue, Storage,
+    Registrar, SettingSpec, Storage,
 };
 
 pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
@@ -226,56 +226,20 @@ pub(crate) fn path_hash(path: &str) -> u64 {
 
 // ---- Settings ------------------------------------------------------------------
 
-/// The settings every widget here has, in its own group: where its text
-/// sits, its frame and how large its text is (`fit`: also as large as
-/// fits).
-pub(crate) fn look_settings(
+/// Registers widget `id`'s settings group, named `title`, with its
+/// settings, kept in the program (where its text sits, its frame, how
+/// large its text is, the parts it shows and the rest).
+pub(crate) fn add_settings(
     r: &mut Registrar,
     id: &Id,
     title: &'static str,
-    align: Align,
-    frame: Frame,
-    size: Size,
-    fit: bool,
+    settings: &'static [SettingSpec],
 ) -> Result<(), RegisterError> {
     r.add_setting_group(widgets::settings_group(id, title))?;
-    r.add_setting(widgets::align_setting(id, align))?;
-    r.add_setting(widgets::frame_setting(id, frame))?;
-    r.add_setting(widgets::size_setting(id, size, fit))?;
-    Ok(())
+    r.add_settings(settings)
 }
 
-/// A switch for `part` of widget `id`, titled `widgets.part.<part>`.
-pub(crate) fn part(
-    r: &mut Registrar,
-    id: &Id,
-    part: &'static str,
-    default: bool,
-) -> Result<(), RegisterError> {
-    let title = format!("widgets.books.part.{part}");
-    r.add_setting(widgets::part_setting(id, part, title, default))
-}
-
-/// A whole number of widget `id`, `<id>.<key>`, from `min` to `max`.
-pub(crate) fn number_setting(
-    r: &mut Registrar,
-    id: &Id,
-    key: &str,
-    title: &'static str,
-    (min, max, default): (i64, i64, i64),
-) -> Result<(), RegisterError> {
-    r.add_setting(
-        SettingSpec::new(
-            widgets::setting_id(id, key),
-            title,
-            SettingKind::Int { min, max },
-            SettingValue::Int(default),
-        )
-        .group(id.clone()),
-    )
-}
-
-/// The value of widget `id`'s choice `key`.
+// The value of widget `id`'s choice `key`.
 pub(crate) fn chosen<'e>(env: &Env<'e>, id: &str, key: &str) -> &'e str {
     env.settings.text(&format!("{id}.{key}"))
 }

@@ -11,9 +11,8 @@ use quireink_sdk::widgets::{self, Align, Frame, Look, Size, Widget, WidgetSpec, 
 use quireink_sdk::{Canvas, Env, Id, Rect, RegisterError, Registrar};
 
 use super::shelf::{self, Place, Shelved};
-use super::{
-    Book, chosen, count, current, draw_message, frame_height, look_settings, number_setting, part,
-};
+use super::{Book, add_settings, chosen, count, current, draw_message, frame_height};
+use quireink_sdk::SettingSpec;
 
 pub(crate) const ID: Id = Id::new_static(WIDGET);
 /// Its id, as text.
@@ -21,28 +20,54 @@ const WIDGET: &str = "widgets.favourites";
 /// In a row, or in rows filling the place.
 pub(crate) const LAYOUTS: [&str; 2] = ["widgets.books.layout.row", "widgets.books.layout.grid"];
 
-pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
-    look_settings(
-        r,
-        &ID,
-        "widgets.favourites",
-        Align::Center,
-        Frame::None,
-        Size::Medium,
-        false,
-    )?;
-    r.add_setting(widgets::choice(
-        &ID,
-        "layout",
+/// Its settings, kept in the program.
+static SETTINGS: [SettingSpec; 9] = [
+    widgets::align_spec("widgets.favourites.align", ID, Align::Center),
+    widgets::frame_spec("widgets.favourites.frame", ID, Frame::None),
+    widgets::size_spec("widgets.favourites.size", ID, Size::Medium, false),
+    SettingSpec::fixed_choice(
+        "widgets.favourites.layout",
         "widgets.books.setting.layout",
         &LAYOUTS,
         LAYOUTS[0],
-    ))?;
-    number_setting(r, &ID, "count", "widgets.books.setting.count", (1, 24, 8))?;
-    part(r, &ID, "caption", true)?;
-    part(r, &ID, "titles", false)?;
-    part(r, &ID, "read", false)?;
-    part(r, &ID, "current", false)?;
+        ID,
+    ),
+    SettingSpec::fixed_number(
+        "widgets.favourites.count",
+        "widgets.books.setting.count",
+        1,
+        24,
+        8,
+        ID,
+    ),
+    widgets::part_spec(
+        "widgets.favourites.caption",
+        ID,
+        "widgets.books.part.caption",
+        true,
+    ),
+    widgets::part_spec(
+        "widgets.favourites.titles",
+        ID,
+        "widgets.books.part.titles",
+        false,
+    ),
+    widgets::part_spec(
+        "widgets.favourites.read",
+        ID,
+        "widgets.books.part.read",
+        false,
+    ),
+    widgets::part_spec(
+        "widgets.favourites.current",
+        ID,
+        "widgets.books.part.current",
+        false,
+    ),
+];
+
+pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
+    add_settings(r, &ID, "widgets.favourites", &SETTINGS)?;
     r.add_widget(
         WidgetSpec::new(
             ID,

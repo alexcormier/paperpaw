@@ -19,9 +19,10 @@ use quireink_sdk::widgets::{self, Align, Frame, Look, Size, Widget, WidgetSpec, 
 use quireink_sdk::{Arg, Canvas, Env, Id, Rect, RegisterError, Registrar, Storage};
 
 use super::{
-    Generation, chosen, draw_line, draw_message, each_book, frame_height, look_settings, mix, open,
-    part, path_hash, today,
+    Generation, add_settings, chosen, draw_line, draw_message, each_book, frame_height, mix, open,
+    path_hash, today,
 };
+use quireink_sdk::SettingSpec;
 
 pub(crate) const ID: Id = Id::new_static(WIDGET);
 /// Its id, as text.
@@ -39,39 +40,63 @@ const MAX_BOOKS: usize = 200;
 /// The largest file of a book's annotations read: it is read whole.
 const MAX_FILE: u64 = 128 * 1024;
 
+/// Its settings, kept in the program.
+static SETTINGS: [SettingSpec; 10] = [
+    widgets::align_spec("widgets.highlight.align", ID, Align::Center),
+    widgets::frame_spec("widgets.highlight.frame", ID, Frame::None),
+    widgets::size_spec("widgets.highlight.size", ID, Size::Fit, true),
+    SettingSpec::fixed_choice(
+        "widgets.highlight.source",
+        "widgets.books.setting.highlight-source",
+        &SOURCES,
+        SOURCES[0],
+        ID,
+    ),
+    SettingSpec::fixed_choice(
+        "widgets.highlight.change",
+        "widgets.books.setting.highlight-change",
+        &CHANGES,
+        CHANGES[0],
+        ID,
+    ),
+    widgets::part_spec(
+        "widgets.highlight.caption",
+        ID,
+        "widgets.books.part.caption",
+        false,
+    ),
+    widgets::part_spec(
+        "widgets.highlight.marks",
+        ID,
+        "widgets.books.part.marks",
+        true,
+    ),
+    widgets::part_spec(
+        "widgets.highlight.title",
+        ID,
+        "widgets.books.part.title",
+        true,
+    ),
+    widgets::part_spec(
+        "widgets.highlight.author",
+        ID,
+        "widgets.books.part.author",
+        false,
+    ),
+    widgets::part_spec(
+        "widgets.highlight.note",
+        ID,
+        "widgets.books.part.note",
+        false,
+    ),
+];
+
 pub(crate) fn register(r: &mut Registrar, generation: &Generation) -> Result<(), RegisterError> {
     r.on(OPEN_AT, |_, goto, out| {
         out.push(open(&goto.path));
         out.push(events::GOTO.emit(goto.clone()));
     })?;
-    look_settings(
-        r,
-        &ID,
-        "widgets.highlight",
-        Align::Center,
-        Frame::None,
-        Size::Fit,
-        true,
-    )?;
-    r.add_setting(widgets::choice(
-        &ID,
-        "source",
-        "widgets.books.setting.highlight-source",
-        &SOURCES,
-        SOURCES[0],
-    ))?;
-    r.add_setting(widgets::choice(
-        &ID,
-        "change",
-        "widgets.books.setting.highlight-change",
-        &CHANGES,
-        CHANGES[0],
-    ))?;
-    part(r, &ID, "caption", false)?;
-    part(r, &ID, "marks", true)?;
-    part(r, &ID, "title", true)?;
-    part(r, &ID, "author", false)?;
-    part(r, &ID, "note", false)?;
+    add_settings(r, &ID, "widgets.highlight", &SETTINGS)?;
     let kept: Kept = Rc::default();
     let shows = Rc::new(Cell::new(0u64));
     let generation = generation.clone();

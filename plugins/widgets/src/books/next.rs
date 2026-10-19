@@ -21,10 +21,11 @@ use quireink_sdk::{Arg, Canvas, Command, Env, Id, Rect, RegisterError, Registrar
 
 use super::series::{Member, members};
 use super::{
-    Book, Generation, Lines, catalog_stamp, chosen, cover_size, current, draw_cover, draw_message,
-    each_book, frame_height, look_settings, mix, part, path_hash, text_size, today,
+    Book, Generation, Lines, add_settings, catalog_stamp, chosen, cover_size, current, draw_cover,
+    draw_message, each_book, frame_height, mix, path_hash, text_size, today,
 };
 use crate::PLUGIN;
+use quireink_sdk::SettingSpec;
 
 pub(crate) const ID: Id = Id::new_static(WIDGET);
 /// Its id, as text.
@@ -42,24 +43,32 @@ const MAX_SEEN: usize = 4096;
 /// New books remembered, at most.
 const MAX_NEWEST: usize = 16;
 
+/// Its settings, kept in the program.
+static SETTINGS: [SettingSpec; 8] = [
+    widgets::align_spec("widgets.next.align", ID, Align::Left),
+    widgets::frame_spec("widgets.next.frame", ID, Frame::None),
+    widgets::size_spec("widgets.next.size", ID, Size::Medium, false),
+    SettingSpec::fixed_choice(
+        "widgets.next.pick",
+        "widgets.books.setting.pick",
+        &PICKS,
+        PICKS[0],
+        ID,
+    )
+    .described("widgets.books.setting.pick.help"),
+    widgets::part_spec(
+        "widgets.next.caption",
+        ID,
+        "widgets.books.part.caption",
+        true,
+    ),
+    widgets::part_spec("widgets.next.cover", ID, "widgets.books.part.cover", true),
+    widgets::part_spec("widgets.next.author", ID, "widgets.books.part.author", true),
+    widgets::part_spec("widgets.next.series", ID, "widgets.books.part.series", true),
+];
+
 pub(crate) fn register(r: &mut Registrar, generation: &Generation) -> Result<(), RegisterError> {
-    look_settings(
-        r,
-        &ID,
-        "widgets.next",
-        Align::Left,
-        Frame::None,
-        Size::Medium,
-        false,
-    )?;
-    r.add_setting(
-        widgets::choice(&ID, "pick", "widgets.books.setting.pick", &PICKS, PICKS[0])
-            .description("widgets.books.setting.pick.help"),
-    )?;
-    part(r, &ID, "caption", true)?;
-    part(r, &ID, "cover", true)?;
-    part(r, &ID, "author", true)?;
-    part(r, &ID, "series", true)?;
+    add_settings(r, &ID, "widgets.next", &SETTINGS)?;
     let kept: Kept = Rc::default();
     let generation = generation.clone();
     r.add_widget(
