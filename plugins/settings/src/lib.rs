@@ -84,6 +84,15 @@ const FOCUS: &str = "focus";
 #[derive(Debug, Default)]
 pub struct SettingsPlugin;
 
+/// Whether advanced settings show.
+static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_switch(
+    ADVANCED.static_str(),
+    "settings.advanced",
+    false,
+    groups::SYSTEM,
+)
+.described("settings.advanced.help")];
+
 impl Plugin for SettingsPlugin {
     fn manifest(&self) -> Manifest {
         Manifest {
@@ -163,11 +172,7 @@ impl Plugin for SettingsPlugin {
         r.add_icon(secrets::OPEN, Cow::Borrowed("lock"))?;
         r.on(secrets::ENTERED, secrets::entered)?;
         r.bind_slot(slots::SETTINGS, SCREEN, Priority::DEFAULT)?;
-        r.add_setting(
-            SettingSpec::switch(&ADVANCED, "settings.advanced", false)
-                .group(groups::SYSTEM)
-                .description("settings.advanced.help"),
-        )?;
+        r.add_settings(&SETTINGS)?;
         r.on(TEXT_ENTERED, |env, typed, out| {
             let id = typed.context.get(ID).and_then(|id| Id::parse(id).ok());
             if let Some(id) = id

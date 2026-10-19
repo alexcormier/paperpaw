@@ -12,7 +12,8 @@ use alloc::vec::Vec;
 use quireink_sdk::builtin::groups;
 use quireink_sdk::widgets;
 use quireink_sdk::{
-    Command, Env, Id, RegisterError, Registrar, SettingKind, SettingSpec, SettingValue,
+    Command, Env, Id, RegisterError, Registrar, SettingExtra, SettingKind, SettingSpec,
+    SettingValue,
 };
 
 use crate::{ACTIONS, SCREEN};
@@ -58,88 +59,105 @@ pub(crate) fn setting(index: usize) -> Id {
     Id::parse(&format!("home.page-{}", index + 1)).unwrap_or(Id::new_static("home.page-1"))
 }
 
+/// The home screen's part of the Appearance settings.
+static IN_HOME: SettingExtra = SettingExtra::new().section(SECTION);
+/// A page's items, edited on the home screen itself.
+static PAGE: SettingExtra = SettingExtra::new().section(SECTION).editor(SCREEN);
+/// The status items below the page, chosen on their picker.
+static ITEMS: SettingExtra = SettingExtra::new()
+    .section(SECTION)
+    .editor(quireink_sdk::builtin::screens::STATUS_ITEMS);
+
+/// The setting of page `n` (1 the first).
+const fn page(id: &'static str, title: &'static str, default: &'static str) -> SettingSpec {
+    SettingSpec::fixed_text(id, title, default, groups::LOOK)
+        .with_extra(&PAGE)
+        .described("home.setting.page.help")
+        .advanced()
+}
+
+/// The pages, the grid, and what shows above and below it.
+static SETTINGS: [SettingSpec; 12] = [
+    page("home.page-1", "home.setting.page-1", DEFAULTS[0]),
+    page("home.page-2", "home.setting.page-2", DEFAULTS[1]),
+    page("home.page-3", "home.setting.page-3", DEFAULTS[2]),
+    page("home.page-4", "home.setting.page-4", DEFAULTS[3]),
+    SettingSpec::fixed_number(
+        COLUMNS.static_str(),
+        "home.setting.columns",
+        2,
+        grid::MAX_COLUMNS as i64,
+        4,
+        groups::LOOK,
+    )
+    .with_extra(&IN_HOME)
+    .described("home.setting.columns.help"),
+    SettingSpec::fixed_number(
+        ROWS.static_str(),
+        "home.setting.rows",
+        0,
+        grid::MAX_ROWS as i64,
+        0,
+        groups::LOOK,
+    )
+    .with_extra(&IN_HOME)
+    .described("home.setting.rows.help"),
+    SettingSpec::fixed_switch(
+        crate::blocks::TOOL_LABELS.static_str(),
+        "home.setting.tool-labels",
+        true,
+        groups::LOOK,
+    )
+    .with_extra(&IN_HOME)
+    .described("home.setting.tool-labels.help"),
+    SettingSpec::fixed_switch(
+        crate::blocks::FOCUS_AT_ONCE.static_str(),
+        "home.setting.focus-at-once",
+        false,
+        groups::LOOK,
+    )
+    .with_extra(&IN_HOME)
+    .described("home.setting.focus-at-once.help"),
+    SettingSpec::fixed_switch(
+        STATUS_BAR.static_str(),
+        "home.setting.status-bar",
+        true,
+        groups::LOOK,
+    )
+    .with_extra(&IN_HOME)
+    .described("home.setting.status-bar.help"),
+    SettingSpec::fixed_switch(
+        FOOTER_PENCIL.static_str(),
+        "home.setting.footer-pencil",
+        true,
+        groups::LOOK,
+    )
+    .with_extra(&IN_HOME)
+    .described("home.setting.footer-pencil.help"),
+    SettingSpec::fixed_switch(
+        FOOTER_DOTS.static_str(),
+        "home.setting.footer-dots",
+        true,
+        groups::LOOK,
+    )
+    .with_extra(&IN_HOME)
+    .described("home.setting.footer-dots.help"),
+    SettingSpec::fixed(
+        FOOTER_ITEMS.static_str(),
+        "home.setting.footer-items",
+        SettingKind::List,
+        SettingValue::Text(Cow::Borrowed("")),
+        groups::LOOK,
+    )
+    .with_extra(&ITEMS)
+    .described("home.setting.footer-items.help"),
+];
+
 pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
-    for (index, default) in DEFAULTS.iter().enumerate() {
-        r.add_setting(
-            SettingSpec::new(
-                setting(index),
-                format!("home.setting.page-{}", index + 1),
-                SettingKind::Text,
-                SettingValue::Text(Cow::Borrowed(default)),
-            )
-            .group(groups::LOOK)
-            .section(SECTION)
-            .editor(SCREEN)
-            .description("home.setting.page.help")
-            .advanced(),
-        )?;
-    }
-    r.add_setting(
-        SettingSpec::number(
-            &COLUMNS,
-            "home.setting.columns",
-            2,
-            i64::from(grid::MAX_COLUMNS),
-            4,
-        )
-        .group(groups::LOOK)
-        .section(SECTION)
-        .description("home.setting.columns.help"),
-    )?;
-    r.add_setting(
-        SettingSpec::number(&ROWS, "home.setting.rows", 0, i64::from(grid::MAX_ROWS), 0)
-            .group(groups::LOOK)
-            .section(SECTION)
-            .description("home.setting.rows.help"),
-    )?;
-    r.add_setting(
-        SettingSpec::switch(
-            &crate::blocks::TOOL_LABELS,
-            "home.setting.tool-labels",
-            true,
-        )
-        .group(groups::LOOK)
-        .section(SECTION)
-        .description("home.setting.tool-labels.help"),
-    )?;
-    r.add_setting(
-        SettingSpec::switch(
-            &crate::blocks::FOCUS_AT_ONCE,
-            "home.setting.focus-at-once",
-            false,
-        )
-        .group(groups::LOOK)
-        .section(SECTION)
-        .description("home.setting.focus-at-once.help"),
-    )?;
+    r.add_settings(&SETTINGS)?;
     r.set_menu_need(
         crate::blocks::FOCUS_AT_ONCE,
         quireink_sdk::MenuNeed::NoTouch,
-    )?;
-    r.add_setting(
-        SettingSpec::switch(&STATUS_BAR, "home.setting.status-bar", true)
-            .group(groups::LOOK)
-            .section(SECTION)
-            .description("home.setting.status-bar.help"),
-    )?;
-    r.add_setting(
-        SettingSpec::switch(&FOOTER_PENCIL, "home.setting.footer-pencil", true)
-            .group(groups::LOOK)
-            .section(SECTION)
-            .description("home.setting.footer-pencil.help"),
-    )?;
-    r.add_setting(
-        SettingSpec::switch(&FOOTER_DOTS, "home.setting.footer-dots", true)
-            .group(groups::LOOK)
-            .section(SECTION)
-            .description("home.setting.footer-dots.help"),
-    )?;
-    r.add_setting(
-        SettingSpec::list(&FOOTER_ITEMS, "home.setting.footer-items", "")
-            .group(groups::LOOK)
-            .section(SECTION)
-            .editor(quireink_sdk::builtin::screens::STATUS_ITEMS)
-            .description("home.setting.footer-items.help"),
     )?;
     Ok(())
 }

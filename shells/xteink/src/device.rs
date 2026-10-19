@@ -16,6 +16,15 @@ pub const LIGHT_SLEEP: Setting<bool> = Setting::new("x4.light-sleep");
 #[derive(Debug, Default)]
 pub struct X4;
 
+/// Whether the X4 sleeps lightly between button reads.
+static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_switch(
+    LIGHT_SLEEP.static_str(),
+    "x4.light-sleep",
+    true,
+    groups::DEVELOPER,
+)
+.described("x4.light-sleep.help")];
+
 impl Plugin for X4 {
     fn manifest(&self) -> Manifest {
         Manifest {
@@ -28,11 +37,7 @@ impl Plugin for X4 {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_setting(
-            SettingSpec::switch(&LIGHT_SLEEP, "x4.light-sleep", true)
-                .group(groups::DEVELOPER)
-                .description("x4.light-sleep.help"),
-        )?;
+        r.add_settings(&SETTINGS)?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())

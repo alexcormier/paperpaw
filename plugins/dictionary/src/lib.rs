@@ -52,6 +52,20 @@ const MAX_DEPTH: usize = 3;
 #[derive(Debug, Default)]
 pub struct DictionaryPlugin;
 
+/// The folder of the dictionaries, in their part of the reading settings,
+/// chosen on the folder chooser.
+static FOLDER_EXTRA: quireink_sdk::SettingExtra = quireink_sdk::SettingExtra::new()
+    .section("dictionary.section")
+    .editor(CHOOSE_FOLDER);
+static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_text(
+    FOLDER.static_str(),
+    "dictionary.setting.folder",
+    "dictionaries",
+    groups::READING,
+)
+.with_extra(&FOLDER_EXTRA)
+.described("dictionary.setting.folder.help")];
+
 impl Plugin for DictionaryPlugin {
     fn manifest(&self) -> Manifest {
         Manifest {
@@ -70,13 +84,7 @@ impl Plugin for DictionaryPlugin {
             factory: Box::new(|env, params| Box::new(Popup::new(env, params))),
         })?;
         r.bind_slot(slots::LOOKUP, POPUP, Priority::DEFAULT)?;
-        r.add_setting(
-            SettingSpec::text(&FOLDER, "dictionary.setting.folder", "dictionaries")
-                .group(groups::READING)
-                .section("dictionary.section")
-                .editor(CHOOSE_FOLDER)
-                .description("dictionary.setting.folder.help"),
-        )?;
+        r.add_settings(&SETTINGS)?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())

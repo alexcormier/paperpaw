@@ -78,6 +78,16 @@ const TIPS_SCREEN: Id = Id::new_static("home.tips");
 /// An item's options were chosen.
 const CHOSEN: Event<choice::Picked> = Event::new("home.item-chosen");
 
+/// Whether the home screen tells how to swipe, until tried.
+static TIPS: [quireink_sdk::SettingSpec; 1] = [quireink_sdk::SettingSpec::fixed_switch(
+    drawer::TIPS_SETTING.static_str(),
+    "home.setting.gesture-tips",
+    true,
+    quireink_sdk::builtin::groups::LOOK,
+)
+.advanced()
+.described("home.setting.gesture-tips.help")];
+
 /// The home screen plugin.
 #[derive(Debug, Default)]
 pub struct Home;
@@ -160,16 +170,7 @@ impl Plugin for Home {
         r.add_keymap(Cow::Borrowed(
             "[keymap.core.home]\nswipe.up = home.all-tools\n",
         ))?;
-        r.add_setting(
-            quireink_sdk::SettingSpec::switch(
-                &drawer::TIPS_SETTING,
-                "home.setting.gesture-tips",
-                true,
-            )
-            .group(quireink_sdk::builtin::groups::LOOK)
-            .advanced()
-            .description("home.setting.gesture-tips.help"),
-        )?;
+        r.add_settings(&TIPS)?;
         r.add_menu_entry(MenuEntry {
             menu: ACTIONS,
             item: actions::LIBRARY,

@@ -6,6 +6,19 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Settings take much less memory: the kernel's and every first-party
+  plugin's are kept in the program, also those with a unit, a section or
+  an editor of their own. In the emulator's X4 profile the home screen
+  needs 109 KiB instead of 152 and starting peaks at 140 KiB instead of
+  207. SDK: `SettingExtra` is made in the program (`SettingExtra::new`
+  and its `const` builders `unit`, `section`, `editor`, `step`,
+  `slider`, `secret`) and given to fixed settings with
+  `SettingSpec::with_extra`; `SettingSpec::scoped` and `advanced` are
+  `const`; `Setting::static_str` and `Id::static_str` name a setting in
+  `static` lists; `role_settings!` makes a decoration role's settings in
+  the program (`decorations::add_role` stays for roles known only at
+  run time); `Tone::id` and `LineKind::id` are `const`.
+
 - *Now reading* shows the chapter and what is left of it ("22 pages
   left · about 11 min"), each a part to show or not. Plugins know the
   chapter from the reading events: `events::Reading` has `chapter` (its

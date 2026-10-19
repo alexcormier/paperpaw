@@ -411,6 +411,27 @@ fn pulled(state: &State, env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command
 #[derive(Debug, Default)]
 pub struct Kosync;
 
+/// The account, signed in on a screen of its own.
+static ACCOUNT: quireink_sdk::SettingExtra =
+    quireink_sdk::SettingExtra::new().editor(ACCOUNT_SCREEN);
+
+/// The account, whether books sync by themselves, and the server.
+static SETTINGS: [SettingSpec; 3] = [
+    SettingSpec::fixed_text(USER.static_str(), "kosync.setting.user", "", GROUP)
+        .with_extra(&ACCOUNT)
+        .described("kosync.setting.user.help"),
+    SettingSpec::fixed_switch(AUTO.static_str(), "kosync.setting.auto", true, GROUP)
+        .described("kosync.setting.auto.help"),
+    SettingSpec::fixed_text(
+        SERVER.static_str(),
+        "kosync.setting.server",
+        DEFAULT_SERVER,
+        GROUP,
+    )
+    .advanced()
+    .described("kosync.setting.server.help"),
+];
+
 impl Plugin for Kosync {
     fn manifest(&self) -> Manifest {
         Manifest {
@@ -433,18 +454,7 @@ impl Plugin for Kosync {
             page: None,
         })?;
         r.add_icon(GROUP, Cow::Borrowed("refresh"))?;
-        for spec in [
-            SettingSpec::text(&USER, "kosync.setting.user", "")
-                .editor(ACCOUNT_SCREEN)
-                .description("kosync.setting.user.help"),
-            SettingSpec::switch(&AUTO, "kosync.setting.auto", true)
-                .description("kosync.setting.auto.help"),
-            SettingSpec::text(&SERVER, "kosync.setting.server", DEFAULT_SERVER)
-                .advanced()
-                .description("kosync.setting.server.help"),
-        ] {
-            r.add_setting(spec.group(GROUP))?;
-        }
+        r.add_settings(&SETTINGS)?;
         r.add_screen(ScreenSpec {
             id: ACCOUNT_SCREEN,
             title: Cow::Borrowed("kosync.group"),

@@ -124,6 +124,24 @@ fn record(env: &Env<'_>, state: &mut State, kind: Kind) {
 #[derive(Debug, Default)]
 pub struct Battery;
 
+/// Whether the battery is recorded, and by plugin.
+static SETTINGS: [SettingSpec; 2] = [
+    SettingSpec::fixed_switch(
+        ENABLED.static_str(),
+        "battery.setting.enabled",
+        true,
+        groups::SYSTEM,
+    )
+    .described("battery.setting.enabled.help"),
+    SettingSpec::fixed_switch(
+        BY_PLUGIN.static_str(),
+        "battery.setting.by-plugin",
+        true,
+        groups::DEVELOPER,
+    )
+    .described("battery.setting.by-plugin.help"),
+];
+
 impl Plugin for Battery {
     fn manifest(&self) -> Manifest {
         Manifest {
@@ -139,16 +157,7 @@ impl Plugin for Battery {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let state: Shared = Rc::new(RefCell::new(State::default()));
-        r.add_setting(
-            SettingSpec::switch(&ENABLED, "battery.setting.enabled", true)
-                .group(groups::SYSTEM)
-                .description("battery.setting.enabled.help"),
-        )?;
-        r.add_setting(
-            SettingSpec::switch(&BY_PLUGIN, "battery.setting.by-plugin", true)
-                .group(groups::DEVELOPER)
-                .description("battery.setting.by-plugin.help"),
-        )?;
+        r.add_settings(&SETTINGS)?;
 
         // Recording: a time awake from start-up or waking to sleep.
         for (event, kind) in [

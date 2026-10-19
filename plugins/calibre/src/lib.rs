@@ -79,6 +79,16 @@ fn provided(metadata: &str) -> quireink_sdk::library::Provided {
 #[derive(Debug, Default)]
 pub struct Calibre;
 
+/// Calibre's address, where it is not found by itself.
+static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_text(
+    ADDRESS.static_str(),
+    "calibre.setting.address",
+    "",
+    groups::LIBRARY,
+)
+.described("calibre.setting.address.help")
+.advanced()];
+
 impl Plugin for Calibre {
     fn manifest(&self) -> Manifest {
         Manifest {
@@ -109,12 +119,7 @@ impl Plugin for Calibre {
             order: 47,
         })?;
         r.add_icon(OPEN, Cow::Borrowed("transfer"))?;
-        r.add_setting(
-            SettingSpec::text(&ADDRESS, "calibre.setting.address", "")
-                .group(groups::LIBRARY)
-                .description("calibre.setting.address.help")
-                .advanced(),
-        )?;
+        r.add_settings(&SETTINGS)?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())

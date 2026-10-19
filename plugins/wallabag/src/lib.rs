@@ -439,6 +439,25 @@ fn done(env: &Env<'_>, key: &str, args: &[(&str, Arg<'_>)], out: &mut Vec<Comman
 #[derive(Debug, Default)]
 pub struct Wallabag;
 
+/// The server and the account, set on the setup screen.
+static ON_SETUP: quireink_sdk::SettingExtra = quireink_sdk::SettingExtra::new().editor(SCREEN);
+static SETTINGS: [SettingSpec; 3] = [
+    SettingSpec::fixed_text(SERVER.static_str(), "wallabag.server", "", groups::LIBRARY)
+        .with_extra(&ON_SETUP)
+        .described("wallabag.server.help"),
+    SettingSpec::fixed_text(USER.static_str(), "wallabag.user", "", groups::LIBRARY)
+        .with_extra(&ON_SETUP)
+        .advanced(),
+    SettingSpec::fixed_text(
+        CLIENT.static_str(),
+        "wallabag.client-id",
+        "",
+        groups::LIBRARY,
+    )
+    .with_extra(&ON_SETUP)
+    .advanced(),
+];
+
 impl Plugin for Wallabag {
     fn manifest(&self) -> Manifest {
         Manifest {
@@ -452,21 +471,7 @@ impl Plugin for Wallabag {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let state: Shared = Rc::default();
-        for (id, title) in [
-            (SERVER, "wallabag.server"),
-            (USER, "wallabag.user"),
-            (CLIENT, "wallabag.client-id"),
-        ] {
-            let mut spec = SettingSpec::text(&id, title, "")
-                .group(groups::LIBRARY)
-                .editor(SCREEN);
-            if id == SERVER {
-                spec = spec.description("wallabag.server.help");
-            } else {
-                spec = spec.advanced();
-            }
-            r.add_setting(spec)?;
-        }
+        r.add_settings(&SETTINGS)?;
         r.add_screen(ScreenSpec {
             id: SCREEN,
             title: Cow::Borrowed("wallabag.title"),

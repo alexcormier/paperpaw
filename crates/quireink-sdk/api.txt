@@ -566,7 +566,7 @@ pub quireink_sdk::decorations::LineKind::Wavy
 impl quireink_sdk::decorations::LineKind
 pub const quireink_sdk::decorations::LineKind::ALL: [quireink_sdk::decorations::LineKind; 5]
 pub fn quireink_sdk::decorations::LineKind::from_id(&str) -> core::option::Option<quireink_sdk::decorations::LineKind>
-pub fn quireink_sdk::decorations::LineKind::id(self) -> &'static str
+pub const fn quireink_sdk::decorations::LineKind::id(self) -> &'static str
 #[non_exhaustive] pub enum quireink_sdk::decorations::Tone
 pub quireink_sdk::decorations::Tone::Black
 pub quireink_sdk::decorations::Tone::Blue
@@ -583,7 +583,7 @@ impl quireink_sdk::decorations::Tone
 pub const quireink_sdk::decorations::Tone::ALL: [quireink_sdk::decorations::Tone; 11]
 pub fn quireink_sdk::decorations::Tone::color(self) -> quireink_platform::pixel::Color
 pub fn quireink_sdk::decorations::Tone::from_id(&str) -> core::option::Option<quireink_sdk::decorations::Tone>
-pub fn quireink_sdk::decorations::Tone::id(self) -> &'static str
+pub const fn quireink_sdk::decorations::Tone::id(self) -> &'static str
 pub struct quireink_sdk::decorations::Decorated
 pub quireink_sdk::decorations::Decorated::end: quireink_document::Locator
 pub quireink_sdk::decorations::Decorated::role: quireink_sdk::Id
@@ -1195,6 +1195,7 @@ impl<T: quireink_sdk::setting::SettingType> quireink_sdk::setting::Setting<T>
 pub fn quireink_sdk::setting::Setting<T>::as_str(&self) -> &str
 pub const fn quireink_sdk::setting::Setting<T>::id(&self) -> &quireink_sdk::Id
 pub const fn quireink_sdk::setting::Setting<T>::new(&'static str) -> Self
+pub const fn quireink_sdk::setting::Setting<T>::static_str(self) -> &'static str
 pub fn quireink_sdk::setting::Setting<T>::value(&self, <T as quireink_sdk::setting::SettingType>::Input) -> quireink_sdk::SettingValue
 impl<T: quireink_sdk::setting::SettingType> core::clone::Clone for quireink_sdk::setting::Setting<T>
 pub fn quireink_sdk::setting::Setting<T>::clone(&self) -> Self
@@ -1896,6 +1897,7 @@ pub mod quireink_sdk::zip
 pub use quireink_sdk::zip::<<quireink_zip::*>>
 pub macro quireink_sdk::data_path!
 pub macro quireink_sdk::event_data!
+pub macro quireink_sdk::role_settings!
 #[non_exhaustive] pub enum quireink_sdk::ActionHint
 pub quireink_sdk::ActionHint::Hidden
 pub quireink_sdk::ActionHint::Icon(&'static str)
@@ -2421,6 +2423,7 @@ pub const fn quireink_sdk::Id::new_static(&'static str) -> quireink_sdk::Id
 pub fn quireink_sdk::Id::parse(&str) -> core::result::Result<quireink_sdk::Id, quireink_sdk::InvalidId>
 pub fn quireink_sdk::Id::placed(&self) -> core::option::Option<alloc::string::String>
 pub fn quireink_sdk::Id::placement(&self, u32) -> quireink_sdk::Id
+pub const fn quireink_sdk::Id::static_str(self) -> &'static str
 impl core::borrow::Borrow<str> for quireink_sdk::Id
 pub fn quireink_sdk::Id::borrow(&self) -> &str
 impl core::fmt::Debug for quireink_sdk::Id
@@ -2645,6 +2648,7 @@ impl<T: quireink_sdk::setting::SettingType> quireink_sdk::setting::Setting<T>
 pub fn quireink_sdk::setting::Setting<T>::as_str(&self) -> &str
 pub const fn quireink_sdk::setting::Setting<T>::id(&self) -> &quireink_sdk::Id
 pub const fn quireink_sdk::setting::Setting<T>::new(&'static str) -> Self
+pub const fn quireink_sdk::setting::Setting<T>::static_str(self) -> &'static str
 pub fn quireink_sdk::setting::Setting<T>::value(&self, <T as quireink_sdk::setting::SettingType>::Input) -> quireink_sdk::SettingValue
 impl<T: quireink_sdk::setting::SettingType> core::clone::Clone for quireink_sdk::setting::Setting<T>
 pub fn quireink_sdk::setting::Setting<T>::clone(&self) -> Self
@@ -2663,6 +2667,23 @@ impl<T: quireink_sdk::setting::SettingType> core::fmt::Debug for quireink_sdk::s
 pub fn quireink_sdk::setting::Setting<T>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl<T: quireink_sdk::setting::SettingType> core::fmt::Display for quireink_sdk::setting::Setting<T>
 pub fn quireink_sdk::setting::Setting<T>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub struct quireink_sdk::SettingExtra
+pub quireink_sdk::SettingExtra::editor: core::option::Option<quireink_sdk::Id>
+pub quireink_sdk::SettingExtra::secret: bool
+pub quireink_sdk::SettingExtra::section: core::option::Option<alloc::borrow::Cow<'static, str>>
+pub quireink_sdk::SettingExtra::slider: bool
+pub quireink_sdk::SettingExtra::step: i64
+pub quireink_sdk::SettingExtra::unit: core::option::Option<alloc::borrow::Cow<'static, str>>
+impl quireink_sdk::SettingExtra
+pub const fn quireink_sdk::SettingExtra::editor(self, quireink_sdk::Id) -> Self
+pub const fn quireink_sdk::SettingExtra::new() -> Self
+pub const fn quireink_sdk::SettingExtra::secret(self) -> Self
+pub const fn quireink_sdk::SettingExtra::section(self, &'static str) -> Self
+pub const fn quireink_sdk::SettingExtra::slider(self) -> Self
+pub const fn quireink_sdk::SettingExtra::step(self, i64) -> Self
+pub const fn quireink_sdk::SettingExtra::unit(self, &'static str) -> Self
+impl core::default::Default for quireink_sdk::SettingExtra
+pub fn quireink_sdk::SettingExtra::default() -> Self
 pub struct quireink_sdk::SettingGroupSpec
 pub quireink_sdk::SettingGroupSpec::id: quireink_sdk::Id
 pub quireink_sdk::SettingGroupSpec::order: i32
@@ -2678,12 +2699,12 @@ pub quireink_sdk::SettingSpec::level: quireink_sdk::Level
 pub quireink_sdk::SettingSpec::scoped: bool
 pub quireink_sdk::SettingSpec::title: alloc::borrow::Cow<'static, str>
 impl quireink_sdk::SettingSpec
-pub fn quireink_sdk::SettingSpec::advanced(self) -> Self
+pub const fn quireink_sdk::SettingSpec::advanced(self) -> Self
 pub fn quireink_sdk::SettingSpec::choice(&quireink_sdk::setting::Setting<quireink_sdk::setting::Text>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, quireink_sdk::Choices, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
 pub const fn quireink_sdk::SettingSpec::described(self, &'static str) -> Self
 pub fn quireink_sdk::SettingSpec::description(self, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
 pub fn quireink_sdk::SettingSpec::editor(self, quireink_sdk::Id) -> Self
-pub fn quireink_sdk::SettingSpec::extra(&self) -> &quireink_sdk::settings::SettingExtra
+pub fn quireink_sdk::SettingSpec::extra(&self) -> &quireink_sdk::SettingExtra
 pub const fn quireink_sdk::SettingSpec::fixed(&'static str, &'static str, quireink_sdk::SettingKind, quireink_sdk::SettingValue, quireink_sdk::Id) -> Self
 pub const fn quireink_sdk::SettingSpec::fixed_choice(&'static str, &'static str, &'static [&'static str], &'static str, quireink_sdk::Id) -> Self
 pub const fn quireink_sdk::SettingSpec::fixed_number(&'static str, &'static str, i64, i64, i64, quireink_sdk::Id) -> Self
@@ -2695,7 +2716,7 @@ pub fn quireink_sdk::SettingSpec::language(&quireink_sdk::setting::Setting<quire
 pub fn quireink_sdk::SettingSpec::list(&quireink_sdk::setting::Setting<quireink_sdk::setting::Text>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
 pub fn quireink_sdk::SettingSpec::new(impl core::convert::Into<quireink_sdk::Id>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, quireink_sdk::SettingKind, quireink_sdk::SettingValue) -> Self
 pub fn quireink_sdk::SettingSpec::number(&quireink_sdk::setting::Setting<i64>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, i64, i64, i64) -> Self
-pub fn quireink_sdk::SettingSpec::scoped(self) -> Self
+pub const fn quireink_sdk::SettingSpec::scoped(self) -> Self
 pub fn quireink_sdk::SettingSpec::secret(self) -> Self
 pub fn quireink_sdk::SettingSpec::section(self, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
 pub fn quireink_sdk::SettingSpec::slider(self) -> Self
@@ -2703,6 +2724,7 @@ pub fn quireink_sdk::SettingSpec::step(self, i64) -> Self
 pub fn quireink_sdk::SettingSpec::switch(&quireink_sdk::setting::Setting<bool>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, bool) -> Self
 pub fn quireink_sdk::SettingSpec::text(&quireink_sdk::setting::Setting<quireink_sdk::setting::Text>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
 pub fn quireink_sdk::SettingSpec::unit(self, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
+pub const fn quireink_sdk::SettingSpec::with_extra(self, &'static quireink_sdk::SettingExtra) -> Self
 pub struct quireink_sdk::Settings
 impl quireink_sdk::Settings
 pub fn quireink_sdk::Settings::add_group(&mut self, quireink_sdk::SettingGroupSpec) -> core::result::Result<(), quireink_sdk::RegisterError>

@@ -116,6 +116,20 @@ impl<T: SettingType> Setting<T> {
         self.id.as_str()
     }
 
+    /// The id as text kept in the program, for a spec kept there too
+    /// (e.g. `SettingSpec::fixed_switch(SHOW.static_str(), …)`, see
+    /// [`SettingSpec::fixed`](crate::SettingSpec::fixed)). Takes the
+    /// setting, so it can be used in `const` and `static` items.
+    pub const fn static_str(self) -> &'static str {
+        let text = match &self.id.0 {
+            Cow::Borrowed(id) => id,
+            // Settings are only made by `new`, from text in the program.
+            Cow::Owned(_) => "",
+        };
+        core::mem::forget(self);
+        text
+    }
+
     /// The stored value of `input`, e.g. for a default.
     pub fn value(&self, input: T::Input) -> SettingValue {
         T::write(input)

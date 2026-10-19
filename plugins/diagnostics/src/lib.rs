@@ -35,6 +35,18 @@ pub const PAGES: Setting<i64> = Setting::new("diagnostics.pages");
 #[derive(Debug, Default)]
 pub struct Diagnostics;
 
+/// How many pages the test turns.
+static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_number(
+    PAGES.static_str(),
+    "diagnostics.setting.pages",
+    1,
+    10_000,
+    20,
+    groups::SYSTEM,
+)
+.advanced()
+.described("diagnostics.setting.pages.help")];
+
 impl Plugin for Diagnostics {
     fn manifest(&self) -> Manifest {
         Manifest {
@@ -56,12 +68,7 @@ impl Plugin for Diagnostics {
         })?;
         r.bind_slot(slots::HOME, SCREEN, Priority::FALLBACK)?;
         r.add_action(ActionSpec::new(RESET, "diagnostics.action.reset"))?;
-        r.add_setting(
-            SettingSpec::number(&PAGES, "diagnostics.setting.pages", 1, 10_000, 20)
-                .group(groups::SYSTEM)
-                .advanced()
-                .description("diagnostics.setting.pages.help"),
-        )?;
+        r.add_settings(&SETTINGS)?;
         r.add_keymap(Cow::Borrowed(include_str!("../keymap.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;

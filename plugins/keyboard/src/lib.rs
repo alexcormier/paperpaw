@@ -94,6 +94,18 @@ impl FieldButton {
 #[derive(Debug, Default)]
 pub struct Keyboard;
 
+/// The layouts to type with, chosen on their screen.
+static CHOSEN: quireink_sdk::SettingExtra = quireink_sdk::SettingExtra::new().editor(CHOOSE_SCREEN);
+static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed(
+    LAYOUTS_SETTING.static_str(),
+    "keyboard.setting.layouts",
+    quireink_sdk::SettingKind::List,
+    quireink_sdk::SettingValue::Text(Cow::Borrowed(layouts::AUTO)),
+    groups::SYSTEM,
+)
+.with_extra(&CHOSEN)
+.described("keyboard.setting.layouts.help")];
+
 impl Plugin for Keyboard {
     fn manifest(&self) -> Manifest {
         Manifest {
@@ -116,12 +128,7 @@ impl Plugin for Keyboard {
             }),
         })?;
         r.bind_slot(slots::KEYBOARD, SCREEN, Priority::DEFAULT)?;
-        r.add_setting(
-            SettingSpec::list(&LAYOUTS_SETTING, "keyboard.setting.layouts", layouts::AUTO)
-                .group(groups::SYSTEM)
-                .editor(CHOOSE_SCREEN)
-                .description("keyboard.setting.layouts.help"),
-        )?;
+        r.add_settings(&SETTINGS)?;
         r.add_screen(ScreenSpec {
             id: CHOOSE_SCREEN,
             title: Cow::Borrowed("keyboard.setting.layouts"),

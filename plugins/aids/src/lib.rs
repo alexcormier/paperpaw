@@ -119,6 +119,29 @@ fn bold_beginnings(block: &mut Block) {
 #[derive(Debug, Default)]
 pub struct Aids;
 
+/// The aids' part of the reading settings.
+static IN_AIDS: quireink_sdk::SettingExtra = quireink_sdk::SettingExtra::new().section(SECTION);
+
+/// Bold word beginnings, and words replaced.
+static SETTINGS: [SettingSpec; 2] = [
+    SettingSpec::fixed_switch(
+        BOLD_BEGINNINGS.static_str(),
+        "aids.setting.bold-beginnings",
+        false,
+        groups::READING,
+    )
+    .with_extra(&IN_AIDS)
+    .described("aids.setting.bold-beginnings.help"),
+    SettingSpec::fixed_text(
+        REPLACE.static_str(),
+        "aids.setting.replace",
+        "",
+        groups::READING,
+    )
+    .with_extra(&IN_AIDS)
+    .described("aids.setting.replace.help"),
+];
+
 impl Plugin for Aids {
     fn manifest(&self) -> Manifest {
         Manifest {
@@ -133,18 +156,7 @@ impl Plugin for Aids {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_setting(
-            SettingSpec::switch(&BOLD_BEGINNINGS, "aids.setting.bold-beginnings", false)
-                .group(groups::READING)
-                .section(SECTION)
-                .description("aids.setting.bold-beginnings.help"),
-        )?;
-        r.add_setting(
-            SettingSpec::text(&REPLACE, "aids.setting.replace", "")
-                .group(groups::READING)
-                .section(SECTION)
-                .description("aids.setting.replace.help"),
-        )?;
+        r.add_settings(&SETTINGS)?;
         r.add_text_filter(TextFilterSpec {
             id: Id::new_static("aids.bold"),
             title: Cow::Borrowed("aids.setting.bold-beginnings"),

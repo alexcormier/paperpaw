@@ -171,7 +171,14 @@ pub struct SettingSpec {
     pub scoped: bool,
     /// What few settings have ([`SettingSpec::extra`]), kept apart: the
     /// others take less memory.
-    extra: Option<Box<SettingExtra>>,
+    extra: Option<Extra>,
+}
+
+/// Where a spec's [`SettingExtra`] is: in the program, or on the heap.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Extra {
+    Fixed(&'static SettingExtra),
+    Owned(Box<SettingExtra>),
 }
 
 /// What few settings have (see [`SettingSpec::extra`]).
@@ -199,14 +206,75 @@ pub struct SettingExtra {
 }
 
 /// The extra of settings without one.
-static NO_EXTRA: SettingExtra = SettingExtra {
-    unit: None,
-    editor: None,
-    step: 1,
-    slider: false,
-    section: None,
-    secret: false,
-};
+static NO_EXTRA: SettingExtra = SettingExtra::new();
+
+impl SettingExtra {
+    /// None of them: no unit, editor or section, a step of 1. Made in the
+    /// program for fixed settings with the builder methods below and given
+    /// to [`SettingSpec::with_extra`]:
+    ///
+    /// ```
+    /// use quireink_sdk::{Id, SettingExtra, SettingSpec};
+    /// const GROUP: Id = Id::new_static("my.page");
+    /// static PERCENT: SettingExtra = SettingExtra::new().unit("my.unit.percent").step(10);
+    /// static SETTINGS: [SettingSpec; 1] = [
+    ///     SettingSpec::fixed_number("my.zoom", "my.zoom", 50, 200, 100, GROUP)
+    ///         .with_extra(&PERCENT),
+    /// ];
+    /// ```
+    pub const fn new() -> Self {
+        Self {
+            unit: None,
+            editor: None,
+            step: 1,
+            slider: false,
+            section: None,
+            secret: false,
+        }
+    }
+
+    /// With the translation key of its unit ([`SettingExtra::unit`]).
+    pub const fn unit(mut self, key: &'static str) -> Self {
+        core::mem::forget(self.unit.replace(Cow::Borrowed(key)));
+        self
+    }
+
+    /// Edited on screen `screen` ([`SettingExtra::editor`]).
+    pub const fn editor(mut self, screen: Id) -> Self {
+        core::mem::forget(self.editor.replace(screen));
+        self
+    }
+
+    /// One step (a `+` or `−`) changes a number by `step`.
+    pub const fn step(mut self, step: i64) -> Self {
+        self.step = if step < 1 { 1 } else { step };
+        self
+    }
+
+    /// Set with a slider in panels ([`SettingExtra::slider`]).
+    pub const fn slider(mut self) -> Self {
+        self.slider = true;
+        self
+    }
+
+    /// In the part `key` of its group ([`SettingExtra::section`]).
+    pub const fn section(mut self, key: &'static str) -> Self {
+        core::mem::forget(self.section.replace(Cow::Borrowed(key)));
+        self
+    }
+
+    /// A secret ([`SettingExtra::secret`]).
+    pub const fn secret(mut self) -> Self {
+        self.secret = true;
+        self
+    }
+}
+
+impl Default for SettingExtra {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl SettingSpec {
     /// A basic setting in the [`OTHER`](crate::builtin::groups::OTHER)
@@ -236,8 +304,7 @@ impl SettingSpec {
     /// takes next to no memory (on small devices the list stays in flash).
     /// Plugins with many settings, such as widgets with their looks, use
     /// these. Its unit, editor and the like ([`SettingSpec::extra`]) are
-    /// not set here; settings that need them are made with
-    /// [`SettingSpec::new`].
+    /// given with [`SettingSpec::with_extra`], also kept in the program.
     ///
     /// ```
     /// use quireink_sdk::{Id, SettingSpec};
@@ -357,14 +424,34 @@ impl SettingSpec {
         spec
     }
 
+    /// The same with `extra` (its unit, section and the like), kept in the
+    /// program too: for [`SettingSpec::fixed`] ones.
+    pub const fn with_extra(mut self, extra: &'static SettingExtra) -> Self {
+        core::mem::forget(self.extra.replace(Extra::Fixed(extra)));
+        self
+    }
+
     /// Its unit, editor, step, slider, section and whether it is a secret
     /// (the defaults for a setting that sets none of them).
     pub fn extra(&self) -> &SettingExtra {
-        self.extra.as_deref().unwrap_or(&NO_EXTRA)
+        match &self.extra {
+            Some(Extra::Fixed(extra)) => extra,
+            Some(Extra::Owned(extra)) => extra,
+            None => &NO_EXTRA,
+        }
     }
 
     fn extra_mut(&mut self) -> &mut SettingExtra {
-        self.extra.get_or_insert_with(|| Box::new(NO_EXTRA.clone()))
+        if let Some(Extra::Fixed(extra)) = self.extra {
+            self.extra = Some(Extra::Owned(Box::new(extra.clone())));
+        }
+        match self
+            .extra
+            .get_or_insert_with(|| Extra::Owned(Box::default()))
+        {
+            Extra::Owned(extra) => extra,
+            Extra::Fixed(_) => unreachable!("made owned above"),
+        }
     }
 
     /// A switch, on or off (see [`setting`](crate::setting)).
@@ -481,7 +568,7 @@ impl SettingSpec {
     }
 
     /// May be set per scope, e.g. for one book only.
-    pub fn scoped(mut self) -> Self {
+    pub const fn scoped(mut self) -> Self {
         self.scoped = true;
         self
     }
@@ -492,7 +579,7 @@ impl SettingSpec {
     }
 
     /// Shown only with advanced settings.
-    pub fn advanced(mut self) -> Self {
+    pub const fn advanced(mut self) -> Self {
         self.level = Level::Advanced;
         self
     }

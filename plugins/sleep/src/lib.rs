@@ -66,6 +66,49 @@ fn data(name: &str) -> String {
 #[derive(Debug, Default)]
 pub struct Sleep;
 
+/// The sleep screen's part of the display settings, its folder and its
+/// widgets each chosen on a screen of their own.
+static IN_SLEEP: quireink_sdk::SettingExtra = quireink_sdk::SettingExtra::new().section(SECTION);
+static FOLDER_EXTRA: quireink_sdk::SettingExtra = quireink_sdk::SettingExtra::new()
+    .section(SECTION)
+    .editor(CHOOSE_FOLDER);
+static WIDGETS_EXTRA: quireink_sdk::SettingExtra = quireink_sdk::SettingExtra::new()
+    .section(SECTION)
+    .editor(EDIT_WIDGETS);
+
+/// What the sleep screen shows, the folder of its pictures and its
+/// widgets.
+static SETTINGS: [SettingSpec; 3] = [
+    SettingSpec::fixed_choice(
+        SHOW.static_str(),
+        "sleep.setting.show",
+        &[COVER, PICTURE, WIDGETS, MESSAGE, PAGE],
+        COVER,
+        groups::DISPLAY,
+    )
+    .with_extra(&IN_SLEEP)
+    .described("sleep.setting.show.help"),
+    SettingSpec::fixed_text(
+        FOLDER.static_str(),
+        "sleep.setting.folder",
+        "sleep",
+        groups::DISPLAY,
+    )
+    .with_extra(&FOLDER_EXTRA)
+    .described("sleep.setting.folder.help"),
+    SettingSpec::fixed(
+        WIDGET_LIST.static_str(),
+        "sleep.setting.widgets",
+        quireink_sdk::SettingKind::List,
+        quireink_sdk::SettingValue::Text(Cow::Borrowed(
+            "home.date, home.continue, stats.widget.today, home.recent",
+        )),
+        groups::DISPLAY,
+    )
+    .with_extra(&WIDGETS_EXTRA)
+    .described("sleep.setting.widgets.help"),
+];
+
 impl Plugin for Sleep {
     fn manifest(&self) -> Manifest {
         Manifest {
@@ -80,38 +123,7 @@ impl Plugin for Sleep {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_setting(
-            SettingSpec::choice(
-                &SHOW,
-                "sleep.setting.show",
-                [COVER, PICTURE, WIDGETS, MESSAGE, PAGE]
-                    .into_iter()
-                    .map(Cow::Borrowed)
-                    .collect(),
-                COVER,
-            )
-            .group(groups::DISPLAY)
-            .section(SECTION)
-            .description("sleep.setting.show.help"),
-        )?;
-        r.add_setting(
-            SettingSpec::text(&FOLDER, "sleep.setting.folder", "sleep")
-                .group(groups::DISPLAY)
-                .section(SECTION)
-                .editor(CHOOSE_FOLDER)
-                .description("sleep.setting.folder.help"),
-        )?;
-        r.add_setting(
-            SettingSpec::list(
-                &WIDGET_LIST,
-                "sleep.setting.widgets",
-                "home.date, home.continue, stats.widget.today, home.recent",
-            )
-            .group(groups::DISPLAY)
-            .section(SECTION)
-            .editor(EDIT_WIDGETS)
-            .description("sleep.setting.widgets.help"),
-        )?;
+        r.add_settings(&SETTINGS)?;
         for item in [SHOW, FOLDER, WIDGET_LIST] {
             r.set_menu_need(item, MenuNeed::Sleep)?;
         }

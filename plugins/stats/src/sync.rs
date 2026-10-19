@@ -49,6 +49,17 @@ quireink_sdk::event_data! {
     }
 }
 const URL_ENTERED: Event<Typed> = Event::new("stats.url-entered");
+
+/// The WebDAV folder and its user, both set on the sync page.
+static ON_PAGE: quireink_sdk::SettingExtra = quireink_sdk::SettingExtra::new().editor(SCREEN);
+static SETTINGS: [quireink_sdk::SettingSpec; 2] = [
+    quireink_sdk::SettingSpec::fixed_text(URL.static_str(), "stats.setting.sync", "", crate::GROUP)
+        .with_extra(&ON_PAGE)
+        .described("stats.setting.sync.help"),
+    quireink_sdk::SettingSpec::fixed_text(USER.static_str(), "stats.sync.user", "", crate::GROUP)
+        .with_extra(&ON_PAGE)
+        .advanced(),
+];
 const USER_ENTERED: Event<Typed> = Event::new("stats.user-entered");
 const PASSWORD_ENTERED: Event<Typed> = Event::new("stats.password-entered");
 
@@ -299,22 +310,11 @@ pub(crate) fn register(
     r: &mut quireink_sdk::Registrar,
     sync: SharedSync,
 ) -> Result<(), quireink_sdk::RegisterError> {
-    use quireink_sdk::{ScreenSpec, SettingSpec};
+    use quireink_sdk::ScreenSpec;
     r.on(quireink_sdk::builtin::events::STARTED, |env, (), out| {
         move_password(env, out);
     })?;
-    r.add_setting(
-        SettingSpec::text(&URL, "stats.setting.sync", "")
-            .editor(SCREEN)
-            .group(crate::GROUP)
-            .description("stats.setting.sync.help"),
-    )?;
-    r.add_setting(
-        SettingSpec::text(&USER, "stats.sync.user", "")
-            .group(crate::GROUP)
-            .editor(SCREEN)
-            .advanced(),
-    )?;
+    r.add_settings(&SETTINGS)?;
     let s = sync.clone();
     r.on(DOWNLOADED, move |env, reply, out| {
         s.borrow_mut().downloaded(env, reply, out);

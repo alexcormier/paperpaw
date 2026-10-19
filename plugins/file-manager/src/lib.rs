@@ -75,6 +75,16 @@ enum Focus {
 #[derive(Debug, Default)]
 pub struct FileManager;
 
+/// Whether hidden files show.
+static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_switch(
+    HIDDEN.static_str(),
+    "file-manager.setting.hidden",
+    false,
+    groups::SYSTEM,
+)
+.advanced()
+.described("file-manager.setting.hidden.help")];
+
 impl Plugin for FileManager {
     fn manifest(&self) -> Manifest {
         Manifest {
@@ -89,12 +99,7 @@ impl Plugin for FileManager {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_setting(
-            SettingSpec::switch(&HIDDEN, "file-manager.setting.hidden", false)
-                .group(groups::SYSTEM)
-                .advanced()
-                .description("file-manager.setting.hidden.help"),
-        )?;
+        r.add_settings(&SETTINGS)?;
         r.add_screen(ScreenSpec {
             id: SCREEN,
             title: Cow::Borrowed("file-manager.title"),

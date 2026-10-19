@@ -50,6 +50,60 @@ mod panel;
 #[derive(Debug, Default)]
 pub struct Menu;
 
+/// The quick panel's part of the Appearance settings: the status items
+/// of its head, chosen on their picker, and its size.
+static QUICK_ITEMS: quireink_sdk::SettingExtra = quireink_sdk::SettingExtra::new()
+    .section("menu.quick.section")
+    .editor(quireink_sdk::builtin::screens::STATUS_ITEMS);
+static QUICK_PT: quireink_sdk::SettingExtra = quireink_sdk::SettingExtra::new()
+    .section("menu.quick.section")
+    .unit("core.unit.pt");
+
+const fn quick_part(id: Id, title: &'static str, default: &'static str) -> SettingSpec {
+    SettingSpec::fixed(
+        id.static_str(),
+        title,
+        SettingKind::List,
+        quireink_sdk::SettingValue::Text(Cow::Borrowed(default)),
+        quireink_sdk::builtin::groups::LOOK,
+    )
+    .with_extra(&QUICK_ITEMS)
+}
+
+/// How menus look, and the quick panel's head: what it shows, and how
+/// large.
+static SETTINGS: [SettingSpec; 5] = [
+    SettingSpec::fixed_choice(
+        STYLE.static_str(),
+        "menu.setting.style",
+        &[STYLE_LIST, STYLE_TILES],
+        STYLE_LIST,
+        quireink_sdk::builtin::groups::LOOK,
+    )
+    .described("menu.setting.style.help"),
+    quick_part(
+        panel::QUICK_LEFT,
+        "menu.quick.left",
+        "core.status.clock, core.status.date",
+    ),
+    quick_part(panel::QUICK_CENTER, "menu.quick.center", ""),
+    quick_part(
+        panel::QUICK_RIGHT,
+        "menu.quick.right",
+        "wifi.status, core.status.battery",
+    ),
+    SettingSpec::fixed_number(
+        panel::QUICK_SIZE.static_str(),
+        "menu.quick.size",
+        6,
+        24,
+        11,
+        quireink_sdk::builtin::groups::LOOK,
+    )
+    .with_extra(&QUICK_PT)
+    .described("menu.quick.size.help"),
+];
+
 impl Plugin for Menu {
     fn manifest(&self) -> Manifest {
         Manifest {
@@ -88,48 +142,7 @@ impl Plugin for Menu {
             factory: Box::new(|env, params| Box::new(notice::NoticeScreen::new(env, params))),
         })?;
         r.bind_slot(slots::NOTICE, NOTICE, Priority::DEFAULT)?;
-        r.add_setting(
-            SettingSpec::new(
-                STYLE,
-                "menu.setting.style",
-                SettingKind::Choice(quireink_sdk::Choices::Fixed(&[STYLE_LIST, STYLE_TILES])),
-                quireink_sdk::SettingValue::Text(Cow::Borrowed(STYLE_LIST)),
-            )
-            .group(quireink_sdk::builtin::groups::LOOK)
-            .description("menu.setting.style.help"),
-        )?;
-        // The quick panel's head: what it shows, and how large.
-        let defaults = [
-            "core.status.clock, core.status.date",
-            "",
-            "wifi.status, core.status.battery",
-        ];
-        let titles = ["menu.quick.left", "menu.quick.center", "menu.quick.right"];
-        for ((id, title), default) in panel::QUICK_PARTS.into_iter().zip(titles).zip(defaults) {
-            r.add_setting(
-                SettingSpec::new(
-                    id,
-                    title,
-                    SettingKind::List,
-                    quireink_sdk::SettingValue::Text(Cow::Borrowed(default)),
-                )
-                .group(quireink_sdk::builtin::groups::LOOK)
-                .section("menu.quick.section")
-                .editor(quireink_sdk::builtin::screens::STATUS_ITEMS),
-            )?;
-        }
-        r.add_setting(
-            SettingSpec::new(
-                panel::QUICK_SIZE,
-                "menu.quick.size",
-                SettingKind::Int { min: 6, max: 24 },
-                quireink_sdk::SettingValue::Int(11),
-            )
-            .group(quireink_sdk::builtin::groups::LOOK)
-            .section("menu.quick.section")
-            .unit("core.unit.pt")
-            .description("menu.quick.size.help"),
-        )?;
+        r.add_settings(&SETTINGS)?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())

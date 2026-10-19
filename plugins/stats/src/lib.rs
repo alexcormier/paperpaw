@@ -247,11 +247,39 @@ fn mark_finished(env: &Env<'_>, path: &str, now: i64) {
 }
 
 /// The settings kept in the program (see [`SettingSpec::fixed`]).
-static SETTINGS: [SettingSpec; 1] =
-    [
-        SettingSpec::fixed_switch("stats.enabled", "stats.setting.enabled", true, GROUP)
-            .described("stats.setting.enabled.help"),
-    ];
+static SETTINGS: [SettingSpec; 3] = [
+    SettingSpec::fixed_switch("stats.enabled", "stats.setting.enabled", true, GROUP)
+        .described("stats.setting.enabled.help"),
+    SettingSpec::fixed_number(
+        MIN_SECONDS.static_str(),
+        "stats.setting.min",
+        1,
+        60,
+        5,
+        GROUP,
+    )
+    .with_extra(&SECONDS)
+    .advanced()
+    .described("stats.setting.min.help"),
+    SettingSpec::fixed_number(
+        MAX_SECONDS.static_str(),
+        "stats.setting.max",
+        30,
+        600,
+        120,
+        GROUP,
+    )
+    .with_extra(&SECONDS_10)
+    .advanced()
+    .described("stats.setting.max.help"),
+];
+
+/// Seconds, in steps of one and of ten.
+static SECONDS: quireink_sdk::SettingExtra =
+    quireink_sdk::SettingExtra::new().unit("stats.unit.seconds");
+static SECONDS_10: quireink_sdk::SettingExtra = quireink_sdk::SettingExtra::new()
+    .unit("stats.unit.seconds")
+    .step(10);
 
 /// The statistics plugin.
 #[derive(Debug, Default)]
@@ -281,22 +309,7 @@ impl Plugin for Stats {
             page: None,
         })?;
         r.add_icon(GROUP, Cow::Borrowed("chart-bar"))?;
-        let seconds = |id: Setting<i64>, title: &'static str, (min, max, default), step| {
-            SettingSpec::number(&id, title, min, max, default)
-                .unit("stats.unit.seconds")
-                .step(step)
-                .advanced()
-        };
         r.add_settings(&SETTINGS)?;
-        // With a unit and a step: made at start.
-        for spec in [
-            seconds(MIN_SECONDS, "stats.setting.min", (1, 60, 5), 1)
-                .description("stats.setting.min.help"),
-            seconds(MAX_SECONDS, "stats.setting.max", (30, 600, 120), 10)
-                .description("stats.setting.max.help"),
-        ] {
-            r.add_setting(spec.group(GROUP))?;
-        }
 
         // Recording.
         let s = state.clone();

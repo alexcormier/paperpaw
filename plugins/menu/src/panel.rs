@@ -848,11 +848,10 @@ fn draw_head(
 }
 
 /// What the quick panel's head shows at its left, centre and right.
-pub(crate) const QUICK_PARTS: [Id; 3] = [
-    Id::new_static("menu.quick.left"),
-    Id::new_static("menu.quick.center"),
-    Id::new_static("menu.quick.right"),
-];
+pub(crate) const QUICK_PARTS: [Id; 3] = [QUICK_LEFT, QUICK_CENTER, QUICK_RIGHT];
+pub(crate) const QUICK_LEFT: Id = Id::new_static("menu.quick.left");
+pub(crate) const QUICK_CENTER: Id = Id::new_static("menu.quick.center");
+pub(crate) const QUICK_RIGHT: Id = Id::new_static("menu.quick.right");
 /// The size of the quick panel's head, in points.
 pub(crate) const QUICK_SIZE: Setting<i64> = Setting::new("menu.quick.size");
 

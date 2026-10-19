@@ -46,6 +46,15 @@ static LOOK: [SettingSpec; 3] = [
 ];
 /// The rest of its settings after the days, kept in the program: what
 /// it shows and how.
+/// How many days, counted with their unit.
+static IN_DAYS: quireink_sdk::SettingExtra =
+    quireink_sdk::SettingExtra::new().unit("weather.unit.days");
+static DAYS_SETTING: [SettingSpec; 1] =
+    [
+        SettingSpec::fixed_number(DAYS.static_str(), "weather.setting.days", 3, 7, 5, ID)
+            .with_extra(&IN_DAYS),
+    ];
+
 static SETTINGS: [SettingSpec; 11] = [
     SettingSpec::fixed_choice(
         "weather.forecast.start",
@@ -81,13 +90,7 @@ static SETTINGS: [SettingSpec; 11] = [
 pub(crate) fn register(r: &mut Registrar, state: &Shared) -> Result<(), RegisterError> {
     r.add_setting_group(widgets::settings_group(&ID, "weather.widget.forecast"))?;
     r.add_settings(&LOOK)?;
-    // The days are counted with their unit, which a setting kept in the
-    // program cannot have: made here.
-    r.add_setting(
-        SettingSpec::number(&DAYS, "weather.setting.days", 3, 7, 5)
-            .unit("weather.unit.days")
-            .group(ID),
-    )?;
+    r.add_settings(&DAYS_SETTING)?;
     r.add_settings(&SETTINGS)?;
     let state = state.clone();
     r.add_widget(

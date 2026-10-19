@@ -55,6 +55,18 @@ fn stamp_file() -> String {
 
 /// The picture's settings kept in the program (its folder is not: it
 /// has an editor).
+/// The folder of the pictures, chosen on the folder chooser.
+static CHOSEN_FOLDER: quireink_sdk::SettingExtra =
+    quireink_sdk::SettingExtra::new().editor(CHOOSE_FOLDER);
+static FOLDER_SETTING: [SettingSpec; 1] = [SettingSpec::fixed_text(
+    FOLDER.static_str(),
+    "widgets.picture.setting.folder",
+    "Pictures",
+    ID,
+)
+.with_extra(&CHOSEN_FOLDER)
+.described("widgets.picture.setting.folder.help")];
+
 static SETTINGS: [SettingSpec; 5] = [
     SettingSpec::fixed_choice(
         "widgets.picture.change",
@@ -82,12 +94,7 @@ static SETTINGS: [SettingSpec; 5] = [
 
 pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     r.add_setting_group(widgets::settings_group(&ID, "widgets.picture"))?;
-    r.add_setting(
-        SettingSpec::text(&FOLDER, "widgets.picture.setting.folder", "Pictures")
-            .group(ID)
-            .editor(CHOOSE_FOLDER)
-            .description("widgets.picture.setting.folder.help"),
-    )?;
+    r.add_settings(&FOLDER_SETTING)?;
     r.add_settings(&SETTINGS)?;
     r.on(NEXT, |env, _, out| {
         Turns::turn(env.storage, &turns_file(), today(env), daily(env));

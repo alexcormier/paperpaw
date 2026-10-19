@@ -75,6 +75,16 @@ pub const EVERY_HOURS: [&str; 4] = [
     "weather.every.6",
 ];
 /// The settings of the weather but the place, kept in the program.
+/// The place, edited on its own screen.
+static ON_PLACE_SCREEN: quireink_sdk::SettingExtra =
+    quireink_sdk::SettingExtra::new().editor(PLACE_SCREEN);
+static PLACE_SETTING: [SettingSpec; 1] =
+    [
+        SettingSpec::fixed_text(PLACE.static_str(), "weather.setting.place", "", GROUP)
+            .with_extra(&ON_PLACE_SCREEN)
+            .described("weather.setting.place.help"),
+    ];
+
 static SETTINGS: [SettingSpec; 4] = [
     SettingSpec::fixed_choice(
         "weather.temperature",
@@ -464,14 +474,7 @@ impl Plugin for Weather {
             page: None,
         })?;
         r.add_icon(GROUP, Cow::Borrowed("sun"))?;
-        // The place is edited on its own screen, so it is made here; the
-        // others are kept in the program.
-        r.add_setting(
-            SettingSpec::text(&PLACE, "weather.setting.place", "")
-                .editor(PLACE_SCREEN)
-                .description("weather.setting.place.help")
-                .group(GROUP),
-        )?;
+        r.add_settings(&PLACE_SETTING)?;
         r.add_settings(&SETTINGS)?;
         r.add_screen(ScreenSpec {
             id: PLACE_SCREEN,

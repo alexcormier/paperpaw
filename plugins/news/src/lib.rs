@@ -267,6 +267,20 @@ fn headlines(env: &Env<'_>, max: usize) -> Vec<(String, String)> {
 #[derive(Debug, Default)]
 pub struct News;
 
+/// How many articles a feed keeps, in steps of five.
+static STEP_5: quireink_sdk::SettingExtra = quireink_sdk::SettingExtra::new().step(5);
+static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_number(
+    ARTICLES.static_str(),
+    "news.setting.articles",
+    5,
+    200,
+    30,
+    groups::LIBRARY,
+)
+.with_extra(&STEP_5)
+.advanced()
+.described("news.setting.articles.help")];
+
 impl Plugin for News {
     fn manifest(&self) -> Manifest {
         Manifest {
@@ -279,13 +293,7 @@ impl Plugin for News {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_setting(
-            SettingSpec::number(&ARTICLES, "news.setting.articles", 5, 200, 30)
-                .group(groups::LIBRARY)
-                .step(5)
-                .advanced()
-                .description("news.setting.articles.help"),
-        )?;
+        r.add_settings(&SETTINGS)?;
         r.add_screen(ScreenSpec {
             id: SCREEN,
             title: Cow::Borrowed("news.title"),

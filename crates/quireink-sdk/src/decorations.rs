@@ -37,7 +37,8 @@ use crate::builtin::groups;
 use crate::document::Locator;
 use crate::setting::Setting;
 use crate::{
-    Canvas, Color, Env, Id, Rect, RegisterError, Registrar, SettingKind, SettingSpec, SettingValue,
+    Canvas, Choices, Color, Env, Id, Rect, RegisterError, Registrar, SettingExtra, SettingKind,
+    SettingSpec, SettingValue,
 };
 
 /// A named tone for backgrounds, ink and lines.
@@ -92,7 +93,7 @@ impl Tone {
     }
 
     /// Its value in settings (also the translation key of its name).
-    pub fn id(self) -> &'static str {
+    pub const fn id(self) -> &'static str {
         match self {
             Tone::LightGray => "core.tone.light-gray",
             Tone::Gray => "core.tone.gray",
@@ -136,7 +137,7 @@ impl LineKind {
     ];
 
     /// Its value in settings (also the translation key of its name).
-    pub fn id(self) -> &'static str {
+    pub const fn id(self) -> &'static str {
         match self {
             LineKind::Solid => "core.line.solid",
             LineKind::Dotted => "core.line.dotted",
@@ -305,11 +306,73 @@ pub fn combine(decorations: impl IntoIterator<Item = Decoration>) -> Decoration 
         .fold(Decoration::NONE, Decoration::combined)
 }
 
+/// The options of a tone setting: `none` (no tone, or the text as it
+/// is), then every tone.
+const fn tone_options(none: &'static str) -> [&'static str; Tone::ALL.len() + 1] {
+    let mut options = [none; Tone::ALL.len() + 1];
+    let mut i = 0;
+    while i < Tone::ALL.len() {
+        options[i + 1] = Tone::ALL[i].id();
+        i += 1;
+    }
+    options
+}
+
+/// The options of a role's background, and of its ink and line tone.
+static TONES: [&str; Tone::ALL.len() + 1] = tone_options(NONE);
+static INKS: [&str; Tone::ALL.len() + 1] = tone_options(AS_IS);
+
+/// The options of a role's line: none, then every kind.
+static LINES: [&str; LineKind::ALL.len() + 1] = {
+    let mut options = [NONE; LineKind::ALL.len() + 1];
+    let mut i = 0;
+    while i < LineKind::ALL.len() {
+        options[i + 1] = LineKind::ALL[i].id();
+        i += 1;
+    }
+    options
+};
+
+const fn tone_value(tone: Option<Tone>, none: &'static str) -> SettingValue {
+    SettingValue::Text(Cow::Borrowed(match tone {
+        Some(tone) => tone.id(),
+        None => none,
+    }))
+}
+
+const fn line_value(line: Option<LineKind>) -> SettingValue {
+    SettingValue::Text(Cow::Borrowed(match line {
+        Some(kind) => kind.id(),
+        None => NONE,
+    }))
+}
+
+const fn default_thickness(default: Decoration) -> i64 {
+    if default.thickness == 0 {
+        THICKNESS as i64
+    } else {
+        default.thickness as i64
+    }
+}
+
+/// The aspects of a role, each a setting `<role>.<aspect>`.
+const ASPECTS: [&str; 7] = [
+    "background",
+    "ink",
+    "line",
+    "line-tone",
+    "thickness",
+    "frame",
+    "struck",
+];
+
 /// Adds role `role`: its settings, one per aspect, in the group
 /// [`groups::MARKS`] under a section `title` (the role's name, a
 /// translation key), with `default` as their defaults. The settings are
 /// `<role>.background`, `.ink`, `.line`, `.line-tone`, `.thickness`,
 /// `.frame` and `.struck`; themes set their defaults like any setting's.
+/// A role known when the plugin is written takes less memory with
+/// [`role_settings!`](crate::role_settings) instead.
 pub fn add_role(
     r: &mut Registrar,
     role: &Id,
@@ -322,70 +385,164 @@ pub fn add_role(
             message: Cow::Borrowed("a role's id makes no setting ids"),
         })
     };
-    let tones = |none: &'static str| -> Vec<Cow<'static, str>> {
-        core::iter::once(none)
-            .chain(Tone::ALL.iter().map(|t| t.id()))
-            .map(Cow::Borrowed)
-            .collect()
+    let choice = |aspect, title, options: &'static [&'static str], value| {
+        Ok::<_, RegisterError>(SettingSpec::new(
+            id(aspect)?,
+            title,
+            SettingKind::Choice(Choices::Fixed(options)),
+            value,
+        ))
     };
-    let tone_value = |tone: Option<Tone>, none: &'static str| {
-        SettingValue::Text(Cow::Borrowed(tone.map_or(none, Tone::id)))
-    };
-    let lines: Vec<Cow<'static, str>> = core::iter::once(NONE)
-        .chain(LineKind::ALL.iter().map(|k| k.id()))
-        .map(Cow::Borrowed)
-        .collect();
-    let in_role = |spec: SettingSpec| spec.group(groups::MARKS).section(title.clone());
-    r.add_setting(in_role(SettingSpec::new(
-        id("background")?,
-        "core.mark.background",
-        SettingKind::Choice(tones(NONE).into()),
-        tone_value(default.background, NONE),
-    )))?;
-    r.add_setting(in_role(SettingSpec::new(
-        id("ink")?,
-        "core.mark.ink",
-        SettingKind::Choice(tones(AS_IS).into()),
-        tone_value(default.ink, AS_IS),
-    )))?;
-    r.add_setting(in_role(SettingSpec::new(
-        id("line")?,
-        "core.mark.line",
-        SettingKind::Choice(lines.into()),
-        SettingValue::Text(Cow::Borrowed(default.line.map_or(NONE, LineKind::id))),
-    )))?;
-    r.add_setting(in_role(SettingSpec::new(
-        id("line-tone")?,
-        "core.mark.line-tone",
-        SettingKind::Choice(tones(AS_IS).into()),
-        tone_value(default.line_tone, AS_IS),
-    )))?;
-    let thickness = if default.thickness == 0 {
-        THICKNESS
-    } else {
-        default.thickness
-    };
-    r.add_setting(
-        in_role(SettingSpec::new(
-            id("thickness")?,
+    let specs = [
+        choice(
+            ASPECTS[0],
+            "core.mark.background",
+            &TONES,
+            tone_value(default.background, NONE),
+        )?,
+        choice(
+            ASPECTS[1],
+            "core.mark.ink",
+            &INKS,
+            tone_value(default.ink, AS_IS),
+        )?,
+        choice(
+            ASPECTS[2],
+            "core.mark.line",
+            &LINES,
+            line_value(default.line),
+        )?,
+        choice(
+            ASPECTS[3],
+            "core.mark.line-tone",
+            &INKS,
+            tone_value(default.line_tone, AS_IS),
+        )?,
+        SettingSpec::new(
+            id(ASPECTS[4])?,
             "core.mark.thickness",
             SettingKind::Int { min: 1, max: 20 },
-            SettingValue::Int(i64::from(thickness)),
-        ))
+            SettingValue::Int(default_thickness(default)),
+        )
         .unit("core.unit.tenth-mm"),
-    )?;
-    r.add_setting(in_role(SettingSpec::new(
-        id("frame")?,
-        "core.mark.frame",
-        SettingKind::Bool,
-        SettingValue::Bool(default.frame),
-    )))?;
-    r.add_setting(in_role(SettingSpec::new(
-        id("struck")?,
-        "core.mark.struck",
-        SettingKind::Bool,
-        SettingValue::Bool(default.struck),
-    )))
+        SettingSpec::new(
+            id(ASPECTS[5])?,
+            "core.mark.frame",
+            SettingKind::Bool,
+            SettingValue::Bool(default.frame),
+        ),
+        SettingSpec::new(
+            id(ASPECTS[6])?,
+            "core.mark.struck",
+            SettingKind::Bool,
+            SettingValue::Bool(default.struck),
+        ),
+    ];
+    for spec in specs {
+        r.add_setting(spec.group(groups::MARKS).section(title.clone()))?;
+    }
+    Ok(())
+}
+
+/// The settings of a role (see [`add_role`]) kept in the program, for
+/// [`Registrar::add_settings`]: made by [`role_settings!`](crate::role_settings).
+#[doc(hidden)]
+pub const fn fixed_role(
+    ids: [&'static str; 7],
+    section: &'static SettingExtra,
+    thickness: &'static SettingExtra,
+    default: Decoration,
+) -> [SettingSpec; 7] {
+    let choice = SettingSpec::fixed;
+    let tones = SettingKind::Choice(Choices::Fixed(&TONES));
+    let inks = SettingKind::Choice(Choices::Fixed(&INKS));
+    let lines = SettingKind::Choice(Choices::Fixed(&LINES));
+    [
+        choice(
+            ids[0],
+            "core.mark.background",
+            tones,
+            tone_value(default.background, NONE),
+            groups::MARKS,
+        )
+        .with_extra(section),
+        choice(
+            ids[1],
+            "core.mark.ink",
+            inks,
+            tone_value(default.ink, AS_IS),
+            groups::MARKS,
+        )
+        .with_extra(section),
+        choice(
+            ids[2],
+            "core.mark.line",
+            lines,
+            line_value(default.line),
+            groups::MARKS,
+        )
+        .with_extra(section),
+        choice(
+            ids[3],
+            "core.mark.line-tone",
+            SettingKind::Choice(Choices::Fixed(&INKS)),
+            tone_value(default.line_tone, AS_IS),
+            groups::MARKS,
+        )
+        .with_extra(section),
+        SettingSpec::fixed_number(
+            ids[4],
+            "core.mark.thickness",
+            1,
+            20,
+            default_thickness(default),
+            groups::MARKS,
+        )
+        .with_extra(thickness),
+        SettingSpec::fixed_switch(ids[5], "core.mark.frame", default.frame, groups::MARKS)
+            .with_extra(section),
+        SettingSpec::fixed_switch(ids[6], "core.mark.struck", default.struck, groups::MARKS)
+            .with_extra(section),
+    ]
+}
+
+/// The settings of a role, as [`add_role`] adds them, kept in the
+/// program: a `static` list for [`Registrar::add_settings`], which takes
+/// next to no memory. The role and its title (a translation key) are
+/// written out:
+///
+/// ```
+/// use quireink_sdk::SettingSpec;
+/// use quireink_sdk::decorations::{Decoration, LineKind};
+/// static LEARNING: [SettingSpec; 7] = quireink_sdk::role_settings!(
+///     "my.learning",
+///     "my.role.learning",
+///     Decoration::NONE.line(LineKind::Dotted)
+/// );
+/// // In `register`: r.add_settings(&LEARNING)?;
+/// ```
+#[macro_export]
+macro_rules! role_settings {
+    ($role:literal, $title:literal, $default:expr $(,)?) => {{
+        static SECTION: $crate::SettingExtra = $crate::SettingExtra::new().section($title);
+        static THICKNESS: $crate::SettingExtra = $crate::SettingExtra::new()
+            .section($title)
+            .unit("core.unit.tenth-mm");
+        $crate::decorations::fixed_role(
+            [
+                concat!($role, ".background"),
+                concat!($role, ".ink"),
+                concat!($role, ".line"),
+                concat!($role, ".line-tone"),
+                concat!($role, ".thickness"),
+                concat!($role, ".frame"),
+                concat!($role, ".struck"),
+            ],
+            &SECTION,
+            &THICKNESS,
+            $default,
+        )
+    }};
 }
 
 /// The boxes of words as one per line: `words` are the marked words'

@@ -27,8 +27,8 @@ use quireink_sdk::builtin::{fonts, params, screens};
 use quireink_sdk::status::{StatusFrame, StatusLine, StatusValue, context, item_ids};
 use quireink_sdk::ui::UiStyle;
 use quireink_sdk::{
-    Arg, Canvas, Env, Id, Params, RegisterError, Registrar, SettingKind, SettingSpec, SettingValue,
-    StatusItemSpec, StatusLineSpec, Storage,
+    Arg, Canvas, Env, Id, Params, RegisterError, Registrar, SettingExtra, SettingKind, SettingSpec,
+    SettingValue, StatusItemSpec, StatusLineSpec, Storage,
 };
 
 use crate::PLUGIN;
@@ -46,12 +46,12 @@ pub const SIZE: Setting<i64> = Setting::new("reader.status.size");
 pub const EDGE: Setting<i64> = Setting::new("reader.status.edge");
 /// The status lines to switch between, above and below the text (ids
 /// separated by commas; the first shows at first).
-pub const LINES: [Id; 2] = [
-    Id::new_static("reader.status.top-lines"),
-    Id::new_static("reader.status.bottom-lines"),
-];
+pub const LINES: [Id; 2] = [TOP_LINES, BOTTOM_LINES];
+const TOP_LINES: Id = Id::new_static("reader.status.top-lines");
+const BOTTOM_LINES: Id = Id::new_static("reader.status.bottom-lines");
 /// The settings' sections: the line above and the line below.
-const SECTIONS: [&str; 2] = ["reader.status.section.top", "reader.status.section.bottom"];
+const SECTION_TOP: &str = "reader.status.section.top";
+const SECTION_BOTTOM: &str = "reader.status.section.bottom";
 
 /// The reader's status lines.
 pub mod lines {
@@ -64,13 +64,19 @@ pub mod lines {
 
 /// The parts: top left, centre, right, then bottom left, centre, right.
 pub const PARTS: [Id; 6] = [
-    Id::new_static("reader.status.top-left"),
-    Id::new_static("reader.status.top-center"),
-    Id::new_static("reader.status.top-right"),
-    Id::new_static("reader.status.bottom-left"),
-    Id::new_static("reader.status.bottom-center"),
-    Id::new_static("reader.status.bottom-right"),
+    TOP_LEFT,
+    TOP_CENTER,
+    TOP_RIGHT,
+    BOTTOM_LEFT,
+    BOTTOM_CENTER,
+    BOTTOM_RIGHT,
 ];
+const TOP_LEFT: Id = Id::new_static("reader.status.top-left");
+const TOP_CENTER: Id = Id::new_static("reader.status.top-center");
+const TOP_RIGHT: Id = Id::new_static("reader.status.top-right");
+const BOTTOM_LEFT: Id = Id::new_static("reader.status.bottom-left");
+const BOTTOM_CENTER: Id = Id::new_static("reader.status.bottom-center");
+const BOTTOM_RIGHT: Id = Id::new_static("reader.status.bottom-right");
 
 /// The reader's status items.
 pub mod items {
@@ -97,75 +103,92 @@ pub(crate) const PRINTED_CONTEXT: &str = "reader.printed-page";
 /// turning automatically).
 pub(crate) const ALOUD_CONTEXT: &str = "reader.aloud";
 
-pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
-    // The chapter, the time and the battery with the page (and Wi-Fi
-    // while it is in use).
-    let defaults = [
-        "",
-        "",
-        "",
-        "reader.status.aloud, reader.status.chapter",
-        "core.status.clock",
-        "wifi.status, core.status.battery, reader.status.page",
-    ];
-    let titles = [
-        "reader.status.top-left",
-        "reader.status.top-center",
-        "reader.status.top-right",
-        "reader.status.bottom-left",
-        "reader.status.bottom-center",
-        "reader.status.bottom-right",
-    ];
-    r.add_setting(
-        SettingSpec::number(&SIZE, "reader.status.size", 5, 16, 6)
-            .group(GROUP)
-            .unit("core.unit.pt")
-            .description("reader.status.size.help"),
-    )?;
-    r.add_setting(
-        SettingSpec::number(&EDGE, "reader.status.edge", 0, 150, 15)
-            .group(GROUP)
-            .unit("core.unit.tenth-mm")
-            .step(5)
-            .description("reader.status.edge.help"),
-    )?;
-    // Below the text: the items, the progress bar, nothing; above: none.
-    let line_defaults = [
-        "",
+static PT: SettingExtra = SettingExtra::new().unit("core.unit.pt");
+static TENTH_MM_5: SettingExtra = SettingExtra::new().unit("core.unit.tenth-mm").step(5);
+/// The lines of a place, chosen on their editor, in the place's section.
+static TOP_LINES_EXTRA: SettingExtra = SettingExtra::new()
+    .section(SECTION_TOP)
+    .editor(screens::STATUS_LINES);
+static BOTTOM_LINES_EXTRA: SettingExtra = SettingExtra::new()
+    .section(SECTION_BOTTOM)
+    .editor(screens::STATUS_LINES);
+/// A part's status items, chosen on their picker, in its place's section.
+static TOP_ITEMS: SettingExtra = SettingExtra::new()
+    .section(SECTION_TOP)
+    .editor(screens::STATUS_ITEMS);
+static BOTTOM_ITEMS: SettingExtra = SettingExtra::new()
+    .section(SECTION_BOTTOM)
+    .editor(screens::STATUS_ITEMS);
+
+const fn list(
+    id: Id,
+    title: &'static str,
+    default: &'static str,
+    extra: &'static SettingExtra,
+) -> SettingSpec {
+    SettingSpec::fixed(
+        id.static_str(),
+        title,
+        SettingKind::List,
+        SettingValue::Text(Cow::Borrowed(default)),
+        GROUP,
+    )
+    .with_extra(extra)
+}
+
+/// The text size and place of the lines, which lines show above and
+/// below the text (below: the items, the progress bar, nothing; above:
+/// none), what each part of *Text and symbols* shows (the chapter, the
+/// time and the battery with the page, and Wi-Fi while it is in use),
+/// and the battery's percent.
+static SETTINGS: [SettingSpec; 11] = [
+    SettingSpec::fixed_number(SIZE.static_str(), "reader.status.size", 5, 16, 6, GROUP)
+        .with_extra(&PT)
+        .described("reader.status.size.help"),
+    SettingSpec::fixed_number(EDGE.static_str(), "reader.status.edge", 0, 150, 15, GROUP)
+        .with_extra(&TENTH_MM_5)
+        .described("reader.status.edge.help"),
+    list(TOP_LINES, "reader.status.top-lines", "", &TOP_LINES_EXTRA)
+        .described("reader.status.lines.help"),
+    list(
+        BOTTOM_LINES,
+        "reader.status.bottom-lines",
         "reader.status-line.items, reader.status-line.progress, reader.status-line.empty",
-    ];
-    let line_titles = ["reader.status.top-lines", "reader.status.bottom-lines"];
-    for (i, id) in LINES.into_iter().enumerate() {
-        r.add_setting(
-            SettingSpec::new(
-                id,
-                line_titles[i],
-                SettingKind::List,
-                SettingValue::Text(Cow::Borrowed(line_defaults[i])),
-            )
-            .group(GROUP)
-            .section(SECTIONS[i])
-            .editor(screens::STATUS_LINES)
-            .description("reader.status.lines.help"),
-        )?;
-    }
-    for (n, ((id, title), default)) in PARTS.into_iter().zip(titles).zip(defaults).enumerate() {
-        let spec = SettingSpec::new(
-            id,
-            title,
-            SettingKind::List,
-            SettingValue::Text(Cow::Owned(default.to_string())),
-        )
-        .group(GROUP)
-        .section(SECTIONS[n / 3])
-        .editor(screens::STATUS_ITEMS);
-        r.add_setting(spec)?;
-    }
-    r.add_setting(
-        SettingSpec::switch(&PERCENT, "reader.status.battery-percent", true)
-            .group(GROUP)
-            .description("reader.status.battery-percent.help"),
-    )?;
+        &BOTTOM_LINES_EXTRA,
+    )
+    .described("reader.status.lines.help"),
+    list(TOP_LEFT, "reader.status.top-left", "", &TOP_ITEMS),
+    list(TOP_CENTER, "reader.status.top-center", "", &TOP_ITEMS),
+    list(TOP_RIGHT, "reader.status.top-right", "", &TOP_ITEMS),
+    list(
+        BOTTOM_LEFT,
+        "reader.status.bottom-left",
+        "reader.status.aloud, reader.status.chapter",
+        &BOTTOM_ITEMS,
+    ),
+    list(
+        BOTTOM_CENTER,
+        "reader.status.bottom-center",
+        "core.status.clock",
+        &BOTTOM_ITEMS,
+    ),
+    list(
+        BOTTOM_RIGHT,
+        "reader.status.bottom-right",
+        "wifi.status, core.status.battery, reader.status.page",
+        &BOTTOM_ITEMS,
+    ),
+    SettingSpec::fixed_switch(
+        PERCENT.static_str(),
+        "reader.status.battery-percent",
+        true,
+        GROUP,
+    )
+    .described("reader.status.battery-percent.help"),
+];
+
+pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
+    r.add_settings(&SETTINGS)?;
     r.add_status_line(StatusLineSpec {
         id: lines::ITEMS,
         title: Cow::Borrowed("reader.status.line.items"),

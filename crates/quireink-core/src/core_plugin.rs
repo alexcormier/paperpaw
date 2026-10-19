@@ -17,8 +17,8 @@ use quireink_sdk::widgets::{self, Drawn, WidgetSpec};
 use quireink_sdk::{
     ActionHandler, ActionHint, ActionSpec, Canvas, Color, Command, Cx, Env, Handled, Id, Manifest,
     MenuEntry, Params, Plugin, Priority, RegisterError, Registrar, SDK_VERSION, Screen, ScreenSpec,
-    SettingGroupSpec, SettingKind, SettingSpec, SettingValue, SlotSpec, StatusItemSpec,
-    StatusValue,
+    SettingExtra, SettingGroupSpec, SettingKind, SettingSpec, SettingValue, SlotSpec,
+    StatusItemSpec, StatusValue,
 };
 
 pub(crate) const CORE: Id = Id::new_static("core");
@@ -460,423 +460,463 @@ fn register_menus(r: &mut Registrar) -> Result<(), RegisterError> {
     Ok(())
 }
 
+/// Units, steps and sections of the kernel's settings.
+static MM: SettingExtra = SettingExtra::new().unit("core.unit.mm");
+static PT: SettingExtra = SettingExtra::new().unit("core.unit.pt");
+static PAGES: SettingExtra = SettingExtra::new().unit("core.unit.pages");
+static SECONDS: SettingExtra = SettingExtra::new().unit("core.unit.seconds");
+static MS: SettingExtra = SettingExtra::new().unit("core.unit.ms");
+static TENTH_MM: SettingExtra = SettingExtra::new().unit("core.unit.tenth-mm");
+static PERCENT_10: SettingExtra = SettingExtra::new().unit("core.unit.percent").step(10);
+static PERCENT_5: SettingExtra = SettingExtra::new().unit("core.unit.percent").step(5);
+static MINUTES_5: SettingExtra = SettingExtra::new().unit("core.unit.minutes").step(5);
+static COLORS: SettingExtra = SettingExtra::new().section("core.section.colors");
+static FONT: SettingExtra = SettingExtra::new().section(setting_sections::FONT);
+static FONT_PT: SettingExtra = SettingExtra::new()
+    .section(setting_sections::FONT)
+    .unit("core.unit.pt");
+
 /// The language, night mode, speech and the edges for swipes.
+static GENERAL: [SettingSpec; 8] = [
+    SettingSpec::fixed_switch(
+        settings::DEVELOPER.static_str(),
+        "core.setting.developer",
+        false,
+        groups::SYSTEM,
+    )
+    .advanced()
+    .described("core.setting.developer.help"),
+    SettingSpec::fixed(
+        settings::LANGUAGE.static_str(),
+        "core.setting.language",
+        SettingKind::Language,
+        SettingValue::Text(Cow::Borrowed(quireink_i18n::FALLBACK_LANGUAGE)),
+        groups::SYSTEM,
+    )
+    .described("core.setting.language.help"),
+    SettingSpec::fixed_switch(
+        settings::NIGHT_MODE.static_str(),
+        "core.setting.night-mode",
+        false,
+        groups::DISPLAY,
+    )
+    .described("core.setting.night-mode.help"),
+    SettingSpec::fixed_switch(
+        settings::NIGHT_PICTURES.static_str(),
+        "core.setting.night-pictures",
+        false,
+        groups::DISPLAY,
+    )
+    .described("core.setting.night-pictures.help"),
+    SettingSpec::fixed_choice(
+        settings::MONO_TEXT.static_str(),
+        "core.setting.mono-text",
+        &settings::MONO_TEXT_LEVELS,
+        settings::MONO_TEXT_LEVELS[1],
+        groups::DISPLAY,
+    )
+    .described("core.setting.mono-text.help"),
+    SettingSpec::fixed_switch(
+        settings::SPEAK_FOCUS.static_str(),
+        "core.setting.speak-focus",
+        false,
+        groups::SYSTEM,
+    )
+    .described("core.setting.speak-focus.help"),
+    SettingSpec::fixed_number(
+        settings::EDGE_ENDS.static_str(),
+        "core.setting.edge-ends",
+        0,
+        25,
+        10,
+        groups::CONTROLS,
+    )
+    .with_extra(&MM)
+    .advanced()
+    .described("core.setting.edge.help"),
+    SettingSpec::fixed_number(
+        settings::EDGE_SIDES.static_str(),
+        "core.setting.edge-sides",
+        0,
+        25,
+        5,
+        groups::CONTROLS,
+    )
+    .with_extra(&MM)
+    .advanced()
+    .described("core.setting.edge.help"),
+];
+
 fn register_general_settings(r: &mut Registrar) -> Result<(), RegisterError> {
-    r.add_setting(
-        SettingSpec::switch(&settings::DEVELOPER, "core.setting.developer", false)
-            .group(groups::SYSTEM)
-            .advanced()
-            .description("core.setting.developer.help"),
-    )?;
-    r.add_setting(
-        SettingSpec::language(
-            &settings::LANGUAGE,
-            "core.setting.language",
-            quireink_i18n::FALLBACK_LANGUAGE,
-        )
-        .group(groups::SYSTEM)
-        .description("core.setting.language.help"),
-    )?;
-    r.add_setting(
-        SettingSpec::switch(&settings::NIGHT_MODE, "core.setting.night-mode", false)
-            .group(groups::DISPLAY)
-            .description("core.setting.night-mode.help"),
-    )?;
-    r.add_setting(
-        SettingSpec::switch(
-            &settings::NIGHT_PICTURES,
-            "core.setting.night-pictures",
-            false,
-        )
-        .group(groups::DISPLAY)
-        .description("core.setting.night-pictures.help"),
-    )?;
-    r.add_setting(
-        SettingSpec::choice(
-            &settings::MONO_TEXT,
-            "core.setting.mono-text",
-            settings::MONO_TEXT_LEVELS
-                .iter()
-                .map(|l| Cow::Borrowed(*l))
-                .collect(),
-            settings::MONO_TEXT_LEVELS[1],
-        )
-        .group(groups::DISPLAY)
-        .description("core.setting.mono-text.help"),
-    )?;
+    r.add_settings(&GENERAL)?;
     r.set_menu_need(settings::MONO_TEXT, quireink_sdk::MenuNeed::BlackAndWhite)?;
-    r.add_setting(
-        SettingSpec::switch(&settings::SPEAK_FOCUS, "core.setting.speak-focus", false)
-            .group(groups::SYSTEM)
-            .description("core.setting.speak-focus.help"),
-    )?;
     r.set_menu_need(settings::SPEAK_FOCUS, quireink_sdk::MenuNeed::Speech)?;
-    for (id, title, default, max) in [
-        (settings::EDGE_ENDS, "core.setting.edge-ends", 10, 25),
-        (settings::EDGE_SIDES, "core.setting.edge-sides", 5, 25),
-    ] {
-        r.add_setting(
-            SettingSpec::new(
-                id.clone(),
-                title,
-                SettingKind::Int { min: 0, max },
-                SettingValue::Int(default),
-            )
-            .group(groups::CONTROLS)
-            .unit("core.unit.mm")
-            .advanced()
-            .description("core.setting.edge.help"),
-        )?;
-    }
     Ok(())
 }
 
 /// How the interface looks: its size, header, corners, contrast and
 /// room.
+static LOOK: [SettingSpec; 7] = [
+    SettingSpec::fixed_number(
+        settings::UI_SIZE.static_str(),
+        "core.setting.ui-size",
+        7,
+        24,
+        9,
+        groups::LOOK,
+    )
+    .with_extra(&PT)
+    .described("core.setting.ui-size.help"),
+    SettingSpec::fixed_choice(
+        settings::UI_HEADER.static_str(),
+        "core.setting.ui-header",
+        &[settings::HEADER_DARK, settings::HEADER_LIGHT],
+        settings::HEADER_LIGHT,
+        groups::LOOK,
+    )
+    .described("core.setting.ui-header.help"),
+    SettingSpec::fixed_choice(
+        settings::UI_CORNERS.static_str(),
+        "core.setting.ui-corners",
+        &settings::CORNERS,
+        settings::CORNERS[0],
+        groups::LOOK,
+    )
+    .described("core.setting.ui-corners.help"),
+    SettingSpec::fixed_choice(
+        settings::UI_CONTRAST.static_str(),
+        "core.setting.ui-contrast",
+        &[settings::CONTRAST_NORMAL, settings::CONTRAST_STRONG],
+        settings::CONTRAST_NORMAL,
+        groups::LOOK,
+    )
+    .described("core.setting.ui-contrast.help"),
+    SettingSpec::fixed_number(
+        settings::UI_MARGIN.static_str(),
+        "core.setting.ui-margin",
+        0,
+        15,
+        3,
+        groups::LOOK,
+    )
+    .with_extra(&MM)
+    .described("core.setting.ui-margin.help"),
+    SettingSpec::fixed_number(
+        settings::UI_ROW.static_str(),
+        "core.setting.ui-row",
+        120,
+        300,
+        180,
+        groups::LOOK,
+    )
+    .with_extra(&PERCENT_10)
+    .described("core.setting.ui-row.help"),
+    SettingSpec::fixed_number(
+        settings::UI_LINES.static_str(),
+        "core.setting.ui-lines",
+        1,
+        10,
+        3,
+        groups::LOOK,
+    )
+    .with_extra(&TENTH_MM)
+    .described("core.setting.ui-lines.help"),
+];
+
 fn register_look_settings(r: &mut Registrar) -> Result<(), RegisterError> {
-    r.add_setting(
-        SettingSpec::number(&settings::UI_SIZE, "core.setting.ui-size", 7, 24, 9)
-            .group(groups::LOOK)
-            .unit("core.unit.pt")
-            .description("core.setting.ui-size.help"),
-    )?;
-    r.add_setting(
-        SettingSpec::choice(
-            &settings::UI_HEADER,
-            "core.setting.ui-header",
-            quireink_sdk::Choices::Fixed(&[settings::HEADER_DARK, settings::HEADER_LIGHT]),
-            settings::HEADER_LIGHT,
-        )
-        .group(groups::LOOK)
-        .description("core.setting.ui-header.help"),
-    )?;
-    r.add_setting(
-        SettingSpec::choice(
-            &settings::UI_CORNERS,
-            "core.setting.ui-corners",
-            settings::CORNERS
-                .iter()
-                .map(|c| Cow::Borrowed(*c))
-                .collect(),
-            settings::CORNERS[0],
-        )
-        .group(groups::LOOK)
-        .description("core.setting.ui-corners.help"),
-    )?;
-    r.add_setting(
-        SettingSpec::choice(
-            &settings::UI_CONTRAST,
-            "core.setting.ui-contrast",
-            quireink_sdk::Choices::Fixed(&[settings::CONTRAST_NORMAL, settings::CONTRAST_STRONG]),
-            settings::CONTRAST_NORMAL,
-        )
-        .group(groups::LOOK)
-        .description("core.setting.ui-contrast.help"),
-    )?;
-    for (id, title, (min, max, default), unit, step) in [
-        (
-            settings::UI_MARGIN,
-            "core.setting.ui-margin",
-            (0, 15, 3),
-            "core.unit.mm",
-            1,
-        ),
-        (
-            settings::UI_ROW,
-            "core.setting.ui-row",
-            (120, 300, 180),
-            "core.unit.percent",
-            10,
-        ),
-        (
-            settings::UI_LINES,
-            "core.setting.ui-lines",
-            (1, 10, 3),
-            "core.unit.tenth-mm",
-            1,
-        ),
-    ] {
-        r.add_setting(
-            SettingSpec::new(
-                id,
-                title,
-                SettingKind::Int { min, max },
-                SettingValue::Int(default),
-            )
-            .group(groups::LOOK)
-            .unit(unit)
-            .step(step)
-            .description(match title {
-                "core.setting.ui-margin" => "core.setting.ui-margin.help",
-                "core.setting.ui-row" => "core.setting.ui-row.help",
-                _ => "core.setting.ui-lines.help",
-            }),
-        )?;
-    }
-    Ok(())
+    r.add_settings(&LOOK)
 }
 
 /// Buttons, the panel's refresh, sleep, rotation, notices and long
 /// presses.
+static DEVICE: [SettingSpec; 8] = [
+    SettingSpec::fixed_choice(
+        settings::KEYMAP_PRESET.static_str(),
+        "core.setting.keymap-preset",
+        &[keymap_presets::STANDARD_NAME],
+        keymap_presets::STANDARD_NAME,
+        groups::CONTROLS,
+    )
+    .described("core.setting.keymap-preset.help"),
+    SettingSpec::fixed_number(
+        settings::FULL_REFRESH_INTERVAL.static_str(),
+        "core.setting.full-refresh-interval",
+        0,
+        1000,
+        6,
+        groups::DISPLAY,
+    )
+    .advanced()
+    .with_extra(&PAGES)
+    .described("core.setting.full-refresh-interval.help"),
+    SettingSpec::fixed_switch(
+        settings::FLASH_SCREENS.static_str(),
+        "core.setting.flash-screens",
+        true,
+        groups::DISPLAY,
+    )
+    .advanced()
+    .described("core.setting.flash-screens.help"),
+    SettingSpec::fixed_number(
+        settings::SLEEP_AFTER.static_str(),
+        "core.setting.sleep-after",
+        0,
+        120,
+        10,
+        groups::SYSTEM,
+    )
+    .with_extra(&MINUTES_5)
+    .described("core.setting.sleep-after.help"),
+    SettingSpec::fixed_choice(
+        settings::ROTATION.static_str(),
+        "core.setting.rotation",
+        &settings::ROTATIONS,
+        settings::ROTATIONS[0],
+        groups::DISPLAY,
+    )
+    .described("core.setting.rotation.help"),
+    SettingSpec::fixed_switch(
+        settings::BUTTON_HINTS.static_str(),
+        "core.setting.button-hints",
+        true,
+        groups::CONTROLS,
+    )
+    .described("core.setting.button-hints.help"),
+    SettingSpec::fixed_number(
+        settings::NOTICE_SECONDS.static_str(),
+        "core.setting.notice-seconds",
+        1,
+        60,
+        4,
+        groups::DISPLAY,
+    )
+    .advanced()
+    .with_extra(&SECONDS)
+    .described("core.setting.notice-seconds.help"),
+    SettingSpec::fixed_number(
+        settings::LONG_PRESS_MS.static_str(),
+        "core.setting.long-press-ms",
+        200,
+        3000,
+        500,
+        groups::CONTROLS,
+    )
+    .advanced()
+    .with_extra(&MS)
+    .described("core.setting.long-press-ms.help"),
+];
+
 fn register_device_settings(r: &mut Registrar) -> Result<(), RegisterError> {
-    r.add_setting(
-        SettingSpec::choice(
-            &settings::KEYMAP_PRESET,
-            "core.setting.keymap-preset",
-            quireink_sdk::Choices::Fixed(&[keymap_presets::STANDARD_NAME]),
-            keymap_presets::STANDARD_NAME,
-        )
-        .group(groups::CONTROLS)
-        .description("core.setting.keymap-preset.help"),
-    )?;
-    r.add_setting(
-        SettingSpec::number(
-            &settings::FULL_REFRESH_INTERVAL,
-            "core.setting.full-refresh-interval",
-            0,
-            1000,
-            6,
-        )
-        .group(groups::DISPLAY)
-        .advanced()
-        .unit("core.unit.pages")
-        .description("core.setting.full-refresh-interval.help"),
-    )?;
-    r.add_setting(
-        SettingSpec::switch(&settings::FLASH_SCREENS, "core.setting.flash-screens", true)
-            .group(groups::DISPLAY)
-            .advanced()
-            .description("core.setting.flash-screens.help"),
-    )?;
-    r.add_setting(
-        SettingSpec::number(
-            &settings::SLEEP_AFTER,
-            "core.setting.sleep-after",
-            0,
-            120,
-            10,
-        )
-        .group(groups::SYSTEM)
-        .unit("core.unit.minutes")
-        .step(5)
-        .description("core.setting.sleep-after.help"),
-    )?;
+    r.add_settings(&DEVICE)?;
     r.set_menu_need(settings::SLEEP_AFTER, quireink_sdk::MenuNeed::Sleep)?;
-    r.add_setting(
-        SettingSpec::choice(
-            &settings::ROTATION,
-            "core.setting.rotation",
-            settings::ROTATIONS
-                .iter()
-                .map(|r| Cow::Borrowed(*r))
-                .collect(),
-            settings::ROTATIONS[0],
-        )
-        .group(groups::DISPLAY)
-        .description("core.setting.rotation.help"),
-    )?;
     r.set_menu_need(settings::ROTATION, quireink_sdk::MenuNeed::Rotation)?;
-    r.add_setting(
-        SettingSpec::switch(&settings::BUTTON_HINTS, "core.setting.button-hints", true)
-            .group(groups::CONTROLS)
-            .description("core.setting.button-hints.help"),
-    )?;
     r.set_menu_need(settings::BUTTON_HINTS, quireink_sdk::MenuNeed::ButtonRow)?;
-    r.add_setting(
-        SettingSpec::number(
-            &settings::NOTICE_SECONDS,
-            "core.setting.notice-seconds",
-            1,
-            60,
-            4,
-        )
-        .group(groups::DISPLAY)
-        .advanced()
-        .unit("core.unit.seconds")
-        .description("core.setting.notice-seconds.help"),
-    )?;
-    r.add_setting(
-        SettingSpec::number(
-            &settings::LONG_PRESS_MS,
-            "core.setting.long-press-ms",
-            200,
-            3000,
-            500,
-        )
-        .group(groups::CONTROLS)
-        .advanced()
-        .unit("core.unit.ms")
-        .description("core.setting.long-press-ms.help"),
-    )?;
     Ok(())
 }
 
 /// The colours of text and paper, each with its own colour code.
+static COLOR_SETTINGS: [SettingSpec; 4] = [
+    SettingSpec::fixed_choice(
+        settings::TEXT_COLOR.static_str(),
+        "core.setting.text-color",
+        &settings::TEXT_COLORS,
+        settings::TEXT_COLORS[0],
+        groups::LOOK,
+    )
+    .with_extra(&COLORS)
+    .described("core.setting.colors.help"),
+    SettingSpec::fixed_text(
+        settings::TEXT_COLOR_OWN.static_str(),
+        "core.setting.text-color-own",
+        "#5b4636",
+        groups::LOOK,
+    )
+    .with_extra(&COLORS)
+    .described("core.setting.color-own.help"),
+    SettingSpec::fixed_choice(
+        settings::PAPER_COLOR.static_str(),
+        "core.setting.paper-color",
+        &settings::PAPER_COLORS,
+        settings::PAPER_COLORS[0],
+        groups::LOOK,
+    )
+    .with_extra(&COLORS)
+    .described("core.setting.colors.help"),
+    SettingSpec::fixed_text(
+        settings::PAPER_COLOR_OWN.static_str(),
+        "core.setting.paper-color-own",
+        "#f4ecd8",
+        groups::LOOK,
+    )
+    .with_extra(&COLORS)
+    .described("core.setting.color-own.help"),
+];
+
 fn register_colors(r: &mut Registrar) -> Result<(), RegisterError> {
-    // Each colour, then its own colour code.
-    for (id, title, values, own, own_title, own_default) in [
-        (
-            settings::TEXT_COLOR,
-            "core.setting.text-color",
-            &settings::TEXT_COLORS,
-            settings::TEXT_COLOR_OWN,
-            "core.setting.text-color-own",
-            "#5b4636",
-        ),
-        (
-            settings::PAPER_COLOR,
-            "core.setting.paper-color",
-            &settings::PAPER_COLORS,
-            settings::PAPER_COLOR_OWN,
-            "core.setting.paper-color-own",
-            "#f4ecd8",
-        ),
+    r.add_settings(&COLOR_SETTINGS)?;
+    for id in [
+        settings::TEXT_COLOR,
+        settings::TEXT_COLOR_OWN,
+        settings::PAPER_COLOR,
+        settings::PAPER_COLOR_OWN,
     ] {
-        r.add_setting(
-            SettingSpec::new(
-                id.clone(),
-                title,
-                SettingKind::Choice(values.iter().map(|v| Cow::Borrowed(*v)).collect()),
-                SettingValue::Text(Cow::Borrowed(values[0])),
-            )
-            .group(groups::LOOK)
-            .section("core.section.colors")
-            .description("core.setting.colors.help"),
-        )?;
         r.set_menu_need(id, quireink_sdk::MenuNeed::Colors)?;
-        r.add_setting(
-            SettingSpec::new(
-                own.clone(),
-                own_title,
-                SettingKind::Text,
-                SettingValue::Text(Cow::Borrowed(own_default)),
-            )
-            .group(groups::LOOK)
-            .section("core.section.colors")
-            .description("core.setting.color-own.help"),
-        )?;
-        r.set_menu_need(own, quireink_sdk::MenuNeed::Colors)?;
     }
     Ok(())
 }
 
-/// The reading font, and whether a book's settings are its own.
+/// The reading font, and whether a book's settings are its own. The
+/// status lines' font: the menus', the book's or one of its own (the
+/// families are offered once all fonts are known).
+static READING: [SettingSpec; 4] = [
+    SettingSpec::fixed_choice(
+        settings::STATUS_FONT.static_str(),
+        "core.setting.status-font",
+        &[settings::STATUS_FONT_UI, settings::STATUS_FONT_BOOK],
+        settings::STATUS_FONT_UI,
+        groups::STATUS_LINES,
+    )
+    .described("core.setting.status-font.help"),
+    SettingSpec::fixed_choice(
+        settings::READING_FONT.static_str(),
+        "core.setting.reading-font",
+        &[settings::DEFAULT_FONT],
+        settings::DEFAULT_FONT,
+        groups::READING,
+    )
+    .with_extra(&FONT)
+    .scoped()
+    .described("core.setting.reading-font.help"),
+    SettingSpec::fixed_number(
+        settings::FONT_SIZE.static_str(),
+        "core.setting.font-size",
+        6,
+        40,
+        11,
+        groups::READING,
+    )
+    .with_extra(&FONT_PT)
+    .scoped()
+    .described("core.setting.font-size.help"),
+    SettingSpec::fixed_switch(
+        settings::SCOPE_ONLY.static_str(),
+        "core.setting.scope-only",
+        false,
+        groups::READING,
+    )
+    .scoped()
+    .described("core.setting.scope-only.help"),
+];
+
 fn register_reading_settings(r: &mut Registrar) -> Result<(), RegisterError> {
-    // The status lines' font: the menus', the book's or one of its own
-    // (the families are offered once all fonts are known).
-    r.add_setting(
-        SettingSpec::choice(
-            &settings::STATUS_FONT,
-            "core.setting.status-font",
-            quireink_sdk::Choices::Fixed(&[settings::STATUS_FONT_UI, settings::STATUS_FONT_BOOK]),
-            settings::STATUS_FONT_UI,
-        )
-        .group(groups::STATUS_LINES)
-        .description("core.setting.status-font.help"),
-    )?;
-    r.add_setting(
-        SettingSpec::choice(
-            &settings::READING_FONT,
-            "core.setting.reading-font",
-            quireink_sdk::Choices::Fixed(&[settings::DEFAULT_FONT]),
-            settings::DEFAULT_FONT,
-        )
-        .group(groups::READING)
-        .section(setting_sections::FONT)
-        .scoped()
-        .description("core.setting.reading-font.help"),
-    )?;
-    r.add_setting(
-        SettingSpec::number(&settings::FONT_SIZE, "core.setting.font-size", 6, 40, 11)
-            .group(groups::READING)
-            .section(setting_sections::FONT)
-            .unit("core.unit.pt")
-            .scoped()
-            .description("core.setting.font-size.help"),
-    )?;
-    r.add_setting(
-        SettingSpec::switch(&settings::SCOPE_ONLY, "core.setting.scope-only", false)
-            .group(groups::READING)
-            .scoped()
-            .description("core.setting.scope-only.help"),
-    )?;
-    Ok(())
+    r.add_settings(&READING)
 }
 
 /// The roles of the marks every reader draws: highlights, links, a
 /// search hit, the sentence read aloud (see `quireink_sdk::decorations`).
+mod marks {
+    use quireink_sdk::SettingSpec;
+    use quireink_sdk::decorations::{Decoration, LineKind, Tone};
+    use quireink_sdk::role_settings;
+
+    pub(super) static HIGHLIGHT: [SettingSpec; 7] = role_settings!(
+        "core.highlight",
+        "core.role.highlight",
+        Decoration::NONE.background(Tone::LightGray)
+    );
+    pub(super) static LINK: [SettingSpec; 7] = role_settings!(
+        "core.link",
+        "core.role.link",
+        Decoration::NONE
+            .line(LineKind::Solid)
+            .line_tone(Tone::DarkGray)
+            .thickness(1)
+    );
+    pub(super) static SEARCH_HIT: [SettingSpec; 7] = role_settings!(
+        "core.search-hit",
+        "core.role.search-hit",
+        Decoration::NONE.line(LineKind::Solid).thickness(5)
+    );
+    pub(super) static ALOUD: [SettingSpec; 7] = role_settings!(
+        "core.aloud",
+        "core.role.aloud",
+        Decoration::NONE.line(LineKind::Solid).thickness(5)
+    );
+}
+
 fn register_marks(r: &mut Registrar) -> Result<(), RegisterError> {
-    use quireink_sdk::builtin::roles;
-    use quireink_sdk::decorations::{Decoration, LineKind, Tone, add_role};
-    let roles = [
-        (
-            roles::HIGHLIGHT,
-            "core.role.highlight",
-            Decoration::NONE.background(Tone::LightGray),
-        ),
-        (
-            roles::LINK,
-            "core.role.link",
-            Decoration::NONE
-                .line(LineKind::Solid)
-                .line_tone(Tone::DarkGray)
-                .thickness(1),
-        ),
-        (
-            roles::SEARCH_HIT,
-            "core.role.search-hit",
-            Decoration::NONE.line(LineKind::Solid).thickness(5),
-        ),
-        (
-            roles::ALOUD,
-            "core.role.aloud",
-            Decoration::NONE.line(LineKind::Solid).thickness(5),
-        ),
-    ];
-    for (role, title, look) in roles {
-        add_role(r, &role, title, look)?;
+    for role in [
+        &marks::HIGHLIGHT,
+        &marks::LINK,
+        &marks::SEARCH_HIT,
+        &marks::ALOUD,
+    ] {
+        r.add_settings(role)?;
     }
     Ok(())
 }
 
+/// The time zones to choose from: the system's, then each known one.
+const ZONES: [&str; TIME_ZONES.len() + 1] = {
+    let mut zones = [AUTO; TIME_ZONES.len() + 1];
+    let mut i = 0;
+    while i < TIME_ZONES.len() {
+        zones[i + 1] = TIME_ZONES[i].0;
+        i += 1;
+    }
+    zones
+};
+
+/// How the time is shown, and where it is.
+static TIME: [SettingSpec; 4] = [
+    SettingSpec::fixed_choice(
+        settings::CLOCK_FORMAT.static_str(),
+        "core.setting.clock-format",
+        &[CLOCK_24H, CLOCK_12H],
+        CLOCK_24H,
+        groups::SYSTEM,
+    ),
+    SettingSpec::fixed_choice(
+        settings::WEEK_START.static_str(),
+        "core.setting.week-start",
+        &time::WEEK_STARTS,
+        time::WEEK_STARTS[0],
+        groups::SYSTEM,
+    ),
+    SettingSpec::fixed_choice(
+        settings::TIME_ZONE.static_str(),
+        "core.setting.time-zone",
+        &ZONES,
+        AUTO,
+        groups::SYSTEM,
+    )
+    .described("core.setting.time-zone.help"),
+    SettingSpec::fixed_text(
+        settings::TIME_ZONE_RULE.static_str(),
+        "core.setting.time-zone-rule",
+        "",
+        groups::SYSTEM,
+    )
+    .advanced()
+    .described("core.setting.time-zone-rule.help"),
+];
+
+/// Below which charge the battery shows when it shows only when low.
+static BATTERY_LOW: [SettingSpec; 1] = [SettingSpec::fixed_number(
+    settings::BATTERY_LOW.static_str(),
+    "core.setting.battery-low",
+    5,
+    50,
+    20,
+    groups::SYSTEM,
+)
+.with_extra(&PERCENT_5)
+.advanced()
+.described("core.setting.battery-low.help")];
+
 /// The time of day and the battery, for status lines.
 fn register_time_and_battery(r: &mut Registrar) -> Result<(), RegisterError> {
-    r.add_setting(
-        SettingSpec::choice(
-            &settings::CLOCK_FORMAT,
-            "core.setting.clock-format",
-            quireink_sdk::Choices::Fixed(&[CLOCK_24H, CLOCK_12H]),
-            CLOCK_24H,
-        )
-        .group(groups::SYSTEM),
-    )?;
-    r.add_setting(
-        SettingSpec::choice(
-            &settings::WEEK_START,
-            "core.setting.week-start",
-            quireink_sdk::Choices::Fixed(&quireink_sdk::time::WEEK_STARTS),
-            quireink_sdk::time::WEEK_STARTS[0],
-        )
-        .group(groups::SYSTEM),
-    )?;
-    let mut zones = alloc::vec![Cow::Borrowed(AUTO)];
-    zones.extend(TIME_ZONES.iter().map(|(id, _)| Cow::Borrowed(*id)));
-    r.add_setting(
-        SettingSpec::choice(
-            &settings::TIME_ZONE,
-            "core.setting.time-zone",
-            zones.into(),
-            AUTO,
-        )
-        .group(groups::SYSTEM)
-        .description("core.setting.time-zone.help"),
-    )?;
-    r.add_setting(
-        SettingSpec::text(&settings::TIME_ZONE_RULE, "core.setting.time-zone-rule", "")
-            .group(groups::SYSTEM)
-            .advanced()
-            .description("core.setting.time-zone-rule.help"),
-    )?;
+    r.add_settings(&TIME)?;
     r.add_status_item(StatusItemSpec {
         id: status_items::CLOCK,
         title: Cow::Borrowed("core.status.clock"),
@@ -911,20 +951,7 @@ fn register_time_and_battery(r: &mut Registrar) -> Result<(), RegisterError> {
                 })
         }),
     })?;
-    r.add_setting(
-        SettingSpec::number(
-            &settings::BATTERY_LOW,
-            "core.setting.battery-low",
-            5,
-            50,
-            20,
-        )
-        .group(groups::SYSTEM)
-        .unit("core.unit.percent")
-        .step(5)
-        .advanced()
-        .description("core.setting.battery-low.help"),
-    )?;
+    r.add_settings(&BATTERY_LOW)?;
     Ok(())
 }
 
@@ -1043,24 +1070,22 @@ fn screenshot_path(env: &Env<'_>) -> alloc::string::String {
     path
 }
 
+/// The size of the gap widget.
+static SPACE: [SettingSpec; 1] = [SettingSpec::fixed_choice(
+    widgets::SPACE_SIZE.static_str(),
+    "core.setting.space-size",
+    &widgets::SPACE_SIZES,
+    widgets::SPACE_SIZES[1],
+    Id::new_static(widgets::SPACE),
+)
+.described("core.setting.space-size.help")];
+
 /// The widgets for room between the others: a gap of a set height, and
 /// the room left (see `quireink_sdk::widgets`).
 fn register_spaces(r: &mut Registrar) -> Result<(), RegisterError> {
     let space = Id::new_static(widgets::SPACE);
     r.add_setting_group(widgets::settings_group(&space, "core.widget.space"))?;
-    r.add_setting(
-        SettingSpec::choice(
-            &widgets::SPACE_SIZE,
-            "core.setting.space-size",
-            widgets::SPACE_SIZES
-                .iter()
-                .map(|s| Cow::Borrowed(*s))
-                .collect(),
-            widgets::SPACE_SIZES[1],
-        )
-        .group(space.clone())
-        .description("core.setting.space-size.help"),
-    )?;
+    r.add_settings(&SPACE)?;
     let space_height = |env: &Env<'_>, _| {
         let size = env.settings.read(&widgets::SPACE_SIZE);
         let mm = match widgets::SPACE_SIZES.iter().position(|s| *s == size) {

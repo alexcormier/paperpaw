@@ -129,6 +129,43 @@ fn failure_text(env: &Env<'_>, ssid: &str, reason: JoinFailure) -> String {
 #[derive(Debug, Default)]
 pub struct Wifi;
 
+/// How long the radio stays on unused, to choose from.
+const IDLE_OFF_IDS: [&str; IDLE_OFF_CHOICES.len()] = {
+    let mut ids = [""; IDLE_OFF_CHOICES.len()];
+    let mut i = 0;
+    while i < IDLE_OFF_CHOICES.len() {
+        ids[i] = IDLE_OFF_CHOICES[i].0;
+        i += 1;
+    }
+    ids
+};
+
+/// When the radio is on.
+static SETTINGS: [SettingSpec; 3] = [
+    SettingSpec::fixed_switch(
+        ON_DEMAND.static_str(),
+        "wifi.setting.on-demand",
+        true,
+        GROUP,
+    )
+    .described("wifi.setting.on-demand.help"),
+    SettingSpec::fixed_choice(
+        IDLE_OFF.static_str(),
+        "wifi.setting.idle-off",
+        &IDLE_OFF_IDS,
+        "wifi.idle-off.1m",
+        GROUP,
+    )
+    .described("wifi.setting.idle-off.help"),
+    SettingSpec::fixed_switch(
+        WHILE_CHARGING.static_str(),
+        "wifi.setting.while-charging",
+        false,
+        GROUP,
+    )
+    .described("wifi.setting.while-charging.help"),
+];
+
 impl Plugin for Wifi {
     fn manifest(&self) -> Manifest {
         Manifest {
@@ -163,26 +200,9 @@ impl Plugin for Wifi {
                     .then_some(StatusValue::Icon(Cow::Borrowed("wifi")))
             }),
         })?;
-        let choices = IDLE_OFF_CHOICES
-            .iter()
-            .map(|(id, _)| Cow::Borrowed(*id))
-            .collect();
-        for spec in [
-            SettingSpec::switch(&ON_DEMAND, "wifi.setting.on-demand", true)
-                .description("wifi.setting.on-demand.help"),
-            SettingSpec::choice(
-                &IDLE_OFF,
-                "wifi.setting.idle-off",
-                choices,
-                "wifi.idle-off.1m",
-            )
-            .description("wifi.setting.idle-off.help"),
-            SettingSpec::switch(&WHILE_CHARGING, "wifi.setting.while-charging", false)
-                .description("wifi.setting.while-charging.help"),
-        ] {
-            let id = spec.id.clone();
-            r.add_setting(spec.group(GROUP))?;
-            r.set_menu_need(id, MenuNeed::Wifi)?;
+        r.add_settings(&SETTINGS)?;
+        for spec in &SETTINGS {
+            r.set_menu_need(spec.id.clone(), MenuNeed::Wifi)?;
         }
         let p = policy.clone();
         r.add_screen(ScreenSpec {

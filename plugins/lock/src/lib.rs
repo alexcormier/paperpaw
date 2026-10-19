@@ -52,6 +52,13 @@ pub(crate) type Locked = Rc<Cell<bool>>;
 /// The kinds; the setting stores them after [`KIND_PREFIX`].
 pub(crate) const KINDS: [&str; 4] = ["off", "pin", "pattern", "password"];
 pub(crate) const KIND_PREFIX: &str = "lock.kind.";
+/// The kinds as the setting stores them: [`KIND_PREFIX`] and the kind.
+const KIND_VALUES: [&str; KINDS.len()] = [
+    "lock.kind.off",
+    "lock.kind.pin",
+    "lock.kind.pattern",
+    "lock.kind.password",
+];
 
 /// Opens the lock screen, if a lock is set and it is not open yet.
 fn lock(env: &Env<'_>, locked: &Locked, out: &mut Vec<Command>) {
@@ -68,6 +75,30 @@ fn lock(env: &Env<'_>, locked: &Locked, out: &mut Vec<Command>) {
 /// The screen lock plugin.
 #[derive(Debug, Default)]
 pub struct Lock;
+
+/// The kind, chosen (and its code set) on the lock's page.
+static ON_PAGE: quireink_sdk::SettingExtra = quireink_sdk::SettingExtra::new().editor(SCREEN);
+
+/// The kind of lock, and whether waking up asks for it.
+static SETTINGS: [SettingSpec; 2] = [
+    SettingSpec::fixed_choice(
+        KIND.static_str(),
+        "lock.setting.kind",
+        &KIND_VALUES,
+        KIND_VALUES[0],
+        groups::SYSTEM,
+    )
+    .described("lock.setting.kind.help")
+    .with_extra(&ON_PAGE),
+    SettingSpec::fixed_switch(
+        ON_WAKE.static_str(),
+        "lock.setting.on-wake",
+        true,
+        groups::SYSTEM,
+    )
+    .advanced()
+    .described("lock.setting.on-wake.help"),
+];
 
 impl Plugin for Lock {
     fn manifest(&self) -> Manifest {
@@ -90,26 +121,7 @@ impl Plugin for Lock {
                 Box::new(screen::LockScreen::new(env, params, shared.clone()))
             }),
         })?;
-        r.add_setting(
-            SettingSpec::choice(
-                &KIND,
-                "lock.setting.kind",
-                KINDS
-                    .iter()
-                    .map(|k| Cow::Owned(alloc::format!("{KIND_PREFIX}{k}")))
-                    .collect(),
-                "lock.kind.off",
-            )
-            .group(groups::SYSTEM)
-            .description("lock.setting.kind.help")
-            .editor(SCREEN),
-        )?;
-        r.add_setting(
-            SettingSpec::switch(&ON_WAKE, "lock.setting.on-wake", true)
-                .group(groups::SYSTEM)
-                .advanced()
-                .description("lock.setting.on-wake.help"),
-        )?;
+        r.add_settings(&SETTINGS)?;
         let now = locked.clone();
         r.add_action(ActionSpec::new(NOW, "lock.now").handler(
             move |env: &Env<'_>, out: &mut Vec<Command>| {
@@ -144,6 +156,14 @@ impl Plugin for Lock {
 #[cfg(test)]
 mod tests {
     use quireink_i18n::{Catalog, check};
+
+    /// The setting's values are the kinds after the prefix.
+    #[test]
+    fn kind_values_follow_kinds() {
+        for (value, kind) in super::KIND_VALUES.iter().zip(super::KINDS) {
+            assert_eq!(*value, alloc::format!("{}{kind}", super::KIND_PREFIX));
+        }
+    }
 
     #[test]
     fn translations_are_complete() {

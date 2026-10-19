@@ -42,12 +42,10 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use quireink_sdk::builtin::{
-    actions as core_actions, events, groups, menus, params, setting_sections,
-    settings as core_settings, slots,
+    actions as core_actions, events, groups, menus, params, settings as core_settings, slots,
 };
 use quireink_sdk::event::Event;
 use quireink_sdk::replies::Typed;
-use quireink_sdk::setting::Setting;
 use quireink_sdk::{
     Command, Env, Id, Manifest, Params, Plugin, Priority, RegisterError, Registrar, SDK_VERSION,
     ScreenSpec, SettingSpec, Version,
@@ -206,6 +204,199 @@ pub mod actions {
 #[derive(Debug, Default)]
 pub struct Reader;
 
+/// The parts of the reading settings, with units and steps.
+mod extras {
+    use quireink_sdk::SettingExtra;
+    use quireink_sdk::builtin::setting_sections::{ALOUD, BEHAVIOUR, FONT, PAGE};
+
+    pub(crate) static LINE_SPACING: SettingExtra = SettingExtra::new()
+        .unit("core.unit.percent")
+        .step(5)
+        .section(PAGE);
+    pub(crate) static WEIGHT: SettingExtra =
+        SettingExtra::new().unit("reader.unit.weight").section(FONT);
+    pub(crate) static IN_FONT: SettingExtra = SettingExtra::new().section(FONT);
+    pub(crate) static WORD_SPACING: SettingExtra = SettingExtra::new()
+        .unit("core.unit.percent")
+        .step(10)
+        .section(FONT);
+    pub(crate) static MARGIN: SettingExtra = SettingExtra::new().unit("core.unit.mm").section(PAGE);
+    pub(crate) static IN_PAGE: SettingExtra = SettingExtra::new().section(PAGE);
+    pub(crate) static IN_BEHAVIOUR: SettingExtra = SettingExtra::new().section(BEHAVIOUR);
+    pub(crate) static AUTO_TURN: SettingExtra = SettingExtra::new()
+        .unit("core.unit.seconds")
+        .step(5)
+        .section(BEHAVIOUR);
+    pub(crate) static ALOUD_SPEED: SettingExtra = SettingExtra::new()
+        .unit("core.unit.percent")
+        .step(10)
+        .section(ALOUD);
+    pub(crate) static IN_ALOUD: SettingExtra = SettingExtra::new().section(ALOUD);
+}
+
+/// The reading settings: the page and its type (each book may have its
+/// own), what the reader does, and reading aloud.
+static SETTINGS: [SettingSpec; 17] = [
+    SettingSpec::fixed_number(
+        settings::LINE_SPACING.static_str(),
+        "reader.setting.line-spacing",
+        100,
+        250,
+        135,
+        groups::READING,
+    )
+    .with_extra(&extras::LINE_SPACING)
+    .scoped()
+    .described("reader.setting.line-spacing.help"),
+    SettingSpec::fixed_number(
+        settings::FONT_WEIGHT.static_str(),
+        "reader.setting.font-weight",
+        0,
+        4,
+        0,
+        groups::READING,
+    )
+    .with_extra(&extras::WEIGHT)
+    .scoped()
+    .described("reader.setting.font-weight.help"),
+    SettingSpec::fixed_switch(
+        settings::SMOOTH_TEXT.static_str(),
+        "reader.setting.smooth-text",
+        false,
+        groups::READING,
+    )
+    .with_extra(&extras::IN_FONT)
+    .described("reader.setting.smooth-text.help"),
+    SettingSpec::fixed_number(
+        settings::WORD_SPACING.static_str(),
+        "reader.setting.word-spacing",
+        50,
+        200,
+        100,
+        groups::READING,
+    )
+    .with_extra(&extras::WORD_SPACING)
+    .scoped()
+    .described("reader.setting.word-spacing.help"),
+    SettingSpec::fixed_number(
+        settings::MARGIN.static_str(),
+        "reader.setting.margin",
+        0,
+        30,
+        4,
+        groups::READING,
+    )
+    .with_extra(&extras::MARGIN)
+    .scoped()
+    .described("reader.setting.margin.help"),
+    SettingSpec::fixed_switch(
+        settings::JUSTIFY.static_str(),
+        "reader.setting.justify",
+        true,
+        groups::READING,
+    )
+    .scoped()
+    .with_extra(&extras::IN_PAGE)
+    .described("reader.setting.justify.help"),
+    SettingSpec::fixed_switch(
+        settings::HYPHENATE.static_str(),
+        "reader.setting.hyphenate",
+        true,
+        groups::READING,
+    )
+    .scoped()
+    .with_extra(&extras::IN_PAGE)
+    .described("reader.setting.hyphenate.help"),
+    SettingSpec::fixed_switch(
+        settings::PUBLISHER_STYLES.static_str(),
+        "reader.setting.publisher-styles",
+        true,
+        groups::READING,
+    )
+    .scoped()
+    .with_extra(&extras::IN_PAGE)
+    .described("reader.setting.publisher-styles.help"),
+    SettingSpec::fixed_switch(
+        settings::INDENT.static_str(),
+        "reader.setting.indent",
+        true,
+        groups::READING,
+    )
+    .advanced()
+    .scoped()
+    .with_extra(&extras::IN_PAGE)
+    .described("reader.setting.indent.help"),
+    SettingSpec::fixed_switch(
+        settings::OPEN_LAST.static_str(),
+        "reader.setting.open-last",
+        true,
+        groups::READING,
+    )
+    .with_extra(&extras::IN_BEHAVIOUR)
+    .described("reader.setting.open-last.help"),
+    SettingSpec::fixed_choice(
+        settings::FOOTNOTES.static_str(),
+        "reader.setting.footnotes",
+        &[settings::FOOTNOTES_POPUP, settings::FOOTNOTES_JUMP],
+        settings::FOOTNOTES_POPUP,
+        groups::READING,
+    )
+    .with_extra(&extras::IN_BEHAVIOUR)
+    .described("reader.setting.footnotes.help"),
+    SettingSpec::fixed_switch(
+        settings::CORNER_BOOKMARK.static_str(),
+        "reader.setting.corner-bookmark",
+        true,
+        groups::CONTROLS,
+    )
+    .described("reader.setting.corner-bookmark.help"),
+    SettingSpec::fixed_number(
+        settings::AUTO_TURN_SECONDS.static_str(),
+        "reader.setting.auto-turn-seconds",
+        5,
+        600,
+        30,
+        groups::READING,
+    )
+    .with_extra(&extras::AUTO_TURN)
+    .described("reader.setting.auto-turn-seconds.help"),
+    SettingSpec::fixed_number(
+        settings::ALOUD_SPEED.static_str(),
+        "reader.setting.aloud-speed",
+        50,
+        300,
+        100,
+        groups::READING,
+    )
+    .with_extra(&extras::ALOUD_SPEED)
+    .described("reader.setting.aloud-speed.help"),
+    SettingSpec::fixed_switch(
+        settings::ALOUD_HIGHLIGHT.static_str(),
+        "reader.setting.aloud-highlight",
+        true,
+        groups::READING,
+    )
+    .with_extra(&extras::IN_ALOUD)
+    .described("reader.setting.aloud-highlight.help"),
+    SettingSpec::fixed_switch(
+        settings::ALOUD_TURN.static_str(),
+        "reader.setting.aloud-turn-pages",
+        true,
+        groups::READING,
+    )
+    .with_extra(&extras::IN_ALOUD)
+    .described("reader.setting.aloud-turn-pages.help"),
+    SettingSpec::fixed_choice(
+        settings::ALOUD_TIMER.static_str(),
+        "reader.setting.aloud-timer",
+        &aloud::TIMER_CHOICES,
+        aloud::TIMER_CHOICES[0],
+        groups::READING,
+    )
+    .with_extra(&extras::IN_ALOUD)
+    .described("reader.setting.aloud-timer.help"),
+];
+
 impl Plugin for Reader {
     fn manifest(&self) -> Manifest {
         Manifest {
@@ -306,150 +497,7 @@ impl Plugin for Reader {
             })?;
         }
 
-        let int = |id: Setting<i64>, key: &'static str, (min, max, default), unit: &'static str| {
-            SettingSpec::number(&id, key, min, max, default)
-                .group(groups::READING)
-                .unit(unit)
-                // Each book may have its own.
-                .scoped()
-        };
-        let flag = |id: Setting<bool>, key: &'static str, default| {
-            SettingSpec::switch(&id, key, default).group(groups::READING)
-        };
-        for setting in [
-            int(
-                settings::LINE_SPACING,
-                "reader.setting.line-spacing",
-                (100, 250, 135),
-                "core.unit.percent",
-            )
-            .step(5)
-            .section(setting_sections::PAGE)
-            .description("reader.setting.line-spacing.help"),
-            int(
-                settings::FONT_WEIGHT,
-                "reader.setting.font-weight",
-                (0, 4, 0),
-                "reader.unit.weight",
-            )
-            .section(setting_sections::FONT)
-            .description("reader.setting.font-weight.help"),
-            flag(settings::SMOOTH_TEXT, "reader.setting.smooth-text", false)
-                .section(setting_sections::FONT)
-                .description("reader.setting.smooth-text.help"),
-            int(
-                settings::WORD_SPACING,
-                "reader.setting.word-spacing",
-                (50, 200, 100),
-                "core.unit.percent",
-            )
-            .step(10)
-            .section(setting_sections::FONT)
-            .description("reader.setting.word-spacing.help"),
-            int(
-                settings::MARGIN,
-                "reader.setting.margin",
-                (0, 30, 4),
-                "core.unit.mm",
-            )
-            .section(setting_sections::PAGE)
-            .description("reader.setting.margin.help"),
-            flag(settings::JUSTIFY, "reader.setting.justify", true)
-                .scoped()
-                .section(setting_sections::PAGE)
-                .description("reader.setting.justify.help"),
-            flag(settings::HYPHENATE, "reader.setting.hyphenate", true)
-                .scoped()
-                .section(setting_sections::PAGE)
-                .description("reader.setting.hyphenate.help"),
-            flag(
-                settings::PUBLISHER_STYLES,
-                "reader.setting.publisher-styles",
-                true,
-            )
-            .scoped()
-            .section(setting_sections::PAGE)
-            .description("reader.setting.publisher-styles.help"),
-            flag(settings::INDENT, "reader.setting.indent", true)
-                .advanced()
-                .scoped()
-                .section(setting_sections::PAGE)
-                .description("reader.setting.indent.help"),
-            flag(settings::OPEN_LAST, "reader.setting.open-last", true)
-                .section(setting_sections::BEHAVIOUR)
-                .description("reader.setting.open-last.help"),
-            SettingSpec::choice(
-                &settings::FOOTNOTES,
-                "reader.setting.footnotes",
-                quireink_sdk::Choices::Fixed(&[
-                    settings::FOOTNOTES_POPUP,
-                    settings::FOOTNOTES_JUMP,
-                ]),
-                settings::FOOTNOTES_POPUP,
-            )
-            .group(groups::READING)
-            .section(setting_sections::BEHAVIOUR)
-            .description("reader.setting.footnotes.help"),
-            flag(
-                settings::CORNER_BOOKMARK,
-                "reader.setting.corner-bookmark",
-                true,
-            )
-            .group(groups::CONTROLS)
-            .description("reader.setting.corner-bookmark.help"),
-            SettingSpec::number(
-                &settings::AUTO_TURN_SECONDS,
-                "reader.setting.auto-turn-seconds",
-                5,
-                600,
-                30,
-            )
-            .group(groups::READING)
-            .unit("core.unit.seconds")
-            .step(5)
-            .section(setting_sections::BEHAVIOUR)
-            .description("reader.setting.auto-turn-seconds.help"),
-            SettingSpec::number(
-                &settings::ALOUD_SPEED,
-                "reader.setting.aloud-speed",
-                50,
-                300,
-                100,
-            )
-            .group(groups::READING)
-            .unit("core.unit.percent")
-            .step(10)
-            .section(setting_sections::ALOUD)
-            .description("reader.setting.aloud-speed.help"),
-            flag(
-                settings::ALOUD_HIGHLIGHT,
-                "reader.setting.aloud-highlight",
-                true,
-            )
-            .section(setting_sections::ALOUD)
-            .description("reader.setting.aloud-highlight.help"),
-            flag(
-                settings::ALOUD_TURN,
-                "reader.setting.aloud-turn-pages",
-                true,
-            )
-            .section(setting_sections::ALOUD)
-            .description("reader.setting.aloud-turn-pages.help"),
-            SettingSpec::choice(
-                &settings::ALOUD_TIMER,
-                "reader.setting.aloud-timer",
-                aloud::TIMER_CHOICES
-                    .iter()
-                    .map(|c| Cow::Borrowed(*c))
-                    .collect(),
-                aloud::TIMER_CHOICES[0],
-            )
-            .group(groups::READING)
-            .section(setting_sections::ALOUD)
-            .description("reader.setting.aloud-timer.help"),
-        ] {
-            r.add_setting(setting)?;
-        }
+        r.add_settings(&SETTINGS)?;
 
         let font_step = |step: i64| -> quireink_sdk::ActionHandler {
             Box::new(move |env: &Env<'_>, out: &mut Vec<Command>| {

@@ -92,6 +92,46 @@ const SHELF_SCREEN: Id = Id::new_static("files.shelf");
 #[derive(Debug, Default)]
 pub struct Files;
 
+/// Folders chosen on the folder chooser.
+static FOLDER: quireink_sdk::SettingExtra = quireink_sdk::SettingExtra::new().editor(CHOOSE_FOLDER);
+
+/// Where the books and the archive are, and how the library shows them.
+static SETTINGS: [SettingSpec; 4] = [
+    SettingSpec::fixed_text(
+        ROOT.static_str(),
+        "files.setting.root",
+        "books",
+        groups::LIBRARY,
+    )
+    .with_extra(&FOLDER)
+    .described("files.setting.root.help"),
+    SettingSpec::fixed_text(
+        ARCHIVE.static_str(),
+        "files.setting.archive",
+        "books/Archive",
+        groups::LIBRARY,
+    )
+    .with_extra(&FOLDER)
+    .advanced()
+    .described("files.setting.archive.help"),
+    SettingSpec::fixed_choice(
+        VIEW.static_str(),
+        "files.setting.view",
+        &[VIEW_LIST, VIEW_COVERS],
+        VIEW_LIST,
+        groups::LIBRARY,
+    )
+    .described("files.setting.view.help"),
+    SettingSpec::fixed_choice(
+        SORT.static_str(),
+        "files.setting.sort",
+        &[SORT_RECENT, SORT_NAME],
+        SORT_RECENT,
+        groups::LIBRARY,
+    )
+    .described("files.setting.sort.help"),
+];
+
 impl Plugin for Files {
     fn manifest(&self) -> Manifest {
         Manifest {
@@ -163,39 +203,7 @@ impl Plugin for Files {
         r.bind_slot(slots::BOOK_INFO, INFO_SCREEN, Priority::DEFAULT)?;
         r.bind_slot(slots::HOME, SCREEN, Priority::FALLBACK)?;
         r.bind_slot(slots::LIBRARY, SCREEN, Priority::DEFAULT)?;
-        r.add_setting(
-            SettingSpec::text(&ROOT, "files.setting.root", "books")
-                .group(groups::LIBRARY)
-                .editor(CHOOSE_FOLDER)
-                .description("files.setting.root.help"),
-        )?;
-        r.add_setting(
-            SettingSpec::text(&ARCHIVE, "files.setting.archive", "books/Archive")
-                .group(groups::LIBRARY)
-                .editor(CHOOSE_FOLDER)
-                .advanced()
-                .description("files.setting.archive.help"),
-        )?;
-        r.add_setting(
-            SettingSpec::choice(
-                &VIEW,
-                "files.setting.view",
-                quireink_sdk::Choices::Fixed(&[VIEW_LIST, VIEW_COVERS]),
-                VIEW_LIST,
-            )
-            .group(groups::LIBRARY)
-            .description("files.setting.view.help"),
-        )?;
-        r.add_setting(
-            SettingSpec::choice(
-                &SORT,
-                "files.setting.sort",
-                quireink_sdk::Choices::Fixed(&[SORT_RECENT, SORT_NAME]),
-                SORT_RECENT,
-            )
-            .group(groups::LIBRARY)
-            .description("files.setting.sort.help"),
-        )?;
+        r.add_settings(&SETTINGS)?;
         r.add_action(
             quireink_sdk::ActionSpec::new(SEARCH, "files.search").handler(
                 |env: &Env<'_>, out: &mut Vec<Command>| {

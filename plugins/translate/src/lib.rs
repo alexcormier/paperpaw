@@ -158,6 +158,32 @@ fn translation(body: &str) -> Option<String> {
 #[derive(Debug, Default)]
 pub struct Translate;
 
+/// The languages to translate into: the reader's own, then each one.
+const TARGETS: [&str; LANGUAGES.len() + 1] = {
+    let mut targets = [AUTO; LANGUAGES.len() + 1];
+    let mut i = 0;
+    while i < LANGUAGES.len() {
+        targets[i + 1] = LANGUAGES[i];
+        i += 1;
+    }
+    targets
+};
+
+/// The translation's part of the reading settings.
+static IN_TRANSLATION: quireink_sdk::SettingExtra =
+    quireink_sdk::SettingExtra::new().section(SECTION);
+
+/// The language to translate into.
+static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_choice(
+    TO.static_str(),
+    "translate.setting.to",
+    &TARGETS,
+    AUTO,
+    groups::READING,
+)
+.with_extra(&IN_TRANSLATION)
+.described("translate.setting.to.help")];
+
 impl Plugin for Translate {
     fn manifest(&self) -> Manifest {
         Manifest {
@@ -170,20 +196,7 @@ impl Plugin for Translate {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_setting(
-            SettingSpec::choice(
-                &TO,
-                "translate.setting.to",
-                core::iter::once(AUTO)
-                    .chain(LANGUAGES.iter().copied())
-                    .map(Cow::Borrowed)
-                    .collect(),
-                AUTO,
-            )
-            .group(groups::READING)
-            .section(SECTION)
-            .description("translate.setting.to.help"),
-        )?;
+        r.add_settings(&SETTINGS)?;
         r.add_screen(ScreenSpec {
             id: SCREEN,
             title: Cow::Borrowed("translate.title"),

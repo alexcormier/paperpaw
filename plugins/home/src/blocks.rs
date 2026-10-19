@@ -17,6 +17,7 @@
 //! never opening books themselves, and read it when the home screen
 //! updates them, not as they are drawn, so drawing stays quick.
 
+use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::format;
 use alloc::string::String;
@@ -30,7 +31,8 @@ use quireink_sdk::widgets::{
     self, Align, Drawn, Frame, Size, Widget, WidgetSpec, WidgetTarget, grid, line_height,
 };
 use quireink_sdk::{
-    Arg, Canvas, Color, Command, Env, Id, Params, Rect, RegisterError, Registrar, SettingSpec, time,
+    Arg, Canvas, Color, Command, Env, Id, Params, Rect, RegisterError, Registrar, SettingExtra,
+    SettingKind, SettingSpec, SettingValue, time,
 };
 
 use crate::pages::{CONTINUE, DATE, RECENT, STATUS};
@@ -56,11 +58,38 @@ pub(crate) const TOOL_LABELS: Setting<bool> = Setting::new("home.tool-labels");
 pub(crate) const FOCUS_AT_ONCE: Setting<bool> = Setting::new("home.focus-at-once");
 /// The status items of the status line's left, centre and right (ids
 /// separated by commas).
-pub(crate) const STATUS_PARTS: [Setting<Text>; 3] = [
-    Setting::new("home.status.left"),
-    Setting::new("home.status.center"),
-    Setting::new("home.status.right"),
+pub(crate) const STATUS_PARTS: [Setting<Text>; 3] = [STATUS_LEFT, STATUS_CENTER, STATUS_RIGHT];
+const STATUS_LEFT: Setting<Text> = Setting::new("home.status.left");
+const STATUS_CENTER: Setting<Text> = Setting::new("home.status.center");
+const STATUS_RIGHT: Setting<Text> = Setting::new("home.status.right");
+/// The status line's parts, each a list of status items chosen on their
+/// picker: the time on the left; Wi-Fi and the battery on the right.
+static STATUS_ITEMS: SettingExtra = SettingExtra::new().editor(screens::STATUS_ITEMS);
+static STATUS_SETTINGS: [SettingSpec; 3] = [
+    status_part(
+        STATUS_LEFT.static_str(),
+        "home.status.left",
+        "core.status.clock",
+    ),
+    status_part(STATUS_CENTER.static_str(), "home.status.center", ""),
+    status_part(
+        STATUS_RIGHT.static_str(),
+        "home.status.right",
+        "wifi.status, core.status.battery",
+    ),
 ];
+
+const fn status_part(id: &'static str, title: &'static str, default: &'static str) -> SettingSpec {
+    SettingSpec::fixed(
+        id,
+        title,
+        SettingKind::List,
+        SettingValue::Text(Cow::Borrowed(default)),
+        Id::new_static(STATUS),
+    )
+    .with_extra(&STATUS_ITEMS)
+}
+
 /// Recent books shown as covers at most.
 const MAX_COVERS: usize = 8;
 
@@ -165,18 +194,7 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     // battery on the right.
     let status = Id::new_static(STATUS);
     r.add_setting_group(widgets::settings_group(&status, "home.widget.status"))?;
-    let parts = [
-        ("home.status.left", "core.status.clock"),
-        ("home.status.center", ""),
-        ("home.status.right", "wifi.status, core.status.battery"),
-    ];
-    for (part, (title, default)) in STATUS_PARTS.iter().zip(parts) {
-        r.add_setting(
-            SettingSpec::list(part, title, default)
-                .group(status.clone())
-                .editor(screens::STATUS_ITEMS),
-        )?;
-    }
+    r.add_settings(&STATUS_SETTINGS)?;
     // Each other widget's settings, in its own group.
     for (id, title) in [
         (DATE, "home.widget.date"),

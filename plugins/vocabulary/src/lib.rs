@@ -31,14 +31,14 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use quireink_sdk::builtin::{actions, events, groups, menus, params, slots};
-use quireink_sdk::decorations::{Decoration, LineKind, add_role};
+use quireink_sdk::decorations::{Decoration, LineKind};
 use quireink_sdk::event::Event;
 use quireink_sdk::ui::choice::{self, Choice};
 use quireink_sdk::ui::{self, ListChange, ListView, UiStyle};
 use quireink_sdk::{
     ActionSpec, Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
     MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen,
-    ScreenSpec, SettingSpec, Version,
+    ScreenSpec, SettingExtra, SettingSpec, Version,
 };
 
 use quireink_sdk::setting::Setting;
@@ -59,6 +59,36 @@ const CHOSEN: Event<choice::Picked> = Event::new("vocabulary.chosen");
 const OPTION_LABELS: &str = "vocabulary.option.";
 /// The dictionary's settings (see the `dictionary` plugin).
 const DICTIONARY_SECTION: &str = "dictionary.section";
+/// The dictionary's part of the reading settings.
+static IN_DICTIONARY: SettingExtra = SettingExtra::new().section(DICTIONARY_SECTION);
+
+/// Whether words are kept and marked.
+static SETTINGS: [SettingSpec; 2] = [
+    SettingSpec::fixed_switch(
+        COLLECT.static_str(),
+        "vocabulary.setting.collect",
+        true,
+        groups::READING,
+    )
+    .with_extra(&IN_DICTIONARY)
+    .described("vocabulary.setting.collect.help"),
+    SettingSpec::fixed_switch(
+        MARK.static_str(),
+        "vocabulary.setting.mark",
+        false,
+        groups::READING,
+    )
+    .with_extra(&IN_DICTIONARY)
+    .described("vocabulary.setting.mark.help"),
+];
+
+/// How the words being learnt look in books.
+static LEARNING_LOOK: [SettingSpec; 7] = quireink_sdk::role_settings!(
+    "vocabulary.learning",
+    "vocabulary.role.learning",
+    Decoration::NONE.line(LineKind::Dotted)
+);
+
 /// The folder exports go to, beside the library (as the reader's notes).
 const NOTES: &str = "Notes";
 const EXPORT_NAME: &str = "Vocabulary.tsv";
@@ -81,33 +111,17 @@ impl Plugin for Vocabulary {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_setting(
-            SettingSpec::switch(&COLLECT, "vocabulary.setting.collect", true)
-                .group(groups::READING)
-                .section(DICTIONARY_SECTION)
-                .description("vocabulary.setting.collect.help"),
-        )?;
+        r.add_settings(&SETTINGS)?;
         r.on(events::WORD_LOOKED_UP, |env, looked_up, _| {
             record(env, looked_up);
         })?;
-        r.add_setting(
-            SettingSpec::switch(&MARK, "vocabulary.setting.mark", false)
-                .group(groups::READING)
-                .section(DICTIONARY_SECTION)
-                .description("vocabulary.setting.mark.help"),
-        )?;
         r.add_menu_entry(MenuEntry {
             menu: menus::READER_MORE,
             item: MARK.id().clone(),
             order: 40,
         })?;
         r.add_icon(&MARK, Cow::Borrowed("vocabulary"))?;
-        add_role(
-            r,
-            &LEARNING,
-            "vocabulary.role.learning",
-            Decoration::NONE.line(LineKind::Dotted),
-        )?;
+        r.add_settings(&LEARNING_LOOK)?;
         r.add_decorator(marks::decorator())?;
         r.on(events::DECORATION_TAPPED, marks::tapped)?;
         r.add_screen(ScreenSpec {
@@ -453,7 +467,7 @@ mod tests {
         assert!(plugin.register(&mut r).is_ok());
         let contributions = r.contributions();
         let mark = contributions.iter().find_map(|c| match c {
-            Contribution::Setting(spec) if spec.id == *super::MARK.id() => Some(spec),
+            Contribution::FixedSettings(list) => list.iter().find(|s| s.id == *super::MARK.id()),
             _ => None,
         });
         assert_eq!(mark.map(|s| &s.default), Some(&SettingValue::Bool(false)));

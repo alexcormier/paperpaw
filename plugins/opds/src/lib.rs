@@ -137,6 +137,35 @@ fn marked(env: &Env<'_>) -> Vec<Catalog> {
 #[derive(Debug, Default)]
 pub struct Opds;
 
+/// The catalogs' part of the library settings.
+static IN_CATALOGS: quireink_sdk::SettingExtra =
+    quireink_sdk::SettingExtra::new().section("opds.section");
+static IN_CATALOGS_10: quireink_sdk::SettingExtra = quireink_sdk::SettingExtra::new()
+    .section("opds.section")
+    .step(10);
+
+/// Covers in lists, and how many books a sync fetches at most.
+static SETTINGS: [SettingSpec; 2] = [
+    SettingSpec::fixed_switch(
+        COVERS.static_str(),
+        "opds.setting.covers",
+        true,
+        groups::LIBRARY,
+    )
+    .with_extra(&IN_CATALOGS)
+    .described("opds.setting.covers.help"),
+    SettingSpec::fixed_number(
+        sync::LIMIT.static_str(),
+        "opds.setting.limit",
+        10,
+        1000,
+        50,
+        groups::LIBRARY,
+    )
+    .with_extra(&IN_CATALOGS_10)
+    .described("opds.setting.limit.help"),
+];
+
 impl Plugin for Opds {
     fn manifest(&self) -> Manifest {
         Manifest {
@@ -202,19 +231,7 @@ impl Plugin for Opds {
         r.on(sync::BOOK_LOADED, move |env, reply, out| {
             shared.borrow_mut().book_loaded(env, reply, out);
         })?;
-        r.add_setting(
-            SettingSpec::switch(&COVERS, "opds.setting.covers", true)
-                .group(groups::LIBRARY)
-                .section("opds.section")
-                .description("opds.setting.covers.help"),
-        )?;
-        r.add_setting(
-            SettingSpec::number(&sync::LIMIT, "opds.setting.limit", 10, 1000, 50)
-                .group(groups::LIBRARY)
-                .section("opds.section")
-                .step(10)
-                .description("opds.setting.limit.help"),
-        )?;
+        r.add_settings(&SETTINGS)?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())
