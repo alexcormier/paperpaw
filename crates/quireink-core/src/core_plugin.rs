@@ -1050,17 +1050,23 @@ fn register_spaces(r: &mut Registrar) -> Result<(), RegisterError> {
         };
         env.metrics.mm(mm).min(u32::from(u16::MAX)) as u16
     };
-    r.add_widget(WidgetSpec::drawn(
-        space,
-        "core.widget.space",
-        Drawn::new(space_height, |_, _, _| {}),
-    ))?;
+    r.add_widget(
+        WidgetSpec::drawn(
+            space,
+            "core.widget.space",
+            Drawn::new(space_height, |_, _, _| {}),
+        )
+        .category(widgets::categories::LAYOUT),
+    )?;
     // Screens that place widgets give it the room left.
-    r.add_widget(WidgetSpec::drawn(
-        Id::new_static(widgets::FILL),
-        "core.widget.fill",
-        Drawn::new(|_, _| 0, |_, _, _| {}),
-    ))?;
+    r.add_widget(
+        WidgetSpec::drawn(
+            Id::new_static(widgets::FILL),
+            "core.widget.fill",
+            Drawn::new(|_, _| 0, |_, _, _| {}),
+        )
+        .category(widgets::categories::LAYOUT),
+    )?;
     Ok(())
 }
 

@@ -1,0 +1,223 @@
+//! Round shapes: circles, rings and arcs of them, and points around a
+//! centre (e.g. a clock's hands), in whole numbers only: small devices
+//! have no floating-point unit.
+//!
+//! Angles are whole degrees clockwise from twelve o'clock, as on a clock
+//! face: 0 up, 90 right, 180 down, 270 left.
+
+use quireink_platform::Point;
+
+/// What [`sin_cos`] scales its values to (1.0).
+pub const UNIT: i32 = 10_000;
+
+/// The sine of 0 to 90 degrees, times [`UNIT`].
+const SINES: [i16; 91] = [
+    0, 175, 349, 523, 698, 872, 1045, 1219, 1392, 1564, 1736, 1908, 2079, 2250, 2419, 2588, 2756,
+    2924, 3090, 3256, 3420, 3584, 3746, 3907, 4067, 4226, 4384, 4540, 4695, 4848, 5000, 5150, 5299,
+    5446, 5592, 5736, 5878, 6018, 6157, 6293, 6428, 6561, 6691, 6820, 6947, 7071, 7193, 7314, 7431,
+    7547, 7660, 7771, 7880, 7986, 8090, 8192, 8290, 8387, 8480, 8572, 8660, 8746, 8829, 8910, 8988,
+    9063, 9135, 9205, 9272, 9336, 9397, 9455, 9511, 9563, 9613, 9659, 9703, 9744, 9781, 9816, 9848,
+    9877, 9903, 9925, 9945, 9962, 9976, 9986, 9994, 9998, 10_000,
+];
+
+/// The sine and cosine of `degrees` (any, taken round the circle), times
+/// [`UNIT`].
+pub fn sin_cos(degrees: i32) -> (i32, i32) {
+    let d = degrees.rem_euclid(360);
+    let sin = |d: i32| -> i32 {
+        match d {
+            0..=90 => i32::from(SINES[d as usize]),
+            91..=180 => i32::from(SINES[(180 - d) as usize]),
+            181..=270 => -i32::from(SINES[(d - 180) as usize]),
+            _ => -i32::from(SINES[(360 - d) as usize]),
+        }
+    };
+    (sin(d), sin((d + 90).rem_euclid(360)))
+}
+
+/// The point `radius` pixels from `center` in the direction of `degrees`
+/// (clockwise from twelve o'clock), rounded to the nearest pixel.
+pub fn point_at(center: Point, radius: i32, degrees: i32) -> Point {
+    let (sin, cos) = sin_cos(degrees);
+    let scale = |v: i32| (i64::from(v) * i64::from(radius) * 2 / i64::from(UNIT) + 1).div_euclid(2);
+    Point::new(center.x + scale(sin) as i32, center.y - scale(cos) as i32)
+}
+
+/// Whether direction `b` lies less than half a turn clockwise after
+/// direction `a` (both given as east and north parts).
+fn clockwise_after(a: (i64, i64), b: (i64, i64)) -> bool {
+    // With north as the first axis and east as the second, clockwise on a
+    // clock face is the positive turn of the plane.
+    a.1 * b.0 - a.0 * b.1 > 0
+}
+
+/// An arc of a ring: where it starts and how far it goes round.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Arc {
+    from: (i64, i64),
+    to: (i64, i64),
+    sweep: u32,
+}
+
+impl Arc {
+    /// `sweep` degrees clockwise from `from`; the whole ring from 360.
+    pub(crate) fn new(from: i32, sweep: u32) -> Self {
+        let direction = |d: i32| {
+            let (sin, cos) = sin_cos(d);
+            (i64::from(sin), i64::from(cos))
+        };
+        Self {
+            from: direction(from),
+            to: direction(from + sweep.min(360) as i32),
+            sweep: sweep.min(360),
+        }
+    }
+
+    pub(crate) fn full(&self) -> bool {
+        self.sweep >= 360
+    }
+
+    /// Whether the direction east `x`, north `y` lies on the arc.
+    pub(crate) fn holds(&self, x: i64, y: i64) -> bool {
+        if self.full() {
+            return true;
+        }
+        if self.sweep == 0 {
+            return false;
+        }
+        let p = (x, y);
+        let between = |a, b| !clockwise_after(p, a) && clockwise_after(p, b);
+        if self.sweep <= 180 {
+            between(self.from, self.to)
+        } else {
+            // The rest of the ring is less than half a turn.
+            !(!clockwise_after(p, self.to) && clockwise_after(p, self.from))
+        }
+    }
+}
+
+/// A ring (or a disc, as thick as its radius), or an arc of it, and how
+/// much of each pixel around its centre it covers.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Ring {
+    /// Its outer and inner radius, in eighths of a pixel.
+    outer: i64,
+    inner: i64,
+    arc: Arc,
+}
+
+/// Half a pixel's diagonal, in eighths of a pixel, rounded up.
+const HALF_DIAGONAL: i64 = 6;
+
+impl Ring {
+    pub(crate) fn new(radius: u32, thickness: u32, arc: Arc) -> Self {
+        Self {
+            outer: 8 * i64::from(radius),
+            inner: 8 * i64::from(radius.saturating_sub(thickness)),
+            arc,
+        }
+    }
+
+    fn holds(&self, east: i64, north: i64) -> bool {
+        let d = east * east + north * north;
+        d <= self.outer * self.outer && d > self.inner * self.inner && self.arc.holds(east, north)
+    }
+
+    /// How much of the pixel `x`, `y` pixels right of and below the
+    /// centre (the corner between four pixels) the ring covers, 0 to 255:
+    /// pixels on its edges sampled sixteen times.
+    pub(crate) fn coverage(&self, x: i32, y: i32) -> u8 {
+        let east = 8 * i64::from(x) + 4;
+        let north = -(8 * i64::from(y) + 4);
+        let distance = (east * east + north * north).isqrt();
+        if distance - HALF_DIAGONAL > self.outer
+            || (self.inner > 0 && distance + HALF_DIAGONAL <= self.inner)
+        {
+            return 0;
+        }
+        let radial = distance + HALF_DIAGONAL <= self.outer
+            && (self.inner == 0 || distance - HALF_DIAGONAL > self.inner);
+        let corners = [(-4, -4), (-4, 4), (4, -4), (4, 4)]
+            .iter()
+            .filter(|(dx, dy)| self.arc.holds(east + dx, north + dy))
+            .count();
+        if corners == 0 && !self.arc.full() {
+            return 0;
+        }
+        if radial && (corners == 4 || self.arc.full()) {
+            return 255;
+        }
+        let mut inside = 0u32;
+        for sy in [-3, -1, 1, 3] {
+            for sx in [-3, -1, 1, 3] {
+                if self.holds(east + sx, north + sy) {
+                    inside += 1;
+                }
+            }
+        }
+        (inside * 255 / 16) as u8
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sines_go_round() {
+        assert_eq!(sin_cos(0), (0, UNIT));
+        assert_eq!(sin_cos(90), (UNIT, 0));
+        assert_eq!(sin_cos(180), (0, -UNIT));
+        assert_eq!(sin_cos(270), (-UNIT, 0));
+        assert_eq!(sin_cos(-90), sin_cos(270));
+        assert_eq!(sin_cos(30).0, 5000);
+        assert_eq!(sin_cos(420), sin_cos(60));
+    }
+
+    #[test]
+    fn points_lie_where_a_clock_shows() {
+        let c = Point::new(100, 100);
+        assert_eq!(point_at(c, 50, 0), Point::new(100, 50));
+        assert_eq!(point_at(c, 50, 90), Point::new(150, 100));
+        assert_eq!(point_at(c, 50, 180), Point::new(100, 150));
+        assert_eq!(point_at(c, 50, 270), Point::new(50, 100));
+    }
+
+    #[test]
+    fn arcs_hold_what_they_sweep() {
+        // A quarter from twelve: the upper right only.
+        let quarter = Arc::new(0, 90);
+        assert!(quarter.holds(10, 10));
+        assert!(!quarter.holds(-10, 10));
+        assert!(!quarter.holds(10, -10));
+        // Three quarters from twelve: all but the upper left.
+        let most = Arc::new(0, 270);
+        assert!(most.holds(10, 10) && most.holds(10, -10) && most.holds(-10, -10));
+        assert!(!most.holds(-10, 10));
+        // From three o'clock, half a turn: the lower half.
+        let half = Arc::new(90, 180);
+        assert!(half.holds(5, -10) && half.holds(-5, -10));
+        assert!(!half.holds(5, 10));
+        assert!(Arc::new(0, 360).holds(-1, 1));
+        assert!(!Arc::new(0, 0).holds(1, 1));
+    }
+
+    #[test]
+    fn rings_cover_their_pixels() {
+        let disc = Ring::new(10, 10, Arc::new(0, 360));
+        assert_eq!(disc.coverage(0, 0), 255);
+        assert_eq!(disc.coverage(-10, -10), 0);
+        assert_eq!(disc.coverage(20, 0), 0);
+        // On the edge: partly.
+        let edge = disc.coverage(7, 6);
+        assert!(edge > 0 && edge < 255, "{edge}");
+        // A ring 2 wide: its middle empty, its band full.
+        let ring = Ring::new(10, 2, Arc::new(0, 360));
+        assert_eq!(ring.coverage(0, 0), 0);
+        assert_eq!(ring.coverage(-1, -9), 255);
+        // Half of it, the right side: the left of the band empty.
+        let half = Ring::new(10, 2, Arc::new(0, 180));
+        assert_eq!(half.coverage(-2, -9), 0);
+        assert_eq!(half.coverage(1, 8), 255);
+    }
+}

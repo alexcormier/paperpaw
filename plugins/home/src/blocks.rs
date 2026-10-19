@@ -17,7 +17,6 @@
 //! never opening books themselves, and read it when the home screen
 //! updates them, not as they are drawn, so drawing stays quick.
 
-use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::format;
 use alloc::string::String;
@@ -27,7 +26,9 @@ use quireink_sdk::builtin::{actions, params, screens, slots};
 use quireink_sdk::document::ImageRef;
 use quireink_sdk::status::{StatusLine, item_ids};
 use quireink_sdk::ui::{self, UiStyle};
-use quireink_sdk::widgets::{self, Align, Drawn, Widget, WidgetSpec, WidgetTarget, grid};
+use quireink_sdk::widgets::{
+    self, Align, Drawn, Frame, Size, Widget, WidgetSpec, WidgetTarget, grid, line_height,
+};
 use quireink_sdk::{
     Arg, Canvas, Color, Command, Env, Id, Params, Rect, RegisterError, Registrar, SettingSpec, time,
 };
@@ -40,18 +41,9 @@ use quireink_sdk::setting::{Setting, Text};
 pub const CLOCK: &str = "home.clock";
 /// Whether the clock shows the date below the time.
 const CLOCK_DATE: Setting<bool> = Setting::new("home.clock.date");
-/// How large the clock is: one of [`SIZES`] or [`FIT`].
-const CLOCK_SIZE: Setting<Text> = Setting::new("home.clock.size");
-/// How large the date is: one of [`SIZES`].
-const DATE_SIZE: Setting<Text> = Setting::new("home.date.size");
-/// Text sizes a widget may choose.
-const SIZES: [&str; 3] = ["home.size.small", "home.size.medium", "home.size.large"];
-/// As large as the widget's cells allow.
-const FIT: &str = "home.size.fit";
-/// Whether the continue card shows the cover, the progress, its frame.
+/// Whether the continue card shows the cover, the progress.
 const CARD_COVER: Setting<bool> = Setting::new("home.continue.cover");
 const CARD_PROGRESS: Setting<bool> = Setting::new("home.continue.progress");
-const CARD_FRAME: Setting<bool> = Setting::new("home.continue.frame");
 /// Whether the recent books show their heading and their titles, how many
 /// there are at most.
 const RECENT_HEADING: Setting<bool> = Setting::new("home.recent.heading");
@@ -73,31 +65,43 @@ pub(crate) const STATUS_PARTS: [Setting<Text>; 3] = [
 const MAX_COVERS: usize = 8;
 
 pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
-    r.add_widget(WidgetSpec::drawn(
-        Id::new_static(STATUS),
-        "home.widget.status",
-        Drawn::new(status_height, draw_status).shows(status_signature),
-    ))?;
-    r.add_widget(WidgetSpec::drawn(
-        Id::new_static(DATE),
-        "home.widget.date",
-        Drawn::new(date_height, draw_date).shows(date_text),
-    ))?;
-    r.add_widget(WidgetSpec::new(
-        Id::new_static(CONTINUE),
-        "home.widget.continue",
-        |_| Box::new(Card::default()),
-    ))?;
-    r.add_widget(WidgetSpec::new(
-        Id::new_static(RECENT),
-        "home.widget.recent",
-        |_| Box::new(Shelf::default()),
-    ))?;
-    r.add_widget(WidgetSpec::drawn(
-        Id::new_static(CLOCK),
-        "home.widget.clock",
-        Drawn::new(clock_height, draw_clock).shows(clock_shows),
-    ))?;
+    use widgets::categories;
+    r.add_widget(
+        WidgetSpec::drawn(
+            Id::new_static(STATUS),
+            "home.widget.status",
+            Drawn::new(status_height, draw_status).shows(status_signature),
+        )
+        .category(categories::DEVICE),
+    )?;
+    r.add_widget(
+        WidgetSpec::drawn(
+            Id::new_static(DATE),
+            "home.widget.date",
+            Drawn::new(date_height, draw_date).shows(date_text),
+        )
+        .category(categories::TIME),
+    )?;
+    r.add_widget(
+        WidgetSpec::new(Id::new_static(CONTINUE), "home.widget.continue", |_| {
+            Box::new(Card::default())
+        })
+        .category(categories::BOOKS),
+    )?;
+    r.add_widget(
+        WidgetSpec::new(Id::new_static(RECENT), "home.widget.recent", |_| {
+            Box::new(Shelf::default())
+        })
+        .category(categories::BOOKS),
+    )?;
+    r.add_widget(
+        WidgetSpec::drawn(
+            Id::new_static(CLOCK),
+            "home.widget.clock",
+            Drawn::new(clock_height, draw_clock).shows(clock_shows),
+        )
+        .category(categories::TIME),
+    )?;
 
     // The status line's parts: the time on the left; Wi-Fi and the
     // battery on the right.
@@ -115,43 +119,32 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
                 .editor(screens::STATUS_ITEMS),
         )?;
     }
-    // Each other widget's settings, in its own group.
-    for (id, title, align) in [
-        (DATE, "home.widget.date", Align::Center),
-        (CLOCK, "home.widget.clock", Align::Center),
-        (CONTINUE, "home.widget.continue", Align::Left),
-        (RECENT, "home.widget.recent", Align::Center),
+    // Each other widget's settings, in its own group: where it sits, its
+    // frame.
+    for (id, title, align, frame) in [
+        (DATE, "home.widget.date", Align::Center, Frame::None),
+        (CLOCK, "home.widget.clock", Align::Center, Frame::None),
+        (CONTINUE, "home.widget.continue", Align::Left, Frame::Line),
+        (RECENT, "home.widget.recent", Align::Center, Frame::None),
     ] {
         let id = Id::new_static(id);
         r.add_setting_group(widgets::settings_group(&id, title))?;
         r.add_setting(widgets::align_setting(&id, align))?;
+        r.add_setting(widgets::frame_setting(&id, frame))?;
     }
-    let choice = |setting: &Setting<Text>,
-                  title: &'static str,
-                  group: &'static str,
-                  values: &[&'static str],
-                  default: &'static str| {
-        let values = values.iter().map(|v| Cow::Borrowed(*v)).collect();
-        SettingSpec::choice(setting, title, values, default).group(Id::new_static(group))
-    };
     let switch = |setting: &Setting<bool>, title: &'static str, group: &'static str, default| {
         SettingSpec::switch(setting, title, default).group(Id::new_static(group))
     };
-    let clock_sizes = [SIZES[0], SIZES[1], SIZES[2], FIT];
-    r.add_setting(choice(
-        &CLOCK_SIZE,
-        "home.setting.size",
-        CLOCK,
-        &clock_sizes,
-        FIT,
+    r.add_setting(widgets::size_setting(
+        &Id::new_static(CLOCK),
+        Size::Fit,
+        true,
     ))?;
     r.add_setting(switch(&CLOCK_DATE, "home.setting.clock-date", CLOCK, true))?;
-    r.add_setting(choice(
-        &DATE_SIZE,
-        "home.setting.size",
-        DATE,
-        &SIZES,
-        SIZES[1],
+    r.add_setting(widgets::size_setting(
+        &Id::new_static(DATE),
+        Size::Medium,
+        false,
     ))?;
     r.add_setting(switch(
         &CARD_COVER,
@@ -162,12 +155,6 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     r.add_setting(switch(
         &CARD_PROGRESS,
         "home.setting.card-progress",
-        CONTINUE,
-        true,
-    ))?;
-    r.add_setting(switch(
-        &CARD_FRAME,
-        "home.setting.card-frame",
         CONTINUE,
         true,
     ))?;
@@ -196,19 +183,10 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     Ok(())
 }
 
-fn line_height(env: &Env<'_>, size: f32) -> u16 {
-    UiStyle::new(env)
-        .font(env)
-        .map_or(size as u16, |f| f.line_metrics(size).line_height as u16)
-}
-
-/// A text size of [`SIZES`] for a widget.
-fn sized(style: &UiStyle, value: &str) -> f32 {
-    match SIZES.iter().position(|s| *s == value) {
-        Some(0) => style.text,
-        Some(2) => style.title * 1.6,
-        _ => style.title,
-    }
+/// The height `widget`'s frame takes above and below its content.
+fn frame_height(env: &Env<'_>, widget: &str) -> u16 {
+    let probe = Rect::new(0, 0, 100, 100);
+    100 - widgets::look::look(env, widget, probe).area.height
 }
 
 /// `height` pixels placed in the middle of `area`, top to bottom.
@@ -266,16 +244,18 @@ fn date_height(env: &Env<'_>, _: u16) -> u16 {
         return 0;
     }
     let style = UiStyle::new(env);
-    line_height(env, sized(&style, env.settings.read(&DATE_SIZE)))
+    line_height(env, widgets::size(env, DATE).text(&style)) + frame_height(env, DATE)
 }
 
 fn draw_date(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     let style = UiStyle::new(env);
+    let look = widgets::draw_frame(canvas, env, DATE, area);
+    let area = look.area;
     if let Some(font) = style.font(env) {
-        let size = sized(&style, env.settings.read(&DATE_SIZE));
+        let size = widgets::size(env, DATE).text(&style);
         let date = ui::fit(&font, size, &date_text(env), f32::from(area.width));
         let x = widgets::align(env, DATE).x(area, font.measure(size, &date));
-        ui::draw_label(canvas, &font, size, x, area, &date, Color::BLACK);
+        ui::draw_label(canvas, &font, size, x, area, &date, look.ink);
     }
 }
 
@@ -292,9 +272,9 @@ fn clock_shows(env: &Env<'_>) -> String {
 
 /// The clock's size in `area`: as set, or as large as fits.
 fn clock_size(env: &Env<'_>, style: &UiStyle, area: Option<Rect>) -> f32 {
-    let value = env.settings.read(&CLOCK_SIZE);
-    if value != FIT {
-        return sized(style, value) * 1.4;
+    let size = widgets::size(env, CLOCK);
+    if size != Size::Fit {
+        return size.text(style) * 1.4;
     }
     let Some(area) = area else {
         return style.title * 2.2;
@@ -322,7 +302,10 @@ fn clock_height(env: &Env<'_>, _: u16) -> u16 {
     } else {
         0
     };
-    line_height(env, clock_size(env, &style, None)) + date + style.gap as u16
+    line_height(env, clock_size(env, &style, None))
+        + date
+        + style.gap as u16
+        + frame_height(env, CLOCK)
 }
 
 fn draw_clock(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
@@ -330,6 +313,8 @@ fn draw_clock(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     let Some(font) = style.font(env) else {
         return;
     };
+    let look = widgets::draw_frame(canvas, env, CLOCK, area);
+    let area = look.area;
     let size = clock_size(env, &style, Some(area));
     let big = line_height(env, size);
     let with_date = env.settings.read(&CLOCK_DATE);
@@ -348,7 +333,7 @@ fn draw_clock(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         align.x(area, font.measure(size, &clock)),
         Rect::new(area.x, top, area.width, big),
         &clock,
-        Color::BLACK,
+        look.ink,
     );
     if !with_date {
         return;
@@ -361,7 +346,7 @@ fn draw_clock(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         align.x(area, font.measure(style.small, &date)),
         Rect::new(area.x, top + big, area.width, small),
         &date,
-        style.faint(80),
+        look.faint,
     );
 }
 
@@ -430,40 +415,30 @@ impl Widget for Card {
     }
 }
 
-fn draw_card(canvas: &mut Canvas<'_>, env: &Env<'_>, r: Rect, shown: Option<&Book>) {
+fn draw_card(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, shown: Option<&Book>) {
     let style = UiStyle::new(env);
     let Some(font) = style.font(env) else {
         return;
     };
-    let framed = env.settings.read(&CARD_FRAME);
-    let line = if framed { style.line * 2 } else { 0 };
-    if framed {
-        ui::stroke_round(canvas, &style, r, line, Color::BLACK);
-    }
+    let look = widgets::draw_frame(canvas, env, CONTINUE, area);
+    let r = look.area;
     let Some(Book { book, cover }) = shown else {
-        ui::draw_message(canvas, env, &style, r, env.i18n.tr("home.nothing-read"));
+        widgets::draw_message(canvas, env, &look, env.i18n.tr("home.nothing-read"));
         return;
     };
-    let gray = style.faint(90);
     // The cover on the left, where there is one.
-    let inset = if framed {
-        style.margin as u16 / 2 + line as u16
-    } else {
-        0
-    };
     let cover = cover.as_ref().filter(|_| env.settings.read(&CARD_COVER));
     let r = match cover {
         Some(cover) => {
-            let (w, h) = ui::fit_image(cover, r.width / 3, r.height.saturating_sub(2 * inset));
-            let area = Rect::new(r.x + inset, r.y + (r.height - h) / 2, w, h);
-            ui::draw_image(canvas, env.storage, cover, area);
-            let shift = inset + w;
+            let (w, h) = ui::fit_image(cover, r.width / 3, r.height);
+            let at = Rect::new(r.x, r.y + (r.height - h) / 2, w, h);
+            ui::draw_image(canvas, env.storage, cover, at);
+            let shift = w + style.gap as u16;
             Rect::new(r.x + shift, r.y, r.width.saturating_sub(shift), r.height)
         }
         None => r,
     };
-    let pad = style.margin as f32 / 2.0 + line as f32;
-    let inner = f32::from(r.width) - 2.0 * pad;
+    let inner = f32::from(r.width);
     let progress = env.settings.read(&CARD_PROGRESS);
     // The lines of text, together in the middle.
     let label_h = line_height(env, style.small);
@@ -478,25 +453,16 @@ fn draw_card(canvas: &mut Canvas<'_>, env: &Env<'_>, r: Rect, shown: Option<&Boo
     let total = label_h + gap + title_h + if progress { gap + label_h } else { 0 };
     let mut y = centred(r, total);
     let align = widgets::align(env, CONTINUE);
-    let x_of = |width: f32| {
-        let inner_area = Rect::new(
-            (f32::from(r.x) + pad) as u16,
-            r.y,
-            inner.max(0.0) as u16,
-            r.height,
-        );
-        align.x(inner_area, width)
-    };
-    let label = env.i18n.tr("home.continue");
     let row = |y: u16, h: u16| Rect::new(r.x, y, r.width, h);
+    let label = env.i18n.tr("home.continue");
     ui::draw_label(
         canvas,
         &font,
         style.small,
-        x_of(font.measure(style.small, label)),
+        align.x(r, font.measure(style.small, label)),
         row(y, label_h),
         label,
-        gray,
+        look.faint,
     );
     y += label_h + gap;
     let title = ui::fit(&font, size, &book.title, inner);
@@ -504,10 +470,10 @@ fn draw_card(canvas: &mut Canvas<'_>, env: &Env<'_>, r: Rect, shown: Option<&Boo
         canvas,
         &font,
         size,
-        x_of(font.measure(size, &title)),
+        align.x(r, font.measure(size, &title)),
         row(y, title_h),
         &title,
-        Color::BLACK,
+        look.ink,
     );
     y += title_h + gap;
     if !progress {
@@ -517,7 +483,7 @@ fn draw_card(canvas: &mut Canvas<'_>, env: &Env<'_>, r: Rect, shown: Option<&Boo
         "home.percent",
         &[("percent", Arg::Int((book.progress + 0.5) as i64))],
     );
-    let x = f32::from(r.x) + pad;
+    let x = f32::from(r.x);
     ui::draw_label(
         canvas,
         &font,
@@ -525,7 +491,7 @@ fn draw_card(canvas: &mut Canvas<'_>, env: &Env<'_>, r: Rect, shown: Option<&Boo
         x,
         row(y, label_h),
         &percent,
-        gray,
+        look.faint,
     );
     // The progress bar, beside it.
     let bar_h = (style.line * 4).max(3);
@@ -533,9 +499,9 @@ fn draw_card(canvas: &mut Canvas<'_>, env: &Env<'_>, r: Rect, shown: Option<&Boo
     let bx = (x + percent_w) as i32;
     let by = i32::from(y) + i32::from(label_h) / 2 - bar_h as i32 / 2;
     let w = (inner - percent_w).max(1.0) as u32;
-    canvas.stroke_rect(bx, by, w, bar_h, style.line.max(1), Color::BLACK);
+    canvas.stroke_rect(bx, by, w, bar_h, style.line.max(1), look.ink);
     let filled = (w as f32 * (book.progress / 100.0).clamp(0.0, 1.0)) as u32;
-    canvas.fill_rect(bx, by, filled, bar_h, Color::BLACK);
+    canvas.fill_rect(bx, by, filled, bar_h, look.ink);
 }
 
 // ---- Recently read ----------------------------------------------------------
@@ -585,6 +551,7 @@ impl Widget for Shelf {
     }
 
     fn targets(&self, env: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
+        let area = widgets::look::look(env, RECENT, area).area;
         shelf_places(env, area, &self.books)
             .into_iter()
             .map(|(cover, title, book)| WidgetTarget {
@@ -634,7 +601,7 @@ fn shelf_height(env: &Env<'_>, width: u16, books: &[Book]) -> u16 {
     let (_, cell) = shelf_columns(env, width);
     let (heading, title) = shelf_labels(env);
     let cover = (cell.saturating_sub(style.gap as u16)) * 4 / 3;
-    heading + cover + title
+    heading + cover + title + frame_height(env, RECENT)
 }
 
 /// Where each cover goes, and its title below (as wide as its column),
@@ -677,8 +644,9 @@ fn draw_shelf(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, books: &[Book]
     if books.is_empty() {
         return;
     }
+    let look = widgets::draw_frame(canvas, env, RECENT, area);
+    let area = look.area;
     let (heading, title_h) = shelf_labels(env);
-    let gray = style.faint(90);
     let align = widgets::align(env, RECENT);
     if heading > 0 {
         let text = env.i18n.tr("home.recent");
@@ -689,7 +657,7 @@ fn draw_shelf(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, books: &[Book]
             align.x(area, font.measure(style.small, text)),
             Rect::new(area.x, area.y, area.width, line_height(env, style.small)),
             text,
-            gray,
+            look.faint,
         );
     }
     for (cover, row, Book { book, cover: image }) in shelf_places(env, area, books) {
@@ -704,14 +672,14 @@ fn draw_shelf(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, books: &[Book]
                 );
                 ui::draw_image(canvas, env.storage, image, at);
             }
-            None => draw_placeholder(canvas, env, &style, cover, &book.title),
+            None => draw_placeholder(canvas, env, &style, cover, &book.title, look.ink),
         }
         if title_h == 0 {
             continue;
         }
         let title = ui::fit(&font, style.small, &book.title, f32::from(row.width));
         let x = align.x(row, font.measure(style.small, &title));
-        ui::draw_label(canvas, &font, style.small, x, row, &title, Color::BLACK);
+        ui::draw_label(canvas, &font, style.small, x, row, &title, look.ink);
     }
 }
 
@@ -722,8 +690,9 @@ fn draw_placeholder(
     style: &UiStyle,
     area: Rect,
     title: &str,
+    ink: Color,
 ) {
-    canvas.stroke(area, style.line.max(2), Color::BLACK);
+    canvas.stroke(area, style.line.max(2), ink);
     let Some(font) = style.font(env) else {
         return;
     };
@@ -754,7 +723,7 @@ fn draw_placeholder(
             f32::from(area.x) + pad,
             row,
             text,
-            Color::BLACK,
+            ink,
         );
     }
 }

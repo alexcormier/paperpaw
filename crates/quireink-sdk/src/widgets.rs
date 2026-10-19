@@ -28,6 +28,10 @@
 //!
 //! Screens that show widgets in a grid, as the home screen does, use
 //! [`grid`]: its layout as data, and a view that edits it in place.
+//!
+//! Widgets share a look the reader shapes for each ([`Frame`], [`Size`],
+//! [`draw_caption`], see [`look`]), and say which kind they are
+//! ([`categories`]), so that screens offering many of them group them.
 
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
@@ -43,6 +47,41 @@ use crate::id::Id;
 use crate::settings::{SettingGroupSpec, SettingKind, SettingSpec, SettingValue};
 
 pub mod grid;
+pub mod look;
+
+pub use look::{
+    Frame, Look, Size, caption_height, choice, draw_caption, draw_frame, draw_message,
+    draw_wrapped, frame, frame_setting, line_height, part_setting, setting_id, shows, size,
+    size_setting,
+};
+
+/// The kinds of widgets ([`WidgetSpec::category`]), each the translation
+/// key of its name; screens that offer widgets group them so.
+pub mod categories {
+    /// Clocks, the date, calendars.
+    pub const TIME: &str = "core.widgets.time";
+    /// The book being read and others: covers, progress, shelves.
+    pub const BOOKS: &str = "core.widgets.books";
+    /// Reading itself: time read, goals, streaks.
+    pub const READING: &str = "core.widgets.reading";
+    /// Words and texts: quotes, highlights, vocabulary.
+    pub const WORDS: &str = "core.widgets.words";
+    /// One's own: notes, to-dos, pictures.
+    pub const PERSONAL: &str = "core.widgets.personal";
+    /// From outside: news, weather.
+    pub const WORLD: &str = "core.widgets.world";
+    /// The device: battery, status.
+    pub const DEVICE: &str = "core.widgets.device";
+    /// Room between the others.
+    pub const LAYOUT: &str = "core.widgets.layout";
+    /// Any other.
+    pub const OTHER: &str = "core.widgets.other";
+
+    /// Every kind, in the order screens show them.
+    pub const ALL: [&str; 9] = [
+        TIME, BOOKS, READING, WORDS, PERSONAL, WORLD, DEVICE, LAYOUT, OTHER,
+    ];
+}
 
 /// A widget as a screen shows it: made for that screen by its spec
 /// ([`WidgetSpec`]), it keeps what it shows.
@@ -111,6 +150,9 @@ pub struct WidgetSpec {
     /// Translation key of its name, e.g. "Clock".
     pub title: Cow<'static, str>,
     pub factory: WidgetFactory,
+    /// Which kind it is, one of [`categories`] (or a translation key of
+    /// a plugin's own).
+    pub category: Cow<'static, str>,
 }
 
 impl WidgetSpec {
@@ -124,6 +166,15 @@ impl WidgetSpec {
             id,
             title: title.into(),
             factory: Box::new(factory),
+            category: Cow::Borrowed(categories::OTHER),
+        }
+    }
+
+    /// Of the kind `category`, one of [`categories`].
+    pub fn category(self, category: impl Into<Cow<'static, str>>) -> Self {
+        Self {
+            category: category.into(),
+            ..self
         }
     }
 
@@ -141,6 +192,7 @@ impl fmt::Debug for WidgetSpec {
         f.debug_struct("WidgetSpec")
             .field("id", &self.id)
             .field("title", &self.title)
+            .field("category", &self.category)
             .finish_non_exhaustive()
     }
 }
@@ -238,6 +290,11 @@ impl Widgets {
     /// Every widget: its id and the translation key of its name.
     pub fn iter(&self) -> impl Iterator<Item = (&Id, &str)> {
         self.widgets.iter().map(|w| (&w.id, w.title.as_ref()))
+    }
+
+    /// The kind of widget `id`, one of [`categories`] (or a plugin's own).
+    pub fn category(&self, id: &str) -> Option<&str> {
+        self.get(id).map(|w| w.category.as_ref())
     }
 
     /// The translation key of the name of widget `id`.

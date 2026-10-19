@@ -165,12 +165,14 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     )?;
     r.add_setting_group(widgets::settings_group(&TODAY, "stats.widget.today"))?;
     r.add_setting(widgets::align_setting(&TODAY, Align::Left))?;
-    r.add_widget(WidgetSpec::new(TODAY, "stats.widget.today", |_| {
-        Box::new(Today::default())
-    }))?;
-    r.add_widget(WidgetSpec::new(WEEK, "stats.widget.week", |_| {
-        Box::new(Week::default())
-    }))
+    r.add_widget(
+        WidgetSpec::new(TODAY, "stats.widget.today", |_| Box::new(Today::default()))
+            .category(widgets::categories::READING),
+    )?;
+    r.add_widget(
+        WidgetSpec::new(WEEK, "stats.widget.week", |_| Box::new(Week::default()))
+            .category(widgets::categories::READING),
+    )
 }
 
 /// "Read today": its numbers, read from the statistics when updated.

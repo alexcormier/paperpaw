@@ -4,6 +4,7 @@ use alloc::vec::Vec;
 use quireink_platform::{Color, Point, Rect};
 
 use crate::framebuffer::Framebuffer;
+use crate::round;
 
 /// A drawing surface clipped to a region of a [`Framebuffer`].
 ///
@@ -165,6 +166,24 @@ impl<'a> Canvas<'a> {
         }
     }
 
+    /// [`fill_shaded`](Self::fill_shaded) with the corners rounded by
+    /// `radius` pixels, e.g. a light card behind a widget.
+    pub fn fill_round_shaded(&mut self, area: Rect, radius: u32, color: Color) {
+        let (x, y, width, height) = signed(area);
+        let r = radius.min(width / 2).min(height / 2);
+        for row in 0..height {
+            let inset = if r == 0 {
+                0
+            } else {
+                corner_inset(r, row, height)
+            };
+            let w = width - 2 * inset;
+            if let Some(rect) = self.clip_signed(x + inset as i32, y + row as i32, w, 1) {
+                self.framebuffer.shade_clipped(rect, color);
+            }
+        }
+    }
+
     /// Draws small pictures with `draw` (e.g. covers in a list): they do
     /// not count as pictures that leave ghosts on e-paper, which a full
     /// refresh clears after large ones
@@ -310,6 +329,58 @@ impl<'a> Canvas<'a> {
             let y = from.y + dy * step / steps;
             self.fill_rect(x - half, y - half, width.max(1), width.max(1), color);
         }
+    }
+
+    /// Fills a circle of `radius` pixels around `center` (the corner
+    /// between four pixels, so the circle is `2 * radius` across).
+    pub fn fill_circle(&mut self, center: Point, radius: u32, color: Color) {
+        self.fill_ring(center, radius, radius, 0, 360, color);
+    }
+
+    /// Draws a circle's outline of `radius` pixels around `center`,
+    /// `thickness` wide, growing inwards.
+    pub fn stroke_circle(&mut self, center: Point, radius: u32, thickness: u32, color: Color) {
+        self.fill_ring(center, radius, thickness, 0, 360, color);
+    }
+
+    /// Draws an arc of a ring of `radius` pixels around `center`,
+    /// `thickness` wide, growing inwards: `sweep` degrees clockwise from
+    /// `from` (degrees clockwise from twelve o'clock, see
+    /// [`round`](crate::round)), e.g. a progress ring.
+    pub fn fill_ring(
+        &mut self,
+        center: Point,
+        radius: u32,
+        thickness: u32,
+        from: i32,
+        sweep: u32,
+        color: Color,
+    ) {
+        let arc = round::Arc::new(from, sweep);
+        let ring = round::Ring::new(radius, thickness, arc);
+        let r = radius as i32;
+        let size = 2 * radius;
+        // Smooth edges where the panel has grays.
+        self.draw_mask(center.x - r, center.y - r, size, size, color, |dx, dy| {
+            ring.coverage(dx as i32 - r, dy as i32 - r)
+        });
+    }
+
+    /// Draws a hand from `center` towards `degrees` (clockwise from
+    /// twelve o'clock), `length` pixels long and `width` thick, as on a
+    /// clock face; `tail` pixels reach past the centre the other way.
+    pub fn draw_hand(
+        &mut self,
+        center: Point,
+        degrees: i32,
+        length: u32,
+        tail: u32,
+        width: u32,
+        color: Color,
+    ) {
+        let tip = round::point_at(center, length as i32, degrees);
+        let back = round::point_at(center, tail as i32, degrees + 180);
+        self.draw_line(back, tip, width, color);
     }
 
     pub fn set_pixel(&mut self, point: Point, color: Color) {

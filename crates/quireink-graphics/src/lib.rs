@@ -11,6 +11,7 @@ extern crate alloc;
 
 mod canvas;
 mod framebuffer;
+pub mod round;
 
 pub use canvas::{Canvas, Described, Role};
 pub use framebuffer::{Framebuffer, MONO_COVERAGE};

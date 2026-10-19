@@ -421,11 +421,14 @@ impl Plugin for News {
         })?;
         r.add_icon(OPEN, Cow::Borrowed("rss"))?;
         r.add_icon(FETCH, Cow::Borrowed("refresh"))?;
-        r.add_widget(quireink_sdk::widgets::WidgetSpec::new(
-            Id::new_static("news.widget.headlines"),
-            "news.widget.headlines",
-            |_| Box::new(Headlines::default()),
-        ))?;
+        r.add_widget(
+            quireink_sdk::widgets::WidgetSpec::new(
+                Id::new_static("news.widget.headlines"),
+                "news.widget.headlines",
+                |_| Box::new(Headlines::default()),
+            )
+            .category(quireink_sdk::widgets::categories::WORLD),
+        )?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())

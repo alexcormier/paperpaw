@@ -136,11 +136,12 @@ impl Plugin for Vocabulary {
             "vocabulary.widget.word",
         ))?;
         r.add_setting(widgets::align_setting(&WORD_WIDGET, widgets::Align::Left))?;
-        r.add_widget(widgets::WidgetSpec::new(
-            WORD_WIDGET,
-            "vocabulary.widget.word",
-            |_| Box::new(WordWidget::default()),
-        ))?;
+        r.add_widget(
+            widgets::WidgetSpec::new(WORD_WIDGET, "vocabulary.widget.word", |_| {
+                Box::new(WordWidget::default())
+            })
+            .category(widgets::categories::WORDS),
+        )?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())
