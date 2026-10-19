@@ -93,6 +93,8 @@ impl Kernel {
             state,
             enabled,
             required_for: RequiredFor::default(),
+            kind: paperpaw_sdk::PluginKind::BuiltIn,
+            problem: None,
         });
     }
 
@@ -459,10 +461,15 @@ impl Kernel {
         }
         let off = read_config(storage.as_ref())
             .is_some_and(|c| crate::config::plugin_switches(&c, false).contains(&id.to_string()));
-        if off {
+        if plugin.has_code() {
+            self.add_code_plugin_later(&plugin, off);
+        } else if off {
             self.register_off(&plugin, manifest);
         } else {
             self.register_plugin(&plugin, manifest);
+            if let Some(info) = self.shared.plugins.get_mut(id.as_str()) {
+                info.kind = paperpaw_sdk::PluginKind::Data;
+            }
         }
         self.shared
             .data_folders
@@ -487,7 +494,19 @@ impl Kernel {
             .settings
             .presets_mut()
             .remove_plugin(id.as_str());
-        self.shared.plugins.remove(id.as_str());
+        // A code plugin's code runs until the restart: it stays listed as
+        // stopping then.
+        match self.shared.plugins.get_mut(id.as_str()) {
+            Some(info)
+                if info.kind == paperpaw_sdk::PluginKind::Code
+                    && info.state == PluginState::Running =>
+            {
+                info.enabled = false;
+            }
+            _ => {
+                self.shared.plugins.remove(id.as_str());
+            }
+        }
         self.offer_choices();
         // A font chosen from it gives way to the default.
         for setting in [core_settings::READING_FONT, core_settings::STATUS_FONT] {

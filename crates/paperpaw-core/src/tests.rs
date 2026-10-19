@@ -54,7 +54,7 @@ impl Kernel {
     }
 }
 
-const DEVICE: DeviceInfo = DeviceInfo {
+pub(crate) const DEVICE: DeviceInfo = DeviceInfo {
     id: "test",
     name: "Test device",
     display: DisplayInfo {

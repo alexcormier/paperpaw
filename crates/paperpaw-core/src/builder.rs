@@ -17,6 +17,8 @@ pub struct KernelBuilder {
     /// of buttons come from their own settings at the end.
     caps: Capabilities,
     firmware: Option<Firmware>,
+    code: Option<crate::code_plugin::CodePlugins>,
+    safe_mode: Option<paperpaw_sdk::native::SafeMode>,
     button_row: &'static [&'static str],
     frame_rows: Option<u16>,
     row_align: u16,
@@ -137,6 +139,28 @@ impl KernelBuilder {
         self
     }
 
+    /// PaperPaw loads native code plugins (see
+    /// [`paperpaw_sdk::native`]): `loader` loads the code of each switched
+    /// on at the start, files fit for `native` (which plugins see as
+    /// [`Env::native`](paperpaw_sdk::Env)).
+    pub fn code_plugins(mut self, native: Native, loader: Box<dyn CodeLoader>) -> Self {
+        self.code = Some(crate::code_plugin::CodePlugins {
+            native,
+            loader,
+            safe_mode: None,
+        });
+        self
+    }
+
+    /// This start goes without code plugins (safe mode): the shell found
+    /// that the last ones did not get to their first frame, or the reader
+    /// held the key for it. See [`paperpaw_sdk::native::SafeMode`]; the
+    /// kernel fills in what it switched off.
+    pub fn safe_mode(mut self, safe_mode: SafeMode) -> Self {
+        self.safe_mode = Some(safe_mode);
+        self
+    }
+
     /// PaperPaw is the device's firmware and updates it (the shell answers
     /// [`Io::Firmware`] and reports with
     /// [`Kernel::firmware_state`]). See [`paperpaw_sdk::firmware`].
@@ -244,6 +268,12 @@ impl KernelBuilder {
             mem::take(&mut self.plugin_dirs),
             mem::take(&mut self.font_dirs),
             &configs,
+            self.code
+                .take()
+                .map(|code| crate::code_plugin::CodePlugins {
+                    safe_mode: self.safe_mode.take(),
+                    ..code
+                }),
         );
         if let Some(source) = self.device_keymap.take() {
             kernel.load_device_keymap(source);
@@ -318,6 +348,7 @@ impl KernelBuilder {
                 caps,
                 wifi: caps.wifi.then(paperpaw_sdk::wifi::Wifi::default),
                 firmware: self.firmware.take(),
+                native: None,
                 clipboard: String::new(),
                 system_clipboard: false,
                 slots: Vec::new(),
@@ -415,6 +446,7 @@ impl Kernel {
         plugin_dirs: Vec<String>,
         font_dirs: Vec<String>,
         configs: &[&str],
+        code: Option<crate::code_plugin::CodePlugins>,
     ) {
         self.shared.menus.set_capabilities(self.shared.caps);
         // Colour screens open documents with colour pictures (ADR 0015).
@@ -443,6 +475,7 @@ impl Kernel {
         } else {
             plugin_dirs
         };
+        let mut with_code = Vec::new();
         for dir in &dirs {
             let mut problems = Vec::new();
             let found = data_plugin::discover(self.shared.storage.as_ref(), dir, &mut |problem| {
@@ -452,12 +485,20 @@ impl Kernel {
                 self.warn_runtime(problem);
             }
             for plugin in found {
-                self.add_plugin(&plugin, &disabled);
                 self.shared
                     .data_folders
                     .push((plugin.manifest().id, plugin.folder().to_string()));
+                if plugin.has_code() {
+                    with_code.push(plugin);
+                    continue;
+                }
+                self.add_plugin(&plugin, &disabled);
+                if let Some(info) = self.shared.plugins.get_mut(plugin.manifest().id.as_str()) {
+                    info.kind = paperpaw_sdk::PluginKind::Data;
+                }
             }
         }
+        self.add_code_plugins(with_code, &disabled, code);
         if !font_dirs.is_empty()
             && let Some(plugin) = data_plugin::font_folder(self.shared.storage.as_ref(), &font_dirs)
         {
@@ -580,6 +621,8 @@ impl Kernel {
             glyph_cache: DEFAULT_GLYPH_CACHE,
             caps: Capabilities::default(),
             firmware: None,
+            code: None,
+            safe_mode: None,
             button_row: &[],
             frame_rows: None,
             row_align: 1,

@@ -1798,6 +1798,7 @@ dependencies = [
  "paperpaw-i18n",
  "paperpaw-image",
  "paperpaw-layout",
+ "paperpaw-native",
  "paperpaw-platform",
  "paperpaw-text",
  "paperpaw-update",
