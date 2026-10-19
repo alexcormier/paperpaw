@@ -725,6 +725,11 @@ impl Kernel {
         self.stack.iter().map(|s| &s.id)
     }
 
+    /// The ids of every screen plugins added, whether open or not.
+    pub fn known_screens(&self) -> impl Iterator<Item = &Id> {
+        self.shared.screens.iter().map(|(id, _)| id)
+    }
+
     /// What the device did since start (see [`paperpaw_sdk::usage`]).
     pub fn usage(&self) -> &paperpaw_sdk::usage::Usage {
         &self.shared.usage
@@ -764,6 +769,19 @@ impl Kernel {
         self.now = now;
         self.last_activity = now;
         self.output.commands.push(Command::OpenSlot(slot, params));
+        self.run_commands();
+        self.finish()
+    }
+
+    /// Opens the screen `screen` with `params`, as a plugin would, e.g.
+    /// asked by a shell's remote control or a test.
+    pub fn open_screen(&mut self, now: Instant, screen: Id, params: Params) -> Effects {
+        let _running = self.shared.meter.enter(meter::CORE);
+        self.now = now;
+        self.last_activity = now;
+        self.output
+            .commands
+            .push(Command::OpenScreen(screen, params));
         self.run_commands();
         self.finish()
     }

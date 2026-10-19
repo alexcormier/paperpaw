@@ -10,6 +10,7 @@ mod headless;
 mod http;
 mod panel;
 mod profiles;
+mod trace;
 mod wifi;
 
 use std::path::PathBuf;
@@ -41,6 +42,8 @@ OPTIONS:
     --heap-budget <KiB>   Override the profile's heap budget (`none` = unlimited)
     --trace-alloc <bytes> Print every kernel allocation of at least this size, with where
     --heap-report         After a headless run, list the live heap by call site
+    --trace               Print what each frame's drawing asks the storage, band by band,
+                          and how long it takes
     -h, --help            Show this help
 
 KEYS (if the device has the button):
@@ -192,6 +195,7 @@ fn parse_args(mut args: impl Iterator<Item = String>) -> Result<Option<Options>,
                 options.screenshot_dir = Some(PathBuf::from(value("--screenshot-dir")?));
             }
             "--heap-report" => options.heap_report = true,
+            "--trace" => trace::start(),
             "--trace-alloc" => {
                 let bytes = value("--trace-alloc")?;
                 budget::trace(
