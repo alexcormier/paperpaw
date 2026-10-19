@@ -27,6 +27,7 @@ pub use quireink_sdk::StorageError
 pub use quireink_sdk::SystemStatus
 pub use quireink_sdk::Translator
 pub use quireink_sdk::WallClock
+pub use quireink_sdk::round
 pub mod quireink_sdk::annotations
 pub enum quireink_sdk::annotations::Kind
 pub quireink_sdk::annotations::Kind::Bookmark

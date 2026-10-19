@@ -102,6 +102,9 @@ pub use settings::{
 pub use version::{SDK_VERSION, Version};
 
 pub use quireink_graphics::Canvas;
+/// Round shapes' geometry: angles as on a clock face, points around a
+/// centre (see [`Canvas::fill_ring`], [`Canvas::draw_hand`]).
+pub use quireink_graphics::round;
 pub use quireink_i18n::{Arg, Translator};
 pub use quireink_platform::{Battery, SystemStatus, WallClock};
 pub use quireink_platform::{
