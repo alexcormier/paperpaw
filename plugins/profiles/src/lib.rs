@@ -127,6 +127,9 @@ struct ListScreen {
     /// The line at the bottom.
     status: Rect,
     profiles: Vec<Profile>,
+    /// Whether the settings are as each profile has them, found when the
+    /// profiles or the settings change.
+    in_use: Vec<bool>,
 }
 
 impl ListScreen {
@@ -143,13 +146,24 @@ impl ListScreen {
             display.width,
             display.height.saturating_sub(top + line),
         );
-        Self {
+        let mut screen = Self {
             list: ListView::new(area, style.noted_row()).focus_on_keys(env),
             status,
             profiles: profile::load(env.storage),
+            in_use: Vec::new(),
             style,
             header,
-        }
+        };
+        screen.find_in_use(env);
+        screen
+    }
+
+    fn find_in_use(&mut self, env: &Env<'_>) {
+        self.in_use = self
+            .profiles
+            .iter()
+            .map(|p| profile::in_use(env, p))
+            .collect();
     }
 
     fn rows(&self) -> Vec<Row> {
@@ -240,7 +254,7 @@ impl Screen for ListScreen {
             None,
             self.list.paging(rows.len()),
         );
-        let profiles = &self.profiles;
+        let (profiles, in_use) = (&self.profiles, &self.in_use);
         self.list.draw(
             canvas,
             &style,
@@ -248,7 +262,7 @@ impl Screen for ListScreen {
             |canvas, index, rect, focused| match rows[index] {
                 Row::Profile(i) => {
                     let p = &profiles[i];
-                    let value = if profile::in_use(env, p) {
+                    let value = if in_use.get(i).copied().unwrap_or(false) {
                         env.i18n.tr("profiles.in-use").to_string()
                     } else {
                         String::new()
@@ -395,7 +409,10 @@ impl Screen for ListScreen {
         } else if *event == paperpaw_sdk::builtin::events::SETTING_CHANGED {
             // "In use" may have changed.
             self.redraw(cx);
+        } else {
+            return;
         }
+        self.find_in_use(&env);
     }
 }
 
