@@ -64,6 +64,64 @@ pub(crate) const STATUS_PARTS: [Setting<Text>; 3] = [
 /// Recent books shown as covers at most.
 const MAX_COVERS: usize = 8;
 
+/// How many books the recent shelf shows at most.
+static RECENT_SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_number(
+    "home.recent.count",
+    "home.setting.recent-count",
+    1,
+    MAX_COVERS as i64,
+    6,
+    Id::new_static(RECENT),
+)];
+
+/// The widgets' settings: where each sits, its frame, size and parts.
+static SETTINGS: [SettingSpec; 16] = {
+    use widgets::{align_spec, frame_spec, part_spec, size_spec};
+    const STATUS_ID: Id = Id::new_static(STATUS);
+    const DATE_ID: Id = Id::new_static(DATE);
+    const CLOCK_ID: Id = Id::new_static(CLOCK);
+    const CONTINUE_ID: Id = Id::new_static(CONTINUE);
+    const RECENT_ID: Id = Id::new_static(RECENT);
+    [
+        frame_spec("home.status.frame", STATUS_ID, Frame::None),
+        align_spec("home.date.align", DATE_ID, Align::Center),
+        frame_spec("home.date.frame", DATE_ID, Frame::None),
+        size_spec("home.date.size", DATE_ID, Size::Medium, false),
+        align_spec("home.clock.align", CLOCK_ID, Align::Center),
+        frame_spec("home.clock.frame", CLOCK_ID, Frame::None),
+        size_spec("home.clock.size", CLOCK_ID, Size::Fit, true),
+        part_spec("home.clock.date", CLOCK_ID, "home.setting.clock-date", true),
+        align_spec("home.continue.align", CONTINUE_ID, Align::Left),
+        frame_spec("home.continue.frame", CONTINUE_ID, Frame::Line),
+        part_spec(
+            "home.continue.cover",
+            CONTINUE_ID,
+            "home.setting.card-cover",
+            true,
+        ),
+        part_spec(
+            "home.continue.progress",
+            CONTINUE_ID,
+            "home.setting.card-progress",
+            true,
+        ),
+        align_spec("home.recent.align", RECENT_ID, Align::Center),
+        frame_spec("home.recent.frame", RECENT_ID, Frame::None),
+        part_spec(
+            "home.recent.heading",
+            RECENT_ID,
+            "home.setting.recent-heading",
+            true,
+        ),
+        part_spec(
+            "home.recent.titles",
+            RECENT_ID,
+            "home.setting.recent-titles",
+            true,
+        ),
+    ]
+};
+
 pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     use widgets::categories;
     r.add_widget(
@@ -107,7 +165,6 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     // battery on the right.
     let status = Id::new_static(STATUS);
     r.add_setting_group(widgets::settings_group(&status, "home.widget.status"))?;
-    r.add_setting(widgets::frame_setting(&status, Frame::None))?;
     let parts = [
         ("home.status.left", "core.status.clock"),
         ("home.status.center", ""),
@@ -120,67 +177,17 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
                 .editor(screens::STATUS_ITEMS),
         )?;
     }
-    // Each other widget's settings, in its own group: where it sits, its
-    // frame.
-    for (id, title, align, frame) in [
-        (DATE, "home.widget.date", Align::Center, Frame::None),
-        (CLOCK, "home.widget.clock", Align::Center, Frame::None),
-        (CONTINUE, "home.widget.continue", Align::Left, Frame::Line),
-        (RECENT, "home.widget.recent", Align::Center, Frame::None),
+    // Each other widget's settings, in its own group.
+    for (id, title) in [
+        (DATE, "home.widget.date"),
+        (CLOCK, "home.widget.clock"),
+        (CONTINUE, "home.widget.continue"),
+        (RECENT, "home.widget.recent"),
     ] {
-        let id = Id::new_static(id);
-        r.add_setting_group(widgets::settings_group(&id, title))?;
-        r.add_setting(widgets::align_setting(&id, align))?;
-        r.add_setting(widgets::frame_setting(&id, frame))?;
+        r.add_setting_group(widgets::settings_group(&Id::new_static(id), title))?;
     }
-    let switch = |setting: &Setting<bool>, title: &'static str, group: &'static str, default| {
-        SettingSpec::switch(setting, title, default).group(Id::new_static(group))
-    };
-    r.add_setting(widgets::size_setting(
-        &Id::new_static(CLOCK),
-        Size::Fit,
-        true,
-    ))?;
-    r.add_setting(switch(&CLOCK_DATE, "home.setting.clock-date", CLOCK, true))?;
-    r.add_setting(widgets::size_setting(
-        &Id::new_static(DATE),
-        Size::Medium,
-        false,
-    ))?;
-    r.add_setting(switch(
-        &CARD_COVER,
-        "home.setting.card-cover",
-        CONTINUE,
-        true,
-    ))?;
-    r.add_setting(switch(
-        &CARD_PROGRESS,
-        "home.setting.card-progress",
-        CONTINUE,
-        true,
-    ))?;
-    r.add_setting(switch(
-        &RECENT_HEADING,
-        "home.setting.recent-heading",
-        RECENT,
-        true,
-    ))?;
-    r.add_setting(switch(
-        &RECENT_TITLES,
-        "home.setting.recent-titles",
-        RECENT,
-        true,
-    ))?;
-    r.add_setting(
-        SettingSpec::number(
-            &RECENT_COUNT,
-            "home.setting.recent-count",
-            1,
-            MAX_COVERS as i64,
-            6,
-        )
-        .group(Id::new_static(RECENT)),
-    )?;
+    r.add_settings(&SETTINGS)?;
+    r.add_settings(&RECENT_SETTINGS)?;
     Ok(())
 }
 
