@@ -8,8 +8,9 @@ change the plugin SDK.
 
 - PaperPaw's logo, the paw on a sheet with a dog-ear: above "Sleeping" on
   the sleep screen (also what the X4 shows as it starts), at the top of
-  *About PaperPaw*, and as a widget for the home screen (*PaperPaw logo*,
-  its name beside it if wanted). The Android app's icon is the logo too.
+  *About PaperPaw*, and as a widget to add to the home screen (*PaperPaw
+  logo*, alone, its name beside it if wanted). The Android app's icon is
+  the logo too.
   `paperpaw_sdk::logo` draws it in any size, as shapes, nothing kept in
   memory; the setting `core.logo` names a picture to show in its place
   (a data plugin sets it in its `settings.ini`, see docs/plugins.md).

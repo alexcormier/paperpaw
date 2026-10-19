@@ -1,4 +1,4 @@
-//! PaperPaw's logo, its name beside it if wanted: the logo as it is set
+//! PaperPaw's logo alone, its name beside it if wanted: the logo as it is set
 //! (see [`paperpaw_sdk::logo`]), PaperPaw's own or a picture.
 
 use alloc::string::String;
@@ -22,7 +22,7 @@ const FACE: Setting<Text> = Setting::new("widgets.logo.face");
 
 /// The logo's settings, kept in the program.
 static SETTINGS: [SettingSpec; 5] = [
-    widgets::part_spec("widgets.logo.name", ID, "widgets.logo.setting.name", true),
+    widgets::part_spec("widgets.logo.name", ID, "widgets.logo.setting.name", false),
     SettingSpec::fixed_choice(
         "widgets.logo.face",
         "widgets.setting.font",
