@@ -482,6 +482,32 @@ fn encrypted_targets_get_nothing() {
 }
 
 #[test]
+fn targets_in_another_format_get_nothing() {
+    let cases = [
+        (
+            r#""version": 4"#,
+            "Joplin keeps the notes there in a newer format",
+        ),
+        (
+            r#""version": 2"#,
+            "Joplin keeps the notes there in an older format",
+        ),
+        (
+            r#""versions": 3"#,
+            "Joplin keeps the notes there in an older format",
+        ),
+    ];
+    for (version, said) in cases {
+        let mut t = Test::new(WEBDAV, false);
+        let calls = t.export(ALICE);
+        let info = INFO.replace(r#""version": 3"#, version);
+        assert!(t.answer(&calls[0], 200, &info).is_empty(), "{version}");
+        assert!(t.last_said().starts_with(said), "{version}");
+        assert_eq!(t.file("waiting.txt"), format!("{ALICE}\n"));
+    }
+}
+
+#[test]
 fn a_note_that_fails_waits_and_the_others_go() {
     let mut t = Test::new(WEBDAV, false);
     let bob = "Notes/Bob.md";

@@ -3,8 +3,9 @@
 //!
 //! 1. Joplin Cloud and Joplin Server: sign in, unless signed in already.
 //! 2. `info.json`, which every sync target has: there is Joplin data at
-//!    the address, and it is not end-to-end encrypted (notes PaperPaw
-//!    sent unencrypted would sit there in plain text).
+//!    the address, in the version of the format PaperPaw writes
+//!    ([`item::SYNC_VERSION`]), and not end-to-end encrypted (notes
+//!    PaperPaw sent unencrypted would sit there in plain text).
 //! 3. The notebook named in the settings: made once, then found again.
 //! 4. Each book: its note, if it was sent before, fetched to a file and
 //!    only its end read. Its text not edited since, it is written over,
@@ -280,10 +281,15 @@ impl Run {
         }
         match reply.status {
             200..=299 => {
-                if encrypted(env) {
-                    return self.end(env, "joplin.encrypted", &[], End::Stop, out);
-                }
-                self.find_notebook(env, out);
+                // Items are written as Joplin writes them for this version
+                // of the format only; Joplin itself syncs with no other.
+                let key = match target_info(env) {
+                    (version, _) if version > item::SYNC_VERSION => "joplin.newer-target",
+                    (version, _) if version < item::SYNC_VERSION => "joplin.older-target",
+                    (_, true) => "joplin.encrypted",
+                    _ => return self.find_notebook(env, out),
+                };
+                self.end(env, key, &[], End::Stop, out);
             }
             404 => self.end(env, "joplin.no-data", &[], End::Stop, out),
             _ => self.trouble(env, reply, out),
@@ -531,17 +537,22 @@ impl Run {
     }
 }
 
-/// Whether the sync target's `info.json`, just fetched, says its notes
-/// are end-to-end encrypted.
-fn encrypted(env: &Env<'_>) -> bool {
-    let mut on = false;
-    let path = ["e2ee".to_string(), "value".to_string()];
+/// What the sync target's `info.json`, just fetched, says: the version
+/// of its format (0 if none) and whether its notes are end-to-end
+/// encrypted.
+fn target_info(env: &Env<'_>) -> (u32, bool) {
+    let (mut version, mut encrypted) = (0, false);
     stream::read_file(env.storage, &kept::file(INFO), &mut |event| {
-        if let Json::Value(at, value) = event
-            && at == path
-        {
-            on = value == "true";
+        let Json::Value(at, value) = event else {
+            return;
+        };
+        match at {
+            [key] if key == "version" => version = value.parse().unwrap_or(0),
+            [key, value_key] if key == "e2ee" && value_key == "value" => {
+                encrypted = value == "true";
+            }
+            _ => {}
         }
     });
-    on
+    (version, encrypted)
 }

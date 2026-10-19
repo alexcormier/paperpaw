@@ -17,7 +17,8 @@ change the plugin SDK.
   for; the password is kept with the passwords and keys. What cannot be
   sent waits and goes with the next export, by the action *Send to
   Joplin* (also for rules), or when Wi-Fi comes back; no connection, a
-  wrong password or address, and Joplin's end-to-end encryption (no
+  wrong password or address, Joplin's end-to-end encryption and a sync
+  target in another version of Joplin's format than PaperPaw writes (no
   notes are sent then) are said plainly. Notes are read and written in
   pieces and sent from a file, Joplin's answers saved to files of which
   only the end is read: the X4's heap peaks no higher for it. Shipped

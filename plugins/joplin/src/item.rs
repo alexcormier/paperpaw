@@ -15,6 +15,11 @@ use paperpaw_sdk::{Storage, StorageError};
 
 use crate::markdown;
 
+/// The version of the sync target's format these items are written for
+/// (`version` in its `info.json`, Joplin's `syncVersion`, 3 since Joplin
+/// 2.x): Joplin syncs only with targets of its own version, upgrading
+/// older ones itself.
+pub const SYNC_VERSION: u32 = 3;
 /// `type_` of a note and of a notebook.
 pub const NOTE: u8 = 1;
 pub const NOTEBOOK: u8 = 2;
