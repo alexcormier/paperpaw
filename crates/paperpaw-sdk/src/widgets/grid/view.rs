@@ -183,14 +183,21 @@ impl GridView {
             .collect();
         self.items = placed
             .into_iter()
-            .map(|(item, cells)| Shown {
-                widget: match &item.what {
-                    What::Widget(id) => env.widgets.make(id, env),
+            .map(|(item, cells)| {
+                let area = geometry.rect(cells);
+                let widget = match &item.what {
+                    What::Widget(id) => env.widgets.make(id, env).map(|mut widget| {
+                        widget.place(env, area);
+                        widget
+                    }),
                     What::Tool(_) => None,
-                },
-                area: geometry.rect(cells),
-                item,
-                cells,
+                };
+                Shown {
+                    widget,
+                    area,
+                    item,
+                    cells,
+                }
             })
             .collect();
         self.geometry = geometry;
@@ -512,6 +519,10 @@ impl GridView {
         let shown = &mut self.items[index];
         shown.cells = to;
         shown.area = area;
+        if let Some(widget) = &mut shown.widget {
+            let env = *cx.env();
+            widget.place(&env, area);
+        }
         if let Some(target) = self.targets.get_mut(index) {
             target.0 = area;
         }

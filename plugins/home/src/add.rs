@@ -209,8 +209,32 @@ impl AddScreen {
         };
         if screen.is_gallery() {
             screen.gallery = screen.lay_out(env, area);
+            screen.make_page(env);
         }
         screen
+    }
+
+    /// Makes the widgets of the gallery's page with the focus, where they
+    /// are not made yet: what they show read, each in its place, before
+    /// the page is drawn. Those of the other pages go (with what they
+    /// keep, e.g. covers made small).
+    fn make_page(&mut self, env: &Env<'_>) {
+        let page = self.gallery_page();
+        for preview in &mut self.gallery {
+            if preview.page != page {
+                preview.widget = None;
+                continue;
+            }
+            let Some(Row::Add(What::Widget(id), _)) = self.rows.get(preview.row) else {
+                continue;
+            };
+            if preview.widget.is_none() {
+                preview.widget = env.widgets.make(id, env).map(|mut widget| {
+                    widget.place(env, preview.area);
+                    widget
+                });
+            }
+        }
     }
 
     /// Whether widgets are shown as they would show, rather than as a list.
@@ -220,7 +244,8 @@ impl AddScreen {
 
     /// The gallery's previews in `area`, as large as each widget would be
     /// on the page (up to [`PREVIEW_ROWS`] rows), as many to a page as
-    /// fit. Widgets are made when their page first shows.
+    /// fit. Widgets are made when their page shows
+    /// ([`Self::make_page`]).
     fn lay_out(&self, env: &Env<'_>, area: Rect) -> Vec<Preview> {
         let style = self.style;
         let (_, geometry, _) = crate::frame(env, None);
@@ -388,7 +413,7 @@ impl AddScreen {
 
     /// The gallery's page with the focus: each widget's name, and the
     /// widget as it would show; the focused one framed.
-    fn draw_gallery(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
+    fn draw_gallery(&self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let Some(font) = style.font(env) else {
             return;
@@ -396,8 +421,8 @@ impl AddScreen {
         let page = self.gallery_page();
         let focus = self.list.focus;
         let shown = self.list.shown;
-        for preview in self.gallery.iter_mut().filter(|p| p.page == page) {
-            let Some(Row::Add(What::Widget(id), title)) = self.rows.get(preview.row) else {
+        for preview in self.gallery.iter().filter(|p| p.page == page) {
+            let Some(Row::Add(What::Widget(_), title)) = self.rows.get(preview.row) else {
                 continue;
             };
             let focused = shown && preview.row == focus;
@@ -419,9 +444,6 @@ impl AddScreen {
                 &name,
                 Color::BLACK,
             );
-            if preview.widget.is_none() {
-                preview.widget = env.widgets.make(id, env);
-            }
             // The widget in its place, as on the page; round it, outside
             // it so that nothing of it is covered, a faint line so its
             // size shows, or a strong frame round the focused one.
@@ -482,6 +504,7 @@ impl Screen for AddScreen {
             };
             self.list.focus = focus;
             self.list.shown = true;
+            self.make_page(cx.env());
             cx.request_redraw();
             return Handled::Yes;
         }
