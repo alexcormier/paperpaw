@@ -14,12 +14,15 @@ pub mod reorder;
 mod rows;
 #[path = "sections.rs"]
 pub mod sections;
+#[path = "slider.rs"]
+pub mod slider;
 #[path = "thumbnail.rs"]
 mod thumbnail;
 
 pub use reorder::{Reorder, ReorderStep};
 pub use rows::Rows;
 pub use sections::Sections;
+pub use slider::{Slider, SliderDrag, SliderFocus, SliderParts, SliderStep, SliderView};
 pub use thumbnail::Thumbnail;
 
 use crate::semantics::Role;
@@ -1396,11 +1399,24 @@ pub fn draw_note(
     focused: bool,
     note: &str,
 ) {
+    let below = title_area(style, rect).bottom() as u16;
+    draw_note_below(canvas, env, style, rect, below, focused, note);
+}
+
+/// Draws the note of a row from `below` down to the end of `rect`: in
+/// small gray text (light on a focused row), wrapped to [`NOTE_LINES`].
+fn draw_note_below(
+    canvas: &mut Canvas<'_>,
+    env: &Env<'_>,
+    style: &UiStyle,
+    rect: Rect,
+    below: u16,
+    focused: bool,
+    note: &str,
+) {
     let Some(font) = style.font(env) else {
         return;
     };
-    let band = title_area(style, rect);
-    let below = band.y + band.height;
     let at = Rect::new(
         rect.x,
         below,
@@ -1417,7 +1433,7 @@ pub fn draw_note(
     };
     let line = style.small * NOTE_LINE_HEIGHT;
     let ascent = font.line_metrics(style.small).ascent;
-    let top = f32::from(band.y + band.height);
+    let top = f32::from(below);
     let lines = font.wrap(style.small, note, width);
     for (n, range) in lines.iter().take(NOTE_LINES).enumerate() {
         let last = n + 1 == NOTE_LINES && lines.len() > NOTE_LINES;
@@ -1735,6 +1751,20 @@ pub fn draw_stepper(
         value,
         Color::WHITE,
     );
+    draw_focused_steps(canvas, style, &font, rect, (minus, plus), editing);
+}
+
+/// The `−` and `+` of a focused number, on the focus bar in `row`:
+/// outlined in white, or filled white while the buttons change it
+/// (`editing`).
+fn draw_focused_steps(
+    canvas: &mut Canvas<'_>,
+    style: &UiStyle,
+    font: &FontHandle<'_>,
+    row: Rect,
+    (minus, plus): (Rect, Rect),
+    editing: bool,
+) {
     for (button, glyph) in [(minus, "−"), (plus, "+")] {
         let (x, y, w, h) = (
             i32::from(button.x),
@@ -1751,7 +1781,7 @@ pub fn draw_stepper(
         };
         let glyph_width = font.measure(style.text, glyph);
         let glyph_x = f32::from(button.x) + (f32::from(button.width) - glyph_width) / 2.0;
-        draw_label(canvas, &font, style.text, glyph_x, rect, glyph, glyph_color);
+        draw_label(canvas, font, style.text, glyph_x, row, glyph, glyph_color);
     }
 }
 

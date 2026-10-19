@@ -3,6 +3,57 @@
 
 use super::*;
 
+/// Draws `lines` laid out with `t`, their content box at `origin`, each
+/// word in its ink (`inks`, by the words' order as [`Book::words`] has
+/// them; black where none). Lines outside the part being drawn (another
+/// band) are only measured.
+pub(super) fn draw_lines(
+    canvas: &mut Canvas<'_>,
+    faces: &Faces<'_>,
+    t: &Typography,
+    (left, top): (f32, f32),
+    lines: &[PageLine],
+    inks: &[Option<Color>],
+) {
+    let clip = canvas.clip();
+    // The words counted as `words_of` counts them: a word that goes on
+    // in the next run (e.g. bold) is one word.
+    let mut ordinal = 0usize;
+    for line in lines {
+        let baseline = (top + line.baseline + 0.5) as i32;
+        let above = baseline - (2.0 * t.line_height) as i32;
+        let below = baseline + t.line_height as i32;
+        let shown = below >= i32::from(clip.y) && above <= clip.bottom() as i32;
+        let mut x = left + line.x;
+        let mut joined = false;
+        for run in &line.runs {
+            let text = &line.text[run.start..run.end];
+            let space = faces.space(run.face) + line.word_spacing;
+            for (i, word) in text.split(' ').enumerate() {
+                if i > 0 {
+                    x += space;
+                    joined = false;
+                }
+                if word.is_empty() {
+                    continue;
+                }
+                if !joined {
+                    ordinal += 1;
+                }
+                joined = true;
+                if !shown {
+                    x += faces.measure(run.face, word);
+                    continue;
+                }
+                match inks.get(ordinal - 1).copied().flatten() {
+                    Some(ink) => x += faces.draw_in(canvas, run.face, x, baseline, word, ink),
+                    None => x += faces.draw(canvas, run.face, x, baseline, word),
+                }
+            }
+        }
+    }
+}
+
 impl Book {
     /// The page's pictures and text, each word in its ink (`inks`, by the
     /// words' order as [`Book::words`] has them; black where none).
@@ -11,47 +62,10 @@ impl Book {
         let Some(faces) = Faces::new(env, t, self.embedded.as_ref()) else {
             return;
         };
-        let clip = canvas.clip();
         for image in &self.page.images {
             draw_image(canvas, env, t, image);
         }
-        // The words counted as `words_of` counts them: a word that goes on
-        // in the next run (e.g. bold) is one word.
-        let mut ordinal = 0usize;
-        for line in &self.page.lines {
-            let baseline = (t.y + line.baseline + 0.5) as i32;
-            // Lines outside the part being drawn (e.g. another band).
-            let top = baseline - (2.0 * t.line_height) as i32;
-            let bottom = baseline + t.line_height as i32;
-            let shown = bottom >= i32::from(clip.y) && top <= clip.bottom() as i32;
-            let mut x = t.x + line.x;
-            let mut joined = false;
-            for run in &line.runs {
-                let text = &line.text[run.start..run.end];
-                let space = faces.space(run.face) + line.word_spacing;
-                for (i, word) in text.split(' ').enumerate() {
-                    if i > 0 {
-                        x += space;
-                        joined = false;
-                    }
-                    if word.is_empty() {
-                        continue;
-                    }
-                    if !joined {
-                        ordinal += 1;
-                    }
-                    joined = true;
-                    if !shown {
-                        x += faces.measure(run.face, word);
-                        continue;
-                    }
-                    match inks.get(ordinal - 1).copied().flatten() {
-                        Some(ink) => x += faces.draw_in(canvas, run.face, x, baseline, word, ink),
-                        None => x += faces.draw(canvas, run.face, x, baseline, word),
-                    }
-                }
-            }
-        }
+        draw_lines(canvas, &faces, t, (t.x, t.y), &self.page.lines, inks);
     }
 
     /// Where *Back* is offered on the page a link led to: a small button

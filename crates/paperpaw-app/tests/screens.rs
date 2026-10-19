@@ -14,7 +14,8 @@ use std::path::PathBuf;
 
 use paperpaw_core::{Effects, Kernel};
 use paperpaw_platform::{
-    DeviceInfo, DisplayInfo, InputCaps, Instant, MemoryClass, PixelFormat, Rotation,
+    DeviceInfo, DisplayInfo, InputCaps, InputEvent, Instant, MemoryClass, PixelFormat, Point,
+    PointerEvent, PointerPhase, PointerTool, Rotation,
 };
 use paperpaw_sdk::builtin::{actions, params, slots};
 use paperpaw_sdk::{Id, MemoryStorage, Params};
@@ -40,6 +41,19 @@ const DEVICE: DeviceInfo = DeviceInfo {
     memory: MemoryClass::Small,
 };
 
+/// A touch screen as large as the X4's.
+const TOUCH: DeviceInfo = DeviceInfo {
+    id: "test-touch",
+    name: "Test touch",
+    input: InputCaps {
+        buttons: false,
+        touch: true,
+        pen: false,
+        keys: &[],
+    },
+    ..DEVICE
+};
+
 const BOOK: &str = "books/alice-in-wonderland.txt";
 
 fn fonts() -> paperpaw_app::Fonts {
@@ -57,6 +71,11 @@ struct App {
 impl App {
     /// The app on a card with two books, past its first-run setup.
     fn new() -> Self {
+        Self::on(DEVICE)
+    }
+
+    /// The same on `device`.
+    fn on(device: DeviceInfo) -> Self {
         let storage = MemoryStorage::new()
             .with(
                 BOOK,
@@ -68,9 +87,10 @@ impl App {
             )
             // The first-run setup was done.
             .with(".paperpaw/plugins/setup/done", "");
-        let builder = Kernel::builder(DEVICE)
+        let builder = Kernel::builder(device)
             .storage(storage)
-            .user_config("[core]\nlanguage = en\n");
+            // On touch screens without the tips on gestures over it all.
+            .user_config("[core]\nlanguage = en\n[home]\ngesture-tips = false\n");
         let mut kernel = paperpaw_app::install(builder, fonts()).build().unwrap();
         let effects = kernel.start(Instant(0));
         let mut app = Self { kernel, now: 0 };
@@ -96,6 +116,38 @@ impl App {
         self.now += 100;
         let effects = self.kernel.run_action(Instant(self.now), action);
         self.settle(effects);
+    }
+
+    /// A tap on the part of the screen that says `label`.
+    fn tap_on(&mut self, label: &str) {
+        self.kernel.render(&mut |_, _| {});
+        let parts = self.kernel.describe();
+        let area = paperpaw_sdk::semantics::find(&parts, label)
+            .unwrap_or_else(|| panic!("nothing says {label}"))
+            .area;
+        let at = Point::new(
+            i32::from(area.x) + i32::from(area.width) / 2,
+            i32::from(area.y) + i32::from(area.height) / 2,
+        );
+        self.finger(PointerPhase::Down, at);
+        self.finger(PointerPhase::Up, at);
+    }
+
+    /// A finger at `point`, coming down, moving or lifted.
+    fn finger(&mut self, phase: PointerPhase, point: Point) {
+        self.now += 50;
+        let event = InputEvent::Pointer(PointerEvent {
+            id: 0,
+            phase,
+            point,
+            tool: PointerTool::Finger,
+            pressure: 1000,
+        });
+        let effects = self.kernel.handle(Instant(self.now), event);
+        // Timers wait while the finger is down: a long press is not meant.
+        if phase == PointerPhase::Up {
+            self.settle(effects);
+        }
     }
 
     fn open_book(&mut self) {
@@ -195,6 +247,74 @@ fn reading_and_its_menus() {
     app.run(actions::BACK);
     app.run(Id::new_static("reader.quick-settings"));
     app.check("reader-layout");
+}
+
+/// A number changed with the buttons shows its values at once, kept only
+/// when chosen; *back* goes back to the one before.
+#[test]
+fn numbers_change_with_the_buttons_kept_when_chosen() {
+    let mut app = App::new();
+    app.run(actions::SETTINGS);
+    app.run(actions::DOWN);
+    app.run(actions::CONFIRM);
+    // The reading settings: past the font, the font size.
+    app.run(actions::DOWN);
+    let size = "core.font-size";
+    let before = app.kernel.settings().int(size);
+    app.run(actions::CONFIRM);
+    app.run(actions::RIGHT);
+    app.run(actions::RIGHT);
+    let settings = app.kernel.settings();
+    assert!(settings.previewing());
+    assert_eq!(settings.int(size), before + 2);
+    assert!(!settings.is_set(size));
+    // Back: as before.
+    app.run(actions::BACK);
+    let settings = app.kernel.settings();
+    assert!(!settings.previewing());
+    assert_eq!(settings.int(size), before);
+    assert!(app.described().contains("screen settings.group"));
+    // Chosen: kept.
+    app.run(actions::CONFIRM);
+    app.run(actions::LEFT);
+    app.run(actions::CONFIRM);
+    let settings = app.kernel.settings();
+    assert!(!settings.previewing());
+    assert!(settings.is_set(size));
+    assert_eq!(settings.int(size), before - 1);
+}
+
+/// On a touch screen a slider's knob is taken along by the finger: what it
+/// is moved to shows at once and is kept where the finger is lifted.
+#[test]
+fn sliders_follow_the_finger_kept_where_it_is_lifted() {
+    let mut app = App::on(TOUCH);
+    app.run(actions::SETTINGS);
+    app.tap_on("Reading");
+    app.kernel.render(&mut |_, _| {});
+    let track = app
+        .kernel
+        .describe()
+        .into_iter()
+        .find(|p| p.role == paperpaw_sdk::semantics::Role::Slider)
+        .expect("a slider on the reading page")
+        .area;
+    let y = i32::from(track.y) + i32::from(track.height) / 2;
+    let size = "core.font-size";
+    let before = app.kernel.settings().int(size);
+    app.finger(PointerPhase::Down, Point::new(i32::from(track.x), y));
+    app.finger(PointerPhase::Move, Point::new(track.right() as i32, y));
+    let settings = app.kernel.settings();
+    assert!(settings.previewing());
+    assert_eq!(settings.int(size), 40, "the end of the track");
+    assert!(!settings.is_set(size));
+    app.finger(PointerPhase::Move, Point::new(i32::from(track.x), y));
+    app.finger(PointerPhase::Up, Point::new(i32::from(track.x), y));
+    let settings = app.kernel.settings();
+    assert!(!settings.previewing());
+    assert_eq!(settings.int(size), 6, "the start of the track");
+    assert!(settings.is_set(size));
+    assert_ne!(before, 6);
 }
 
 /// The home screen's widgets read what they show when it shows again:

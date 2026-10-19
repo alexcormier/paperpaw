@@ -94,6 +94,26 @@ const CASES: &[Case] = &[
         script: "right,right",
         colour: 0,
     },
+    // The reading settings with a sample of text above them. On the X4
+    // (buttons alone, compact rows) the text size changed with the
+    // buttons, shown there before it is kept; on the Boox in German, its
+    // sliders as touched.
+    Case {
+        name: "x4-reading-preview",
+        profile: "xteink-x4",
+        book: None,
+        sets: &[],
+        script: "run:core.settings,wait:300,right,confirm,wait:300,right,confirm,right,right,wait:300",
+        colour: 0,
+    },
+    Case {
+        name: "boox-reading-de",
+        profile: "boox-go-7",
+        book: None,
+        sets: &["core.language=de"],
+        script: "swipe:600:1100:600:500,wait:300,tap-on:Einstellungen,wait:500,tap-on:Lesen,wait:300",
+        colour: 0,
+    },
     Case {
         name: "boox-home",
         profile: "boox-go-7",

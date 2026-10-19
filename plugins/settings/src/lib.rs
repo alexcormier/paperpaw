@@ -17,11 +17,17 @@
 //! Changes apply immediately and are saved to `paperpaw.ini` by the
 //! kernel.
 //!
+//! - On touch screens, numbers marked as sliders (`SettingExtra::slider`)
+//!   show one below their title (`ui::slider`); with buttons alone they
+//!   keep their compact row with − and +.
+//!
 //! Buttons: move to an item, *confirm* opens a group, toggles a switch,
-//! opens a choice or starts editing a number; while editing, left/right
-//! (or up/down, page buttons) change it and *confirm*/*back* finish.
+//! opens a choice or starts changing a number; then left/right (or
+//! up/down, page buttons) change it, shown at once but not kept yet,
+//! *confirm* keeps it and *back* goes back to the value before.
 //! Touch: tap an item to open, toggle or choose it; numbers show their −
-//! and + buttons all the time, a tap on one changes the number at once.
+//! and + buttons all the time, a tap on one changes the number at once;
+//! a slider's knob is dragged, and kept where the finger is lifted.
 //!
 //! The main page is bound to the `core.settings` slot.
 
@@ -47,11 +53,12 @@ use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::setting::Setting;
 use paperpaw_sdk::ui::choice::{self, Choice};
 use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
+use paperpaw_sdk::widgets::Widget;
 use paperpaw_sdk::{ActionSpec, MenuEntry};
 use paperpaw_sdk::{
-    Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Level, Manifest, Params,
-    Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen, ScreenSpec,
-    SettingKind, SettingSpec, SettingValue, Version,
+    Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Hint, Id, Level, Manifest,
+    Params, Plugin, PointerEvent, PointerPhase, Priority, Rect, RefreshMode, RegisterError,
+    Registrar, SDK_VERSION, Screen, ScreenSpec, SettingKind, SettingSpec, SettingValue, Version,
 };
 
 use self::chooser::*;
@@ -311,6 +318,13 @@ fn navigate_rows(rows: &mut ui::Rows, keys: &mut bool, action: &Id) -> Option<Li
         return Some(ListChange::Focus);
     }
     Some(rows.step(forward))
+}
+
+/// Shows the values kept again, if values were shown without being kept.
+fn end_preview(env: &Env<'_>, cx: &mut Cx<'_, '_>) {
+    if env.settings.previewing() {
+        cx.command(Command::PreviewSettings(Vec::new()));
+    }
 }
 
 /// The page shown in a header: its number and the number of pages.
