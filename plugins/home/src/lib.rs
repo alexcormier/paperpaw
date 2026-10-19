@@ -487,6 +487,10 @@ impl Screen for Dashboard {
             // The widgets made anew, what they show read again.
             self.layout(&env);
             cx.request_redraw();
+        } else if let Some(changed) = events::WIDGET_CHANGED.read(event, params) {
+            if self.grid.update_widget(changed.id.as_str(), &env, cx) {
+                cx.request_refresh(RefreshMode::Fast);
+            }
         } else if *event == events::STATUS_CHANGED {
             if let Some(status) = self.status {
                 cx.request_redraw_area(status);

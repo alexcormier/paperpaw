@@ -189,6 +189,11 @@ pub fn quireink_sdk::builtin::events::TextChosen::start(&self) -> quireink_docum
 impl quireink_sdk::event::EventData for quireink_sdk::builtin::events::TextChosen
 pub fn quireink_sdk::builtin::events::TextChosen::from_params(&quireink_sdk::Params) -> core::option::Option<Self>
 pub fn quireink_sdk::builtin::events::TextChosen::to_params(&self) -> quireink_sdk::Params
+pub struct quireink_sdk::builtin::events::WidgetChanged
+pub quireink_sdk::builtin::events::WidgetChanged::id: quireink_sdk::Id
+impl quireink_sdk::event::EventData for quireink_sdk::builtin::events::WidgetChanged
+pub fn quireink_sdk::builtin::events::WidgetChanged::from_params(&quireink_sdk::Params) -> core::option::Option<Self>
+pub fn quireink_sdk::builtin::events::WidgetChanged::to_params(&self) -> quireink_sdk::Params
 pub struct quireink_sdk::builtin::events::WifiFailed
 pub quireink_sdk::builtin::events::WifiFailed::reason: quireink_sdk::wifi::JoinFailure
 pub quireink_sdk::builtin::events::WifiFailed::ssid: alloc::string::String
@@ -228,6 +233,7 @@ pub const quireink_sdk::builtin::events::STARTED: quireink_sdk::event::Event<()>
 pub const quireink_sdk::builtin::events::STATUS_CHANGED: quireink_sdk::event::Event<()>
 pub const quireink_sdk::builtin::events::SUSPEND: quireink_sdk::event::Event<()>
 pub const quireink_sdk::builtin::events::TEXT_CHOSEN: quireink_sdk::event::Event<quireink_sdk::builtin::events::TextChosen>
+pub const quireink_sdk::builtin::events::WIDGET_CHANGED: quireink_sdk::event::Event<quireink_sdk::builtin::events::WidgetChanged>
 pub const quireink_sdk::builtin::events::WIFI_CHANGED: quireink_sdk::event::Event<()>
 pub const quireink_sdk::builtin::events::WIFI_FAILED: quireink_sdk::event::Event<quireink_sdk::builtin::events::WifiFailed>
 pub const quireink_sdk::builtin::events::WIFI_SCANNED: quireink_sdk::event::Event<()>
@@ -712,6 +718,9 @@ pub fn quireink_sdk::builtin::events::SettingChanged::to_params(&self) -> quirei
 impl quireink_sdk::event::EventData for quireink_sdk::builtin::events::TextChosen
 pub fn quireink_sdk::builtin::events::TextChosen::from_params(&quireink_sdk::Params) -> core::option::Option<Self>
 pub fn quireink_sdk::builtin::events::TextChosen::to_params(&self) -> quireink_sdk::Params
+impl quireink_sdk::event::EventData for quireink_sdk::builtin::events::WidgetChanged
+pub fn quireink_sdk::builtin::events::WidgetChanged::from_params(&quireink_sdk::Params) -> core::option::Option<Self>
+pub fn quireink_sdk::builtin::events::WidgetChanged::to_params(&self) -> quireink_sdk::Params
 impl quireink_sdk::event::EventData for quireink_sdk::builtin::events::WifiFailed
 pub fn quireink_sdk::builtin::events::WifiFailed::from_params(&quireink_sdk::Params) -> core::option::Option<Self>
 pub fn quireink_sdk::builtin::events::WifiFailed::to_params(&self) -> quireink_sdk::Params
@@ -1779,6 +1788,7 @@ pub fn quireink_sdk::widgets::Widget::update(&mut self, &quireink_sdk::Env<'_>) 
 pub fn quireink_sdk::widgets::align(&quireink_sdk::Env<'_>, &str) -> quireink_sdk::widgets::Align
 pub fn quireink_sdk::widgets::align_setting(&quireink_sdk::Id, quireink_sdk::widgets::Align) -> quireink_sdk::SettingSpec
 pub fn quireink_sdk::widgets::caption_height(&quireink_sdk::Env<'_>) -> u16
+pub fn quireink_sdk::widgets::changed(&quireink_sdk::Id) -> quireink_sdk::Command
 pub fn quireink_sdk::widgets::choice(&quireink_sdk::Id, &str, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, &[&'static str], &'static str) -> quireink_sdk::SettingSpec
 pub fn quireink_sdk::widgets::draw_caption(&mut quireink_graphics::canvas::Canvas<'_>, &quireink_sdk::Env<'_>, &str, &quireink_sdk::widgets::look::Look, &str) -> quireink_platform::geometry::Rect
 pub fn quireink_sdk::widgets::draw_frame(&mut quireink_graphics::canvas::Canvas<'_>, &quireink_sdk::Env<'_>, &str, quireink_platform::geometry::Rect) -> quireink_sdk::widgets::look::Look
@@ -2774,6 +2784,9 @@ pub fn quireink_sdk::builtin::events::SettingChanged::to_params(&self) -> quirei
 impl quireink_sdk::event::EventData for quireink_sdk::builtin::events::TextChosen
 pub fn quireink_sdk::builtin::events::TextChosen::from_params(&quireink_sdk::Params) -> core::option::Option<Self>
 pub fn quireink_sdk::builtin::events::TextChosen::to_params(&self) -> quireink_sdk::Params
+impl quireink_sdk::event::EventData for quireink_sdk::builtin::events::WidgetChanged
+pub fn quireink_sdk::builtin::events::WidgetChanged::from_params(&quireink_sdk::Params) -> core::option::Option<Self>
+pub fn quireink_sdk::builtin::events::WidgetChanged::to_params(&self) -> quireink_sdk::Params
 impl quireink_sdk::event::EventData for quireink_sdk::builtin::events::WifiFailed
 pub fn quireink_sdk::builtin::events::WifiFailed::from_params(&quireink_sdk::Params) -> core::option::Option<Self>
 pub fn quireink_sdk::builtin::events::WifiFailed::to_params(&self) -> quireink_sdk::Params

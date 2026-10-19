@@ -111,7 +111,7 @@ pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
             item.done = if was_done { None } else { Some(today) };
             save(env.storage, &items);
         }
-        changed(out);
+        changed(out, &ID);
     })?;
     r.add_screen(ScreenSpec {
         id: SCREEN,
@@ -547,7 +547,7 @@ impl TodoScreen {
         let env = *cx.env();
         save(env.storage, &self.items);
         let mut out = Vec::new();
-        changed(&mut out);
+        changed(&mut out, &ID);
         for command in out {
             cx.command(command);
         }

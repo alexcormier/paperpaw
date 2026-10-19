@@ -264,6 +264,14 @@ impl Widget for DrawnWidget {
     }
 }
 
+/// Says that what widget `id` shows changed (e.g. its own data, after a
+/// tap on it): screens showing it read it anew
+/// ([`WIDGET_CHANGED`](crate::builtin::events::WIDGET_CHANGED)).
+pub fn changed(id: &Id) -> crate::Command {
+    use crate::builtin::events;
+    events::WIDGET_CHANGED.emit(events::WidgetChanged { id: id.clone() })
+}
+
 /// The registered widgets.
 #[derive(Debug, Default)]
 pub struct Widgets {

@@ -449,6 +449,13 @@ pub mod events {
     }
 
     crate::event_data! {
+        /// The widget whose content changed ([`WIDGET_CHANGED`]).
+        pub struct WidgetChanged {
+            pub id: Id,
+        }
+    }
+
+    crate::event_data! {
         /// A network that could not be joined ([`WIFI_FAILED`]).
         pub struct WifiFailed {
             pub ssid: String,
@@ -512,6 +519,12 @@ pub mod events {
     pub const DECORATION_TAPPED: Event<DecorationTapped> = Event::new("core.decoration-tapped");
     /// A word of a book was looked up ([`WordLookedUp`]).
     pub const WORD_LOOKED_UP: Event<WordLookedUp> = Event::new("core.word-looked-up");
+    /// What a widget shows changed by other means than the events screens
+    /// already follow, e.g. a tap on it turned to another quote or ticked
+    /// an item off ([`WidgetChanged`]): screens showing it read it anew
+    /// ([`Widget::update`](crate::widgets::Widget::update)). See
+    /// [`widgets::changed`](crate::widgets::changed).
+    pub const WIDGET_CHANGED: Event<WidgetChanged> = Event::new("core.widget-changed");
     /// A menu was redefined or reset ([`MenuChanged`]).
     pub const MENU_CHANGED: Event<MenuChanged> = Event::new("core.menu-changed");
     /// The device goes to sleep or the app to the background: a moment to

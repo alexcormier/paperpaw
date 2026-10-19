@@ -61,6 +61,9 @@ plugin converts books differently; a plugin must keep that mapping.
 | `.quireink/plugins/sleep/next.txt` | sleep | the next picture, counted | version 1 |
 | `.quireink/plugins/setup/done` | setup | its presence | version 1 (the app's screen tests) |
 | `.quireink/plugins/update/installing.txt`, `offered.txt` | update | a path and a version, a line each | version 1 |
+| `.quireink/plugins/widgets/todo.txt` | widgets | an item per line, done ones as `x <date> <text>` (as todo.txt has them) | version 1 |
+| `.quireink/plugins/widgets/quotes.txt` | widgets | the reader's own quotes, a line each: `text \| author` | version 1 |
+| `.quireink/plugins/widgets/quote.txt`, `picture.txt` | widgets | the day and the turns of the quote and the picture shown | version 1 |
 
 ## Caches
 
@@ -68,6 +71,7 @@ plugin converts books differently; a plugin must keep that mapping.
 |-------|-------|-------|
 | `.quireink/plugins/format-epub/<hash>/` | format-epub | `CACHE_VERSION` and the book's size and start; HTML, Markdown and FB2 their own |
 | `.quireink/plugins/format-xtc/<hash>/` | format-xtc | the book's size and start |
+| `.quireink/plugins/widgets/picture.pixels` | widgets | `picture.stamp`: the picture's path and size, the screen's size and colour |
 | `.quireink/plugins/reader/books/<hash>/index.bin` | reader | the layout's settings and `quireink_layout::VERSION`, in the folder's name |
 | `.quireink/library/catalog.txt` | SDK `library` | the folders' contents |
 | `.quireink/plugins/stats/days.bin` | stats | the bytes of `pages.bin` it covers |

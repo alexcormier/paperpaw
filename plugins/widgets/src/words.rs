@@ -21,10 +21,9 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::sync::atomic::{AtomicU32, Ordering};
 
-use quireink_sdk::builtin::events;
 use quireink_sdk::ui::UiStyle;
 use quireink_sdk::widgets;
-use quireink_sdk::{Canvas, Command, Env, Rect, RegisterError, Registrar, Storage, time};
+use quireink_sdk::{Canvas, Command, Env, Id, Rect, RegisterError, Registrar, Storage, time};
 
 pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     r.add_translations(Cow::Borrowed(include_str!("../i18n/words.en.ini")))?;
@@ -54,13 +53,12 @@ fn changes() -> u32 {
     CHANGES.load(Ordering::Relaxed)
 }
 
-/// What a widget keeps changed (a quote turned, an item ticked off): the
-/// widgets showing it read it anew. Screens read their live widgets when
-/// the status changes, so that is said.
-fn changed(out: &mut Vec<Command>) {
+/// What widget `id` keeps changed (a quote turned, an item ticked off):
+/// the screens showing it read it anew.
+fn changed(out: &mut Vec<Command>, id: &Id) {
     // Load and store: the device has no atomic adding, and one thread.
     CHANGES.store(changes().wrapping_add(1), Ordering::Relaxed);
-    out.push(events::STATUS_CHANGED.emit(()));
+    out.push(widgets::changed(id));
 }
 
 /// Today as days since 1970 in the local time zone; 0 where the device

@@ -114,7 +114,7 @@ pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     r.add_setting(widgets::frame_setting(&ID, Frame::None))?;
     r.on(NEXT, |env, _, out| {
         Turns::turn(env.storage, &turns_file(), today(env), daily(env));
-        changed(out);
+        changed(out, &ID);
     })?;
     r.add_widget(
         WidgetSpec::new(ID, "widgets.quote", |env| {
