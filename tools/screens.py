@@ -49,6 +49,13 @@ SCREENS = [
     ("setup", "run:setup.open", []),
 ]
 
+# The home screen's ready-made layouts, each as the chooser shows it.
+LAYOUTS = ["calm", "covers", "dashboard", "clock", "minimal"]
+SCREENS += [
+    (f"layout-{name}", ",".join(["run:home.choose-layout"] + ["run:core.next-page"] * n), [])
+    for n, name in enumerate(LAYOUTS)
+]
+
 BOOK = "pride-and-prejudice.epub"
 
 

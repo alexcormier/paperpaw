@@ -34,6 +34,7 @@ use crate::hyphenation::HyphenationSpec;
 use crate::id::Id;
 use crate::menus::{MenuEntry, MenuNeed, MenuSection};
 use crate::plugin::{Priority, RegisterError, SlotSpec};
+use crate::presets::Preset;
 use crate::screen::{Hints, ScreenSpec};
 use crate::settings::{SettingGroupSpec, SettingSpec};
 use crate::setup::SetupStepSpec;
@@ -114,6 +115,10 @@ pub enum Contribution {
     RefreshFilter(RefreshFilterSpec),
     Widget(Box<WidgetSpec>),
     SetupStep(Box<SetupStepSpec>),
+    /// A preset made at start (see [`presets`](crate::presets)).
+    Preset(Box<Preset>),
+    /// Presets kept in the program.
+    FixedPresets(&'static [Preset]),
     Service {
         id: Id,
         service: Box<dyn Any>,
@@ -163,6 +168,7 @@ impl Contribution {
             Contribution::RefreshFilter(_) => "refresh-filter",
             Contribution::Widget(_) => "widget",
             Contribution::SetupStep(_) => "setup-step",
+            Contribution::Preset(_) | Contribution::FixedPresets(_) => "preset",
             Contribution::Service { .. } => "service",
             Contribution::ToPoint { .. } => "to-point",
             Contribution::Translations(_) => "translations",
@@ -195,6 +201,7 @@ impl Contribution {
             Contribution::RefreshFilter(f) => &f.id,
             Contribution::Widget(w) => &w.id,
             Contribution::SetupStep(s) => &s.id,
+            Contribution::Preset(p) => &p.id,
             Contribution::Service { id, .. } => id,
             _ => return None,
         })
@@ -559,6 +566,42 @@ impl Registrar {
     /// Adds a step to the first-run setup (see [`setup`](crate::setup)).
     pub fn add_setup_step(&mut self, step: SetupStepSpec) -> Result<(), RegisterError> {
         self.add(Contribution::SetupStep(Box::new(step)))
+    }
+
+    /// Adds a preset, a ready-made set of setting values (see
+    /// [`presets`](crate::presets)), e.g. from a data plugin's file.
+    pub fn add_preset(&mut self, preset: Preset) -> Result<(), RegisterError> {
+        let fixed = self.contributions.iter().any(|c| {
+            matches!(c, Contribution::FixedPresets(list) if list.iter().any(|p| p.id == preset.id))
+        });
+        if fixed {
+            return Err(RegisterError::Duplicate { id: preset.id });
+        }
+        self.add(Contribution::Preset(Box::new(preset)))
+    }
+
+    /// Adds presets kept in the program ([`Preset::fixed`]), a `static`
+    /// list, each in the plugin's namespace (they may be of any plugin's
+    /// kind).
+    pub fn add_presets(&mut self, presets: &'static [Preset]) -> Result<(), RegisterError> {
+        let added = |id: &Id| {
+            self.contributions.iter().any(|c| match c {
+                Contribution::Preset(p) => p.id == *id,
+                Contribution::FixedPresets(list) => list.iter().any(|p| p.id == *id),
+                _ => false,
+            })
+        };
+        for (n, preset) in presets.iter().enumerate() {
+            let id = &preset.id;
+            if !id.is_owned_by(&self.plugin) {
+                return Err(RegisterError::Namespace { id: id.clone() });
+            }
+            if added(id) || presets[..n].iter().any(|p| p.id == *id) {
+                return Err(RegisterError::Duplicate { id: id.clone() });
+            }
+        }
+        self.contributions.push(Contribution::FixedPresets(presets));
+        Ok(())
     }
 
     /// Adds a whole status line, drawn by the plugin (see

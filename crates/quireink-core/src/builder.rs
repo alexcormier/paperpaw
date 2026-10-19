@@ -382,6 +382,7 @@ impl KernelBuilder {
             shown_since: Instant(0),
             scope: None,
             screens_changed: false,
+            preview_owner: None,
             plugin_defaults: Vec::new(),
             now: Instant::default(),
         })

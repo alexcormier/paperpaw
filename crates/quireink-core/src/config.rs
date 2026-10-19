@@ -159,6 +159,36 @@ impl Kernel {
         }
     }
 
+    /// Shows settings without keeping them, for the screen on top (see
+    /// [`Command::PreviewSettings`]); empty, ends that.
+    pub(crate) fn preview_settings(
+        &mut self,
+        values: Vec<(Id, Option<quireink_sdk::SettingValue>)>,
+    ) {
+        let ending = values.is_empty();
+        if ending && self.preview_owner.is_none() && !self.shared.settings.previewing() {
+            return;
+        }
+        self.shared.settings.set_preview(values);
+        self.preview_owner = if ending {
+            None
+        } else {
+            self.stack.last().map(screen_key)
+        };
+        self.output.commands.push(events::PREVIEW_CHANGED.emit(()));
+    }
+
+    /// Ends the values shown without being kept when the screen that
+    /// asked for them is gone.
+    pub(crate) fn check_preview_owner(&mut self) {
+        let Some(owner) = self.preview_owner else {
+            return;
+        };
+        if !self.stack.iter().any(|s| screen_key(s) == owner) {
+            self.preview_settings(Vec::new());
+        }
+    }
+
     /// Sets `key` in `section` of the configuration file on the device.
     pub(crate) fn save_config(&mut self, section: &str, key: &str, value: &str) {
         let storage = self.shared.storage.as_ref();

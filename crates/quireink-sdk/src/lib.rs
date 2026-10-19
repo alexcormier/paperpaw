@@ -55,6 +55,7 @@ mod menus;
 mod params;
 mod plugin;
 mod plugins;
+pub mod presets;
 pub mod replies;
 mod screen;
 pub mod secrets;

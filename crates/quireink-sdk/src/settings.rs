@@ -757,6 +757,13 @@ impl Specs {
 /// own value applies. While a placement is shown, its values are those of
 /// the setting itself ([`Settings::with_placement`]), so a widget reads
 /// its settings as always.
+///
+/// Values may be shown for a while without being kept, e.g. a layout
+/// before it is chosen ([`Settings::set_preview`], asked for with
+/// [`Command::PreviewSettings`](crate::Command::PreviewSettings)): they
+/// are what [`Settings::get`] gives while they last; what is kept
+/// ([`Settings::global`]) stays as it is. The ready-made sets of values
+/// plugins offer are kept here too ([`Settings::presets`]).
 #[derive(Debug, Default)]
 pub struct Settings {
     specs: Specs,
@@ -768,6 +775,9 @@ pub struct Settings {
     groups: Vec<SettingGroupSpec>,
     /// The values of the active scope (e.g. the open book), if any.
     scope: Option<VecMap<Id, SettingValue>>,
+    /// Values shown without being kept; `None`: as if not set.
+    preview: VecMap<Id, Option<SettingValue>>,
+    presets: crate::presets::Presets,
 }
 
 impl Settings {
@@ -780,6 +790,42 @@ impl Settings {
         self.specs.shrink_to_fit();
         self.values.shrink_to_fit();
         self.groups.shrink_to_fit();
+        self.presets.shrink_to_fit();
+    }
+
+    /// The presets every plugin added (see [`presets`](crate::presets)).
+    pub fn presets(&self) -> &crate::presets::Presets {
+        &self.presets
+    }
+
+    /// Adds presets (see [`presets`](crate::presets)).
+    pub fn presets_mut(&mut self) -> &mut crate::presets::Presets {
+        &mut self.presets
+    }
+
+    /// Shows `values` in place of those kept (`None`: as if not set),
+    /// until they are replaced; empty, the kept ones show again. Values of
+    /// unknown settings and those that do not fit are left out.
+    pub fn set_preview(&mut self, values: Vec<(Id, Option<SettingValue>)>) {
+        self.preview = VecMap::default();
+        for (id, value) in values {
+            let fits = self
+                .spec(id.as_str())
+                .is_some_and(|spec| value.as_ref().is_none_or(|value| spec.kind.accepts(value)));
+            if fits {
+                self.preview.insert(id, value);
+            }
+        }
+    }
+
+    /// Whether values are shown without being kept.
+    pub fn previewing(&self) -> bool {
+        !self.preview.is_empty()
+    }
+
+    /// Whether a value is kept for `id` (it is not at its default).
+    pub fn is_set(&self, id: &str) -> bool {
+        self.values.contains_key(id)
     }
 
     /// Registers a group of settings.
@@ -908,7 +954,10 @@ impl Settings {
         let plain = &placed[..placed.find('@')?];
         let rest = id.strip_prefix(plain).filter(|r| r.starts_with('.'))?;
         let key = alloc::format!("{placed}{rest}");
-        self.values.get(key.as_str())
+        match self.preview.get(key.as_str()) {
+            Some(shown) => shown.as_ref(),
+            None => self.values.get(key.as_str()),
+        }
     }
 
     /// The ids of the values `placement` sets (e.g. to forget them when it
@@ -960,6 +1009,13 @@ impl Settings {
     pub fn get(&self, id: &str) -> Option<&SettingValue> {
         if let Some(value) = self.placed_value(id) {
             return Some(value);
+        }
+        if let Some(shown) = self.preview.get(id) {
+            return match (shown, crate::id::unplaced(id)) {
+                (Some(value), _) => Some(value),
+                (None, Some(plain)) => self.get(&plain),
+                (None, None) => self.specs.get(id).map(|spec| &spec.default),
+            };
         }
         if let Some(plain) = crate::id::unplaced(id) {
             return self.values.get(id).or_else(|| self.get(&plain));
@@ -1291,5 +1347,64 @@ mod tests {
             s.set("widgets.other@2.date", SettingValue::Bool(true)),
             Err(SettingError::Unknown)
         );
+    }
+
+    #[test]
+    fn previews_show_values_without_keeping_them() {
+        let mut s = Settings::new();
+        static SPECS: [SettingSpec; 2] = [
+            SettingSpec::fixed_switch(
+                "widgets.clock.date",
+                "widgets.clock.date",
+                true,
+                Id::new_static("widgets.clock"),
+            ),
+            SettingSpec::fixed_number(
+                "widgets.clock.size",
+                "",
+                1,
+                9,
+                5,
+                Id::new_static("widgets.clock"),
+            ),
+        ];
+        s.define_fixed(&SPECS[0]).unwrap();
+        s.define_fixed(&SPECS[1]).unwrap();
+        s.set("widgets.clock.size", SettingValue::Int(7)).unwrap();
+        s.set("widgets.clock@2.date", SettingValue::Bool(false))
+            .unwrap();
+        s.set_preview(alloc::vec![
+            (
+                Id::new_static("widgets.clock.date"),
+                Some(SettingValue::Bool(false))
+            ),
+            (Id::new_static("widgets.clock.size"), None),
+            (Id::new_static("widgets.clock@2.date"), None),
+            (
+                Id::new_static("widgets.clock@3.date"),
+                Some(SettingValue::Bool(true))
+            ),
+            // Unknown, or not fitting: left out.
+            (Id::new_static("widgets.none"), None),
+            (
+                Id::new_static("widgets.clock@4.date"),
+                Some(SettingValue::Int(1))
+            ),
+        ]);
+        assert!(s.previewing());
+        assert!(!s.bool("widgets.clock.date"));
+        // Not set, while shown: the default, not the value kept.
+        assert_eq!(s.int("widgets.clock.size"), 5);
+        assert_eq!(s.global("widgets.clock.size"), Some(&SettingValue::Int(7)));
+        // A placement not set shows the setting's (shown) value.
+        assert!(!s.bool("widgets.clock@2.date"));
+        assert!(s.with_placement(Some("widgets.clock@3"), || s.bool("widgets.clock.date")));
+        assert!(!s.with_placement(Some("widgets.clock@4"), || s.bool("widgets.clock.date")));
+        s.set_preview(Vec::new());
+        assert!(!s.previewing());
+        assert_eq!(s.int("widgets.clock.size"), 7);
+        assert!(s.bool("widgets.clock.date"));
+        assert!(s.is_set("widgets.clock@2.date"));
+        assert!(!s.is_set("widgets.clock.date"));
     }
 }

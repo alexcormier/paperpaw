@@ -275,6 +275,12 @@ impl Kernel {
         for step in staging.setup_steps.drain(..) {
             self.shared.setup.add(step);
         }
+        for list in staging.fixed_presets.drain(..) {
+            self.shared.settings.presets_mut().add_fixed(list);
+        }
+        for preset in staging.presets.drain(..) {
+            self.shared.settings.presets_mut().add(preset);
+        }
         for widget in staging.widgets.drain(..) {
             self.shared.widgets.add(widget);
         }

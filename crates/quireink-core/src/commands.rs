@@ -15,6 +15,7 @@ impl Kernel {
         self.shared.meter.snapshot(&mut self.shared.usage.plugins);
         // A screen that set a scope may have closed.
         self.check_scope_owner();
+        self.check_preview_owner();
         self.check_network();
         self.run_commands();
         if let Some(row) = self.hint_row() {
@@ -153,6 +154,7 @@ impl Kernel {
             Command::Sleep => self.sleep = self.shared.caps.sleep,
             command @ (Command::SetSetting(..)
             | Command::ResetSetting(_)
+            | Command::PreviewSettings(_)
             | Command::SetScope(_)
             | Command::SetPluginEnabled(..)
             | Command::SetSecret(_)
@@ -229,6 +231,7 @@ impl Kernel {
                 }
             },
             Command::ResetSetting(id) => self.reset_setting(&id),
+            Command::PreviewSettings(values) => self.preview_settings(values),
             Command::SetScope(path) => self.set_scope(path),
             Command::SetPluginEnabled(id, enabled) => self.set_plugin_enabled(&id, enabled),
             Command::SetSecret(change) => self.set_secret(change),

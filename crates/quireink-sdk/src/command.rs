@@ -205,6 +205,16 @@ pub enum Command {
     /// the active scope, where changes go there: the scope's value, the
     /// global one applies again). See [`Settings::reset`](crate::Settings::reset).
     ResetSetting(Id),
+    /// Shows settings with these values for a while without keeping them
+    /// (`None`: as if not set), e.g. a layout before it is chosen: every
+    /// screen drawn from them shows them, until the next
+    /// `PreviewSettings` (empty: the values kept show again) or until the
+    /// screen that asked closes; the event
+    /// [`PREVIEW_CHANGED`](crate::builtin::events::PREVIEW_CHANGED)
+    /// follows each change. What the kernel does when a setting changes
+    /// (the language, the turn of the screen) waits for the value kept.
+    /// See [`Settings::set_preview`](crate::Settings::set_preview).
+    PreviewSettings(Vec<(Id, Option<SettingValue>)>),
     /// Redraws the current screen completely; with
     /// [`RefreshMode::Full`] the whole screen, flashing.
     Redraw(RefreshMode),

@@ -1,6 +1,6 @@
-//! Adding to a page of the home screen, in two steps: first the kinds of
-//! widgets (time, books, reading ...), the tools, *Add a page* and *Remove
-//! this page*; then, for a kind, its widgets not on the page yet, each
+//! Adding to a page of the home screen, in two steps: first the
+//! ready-made layouts (see `layouts`), the kinds of widgets (time, books,
+//! reading ...), the tools, *Add a page* and *Remove this page*; then, for a kind, its widgets not on the page yet, each
 //! drawn as it would show (a gallery, as phones offer widgets), or the
 //! tools as a list. A widget or tool goes into the first free cells of
 //! the page (a widget as wide as the page and as high as it needs, a tool
@@ -36,6 +36,8 @@ enum Row {
     Kind(String, usize),
     /// A widget or tool, and the translation key of its name.
     Add(What, String),
+    /// The ready-made layouts, to start anew from one.
+    Layouts,
     AddPage,
     RemovePage,
 }
@@ -180,10 +182,12 @@ impl AddScreen {
                 .map(|(_, what, title)| Row::Add(what, title))
                 .collect(),
             None => {
-                let mut rows: Vec<Row> = kinds(&found)
-                    .into_iter()
-                    .map(|(kind, count)| Row::Kind(kind, count))
-                    .collect();
+                let mut rows: Vec<Row> = alloc::vec![Row::Layouts];
+                rows.extend(
+                    kinds(&found)
+                        .into_iter()
+                        .map(|(kind, count)| Row::Kind(kind, count)),
+                );
                 let all = pages::pages(env).len();
                 if all < MAX_PAGES {
                     rows.push(Row::AddPage);
@@ -219,7 +223,7 @@ impl AddScreen {
     /// fit. Widgets are made when their page first shows.
     fn lay_out(&self, env: &Env<'_>, area: Rect) -> Vec<Preview> {
         let style = self.style;
-        let (_, geometry, _) = crate::frame(env);
+        let (_, geometry, _) = crate::frame(env, None);
         let title_h = widgets::line_height(env, style.title) + style.gap as u16 / 2;
         let gap = style.gap as u16;
         let bottom = area.y + area.height;
@@ -295,7 +299,7 @@ impl AddScreen {
                 let Some(items) = all.get_mut(self.page) else {
                     return;
                 };
-                let (_, geometry, _) = crate::frame(&env);
+                let (_, geometry, _) = crate::frame(&env, None);
                 // The page as shown, every item with its place, and the new one.
                 let shown = pages::expand(&env, items);
                 let Some(added) = grid::add(&env, &geometry, &shown, what) else {
@@ -304,6 +308,12 @@ impl AddScreen {
                     return;
                 };
                 *items = added;
+            }
+            Some(Row::Layouts) => {
+                // Over the home screen, so that what is chosen shows there.
+                cx.command(Command::Back);
+                cx.command(Command::OpenScreen(crate::layouts::SCREEN, Params::new()));
+                return;
             }
             Some(Row::AddPage) => all.push(Vec::new()),
             Some(Row::RemovePage) => {
@@ -355,6 +365,11 @@ impl AddScreen {
                         String::from("+"),
                     ),
                     Row::Add(_, title) => (None, env.i18n.tr(title).to_string(), String::from("+")),
+                    Row::Layouts => (
+                        Some("layout"),
+                        env.i18n.tr("home.layouts.title").to_string(),
+                        String::new(),
+                    ),
                     Row::AddPage => (
                         Some("plus"),
                         env.i18n.tr("home.edit.add-page").to_string(),

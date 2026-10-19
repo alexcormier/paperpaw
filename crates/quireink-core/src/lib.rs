@@ -313,6 +313,9 @@ pub struct Kernel {
     shown_since: Instant,
     /// The active settings scope: its file and the screen that set it.
     scope: Option<(String, Option<usize>)>,
+    /// The screen that asked for the values shown without being kept
+    /// ([`Command::PreviewSettings`]), if any.
+    preview_owner: Option<usize>,
     /// A screen was opened or closed since the last call ended; then the
     /// frame drawn for it is not shown yet (see [`Kernel::shown`]).
     screens_changed: bool,

@@ -503,6 +503,9 @@ pub mod events {
     /// change the library emit it ([`library::changed`](crate::library::changed));
     /// a move is [`BOOK_MOVED`].
     pub const LIBRARY_CHANGED: Event<()> = Event::new("core.library-changed");
+    /// The values shown without being kept changed, or ended (see
+    /// [`Command::PreviewSettings`](crate::Command::PreviewSettings)).
+    pub const PREVIEW_CHANGED: Event<()> = Event::new("core.preview-changed");
     /// The bookmarks or highlights of a book changed
     /// ([`annotations`](crate::annotations), [`AnnotationsChanged`]).
     /// Readers show them anew, syncs pass them on.

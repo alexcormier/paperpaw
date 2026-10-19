@@ -229,6 +229,7 @@ pub const quireink_sdk::builtin::events::NETWORK_IDLE: quireink_sdk::event::Even
 pub const quireink_sdk::builtin::events::NETWORK_WANTED: quireink_sdk::event::Event<()>
 pub const quireink_sdk::builtin::events::NOTES_EXPORTED: quireink_sdk::event::Event<quireink_sdk::builtin::events::NotesExported>
 pub const quireink_sdk::builtin::events::PAGE_TURNED: quireink_sdk::event::Event<quireink_sdk::builtin::events::Reading>
+pub const quireink_sdk::builtin::events::PREVIEW_CHANGED: quireink_sdk::event::Event<()>
 pub const quireink_sdk::builtin::events::RESUME: quireink_sdk::event::Event<()>
 pub const quireink_sdk::builtin::events::SETTING_CHANGED: quireink_sdk::event::Event<quireink_sdk::builtin::events::SettingChanged>
 pub const quireink_sdk::builtin::events::STARTED: quireink_sdk::event::Event<()>
@@ -432,6 +433,7 @@ pub mod quireink_sdk::contribution
 pub quireink_sdk::contribution::Contribution::Action(quireink_sdk::ActionSpec)
 pub quireink_sdk::contribution::Contribution::BookData(quireink_sdk::library::BookData)
 pub quireink_sdk::contribution::Contribution::Decorator(alloc::boxed::Box<quireink_sdk::decorations::DecoratorSpec>)
+pub quireink_sdk::contribution::Contribution::FixedPresets(&'static [quireink_sdk::presets::Preset])
 pub quireink_sdk::contribution::Contribution::FixedSettings(&'static [quireink_sdk::SettingSpec])
 pub quireink_sdk::contribution::Contribution::Font(alloc::boxed::Box<quireink_sdk::FontSpec>)
 pub quireink_sdk::contribution::Contribution::FontBinding
@@ -460,6 +462,7 @@ pub quireink_sdk::contribution::Contribution::MenuNeed
 pub quireink_sdk::contribution::Contribution::MenuNeed::item: quireink_sdk::Id
 pub quireink_sdk::contribution::Contribution::MenuNeed::need: quireink_sdk::MenuNeed
 pub quireink_sdk::contribution::Contribution::MenuSection(quireink_sdk::MenuSection)
+pub quireink_sdk::contribution::Contribution::Preset(alloc::boxed::Box<quireink_sdk::presets::Preset>)
 pub quireink_sdk::contribution::Contribution::RefreshFilter(quireink_sdk::filters::RefreshFilterSpec)
 pub quireink_sdk::contribution::Contribution::Screen(quireink_sdk::ScreenSpec)
 pub quireink_sdk::contribution::Contribution::ScreenHints
@@ -513,6 +516,8 @@ pub fn quireink_sdk::contribution::Registrar::add_keymap(&mut self, alloc::borro
 pub fn quireink_sdk::contribution::Registrar::add_keymap_preset(&mut self, quireink_sdk::Id, alloc::borrow::Cow<'static, str>) -> core::result::Result<(), quireink_sdk::RegisterError>
 pub fn quireink_sdk::contribution::Registrar::add_menu_entry(&mut self, quireink_sdk::MenuEntry) -> core::result::Result<(), quireink_sdk::RegisterError>
 pub fn quireink_sdk::contribution::Registrar::add_menu_section(&mut self, quireink_sdk::MenuSection) -> core::result::Result<(), quireink_sdk::RegisterError>
+pub fn quireink_sdk::contribution::Registrar::add_preset(&mut self, quireink_sdk::presets::Preset) -> core::result::Result<(), quireink_sdk::RegisterError>
+pub fn quireink_sdk::contribution::Registrar::add_presets(&mut self, &'static [quireink_sdk::presets::Preset]) -> core::result::Result<(), quireink_sdk::RegisterError>
 pub fn quireink_sdk::contribution::Registrar::add_refresh_filter(&mut self, quireink_sdk::filters::RefreshFilterSpec) -> core::result::Result<(), quireink_sdk::RegisterError>
 pub fn quireink_sdk::contribution::Registrar::add_screen(&mut self, quireink_sdk::ScreenSpec) -> core::result::Result<(), quireink_sdk::RegisterError>
 pub fn quireink_sdk::contribution::Registrar::add_service(&mut self, quireink_sdk::Id, alloc::boxed::Box<dyn core::any::Any>) -> core::result::Result<(), quireink_sdk::RegisterError>
@@ -1055,6 +1060,30 @@ pub fn quireink_sdk::library::set_favourite(&dyn quireink_platform::storage::Sto
 pub fn quireink_sdk::library::set_field(&dyn quireink_platform::storage::Storage, &str, &str, &str)
 pub fn quireink_sdk::library::set_finished(&dyn quireink_platform::storage::Storage, &str, bool)
 pub fn quireink_sdk::library::take_over_old(&dyn quireink_platform::storage::Storage)
+pub mod quireink_sdk::presets
+#[non_exhaustive] pub struct quireink_sdk::presets::Preset
+pub quireink_sdk::presets::Preset::description: alloc::borrow::Cow<'static, str>
+pub quireink_sdk::presets::Preset::id: quireink_sdk::Id
+pub quireink_sdk::presets::Preset::kind: quireink_sdk::Id
+pub quireink_sdk::presets::Preset::title: alloc::borrow::Cow<'static, str>
+pub quireink_sdk::presets::Preset::values: alloc::borrow::Cow<'static, str>
+impl quireink_sdk::presets::Preset
+pub fn quireink_sdk::presets::Preset::changes(&self, &quireink_sdk::Settings, &[quireink_sdk::Id]) -> alloc::vec::Vec<(quireink_sdk::Id, core::option::Option<quireink_sdk::SettingValue>)>
+pub const fn quireink_sdk::presets::Preset::fixed(&'static str, &'static str, &'static str, &'static str, &'static str) -> Self
+pub fn quireink_sdk::presets::Preset::new(quireink_sdk::Id, quireink_sdk::Id, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
+pub fn quireink_sdk::presets::Preset::value(&self, &str) -> core::option::Option<&str>
+pub fn quireink_sdk::presets::Preset::values(&self) -> impl core::iter::traits::iterator::Iterator<Item = (&str, &str)>
+pub struct quireink_sdk::presets::Presets
+impl quireink_sdk::presets::Presets
+pub fn quireink_sdk::presets::Presets::add(&mut self, quireink_sdk::presets::Preset)
+pub fn quireink_sdk::presets::Presets::add_fixed(&mut self, &'static [quireink_sdk::presets::Preset])
+pub fn quireink_sdk::presets::Presets::get(&self, &str) -> core::option::Option<&quireink_sdk::presets::Preset>
+pub fn quireink_sdk::presets::Presets::iter(&self) -> impl core::iter::traits::iterator::Iterator<Item = &quireink_sdk::presets::Preset>
+pub fn quireink_sdk::presets::Presets::new() -> Self
+pub fn quireink_sdk::presets::Presets::of_kind<'a>(&'a self, &'a str) -> impl core::iter::traits::iterator::Iterator<Item = &'a quireink_sdk::presets::Preset> + 'a
+pub fn quireink_sdk::presets::Presets::shrink_to_fit(&mut self)
+pub fn quireink_sdk::presets::applied(&quireink_sdk::Settings, &[(quireink_sdk::Id, core::option::Option<quireink_sdk::SettingValue>)]) -> bool
+pub fn quireink_sdk::presets::commands(&quireink_sdk::Settings, &[(quireink_sdk::Id, core::option::Option<quireink_sdk::SettingValue>)]) -> alloc::vec::Vec<quireink_sdk::Command>
 pub mod quireink_sdk::replies
 pub enum quireink_sdk::replies::ServerNotice
 pub quireink_sdk::replies::ServerNotice::Failed
@@ -1952,6 +1981,7 @@ pub quireink_sdk::Command::NoNetwork
 pub quireink_sdk::Command::Notify(alloc::string::String)
 pub quireink_sdk::Command::OpenScreen(quireink_sdk::Id, quireink_sdk::Params)
 pub quireink_sdk::Command::OpenSlot(quireink_sdk::Id, quireink_sdk::Params)
+pub quireink_sdk::Command::PreviewSettings(alloc::vec::Vec<(quireink_sdk::Id, core::option::Option<quireink_sdk::SettingValue>)>)
 pub quireink_sdk::Command::ReadClipboard(quireink_sdk::Id, quireink_sdk::Params)
 pub quireink_sdk::Command::Redraw(quireink_platform::display::RefreshMode)
 pub quireink_sdk::Command::ResetSetting(quireink_sdk::Id)
@@ -1989,6 +2019,7 @@ pub fn quireink_sdk::Command::set<T: quireink_sdk::setting::SettingType>(&quirei
 pub quireink_sdk::Contribution::Action(quireink_sdk::ActionSpec)
 pub quireink_sdk::Contribution::BookData(quireink_sdk::library::BookData)
 pub quireink_sdk::Contribution::Decorator(alloc::boxed::Box<quireink_sdk::decorations::DecoratorSpec>)
+pub quireink_sdk::Contribution::FixedPresets(&'static [quireink_sdk::presets::Preset])
 pub quireink_sdk::Contribution::FixedSettings(&'static [quireink_sdk::SettingSpec])
 pub quireink_sdk::Contribution::Font(alloc::boxed::Box<quireink_sdk::FontSpec>)
 pub quireink_sdk::Contribution::FontBinding
@@ -2017,6 +2048,7 @@ pub quireink_sdk::Contribution::MenuNeed
 pub quireink_sdk::Contribution::MenuNeed::item: quireink_sdk::Id
 pub quireink_sdk::Contribution::MenuNeed::need: quireink_sdk::MenuNeed
 pub quireink_sdk::Contribution::MenuSection(quireink_sdk::MenuSection)
+pub quireink_sdk::Contribution::Preset(alloc::boxed::Box<quireink_sdk::presets::Preset>)
 pub quireink_sdk::Contribution::RefreshFilter(quireink_sdk::filters::RefreshFilterSpec)
 pub quireink_sdk::Contribution::Screen(quireink_sdk::ScreenSpec)
 pub quireink_sdk::Contribution::ScreenHints
@@ -2605,6 +2637,8 @@ pub fn quireink_sdk::contribution::Registrar::add_keymap(&mut self, alloc::borro
 pub fn quireink_sdk::contribution::Registrar::add_keymap_preset(&mut self, quireink_sdk::Id, alloc::borrow::Cow<'static, str>) -> core::result::Result<(), quireink_sdk::RegisterError>
 pub fn quireink_sdk::contribution::Registrar::add_menu_entry(&mut self, quireink_sdk::MenuEntry) -> core::result::Result<(), quireink_sdk::RegisterError>
 pub fn quireink_sdk::contribution::Registrar::add_menu_section(&mut self, quireink_sdk::MenuSection) -> core::result::Result<(), quireink_sdk::RegisterError>
+pub fn quireink_sdk::contribution::Registrar::add_preset(&mut self, quireink_sdk::presets::Preset) -> core::result::Result<(), quireink_sdk::RegisterError>
+pub fn quireink_sdk::contribution::Registrar::add_presets(&mut self, &'static [quireink_sdk::presets::Preset]) -> core::result::Result<(), quireink_sdk::RegisterError>
 pub fn quireink_sdk::contribution::Registrar::add_refresh_filter(&mut self, quireink_sdk::filters::RefreshFilterSpec) -> core::result::Result<(), quireink_sdk::RegisterError>
 pub fn quireink_sdk::contribution::Registrar::add_screen(&mut self, quireink_sdk::ScreenSpec) -> core::result::Result<(), quireink_sdk::RegisterError>
 pub fn quireink_sdk::contribution::Registrar::add_service(&mut self, quireink_sdk::Id, alloc::boxed::Box<dyn core::any::Any>) -> core::result::Result<(), quireink_sdk::RegisterError>
@@ -2747,8 +2781,12 @@ pub fn quireink_sdk::Settings::group_of(&self, &quireink_sdk::SettingSpec) -> qu
 pub fn quireink_sdk::Settings::groups(&self) -> impl core::iter::traits::iterator::Iterator<Item = &quireink_sdk::SettingGroupSpec>
 pub fn quireink_sdk::Settings::int(&self, &str) -> i64
 pub fn quireink_sdk::Settings::is_scoped(&self, &str) -> bool
+pub fn quireink_sdk::Settings::is_set(&self, &str) -> bool
 pub fn quireink_sdk::Settings::new() -> Self
 pub fn quireink_sdk::Settings::placement_values(&self, &str) -> alloc::vec::Vec<quireink_sdk::Id>
+pub fn quireink_sdk::Settings::presets(&self) -> &quireink_sdk::presets::Presets
+pub fn quireink_sdk::Settings::presets_mut(&mut self) -> &mut quireink_sdk::presets::Presets
+pub fn quireink_sdk::Settings::previewing(&self) -> bool
 pub fn quireink_sdk::Settings::read<T: quireink_sdk::setting::SettingType>(&self, &quireink_sdk::setting::Setting<T>) -> <T as quireink_sdk::setting::SettingType>::Value
 pub fn quireink_sdk::Settings::reset(&mut self, &str) -> core::result::Result<(), quireink_sdk::SettingError>
 pub fn quireink_sdk::Settings::scope(&self) -> core::option::Option<&quireink_sdk::collections::VecMap<quireink_sdk::Id, quireink_sdk::SettingValue>>
@@ -2758,6 +2796,7 @@ pub fn quireink_sdk::Settings::set_choices(&mut self, &str, impl core::convert::
 pub fn quireink_sdk::Settings::set_default_from_text(&mut self, &str, &str) -> core::result::Result<(), quireink_sdk::SettingError>
 pub fn quireink_sdk::Settings::set_from_text(&mut self, &str, &str) -> core::result::Result<(), quireink_sdk::SettingError>
 pub fn quireink_sdk::Settings::set_in_scope(&mut self, &str, quireink_sdk::SettingValue) -> core::result::Result<(), quireink_sdk::SettingError>
+pub fn quireink_sdk::Settings::set_preview(&mut self, alloc::vec::Vec<(quireink_sdk::Id, core::option::Option<quireink_sdk::SettingValue>)>)
 pub fn quireink_sdk::Settings::set_scope(&mut self, core::option::Option<quireink_sdk::collections::VecMap<quireink_sdk::Id, quireink_sdk::SettingValue>>)
 pub fn quireink_sdk::Settings::shrink_to_fit(&mut self)
 pub fn quireink_sdk::Settings::spec(&self, &str) -> core::option::Option<&quireink_sdk::SettingSpec>

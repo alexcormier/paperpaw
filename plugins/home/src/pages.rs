@@ -47,7 +47,7 @@ pub(crate) const TOOLS: &str = "home.tools";
 
 /// What the pages show at first: the clock, the book being read and the
 /// recent ones, then the tools.
-const DEFAULTS: [&str; MAX_PAGES] = [
+pub(crate) const DEFAULTS: [&str; MAX_PAGES] = [
     "home.clock, home.continue, home.recent",
     "home.tools",
     "",

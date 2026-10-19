@@ -18,6 +18,10 @@
 //!   corner to size it; tap it for its options (move or size it with the
 //!   buttons, its settings, remove it). *Add* lists what can be added,
 //!   and adds or removes pages (see `add`).
+//! - **Layouts**: ready-made ones to start from (calm, covers, a look at
+//!   one's reading, a large clock, minimal), any plugin's too, chosen in
+//!   the first-run setup, while editing or with `home.choose-layout`, each
+//!   shown on the home screen itself before it is kept (see `layouts`).
 //! - **Tools**: the entries of the `home.actions` menu (the library by
 //!   default) and of the tools menu; plugins add their own with
 //!   `Registrar::add_menu_entry`.
@@ -37,6 +41,7 @@ mod blocks;
 mod covers;
 mod drawer;
 mod edit;
+mod layouts;
 mod pages;
 mod recent;
 
@@ -133,6 +138,11 @@ impl Plugin for Home {
         })?;
         r.bind_slot(slots::HOME, SCREEN, Priority::DEFAULT)?;
         r.add_screen(ScreenSpec {
+            id: layouts::SCREEN,
+            title: Cow::Borrowed("home.layouts.title"),
+            factory: Box::new(|env, _| Box::new(Dashboard::chooser(env))),
+        })?;
+        r.add_screen(ScreenSpec {
             id: DRAWER_SCREEN,
             title: Cow::Borrowed("home.drawer"),
             factory: Box::new(|env, _| Box::new(drawer::DrawerScreen::new(env))),
@@ -178,6 +188,7 @@ impl Plugin for Home {
         })?;
         pages::register(r)?;
         blocks::register(r)?;
+        layouts::register(r)?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())
@@ -204,6 +215,11 @@ struct Dashboard {
     missing: Vec<String>,
     /// How many of the recent books the page's widgets show.
     books: usize,
+    /// Choosing a layout: each shown here, a sheet below (see `layouts`).
+    chooser: Option<layouts::Chooser>,
+    /// What the page shows changed (a setting, the library): laid out
+    /// anew before it is drawn next, once for many changes.
+    stale: bool,
 }
 
 /// The next full minute, when the clock shows another time.
@@ -212,13 +228,25 @@ fn next_minute(env: &Env<'_>) -> quireink_sdk::Instant {
 }
 
 /// Where the parts of the home screen go: the status line, the grid, the
-/// footer.
-fn frame(env: &Env<'_>) -> (Option<Rect>, Geometry, Rect) {
+/// footer; with `sheet`, a footer that high, the grid's cells as many as
+/// without it.
+fn frame(env: &Env<'_>, sheet: Option<u16>) -> (Option<Rect>, Geometry, Rect) {
+    let (status, geometry, footer) = frame_of(env, UiStyle::new(env).row as u16);
+    let Some(height) = sheet else {
+        return (status, geometry, footer);
+    };
+    let (_, shorter, footer) = frame_of(env, height);
+    let gap = UiStyle::new(env).gap as u16;
+    let geometry = Geometry::of(shorter.area, geometry.columns, geometry.rows, gap);
+    (status, geometry, footer)
+}
+
+/// [`frame`] with a footer `footer_height` high.
+fn frame_of(env: &Env<'_>, footer_height: u16) -> (Option<Rect>, Geometry, Rect) {
     let style = UiStyle::new(env);
     let display = env.device.display;
     let margin = style.margin as u16;
     let gap = style.gap as u16;
-    let footer_height = style.row as u16;
     let footer = Rect::new(
         0,
         display.height - footer_height,
@@ -263,7 +291,7 @@ impl Dashboard {
         });
         let mut grid = GridView::new(env, CHOICE, CHOSEN);
         grid.set_editing(editing.is_some());
-        let (status, _, footer) = frame(env);
+        let (status, _, footer) = frame(env, None);
         let mut dashboard = Self {
             style: UiStyle::new(env),
             page: editing.unwrap_or(0),
@@ -275,7 +303,17 @@ impl Dashboard {
             plus: Rect::default(),
             missing: Vec::new(),
             books: 0,
+            chooser: None,
+            stale: false,
         };
+        dashboard.layout(env);
+        dashboard
+    }
+
+    /// The home screen choosing a layout.
+    fn chooser(env: &Env<'_>) -> Self {
+        let mut dashboard = Self::new(env, &Params::new());
+        dashboard.chooser = Some(layouts::Chooser::new(env));
         dashboard.layout(env);
         dashboard
     }
@@ -284,11 +322,21 @@ impl Dashboard {
     fn layout(&mut self, env: &Env<'_>) {
         let style = UiStyle::new(env);
         let display = env.device.display;
-        let (status, geometry, footer) = frame(env);
+        let sheet = self.chooser.as_ref().map(|c| c.height(env));
+        let (status, geometry, footer) = frame(env, sheet);
         let pages = pages::pages(env);
         self.pages = pages.len();
         self.page = self.page.min(self.pages - 1);
-        let items = pages::expand(env, &pages[self.page]);
+        let mut items = pages::expand(env, &pages[self.page]);
+        if sheet.is_some() {
+            // Placed as on the home screen, then shown in the lower
+            // preview cell for cell.
+            let (_, full, _) = frame(env, None);
+            items = grid::place(env, &full, &items)
+                .into_iter()
+                .map(|(item, cells)| Item::placed(item.what, cells))
+                .collect();
+        }
         // The pencil (done, when editing) at the right of the footer, if
         // it is wanted; add at the left when editing.
         let margin = style.margin as u16;
@@ -297,11 +345,18 @@ impl Dashboard {
         self.plus = Rect::new(margin, footer.y, side, side);
         let editing = self.grid.editing();
         let mut buttons = Vec::new();
-        if editing {
-            buttons.push((self.plus, ADD));
-        }
-        if editing || env.settings.read(&pages::FOOTER_PENCIL) {
-            buttons.push((self.pencil, PENCIL));
+        if let Some(chooser) = &mut self.chooser {
+            // Shown, not used: no focus, nothing to tap but the sheet.
+            self.page = 0;
+            self.grid.set_focus_shown(false);
+            chooser.layout(env, footer);
+        } else {
+            if editing {
+                buttons.push((self.plus, ADD));
+            }
+            if editing || env.settings.read(&pages::FOOTER_PENCIL) {
+                buttons.push((self.pencil, PENCIL));
+            }
         }
         self.grid
             .set_tool_labels(env.settings.read(&blocks::TOOL_LABELS));
@@ -310,6 +365,33 @@ impl Dashboard {
         self.status = status;
         self.footer = footer;
         self.style = style;
+        self.stale = false;
+    }
+
+    /// Lays the page out anew before it is drawn next.
+    fn mark_stale(&mut self, cx: &mut Cx<'_, '_>) {
+        self.stale = true;
+        cx.request_redraw();
+    }
+
+    /// Does what was asked on the chooser's sheet.
+    fn choose(&mut self, tap: layouts::Tap, cx: &mut Cx<'_, '_>) {
+        let env = *cx.env();
+        let Some(chooser) = &mut self.chooser else {
+            return;
+        };
+        match tap {
+            layouts::Tap::Use => {
+                for command in chooser.choose(&env) {
+                    cx.command(command);
+                }
+            }
+            layouts::Tap::Next | layouts::Tap::Previous => {
+                if chooser.turn(tap == layouts::Tap::Next) {
+                    cx.command(chooser.preview(&env));
+                }
+            }
+        }
     }
 
     /// Lays the screen out again and draws it.
@@ -420,18 +502,27 @@ impl Dashboard {
 
 impl Screen for Dashboard {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
+        if self.stale {
+            self.layout(env);
+        }
         if let Some(status) = self.status {
             blocks::draw_status(canvas, env, status);
         }
-        self.draw_footer(canvas, env);
+        match &self.chooser {
+            Some(chooser) => chooser.draw(canvas, env),
+            None => self.draw_footer(canvas, env),
+        }
         self.grid.draw(canvas, env);
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
         // The reader may have changed the recent books meanwhile.
         let env = *cx.env();
-        // The first time on a touch screen: how the gestures go.
-        if drawer::tips_due(&env) {
+        if let Some(chooser) = &self.chooser {
+            // The layout chosen, shown.
+            cx.command(chooser.preview(&env));
+        } else if drawer::tips_due(&env) {
+            // The first time on a touch screen: how the gestures go.
             cx.command(Command::OpenScreen(TIPS_SCREEN, Params::new()));
         }
         // Each time it shows, the page as it is; the focus where wanted.
@@ -484,10 +575,13 @@ impl Screen for Dashboard {
         } else if *event == events::SETTING_CHANGED
             || *event == events::LIBRARY_CHANGED
             || *event == events::BOOK_MOVED
+            || layouts::shows_anew(event)
         {
             // The widgets made anew, what they show read again.
-            self.layout(&env);
-            cx.request_redraw();
+            self.mark_stale(cx);
+            if self.chooser.is_some() {
+                cx.request_refresh(RefreshMode::Partial);
+            }
         } else if let Some(changed) = events::WIDGET_CHANGED.read(event, params) {
             if self.grid.update_widget(changed.id.as_str(), &env, cx) {
                 cx.request_refresh(RefreshMode::Fast);
@@ -503,10 +597,26 @@ impl Screen for Dashboard {
 
     /// While the home screen is arranged, back ends it.
     fn hint(&self, action: &Id, env: &Env<'_>) -> Hint {
+        if self.chooser.is_some() {
+            return if *action == actions::CONFIRM {
+                Hint::Text(env.i18n.tr("home.layouts.use-short").into())
+            } else {
+                Hint::Default
+            };
+        }
         self.grid.hint(action, env)
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
+        if self.chooser.is_some() {
+            return match layouts::action(action) {
+                Some(tap) => {
+                    self.choose(tap, cx);
+                    Handled::Yes
+                }
+                None => Handled::No,
+            };
+        }
         if *action == EDIT_PAGES {
             self.set_editing(!self.grid.editing(), cx);
             return Handled::Yes;
@@ -528,11 +638,26 @@ impl Screen for Dashboard {
     }
 
     fn on_pointer(&mut self, event: &PointerEvent, cx: &mut Cx<'_, '_>) -> Handled {
+        if self.chooser.is_some() {
+            return Handled::No;
+        }
         let response = self.grid.on_pointer(event, cx);
         self.respond(response, cx)
     }
 
     fn on_gesture(&mut self, gesture: Gesture, cx: &mut Cx<'_, '_>) -> Handled {
+        if let Some(chooser) = &self.chooser {
+            // The layout is only shown: taps on it do nothing.
+            let on_sheet = chooser.contains(gesture.start);
+            return match layouts::gesture(chooser, gesture) {
+                Some(tap) => {
+                    self.choose(tap, cx);
+                    Handled::Yes
+                }
+                None if gesture.kind == quireink_sdk::GestureKind::Tap && !on_sheet => Handled::Yes,
+                None => Handled::No,
+            };
+        }
         let response = self.grid.on_gesture(gesture, cx);
         self.respond(response, cx)
     }

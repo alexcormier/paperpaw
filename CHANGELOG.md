@@ -6,6 +6,24 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Ready-made home screen layouts to start from: *Calm* (as it comes),
+  *Covers* (the books first), *At a glance* (daily goal, today
+  and the streak), *Clock* (a large clock face) and *Minimal* (the book
+  alone). Each is shown on the home screen itself before it is kept,
+  with a sheet below to go from one to the next and *Use this layout*;
+  back leaves everything as it was. They are offered in the first-run
+  setup and under *Add* while editing the home screen (action
+  `home.choose-layout`), and everything on them can be changed after.
+  Anyone can share one: a data plugin with a `presets.ini` (sample
+  `samples/plugins/reading-nook`). The home screen lays itself out once
+  for many changes at a time. SDK: presets, ready-made sets of setting
+  values of a kind (`presets`: `Preset`, `Presets`, `Preset::changes`,
+  `presets::commands`, `presets::applied`; `Registrar::add_presets`
+  and `add_preset`, `Settings::presets`); values shown without being
+  kept (`Command::PreviewSettings`, `Settings::set_preview`,
+  `Settings::previewing`, the event `events::PREVIEW_CHANGED`), ended
+  when the screen that asked closes; `Settings::is_set`.
+
 - A new look, calmer and more modern, on every screen: rounded corners
   by default, the focus a rounded bar within the margins, thinner lines,
   dark rounded notices, and Source Sans 3 as the menus' font (warmer than

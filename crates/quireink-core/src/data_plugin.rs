@@ -12,6 +12,9 @@
 //!   fonts/*.qifp   packs with characters other fonts lack, named in
 //!                  plugin.ini: [extends] cyrillic.qifp = fonts-default.literata
 //!   styles.css     a stylesheet for books, after a book's own
+//!   presets.ini    ready-made sets of settings, e.g. home screen layouts,
+//!                  a section each: [nook] kind = home.layout, name,
+//!                  description, then the values (home.page-1 = …)
 //! ```
 //!
 //! The kernel lists them like every other plugin, so they can be switched
@@ -25,6 +28,7 @@ use alloc::vec::Vec;
 use core::cell::RefCell;
 
 use quireink_platform::Storage;
+use quireink_sdk::presets::Preset;
 use quireink_sdk::{Id, Manifest, Plugin, RegisterError, Registrar, SDK_VERSION, Version};
 
 /// Largest data file read (a translation catalog, a key map).
@@ -46,6 +50,7 @@ pub(crate) struct DataPlugin {
     keymap: RefCell<Option<String>>,
     styles: RefCell<Option<String>>,
     settings: RefCell<Option<String>>,
+    presets: RefCell<Option<String>>,
     /// Paths of font files.
     fonts: RefCell<Vec<String>>,
     /// Packs that extend other fonts: their paths and those fonts' ids.
@@ -112,8 +117,61 @@ impl Plugin for DataPlugin {
                 r.set_setting_default(id, Cow::Owned(entry.value.as_str().into_owned()))?;
             }
         }
+        if let Some(source) = self.presets.take() {
+            for preset in presets(&self.manifest.id, &source)? {
+                r.add_preset(preset)?;
+            }
+        }
         Ok(())
     }
+}
+
+/// The presets of a `presets.ini`, a section each: its `kind`, `name`
+/// and `description`, then its values (keys with a dot: settings).
+fn presets(plugin: &Id, source: &str) -> Result<Vec<Preset>, RegisterError> {
+    let mut out: Vec<Preset> = Vec::new();
+    let mut section = "";
+    for entry in quireink_config::parse(source) {
+        let entry = entry.map_err(|error| RegisterError::Parse {
+            line: error.line,
+            message: Cow::Owned(error.to_string()),
+        })?;
+        if entry.section.is_empty() {
+            continue;
+        }
+        if entry.section != section {
+            section = entry.section;
+            let id =
+                Id::parse(&format!("{plugin}.{section}")).map_err(|_| RegisterError::Parse {
+                    line: entry.line,
+                    message: Cow::Owned(format!("invalid preset `{section}`")),
+                })?;
+            out.push(Preset::new(id, plugin.clone(), "", "", String::new()));
+        }
+        let Some(preset) = out.last_mut() else {
+            continue;
+        };
+        let value = entry.value.as_str();
+        match entry.key {
+            "kind" => {
+                preset.kind = Id::parse(value.trim()).map_err(|_| RegisterError::Parse {
+                    line: entry.line,
+                    message: Cow::Owned(format!("invalid kind `{value}`")),
+                })?;
+            }
+            "name" => preset.title = Cow::Owned(value.into_owned()),
+            "description" => preset.description = Cow::Owned(value.into_owned()),
+            key if key.contains('.') => {
+                let values = preset.values.to_mut();
+                values.push_str(key);
+                values.push_str(" = ");
+                values.push_str(&value);
+                values.push('\n');
+            }
+            _ => {}
+        }
+    }
+    Ok(out)
 }
 
 /// Every data plugin in the folders of `dir`, in name order. Folders
@@ -166,6 +224,7 @@ fn load(storage: &dyn Storage, path: &str, folder: &str) -> Result<DataPlugin, S
         keymap: RefCell::new(read(storage, &format!("{path}/keymap.ini"), MAX_FILE)),
         styles: RefCell::new(read(storage, &format!("{path}/styles.css"), MAX_FILE)),
         settings: RefCell::new(read(storage, &format!("{path}/settings.ini"), MAX_FILE)),
+        presets: RefCell::new(read(storage, &format!("{path}/presets.ini"), MAX_FILE)),
         fonts: RefCell::new(font_files(storage, &format!("{path}/fonts"))),
         extensions: RefCell::new(extensions(&source, path)),
     })
@@ -227,6 +286,7 @@ pub(crate) fn font_folder(storage: &dyn Storage, dirs: &[String]) -> Option<Data
         keymap: RefCell::new(None),
         styles: RefCell::new(None),
         settings: RefCell::new(None),
+        presets: RefCell::new(None),
         fonts: RefCell::new(fonts),
         extensions: RefCell::new(Vec::new()),
     })
@@ -395,6 +455,39 @@ literata.qifp = fonts-default.literata
             )]
         );
         assert_eq!(slug("….ttf"), "font");
+    }
+
+    #[test]
+    fn presets_are_read_a_section_each() {
+        let source = "# Layouts
+[nook]
+kind = home.layout
+name = Reading nook
+                      description = The book, large.
+home.page-1 = home.continue 0/0 4x3
+                      home.rows = 4
+[plain]
+home.status-bar = off
+";
+        let presets = presets(&Id::new_static("cosy"), source).unwrap();
+        assert_eq!(presets.len(), 2);
+        let nook = &presets[0];
+        assert_eq!(nook.id.as_str(), "cosy.nook");
+        assert_eq!(nook.kind.as_str(), "home.layout");
+        assert_eq!(nook.title, "Reading nook");
+        assert_eq!(nook.value("home.page-1"), Some("home.continue 0/0 4x3"));
+        assert_eq!(nook.value("home.rows"), Some("4"));
+        // Without a kind, the plugin's own.
+        assert_eq!(presets[1].kind.as_str(), "cosy");
+        assert!(
+            super::presets(
+                &Id::new_static("cosy"),
+                "[a]
+kind = Not An Id
+"
+            )
+            .is_err()
+        );
     }
 
     #[test]
