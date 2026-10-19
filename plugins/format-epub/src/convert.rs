@@ -84,6 +84,9 @@ pub(crate) enum Source<'a> {
         path: &'a str,
         focus: Option<&'a str>,
         base: Option<&'a str>,
+        /// Whether its pictures are shown: those on the storage, beside a
+        /// file made from Markdown (web pages' are not fetched).
+        pictures: bool,
     },
     /// A FictionBook in storage: one XML file. Section titles get the
     /// anchors `fb2-toc-<n>` for the table of contents; pictures come
@@ -283,6 +286,8 @@ struct Html {
     focus: Option<String>,
     /// The page's address, for absolute links.
     base: Option<String>,
+    /// Whether its pictures are shown (see [`Source::Html`]).
+    pictures: bool,
 }
 
 struct Converter<'a> {
@@ -647,7 +652,10 @@ impl Converter<'_> {
             self.hidden += 1;
         }
         // Images, also inside <svg> (a common way to show covers).
-        if matches!(tag.as_str(), "img" | "image") && self.html.is_none() && self.only_svg_hides() {
+        if matches!(tag.as_str(), "img" | "image")
+            && self.html.as_ref().is_none_or(|html| html.pictures)
+            && self.only_svg_hides()
+        {
             let href = attrs
                 .iter()
                 .find(|(name, _)| matches!(local_name(name), "src" | "href"))
@@ -1205,9 +1213,15 @@ pub(crate) fn convert(
     let base = String::from(name.rfind('/').map_or("", |i| &name[..=i]));
     let html = match source {
         Source::Zip { .. } | Source::Fb2 { .. } => None,
-        Source::Html { focus, base, .. } => Some(Html {
+        Source::Html {
+            focus,
+            base,
+            pictures,
+            ..
+        } => Some(Html {
             focus: focus.map(String::from),
             base: base.map(String::from),
+            pictures: *pictures,
         }),
     };
     let dialect: Option<Box<dyn Dialect>> = match source {
@@ -1343,6 +1357,18 @@ pub(crate) fn convert(
                     let file = crate::pictures::file(base, color);
                     let _ = decode_image(storage, archive, path, &file, &paths.dir, fit, color);
                 }
+            }
+        }
+    }
+    // Pictures on the storage, beside a file made from Markdown.
+    if let Source::Html { pictures: true, .. } = source {
+        for (path, base) in &images {
+            if crate::pictures::has(storage, base, color) {
+                continue;
+            }
+            if let Ok(size) = storage.size(path) {
+                let file = crate::pictures::file(base, color);
+                let _ = decode_range(storage, path, 0, size, &file, fit, color);
             }
         }
     }
@@ -1695,6 +1721,7 @@ mod tests {
             path: "page.html",
             focus: None,
             base: None,
+            pictures: false,
         };
         convert(
             &storage,

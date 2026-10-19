@@ -6,13 +6,15 @@
 //! - *Cover* (the default): the cover of the book read last;
 //! - *Picture*: the pictures (JPEG, PNG) of a folder (`sleep.folder`,
 //!   `sleep` at first, as on CrossPoint), one after the other;
-//! - *Message*: just "Sleeping";
+//! - *Message*: PaperPaw's logo and "Sleeping" (the logo as set,
+//!   see [`paperpaw_sdk::logo`]);
 //! - *Widgets*: widgets as on the home screen (setting `sleep.widgets`,
 //!   edited with the home screen's editor), e.g. the book being read and
 //!   today's reading, in the middle of the screen;
 //! - *Page*: the screen stays as it is.
 //!
-//! Without a cover or a picture the message shows. The screen closes when
+//! Without a cover or a picture the message shows. Where the device is
+//! off while it sleeps (the X4), this is also what shows as it starts. The screen closes when
 //! the device wakes. Only where PaperPaw shows the sleep screen itself
 //! (the X4, not Android): elsewhere its settings are hidden.
 
@@ -29,6 +31,7 @@ use alloc::vec::Vec;
 use paperpaw_sdk::builtin::{events, groups, slots};
 use paperpaw_sdk::document::ImageRef;
 use paperpaw_sdk::library;
+use paperpaw_sdk::logo::Logo;
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::widgets::Widget;
@@ -256,6 +259,8 @@ struct SleepScreen {
     image: Option<ImageRef>,
     /// The widgets shown, where they go.
     widgets: Vec<(Box<dyn Widget>, Rect)>,
+    /// The logo above the message, when the message shows.
+    logo: Option<Logo>,
 }
 
 impl SleepScreen {
@@ -271,10 +276,16 @@ impl SleepScreen {
         } else {
             Vec::new()
         };
+        let message = image.is_none() && widgets.is_empty() && show != PAGE;
+        let logo = message.then(|| {
+            let side = logo_side(env);
+            Logo::read(env, side, side)
+        });
         Self {
             show,
             image,
             widgets,
+            logo,
         }
     }
 }
@@ -307,7 +318,21 @@ impl Screen for SleepScreen {
             }
             None => {
                 let style = UiStyle::new(env);
-                ui::draw_message(canvas, env, &style, screen, env.i18n.tr("sleep.sleeping"));
+                let text = env.i18n.tr("sleep.sleeping");
+                let Some(logo) = &self.logo else {
+                    ui::draw_message(canvas, env, &style, screen, text);
+                    return;
+                };
+                // The logo a little above the middle, the message below it.
+                let side = logo_side(env);
+                let (_, h) = logo.fit(side, side);
+                let line = paperpaw_sdk::widgets::line_height(env, style.text);
+                let gap = style.gap as u16 * 2;
+                let top = display.height.saturating_sub(h + gap + line) / 2;
+                let area = Rect::new(0, top, display.width, h);
+                logo.draw(canvas, env.storage, area, Color::BLACK);
+                let below = Rect::new(0, top + h + gap, display.width, line);
+                ui::draw_message(canvas, env, &style, below, text);
             }
         }
     }
@@ -336,6 +361,12 @@ impl Screen for SleepScreen {
             }
         }
     }
+}
+
+/// The logo's size on the sleep screen: a third of the screen across.
+fn logo_side(env: &Env<'_>) -> u16 {
+    let display = env.device.display;
+    display.width.min(display.height) / 3
 }
 
 /// Which picture comes next, counted on from the first (`next.txt`).

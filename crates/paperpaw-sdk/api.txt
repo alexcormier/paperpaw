@@ -1064,6 +1064,16 @@ pub fn paperpaw_sdk::library::set_favourite(&dyn paperpaw_platform::storage::Sto
 pub fn paperpaw_sdk::library::set_field(&dyn paperpaw_platform::storage::Storage, &str, &str, &str)
 pub fn paperpaw_sdk::library::set_finished(&dyn paperpaw_platform::storage::Storage, &str, bool)
 pub fn paperpaw_sdk::library::take_over_old(&dyn paperpaw_platform::storage::Storage)
+pub mod paperpaw_sdk::logo
+pub enum paperpaw_sdk::logo::Logo
+pub paperpaw_sdk::logo::Logo::Drawn
+pub paperpaw_sdk::logo::Logo::Picture(paperpaw_document::ImageRef)
+impl paperpaw_sdk::logo::Logo
+pub fn paperpaw_sdk::logo::Logo::draw(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &dyn paperpaw_platform::storage::Storage, paperpaw_platform::geometry::Rect, paperpaw_platform::pixel::Color)
+pub fn paperpaw_sdk::logo::Logo::fit(&self, u16, u16) -> (u16, u16)
+pub fn paperpaw_sdk::logo::Logo::read(&paperpaw_sdk::Env<'_>, u16, u16) -> paperpaw_sdk::logo::Logo
+pub const paperpaw_sdk::logo::LOGO: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
+pub fn paperpaw_sdk::logo::draw(&mut paperpaw_graphics::canvas::Canvas<'_>, paperpaw_platform::geometry::Rect, paperpaw_platform::pixel::Color)
 pub mod paperpaw_sdk::presets
 #[non_exhaustive] pub struct paperpaw_sdk::presets::Preset
 pub paperpaw_sdk::presets::Preset::description: alloc::borrow::Cow<'static, str>

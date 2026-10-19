@@ -1,7 +1,8 @@
 //! Markdown (`.md`, `.markdown`): turned into HTML line by line once, then
 //! read like an HTML file (see [`crate::html`]). Headings, paragraphs,
-//! lists, block quotes, code blocks, rules, emphasis, inline code and
-//! links; the first heading is the title.
+//! lists, block quotes, code blocks, rules, emphasis, inline code, links
+//! and pictures beside the file (`![alt](picture.png)`); the first heading
+//! is the title.
 
 use alloc::format;
 use alloc::string::{String, ToString};
@@ -15,7 +16,7 @@ use crate::PLUGIN;
 use crate::html::HtmlDocument;
 
 /// Changes whenever Markdown is turned into HTML differently.
-const MD_VERSION: u32 = 1;
+const MD_VERSION: u32 = 2;
 
 /// An open Markdown file.
 #[derive(Debug)]
@@ -44,7 +45,7 @@ impl MarkdownDocument {
             convert(storage, path, &html_path)?;
             storage.write(&stamp_path, stamp.as_bytes())?;
         }
-        let html = HtmlDocument::open(storage, &html_path, styles)?;
+        let html = HtmlDocument::open_with_pictures(storage, &html_path, styles)?;
         let mut metadata = html.metadata().clone();
         if metadata.title.as_deref().is_none_or(|t| t == "book") {
             let name = path.rsplit('/').next().unwrap_or(path);
@@ -57,8 +58,11 @@ impl MarkdownDocument {
 use paperpaw_sdk::xml::escape;
 
 /// A line's inline markup as HTML: `**bold**`, `*italic*`, `_italic_`,
-/// `` `code` ``, `[text](url)`, `![alt](src)` (its alternative text).
-fn inline(text: &str, out: &mut String) {
+/// `` `code` ``, `[text](url)`, `![alt](src)` (a picture on the storage:
+/// `src` beside the file, or from its root with `/`; elsewhere, as on the
+/// web, its alternative text). `pictures` leads from the HTML to the
+/// Markdown file's folder (see [`pictures_path`]).
+fn inline(text: &str, pictures: &str, out: &mut String) {
     let chars: Vec<char> = text.chars().collect();
     let mut i = 0;
     let (mut bold, mut italic) = (false, false);
@@ -116,8 +120,28 @@ fn inline(text: &str, out: &mut String) {
                     })
                     .flatten();
                 match link {
-                    Some((label, _, end)) if image => {
-                        escape(&label, out);
+                    Some((label, src, end)) if image => {
+                        let src = src.split_whitespace().next().unwrap_or_default();
+                        if src.contains("://") || src.is_empty() {
+                            escape(&label, out);
+                        } else {
+                            out.push_str("<img src=\"");
+                            match src.strip_prefix('/') {
+                                // From the root: up to it, then down.
+                                Some(root) => {
+                                    let up = pictures.matches("../").count();
+                                    escape(&"../".repeat(up), out);
+                                    escape(root, out);
+                                }
+                                None => {
+                                    escape(pictures, out);
+                                    escape(src, out);
+                                }
+                            }
+                            out.push_str("\" alt=\"");
+                            escape(&label, out);
+                            out.push_str("\"/>");
+                        }
                         i = end;
                     }
                     Some((label, url, end)) => {
@@ -125,7 +149,7 @@ fn inline(text: &str, out: &mut String) {
                         out.push_str("<a href=\"");
                         escape(url, out);
                         out.push_str("\">");
-                        inline(&label, out);
+                        inline(&label, pictures, out);
                         out.push_str("</a>");
                         i = end;
                     }
@@ -158,6 +182,8 @@ struct State {
     item: bool,
     quote: bool,
     code: bool,
+    /// From the HTML's folder to the Markdown file's (see [`inline`]).
+    pictures: String,
 }
 
 impl State {
@@ -225,7 +251,7 @@ fn line(raw: &str, state: &mut State, out: &mut String) {
         state.close_blocks(out);
         let title = text[heading..].trim().trim_end_matches('#').trim();
         out.push_str(&format!("<h{heading}>"));
-        inline(title, out);
+        inline(title, &state.pictures, out);
         out.push_str(&format!("</h{heading}>\n"));
         return;
     }
@@ -257,14 +283,14 @@ fn line(raw: &str, state: &mut State, out: &mut String) {
             state.list = Some(kind);
         }
         out.push_str("<li>");
-        inline(rest.trim(), out);
+        inline(rest.trim(), &state.pictures, out);
         state.item = true;
         return;
     }
     if state.item {
         // A list item going on.
         out.push(' ');
-        inline(text, out);
+        inline(text, &state.pictures, out);
         return;
     }
     if state.list.is_some() && !state.item {
@@ -281,14 +307,17 @@ fn line(raw: &str, state: &mut State, out: &mut String) {
         out.push_str("<p>");
         state.paragraph = true;
     }
-    inline(text, out);
+    inline(text, &state.pictures, out);
 }
 
 /// Writes the HTML for the Markdown file at `path` to `to`, a few lines
 /// at a time.
 fn convert(storage: &dyn Storage, path: &str, to: &str) -> Result<(), DocumentError> {
     storage.write(to, b"<html><body>\n")?;
-    let mut state = State::default();
+    let mut state = State {
+        pictures: pictures_path(path, to),
+        ..State::default()
+    };
     let mut out = String::new();
     let mut pending: Vec<u8> = Vec::new();
     let mut chunk = [0u8; 1024];
@@ -324,6 +353,22 @@ fn convert(storage: &dyn Storage, path: &str, to: &str) -> Result<(), DocumentEr
     state.close_blocks(&mut out);
     out.push_str("</body></html>\n");
     flush(&mut out)
+}
+
+/// The way from the folder of the HTML `to` to that of the Markdown file
+/// `from`, both on the storage: up to the root, then down
+/// (`../../notes/`).
+fn pictures_path(from: &str, to: &str) -> String {
+    let up = to
+        .rsplit_once('/')
+        .map_or(0, |(dir, _)| dir.split('/').count());
+    let down = from.rsplit_once('/').map_or("", |(dir, _)| dir);
+    let mut path = "../".repeat(up);
+    if !down.is_empty() {
+        path.push_str(down);
+        path.push('/');
+    }
+    path
 }
 
 impl Document for MarkdownDocument {
@@ -414,5 +459,32 @@ mod tests {
             at = Locator::new(0, block.end);
         }
         assert_eq!(texts, ["Notes", "A first paragraph.", "Part", "• item"]);
+    }
+
+    #[test]
+    fn pictures_beside_the_file_are_shown() {
+        let way = pictures_path("notes/day.md", ".paperpaw/plugins/x/md-1/book.html");
+        assert_eq!(way, "../../../../notes/");
+        let mut state = State {
+            pictures: way,
+            ..State::default()
+        };
+        let mut out = String::new();
+        line(
+            "![A cat](cat.png) ![Root](/pics/b.png)",
+            &mut state,
+            &mut out,
+        );
+        assert_eq!(
+            out,
+            "<p><img src=\"../../../../notes/cat.png\" alt=\"A cat\"/> \
+             <img src=\"../../../../pics/b.png\" alt=\"Root\"/>"
+        );
+        // From the web: its alternative text, as before.
+        assert_eq!(html("![Far](https://x.org/a.png)"), "<p>Far</p>\n");
+        // The way resolves to the picture.
+        let (path, _) =
+            crate::package::resolve(".paperpaw/plugins/x/md-1/", "../../../../notes/cat.png");
+        assert_eq!(path, "notes/cat.png");
     }
 }

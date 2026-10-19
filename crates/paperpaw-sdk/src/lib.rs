@@ -50,6 +50,7 @@ pub mod icons;
 mod id;
 pub mod keys;
 pub mod library;
+pub mod logo;
 mod memory_storage;
 mod menus;
 mod params;

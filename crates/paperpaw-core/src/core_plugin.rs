@@ -564,7 +564,7 @@ fn register_general_settings(r: &mut Registrar) -> Result<(), RegisterError> {
 
 /// How the interface looks: its size, header, corners, contrast and
 /// room.
-static LOOK: [SettingSpec; 7] = [
+static LOOK: [SettingSpec; 8] = [
     SettingSpec::fixed_number(
         settings::UI_SIZE.static_str(),
         "core.setting.ui-size",
@@ -629,6 +629,16 @@ static LOOK: [SettingSpec; 7] = [
     )
     .with_extra(&TENTH_MM)
     .described("core.setting.ui-lines.help"),
+    // A picture in place of PaperPaw's logo: for data plugins, which set
+    // it in their settings.ini, and those who type a path.
+    SettingSpec::fixed_text(
+        paperpaw_sdk::logo::LOGO.static_str(),
+        "core.setting.logo",
+        "",
+        groups::LOOK,
+    )
+    .for_advanced()
+    .described("core.setting.logo.help"),
 ];
 
 fn register_look_settings(r: &mut Registrar) -> Result<(), RegisterError> {

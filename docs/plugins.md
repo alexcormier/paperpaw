@@ -633,6 +633,15 @@ regular = regular.ppfp
 bold = bold.ppfp
 ```
 
+A logo of its own takes the place of PaperPaw's (on the sleep screen,
+the About page and the logo widget): a picture in the folder, named in
+`settings.ini`:
+
+```ini
+[core]
+logo = plugins/my-brand/logo.png
+```
+
 The fonts browser (`plugins/fonts-browser`) downloads fonts as such
 plugins from paperpaw.org: font files for devices with scalable fonts
 and the memory for them, packs for the others.

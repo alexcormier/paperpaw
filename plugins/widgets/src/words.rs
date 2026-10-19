@@ -1,6 +1,6 @@
 //! Words and one's own: the quote of the day (`quote`), a picture from
 //! the card (`picture`), a note (`note`), a to-do list (`todo`) and a
-//! greeting by the time of day (`greeting`).
+//! greeting by the time of day (`greeting`); PaperPaw's logo (`logo`).
 //!
 //! What a widget keeps of its own (its own quotes, the to-do list, which
 //! picture or quote is turned to) is in the plugin's folder,
@@ -9,6 +9,7 @@
 //! screen read its widgets anew.
 
 mod greeting;
+mod logo;
 mod note;
 mod picture;
 mod quote;
@@ -33,6 +34,7 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     note::register(r)?;
     todo::register(r)?;
     greeting::register(r)?;
+    logo::register(r)?;
     Ok(())
 }
 

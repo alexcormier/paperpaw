@@ -1,7 +1,8 @@
 //! *About PaperPaw*, in the device's settings: its version, its licence
 //! and the licences of what it bundles (fonts, icons, hyphenation
 //! patterns), which every copy of it must carry. Shown by the reader (as
-//! Markdown), so it pages and reads like a book.
+//! Markdown), so it pages and reads like a book; PaperPaw's logo above it
+//! (the picture [`logo::LOGO`] names, if one does).
 
 #![no_std]
 
@@ -12,6 +13,7 @@ use alloc::format;
 use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::{menus, params, slots};
+use paperpaw_sdk::logo;
 use paperpaw_sdk::{
     ActionSpec, Command, Env, Id, Manifest, MenuEntry, Params, Plugin, RegisterError, Registrar,
     SDK_VERSION, Version,
@@ -22,17 +24,30 @@ pub const PLUGIN: Id = Id::new_static("about");
 pub const OPEN: Id = Id::new_static("about.open");
 /// The licences, from `tools/licences/build.py`.
 const LICENCES: &str = include_str!("../licences.md");
+/// PaperPaw's logo, as the page shows it.
+const LOGO: &[u8] = include_bytes!("../logo.png");
 /// Where the page is written for the reader: in the plugin's folder, so
 /// it is no book.
 fn page_path() -> alloc::string::String {
     format!("{}/about.md", Env::plugin_dir(PLUGIN.as_str()))
 }
 
-/// The page's text.
+/// The page's text, the logo first: the picture set, or PaperPaw's own
+/// written beside the page.
 fn page(env: &Env<'_>) -> alloc::string::String {
     let intro = env.i18n.tr("about.intro");
+    let set = env.settings.read(&logo::LOGO).trim().trim_matches('/');
+    let picture = if !set.is_empty() && env.storage.exists(set) {
+        format!("/{set}")
+    } else {
+        let path = format!("{}/logo.png", Env::plugin_dir(PLUGIN.as_str()));
+        if env.storage.size(&path).ok() != Some(LOGO.len() as u64) {
+            let _ = env.storage.write(&path, LOGO);
+        }
+        alloc::string::String::from("logo.png")
+    };
     format!(
-        "# PaperPaw {}\n\n{intro}\n\nhttps://github.com/hthoene/paperpaw\n\n{LICENCES}",
+        "![PaperPaw]({picture})\n\n# PaperPaw {}\n\n{intro}\n\nhttps://github.com/hthoene/paperpaw\n\n{LICENCES}",
         env!("CARGO_PKG_VERSION")
     )
 }

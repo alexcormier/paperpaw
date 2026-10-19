@@ -1,5 +1,5 @@
-"""Draws PaperPaw's Android launcher icon: a white Literata "Q" on a black
-rounded square, at every launcher density.
+"""Draws PaperPaw's Android launcher icon: the paw on a rose sheet with a
+dog-ear, as shells/android/icon.svg has it, at every launcher density.
 
 Usage: python tools/android-icon.py   (needs Pillow; writes
 shells/android/res/mipmap-*/ic_launcher.png and the 512 px icon of the
@@ -8,40 +8,55 @@ app stores' metadata, fastlane/metadata/android/en-US/images/icon.png)
 
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 
 ROOT = Path(__file__).resolve().parent.parent
-FONT = ROOT / "plugins/fonts-default/fonts/Literata.ttf"
 RES = ROOT / "shells/android/res"
 SIZES = {"mdpi": 48, "hdpi": 72, "xhdpi": 96, "xxhdpi": 144, "xxxhdpi": 192}
 # Drawn this much larger, then reduced: smooth edges at every size.
 SCALE = 8
+# The logo's colours: the sheet, its dog-ear, the paw.
+ROSE = (0xEE, 0x8F, 0xA4, 255)
+DOG_EAR = (0xC1, 0x76, 0x86, 255)
+INK = (0x1F, 0x1D, 0x1A, 255)
+
+
+def quad(p0, p1, p2, steps=24):
+    """Points along the quadratic curve from p0 over p1 to p2."""
+    return [
+        ((1 - t) ** 2 * p0[0] + 2 * (1 - t) * t * p1[0] + t * t * p2[0],
+         (1 - t) ** 2 * p0[1] + 2 * (1 - t) * t * p1[1] + t * t * p2[1])
+        for t in (i / steps for i in range(steps + 1))
+    ]
 
 
 def icon(size: int) -> Image.Image:
     big = size * SCALE
-    image = Image.new("L", (big, big), 0)
-    mask = Image.new("L", (big, big), 0)
-    # The square fills 88 % of the icon, as launchers expect.
-    inset = round(big * 0.06)
-    box = (inset, inset, big - inset, big - inset)
-    ImageDraw.Draw(mask).rounded_rectangle(box, radius=round(big * 0.2), fill=255)
-    font = ImageFont.truetype(str(FONT), round(big * 0.66))
-    try:
-        font.set_variation_by_name("Bold")
-    except (OSError, ValueError):
-        pass
+    image = Image.new("RGBA", (big, big), (0, 0, 0, 0))
     draw = ImageDraw.Draw(image)
-    left, top, right, bottom = draw.textbbox((0, 0), "Q", font=font)
-    x = (big - (right - left)) / 2 - left
-    # Optically centred: the tail of the Q hangs below.
-    y = (big - (bottom - top)) / 2 - top - big * 0.02
-    draw.text((x, y), "Q", font=font, fill=255)
-    black = Image.new("L", (big, big), 20)
-    white = Image.new("L", (big, big), 250)
-    face = Image.composite(white, black, image)
-    rgba = Image.merge("RGBA", (face, face, face, mask))
-    return rgba.resize((size, size), Image.LANCZOS)
+    # The drawing's units, 12 to 108 as in icon.svg, fill 88 % of the
+    # icon, as launchers expect.
+    inset = big * 0.06
+    unit = (big - 2 * inset) / 96
+
+    def at(x, y):
+        return (inset + (x - 12) * unit, inset + (y - 12) * unit)
+
+    def shape(points):
+        return [at(x, y) for x, y in points]
+
+    sheet = ([(24, 12), (82, 12), (108, 38)] + quad((108, 96), (108, 108), (96, 108))
+             + quad((24, 108), (12, 108), (12, 96)) + quad((12, 24), (12, 12), (24, 12)))
+    draw.polygon(shape(sheet), fill=ROSE)
+    fold = [(82, 12)] + quad((82, 30), (82, 38), (90, 38)) + [(108, 38)]
+    draw.polygon(shape(fold), fill=DOG_EAR)
+    for cx, cy in [(40, 54), (58, 45), (76, 54)]:
+        (x0, y0), (x1, y1) = at(cx - 7.5, cy - 7.5), at(cx + 7.5, cy + 7.5)
+        draw.ellipse((x0, y0, x1, y1), fill=INK)
+    pad = (quad((40, 79), (40, 65), (58, 65)) + quad((58, 65), (76, 65), (76, 79))
+           + quad((76, 79), (76, 92), (58, 92)) + quad((58, 92), (40, 92), (40, 79)))
+    draw.polygon(shape(pad), fill=INK)
+    return image.resize((size, size), Image.LANCZOS)
 
 
 def main() -> None:

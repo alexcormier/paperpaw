@@ -6,6 +6,16 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- PaperPaw's logo, the paw on a sheet with a dog-ear: above "Sleeping" on
+  the sleep screen (also what the X4 shows as it starts), at the top of
+  *About PaperPaw*, and as a widget for the home screen (*PaperPaw logo*,
+  its name beside it if wanted). The Android app's icon is the logo too.
+  `paperpaw_sdk::logo` draws it in any size, as shapes, nothing kept in
+  memory; the setting `core.logo` names a picture to show in its place
+  (a data plugin sets it in its `settings.ini`, see docs/plugins.md).
+- Markdown files show the pictures beside them (`![alt](picture.png)`,
+  or from the card's root with `/`); before, their alternative text.
+
 - QuireInk is now called PaperPaw, everywhere. Crates `paperpaw-*` (for
   `quireink-*`), so a plugin uses `paperpaw_sdk` (for `quireink_sdk`).
   On the card `paperpaw.ini` and the folder `.paperpaw` (for QuireInk's

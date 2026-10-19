@@ -39,6 +39,8 @@ pub struct HtmlDocument {
     /// The page's address.
     base: Option<String>,
     styles: bool,
+    /// Whether pictures beside the file are shown (made from Markdown).
+    pictures: bool,
     /// Size of the file: the length until it is converted.
     size: u32,
     length: Cell<u32>,
@@ -110,6 +112,25 @@ fn scan(storage: &dyn Storage, path: &str) -> Result<Scan, DocumentError> {
 impl HtmlDocument {
     /// Opens an HTML file; without `styles` its CSS is ignored.
     pub fn open(storage: &dyn Storage, path: &str, styles: bool) -> Result<Self, DocumentError> {
+        Self::open_as(storage, path, styles, false)
+    }
+
+    /// Opens an HTML file made from Markdown: as [`HtmlDocument::open`],
+    /// the pictures it names on the storage shown.
+    pub(crate) fn open_with_pictures(
+        storage: &dyn Storage,
+        path: &str,
+        styles: bool,
+    ) -> Result<Self, DocumentError> {
+        Self::open_as(storage, path, styles, true)
+    }
+
+    fn open_as(
+        storage: &dyn Storage,
+        path: &str,
+        styles: bool,
+        pictures: bool,
+    ) -> Result<Self, DocumentError> {
         let size = storage.size(path)?;
         let found = scan(storage, path)?;
         let mut cache = format!(
@@ -160,6 +181,7 @@ impl HtmlDocument {
             focus: found.focus,
             base: found.base,
             styles,
+            pictures,
             size: u32::try_from(size).unwrap_or(u32::MAX - 1),
             length: Cell::new(UNKNOWN),
         })
@@ -175,6 +197,7 @@ impl HtmlDocument {
                     path: &self.path,
                     focus: self.focus,
                     base: self.base.as_deref(),
+                    pictures: self.pictures,
                 };
                 // Web pages' pictures are not fetched: no colour to ask for.
                 convert::convert(

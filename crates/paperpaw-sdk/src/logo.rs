@@ -1,0 +1,242 @@
+//! PaperPaw's logo, the paw on a sheet with a dog-ear, where screens show
+//! it (the sleep screen, the logo widget): drawn as shapes in any size,
+//! sharp on every panel, nothing kept in memory.
+//!
+//! A picture takes its place where [`LOGO`] names one (a JPEG, PNG or GIF
+//! on the card), e.g. one a data plugin brings with
+//! `[core] logo = plugins/mine/logo.png` in its `settings.ini`.
+
+use alloc::format;
+use alloc::string::String;
+use alloc::vec::Vec;
+
+use crate::document::ImageRef;
+use crate::setting::{Setting, Text};
+use crate::{Canvas, Color, Env, Rect, Storage};
+
+/// A picture shown in place of the drawn logo; none (empty) for that.
+pub const LOGO: Setting<Text> = Setting::new("core.logo");
+
+/// The logo as it is drawn: the drawn one or a picture, read once.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Logo {
+    /// PaperPaw's own, drawn.
+    Drawn,
+    /// The picture [`LOGO`] names, decoded to fit `width` × `height`.
+    Picture(ImageRef),
+}
+
+impl Logo {
+    /// The logo to draw in up to `width` × `height` pixels: the picture
+    /// [`LOGO`] names, decoded unless it was already for that size, or
+    /// the drawn one (also when the picture cannot be read).
+    pub fn read(env: &Env<'_>, width: u16, height: u16) -> Logo {
+        let path = String::from(env.settings.read(&LOGO).trim().trim_matches('/'));
+        if path.is_empty() {
+            return Logo::Drawn;
+        }
+        picture(env, &path, width, height).map_or(Logo::Drawn, Logo::Picture)
+    }
+
+    /// Its size in up to `width` × `height`, its proportions kept.
+    pub fn fit(&self, width: u16, height: u16) -> (u16, u16) {
+        match self {
+            Logo::Drawn => {
+                let side = width.min(height);
+                (side, side)
+            }
+            Logo::Picture(image) => crate::ui::fit_image(image, width, height),
+        }
+    }
+
+    /// Draws it as large as fits in `area`, in its middle; the drawn one
+    /// in `ink`, its paw and fold showing what is below.
+    pub fn draw(&self, canvas: &mut Canvas<'_>, storage: &dyn Storage, area: Rect, ink: Color) {
+        let (w, h) = self.fit(area.width, area.height);
+        let at = Rect::new(
+            area.x + (area.width - w) / 2,
+            area.y + (area.height - h) / 2,
+            w,
+            h,
+        );
+        match self {
+            Logo::Drawn => draw(canvas, at, ink),
+            Logo::Picture(image) => crate::ui::draw_image(canvas, storage, image, at),
+        }
+    }
+}
+
+/// The picture at `path`, decoded for `width` × `height` into a file of
+/// the logo's own, again only when the picture or the size changed.
+fn picture(env: &Env<'_>, path: &str, width: u16, height: u16) -> Option<ImageRef> {
+    use crate::image::{Fit, ImageFile};
+    let size = env.storage.size(path).ok()?;
+    let color = env.device.display.format.is_color();
+    let stamp = format!("{path}\t{size}\t{width}x{height}\t{color}");
+    let dir = crate::data::DIR;
+    let (pixels, stamp_path) = (format!("{dir}/logo.pixels"), format!("{dir}/logo.stamp"));
+    let kept =
+        crate::read_file(env.storage, &stamp_path, 1024).is_ok_and(|kept| kept == stamp.as_bytes());
+    if kept && let Some(file) = ImageFile::open(env.storage, &pixels) {
+        return Some(ImageRef {
+            path: file.path,
+            width: file.width,
+            height: file.height,
+        });
+    }
+    let fit = Fit::screen(width.into(), height.into());
+    let image = crate::image::picture_from_file(env.storage, path, &pixels, fit, color)?;
+    let _ = env.storage.write(&stamp_path, stamp.as_bytes());
+    Some(image)
+}
+
+/// The drawing's units: the sheet is 96 across, as in the logo's own
+/// drawing (its SVG, less a margin of 12).
+const UNITS: i64 = 96;
+/// Fractions of a unit the shapes are tested at.
+const FINE: i64 = 256;
+
+/// Draws PaperPaw's logo in the square `area` in `color`: the sheet, its
+/// dog-ear apart, the paw cut out of it. Smoothed where the panel has
+/// grays.
+pub fn draw(canvas: &mut Canvas<'_>, area: Rect, color: Color) {
+    let side = i64::from(area.width.min(area.height));
+    if side < 8 {
+        return;
+    }
+    // Two by two samples a pixel; the pad's width per sample row, read
+    // once.
+    let samples = side * 2;
+    let to_units = |s: i64| (2 * s + 1) * UNITS * FINE / (2 * samples);
+    let pad: Vec<(i64, i64)> = (0..samples).map(|s| pad_span(to_units(s))).collect();
+    let inside = |su: i64, sv: i64| {
+        let (u, v) = (to_units(su), to_units(sv));
+        (sheet(u, v) && !paw(u, v, pad[sv as usize])) || dog_ear(u, v)
+    };
+    let x = i32::from(area.x) + (i32::from(area.width) - side as i32) / 2;
+    let y = i32::from(area.y) + (i32::from(area.height) - side as i32) / 2;
+    canvas.draw_mask(x, y, side as u32, side as u32, color, |dx, dy| {
+        let (su, sv) = (i64::from(dx) * 2, i64::from(dy) * 2);
+        let hits = [(0, 0), (1, 0), (0, 1), (1, 1)]
+            .iter()
+            .filter(|(a, b)| inside(su + a, sv + b))
+            .count();
+        (hits * 255 / 4) as u8
+    });
+}
+
+/// Units in the drawing's fine steps.
+const fn at(units: i64) -> i64 {
+    units * FINE
+}
+
+/// Whether `(u, v)` is within `r` of `(cu, cv)` (all in fine steps).
+fn near(u: i64, v: i64, cu: i64, cv: i64, r: i64) -> bool {
+    (u - cu) * (u - cu) + (v - cv) * (v - cv) <= r * r
+}
+
+/// The sheet: rounded corners, the top right one folded away.
+fn sheet(u: i64, v: i64) -> bool {
+    let r = at(12);
+    if !(0..at(UNITS)).contains(&u) || !(0..at(UNITS)).contains(&v) {
+        return false;
+    }
+    // Round corners but the folded one.
+    for (cu, cv) in [(r, r), (r, at(UNITS) - r), (at(UNITS) - r, at(UNITS) - r)] {
+        let (outside_u, outside_v) = (
+            if cu == r { u < cu } else { u > cu },
+            if cv == r { v < cv } else { v > cv },
+        );
+        if outside_u && outside_v && !near(u, v, cu, cv, r) {
+            return false;
+        }
+    }
+    // Where the dog-ear was: cut away, its inner corner round.
+    let fold =
+        u > at(68) && v < at(18) || u > at(78) && v < at(28) || near(u, v, at(78), at(18), at(10));
+    !fold
+}
+
+/// The dog-ear: a triangle in the cut corner, its inner corner round.
+fn dog_ear(u: i64, v: i64) -> bool {
+    if u < at(72) || v > at(24) || u - at(72) > v - at(2) {
+        return false;
+    }
+    !(u < at(78) && v > at(18)) || near(u, v, at(78), at(18), at(6))
+}
+
+/// The paw: three toes and the pad, `pad` being the pad's span on this
+/// row (empty where the row misses it).
+fn paw(u: i64, v: i64, pad: (i64, i64)) -> bool {
+    let toe = at(15) / 2;
+    near(u, v, at(28), at(42), toe)
+        || near(u, v, at(46), at(33), toe)
+        || near(u, v, at(64), at(42), toe)
+        || (pad.0..pad.1).contains(&u)
+}
+
+/// The pad's span on row `v`: from the logo's curves (quadratic, from the
+/// widest row 67 up to the top at 53 and down to the bottom at 80), 36
+/// across at most around 46.
+fn pad_span(v: i64) -> (i64, i64) {
+    let (mid, top, widest, bottom) = (at(46), at(53), at(67), at(80));
+    if v < top || v > bottom {
+        return (0, 0);
+    }
+    // Along a curve t runs 0..1 from the widest row; the half width is
+    // 18 (1 - t²), with t = 1 - sqrt(distance from the end / its height).
+    let (gone, height) = if v <= widest {
+        (v - top, widest - top)
+    } else {
+        (bottom - v, bottom - widest)
+    };
+    // In steps of 1/FINE: t = FINE - sqrt(gone / height) * FINE.
+    let t = FINE - isqrt(gone * FINE * FINE / height);
+    let half = 18 * (FINE * FINE - t * t) / FINE;
+    (mid - half, mid + half)
+}
+
+/// The integer square root.
+fn isqrt(n: i64) -> i64 {
+    if n <= 0 {
+        return 0;
+    }
+    let mut x = n;
+    let mut y = (x + 1) / 2;
+    while y < x {
+        x = y;
+        y = (x + n / x) / 2;
+    }
+    x
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_shapes_are_where_the_logo_has_them() {
+        // The sheet's middle, below the paw; the folded corner is not.
+        assert!(sheet(at(48), at(90)));
+        assert!(!sheet(at(90), at(5)));
+        assert!(!sheet(at(1), at(1)), "a round corner");
+        // The dog-ear sits in the cut corner, apart from the sheet.
+        assert!(dog_ear(at(80), at(20)));
+        assert!(!dog_ear(at(93), at(5)), "above its slant");
+        assert!(!sheet(at(80), at(20)));
+        // The toes and the pad are cut out.
+        assert!(paw(at(46), at(33), pad_span(at(33))));
+        assert!(paw(at(46), at(67), pad_span(at(67))));
+        assert!(!paw(at(10), at(67), pad_span(at(67))));
+        assert_eq!(pad_span(at(67)), (at(28), at(64)), "36 across at most");
+        assert_eq!(pad_span(at(20)), (0, 0));
+    }
+
+    #[test]
+    fn square_roots_are_whole() {
+        assert_eq!(isqrt(0), 0);
+        assert_eq!(isqrt(15), 3);
+        assert_eq!(isqrt(16), 4);
+        assert_eq!(isqrt(1 << 40), 1 << 20);
+    }
+}

@@ -1,0 +1,107 @@
+//! PaperPaw's logo, its name beside it if wanted: the logo as it is set
+//! (see [`paperpaw_sdk::logo`]), PaperPaw's own or a picture.
+
+use alloc::string::String;
+
+use paperpaw_sdk::logo::{LOGO, Logo};
+use paperpaw_sdk::setting::{Setting, Text};
+use paperpaw_sdk::ui::{self, UiStyle};
+use paperpaw_sdk::widgets::{self, Align, Drawn, Frame, Size, WidgetSpec};
+use paperpaw_sdk::{Canvas, Env, Id, Rect, RegisterError, Registrar, SettingSpec};
+
+use super::frame_height;
+use super::text::{self, FACES};
+
+pub(super) const ID: Id = Id::new_static("widgets.logo");
+/// The name beside the logo.
+const NAME: &str = "name";
+/// The name as it is written: a name, not translated.
+const PAPERPAW: &str = "PaperPaw";
+/// The font of the name: one of [`FACES`].
+const FACE: Setting<Text> = Setting::new("widgets.logo.face");
+
+/// The logo's settings, kept in the program.
+static SETTINGS: [SettingSpec; 5] = [
+    widgets::part_spec("widgets.logo.name", ID, "widgets.logo.setting.name", true),
+    SettingSpec::fixed_choice(
+        "widgets.logo.face",
+        "widgets.setting.font",
+        &FACES,
+        FACES[0],
+        ID,
+    ),
+    widgets::size_spec("widgets.logo.size", ID, Size::Medium, false),
+    widgets::align_spec("widgets.logo.align", ID, Align::Center),
+    widgets::frame_spec("widgets.logo.frame", ID, Frame::None),
+];
+
+pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
+    r.add_setting_group(widgets::settings_group(&ID, "widgets.logo"))?;
+    r.add_settings(&SETTINGS)?;
+    r.add_widget(
+        WidgetSpec::drawn(ID, "widgets.logo", Drawn::new(height, draw).shows(shows))
+            .category(widgets::categories::OTHER),
+    )
+}
+
+/// What it shows: drawn again when the logo set changes.
+fn shows(env: &Env<'_>) -> String {
+    String::from(env.settings.read(&LOGO))
+}
+
+/// The size of the name, and of the logo: as high as a line and a half
+/// of it.
+fn sizes(env: &Env<'_>) -> (f32, u16) {
+    let size = widgets::size(env, ID.as_str()).text(&UiStyle::new(env));
+    let side = widgets::line_height(env, size) * 3 / 2;
+    (size, side)
+}
+
+fn height(env: &Env<'_>, _: u16) -> u16 {
+    sizes(env).1 + frame_height(env, ID.as_str())
+}
+
+fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
+    let look = widgets::draw_frame(canvas, env, ID.as_str(), area);
+    let area = look.area;
+    let (size, side) = sizes(env);
+    let side = side.min(area.height).min(area.width);
+    let logo = Logo::read(env, side, side);
+    let (w, h) = logo.fit(side, side);
+    // The name a third of the logo's width after it, where it fits.
+    let font = text::font(env, env.settings.read(&FACE));
+    let gap = w / 3;
+    let name = font
+        .as_ref()
+        .filter(|_| widgets::shows(env, ID.as_str(), NAME));
+    let name_width = name.map_or(0.0, |font| font.measure(size, PAPERPAW));
+    let with_name = f32::from(w + gap) + name_width <= f32::from(area.width);
+    let total = if with_name && name.is_some() {
+        f32::from(w + gap) + name_width
+    } else {
+        f32::from(w)
+    };
+    let x = widgets::align(env, ID.as_str()).x(area, total);
+    let top = area.y + area.height.saturating_sub(h) / 2;
+    logo.draw(
+        canvas,
+        env.storage,
+        Rect::new(x as u16, top, w, h),
+        look.ink,
+    );
+    if let (Some(font), true) = (name, with_name) {
+        let row = Rect::new(area.x, top, area.width, h);
+        let after = x + f32::from(w + gap);
+        ui::draw_label(canvas, font, size, after, row, PAPERPAW, look.ink);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn its_settings_are_in_its_group() {
+        assert!(super::SETTINGS.iter().all(|s| s.group == super::ID));
+        let ids: alloc::vec::Vec<&str> = super::SETTINGS.iter().map(|s| s.id.as_str()).collect();
+        assert!(ids.contains(&super::FACE.as_str()));
+    }
+}
