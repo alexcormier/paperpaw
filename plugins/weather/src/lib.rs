@@ -40,6 +40,7 @@ use quireink_sdk::event::Event;
 use quireink_sdk::replies::HttpReply;
 use quireink_sdk::setting::{Setting, Text};
 use quireink_sdk::status::item_ids;
+use quireink_sdk::widgets;
 use quireink_sdk::{
     ActionSpec, Command, Env, HttpRequest, Id, Instant, Manifest, Params, Plugin, RegisterError,
     Registrar, SDK_VERSION, ScreenSpec, SettingGroupSpec, SettingSpec, Version, time,
@@ -364,6 +365,9 @@ fn fetched(env: &Env<'_>, state: &Shared, reply: &HttpReply, out: &mut Vec<Comma
         .then(|| data::parse_forecast(reply.body.as_bytes(), &coordinates, fetched))
         .flatten();
     let told = reply.context.get(TOLD).is_some();
+    // Shown at once, the new weather or that it failed.
+    out.push(widgets::changed(&now::ID));
+    out.push(widgets::changed(&forecast::ID));
     match weather {
         Some(weather) => {
             let _ = env.storage.create_dir(&Env::plugin_dir(PLUGIN.as_str()));
