@@ -17,6 +17,7 @@ use quireink_sdk::ui::{self, UiStyle};
 use quireink_sdk::widgets::{self, Align, Frame, Look, Size, Widget, WidgetSpec, WidgetTarget};
 use quireink_sdk::{
     Canvas, Color, Command, Env, FontHandle, Id, Params, Rect, RegisterError, Registrar,
+    SettingSpec,
 };
 
 use crate::{OPEN, headlines};
@@ -36,33 +37,49 @@ const MOST: usize = 8;
 /// Lines a headline takes at most.
 const LINES: [&str; 2] = ["news.lines.1", "news.lines.2"];
 
-pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
-    let id = &HEADLINES;
-    r.add_setting_group(widgets::settings_group(id, "news.widget.headlines"))?;
-    r.add_setting(widgets::frame_setting(id, Frame::None))?;
-    r.add_setting(widgets::size_setting(id, Size::Small, false))?;
-    r.add_setting(widgets::align_setting(id, Align::Left))?;
-    r.add_setting(widgets::choice(
-        id,
-        "count",
+/// Its settings, kept in the program: its look, its choices and
+/// switches for its parts.
+static SETTINGS: [SettingSpec; 8] = [
+    widgets::frame_spec("news.widget.headlines.frame", HEADLINES, Frame::None),
+    widgets::size_spec("news.widget.headlines.size", HEADLINES, Size::Small, false),
+    widgets::align_spec("news.widget.headlines.align", HEADLINES, Align::Left),
+    SettingSpec::fixed_choice(
+        "news.widget.headlines.count",
         "news.setting.count",
         &COUNTS,
         COUNTS[2],
-    ))?;
-    r.add_setting(widgets::choice(
-        id,
-        "lines",
+        HEADLINES,
+    ),
+    SettingSpec::fixed_choice(
+        "news.widget.headlines.lines",
         "news.setting.lines",
         &LINES,
         LINES[0],
-    ))?;
-    for (key, title, default) in [
-        ("caption", "news.part.caption", true),
-        ("source", "news.part.source", false),
-        ("rules", "news.part.rules", true),
-    ] {
-        r.add_setting(widgets::part_setting(id, key, title, default))?;
-    }
+        HEADLINES,
+    ),
+    widgets::part_spec(
+        "news.widget.headlines.caption",
+        HEADLINES,
+        "news.part.caption",
+        true,
+    ),
+    widgets::part_spec(
+        "news.widget.headlines.source",
+        HEADLINES,
+        "news.part.source",
+        false,
+    ),
+    widgets::part_spec(
+        "news.widget.headlines.rules",
+        HEADLINES,
+        "news.part.rules",
+        true,
+    ),
+];
+
+pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
+    r.add_setting_group(widgets::settings_group(&HEADLINES, "news.widget.headlines"))?;
+    r.add_settings(&SETTINGS)?;
     r.add_widget(
         WidgetSpec::new(HEADLINES, "news.widget.headlines", |_| {
             Box::new(Headlines::default())
@@ -293,6 +310,16 @@ fn draw_row(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The settings kept in the program are named after the widget, as
+    /// it reads them.
+    #[test]
+    fn settings_are_the_widgets() {
+        for spec in &SETTINGS {
+            assert!(spec.id.as_str().starts_with("news.widget.headlines."));
+            assert_eq!(spec.group, HEADLINES);
+        }
+    }
 
     #[test]
     fn sources_are_named_by_their_books() {

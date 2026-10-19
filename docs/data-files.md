@@ -43,7 +43,7 @@ plugin converts books differently; a plugin must keep that mapping.
 | `.quireink/plugins/reader/state.ini` | reader | ini: the book read last | version 1 |
 | `.quireink/plugins/reader/books/<hash>/progress.ini` | reader | ini: the position | version 1 |
 | `.quireink/plugins/reader/books/<hash>/settings.ini` | kernel (a book's own settings) | ini, as `quireink.ini` | version 1 |
-| `.quireink/plugins/stats/books.ini` | stats | ini: a section per book | version 1 |
+| `.quireink/plugins/stats/books.ini` | stats | ini: a section per book (title, authors, md5, pages, language, series, `last-open`, path; `finished`, when it was last read to the end, added later) | version 1 |
 | `.quireink/plugins/stats/pages.bin` | stats | 16 bytes per stay on a page | version 1 |
 | `.quireink/plugins/stats/webdav.ini` | stats | ini of earlier versions: its password moves to the passwords and keys, then it goes | version 1 |
 | `.quireink/plugins/profiles/profiles.ini` | profiles | ini: a section per profile, its name and values | versions 1 and 2 |

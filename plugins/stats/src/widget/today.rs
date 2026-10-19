@@ -8,8 +8,8 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use quireink_sdk::ui::{self, UiStyle};
-use quireink_sdk::widgets::{self, Align, Size, Widget, WidgetSpec, WidgetTarget};
-use quireink_sdk::{Arg, Canvas, Env, Id, Rect, RegisterError, Registrar};
+use quireink_sdk::widgets::{self, Align, Frame, Size, Widget, WidgetSpec, WidgetTarget};
+use quireink_sdk::{Arg, Canvas, Env, Id, Rect, RegisterError, Registrar, SettingSpec};
 
 use super::{caption_room, frame_height, goal, line, seconds_on, shade};
 use crate::{fmt, overview, totals};
@@ -18,24 +18,26 @@ pub(crate) const TODAY: Id = Id::new_static(NAME);
 /// Its id, as text.
 const NAME: &str = "stats.widget.today";
 
+/// Its settings, kept in the program: its look, its choices and
+/// switches for its parts.
+static SETTINGS: [SettingSpec; 7] = [
+    widgets::frame_spec("stats.widget.today.frame", TODAY, Frame::None),
+    widgets::size_spec("stats.widget.today.size", TODAY, Size::Medium, true),
+    widgets::align_spec("stats.widget.today.align", TODAY, Align::Left),
+    widgets::part_spec(
+        "stats.widget.today.caption",
+        TODAY,
+        "stats.part.caption",
+        true,
+    ),
+    widgets::part_spec("stats.widget.today.pages", TODAY, "stats.part.pages", true),
+    widgets::part_spec("stats.widget.today.bar", TODAY, "stats.part.goal-bar", true),
+    widgets::part_spec("stats.widget.today.note", TODAY, "stats.part.note", true),
+];
+
 pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
-    super::look_settings(
-        r,
-        &TODAY,
-        "stats.widget.today",
-        Align::Left,
-        Some(Size::Medium),
-    )?;
-    super::parts(
-        r,
-        &TODAY,
-        &[
-            ("caption", "stats.part.caption", true),
-            ("pages", "stats.part.pages", true),
-            ("bar", "stats.part.goal-bar", true),
-            ("note", "stats.part.note", true),
-        ],
-    )?;
+    r.add_setting_group(widgets::settings_group(&TODAY, "stats.widget.today"))?;
+    r.add_settings(&SETTINGS)?;
     r.add_widget(
         WidgetSpec::new(TODAY, "stats.widget.today", |_| Box::new(Today::default()))
             .category(widgets::categories::READING),

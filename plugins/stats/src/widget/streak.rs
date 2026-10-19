@@ -8,8 +8,8 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use quireink_sdk::ui::{self, UiStyle};
-use quireink_sdk::widgets::{self, Align, Look, Size, Widget, WidgetSpec, WidgetTarget};
-use quireink_sdk::{Arg, Canvas, Env, Id, Point, Rect, RegisterError, Registrar};
+use quireink_sdk::widgets::{self, Align, Frame, Look, Size, Widget, WidgetSpec, WidgetTarget};
+use quireink_sdk::{Arg, Canvas, Env, Id, Point, Rect, RegisterError, Registrar, SettingSpec};
 
 use super::{caption_room, chosen, frame_height, goal, line, middle};
 use crate::fmt;
@@ -25,45 +25,62 @@ const MARKS: [&str; 2] = ["stats.marks.dots", "stats.marks.checks"];
 /// How many days show.
 const DAYS: [&str; 2] = ["stats.marks.7", "stats.marks.14"];
 
-pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
-    super::look_settings(
-        r,
-        &STREAK,
-        "stats.widget.streak",
-        Align::Center,
-        Some(Size::Medium),
-    )?;
-    r.add_setting(widgets::choice(
-        &STREAK,
-        "counts",
+/// Its settings, kept in the program: its look, its choices and
+/// switches for its parts.
+static SETTINGS: [SettingSpec; 10] = [
+    widgets::frame_spec("stats.widget.streak.frame", STREAK, Frame::None),
+    widgets::size_spec("stats.widget.streak.size", STREAK, Size::Medium, true),
+    widgets::align_spec("stats.widget.streak.align", STREAK, Align::Center),
+    SettingSpec::fixed_choice(
+        "stats.widget.streak.counts",
         "stats.setting.counts",
         &COUNTS,
         COUNTS[0],
-    ))?;
-    r.add_setting(widgets::choice(
-        &STREAK,
-        "style",
+        STREAK,
+    ),
+    SettingSpec::fixed_choice(
+        "stats.widget.streak.style",
         "stats.setting.marks",
         &MARKS,
         MARKS[1],
-    ))?;
-    r.add_setting(widgets::choice(
-        &STREAK,
-        "days",
+        STREAK,
+    ),
+    SettingSpec::fixed_choice(
+        "stats.widget.streak.days",
         "stats.setting.days",
         &DAYS,
         DAYS[0],
-    ))?;
-    super::parts(
-        r,
-        &STREAK,
-        &[
-            ("caption", "stats.part.caption", true),
-            ("longest", "stats.part.longest", true),
-            ("marks", "stats.part.marks", true),
-            ("weekdays", "stats.part.weekdays", true),
-        ],
-    )?;
+        STREAK,
+    ),
+    widgets::part_spec(
+        "stats.widget.streak.caption",
+        STREAK,
+        "stats.part.caption",
+        true,
+    ),
+    widgets::part_spec(
+        "stats.widget.streak.longest",
+        STREAK,
+        "stats.part.longest",
+        true,
+    ),
+    widgets::part_spec(
+        "stats.widget.streak.marks",
+        STREAK,
+        "stats.part.marks",
+        true,
+    ),
+    widgets::part_spec(
+        "stats.widget.streak.weekdays",
+        STREAK,
+        "stats.part.weekdays",
+        true,
+    ),
+];
+
+pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
+    r.add_setting_group(widgets::settings_group(&STREAK, "stats.widget.streak"))?;
+    r.add_settings(&SETTINGS)?;
     r.add_widget(
         WidgetSpec::new(STREAK, "stats.widget.streak", |_| {
             Box::new(Streak::default())

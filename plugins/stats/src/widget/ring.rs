@@ -17,8 +17,10 @@ use alloc::vec::Vec;
 
 use quireink_sdk::builtin::{params, slots};
 use quireink_sdk::ui::{self, UiStyle};
-use quireink_sdk::widgets::{self, Align, Look, Size, Widget, WidgetSpec, WidgetTarget};
-use quireink_sdk::{Arg, Canvas, Command, Env, Id, Params, Rect, RegisterError, Registrar};
+use quireink_sdk::widgets::{self, Align, Frame, Look, Size, Widget, WidgetSpec, WidgetTarget};
+use quireink_sdk::{
+    Arg, Canvas, Command, Env, Id, Params, Rect, RegisterError, Registrar, SettingSpec,
+};
 
 use super::{caption_room, chosen, fit_size, frame_height, goal, line, middle};
 use crate::{fmt, totals};
@@ -31,37 +33,44 @@ const STYLES: [&str; 2] = ["stats.ring.full", "stats.ring.gauge"];
 /// How thick the ring is.
 const LINES: [&str; 3] = ["stats.line.thin", "stats.line.medium", "stats.line.thick"];
 
-pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
-    super::look_settings(
-        r,
-        &RING,
-        "stats.widget.goal",
-        Align::Center,
-        Some(Size::Fit),
-    )?;
-    r.add_setting(widgets::choice(
-        &RING,
-        "style",
+/// Its settings, kept in the program: its look, its choices and
+/// switches for its parts.
+static SETTINGS: [SettingSpec; 8] = [
+    widgets::frame_spec("stats.widget.goal.frame", RING, Frame::None),
+    widgets::size_spec("stats.widget.goal.size", RING, Size::Fit, true),
+    widgets::align_spec("stats.widget.goal.align", RING, Align::Center),
+    SettingSpec::fixed_choice(
+        "stats.widget.goal.style",
         "stats.setting.ring",
         &STYLES,
         STYLES[0],
-    ))?;
-    r.add_setting(widgets::choice(
-        &RING,
-        "line",
+        RING,
+    ),
+    SettingSpec::fixed_choice(
+        "stats.widget.goal.line",
         "stats.setting.line",
         &LINES,
         LINES[1],
-    ))?;
-    super::parts(
-        r,
-        &RING,
-        &[
-            ("caption", "stats.part.caption", true),
-            ("unit", "stats.part.unit", true),
-            ("note", "stats.part.streak-left", true),
-        ],
-    )?;
+        RING,
+    ),
+    widgets::part_spec(
+        "stats.widget.goal.caption",
+        RING,
+        "stats.part.caption",
+        true,
+    ),
+    widgets::part_spec("stats.widget.goal.unit", RING, "stats.part.unit", true),
+    widgets::part_spec(
+        "stats.widget.goal.note",
+        RING,
+        "stats.part.streak-left",
+        true,
+    ),
+];
+
+pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
+    r.add_setting_group(widgets::settings_group(&RING, "stats.widget.goal"))?;
+    r.add_settings(&SETTINGS)?;
     r.add_widget(
         WidgetSpec::new(RING, "stats.widget.goal", |_| Box::new(Ring::default()))
             .category(widgets::categories::READING),
