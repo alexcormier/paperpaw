@@ -399,6 +399,50 @@ fn placed_widgets_draw_from_memory() {
     }
 }
 
+/// The logo widget with a picture for the logo: the picture is read and
+/// made small where the widget is placed, and drawn from memory.
+#[test]
+fn a_logo_picture_draws_from_memory() {
+    let logo = ".paperpaw/plugins/mine/logo.png";
+    let storage = library();
+    // Larger than it is drawn: made small, not larger.
+    let mut png = paperpaw_sdk::image::PngWriter::new(&storage, logo, 256, 256).unwrap();
+    for y in 0..256u32 {
+        let row: Vec<u8> = (0..256u32)
+            .map(|x| if (x / 32 + y / 32) % 2 == 0 { 0 } else { 255 })
+            .collect();
+        png.row(&storage, logo, &row).unwrap();
+    }
+    let mut h = Harness::new(storage);
+    let mut bare = Harness::new(MemoryStorage::new());
+    for h in [&mut h, &mut bare] {
+        h.settings
+            .define(SettingSpec::new(
+                Id::new_static("core.logo"),
+                "x",
+                SettingKind::Text,
+                SettingValue::Text(Cow::Borrowed(logo)),
+            ))
+            .unwrap();
+        h.set(
+            "widgets.logo.size",
+            SettingValue::Text(Cow::Borrowed("core.size.large")),
+        );
+    }
+    let env = h.env();
+    let area = Rect::new(10, 10, 460, 150);
+    let mut widget = env.widgets.make("widgets.logo", &env).unwrap();
+    widget.place(&env, area);
+    let drawn = pixels(&env, &*widget, area);
+    let drawn_logo = paperpaw_sdk::logo::Logo::read(&env, 10, 10);
+    assert!(matches!(drawn_logo, paperpaw_sdk::logo::Logo::Picture(_)));
+    assert!(drawn.iter().any(|&p| p < 128));
+    assert!(
+        pixels(&bare.env(), &*widget, area) == drawn,
+        "reads as it draws"
+    );
+}
+
 /// Texts laid out when their widget is placed (a highlight, a note, the
 /// quote of the day) show as those laid out as they are drawn unplaced.
 #[test]
