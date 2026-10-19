@@ -1308,6 +1308,7 @@ dependencies = [
  "quireink-plugin-update",
  "quireink-plugin-vocabulary",
  "quireink-plugin-wallabag",
+ "quireink-plugin-weather",
  "quireink-plugin-widgets",
  "quireink-plugin-wifi",
  "quireink-plugin-wikipedia",
@@ -1767,6 +1768,18 @@ dependencies = [
 name = "quireink-plugin-wallabag"
 version = "0.4.0-dev"
 dependencies = [
+ "quireink-core",
+ "quireink-i18n",
+ "quireink-json",
+ "quireink-platform",
+ "quireink-sdk",
+]
+
+[[package]]
+name = "quireink-plugin-weather"
+version = "0.4.0-dev"
+dependencies = [
+ "quireink-app",
  "quireink-core",
  "quireink-i18n",
  "quireink-json",
