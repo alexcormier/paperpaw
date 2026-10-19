@@ -1494,6 +1494,7 @@ dependencies = [
  "paperpaw-json",
  "paperpaw-platform",
  "paperpaw-sdk",
+ "paperpaw-xml",
 ]
 
 [[package]]

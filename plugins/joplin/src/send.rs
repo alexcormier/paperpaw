@@ -6,8 +6,10 @@
 //!    the address, in the version of the format PaperPaw writes
 //!    ([`item::SYNC_VERSION`]), and not end-to-end encrypted (notes
 //!    PaperPaw sent unencrypted would sit there in plain text).
-//! 3. The notebook named in the settings: made once, then found again.
-//! 4. Each book: its note, if it was sent before, fetched to a file and
+//! 3. Its locks: none exclusive, held by a client upgrading the target
+//!    (see [`locks`]).
+//! 4. The notebook named in the settings: made once, then found again.
+//! 5. Each book: its note, if it was sent before, fetched to a file and
 //!    only its end read. Its text not edited since, it is written over,
 //!    staying in the notebook it was moved to; edited in Joplin or put in
 //!    the trash, a new note is made beside it, so nothing written there is
@@ -30,6 +32,7 @@ use paperpaw_sdk::{Arg, Command, Env, HttpRequest, Params};
 
 use crate::item::{self, NOTE, NOTEBOOK};
 use crate::kept::{self, Sent};
+use crate::locks;
 use crate::markdown;
 use crate::service::{self, Auth, Service};
 use crate::{DONE, Finished, NOTEBOOK as NOTEBOOK_SETTING, PASSWORD, SCREEN, USER};
@@ -37,6 +40,7 @@ use crate::{DONE, Finished, NOTEBOOK as NOTEBOOK_SETTING, PASSWORD, SCREEN, USER
 /// The answers, a step each.
 pub const SIGNED_IN: Event<HttpReply> = Event::new("joplin.signed-in");
 pub const CHECKED: Event<HttpReply> = Event::new("joplin.checked");
+pub const LOCKS: Event<HttpReply> = Event::new("joplin.locks");
 pub const NOTEBOOK_FOUND: Event<HttpReply> = Event::new("joplin.notebook-found");
 pub const NOTEBOOK_MADE: Event<HttpReply> = Event::new("joplin.notebook-made");
 pub const NOTE_FOUND: Event<HttpReply> = Event::new("joplin.note-found");
@@ -48,6 +52,7 @@ pub const DEFAULT_NOTEBOOK: &str = "PaperPaw";
 const ID: &str = "id";
 /// The files of a sending, in the plugin's folder.
 const INFO: &str = "info.json";
+const LOCKS_FILE: &str = "locks.txt";
 const FOUND: &str = "found.md";
 const NOTE_FILE: &str = "note.md";
 
@@ -199,6 +204,17 @@ impl Run {
         out.push(Command::Http(request));
     }
 
+    /// How requests prove who sends them: the session where there is one.
+    fn auth<'a>(&'a self, env: &Env<'a>) -> Auth<'a> {
+        match &self.session {
+            Some(session) if Service::of(env).signs_in() => Auth::Session(session),
+            _ => Auth::Basic {
+                user: env.settings.read(&USER).trim(),
+                password: env.secrets.get(PASSWORD).unwrap_or_default(),
+            },
+        }
+    }
+
     /// A request for the file `name` of the sync target.
     fn request(
         &self,
@@ -208,14 +224,8 @@ impl Run {
         reply: &Event<HttpReply>,
     ) -> HttpRequest {
         let service = Service::of(env);
-        let auth = match &self.session {
-            Some(session) if service.signs_in() => Auth::Session(session),
-            _ => Auth::Basic {
-                user: env.settings.read(&USER).trim(),
-                password: env.secrets.get(PASSWORD).unwrap_or_default(),
-            },
-        };
-        service::request(service, &service.base(env), name, method, auth, reply)
+        let url = service.url(&service.base(env), name);
+        service::request(&url, method, self.auth(env), reply)
     }
 
     /// A request putting the file `name`; its body is the caller's.
@@ -287,11 +297,42 @@ impl Run {
                     (version, _) if version > item::SYNC_VERSION => "joplin.newer-target",
                     (version, _) if version < item::SYNC_VERSION => "joplin.older-target",
                     (_, true) => "joplin.encrypted",
-                    _ => return self.find_notebook(env, out),
+                    _ => {
+                        let service = Service::of(env);
+                        let base = service.base(env);
+                        let file = kept::file(LOCKS_FILE);
+                        let auth = self.auth(env);
+                        let request = locks::request(service, &base, auth, file, &LOCKS);
+                        return out.push(Command::Http(request));
+                    }
                 };
                 self.end(env, key, &[], End::Stop, out);
             }
             404 => self.end(env, "joplin.no-data", &[], End::Stop, out),
+            _ => self.trouble(env, reply, out),
+        }
+    }
+
+    /// The sync target's locks are listed: nothing is written while a
+    /// client upgrades it (see [`locks`]).
+    pub fn locks_listed(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+        if !self.running {
+            return;
+        }
+        match reply.status {
+            200..=299 => {
+                let now = now_ms(env).unwrap_or_default();
+                let file = kept::file(LOCKS_FILE);
+                let upgrading = locks::upgrading(Service::of(env), env.storage, &file, now);
+                let _ = env.storage.remove(&file);
+                if upgrading {
+                    return self.end(env, "joplin.upgrading", &[], End::Again, out);
+                }
+                self.find_notebook(env, out);
+            }
+            // No locks: no folder for them (WebDAV), no lock list (a
+            // Joplin Server before locks).
+            404 => self.find_notebook(env, out),
             _ => self.trouble(env, reply, out),
         }
     }
@@ -527,7 +568,7 @@ impl Run {
         self.blocked = end == End::Stop;
         self.queue.clear();
         self.book = None;
-        for name in [INFO, FOUND, NOTE_FILE] {
+        for name in [INFO, LOCKS_FILE, FOUND, NOTE_FILE] {
             let _ = env.storage.remove(&kept::file(name));
         }
         if !self.quiet {

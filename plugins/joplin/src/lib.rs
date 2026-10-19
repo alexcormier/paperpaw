@@ -29,6 +29,7 @@ extern crate alloc;
 
 mod item;
 mod kept;
+mod locks;
 mod markdown;
 mod send;
 mod service;
@@ -178,9 +179,10 @@ impl Plugin for Joplin {
             }
         })?;
         type Step = fn(&mut Run, &Env<'_>, &HttpReply, &mut Vec<Command>);
-        let steps: [(Event<HttpReply>, Step); 6] = [
+        let steps: [(Event<HttpReply>, Step); 7] = [
             (send::SIGNED_IN, Run::signed_in),
             (send::CHECKED, Run::checked),
+            (send::LOCKS, Run::locks_listed),
             (send::NOTEBOOK_FOUND, Run::notebook_found),
             (send::NOTEBOOK_MADE, Run::notebook_made),
             (send::NOTE_FOUND, Run::note_found),

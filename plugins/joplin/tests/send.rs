@@ -212,6 +212,27 @@ impl Test {
         self.requests()
     }
 
+    /// Answers `info.json` (version 3, not encrypted) and the list of
+    /// locks that follows (none held).
+    fn checked(&mut self, call: &HttpCall) -> Vec<HttpCall> {
+        let calls = self.answer(call, 200, INFO);
+        assert_eq!(calls.len(), 1);
+        let empty = if calls[0].method == "PROPFIND" {
+            assert!(calls[0].url.ends_with("/locks/"));
+            assert!(
+                calls[0]
+                    .headers
+                    .contains(&(String::from("Depth"), String::from("1")))
+            );
+            "<?xml version=\"1.0\"?><d:multistatus xmlns:d=\"DAV:\"></d:multistatus>"
+        } else {
+            assert_eq!(calls[0].method, "GET");
+            assert!(calls[0].url.ends_with("/api/locks"));
+            r#"{"items": [], "has_more": false}"#
+        };
+        self.answer(&calls[0], 207, empty)
+    }
+
     fn wifi(&mut self, online: bool) -> Vec<HttpCall> {
         let state = if online {
             WifiState::Online {
@@ -251,7 +272,7 @@ impl Test {
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].method, "GET");
         assert_eq!(calls[0].url, "https://dav.example/Joplin/info.json");
-        let calls = self.answer(&calls[0], 200, INFO);
+        let calls = self.checked(&calls[0]);
         assert_eq!(calls[0].method, "PUT");
         let notebook = self.body(&calls[0]);
         let calls = self.answer(&calls[0], 201, "");
@@ -290,7 +311,7 @@ fn sends_a_new_note_then_updates_it() {
     ));
     assert_eq!(prop(&note, "parent_id"), notebook_id);
     assert_eq!(prop(&note, "author"), "Lewis Carroll");
-    assert_eq!(prop(&note, "created_time"), "2026-10-20T08:00:03.001Z");
+    assert_eq!(prop(&note, "created_time"), "2026-10-20T08:00:04.001Z");
     assert_eq!(prop(&note, "type_"), "1");
     let id = prop(&note, "id").to_string();
     assert_eq!(t.last_said(), "The notes of 1 book are in Joplin.");
@@ -311,7 +332,7 @@ fn sends_a_new_note_then_updates_it() {
         )
         .unwrap();
     let calls = t.export(ALICE);
-    let calls = t.answer(&calls[0], 200, INFO);
+    let calls = t.checked(&calls[0]);
     assert!(calls[0].url.ends_with(&format!("/{notebook_id}.md")));
     let calls = t.answer(&calls[0], 200, &notebook);
     assert_eq!(calls[0].method, "GET");
@@ -354,7 +375,7 @@ fn a_note_changed_in_joplin_stays_and_a_new_one_is_made() {
     let mut t = Test::new(WEBDAV, false);
     let (notebook, note) = t.send_first();
     let calls = t.export(ALICE);
-    let calls = t.answer(&calls[0], 200, INFO);
+    let calls = t.checked(&calls[0]);
     let calls = t.answer(&calls[0], 200, &notebook);
     let edited = note.replace("Curiouser and curiouser!", "My own words.");
     let calls = t.answer(&calls[0], 200, &edited);
@@ -366,7 +387,7 @@ fn a_note_changed_in_joplin_stays_and_a_new_one_is_made() {
 
     // Deleted in Joplin: made anew too, the notebook as well.
     let calls = t.export(ALICE);
-    let calls = t.answer(&calls[0], 200, INFO);
+    let calls = t.checked(&calls[0]);
     let calls = t.answer(&calls[0], 404, "");
     assert_eq!(calls[0].method, "PUT");
     let new_notebook = t.body(&calls[0]);
@@ -395,7 +416,7 @@ fn joplin_cloud_signs_in_and_again_when_the_session_ends() {
     );
     let session = (String::from("X-API-AUTH"), String::from("S1"));
     assert!(calls[0].headers.contains(&session));
-    let calls = t.answer(&calls[0], 200, INFO);
+    let calls = t.checked(&calls[0]);
     let calls = t.answer(&calls[0], 200, "{}");
     assert!(calls[0].url.ends_with(".md:/content"));
     assert!(t.answer(&calls[0], 200, "{}").is_empty());
@@ -431,7 +452,7 @@ fn notes_wait_without_a_connection_and_go_when_wifi_comes() {
     let calls = t.wifi(true);
     assert_eq!(calls.len(), 1);
     assert!(calls[0].url.ends_with("/info.json"));
-    let calls = t.answer(&calls[0], 200, INFO);
+    let calls = t.checked(&calls[0]);
     let calls = t.answer(&calls[0], 201, "");
     assert!(t.answer(&calls[0], 201, "").is_empty());
     assert_eq!(t.file("waiting.txt"), "");
@@ -482,6 +503,63 @@ fn encrypted_targets_get_nothing() {
 }
 
 #[test]
+fn nothing_is_written_while_a_client_upgrades_the_target() {
+    // A WebDAV folder with an exclusive lock renewed a minute ago (the
+    // clock says 08:00:02 by then), and a shared one.
+    let mut t = Test::new(WEBDAV, true);
+    let listing = |modified: &str| {
+        format!(
+            "<?xml version=\"1.0\"?><d:multistatus xmlns:d=\"DAV:\">\
+             <d:response><d:href>/Joplin/locks/1_1_desktop.json</d:href><d:propstat><d:prop>\
+             <d:getlastmodified>{modified}</d:getlastmodified></d:prop></d:propstat></d:response>\
+             <d:response><d:href>/Joplin/locks/2_3_cli.json</d:href><d:propstat><d:prop>\
+             <d:getlastmodified>{modified}</d:getlastmodified></d:prop></d:propstat></d:response>\
+             </d:multistatus>"
+        )
+    };
+    let calls = t.export(ALICE);
+    let calls = t.answer(&calls[0], 200, INFO);
+    assert_eq!(calls[0].method, "PROPFIND");
+    let calls = t.answer(&calls[0], 207, &listing("Tue, 20 Oct 2026 07:59:02 GMT"));
+    assert!(calls.is_empty());
+    assert!(
+        t.last_said()
+            .starts_with("Joplin is upgrading the notes there")
+    );
+    assert_eq!(t.file("waiting.txt"), format!("{ALICE}\n"));
+    assert!(t.file("locks.txt").is_empty());
+    // Tried again by itself; the lock has run out since (or was left by
+    // a client that stopped): the notes go.
+    t.wifi(false);
+    let calls = t.wifi(true);
+    let calls = t.answer(&calls[0], 200, INFO);
+    let calls = t.answer(&calls[0], 207, &listing("Tue, 20 Oct 2026 07:50:00 GMT"));
+    assert_eq!(calls[0].method, "PUT");
+
+    // Joplin Server lists its locks with the time each was renewed.
+    let mut t = Test::new(CLOUD, false);
+    let calls = t.export(ALICE);
+    let calls = t.answer(&calls[0], 200, r#"{"id": "S1"}"#);
+    let calls = t.answer(&calls[0], 200, INFO);
+    assert_eq!(calls[0].url, "https://api.joplincloud.com/api/locks");
+    assert!(
+        calls[0]
+            .headers
+            .contains(&(String::from("X-API-AUTH"), String::from("S1")))
+    );
+    let lock = format!(
+        r#"{{"items": [{{"id": "l", "type": 2, "clientType": 1, "clientId": "d",
+            "updatedTime": {}}}], "has_more": false}}"#,
+        NOW - 30_000
+    );
+    assert!(t.answer(&calls[0], 200, &lock).is_empty());
+    assert!(
+        t.last_said()
+            .starts_with("Joplin is upgrading the notes there")
+    );
+}
+
+#[test]
 fn targets_in_another_format_get_nothing() {
     let cases = [
         (
@@ -523,7 +601,7 @@ fn a_note_that_fails_waits_and_the_others_go() {
     let now = t.now();
     t.kernel.run_action(now, Id::new_static("joplin.send"));
     let calls = t.requests();
-    let calls = t.answer(&calls[0], 200, INFO);
+    let calls = t.checked(&calls[0]);
     let calls = t.answer(&calls[0], 201, "");
     let calls = t.answer(&calls[0], 507, "Insufficient Storage");
     assert!(t.body(&calls[0]).starts_with("Bob\n\nSomeone\n\nid: "));

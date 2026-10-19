@@ -19,14 +19,17 @@ change the plugin SDK.
   Joplin* (also for rules), or when Wi-Fi comes back; no connection, a
   wrong password or address, Joplin's end-to-end encryption and a sync
   target in another version of Joplin's format than PaperPaw writes (no
-  notes are sent then) are said plainly. Notes are read and written in
-  pieces and sent from a file, Joplin's answers saved to files of which
-  only the end is read: the X4's heap peaks no higher for it. Shipped
-  switched off.
+  notes are sent then) are said plainly. While an older Joplin holds an
+  exclusive lock on the target to upgrade it, the notes wait; PaperPaw
+  takes no lock of its own, as Joplin 3.7 takes none. Notes are read
+  and written in pieces and sent from a file, Joplin's answers saved to
+  files of which only the end is read: the X4's heap peaks no higher
+  for it. Shipped switched off.
 - SDK: `files::for_each_line` reads a text file line by line as it
   streams from the storage, so lists of any length take little memory;
   `LocalTime::to_seconds` is the way back from
-  `LocalTime::from_seconds`.
+  `LocalTime::from_seconds`; `web::http_date` reads the dates servers
+  send (`Last-Modified`, WebDAV's `getlastmodified`).
 - Settings: a live preview above the reading settings (PLANNING §6.7):
   two short paragraphs set exactly as book pages are (the same layout
   engine, type, margins at the sides, justification, indents and

@@ -99,6 +99,14 @@ impl Service {
             _ => format!("{base}/api/items/root:/{name}:/content"),
         }
     }
+
+    /// The address of the sync locks at `base` (see [`locks`](crate::locks)).
+    pub fn locks_url(self, base: &str) -> String {
+        match self {
+            Service::WebDav => format!("{base}/locks/"),
+            _ => format!("{base}/api/locks"),
+        }
+    }
 }
 
 /// The request signing in to Joplin Cloud or Joplin Server at `base`.
@@ -124,16 +132,10 @@ pub enum Auth<'a> {
     Basic { user: &'a str, password: &'a str },
 }
 
-/// A request of `method` for the file `name`, answered as `reply`.
-pub fn request(
-    service: Service,
-    base: &str,
-    name: &str,
-    method: &str,
-    auth: Auth<'_>,
-    reply: &Event<HttpReply>,
-) -> HttpRequest {
-    let mut request = HttpRequest::new(method, &service.url(base, name), reply);
+/// A request of `method` for `url` (see [`Service::url`]), answered as
+/// `reply`.
+pub fn request(url: &str, method: &str, auth: Auth<'_>, reply: &Event<HttpReply>) -> HttpRequest {
+    let mut request = HttpRequest::new(method, url, reply);
     let header = match auth {
         Auth::Session(id) => (String::from("X-API-AUTH"), id.to_string()),
         Auth::Basic { user, password } => {
@@ -163,6 +165,14 @@ mod tests {
             ),
             "https://cloud.example/remote.php/dav/files/me/Joplin/a.md"
         );
+        assert_eq!(
+            Service::Server.locks_url("https://j"),
+            "https://j/api/locks"
+        );
+        assert_eq!(
+            Service::WebDav.locks_url("https://d/J"),
+            "https://d/J/locks/"
+        );
         let mut s = Service::Cloud;
         for _ in Service::ALL {
             s = s.next();
@@ -178,14 +188,7 @@ mod tests {
             r.body.as_deref(),
             Some("{\"email\":\"me@example.org\",\"password\":\"p\\\"w\"}")
         );
-        let r = request(
-            Service::Server,
-            "https://j",
-            "x.md",
-            "GET",
-            Auth::Session("S"),
-            &REPLY,
-        );
+        let r = request("https://j/x", "GET", Auth::Session("S"), &REPLY);
         assert!(
             r.headers
                 .contains(&(String::from("X-API-AUTH"), String::from("S")))
@@ -194,7 +197,7 @@ mod tests {
             user: "me",
             password: "pw",
         };
-        let r = request(Service::WebDav, "https://d", "x.md", "PUT", basic, &REPLY);
+        let r = request("https://d/x.md", "PUT", basic, &REPLY);
         assert_eq!(r.headers[0].0, "Authorization");
         assert!(r.headers[0].1.starts_with("Basic "));
     }

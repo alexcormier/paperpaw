@@ -80,7 +80,7 @@ plugin converts books differently; a plugin must keep that mapping.
 | `.paperpaw/plugins/stats/days.bin` | stats | the bytes of `pages.bin` it covers |
 | `.paperpaw/plugins/dictionary/<hash>/` | dictionary | the dictionary's `.ifo` |
 | `.paperpaw/plugins/opds/feed.json`, `news/headlines.txt`, `wallabag/entries.json` | their plugins | fetched again |
-| `.paperpaw/plugins/joplin/info.json`, `found.md`, `note.md` | joplin | fetched or written again with each sending, removed after it |
+| `.paperpaw/plugins/joplin/info.json`, `locks.txt`, `found.md`, `note.md` | joplin | fetched or written again with each sending, removed after it |
 | `.paperpaw/plugins/update/offer.txt`, `updates/.download` | update | the update server's last answer and a download until it is whole, fetched again; let go once the version is no longer newer |
 | `.paperpaw/plugins/about/about.md`, `.paperpaw/tmp/` | about, kernel | written when needed |
 

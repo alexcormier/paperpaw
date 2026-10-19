@@ -14,6 +14,7 @@ categories = ["no-std"]
 paperpaw-digest.workspace = true
 paperpaw-json.workspace = true
 paperpaw-sdk.workspace = true
+paperpaw-xml.workspace = true
 
 [dev-dependencies]
 paperpaw-i18n.workspace = true
