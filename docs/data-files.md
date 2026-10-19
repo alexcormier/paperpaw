@@ -55,6 +55,7 @@ plugin converts books differently; a plugin must keep that mapping.
 | `.paperpaw/plugins/browser/bookmarks.txt`, `history.txt` | browser | a page per line: title, address | version 1 |
 | `.paperpaw/plugins/kosync/device.ini`, `account.ini` | kosync | ini: the device's id; the key of earlier versions (moved to the passwords and keys) | version 1 |
 | `.paperpaw/plugins/wallabag/articles.txt`, `finished.txt` | wallabag | an article per line: id and path; ids read to the end | version 1 |
+| `.paperpaw/plugins/joplin/sent.txt`, `waiting.txt`, `notebook.txt` | joplin | a book per line: notes file, note id, MD5 of the note's text (tab separated); a notes file per line; the notebook's name and id | version 1 |
 | `.paperpaw/plugins/battery/log.csv` | battery | CSV with a header | version 1 |
 | `.paperpaw/crashes.txt` | X4 firmware | a line per panic: the version and why, written for bug reports, never read back | |
 | `.paperpaw/plugins/battery/plugins.csv` | battery | CSV with a header, written for reading on a computer, never read back | |
@@ -79,6 +80,7 @@ plugin converts books differently; a plugin must keep that mapping.
 | `.paperpaw/plugins/stats/days.bin` | stats | the bytes of `pages.bin` it covers |
 | `.paperpaw/plugins/dictionary/<hash>/` | dictionary | the dictionary's `.ifo` |
 | `.paperpaw/plugins/opds/feed.json`, `news/headlines.txt`, `wallabag/entries.json` | their plugins | fetched again |
+| `.paperpaw/plugins/joplin/info.json`, `found.md`, `note.md` | joplin | fetched or written again with each sending, removed after it |
 | `.paperpaw/plugins/update/offer.txt`, `updates/.download` | update | the update server's last answer and a download until it is whole, fetched again; let go once the version is no longer newer |
 | `.paperpaw/plugins/about/about.md`, `.paperpaw/tmp/` | about, kernel | written when needed |
 

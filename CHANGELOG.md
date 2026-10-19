@@ -6,6 +6,22 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Joplin (PLANNING C15, S1): a book's highlights and notes, once
+  exported, become a note in Joplin, one per book, in a notebook named
+  in the settings. Exporting again updates the note, also where it was
+  moved to in Joplin; a note whose text was edited in Joplin stays, and
+  a new one is made beside it. The notes go where Joplin synchronises
+  to (Joplin Cloud, Joplin Server, or a WebDAV folder such as
+  Nextcloud), so they reach Joplin on every device with no computer
+  running. *Joplin* in the tools sets it up, each row with what it is
+  for; the password is kept with the passwords and keys. What cannot be
+  sent waits and goes with the next export, by the action *Send to
+  Joplin* (also for rules), or when Wi-Fi comes back; no connection, a
+  wrong password or address, and Joplin's end-to-end encryption (no
+  notes are sent then) are said plainly. Notes are read and written in
+  pieces and sent from a file, Joplin's answers saved to files of which
+  only the end is read: the X4's heap peaks no higher for it. Shipped
+  switched off.
 - SDK: `files::for_each_line` reads a text file line by line as it
   streams from the storage, so lists of any length take little memory;
   `LocalTime::to_seconds` is the way back from
