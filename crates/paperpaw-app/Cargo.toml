@@ -24,6 +24,7 @@ paperpaw-plugin-dictionary.workspace = true
 paperpaw-plugin-files.workspace = true
 paperpaw-plugin-fonts-default = { workspace = true, default-features = false }
 paperpaw-plugin-fonts-browser.workspace = true
+paperpaw-plugin-store.workspace = true
 paperpaw-plugin-format-epub.workspace = true
 paperpaw-plugin-format-txt.workspace = true
 paperpaw-plugin-format-xtc.workspace = true

@@ -2054,6 +2054,7 @@ dependencies = [
  "paperpaw-plugin-setup",
  "paperpaw-plugin-sleep",
  "paperpaw-plugin-stats",
+ "paperpaw-plugin-store",
  "paperpaw-plugin-transfer",
  "paperpaw-plugin-translate",
  "paperpaw-plugin-update",
@@ -2223,7 +2224,6 @@ dependencies = [
 name = "paperpaw-plugin-fonts-browser"
 version = "0.4.0-dev"
 dependencies = [
- "paperpaw-digest",
  "paperpaw-json",
  "paperpaw-sdk",
 ]
@@ -2408,6 +2408,14 @@ dependencies = [
  "paperpaw-digest",
  "paperpaw-sdk",
  "paperpaw-sqlite",
+]
+
+[[package]]
+name = "paperpaw-plugin-store"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-json",
+ "paperpaw-sdk",
 ]
 
 [[package]]

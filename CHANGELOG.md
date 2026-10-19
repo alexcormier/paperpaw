@@ -6,6 +6,23 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- A plugin store on the device (*More plugins*, in the tools and in the
+  plugin manager, PLANNING O6, ADR 0023): the data plugins of
+  paperpaw.org's plugin library made for this device, PaperPaw version
+  and data format, by group as on the website, named and described in
+  the language shown, with *Fonts* opening the fonts browser. A plugin's
+  page tells what it does, who made it, its licence, version and size,
+  and installs, updates or removes it; downloads go on when the page is
+  closed. The list is read as it streams and kept on the card; the
+  setting *Plugin library* (developers) names another one.
+  SDK: `install` (`Installer`, `Package`, `PackageFile`, `Progress`,
+  `Received`, `device_name`, `fits`, `is_plugin_name`, `is_safe_path`,
+  `MAX_FILES`): installing data plugins from the internet, file by
+  file, each checked, the job kept on the storage, the version before
+  replaced once all is there; the fonts browser uses it too.
+  `DATA_FORMATS`: the data plugins' formats this PaperPaw reads. The
+  plugin manager lists the actions of the menu `plugin-manager.more`
+  above the plugins.
 - X4: removing or copying a large folder (e.g. one with many books, or
   their caches) no longer starts the device again half way: work on the
   card keeps the watchdogs from taking it for hung (it took 20 s before

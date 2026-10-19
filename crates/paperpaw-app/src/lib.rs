@@ -53,6 +53,7 @@ pub fn install(builder: KernelBuilder, fonts: Fonts) -> KernelBuilder {
         .plugin(paperpaw_plugin_transfer::Transfer)
         .plugin(paperpaw_plugin_opds::Opds)
         .plugin(paperpaw_plugin_fonts_browser::FontsBrowser)
+        .plugin(paperpaw_plugin_store::Store)
         .plugin(paperpaw_plugin_rules::Rules)
         .plugin(paperpaw_plugin_lock::Lock)
         .plugin(paperpaw_plugin_profiles::Profiles)
