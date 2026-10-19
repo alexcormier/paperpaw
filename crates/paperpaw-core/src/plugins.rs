@@ -292,7 +292,7 @@ impl Kernel {
         self.shared.stylesheets.append(&mut staging.stylesheets);
         self.shared.book_data.append(&mut staging.book_data);
         for (id, service) in staging.services.drain(..) {
-            self.shared.services.add(id, service);
+            self.shared.services.insert(id, service);
         }
         for (point, contribution) in staging.contributions.drain(..) {
             self.shared

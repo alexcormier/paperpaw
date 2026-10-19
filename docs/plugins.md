@@ -317,7 +317,7 @@ cargo run -p paperpaw-emulator -- --profile xteink-x4 --headless --script "confi
 | Status items and lines | `add_status_item`, `add_status_line` | What status lines show |
 | Widgets | `add_widget` | Blocks for the home screen and the sleep screen |
 | Setup steps | `add_setup_step` | A page of the first-run setup: a setting to choose or a screen of the plugin's, where the device needs it |
-| Services | `add_service` | Anything one plugin offers others, found with `env.services.get` |
+| Services | `publish` | Anything one plugin offers others, found with `env.services.get` |
 | Contributions | `contribute` | Additions to a point another plugin defined |
 | Translations | `add_translations` | Catalogs for any language |
 | Book data | `add_book_data` | Where the plugin keeps something for each book (named by `library::key`): moved and removed with the book, cleaned up when it is gone |
@@ -359,13 +359,18 @@ there and do without it when not:
 
 ```rust
 // The publishing plugin.
-r.add_service(WEATHER, Box::new(Box::new(Forecast::new()) as Box<dyn Weather>))?;
+r.publish(WEATHER, Box::new(Forecast::new()) as Box<dyn Weather>)?;
 
 // Any other plugin, wherever it has an `Env`.
 if let Some(weather) = env.services.get::<Box<dyn Weather>>(WEATHER.as_str()) {
     let today = weather.today();
 }
 ```
+
+A service is found by its type's name too, so native code plugins built
+apart from the firmware find it (see *Plugins as files* below). When
+the type of a service changes, give it a new id (`weather.forecast-2`):
+its name alone would not tell.
 
 A point is an id a plugin names, with what a contribution there is in
 its documentation (for example one line per entry); others add to it
