@@ -11,10 +11,11 @@ use quireink_sdk::widgets::{self, Align, Frame, Look, Size, Widget, WidgetSpec, 
 use quireink_sdk::{Canvas, Command, Env, Id, Point, Rect, RegisterError, Registrar};
 
 use super::{
-    Book, Lines, THICKNESSES, caption, chosen, cover_size, current, draw_bar, draw_cover,
-    draw_message, draw_percent_alone, draw_ring, draw_ring_percent, frame_height, look_settings,
-    part, percent_text, place_x, text_size, thickness,
+    Book, Lines, THICKNESSES, add_settings, caption, chosen, cover_size, current, draw_bar,
+    draw_cover, draw_message, draw_percent_alone, draw_ring, draw_ring_percent, frame_height,
+    percent_text, place_x, text_size, thickness,
 };
+use quireink_sdk::SettingSpec;
 
 pub(crate) const ID: Id = Id::new_static(WIDGET);
 /// Its id, as text.
@@ -28,34 +29,53 @@ const STYLES: [&str; 4] = [
     "widgets.progress.bar",
 ];
 
-pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
-    look_settings(
-        r,
-        &ID,
-        "widgets.progress",
-        Align::Center,
-        Frame::None,
-        Size::Medium,
-        false,
-    )?;
-    r.add_setting(widgets::choice(
-        &ID,
-        "style",
+/// Its settings, kept in the program.
+static SETTINGS: [SettingSpec; 9] = [
+    widgets::align_spec("widgets.progress.align", ID, Align::Center),
+    widgets::frame_spec("widgets.progress.frame", ID, Frame::None),
+    widgets::size_spec("widgets.progress.size", ID, Size::Medium, false),
+    SettingSpec::fixed_choice(
+        "widgets.progress.style",
         "widgets.books.setting.style",
         &STYLES,
         STYLES[0],
-    ))?;
-    r.add_setting(widgets::choice(
-        &ID,
-        "thickness",
+        ID,
+    ),
+    SettingSpec::fixed_choice(
+        "widgets.progress.thickness",
         "widgets.books.setting.thickness",
         &THICKNESSES,
         THICKNESSES[1],
-    ))?;
-    part(r, &ID, "cover", true)?;
-    part(r, &ID, "title", true)?;
-    part(r, &ID, "author", true)?;
-    part(r, &ID, "caption", false)?;
+        ID,
+    ),
+    widgets::part_spec(
+        "widgets.progress.cover",
+        ID,
+        "widgets.books.part.cover",
+        true,
+    ),
+    widgets::part_spec(
+        "widgets.progress.title",
+        ID,
+        "widgets.books.part.title",
+        true,
+    ),
+    widgets::part_spec(
+        "widgets.progress.author",
+        ID,
+        "widgets.books.part.author",
+        true,
+    ),
+    widgets::part_spec(
+        "widgets.progress.caption",
+        ID,
+        "widgets.books.part.caption",
+        false,
+    ),
+];
+
+pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
+    add_settings(r, &ID, "widgets.progress", &SETTINGS)?;
     r.add_widget(
         WidgetSpec::new(ID, "widgets.progress", |_| Box::new(Progress::default()))
             .category(widgets::categories::BOOKS),

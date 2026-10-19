@@ -148,6 +148,7 @@ impl Harness {
         for contribution in r.into_contributions() {
             match contribution {
                 Contribution::Setting(spec) => self.settings.define(*spec).unwrap(),
+                Contribution::FixedSetting(spec) => self.settings.define_fixed(spec).unwrap(),
                 Contribution::SettingGroup(group) => self.settings.add_group(group).unwrap(),
                 Contribution::Widget(widget) => self.widgets.add(*widget),
                 Contribution::Translations(text) => {

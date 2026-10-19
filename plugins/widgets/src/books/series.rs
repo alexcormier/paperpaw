@@ -17,8 +17,8 @@ use quireink_sdk::{Arg, Canvas, Env, Id, Rect, RegisterError, Registrar, Setting
 
 use super::shelf::{self, Place, Shelved};
 use super::{
-    Book, Generation, catalog_stamp, chosen, count, current, draw_message, each_book, frame_height,
-    has_catalog, look_settings, number_setting, part, series_rank,
+    Book, Generation, add_settings, catalog_stamp, chosen, count, current, draw_message, each_book,
+    frame_height, has_catalog, series_rank,
 };
 
 pub(crate) const ID: Id = Id::new_static(WIDGET);
@@ -32,34 +32,62 @@ const STARTS: [&str; 2] = ["widgets.series.around", "widgets.series.first"];
 /// Books of a series looked at, at most.
 const MAX_MEMBERS: usize = 60;
 
-pub(crate) fn register(r: &mut Registrar, generation: &Generation) -> Result<(), RegisterError> {
-    look_settings(
-        r,
-        &ID,
-        "widgets.series",
-        Align::Center,
-        Frame::None,
-        Size::Medium,
-        false,
-    )?;
-    r.add_setting(
-        SettingSpec::text(&NAME, "widgets.books.setting.series-name", "")
-            .group(ID.clone())
-            .description("widgets.books.setting.series-name.help"),
-    )?;
-    number_setting(r, &ID, "count", "widgets.books.setting.count", (2, 12, 6))?;
-    r.add_setting(widgets::choice(
-        &ID,
-        "start",
+/// Its settings, kept in the program.
+static SETTINGS: [SettingSpec; 11] = [
+    widgets::align_spec("widgets.series.align", ID, Align::Center),
+    widgets::frame_spec("widgets.series.frame", ID, Frame::None),
+    widgets::size_spec("widgets.series.size", ID, Size::Medium, false),
+    SettingSpec::fixed_text(
+        "widgets.series.name",
+        "widgets.books.setting.series-name",
+        "",
+        ID,
+    )
+    .described("widgets.books.setting.series-name.help"),
+    SettingSpec::fixed_number(
+        "widgets.series.count",
+        "widgets.books.setting.count",
+        2,
+        12,
+        6,
+        ID,
+    ),
+    SettingSpec::fixed_choice(
+        "widgets.series.start",
         "widgets.books.setting.series-start",
         &STARTS,
         STARTS[0],
-    ))?;
-    part(r, &ID, "caption", true)?;
-    part(r, &ID, "numbers", true)?;
-    part(r, &ID, "titles", false)?;
-    part(r, &ID, "read", true)?;
-    part(r, &ID, "current", true)?;
+        ID,
+    ),
+    widgets::part_spec(
+        "widgets.series.caption",
+        ID,
+        "widgets.books.part.caption",
+        true,
+    ),
+    widgets::part_spec(
+        "widgets.series.numbers",
+        ID,
+        "widgets.books.part.numbers",
+        true,
+    ),
+    widgets::part_spec(
+        "widgets.series.titles",
+        ID,
+        "widgets.books.part.titles",
+        false,
+    ),
+    widgets::part_spec("widgets.series.read", ID, "widgets.books.part.read", true),
+    widgets::part_spec(
+        "widgets.series.current",
+        ID,
+        "widgets.books.part.current",
+        true,
+    ),
+];
+
+pub(crate) fn register(r: &mut Registrar, generation: &Generation) -> Result<(), RegisterError> {
+    add_settings(r, &ID, "widgets.series", &SETTINGS)?;
     let kept: Kept = Rc::default();
     let generation = generation.clone();
     r.add_widget(

@@ -23,10 +23,11 @@ use quireink_sdk::{
 };
 
 use super::{
-    Book, Lines, current, draw_bar, draw_cover, draw_message, frame_height, look_settings, part,
+    Book, Lines, add_settings, current, draw_bar, draw_cover, draw_message, frame_height,
     percent_text, text_size,
 };
 use crate::PLUGIN;
+use quireink_sdk::SettingSpec;
 
 pub(crate) const ID: Id = Id::new_static(WIDGET);
 /// Its id, as text.
@@ -156,6 +157,39 @@ impl Recorder {
     }
 }
 
+/// Its settings, kept in the program.
+static SETTINGS: [SettingSpec; 9] = [
+    widgets::align_spec("widgets.reading.align", ID, Align::Left),
+    widgets::frame_spec("widgets.reading.frame", ID, Frame::None),
+    widgets::size_spec("widgets.reading.size", ID, Size::Medium, false),
+    widgets::part_spec(
+        "widgets.reading.caption",
+        ID,
+        "widgets.books.part.caption",
+        true,
+    ),
+    widgets::part_spec(
+        "widgets.reading.cover",
+        ID,
+        "widgets.books.part.cover",
+        true,
+    ),
+    widgets::part_spec(
+        "widgets.reading.author",
+        ID,
+        "widgets.books.part.author",
+        true,
+    ),
+    widgets::part_spec(
+        "widgets.reading.pages",
+        ID,
+        "widgets.books.part.pages",
+        true,
+    ),
+    widgets::part_spec("widgets.reading.bar", ID, "widgets.books.part.bar", true),
+    widgets::part_spec("widgets.reading.left", ID, "widgets.books.part.left", true),
+];
+
 pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     let recorder: Shared = Rc::default();
     for (event, turned) in [(events::BOOK_OPENED, false), (events::PAGE_TURNED, true)] {
@@ -176,21 +210,7 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
         saving.borrow_mut().save(env.storage);
     })?;
 
-    look_settings(
-        r,
-        &ID,
-        "widgets.reading",
-        Align::Left,
-        Frame::None,
-        Size::Medium,
-        false,
-    )?;
-    part(r, &ID, "caption", true)?;
-    part(r, &ID, "cover", true)?;
-    part(r, &ID, "author", true)?;
-    part(r, &ID, "pages", true)?;
-    part(r, &ID, "bar", true)?;
-    part(r, &ID, "left", true)?;
+    add_settings(r, &ID, "widgets.reading", &SETTINGS)?;
     r.add_widget(
         WidgetSpec::new(ID, "widgets.reading", move |_| {
             Box::new(Reading {

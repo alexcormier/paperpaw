@@ -12,7 +12,8 @@ use quireink_sdk::ui::UiStyle;
 use quireink_sdk::widgets::{self, Align, Frame, Look, Size, Widget, WidgetSpec};
 use quireink_sdk::{Canvas, Color, Env, FontHandle, Id, Point, Rect, RegisterError, Registrar};
 
-use super::{caption, chosen, draw_message, draw_ring, frame_height, look_settings, part};
+use super::{add_settings, caption, chosen, draw_message, draw_ring, frame_height};
+use quireink_sdk::SettingSpec;
 
 pub(crate) const ID: Id = Id::new_static(WIDGET);
 /// Its id, as text.
@@ -24,26 +25,40 @@ const STYLES: [&str; 3] = [
     "widgets.battery.ring",
 ];
 
-pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
-    look_settings(
-        r,
-        &ID,
-        "widgets.battery",
-        Align::Center,
-        Frame::None,
-        Size::Fit,
-        true,
-    )?;
-    r.add_setting(widgets::choice(
-        &ID,
-        "style",
+/// Its settings, kept in the program.
+static SETTINGS: [SettingSpec; 7] = [
+    widgets::align_spec("widgets.battery.align", ID, Align::Center),
+    widgets::frame_spec("widgets.battery.frame", ID, Frame::None),
+    widgets::size_spec("widgets.battery.size", ID, Size::Fit, true),
+    SettingSpec::fixed_choice(
+        "widgets.battery.style",
         "widgets.books.setting.style",
         &STYLES,
         STYLES[0],
-    ))?;
-    part(r, &ID, "percent", true)?;
-    part(r, &ID, "charging", true)?;
-    part(r, &ID, "caption", false)?;
+        ID,
+    ),
+    widgets::part_spec(
+        "widgets.battery.percent",
+        ID,
+        "widgets.books.part.percent",
+        true,
+    ),
+    widgets::part_spec(
+        "widgets.battery.charging",
+        ID,
+        "widgets.books.part.charging",
+        true,
+    ),
+    widgets::part_spec(
+        "widgets.battery.caption",
+        ID,
+        "widgets.books.part.caption",
+        false,
+    ),
+];
+
+pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
+    add_settings(r, &ID, "widgets.battery", &SETTINGS)?;
     r.add_widget(
         WidgetSpec::new(
             ID,
