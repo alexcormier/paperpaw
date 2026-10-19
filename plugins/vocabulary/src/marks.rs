@@ -3,8 +3,10 @@
 //! language, and marks them in the role `vocabulary.learning`; a tap on
 //! one looks it up.
 //!
-//! The words are read from the file only when it changed, into a
-//! [`WordSet`] for the language of the book being read.
+//! The words are read from the file only when they changed, into a
+//! [`WordSet`] for the language of the book being read. Whether they did
+//! is known without reading anything ([`store::changes`]): readers ask
+//! as they draw a page.
 
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -20,11 +22,8 @@ use crate::{LEARNING, MARK};
 
 /// The decorator.
 pub(crate) const DECORATOR: Id = Id::new_static("vocabulary.words");
-/// Bytes at the end of the file in the signature: where a word looked up
-/// again, or one more beyond the most kept, shows.
-const TAIL: usize = 64;
 
-/// The words of a language, as they were when the file had a signature.
+/// The words of a language, as they were after a number of changes.
 pub(crate) type Cache = RefCell<Option<(u64, String, WordSet)>>;
 
 /// The decorator, switched by [`MARK`], hearing taps.
@@ -35,24 +34,12 @@ pub(crate) fn decorator() -> DecoratorSpec {
     })
     .switch(&MARK)
     .taps()
-    .signature(|env| signature(env.storage))
+    .signature(|_| signature())
 }
 
-/// What the list of words is like: its size and its last bytes, which
-/// change whenever a word comes or goes.
-pub(crate) fn signature(storage: &dyn Storage) -> u64 {
-    let file = store::file();
-    let size = storage.size(&file).unwrap_or(0);
-    let mut tail = [0u8; TAIL];
-    let n = storage
-        .read_at(&file, size.saturating_sub(TAIL as u64), &mut tail)
-        .unwrap_or(0);
-    // FNV-1a over the size and the tail.
-    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
-    for &b in size.to_le_bytes().iter().chain(&tail[..n]) {
-        hash = (hash ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3);
-    }
-    hash
+/// What the marks depend on: the changes made to the words.
+pub(crate) fn signature() -> u64 {
+    u64::from(store::changes())
 }
 
 /// The marks of `page`: the words of the list in its language.
@@ -64,7 +51,7 @@ pub(crate) fn decorate(
     let Ok(mut cache) = cache.try_borrow_mut() else {
         return Vec::new();
     };
-    let signature = signature(storage);
+    let signature = signature();
     let language = primary(page.language);
     let fresh = matches!(
         &*cache,
@@ -220,11 +207,14 @@ mod tests {
         let cache = Cache::default();
         let text = words(&["a", "quire", "of", "ink"]);
         assert!(decorate(&cache, &storage, &page("en", &text)).is_empty());
-        let before = signature(&storage);
-        storage
-            .append(&store::file(), b"quire\ten\t1\t1\tb\tB\t\n")
-            .unwrap_or_default();
-        assert_ne!(signature(&storage), before);
+        let before = signature();
+        let quire = store::Word {
+            word: "quire".to_string(),
+            language: "en".to_string(),
+            ..store::Word::default()
+        };
+        store::add(&storage, &quire);
+        assert_ne!(signature(), before);
         assert_eq!(decorate(&cache, &storage, &page("en", &text)).len(), 1);
     }
 

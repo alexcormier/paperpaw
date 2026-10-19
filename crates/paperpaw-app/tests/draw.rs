@@ -252,6 +252,15 @@ impl App {
         self.settle(effects);
     }
 
+    fn set(&mut self, id: &str, value: &str) {
+        self.now += 100;
+        let effects = self
+            .kernel
+            .set_setting(Instant(self.now), id, value)
+            .unwrap();
+        self.settle(effects);
+    }
+
     fn open_book(&mut self, path: &str) {
         self.now += 100;
         let params = Params::new().with(params::PATH, path);
@@ -437,11 +446,13 @@ enum Step {
     Run(Id),
     Book(&'static str),
     Open(Id, Params),
+    /// A setting set, as the settings screen would.
+    Set(&'static str, &'static str),
 }
 
 /// Screens reached as people reach them, with what they open with.
 fn walks() -> Vec<(String, Vec<Step>)> {
-    use Step::{Book, Open, Run};
+    use Step::{Book, Open, Run, Set};
     let reader = || Book(EPUB);
     let mut walks = vec![
         ("home", vec![Run(actions::HOME)]),
@@ -464,6 +475,10 @@ fn walks() -> Vec<(String, Vec<Step>)> {
             vec![reader(), Run(Id::new_static("reader.quick-settings"))],
         ),
         ("a text book", vec![Book(TXT)]),
+        (
+            "a book with the words looked up marked",
+            vec![Set("vocabulary.mark", "on"), reader()],
+        ),
     ];
     // The widgets of each kind as the home screen offers them, each drawn
     // as it would show, page by page.
@@ -499,6 +514,7 @@ fn no_screen_reads_while_it_draws() {
             match step {
                 Step::Run(action) => app.run(action),
                 Step::Book(path) => app.open_book(path),
+                Step::Set(id, value) => app.set(id, value),
                 Step::Open(screen, params) => {
                     app.open(&screen, params);
                     assert_eq!(app.shown(), screen.as_str(), "{name}");

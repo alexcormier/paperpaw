@@ -792,7 +792,10 @@ impl DecoratorSpec {
         self
     }
 
-    /// What its marks depend on besides the page.
+    /// What its marks depend on besides the page. Readers ask for it
+    /// whenever they draw a page (on some devices once for every band of
+    /// it): it says it from memory, e.g. a count of the changes to its
+    /// data, without reading the storage.
     pub fn signature(mut self, signature: impl Fn(&Env<'_>) -> u64 + 'static) -> Self {
         self.signature = Box::new(signature);
         self
