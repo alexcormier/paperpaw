@@ -105,7 +105,8 @@ USB_ID = (0x303A, 0x1001)
 LONG_MS = 1200
 # A command that takes longer has failed.
 TIMEOUT_S = 60
-# Removing a large folder (e.g. the books' caches) takes minutes.
+# Removing a large folder (e.g. the books' caches) or a large download
+# takes minutes.
 REMOVE_TIMEOUT_S = 900
 
 
@@ -489,7 +490,7 @@ def run(x4, step):
             # `http:get:<url>` into memory, `http:get:<url>><path>` into a file.
             url, _, path = rest[4:].partition(">")
             started = time.monotonic()
-            answer = x4.ask(f"http get {url} {path}".strip(), "HTTP")[-1]
+            answer = x4.ask(f"http get {url} {path}".strip(), "HTTP", REMOVE_TIMEOUT_S)[-1]
             print(f"{answer}  ({time.monotonic() - started:.1f} s)")
         case ["screens"]:
             print(x4.ask("screens", "SCREENS")[-1].split(" ", 1)[-1])

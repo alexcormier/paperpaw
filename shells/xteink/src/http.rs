@@ -557,16 +557,30 @@ fn keep(
             if *got > max {
                 return Err("too large");
             }
-            buf.extend_from_slice(piece);
-            if buf.len() >= FILE_BUF {
+            let mut write = |bytes: &[u8]| {
                 let written = if *started {
-                    storage.append(part, buf)
+                    storage.append(part, bytes)
                 } else {
-                    storage.write(part, buf)
+                    storage.write(part, bytes)
                 };
-                written.map_err(|_| "could not write the file")?;
                 *started = true;
+                written.map_err(|_| "could not write the file")
+            };
+            // Small pieces gathered to write in fewer calls; the buffer
+            // never grows past `FILE_BUF`, as pieces come up to a
+            // connection's whole buffer (16 KB) when memory is short.
+            if buf.len() + piece.len() > FILE_BUF && !buf.is_empty() {
+                write(buf)?;
                 buf.clear();
+            }
+            if piece.len() >= FILE_BUF {
+                write(piece)?;
+            } else {
+                if buf.capacity() < FILE_BUF {
+                    buf.try_reserve_exact(FILE_BUF - buf.len())
+                        .map_err(|_| "not enough memory to write the file")?;
+                }
+                buf.extend_from_slice(piece);
             }
         }
     }

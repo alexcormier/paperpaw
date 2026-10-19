@@ -6,6 +6,12 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- X4: downloads into a file (updates, books, fonts) no longer run out of
+  memory half way: pieces of an answer gathered before writing them to
+  the card grew without bound when the connection handed over a lot at
+  once, and the X4 started again (found with the crash file's calls;
+  the out-of-memory crashes seen in testing were this). Downloads of
+  10 MB one after another now go through, at the peak 222 KB of the heap's 262 KB.
 - X4: removing or copying a large folder (e.g. one with many books, or
   their caches) no longer starts the device again half way: work on the
   card keeps the watchdogs from taking it for hung (it took 20 s before
