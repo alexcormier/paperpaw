@@ -175,9 +175,14 @@ Only if the user has one and wants it used. Its README is
 - `tools/x4-remote.py` drives a test build over USB (see its docstring
   and `--help`): presses buttons, runs actions, opens books, prints the
   screen's id and what it shows, takes screenshots, puts files onto the
-  card and gets them back, shows the log (`-v`), the heap and the stack
-  left (`heap`), a sampling profile (`--profile`) and the storage calls
-  (`--trace`). Released firmware has no remote control.
+  card and gets them back (also whole folders, checked by MD5), lists,
+  moves and removes files, shows the log (`-v`, its level with `log:`),
+  the heap and the stack left (`heap`), what each plugin took (`usage`),
+  a sampling profile (`--profile`) and the storage calls (`--trace`). It
+  waits for and checks what the screen shows (`until:`, `expect:`, an
+  exit code for scripts), taps and swipes, sends events (`emit:`), sets
+  the clock, and restarts the X4 or makes it panic, waiting until it is
+  back. Released firmware has no remote control.
 - **Keep the device reachable.** Never start anything that could cut the
   USB link (sleep, long blocking loops) without a bounded timeout after
   which it comes back by itself; run tools with timeouts. Ask before

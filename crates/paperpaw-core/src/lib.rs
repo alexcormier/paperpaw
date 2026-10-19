@@ -720,6 +720,33 @@ impl Kernel {
         self.stack.last().map(|s| &s.id)
     }
 
+    /// The ids of the screens open, the one shown last.
+    pub fn screens(&self) -> impl Iterator<Item = &Id> {
+        self.stack.iter().map(|s| &s.id)
+    }
+
+    /// What the device and each plugin did since start, as of the last
+    /// input or tick (see [`paperpaw_sdk::usage`]).
+    pub fn usage(&self) -> &paperpaw_sdk::usage::Usage {
+        &self.shared.usage
+    }
+
+    /// Every action plugins added.
+    pub fn actions(&self) -> &paperpaw_sdk::Actions {
+        &self.shared.actions
+    }
+
+    /// Sends `event` with `params` as a plugin would, to every plugin and
+    /// screen that hears it, e.g. asked by a shell's remote control or a
+    /// test.
+    pub fn send_event(&mut self, now: Instant, event: Id, params: Params) -> Effects {
+        let _running = self.shared.meter.enter(meter::CORE);
+        self.now = now;
+        self.output.commands.push(Command::Emit(event, params));
+        self.run_commands();
+        self.finish()
+    }
+
     /// Returns and clears the collected warnings.
     pub fn take_warnings(&mut self) -> Vec<Warning> {
         mem::take(&mut self.warnings)

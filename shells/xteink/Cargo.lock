@@ -2567,6 +2567,7 @@ dependencies = [
  "nb 1.1.0",
  "paperpaw-app",
  "paperpaw-core",
+ "paperpaw-digest",
  "paperpaw-fat",
  "paperpaw-http",
  "paperpaw-platform",

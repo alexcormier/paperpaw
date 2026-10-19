@@ -69,6 +69,49 @@
 //! - `get <path>`: a file of the storage, as `PP:SIZE <size>`, then
 //!   `PP:DATA <hex>` lines and `PP:END` (e.g. the battery's log).
 //!
+//! The storage (paths are the rest of the line, spaces and all; the card's
+//! top is an empty path):
+//!
+//! - `ls [<path>]`: a folder, a `PP:ENTRY <d|f> <size> <name>` line for
+//!   each entry, then `PP:END`;
+//! - `stat <path>`: `PP:STAT <d|f|-> <size>` (`-`: not there);
+//! - `md5 <path>`: `PP:MD5 <hex> <size>`, to check a file that came;
+//! - `rm <path>`: removes a file, or a folder with all in it (`PP:OK`);
+//! - `mkdir <path>`: makes a folder and those above it (`PP:OK`);
+//! - `mv <from> <to>`: renames or moves (both in hexadecimal, `PP:OK`);
+//! - `sync`: what the storage kept back written to the card (`PP:OK`).
+//!
+//! What runs:
+//!
+//! - `version`: `PP:VERSION <version> <device>`, then a `PP:CRATE <name>
+//!   <version>` line for each plugin crate built in and `PP:END`;
+//! - `plugins`: a `PP:PLUGIN <id> <on|off> <version>` line for each plugin,
+//!   then `PP:END`;
+//! - `actions [<prefix>]`: a `PP:ACTION <id>` line for each action (those
+//!   whose ids begin with `prefix`), then `PP:END`;
+//! - `settings [<prefix>]`: a `PP:VALUE <id> <value>` line for each
+//!   setting (as configuration files write it), then `PP:END`;
+//! - `screens`: `PP:SCREENS <id> …`, the screens open, the one shown last;
+//! - `usage`: `PP:USAGE <fast> <partial> <full> <pixels> <inputs> <sleeps>
+//!   <panel ms>` since start, then a `PP:USE <plugin> <busy µs> <calls>
+//!   <shown ms> <fast> <partial> <full> <bytes read> <bytes written>` line
+//!   for each plugin and `PP:END` (as of the last input or tick);
+//! - `time`: `PP:TIME <unix ms or -> <ms since start>`;
+//! - `log <off|error|warn|info|debug|trace>`: how much the log says
+//!   (`PP:OK`).
+//!
+//! Changes:
+//!
+//! - `emit <event> [<key>=<hex value> …]`: an event, as a plugin would
+//!   send it (`PP:OK`);
+//! - `touch <down|move|up> <x> <y>`: a finger on the screen, where
+//!   PaperPaw draws (`PP:OK`), e.g. to tap or swipe on the X4 Pro;
+//! - `time set <unix ms>`: the clock set (`PP:OK`);
+//! - `restart`: what plugins keep saved, then the X4 starts again
+//!   (`PP:OK` first; the connection comes back by itself);
+//! - `panic <message>`: panics with that message (hexadecimal), to try
+//!   what a crash leaves (`boot` says it after the restart).
+//!
 //! Any other line is answered with `PP:ERR <line>`.
 
 use alloc::string::String;
@@ -138,7 +181,58 @@ pub enum Command {
     Network(Ask),
     Hang(u64),
     Nap(u64),
+    /// A folder's entries.
+    List(String),
+    /// Whether a path is a file or a folder, and its size.
+    Stat(String),
+    /// A file's MD5.
+    Md5(String),
+    /// A file, or a folder with all in it, removed.
+    Remove(String),
+    MakeDir(String),
+    Move {
+        from: String,
+        to: String,
+    },
+    Sync,
+    Version,
+    Plugins,
+    /// The actions whose ids begin with this.
+    Actions(String),
+    /// The settings whose ids begin with this, with their values.
+    Settings(String),
+    Screens,
+    Usage,
+    Time,
+    /// The log's level, as the `log` crate names them.
+    Log(&'static str),
+    /// An event, with its parameters.
+    Emit {
+        event: String,
+        params: Vec<(String, String)>,
+    },
+    /// A finger down, moved or up at a point.
+    Touch {
+        phase: Touch,
+        x: i32,
+        y: i32,
+    },
+    /// The clock set, to milliseconds since 1970.
+    SetTime(i64),
+    Restart,
+    Panic(String),
 }
+
+/// What a finger does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Touch {
+    Down,
+    Move,
+    Up,
+}
+
+/// The log's levels, from saying nothing to saying everything.
+pub const LOG_LEVELS: [&str; 6] = ["off", "error", "warn", "info", "debug", "trace"];
 
 /// What is asked of the network.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -203,6 +297,60 @@ pub fn parse(line: &str) -> Option<Command> {
             _ => return None,
         },
         "hang" => Command::Hang(words.next()?.parse().ok()?),
+        "sync" => Command::Sync,
+        "version" => Command::Version,
+        "plugins" => Command::Plugins,
+        "screens" => Command::Screens,
+        "usage" => Command::Usage,
+        "restart" => Command::Restart,
+        "actions" => Command::Actions(String::from(words.next().unwrap_or(""))),
+        "settings" => Command::Settings(String::from(words.next().unwrap_or(""))),
+        "time" => match words.next() {
+            None => Command::Time,
+            Some("set") => Command::SetTime(words.next()?.parse().ok()?),
+            Some(_) => return None,
+        },
+        "log" => {
+            let level = words.next()?;
+            Command::Log(LOG_LEVELS.iter().find(|l| **l == level).copied()?)
+        }
+        "panic" => Command::Panic(unhex(words.next()?)?),
+        "mv" => Command::Move {
+            from: unhex(words.next()?)?,
+            to: unhex(words.next()?)?,
+        },
+        "touch" => Command::Touch {
+            phase: match words.next()? {
+                "down" => Touch::Down,
+                "move" => Touch::Move,
+                "up" => Touch::Up,
+                _ => return None,
+            },
+            x: words.next()?.parse().ok()?,
+            y: words.next()?.parse().ok()?,
+        },
+        "emit" => {
+            let event = String::from(words.next()?);
+            let mut params = Vec::new();
+            for pair in words.by_ref() {
+                let (key, value) = pair.split_once('=')?;
+                params.push((String::from(key), unhex(value)?));
+            }
+            Command::Emit { event, params }
+        }
+        // A path, the rest of the line.
+        "ls" | "stat" | "md5" | "rm" | "mkdir" => {
+            let path = line.split_once(' ').map_or("", |(_, rest)| rest.trim());
+            let path = String::from(path);
+            return match line.split_ascii_whitespace().next()? {
+                "ls" => Some(Command::List(path)),
+                _ if path.is_empty() => None,
+                "stat" => Some(Command::Stat(path)),
+                "md5" => Some(Command::Md5(path)),
+                "rm" => Some(Command::Remove(path)),
+                _ => Some(Command::MakeDir(path)),
+            };
+        }
         "nap" => Command::Nap(words.next()?.parse().ok()?),
         "gray" => Command::Gray(match words.next() {
             Some(path) => Some(unhex(path)?),
@@ -427,6 +575,74 @@ mod tests {
         assert_eq!(parse("refresh half"), None);
         assert_eq!(parse("dance"), None);
         assert_eq!(parse(""), None);
+    }
+
+    #[test]
+    fn the_storage() {
+        assert_eq!(parse("ls"), Some(Command::List(String::new())));
+        assert_eq!(
+            parse("ls books/my books"),
+            Some(Command::List(String::from("books/my books")))
+        );
+        assert_eq!(
+            parse("rm updates/a b.bin"),
+            Some(Command::Remove(String::from("updates/a b.bin")))
+        );
+        assert_eq!(parse("rm"), None);
+        assert_eq!(parse("rm  "), None);
+        assert_eq!(
+            parse("mkdir a/b"),
+            Some(Command::MakeDir(String::from("a/b")))
+        );
+        assert_eq!(parse("md5 a"), Some(Command::Md5(String::from("a"))));
+        assert_eq!(parse("stat a"), Some(Command::Stat(String::from("a"))));
+        assert_eq!(
+            parse("mv 61 2f62"),
+            Some(Command::Move {
+                from: String::from("a"),
+                to: String::from("/b")
+            })
+        );
+        assert_eq!(parse("mv 61"), None);
+    }
+
+    #[test]
+    fn what_runs_and_changes() {
+        assert_eq!(parse("actions"), Some(Command::Actions(String::new())));
+        assert_eq!(
+            parse("settings reader."),
+            Some(Command::Settings(String::from("reader.")))
+        );
+        assert_eq!(parse("time"), Some(Command::Time));
+        assert_eq!(
+            parse("time set 1760000000000"),
+            Some(Command::SetTime(1_760_000_000_000))
+        );
+        assert_eq!(parse("time set soon"), None);
+        assert_eq!(parse("log debug"), Some(Command::Log("debug")));
+        assert_eq!(parse("log loud"), None);
+        assert_eq!(
+            parse("touch down 10 20"),
+            Some(Command::Touch {
+                phase: Touch::Down,
+                x: 10,
+                y: 20
+            })
+        );
+        assert_eq!(parse("touch tap 1 2"), None);
+        assert_eq!(
+            parse("emit core.book-opened path=2f61"),
+            Some(Command::Emit {
+                event: String::from("core.book-opened"),
+                params: alloc::vec![(String::from("path"), String::from("/a"))]
+            })
+        );
+        assert_eq!(parse("emit e path"), None);
+        assert_eq!(
+            parse("panic 6f68"),
+            Some(Command::Panic(String::from("oh")))
+        );
+        assert_eq!(parse("restart now"), None);
     }
 
     #[test]

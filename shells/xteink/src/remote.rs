@@ -163,6 +163,126 @@ impl Remote {
                 Some(value) => println!("PP:SETTING {}", value.to_config_text()),
                 None => error("no such setting"),
             },
+            Command::List(path) => list(kernel, &path),
+            Command::Stat(path) => {
+                let storage = kernel.storage();
+                if let Ok(size) = storage.size(&path) {
+                    println!("PP:STAT f {size}");
+                } else if storage.list(&path, &mut |_| {}).is_ok() {
+                    println!("PP:STAT d 0");
+                } else {
+                    println!("PP:STAT - 0");
+                }
+            }
+            Command::Md5(path) => md5(kernel, &path),
+            Command::Remove(path) => {
+                let storage = kernel.storage();
+                let removed = if storage.size(&path).is_ok() {
+                    storage.remove(&path)
+                } else {
+                    storage.remove_dir_all(&path)
+                };
+                match removed.and_then(|()| storage.sync()) {
+                    Ok(()) => ok(),
+                    Err(e) => error(&alloc::format!("{path}: {e:?}")),
+                }
+            }
+            Command::MakeDir(path) => match kernel.storage().create_dir(&path) {
+                Ok(()) => ok(),
+                Err(e) => error(&alloc::format!("{path}: {e:?}")),
+            },
+            Command::Move { from, to } => {
+                let storage = kernel.storage();
+                match storage.rename(&from, &to).and_then(|()| storage.sync()) {
+                    Ok(()) => ok(),
+                    Err(e) => error(&alloc::format!("{from}: {e:?}")),
+                }
+            }
+            Command::Sync => match kernel.storage().sync() {
+                Ok(()) => ok(),
+                Err(e) => error(&alloc::format!("{e:?}")),
+            },
+            Command::Version => {
+                println!(
+                    "PP:VERSION {} {}",
+                    env!("PAPERPAW_VERSION"),
+                    kernel.device().id
+                );
+                if let Some(list) =
+                    paperpaw_sdk::firmware::Plugins::read_static(&crate::ota::PLUGINS)
+                {
+                    for c in list.iter() {
+                        println!("PP:CRATE {} {}", c.name, c.version);
+                    }
+                }
+                println!("PP:END");
+            }
+            Command::Plugins => {
+                for plugin in kernel.plugins().iter() {
+                    let m = &plugin.manifest;
+                    let on = if plugin.enabled { "on" } else { "off" };
+                    println!("PP:PLUGIN {} {on} {}", m.id, m.version);
+                }
+                println!("PP:END");
+            }
+            Command::Actions(prefix) => {
+                for action in kernel.actions().iter() {
+                    if action.id.as_str().starts_with(prefix.as_str()) {
+                        println!("PP:ACTION {}", action.id);
+                    }
+                }
+                println!("PP:END");
+            }
+            Command::Settings(prefix) => {
+                let settings = kernel.settings();
+                for spec in settings.specs() {
+                    let id = spec.id.as_str();
+                    if id.starts_with(prefix.as_str())
+                        && let Some(value) = settings.get(id)
+                    {
+                        println!("PP:VALUE {id} {}", value.to_config_text());
+                    }
+                }
+                println!("PP:END");
+            }
+            Command::Screens => {
+                let mut line = String::from("PP:SCREENS");
+                for id in kernel.screens() {
+                    let _ = write!(line, " {id}");
+                }
+                println!("{line}");
+            }
+            Command::Usage => {
+                let u = kernel.usage();
+                let [fast, partial, full] = u.refreshes;
+                println!(
+                    "PP:USAGE {fast} {partial} {full} {} {} {} {}",
+                    u.pixels, u.inputs, u.sleeps, u.panel_ms
+                );
+                for p in &u.plugins {
+                    let [fast, partial, full] = p.refreshes;
+                    println!(
+                        "PP:USE {} {} {} {} {fast} {partial} {full} {} {}",
+                        p.plugin, p.busy_us, p.calls, p.shown_ms, p.read, p.written
+                    );
+                }
+                println!("PP:END");
+            }
+            Command::Time => {
+                let now = crate::now();
+                match crate::clock::unix_ms(now) {
+                    Some(ms) => println!("PP:TIME {ms} {}", now.0),
+                    None => println!("PP:TIME - {}", now.0),
+                }
+            }
+            Command::Log(level) => {
+                let level = level.parse().unwrap_or(log::LevelFilter::Info);
+                // SAFETY: nothing else sets the level, and interrupts are
+                // held meanwhile (the chip has no atomics for the safe one).
+                critical_section::with(|_| unsafe { log::set_max_level_racy(level) });
+                ok();
+            }
+            Command::Panic(message) => panic!("asked over USB: {message}"),
             command @ (Command::Press { .. }
             | Command::Run(_)
             | Command::Set { .. }
@@ -170,7 +290,11 @@ impl Remote {
             | Command::Refresh { .. }
             | Command::Gray(_)
             | Command::IdleSleep(_)
-            | Command::Network(_)) => return Some(command),
+            | Command::Network(_)
+            | Command::Emit { .. }
+            | Command::Touch { .. }
+            | Command::SetTime(_)
+            | Command::Restart) => return Some(command),
         }
         None
     }
@@ -217,6 +341,38 @@ impl Remote {
         }
         println!("PP:OK {got}");
     }
+}
+
+/// Lists the folder `path` of the storage.
+fn list(kernel: &Kernel, path: &str) {
+    let listed = kernel.storage().list(path, &mut |entry| {
+        let kind = if entry.is_dir { "d" } else { "f" };
+        println!("PP:ENTRY {kind} {} {}", entry.size, entry.name);
+    });
+    match listed {
+        Ok(()) => println!("PP:END"),
+        Err(e) => error(&alloc::format!("{path}: {e:?}")),
+    }
+}
+
+/// Says the MD5 of the file `path` of the storage, and its size.
+fn md5(kernel: &Kernel, path: &str) {
+    let storage = kernel.storage();
+    let mut digest = paperpaw_digest::md5::Md5::new();
+    let mut buf = alloc::vec![0u8; CHUNK];
+    let mut at = 0u64;
+    loop {
+        crate::power::feed();
+        match storage.read_at(path, at, &mut buf) {
+            Ok(0) => break,
+            Ok(n) => {
+                digest.update(&buf[..n]);
+                at += n as u64;
+            }
+            Err(e) => return error(&alloc::format!("{path}: {e:?}")),
+        }
+    }
+    println!("PP:MD5 {} {at}", digest.hex());
 }
 
 /// Sends the file `path` of the storage.

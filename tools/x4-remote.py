@@ -8,8 +8,14 @@ leaves it out).
 Usage:
   python tools/x4-remote.py [--port COM10] [--script STEPS] [--screenshot FILE]
   python tools/x4-remote.py --log 30     (the X4's log for 30 seconds)
-  python tools/x4-remote.py --put book.epub books/book.epub   (a file onto its card)
+  python tools/x4-remote.py --put book.epub books/book.epub   (a file onto its card,
+      checked by its MD5 once there)
   python tools/x4-remote.py --get .paperpaw/plugins/battery/log.csv log.csv   (one off it)
+  python tools/x4-remote.py --push fonts/ .paperpaw/fonts   (a folder, all in it)
+  python tools/x4-remote.py --pull .paperpaw/plugins/stats stats/   (a folder off it)
+  python tools/x4-remote.py --ls books   --cat paperpaw.ini   --rm updates/old.bin
+  python tools/x4-remote.py --mkdir books/new   --mv books/a.epub books/b.epub
+  python tools/x4-remote.py --info     (version, plugins, the screens open, the time)
   python tools/x4-remote.py --profile --script "page-forward,wait:2000"
       (where the time goes during the steps: the functions the processor
       was in most, from the firmware's symbols; needs rustup's llvm-tools)
@@ -37,6 +43,36 @@ STEPS, separated by commas:
   input              print how the buttons and the battery are read
   shot:out/a.png     a screenshot now
 
+  Waiting and checking (a script with a failed check ends with exit code 1):
+  until:Settings     wait until the screen shows this text (at most 30 s)
+  until:Settings:5000  at most 5 s
+  expect:Settings    check that the screen shows this text now
+  expect-not:Error   check that it does not
+  screens            print the screens open, the one shown last
+  boot               why the X4 last started, and the panic before if any
+
+  Touch (the X4 Pro), where PaperPaw draws:
+  tap:240:400        a tap there
+  swipe:240:700:240:100   a finger from one point to the other (also :ms)
+  tap-label:Search online  a tap in the middle of what shows that text
+
+  The card (paths as PaperPaw writes them, from the card's top):
+  ls:books  stat:books/a.epub  md5:books/a.epub  rm:updates  mkdir:books/new
+  mv:books/a.epub>books/b.epub   sync   cat:paperpaw.ini
+
+  What runs, and changes:
+  version            the firmware's version and the plugin crates built in
+  plugins            every plugin, on or off, with its version
+  actions:reader.    the actions (those beginning so; all without)
+  settings:reader.   the settings and their values
+  usage              what each plugin took since start: time, calls,
+                     refreshes, bytes read and written (busiest first)
+  time               the clock; time:set sets it to this computer's
+  log:debug          how much the log says (off, error, warn, info, debug, trace)
+  emit:core.book-opened:path=books/a.epub   an event, as a plugin sends it
+  restart            the X4 starts again (waits until it is back)
+  panic:why          a panic, to try what a crash leaves (waits until back)
+
 Needs pyserial (pip install pyserial). Without --port, the X4 is found by
 its USB id.
 """
@@ -45,6 +81,7 @@ import argparse
 import bisect
 import getpass
 import glob
+import hashlib
 import os
 import re
 import struct
@@ -86,9 +123,12 @@ def open_port(name):
 class X4:
     def __init__(self, port):
         self.port = port
+        self.name = port.port
         self.buffer = b""
         # The X4's log is printed, too.
         self.verbose = False
+        # Checks of the script that did not hold.
+        self.failed = []
 
     def line(self, deadline):
         """The next line from the X4, or None once the deadline passed."""
@@ -127,7 +167,8 @@ class X4:
                 return answers
 
     def put(self, local, path):
-        """Copies the file `local` to `path` on the X4's card."""
+        """Copies the file `local` to `path` on the X4's card, and checks it
+        there by its MD5."""
         data = Path(local).read_bytes()
         self.ask(f"put {len(data)} {path}", "READY")
         started = time.monotonic()
@@ -135,14 +176,103 @@ class X4:
             self.port.write(b"data " + data[at : at + 512].hex().encode() + b"\n")
         self.expect(f"put {path}", "OK")
         seconds = time.monotonic() - started
-        print(f"{path}: {len(data) // 1000} KB in {seconds:.1f} s")
+        there = self.ask(f"md5 {path}", "MD5")[-1].split()
+        if there[1] != hashlib.md5(data).hexdigest() or int(there[2]) != len(data):
+            sys.exit(f"{path}: arrived changed (MD5 {there[1]}, {there[2]} bytes)")
+        print(f"{path}: {len(data) // 1000} KB in {seconds:.1f} s, checked")
 
     def get(self, path, local):
         """Copies the file `path` on the X4's card to `local`."""
-        answers = self.ask(f"get {path}", "END")
-        data = b"".join(bytes.fromhex(a.split(" ", 1)[1]) for a in answers if a.startswith("DATA "))
+        data = self.read(path)
         Path(local).write_bytes(data)
         print(f"{path}: {len(data)} bytes to {local}")
+
+    def read(self, path):
+        """The bytes of the file `path` on the X4's card."""
+        answers = self.ask(f"get {path}", "END")
+        return b"".join(bytes.fromhex(a.split(" ", 1)[1]) for a in answers if a.startswith("DATA "))
+
+    def listing(self, path):
+        """The entries of the folder `path`: (folder?, size, name)."""
+        entries = []
+        for answer in self.ask(f"ls {path}", "END")[:-1]:
+            _, kind, size, name = answer.split(" ", 3)
+            entries.append((kind == "d", int(size), name))
+        return entries
+
+    def push(self, local, path):
+        """Copies the folder `local` and all in it to `path` on the card."""
+        root = Path(local)
+        self.ask(f"mkdir {path}", "OK")
+        for item in sorted(root.rglob("*")):
+            target = f"{path}/{item.relative_to(root).as_posix()}"
+            if item.is_dir():
+                self.ask(f"mkdir {target}", "OK")
+            else:
+                self.put(item, target)
+
+    def pull(self, path, local):
+        """Copies the folder `path` on the card and all in it to `local`."""
+        Path(local).mkdir(parents=True, exist_ok=True)
+        for is_dir, _, name in self.listing(path):
+            there = f"{path}/{name}" if path else name
+            if is_dir:
+                self.pull(there, Path(local) / name)
+            else:
+                self.get(there, Path(local) / name)
+
+    def boot(self):
+        """Prints why the X4 last started, and the panic of the run
+        before if it panicked."""
+        print(self.ask("boot", "BOOT")[-1])
+        deadline = time.monotonic() + 0.5
+        while (line := self.line(deadline)) is not None:
+            if line.startswith("PP:PANIC"):
+                print(line[3:])
+
+    def parts(self):
+        """What the screen shows: (role, x, y, width, height, state, label)."""
+        parts = []
+        for answer in self.ask("describe", "END")[:-1]:
+            _, role, x, y, w, h, state, *label = answer.split(" ")
+            parts.append((role, int(x), int(y), int(w), int(h), state, " ".join(label)))
+        return parts
+
+    def shows(self, text):
+        return any(text in part[6] for part in self.parts())
+
+    def touch(self, phase, x, y):
+        self.ask(f"touch {phase} {x} {y}", "OK")
+
+    def swipe(self, x1, y1, x2, y2, ms=300):
+        """A finger from one point to the other, in steps."""
+        self.touch("down", x1, y1)
+        steps = max(1, ms // 30)
+        for i in range(1, steps + 1):
+            time.sleep(ms / 1000 / steps)
+            self.touch("move", x1 + (x2 - x1) * i // steps, y1 + (y2 - y1) * i // steps)
+        self.touch("up", x2, y2)
+
+    def back_again(self, command, until):
+        """Sends a command after which the X4 starts again, and waits until
+        it answers once more."""
+        self.port.write(command.encode() + b"\n")
+        time.sleep(1)
+        self.port.close()
+        deadline = time.monotonic() + 40
+        while time.monotonic() < deadline:
+            time.sleep(1)
+            try:
+                self.port = open_port(self.name)
+                self.buffer = b""
+                self.boot()
+                return
+            except (serial.SerialException, SystemExit):
+                try:
+                    self.port.close()
+                except serial.SerialException:
+                    pass
+        sys.exit(f"{command}: the X4 did not come back in 40 s")
 
     def press(self, button, ms):
         self.ask(f"hold {button} {ms}", "OK")
@@ -281,9 +411,105 @@ def write_png(path, width, height, gray_rows):
 
 def run(x4, step):
     parts = step.split(":")
+    # What follows the step's name, colons and all (paths, texts).
+    rest = step.split(":", 1)[1] if ":" in step else ""
     match parts:
         case ["wait", ms]:
             time.sleep(int(ms) / 1000)
+        case ["until", *_]:
+            text, ms = rest, 30000
+            if ":" in rest and rest.rsplit(":", 1)[1].isdigit():
+                text, ms = rest.rsplit(":", 1)[0], int(rest.rsplit(":", 1)[1])
+            deadline = time.monotonic() + ms / 1000
+            while not x4.shows(text):
+                if time.monotonic() > deadline:
+                    x4.failed.append(f"until {text}: not shown in {ms} ms")
+                    print(f"FAILED: {text} not shown in {ms} ms")
+                    return
+                time.sleep(0.5)
+        case ["expect", *_]:
+            if not x4.shows(rest):
+                x4.failed.append(f"expect {rest}")
+                print(f"FAILED: {rest} not shown")
+        case ["expect-not", *_]:
+            if x4.shows(rest):
+                x4.failed.append(f"expect-not {rest}")
+                print(f"FAILED: {rest} shown")
+        case ["tap", x, y]:
+            x4.touch("down", x, y)
+            time.sleep(0.08)
+            x4.touch("up", x, y)
+        case ["swipe", x1, y1, x2, y2, *ms]:
+            x4.swipe(int(x1), int(y1), int(x2), int(y2), int(ms[0]) if ms else 300)
+        case ["tap-label", *_]:
+            found = [p for p in x4.parts() if rest in p[6]]
+            if not found:
+                sys.exit(f"tap-label: nothing shows {rest}")
+            _, x, y, w, h, _, _ = found[-1]
+            run(x4, f"tap:{x + w // 2}:{y + h // 2}")
+        case ["boot"]:
+            x4.boot()
+        case ["screens"]:
+            print(x4.ask("screens", "SCREENS")[-1].split(" ", 1)[-1])
+        case ["ls", *_]:
+            for is_dir, size, name in x4.listing(rest):
+                print(f"{name}/" if is_dir else f"{name}  {size}")
+        case ["stat", *_]:
+            print(x4.ask(f"stat {rest}", "STAT")[-1])
+        case ["md5", *_]:
+            print(x4.ask(f"md5 {rest}", "MD5")[-1])
+        case ["cat", *_]:
+            sys.stdout.write(x4.read(rest).decode("utf-8", "replace"))
+        case ["rm", *_]:
+            x4.ask(f"rm {rest}", "OK")
+        case ["mkdir", *_]:
+            x4.ask(f"mkdir {rest}", "OK")
+        case ["mv", *_] if ">" in rest:
+            old, new = rest.split(">", 1)
+            x4.ask(f"mv {old.encode().hex()} {new.encode().hex()}", "OK")
+        case ["sync"]:
+            x4.ask("sync", "OK")
+        case ["version"]:
+            for answer in x4.ask("version", "END")[:-1]:
+                print(answer.split(" ", 1)[1])
+        case ["plugins"]:
+            for answer in x4.ask("plugins", "END")[:-1]:
+                print(answer.split(" ", 1)[1])
+        case ["actions", *_]:
+            for answer in x4.ask(f"actions {rest}".strip(), "END")[:-1]:
+                print(answer.split(" ", 1)[1])
+        case ["settings", *_]:
+            for answer in x4.ask(f"settings {rest}".strip(), "END")[:-1]:
+                print(answer.split(" ", 1)[1])
+        case ["time"]:
+            print(x4.ask("time", "TIME")[-1])
+        case ["usage"]:
+            answers = x4.ask("usage", "END")[:-1]
+            f, p, u, pixels, inputs, sleeps, panel = answers[0].split()[1:]
+            print(f"refreshes {f} fast, {p} partial, {u} full; {pixels} pixels; "
+                  f"{inputs} inputs, {sleeps} sleeps, panel {panel} ms")
+            print(f"{'plugin':<20}{'busy ms':>10}{'calls':>8}{'shown s':>9}"
+                  f"{'refreshes':>12}{'read KB':>9}{'written KB':>11}")
+            rows = [a.split()[1:] for a in answers[1:]]
+            for row in sorted(rows, key=lambda r: -int(r[1])):
+                name, busy, calls, shown, rf, rp, ru, read, written = row
+                print(f"{name:<20}{int(busy) // 1000:>10}{calls:>8}{int(shown) // 1000:>9}"
+                      f"{f'{rf}/{rp}/{ru}':>12}{int(read) // 1000:>9}{int(written) // 1000:>11}")
+        case ["time", "set", *ms]:
+            at = int(ms[0]) if ms else int(time.time() * 1000)
+            x4.ask(f"time set {at}", "OK")
+        case ["log", level]:
+            x4.ask(f"log {level}", "OK")
+        case ["emit", event, *pairs]:
+            hexed = []
+            for pair in pairs:
+                key, value = pair.split("=", 1)
+                hexed.append(f"{key}={value.encode().hex() or '-'}")
+            x4.ask(" ".join(["emit", event, *hexed]), "OK")
+        case ["restart"]:
+            x4.back_again("restart", "BOOT")
+        case ["panic", *_]:
+            x4.back_again(f"panic {(rest or 'asked').encode().hex()}", "BOOT")
         case ["long", button]:
             x4.press(button, LONG_MS)
         case ["hold", button, ms]:
@@ -320,8 +546,8 @@ def run(x4, step):
                 _, role, x, y, w, h, state, *label = answer.split(" ")
                 state = "" if state == "-" else f" ({state.replace('+', ', ')})"
                 print(f'{role} "{" ".join(label)}"{state} at {x},{y} {w}x{h}')
-        case ["shot", path]:
-            x4.screenshot(path)
+        case ["shot", *_]:
+            x4.screenshot(rest)
         case [button]:
             x4.press(button, 60)
         case _:
@@ -341,22 +567,50 @@ def main():
     parser.add_argument("--trace", action="store_true", help="what the steps do on the storage")
     parser.add_argument("--put", nargs=2, action="append", default=[], metavar=("FILE", "PATH"))
     parser.add_argument("--get", nargs=2, action="append", default=[], metavar=("PATH", "FILE"))
+    parser.add_argument("--push", nargs=2, action="append", default=[], metavar=("DIR", "PATH"))
+    parser.add_argument("--pull", nargs=2, action="append", default=[], metavar=("PATH", "DIR"))
+    parser.add_argument("--ls", action="append", default=[], metavar="PATH")
+    parser.add_argument("--cat", action="append", default=[], metavar="PATH")
+    parser.add_argument("--rm", action="append", default=[], metavar="PATH")
+    parser.add_argument("--mkdir", action="append", default=[], metavar="PATH")
+    parser.add_argument("--mv", nargs=2, action="append", default=[], metavar=("FROM", "TO"))
+    parser.add_argument("--info", action="store_true", help="version, plugins, screens, time")
     parser.add_argument(
         "--wifi-connect", metavar="NAME", help="join a network (asks for its password, not shown)"
     )
     args = parser.parse_args()
-    port = open_port(args.port or find_port())
+    name = args.port or find_port()
+    port = open_port(name)
     x4 = X4(port)
+    x4.name = name
     x4.verbose = args.verbose
     if args.log:
         deadline = time.monotonic() + args.log
         while (line := x4.line(deadline)) is not None:
             print(line)
         return
+    if args.info:
+        for step in ["version", "plugins", "screens", "time"]:
+            run(x4, step)
+    # Made, brought, fetched, moved, shown, then removed.
+    for path in args.mkdir:
+        run(x4, f"mkdir:{path}")
     for local, path in args.put:
         x4.put(local, path)
+    for local, path in args.push:
+        x4.push(local, path)
     for path, local in args.get:
         x4.get(path, local)
+    for path, local in args.pull:
+        x4.pull(path, local)
+    for old, new in args.mv:
+        run(x4, f"mv:{old}>{new}")
+    for path in args.ls:
+        run(x4, f"ls:{path}")
+    for path in args.cat:
+        run(x4, f"cat:{path}")
+    for path in args.rm:
+        run(x4, f"rm:{path}")
     if args.wifi_connect:
         password = getpass.getpass(f"Password for {args.wifi_connect} (empty if open): ")
         hexed = password.encode().hex() or "-"
@@ -383,6 +637,8 @@ def main():
         report(places, FIRMWARE, x4)
     if args.screenshot:
         x4.screenshot(args.screenshot)
+    if x4.failed:
+        sys.exit(f"{len(x4.failed)} check(s) failed: " + "; ".join(x4.failed))
 
 
 if __name__ == "__main__":

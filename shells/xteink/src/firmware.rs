@@ -740,6 +740,49 @@ impl Firmware {
                 let refresh = if full { Refresh::Full } else { Refresh::Fast };
                 remote::refreshed(self.panel.refresh(refresh, false));
             }
+            Command::Emit { event, params } => {
+                let Ok(id) = paperpaw_sdk::Id::parse(&event) else {
+                    return remote::error(&event);
+                };
+                let mut with = paperpaw_sdk::Params::new();
+                for (key, value) in params {
+                    with.set(key, value);
+                }
+                let at = self.kernel_now();
+                let effects = self.kernel.send_event(at, id, with);
+                self.apply(effects);
+                remote::ok();
+            }
+            Command::Touch { phase, x, y } => {
+                use paperpaw_x4::remote::Touch;
+                let phase = match phase {
+                    Touch::Down => PointerPhase::Down,
+                    Touch::Move => PointerPhase::Move,
+                    Touch::Up => PointerPhase::Up,
+                };
+                let event = InputEvent::Pointer(PointerEvent {
+                    id: 0,
+                    phase,
+                    point: Point::new(x, y),
+                    tool: PointerTool::Finger,
+                    pressure: 1000,
+                });
+                let at = self.kernel_now();
+                let effects = self.kernel.handle(at, event);
+                self.apply(effects);
+                remote::ok();
+            }
+            Command::SetTime(unix_ms) => {
+                crate::clock::set(now(), unix_ms);
+                remote::ok();
+            }
+            Command::Restart => {
+                // What plugins keep, saved and on the card first.
+                let at = self.kernel_now();
+                let _ = self.kernel.suspend(at);
+                remote::ok();
+                esp_hal::system::software_reset();
+            }
             Command::Press { button, ms } => {
                 if self.state.held.is_some() {
                     return remote::busy();

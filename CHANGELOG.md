@@ -6,6 +6,19 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- The X4's remote control over USB (test builds) does much more, for
+  developing on the device: the card (`ls`, `stat`, `md5`, `rm` also of
+  folders, `mkdir`, `mv`, `sync`; `tools/x4-remote.py` pushes and pulls
+  whole folders and checks every file it puts by its MD5), what runs
+  (`version` with the plugin crates built in, `plugins`, `actions`,
+  `settings`, `screens`, `usage`: what each plugin took), the clock
+  (`time`, `time set`), the log's level (`log`), events (`emit`), touch
+  (`touch`, and the script's `tap`, `swipe`, `tap-label`), `restart` and
+  `panic` (the script waits until the X4 is back and says why it
+  started, with the panic). Scripts wait for and check what the screen
+  shows (`until:`, `expect:`, `expect-not:`) and end with exit code 1 when
+  a check fails. Kernel: `Kernel::screens`, `actions`, `usage`,
+  `send_event`.
 - Updates from the internet (X4): *Search online* on the update page
   (Settings, *Update*) asks paperpaw.org for a newer PaperPaw, and
   *Download* fetches it into `updates` on the card, to install as one

@@ -52,8 +52,19 @@ X4's buttons, takes screenshots and prints what the screen shows, with
 the steps of the emulator's scripts. Firmware built here has it (the
 `remote` feature, on by default); released firmware leaves it out.
 
+It also waits for and checks what the screen shows (`until:`, `expect:`,
+with an exit code for scripts), taps and swipes (the X4 Pro), runs
+actions, sends events, reads and sets settings and the clock, lists the
+plugins, actions, settings and screens open, says what each plugin took
+(`usage`), works with the card (folders pushed and pulled, files checked
+by their MD5, `ls`, `rm`, `mv`), changes the log's level, restarts the X4
+or makes it panic and waits until it is back. `--help` lists it all; the
+protocol is in `paperpaw_x4::remote`.
+
 ```sh
 python tools/x4-remote.py --script "page-forward,right,describe" --screenshot out/x4.png
+python tools/x4-remote.py --script "run:update.open,until:Search online,expect:Wi-Fi transfer"
+python tools/x4-remote.py --push my-fonts .paperpaw/fonts --info
 ```
 
 ## What works, what is to come
