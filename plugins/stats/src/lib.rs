@@ -214,6 +214,7 @@ fn register_book(env: &Env<'_>, path: &str, now: i64, pages: u32) -> Option<u16>
                 series: String::from("N/A"),
                 last_open: 0,
                 path: String::new(),
+                finished: 0,
             });
             books.len() - 1
         }
@@ -228,6 +229,21 @@ fn register_book(env: &Env<'_>, path: &str, now: i64, pages: u32) -> Option<u16>
     let id = book.id;
     store::save_books(env.storage, &books);
     Some(id)
+}
+
+/// The book at `path` was read to the end `now`: kept as when it was
+/// finished, unless it was finished earlier the same year (its last page
+/// reached again), so that a book read again in a later year counts then
+/// too.
+fn mark_finished(env: &Env<'_>, path: &str, now: i64) {
+    let mut books = store::books(env.storage);
+    let year = |unix: i64| fmt::date_of(fmt::day_of(env, unix.max(0) as u32)).year;
+    if let Some(book) = books.iter_mut().find(|b| b.path == path)
+        && (book.finished <= 0 || year(book.finished) != year(now))
+    {
+        book.finished = now;
+        store::save_books(env.storage, &books);
+    }
 }
 
 /// The statistics plugin.
@@ -302,6 +318,11 @@ impl Plugin for Stats {
             }
             if changed {
                 store::save_books(env.storage, &books);
+            }
+        })?;
+        r.on(events::BOOK_FINISHED, |env, reading, _| {
+            if let Some(now) = time::unix_seconds(env).filter(|_| enabled(env)) {
+                mark_finished(env, &reading.path, now);
             }
         })?;
         let s = state.clone();

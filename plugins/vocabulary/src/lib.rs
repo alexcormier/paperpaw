@@ -22,6 +22,7 @@ extern crate alloc;
 
 mod marks;
 mod store;
+mod widget;
 
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
@@ -34,7 +35,6 @@ use quireink_sdk::decorations::{Decoration, LineKind, add_role};
 use quireink_sdk::event::Event;
 use quireink_sdk::ui::choice::{self, Choice};
 use quireink_sdk::ui::{self, ListChange, ListView, UiStyle};
-use quireink_sdk::widgets;
 use quireink_sdk::{
     ActionSpec, Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
     MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen,
@@ -131,129 +131,10 @@ impl Plugin for Vocabulary {
             order: 36,
         })?;
         r.add_icon(OPEN, Cow::Borrowed("vocabulary"))?;
-        r.add_setting_group(widgets::settings_group(
-            &WORD_WIDGET,
-            "vocabulary.widget.word",
-        ))?;
-        r.add_setting(widgets::align_setting(&WORD_WIDGET, widgets::Align::Left))?;
-        r.add_widget(
-            widgets::WidgetSpec::new(WORD_WIDGET, "vocabulary.widget.word", |_| {
-                Box::new(WordWidget::default())
-            })
-            .category(widgets::categories::WORDS),
-        )?;
+        widget::register(r)?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())
-    }
-}
-
-/// The word of the day on the home screen.
-const WORD_WIDGET: Id = Id::new_static("vocabulary.widget.word");
-
-/// A word to go over today: another one every day.
-fn word_of_the_day(env: &Env<'_>) -> Option<Word> {
-    let count = store::count(env.storage);
-    if count == 0 {
-        return None;
-    }
-    let day = quireink_sdk::time::unix_seconds(env).map_or(0, |s| s / 86_400) as usize;
-    store::range(env.storage, day % count, day % count + 1)
-        .into_iter()
-        .next()
-        .map(|(_, word)| word)
-}
-
-/// The word of the day, read when updated.
-#[derive(Default)]
-struct WordWidget {
-    word: Option<Word>,
-}
-
-impl widgets::Widget for WordWidget {
-    fn update(&mut self, env: &Env<'_>) -> bool {
-        let word = word_of_the_day(env);
-        let changed = word != self.word;
-        self.word = word;
-        changed
-    }
-
-    fn height(&self, env: &Env<'_>, width: u16) -> u16 {
-        if self.word.is_none() {
-            return 0;
-        }
-        word_height(env, width)
-    }
-
-    fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
-        if let Some(word) = &self.word {
-            draw_word(canvas, env, area, word);
-        }
-    }
-
-    fn targets(&self, _: &Env<'_>, area: Rect) -> Vec<widgets::WidgetTarget> {
-        alloc::vec![widgets::WidgetTarget {
-            area,
-            command: Command::RunAction(OPEN),
-        }]
-    }
-}
-
-fn word_height(env: &Env<'_>, _: u16) -> u16 {
-    let style = UiStyle::new(env);
-    let Some(font) = style.font(env) else {
-        return 0;
-    };
-    let small = font.line_metrics(style.small).line_height;
-    let title = font.line_metrics(style.title).line_height;
-    (small * 3.0 + title) as u16
-}
-
-/// "Word of the day", the word, and its sentence (two lines at most).
-fn draw_word(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, word: &Word) {
-    let style = UiStyle::new(env);
-    let Some(font) = style.font(env) else {
-        return;
-    };
-    let small = font.line_metrics(style.small).line_height as u16;
-    let title = font.line_metrics(style.title).line_height as u16;
-    let align = widgets::align(env, WORD_WIDGET.as_str());
-    let x = |size: f32, text: &str| align.x(area, font.measure(size, text));
-    let gray = style.faint(80);
-    let row = |y: u16, h: u16| Rect::new(area.x, y, area.width, h);
-    let label = env.i18n.tr("vocabulary.widget.word");
-    ui::draw_label(
-        canvas,
-        &font,
-        style.small,
-        x(style.small, label),
-        row(area.y, small),
-        label,
-        gray,
-    );
-    let shown = ui::fit(&font, style.title, &word.word, f32::from(area.width));
-    ui::draw_label(
-        canvas,
-        &font,
-        style.title,
-        x(style.title, &shown),
-        row(area.y + small, title),
-        &shown,
-        quireink_sdk::Color::BLACK,
-    );
-    let lines = font.wrap(style.small, &word.sentence, f32::from(area.width));
-    for (n, range) in lines.into_iter().take(2).enumerate() {
-        let y = area.y + small + title + n as u16 * small;
-        let line = &word.sentence[range];
-        ui::draw_label(
-            canvas,
-            &font,
-            style.small,
-            x(style.small, line),
-            row(y, small),
-            line,
-            gray,
-        );
     }
 }
 

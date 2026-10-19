@@ -82,14 +82,43 @@ pub(crate) fn seconds_per_book(storage: &dyn Storage) -> Vec<u64> {
 /// The days in a row up to `today` (or yesterday, while today has no
 /// reading yet) that have reading.
 pub(crate) fn streak(days: &[store::Day], today: i32) -> u32 {
-    let has = |day: i32| days.binary_search_by_key(&day, |d| d.day).is_ok();
-    let mut day = if has(today) { today } else { today - 1 };
-    let mut count = 0;
-    while has(day) {
-        count += 1;
+    streaks(days, today, 1).current
+}
+
+/// Days read in a row: up to today, and the most there ever were.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct Streaks {
+    /// Up to `today`, or up to yesterday while today does not count yet.
+    pub current: u32,
+    pub longest: u32,
+}
+
+/// The streaks of days with at least `least` seconds of reading (any
+/// reading for 0 or 1, the daily goal for more); days after `today` are
+/// left out.
+pub(crate) fn streaks(days: &[store::Day], today: i32, least: u32) -> Streaks {
+    let least = least.max(1);
+    let (mut longest, mut run, mut last) = (0, 0, None);
+    for day in days.iter().filter(|d| d.seconds >= least && d.day <= today) {
+        run = if last == Some(day.day - 1) {
+            run + 1
+        } else {
+            1
+        };
+        longest = longest.max(run);
+        last = Some(day.day);
+    }
+    let counts = |day: i32| {
+        days.binary_search_by_key(&day, |d| d.day)
+            .is_ok_and(|i| days[i].seconds >= least)
+    };
+    let mut day = if counts(today) { today } else { today - 1 };
+    let mut current = 0;
+    while counts(day) {
+        current += 1;
         day -= 1;
     }
-    count
+    Streaks { current, longest }
 }
 
 #[cfg(test)]
@@ -156,5 +185,34 @@ mod tests {
         // Not read yet today: the streak up to yesterday still counts.
         assert_eq!(streak(&days, 8), 3);
         assert_eq!(streak(&days, 9), 0);
+    }
+
+    #[test]
+    fn streaks_count_the_days_that_reach_the_goal() {
+        let days: Vec<Day> = [(1, 600), (2, 900), (3, 1200), (4, 100), (6, 900), (7, 1000)]
+            .into_iter()
+            .map(|(day, seconds)| Day {
+                day,
+                seconds,
+                stays: 1,
+            })
+            .collect();
+        // Any reading: 1 to 4 in a row, then 6 and 7.
+        assert_eq!(
+            streaks(&days, 7, 0),
+            Streaks {
+                current: 2,
+                longest: 4
+            }
+        );
+        // A goal of 15 minutes: day 1 and day 4 fall short.
+        let goal = streaks(&days, 7, 900);
+        assert_eq!((goal.current, goal.longest), (2, 2));
+        // Today not done yet: up to yesterday.
+        assert_eq!(streaks(&days, 8, 900).current, 2);
+        assert_eq!(streaks(&days, 9, 900).current, 0);
+        // Days after today do not count.
+        assert_eq!(streaks(&days, 3, 0).longest, 3);
+        assert_eq!(streaks(&[], 3, 0), Streaks::default());
     }
 }

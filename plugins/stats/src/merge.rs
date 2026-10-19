@@ -161,6 +161,7 @@ fn merge_books(mut books: Vec<Book>, income: Option<&Side>, cached: Option<&Side
                     series: theirs.series.clone(),
                     last_open: theirs.last_open,
                     path: String::new(),
+                    finished: 0,
                 });
             }
         }
@@ -471,6 +472,7 @@ mod tests {
             series: String::from("N/A"),
             last_open: 10,
             path: format!("books/{id}.epub"),
+            finished: 0,
         }
     }
 

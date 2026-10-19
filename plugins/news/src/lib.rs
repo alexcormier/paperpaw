@@ -14,6 +14,7 @@
 extern crate alloc;
 
 mod convert;
+mod widget;
 
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
@@ -262,114 +263,6 @@ fn headlines(env: &Env<'_>, max: usize) -> Vec<(String, String)> {
         .collect()
 }
 
-/// Headlines the widget shows.
-const SHOWN_HEADLINES: usize = 4;
-
-/// The headlines widget: the last ones fetched, read when updated.
-#[derive(Default)]
-struct Headlines {
-    /// Each one's title and its book.
-    shown: Vec<(String, String)>,
-}
-
-impl quireink_sdk::widgets::Widget for Headlines {
-    fn update(&mut self, env: &Env<'_>) -> bool {
-        let shown = headlines(env, SHOWN_HEADLINES);
-        let changed = shown != self.shown;
-        self.shown = shown;
-        changed
-    }
-
-    fn height(&self, env: &Env<'_>, _: u16) -> u16 {
-        headlines_height(env, self.shown.len())
-    }
-
-    fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
-        draw_headlines(canvas, env, area, &self.shown);
-    }
-
-    fn targets(&self, env: &Env<'_>, area: Rect) -> Vec<quireink_sdk::widgets::WidgetTarget> {
-        headline_rows(env, area, &self.shown)
-            .into_iter()
-            .map(|(row, _, book)| quireink_sdk::widgets::WidgetTarget {
-                area: row,
-                command: Command::OpenSlot(
-                    slots::READER,
-                    Params::new().with(params::PATH, book.to_string()),
-                ),
-            })
-            .collect()
-    }
-}
-
-fn headlines_height(env: &Env<'_>, count: usize) -> u16 {
-    if count == 0 {
-        return 0;
-    }
-    let style = UiStyle::new(env);
-    let Some(font) = style.font(env) else {
-        return 0;
-    };
-    let small = font.line_metrics(style.small).line_height;
-    let text = font.line_metrics(style.text).line_height;
-    (small + text * count as f32) as u16
-}
-
-/// The rows of the headlines below the label.
-fn headline_rows<'h>(
-    env: &Env<'_>,
-    area: Rect,
-    shown: &'h [(String, String)],
-) -> Vec<(Rect, &'h str, &'h str)> {
-    let style = UiStyle::new(env);
-    let Some(font) = style.font(env) else {
-        return Vec::new();
-    };
-    let small = font.line_metrics(style.small).line_height as u16;
-    let text = font.line_metrics(style.text).line_height as u16;
-    shown
-        .iter()
-        .enumerate()
-        .map(|(i, (title, book))| {
-            let y = area.y + small + i as u16 * text;
-            (
-                Rect::new(area.x, y, area.width, text),
-                title.as_str(),
-                book.as_str(),
-            )
-        })
-        .collect()
-}
-
-fn draw_headlines(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, shown: &[(String, String)]) {
-    let style = UiStyle::new(env);
-    let Some(font) = style.font(env) else {
-        return;
-    };
-    let small = font.line_metrics(style.small).line_height as u16;
-    ui::draw_label(
-        canvas,
-        &font,
-        style.small,
-        f32::from(area.x),
-        Rect::new(area.x, area.y, area.width, small),
-        env.i18n.tr("news.title"),
-        style.faint(80),
-    );
-    for (row, title, _) in headline_rows(env, area, shown) {
-        let title = ui::fit(&font, style.text, title, f32::from(row.width));
-        ui::draw_label(
-            canvas,
-            &font,
-            style.text,
-            f32::from(row.x),
-            row,
-            &title,
-            quireink_sdk::Color::BLACK,
-        );
-    }
-}
-
 /// The news plugin.
 #[derive(Debug, Default)]
 pub struct News;
@@ -421,14 +314,7 @@ impl Plugin for News {
         })?;
         r.add_icon(OPEN, Cow::Borrowed("rss"))?;
         r.add_icon(FETCH, Cow::Borrowed("refresh"))?;
-        r.add_widget(
-            quireink_sdk::widgets::WidgetSpec::new(
-                Id::new_static("news.widget.headlines"),
-                "news.widget.headlines",
-                |_| Box::new(Headlines::default()),
-            )
-            .category(quireink_sdk::widgets::categories::WORLD),
-        )?;
+        widget::register(r)?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())
