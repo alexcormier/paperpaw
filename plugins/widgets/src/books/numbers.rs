@@ -224,55 +224,119 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, numbers: &Numbers) 
         })
         .collect();
     let small = widgets::line_height(env, style.small);
-    let mut bar = widgets::shows(env, id, "bar") && numbers.books > 0;
+    let wanted_bar = widgets::shows(env, id, "bar") && numbers.books > 0;
     let bar_h = (style.line as u16 * 3).max(4);
-    // As many columns as the names fit in, the numbers in rows below
-    // each other where they do not.
     let widest_label = labels
         .iter()
         .map(|l| font.measure(style.small, l))
         .fold(0.0, f32::max);
-    let count = shown.len().max(1) as u16;
-    let mut columns = count;
-    while columns > 2 && f32::from(area.width / columns) < widest_label + f32::from(gap) {
-        columns = columns.div_ceil(2);
-    }
-    // Where the rows leave the numbers too little room: without the
-    // bar, then all in one row.
-    let room_for = |columns: u16, bar: bool| {
-        let bar_room = if bar { bar_h + gap } else { 0 };
-        (area.height.saturating_sub(bar_room) / count.div_ceil(columns)).saturating_sub(small)
-    };
-    let least = small;
-    if room_for(columns, bar) < least {
-        bar = false;
-    }
-    if room_for(columns, bar) < least {
-        columns = count;
-    }
-    let bar_room = if bar { bar_h + gap } else { 0 };
-    let rows = count.div_ceil(columns);
-    let column = area.width / columns;
-    // The numbers as large as fit: the widest in its column, all rows
-    // with their names in the height.
-    let room = room_for(columns, bar);
     let widest = shown
         .iter()
         .map(|(n, _)| n.to_string())
         .max_by_key(String::len)
         .unwrap_or_default();
-    let size = match widgets::size(env, id) {
-        Size::Fit => {
-            let at_title = font.measure(style.title, &widest).max(1.0);
-            let by_width = style.title * f32::from(column) * 0.8 / at_title;
-            let line = f32::from(widgets::line_height(env, style.title)).max(1.0);
-            let by_height = style.title * f32::from(room) / line;
-            by_width
-                .min(by_height)
-                .clamp(style.small, style.title * 3.0)
-        }
-        other => other.text(&style) * 1.4,
+    let count = shown.len().max(1) as u16;
+    let room_for = |columns: u16, bar: bool| {
+        let bar_room = if bar { bar_h + gap } else { 0 };
+        (area.height.saturating_sub(bar_room) / count.div_ceil(columns)).saturating_sub(small)
     };
+    // The numbers as large as fit: the widest in its column, all rows
+    // with their names in the height.
+    let size_for = |columns: u16, bar: bool| -> f32 {
+        let room = room_for(columns, bar);
+        match widgets::size(env, id) {
+            Size::Fit => {
+                let column = area.width / columns;
+                let at_title = font.measure(style.title, &widest).max(1.0);
+                let by_width = style.title * f32::from(column) * 0.8 / at_title;
+                let line = f32::from(widgets::line_height(env, style.title)).max(1.0);
+                let by_height = style.title * f32::from(room) / line;
+                by_width.min(by_height).min(style.title * 3.0)
+            }
+            other
+                if f32::from(widgets::line_height(env, other.text(&style) * 1.4))
+                    <= f32::from(room) =>
+            {
+                other.text(&style) * 1.4
+            }
+            _ => 0.0,
+        }
+    };
+    // In one row, or in two; with the bar or without: whichever makes
+    // the numbers largest, their names fitting below them, the bar kept
+    // where it costs little.
+    let mut best = (0.0, count, false);
+    for columns in [count, count.div_ceil(2)] {
+        for bar in [wanted_bar, false] {
+            // Names cut short count against it, the more the shorter.
+            let fits = (f32::from(area.width / columns) / widest_label.max(1.0)).min(1.0);
+            let mut score = size_for(columns, bar) * fits;
+            if bar != wanted_bar {
+                score *= 0.9;
+            }
+            if score > best.0 {
+                best = (score, columns, bar);
+            }
+        }
+    }
+    let (_, columns, bar) = best;
+    if best.0 < style.small * 0.8 {
+        // No room for numbers above names: each beside its name, on a
+        // line, the names left out where they do not fit.
+        let column = area.width / count;
+        let row = super::center_row(env, area, style.small);
+        let left = super::place_x(area, column * count, widgets::align(env, id));
+        let with_names = shown.iter().zip(&labels).all(|((number, _), label)| {
+            font.measure(style.small, &alloc::format!("{number} {label}")) <= f32::from(column)
+        });
+        for (i, ((number, _), label)) in shown.iter().zip(&labels).enumerate() {
+            let cell = Rect::new(left + i as u16 * column, row.y, column, row.height);
+            let number = number.to_string();
+            let with_name = with_names;
+            let text = if with_name {
+                alloc::format!("{number} {label}")
+            } else {
+                number.clone()
+            };
+            let x = Align::Center.x(cell, font.measure(style.small, &text));
+            let at = Rect::new(x as u16, cell.y, cell.width, cell.height);
+            draw_line(
+                canvas,
+                env,
+                &font,
+                style.small,
+                at,
+                Align::Left,
+                &number,
+                look.ink,
+            );
+            if with_name {
+                let shift = font.measure(style.small, &alloc::format!("{number} ")) as u16;
+                let name = Rect::new(
+                    at.x + shift,
+                    at.y,
+                    at.width.saturating_sub(shift),
+                    at.height,
+                );
+                draw_line(
+                    canvas,
+                    env,
+                    &font,
+                    style.small,
+                    name,
+                    Align::Left,
+                    label,
+                    look.faint,
+                );
+            }
+        }
+        return;
+    }
+    let size = size_for(columns, bar).max(style.small * 0.6);
+    let room = room_for(columns, bar);
+    let bar_room = if bar { bar_h + gap } else { 0 };
+    let rows = count.div_ceil(columns);
+    let column = area.width / columns;
     let big = widgets::line_height(env, size).min(room);
     let row_h = big + small;
     let total = (row_h * rows + bar_room).min(area.height);
