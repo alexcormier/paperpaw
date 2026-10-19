@@ -6,6 +6,16 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: sliders as a building block for any plugin (`ui::slider`:
+  `Slider`, `SliderDrag`, `SliderFocus`, `SliderLabels`, `SliderParts`,
+  `SliderStep`, `band`, `band_height`, `key_step`, `parts`,
+  `row_height`, `shows`): a track filled up to the value with a knob
+  there, between a `−` and a `+` flush with the margins, the title and
+  the value with its unit above it as in other rows. By touch a finger
+  takes the knob along in the slider's steps and lifting it chooses the
+  value, with the buttons left and right move it a step. Screen readers
+  hear it as `semantics::Role::Slider`. The panel's sliders (the
+  frontlight) are drawn with it and keep to their steps.
 - X4: downloads into a file (updates, books, fonts) no longer run out of
   memory half way: pieces of an answer gathered before writing them to
   the card grew without bound when the connection handed over a lot at

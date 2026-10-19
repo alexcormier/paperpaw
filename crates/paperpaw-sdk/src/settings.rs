@@ -193,8 +193,9 @@ pub struct SettingExtra {
     pub editor: Option<Id>,
     /// How much one step changes a number (e.g. 10 for percentages).
     pub step: i64,
-    /// A number better set by eye than by its value, such as a light's
-    /// brightness: panels show a slider.
+    /// A number better set by eye than by its value, such as the line
+    /// spacing or a light's brightness: settings pages and panels show it
+    /// as a slider ([`ui::slider`](crate::ui::slider)), in its steps.
     pub slider: bool,
     /// Translation key of the part of its group it belongs to (e.g.
     /// [`setting_sections::FONT`](crate::builtin::setting_sections::FONT)),
@@ -251,7 +252,7 @@ impl SettingExtra {
         self
     }
 
-    /// Set with a slider in panels ([`SettingExtra::slider`]).
+    /// Set with a slider ([`SettingExtra::slider`]).
     pub const fn slider(mut self) -> Self {
         self.slider = true;
         self
@@ -549,7 +550,7 @@ impl SettingSpec {
         self
     }
 
-    /// A number set with a slider in panels (see [`SettingSpec::slider`]).
+    /// A number set with a slider (see [`SettingExtra::slider`]).
     pub fn slider(mut self) -> Self {
         self.extra_mut().slider = true;
         self

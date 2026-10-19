@@ -578,7 +578,8 @@ impl PanelScreen {
     }
 }
 
-/// A slider: a thin track, filled up to the value, with a knob there.
+/// A slider's track (its − and + are controls of their own), framed
+/// when focused.
 fn draw_slider(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
@@ -587,39 +588,14 @@ fn draw_slider(
     rect: Rect,
     focused: bool,
 ) {
-    let Some(SettingKind::Int { min, max }) = spec(env, id).map(|s| s.kind.clone()) else {
+    let Some(slider) = spec(env, id).and_then(ui::Slider::of) else {
         return;
     };
-    let value = env.settings.int(id.as_str()).clamp(min, max);
-    let share = (value - min) as f32 / (max - min).max(1) as f32;
-    let knob = (rect.height / 2).max(4);
-    let track = (style.line * 2).max(2) as u16;
-    let mid = rect.y + rect.height / 2;
-    let left = rect.x + knob / 2;
-    let width = rect.width.saturating_sub(knob);
-    let filled = (f32::from(width) * share) as u16;
-    canvas.fill_tint(
-        Rect::new(left, mid - track / 2, width, track),
-        Color::gray(170),
-    );
-    canvas.fill(
-        Rect::new(left, mid - track, filled, track * 2),
-        Color::BLACK,
-    );
-    let knob_rect = Rect::new(left + filled - knob / 2, mid - knob / 2, knob, knob);
-    canvas.fill(knob_rect, Color::BLACK);
+    let value = env.settings.int(id.as_str());
+    slider.draw_track(canvas, style, rect, value, Color::BLACK);
     if focused {
         canvas.stroke(rect, ui::button_border(style), Color::BLACK);
     }
-}
-
-/// The value of a slider for a tap at `x`.
-fn slider_value(min: i64, max: i64, rect: Rect, x: i32) -> i64 {
-    let knob = i32::from((rect.height / 2).max(4));
-    let left = i32::from(rect.x) + knob / 2;
-    let width = (i32::from(rect.width) - knob).max(1);
-    let share = ((x - left) as f32 / width as f32).clamp(0.0, 1.0);
-    min + ((max - min) as f32 * share + 0.5) as i64
 }
 
 /// Whether a choice's options fit side by side in `area`, readably.
@@ -798,14 +774,13 @@ impl Screen for PanelScreen {
             if let Some(control) = control {
                 self.focus = None;
                 if let Control::Slide(id) = &control
-                    && let Some((SettingKind::Int { min, max }, rect)) =
-                        spec(&env, id).map(|s| s.kind.clone()).zip(
-                            self.controls()
-                                .find(|(c, _)| *c == control)
-                                .map(|(_, r)| *r),
-                        )
+                    && let Some((slider, rect)) = spec(&env, id).and_then(ui::Slider::of).zip(
+                        self.controls()
+                            .find(|(c, _)| *c == control)
+                            .map(|(_, r)| *r),
+                    )
                 {
-                    let value = SettingValue::Int(slider_value(min, max, rect, gesture.start.x));
+                    let value = SettingValue::Int(slider.value_at(rect, gesture.start.x));
                     if env.settings.get(id.as_str()) != Some(&value) {
                         cx.command(Command::SetSetting(id.clone(), value));
                     }
@@ -854,22 +829,6 @@ pub(crate) const QUICK_CENTER: Id = Id::new_static("menu.quick.center");
 pub(crate) const QUICK_RIGHT: Id = Id::new_static("menu.quick.right");
 /// The size of the quick panel's head, in points.
 pub(crate) const QUICK_SIZE: Setting<i64> = Setting::new("menu.quick.size");
-
-#[cfg(test)]
-mod slider_tests {
-    use super::*;
-
-    #[test]
-    fn a_tap_sets_the_value_where_it_lands() {
-        // Knob 15 wide: the track runs from 107 to 192.
-        let rect = Rect::new(100, 0, 100, 30);
-        assert_eq!(slider_value(0, 255, rect, 50), 0);
-        assert_eq!(slider_value(0, 255, rect, 107), 0);
-        assert_eq!(slider_value(0, 255, rect, 150), 129);
-        assert_eq!(slider_value(0, 255, rect, 192), 255);
-        assert_eq!(slider_value(0, 255, rect, 400), 255);
-    }
-}
 
 #[cfg(test)]
 mod layout_tests {
