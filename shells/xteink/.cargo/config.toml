@@ -4,8 +4,9 @@
 # an update before.
 #
 # The X4 Pro's: an ESP32-S3 (Xtensa), with the `esp` toolchain (espup):
-# `cargo +esp x4pro` builds it, `cargo +esp x4pro-run` flashes it (hold
-# its power button meanwhile: the boot loader does not keep it on).
+# `cargo +esp x4pro` builds it, `cargo +esp x4pro-run` flashes it (over
+# the stock firmware, hold its power button meanwhile: its boot loader
+# does not keep it on; QuireInk does).
 [build]
 target = "riscv32imc-unknown-none-elf"
 

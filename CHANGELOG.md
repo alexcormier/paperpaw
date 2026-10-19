@@ -6,6 +6,10 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- X4 Pro: pictures in four grays, as on the X4. `uc8179::Display` shows
+  the frame in black and white first, then lightens the grays with the
+  FreeInk SDK's gray waveforms; the next refresh drives every pixel
+  back to black or white.
 - QuireInk runs on the Xteink X4 Pro (ESP32-S3): the X4's firmware built
   with the feature `x4-pro` (`cargo +esp x4pro`). Its UC8179 display,
   touch screen and home key, page and power buttons, SD card (SDMMC),
