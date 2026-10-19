@@ -6,6 +6,11 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- *Now reading* shows the chapter and what is left of it ("22 pages
+  left · about 11 min"), each a part to show or not. Plugins know the
+  chapter from the reading events: `events::Reading` has `chapter` (its
+  title) and `chapter_left` (pages after this one in it, once the pages
+  are counted); the reader fills them.
 - The status lines while reading have a font of their own (*Status
   lines → Font*): as the menus (as before), as the book, or any font
   installed. SDK: `fonts::STATUS` (readers draw their status lines in
