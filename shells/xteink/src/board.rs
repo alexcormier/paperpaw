@@ -1,6 +1,7 @@
 //! The X4's board: which of the ESP32-C3's pins and units does what, the
 //! one place that says so. The rest of the firmware takes its parts from
-//! [`Board`]; the X4 Pro (an ESP32-S3, with touch) has a board of its own.
+//! [`Board`]; the X4 Pro and the X4 Classic (ESP32-S3s) have boards of
+//! their own.
 //!
 //! | Part | Connection |
 //! |---|---|

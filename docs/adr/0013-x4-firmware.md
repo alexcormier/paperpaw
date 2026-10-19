@@ -133,5 +133,35 @@ where each band lands against simulated controllers, the SSD1677's and
 the X4 Pro's UC8179's bytes unchanged. To check on one: that the log line
 names the controller, then a page turned fast and fully, the screen
 turned, sleep and waking, and (on a UC8179 with the frame kept) grays.
-The X4 Classic needs a board of its own (its pins, its buttons, the
-card's power) before any of this applies to it.
+
+## Later: the X4 Classic (2026-10-20)
+
+The X4 Classic ("X4 v2", X4C) is an ESP32-S3 board, not a revision of
+the X4: an ESP32-C3 image cannot run on it. The same firmware builds for
+it with the feature `x4-classic` (`cargo +esp x4classic`); `x4-pro` and
+`x4-classic` share what both ESP32-S3 devices build with (the feature
+`esp32s3`: the chip, its PSRAM as the heap, the card on its SD host,
+`card_pro.rs`, outer power seen by the USB frames, `usb_power.rs`).
+Its board (`board_classic.rs`) has what differs, from the FreeInk SDK's
+board table and Papyrix's notes (both from the stock firmware, MIT):
+
+- **The panel on other pins** (data/command GPIO 14, reset GPIO 10, busy
+  GPIO 18), the glass and memory of the X4 Pro (`Device::X4Pro`: a frame
+  kept, turned as the X4 Pro's), its controller asked at start like the
+  others' and driven as such; without a sure answer, a UC8179.
+- **The X4's seven buttons, each on a pin of its own**, low while
+  pressed (`State::keys`): back, confirm, left and right below the
+  screen (with the X4's row of hints), the page buttons on the side,
+  power. No touch, no front light.
+- **The card's power** on GPIO 6 (on while low), off for 80 ms first as
+  the stock firmware does; the gauge and the clock chip as on the X4 Pro.
+- **Its own id** (`xteink-x4-classic`, plugin libraries' `x4-classic`):
+  plugins made for the X4 or the X4 Pro are not offered to it until the
+  library lists it.
+
+Not tried on one: no X4 Classic is at hand. To check: the log line
+naming the controller, every button (the side buttons' direction above
+all, which the sources name differently), the screen's turning, the card,
+the battery's charge (the gauge may need its battery profile, which the
+stock firmware writes), whether the charging pin reads as on the X4 Pro,
+sleep and waking by the power button.

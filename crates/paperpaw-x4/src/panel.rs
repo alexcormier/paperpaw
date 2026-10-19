@@ -18,7 +18,8 @@ pub enum Device {
     /// side ([`Rotation::Deg90`], its buttons on the left).
     X4,
     /// The X4 Pro: a frame kept in its PSRAM; turned the other way on
-    /// [`Rotation::Deg90`] (see [`uc8179::turned`]).
+    /// [`Rotation::Deg90`] (see [`uc8179::turned`]). The X4 Classic too,
+    /// which has its glass and PSRAM (its turning not yet seen on one).
     X4Pro,
 }
 

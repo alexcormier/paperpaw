@@ -6,6 +6,16 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- The Xteink X4 Classic ("X4 v2", an ESP32-S3 board with other pins than
+  the X4's): the firmware builds for it with the feature `x4-classic`
+  (`cargo +esp x4classic`; ADR 0013). Its panel's controller (SSD1677,
+  UC8179 or UC8279) is found at start and keeps a frame in its 8 MB of
+  PSRAM, as on the X4 Pro; its seven buttons are the X4's (with the row
+  of hints below the screen), each on a pin of its own; SD card, fuel
+  gauge and clock chip as on the X4 Pro. Its pins come from the FreeInk
+  SDK's and Papyrix's notes; not yet tried on one. Device id
+  `xteink-x4-classic`, `x4-classic` for plugin libraries.
+  `paperpaw-x4`: `buttons::State::keys`, the buttons from a pin each.
 - X4 and X4 Pro: the display controller is found at start, so devices
   from other batches show something: the first X4 Pros have an SSD1677,
   later ones a UC8179 or a UC8279 (ADR 0013). The firmware asks the panel

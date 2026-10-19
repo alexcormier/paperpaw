@@ -11,7 +11,7 @@
 //! `memory.x`; not named so here, where the linker would find it for the
 //! X4 Pro too): esp-hal's maps 4 MB
 //! of flash for code and read-only data together, and the fonts take much
-//! of it. The X4 Pro (ESP32-S3) keeps esp-hal's, whose code and data each
+//! of it. The X4 Pro and X4 Classic (ESP32-S3) keep esp-hal's, whose code and data each
 //! have their own 32 MB window; its linker (GCC) takes the script through
 //! `-Wl`.
 //!
@@ -34,7 +34,7 @@ fn main() {
     println!("cargo::rerun-if-changed=../../Cargo.toml");
     println!("cargo::rerun-if-changed=memory-x4.x");
     plugins();
-    if std::env::var_os("CARGO_FEATURE_X4_PRO").is_some() {
+    if std::env::var_os("CARGO_FEATURE_ESP32S3").is_some() {
         println!("cargo::rustc-link-arg=-nostartfiles");
         println!("cargo::rustc-link-arg=-Wl,-Tlinkall.x");
         return;

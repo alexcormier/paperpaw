@@ -1,6 +1,6 @@
 //! Asks the panel which controller it has (`paperpaw_x4::probe`), on its
-//! lines driven by hand before the SPI bus takes them. Both boards ask,
-//! each with its own pins.
+//! lines driven by hand before the SPI bus takes them. Every board asks,
+//! with its own pins.
 
 use embedded_hal::digital::{ErrorType, InputPin, OutputPin};
 use esp_hal::delay::Delay;

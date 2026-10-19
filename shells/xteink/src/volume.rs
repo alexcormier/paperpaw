@@ -1,5 +1,5 @@
 //! The SD card's FAT file system as PaperPaw's storage, on any card's
-//! blocks (the X4's on SPI, the X4 Pro's on SDMMC).
+//! blocks (the X4's on SPI, the ESP32-S3 devices' on SDMMC).
 
 use alloc::boxed::Box;
 
