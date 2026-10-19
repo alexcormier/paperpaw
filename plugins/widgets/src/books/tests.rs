@@ -14,9 +14,10 @@ use alloc::vec::Vec;
 use paperpaw_graphics::Framebuffer;
 use paperpaw_i18n::{Catalog, Translator};
 use paperpaw_sdk::builtin::settings as core_settings;
+use paperpaw_sdk::document::ImageRef;
 use paperpaw_sdk::document::Locator;
 use paperpaw_sdk::library::{self, catalog};
-use paperpaw_sdk::widgets::{Widgets, categories};
+use paperpaw_sdk::widgets::{Widget, Widgets, categories};
 use paperpaw_sdk::{
     Actions, Battery, Capabilities, Color, Contribution, DeviceInfo, DisplayInfo, Env, EnvParts,
     Fonts, Formats, Hyphenation, Id, InputCaps, Instant, MemoryClass, MemoryStorage, Menus,
@@ -215,10 +216,26 @@ impl Harness {
     }
 }
 
-/// A library: a series of four, the third being read, the first read;
-/// two other books, favourites, a highlight.
+/// A cover: a decoded picture (`PPGI`, its width and height, rows of
+/// gray), dark at the top, light at the bottom.
+const COVER: &str = ".paperpaw/covers/tales.gray";
+const COVER_SIZE: (u32, u32) = (300, 450);
+
+fn cover() -> Vec<u8> {
+    let (w, h) = COVER_SIZE;
+    let mut data = b"PPGI".to_vec();
+    data.extend_from_slice(&w.to_le_bytes());
+    data.extend_from_slice(&h.to_le_bytes());
+    for y in 0..h {
+        data.extend((0..w).map(|x| ((y * 255 / h + x) % 256) as u8));
+    }
+    data
+}
+
+/// A library: a series of four, the third being read, the first read,
+/// each with a cover; two other books, favourites, a highlight.
 fn library() -> MemoryStorage {
-    let mut storage = MemoryStorage::new();
+    let mut storage = MemoryStorage::new().with(COVER, cover());
     let mut records = Vec::new();
     let mut add = |storage: MemoryStorage,
                    path: &str,
@@ -234,6 +251,11 @@ fn library() -> MemoryStorage {
             author: Some("Ann Author".to_string()),
             series: (!series.is_empty()).then(|| series.to_string()),
             series_index: (!n.is_empty()).then(|| n.to_string()),
+            cover: (!series.is_empty()).then(|| ImageRef {
+                path: COVER.to_string(),
+                width: COVER_SIZE.0,
+                height: COVER_SIZE.1,
+            }),
             progress,
             ..library::Book::default()
         };
@@ -309,6 +331,101 @@ const IDS: [&str; 8] = [
     "widgets.library",
     "widgets.battery",
 ];
+
+/// The pixels of `widget` drawn into `area` of a page with `env`.
+fn pixels(env: &Env<'_>, widget: &dyn Widget, area: Rect) -> Vec<u8> {
+    let mut fb = Framebuffer::new(
+        DEVICE.display.width,
+        DEVICE.display.height,
+        PixelFormat::Gray4,
+    )
+    .unwrap();
+    {
+        let mut canvas = fb.canvas();
+        canvas.clear(Color::WHITE);
+        widget.draw(&mut canvas, env, area);
+    }
+    let view = fb.view();
+    let mut pixels = Vec::new();
+    for y in area.y..area.y + area.height {
+        pixels.extend((area.x..area.x + area.width).map(|x| view.pixel(x, y).luma()));
+    }
+    pixels
+}
+
+/// Each way the widgets with covers or long texts can be drawn.
+const STYLES: [(&str, &str, &str); 7] = [
+    ("widgets.progress", "style", "widgets.progress.beside"),
+    ("widgets.progress", "style", "widgets.progress.round"),
+    ("widgets.progress", "style", "widgets.progress.bar"),
+    ("widgets.favourites", "layout", "widgets.books.layout.grid"),
+    ("widgets.reading", "frame", "core.frame.line"),
+    ("widgets.next", "frame", "core.frame.line"),
+    ("widgets.highlight", "size", "core.size.fit"),
+];
+
+/// Placed, a widget has made what it draws (its covers small, its text
+/// in lines) and draws without reading anything: the same with the
+/// storage gone.
+#[test]
+fn placed_widgets_draw_from_memory() {
+    let mut h = Harness::new(library());
+    let mut bare = Harness::new(MemoryStorage::new());
+    let styles = STYLES
+        .iter()
+        .map(|&(id, key, value)| (id, Some((key, value))));
+    for (id, style) in IDS.iter().map(|&id| (id, None)).chain(styles) {
+        if let Some((key, value)) = style {
+            let value = SettingValue::Text(Cow::Borrowed(value));
+            h.set(&alloc::format!("{id}.{key}"), value.clone());
+            bare.set(&alloc::format!("{id}.{key}"), value);
+        }
+        for area in [
+            Rect::new(10, 10, 230, 200),
+            Rect::new(10, 10, 460, 200),
+            Rect::new(10, 10, 460, 600),
+        ] {
+            let env = h.env();
+            let mut widget = env.widgets.make(id, &env).unwrap();
+            widget.place(&env, area);
+            let drawn = pixels(&env, &*widget, area);
+            assert!(drawn.iter().any(|&p| p < 128), "{id} {style:?} {area:?}");
+            let without = pixels(&bare.env(), &*widget, area);
+            assert!(
+                drawn == without,
+                "{id} {style:?} {area:?} reads as it draws"
+            );
+        }
+    }
+}
+
+/// Texts laid out when their widget is placed (a highlight, a note, the
+/// quote of the day) show as those laid out as they are drawn unplaced.
+#[test]
+fn texts_draw_as_laid_out() {
+    let mut h = Harness::new(library());
+    let note = "If found, please return to Ann Author, who will be very glad to have it \
+                back and will gladly lend you another book in return.";
+    h.set(
+        "widgets.note.text",
+        SettingValue::Text(Cow::Owned(note.to_string())),
+    );
+    h.set(
+        "widgets.note.heading",
+        SettingValue::Text(Cow::Borrowed("Mine")),
+    );
+    let env = h.env();
+    for id in ["widgets.highlight", "widgets.note", "widgets.quote"] {
+        for area in [Rect::new(10, 10, 230, 200), Rect::new(10, 10, 460, 200)] {
+            let unplaced = env.widgets.make(id, &env).unwrap();
+            let mut placed = env.widgets.make(id, &env).unwrap();
+            placed.place(&env, area);
+            let drawn = pixels(&env, &*placed, area);
+            assert!(drawn.iter().any(|&p| p < 128), "{id} {area:?}");
+            assert!(drawn == pixels(&env, &*unplaced, area), "{id} {area:?}");
+        }
+    }
+}
 
 /// Draws widget `id` into `area` of a page; how many pixels are dark.
 fn draw(h: &Harness, id: &str, area: Rect) -> usize {
