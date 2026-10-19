@@ -76,6 +76,15 @@ impl LocalTime {
             weekday: (days + 4).rem_euclid(7) as u8,
         }
     }
+
+    /// The seconds after 1970-01-01 00:00 of this time, the other way
+    /// round from [`LocalTime::from_seconds`] (the weekday is not read).
+    pub fn to_seconds(&self) -> i64 {
+        days_from_civil(self.year, self.month, self.day) * 86_400
+            + i64::from(self.hour) * 3600
+            + i64::from(self.minute) * 60
+            + i64::from(self.second)
+    }
 }
 
 /// A POSIX time zone rule: the standard offset and, optionally, summer time
@@ -442,6 +451,9 @@ mod tests {
             (2026, 10, 14, 13, 5)
         );
         assert_eq!(t.weekday, 3);
+        for seconds in [-86_401, 0, 951_782_400, 1_792_448_650] {
+            assert_eq!(LocalTime::from_seconds(seconds).to_seconds(), seconds);
+        }
     }
 
     #[test]

@@ -6,6 +6,10 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: `files::for_each_line` reads a text file line by line as it
+  streams from the storage, so lists of any length take little memory;
+  `LocalTime::to_seconds` is the way back from
+  `LocalTime::from_seconds`.
 - X4: downloads into a file (updates, books, fonts) no longer run out of
   memory half way: pieces of an answer gathered before writing them to
   the card grew without bound when the connection handed over a lot at

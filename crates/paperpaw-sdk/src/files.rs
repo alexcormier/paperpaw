@@ -1,13 +1,19 @@
 //! Working with files and folders of a storage: listing, copying,
-//! moving and deleting them, free names, sizes as people read them. Used
-//! by file managers and transfers alike.
+//! moving and deleting them, reading text files line by line, free
+//! names, sizes as people read them. Used by file managers and transfers
+//! alike.
 
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec;
 use alloc::vec::Vec;
+use core::ops::ControlFlow;
 
 use paperpaw_platform::{Storage, StorageError};
+
+/// The longest line [`for_each_line`] hands on; the rest of a longer one
+/// is left out.
+pub const MAX_LINE: usize = 4096;
 
 /// An entry of a folder.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -137,6 +143,51 @@ pub fn delete(storage: &dyn Storage, path: &str) -> Result<(), StorageError> {
     }
 }
 
+/// Reads the text file at `path` line by line as it streams from the
+/// storage, so lists of any length are read in little memory: `visit`
+/// gets each line without its line break (`\n` or `\r\n`, invalid UTF-8
+/// replaced) and says whether to go on. Lines are cut at [`MAX_LINE`]
+/// bytes.
+pub fn for_each_line(
+    storage: &dyn Storage,
+    path: &str,
+    visit: &mut dyn FnMut(&str) -> ControlFlow<()>,
+) -> Result<(), StorageError> {
+    let mut chunk = [0u8; 512];
+    let mut line: Vec<u8> = Vec::new();
+    let mut at = 0u64;
+    let mut emit = |line: &mut Vec<u8>| {
+        if line.last() == Some(&b'\r') {
+            line.pop();
+        }
+        let flow = visit(&String::from_utf8_lossy(line));
+        line.clear();
+        flow
+    };
+    loop {
+        let n = storage.read_at(path, at, &mut chunk)?;
+        if n == 0 {
+            break;
+        }
+        at += n as u64;
+        for piece in chunk[..n].split_inclusive(|b| *b == b'\n') {
+            let (text, ends) = match piece.split_last() {
+                Some((b'\n', text)) => (text, true),
+                _ => (piece, false),
+            };
+            let room = MAX_LINE.saturating_sub(line.len());
+            line.extend_from_slice(&text[..text.len().min(room)]);
+            if ends && emit(&mut line).is_break() {
+                return Ok(());
+            }
+        }
+    }
+    if !line.is_empty() {
+        let _ = emit(&mut line);
+    }
+    Ok(())
+}
+
 /// A size as people read it: `820 B`, `14 KB`, `2,3 MB` (with the
 /// language's decimal mark).
 pub fn size(bytes: u64, decimal: &str) -> String {
@@ -205,5 +256,34 @@ mod tests {
         assert_eq!(size(820, ","), "820 B");
         assert_eq!(size(2_400_000, ","), "2,3 MB");
         assert_eq!(size(14_000, "."), "14 KB");
+    }
+
+    #[test]
+    fn reads_lines_as_they_stream() {
+        let long = "x".repeat(MAX_LINE + 600);
+        let text = format!("one\r\n\ntwo {long}\nthree");
+        let s = MemoryStorage::new().with("list.txt", text.into_bytes());
+        let mut lines = Vec::new();
+        for_each_line(&s, "list.txt", &mut |line| {
+            lines.push(line.to_string());
+            ControlFlow::Continue(())
+        })
+        .unwrap();
+        assert_eq!(lines.len(), 4);
+        assert_eq!((lines[0].as_str(), lines[1].as_str()), ("one", ""));
+        assert_eq!(lines[2].len(), MAX_LINE);
+        assert_eq!(lines[3], "three");
+        // Stopped early.
+        let mut first = String::new();
+        for_each_line(&s, "list.txt", &mut |line| {
+            first = line.to_string();
+            ControlFlow::Break(())
+        })
+        .unwrap();
+        assert_eq!(first, "one");
+        assert_eq!(
+            for_each_line(&s, "none.txt", &mut |_| ControlFlow::Continue(())),
+            Err(StorageError::NotFound)
+        );
     }
 }

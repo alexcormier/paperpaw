@@ -826,8 +826,10 @@ pub struct paperpaw_sdk::files::Entry
 pub paperpaw_sdk::files::Entry::is_dir: bool
 pub paperpaw_sdk::files::Entry::name: alloc::string::String
 pub paperpaw_sdk::files::Entry::size: u64
+pub const paperpaw_sdk::files::MAX_LINE: usize
 pub fn paperpaw_sdk::files::copy(&dyn paperpaw_platform::storage::Storage, &str, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub fn paperpaw_sdk::files::delete(&dyn paperpaw_platform::storage::Storage, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_sdk::files::for_each_line(&dyn paperpaw_platform::storage::Storage, &str, &mut dyn core::ops::function::FnMut(&str) -> core::ops::control_flow::ControlFlow<()>) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub fn paperpaw_sdk::files::free_path(&dyn paperpaw_platform::storage::Storage, &str, &str) -> alloc::string::String
 pub fn paperpaw_sdk::files::is_dir(&dyn paperpaw_platform::storage::Storage, &str) -> bool
 pub fn paperpaw_sdk::files::is_hidden(&str) -> bool
@@ -1431,6 +1433,7 @@ pub paperpaw_sdk::time::LocalTime::weekday: u8
 pub paperpaw_sdk::time::LocalTime::year: i32
 impl paperpaw_sdk::time::LocalTime
 pub fn paperpaw_sdk::time::LocalTime::from_seconds(i64) -> Self
+pub fn paperpaw_sdk::time::LocalTime::to_seconds(&self) -> i64
 pub struct paperpaw_sdk::time::TimeZone
 impl paperpaw_sdk::time::TimeZone
 pub fn paperpaw_sdk::time::TimeZone::offset_at(&self, i64) -> i32
