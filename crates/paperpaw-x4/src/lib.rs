@@ -19,6 +19,7 @@
 
 extern crate alloc;
 
+mod bands;
 pub mod battery;
 pub mod bm8563;
 pub mod buttons;
