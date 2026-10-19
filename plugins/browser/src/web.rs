@@ -5,10 +5,10 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::document::is_external;
-use quireink_sdk::web::{encode, file_name};
-use quireink_sdk::xml::{Token, Tokenizer, decode, local_name};
-use quireink_sdk::{Storage, StorageError};
+use paperpaw_sdk::document::is_external;
+use paperpaw_sdk::web::{encode, file_name};
+use paperpaw_sdk::xml::{Token, Tokenizer, decode, local_name};
+use paperpaw_sdk::{Storage, StorageError};
 
 /// Where searches go: a search engine whose results work without
 /// JavaScript.
@@ -147,14 +147,14 @@ pub(crate) fn keep_page(
 /// A stable name for the page at `url`, so a page shown again opens
 /// where it was left.
 pub(crate) fn page_name(url: &str) -> String {
-    let hash = quireink_digest::fnv1a64(url);
+    let hash = paperpaw_digest::fnv1a64(url);
     format!("{hash:016x}.html")
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quireink_sdk::MemoryStorage;
+    use paperpaw_sdk::MemoryStorage;
 
     #[test]
     fn addresses_and_searches() {
@@ -211,7 +211,7 @@ mod tests {
             b"<html><head><title> Ein\n Titel </title></head><body>x</body></html>".to_vec(),
         );
         keep_page(&storage, "tmp", "page.html", "https://a.org/?a=1&b=2").unwrap();
-        let page = quireink_sdk::read_file(&storage, "page.html", 1024).unwrap();
+        let page = paperpaw_sdk::read_file(&storage, "page.html", 1024).unwrap();
         assert!(page.starts_with(b"<base href=\"https://a.org/?a=1&amp;b=2\">\n<html>"));
         assert!(!storage.exists("tmp"));
         assert_eq!(title(&storage, "page.html").as_deref(), Some("Ein Titel"));

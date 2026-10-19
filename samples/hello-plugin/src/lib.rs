@@ -1,4 +1,4 @@
-//! A sample QuireInk plugin to start from: everything a plugin usually
+//! A sample PaperPaw plugin to start from: everything a plugin usually
 //! needs, small. See `docs/plugins.md` for the walk through it.
 //!
 //! - an **action**, *Hello*, listed in the tools menu with an icon;
@@ -16,10 +16,10 @@ use alloc::boxed::Box;
 use alloc::rc::Rc;
 use core::cell::Cell;
 
-use quireink_sdk::builtin::{actions, events, groups, menus};
-use quireink_sdk::setting::{Setting, Text};
-use quireink_sdk::ui::{self, UiStyle};
-use quireink_sdk::{
+use paperpaw_sdk::builtin::{actions, events, groups, menus};
+use paperpaw_sdk::setting::{Setting, Text};
+use paperpaw_sdk::ui::{self, UiStyle};
+use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
     MenuEntry, Params, Plugin, Rect, RegisterError, Registrar, SDK_VERSION, Screen, ScreenSpec,
     SettingSpec, Version,

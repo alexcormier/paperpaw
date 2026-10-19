@@ -9,10 +9,10 @@
 //! archived with the next fetch and their books removed, as are those
 //! archived or deleted elsewhere. The password and the client's secret
 //! are kept with the other passwords and keys (see
-//! `quireink_sdk::secrets`).
+//! `paperpaw_sdk::secrets`).
 //!
 //! The list of articles is read as it streams from storage (see
-//! `quireink_json::stream`) and each book is written straight to
+//! `paperpaw_json::stream`) and each book is written straight to
 //! storage, so this works on small devices too. Shipped switched off:
 //! switch it on in the plugins.
 
@@ -28,16 +28,16 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::cell::RefCell;
 
-use quireink_json as json;
-use quireink_json::stream::{self, Event as Json};
-use quireink_sdk::builtin::{actions, events, groups, menus, params};
-use quireink_sdk::event::Event;
-use quireink_sdk::replies::{HttpReply, Typed};
-use quireink_sdk::secrets::SecretChange;
-use quireink_sdk::setting::{Setting, Text};
-use quireink_sdk::ui::{self, ListChange, ListView, UiStyle};
-use quireink_sdk::web::{clean_name, encode};
-use quireink_sdk::{
+use paperpaw_json as json;
+use paperpaw_json::stream::{self, Event as Json};
+use paperpaw_sdk::builtin::{actions, events, groups, menus, params};
+use paperpaw_sdk::event::Event;
+use paperpaw_sdk::replies::{HttpReply, Typed};
+use paperpaw_sdk::secrets::SecretChange;
+use paperpaw_sdk::setting::{Setting, Text};
+use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
+use paperpaw_sdk::web::{clean_name, encode};
+use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, HttpRequest, Id,
     Manifest, MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION,
     Screen, ScreenSpec, SettingSpec, Version,
@@ -65,7 +65,7 @@ const DOWNLOADED: Event<HttpReply> = Event::new("wallabag.downloaded");
 /// Emitted with a message (`text`) when a fetch ends.
 const DONE: Event<Finished> = Event::new("wallabag.done");
 
-quireink_sdk::event_data! {
+paperpaw_sdk::event_data! {
     /// How a fetch ended ([`DONE`]), in words.
     struct Finished {
         text: String,
@@ -88,7 +88,7 @@ fn data(name: &str) -> String {
 
 /// The folder of the articles: `Wallabag` in the library.
 fn folder(env: &Env<'_>) -> String {
-    let library = quireink_sdk::library::folder(env);
+    let library = paperpaw_sdk::library::folder(env);
     if library.is_empty() {
         String::from(FOLDER)
     } else {
@@ -119,8 +119,8 @@ struct Article {
 }
 
 /// The articles fetched, kept as `id<TAB>path` lines.
-fn articles(storage: &dyn quireink_sdk::Storage) -> Vec<Article> {
-    let Ok(data) = quireink_sdk::read_file(storage, &data("articles.txt"), 64 * 1024) else {
+fn articles(storage: &dyn paperpaw_sdk::Storage) -> Vec<Article> {
+    let Ok(data) = paperpaw_sdk::read_file(storage, &data("articles.txt"), 64 * 1024) else {
         return Vec::new();
     };
     String::from_utf8_lossy(&data)
@@ -144,8 +144,8 @@ fn save_articles(env: &Env<'_>, list: &[Article]) {
 }
 
 /// The ids of articles read to the end, to archive.
-fn finished(storage: &dyn quireink_sdk::Storage) -> Vec<String> {
-    quireink_sdk::read_file(storage, &data("finished.txt"), 16 * 1024)
+fn finished(storage: &dyn paperpaw_sdk::Storage) -> Vec<String> {
+    paperpaw_sdk::read_file(storage, &data("finished.txt"), 16 * 1024)
         .map(|d| {
             String::from_utf8_lossy(&d)
                 .lines()
@@ -213,7 +213,7 @@ impl Fetch {
         ));
         request.headers.push((
             String::from("User-Agent"),
-            String::from("QuireInk/0.1 (e-reader)"),
+            String::from("PaperPaw/0.1 (e-reader)"),
         ));
         request
     }
@@ -392,7 +392,7 @@ impl Fetch {
 }
 
 /// The unread articles in the list Wallabag sent: ids and titles.
-fn unread(storage: &dyn quireink_sdk::Storage) -> Vec<(String, String)> {
+fn unread(storage: &dyn paperpaw_sdk::Storage) -> Vec<(String, String)> {
     let mut items: Vec<(String, String)> = Vec::new();
     let item = ["_embedded", "items", "[]"];
     stream::read_file(storage, &data("entries.json"), &mut |event| match event {
@@ -440,7 +440,7 @@ fn done(env: &Env<'_>, key: &str, args: &[(&str, Arg<'_>)], out: &mut Vec<Comman
 pub struct Wallabag;
 
 /// The server and the account, set on the setup screen.
-static ON_SETUP: quireink_sdk::SettingExtra = quireink_sdk::SettingExtra::new().editor(SCREEN);
+static ON_SETUP: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new().editor(SCREEN);
 static SETTINGS: [SettingSpec; 3] = [
     SettingSpec::fixed_text(SERVER.static_str(), "wallabag.server", "", groups::LIBRARY)
         .with_extra(&ON_SETUP)
@@ -636,7 +636,7 @@ impl SetupScreen {
             Row::Client => (env.settings.read(&CLIENT), false),
             _ => ("", true),
         };
-        let question = quireink_sdk::ask::text(env.i18n.tr(row.title()), &ENTERED)
+        let question = paperpaw_sdk::ask::text(env.i18n.tr(row.title()), &ENTERED)
             .initial(text)
             .with(FIELD, row.field());
         let question = if password {
@@ -740,7 +740,7 @@ impl Screen for SetupScreen {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quireink_i18n::{Catalog, check};
+    use paperpaw_i18n::{Catalog, check};
 
     #[test]
     fn translations_are_complete() {
@@ -756,7 +756,7 @@ mod tests {
             {"id": 7, "title": "Slow \"news\"", "tags": [{"id": 1, "title": "tag"}]},
             {"title": "Second", "id": 9, "_links": {"self": {"href": "/api/entries/9"}}}
         ]}, "_links": {"self": {"href": "x"}}}"#;
-        let storage = quireink_sdk::MemoryStorage::new().with(&data("entries.json"), list);
+        let storage = paperpaw_sdk::MemoryStorage::new().with(&data("entries.json"), list);
         assert_eq!(
             unread(&storage),
             [
@@ -779,7 +779,7 @@ mod tests {
     /// What version 1 wrote stays readable (see `docs/data-files.md`).
     #[test]
     fn lists_of_version_1_are_read() {
-        let storage = quireink_sdk::MemoryStorage::new()
+        let storage = paperpaw_sdk::MemoryStorage::new()
             .with(
                 &super::data("articles.txt"),
                 include_str!("../testdata/articles.txt.v1"),

@@ -4,12 +4,12 @@
 // Tests panic on purpose when something is wrong.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use quireink_core::Kernel;
-use quireink_core::sdk::{
+use paperpaw_core::Kernel;
+use paperpaw_core::sdk::{
     DeviceInfo, DisplayInfo, InputCaps, Instant, MemoryClass, MemoryStorage, PixelFormat,
 };
-use quireink_platform::{ButtonState, InputEvent, Rotation};
-use quireink_sample_hello::{Hello, SCREEN};
+use paperpaw_platform::{ButtonState, InputEvent, Rotation};
+use paperpaw_sample_hello::{Hello, SCREEN};
 
 const DEVICE: DeviceInfo = DeviceInfo {
     id: "test",
@@ -57,7 +57,7 @@ fn opens_and_closes_by_buttons() {
 
 #[test]
 fn translations_are_complete() {
-    use quireink_i18n::{Catalog, check};
+    use paperpaw_i18n::{Catalog, check};
     let en = Catalog::parse(include_str!("../i18n/en.ini")).unwrap();
     let de = Catalog::parse(include_str!("../i18n/de.ini")).unwrap();
     let issues = check::compare(&en, &de);

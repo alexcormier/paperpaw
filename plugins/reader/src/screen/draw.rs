@@ -241,7 +241,7 @@ impl Book {
         for (area, top) in self.status_areas() {
             canvas.fill(area, Color::WHITE);
             let id = status::current(env, top, &self.status_lines[usize::from(!top)]);
-            let frame = quireink_sdk::StatusFrame {
+            let frame = paperpaw_sdk::StatusFrame {
                 area,
                 top,
                 size: status::size(env),
@@ -263,7 +263,7 @@ pub(super) fn draw_image(
     let left = (t.x + image.x + 0.5) as i32;
     let top = (t.y + image.y + 0.5) as i32;
     let (w, h) = ((image.width + 0.5) as i32, (image.height + 0.5) as i32);
-    quireink_sdk::ui::draw_image(
+    paperpaw_sdk::ui::draw_image(
         canvas,
         env.storage,
         &image.image,

@@ -1,0 +1,483 @@
+//! Decoded images compared with Pillow's reference conversion to gray
+//! (`L` mode; transparency composited over white). Small differences are
+//! expected from rounding and, when downscaling, from Pillow's box filter.
+
+// Tests panic on purpose when something is wrong.
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
+use paperpaw_image::{Fit, Format, ImageError, ImageSink, decode, dimensions};
+
+#[derive(Default)]
+struct Collect {
+    width: u32,
+    height: u32,
+    pixels: Vec<u8>,
+}
+
+impl ImageSink for Collect {
+    fn start(&mut self, width: u32, height: u32) -> Result<(), ImageError> {
+        self.width = width;
+        self.height = height;
+        Ok(())
+    }
+
+    fn row(&mut self, gray: &[u8]) -> Result<(), ImageError> {
+        assert_eq!(gray.len(), self.width as usize);
+        self.pixels.extend_from_slice(gray);
+        Ok(())
+    }
+}
+
+fn decoded(data: &[u8], side: u32) -> Collect {
+    decoded_fit(data, Fit::side(side))
+}
+
+fn decoded_fit(data: &[u8], fit: Fit) -> Collect {
+    let format = Format::detect(data).expect("known format");
+    let mut source = data;
+    let mut out = Collect::default();
+    decode(format, &mut source, fit, &mut out).expect("decodes");
+    assert_eq!(out.pixels.len(), (out.width * out.height) as usize);
+    out
+}
+
+/// Mean absolute difference.
+fn difference(a: &[u8], b: &[u8]) -> f64 {
+    assert_eq!(a.len(), b.len());
+    let sum: u64 = a
+        .iter()
+        .zip(b)
+        .map(|(&x, &y)| u64::from(x.abs_diff(y)))
+        .sum();
+    sum as f64 / a.len() as f64
+}
+
+#[test]
+fn colour_jpeg_matches_reference() {
+    let image = decoded(include_bytes!("data/alice-cover.jpg"), 276);
+    // 800×1104 by 1/4 fits 276.
+    assert_eq!((image.width, image.height), (200, 276));
+    let diff = difference(&image.pixels, include_bytes!("data/alice-cover.gray4"));
+    assert!(diff < 4.0, "mean difference {diff}");
+}
+
+#[test]
+fn gray_jpeg_matches_reference() {
+    let image = decoded(include_bytes!("data/kafka-title.jpg"), 150);
+    assert_eq!((image.width, image.height), (85, 150));
+    let diff = difference(&image.pixels, include_bytes!("data/kafka-title.gray4"));
+    assert!(diff < 6.0, "mean difference {diff}");
+}
+
+/// `image` reduced by averaging `factor`×`factor` blocks (whole ones).
+fn reduce(image: &Collect, factor: u32) -> Vec<u8> {
+    let (w, h) = (image.width / factor, image.height / factor);
+    let mut out = Vec::with_capacity((w * h) as usize);
+    for y in 0..h {
+        for x in 0..w {
+            let mut sum = 0u32;
+            for dy in 0..factor {
+                for dx in 0..factor {
+                    let at = (y * factor + dy) * image.width + x * factor + dx;
+                    sum += u32::from(image.pixels[at as usize]);
+                }
+            }
+            out.push((sum / (factor * factor)) as u8);
+        }
+    }
+    out
+}
+
+#[test]
+fn jpeg_made_smaller_as_it_is_decoded() {
+    // 800×1104 for 552 at most: decoded at half its size (its blocks'
+    // lower frequencies), not whole and averaged.
+    let image = decoded(include_bytes!("data/alice-cover.jpg"), 552);
+    assert_eq!((image.width, image.height), (400, 552));
+    let diff = difference(&reduce(&image, 2), include_bytes!("data/alice-cover.gray4"));
+    assert!(diff < 4.0, "mean difference {diff}");
+    // For 400 at most: decoded at half its size, then averaged to fit.
+    let image = decoded(include_bytes!("data/alice-cover.jpg"), 400);
+    assert_eq!((image.width, image.height), (290, 400));
+}
+
+#[test]
+fn pictures_fit_the_screen_either_way_up() {
+    let x4 = Fit::screen(480, 800);
+    assert_eq!(x4, Fit::screen(800, 480));
+    // A cover: as wide as the screen upright.
+    assert_eq!(x4.size(1500, 2114), (480, 676));
+    // A wide picture: as wide as the screen turned.
+    assert_eq!(x4.size(2000, 1000), (800, 400));
+    // Small ones stay as they are.
+    assert_eq!(x4.size(300, 200), (300, 200));
+    // Decoded whole, then averaged to the size it shows at.
+    let image = decoded_fit(include_bytes!("data/alice-cover.jpg"), x4);
+    assert_eq!((image.width, image.height), (480, 662));
+    assert_eq!(image.pixels.len(), 480 * 662);
+}
+
+#[test]
+fn progressive_jpeg_matches_reference() {
+    // 4:2:0 colour, ten scans, restart markers.
+    let data = include_bytes!("data/alice-progressive.jpg");
+    let reference = include_bytes!("data/alice-progressive.gray4");
+    // A quarter: the 2×2 lowest frequencies of each block.
+    let image = decoded(data, 276);
+    assert_eq!((image.width, image.height), (200, 276));
+    let diff = difference(&image.pixels, reference);
+    assert!(diff < 4.0, "mean difference {diff}");
+    // Full size: all frequencies.
+    let image = decoded(data, 2000);
+    assert_eq!((image.width, image.height), (800, 1104));
+    let diff = difference(&reduce(&image, 4), reference);
+    assert!(diff < 3.0, "mean difference {diff}");
+    // Half size.
+    let image = decoded(data, 552);
+    assert_eq!((image.width, image.height), (400, 552));
+    let diff = difference(&reduce(&image, 2), reference);
+    assert!(diff < 3.0, "mean difference {diff}");
+    // Very small: the DC only.
+    let image = decoded(data, 69);
+    assert_eq!((image.width, image.height), (50, 69));
+    let small = Collect {
+        width: 200,
+        height: 276,
+        pixels: reference.to_vec(),
+    };
+    let diff = difference(&image.pixels, &reduce(&small, 4)[..50 * 69]);
+    assert!(diff < 6.0, "mean difference {diff}");
+}
+
+#[test]
+fn progressive_gray_jpeg_matches_reference() {
+    let image = decoded(include_bytes!("data/kafka-progressive.jpg"), 150);
+    assert_eq!((image.width, image.height), (85, 150));
+    let diff = difference(
+        &image.pixels,
+        include_bytes!("data/kafka-progressive.gray4"),
+    );
+    assert!(diff < 6.0, "mean difference {diff}");
+}
+
+#[test]
+fn full_size_jpeg() {
+    let image = decoded(include_bytes!("data/alice-cover.jpg"), 2000);
+    assert_eq!((image.width, image.height), (800, 1104));
+}
+
+#[test]
+fn png_colour_types_match_reference() {
+    let cases: [(&[u8], &[u8]); 5] = [
+        (
+            include_bytes!("data/rgba.png"),
+            include_bytes!("data/rgba.gray"),
+        ),
+        (
+            include_bytes!("data/palette.png"),
+            include_bytes!("data/palette.gray"),
+        ),
+        (
+            include_bytes!("data/gray-alpha.png"),
+            include_bytes!("data/gray-alpha.gray"),
+        ),
+        (
+            include_bytes!("data/gray.png"),
+            include_bytes!("data/gray.gray"),
+        ),
+        (
+            include_bytes!("data/bilevel.png"),
+            include_bytes!("data/bilevel.gray"),
+        ),
+    ];
+    for (i, (png, reference)) in cases.iter().enumerate() {
+        let image = decoded(png, 1000);
+        assert_eq!((image.width, image.height), (37, 23), "case {i}");
+        let diff = difference(&image.pixels, reference);
+        assert!(diff < 1.5, "case {i}: mean difference {diff}");
+    }
+}
+
+#[test]
+fn damaged_images_fail_cleanly() {
+    for data in [
+        &include_bytes!("data/alice-cover.jpg")[..],
+        &include_bytes!("data/rgba.png")[..],
+        &include_bytes!("data/alice-progressive.jpg")[..],
+        &include_bytes!("data/kafka-progressive.jpg")[..],
+    ] {
+        let step = data.len() / 60 + 1;
+        for cut in (0..data.len()).step_by(step) {
+            let mut source = &data[..cut];
+            let mut out = Collect::default();
+            if let Some(format) = Format::detect(&data[..cut]) {
+                let _ = decode(format, &mut source, Fit::side(100), &mut out);
+            }
+        }
+        for at in (0..data.len()).step_by(step / 2 + 1) {
+            let mut damaged = data.to_vec();
+            damaged[at] ^= 0x5a;
+            // Small and large: progressive JPEG keeps more for larger.
+            for side in [100, 1000] {
+                let mut source = &damaged[..];
+                let mut out = Collect::default();
+                let _ = decode(
+                    Format::detect(&damaged).unwrap_or(Format::Jpeg),
+                    &mut source,
+                    Fit::side(side),
+                    &mut out,
+                );
+                if out.height > 0 {
+                    assert!(out.pixels.len() <= (out.width * out.height) as usize);
+                }
+            }
+        }
+    }
+}
+
+/// A file in memory, for writing PNGs.
+#[derive(Default)]
+struct OneFile(std::cell::RefCell<Vec<u8>>);
+
+impl paperpaw_platform::Storage for OneFile {
+    fn read_at(
+        &self,
+        _: &str,
+        offset: u64,
+        buf: &mut [u8],
+    ) -> Result<usize, paperpaw_platform::StorageError> {
+        let data = self.0.borrow();
+        let start = (offset as usize).min(data.len());
+        let n = buf.len().min(data.len() - start);
+        buf[..n].copy_from_slice(&data[start..start + n]);
+        Ok(n)
+    }
+    fn size(&self, _: &str) -> Result<u64, paperpaw_platform::StorageError> {
+        Ok(self.0.borrow().len() as u64)
+    }
+    fn write(&self, _: &str, data: &[u8]) -> Result<(), paperpaw_platform::StorageError> {
+        *self.0.borrow_mut() = data.to_vec();
+        Ok(())
+    }
+    fn append(&self, _: &str, data: &[u8]) -> Result<(), paperpaw_platform::StorageError> {
+        self.0.borrow_mut().extend_from_slice(data);
+        Ok(())
+    }
+    fn list(
+        &self,
+        _: &str,
+        _: &mut dyn FnMut(paperpaw_platform::DirEntry<'_>),
+    ) -> Result<(), paperpaw_platform::StorageError> {
+        Ok(())
+    }
+    fn remove(&self, _: &str) -> Result<(), paperpaw_platform::StorageError> {
+        Ok(())
+    }
+}
+
+#[test]
+fn written_png_reads_back() {
+    let file = OneFile::default();
+    let (w, h) = (37u32, 5u32);
+    let mut writer = paperpaw_image::PngWriter::new(&file, "shot.png", w, h).unwrap();
+    for y in 0..h {
+        let row: Vec<u8> = (0..w).map(|x| ((x * 7 + y * 40) % 256) as u8).collect();
+        writer.row(&file, "shot.png", &row).unwrap();
+    }
+    assert!(writer.is_complete());
+    let data = file.0.borrow().clone();
+    let image = decoded(&data, 1000);
+    assert_eq!((image.width, image.height), (w, h));
+    assert_eq!(image.pixels[w as usize + 3], 3 * 7 + 40);
+}
+
+#[test]
+fn gif_matches_reference() {
+    let image = decoded(include_bytes!("data/alice-cover.gif"), 1000);
+    assert_eq!((image.width, image.height), (160, 221));
+    let diff = difference(&image.pixels, include_bytes!("data/alice-cover-gif.gray"));
+    assert!(diff < 0.5, "mean difference {diff}");
+}
+
+#[test]
+fn interlaced_gif_matches_the_same_picture() {
+    let image = decoded(include_bytes!("data/alice-cover-interlaced.gif"), 1000);
+    assert_eq!((image.width, image.height), (160, 221));
+    let diff = difference(&image.pixels, include_bytes!("data/alice-cover-gif.gray"));
+    assert!(diff < 0.5, "mean difference {diff}");
+}
+
+#[test]
+fn gif_downscales() {
+    // 160×221 made to fit 80, in its proportions.
+    let image = decoded(include_bytes!("data/alice-cover.gif"), 80);
+    assert_eq!((image.width, image.height), (58, 80));
+}
+
+#[test]
+fn gif_transparency_is_white_and_the_first_frame_shows() {
+    let image = decoded(include_bytes!("data/transparent.gif"), 100);
+    assert_eq!((image.width, image.height), (24, 16));
+    assert_eq!(image.pixels, include_bytes!("data/transparent.gray"));
+    // The second frame's top row is not drawn.
+    assert_ne!(image.pixels[10], image.pixels[2]);
+}
+
+#[test]
+fn damaged_gifs_fail_without_panicking() {
+    let data = include_bytes!("data/alice-cover.gif");
+    for cut in [6, 13, 400, 800, 5000, data.len() - 1] {
+        let mut source = &data[..cut];
+        let mut out = Collect::default();
+        let _ = decode(Format::Gif, &mut source, Fit::side(100), &mut out);
+    }
+}
+
+/// Collects RGB rows, as a sink for colour screens does.
+#[derive(Default)]
+struct CollectRgb {
+    width: u32,
+    height: u32,
+    pixels: Vec<u8>,
+}
+
+impl ImageSink for CollectRgb {
+    fn start(&mut self, width: u32, height: u32) -> Result<(), ImageError> {
+        self.width = width;
+        self.height = height;
+        Ok(())
+    }
+
+    fn row(&mut self, _: &[u8]) -> Result<(), ImageError> {
+        panic!("gray row for a sink that wants colour");
+    }
+
+    fn wants_color(&self) -> bool {
+        true
+    }
+
+    fn row_rgb(&mut self, rgb: &[u8]) -> Result<(), ImageError> {
+        assert_eq!(rgb.len(), self.width as usize * 3);
+        self.pixels.extend_from_slice(rgb);
+        Ok(())
+    }
+}
+
+fn decoded_rgb(data: &[u8], max_side: u32) -> CollectRgb {
+    let format = Format::detect(data).expect("known format");
+    let mut source = data;
+    let mut out = CollectRgb::default();
+    decode(format, &mut source, Fit::side(max_side), &mut out).expect("decodes");
+    assert_eq!(out.pixels.len(), (out.width * out.height * 3) as usize);
+    out
+}
+
+#[test]
+fn colour_jpeg_matches_reference_in_colour() {
+    let image = decoded_rgb(include_bytes!("data/alice-cover.jpg"), 138);
+    // 800×1104 by 1/8 fits 138.
+    assert_eq!((image.width, image.height), (100, 138));
+    let diff = difference(&image.pixels, include_bytes!("data/alice-cover.rgb8"));
+    assert!(diff < 6.0, "mean difference {diff}");
+}
+
+#[test]
+fn colour_pngs_match_references() {
+    for (png, rgb) in [
+        (
+            &include_bytes!("data/colors-rgb.png")[..],
+            &include_bytes!("data/colors-rgb.rgb")[..],
+        ),
+        (
+            include_bytes!("data/colors-rgba.png"),
+            include_bytes!("data/colors-rgba.rgb"),
+        ),
+        (
+            include_bytes!("data/colors-palette.png"),
+            include_bytes!("data/colors-palette.rgb"),
+        ),
+    ] {
+        let image = decoded_rgb(png, 100);
+        assert_eq!((image.width, image.height), (20, 12));
+        let diff = difference(&image.pixels, rgb);
+        assert!(diff < 1.0, "mean difference {diff}");
+    }
+}
+
+#[test]
+fn colour_gif_matches_reference() {
+    let image = decoded_rgb(include_bytes!("data/alice-cover.gif"), 111);
+    assert_eq!((image.width, image.height), (80, 111));
+    let diff = difference(&image.pixels, include_bytes!("data/alice-cover-gif.rgb2"));
+    assert!(diff < 1.0, "mean difference {diff}");
+}
+
+#[test]
+fn gray_sinks_still_get_gray_from_colour_images() {
+    // The same pictures for e-ink: gray as before.
+    let image = decoded(include_bytes!("data/colors-rgb.png"), 100);
+    assert_eq!(image.pixels.len(), 20 * 12);
+}
+
+/// `image` reduced by averaging `factor`×`factor` blocks, channel by
+/// channel.
+fn reduce_rgb(image: &CollectRgb, factor: u32) -> Vec<u8> {
+    let channels: Vec<Vec<u8>> = (0..3)
+        .map(|c| {
+            let plane = Collect {
+                width: image.width,
+                height: image.height,
+                pixels: image.pixels.iter().skip(c).step_by(3).copied().collect(),
+            };
+            reduce(&plane, factor)
+        })
+        .collect();
+    (0..channels[0].len())
+        .flat_map(|i| channels.iter().map(move |c| c[i]))
+        .collect()
+}
+
+#[test]
+fn progressive_jpeg_matches_reference_in_colour() {
+    let data = include_bytes!("data/alice-progressive.jpg");
+    let reference = include_bytes!("data/alice-progressive.rgb4");
+    // A quarter: the 2×2 lowest frequencies of each block, chroma too.
+    let image = decoded_rgb(data, 276);
+    assert_eq!((image.width, image.height), (200, 276));
+    let diff = difference(&image.pixels, reference);
+    assert!(diff < 5.0, "mean difference {diff}");
+    // Full size: all frequencies.
+    let image = decoded_rgb(data, 2000);
+    assert_eq!((image.width, image.height), (800, 1104));
+    let diff = difference(&reduce_rgb(&image, 4), reference);
+    assert!(diff < 4.0, "mean difference {diff}");
+}
+
+#[test]
+fn sizes_read_from_the_first_bytes_match_the_decoded() {
+    for name in [
+        "alice-cover.jpg",
+        "alice-progressive.jpg",
+        "kafka-title.jpg",
+        "alice-cover.gif",
+        "gray.png",
+        "colors-rgba.png",
+    ] {
+        let data =
+            std::fs::read(format!("{}/tests/data/{name}", env!("CARGO_MANIFEST_DIR"))).unwrap();
+        let format = Format::detect(&data).unwrap();
+        let mut sink = Collect::default();
+        let mut source = &data[..];
+        decode(format, &mut source, Fit::side(100_000), &mut sink).unwrap();
+        let head = &data[..data.len().min(16 * 1024)];
+        assert_eq!(dimensions(head), Some((sink.width, sink.height)), "{name}");
+    }
+    // Cut short before the frame's header: not known.
+    let jpeg = std::fs::read(format!(
+        "{}/tests/data/alice-cover.jpg",
+        env!("CARGO_MANIFEST_DIR")
+    ))
+    .unwrap();
+    assert_eq!(dimensions(&jpeg[..20]), None);
+    assert_eq!(dimensions(b"plain text"), None);
+}

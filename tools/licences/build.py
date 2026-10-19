@@ -1,5 +1,5 @@
-"""Writes plugins/about/licences.md: QuireInk's licence and those of what it
-bundles, shown in the app (Settings, About QuireInk), as binary copies must
+"""Writes plugins/about/licences.md: PaperPaw's licence and those of what it
+bundles, shown in the app (Settings, About PaperPaw), as binary copies must
 carry them. Run it from the repository root after one of them changed; a
 test of the `about` plugin checks that each is in the file.
 
@@ -37,7 +37,7 @@ def paragraphs(text):
 patterns = code_blocks("plugins/hyphenation/patterns/README.md")
 parts = [
     ("Notice", read("NOTICE")),
-    ("QuireInk: Apache License 2.0", read("LICENSE")),
+    ("PaperPaw: Apache License 2.0", read("LICENSE")),
     ("Literata: SIL Open Font License 1.1", read("plugins/fonts-default/fonts/Literata-OFL.txt")),
     ("Source Sans 3: SIL Open Font License 1.1",
      read("plugins/fonts-default/fonts/SourceSans3-OFL.txt")),

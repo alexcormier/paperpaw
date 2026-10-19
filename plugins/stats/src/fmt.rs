@@ -3,8 +3,8 @@
 use alloc::format;
 use alloc::string::{String, ToString};
 
-use quireink_sdk::time::{self, LocalTime};
-use quireink_sdk::{Arg, Env};
+use paperpaw_sdk::time::{self, LocalTime};
+use paperpaw_sdk::{Arg, Env};
 
 const DAY: i64 = 86_400;
 
@@ -129,7 +129,7 @@ pub(crate) fn month<'a>(env: &Env<'a>, month: u8) -> &'a str {
 /// The first day of the week: 1 for Monday, 0 for Sunday, as set for
 /// the device.
 pub(crate) fn week_start(env: &Env<'_>) -> u8 {
-    quireink_sdk::time::week_start(env)
+    paperpaw_sdk::time::week_start(env)
 }
 
 #[cfg(test)]

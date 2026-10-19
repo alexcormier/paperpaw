@@ -1,9 +1,9 @@
 # Samples
 
 `library/` is the default storage of the desktop emulator
-(`cargo run -p quireink-emulator`); pass `--library <dir>` to use another
+(`cargo run -p paperpaw-emulator`); pass `--library <dir>` to use another
 folder. The emulator writes reading positions and page indexes to
-`library/.quireink/`, which is ignored by Git.
+`library/.paperpaw/`, which is ignored by Git.
 
 ## Books
 
@@ -30,4 +30,4 @@ preset in `presets.ini`, offered with the home screen's own layouts.
 `hello-plugin` is a plugin with code to start from: an action in the
 tools, a screen for touch and buttons, a setting, an event and
 translations. [Writing plugins](../docs/plugins.md) walks through it; try
-it with `cargo run -p quireink-emulator --features hello`.
+it with `cargo run -p paperpaw-emulator --features hello`.

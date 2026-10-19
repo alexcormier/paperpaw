@@ -3,13 +3,13 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::cell::Cell;
 
-use quireink_digest::fnv1a64;
-use quireink_sdk::document::{
+use paperpaw_digest::fnv1a64;
+use paperpaw_sdk::document::{
     Block, Document, DocumentError, EmbeddedFont, ImageRef, Link, Locator, Metadata, TocEntry,
 };
-use quireink_sdk::image::Fit;
-use quireink_sdk::zip::ZipArchive;
-use quireink_sdk::{Env, Storage};
+use paperpaw_sdk::image::Fit;
+use paperpaw_sdk::zip::ZipArchive;
+use paperpaw_sdk::{Env, Storage};
 
 use crate::PLUGIN;
 use crate::cached;
@@ -248,7 +248,7 @@ impl EpubDocument {
             styles,
             "",
             false,
-            (convert::IMAGE_FIT, quireink_sdk::COVER_FIT),
+            (convert::IMAGE_FIT, paperpaw_sdk::COVER_FIT),
         )
     }
 
@@ -257,7 +257,7 @@ impl EpubDocument {
     pub fn open_options(
         storage: &dyn Storage,
         path: &str,
-        options: &quireink_sdk::OpenOptions,
+        options: &paperpaw_sdk::OpenOptions,
     ) -> Result<Self, DocumentError> {
         Self::open_styled(
             storage,
@@ -275,7 +275,7 @@ impl EpubDocument {
     pub fn prepared(
         storage: &dyn Storage,
         path: &str,
-        options: &quireink_sdk::OpenOptions,
+        options: &paperpaw_sdk::OpenOptions,
     ) -> bool {
         let cache = book_cache(path);
         let (chapters, _) = chapters_cache(
@@ -344,7 +344,7 @@ impl EpubDocument {
     /// by offset.
     fn positions(&self, storage: &dyn Storage, section: u32) -> Option<Vec<(u32, String)>> {
         let (paths, ..) = self.chapter(storage, section).ok()?;
-        let data = quireink_sdk::read_file(storage, &paths.positions, 1 << 20).ok()?;
+        let data = paperpaw_sdk::read_file(storage, &paths.positions, 1 << 20).ok()?;
         let text = String::from_utf8_lossy(&data);
         Some(
             text.lines()
@@ -422,16 +422,16 @@ const MAX_USER_CSS: usize = 64 * 1024;
 /// books there), then the one named like the book (`Alice.css` for
 /// `Alice.epub`). The later win.
 pub(crate) fn user_css(storage: &dyn Storage, path: &str, plugins: &str) -> String {
-    let folder = quireink_sdk::files::parent(path);
-    let name = quireink_sdk::files::name(path);
+    let folder = paperpaw_sdk::files::parent(path);
+    let name = paperpaw_sdk::files::name(path);
     let stem = name.rsplit_once('.').map_or(name, |(s, _)| s);
     let mut css = String::from(plugins);
     if !css.is_empty() {
         css.push('\n');
     }
     for file in [String::from("styles.css"), alloc::format!("{stem}.css")] {
-        let file = quireink_sdk::files::join(folder, &file);
-        if let Ok(data) = quireink_sdk::read_file(storage, &file, MAX_USER_CSS) {
+        let file = paperpaw_sdk::files::join(folder, &file);
+        if let Ok(data) = paperpaw_sdk::read_file(storage, &file, MAX_USER_CSS) {
             css.push_str(&String::from_utf8_lossy(&data));
             css.push('\n');
         }
@@ -447,7 +447,7 @@ impl EpubDocument {
         storage: &dyn Storage,
         section: u32,
     ) -> (Option<String>, Vec<(u32, String)>) {
-        let Ok(data) = quireink_sdk::read_file(
+        let Ok(data) = paperpaw_sdk::read_file(
             storage,
             &alloc::format!("{}/pages.txt", self.cache),
             1 << 20,
@@ -501,7 +501,7 @@ impl Document for EpubDocument {
     }
 
     fn prepare_image(&self, storage: &dyn Storage, image: &ImageRef) -> Option<ImageRef> {
-        if quireink_sdk::image::ImageFile::open(storage, &image.path).is_some() {
+        if paperpaw_sdk::image::ImageFile::open(storage, &image.path).is_some() {
             return None;
         }
         let base = image.path.rsplit_once('.')?.0;
@@ -595,7 +595,7 @@ impl Document for EpubDocument {
             return None;
         }
         let positions = self.positions(storage, section)?;
-        // Exactly, where it points into text QuireInk shows.
+        // Exactly, where it points into text PaperPaw shows.
         if let Some((node, char)) = pointer.node() {
             let paths = self.paths(section);
             let mut found: Option<(u32, u32)> = None;
@@ -737,7 +737,7 @@ impl Document for EpubDocument {
     }
 
     fn link_target(&self, storage: &dyn Storage, href: &str) -> Option<Locator> {
-        if quireink_sdk::document::is_external(href) {
+        if paperpaw_sdk::document::is_external(href) {
             return None;
         }
         let (path, fragment) = match href.split_once('#') {

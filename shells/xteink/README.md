@@ -1,9 +1,9 @@
-# QuireInk on the Xteink X4
+# PaperPaw on the Xteink X4
 
 The firmware for the Xteink X4 (ESP32-C3). See
 [ADR 0013](../../docs/adr/0013-x4-firmware.md) for how it is built; its
-hardware parts are in [`quireink-x4`](../../crates/quireink-x4) and
-[`quireink-fat`](../../crates/quireink-fat), tested on a computer.
+hardware parts are in [`paperpaw-x4`](../../crates/paperpaw-x4) and
+[`paperpaw-fat`](../../crates/paperpaw-fat), tested on a computer.
 
 > Save the stock firmware first (below), so the X4 can always go back.
 
@@ -67,7 +67,7 @@ python tools/x4-remote.py --script "page-forward,right,describe" --screenshot ou
   downloads straight to the card.
 - Updates from the card (ADR 0019): two app partitions
   (`partitions.csv`, which `espflash.toml` names), signed update files
-  made with `quireink-sign`, a failed update undone at the next start.
+  made with `paperpaw-sign`, a failed update undone at the next start.
 - To come: the UC8179 controller of newer X4s, updates fetched over the
   network.
 
@@ -86,7 +86,7 @@ cargo +esp x4pro-clippy   # lints
 ```
 
 The first flash over the stock firmware needs its power button held
-until the flashing ends (its boot loader does not keep it on); QuireInk
+until the flashing ends (its boot loader does not keep it on); PaperPaw
 holds its power through resets, so later flashes need nothing held. Its
 USB comes through the pogo pins (Espressif's `303A:1001`).
 

@@ -4,12 +4,12 @@
 
 use alloc::format;
 
-use quireink_sdk::round::point_at;
-use quireink_sdk::time::{self, LocalTime};
-use quireink_sdk::widgets::{self, Align, Drawn, Frame};
-use quireink_sdk::{Canvas, Color, Env, Id, Point, Rect, RegisterError, Registrar};
+use paperpaw_sdk::round::point_at;
+use paperpaw_sdk::time::{self, LocalTime};
+use paperpaw_sdk::widgets::{self, Align, Drawn, Frame};
+use paperpaw_sdk::{Canvas, Color, Env, Id, Point, Rect, RegisterError, Registrar};
 
-use quireink_sdk::SettingSpec;
+use paperpaw_sdk::SettingSpec;
 
 use super::{chosen, frame_height, line, ui};
 
@@ -95,7 +95,7 @@ pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
 }
 
 fn height(env: &Env<'_>, width: u16) -> u16 {
-    let style = quireink_sdk::ui::UiStyle::new(env);
+    let style = paperpaw_sdk::ui::UiStyle::new(env);
     let face = width.min((style.row * 4) as u16);
     face + frame_height(env, ID.as_str())
 }
@@ -226,12 +226,12 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
             line(font, style.small) as u16,
         );
         let x = align.x(area, f32::from(room)) + f32::from(room) / 2.0;
-        let shown = quireink_sdk::ui::fit(font, style.small, text, f32::from(area.width));
+        let shown = paperpaw_sdk::ui::fit(font, style.small, text, f32::from(area.width));
         let width = font.measure(style.small, &shown);
         let x = (x - width / 2.0)
             .max(f32::from(area.x))
             .min(f32::from(area.x) + f32::from(area.width) - width);
-        quireink_sdk::ui::draw_label(canvas, font, style.small, x, row, &shown, look.faint);
+        paperpaw_sdk::ui::draw_label(canvas, font, style.small, x, row, &shown, look.faint);
     }
 }
 

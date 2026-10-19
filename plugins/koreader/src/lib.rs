@@ -3,12 +3,12 @@
 //! folder synced between devices).
 //!
 //! KOReader keeps what it knows of a book beside it, in `Book.sdr`. When
-//! QuireInk opens a book that has such a folder, and when its bookmarks or
+//! PaperPaw opens a book that has such a folder, and when its bookmarks or
 //! highlights change, this plugin reads KOReader's (`metadata.epub.lua`),
 //! takes over what is new there, and leaves what is new here in
 //! `Book.epub.annotations.lua`: KOReader takes that over the next time it
 //! opens the book, and removes the file. Positions are KOReader's
-//! XPointers ([`Document::xpointer`](quireink_sdk::document::Document)),
+//! XPointers ([`Document::xpointer`](paperpaw_sdk::document::Document)),
 //! so EPUBs only.
 //!
 //! What is removed on one side goes on the other too: the plugin keeps
@@ -26,11 +26,11 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use quireink_sdk::annotations::{self, Annotation, Kind, Mark};
-use quireink_sdk::builtin::events;
-use quireink_sdk::document::{Document, Locator};
-use quireink_sdk::time::{self, LocalTime};
-use quireink_sdk::{
+use paperpaw_sdk::annotations::{self, Annotation, Kind, Mark};
+use paperpaw_sdk::builtin::events;
+use paperpaw_sdk::document::{Document, Locator};
+use paperpaw_sdk::time::{self, LocalTime};
+use paperpaw_sdk::{
     Command, Env, Id, Manifest, Plugin, RegisterError, Registrar, SDK_VERSION, Storage, Version,
 };
 
@@ -39,7 +39,7 @@ use lua::{Table, Value};
 pub const PLUGIN: Id = Id::new_static("koreader");
 /// Who wrote the annotations file, for KOReader (which takes over only
 /// those of other devices).
-const DEVICE: &str = "QuireInk";
+const DEVICE: &str = "PaperPaw";
 /// Longest KOReader file read.
 const MAX_FILE: usize = 4 << 20;
 /// Most text taken from a book for a highlight.
@@ -62,7 +62,7 @@ fn exchange_file(book: &str) -> String {
     format!(
         "{}/{}.annotations.lua",
         sidecar(book),
-        quireink_sdk::files::name(book)
+        paperpaw_sdk::files::name(book)
     )
 }
 
@@ -73,7 +73,7 @@ fn known_file(book: &str) -> String {
     format!(
         "{}/{}.txt",
         Env::plugin_dir(PLUGIN.as_str()),
-        quireink_sdk::library::key(book)
+        paperpaw_sdk::library::key(book)
     )
 }
 
@@ -88,7 +88,7 @@ fn key_of(mark: &Mark) -> Key {
 }
 
 fn load_known(storage: &dyn Storage, book: &str) -> Vec<Key> {
-    let Ok(data) = quireink_sdk::read_file(storage, &known_file(book), 1 << 20) else {
+    let Ok(data) = paperpaw_sdk::read_file(storage, &known_file(book), 1 << 20) else {
         return Vec::new();
     };
     String::from_utf8_lossy(&data)
@@ -129,7 +129,7 @@ fn has_entries(storage: &dyn Storage, dir: &str) -> bool {
 
 /// The annotations of KOReader's file at `path` (empty if there is none).
 fn read_items(storage: &dyn Storage, path: &str) -> Vec<Table> {
-    let Ok(data) = quireink_sdk::read_file(storage, path, MAX_FILE) else {
+    let Ok(data) = paperpaw_sdk::read_file(storage, path, MAX_FILE) else {
         return Vec::new();
     };
     let Some(Value::Table(root)) = lua::parse(&String::from_utf8_lossy(&data)) else {
@@ -443,9 +443,9 @@ fn exchange_book(env: &Env<'_>, book: &str, out: &mut Vec<Command>) {
         now: time::unix_seconds(env).unwrap_or(0),
         local: &local,
         // As highlights look here: a line under them, else a marker.
-        drawer: if quireink_sdk::decorations::Decoration::of_role(
+        drawer: if paperpaw_sdk::decorations::Decoration::of_role(
             env,
-            &quireink_sdk::builtin::roles::HIGHLIGHT,
+            &paperpaw_sdk::builtin::roles::HIGHLIGHT,
         )
         .line
         .is_some()
@@ -469,7 +469,7 @@ fn moved_book(env: &Env<'_>, from: &str, to: &str) {
         let old = format!(
             "{}/{}.annotations.lua",
             sidecar(to),
-            quireink_sdk::files::name(from)
+            paperpaw_sdk::files::name(from)
         );
         let _ = storage.rename(&old, &exchange_file(to));
     }

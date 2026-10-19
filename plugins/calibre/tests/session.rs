@@ -8,11 +8,11 @@
 
 use std::rc::Rc;
 
-use quireink_core::{Io, Kernel, SocketCall, SocketEvent};
-use quireink_platform::{ButtonState, InputEvent, Rotation};
-use quireink_plugin_calibre::Calibre;
-use quireink_plugin_calibre::protocol::{self, frame, op};
-use quireink_sdk::{
+use paperpaw_core::{Io, Kernel, SocketCall, SocketEvent};
+use paperpaw_platform::{ButtonState, InputEvent, Rotation};
+use paperpaw_plugin_calibre::Calibre;
+use paperpaw_plugin_calibre::protocol::{self, frame, op};
+use paperpaw_sdk::{
     DeviceInfo, DirEntry, DisplayInfo, InputCaps, Instant, MemoryClass, MemoryStorage, PixelFormat,
     Storage, StorageError,
 };
@@ -212,7 +212,7 @@ fn a_session_with_calibre() {
     calibre.say(
         &mut kernel,
         op::SET_CALIBRE_DEVICE_INFO,
-        r#"{"device_store_uuid": "store-1", "device_name": "QuireInk"}"#,
+        r#"{"device_store_uuid": "store-1", "device_name": "PaperPaw"}"#,
     );
     calibre.say(&mut kernel, op::GET_DEVICE_INFORMATION, "{}");
     calibre.say(&mut kernel, op::FREE_SPACE, "{}");
@@ -241,7 +241,7 @@ fn a_session_with_calibre() {
     calibre.pump(&mut kernel);
     assert!(calibre.answers().is_empty(), "no answer to a book");
     assert!(calibre.wire.is_empty());
-    let saved = quireink_sdk::read_file(&storage, "Ann Author/A Book.epub", 1 << 20).unwrap();
+    let saved = paperpaw_sdk::read_file(&storage, "Ann Author/A Book.epub", 1 << 20).unwrap();
     assert_eq!(saved, book);
     assert!(!storage.exists("Ann Author/A Book.epub.part"));
 
@@ -301,7 +301,7 @@ fn a_path_out_of_the_library_is_dropped() {
     calibre.wire.extend_from_slice(&frame(op::NOOP, "{}"));
     calibre.pump(&mut kernel);
     assert!(!storage.exists("../outside.epub") && !storage.exists("outside.epub"));
-    assert!(!storage.exists(".quireink/plugins/calibre/dropped.part"));
+    assert!(!storage.exists(".paperpaw/plugins/calibre/dropped.part"));
     assert_eq!(calibre.answers().len(), 1, "the NOOP after it was answered");
 }
 

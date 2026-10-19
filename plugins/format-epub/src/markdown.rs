@@ -7,9 +7,9 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_digest::fnv1a64;
-use quireink_sdk::document::{Block, Document, DocumentError, Link, Locator, Metadata, TocEntry};
-use quireink_sdk::{Env, Storage};
+use paperpaw_digest::fnv1a64;
+use paperpaw_sdk::document::{Block, Document, DocumentError, Link, Locator, Metadata, TocEntry};
+use paperpaw_sdk::{Env, Storage};
 
 use crate::PLUGIN;
 use crate::html::HtmlDocument;
@@ -36,7 +36,7 @@ impl MarkdownDocument {
         let html_path = format!("{dir}/book.html");
         let stamp = format!("{MD_VERSION} {size} {:016x}\n", fnv1a64(&head));
         let stamp_path = format!("{dir}/source");
-        if quireink_sdk::read_file(storage, &stamp_path, 128).ok()
+        if paperpaw_sdk::read_file(storage, &stamp_path, 128).ok()
             != Some(stamp.clone().into_bytes())
             || storage.size(&html_path).is_err()
         {
@@ -54,7 +54,7 @@ impl MarkdownDocument {
     }
 }
 
-use quireink_sdk::xml::escape;
+use paperpaw_sdk::xml::escape;
 
 /// A line's inline markup as HTML: `**bold**`, `*italic*`, `_italic_`,
 /// `` `code` ``, `[text](url)`, `![alt](src)` (its alternative text).
@@ -363,8 +363,8 @@ impl Document for MarkdownDocument {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quireink_sdk::MemoryStorage;
-    use quireink_sdk::document::BlockKind;
+    use paperpaw_sdk::MemoryStorage;
+    use paperpaw_sdk::document::BlockKind;
 
     fn html(md: &str) -> String {
         let mut state = State::default();

@@ -1,5 +1,5 @@
 //! The screen that lists the bookmarks and highlights of a book (kept by
-//! [`quireink_sdk::annotations`]). The list ends with *Export as
+//! [`paperpaw_sdk::annotations`]). The list ends with *Export as
 //! Markdown*: a file in `Notes` beside the library folder, then the event
 //! `core.notes-exported` for plugins that take it further (a notes app, a
 //! sync).
@@ -9,16 +9,16 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-pub(crate) use quireink_sdk::annotations::{
+pub(crate) use paperpaw_sdk::annotations::{
     Annotation, Kind, Mark, add, changed, load, marks, note_of, remove, set_note, snippet,
 };
-use quireink_sdk::builtin::{actions, params};
-use quireink_sdk::ui::{self, ListView, UiStyle};
-use quireink_sdk::{
+use paperpaw_sdk::builtin::{actions, params};
+use paperpaw_sdk::ui::{self, ListView, UiStyle};
+use paperpaw_sdk::{
     Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, Screen,
 };
 
-use quireink_sdk::builtin::events;
+use paperpaw_sdk::builtin::events;
 
 /// Where exported notes go, beside the library folder.
 const NOTES: &str = "Notes";
@@ -60,8 +60,8 @@ pub(crate) fn markdown(env: &Env<'_>, title: &str, author: &str, all: &[Annotati
 
 /// The folder notes are exported to: `Notes` beside the library folder.
 fn notes_dir(env: &Env<'_>) -> String {
-    let library = quireink_sdk::library::folder(env);
-    let parent = quireink_sdk::files::parent(library);
+    let library = paperpaw_sdk::library::folder(env);
+    let parent = paperpaw_sdk::files::parent(library);
     if parent.is_empty() {
         String::from(NOTES)
     } else {
@@ -108,7 +108,7 @@ impl AnnotationsScreen {
             Err(_) => (String::new(), String::new()),
         };
         let title = if title.is_empty() {
-            quireink_sdk::files::name(&self.path).to_string()
+            paperpaw_sdk::files::name(&self.path).to_string()
         } else {
             title
         };
@@ -118,7 +118,7 @@ impl AnnotationsScreen {
             format!("{author} - {title}")
         };
         let name =
-            quireink_sdk::web::clean_name(&base, 100).unwrap_or_else(|| String::from("notes"));
+            paperpaw_sdk::web::clean_name(&base, 100).unwrap_or_else(|| String::from("notes"));
         let dir = notes_dir(&env);
         let _ = env.storage.create_dir(&dir);
         let file = format!("{dir}/{name}.md");
@@ -133,7 +133,7 @@ impl AnnotationsScreen {
                 }));
                 env.i18n.format(
                     "reader.exported",
-                    &[("path", quireink_sdk::Arg::Str(&file))],
+                    &[("path", paperpaw_sdk::Arg::Str(&file))],
                 )
             }
             Err(_) => env.i18n.tr("reader.export-failed").to_string(),
@@ -201,7 +201,7 @@ impl Screen for AnnotationsScreen {
                         "reader.highlight",
                         env.i18n.format(
                             "reader.quoted",
-                            &[("text", quireink_sdk::Arg::Str(&a.text))],
+                            &[("text", paperpaw_sdk::Arg::Str(&a.text))],
                         ),
                     ),
                 };

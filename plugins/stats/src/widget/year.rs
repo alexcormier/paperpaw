@@ -5,7 +5,7 @@
 //!
 //! A book counts in the year it was last read to the end: the statistics
 //! keep when that was (`finished` in `books.ini`, from
-//! [`BOOK_FINISHED`](quireink_sdk::builtin::events::BOOK_FINISHED)).
+//! [`BOOK_FINISHED`](paperpaw_sdk::builtin::events::BOOK_FINISHED)).
 //! Books finished before the statistics kept that, or marked as read in
 //! the library, count in the year they were last opened, if the library
 //! has them read to the end.
@@ -14,9 +14,9 @@ use alloc::boxed::Box;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::ui::{self, UiStyle};
-use quireink_sdk::widgets::{self, Align, Frame, Look, Size, Widget, WidgetSpec, WidgetTarget};
-use quireink_sdk::{
+use paperpaw_sdk::ui::{self, UiStyle};
+use paperpaw_sdk::widgets::{self, Align, Frame, Look, Size, Widget, WidgetSpec, WidgetTarget};
+use paperpaw_sdk::{
     Arg, Canvas, Command, Env, Id, Params, Point, Rect, RegisterError, Registrar, SettingSpec,
 };
 
@@ -168,7 +168,7 @@ fn shown(env: &Env<'_>) -> Option<Shown> {
         fmt::date_of(fmt::day_of(env, unix)).year
     };
     let read_to_end = |book: &Book| {
-        quireink_sdk::library::book(env.storage, &book.path).and_then(|b| b.progress) == Some(100)
+        paperpaw_sdk::library::book(env.storage, &book.path).and_then(|b| b.progress) == Some(100)
     };
     let (done, last) = finished_in(&books, year, year_of, read_to_end);
     let (ordinal, length) = day_of_year(today);

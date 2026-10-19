@@ -2,7 +2,7 @@
 
 use alloc::string::String;
 
-use quireink_sdk::Env;
+use paperpaw_sdk::Env;
 
 use crate::settings::ALOUD_TIMER;
 

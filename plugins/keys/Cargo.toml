@@ -1,6 +1,6 @@
 [package]
-name = "quireink-plugin-keys"
-description = "QuireInk buttons and gestures: what every button, tap zone and swipe does, changed on the device"
+name = "paperpaw-plugin-keys"
+description = "PaperPaw buttons and gestures: what every button, tap zone and swipe does, changed on the device"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,10 +11,10 @@ authors.workspace = true
 categories = ["no-std"]
 
 [dependencies]
-quireink-sdk.workspace = true
+paperpaw-sdk.workspace = true
 
 [dev-dependencies]
-quireink-i18n.workspace = true
+paperpaw-i18n.workspace = true
 
 [lints]
 workspace = true

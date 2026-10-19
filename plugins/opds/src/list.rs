@@ -8,14 +8,14 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::cell::RefCell;
 
-use quireink_sdk::ask;
-use quireink_sdk::builtin::actions;
-use quireink_sdk::event::Event;
-use quireink_sdk::replies::Typed;
-use quireink_sdk::ui::choice;
-use quireink_sdk::ui::{self, ListChange, ListView, UiStyle};
-use quireink_sdk::web::host;
-use quireink_sdk::{
+use paperpaw_sdk::ask;
+use paperpaw_sdk::builtin::actions;
+use paperpaw_sdk::event::Event;
+use paperpaw_sdk::replies::Typed;
+use paperpaw_sdk::ui::choice;
+use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
+use paperpaw_sdk::web::host;
+use paperpaw_sdk::{
     Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect,
     RefreshMode, Screen,
 };

@@ -1,14 +1,14 @@
 //! Four grays on the panel, to judge them (`gray` over USB): bars of the
-//! four, a gradient dithered to them, and a picture QuireInk decoded (e.g.
+//! four, a gradient dithered to them, and a picture PaperPaw decoded (e.g.
 //! a book's cover) below, drawn straight into the panel's memories and
 //! shown with the gray waveform. The screen is drawn again after.
 
 use alloc::vec;
 use alloc::vec::Vec;
 
-use quireink_platform::{FrameView, PixelFormat, Storage};
-use quireink_sdk::image::GrayFile;
-use quireink_x4::display::Error;
+use paperpaw_platform::{FrameView, PixelFormat, Storage};
+use paperpaw_sdk::image::GrayFile;
+use paperpaw_x4::display::Error;
 
 use crate::board::Panel;
 
@@ -16,7 +16,7 @@ use crate::board::Panel;
 const BAND: u16 = 40;
 
 /// Shows the test picture: `picture`, if given, is a gray picture
-/// QuireInk decoded (`.gray`).
+/// PaperPaw decoded (`.gray`).
 pub fn show(panel: &mut Panel, storage: &dyn Storage, picture: Option<&str>) -> Result<(), Error> {
     let (width, height) = panel.size();
     let picture = picture.and_then(|path| GrayFile::open(storage, path));

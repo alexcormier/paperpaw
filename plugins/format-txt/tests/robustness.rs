@@ -4,9 +4,9 @@
 // Tests panic on purpose when something is wrong.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use quireink_plugin_format_txt::TxtDocument;
-use quireink_sdk::MemoryStorage;
-use quireink_sdk::document::{Document, Locator};
+use paperpaw_plugin_format_txt::TxtDocument;
+use paperpaw_sdk::MemoryStorage;
+use paperpaw_sdk::document::{Document, Locator};
 
 struct Rng(u64);
 

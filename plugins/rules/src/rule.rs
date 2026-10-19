@@ -7,7 +7,7 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::{Env, Id, Storage};
+use paperpaw_sdk::{Env, Id, Storage};
 
 use crate::PLUGIN;
 
@@ -21,7 +21,7 @@ pub(crate) const WEEKENDS: u8 = 0b100_0001;
 /// When a rule applies.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Trigger {
-    /// QuireInk has started.
+    /// PaperPaw has started.
     Start,
     /// At this minute of the day, on the days set ([`EVERY_DAY`] …).
     Time {
@@ -224,7 +224,7 @@ fn path() -> String {
 }
 
 pub(crate) fn load(storage: &dyn Storage) -> Vec<Rule> {
-    let data = quireink_sdk::read_file(storage, &path(), 64 * 1024).unwrap_or_default();
+    let data = paperpaw_sdk::read_file(storage, &path(), 64 * 1024).unwrap_or_default();
     String::from_utf8_lossy(&data)
         .lines()
         .filter_map(|line| {
@@ -292,7 +292,7 @@ pub(crate) fn minutes_until(now: u16, at: u16) -> u16 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quireink_sdk::MemoryStorage;
+    use paperpaw_sdk::MemoryStorage;
 
     #[test]
     fn rules_are_kept() {

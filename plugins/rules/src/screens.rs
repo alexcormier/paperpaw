@@ -12,14 +12,14 @@
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::ask;
-use quireink_sdk::builtin::settings::SCOPE_ONLY;
-use quireink_sdk::builtin::{actions, params};
-use quireink_sdk::event::Event;
-use quireink_sdk::replies::Typed;
-use quireink_sdk::ui::choice;
-use quireink_sdk::ui::{self, ListChange, ListView, UiStyle};
-use quireink_sdk::{
+use paperpaw_sdk::ask;
+use paperpaw_sdk::builtin::settings::SCOPE_ONLY;
+use paperpaw_sdk::builtin::{actions, params};
+use paperpaw_sdk::event::Event;
+use paperpaw_sdk::replies::Typed;
+use paperpaw_sdk::ui::choice;
+use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
+use paperpaw_sdk::{
     Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect,
     RefreshMode, Screen, SettingKind,
 };

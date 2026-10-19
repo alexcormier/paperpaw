@@ -14,15 +14,15 @@
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::builtin::{actions, events, params, slots};
-use quireink_sdk::ui::{self, UiStyle};
-use quireink_sdk::{
+use paperpaw_sdk::builtin::{actions, events, params, slots};
+use paperpaw_sdk::ui::{self, UiStyle};
+use paperpaw_sdk::{
     Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, MenuItem, Params, Rect,
     RefreshMode, Screen, SettingKind, SettingSpec, SettingValue,
 };
 
 use crate::{CHOOSE_SCREEN, is_menu};
-use quireink_sdk::setting::Setting;
+use paperpaw_sdk::setting::Setting;
 
 /// Most switches or buttons in one row.
 const PER_ROW: usize = 3;
@@ -626,7 +626,7 @@ fn slider_value(min: i64, max: i64, rect: Rect, x: i32) -> i64 {
 fn fits_segments(
     env: &Env<'_>,
     style: &UiStyle,
-    options: &quireink_sdk::Choices,
+    options: &paperpaw_sdk::Choices,
     area: Rect,
 ) -> bool {
     let Some(font) = style.font(env) else {
@@ -831,11 +831,11 @@ fn draw_head(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
     _: &UiStyle,
-    font: &quireink_sdk::FontHandle<'_>,
+    font: &paperpaw_sdk::FontHandle<'_>,
     area: Rect,
 ) {
     let lists = QUICK_PARTS.map(|id| env.settings.text(id.as_str()));
-    let line = quireink_sdk::status::StatusLine {
+    let line = paperpaw_sdk::status::StatusLine {
         area,
         lists,
         size: env

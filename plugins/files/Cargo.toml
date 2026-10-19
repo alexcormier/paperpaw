@@ -1,6 +1,6 @@
 [package]
-name = "quireink-plugin-files"
-description = "QuireInk file browser: lists books on the device and opens them"
+name = "paperpaw-plugin-files"
+description = "PaperPaw file browser: lists books on the device and opens them"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,10 +11,10 @@ authors.workspace = true
 categories = ["no-std"]
 
 [dependencies]
-quireink-sdk.workspace = true
+paperpaw-sdk.workspace = true
 
 [dev-dependencies]
-quireink-i18n.workspace = true
+paperpaw-i18n.workspace = true
 
 [lints]
 workspace = true

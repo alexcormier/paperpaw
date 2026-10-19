@@ -13,15 +13,15 @@ use alloc::boxed::Box;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::builtin::{actions, params};
-use quireink_sdk::document::{Document, Locator, TocEntry};
-use quireink_sdk::ui::{self, ListChange, ListView, UiStyle};
-use quireink_sdk::{
+use paperpaw_sdk::builtin::{actions, params};
+use paperpaw_sdk::document::{Document, Locator, TocEntry};
+use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
+use paperpaw_sdk::{
     Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, RefreshMode,
     Screen,
 };
 
-use quireink_sdk::builtin::events;
+use paperpaw_sdk::builtin::events;
 
 /// Parameters carrying a position.
 pub(crate) const SECTION: &str = "section";
@@ -55,7 +55,7 @@ fn headings_path(path: &str) -> String {
 /// The headings found before, if the book is still the same file.
 fn load_headings(env: &Env<'_>, path: &str) -> Option<Vec<TocEntry>> {
     let size = env.storage.size(path).ok()?;
-    let data = quireink_sdk::read_file(env.storage, &headings_path(path), 256 * 1024).ok()?;
+    let data = paperpaw_sdk::read_file(env.storage, &headings_path(path), 256 * 1024).ok()?;
     let text = core::str::from_utf8(&data).ok()?;
     let mut lines = text.lines();
     if lines.next()? != alloc::format!("size {size}") {
@@ -251,7 +251,7 @@ impl TocScreen {
             }
             match document.block_at(env.storage, at) {
                 Ok(Some(block)) => {
-                    if let quireink_sdk::document::BlockKind::Heading(level) = block.kind {
+                    if let paperpaw_sdk::document::BlockKind::Heading(level) = block.kind {
                         let title: String =
                             block.text.split_whitespace().collect::<Vec<_>>().join(" ");
                         let title: String = title.chars().take(MAX_TITLE).collect();

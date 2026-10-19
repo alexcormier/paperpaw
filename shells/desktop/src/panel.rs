@@ -8,7 +8,7 @@
 
 use std::time::{Duration, Instant};
 
-use quireink_platform::{ColorPanel, FrameView, Rect, RefreshMode};
+use paperpaw_platform::{ColorPanel, FrameView, Rect, RefreshMode};
 
 const INK: [u8; 3] = [0x1e, 0x1e, 0x1e];
 const PAPER: [u8; 3] = [0xe9, 0xe6, 0xdd];

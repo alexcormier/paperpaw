@@ -20,7 +20,7 @@ use std::fs::File;
 use std::io::BufWriter;
 use std::path::Path;
 
-use quireink_platform::{ButtonState, InputEvent, Point, PointerEvent, PointerPhase, PointerTool};
+use paperpaw_platform::{ButtonState, InputEvent, Point, PointerEvent, PointerPhase, PointerTool};
 
 use crate::device::Device;
 
@@ -78,14 +78,14 @@ fn run_step(device: &mut Device, step: &str) -> Result<(), String> {
         }
         ["long", name] => press(device, button(device, name)?, LONG_MS),
         ["run", action] => {
-            let action = quireink_core::sdk::Id::parse(action).map_err(|e| e.to_string())?;
+            let action = paperpaw_core::sdk::Id::parse(action).map_err(|e| e.to_string())?;
             device.run_action(action);
         }
         ["tap", x, y] => touch(device, Point::new(number(x)?, number(y)?), None, 60),
         ["tap-on", label @ ..] if !label.is_empty() => {
             let label = label.join(":");
             let parts = device.kernel.describe();
-            let part = quireink_core::sdk::semantics::find(&parts, &label)
+            let part = paperpaw_core::sdk::semantics::find(&parts, &label)
                 .ok_or_else(|| format!("nothing on the screen says `{label}`"))?;
             let a = part.area;
             let center = Point::new(

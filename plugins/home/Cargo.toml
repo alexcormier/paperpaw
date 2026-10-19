@@ -1,6 +1,6 @@
 [package]
-name = "quireink-plugin-home"
-description = "QuireInk home screen: continue reading, recently read books, shortcuts"
+name = "paperpaw-plugin-home"
+description = "PaperPaw home screen: continue reading, recently read books, shortcuts"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,10 +11,10 @@ authors.workspace = true
 categories = ["no-std"]
 
 [dependencies]
-quireink-sdk.workspace = true
+paperpaw-sdk.workspace = true
 
 [dev-dependencies]
-quireink-i18n.workspace = true
+paperpaw-i18n.workspace = true
 
 [lints]
 workspace = true

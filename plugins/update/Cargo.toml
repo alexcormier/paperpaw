@@ -1,6 +1,6 @@
 [package]
-name = "quireink-plugin-update"
-description = "QuireInk firmware updates: finds an update file on the card, says what it is and installs it, on devices whose firmware QuireInk is"
+name = "paperpaw-plugin-update"
+description = "PaperPaw firmware updates: finds an update file on the card, says what it is and installs it, on devices whose firmware PaperPaw is"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,11 +11,11 @@ authors.workspace = true
 categories = ["no-std"]
 
 [dependencies]
-quireink-sdk.workspace = true
+paperpaw-sdk.workspace = true
 
 [dev-dependencies]
-quireink-i18n.workspace = true
-quireink-update.workspace = true
+paperpaw-i18n.workspace = true
+paperpaw-update.workspace = true
 
 [lints]
 workspace = true

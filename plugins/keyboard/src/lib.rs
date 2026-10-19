@@ -40,13 +40,13 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::cell::Cell;
 
-use quireink_sdk::ask;
-use quireink_sdk::builtin::{actions, groups, params, slots};
-use quireink_sdk::event::{Event, EventData};
-use quireink_sdk::replies::Typed;
-use quireink_sdk::setting::{Setting, Text};
-use quireink_sdk::ui::{self, UiStyle};
-use quireink_sdk::{
+use paperpaw_sdk::ask;
+use paperpaw_sdk::builtin::{actions, groups, params, slots};
+use paperpaw_sdk::event::{Event, EventData};
+use paperpaw_sdk::replies::Typed;
+use paperpaw_sdk::setting::{Setting, Text};
+use paperpaw_sdk::ui::{self, UiStyle};
+use paperpaw_sdk::{
     Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest, Params, Plugin,
     Priority, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen, ScreenSpec,
     SettingSpec, Version,
@@ -95,12 +95,12 @@ impl FieldButton {
 pub struct Keyboard;
 
 /// The layouts to type with, chosen on their screen.
-static CHOSEN: quireink_sdk::SettingExtra = quireink_sdk::SettingExtra::new().editor(CHOOSE_SCREEN);
+static CHOSEN: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new().editor(CHOOSE_SCREEN);
 static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed(
     LAYOUTS_SETTING.static_str(),
     "keyboard.setting.layouts",
-    quireink_sdk::SettingKind::List,
-    quireink_sdk::SettingValue::Text(Cow::Borrowed(layouts::AUTO)),
+    paperpaw_sdk::SettingKind::List,
+    paperpaw_sdk::SettingValue::Text(Cow::Borrowed(layouts::AUTO)),
     groups::SYSTEM,
 )
 .with_extra(&CHOSEN)
@@ -135,12 +135,12 @@ impl Plugin for Keyboard {
             factory: Box::new(|env, _| Box::new(choose::ChooseScreen::new(env))),
         })?;
         // The first-run setup: the layouts to type with.
-        r.add_setup_step(quireink_sdk::setup::SetupStepSpec {
+        r.add_setup_step(paperpaw_sdk::setup::SetupStepSpec {
             id: Id::new_static("keyboard.setup"),
             title: Cow::Borrowed(""),
             help: Cow::Borrowed(""),
             order: 60,
-            page: quireink_sdk::setup::SetupPage::Setting(LAYOUTS_SETTING.into()),
+            page: paperpaw_sdk::setup::SetupPage::Setting(LAYOUTS_SETTING.into()),
             applies: None,
         })?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
@@ -416,7 +416,7 @@ impl KeyboardScreen {
         Rect::new(left as u16, y, (right - left) as u16, self.key_height)
     }
 
-    fn key_at(&self, point: quireink_sdk::Point) -> Option<(usize, usize)> {
+    fn key_at(&self, point: paperpaw_sdk::Point) -> Option<(usize, usize)> {
         if let Some(index) = self.buttons.iter().position(|b| b.1.contains(point)) {
             return Some((PASTE_ROW, index));
         }
@@ -964,7 +964,7 @@ impl Screen for KeyboardScreen {
 
 #[cfg(test)]
 mod tests {
-    use quireink_i18n::{Catalog, check};
+    use paperpaw_i18n::{Catalog, check};
 
     use super::*;
 

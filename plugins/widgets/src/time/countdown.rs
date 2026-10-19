@@ -6,10 +6,10 @@
 use alloc::format;
 use alloc::string::String;
 
-use quireink_sdk::setting::{Setting, Text};
-use quireink_sdk::time;
-use quireink_sdk::widgets::{self, Align, Drawn, Frame, Size};
-use quireink_sdk::{Arg, Canvas, Env, FontHandle, Id, Rect, RegisterError, Registrar, SettingSpec};
+use paperpaw_sdk::setting::{Setting, Text};
+use paperpaw_sdk::time;
+use paperpaw_sdk::widgets::{self, Align, Drawn, Frame, Size};
+use paperpaw_sdk::{Arg, Canvas, Env, FontHandle, Id, Rect, RegisterError, Registrar, SettingSpec};
 
 use super::word_clock::{balanced, largest};
 use super::{chosen, dates, frame_height, line, ui};
@@ -175,7 +175,7 @@ pub(super) struct Shown {
 }
 
 /// The texts for `days` days to (or since) `title`.
-pub(super) fn shown(i18n: &quireink_sdk::Translator, days: i64, title: &str) -> Shown {
+pub(super) fn shown(i18n: &paperpaw_sdk::Translator, days: i64, title: &str) -> Shown {
     let args = [("title", Arg::Str(title))];
     let word = |key: &str| String::from(i18n.tr(key));
     match days {
@@ -348,7 +348,7 @@ fn text_size(env: &Env<'_>, font: &FontHandle<'_>, text: &str, room: Rect) -> f3
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quireink_i18n::Catalog;
+    use paperpaw_i18n::Catalog;
 
     #[test]
     fn dates_are_read() {
@@ -391,7 +391,7 @@ mod tests {
 
     #[test]
     fn kind_words() {
-        let mut t = quireink_sdk::Translator::new();
+        let mut t = paperpaw_sdk::Translator::new();
         t.add(Catalog::parse(include_str!("../../i18n/time.en.ini")).unwrap());
         t.add(Catalog::parse(include_str!("../../i18n/time.de.ini")).unwrap());
         t.set_language("en");

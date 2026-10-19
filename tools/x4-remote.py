@@ -1,7 +1,7 @@
-r"""Drives QuireInk on an Xteink X4 over USB: presses its buttons, takes
+r"""Drives PaperPaw on an Xteink X4 over USB: presses its buttons, takes
 screenshots and tells what the screen shows, as the emulator's scripts do
 (see shells/desktop/src/headless.rs). The commands are described in
-crates/quireink-x4/src/remote.rs, the firmware's side is in
+crates/paperpaw-x4/src/remote.rs, the firmware's side is in
 shells/xteink/src/remote.rs (its `remote` feature: released firmware
 leaves it out).
 
@@ -9,7 +9,7 @@ Usage:
   python tools/x4-remote.py [--port COM10] [--script STEPS] [--screenshot FILE]
   python tools/x4-remote.py --log 30     (the X4's log for 30 seconds)
   python tools/x4-remote.py --put book.epub books/book.epub   (a file onto its card)
-  python tools/x4-remote.py --get .quireink/plugins/battery/log.csv log.csv   (one off it)
+  python tools/x4-remote.py --get .paperpaw/plugins/battery/log.csv log.csv   (one off it)
   python tools/x4-remote.py --profile --script "page-forward,wait:2000"
       (where the time goes during the steps: the functions the processor
       was in most, from the firmware's symbols; needs rustup's llvm-tools)
@@ -31,7 +31,7 @@ STEPS, separated by commas:
   describe           print what the screen shows, part by part
   heap               print the heap used and free, and the stack never used, in bytes
   gray               four grays on the panel to judge them (bars, a gradient)
-  gray:.quireink/…/cover.gray   with a decoded gray picture below
+  gray:.paperpaw/…/cover.gray   with a decoded gray picture below
   refresh:full       refresh the panel from what the controller holds (also
                      refresh:fast), nothing sent
   input              print how the buttons and the battery are read
@@ -100,7 +100,7 @@ class X4:
         return line.decode("utf-8", "replace").rstrip("\r")
 
     def ask(self, command, until):
-        """Sends a command and returns the X4's answers (lines with "QI:")
+        """Sends a command and returns the X4's answers (lines with "PP:")
         up to the one starting with `until`."""
         self.port.reset_input_buffer()
         self.buffer = b""
@@ -115,7 +115,7 @@ class X4:
             line = self.line(deadline)
             if line is None:
                 sys.exit(f"{command}: no answer from the X4")
-            if not line.startswith("QI:"):
+            if not line.startswith("PP:"):
                 if self.verbose:
                     print(line)
                 continue
@@ -172,7 +172,7 @@ class X4:
         print(f"screenshot saved to {path}")
 
 
-FIRMWARE = Path(__file__).resolve().parent.parent / "shells/xteink/target/riscv32imc-unknown-none-elf/release/quireink-xteink"
+FIRMWARE = Path(__file__).resolve().parent.parent / "shells/xteink/target/riscv32imc-unknown-none-elf/release/paperpaw-xteink"
 
 
 def symbols(elf):

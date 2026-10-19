@@ -10,7 +10,7 @@
 //! read when the widget shows and kept until it may have changed
 //! ([`Generation`]); widgets of books are not read each minute.
 //!
-//! [`annotations`]: quireink_sdk::annotations
+//! [`annotations`]: paperpaw_sdk::annotations
 
 mod battery;
 mod favourites;
@@ -31,12 +31,12 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::cell::Cell;
 
-use quireink_sdk::builtin::{events, params, slots};
-use quireink_sdk::document::ImageRef;
-use quireink_sdk::library::{self, catalog};
-use quireink_sdk::ui::{self, UiStyle};
-use quireink_sdk::widgets::{self, Align, Look, line_height};
-use quireink_sdk::{
+use paperpaw_sdk::builtin::{events, params, slots};
+use paperpaw_sdk::document::ImageRef;
+use paperpaw_sdk::library::{self, catalog};
+use paperpaw_sdk::ui::{self, UiStyle};
+use paperpaw_sdk::widgets::{self, Align, Look, line_height};
+use paperpaw_sdk::{
     Arg, Canvas, Color, Command, Env, FontHandle, Id, Params, Point, Rect, RegisterError,
     Registrar, SettingSpec, Storage,
 };
@@ -206,8 +206,8 @@ pub(crate) fn series_rank(number: &str) -> u64 {
 
 /// The day it is (days since 1970, local), 0 where the time is not known.
 pub(crate) fn today(env: &Env<'_>) -> i64 {
-    quireink_sdk::time::unix_seconds(env)
-        .map_or(0, |unix| quireink_sdk::time::local_seconds(env, unix))
+    paperpaw_sdk::time::unix_seconds(env)
+        .map_or(0, |unix| paperpaw_sdk::time::local_seconds(env, unix))
         .div_euclid(86_400)
 }
 
@@ -510,7 +510,7 @@ pub(crate) fn draw_ring(
         let middle = (radius - thickness / 2) as i32;
         let end = (thickness / 2).max(1);
         for degrees in [0, sweep as i32] {
-            let at = quireink_sdk::round::point_at(center, middle, degrees);
+            let at = paperpaw_sdk::round::point_at(center, middle, degrees);
             canvas.fill_circle(at, end, look.ink);
         }
     }

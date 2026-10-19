@@ -9,9 +9,9 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::builtin::actions;
-use quireink_sdk::ui::{self, UiStyle};
-use quireink_sdk::{
+use paperpaw_sdk::builtin::actions;
+use paperpaw_sdk::ui::{self, UiStyle};
+use paperpaw_sdk::{
     Canvas, Color, Command, Cx, Direction, Env, Gesture, GestureKind, Handled, Id, Point, Rect,
     RefreshMode, Screen,
 };
@@ -356,12 +356,12 @@ impl Calendar {
 }
 
 impl Screen for Calendar {
-    fn hint(&self, action: &Id, _: &Env<'_>) -> quireink_sdk::Hint {
+    fn hint(&self, action: &Id, _: &Env<'_>) -> paperpaw_sdk::Hint {
         // Days are moved through; choosing one does nothing more.
         if *action == actions::CONFIRM {
-            quireink_sdk::Hint::Hidden
+            paperpaw_sdk::Hint::Hidden
         } else {
-            quireink_sdk::Hint::Default
+            paperpaw_sdk::Hint::Default
         }
     }
 

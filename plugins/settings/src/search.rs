@@ -5,11 +5,11 @@
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::builtin::{actions, menus, params};
-use quireink_sdk::event::Event;
-use quireink_sdk::replies::Typed;
-use quireink_sdk::ui::{self, ListView, UiStyle};
-use quireink_sdk::{Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Screen};
+use paperpaw_sdk::builtin::{actions, menus, params};
+use paperpaw_sdk::event::Event;
+use paperpaw_sdk::replies::Typed;
+use paperpaw_sdk::ui::{self, ListView, UiStyle};
+use paperpaw_sdk::{Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Screen};
 
 use crate::{FOCUS, GROUP_SCREEN, ID, page, visible};
 
@@ -20,7 +20,7 @@ pub(crate) const ENTERED: Event<Typed> = Event::new("settings.search-entered");
 
 /// Asks for what to find.
 pub(crate) fn ask(env: &Env<'_>) -> Command {
-    quireink_sdk::ask::text(env.i18n.tr("settings.search"), &ENTERED).command()
+    paperpaw_sdk::ask::text(env.i18n.tr("settings.search"), &ENTERED).command()
 }
 
 /// Where a result leads.
@@ -132,7 +132,7 @@ impl SearchScreen {
             list: ListView::new(area, style.noted_row()).focus_on_keys(env),
             title: env.i18n.format(
                 "settings.search.title",
-                &[("query", quireink_sdk::Arg::Str(query))],
+                &[("query", paperpaw_sdk::Arg::Str(query))],
             ),
             hits: find(env, query),
             style,
@@ -155,7 +155,7 @@ impl SearchScreen {
 }
 
 impl Screen for SearchScreen {
-    fn draw(&mut self, canvas: &mut quireink_sdk::Canvas<'_>, env: &Env<'_>) {
+    fn draw(&mut self, canvas: &mut paperpaw_sdk::Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let len = self.hits.len();
         self.header.draw(

@@ -1,6 +1,6 @@
 [package]
-name = "quireink-plugin-plugin-manager"
-description = "QuireInk plugin manager: lists the plugins and switches them on and off"
+name = "paperpaw-plugin-plugin-manager"
+description = "PaperPaw plugin manager: lists the plugins and switches them on and off"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,10 +11,10 @@ authors.workspace = true
 categories = ["no-std"]
 
 [dependencies]
-quireink-sdk.workspace = true
+paperpaw-sdk.workspace = true
 
 [dev-dependencies]
-quireink-i18n.workspace = true
+paperpaw-i18n.workspace = true
 
 [lints]
 workspace = true

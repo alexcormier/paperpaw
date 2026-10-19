@@ -27,12 +27,12 @@ ESP32-C3 there is no memory for an off-screen compositing buffer.
 - **The settings screen is generated** from `SettingSpec`s, in registration
   order, by a plugin bound to `core.settings`. Kinds define the editing
   (switch, number range, choice, language).
-- **Changed settings are persisted** by the kernel into `quireink.ini` on the
+- **Changed settings are persisted** by the kernel into `paperpaw.ini` on the
   device, editing the file minimally so comments and order survive
-  (`quireink_config::set`), and announced with `core.setting-changed`.
+  (`paperpaw_config::set`), and announced with `core.setting-changed`.
   Events now also reach every open screen (`Screen::on_event`), so screens
   re-layout without polling.
-- **Shared UI building blocks** (`quireink_sdk::ui`: style, header, paged
+- **Shared UI building blocks** (`paperpaw_sdk::ui`: style, header, paged
   list, messages) derive all sizes from `core.ui-size`, so plugins look
   consistent and scale together.
 

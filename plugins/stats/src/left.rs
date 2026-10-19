@@ -6,9 +6,9 @@ use alloc::boxed::Box;
 use alloc::rc::Rc;
 use core::cell::Cell;
 
-use quireink_sdk::builtin::{events, params};
-use quireink_sdk::status::{StatusItemSpec, StatusValue, context};
-use quireink_sdk::{Arg, Env, Id, Params, RegisterError, Registrar};
+use paperpaw_sdk::builtin::{events, params};
+use paperpaw_sdk::status::{StatusItemSpec, StatusValue, context};
+use paperpaw_sdk::{Arg, Env, Id, Params, RegisterError, Registrar};
 
 use crate::{fmt, store};
 

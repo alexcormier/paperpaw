@@ -1,6 +1,6 @@
 //! The buttons, the touch screen (the X4 Pro's) and the battery, read in a
 //! timer's interrupt every
-//! [`SAMPLE_MS`]: a press is seen while QuireInk is busy for a second or
+//! [`SAMPLE_MS`]: a press is seen while PaperPaw is busy for a second or
 //! more (laying out a page, counting a book's pages), and waits in a queue
 //! until the main loop takes it ([`next`]). Each keeps the time it came,
 //! so a long press stays long.
@@ -19,7 +19,7 @@ use esp_hal::gpio::Input;
 use esp_hal::handler;
 use esp_hal::time::Duration;
 use esp_hal::timer::PeriodicTimer;
-use quireink_x4::buttons::Debouncer;
+use paperpaw_x4::buttons::Debouncer;
 
 use crate::board::Keys;
 
@@ -78,7 +78,7 @@ static PROFILE: Mutex<RefCell<Option<Vec<u32>>>> = Mutex::new(RefCell::new(None)
 /// Places noted at most (4 bytes each): 15 s.
 #[cfg(feature = "remote")]
 const PROFILE_SAMPLES: usize = 3000;
-/// Memory left free for QuireInk while profiling.
+/// Memory left free for PaperPaw while profiling.
 #[cfg(feature = "remote")]
 const PROFILE_SPARE: usize = 64 * 1024;
 /// The battery's voltage, in millivolts, and its charge in percent (0

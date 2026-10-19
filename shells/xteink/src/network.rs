@@ -9,15 +9,15 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use quireink_core::{
+use paperpaw_core::{
     Effects, HttpCall, Kernel, ServerCall, ServerEvent, SocketCall, SocketEvent, WifiCommand,
 };
 #[cfg(feature = "remote")]
-use quireink_core::{WifiEvent, WifiState};
+use paperpaw_core::{WifiEvent, WifiState};
 
 use crate::serve::Servers;
 use crate::sockets::Sockets;
-use quireink_platform::Instant;
+use paperpaw_platform::Instant;
 
 use smoltcp::iface::SocketHandle;
 use smoltcp::socket::dns;
@@ -29,8 +29,8 @@ use crate::net::{Net, Resolve};
 use crate::remote;
 use crate::wifi::{Parts, Radio};
 #[cfg(feature = "remote")]
-use quireink_x4::remote::Ask;
-use quireink_x4::sntp;
+use paperpaw_x4::remote::Ask;
+use paperpaw_x4::sntp;
 
 /// How often the clock is set again while online, and how long to wait
 /// after a failed try.
@@ -164,7 +164,7 @@ impl Network {
 
     /// Answers a request made over USB.
     #[cfg(feature = "remote")]
-    fn answer_request(&mut self, answer: &quireink_core::HttpResponse, now: Instant) {
+    fn answer_request(&mut self, answer: &paperpaw_core::HttpResponse, now: Instant) {
         let asked = self
             .asked
             .requests
@@ -318,7 +318,7 @@ impl Network {
                     body: None,
                     body_from: None,
                     max_response: if save_to.is_some() {
-                        quireink_core::MAX_FILE
+                        paperpaw_core::MAX_FILE
                     } else {
                         64 * 1024
                     },
@@ -339,7 +339,7 @@ impl Network {
             WifiEvent::State(WifiState::Online { ssid, address }) => {
                 if let Some((asked, password)) = self.asked.connect.take() {
                     if asked == *ssid {
-                        kernel.set_secret(quireink_sdk::wifi::keep(&asked, &password));
+                        kernel.set_secret(paperpaw_sdk::wifi::keep(&asked, &password));
                         remote::connected(ssid, address);
                     } else {
                         self.asked.connect = Some((asked, password));

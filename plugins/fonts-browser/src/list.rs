@@ -7,11 +7,11 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::builtin::{actions, events, params, settings};
-use quireink_sdk::event::Event;
-use quireink_sdk::replies::HttpReply;
-use quireink_sdk::ui::{self, ListView, UiStyle};
-use quireink_sdk::{
+use paperpaw_sdk::builtin::{actions, events, params, settings};
+use paperpaw_sdk::event::Event;
+use paperpaw_sdk::replies::HttpReply;
+use paperpaw_sdk::ui::{self, ListView, UiStyle};
+use paperpaw_sdk::{
     Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, HttpRequest, Id, Params, Rect,
     RefreshMode, Screen, files,
 };

@@ -112,7 +112,7 @@ impl ReaderScreen {
         let popup =
             env.settings.read(&crate::settings::FOOTNOTES) == crate::settings::FOOTNOTES_POPUP;
         if popup
-            && !quireink_sdk::document::is_external(href)
+            && !paperpaw_sdk::document::is_external(href)
             && crate::footnote::note_like(label)
             && let Ok(book) = &self.book
             && let Some(text) = book.note_text(&env, href)
@@ -136,7 +136,7 @@ impl ReaderScreen {
         let Ok(book) = &mut self.book else {
             return Handled::No;
         };
-        if quireink_sdk::document::is_external(href) {
+        if paperpaw_sdk::document::is_external(href) {
             // To the web, if a browser is there.
             if !env.has_slot(&slots::BROWSER) {
                 return Handled::No;
@@ -223,8 +223,8 @@ pub(super) fn draw_linking(
     let text = match target {
         Some(Target::Link(i)) => {
             let href = book.links.get(i).map_or("", |l| l.href.as_str());
-            let place = if quireink_sdk::document::is_external(href) {
-                quireink_sdk::web::host(href).to_string()
+            let place = if paperpaw_sdk::document::is_external(href) {
+                paperpaw_sdk::web::host(href).to_string()
             } else {
                 env.i18n.tr("reader.link.in-book").to_string()
             };

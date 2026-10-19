@@ -1,6 +1,6 @@
 //! Customizing menus on the device: reorder, remove and add entries of any
 //! menu, or return it to how its plugins define it. Changes apply at once
-//! and are saved in `[menus]` of `quireink.ini`.
+//! and are saved in `[menus]` of `paperpaw.ini`.
 //!
 //! One cannot lock oneself out: a menu that leads to the settings (directly
 //! or through submenus) keeps doing so, and this editor stays on the
@@ -17,9 +17,9 @@ use alloc::boxed::Box;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::builtin::{actions, menus};
-use quireink_sdk::ui::{self, ListChange, ListView, Reorder, ReorderStep, UiStyle};
-use quireink_sdk::{
+use paperpaw_sdk::builtin::{actions, menus};
+use paperpaw_sdk::ui::{self, ListChange, ListView, Reorder, ReorderStep, UiStyle};
+use paperpaw_sdk::{
     ActionSpec, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
     MenuEntry, Params, Plugin, PointerEvent, Rect, RefreshMode, RegisterError, Registrar,
     SDK_VERSION, Screen, ScreenSpec, Version,
@@ -413,7 +413,7 @@ impl Screen for MenusScreen {
     }
 
     fn on_event(&mut self, event: &Id, _: &Params, cx: &mut Cx<'_, '_>) {
-        if *event == quireink_sdk::builtin::events::MENU_CHANGED {
+        if *event == paperpaw_sdk::builtin::events::MENU_CHANGED {
             cx.request_redraw();
             cx.request_refresh(RefreshMode::Fast);
         }
@@ -508,7 +508,7 @@ impl Screen for EntriesScreen {
     }
 
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
-        if *event == MOVED || *event == quireink_sdk::builtin::events::MENU_CHANGED {
+        if *event == MOVED || *event == paperpaw_sdk::builtin::events::MENU_CHANGED {
             // The focus follows a moved entry.
             if let Some(focus) = params.get(INDEX).and_then(|i| i.parse().ok()) {
                 self.frame.list.focus = focus;
@@ -830,7 +830,7 @@ mod tests {
 
     #[test]
     fn translations_are_complete() {
-        use quireink_i18n::{Catalog, check};
+        use paperpaw_i18n::{Catalog, check};
         let en = Catalog::parse(include_str!("../i18n/en.ini")).unwrap();
         let de = Catalog::parse(include_str!("../i18n/de.ini")).unwrap();
         let issues = check::compare(&en, &de);

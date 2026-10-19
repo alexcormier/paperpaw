@@ -1,4 +1,4 @@
-<p>QuireInk ist ein freier E-Reader für E-Ink-Geräte wie die Onyx-Boox-Reader. Er ist schnell, schont den Akku und ist von Haus aus einfach: einschalten und weiterlesen. Alles, was er kann, kommt aus Plugins, und jeder Bildschirm, jedes Menü, jede Taste und jede Geste lässt sich ändern.</p>
+<p>PaperPaw ist ein freier E-Reader für E-Ink-Geräte wie die Onyx-Boox-Reader. Er ist schnell, schont den Akku und ist von Haus aus einfach: einschalten und weiterlesen. Alles, was er kann, kommt aus Plugins, und jeder Bildschirm, jedes Menü, jede Taste und jede Geste lässt sich ändern.</p>
 
 <p><b>Lesen</b></p>
 <ul>

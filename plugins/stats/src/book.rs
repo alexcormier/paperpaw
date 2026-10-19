@@ -4,9 +4,9 @@
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::builtin::params;
-use quireink_sdk::ui::{self, UiStyle};
-use quireink_sdk::{
+use paperpaw_sdk::builtin::params;
+use paperpaw_sdk::ui::{self, UiStyle};
+use paperpaw_sdk::{
     Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, Screen,
 };
 
@@ -93,9 +93,9 @@ impl BookView {
 }
 
 impl Screen for BookView {
-    fn hint(&self, action: &Id, _: &Env<'_>) -> quireink_sdk::Hint {
+    fn hint(&self, action: &Id, _: &Env<'_>) -> paperpaw_sdk::Hint {
         // Only back does anything here.
-        quireink_sdk::Hint::only_back(action)
+        paperpaw_sdk::Hint::only_back(action)
     }
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {

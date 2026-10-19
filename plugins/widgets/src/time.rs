@@ -32,11 +32,11 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use quireink_sdk::builtin::{params, slots};
-use quireink_sdk::time::{self, LocalTime};
-use quireink_sdk::ui::UiStyle;
-use quireink_sdk::widgets::{self, Align, Drawn, Widget, WidgetSpec, WidgetTarget};
-use quireink_sdk::{
+use paperpaw_sdk::builtin::{params, slots};
+use paperpaw_sdk::time::{self, LocalTime};
+use paperpaw_sdk::ui::UiStyle;
+use paperpaw_sdk::widgets::{self, Align, Drawn, Widget, WidgetSpec, WidgetTarget};
+use paperpaw_sdk::{
     Arg, Canvas, Color, Command, Env, FontHandle, Id, Params, Rect, RegisterError, Registrar,
     SettingSpec,
 };
@@ -254,7 +254,7 @@ fn clock_text(env: &Env<'_>, t: &LocalTime) -> String {
 /// Whether the reader wants the time in twelve hours.
 fn twelve_hours(env: &Env<'_>) -> bool {
     env.settings
-        .read(&quireink_sdk::builtin::settings::CLOCK_FORMAT)
+        .read(&paperpaw_sdk::builtin::settings::CLOCK_FORMAT)
         == time::CLOCK_12H
 }
 
@@ -291,9 +291,9 @@ fn label(
     text: &str,
     color: Color,
 ) {
-    let text = quireink_sdk::ui::fit(font, size, text, f32::from(row.width));
+    let text = paperpaw_sdk::ui::fit(font, size, text, f32::from(row.width));
     let x = align.x(row, font.measure(size, &text));
-    quireink_sdk::ui::draw_label(canvas, font, size, x, row, &text, color);
+    paperpaw_sdk::ui::draw_label(canvas, font, size, x, row, &text, color);
 }
 
 /// The size at which `text` is `width` pixels wide at most, and `size`
@@ -339,7 +339,7 @@ fn wrap(font: &FontHandle<'_>, size: f32, text: &str, width: f32, most: usize) -
         .collect();
     if cut && let (Some(last), Some(range)) = (lines.last_mut(), ranges.get(most.max(1) - 1)) {
         let rest = text[range.start..].trim();
-        *last = quireink_sdk::ui::fit(font, size, rest, width);
+        *last = paperpaw_sdk::ui::fit(font, size, rest, width);
     }
     lines
 }
@@ -365,7 +365,7 @@ fn pack(
             Some(last) if full => {
                 // No more lines: the rest shortened on the last.
                 let joined = format!("{last} · {item}");
-                *last = quireink_sdk::ui::fit(font, size, &joined, width);
+                *last = paperpaw_sdk::ui::fit(font, size, &joined, width);
                 break;
             }
             _ => lines.push(item.clone()),

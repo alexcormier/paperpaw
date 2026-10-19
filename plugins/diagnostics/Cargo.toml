@@ -1,6 +1,6 @@
 [package]
-name = "quireink-plugin-diagnostics"
-description = "QuireInk diagnostics screen: gray levels, focus navigation, refresh modes"
+name = "paperpaw-plugin-diagnostics"
+description = "PaperPaw diagnostics screen: gray levels, focus navigation, refresh modes"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -12,10 +12,10 @@ categories = ["no-std"]
 
 [dependencies]
 # Plugins depend on the SDK only, never on the kernel.
-quireink-sdk.workspace = true
+paperpaw-sdk.workspace = true
 
 [dev-dependencies]
-quireink-i18n.workspace = true
+paperpaw-i18n.workspace = true
 
 [lints]
 workspace = true

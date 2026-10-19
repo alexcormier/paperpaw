@@ -1,4 +1,4 @@
-use quireink_i18n::{Catalog, check};
+use paperpaw_i18n::{Catalog, check};
 
 #[test]
 fn translations_are_complete() {

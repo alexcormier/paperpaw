@@ -2,8 +2,8 @@ use alloc::borrow::Cow;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use quireink_sdk::Storage;
-use quireink_sdk::document::{
+use paperpaw_sdk::Storage;
+use paperpaw_sdk::document::{
     Align, Block, BlockKind, Document, DocumentError, Locator, Metadata, OffsetMap,
 };
 
@@ -551,7 +551,7 @@ mod tests {
     use super::*;
     use alloc::format;
     use alloc::string::ToString;
-    use quireink_sdk::MemoryStorage;
+    use paperpaw_sdk::MemoryStorage;
 
     fn open(content: impl Into<Vec<u8>>) -> (MemoryStorage, TxtDocument) {
         let storage = MemoryStorage::new().with("books/book.txt", content);

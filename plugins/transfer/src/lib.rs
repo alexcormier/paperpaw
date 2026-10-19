@@ -23,12 +23,12 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use quireink_qr::QrCode;
-use quireink_sdk::builtin::{actions, menus, slots};
-use quireink_sdk::event::Event;
-use quireink_sdk::replies::ServerNotice;
-use quireink_sdk::ui::{self, UiStyle};
-use quireink_sdk::{
+use paperpaw_qr::QrCode;
+use paperpaw_sdk::builtin::{actions, menus, slots};
+use paperpaw_sdk::event::Event;
+use paperpaw_sdk::replies::ServerNotice;
+use paperpaw_sdk::ui::{self, UiStyle};
+use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
     MenuEntry, Params, Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION,
     Screen, ScreenSpec, Version,
@@ -190,7 +190,7 @@ impl TransferScreen {
                 cx.command(Command::Respond(response));
                 if let Some(done) = done {
                     if !matches!(done, web::Done::Sent(_) | web::Done::NotReceived(_)) {
-                        cx.command(quireink_sdk::library::changed());
+                        cx.command(paperpaw_sdk::library::changed());
                     }
                     let (key, name) = match &done {
                         web::Done::Received(name) => ("transfer.received", name),
@@ -213,10 +213,10 @@ impl TransferScreen {
 /// A key for this transfer: hard to guess for others in the network,
 /// short enough to type.
 pub(crate) fn key(env: &Env<'_>) -> String {
-    let mut hash = quireink_digest::md5::Md5::new();
+    let mut hash = paperpaw_digest::md5::Md5::new();
     hash.update(env.device.id.as_bytes());
     hash.update(&env.now.0.to_le_bytes());
-    if let Some(seconds) = quireink_sdk::time::unix_seconds(env) {
+    if let Some(seconds) = paperpaw_sdk::time::unix_seconds(env) {
         hash.update(&seconds.to_le_bytes());
     }
     hash.update(&env.status.battery.map_or(0, |b| b.percent).to_le_bytes());
@@ -365,9 +365,9 @@ pub(crate) fn draw_address(
 }
 
 impl Screen for TransferScreen {
-    fn hint(&self, action: &Id, _: &Env<'_>) -> quireink_sdk::Hint {
+    fn hint(&self, action: &Id, _: &Env<'_>) -> paperpaw_sdk::Hint {
         // Only back does anything here.
-        quireink_sdk::Hint::only_back(action)
+        paperpaw_sdk::Hint::only_back(action)
     }
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
@@ -389,7 +389,7 @@ impl Screen for TransferScreen {
                 return ui::draw_message(canvas, env, &style, area, message);
             }
             State::NoNetwork => {
-                // Where QuireInk runs Wi-Fi, its settings join a network;
+                // Where PaperPaw runs Wi-Fi, its settings join a network;
                 // elsewhere the system's.
                 let text = if env.wifi.is_some() {
                     "transfer.no-network"

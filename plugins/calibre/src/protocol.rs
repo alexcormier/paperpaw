@@ -9,14 +9,14 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_json as json;
+use paperpaw_json as json;
 
 /// The ports Calibre listens on for a device looking for it.
 pub const BROADCAST_PORTS: [u16; 5] = [54982, 48123, 39001, 44044, 59678];
 /// The port Calibre takes for devices unless set otherwise.
 pub const DEFAULT_PORT: u16 = 9090;
 
-/// The opcodes QuireInk knows.
+/// The opcodes PaperPaw knows.
 pub mod op {
     pub const OK: u8 = 0;
     pub const SET_CALIBRE_DEVICE_INFO: u8 = 1;
@@ -150,7 +150,7 @@ pub fn strings(object: &str, key: &str) -> Vec<String> {
 #[derive(Debug)]
 pub struct Device<'a> {
     pub name: &'a str,
-    /// The file extensions QuireInk reads.
+    /// The file extensions PaperPaw reads.
     pub extensions: &'a [&'a str],
     /// Calibre's challenge and the password, if one is set.
     pub challenge: &'a str,
@@ -163,7 +163,7 @@ pub fn initialization(device: &Device<'_>) -> String {
     let extensions: Vec<String> = device.extensions.iter().map(|e| json::string(e)).collect();
     let hash = match device.password {
         Some(password) if !device.challenge.is_empty() => {
-            let mut sha = quireink_digest::sha1::Sha1::new();
+            let mut sha = paperpaw_digest::sha1::Sha1::new();
             sha.update(password.as_bytes());
             sha.update(device.challenge.as_bytes());
             sha.hex()
@@ -178,8 +178,8 @@ pub fn initialization(device: &Device<'_>) -> String {
          \"canUseCachedMetadata\": false, \"cacheUsesLpaths\": true, \
          \"canSendOkToSendbook\": false, \"canAcceptLibraryInfo\": true, \
          \"willAskForUpdateBooks\": false, \"useUuidFileNames\": false, \
-         \"coverHeight\": 240, \"deviceKind\": \"QuireInk\", \"deviceName\": {name}, \
-         \"appName\": \"QuireInk\", \"ccVersionNumber\": {version}, \
+         \"coverHeight\": 240, \"deviceKind\": \"PaperPaw\", \"deviceName\": {name}, \
+         \"appName\": \"PaperPaw\", \"ccVersionNumber\": {version}, \
          \"passwordHash\": {hash}}}",
         extensions = extensions.join(", "),
         name = json::string(device.name),
@@ -284,14 +284,14 @@ mod tests {
     #[test]
     fn password_answers_the_challenge() {
         let device = Device {
-            name: "QuireInk",
+            name: "PaperPaw",
             extensions: &["epub", "txt"],
             challenge: "2026-10-16T12:00:00",
             password: Some("secret"),
             version: "1",
         };
         let answer = initialization(&device);
-        let expected = quireink_digest::sha1::hex(b"secret2026-10-16T12:00:00");
+        let expected = paperpaw_digest::sha1::hex(b"secret2026-10-16T12:00:00");
         assert_eq!(text(&answer, "passwordHash"), Some(expected));
         assert_eq!(strings(&answer, "acceptedExtensions"), ["epub", "txt"]);
         assert_eq!(text(&answer, "canStreamBooks").as_deref(), Some("true"));
@@ -307,7 +307,7 @@ mod tests {
 
     #[test]
     fn device_information_returns_what_calibre_said() {
-        let stored = r#"{"device_store_uuid": "abc", "device_name": "QuireInk"}"#;
+        let stored = r#"{"device_store_uuid": "abc", "device_name": "PaperPaw"}"#;
         let info = device_information(Some(stored), "Boox", "1");
         assert_eq!(member(&info, "device_info"), Some(stored));
         let fresh = device_information(None, "Boox", "1");

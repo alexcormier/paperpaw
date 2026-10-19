@@ -3,7 +3,7 @@
 //! start-up or waking), has a `sample` line each time the battery is
 //! measured (about once a minute) and ends with an `end` line (going to
 //! sleep). Besides the battery, each line has what the device did since
-//! QuireInk started ([`Usage`]) and the pages turned, so the battery's use
+//! PaperPaw started ([`Usage`]) and the pages turned, so the battery's use
 //! can be put down to what used it.
 //!
 //! What each plugin took goes into [`PLUGINS`], every ten minutes awake
@@ -17,8 +17,8 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use quireink_sdk::Storage;
-use quireink_sdk::usage::{PluginUsage, Usage};
+use paperpaw_sdk::Storage;
+use paperpaw_sdk::usage::{PluginUsage, Usage};
 
 /// The log, in the plugin's folder.
 pub(crate) const FILE: &str = "log.csv";
@@ -409,7 +409,7 @@ mod tests {
     fn plugin_lines_for_those_that_took_anything() {
         let plugins = [
             PluginUsage {
-                plugin: quireink_sdk::Id::new_static("reader"),
+                plugin: paperpaw_sdk::Id::new_static("reader"),
                 busy_us: 2_500_000,
                 calls: 40,
                 shown_ms: 600_000,
@@ -419,7 +419,7 @@ mod tests {
                 written: 2048,
             },
             PluginUsage {
-                plugin: quireink_sdk::Id::new_static("idle"),
+                plugin: paperpaw_sdk::Id::new_static("idle"),
                 ..PluginUsage::default()
             },
         ];
@@ -472,7 +472,7 @@ mod tests {
     /// What version 1 wrote stays readable (see `docs/data-files.md`).
     #[test]
     fn logs_of_version_1_are_read() {
-        let storage = quireink_sdk::MemoryStorage::new()
+        let storage = paperpaw_sdk::MemoryStorage::new()
             .with("battery/log.csv", include_str!("../testdata/log.csv.v1"));
         let sessions = Sessions::read(&storage, "battery");
         // One time awake, from its start to its end.

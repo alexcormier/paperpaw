@@ -5,11 +5,11 @@
 //! kernel may use. Values marked "unverified" are best guesses until checked
 //! on real hardware.
 
-use quireink_platform::{
+use paperpaw_platform::{
     ColorPanel, DeviceInfo, DisplayInfo, InputCaps, MemoryClass, PixelFormat, Rotation, buttons,
 };
 
-/// The X4's front buttons, left to right, as `quireink-x4` names them.
+/// The X4's front buttons, left to right, as `paperpaw-x4` names them.
 const X4_ROW: [&str; 4] = [
     buttons::BACK,
     buttons::CONFIRM,
@@ -42,10 +42,10 @@ pub struct Profile {
     /// The device speaks text aloud (emulated: the text is logged and
     /// takes as long as it would to speak).
     pub speech: bool,
-    /// QuireInk manages Wi-Fi itself, as on the X4 (emulated: made-up
+    /// PaperPaw manages Wi-Fi itself, as on the X4 (emulated: made-up
     /// networks, see `wifi`); elsewhere the system does.
     pub wifi: bool,
-    /// QuireInk shows its sleep screen and the device sleeps (the power
+    /// PaperPaw shows its sleep screen and the device sleeps (the power
     /// button); Android shows its own.
     pub sleep: bool,
     /// The buttons in a row below the screen, left to right (see

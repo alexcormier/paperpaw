@@ -4,9 +4,9 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use quireink_plugin_format_epub::EpubDocument;
-use quireink_sdk::MemoryStorage;
-use quireink_sdk::document::{Document, Locator};
+use paperpaw_plugin_format_epub::EpubDocument;
+use paperpaw_sdk::MemoryStorage;
+use paperpaw_sdk::document::{Document, Locator};
 
 fuzz_target!(|data: &[u8]| {
     let storage = MemoryStorage::new().with("book.epub", data.to_vec());

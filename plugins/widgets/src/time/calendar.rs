@@ -5,11 +5,11 @@
 use alloc::format;
 use alloc::string::String;
 
-use quireink_sdk::time;
-use quireink_sdk::widgets::{self, Align, Drawn, Frame};
-use quireink_sdk::{Canvas, Color, Env, FontHandle, Id, Point, Rect, RegisterError, Registrar};
+use paperpaw_sdk::time;
+use paperpaw_sdk::widgets::{self, Align, Drawn, Frame};
+use paperpaw_sdk::{Canvas, Color, Env, FontHandle, Id, Point, Rect, RegisterError, Registrar};
 
-use quireink_sdk::SettingSpec;
+use paperpaw_sdk::SettingSpec;
 
 use super::dates::MonthGrid;
 use super::{chosen, frame_height, ui};
@@ -114,7 +114,7 @@ pub(super) fn week_start(env: &Env<'_>, widget: &str) -> u8 {
     match chosen(env, widget, "week-start") {
         "sunday" => 0,
         "monday" => 1,
-        _ => quireink_sdk::time::week_start(env),
+        _ => paperpaw_sdk::time::week_start(env),
     }
 }
 
@@ -302,7 +302,7 @@ fn draw_month(
     }
     let label = format!("{} {}", super::month_name(env, month.month), month.year);
     canvas.describe(
-        quireink_sdk::semantics::Role::Text,
+        paperpaw_sdk::semantics::Role::Text,
         &label,
         area,
         false,

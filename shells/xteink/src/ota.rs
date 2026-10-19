@@ -10,8 +10,8 @@
 //! a panic), it is marked bad and the device restarts into the firmware
 //! before it, which says so ([`Ota::undone`]) and takes its place back.
 //!
-//! Only update files signed with a key built in here (QuireInk's) or one
-//! the reader trusts (`quireink_sdk::firmware`) are installed; the
+//! Only update files signed with a key built in here (PaperPaw's) or one
+//! the reader trusts (`paperpaw_sdk::firmware`) are installed; the
 //! signature is checked while the image is written, and the new firmware
 //! chosen only if it holds.
 
@@ -24,12 +24,12 @@ use esp_bootloader_esp_idf::partitions::{
     self, AppPartitionSubType, FlashStorage, PARTITION_TABLE_MAX_LEN, PartitionType,
 };
 use log::{info, warn};
-use quireink_platform::Storage;
-use quireink_sdk::firmware::{
+use paperpaw_platform::Storage;
+use paperpaw_sdk::firmware::{
     Check, Firmware, FirmwareState, InstallFailure, Signer, Update, trusted_keys,
 };
 
-/// QuireInk's keys: updates signed with them install without asking.
+/// PaperPaw's keys: updates signed with them install without asking.
 const KEYS: &[[u8; 32]] = &[
     // The release key, fingerprint 55A9 F626 DB17 EB90.
     [
@@ -39,9 +39,9 @@ const KEYS: &[[u8; 32]] = &[
     ],
 ];
 /// The chip id in the images for the X4 (ESP32-C3).
-const CHIP: u16 = quireink_sdk::firmware::CHIP_ESP32_C3;
+const CHIP: u16 = paperpaw_sdk::firmware::CHIP_ESP32_C3;
 /// Which firmware this is: updates must be the same.
-const PROJECT: &str = "quireink-xteink";
+const PROJECT: &str = "paperpaw-xteink";
 /// The flash's erase block: erased a block at a time, before it is
 /// written.
 const BLOCK: u32 = 64 * 1024;
@@ -164,7 +164,7 @@ impl Ota {
     /// The firmware as plugins see it.
     pub fn firmware(&self) -> Firmware {
         Firmware {
-            version: String::from(env!("QUIREINK_VERSION")),
+            version: String::from(env!("PAPERPAW_VERSION")),
             project: String::from(PROJECT),
             chip: CHIP,
             keys: KEYS.to_vec(),

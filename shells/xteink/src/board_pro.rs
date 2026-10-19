@@ -26,10 +26,10 @@ use esp_hal::spi::Mode;
 use esp_hal::spi::master::{Config as SpiConfig, Spi};
 use esp_hal::time::Rate;
 use esp_hal::timer::timg::TimerGroup;
-use quireink_x4::buttons::State;
-use quireink_x4::gt911::{self, Transform};
-use quireink_x4::uc8179::Display;
-use quireink_x4::{bm8563, cw2017};
+use paperpaw_x4::buttons::State;
+use paperpaw_x4::gt911::{self, Transform};
+use paperpaw_x4::uc8179::Display;
+use paperpaw_x4::{bm8563, cw2017};
 
 use crate::input::Touch;
 
@@ -83,7 +83,7 @@ const TOUCH_EVERY: u8 = 2;
 /// upright screen.
 const TOUCH: Transform = Transform {
     from: (TOUCH_WIDTH, TOUCH_HEIGHT),
-    to: (quireink_x4::uc8179::WIDTH, quireink_x4::uc8179::HEIGHT),
+    to: (paperpaw_x4::uc8179::WIDTH, paperpaw_x4::uc8179::HEIGHT),
     swap: false,
     mirror_x: false,
     mirror_y: false,

@@ -1,4 +1,4 @@
-//! Fonts from the internet: a catalog of fonts (quireink.org's by
+//! Fonts from the internet: a catalog of fonts (paperpaw.org's by
 //! default), each name shown in its own font; one is shown larger with a
 //! sentence in it, downloaded as a data plugin and read with at once.
 //!
@@ -21,10 +21,10 @@ use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
-use quireink_sdk::builtin::{groups, settings};
-use quireink_sdk::setting::Setting;
-use quireink_sdk::ui::choice::Choice;
-use quireink_sdk::{
+use paperpaw_sdk::builtin::{groups, settings};
+use paperpaw_sdk::setting::Setting;
+use paperpaw_sdk::ui::choice::Choice;
+use paperpaw_sdk::{
     ActionSpec, Command, Env, Id, Manifest, MenuEntry, Params, Plugin, RegisterError, Registrar,
     SDK_VERSION, ScreenSpec, SettingSpec, Version,
 };
@@ -37,13 +37,13 @@ const FONT_SCREEN: Id = Id::new_static("fonts-browser.font");
 const CHOICE: Id = Id::new_static("fonts-browser.choice");
 
 /// Where the catalog of fonts comes from.
-pub const CATALOG: Setting<quireink_sdk::setting::Text> = Setting::new("fonts-browser.catalog");
+pub const CATALOG: Setting<paperpaw_sdk::setting::Text> = Setting::new("fonts-browser.catalog");
 
 /// The font library's address, for developers and libraries of one's own.
 static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_text(
     CATALOG.static_str(),
     "fonts-browser.setting.catalog",
-    "https://quireink.org/api/v1/fonts.json",
+    "https://paperpaw.org/api/v1/fonts.json",
     groups::DEVELOPER,
 )
 .described("fonts-browser.setting.catalog.help")];

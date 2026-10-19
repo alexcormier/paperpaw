@@ -4,7 +4,7 @@
 //!
 //! What a widget keeps of its own (its own quotes, the to-do list, which
 //! picture or quote is turned to) is in the plugin's folder,
-//! `.quireink/plugins/widgets`. A tap that changes what a widget shows
+//! `.paperpaw/plugins/widgets`. A tap that changes what a widget shows
 //! (the next quote, an item ticked off) writes it there and has the
 //! screen read its widgets anew.
 
@@ -21,9 +21,9 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::sync::atomic::{AtomicU32, Ordering};
 
-use quireink_sdk::ui::UiStyle;
-use quireink_sdk::widgets;
-use quireink_sdk::{Canvas, Command, Env, Id, Rect, RegisterError, Registrar, Storage, time};
+use paperpaw_sdk::ui::UiStyle;
+use paperpaw_sdk::widgets;
+use paperpaw_sdk::{Canvas, Command, Env, Id, Rect, RegisterError, Registrar, Storage, time};
 
 pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     r.add_translations(Cow::Borrowed(include_str!("../i18n/words.en.ini")))?;
@@ -40,7 +40,7 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
 fn data(name: &str) -> String {
     format!(
         "{}/{name}",
-        quireink_sdk::Env::plugin_dir(crate::PLUGIN.as_str())
+        paperpaw_sdk::Env::plugin_dir(crate::PLUGIN.as_str())
     )
 }
 
@@ -103,7 +103,7 @@ struct Turns {
 impl Turns {
     /// As kept at `path` (`<day> <turns>`); none if not kept.
     fn load(storage: &dyn Storage, path: &str) -> Self {
-        let Ok(data) = quireink_sdk::read_file(storage, path, 64) else {
+        let Ok(data) = paperpaw_sdk::read_file(storage, path, 64) else {
             return Self::default();
         };
         let text = String::from_utf8_lossy(&data);
@@ -198,7 +198,7 @@ fn draw_empty(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &widgets::Look, text
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quireink_sdk::MemoryStorage;
+    use paperpaw_sdk::MemoryStorage;
 
     #[test]
     fn each_day_has_its_own_until_all_were_shown() {

@@ -3,11 +3,11 @@
 //! Onyx adds hidden methods to `android.view.View`; on current firmware
 //! (e.g. the Go 7 with Android 13) `setDefaultUpdateMode(int)` chooses the
 //! waveform the system uses for the window's next updates and
-//! `resetUpdateMode()` restores the user's setting. QuireInk sets the mode
+//! `resetUpdateMode()` restores the user's setting. PaperPaw sets the mode
 //! before each frame it shows, so the system refreshes once, with the right
 //! waveform:
 //!
-//! | QuireInk | Onyx waveform |
+//! | PaperPaw | Onyx waveform |
 //! |----------|---------------|
 //! | `Full` (every few pages, new screens) | GC16, full, flashing: clears ghosting |
 //! | `Partial` (page turns) | GC16 regional: clean grays, no flash |
@@ -20,7 +20,7 @@ use android_activity::AndroidApp;
 use jni::objects::{GlobalRef, JMethodID, JValue};
 use jni::signature::{Primitive, ReturnType};
 use jni::{JNIEnv, JavaVM};
-use quireink_platform::RefreshMode;
+use paperpaw_platform::RefreshMode;
 
 /// Full update (32) + wait (64) + GC16 (2).
 const FULL: i32 = 98;

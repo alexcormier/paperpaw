@@ -16,13 +16,13 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use quireink_sdk::time;
-use quireink_sdk::widgets::{self, Align, Drawn, Frame, Size};
-use quireink_sdk::{
+use paperpaw_sdk::time;
+use paperpaw_sdk::widgets::{self, Align, Drawn, Frame, Size};
+use paperpaw_sdk::{
     Arg, Canvas, Color, Env, FontHandle, Id, Point, Rect, RegisterError, Registrar, Translator,
 };
 
-use quireink_sdk::SettingSpec;
+use paperpaw_sdk::SettingSpec;
 
 use super::{chosen, frame_height, line, ui};
 
@@ -266,7 +266,7 @@ fn draw_text(
         font.draw(canvas, size, x, baseline as i32, text, look.ink);
     }
     canvas.describe(
-        quireink_sdk::semantics::Role::Text,
+        paperpaw_sdk::semantics::Role::Text,
         &rest,
         room,
         false,
@@ -464,7 +464,7 @@ fn draw_grid(
     let sentence = format!("{lead} {rest}");
     let at = Rect::new(left as u16, top as u16, width as u16, height as u16);
     canvas.describe(
-        quireink_sdk::semantics::Role::Text,
+        paperpaw_sdk::semantics::Role::Text,
         &sentence,
         at,
         false,
@@ -513,7 +513,7 @@ fn halve(canvas: &mut Canvas<'_>, area: Rect, paper: Color) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quireink_i18n::Catalog;
+    use paperpaw_i18n::Catalog;
 
     fn translator(language: &str) -> Translator {
         let mut t = Translator::new();

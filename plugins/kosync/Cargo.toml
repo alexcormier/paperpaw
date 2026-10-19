@@ -1,6 +1,6 @@
 [package]
-name = "quireink-plugin-kosync"
-description = "QuireInk progress sync: reading positions shared with KOReader's sync server (kosync)"
+name = "paperpaw-plugin-kosync"
+description = "PaperPaw progress sync: reading positions shared with KOReader's sync server (kosync)"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,12 +11,12 @@ authors.workspace = true
 categories = ["no-std"]
 
 [dependencies]
-quireink-json.workspace = true
-quireink-digest.workspace = true
-quireink-sdk.workspace = true
+paperpaw-json.workspace = true
+paperpaw-digest.workspace = true
+paperpaw-sdk.workspace = true
 
 [dev-dependencies]
-quireink-i18n.workspace = true
+paperpaw-i18n.workspace = true
 
 [lints]
 workspace = true

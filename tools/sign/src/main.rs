@@ -1,32 +1,32 @@
-//! `quireink-sign`: signs firmware images as update files (see
-//! `quireink-update`), makes signing keys and shows what an update file
+//! `paperpaw-sign`: signs firmware images as update files (see
+//! `paperpaw-update`), makes signing keys and shows what an update file
 //! holds.
 //!
-//! A device installs updates signed with QuireInk's key, and those signed
+//! A device installs updates signed with PaperPaw's key, and those signed
 //! with a key its reader chose to trust (their own builds).
 
 use std::process::ExitCode;
 
-use quireink_update::{AppInfo, Check, TRAILER_LEN, Trailer};
+use paperpaw_update::{AppInfo, Check, TRAILER_LEN, Trailer};
 
 const USAGE: &str = "\
-quireink-sign: sign QuireInk firmware updates
+paperpaw-sign: sign PaperPaw firmware updates
 
 USAGE:
-    quireink-sign key <secret-key-file>
+    paperpaw-sign key <secret-key-file>
         Makes a new signing key, keeps it in the file (keep it safe) and
         prints its public key.
-    quireink-sign sign <image.bin> <update.bin> [--key <secret-key-file>]
+    paperpaw-sign sign <image.bin> <update.bin> [--key <secret-key-file>]
         Signs an app image (`espflash save-image`, not merged) as an update
-        file. Without --key, the key comes from QUIREINK_SIGNING_KEY (64
+        file. Without --key, the key comes from PAPERPAW_SIGNING_KEY (64
         hexadecimal digits).
-    quireink-sign show <update.bin>
+    paperpaw-sign show <update.bin>
         Shows what the update holds, its signer, and whether its signature
         holds.
-    quireink-sign sign-apart <flash.bin> <flash.bin.sig> [--key <secret-key-file>]
+    paperpaw-sign sign-apart <flash.bin> <flash.bin.sig> [--key <secret-key-file>]
         Signs a whole flash image (as the web flasher writes it) with a
         signature file of its own; the key as for sign.
-    quireink-sign check <flash.bin> <flash.bin.sig>
+    paperpaw-sign check <flash.bin> <flash.bin.sig>
         Shows the signer of a whole flash image and whether its signature
         holds.
 ";
@@ -65,33 +65,33 @@ fn key(file: &str) -> Result<(), String> {
     }
     let pair = ed25519_compact::KeyPair::generate();
     let seed: [u8; 32] = *pair.sk.seed();
-    std::fs::write(file, format!("{}\n", quireink_update::key_hex(&seed)))
+    std::fs::write(file, format!("{}\n", paperpaw_update::key_hex(&seed)))
         .map_err(|e| format!("{file}: {e}"))?;
-    let public = quireink_update::public_key(&seed);
-    println!("public key:  {}", quireink_update::key_hex(&public));
-    println!("fingerprint: {}", quireink_update::fingerprint(&public));
+    let public = paperpaw_update::public_key(&seed);
+    println!("public key:  {}", paperpaw_update::key_hex(&public));
+    println!("fingerprint: {}", paperpaw_update::fingerprint(&public));
     Ok(())
 }
 
-/// The secret key from `key_file`, else from QUIREINK_SIGNING_KEY.
+/// The secret key from `key_file`, else from PAPERPAW_SIGNING_KEY.
 fn secret_key(key_file: Option<&str>) -> Result<[u8; 32], String> {
     let text = match key_file {
         Some(file) => std::fs::read_to_string(file).map_err(|e| format!("{file}: {e}"))?,
-        None => std::env::var("QUIREINK_SIGNING_KEY")
-            .map_err(|_| "no --key and no QUIREINK_SIGNING_KEY".to_string())?,
+        None => std::env::var("PAPERPAW_SIGNING_KEY")
+            .map_err(|_| "no --key and no PAPERPAW_SIGNING_KEY".to_string())?,
     };
-    Ok(quireink_update::parse_key(&text).ok_or("the key is not 64 hexadecimal digits")?)
+    Ok(paperpaw_update::parse_key(&text).ok_or("the key is not 64 hexadecimal digits")?)
 }
 
 fn sign_apart(image: &str, signature: &str, key_file: Option<&str>) -> Result<(), String> {
     let seed = secret_key(key_file)?;
     let data = std::fs::read(image).map_err(|e| format!("{image}: {e}"))?;
-    let trailer = quireink_update::sign(&data, &seed).map_err(|e| format!("{image}: {e}"))?;
+    let trailer = paperpaw_update::sign(&data, &seed).map_err(|e| format!("{image}: {e}"))?;
     std::fs::write(signature, trailer.to_bytes()).map_err(|e| format!("{signature}: {e}"))?;
     println!(
         "{signature}: {} bytes signed by {}",
         data.len(),
-        quireink_update::fingerprint(&trailer.key)
+        paperpaw_update::fingerprint(&trailer.key)
     );
     Ok(())
 }
@@ -99,12 +99,12 @@ fn sign_apart(image: &str, signature: &str, key_file: Option<&str>) -> Result<()
 fn check(image: &str, signature: &str) -> Result<(), String> {
     let data = std::fs::read(image).map_err(|e| format!("{image}: {e}"))?;
     let sig = std::fs::read(signature).map_err(|e| format!("{signature}: {e}"))?;
-    let trailer = quireink_update::check_apart(&data, &sig).map_err(|e| format!("{image}: {e}"))?;
+    let trailer = paperpaw_update::check_apart(&data, &sig).map_err(|e| format!("{image}: {e}"))?;
     println!("image:       {} bytes", data.len());
     println!(
         "signer:      {} ({})",
-        quireink_update::fingerprint(&trailer.key),
-        quireink_update::key_hex(&trailer.key)
+        paperpaw_update::fingerprint(&trailer.key),
+        paperpaw_update::key_hex(&trailer.key)
     );
     println!("signature:   holds");
     Ok(())
@@ -114,14 +114,14 @@ fn sign(image: &str, update: &str, key_file: Option<&str>) -> Result<(), String>
     let seed = secret_key(key_file)?;
     let mut data = std::fs::read(image).map_err(|e| format!("{image}: {e}"))?;
     let info = AppInfo::read(&data).map_err(|e| format!("{image}: {e}"))?;
-    let trailer = quireink_update::sign(&data, &seed).map_err(|e| format!("{image}: {e}"))?;
+    let trailer = paperpaw_update::sign(&data, &seed).map_err(|e| format!("{image}: {e}"))?;
     data.extend_from_slice(&trailer.to_bytes());
     std::fs::write(update, &data).map_err(|e| format!("{update}: {e}"))?;
     println!(
         "{update}: {} {}, signed by {}",
         info.project,
         info.version,
-        quireink_update::fingerprint(&trailer.key)
+        paperpaw_update::fingerprint(&trailer.key)
     );
     Ok(())
 }
@@ -143,8 +143,8 @@ fn show(update: &str) -> Result<(), String> {
     println!("image:       {} bytes", trailer.image_len);
     println!(
         "signer:      {} ({})",
-        quireink_update::fingerprint(&trailer.key),
-        quireink_update::key_hex(&trailer.key)
+        paperpaw_update::fingerprint(&trailer.key),
+        paperpaw_update::key_hex(&trailer.key)
     );
     match holds {
         Ok(()) => println!("signature:   holds"),

@@ -5,7 +5,7 @@
 
 ## Context
 
-The X4's firmware is QuireInk with all its code plugins built in. Until
+The X4's firmware is PaperPaw with all its code plugins built in. Until
 now a new version needed a computer: the web flasher or espflash over
 USB. Readers should update on the device, and nothing about an update
 may leave a device that does not start.
@@ -30,19 +30,19 @@ may leave a device that does not start.
   first frame, e.g. it panicked) is marked bad and the device restarts;
   the bootloader skips it, and the firmware before it takes its place
   back and says so.
-- **Signed update files** (`quireink-update`): the app image followed by
+- **Signed update files** (`paperpaw-update`): the app image followed by
   a trailer with its length, the signer's Ed25519 public key and the
   signature over both. The X4 checks the signature while it writes the
   image, a piece at a time, and chooses the new image only if it holds.
-  It installs images signed with QuireInk's key, built in, or with a key
+  It installs images signed with PaperPaw's key, built in, or with a key
   the reader chose to trust (their own builds), listed on the card.
-  `quireink-sign` makes keys, signs images and shows what a file holds;
+  `paperpaw-sign` makes keys, signs images and shows what a file holds;
   releases are signed with a key kept as a secret of the repository.
   The whole flash image the web flasher writes is signed with the same
   key, in a signature file of its own (`.sig`, the trailer alone); the
   website checks it when it fetches a release, and the browser again
   before it writes.
-- **The shell installs, a plugin asks** (`quireink_sdk::firmware`): the
+- **The shell installs, a plugin asks** (`paperpaw_sdk::firmware`): the
   shell does what `Command::Firmware` says (install a file, restart) and
   reports its progress; the `update` plugin finds update files in
   `updates` on the card, says what they are and who signed them, offers
@@ -60,5 +60,5 @@ may leave a device that does not start.
   anyway.
 - Devices flashed before the two partitions came need the web flasher
   once more; until then the update page is not offered.
-- Updates over the network (from quireink.org, O3 to O6 in the
+- Updates over the network (from paperpaw.org, O3 to O6 in the
   planning) build on this: they only fetch the file.

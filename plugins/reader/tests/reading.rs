@@ -9,12 +9,12 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use quireink_core::Kernel;
-use quireink_platform::Rotation;
-use quireink_plugin_reader::{Reader, actions};
-use quireink_sdk::annotations::Kind;
-use quireink_sdk::builtin::{actions as core_actions, events, params, slots};
-use quireink_sdk::{
+use paperpaw_core::Kernel;
+use paperpaw_platform::Rotation;
+use paperpaw_plugin_reader::{Reader, actions};
+use paperpaw_sdk::annotations::Kind;
+use paperpaw_sdk::builtin::{actions as core_actions, events, params, slots};
+use paperpaw_sdk::{
     DeviceInfo, DirEntry, DisplayInfo, Id, InputCaps, Instant, Manifest, MemoryClass,
     MemoryStorage, Params, PixelFormat, Plugin, RegisterError, Registrar, SDK_VERSION, Storage,
     StorageError, Version,
@@ -135,9 +135,9 @@ impl Reading {
         let heard = Heard::default();
         let kernel = Kernel::builder(DEVICE)
             .storage(storage.clone())
-            .plugin(quireink_plugin_fonts_default::DefaultFontPacks)
-            .plugin(quireink_plugin_format_txt::TxtFormat)
-            .plugin(quireink_plugin_format_epub::EpubFormat)
+            .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
+            .plugin(paperpaw_plugin_format_txt::TxtFormat)
+            .plugin(paperpaw_plugin_format_epub::EpubFormat)
             .plugin(Reader)
             .plugin(Listener(heard.clone()))
             .build()
@@ -156,7 +156,7 @@ impl Reading {
 
     /// Lets the kernel's timers run (the page index, a first opening)
     /// until nothing is due within a second.
-    fn settle(&mut self, mut effects: quireink_core::Effects) {
+    fn settle(&mut self, mut effects: paperpaw_core::Effects) {
         for _ in 0..10_000 {
             let Some(at) = effects.wake_at() else {
                 return;
@@ -196,8 +196,8 @@ impl Reading {
         let effects = self.kernel.suspend(Instant(self.now));
         self.settle(effects);
         let dir = format!(
-            ".quireink/plugins/reader/books/{:016x}",
-            quireink_digest::fnv1a64(self.book)
+            ".paperpaw/plugins/reader/books/{:016x}",
+            paperpaw_digest::fnv1a64(self.book)
         );
         let Some(data) = self.storage.0.get(&format!("{dir}/progress.ini")) else {
             return (0, 0);
@@ -282,7 +282,7 @@ fn bookmarks_are_kept() {
     reading.run(core_actions::NEXT_PAGE);
     reading.run(actions::TOGGLE_BOOKMARK);
     let marks = |reading: &Reading| {
-        let marks = quireink_sdk::annotations::marks(&reading.storage, BOOK);
+        let marks = paperpaw_sdk::annotations::marks(&reading.storage, BOOK);
         let bookmarks = marks.iter().filter(|m| m.kind == Kind::Bookmark);
         bookmarks.count()
     };

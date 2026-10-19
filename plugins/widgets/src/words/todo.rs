@@ -11,16 +11,16 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::ask;
-use quireink_sdk::builtin::actions;
-use quireink_sdk::event::Event;
-use quireink_sdk::replies::Typed;
-use quireink_sdk::setting::{Setting, Text};
-use quireink_sdk::time::LocalTime;
-use quireink_sdk::ui::choice::{self, Choice};
-use quireink_sdk::ui::{self, ListView, UiStyle};
-use quireink_sdk::widgets::{self, Align, Frame, Look, Size, Widget, WidgetSpec, WidgetTarget};
-use quireink_sdk::{
+use paperpaw_sdk::ask;
+use paperpaw_sdk::builtin::actions;
+use paperpaw_sdk::event::Event;
+use paperpaw_sdk::replies::Typed;
+use paperpaw_sdk::setting::{Setting, Text};
+use paperpaw_sdk::time::LocalTime;
+use paperpaw_sdk::ui::choice::{self, Choice};
+use paperpaw_sdk::ui::{self, ListView, UiStyle};
+use paperpaw_sdk::widgets::{self, Align, Frame, Look, Size, Widget, WidgetSpec, WidgetTarget};
+use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Color, Command, Cx, Env, FontHandle, Gesture, GestureKind, Handled,
     Id, Params, Point, Rect, RefreshMode, RegisterError, Registrar, Screen, ScreenSpec,
     SettingSpec, Storage,
@@ -228,7 +228,7 @@ fn format(items: &[Item]) -> String {
 }
 
 fn load(storage: &dyn Storage, today: i64) -> Vec<Item> {
-    quireink_sdk::read_file(storage, &file(), 32 * 1024)
+    paperpaw_sdk::read_file(storage, &file(), 32 * 1024)
         .map(|data| parse(&String::from_utf8_lossy(&data), today))
         .unwrap_or_default()
 }
@@ -810,7 +810,7 @@ mod tests {
         assert!(super::SETTINGS.iter().all(|s| s.group == super::ID));
     }
     use super::*;
-    use quireink_sdk::MemoryStorage;
+    use paperpaw_sdk::MemoryStorage;
 
     #[test]
     fn days_and_dates_agree() {
@@ -842,7 +842,7 @@ mod tests {
             },
         ];
         save(&storage, &items);
-        let text = String::from_utf8(quireink_sdk::read_file(&storage, &file(), 1024).unwrap());
+        let text = String::from_utf8(paperpaw_sdk::read_file(&storage, &file(), 1024).unwrap());
         assert_eq!(
             text.unwrap(),
             "Return the library book\nx 2026-10-19 Call Anna back\n"

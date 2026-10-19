@@ -9,10 +9,10 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::setting::Setting;
-use quireink_sdk::ui::{self, UiStyle};
-use quireink_sdk::widgets::{self, Align, Frame, Look, Size, Widget, WidgetSpec, WidgetTarget};
-use quireink_sdk::{
+use paperpaw_sdk::setting::Setting;
+use paperpaw_sdk::ui::{self, UiStyle};
+use paperpaw_sdk::widgets::{self, Align, Frame, Look, Size, Widget, WidgetSpec, WidgetTarget};
+use paperpaw_sdk::{
     Arg, Canvas, Color, Env, FontHandle, Id, Rect, RegisterError, Registrar, SettingSpec,
 };
 
@@ -47,8 +47,8 @@ static LOOK: [SettingSpec; 3] = [
 /// The rest of its settings after the days, kept in the program: what
 /// it shows and how.
 /// How many days, counted with their unit.
-static IN_DAYS: quireink_sdk::SettingExtra =
-    quireink_sdk::SettingExtra::new().unit("weather.unit.days");
+static IN_DAYS: paperpaw_sdk::SettingExtra =
+    paperpaw_sdk::SettingExtra::new().unit("weather.unit.days");
 static DAYS_SETTING: [SettingSpec; 1] =
     [
         SettingSpec::fixed_number(DAYS.static_str(), "weather.setting.days", 3, 7, 5, ID)
@@ -611,7 +611,7 @@ mod tests {
 
     #[test]
     fn calm_parts_at_first() {
-        use quireink_sdk::SettingValue;
+        use paperpaw_sdk::SettingValue;
         for spec in LOOK.iter().chain(&SETTINGS) {
             assert!(
                 spec.id.as_str().starts_with("weather.forecast."),

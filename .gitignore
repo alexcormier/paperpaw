@@ -6,8 +6,8 @@
 # Emulator output
 /out/
 # Reading progress and page indexes written by the emulator
-/samples/library/.quireink/
-/samples/library/quireink.ini
+/samples/library/.paperpaw/
+/samples/library/paperpaw.ini
 *.screenshot.png
 
 # Editors and OS files

@@ -12,7 +12,7 @@
 //!
 //! The inputs follow in sections. Tapping one lists the actions to choose
 //! from, in groups and searchable, after *As standard* (what plugins and
-//! the button layout bind) and *Nothing*. Changes go to `quireink.ini`
+//! the button layout bind) and *Nothing*. Changes go to `paperpaw.ini`
 //! like any binding written there (`Command::Bind`) and apply at once.
 
 #![no_std]
@@ -25,12 +25,12 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::ask;
-use quireink_sdk::builtin::{GLOBAL_KEYMAP_LAYER, actions, menus, params, slots};
-use quireink_sdk::event::Event;
-use quireink_sdk::replies::Typed;
-use quireink_sdk::ui::{self, ListChange, ListView, Rows, UiStyle};
-use quireink_sdk::{
+use paperpaw_sdk::ask;
+use paperpaw_sdk::builtin::{GLOBAL_KEYMAP_LAYER, actions, menus, params, slots};
+use paperpaw_sdk::event::Event;
+use paperpaw_sdk::replies::Typed;
+use paperpaw_sdk::ui::{self, ListChange, ListView, Rows, UiStyle};
+use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
     MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen,
     ScreenSpec, Version,
@@ -971,7 +971,7 @@ impl Screen for PickScreen {
 
 #[cfg(test)]
 mod tests {
-    use quireink_i18n::{Catalog, check};
+    use paperpaw_i18n::{Catalog, check};
 
     #[test]
     fn translations_are_complete() {

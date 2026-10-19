@@ -1,4 +1,4 @@
-"""Draws QuireInk's screens in the emulator, one picture each, for a look
+"""Draws PaperPaw's screens in the emulator, one picture each, for a look
 at all of them side by side (e.g. before a release, to see that they look
 alike and calm). The sample books are the library; the setup counts as
 done.
@@ -7,7 +7,7 @@ Usage:
     python tools/screens.py OUT_DIR [--lang de] [PROFILE ...]
 
 PROFILE defaults to xteink-x4 and boox-go-7. Builds the emulator first
-(cargo build -p quireink-emulator).
+(cargo build -p paperpaw-emulator).
 """
 
 import os
@@ -18,12 +18,12 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-EMULATOR = ROOT / "target/debug/quireink-emu"
+EMULATOR = ROOT / "target/debug/paperpaw-emu"
 
-# The font library the fonts browser asks: quireink.org's, or another
-# (e.g. one running here) named in QUIREINK_FONTS_CATALOG.
-FONTS = ([f"fonts-browser.catalog={os.environ['QUIREINK_FONTS_CATALOG']}"]
-         if os.environ.get("QUIREINK_FONTS_CATALOG") else [])
+# The font library the fonts browser asks: paperpaw.org's, or another
+# (e.g. one running here) named in PAPERPAW_FONTS_CATALOG.
+FONTS = ([f"fonts-browser.catalog={os.environ['PAPERPAW_FONTS_CATALOG']}"]
+         if os.environ.get("PAPERPAW_FONTS_CATALOG") else [])
 
 # Name, script, settings; a book open at start where the script says so.
 SCREENS = [
@@ -72,17 +72,17 @@ ONLINE = {"fonts", "font"}
 
 
 def library(book, online=False):
-    dir = Path(tempfile.mkdtemp(prefix="quireink-screens-"))
+    dir = Path(tempfile.mkdtemp(prefix="paperpaw-screens-"))
     books = dir / "books"
     shutil.copytree(ROOT / "samples/library/books", books)
-    (dir / ".quireink/plugins/setup").mkdir(parents=True)
-    (dir / ".quireink/plugins/setup/done").write_text("")
+    (dir / ".paperpaw/plugins/setup").mkdir(parents=True)
+    (dir / ".paperpaw/plugins/setup/done").write_text("")
     if online:
-        (dir / ".quireink/secrets.txt").write_text("wifi.Cafe\tWi-Fi Cafe\tc\t\n")
+        (dir / ".paperpaw/secrets.txt").write_text("wifi.Cafe\tWi-Fi Cafe\tc\t\n")
     if book:
         names = sorted(p.name for p in books.iterdir() if p.suffix == ".epub")
         name = BOOK if BOOK in names else names[0]
-        state = dir / ".quireink/plugins/reader"
+        state = dir / ".paperpaw/plugins/reader"
         state.mkdir(parents=True)
         (state / "state.ini").write_text(f"[reader]\nlast = books/{name}\n")
     return dir
@@ -100,7 +100,7 @@ def main():
         lang = args[at + 1]
         del args[at:at + 2]
     profiles = args or ["xteink-x4", "boox-go-7"]
-    subprocess.run(["cargo", "build", "-q", "-p", "quireink-emulator"], cwd=ROOT, check=True)
+    subprocess.run(["cargo", "build", "-q", "-p", "paperpaw-emulator"], cwd=ROOT, check=True)
     for profile in profiles:
         for name, script, sets in SCREENS:
             book = script.startswith("@book")

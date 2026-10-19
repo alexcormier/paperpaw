@@ -7,10 +7,10 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::builtin::{groups, settings};
-use quireink_sdk::config;
-use quireink_sdk::data::Format;
-use quireink_sdk::{Command, Env, Id, SettingKind, Storage};
+use paperpaw_sdk::builtin::{groups, settings};
+use paperpaw_sdk::config;
+use paperpaw_sdk::data::Format;
+use paperpaw_sdk::{Command, Env, Id, SettingKind, Storage};
 
 use crate::PLUGIN;
 
@@ -21,7 +21,7 @@ const GROUPS: [Id; 3] = [groups::READING, groups::DISPLAY, groups::STATUS_LINES]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Profile {
     pub name: String,
-    /// Setting ids and values as in `quireink.ini`.
+    /// Setting ids and values as in `paperpaw.ini`.
     pub values: Vec<(Id, String)>,
 }
 
@@ -117,7 +117,7 @@ pub(crate) fn save(storage: &dyn Storage, profiles: &[Profile]) {
 
 /// The name of the profile applied last.
 pub(crate) fn last(storage: &dyn Storage) -> String {
-    let data = quireink_sdk::read_file(storage, &last_path(), 1024).unwrap_or_default();
+    let data = paperpaw_sdk::read_file(storage, &last_path(), 1024).unwrap_or_default();
     String::from_utf8_lossy(&data).trim().to_string()
 }
 
@@ -165,7 +165,7 @@ pub(crate) fn in_use(env: &Env<'_>, profile: &Profile) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quireink_sdk::MemoryStorage;
+    use paperpaw_sdk::MemoryStorage;
 
     #[test]
     fn profiles_are_kept() {
@@ -212,7 +212,7 @@ mod tests {
         assert_eq!(loaded[1].name, "Large print");
         // Saved again, it is version 2.
         save(&storage, &loaded);
-        let text = quireink_sdk::read_file(&storage, &path(), 4096).unwrap();
+        let text = paperpaw_sdk::read_file(&storage, &path(), 4096).unwrap();
         assert!(text.starts_with(b"# format 2\n[profile.1]\nname = Night\n"));
         assert_eq!(load(&storage), loaded);
     }
@@ -220,7 +220,7 @@ mod tests {
     /// What version 1 wrote stays readable (see `docs/data-files.md`).
     #[test]
     fn the_last_profile_of_version_1_is_read() {
-        let storage = quireink_sdk::MemoryStorage::new()
+        let storage = paperpaw_sdk::MemoryStorage::new()
             .with(&super::last_path(), include_str!("../testdata/last.txt.v1"));
         assert_eq!(super::last(&storage), "Night reading");
     }

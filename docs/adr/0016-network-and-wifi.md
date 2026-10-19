@@ -7,8 +7,8 @@
 
 Plugins reach the network through HTTP requests, servers and sockets
 ([ADR 0014](0014-sockets-for-plugins.md)). On Android and desktops the
-system manages Wi-Fi; QuireInk only uses the network. On the X4 (and
-later on Linux readers) QuireInk has to manage the radio itself: switch
+system manages Wi-Fi; PaperPaw only uses the network. On the X4 (and
+later on Linux readers) PaperPaw has to manage the radio itself: switch
 it on and off, find networks, join one with a password the user typed.
 
 The radio is the largest consumer of battery after the display and,
@@ -25,11 +25,11 @@ stays sans-I/O ([ADR 0003](0003-sans-io-kernel.md)).
   it is told and reports what happens; deciding when the radio is on
   and which network it joins, and the page to choose networks, are the
   `wifi` plugin's. Another plugin can take its place.
-- **The vocabulary is in the SDK** (`quireink_sdk::wifi`):
+- **The vocabulary is in the SDK** (`paperpaw_sdk::wifi`):
   `WifiCommand` (on, off, scan, join, leave), `WifiState` (off, on,
   joining, online with the address), `WifiNetwork` and `JoinFailure`.
   Plugins send `Command::Wifi`; `Env::wifi` is `Some` only where
-  QuireInk manages Wi-Fi, with the state, the networks found last,
+  PaperPaw manages Wi-Fi, with the state, the networks found last,
   whether work waits for the network (`wanted`) and whether something
   uses it (`busy`). Events: `core.wifi-changed`, `core.wifi-scanned`,
   `core.wifi-failed`, `core.network-wanted`, `core.network-idle`.
@@ -43,7 +43,7 @@ stays sans-I/O ([ADR 0003](0003-sans-io-kernel.md)).
   any more, `core.network-idle`. `Env::network` keeps its meaning: the
   device can reach a network, not that it does now.
 - **Known networks are shared data**: their passwords are kept with the
-  passwords and keys as `wifi.<name>` (`quireink_sdk::wifi::{known,
+  passwords and keys as `wifi.<name>` (`paperpaw_sdk::wifi::{known,
   keep, forget}`), so a plugin taking the place of `wifi` finds them, and
   the user sees and removes them in the settings.
 - **The `wifi` plugin's policy**: on demand (a setting) it switches the
@@ -53,7 +53,7 @@ stays sans-I/O ([ADR 0003](0003-sans-io-kernel.md)).
   idle (a setting), unless the user switched it on on its page or it
   stays on while charging (a setting; on by default on the X4, which
   charges from USB). Its page is the settings group's own page
-  (`SettingGroupSpec::page`); its settings are shown only where QuireInk
+  (`SettingGroupSpec::page`); its settings are shown only where PaperPaw
   manages Wi-Fi (`MenuNeed::Wifi`).
 - **Bodies stream on the shell's side**: a request's file to send
   (`HttpCall::body_from`) is read by the shell, and a body meant for a
@@ -64,7 +64,7 @@ stays sans-I/O ([ADR 0003](0003-sans-io-kernel.md)).
 - **The X4 shell**: the radio (esp-radio) is started when told and
   dropped when off, which powers it down and frees its memory; scanning
   and joining run in the background, polled by the main loop. HTTP goes
-  over smoltcp with the protocol in `quireink-http`, a crate without
+  over smoltcp with the protocol in `paperpaw-http`, a crate without
   I/O. Servers and sockets are not there yet: they fail at once with a
   reason.
 - **The emulator** pretends to be such a device for the X4 profiles:

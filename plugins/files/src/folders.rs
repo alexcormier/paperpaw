@@ -16,17 +16,17 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::ask;
-use quireink_sdk::builtin::{actions, params};
-use quireink_sdk::event::{Event, EventData};
-use quireink_sdk::replies::{Chosen, Typed};
-use quireink_sdk::ui::{self, ListChange, ListView, UiStyle};
-use quireink_sdk::{
+use paperpaw_sdk::ask;
+use paperpaw_sdk::builtin::{actions, params};
+use paperpaw_sdk::event::{Event, EventData};
+use paperpaw_sdk::replies::{Chosen, Typed};
+use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
+use paperpaw_sdk::{
     Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, RefreshMode, Screen,
     SettingValue,
 };
 
-use quireink_sdk::library::listing::{Entry, Listing};
+use paperpaw_sdk::library::listing::{Entry, Listing};
 
 /// The setting the chosen folder is written to.
 pub(crate) const ID: &str = "id";
@@ -334,7 +334,7 @@ impl Screen for FolderChooser {
         if name.is_empty() {
             return;
         }
-        let path = quireink_sdk::files::join(&self.dir, name);
+        let path = paperpaw_sdk::files::join(&self.dir, name);
         if env.storage.create_dir(&path).is_ok() {
             self.dir = path;
             self.load(&env);

@@ -1,6 +1,6 @@
 [package]
-name = "quireink-xteink"
-description = "QuireInk's firmware for the Xteink X4 (ESP32-C3) and X4 Pro (ESP32-S3)"
+name = "paperpaw-xteink"
+description = "PaperPaw's firmware for the Xteink X4 (ESP32-C3) and X4 Pro (ESP32-S3)"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.95"
@@ -8,7 +8,7 @@ license = "Apache-2.0"
 publish = false
 
 [[bin]]
-name = "quireink-xteink"
+name = "paperpaw-xteink"
 path = "src/main.rs"
 test = false
 bench = false
@@ -49,16 +49,16 @@ x4-pro = [
 remote = []
 
 [dependencies]
-quireink-app = { path = "../../crates/quireink-app", default-features = false, features = ["packs"] }
-quireink-core = { path = "../../crates/quireink-core" }
-quireink-sdk = { path = "../../crates/quireink-sdk" }
-quireink-platform = { path = "../../crates/quireink-platform" }
-quireink-x4 = { path = "../../crates/quireink-x4" }
-quireink-fat = { path = "../../crates/quireink-fat" }
-quireink-http = { path = "../../crates/quireink-http" }
+paperpaw-app = { path = "../../crates/paperpaw-app", default-features = false, features = ["packs"] }
+paperpaw-core = { path = "../../crates/paperpaw-core" }
+paperpaw-sdk = { path = "../../crates/paperpaw-sdk" }
+paperpaw-platform = { path = "../../crates/paperpaw-platform" }
+paperpaw-x4 = { path = "../../crates/paperpaw-x4" }
+paperpaw-fat = { path = "../../crates/paperpaw-fat" }
+paperpaw-http = { path = "../../crates/paperpaw-http" }
 # Their settings' ids, for the X4's defaults.
-quireink-plugin-reader = { path = "../../plugins/reader" }
-quireink-plugin-wifi = { path = "../../plugins/wifi" }
+paperpaw-plugin-reader = { path = "../../plugins/reader" }
+paperpaw-plugin-wifi = { path = "../../plugins/wifi" }
 esp-hal = { version = "1.2", features = ["unstable"] }
 esp-alloc = "0.11"
 esp-backtrace = { version = "0.20", features = ["println"] }

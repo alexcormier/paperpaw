@@ -1,11 +1,11 @@
-//! Firmware updates, on devices whose firmware QuireInk is (the X4): a
+//! Firmware updates, on devices whose firmware PaperPaw is (the X4): a
 //! page in the settings finds an update file in the folder `updates` on
 //! the card, says what it is and who signed it, and has the shell install
-//! it (see `quireink_sdk::firmware`). An update found at start is offered
+//! it (see `paperpaw_sdk::firmware`). An update found at start is offered
 //! once; after the restart the plugin says how it went and removes the
 //! file.
 //!
-//! Updates signed by QuireInk install at once; one's own builds, signed
+//! Updates signed by PaperPaw install at once; one's own builds, signed
 //! with one's own key, after the reader chose to trust that key.
 
 #![no_std]
@@ -21,9 +21,9 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use quireink_sdk::builtin::{events, menus};
-use quireink_sdk::firmware::Firmware;
-use quireink_sdk::{
+use paperpaw_sdk::builtin::{events, menus};
+use paperpaw_sdk::firmware::Firmware;
+use paperpaw_sdk::{
     ActionSpec, Arg, Command, Env, Id, Manifest, MenuEntry, MenuNeed, Params, Plugin,
     RegisterError, Registrar, SDK_VERSION, ScreenSpec, Storage, Version,
 };
@@ -44,7 +44,7 @@ fn file(name: &str) -> String {
 
 /// Two lines of a small file of the plugin's.
 fn read_pair(storage: &dyn Storage, name: &str) -> Option<(String, String)> {
-    let text = quireink_sdk::read_file(storage, &file(name), 4096).ok()?;
+    let text = paperpaw_sdk::read_file(storage, &file(name), 4096).ok()?;
     let text = String::from_utf8(text).ok()?;
     let mut lines = text.lines();
     Some((String::from(lines.next()?), String::from(lines.next()?)))
@@ -78,7 +78,7 @@ fn started(env: &Env<'_>, firmware: &Firmware, out: &mut Vec<Command>) {
     }
     // A newer update on the card, not offered before.
     if let Ok(update) = found::find(storage, firmware)
-        && quireink_sdk::firmware::compare_versions(&update.info.version, &firmware.version).is_gt()
+        && paperpaw_sdk::firmware::compare_versions(&update.info.version, &firmware.version).is_gt()
         && read_pair(storage, OFFERED) != Some((update.path.clone(), update.info.version.clone()))
     {
         write_pair(storage, OFFERED, &update.path, &update.info.version);
@@ -133,7 +133,7 @@ impl Plugin for Update {
 
 #[cfg(test)]
 mod tests {
-    use quireink_i18n::{Catalog, check};
+    use paperpaw_i18n::{Catalog, check};
 
     #[test]
     fn translations_are_complete() {
@@ -146,14 +146,14 @@ mod tests {
     /// What version 1 wrote stays readable (see `docs/data-files.md`).
     #[test]
     fn pairs_of_version_1_are_read() {
-        let storage = quireink_sdk::MemoryStorage::new().with(
+        let storage = paperpaw_sdk::MemoryStorage::new().with(
             &super::file(super::INSTALLING),
             include_str!("../testdata/installing.txt.v1"),
         );
         assert_eq!(
             super::read_pair(&storage, super::INSTALLING),
             Some((
-                alloc::string::String::from("updates/quireink-x4-0.4.0.bin"),
+                alloc::string::String::from("updates/paperpaw-x4-0.4.0.bin"),
                 alloc::string::String::from("0.4.0")
             ))
         );

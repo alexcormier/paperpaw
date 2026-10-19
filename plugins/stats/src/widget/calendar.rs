@@ -9,9 +9,9 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use quireink_sdk::ui::{self, UiStyle};
-use quireink_sdk::widgets::{self, Align, Frame, Look, Widget, WidgetSpec, WidgetTarget};
-use quireink_sdk::{
+use paperpaw_sdk::ui::{self, UiStyle};
+use paperpaw_sdk::widgets::{self, Align, Frame, Look, Widget, WidgetSpec, WidgetTarget};
+use paperpaw_sdk::{
     Arg, Canvas, Env, FontHandle, Id, Point, Rect, RegisterError, Registrar, SettingSpec,
 };
 

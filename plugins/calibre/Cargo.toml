@@ -1,6 +1,6 @@
 [package]
-name = "quireink-plugin-calibre"
-description = "QuireInk's Calibre connection: receive books from Calibre over the network, as its wireless device"
+name = "paperpaw-plugin-calibre"
+description = "PaperPaw's Calibre connection: receive books from Calibre over the network, as its wireless device"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,14 +11,14 @@ authors.workspace = true
 categories = ["no-std"]
 
 [dependencies]
-quireink-json.workspace = true
-quireink-digest.workspace = true
-quireink-sdk.workspace = true
+paperpaw-json.workspace = true
+paperpaw-digest.workspace = true
+paperpaw-sdk.workspace = true
 
 [dev-dependencies]
-quireink-i18n.workspace = true
-quireink-core.workspace = true
-quireink-platform.workspace = true
+paperpaw-i18n.workspace = true
+paperpaw-core.workspace = true
+paperpaw-platform.workspace = true
 
 [lints]
 workspace = true

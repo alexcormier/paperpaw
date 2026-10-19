@@ -9,8 +9,8 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::xml::{Token, Tokenizer, decode, local_name};
-use quireink_sdk::{Storage, StorageError};
+use paperpaw_sdk::xml::{Token, Tokenizer, decode, local_name};
+use paperpaw_sdk::{Storage, StorageError};
 
 /// Pieces the feed is read in.
 const CHUNK: usize = 2048;
@@ -396,20 +396,20 @@ fn paragraphs(markup: &str, max: usize) -> Vec<String> {
 /// `text` safe in HTML.
 fn escape(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
-    quireink_sdk::xml::escape(text, &mut out);
+    paperpaw_sdk::xml::escape(text, &mut out);
     out
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quireink_sdk::MemoryStorage;
+    use paperpaw_sdk::MemoryStorage;
 
     fn page(feed: &str) -> (Converted, String) {
         let storage = MemoryStorage::new();
         storage.write("feed.xml", feed.as_bytes()).unwrap();
         let converted = convert(&storage, "feed.xml", "out.html", 10, 10_000).unwrap();
-        let data = quireink_sdk::read_file(&storage, "out.html", 1 << 20).unwrap();
+        let data = paperpaw_sdk::read_file(&storage, "out.html", 1 << 20).unwrap();
         (converted, String::from_utf8(data).unwrap())
     }
 

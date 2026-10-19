@@ -6,13 +6,13 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use quireink_sdk::time::{self, LocalTime};
-use quireink_sdk::widgets::{self, Align, Drawn, Frame};
-use quireink_sdk::{
+use paperpaw_sdk::time::{self, LocalTime};
+use paperpaw_sdk::widgets::{self, Align, Drawn, Frame};
+use paperpaw_sdk::{
     Arg, Canvas, Color, Env, FontHandle, Id, Point, Rect, RegisterError, Registrar,
 };
 
-use quireink_sdk::SettingSpec;
+use paperpaw_sdk::SettingSpec;
 
 use super::{chosen, dates, frame_height, line, ui};
 

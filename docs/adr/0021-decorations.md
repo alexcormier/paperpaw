@@ -31,7 +31,7 @@ again.
   layout: a plugin's *decorator* gets the words of a page (their text
   and content positions) and gives back ranges, each with a *role*;
   nothing is laid out again.
-- **A style model of its own**, `quireink_sdk::decorations::Decoration`:
+- **A style model of its own**, `paperpaw_sdk::decorations::Decoration`:
   a background, the text's ink, a line under the text (solid, dotted,
   dashed, wavy, double) and its thickness, a frame, struck through. Tones
   are named (light gray to black, yellow, green, blue, pink, orange,
@@ -64,7 +64,7 @@ again.
   is laid out or a decorator's signature changes (as text filters have
   one), and keep the answer with the page. Positions are content
   positions (section and offset), so they fit any layout and any reader.
-- **A word search for all,** `quireink_sdk::words::WordSet`: whole words,
+- **A word search for all,** `paperpaw_sdk::words::WordSet`: whole words,
   without regard to case, phrases of several words, many at once, so
   plugins do not each write their own.
 

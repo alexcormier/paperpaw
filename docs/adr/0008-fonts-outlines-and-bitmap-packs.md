@@ -5,7 +5,7 @@
 
 ## Context
 
-QuireInk needs good-looking, anti-aliased text on every device. Larger
+PaperPaw needs good-looking, anti-aliased text on every device. Larger
 devices should render any OpenType/TrueType font at any size. The ESP32-C3
 has no FPU and no atomic compare-and-swap; `skrifa`/`read-fonts` (the
 maintained font reader from Google Fonts) depend on `alloc::sync::Arc`,
@@ -14,14 +14,14 @@ maintained (RUSTSEC-2026-0192).
 
 ## Decision
 
-- `quireink-text` provides one `Font` type with two backends:
+- `paperpaw-text` provides one `Font` type with two backends:
   - **Outline** (feature `outline`): `skrifa` reads outlines at runtime, a
     built-in accumulation rasterizer renders 4-bit anti-aliased glyphs, and
     a size-bounded LRU glyph cache keeps page turns cheap.
-  - **Bitmap packs** (`.qifp`, always available): glyphs pre-rendered per
+  - **Bitmap packs** (`.ppfp`, always available): glyphs pre-rendered per
     size, read in place from flash or storage without RAM or floating-point
     work.
-- Packs are produced by `quireink-fontgen` (and by the `fonts-default`
+- Packs are produced by `paperpaw-fontgen` (and by the `fonts-default`
   build script) with the *same* rasterizer, so text renders pixel-identical
   on both paths; a test enforces this.
 - Fonts are contributions (`FontSpec`) bound to roles (`core.font-ui`,

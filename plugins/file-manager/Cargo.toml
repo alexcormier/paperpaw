@@ -1,6 +1,6 @@
 [package]
-name = "quireink-plugin-file-manager"
-description = "QuireInk file manager: open, rename, move, copy and delete files and folders"
+name = "paperpaw-plugin-file-manager"
+description = "PaperPaw file manager: open, rename, move, copy and delete files and folders"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,10 +11,10 @@ authors.workspace = true
 categories = ["no-std"]
 
 [dependencies]
-quireink-sdk.workspace = true
+paperpaw-sdk.workspace = true
 
 [dev-dependencies]
-quireink-i18n.workspace = true
+paperpaw-i18n.workspace = true
 
 [lints]
 workspace = true

@@ -1,4 +1,4 @@
-//! Reading aids, as text filters (see `quireink_sdk::filters`), set under
+//! Reading aids, as text filters (see `paperpaw_sdk::filters`), set under
 //! Settings › Reading › Reading aids:
 //!
 //! - *Bold word beginnings*: the first half of every word in bold, which
@@ -17,11 +17,11 @@ use alloc::boxed::Box;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::builtin::groups;
-use quireink_sdk::document::{Block, BlockKind, Run, TextStyle};
-use quireink_sdk::filters::TextFilterSpec;
-use quireink_sdk::setting::{Setting, Text};
-use quireink_sdk::{
+use paperpaw_sdk::builtin::groups;
+use paperpaw_sdk::document::{Block, BlockKind, Run, TextStyle};
+use paperpaw_sdk::filters::TextFilterSpec;
+use paperpaw_sdk::setting::{Setting, Text};
+use paperpaw_sdk::{
     Env, Id, Manifest, Plugin, RegisterError, Registrar, SDK_VERSION, SettingSpec, Version,
 };
 
@@ -120,7 +120,7 @@ fn bold_beginnings(block: &mut Block) {
 pub struct Aids;
 
 /// The aids' part of the reading settings.
-static IN_AIDS: quireink_sdk::SettingExtra = quireink_sdk::SettingExtra::new().section(SECTION);
+static IN_AIDS: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new().section(SECTION);
 
 /// Bold word beginnings, and words replaced.
 static SETTINGS: [SettingSpec; 2] = [
@@ -193,8 +193,8 @@ impl Plugin for Aids {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quireink_i18n::{Catalog, check};
-    use quireink_sdk::document::{Align, OffsetMap};
+    use paperpaw_i18n::{Catalog, check};
+    use paperpaw_sdk::document::{Align, OffsetMap};
 
     fn block(text: &str) -> Block {
         Block {

@@ -13,16 +13,16 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::cell::RefCell;
 
-use quireink_sdk::builtin::actions;
-use quireink_sdk::library;
-use quireink_sdk::ui::UiStyle;
-use quireink_sdk::widgets::{self, Align, Frame, Look, Size, Widget, WidgetSpec, WidgetTarget};
-use quireink_sdk::{Canvas, Color, Command, Env, Id, Rect, RegisterError, Registrar};
+use paperpaw_sdk::builtin::actions;
+use paperpaw_sdk::library;
+use paperpaw_sdk::ui::UiStyle;
+use paperpaw_sdk::widgets::{self, Align, Frame, Look, Size, Widget, WidgetSpec, WidgetTarget};
+use paperpaw_sdk::{Canvas, Color, Command, Env, Id, Rect, RegisterError, Registrar};
 
 use super::{
     Generation, add_settings, catalog_stamp, draw_line, each_book, frame_height, path_hash,
 };
-use quireink_sdk::SettingSpec;
+use paperpaw_sdk::SettingSpec;
 
 pub(crate) const ID: Id = Id::new_static(WIDGET);
 /// Its id, as text.

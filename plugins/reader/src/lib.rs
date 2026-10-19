@@ -12,7 +12,7 @@
 //!   *Back* returns to where a link was followed from.
 //! - Emits the standard events `core.book-opened` and `core.page-turned`,
 //!   so other plugins (home screen, statistics, sync, …) follow the reading.
-//! - Offers what every reader offers (see `quireink_sdk::builtin`): its
+//! - Offers what every reader offers (see `paperpaw_sdk::builtin`): its
 //!   menus (`menus::READER`, `READER_MORE`, `READER_PANEL`, `SELECTION`),
 //!   the events `core.goto`, `core.text-chosen` and `core.notes-exported`,
 //!   the font size `core.font-size`, the status lines' group, key bindings
@@ -41,12 +41,12 @@ use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use quireink_sdk::builtin::{
+use paperpaw_sdk::builtin::{
     actions as core_actions, events, groups, menus, params, settings as core_settings, slots,
 };
-use quireink_sdk::event::Event;
-use quireink_sdk::replies::Typed;
-use quireink_sdk::{
+use paperpaw_sdk::event::Event;
+use paperpaw_sdk::replies::Typed;
+use paperpaw_sdk::{
     Command, Env, Id, Manifest, Params, Plugin, Priority, RegisterError, Registrar, SDK_VERSION,
     ScreenSpec, SettingSpec, Version,
 };
@@ -90,10 +90,10 @@ pub const FOOTNOTE_SCREEN: Id = Id::new_static("reader.footnote");
 /// Settings of the reader.
 pub mod settings {
 
-    use quireink_sdk::setting::{Setting, Text};
+    use paperpaw_sdk::setting::{Setting, Text};
 
     /// Font size in points: the standard one, registered by the kernel.
-    pub use quireink_sdk::builtin::settings::FONT_SIZE;
+    pub use paperpaw_sdk::builtin::settings::FONT_SIZE;
     /// Darker text: glyphs widened by up to this many steps.
     pub const FONT_WEIGHT: Setting<i64> = Setting::new("reader.font-weight");
     /// Book pages with smooth letters, their edges in grays, where the
@@ -141,7 +141,7 @@ pub const MENU: Id = menus::READER;
 
 /// Actions of the reader.
 pub mod actions {
-    use quireink_sdk::Id;
+    use paperpaw_sdk::Id;
 
     pub const FONT_LARGER: Id = Id::new_static("reader.font-larger");
     pub const FONT_SMALLER: Id = Id::new_static("reader.font-smaller");
@@ -206,8 +206,8 @@ pub struct Reader;
 
 /// The parts of the reading settings, with units and steps.
 mod extras {
-    use quireink_sdk::SettingExtra;
-    use quireink_sdk::builtin::setting_sections::{ALOUD, BEHAVIOUR, FONT, PAGE};
+    use paperpaw_sdk::SettingExtra;
+    use paperpaw_sdk::builtin::setting_sections::{ALOUD, BEHAVIOUR, FONT, PAGE};
 
     pub(crate) static LINE_SPACING: SettingExtra = SettingExtra::new()
         .unit("core.unit.percent")
@@ -418,7 +418,7 @@ impl Plugin for Reader {
             "",
         )?;
         // The page takes all of the screen; the buttons' row comes on a press.
-        r.set_screen_hints(SCREEN, quireink_sdk::Hints::OnPress)?;
+        r.set_screen_hints(SCREEN, paperpaw_sdk::Hints::OnPress)?;
         r.add_screen(ScreenSpec {
             id: SCREEN,
             title: Cow::Borrowed("reader.title"),
@@ -430,7 +430,7 @@ impl Plugin for Reader {
             title: Cow::Borrowed("reader.toc"),
             factory: Box::new(|env, params| Box::new(toc::TocScreen::open(env, params))),
         })?;
-        r.add_action(quireink_sdk::ActionSpec::new(actions::TOC, "reader.toc"))?;
+        r.add_action(paperpaw_sdk::ActionSpec::new(actions::TOC, "reader.toc"))?;
         r.add_screen(ScreenSpec {
             id: ANNOTATIONS_SCREEN,
             title: Cow::Borrowed("reader.annotations"),
@@ -477,7 +477,7 @@ impl Plugin for Reader {
             (actions::CANCEL, "reader.select.cancel"),
             (actions::MORE, "reader.select.more"),
         ] {
-            r.add_action(quireink_sdk::ActionSpec::new(id, title))?;
+            r.add_action(paperpaw_sdk::ActionSpec::new(id, title))?;
         }
         // The bar for selected text; plugins add to it.
         for (item, order) in [
@@ -490,7 +490,7 @@ impl Plugin for Reader {
             (actions::EXTEND, 80),
             (actions::CANCEL, 90),
         ] {
-            r.add_menu_entry(quireink_sdk::MenuEntry {
+            r.add_menu_entry(paperpaw_sdk::MenuEntry {
                 menu: SELECTION_MENU,
                 item,
                 order,
@@ -499,13 +499,13 @@ impl Plugin for Reader {
 
         r.add_settings(&SETTINGS)?;
 
-        let font_step = |step: i64| -> quireink_sdk::ActionHandler {
+        let font_step = |step: i64| -> paperpaw_sdk::ActionHandler {
             Box::new(move |env: &Env<'_>, out: &mut Vec<Command>| {
                 let size = env.settings.read(&settings::FONT_SIZE) + step;
                 out.push(Command::set(&settings::FONT_SIZE, size.clamp(6, 40)));
             })
         };
-        let handlers: [(Id, &'static str, quireink_sdk::ActionHandler); 3] = [
+        let handlers: [(Id, &'static str, paperpaw_sdk::ActionHandler); 3] = [
             (
                 actions::FONT_LARGER,
                 "reader.action.font-larger",
@@ -526,11 +526,11 @@ impl Plugin for Reader {
             ),
         ];
         for (id, title, handler) in handlers {
-            r.add_action(quireink_sdk::ActionSpec::new(id, title).handler(handler))?;
+            r.add_action(paperpaw_sdk::ActionSpec::new(id, title).handler(handler))?;
         }
         // Font and layout as a panel of controls: changes show at once.
         r.add_action(
-            quireink_sdk::ActionSpec::new(actions::QUICK_SETTINGS, "reader.layout").handler(
+            paperpaw_sdk::ActionSpec::new(actions::QUICK_SETTINGS, "reader.layout").handler(
                 |_: &Env<'_>, out: &mut Vec<Command>| {
                     out.push(Command::OpenSlot(
                         slots::PANEL,
@@ -577,7 +577,7 @@ impl Plugin for Reader {
             (MORE_MENU, core_actions::SETTINGS, 50),
         ];
         for (menu, item, order) in entries {
-            r.add_menu_entry(quireink_sdk::MenuEntry { menu, item, order })?;
+            r.add_menu_entry(paperpaw_sdk::MenuEntry { menu, item, order })?;
         }
         // Short menus: reading aloud where the device speaks; choosing
         // text and links with the buttons where there is no touch screen.
@@ -589,12 +589,12 @@ impl Plugin for Reader {
             settings::ALOUD_TURN.into(),
             settings::ALOUD_TIMER.into(),
         ] {
-            r.set_menu_need(item, quireink_sdk::MenuNeed::Speech)?;
+            r.set_menu_need(item, paperpaw_sdk::MenuNeed::Speech)?;
         }
         for item in [actions::SELECT, actions::LINKS] {
-            r.set_menu_need(item, quireink_sdk::MenuNeed::NoTouch)?;
+            r.set_menu_need(item, paperpaw_sdk::MenuNeed::NoTouch)?;
         }
-        r.set_menu_need(settings::SMOOTH_TEXT, quireink_sdk::MenuNeed::BlackAndWhite)?;
+        r.set_menu_need(settings::SMOOTH_TEXT, paperpaw_sdk::MenuNeed::BlackAndWhite)?;
         for (item, icon) in [
             (actions::TOC, "list"),
             (actions::LINKS, "link"),
@@ -614,12 +614,12 @@ impl Plugin for Reader {
         r.on(events::STARTED, |env, (), out| reopen_last_book(env, out))?;
         r.on(events::BOOK_MOVED, |env, moved, _| book_moved(env, moved))?;
         // The first-run setup: how large the text is.
-        r.add_setup_step(quireink_sdk::setup::SetupStepSpec {
+        r.add_setup_step(paperpaw_sdk::setup::SetupStepSpec {
             id: Id::new_static("reader.setup.font-size"),
             title: Cow::Borrowed(""),
             help: Cow::Borrowed(""),
             order: 30,
-            page: quireink_sdk::setup::SetupPage::Setting(settings::FONT_SIZE.into()),
+            page: paperpaw_sdk::setup::SetupPage::Setting(settings::FONT_SIZE.into()),
             applies: None,
         })?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
@@ -644,13 +644,13 @@ fn book_moved(env: &Env<'_>, moved: &events::BookMoved) {
 
 /// The book read last, as remembered.
 fn last_book(env: &Env<'_>) -> Option<String> {
-    let data = quireink_sdk::read_file(env.storage, &state_path(), 4096).ok()?;
+    let data = paperpaw_sdk::read_file(env.storage, &state_path(), 4096).ok()?;
     last_in(core::str::from_utf8(&data).ok()?)
 }
 
 /// The book kept in `state.ini`.
 fn last_in(text: &str) -> Option<String> {
-    quireink_sdk::config::parse(text)
+    paperpaw_sdk::config::parse(text)
         .filter_map(Result::ok)
         .filter(|e| e.section == "reader" && e.key == "last")
         .last()
@@ -673,7 +673,7 @@ fn reopen_last_book(env: &Env<'_>, out: &mut Vec<Command>) {
 
 #[cfg(test)]
 mod tests {
-    use quireink_i18n::{Catalog, check};
+    use paperpaw_i18n::{Catalog, check};
 
     /// The last book as version 1 wrote it stays readable (see
     /// `docs/data-files.md`).

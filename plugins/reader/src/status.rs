@@ -23,19 +23,19 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::builtin::{fonts, params, screens};
-use quireink_sdk::status::{StatusFrame, StatusLine, StatusValue, context, item_ids};
-use quireink_sdk::ui::UiStyle;
-use quireink_sdk::{
+use paperpaw_sdk::builtin::{fonts, params, screens};
+use paperpaw_sdk::status::{StatusFrame, StatusLine, StatusValue, context, item_ids};
+use paperpaw_sdk::ui::UiStyle;
+use paperpaw_sdk::{
     Arg, Canvas, Env, Id, Params, RegisterError, Registrar, SettingExtra, SettingKind, SettingSpec,
     SettingValue, StatusItemSpec, StatusLineSpec, Storage,
 };
 
 use crate::PLUGIN;
-use quireink_sdk::setting::Setting;
+use paperpaw_sdk::setting::Setting;
 
 /// The settings group of the status lines (the kernel's).
-pub const GROUP: Id = quireink_sdk::builtin::groups::STATUS_LINES;
+pub const GROUP: Id = paperpaw_sdk::builtin::groups::STATUS_LINES;
 
 /// The battery's charge in percent beside its symbol.
 pub const PERCENT: Setting<bool> = Setting::new("reader.status.battery-percent");
@@ -55,7 +55,7 @@ const SECTION_BOTTOM: &str = "reader.status.section.bottom";
 
 /// The reader's status lines.
 pub mod lines {
-    use quireink_sdk::Id;
+    use paperpaw_sdk::Id;
 
     pub const ITEMS: Id = Id::new_static("reader.status-line.items");
     pub const PROGRESS: Id = Id::new_static("reader.status-line.progress");
@@ -80,7 +80,7 @@ const BOTTOM_RIGHT: Id = Id::new_static("reader.status.bottom-right");
 
 /// The reader's status items.
 pub mod items {
-    use quireink_sdk::Id;
+    use paperpaw_sdk::Id;
 
     pub const TITLE: Id = Id::new_static("reader.status.title");
     /// The chapter, or the title in books without a table of contents.
@@ -336,7 +336,7 @@ fn choice_path() -> String {
 
 /// The lines chosen last, top then bottom.
 pub(crate) fn load_choice(storage: &dyn Storage) -> [String; 2] {
-    let data = quireink_sdk::read_file(storage, &choice_path(), 1024).unwrap_or_default();
+    let data = paperpaw_sdk::read_file(storage, &choice_path(), 1024).unwrap_or_default();
     let text = String::from_utf8_lossy(&data);
     let mut lines = text.lines().map(|l| l.trim().to_string());
     [
@@ -353,7 +353,7 @@ pub(crate) fn save_choice(storage: &dyn Storage, chosen: &[String; 2]) {
 }
 
 /// The colour of status lines: gray, or black for strong contrast.
-pub(crate) fn color(env: &Env<'_>) -> quireink_sdk::Color {
+pub(crate) fn color(env: &Env<'_>) -> paperpaw_sdk::Color {
     UiStyle::new(env).faint(80)
 }
 

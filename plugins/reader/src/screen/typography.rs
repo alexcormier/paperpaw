@@ -22,10 +22,10 @@ pub(super) struct Embedded {
 /// Whether a book's own fonts are used: the font chosen is the book's
 /// (the default choice), and they render on this device.
 pub(super) fn uses_book_fonts(env: &Env<'_>) -> bool {
-    use quireink_sdk::builtin::settings::{DEFAULT_FONT, READING_FONT};
+    use paperpaw_sdk::builtin::settings::{DEFAULT_FONT, READING_FONT};
     // Embedded fonts take hundreds of kilobytes: not on small devices.
-    quireink_sdk::text::OUTLINES
-        && env.device.memory != quireink_sdk::MemoryClass::Small
+    paperpaw_sdk::text::OUTLINES
+        && env.device.memory != paperpaw_sdk::MemoryClass::Small
         && env.settings.read(&READING_FONT) == DEFAULT_FONT
 }
 
@@ -51,7 +51,7 @@ impl Embedded {
             if total > EMBEDDED_LIMIT {
                 break;
             }
-            let Ok(loaded) = quireink_sdk::Font::from_data(data, &[]) else {
+            let Ok(loaded) = paperpaw_sdk::Font::from_data(data, &[]) else {
                 continue;
             };
             let id = Id::parse(&format!("reader.book-font-{index}")).ok()?;
@@ -98,7 +98,7 @@ impl<'a> Faces<'a> {
         let fonts_ = env.fonts;
         let regular = fonts_.role(fonts::READING.as_str())?;
         let custom = fonts_.user_bound(fonts::READING.as_str());
-        let face = |role: &quireink_sdk::Id| {
+        let face = |role: &paperpaw_sdk::Id| {
             if custom && !fonts_.user_bound(role.as_str()) {
                 None
             } else {
@@ -356,7 +356,7 @@ impl Typography {
             "{:016x}",
             fnv1a64(format!(
                 "{}|{}|{}|{}|{}|{size}|{line_height}|{}|{}|{justify}|{width}x{height}|{}|{}|{}|{word_spacing}|{}|{whole_pages}",
-                quireink_sdk::layout::VERSION,
+                paperpaw_sdk::layout::VERSION,
                 font.id(),
                 face_id(env, &fonts::READING_BOLD),
                 face_id(env, &fonts::READING_ITALIC),
@@ -390,7 +390,7 @@ impl Typography {
 }
 
 /// The font bound to an optional reading face, for the layout key.
-pub(super) fn face_id(env: &Env<'_>, role: &quireink_sdk::Id) -> String {
+pub(super) fn face_id(env: &Env<'_>, role: &paperpaw_sdk::Id) -> String {
     env.fonts
         .bound(role.as_str())
         .map_or_else(String::new, |font| font.id().to_string())

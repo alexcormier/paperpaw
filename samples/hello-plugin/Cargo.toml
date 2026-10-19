@@ -1,6 +1,6 @@
 [package]
-name = "quireink-sample-hello"
-description = "A sample QuireInk plugin: a screen, an action in the tools, a setting and an event"
+name = "paperpaw-sample-hello"
+description = "A sample PaperPaw plugin: a screen, an action in the tools, a setting and an event"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,12 +11,12 @@ authors.workspace = true
 publish = false
 
 [dependencies]
-quireink-sdk.workspace = true
+paperpaw-sdk.workspace = true
 
 [dev-dependencies]
-quireink-core.workspace = true
-quireink-i18n.workspace = true
-quireink-platform.workspace = true
+paperpaw-core.workspace = true
+paperpaw-i18n.workspace = true
+paperpaw-platform.workspace = true
 
 [lints]
 workspace = true

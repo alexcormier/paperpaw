@@ -1,4 +1,4 @@
-# QuireInk for Android
+# PaperPaw for Android
 
 A native activity in Rust; its only Java code is a small listener for the
 system's speech output (reading aloud). The app runs on Android
@@ -18,11 +18,11 @@ Then build and install:
 
 ```bash
 shells/android/build-apk.sh
-adb install -r target/android/quireink.apk
+adb install -r target/android/paperpaw.apk
 ```
 
 The script finds the SDK through `ANDROID_HOME` and the usual install
-locations, builds `libquireink.so` with `cargo-ndk`, and packages and signs
+locations, builds `libpaperpaw.so` with `cargo-ndk`, and packages and signs
 the APK with the SDK's build tools and the debug keystore. It does not use
 Gradle. `--debug` builds without optimizations. CI builds the same APK on
 every push; it can be downloaded from the workflow run's artifacts.
@@ -35,13 +35,13 @@ USB debugging*.
 
 - **Books:** choose *Allow access to your books* on the home screen and
   allow *All files access* (Android 11+) or the storage permission (older
-  versions); QuireInk restarts and shows the shared `Books` folder, where
+  versions); PaperPaw restarts and shows the shared `Books` folder, where
   Boox and most e-readers keep books. Any other folder can be chosen under
   *Settings → Library → Library folder*. Until access is allowed, the
-  library is `Android/data/io.github.hthoene.quireink/files/books` with the
-  sample books. `quireink.ini` and all caches stay in
-  `Android/data/io.github.hthoene.quireink/files`.
-- **Plugins without code:** copy plugin folders into `QuireInk/plugins` on
+  library is `Android/data/io.github.hthoene.paperpaw/files/books` with the
+  sample books. `paperpaw.ini` and all caches stay in
+  `Android/data/io.github.hthoene.paperpaw/files`.
+- **Plugins without code:** copy plugin folders into `PaperPaw/plugins` on
   the device's storage (created once access is allowed) and restart.
 - **Touch:** tap the left or right side to turn pages, the middle for the
   menu, or swipe. Long-press for more options.
@@ -51,10 +51,10 @@ USB debugging*.
   and cold light, its warmth, in the reader's menu and under
   *Settings → Display*. They follow the device, so changes made with the
   system's own controls show up too.
-- **E-ink (Onyx Boox):** QuireInk chooses the waveform for every frame:
+- **E-ink (Onyx Boox):** PaperPaw chooses the waveform for every frame:
   a flashing full refresh every few pages (*Settings → Display*) and on
   new screens, clean partial refreshes for page turns and fast ones for
-  menus. Boox's own per-app refresh setting applies again when QuireInk is
+  menus. Boox's own per-app refresh setting applies again when PaperPaw is
   in the background.
 
 ## Limitations

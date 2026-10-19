@@ -2,12 +2,12 @@
 //! settings that matter, one a page, each with a sensible default already
 //! chosen, so *Next* is always right (PLANNING §12.7, E1).
 //!
-//! - The steps come from the plugins ([`quireink_sdk::setup`]): the
+//! - The steps come from the plugins ([`paperpaw_sdk::setup`]): the
 //!   language, the buttons, the text size, the time zone, Wi-Fi, the
 //!   keyboard, the screen lock, and any other plugin's. Those this device
 //!   does not need are left out (e.g. Wi-Fi where the system runs it).
 //! - Skipped as a whole on its first page, never shown again once done
-//!   or skipped; *Set up QuireInk* in the settings opens it again.
+//!   or skipped; *Set up PaperPaw* in the settings opens it again.
 //! - The last page tells where books come from.
 //! - It is the screen of the slot [`slots::SETUP`], so another plugin can
 //!   replace it.
@@ -26,8 +26,8 @@ use alloc::boxed::Box;
 use alloc::format;
 use alloc::vec::Vec;
 
-use quireink_sdk::builtin::{events, menus, slots};
-use quireink_sdk::{
+use paperpaw_sdk::builtin::{events, menus, slots};
+use paperpaw_sdk::{
     ActionSpec, Command, Env, Id, Manifest, MenuEntry, Params, Plugin, Priority, RegisterError,
     Registrar, SDK_VERSION, ScreenSpec, Version, library,
 };
@@ -105,7 +105,7 @@ impl Plugin for Setup {
 mod tests {
     extern crate std;
 
-    use quireink_i18n::{Catalog, check};
+    use paperpaw_i18n::{Catalog, check};
 
     #[test]
     fn translations_are_complete() {

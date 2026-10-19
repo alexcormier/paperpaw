@@ -11,9 +11,9 @@
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_json::stream::{self, Event};
-use quireink_sdk::Storage;
-use quireink_sdk::web::join_url;
+use paperpaw_json::stream::{self, Event};
+use paperpaw_sdk::Storage;
+use paperpaw_sdk::web::join_url;
 
 use crate::feed::{Book, Entry, Feed, MAX_ENTRIES, Search};
 
@@ -235,7 +235,7 @@ fn plain(html: &str) -> String {
             _ => {}
         }
     }
-    crate::feed::clean(&quireink_sdk::xml::decode(&text))
+    crate::feed::clean(&paperpaw_sdk::xml::decode(&text))
 }
 
 /// Whether the file at `path` is JSON (its first character `{`).
@@ -261,7 +261,7 @@ pub(crate) fn read(storage: &dyn Storage, path: &str, base: &str) -> Feed {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quireink_sdk::MemoryStorage;
+    use paperpaw_sdk::MemoryStorage;
 
     const FEED: &str = r#"{
   "metadata": {"title": "Koméga 📚 library", "numberOfItems": 2},

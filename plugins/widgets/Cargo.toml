@@ -1,6 +1,6 @@
 [package]
-name = "quireink-plugin-widgets"
-description = "QuireInk widget pack: clocks, calendars, quotes, books, notes and more for the home screen"
+name = "paperpaw-plugin-widgets"
+description = "PaperPaw widget pack: clocks, calendars, quotes, books, notes and more for the home screen"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,15 +11,15 @@ authors.workspace = true
 categories = ["no-std"]
 
 [dependencies]
-quireink-sdk.workspace = true
+paperpaw-sdk.workspace = true
 
 [dev-dependencies]
-quireink-i18n.workspace = true
-quireink-core.workspace = true
-quireink-graphics.workspace = true
-quireink-platform.workspace = true
-quireink-plugin-fonts-default = { workspace = true, features = ["packs"] }
-quireink-plugin-home.workspace = true
+paperpaw-i18n.workspace = true
+paperpaw-core.workspace = true
+paperpaw-graphics.workspace = true
+paperpaw-platform.workspace = true
+paperpaw-plugin-fonts-default = { workspace = true, features = ["packs"] }
+paperpaw-plugin-home.workspace = true
 
 [lints]
 workspace = true

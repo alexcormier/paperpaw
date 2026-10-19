@@ -5,15 +5,15 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::builtin::{actions, params};
-use quireink_sdk::document::ImageRef;
-use quireink_sdk::ui::{self, UiStyle};
-use quireink_sdk::{
+use paperpaw_sdk::builtin::{actions, params};
+use paperpaw_sdk::document::ImageRef;
+use paperpaw_sdk::ui::{self, UiStyle};
+use paperpaw_sdk::{
     Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, Screen,
     files,
 };
 
-use quireink_sdk::library;
+use paperpaw_sdk::library;
 
 /// What is shown of a book.
 #[derive(Debug, Default)]
@@ -106,8 +106,8 @@ fn size_text(bytes: u64) -> String {
 
 impl Screen for InfoScreen {
     /// Only *Back* shows: nothing else does more than close it.
-    fn hint(&self, action: &Id, _: &Env<'_>) -> quireink_sdk::Hint {
-        quireink_sdk::Hint::only_back(action)
+    fn hint(&self, action: &Id, _: &Env<'_>) -> paperpaw_sdk::Hint {
+        paperpaw_sdk::Hint::only_back(action)
     }
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {

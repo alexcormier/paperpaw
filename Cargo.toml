@@ -4,31 +4,31 @@ resolver = "3"
 # firmware for its chip only, patched dependencies (see [patch.crates-io]).
 exclude = ["fuzz", "shells/xteink", "patches"]
 members = [
-    "crates/quireink-platform",
-    "crates/quireink-config",
-    "crates/quireink-sqlite",
-    "crates/quireink-serve",
-    "crates/quireink-i18n",
-    "crates/quireink-graphics",
-    "crates/quireink-text",
-    "crates/quireink-document",
-    "crates/quireink-layout",
-    "crates/quireink-hyphen",
-    "crates/quireink-image",
-    "crates/quireink-zip",
-    "crates/quireink-http",
-    "crates/quireink-xml",
-    "crates/quireink-stardict",
-    "crates/quireink-sdk",
-    "crates/quireink-core",
-    "crates/quireink-app",
-    "crates/quireink-fs",
-    "crates/quireink-x4",
-    "crates/quireink-fat",
-    "crates/quireink-update",
-    "crates/quireink-digest",
-    "crates/quireink-json",
-    "crates/quireink-qr",
+    "crates/paperpaw-platform",
+    "crates/paperpaw-config",
+    "crates/paperpaw-sqlite",
+    "crates/paperpaw-serve",
+    "crates/paperpaw-i18n",
+    "crates/paperpaw-graphics",
+    "crates/paperpaw-text",
+    "crates/paperpaw-document",
+    "crates/paperpaw-layout",
+    "crates/paperpaw-hyphen",
+    "crates/paperpaw-image",
+    "crates/paperpaw-zip",
+    "crates/paperpaw-http",
+    "crates/paperpaw-xml",
+    "crates/paperpaw-stardict",
+    "crates/paperpaw-sdk",
+    "crates/paperpaw-core",
+    "crates/paperpaw-app",
+    "crates/paperpaw-fs",
+    "crates/paperpaw-x4",
+    "crates/paperpaw-fat",
+    "crates/paperpaw-update",
+    "crates/paperpaw-digest",
+    "crates/paperpaw-json",
+    "crates/paperpaw-qr",
     "plugins/diagnostics",
     "plugins/dictionary",
     "plugins/fonts-default",
@@ -84,79 +84,79 @@ version = "0.4.0-dev"
 edition = "2024"
 rust-version = "1.88"
 license = "Apache-2.0"
-repository = "https://github.com/hthoene/quireink"
-homepage = "https://github.com/hthoene/quireink"
-authors = ["Hannes Thoene", "The QuireInk contributors"]
+repository = "https://github.com/hthoene/paperpaw"
+homepage = "https://github.com/hthoene/paperpaw"
+authors = ["Hannes Thoene", "The PaperPaw contributors"]
 
 [workspace.dependencies]
-quireink-platform = { path = "crates/quireink-platform", version = "0.4.0-dev" }
-quireink-config = { path = "crates/quireink-config", version = "0.4.0-dev" }
-quireink-sqlite = { path = "crates/quireink-sqlite", version = "0.4.0-dev" }
-quireink-serve = { path = "crates/quireink-serve", version = "0.4.0-dev" }
-quireink-i18n = { path = "crates/quireink-i18n", version = "0.4.0-dev" }
-quireink-graphics = { path = "crates/quireink-graphics", version = "0.4.0-dev" }
-quireink-text = { path = "crates/quireink-text", version = "0.4.0-dev" }
-quireink-document = { path = "crates/quireink-document", version = "0.4.0-dev" }
-quireink-zip = { path = "crates/quireink-zip", version = "0.4.0-dev" }
-quireink-http = { path = "crates/quireink-http", version = "0.4.0-dev" }
-quireink-xml = { path = "crates/quireink-xml", version = "0.4.0-dev" }
-quireink-stardict = { path = "crates/quireink-stardict", version = "0.4.0-dev" }
-quireink-layout = { path = "crates/quireink-layout", version = "0.4.0-dev" }
-quireink-x4 = { path = "crates/quireink-x4", version = "0.4.0-dev" }
-quireink-fat = { path = "crates/quireink-fat" }
-quireink-update = { path = "crates/quireink-update", version = "0.4.0-dev" }
-quireink-digest = { path = "crates/quireink-digest", version = "0.4.0-dev" }
-quireink-json = { path = "crates/quireink-json", version = "0.4.0-dev" }
-quireink-qr = { path = "crates/quireink-qr", version = "0.4.0-dev" }
-quireink-sdk = { path = "crates/quireink-sdk", version = "0.4.0-dev" }
-quireink-core = { path = "crates/quireink-core", version = "0.4.0-dev" }
-quireink-hyphen = { path = "crates/quireink-hyphen", version = "0.4.0-dev" }
-quireink-image = { path = "crates/quireink-image", version = "0.4.0-dev" }
-quireink-app = { path = "crates/quireink-app", version = "0.4.0-dev" }
-quireink-fs = { path = "crates/quireink-fs", version = "0.4.0-dev" }
-quireink-plugin-diagnostics = { path = "plugins/diagnostics", version = "0.4.0-dev" }
-quireink-plugin-dictionary = { path = "plugins/dictionary", version = "0.4.0-dev" }
-quireink-plugin-menu = { path = "plugins/menu", version = "0.4.0-dev" }
-quireink-plugin-menu-editor = { path = "plugins/menu-editor", version = "0.4.0-dev" }
-quireink-plugin-kosync = { path = "plugins/kosync", version = "0.4.0-dev" }
-quireink-plugin-calibre = { path = "plugins/calibre", version = "0.4.0-dev" }
-quireink-plugin-stats = { path = "plugins/stats", version = "0.4.0-dev" }
-quireink-plugin-battery = { path = "plugins/battery", version = "0.4.0-dev" }
-quireink-plugin-wifi = { path = "plugins/wifi", version = "0.4.0-dev" }
-quireink-plugin-file-manager = { path = "plugins/file-manager", version = "0.4.0-dev" }
-quireink-plugin-transfer = { path = "plugins/transfer", version = "0.4.0-dev" }
-quireink-plugin-browser = { path = "plugins/browser", version = "0.4.0-dev" }
-quireink-plugin-opds = { path = "plugins/opds", version = "0.4.0-dev" }
-quireink-plugin-fonts-browser = { path = "plugins/fonts-browser", version = "0.4.0-dev" }
-quireink-plugin-rules = { path = "plugins/rules", version = "0.4.0-dev" }
-quireink-plugin-lock = { path = "plugins/lock", version = "0.4.0-dev" }
-quireink-plugin-profiles = { path = "plugins/profiles", version = "0.4.0-dev" }
-quireink-plugin-keys = { path = "plugins/keys", version = "0.4.0-dev" }
-quireink-plugin-wikipedia = { path = "plugins/wikipedia", version = "0.4.0-dev" }
-quireink-plugin-aids = { path = "plugins/aids", version = "0.4.0-dev" }
-quireink-plugin-vocabulary = { path = "plugins/vocabulary", version = "0.4.0-dev" }
-quireink-plugin-sleep = { path = "plugins/sleep", version = "0.4.0-dev" }
-quireink-plugin-translate = { path = "plugins/translate", version = "0.4.0-dev" }
-quireink-plugin-readwise = { path = "plugins/readwise", version = "0.4.0-dev" }
-quireink-plugin-koreader = { path = "plugins/koreader", version = "0.4.0-dev" }
-quireink-plugin-wallabag = { path = "plugins/wallabag", version = "0.4.0-dev" }
-quireink-plugin-about = { path = "plugins/about", version = "0.4.0-dev" }
-quireink-plugin-setup = { path = "plugins/setup", version = "0.4.0-dev" }
-quireink-plugin-update = { path = "plugins/update", version = "0.4.0-dev" }
-quireink-plugin-news = { path = "plugins/news", version = "0.4.0-dev" }
-quireink-plugin-weather = { path = "plugins/weather", version = "0.4.0-dev" }
-quireink-plugin-widgets = { path = "plugins/widgets", version = "0.4.0-dev" }
-quireink-plugin-keyboard = { path = "plugins/keyboard", version = "0.4.0-dev" }
-quireink-plugin-plugin-manager = { path = "plugins/plugin-manager", version = "0.4.0-dev" }
-quireink-plugin-hyphenation = { path = "plugins/hyphenation", version = "0.4.0-dev" }
-quireink-plugin-home = { path = "plugins/home", version = "0.4.0-dev" }
-quireink-plugin-settings = { path = "plugins/settings", version = "0.4.0-dev" }
-quireink-plugin-files = { path = "plugins/files", version = "0.4.0-dev" }
-quireink-plugin-reader = { path = "plugins/reader", version = "0.4.0-dev" }
-quireink-plugin-format-epub = { path = "plugins/format-epub", version = "0.4.0-dev" }
-quireink-plugin-format-txt = { path = "plugins/format-txt", version = "0.4.0-dev" }
-quireink-plugin-format-xtc = { path = "plugins/format-xtc", version = "0.4.0-dev" }
-quireink-plugin-fonts-default = { path = "plugins/fonts-default", version = "0.4.0-dev", default-features = false }
+paperpaw-platform = { path = "crates/paperpaw-platform", version = "0.4.0-dev" }
+paperpaw-config = { path = "crates/paperpaw-config", version = "0.4.0-dev" }
+paperpaw-sqlite = { path = "crates/paperpaw-sqlite", version = "0.4.0-dev" }
+paperpaw-serve = { path = "crates/paperpaw-serve", version = "0.4.0-dev" }
+paperpaw-i18n = { path = "crates/paperpaw-i18n", version = "0.4.0-dev" }
+paperpaw-graphics = { path = "crates/paperpaw-graphics", version = "0.4.0-dev" }
+paperpaw-text = { path = "crates/paperpaw-text", version = "0.4.0-dev" }
+paperpaw-document = { path = "crates/paperpaw-document", version = "0.4.0-dev" }
+paperpaw-zip = { path = "crates/paperpaw-zip", version = "0.4.0-dev" }
+paperpaw-http = { path = "crates/paperpaw-http", version = "0.4.0-dev" }
+paperpaw-xml = { path = "crates/paperpaw-xml", version = "0.4.0-dev" }
+paperpaw-stardict = { path = "crates/paperpaw-stardict", version = "0.4.0-dev" }
+paperpaw-layout = { path = "crates/paperpaw-layout", version = "0.4.0-dev" }
+paperpaw-x4 = { path = "crates/paperpaw-x4", version = "0.4.0-dev" }
+paperpaw-fat = { path = "crates/paperpaw-fat" }
+paperpaw-update = { path = "crates/paperpaw-update", version = "0.4.0-dev" }
+paperpaw-digest = { path = "crates/paperpaw-digest", version = "0.4.0-dev" }
+paperpaw-json = { path = "crates/paperpaw-json", version = "0.4.0-dev" }
+paperpaw-qr = { path = "crates/paperpaw-qr", version = "0.4.0-dev" }
+paperpaw-sdk = { path = "crates/paperpaw-sdk", version = "0.4.0-dev" }
+paperpaw-core = { path = "crates/paperpaw-core", version = "0.4.0-dev" }
+paperpaw-hyphen = { path = "crates/paperpaw-hyphen", version = "0.4.0-dev" }
+paperpaw-image = { path = "crates/paperpaw-image", version = "0.4.0-dev" }
+paperpaw-app = { path = "crates/paperpaw-app", version = "0.4.0-dev" }
+paperpaw-fs = { path = "crates/paperpaw-fs", version = "0.4.0-dev" }
+paperpaw-plugin-diagnostics = { path = "plugins/diagnostics", version = "0.4.0-dev" }
+paperpaw-plugin-dictionary = { path = "plugins/dictionary", version = "0.4.0-dev" }
+paperpaw-plugin-menu = { path = "plugins/menu", version = "0.4.0-dev" }
+paperpaw-plugin-menu-editor = { path = "plugins/menu-editor", version = "0.4.0-dev" }
+paperpaw-plugin-kosync = { path = "plugins/kosync", version = "0.4.0-dev" }
+paperpaw-plugin-calibre = { path = "plugins/calibre", version = "0.4.0-dev" }
+paperpaw-plugin-stats = { path = "plugins/stats", version = "0.4.0-dev" }
+paperpaw-plugin-battery = { path = "plugins/battery", version = "0.4.0-dev" }
+paperpaw-plugin-wifi = { path = "plugins/wifi", version = "0.4.0-dev" }
+paperpaw-plugin-file-manager = { path = "plugins/file-manager", version = "0.4.0-dev" }
+paperpaw-plugin-transfer = { path = "plugins/transfer", version = "0.4.0-dev" }
+paperpaw-plugin-browser = { path = "plugins/browser", version = "0.4.0-dev" }
+paperpaw-plugin-opds = { path = "plugins/opds", version = "0.4.0-dev" }
+paperpaw-plugin-fonts-browser = { path = "plugins/fonts-browser", version = "0.4.0-dev" }
+paperpaw-plugin-rules = { path = "plugins/rules", version = "0.4.0-dev" }
+paperpaw-plugin-lock = { path = "plugins/lock", version = "0.4.0-dev" }
+paperpaw-plugin-profiles = { path = "plugins/profiles", version = "0.4.0-dev" }
+paperpaw-plugin-keys = { path = "plugins/keys", version = "0.4.0-dev" }
+paperpaw-plugin-wikipedia = { path = "plugins/wikipedia", version = "0.4.0-dev" }
+paperpaw-plugin-aids = { path = "plugins/aids", version = "0.4.0-dev" }
+paperpaw-plugin-vocabulary = { path = "plugins/vocabulary", version = "0.4.0-dev" }
+paperpaw-plugin-sleep = { path = "plugins/sleep", version = "0.4.0-dev" }
+paperpaw-plugin-translate = { path = "plugins/translate", version = "0.4.0-dev" }
+paperpaw-plugin-readwise = { path = "plugins/readwise", version = "0.4.0-dev" }
+paperpaw-plugin-koreader = { path = "plugins/koreader", version = "0.4.0-dev" }
+paperpaw-plugin-wallabag = { path = "plugins/wallabag", version = "0.4.0-dev" }
+paperpaw-plugin-about = { path = "plugins/about", version = "0.4.0-dev" }
+paperpaw-plugin-setup = { path = "plugins/setup", version = "0.4.0-dev" }
+paperpaw-plugin-update = { path = "plugins/update", version = "0.4.0-dev" }
+paperpaw-plugin-news = { path = "plugins/news", version = "0.4.0-dev" }
+paperpaw-plugin-weather = { path = "plugins/weather", version = "0.4.0-dev" }
+paperpaw-plugin-widgets = { path = "plugins/widgets", version = "0.4.0-dev" }
+paperpaw-plugin-keyboard = { path = "plugins/keyboard", version = "0.4.0-dev" }
+paperpaw-plugin-plugin-manager = { path = "plugins/plugin-manager", version = "0.4.0-dev" }
+paperpaw-plugin-hyphenation = { path = "plugins/hyphenation", version = "0.4.0-dev" }
+paperpaw-plugin-home = { path = "plugins/home", version = "0.4.0-dev" }
+paperpaw-plugin-settings = { path = "plugins/settings", version = "0.4.0-dev" }
+paperpaw-plugin-files = { path = "plugins/files", version = "0.4.0-dev" }
+paperpaw-plugin-reader = { path = "plugins/reader", version = "0.4.0-dev" }
+paperpaw-plugin-format-epub = { path = "plugins/format-epub", version = "0.4.0-dev" }
+paperpaw-plugin-format-txt = { path = "plugins/format-txt", version = "0.4.0-dev" }
+paperpaw-plugin-format-xtc = { path = "plugins/format-xtc", version = "0.4.0-dev" }
+paperpaw-plugin-fonts-default = { path = "plugins/fonts-default", version = "0.4.0-dev", default-features = false }
 
 [workspace.lints.rust]
 unsafe_op_in_unsafe_fn = "deny"
@@ -189,6 +189,6 @@ opt-level = 3
 
 # A dependency's macro wrote its code in a random order, so the Android app
 # came out different in every build; this copy hashes with fixed keys
-# (patches/jni-macros, "Modified for QuireInk"), for reproducible builds.
+# (patches/jni-macros, "Modified for PaperPaw"), for reproducible builds.
 [patch.crates-io]
 jni-macros = { path = "patches/jni-macros" }

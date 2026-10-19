@@ -22,7 +22,7 @@ pub(super) struct Aloud {
     pub(super) now: Sentence,
     pub(super) next: Option<Sentence>,
     /// When the timer stops reading aloud.
-    pub(super) until: Option<quireink_sdk::Instant>,
+    pub(super) until: Option<paperpaw_sdk::Instant>,
 }
 
 /// Where the underline of words `range` goes, if any is on the page.
@@ -113,7 +113,7 @@ impl ReaderScreen {
     pub(super) fn begin_aloud(
         &mut self,
         from: usize,
-        until: Option<quireink_sdk::Instant>,
+        until: Option<paperpaw_sdk::Instant>,
         cx: &mut Cx<'_, '_>,
     ) {
         let env = *cx.env();
@@ -202,7 +202,7 @@ impl ReaderScreen {
             return;
         };
         let env = *cx.env();
-        if params.get(quireink_sdk::speech_params::FAILED).is_some() {
+        if params.get(paperpaw_sdk::speech_params::FAILED).is_some() {
             self.pause_aloud(cx);
             self.resume = None;
             cx.command(Command::Notify(
@@ -334,7 +334,7 @@ impl Book {
 
     /// Hands `text` over to be spoken, after what is spoken with `queue`.
     pub(super) fn speak(&self, env: &Env<'_>, text: String, queue: bool, cx: &mut Cx<'_, '_>) {
-        let mut speech = quireink_sdk::Speech::new(text, crate::SPOKEN);
+        let mut speech = paperpaw_sdk::Speech::new(text, crate::SPOKEN);
         speech.language = self.language.clone();
         speech.rate = env
             .settings

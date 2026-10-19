@@ -1,6 +1,6 @@
 # Changelog
 
-What changes from one release of QuireInk to the next. Versions follow
+What changes from one release of PaperPaw to the next. Versions follow
 [Semantic Versioning](https://semver.org); before 1.0, a minor version may
 change the plugin SDK.
 
@@ -8,7 +8,7 @@ change the plugin SDK.
 
 - More fonts, from the internet: *More fonts* below the fonts to choose
   from (Settings, Reading, Font, and the status lines' font) lists the
-  fonts of quireink.org's font library, each name set in its own font;
+  fonts of paperpaw.org's font library, each name set in its own font;
   one shows larger with a sentence in it, its licence and size, and is
   downloaded, read with at once (no restart), set for the status lines,
   updated or removed. Nothing of a font is built in: devices with
@@ -32,13 +32,13 @@ change the plugin SDK.
   the frame in black and white first, then lightens the grays with the
   FreeInk SDK's gray waveforms; the next refresh drives every pixel
   back to black or white.
-- QuireInk runs on the Xteink X4 Pro (ESP32-S3): the X4's firmware built
+- PaperPaw runs on the Xteink X4 Pro (ESP32-S3): the X4's firmware built
   with the feature `x4-pro` (`cargo +esp x4pro`). Its UC8179 display,
   touch screen and home key, page and power buttons, SD card (SDMMC),
   fuel gauge, clock chip (the time is kept while it is off), front light
   with brightness and warmth (in the quick panel and the reader's
   panel), sleep and Wi-Fi. Its 8 MB of PSRAM is the heap. It stays on
-  while flashed (its power held through resets). `quireink-x4` has the
+  while flashed (its power held through resets). `paperpaw-x4` has the
   drivers: `uc8179`, `gt911`, `cw2017`, `bm8563`. Cards whose partition
   table says more than the card holds (as an X4 Pro's card as sold) are
   read up to the card's end.
@@ -107,7 +107,7 @@ change the plugin SDK.
   before keep their widgets; one gets settings of its own when they are
   first opened. SDK: placements (`Id::placement`, `Id::placed`; ids such
   as `widgets.clock@2` and settings such as `widgets.clock@2.face`, saved
-  in `quireink.ini` like others), `Settings::with_placement`,
+  in `paperpaw.ini` like others), `Settings::with_placement`,
   `Settings::spec`, `Settings::placement_values`, `widgets::base`;
   `Widgets::make` gives a placement's widget in its own values.
 - *First day of the week* (System): Monday, Sunday, or as the language
@@ -141,7 +141,7 @@ change the plugin SDK.
   (`widgets::changed`) for a widget whose content changed. Graphics:
   `Canvas::fill_circle`, `stroke_circle`, `fill_ring` (arcs, smooth
   where the panel has grays), `draw_hand`, `fill_round_shaded`,
-  `quireink_sdk::round` (angles as on a clock face, whole numbers).
+  `paperpaw_sdk::round` (angles as on a clock face, whole numbers).
   `Kernel::widgets`.
 - SDK: settings kept in the program (`SettingSpec::fixed`,
   `fixed_switch`, `fixed_number`, `fixed_choice`, `fixed_text`,
@@ -158,7 +158,7 @@ change the plugin SDK.
   are any. What is written reaches the card two seconds after the last
   work, not only before sleep, so a reset, a flash or an empty battery
   loses nothing; files sent over USB are on the card before the X4 says
-  so. quireink-fat: `SharedDisk`, `FatStorage::with_disk`.
+  so. paperpaw-fat: `SharedDisk`, `FatStorage::with_disk`.
 - Decorators get a word split over two lines (hyphenated) whole, in
   both parts, so words being learnt are marked there too. The page is
   drawn again at once when how marks look or what decorators mark
@@ -325,7 +325,7 @@ change the plugin SDK.
   causes: inflate states and JPEG tables are no longer built on the
   stack, pictures are written with a buffer taken once, the icon names
   stay in flash. A first opening now leaves about 14 KB of the stack.
-- Plugins name any of Tabler's icons: `quireink_sdk::icons` knows all
+- Plugins name any of Tabler's icons: `paperpaw_sdk::icons` knows all
   5934 names (a table in flash, about 150 KB on the X4, no memory); the
   drawings of those the icon font lacks come from icon packs.
 - X4: opening a book for the first time could run out of memory (a
@@ -335,12 +335,12 @@ change the plugin SDK.
   5 KiB lower.
 - Emulator: `--trace-alloc` says where each allocation comes from.
 - The X4's whole flash image in a release is signed too, in a signature
-  file of its own (`quireink-x4-<version>.bin.sig`), which the web
-  flasher checks before it writes (`quireink-sign sign-apart`, `check`;
-  `quireink_update::check_apart`).
+  file of its own (`paperpaw-x4-<version>.bin.sig`), which the web
+  flasher checks before it writes (`paperpaw-sign sign-apart`, `check`;
+  `paperpaw_update::check_apart`).
 - Icon packs: `tools/icons/pack.py` builds a data plugin with the
-  drawings of any Tabler icons QuireInk's icon font lacks, read a glyph
-  at a time from the card; `quireink-fontgen --chars` takes code points
+  drawings of any Tabler icons PaperPaw's icon font lacks, read a glyph
+  at a time from the card; `paperpaw-fontgen --chars` takes code points
   (`U+EA01-EA0F`). An icon without a drawing now shows nothing rather
   than a missing character.
 - SDK: a widget is a `Widget` a screen keeps: it reads what it shows in
@@ -372,14 +372,14 @@ change the plugin SDK.
 - Home: the status line at the top shows the status items chosen for its
   left, centre and right (the status line widget's settings), any
   plugin's, as the reader's lines do.
-- QuireInk builds with Rust 1.88 and later (it said 1.85, which was too
+- PaperPaw builds with Rust 1.88 and later (it said 1.85, which was too
   old); CI checks it. A short [security model](docs/security-model.md)
   says what is protected and against whom.
 - X4: a crash is written to the card at the next start
-  (`.quireink/crashes.txt`, its version and why), for bug reports.
+  (`.paperpaw/crashes.txt`, its version and why), for bug reports.
 - Data plugins say which version of the formats they are made for,
-  `formats = 1` in `plugin.ini`; a QuireInk that reads older ones leaves
-  such a plugin out and says why. Every data file QuireInk keeps has a
+  `formats = 1` in `plugin.ini`; a PaperPaw that reads older ones leaves
+  such a plugin out and says why. Every data file PaperPaw keeps has a
   file of its version in `testdata`, read by the tests.
 - SDK: a setting's unit, editor, step, slider, section and whether it is
   a secret are read with `SettingSpec::extra()` (they are kept apart, so
@@ -392,7 +392,7 @@ change the plugin SDK.
   alone.
 - Drawing, text and layout take their parts together: `Canvas::fill`,
   `stroke`, `fill_round` and `stroke_round` take a `Rect` (`ui::fill` is
-  deprecated), `quireink_text::draw_text` a `TextStyle` (with `bolder`,
+  deprecated), `paperpaw_text::draw_text` a `TextStyle` (with `bolder`,
   in place of `draw_text_bolder`), and `layout_page` and `line_start` a
   `LayoutContext`.
 - The keyboard's shift, delete and space keys and the grip that moves a
@@ -417,13 +417,13 @@ change the plugin SDK.
   (the `remote` feature, for testing), 34 KB less. Inside, the main loop
   is a `Firmware` with a method for each step and the pins are in one
   board module; the USB protocol, SNTP and the frame kept for the panel
-  are in `quireink-x4`, tested on a computer.
+  are in `paperpaw-x4`, tested on a computer.
 - Kernel: device defaults are typed, `setting_default(&SETTING, value)`;
   `setting_default_text` takes an id and text, for settings known only
   at run time.
 - SDK: its compatibility is checked. CI fails on a change that would
   break plugins unless the version says the next release breaks
-  (`cargo-semver-checks`), and `crates/quireink-sdk/api.txt` lists its
+  (`cargo-semver-checks`), and `crates/paperpaw-sdk/api.txt` lists its
   public API, so every change to it shows (ADR 0020). Builds between
   releases are the next version with `-dev`, and an update to the
   release counts as newer.
@@ -451,13 +451,13 @@ change the plugin SDK.
   spelled out in nine places. Registrar methods that name an item take
   `impl Into<Id>`.
 - SDK: its helpers are crates of their own, so a change to one does not
-  change the SDK: `quireink-digest` (MD5, SHA-1, FNV-1a), `quireink-json`,
-  `quireink-qr`; plugins that read SQLite use `quireink-sqlite`.
+  change the SDK: `paperpaw-digest` (MD5, SHA-1, FNV-1a), `paperpaw-json`,
+  `paperpaw-qr`; plugins that read SQLite use `paperpaw-sqlite`.
 - SDK: `Registrar` is a struct now that collects `Contribution`s (a
   `#[non_exhaustive]` enum, the large kinds boxed); `add_action` and the
   rest are shorthands for `add`. Plugins take `&mut Registrar` instead of
   `&mut dyn Registrar`. Anything can see what a plugin adds without
-  QuireInk running (`Registrar::new`, `contributions()`); the kernel
+  PaperPaw running (`Registrar::new`, `contributions()`); the kernel
   applies the list and checks key maps, translations and patterns then.
 - SDK: `Env` is `#[non_exhaustive]` (new fields break no plugin). What
   the device and its shell can do is `env.caps` (`Capabilities`: touch,
@@ -465,29 +465,29 @@ change the plugin SDK.
   the row of buttons, a system clipboard), replacing `env.network`,
   `env.speech` and `env.sleep`; menu entries' needs are checked against
   it (`Menus::set_capabilities`).
-- SDK: QuireInk's folder is one constant, `data::DIR`, with
+- SDK: PaperPaw's folder is one constant, `data::DIR`, with
   `data_path!` for constants; the about page is written in its plugin's
   folder.
 - Versioned data files ([data-files.md](docs/data-files.md)): every file
-  QuireInk keeps on the card is listed as data, cache or another
-  program's format. Data formats have a version (`quireink_sdk::data`,
+  PaperPaw keeps on the card is listed as data, cache or another
+  program's format. Data formats have a version (`paperpaw_sdk::data`,
   `# format 2` as the first line), are upgraded as they are read, and are
-  never written over by an older QuireInk (after going back to an older
+  never written over by an older PaperPaw (after going back to an older
   update). Files of the current formats are kept in `testdata` folders
   and read by the tests. Profiles are kept as a proper ini file now (names
   with spaces and brackets survive); older files are read and upgraded.
-- `quireink-config`: changing a key there more than once (by hand)
+- `paperpaw-config`: changing a key there more than once (by hand)
   changes the entry that is read, the last; `quote()` is public and the
   reader and statistics use it (a book path with a line break broke the
   reader's file).
-- One FNV-1a (`quireink_digest::fnv1a64`) instead of fifteen copies.
+- One FNV-1a (`paperpaw_digest::fnv1a64`) instead of fifteen copies.
 - Firmware updates on the X4 ([ADR 0019](docs/adr/0019-firmware-updates.md)):
   two app partitions (the web flasher sets them up once), an update file
   in the folder `updates` on the card installed from Settings, *Update*
   (or offered at start) in about 45 s, then a restart. A new firmware
   that does not get to its first frame is undone at the next start.
-  Update files are signed (Ed25519, `quireink-update`, made with
-  `quireink-sign`): QuireInk's key is built in, one's own builds are
+  Update files are signed (Ed25519, `paperpaw-update`, made with
+  `paperpaw-sign`): PaperPaw's key is built in, one's own builds are
   installed once their key is trusted on the device. Releases carry the
   signed update file beside the image for the web flasher.
 - HTTPS on the X4 ([ADR 0017](docs/adr/0017-tls-on-the-x4.md)): mbedTLS
@@ -541,7 +541,7 @@ change the plugin SDK.
   guide through the language, the buttons, the text size, the time zone,
   Wi-Fi, the keyboard and the screen lock, a page each with a good
   default chosen, so *Next* is always right; skippable, and opened again
-  from Settings (*Set up QuireInk*). Plugins add steps of their own
+  from Settings (*Set up PaperPaw*). Plugins add steps of their own
   (`Registrar::add_setup_step`); steps a device does not need are left
   out.
 - The row of hints under the screen says what the buttons do there: only
@@ -595,7 +595,7 @@ change the plugin SDK.
   could be had.
 - The licence check covers the X4 firmware's dependencies too.
 - Releases carry the X4's firmware as one image for its whole flash
-  (`quireink-x4-<version>.bin`, with its SHA-256), which quireink.org
+  (`paperpaw-x4-<version>.bin`, with its SHA-256), which paperpaw.org
   offers for flashing in the browser.
 
 - Wi-Fi on the X4 (new plugin `wifi`, under Settings, Device): the radio
@@ -606,8 +606,8 @@ change the plugin SDK.
   password typed on the keyboard, and forgets saved ones (menu button or
   a long press). Saved networks are kept with the passwords and keys.
   Plain HTTP and, since, HTTPS.
-- Network for plugins on devices where QuireInk manages Wi-Fi
-  (`quireink_sdk::wifi`, [ADR 0016](docs/adr/0016-network-and-wifi.md)):
+- Network for plugins on devices where PaperPaw manages Wi-Fi
+  (`paperpaw_sdk::wifi`, [ADR 0016](docs/adr/0016-network-and-wifi.md)):
   `Command::Wifi`, `Env::wifi`, and the events `core.wifi-changed`,
   `core.wifi-scanned`, `core.wifi-failed`, `core.network-wanted` and
   `core.network-idle`. Requests, servers and connections made without a
@@ -615,9 +615,9 @@ change the plugin SDK.
   send themselves (`HttpCall::body_from`) and may write a download to its
   file as it comes (`HttpCall::save_to`, `HttpResponse::saved`).
 - Settings: a group may bring its own page (`SettingGroupSpec::page`),
-  and settings and menu entries may need a device where QuireInk manages
+  and settings and menu entries may need a device where PaperPaw manages
   Wi-Fi (`MenuNeed::Wifi`).
-- `quireink-http` (new crate): the HTTP/1.1 client protocol without I/O,
+- `paperpaw-http` (new crate): the HTTP/1.1 client protocol without I/O,
   for shells with their own network stack.
 - The emulator's X4 profiles pretend to manage Wi-Fi, with made-up
   networks, to try the `wifi` plugin without a device.
@@ -650,13 +650,13 @@ change the plugin SDK.
   charge now, this time awake (pages, refreshes), the use on battery an
   hour awake and for 100 pages, how long it lasts at that pace, the recent
   times awake, and which plugins were shown and kept the processor busy.
-  The records are CSV files in `.quireink/plugins/battery` (`log.csv`,
+  The records are CSV files in `.paperpaw/plugins/battery` (`log.csv`,
   and `plugins.csv` every ten minutes awake), for analysis on a computer.
 - What each plugin takes: the kernel measures the time each plugin's code
   runs (screens drawing and handling input, event and action handlers),
   the time its screens are shown with the refreshes then, and the storage
   it reads and writes; plugins see it in `Env::usage`
-  (`quireink_sdk::usage`), with the refreshes, input and sleeps of the
+  (`paperpaw_sdk::usage`), with the refreshes, input and sleeps of the
   whole device. Shells give a clock for it (`KernelBuilder::clock`) and
   say how long the panel refreshed (`Kernel::panel_busy`).
 - The battery's voltage where the device measures it
@@ -665,7 +665,7 @@ change the plugin SDK.
   only when the percent or charging changes.
 - X4 remote: `--get` copies a file off the card (e.g. the battery logs).
 - A new icon: the capital Q of Besley in ink on e-paper, as on
-  quireink.org (its source is `shells/android/icon.svg`).
+  paperpaw.org (its source is `shells/android/icon.svg`).
 - X4: SD cards with a partition table (MBR or GPT), as nearly all come,
   are read; before, only cards with the file system from the first block
   were. A card in exFAT is named as such in the log.
@@ -690,7 +690,7 @@ change the plugin SDK.
   under Status lines › *Distance from the edge*), and the text has the
   room their margin took: two more lines a page on the X4.
 - X4: the buttons are read in a timer's interrupt every 5 ms, so a press
-  counts while QuireInk is busy (before, the buttons did nothing while
+  counts while PaperPaw is busy (before, the buttons did nothing while
   the reader counted a book's pages); presses wait in a queue with the
   time they came.
 - X4: a page turns in about 1.5 s instead of 4 to 6. It draws in black and
@@ -757,8 +757,8 @@ change the plugin SDK.
   moment ("This takes a moment"), then opens it: formats say whether a
   document opens at once (`FormatSpec::prepared`, `Formats::prepared`);
   EPUB does once its first chapter is converted.
-- X4: the SD card is read and written by QuireInk's own driver
-  (`quireink_x4::card`), a command at a time with the bus held, not a
+- X4: the SD card is read and written by PaperPaw's own driver
+  (`paperpaw_x4::card`), a command at a time with the bus held, not a
   bus transaction for every byte as `embedded-sdmmc` did.
 - X4: pages with pictures are sent to the panel's second memory as they
   were kept, packed, in 80 ms, not drawn again in 2 s: the heap has the
@@ -783,7 +783,7 @@ change the plugin SDK.
 ## [0.3.0] - 2026-10-16
 
 - Screen lock (off by default): a PIN, a pattern or a password asked for
-  when QuireInk starts and when the device wakes up, set under System ›
+  when PaperPaw starts and when the device wakes up, set under System ›
   *Screen lock*. The code is kept only as a salted hash. Locked, nothing
   else can be used; after five wrong tries the next one waits half a
   minute. *Lock now* locks at once from any button, gesture or rule.
@@ -874,7 +874,7 @@ change the plugin SDK.
   (text files, PDFs): `library::provide`.
 - *Say what is chosen* (System, where the device speaks): says the row
   or button the buttons move to, with a switch's state, for using
-  QuireInk without looking at the screen.
+  PaperPaw without looking at the screen.
 - Screens say what they show (PLANNING G11): rows with their text and
   focus, buttons, switches and headings, told by the drawing helpers as
   they draw (`Canvas::describe`, `semantics::parts`,
@@ -961,7 +961,7 @@ The Android app for F-Droid.
 
 - The app is built reproducibly: with the same tools (shells/android/
   versions.env) it comes out byte for byte the same anywhere, so F-Droid
-  can publish it signed with QuireInk's key. A dependency's macro that
+  can publish it signed with PaperPaw's key. A dependency's macro that
   wrote its code in a random order is patched (patches/jni-macros).
 - The app's library is stored in the APK and runs from there, without
   symbols: 6.8 MB to download, less space taken on the device.
@@ -969,7 +969,7 @@ The Android app for F-Droid.
 
 ## [0.1.0] - 2026-10-15
 
-The first release: QuireInk on Android e-readers (tested on a Boox Go 7)
+The first release: PaperPaw on Android e-readers (tested on a Boox Go 7)
 and in the desktop emulator, with its plugin SDK. The firmware for the
 Xteink X4 is built but has not run on a device yet.
 
@@ -1002,7 +1002,7 @@ Xteink X4 is built but has not run on a device yet.
 ### Making it one's own
 
 - Every screen, menu, key and gesture can be changed, in the app or in
-  `quireink.ini`; profiles, rules, themes, translations and fonts as
+  `paperpaw.ini`; profiles, rules, themes, translations and fonts as
   plugins without code (data plugins).
 - Settings with descriptions and a search, passwords and keys in one
   place, short menus by default, usable by touch and by buttons alike.
@@ -1010,14 +1010,14 @@ Xteink X4 is built but has not run on a device yet.
 
 ### For developers
 
-- The plugin SDK (`quireink-sdk`) with a guide ([Writing
+- The plugin SDK (`paperpaw-sdk`) with a guide ([Writing
   plugins](docs/plugins.md)) and a sample plugin; plugins are tested
   against the real kernel.
 - The desktop emulator with device profiles and memory budgets.
 - The Xteink X4's firmware, its display, buttons, battery and SD card
   tested against simulated hardware ([ADR 0013](docs/adr/0013-x4-firmware.md)).
 
-[0.3.0]: https://github.com/hthoene/quireink/releases/tag/v0.3.0
-[0.2.0]: https://github.com/hthoene/quireink/releases/tag/v0.2.0
-[0.1.1]: https://github.com/hthoene/quireink/releases/tag/v0.1.1
-[0.1.0]: https://github.com/hthoene/quireink/releases/tag/v0.1.0
+[0.3.0]: https://github.com/hthoene/paperpaw/releases/tag/v0.3.0
+[0.2.0]: https://github.com/hthoene/paperpaw/releases/tag/v0.2.0
+[0.1.1]: https://github.com/hthoene/paperpaw/releases/tag/v0.1.1
+[0.1.0]: https://github.com/hthoene/paperpaw/releases/tag/v0.1.0

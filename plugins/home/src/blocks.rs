@@ -23,21 +23,21 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use quireink_sdk::builtin::{actions, params, screens, slots};
-use quireink_sdk::document::ImageRef;
-use quireink_sdk::status::{StatusLine, item_ids};
-use quireink_sdk::ui::{self, UiStyle};
-use quireink_sdk::widgets::{
+use paperpaw_sdk::builtin::{actions, params, screens, slots};
+use paperpaw_sdk::document::ImageRef;
+use paperpaw_sdk::status::{StatusLine, item_ids};
+use paperpaw_sdk::ui::{self, UiStyle};
+use paperpaw_sdk::widgets::{
     self, Align, Drawn, Frame, Size, Widget, WidgetSpec, WidgetTarget, grid, line_height,
 };
-use quireink_sdk::{
+use paperpaw_sdk::{
     Arg, Canvas, Color, Command, Env, Id, Params, Rect, RegisterError, Registrar, SettingExtra,
     SettingKind, SettingSpec, SettingValue, time,
 };
 
 use crate::pages::{CONTINUE, DATE, RECENT, STATUS};
 use crate::recent;
-use quireink_sdk::setting::{Setting, Text};
+use paperpaw_sdk::setting::{Setting, Text};
 
 /// The clock with the date, large.
 pub const CLOCK: &str = "home.clock";
@@ -780,7 +780,7 @@ fn draw_placeholder(
 /// together in the middle.
 pub(crate) fn draw_tool(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, action: &Id) {
     let labels = env.settings.read(&TOOL_LABELS);
-    quireink_sdk::widgets::grid::draw_tool(canvas, env, area, action, labels);
+    paperpaw_sdk::widgets::grid::draw_tool(canvas, env, area, action, labels);
 }
 
 /// How many of the recent books the widgets in `items` show: the current

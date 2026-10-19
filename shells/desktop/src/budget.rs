@@ -196,8 +196,8 @@ pub fn profile() {
     PROFILE.store(true, Ordering::Relaxed);
 }
 
-/// The first frames in QuireInk code below the allocator, e.g.
-/// `quireink_text::cache::GlyphCache::insert (cache.rs:120)`.
+/// The first frames in PaperPaw code below the allocator, e.g.
+/// `paperpaw_text::cache::GlyphCache::insert (cache.rs:120)`.
 fn site_of(backtrace: &Backtrace, depth: usize) -> String {
     let text = backtrace.to_string();
     let mut frames = Vec::new();
@@ -215,17 +215,17 @@ fn site_of(backtrace: &Backtrace, depth: usize) -> String {
             })
             .unwrap_or_default();
         let name = name.rsplit_once("::h").map_or(name, |(n, _)| n);
-        if name.starts_with("quireink") && !name.contains("budget") && !name.contains("__rust_") {
+        if name.starts_with("paperpaw") && !name.contains("budget") && !name.contains("__rust_") {
             frames.push(format!("{name} ({location})"));
             if frames.len() == depth {
                 break;
             }
-        } else if !frames.is_empty() && name.contains("quireink_emu") {
+        } else if !frames.is_empty() && name.contains("paperpaw_emu") {
             break;
         }
     }
     if frames.is_empty() {
-        String::from("(outside QuireInk code)")
+        String::from("(outside PaperPaw code)")
     } else {
         frames.join(
             "

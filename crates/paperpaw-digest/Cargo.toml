@@ -1,0 +1,18 @@
+[package]
+name = "paperpaw-digest"
+description = "Digests PaperPaw needs to work with others: MD5 (KOReader's book fingerprints), SHA-1, and FNV-1a for stable short ids (no_std)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+categories = ["no-std", "algorithms"]
+keywords = ["md5", "sha1", "fnv", "no-std"]
+
+[dependencies]
+paperpaw-platform.workspace = true
+
+[lints]
+workspace = true

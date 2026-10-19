@@ -1,6 +1,6 @@
 [package]
-name = "quireink-plugin-aids"
-description = "QuireInk reading aids: bold word beginnings and replaced words, as text filters"
+name = "paperpaw-plugin-aids"
+description = "PaperPaw reading aids: bold word beginnings and replaced words, as text filters"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,10 +11,10 @@ authors.workspace = true
 categories = ["no-std"]
 
 [dependencies]
-quireink-sdk.workspace = true
+paperpaw-sdk.workspace = true
 
 [dev-dependencies]
-quireink-i18n.workspace = true
+paperpaw-i18n.workspace = true
 
 [lints]
 workspace = true

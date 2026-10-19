@@ -1,5 +1,5 @@
 //! Ready-made layouts of the home screen (PLANNING §12.1, C27): presets
-//! of the kind [`KIND`] (see `quireink_sdk::presets`), five of the home
+//! of the kind [`KIND`] (see `paperpaw_sdk::presets`), five of the home
 //! screen's own and any other plugin's (data plugins bring them in a
 //! `presets.ini`). A layout sets the pages and how the screen looks (its
 //! columns and rows, what shows above and below the grid); the rest of
@@ -24,12 +24,12 @@ use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use quireink_sdk::builtin::{actions, events};
-use quireink_sdk::presets::{self, Preset};
-use quireink_sdk::setup::{SetupPage, SetupStepSpec};
-use quireink_sdk::ui::{self, UiStyle};
-use quireink_sdk::widgets::grid::{self, What};
-use quireink_sdk::{
+use paperpaw_sdk::builtin::{actions, events};
+use paperpaw_sdk::presets::{self, Preset};
+use paperpaw_sdk::setup::{SetupPage, SetupStepSpec};
+use paperpaw_sdk::ui::{self, UiStyle};
+use paperpaw_sdk::widgets::grid::{self, What};
+use paperpaw_sdk::{
     ActionSpec, Canvas, Color, Command, Env, Gesture, GestureKind, Id, Params, Point, Rect,
     RegisterError, Registrar, SettingValue,
 };
@@ -450,8 +450,8 @@ impl Chooser {
 pub(crate) fn gesture(chooser: &Chooser, gesture: Gesture) -> Option<Tap> {
     match gesture.kind {
         GestureKind::Tap => chooser.tap(gesture.start),
-        GestureKind::Swipe(quireink_sdk::Direction::Left) => Some(Tap::Next),
-        GestureKind::Swipe(quireink_sdk::Direction::Right) => Some(Tap::Previous),
+        GestureKind::Swipe(paperpaw_sdk::Direction::Left) => Some(Tap::Next),
+        GestureKind::Swipe(paperpaw_sdk::Direction::Right) => Some(Tap::Previous),
         _ => None,
     }
 }

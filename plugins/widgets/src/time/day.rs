@@ -6,11 +6,11 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use quireink_sdk::time;
-use quireink_sdk::widgets::{self, Align, Drawn, Frame, Size};
-use quireink_sdk::{Arg, Canvas, Env, Id, Rect, RegisterError, Registrar};
+use paperpaw_sdk::time;
+use paperpaw_sdk::widgets::{self, Align, Drawn, Frame, Size};
+use paperpaw_sdk::{Arg, Canvas, Env, Id, Rect, RegisterError, Registrar};
 
-use quireink_sdk::SettingSpec;
+use paperpaw_sdk::SettingSpec;
 
 use super::{chosen, frame_height, line, ui};
 
@@ -184,9 +184,9 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
 fn draw_sheet(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
-    font: &quireink_sdk::FontHandle<'_>,
+    font: &paperpaw_sdk::FontHandle<'_>,
     look: &widgets::Look,
-    t: &quireink_sdk::time::LocalTime,
+    t: &paperpaw_sdk::time::LocalTime,
     with_year: bool,
     week: Option<&str>,
 ) {

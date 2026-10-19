@@ -3,9 +3,9 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use quireink_plugin_format_txt::TxtDocument;
-use quireink_sdk::MemoryStorage;
-use quireink_sdk::document::{Document, Locator};
+use paperpaw_plugin_format_txt::TxtDocument;
+use paperpaw_sdk::MemoryStorage;
+use paperpaw_sdk::document::{Document, Locator};
 
 fuzz_target!(|data: &[u8]| {
     let storage = MemoryStorage::new().with("book.txt", data.to_vec());

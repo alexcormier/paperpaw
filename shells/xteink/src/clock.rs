@@ -5,9 +5,9 @@
 //! Pro's clock chip keeps it: read at start (`main`), and set whenever the
 //! network sets the time (`input::keep_time`).
 //!
-//! The SNTP messages are `quireink_x4::sntp`.
+//! The SNTP messages are `paperpaw_x4::sntp`.
 
-use quireink_platform::{Instant, WallClock};
+use paperpaw_platform::{Instant, WallClock};
 
 /// Milliseconds since 1970 (UTC) minus the timer's milliseconds, once
 /// set; and whether it was set since last asked.

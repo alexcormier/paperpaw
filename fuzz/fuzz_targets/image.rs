@@ -3,7 +3,7 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use quireink_image::{Fit, Format, ImageError, ImageSink, decode};
+use paperpaw_image::{Fit, Format, ImageError, ImageSink, decode};
 
 struct Count(u64);
 

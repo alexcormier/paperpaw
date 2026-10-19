@@ -7,8 +7,8 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_digest::md5::Md5;
-use quireink_sdk::{Env, Storage};
+use paperpaw_digest::md5::Md5;
+use paperpaw_sdk::{Env, Storage};
 
 use crate::PLUGIN;
 use crate::protocol;
@@ -49,7 +49,7 @@ pub fn forget(storage: &dyn Storage, lpath: &str) -> Option<String> {
 }
 
 fn read(storage: &dyn Storage, path: &str) -> Option<String> {
-    let data = quireink_sdk::read_file(storage, path, MAX_METADATA).ok()?;
+    let data = paperpaw_sdk::read_file(storage, path, MAX_METADATA).ok()?;
     String::from_utf8(data).ok()
 }
 
@@ -69,7 +69,7 @@ pub fn books(storage: &dyn Storage, library: &str) -> Vec<String> {
         .filter(|metadata| {
             protocol::text(metadata, "lpath")
                 .and_then(|lpath| protocol::safe_path(&lpath))
-                .is_some_and(|lpath| storage.exists(&quireink_sdk::files::join(library, &lpath)))
+                .is_some_and(|lpath| storage.exists(&paperpaw_sdk::files::join(library, &lpath)))
         })
         .collect()
 }
@@ -87,7 +87,7 @@ pub fn set_device_info(storage: &dyn Storage, info: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quireink_sdk::MemoryStorage;
+    use paperpaw_sdk::MemoryStorage;
 
     #[test]
     fn books_kept_while_their_files_are_there() {

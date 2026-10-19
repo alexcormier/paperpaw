@@ -10,7 +10,7 @@ use alloc::borrow::Cow;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::Env;
+use paperpaw_sdk::Env;
 
 /// The setting value (and list entry) for the UI language's layout.
 pub(crate) const AUTO: &str = "keyboard.layout.auto";
@@ -134,7 +134,7 @@ pub(crate) fn variants(c: char) -> Option<&'static str> {
 /// capitals: a layout in a script they lack (e.g. Cyrillic on the X4's
 /// packs) is not offered, rather than shown as question marks.
 pub(crate) fn drawable(env: &Env<'_>, letters: &str) -> bool {
-    let Some(font) = quireink_sdk::ui::UiStyle::new(env).font(env) else {
+    let Some(font) = paperpaw_sdk::ui::UiStyle::new(env).font(env) else {
         return true;
     };
     letters

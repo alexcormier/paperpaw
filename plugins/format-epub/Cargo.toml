@@ -1,6 +1,6 @@
 [package]
-name = "quireink-plugin-format-epub"
-description = "QuireInk EPUB 2/3 support: streaming conversion, table of contents, metadata"
+name = "paperpaw-plugin-format-epub"
+description = "PaperPaw EPUB 2/3 support: streaming conversion, table of contents, metadata"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,14 +11,14 @@ authors.workspace = true
 categories = ["no-std", "text-processing"]
 
 [dependencies]
-quireink-digest.workspace = true
-quireink-sdk.workspace = true
+paperpaw-digest.workspace = true
+paperpaw-sdk.workspace = true
 # WOFF fonts: their tables are zlib-compressed.
 miniz_oxide = { version = "0.8", default-features = false, features = ["with-alloc"] }
 
 [dev-dependencies]
-quireink-i18n.workspace = true
-quireink-zip = { workspace = true, features = ["testing"] }
+paperpaw-i18n.workspace = true
+paperpaw-zip = { workspace = true, features = ["testing"] }
 
 [lints]
 workspace = true

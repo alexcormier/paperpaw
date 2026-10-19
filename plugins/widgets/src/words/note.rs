@@ -8,13 +8,13 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::cell::Cell;
 
-use quireink_sdk::ask;
-use quireink_sdk::event::Event;
-use quireink_sdk::replies::Typed;
-use quireink_sdk::setting::{Setting, Text};
-use quireink_sdk::ui::UiStyle;
-use quireink_sdk::widgets::{self, Align, Frame, Size, Widget, WidgetSpec, WidgetTarget};
-use quireink_sdk::{
+use paperpaw_sdk::ask;
+use paperpaw_sdk::event::Event;
+use paperpaw_sdk::replies::Typed;
+use paperpaw_sdk::setting::{Setting, Text};
+use paperpaw_sdk::ui::UiStyle;
+use paperpaw_sdk::widgets::{self, Align, Frame, Size, Widget, WidgetSpec, WidgetTarget};
+use paperpaw_sdk::{
     Canvas, Command, Env, Id, Rect, RegisterError, Registrar, SettingSpec, SettingValue,
 };
 

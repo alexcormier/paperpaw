@@ -10,7 +10,7 @@ use alloc::vec::Vec;
 use core::cell::{Cell, RefCell};
 
 use critical_section::Mutex;
-use quireink_platform::{DirEntry, Storage, StorageError};
+use paperpaw_platform::{DirEntry, Storage, StorageError};
 
 /// What is noted at most.
 const MAX: usize = 400;

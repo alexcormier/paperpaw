@@ -17,7 +17,7 @@ body:
     id: plugin
     attributes:
       label: Could this be a plugin?
-      description: QuireInk's core stays small; most features are plugins.
+      description: PaperPaw's core stays small; most features are plugins.
       options:
         - Yes, as a plugin
         - It needs a new SDK capability

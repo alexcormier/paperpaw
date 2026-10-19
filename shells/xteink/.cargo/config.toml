@@ -6,7 +6,7 @@
 # The X4 Pro's: an ESP32-S3 (Xtensa), with the `esp` toolchain (espup):
 # `cargo +esp x4pro` builds it, `cargo +esp x4pro-run` flashes it (over
 # the stock firmware, hold its power button meanwhile: its boot loader
-# does not keep it on; QuireInk does).
+# does not keep it on; PaperPaw does).
 [build]
 target = "riscv32imc-unknown-none-elf"
 
@@ -27,4 +27,4 @@ rustflags = ["-C", "force-frame-pointers"]
 ESP_LOG = "info"
 # Font packs: code and data share 4 MB of flash, so up to 36 px (about
 # 12 pt on its 220 dpi screen), not the 40 and 48 px of larger screens.
-QUIREINK_FONT_SIZES = "20,24,28,32,36"
+PAPERPAW_FONT_SIZES = "20,24,28,32,36"

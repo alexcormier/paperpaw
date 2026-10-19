@@ -16,9 +16,9 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use quireink_sdk::ui::{self, UiStyle};
-use quireink_sdk::widgets::{self, Align, Frame, Look, Size, Widget, WidgetSpec, WidgetTarget};
-use quireink_sdk::{
+use paperpaw_sdk::ui::{self, UiStyle};
+use paperpaw_sdk::widgets::{self, Align, Frame, Look, Size, Widget, WidgetSpec, WidgetTarget};
+use paperpaw_sdk::{
     Arg, Canvas, Command, Env, FontHandle, Id, Rect, RegisterError, Registrar, SettingSpec,
 };
 
@@ -225,7 +225,7 @@ fn pick(env: &Env<'_>) -> Option<Word> {
     if count == 0 {
         return None;
     }
-    let day = quireink_sdk::time::unix_seconds(env).map_or(0, |s| s / 86_400) as usize;
+    let day = paperpaw_sdk::time::unix_seconds(env).map_or(0, |s| s / 86_400) as usize;
     store::range(env.storage, day % count, day % count + 1)
         .into_iter()
         .next()
@@ -245,7 +245,7 @@ impl Widget for WordWidget {
     fn update(&mut self, env: &Env<'_>) -> bool {
         // Read again only when the day, the words or the choice changed:
         // it is asked each minute, for the day.
-        let day = quireink_sdk::time::unix_seconds(env).map_or(0, |s| s / 86_400);
+        let day = paperpaw_sdk::time::unix_seconds(env).map_or(0, |s| s / 86_400);
         let size = env.storage.size(&store::file()).unwrap_or(0);
         let newest = env.settings.text(&format!("{WORD_NAME}.pick")) == PICKS[1];
         let read_for = Some((day, size, newest));

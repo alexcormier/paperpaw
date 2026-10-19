@@ -1,6 +1,6 @@
 [package]
-name = "quireink-plugin-menu-editor"
-description = "QuireInk menu editor: reorders, removes and adds the entries of every menu on the device"
+name = "paperpaw-plugin-menu-editor"
+description = "PaperPaw menu editor: reorders, removes and adds the entries of every menu on the device"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,10 +11,10 @@ authors.workspace = true
 categories = ["no-std"]
 
 [dependencies]
-quireink-sdk.workspace = true
+paperpaw-sdk.workspace = true
 
 [dev-dependencies]
-quireink-i18n.workspace = true
+paperpaw-i18n.workspace = true
 
 [lints]
 workspace = true

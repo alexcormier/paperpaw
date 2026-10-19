@@ -1,4 +1,4 @@
-"""Builds QuireInk's icon font: the icons it uses, taken from Tabler Icons.
+"""Builds PaperPaw's icon font: the icons it uses, taken from Tabler Icons.
 
 Usage:
     python tools/icons/subset.py path/to/tabler-icons.ttf
@@ -8,10 +8,10 @@ see plugins/fonts-default/fonts/TablerIcons-MIT.txt), file
 `dist/fonts/tabler-icons.ttf`, version TABLER below. Needs fontTools.
 
 Writes:
-- plugins/fonts-default/fonts/QuireInkIcons.ttf: only the icons in ICONS,
+- plugins/fonts-default/fonts/PaperPawIcons.ttf: only the icons in ICONS,
   at Tabler's code points (private use area);
-- crates/quireink-sdk/src/icon_table.rs: the names and code points of all
-  of Tabler's icons, sorted by name, for `quireink_sdk::icons` (plugins
+- crates/paperpaw-sdk/src/icon_table.rs: the names and code points of all
+  of Tabler's icons, sorted by name, for `paperpaw_sdk::icons` (plugins
   name any; icon packs bring the drawings the font lacks, see pack.py).
 
 To add an icon, add its Tabler name to ICONS (https://tabler.io/icons)
@@ -26,7 +26,7 @@ from fontTools.ttLib import TTFont
 
 TABLER = "3.35.0"
 
-# Icons by their Tabler names; QuireInk uses the same names.
+# Icons by their Tabler names; PaperPaw uses the same names.
 ICONS = sorted({
     # Places
     "home", "books", "book", "book-2", "bookmark", "bookmarks", "list",
@@ -81,7 +81,7 @@ def icon_font(path, codes):
     subsetter.subset(font)
     # Tabler's metrics put every left side bearing at 0 although the
     # drawings start further right; renderers that follow the metrics
-    # (as QuireInk's does) would draw icons off centre. The bearings are
+    # (as PaperPaw's does) would draw icons off centre. The bearings are
     # set from the drawings, and the ascent and descent to the drawings'
     # extent, so an icon centred by its line box is centred by its ink.
     glyf, hmtx = font["glyf"], font["hmtx"]
@@ -114,13 +114,13 @@ def main():
     # Named for what it is now.
     for record in font["name"].names:
         if record.nameID in (1, 4, 6):
-            record.string = "QuireInk Icons" if record.nameID != 6 else "QuireInkIcons"
-    out = root / "plugins/fonts-default/fonts/QuireInkIcons.ttf"
+            record.string = "PaperPaw Icons" if record.nameID != 6 else "PaperPawIcons"
+    out = root / "plugins/fonts-default/fonts/PaperPawIcons.ttf"
     font.save(out)
 
     # Every icon's name, so that plugins name any of them; the drawings of
     # those the font lacks come from icon packs (tools/icons/pack.py).
-    table = root / "crates/quireink-sdk/src/icon_table.rs"
+    table = root / "crates/paperpaw-sdk/src/icon_table.rs"
     # Without pointers (one text of all names, and where each ends): a
     # table of string slices went partly into RAM on the X4.
     ordered = sorted(names.items())
@@ -134,7 +134,7 @@ def main():
         f"{TABLER}; do not edit.",
         "",
         "/// The names of all of Tabler's icons, sorted, one after another; the",
-        "/// icon font holds those QuireInk uses, packs add others.",
+        "/// icon font holds those PaperPaw uses, packs add others.",
         "pub(crate) static NAMES: &str = concat!(",
     ]
     lines += [f'    "{text[i:i + 80]}",' for i in range(0, len(text), 80)]

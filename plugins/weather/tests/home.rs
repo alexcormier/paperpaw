@@ -5,12 +5,12 @@
 // Tests panic on purpose when something is wrong.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use quireink_core::{HttpResponse, Io, Kernel};
-use quireink_platform::{
+use paperpaw_core::{HttpResponse, Io, Kernel};
+use paperpaw_platform::{
     Color, DeviceInfo, DisplayInfo, InputCaps, Instant, MemoryClass, PixelFormat, Rotation,
     SystemStatus, WallClock,
 };
-use quireink_sdk::MemoryStorage;
+use paperpaw_sdk::MemoryStorage;
 
 /// An X4 as the emulator's profile has it: buttons, no touch.
 const DEVICE: DeviceInfo = DeviceInfo {
@@ -33,7 +33,7 @@ const DEVICE: DeviceInfo = DeviceInfo {
     memory: MemoryClass::Small,
 };
 
-const KEPT: &str = ".quireink/plugins/weather/weather.txt";
+const KEPT: &str = ".paperpaw/plugins/weather/weather.txt";
 /// When the kept weather was fetched (2026-10-14, 10:30 UTC).
 const FETCHED: i64 = 1_791_973_800;
 const PLACE: &str = "[weather]\nplace = Berlin\ncoordinates = 52.52,13.41\n";
@@ -48,7 +48,7 @@ impl App {
     /// added, the weather kept if `kept`, the time `minutes` after the
     /// weather was fetched.
     fn new(config: &str, kept: bool, minutes: i64) -> Self {
-        let mut storage = MemoryStorage::new().with(".quireink/plugins/setup/done", "");
+        let mut storage = MemoryStorage::new().with(".paperpaw/plugins/setup/done", "");
         if kept {
             storage = storage.with(KEPT, include_str!("../testdata/weather.txt.v1"));
         }
@@ -59,7 +59,7 @@ impl App {
             .storage(storage)
             .network(true)
             .user_config(config);
-        let mut kernel = quireink_app::install(builder, quireink_app::Fonts::Packs)
+        let mut kernel = paperpaw_app::install(builder, paperpaw_app::Fonts::Packs)
             .build()
             .unwrap();
         let clock = WallClock {
@@ -183,7 +183,7 @@ fn old_weather_is_fetched_and_shown() {
         ..HttpResponse::default()
     };
     let _ = app.kernel.http_response(Instant(app.now), response);
-    let kept = quireink_sdk::read_file(app.kernel.storage(), KEPT, 4096).unwrap();
+    let kept = paperpaw_sdk::read_file(app.kernel.storage(), KEPT, 4096).unwrap();
     assert!(String::from_utf8(kept).unwrap().contains("now 215 "));
     let texts = app.texts();
     assert!(texts.iter().any(|t| t == "71°"), "{texts:?}");

@@ -1,6 +1,6 @@
 [package]
-name = "quireink-plugin-hyphenation"
-description = "QuireInk hyphenation patterns for German and English"
+name = "paperpaw-plugin-hyphenation"
+description = "PaperPaw hyphenation patterns for German and English"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -14,13 +14,13 @@ categories = ["no-std", "text-processing"]
 include = ["src", "patterns", "i18n", "build.rs"]
 
 [dependencies]
-quireink-sdk.workspace = true
+paperpaw-sdk.workspace = true
 
 [build-dependencies]
-quireink-hyphen.workspace = true
+paperpaw-hyphen.workspace = true
 
 [dev-dependencies]
-quireink-i18n.workspace = true
+paperpaw-i18n.workspace = true
 
 [lints]
 workspace = true

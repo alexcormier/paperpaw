@@ -1,6 +1,6 @@
 [package]
-name = "quireink-fuzz"
-description = "Fuzz targets for QuireInk's parsers (cargo fuzz, Linux and nightly Rust)"
+name = "paperpaw-fuzz"
+description = "Fuzz targets for PaperPaw's parsers (cargo fuzz, Linux and nightly Rust)"
 version = "0.0.0"
 edition = "2024"
 license = "Apache-2.0"
@@ -11,12 +11,12 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4"
-quireink-sdk = { path = "../crates/quireink-sdk" }
-quireink-plugin-format-epub = { path = "../plugins/format-epub" }
-quireink-plugin-format-txt = { path = "../plugins/format-txt" }
-quireink-hyphen = { path = "../crates/quireink-hyphen" }
-quireink-image = { path = "../crates/quireink-image" }
-quireink-plugin-koreader = { path = "../plugins/koreader" }
+paperpaw-sdk = { path = "../crates/paperpaw-sdk" }
+paperpaw-plugin-format-epub = { path = "../plugins/format-epub" }
+paperpaw-plugin-format-txt = { path = "../plugins/format-txt" }
+paperpaw-hyphen = { path = "../crates/paperpaw-hyphen" }
+paperpaw-image = { path = "../crates/paperpaw-image" }
+paperpaw-plugin-koreader = { path = "../plugins/koreader" }
 
 # Not part of the main workspace.
 [workspace]

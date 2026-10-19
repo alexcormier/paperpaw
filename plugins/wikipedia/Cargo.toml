@@ -1,6 +1,6 @@
 [package]
-name = "quireink-plugin-wikipedia"
-description = "QuireInk Wikipedia: looks words up online, beside the dictionaries"
+name = "paperpaw-plugin-wikipedia"
+description = "PaperPaw Wikipedia: looks words up online, beside the dictionaries"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,11 +11,11 @@ authors.workspace = true
 categories = ["no-std"]
 
 [dependencies]
-quireink-json.workspace = true
-quireink-sdk.workspace = true
+paperpaw-json.workspace = true
+paperpaw-sdk.workspace = true
 
 [dev-dependencies]
-quireink-i18n.workspace = true
+paperpaw-i18n.workspace = true
 
 [lints]
 workspace = true

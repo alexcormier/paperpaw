@@ -14,7 +14,7 @@
 //!   main page with resetting all of them (but the language); both ask
 //!   first.
 //!
-//! Changes apply immediately and are saved to `quireink.ini` by the
+//! Changes apply immediately and are saved to `paperpaw.ini` by the
 //! kernel.
 //!
 //! Buttons: move to an item, *confirm* opens a group, toggles a switch,
@@ -40,15 +40,15 @@ use alloc::boxed::Box;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::ask;
-use quireink_sdk::builtin::{actions, events, groups, menus, params, setting_sections, slots};
-use quireink_sdk::event::Event;
-use quireink_sdk::replies::Typed;
-use quireink_sdk::setting::Setting;
-use quireink_sdk::ui::choice::{self, Choice};
-use quireink_sdk::ui::{self, ListChange, ListView, UiStyle};
-use quireink_sdk::{ActionSpec, MenuEntry};
-use quireink_sdk::{
+use paperpaw_sdk::ask;
+use paperpaw_sdk::builtin::{actions, events, groups, menus, params, setting_sections, slots};
+use paperpaw_sdk::event::Event;
+use paperpaw_sdk::replies::Typed;
+use paperpaw_sdk::setting::Setting;
+use paperpaw_sdk::ui::choice::{self, Choice};
+use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
+use paperpaw_sdk::{ActionSpec, MenuEntry};
+use paperpaw_sdk::{
     Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Level, Manifest, Params,
     Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen, ScreenSpec,
     SettingKind, SettingSpec, SettingValue, Version,
@@ -196,7 +196,7 @@ fn ask_reset(env: &Env<'_>, group: Option<(&Id, &str)>) -> Command {
     let question = match group {
         Some((_, title)) => env.i18n.format(
             "settings.reset-page.question",
-            &[("page", quireink_sdk::Arg::Str(title))],
+            &[("page", paperpaw_sdk::Arg::Str(title))],
         ),
         None => env.i18n.tr("settings.reset-all.question").to_string(),
     };
@@ -228,7 +228,7 @@ fn reset(env: &Env<'_>, picked: &choice::Picked, cx: &mut Cx<'_, '_>) {
         ));
         return;
     }
-    let language = quireink_sdk::builtin::settings::LANGUAGE;
+    let language = paperpaw_sdk::builtin::settings::LANGUAGE;
     for spec in env.settings.specs() {
         let chosen = match &group {
             Some(group) => env.settings.group_of(spec) == *group && visible(env, spec),
@@ -245,7 +245,7 @@ fn reset(env: &Env<'_>, picked: &choice::Picked, cx: &mut Cx<'_, '_>) {
 
 fn visible(env: &Env<'_>, spec: &SettingSpec) -> bool {
     // "Only this book" and the like mean nothing outside a scope.
-    let scope_only = spec.id == quireink_sdk::builtin::settings::SCOPE_ONLY;
+    let scope_only = spec.id == paperpaw_sdk::builtin::settings::SCOPE_ONLY;
     if scope_only && env.settings.scope().is_none() {
         return false;
     }
@@ -258,7 +258,7 @@ fn visible(env: &Env<'_>, spec: &SettingSpec) -> bool {
     if env.settings.group_of(spec) == groups::DEVELOPER {
         return env
             .settings
-            .bool(quireink_sdk::builtin::settings::DEVELOPER.as_str());
+            .bool(paperpaw_sdk::builtin::settings::DEVELOPER.as_str());
     }
     spec.level == Level::Basic || env.settings.read(&ADVANCED)
 }
@@ -320,7 +320,7 @@ fn paging(rows: &ui::Rows) -> Option<(usize, usize)> {
 
 #[cfg(test)]
 mod tests {
-    use quireink_i18n::{Catalog, check};
+    use paperpaw_i18n::{Catalog, check};
 
     #[test]
     fn translations_are_complete() {

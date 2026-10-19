@@ -1,6 +1,6 @@
 [package]
-name = "quireink-plugin-weather"
-description = "QuireInk weather: the weather now and the next days as widgets, from Open-Meteo"
+name = "paperpaw-plugin-weather"
+description = "PaperPaw weather: the weather now and the next days as widgets, from Open-Meteo"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,14 +11,14 @@ authors.workspace = true
 categories = ["no-std"]
 
 [dependencies]
-quireink-json.workspace = true
-quireink-sdk.workspace = true
+paperpaw-json.workspace = true
+paperpaw-sdk.workspace = true
 
 [dev-dependencies]
-quireink-app.workspace = true
-quireink-core.workspace = true
-quireink-i18n.workspace = true
-quireink-platform.workspace = true
+paperpaw-app.workspace = true
+paperpaw-core.workspace = true
+paperpaw-i18n.workspace = true
+paperpaw-platform.workspace = true
 
 [lints]
 workspace = true

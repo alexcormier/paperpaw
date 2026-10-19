@@ -10,10 +10,10 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::cell::RefCell;
 
-use quireink_sdk::setting::{Setting, Text};
-use quireink_sdk::ui::UiStyle;
-use quireink_sdk::widgets::{self, Align, Frame, Look, Size, Widget, WidgetSpec, WidgetTarget};
-use quireink_sdk::{Arg, Canvas, Env, Id, Rect, RegisterError, Registrar, SettingSpec};
+use paperpaw_sdk::setting::{Setting, Text};
+use paperpaw_sdk::ui::UiStyle;
+use paperpaw_sdk::widgets::{self, Align, Frame, Look, Size, Widget, WidgetSpec, WidgetTarget};
+use paperpaw_sdk::{Arg, Canvas, Env, Id, Rect, RegisterError, Registrar, SettingSpec};
 
 use super::shelf::{self, Place, Shelved};
 use super::{
@@ -216,7 +216,7 @@ impl Series {
         if kept.as_ref().is_none_or(|(k, _)| *k != key) {
             let mut members = members(env, &name);
             for member in &mut members {
-                member.read = quireink_sdk::library::book(env.storage, &member.path)
+                member.read = paperpaw_sdk::library::book(env.storage, &member.path)
                     .is_some_and(|b| b.progress == Some(100));
             }
             *kept = Some((key, members));

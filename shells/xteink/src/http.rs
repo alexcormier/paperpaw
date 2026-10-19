@@ -1,7 +1,7 @@
 //! Plugins' HTTP requests (the kernel's `HttpCall`s), made over the
 //! network of `net` without stopping the X4: each one moves on a step at a
 //! time from the main loop (finding the host, connecting, sending,
-//! receiving), the protocol by `quireink_http`. A body meant for a file
+//! receiving), the protocol by `paperpaw_http`. A body meant for a file
 //! goes there as it comes (by way of a `.part` file, renamed once whole),
 //! so a large download never needs to fit in memory.
 //!
@@ -11,9 +11,9 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use quireink_core::{HttpCall, HttpResponse};
-use quireink_http::{Parser, Url};
-use quireink_platform::Storage;
+use paperpaw_core::{HttpCall, HttpResponse};
+use paperpaw_http::{Parser, Url};
+use paperpaw_platform::Storage;
 use smoltcp::socket::dns;
 
 use crate::link::{Link, Received};
@@ -332,7 +332,7 @@ impl Call {
             None => body.map(<[u8]>::len),
         };
         let mut request =
-            quireink_http::request(&self.call.method, &url, &self.call.headers, body_len);
+            paperpaw_http::request(&self.call.method, &url, &self.call.headers, body_len);
         request.extend_from_slice(body.unwrap_or_default());
         // The secure session first: it takes the most memory.
         let tls = match url.https.then(|| crate::tls::Session::new(url.host)) {
@@ -371,7 +371,7 @@ impl Call {
         let Some(to) = head
             .location
             .as_deref()
-            .and_then(|location| quireink_http::redirect(&self.url, location))
+            .and_then(|location| paperpaw_http::redirect(&self.url, location))
         else {
             return Some(Err("not an address"));
         };

@@ -1,7 +1,7 @@
 use super::*;
-use quireink_plugin_format_epub::EpubDocument;
-use quireink_sdk::MemoryStorage;
-use quireink_zip::testing::ZipBuilder;
+use paperpaw_plugin_format_epub::EpubDocument;
+use paperpaw_sdk::MemoryStorage;
+use paperpaw_zip::testing::ZipBuilder;
 
 const BOOK: &str = "books/alice.epub";
 const SIDECAR: &str = "books/alice.sdr/metadata.epub.lua";
@@ -31,7 +31,7 @@ const CH1: &str = "<html xmlns=\"http://www.w3.org/1999/xhtml\"><body>\
     <p>So she was considering in her own mind.</p></body></html>";
 
 /// What KOReader keeps: a highlight of "Alice" with a note, a bookmark,
-/// and a highlight QuireInk cannot place.
+/// and a highlight PaperPaw cannot place.
 const METADATA: &str = r#"-- we can read Lua syntax here!
 return {
     ["annotations"] = {
@@ -170,11 +170,11 @@ fn annotations_go_back_and_forth() {
         Some("/body/DocFragment[1]/body/p[1]/text()[1].37")
     );
     let Some(Value::Table(root)) = lua::parse(
-        &String::from_utf8(quireink_sdk::read_file(&storage, EXCHANGE, 1 << 20).unwrap()).unwrap(),
+        &String::from_utf8(paperpaw_sdk::read_file(&storage, EXCHANGE, 1 << 20).unwrap()).unwrap(),
     ) else {
         panic!("not Lua");
     };
-    assert_eq!(root.str("device_id"), Some("QuireInk"));
+    assert_eq!(root.str("device_id"), Some("PaperPaw"));
 
     // Until KOReader has taken it over, nothing more to do.
     assert!(!run(&storage, NOW + 10));
@@ -245,7 +245,7 @@ fn unix_of_utc(text: &str) -> i64 {
 
 #[test]
 fn translations_are_complete() {
-    use quireink_i18n::{Catalog, check};
+    use paperpaw_i18n::{Catalog, check};
     let en = Catalog::parse(include_str!("../i18n/en.ini")).unwrap();
     let de = Catalog::parse(include_str!("../i18n/de.ini")).unwrap();
     let issues = check::compare(&en, &de);

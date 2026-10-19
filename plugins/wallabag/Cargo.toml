@@ -1,6 +1,6 @@
 [package]
-name = "quireink-plugin-wallabag"
-description = "QuireInk Wallabag: articles saved to read later, fetched as books"
+name = "paperpaw-plugin-wallabag"
+description = "PaperPaw Wallabag: articles saved to read later, fetched as books"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,13 +11,13 @@ authors.workspace = true
 categories = ["no-std"]
 
 [dependencies]
-quireink-json.workspace = true
-quireink-sdk.workspace = true
+paperpaw-json.workspace = true
+paperpaw-sdk.workspace = true
 
 [dev-dependencies]
-quireink-i18n.workspace = true
-quireink-core.workspace = true
-quireink-platform.workspace = true
+paperpaw-i18n.workspace = true
+paperpaw-core.workspace = true
+paperpaw-platform.workspace = true
 
 [lints]
 workspace = true

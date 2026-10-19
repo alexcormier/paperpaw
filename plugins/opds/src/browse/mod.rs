@@ -1,7 +1,7 @@
 //! Browsing a catalog: a feed's entries, each leading to a further feed
 //! or a book; *Search* where the catalog can be searched and *More* where
 //! its list goes on. A book is downloaded into the library, in the best
-//! format QuireInk reads, and can be read at once.
+//! format PaperPaw reads, and can be read at once.
 //!
 //! *Back* returns to the feed before, and from the first to the list of
 //! catalogs.
@@ -13,15 +13,15 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::ask;
-use quireink_sdk::builtin::{actions, params, slots};
-use quireink_sdk::document::ImageRef;
-use quireink_sdk::event::Event;
-use quireink_sdk::replies::{HttpReply, Typed};
-use quireink_sdk::ui::choice;
-use quireink_sdk::ui::{self, ListChange, ListView, UiStyle};
-use quireink_sdk::web::host;
-use quireink_sdk::{
+use paperpaw_sdk::ask;
+use paperpaw_sdk::builtin::{actions, params, slots};
+use paperpaw_sdk::document::ImageRef;
+use paperpaw_sdk::event::Event;
+use paperpaw_sdk::replies::{HttpReply, Typed};
+use paperpaw_sdk::ui::choice;
+use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
+use paperpaw_sdk::web::host;
+use paperpaw_sdk::{
     Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, MemoryClass, Params,
     Rect, RefreshMode, Screen, files,
 };
@@ -47,7 +47,7 @@ const CHOSEN: Event<choice::Picked> = Event::new("opds.read");
 fn feed_path() -> String {
     format!(
         "{}/browse.xml",
-        quireink_sdk::Env::plugin_dir(PLUGIN.as_str())
+        paperpaw_sdk::Env::plugin_dir(PLUGIN.as_str())
     )
 }
 
@@ -175,7 +175,7 @@ impl BrowseScreen {
         let message = match status {
             200..=299 => return true,
             0 => env.i18n.format("opds.failed-host", &[("host", host)]),
-            401 | 403 => quireink_sdk::ui::tr_input(&env, "opds.unauthorized").to_string(),
+            401 | 403 => paperpaw_sdk::ui::tr_input(&env, "opds.unauthorized").to_string(),
             status => env.i18n.format(
                 "opds.error",
                 &[("host", host), ("status", Arg::Int(i64::from(status)))],

@@ -2,7 +2,7 @@ name: Release
 
 # A tag `v1.2.3` (the workspace's version) makes a GitHub release with the
 # Android app signed with the release key, the Xteink X4's firmware (one
-# image for its whole flash, which quireink.org offers for flashing in the
+# image for its whole flash, which paperpaw.org offers for flashing in the
 # browser, with a signature file of its own, and the update file, both
 # signed with the firmware's key; the update is installed on the device),
 # their checksums, and the release notes from CHANGELOG.md.
@@ -34,39 +34,39 @@ jobs:
       - uses: ./.github/actions/android-tools
       - name: Build the app, signed with the release key
         env:
-          QUIREINK_REPRODUCIBLE: 1
+          PAPERPAW_REPRODUCIBLE: 1
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          QUIREINK_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          QUIREINK_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          QUIREINK_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          PAPERPAW_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          PAPERPAW_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          PAPERPAW_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           if [[ -z "$KEYSTORE_BASE64" ]]; then
             echo "::error::the secret ANDROID_KEYSTORE_BASE64 is missing"
             exit 1
           fi
-          export QUIREINK_KEYSTORE="$RUNNER_TEMP/release.p12"
-          echo "$KEYSTORE_BASE64" | base64 --decode > "$QUIREINK_KEYSTORE"
-          [[ -n "$QUIREINK_KEY_PASSWORD" ]] || unset QUIREINK_KEY_PASSWORD
+          export PAPERPAW_KEYSTORE="$RUNNER_TEMP/release.p12"
+          echo "$KEYSTORE_BASE64" | base64 --decode > "$PAPERPAW_KEYSTORE"
+          [[ -n "$PAPERPAW_KEY_PASSWORD" ]] || unset PAPERPAW_KEY_PASSWORD
           shells/android/build-apk.sh
-          rm -f "$QUIREINK_KEYSTORE"
+          rm -f "$PAPERPAW_KEYSTORE"
           mkdir -p dist
-          cp target/android/quireink.apk "dist/quireink-$VERSION.apk"
-          (cd dist && sha256sum "quireink-$VERSION.apk" > "quireink-$VERSION.apk.sha256")
+          cp target/android/paperpaw.apk "dist/paperpaw-$VERSION.apk"
+          (cd dist && sha256sum "paperpaw-$VERSION.apk" > "paperpaw-$VERSION.apk.sha256")
       # As F-Droid checks it: its own build, unsigned, must verify with the
       # signature of this one.
       - name: The signature fits the unsigned build
         env:
-          QUIREINK_REPRODUCIBLE: 1
-          QUIREINK_UNSIGNED: 1
+          PAPERPAW_REPRODUCIBLE: 1
+          PAPERPAW_UNSIGNED: 1
         run: |
           shells/android/build-apk.sh
           pipx install apksigcopier==1.1.1
           PATH="$ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION:$PATH" apksigcopier compare \
-            "dist/quireink-$VERSION.apk" --unsigned target/android/quireink-unsigned.apk
+            "dist/paperpaw-$VERSION.apk" --unsigned target/android/paperpaw-unsigned.apk
       - uses: actions/upload-artifact@v4
         with:
           name: android
-          path: dist/quireink-*.apk*
+          path: dist/paperpaw-*.apk*
 
   x4:
     name: Xteink X4 firmware
@@ -98,30 +98,30 @@ jobs:
         run: |
           cargo build --release --no-default-features
           mkdir -p "$GITHUB_WORKSPACE/dist"
-          elf=target/riscv32imc-unknown-none-elf/release/quireink-xteink
+          elf=target/riscv32imc-unknown-none-elf/release/paperpaw-xteink
           espflash save-image --chip esp32c3 --merge --skip-padding --flash-size 16mb \
-            "$elf" "$GITHUB_WORKSPACE/dist/quireink-x4-$VERSION.bin"
+            "$elf" "$GITHUB_WORKSPACE/dist/paperpaw-x4-$VERSION.bin"
           espflash save-image --chip esp32c3 --flash-size 16mb "$elf" "$RUNNER_TEMP/app.bin"
       - name: Sign the update and the flash image with the firmware's key
         env:
-          QUIREINK_SIGNING_KEY: ${{ secrets.QUIREINK_SIGNING_KEY }}
+          PAPERPAW_SIGNING_KEY: ${{ secrets.PAPERPAW_SIGNING_KEY }}
         run: |
-          if [[ -z "$QUIREINK_SIGNING_KEY" ]]; then
-            echo "::error::no QUIREINK_SIGNING_KEY: devices install only signed updates"
+          if [[ -z "$PAPERPAW_SIGNING_KEY" ]]; then
+            echo "::error::no PAPERPAW_SIGNING_KEY: devices install only signed updates"
             exit 1
           fi
-          cargo run --release -p quireink-sign -- sign \
-            "$RUNNER_TEMP/app.bin" "dist/quireink-x4-$VERSION-update.bin"
+          cargo run --release -p paperpaw-sign -- sign \
+            "$RUNNER_TEMP/app.bin" "dist/paperpaw-x4-$VERSION-update.bin"
           # The web flasher checks the whole image against this.
-          cargo run --release -p quireink-sign -- sign-apart \
-            "dist/quireink-x4-$VERSION.bin" "dist/quireink-x4-$VERSION.bin.sig"
+          cargo run --release -p paperpaw-sign -- sign-apart \
+            "dist/paperpaw-x4-$VERSION.bin" "dist/paperpaw-x4-$VERSION.bin.sig"
           cd dist
-          sha256sum "quireink-x4-$VERSION.bin" > "quireink-x4-$VERSION.bin.sha256"
-          sha256sum "quireink-x4-$VERSION-update.bin" > "quireink-x4-$VERSION-update.bin.sha256"
+          sha256sum "paperpaw-x4-$VERSION.bin" > "paperpaw-x4-$VERSION.bin.sha256"
+          sha256sum "paperpaw-x4-$VERSION-update.bin" > "paperpaw-x4-$VERSION-update.bin.sha256"
       - uses: actions/upload-artifact@v4
         with:
           name: x4
-          path: dist/quireink-x4-*
+          path: dist/paperpaw-x4-*
 
   release:
     name: Release
@@ -154,8 +154,8 @@ jobs:
           prerelease=()
           [[ "$VERSION" == 0.* || "$VERSION" == *-* ]] && prerelease=(--prerelease)
           gh release create "$GITHUB_REF_NAME" "${prerelease[@]}" \
-            --title "QuireInk $VERSION" --notes-file dist/notes.md \
-            "dist/quireink-$VERSION.apk" "dist/quireink-$VERSION.apk.sha256" \
-            "dist/quireink-x4-$VERSION.bin" "dist/quireink-x4-$VERSION.bin.sha256" \
-            "dist/quireink-x4-$VERSION.bin.sig" \
-            "dist/quireink-x4-$VERSION-update.bin" "dist/quireink-x4-$VERSION-update.bin.sha256"
+            --title "PaperPaw $VERSION" --notes-file dist/notes.md \
+            "dist/paperpaw-$VERSION.apk" "dist/paperpaw-$VERSION.apk.sha256" \
+            "dist/paperpaw-x4-$VERSION.bin" "dist/paperpaw-x4-$VERSION.bin.sha256" \
+            "dist/paperpaw-x4-$VERSION.bin.sig" \
+            "dist/paperpaw-x4-$VERSION-update.bin" "dist/paperpaw-x4-$VERSION-update.bin.sha256"

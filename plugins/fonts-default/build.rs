@@ -19,14 +19,14 @@ const FONTS: &[(&str, &str, f32)] = &[
 fn main() {
     println!("cargo::rerun-if-changed=build.rs");
     println!("cargo::rerun-if-changed=fonts");
-    println!("cargo::rerun-if-env-changed=QUIREINK_FONT_SIZES");
+    println!("cargo::rerun-if-env-changed=PAPERPAW_FONT_SIZES");
     if std::env::var_os("CARGO_FEATURE_OUTLINE").is_some()
         && std::env::var_os("CARGO_FEATURE_PACKS").is_none()
     {
         return;
     }
 
-    let sizes_text = std::env::var("QUIREINK_FONT_SIZES").unwrap_or(DEFAULT_SIZES.into());
+    let sizes_text = std::env::var("PAPERPAW_FONT_SIZES").unwrap_or(DEFAULT_SIZES.into());
     let sizes: Vec<f32> = sizes_text
         .split(',')
         .map(|s| {
@@ -41,19 +41,19 @@ fn main() {
     );
     for &(name, path, weight) in FONTS {
         let data = std::fs::read(path).unwrap_or_else(|e| panic!("{path}: {e}"));
-        let font = quireink_text::OutlineFont::new(data, &[("wght", weight)])
+        let font = paperpaw_text::OutlineFont::new(data, &[("wght", weight)])
             .unwrap_or_else(|e| panic!("{path}: {e}"));
-        let chars = quireink_text::charset::chars(quireink_text::charset::LATIN);
-        let pack = quireink_text::build_pack(&font, &sizes, chars);
-        write(&out.join(format!("{name}.qifp")), &pack);
+        let chars = paperpaw_text::charset::chars(paperpaw_text::charset::LATIN);
+        let pack = paperpaw_text::build_pack(&font, &sizes, chars);
+        write(&out.join(format!("{name}.ppfp")), &pack);
     }
     // Icons sit in the private use area and just above it.
-    let path = "fonts/QuireInkIcons.ttf";
+    let path = "fonts/PaperPawIcons.ttf";
     let data = std::fs::read(path).unwrap_or_else(|e| panic!("{path}: {e}"));
-    let font = quireink_text::OutlineFont::new(data, &[]).unwrap_or_else(|e| panic!("{path}: {e}"));
+    let font = paperpaw_text::OutlineFont::new(data, &[]).unwrap_or_else(|e| panic!("{path}: {e}"));
     let chars = ('\u{e000}'..='\u{ffff}').filter(|ch| font.has_char(*ch));
-    let pack = quireink_text::build_pack(&font, &sizes, chars);
-    write(&out.join("icons.qifp"), &pack);
+    let pack = paperpaw_text::build_pack(&font, &sizes, chars);
+    write(&out.join("icons.ppfp"), &pack);
 }
 
 fn write(path: &Path, data: &[u8]) {

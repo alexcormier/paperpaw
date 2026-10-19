@@ -1,6 +1,6 @@
 [package]
-name = "quireink-plugin-wifi"
-description = "QuireInk Wi-Fi: joins networks when needed, switches the radio off after, and the page to choose networks"
+name = "paperpaw-plugin-wifi"
+description = "PaperPaw Wi-Fi: joins networks when needed, switches the radio off after, and the page to choose networks"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,7 +11,7 @@ authors.workspace = true
 categories = ["no-std"]
 
 [dependencies]
-quireink-sdk.workspace = true
+paperpaw-sdk.workspace = true
 
 [lints]
 workspace = true

@@ -20,13 +20,13 @@ use alloc::boxed::Box;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::ask;
-use quireink_sdk::builtin::{actions, menus, params};
-use quireink_sdk::event::Event;
-use quireink_sdk::replies::Typed;
-use quireink_sdk::ui::choice::{self, Choice};
-use quireink_sdk::ui::{self, ListChange, ListView, UiStyle};
-use quireink_sdk::{
+use paperpaw_sdk::ask;
+use paperpaw_sdk::builtin::{actions, menus, params};
+use paperpaw_sdk::event::Event;
+use paperpaw_sdk::replies::Typed;
+use paperpaw_sdk::ui::choice::{self, Choice};
+use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
+use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
     MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen,
     ScreenSpec, Version,
@@ -392,7 +392,7 @@ impl Screen for ListScreen {
                 }
                 _ => {}
             }
-        } else if *event == quireink_sdk::builtin::events::SETTING_CHANGED {
+        } else if *event == paperpaw_sdk::builtin::events::SETTING_CHANGED {
             // "In use" may have changed.
             self.redraw(cx);
         }
@@ -401,7 +401,7 @@ impl Screen for ListScreen {
 
 #[cfg(test)]
 mod tests {
-    use quireink_i18n::{Catalog, check};
+    use paperpaw_i18n::{Catalog, check};
 
     #[test]
     fn translations_are_complete() {

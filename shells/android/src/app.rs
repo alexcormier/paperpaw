@@ -9,35 +9,35 @@ use android_activity::input::{InputEvent as AndroidInput, KeyAction, MotionActio
 use android_activity::{AndroidApp, InputStatus, MainEvent, PollEvent, WindowManagerFlags};
 use ndk::hardware_buffer_format::HardwareBufferFormat;
 use ndk::native_window::NativeWindow;
-use quireink_core::{Effects, Io, Kernel};
-use quireink_fs::DirStorage;
-use quireink_graphics::Framebuffer;
-use quireink_platform::{
+use paperpaw_core::{Effects, Io, Kernel};
+use paperpaw_fs::DirStorage;
+use paperpaw_graphics::Framebuffer;
+use paperpaw_platform::{
     ButtonState, DeviceInfo, DirEntry, DisplayInfo, InputCaps, InputEvent, Instant, Mounted,
     PixelFormat, Point, PointerEvent, PointerPhase, PointerTool, RefreshMode, Rotation, Storage,
     StorageError,
 };
-use quireink_sdk::builtin::settings;
-use quireink_sdk::library;
+use paperpaw_sdk::builtin::settings;
+use paperpaw_sdk::library;
 
 use crate::epd::Epd;
 use crate::lights::Lights;
 use crate::plugin::{AndroidPlugin, Frontlight};
 use crate::{access, keys, pixels, status};
 
-/// Where the device's shared storage appears in QuireInk's storage.
+/// Where the device's shared storage appears in PaperPaw's storage.
 const SHARED: &str = "storage";
 /// Where SD cards appear: the first as `SD card`, more numbered.
 const REMOVABLE: &str = "SD card";
 /// Data plugins on the shared storage, where users can copy them.
-const PLUGINS: &str = "QuireInk/plugins";
+const PLUGINS: &str = "PaperPaw/plugins";
 /// Dictionaries on the shared storage.
-const DICTIONARIES: &str = "QuireInk/dictionaries";
+const DICTIONARIES: &str = "PaperPaw/dictionaries";
 /// Where KOReader keeps dictionaries; used if it has any.
 const KOREADER_DICTIONARIES: &str = "koreader/data/dict";
-/// Fonts to read with: QuireInk's folder, KOReader's and the one Boox's
+/// Fonts to read with: PaperPaw's folder, KOReader's and the one Boox's
 /// reader uses.
-const FONTS: &str = "QuireInk/fonts";
+const FONTS: &str = "PaperPaw/fonts";
 const KOREADER_FONTS: &str = "koreader/fonts";
 const SYSTEM_FONTS: &str = "fonts";
 
@@ -60,9 +60,9 @@ struct Running {
     /// For the system's clipboard.
     app: AndroidApp,
     /// Plugins' servers.
-    servers: quireink_serve::Servers,
+    servers: paperpaw_serve::Servers,
     /// Plugins' sockets.
-    sockets: quireink_serve::Sockets,
+    sockets: paperpaw_serve::Sockets,
     /// Reading aloud.
     speech: crate::speech::Speech,
     /// Plugins wait for the system clipboard's text.
@@ -82,7 +82,7 @@ fn android_main(app: AndroidApp) {
     android_logger::init_once(
         android_logger::Config::default()
             .with_max_level(log::LevelFilter::Info)
-            .with_tag("QuireInk"),
+            .with_tag("PaperPaw"),
     );
     let start = StdInstant::now();
     let now = move || Instant(start.elapsed().as_millis() as u64);
@@ -332,12 +332,12 @@ fn start_kernel(
             pen: false,
             // The page buttons (or volume keys) and back.
             keys: &[
-                quireink_platform::buttons::PAGE_FORWARD,
-                quireink_platform::buttons::PAGE_BACK,
-                quireink_platform::buttons::BACK,
+                paperpaw_platform::buttons::PAGE_FORWARD,
+                paperpaw_platform::buttons::PAGE_BACK,
+                paperpaw_platform::buttons::BACK,
             ],
         },
-        memory: quireink_platform::MemoryClass::Large,
+        memory: paperpaw_platform::MemoryClass::Large,
     };
     let root = app
         .external_data_path()
@@ -371,7 +371,7 @@ fn start_kernel(
                 }
             }
         });
-    // KOReader's dictionaries if there are any, else QuireInk's folder.
+    // KOReader's dictionaries if there are any, else PaperPaw's folder.
     let dictionaries = access::storage_dir(app)
         .filter(|dir| shared.is_some() && dir.join(KOREADER_DICTIONARIES).is_dir())
         .map_or(DICTIONARIES, |_| KOREADER_DICTIONARIES);
@@ -420,7 +420,7 @@ fn start_kernel(
             .font_dir(format!("{SHARED}/{SYSTEM_FONTS}"))
             .setting_default(&library::FOLDER, format!("{SHARED}/Books").into())
             .setting_default(
-                &quireink_plugin_dictionary::FOLDER,
+                &paperpaw_plugin_dictionary::FOLDER,
                 format!("{SHARED}/{dictionaries}").into(),
             ),
         None => builder.storage(storage),
@@ -430,7 +430,7 @@ fn start_kernel(
         builder = builder.setting_default(&settings::LANGUAGE, language.into());
     }
     let builder =
-        quireink_app::install(builder, quireink_app::Fonts::Outline).plugin(AndroidPlugin {
+        paperpaw_app::install(builder, paperpaw_app::Fonts::Outline).plugin(AndroidPlugin {
             app: app.clone(),
             shared_storage,
             screen: (
@@ -465,11 +465,11 @@ fn start_kernel(
         app: app.clone(),
         servers: {
             let waker = app.create_waker();
-            quireink_serve::Servers::new(move || waker.wake())
+            paperpaw_serve::Servers::new(move || waker.wake())
         },
         sockets: {
             let waker = app.create_waker();
-            quireink_serve::Sockets::new(move || waker.wake())
+            paperpaw_serve::Sockets::new(move || waker.wake())
         },
         speech: crate::speech::Speech::new(app),
         clipboard_wanted: false,
@@ -522,7 +522,7 @@ fn apply(state: &mut Running, effects: Effects) -> bool {
         match io {
             Io::Http(mut call) => {
                 if let Err(e) = call.load_body(state.kernel.storage()) {
-                    let failed = quireink_core::HttpResponse::failed(call.id, &e.to_string());
+                    let failed = paperpaw_core::HttpResponse::failed(call.id, &e.to_string());
                     // Answered on the next round, like the network's answers.
                     state.net.answer(failed);
                     continue;

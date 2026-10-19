@@ -1,6 +1,6 @@
 [package]
-name = "quireink-android"
-description = "QuireInk Android shell: a native activity for Android e-readers (Boox and others)"
+name = "paperpaw-android"
+description = "PaperPaw Android shell: a native activity for Android e-readers (Boox and others)"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,21 +11,21 @@ authors.workspace = true
 publish = false
 
 [lib]
-# The library Android loads (`libquireink.so`, see AndroidManifest.xml).
-name = "quireink"
+# The library Android loads (`libpaperpaw.so`, see AndroidManifest.xml).
+name = "paperpaw"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-quireink-digest.workspace = true
-quireink-app = { workspace = true, features = ["outline"] }
-quireink-core = { workspace = true, features = ["color", "outline"] }
-quireink-serve.workspace = true
-quireink-fs.workspace = true
-quireink-graphics = { workspace = true, features = ["color"] }
-quireink-platform.workspace = true
-quireink-sdk.workspace = true
+paperpaw-digest.workspace = true
+paperpaw-app = { workspace = true, features = ["outline"] }
+paperpaw-core = { workspace = true, features = ["color", "outline"] }
+paperpaw-serve.workspace = true
+paperpaw-fs.workspace = true
+paperpaw-graphics = { workspace = true, features = ["color"] }
+paperpaw-platform.workspace = true
+paperpaw-sdk.workspace = true
 # Its setting's id, for the shared dictionaries folder.
-quireink-plugin-dictionary.workspace = true
+paperpaw-plugin-dictionary.workspace = true
 
 [target.'cfg(target_os = "android")'.dependencies]
 android-activity = { version = "0.6", features = ["native-activity"] }

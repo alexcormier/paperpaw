@@ -1,4 +1,4 @@
-//! The radio, as the kernel tells it (`quireink_sdk::wifi`): on and off,
+//! The radio, as the kernel tells it (`paperpaw_sdk::wifi`): on and off,
 //! looking for networks, joining and leaving one, and what happened. When
 //! and which network is the `wifi` plugin's to decide; this only does it.
 //!
@@ -28,7 +28,7 @@ use esp_radio::wifi::{
     AuthenticationMethod, AuthenticationMethodConfig, Config, ConnectionError, DisconnectReason,
     WifiController,
 };
-use quireink_core::{JoinFailure, WifiCommand, WifiEvent, WifiNetwork, WifiState};
+use paperpaw_core::{JoinFailure, WifiCommand, WifiEvent, WifiNetwork, WifiState};
 
 use crate::net::Net;
 use crate::power::{at, mark};

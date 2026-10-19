@@ -22,10 +22,10 @@ use alloc::boxed::Box;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::builtin::{actions, events, menus, params, slots};
-use quireink_sdk::setting::{Setting, Text};
-use quireink_sdk::ui::{self, UiStyle};
-use quireink_sdk::{
+use paperpaw_sdk::builtin::{actions, events, menus, params, slots};
+use paperpaw_sdk::setting::{Setting, Text};
+use paperpaw_sdk::ui::{self, UiStyle};
+use paperpaw_sdk::{
     Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest, Params, Plugin,
     Priority, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen, ScreenSpec,
     SettingKind, SettingSpec, Version,
@@ -52,10 +52,10 @@ pub struct Menu;
 
 /// The quick panel's part of the Appearance settings: the status items
 /// of its head, chosen on their picker, and its size.
-static QUICK_ITEMS: quireink_sdk::SettingExtra = quireink_sdk::SettingExtra::new()
+static QUICK_ITEMS: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new()
     .section("menu.quick.section")
-    .editor(quireink_sdk::builtin::screens::STATUS_ITEMS);
-static QUICK_PT: quireink_sdk::SettingExtra = quireink_sdk::SettingExtra::new()
+    .editor(paperpaw_sdk::builtin::screens::STATUS_ITEMS);
+static QUICK_PT: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new()
     .section("menu.quick.section")
     .unit("core.unit.pt");
 
@@ -64,8 +64,8 @@ const fn quick_part(id: Id, title: &'static str, default: &'static str) -> Setti
         id.static_str(),
         title,
         SettingKind::List,
-        quireink_sdk::SettingValue::Text(Cow::Borrowed(default)),
-        quireink_sdk::builtin::groups::LOOK,
+        paperpaw_sdk::SettingValue::Text(Cow::Borrowed(default)),
+        paperpaw_sdk::builtin::groups::LOOK,
     )
     .with_extra(&QUICK_ITEMS)
     .described("menu.quick.part.help")
@@ -79,7 +79,7 @@ static SETTINGS: [SettingSpec; 5] = [
         "menu.setting.style",
         &[STYLE_LIST, STYLE_TILES],
         STYLE_LIST,
-        quireink_sdk::builtin::groups::LOOK,
+        paperpaw_sdk::builtin::groups::LOOK,
     )
     .described("menu.setting.style.help"),
     quick_part(
@@ -99,7 +99,7 @@ static SETTINGS: [SettingSpec; 5] = [
         6,
         24,
         11,
-        quireink_sdk::builtin::groups::LOOK,
+        paperpaw_sdk::builtin::groups::LOOK,
     )
     .with_extra(&QUICK_PT)
     .described("menu.quick.size.help"),
@@ -194,7 +194,7 @@ impl MenuScreen {
             .menus
             .items(menu)
             .into_iter()
-            .filter(|item| !quireink_sdk::Menus::hidden(params, item.id.as_str()))
+            .filter(|item| !paperpaw_sdk::Menus::hidden(params, item.id.as_str()))
             .map(|item| Item {
                 id: item.id.clone(),
                 title: String::from(item.title),
@@ -616,7 +616,7 @@ impl Screen for MenuScreen {
 
 #[cfg(test)]
 mod tests {
-    use quireink_i18n::{Catalog, check};
+    use paperpaw_i18n::{Catalog, check};
 
     #[test]
     fn translations_are_complete() {

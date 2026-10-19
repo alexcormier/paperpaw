@@ -1,4 +1,4 @@
-//! A book downloaded from a catalog: in the best format QuireInk reads,
+//! A book downloaded from a catalog: in the best format PaperPaw reads,
 //! into the catalog's folder in the library, with what the catalog
 //! says of it; then read at once, or later.
 
@@ -15,7 +15,7 @@ pub(super) const AUTHORS: &str = "authors";
 pub(super) fn download_path() -> String {
     format!(
         "{}/download.tmp",
-        quireink_sdk::Env::plugin_dir(PLUGIN.as_str())
+        paperpaw_sdk::Env::plugin_dir(PLUGIN.as_str())
     )
 }
 
@@ -75,13 +75,13 @@ impl BrowseScreen {
             let message = env.i18n.tr("opds.cannot-save").to_string();
             return self.say(message, cx);
         }
-        cx.command(quireink_sdk::library::changed());
+        cx.command(paperpaw_sdk::library::changed());
         // What the catalog says of it, for books that say nothing.
         let first = |authors: &str| authors.split(" & ").next().map(String::from);
-        quireink_sdk::library::provide(
+        paperpaw_sdk::library::provide(
             env.storage,
             &target,
-            quireink_sdk::library::Provided {
+            paperpaw_sdk::library::Provided {
                 title: reply.context.get(params::TITLE).map(String::from),
                 author: reply.context.get(AUTHORS).and_then(first),
                 ..Default::default()

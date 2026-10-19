@@ -4,10 +4,10 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use quireink_sdk::document::{
+use paperpaw_sdk::document::{
     Align, Block, BlockKind, DocumentError, Link, OffsetMap, Run, TextStyle,
 };
-use quireink_sdk::{Storage, StorageError};
+use paperpaw_sdk::{Storage, StorageError};
 
 use crate::convert::{self, CachePaths, HEADER, INDEX};
 

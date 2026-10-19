@@ -13,7 +13,7 @@
 //! After a change meant to alter a screen, write the references anew:
 //!
 //! ```sh
-//! QUIREINK_BLESS=1 cargo test -p quireink-emulator --test snapshots
+//! PAPERPAW_BLESS=1 cargo test -p paperpaw-emulator --test snapshots
 //! ```
 //!
 //! and look at the changed pictures before committing them. A failing
@@ -260,7 +260,7 @@ fn root() -> PathBuf {
 /// A library with only the sample books (and the book to reopen).
 fn library(case: &Case) -> PathBuf {
     let dir = std::env::temp_dir().join(format!(
-        "quireink-snapshot-{}-{}",
+        "paperpaw-snapshot-{}-{}",
         case.name,
         std::process::id()
     ));
@@ -276,12 +276,12 @@ fn library(case: &Case) -> PathBuf {
     }
     // The first-run setup only where it is what is shown.
     if !case.name.contains("setup") {
-        let setup = dir.join(".quireink/plugins/setup");
+        let setup = dir.join(".paperpaw/plugins/setup");
         fs::create_dir_all(&setup).unwrap();
         fs::write(setup.join("done"), "").unwrap();
     }
     if let Some(book) = case.book {
-        let state = dir.join(".quireink/plugins/reader");
+        let state = dir.join(".paperpaw/plugins/reader");
         fs::create_dir_all(&state).unwrap();
         fs::write(
             state.join("state.ini"),
@@ -346,7 +346,7 @@ fn write_gray(path: &Path, width: u32, height: u32, gray: &[u8]) {
 fn draw(case: &Case) -> (u32, u32, Vec<u8>, usize) {
     let library = library(case);
     let shot = library.join("shot.png");
-    let mut command = Command::new(env!("CARGO_BIN_EXE_quireink-emu"));
+    let mut command = Command::new(env!("CARGO_BIN_EXE_paperpaw-emu"));
     command
         .args(["--profile", case.profile, "--headless", "--library"])
         .arg(&library)
@@ -377,7 +377,7 @@ fn draw(case: &Case) -> (u32, u32, Vec<u8>, usize) {
 
 #[test]
 fn screens_look_as_before() {
-    let bless = std::env::var_os("QUIREINK_BLESS").is_some();
+    let bless = std::env::var_os("PAPERPAW_BLESS").is_some();
     let references = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots");
     let failed_dir = root().join("target/snapshots");
     let mut failures = Vec::new();
@@ -420,7 +420,7 @@ fn screens_look_as_before() {
     }
     assert!(
         failures.is_empty(),
-        "screens changed; if meant, run with QUIREINK_BLESS=1:\n{}",
+        "screens changed; if meant, run with PAPERPAW_BLESS=1:\n{}",
         failures.join("\n")
     );
 }
@@ -436,7 +436,7 @@ fn screens_say_what_they_show() {
         colour: 0,
     };
     let library = library(&case);
-    let output = Command::new(env!("CARGO_BIN_EXE_quireink-emu"))
+    let output = Command::new(env!("CARGO_BIN_EXE_paperpaw-emu"))
         .args(["--profile", case.profile, "--headless", "--library"])
         .arg(&library)
         .args(["--set", "reader.open-last=false"])

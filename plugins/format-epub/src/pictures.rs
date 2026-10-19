@@ -12,9 +12,9 @@
 use alloc::format;
 use alloc::string::String;
 
-use quireink_sdk::Storage;
-use quireink_sdk::document::ImageRef;
-use quireink_sdk::image::ImageFile;
+use paperpaw_sdk::Storage;
+use paperpaw_sdk::document::ImageRef;
+use paperpaw_sdk::image::ImageFile;
 
 /// The cache file of picture `base` in colour or gray.
 pub(crate) fn file(base: &str, color: bool) -> String {

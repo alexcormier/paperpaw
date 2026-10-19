@@ -1,7 +1,7 @@
 //! Days and weeks of the (proleptic Gregorian) calendar, in whole
 //! numbers.
 
-use quireink_sdk::time::LocalTime;
+use paperpaw_sdk::time::LocalTime;
 
 pub(crate) fn is_leap(year: i32) -> bool {
     year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)

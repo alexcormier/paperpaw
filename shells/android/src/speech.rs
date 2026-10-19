@@ -4,7 +4,7 @@
 //! asynchronously: texts that come before it is ready wait for it a
 //! while. Texts handed over while one is spoken are queued, so they follow
 //! without a pause. The engine reports the end of each text to
-//! `SpeechListener` (QuireInk's only Java class), which calls [`ended`]
+//! `SpeechListener` (PaperPaw's only Java class), which calls [`ended`]
 //! on one of its threads; the event loop is woken to pass it on.
 
 use std::collections::VecDeque;
@@ -15,7 +15,7 @@ use android_activity::{AndroidApp, AndroidAppWaker};
 use jni::JNIEnv;
 use jni::objects::{GlobalRef, JClass, JObject, JString, JValue};
 use jni::sys::jboolean;
-use quireink_core::SpeechCall;
+use paperpaw_core::SpeechCall;
 
 use crate::access::with_activity;
 
@@ -29,7 +29,7 @@ const MAX_CHARS: usize = 3_900;
 const QUEUE_FLUSH: i32 = 0;
 const QUEUE_ADD: i32 = 1;
 /// The listener class, in the APK's `classes.dex`.
-const LISTENER: &str = "io.github.hthoene.quireink.SpeechListener";
+const LISTENER: &str = "io.github.hthoene.paperpaw.SpeechListener";
 
 /// Texts the engine reported as ended (spoken or not), from its threads.
 static ENDED: Mutex<Vec<(u32, bool)>> = Mutex::new(Vec::new());

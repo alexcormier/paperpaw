@@ -9,20 +9,20 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::cell::{Cell, RefCell};
 
-use quireink_sdk::annotations::{self, Kind};
-use quireink_sdk::builtin::events::{self, Goto};
-use quireink_sdk::document::Locator;
-use quireink_sdk::event::Event;
-use quireink_sdk::library;
-use quireink_sdk::ui::UiStyle;
-use quireink_sdk::widgets::{self, Align, Frame, Look, Size, Widget, WidgetSpec, WidgetTarget};
-use quireink_sdk::{Arg, Canvas, Env, Id, Rect, RegisterError, Registrar, Storage};
+use paperpaw_sdk::annotations::{self, Kind};
+use paperpaw_sdk::builtin::events::{self, Goto};
+use paperpaw_sdk::document::Locator;
+use paperpaw_sdk::event::Event;
+use paperpaw_sdk::library;
+use paperpaw_sdk::ui::UiStyle;
+use paperpaw_sdk::widgets::{self, Align, Frame, Look, Size, Widget, WidgetSpec, WidgetTarget};
+use paperpaw_sdk::{Arg, Canvas, Env, Id, Rect, RegisterError, Registrar, Storage};
 
 use super::{
     Generation, add_settings, chosen, draw_line, draw_message, each_book, frame_height, mix, open,
     path_hash, today,
 };
-use quireink_sdk::SettingSpec;
+use paperpaw_sdk::SettingSpec;
 
 pub(crate) const ID: Id = Id::new_static(WIDGET);
 /// Its id, as text.

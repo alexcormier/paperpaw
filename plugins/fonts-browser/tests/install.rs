@@ -8,15 +8,15 @@
 
 use std::rc::Rc;
 
-use quireink_core::{HttpCall, HttpResponse, Io, Kernel};
-use quireink_platform::Rotation;
-use quireink_plugin_fonts_browser::{FontsBrowser, OPEN};
-use quireink_sdk::builtin::{actions, settings};
-use quireink_sdk::{
+use paperpaw_core::{HttpCall, HttpResponse, Io, Kernel};
+use paperpaw_platform::Rotation;
+use paperpaw_plugin_fonts_browser::{FontsBrowser, OPEN};
+use paperpaw_sdk::builtin::{actions, settings};
+use paperpaw_sdk::{
     DeviceInfo, DirEntry, DisplayInfo, Id, InputCaps, Instant, MemoryClass, MemoryStorage,
     PixelFormat, Storage, StorageError,
 };
-use quireink_text::{Glyph, LineMetrics, PackBuilder};
+use paperpaw_text::{Glyph, LineMetrics, PackBuilder};
 
 const DEVICE: DeviceInfo = DeviceInfo {
     id: "test",
@@ -38,7 +38,7 @@ const DEVICE: DeviceInfo = DeviceInfo {
     memory: MemoryClass::Small,
 };
 
-const CATALOG: &str = "https://quireink.org/api/v1/fonts.json";
+const CATALOG: &str = "https://paperpaw.org/api/v1/fonts.json";
 
 const PLUGIN_INI: &str = "[plugin]
 id = font-round
@@ -47,7 +47,7 @@ version = 1.0.0
 
 [family]
 name = Round
-regular = regular.qifp
+regular = regular.ppfp
 ";
 
 /// A pack with a few letters.
@@ -68,17 +68,17 @@ fn catalog(pack: &[u8], pack_sha1: &str) -> String {
         r#"{{"format": 1, "fonts": [{{
   "id": "round", "name": "Round", "category": "sans", "author": "Someone",
   "licence": "OFL-1.1", "version": "1.0.0", "styles": 1,
-  "sample": "https://quireink.org/api/v1/fonts/round/sample.qifp",
+  "sample": "https://paperpaw.org/api/v1/fonts/round/sample.ppfp",
   "packs": [
-    {{"path": "plugin.ini", "url": "https://quireink.org/f/round/plugin.ini",
+    {{"path": "plugin.ini", "url": "https://paperpaw.org/f/round/plugin.ini",
       "size": {}, "sha1": "{}"}},
-    {{"path": "fonts/regular.qifp", "url": "https://quireink.org/f/round/regular.qifp",
+    {{"path": "fonts/regular.ppfp", "url": "https://paperpaw.org/f/round/regular.ppfp",
       "size": {}, "sha1": "{pack_sha1}"}}
   ]}},
   {{"id": "../bad", "name": "Bad", "packs": []}}
 ]}}"#,
         PLUGIN_INI.len(),
-        quireink_digest::sha1::hex(PLUGIN_INI.as_bytes()),
+        paperpaw_digest::sha1::hex(PLUGIN_INI.as_bytes()),
         pack.len(),
     )
 }
@@ -133,7 +133,7 @@ impl Browsing {
         let mut kernel = Kernel::builder(DEVICE)
             .storage(storage.clone())
             .network(true)
-            .plugin(quireink_plugin_fonts_default::DefaultFontPacks)
+            .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
             .plugin(FontsBrowser)
             .build()
             .unwrap();
@@ -203,13 +203,13 @@ impl Browsing {
         // The font's page, then *Download*.
         self.run(actions::CONFIRM);
         self.run(actions::CONFIRM);
-        let call = self.request("https://quireink.org/f/round/plugin.ini");
+        let call = self.request("https://paperpaw.org/f/round/plugin.ini");
         assert_eq!(
             call.save_to.as_deref(),
             Some("plugins/.font-round.part/plugin.ini")
         );
         self.answer(&call, 200, PLUGIN_INI.as_bytes());
-        let call = self.request("https://quireink.org/f/round/regular.qifp");
+        let call = self.request("https://paperpaw.org/f/round/regular.ppfp");
         self.answer(&call, 200, pack);
     }
 }
@@ -217,7 +217,7 @@ impl Browsing {
 #[test]
 fn the_catalog_is_shown_with_what_fits() {
     let pack = pack();
-    let sha1 = quireink_digest::sha1::hex(&pack);
+    let sha1 = paperpaw_digest::sha1::hex(&pack);
     let mut browsing = Browsing::new(&catalog(&pack, &sha1));
     let shown = browsing.shown();
     assert!(shown.contains("Round"), "{shown}");
@@ -228,14 +228,14 @@ fn the_catalog_is_shown_with_what_fits() {
     assert!(
         browsing
             .storage
-            .exists(".quireink/plugins/fonts-browser/catalog.json")
+            .exists(".paperpaw/plugins/fonts-browser/catalog.json")
     );
 }
 
 #[test]
 fn a_font_is_downloaded_chosen_and_removed() {
     let pack = pack();
-    let sha1 = quireink_digest::sha1::hex(&pack);
+    let sha1 = paperpaw_digest::sha1::hex(&pack);
     let mut browsing = Browsing::new(&catalog(&pack, &sha1));
     browsing.download(&pack);
     // Loaded at once, as a plugin of its own.
@@ -244,7 +244,7 @@ fn a_font_is_downloaded_chosen_and_removed() {
     assert!(
         browsing
             .storage
-            .exists("plugins/font-round/fonts/regular.qifp")
+            .exists("plugins/font-round/fonts/regular.ppfp")
     );
     assert!(
         !browsing
@@ -287,7 +287,7 @@ fn a_font_is_downloaded_chosen_and_removed() {
 #[test]
 fn a_damaged_download_is_not_installed() {
     let pack = pack();
-    let sha1 = quireink_digest::sha1::hex(&pack);
+    let sha1 = paperpaw_digest::sha1::hex(&pack);
     let mut browsing = Browsing::new(&catalog(&pack, &sha1));
     let mut damaged = pack.clone();
     let last = damaged.len() - 1;
@@ -302,7 +302,7 @@ fn a_damaged_download_is_not_installed() {
     assert!(
         !browsing
             .storage
-            .exists(".quireink/plugins/fonts-browser/install.txt")
+            .exists(".paperpaw/plugins/fonts-browser/install.txt")
     );
     // Offered again.
     let shown = browsing.shown();

@@ -1,0 +1,465 @@
+//! Status items: small pieces of information shown in a status line, such
+//! as the time, the battery or the page.
+//!
+//! Any plugin adds items with
+//! [`Registrar::add_status_item`](crate::Registrar::add_status_item);
+//! screens with a status line let the user choose which items it shows and
+//! where (the reader does this for its lines above and below the text).
+//! An item computes its value from the environment and from the context the
+//! screen passes, e.g. the reader's `title`, `chapter`, `page` and
+//! `progress` (see [`context`]).
+//!
+//! Plugins can also add whole status lines
+//! ([`Registrar::add_status_line`](crate::Registrar::add_status_line)),
+//! which draw the line themselves: a progress bar, a large clock, anything.
+//! The reader offers the lines the user chose, above and below the text,
+//! and switches between them when the line is tapped.
+
+use alloc::borrow::Cow;
+use alloc::boxed::Box;
+use alloc::string::String;
+use alloc::vec::Vec;
+use core::fmt;
+
+use paperpaw_graphics::Canvas;
+use paperpaw_platform::{Color, Rect};
+
+use crate::env::Env;
+use crate::fonts::FontHandle;
+use crate::id::Id;
+use crate::params::Params;
+
+/// Parameters screens pass to status items. Items ignore what they do not
+/// need; a screen passes what it knows.
+pub mod context {
+    /// The open book's path, title and reading progress in percent are
+    /// [`params::PATH`](crate::builtin::params::PATH),
+    /// [`params::TITLE`](crate::builtin::params::TITLE) and
+    /// [`params::PROGRESS`](crate::builtin::params::PROGRESS).
+    pub const CHAPTER: &str = "chapter";
+    /// The page as shown, e.g. `12 / 340` (or a percentage while pages are
+    /// being counted).
+    pub const PAGE: &str = "page";
+    /// Where the chapters begin, as thousandths of the book separated by
+    /// commas, e.g. `0,112,260`.
+    pub const CHAPTERS: &str = "chapters";
+}
+
+/// Where and how a status line is drawn (see [`StatusLineSpec`]).
+#[derive(Debug, Clone, Copy)]
+pub struct StatusFrame<'a> {
+    pub area: Rect,
+    /// The line above the text, else below it.
+    pub top: bool,
+    /// Text size in pixels, as the user set it for status lines.
+    pub size: f32,
+    pub color: Color,
+    /// What the screen tells about its content (see [`context`]).
+    pub context: &'a Params,
+}
+
+/// Draws a status line into its frame's area (cleared before).
+pub type StatusLineFn = Box<dyn Fn(&mut Canvas<'_>, &Env<'_>, &StatusFrame<'_>)>;
+
+/// What a status line shows now, as text: the screen redraws the line
+/// when it changes (e.g. each minute for a clock).
+pub type StatusSignatureFn = Box<dyn Fn(&Env<'_>, &Params) -> String>;
+
+/// A whole status line contributed by a plugin.
+pub struct StatusLineSpec {
+    pub id: Id,
+    /// Translation key of its name in settings, e.g. "Progress bar".
+    pub title: Cow<'static, str>,
+    pub draw: StatusLineFn,
+    /// What it shows; without one it is redrawn when the context
+    /// changes (the page, the chapter, …).
+    pub signature: Option<StatusSignatureFn>,
+}
+
+impl fmt::Debug for StatusLineSpec {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("StatusLineSpec")
+            .field("id", &self.id)
+            .field("title", &self.title)
+            .finish_non_exhaustive()
+    }
+}
+
+/// What a status item shows.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StatusValue {
+    Text(String),
+    /// A gauge with a percentage, drawn as a battery.
+    Level {
+        percent: u8,
+        charging: bool,
+    },
+    /// An icon by name ([`icons`](crate::icons)), e.g. while reading
+    /// aloud.
+    Icon(Cow<'static, str>),
+}
+
+/// Computes an item's value; `None` hides it (e.g. no battery).
+pub type StatusFn = Box<dyn Fn(&Env<'_>, &Params) -> Option<StatusValue>>;
+
+/// A status item contribution.
+pub struct StatusItemSpec {
+    pub id: Id,
+    /// Translation key of its name in settings, e.g. "Battery".
+    pub title: Cow<'static, str>,
+    pub value: StatusFn,
+}
+
+impl fmt::Debug for StatusItemSpec {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("StatusItemSpec")
+            .field("id", &self.id)
+            .field("title", &self.title)
+            .finish_non_exhaustive()
+    }
+}
+
+/// The registered status items.
+#[derive(Debug, Default)]
+pub struct StatusItems {
+    items: Vec<StatusItemSpec>,
+    lines: Vec<StatusLineSpec>,
+}
+
+impl StatusItems {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn add(&mut self, item: StatusItemSpec) {
+        self.items.push(item);
+    }
+
+    pub fn shrink_to_fit(&mut self) {
+        self.items.shrink_to_fit();
+        self.lines.shrink_to_fit();
+    }
+
+    pub fn add_line(&mut self, line: StatusLineSpec) {
+        self.lines.push(line);
+    }
+
+    /// Every status line: its id and the translation key of its name.
+    pub fn lines(&self) -> impl Iterator<Item = (&Id, &str)> {
+        self.lines.iter().map(|l| (&l.id, l.title.as_ref()))
+    }
+
+    /// Draws status line `id`; `false` if there is none.
+    pub fn draw_line(
+        &self,
+        id: &str,
+        canvas: &mut Canvas<'_>,
+        env: &Env<'_>,
+        frame: &StatusFrame<'_>,
+    ) -> bool {
+        match self.lines.iter().find(|l| l.id.as_str() == id) {
+            Some(line) => {
+                (line.draw)(canvas, env, frame);
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// What status line `id` shows now (see [`StatusSignatureFn`]).
+    pub fn line_signature(&self, id: &str, env: &Env<'_>, context: &Params) -> String {
+        let line = self.lines.iter().find(|l| l.id.as_str() == id);
+        match line.and_then(|l| l.signature.as_ref()) {
+            Some(signature) => signature(env, context),
+            None => alloc::format!("{context:?}"),
+        }
+    }
+
+    /// Every item: its id and the translation key of its name.
+    pub fn iter(&self) -> impl Iterator<Item = (&Id, &str)> {
+        self.items.iter().map(|i| (&i.id, i.title.as_ref()))
+    }
+
+    /// The translation key of the name of item or status line `id`.
+    pub fn title(&self, id: &str) -> Option<&str> {
+        self.items
+            .iter()
+            .find(|i| i.id.as_str() == id)
+            .map(|i| i.title.as_ref())
+            .or_else(|| {
+                self.lines
+                    .iter()
+                    .find(|l| l.id.as_str() == id)
+                    .map(|l| l.title.as_ref())
+            })
+    }
+
+    /// The value of item `id` now.
+    pub fn value(&self, id: &str, env: &Env<'_>, context: &Params) -> Option<StatusValue> {
+        let item = self.items.iter().find(|i| i.id.as_str() == id)?;
+        (item.value)(env, context)
+    }
+}
+
+/// The items of a list as stored in a setting: ids separated by commas.
+pub fn item_ids(list: &str) -> impl Iterator<Item = &str> {
+    list.split(',').map(str::trim).filter(|id| !id.is_empty())
+}
+
+/// A status line: the items listed (comma-separated ids) for its left,
+/// centre and right, drawn in `area` with text of `size` in `color`.
+#[derive(Debug, Clone, Copy)]
+pub struct StatusLine<'a> {
+    pub area: Rect,
+    pub lists: [&'a str; 3],
+    pub size: f32,
+    pub color: Color,
+    /// Levels (the battery) with their percentage beside the symbol, or
+    /// the symbol alone.
+    pub percent: bool,
+}
+
+impl StatusLine<'_> {
+    /// Whether no item is listed.
+    pub fn is_empty(&self) -> bool {
+        self.lists
+            .iter()
+            .all(|list| item_ids(list).next().is_none())
+    }
+
+    /// Draws the items' current values. The short ones (the page, the
+    /// time, the battery) stay whole: the right and centre parts take what
+    /// they need, and long texts such as a chapter's title on the left are
+    /// shortened with "…" to the rest (keeping a few letters at least).
+    pub fn draw(
+        &self,
+        canvas: &mut Canvas<'_>,
+        env: &Env<'_>,
+        font: &FontHandle<'_>,
+        context: &Params,
+    ) {
+        let (area, size, percent) = (self.area, self.size, self.percent);
+        let gap = size;
+        let values = |list: &str| -> Vec<StatusValue> {
+            item_ids(list)
+                .filter_map(|id| env.status_items.value(id, env, context))
+                .collect()
+        };
+        let [left, center, right] = self.lists.map(values);
+        let width = |values: &[StatusValue]| -> f32 {
+            values
+                .iter()
+                .map(|v| value_width(env, font, size, v, percent))
+                .sum::<f32>()
+                + gap * values.len().saturating_sub(1) as f32
+        };
+        let x0 = f32::from(area.x);
+        let x1 = x0 + f32::from(area.width);
+        let line = f32::from(area.width);
+        // The left keeps a few letters, the centre all it needs; the
+        // right gets the rest.
+        let left_room = if left.is_empty() {
+            0.0
+        } else {
+            width(&left).min(size * 3.0)
+        };
+        let center_need = if center.is_empty() {
+            0.0
+        } else {
+            width(&center) + gap
+        };
+        let beside = left_room + if left.is_empty() { 0.0 } else { gap } + center_need;
+        let right_room = (line - beside).max(line / 2.0);
+        let right_x = x1 - width(&right).min(right_room);
+        let center_room = (right_x - gap - x0 - left_room).max(0.0);
+        let center_w = width(&center).min(center_room);
+        // Centred, unless that runs into the right part.
+        let center_x = (x0 + (line - center_w) / 2.0)
+            .min(right_x - gap - center_w)
+            .max(x0 + left_room);
+        let left_end = if center.is_empty() { right_x } else { center_x } - gap;
+        let mut draw = |values: &[StatusValue], x: f32, end: f32| {
+            draw_values(
+                canvas,
+                env,
+                font,
+                area,
+                values,
+                (x, end),
+                (size, percent),
+                self.color,
+            );
+        };
+        draw(&center, center_x, right_x - gap);
+        draw(&right, right_x, x1);
+        draw(&left, x0, left_end);
+    }
+}
+
+fn value_width(
+    env: &Env<'_>,
+    font: &FontHandle<'_>,
+    size: f32,
+    value: &StatusValue,
+    with_percent: bool,
+) -> f32 {
+    match value {
+        StatusValue::Icon(name) => crate::ui::icon_width(env, name, size),
+        StatusValue::Text(text) => font.measure(size, text),
+        StatusValue::Level { percent, .. } if with_percent => {
+            battery_width(size) + size * 0.3 + font.measure(size, &level_text(*percent))
+        }
+        StatusValue::Level { .. } => battery_width(size),
+    }
+}
+
+fn level_text(percent: u8) -> String {
+    alloc::format!("{percent} %")
+}
+
+fn battery_width(size: f32) -> f32 {
+    size * 1.3
+}
+
+#[allow(clippy::too_many_arguments)]
+fn draw_values(
+    canvas: &mut Canvas<'_>,
+    env: &Env<'_>,
+    font: &FontHandle<'_>,
+    area: Rect,
+    values: &[StatusValue],
+    (mut x, end): (f32, f32),
+    (size, with_percent): (f32, bool),
+    color: Color,
+) {
+    let gap = size;
+    let metrics = font.line_metrics(size);
+    let baseline = i32::from(area.y)
+        + ((f32::from(area.height) + metrics.ascent - metrics.descent) / 2.0) as i32;
+    let widths: Vec<f32> = values
+        .iter()
+        .map(|v| value_width(env, font, size, v, with_percent))
+        .collect();
+    let texts: Vec<bool> = values
+        .iter()
+        .map(|v| matches!(v, StatusValue::Text(_)))
+        .collect();
+    let shrunk = shrink(&widths, &texts, gap, end - x);
+    let budget = |i: usize| match shrunk {
+        Some((at, width)) if at == i => width,
+        _ => f32::MAX,
+    };
+    for (i, value) in values.iter().enumerate() {
+        if x >= end {
+            break;
+        }
+        match value {
+            StatusValue::Text(text) => {
+                // A pixel of slack for rounding: the parts were measured to fit.
+                let room = (end - x + 1.0).min(budget(i));
+                let text = crate::ui::fit(font, size, text, room);
+                x += font.draw(canvas, size, x, baseline, &text, color);
+            }
+            StatusValue::Icon(name) => {
+                x += crate::ui::draw_icon(canvas, env, name, size, x, area, color);
+            }
+            StatusValue::Level { percent, charging } => {
+                let height = (metrics.ascent * 0.75) as i32;
+                let top = baseline - height;
+                let battery = Rect::new(
+                    x as u16,
+                    top.max(0) as u16,
+                    battery_width(size) as u16,
+                    height as u16,
+                );
+                draw_battery(canvas, battery, size, *percent, *charging, color);
+                x += battery_width(size);
+                if with_percent {
+                    x += size * 0.3;
+                    x += font.draw(canvas, size, x, baseline, &level_text(*percent), color);
+                }
+            }
+        }
+        x += gap;
+    }
+}
+
+/// When values of `widths` (with `gap`s between them) do not fit `room`:
+/// the longest text (`texts`) and the width it may take, so short ones
+/// (the page, the time) stay whole. A pixel of slack for rounding: parts
+/// are placed by their own width.
+fn shrink(widths: &[f32], texts: &[bool], gap: f32, room: f32) -> Option<(usize, f32)> {
+    let total = widths.iter().sum::<f32>() + gap * widths.len().saturating_sub(1) as f32;
+    if total <= room + 1.0 {
+        return None;
+    }
+    let longest = (0..widths.len())
+        .filter(|&i| texts[i])
+        .max_by(|&a, &b| widths[a].total_cmp(&widths[b]))?;
+    Some((longest, (widths[longest] - (total - room)).max(0.0)))
+}
+
+/// A battery outline filled to `percent`; a plus when charging.
+fn draw_battery(
+    canvas: &mut Canvas<'_>,
+    area: Rect,
+    size: f32,
+    percent: u8,
+    charging: bool,
+    color: Color,
+) {
+    let (x, y, height) = (i32::from(area.x), i32::from(area.y), i32::from(area.height));
+    let line = ((size / 10.0) as u32).max(1);
+    let nub = ((size / 8.0) as i32).max(2);
+    let width = i32::from(area.width) - nub;
+    canvas.stroke_rect(x, y, width as u32, height as u32, line, color);
+    canvas.fill_rect(
+        x + width,
+        y + height / 4,
+        nub as u32,
+        (height / 2) as u32,
+        color,
+    );
+    let inner = width - 2 * (line as i32 + 1);
+    let fill = inner * i32::from(percent.min(100)) / 100;
+    let inset = line as i32 + 1;
+    canvas.fill_rect(
+        x + inset,
+        y + inset,
+        fill.max(0) as u32,
+        (height - 2 * inset).max(0) as u32,
+        color,
+    );
+    if charging {
+        // A plus right of the battery, in the gap before the percentage.
+        let s = (height / 2).max(3);
+        let cx = x + width / 2;
+        let cy = y + height / 2;
+        let bar = (line as i32).max(1);
+        let ink = if percent > 50 { Color::WHITE } else { color };
+        canvas.fill_rect(cx - s / 2, cy - bar / 2, s as u32, bar as u32, ink);
+        canvas.fill_rect(cx - bar / 2, cy - s / 2, bar as u32, s as u32, ink);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_lines_too_long_give_way() {
+        // Battery and time placed by their own width: rounding noise is
+        // no reason to cut the time.
+        let widths = [60.0, 70.1];
+        let room = 70.1 + 60.0 + 20.0 - 0.000_01;
+        assert_eq!(shrink(&widths, &[false, true], 20.0, room), None);
+        // Too long: the longest text gives way, the page stays whole.
+        let widths = [300.0, 80.0];
+        assert_eq!(
+            shrink(&widths, &[true, true], 20.0, 250.0),
+            Some((0, 150.0))
+        );
+        // Nothing to shorten without text.
+        assert_eq!(shrink(&[100.0], &[false], 0.0, 50.0), None);
+    }
+}

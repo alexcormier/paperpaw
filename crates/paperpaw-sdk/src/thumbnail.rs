@@ -1,0 +1,461 @@
+//! Pictures made small once and kept in memory ([`Thumbnail`]).
+
+use alloc::vec::Vec;
+
+use paperpaw_document::ImageRef;
+use paperpaw_graphics::Canvas;
+use paperpaw_image::{ColorFile, Downscaler, GrayFile, ImageError, ImageFile, ImageSink, luma};
+use paperpaw_platform::{PixelFormat, Storage};
+
+/// Bytes of the picture's rows read at a time.
+const ROWS_BYTES: usize = 8192;
+/// A thumbnail kept on the storage ([`Thumbnail::keep`]): this, its
+/// width and height (2 bytes each, little-endian), its bits a pixel (1),
+/// its stamp (8), then its pixels.
+const MAGIC: &[u8; 4] = b"QIT2";
+const HEADER: usize = 17;
+
+/// How a thumbnail keeps its pixels, by the panel it is shown on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Depth {
+    /// Black and white, ordered dithered as such a panel shows it: eight
+    /// pixels a byte, the first in the high bit, set for white.
+    Mono,
+    /// Sixteen grays: two pixels a byte, the first in the high bits.
+    Gray,
+    /// Red, green, blue.
+    Rgb,
+}
+
+impl Depth {
+    fn bits(self) -> u8 {
+        match self {
+            Depth::Mono => 1,
+            Depth::Gray => 4,
+            Depth::Rgb => 24,
+        }
+    }
+
+    fn of_bits(bits: u8) -> Option<Depth> {
+        [Depth::Mono, Depth::Gray, Depth::Rgb]
+            .into_iter()
+            .find(|d| d.bits() == bits)
+    }
+
+    /// The bytes of a row `width` pixels wide.
+    fn row(self, width: u16) -> usize {
+        let width = usize::from(width);
+        match self {
+            Depth::Mono => width.div_ceil(8),
+            Depth::Gray => width.div_ceil(2),
+            Depth::Rgb => width * 3,
+        }
+    }
+}
+
+/// A picture made small once and kept in memory, to draw it again and
+/// again without reading the storage: covers in a list, drawn in every
+/// band of every frame. Kept as the panel shows it ([`Thumbnail::new`]):
+/// in black and white, dithered, for panels of black and white alone (a
+/// cover of 70 by 100 pixels takes under 1 KB), in sixteen grays
+/// otherwise (3.5 KB), in colour where the panel has colour and the
+/// picture too.
+///
+/// [`draw_image`](crate::ui::draw_image) reads a picture's rows from the
+/// storage each time it is drawn; a thumbnail reads it once, when made
+/// (e.g. when a page of a list is loaded), each pixel the mean of all it
+/// covers.
+#[derive(Debug, Clone)]
+pub struct Thumbnail {
+    width: u16,
+    height: u16,
+    depth: Depth,
+    pixels: Vec<u8>,
+}
+
+impl Thumbnail {
+    /// `image` made `width` × `height` (at most its own size; pass a size
+    /// that keeps its proportions, e.g. from
+    /// [`fit_image`](crate::ui::fit_image)), as a panel of `format` shows
+    /// it. `None` if it cannot be read or there is no memory for it.
+    pub fn new(
+        storage: &dyn Storage,
+        image: &ImageRef,
+        width: u16,
+        height: u16,
+        format: PixelFormat,
+    ) -> Option<Self> {
+        let file = ImageFile::open(storage, &image.path)?;
+        let depth = if format.is_color() && file.color {
+            Depth::Rgb
+        } else if format.gray_levels() == Some(2) {
+            Depth::Mono
+        } else {
+            Depth::Gray
+        };
+        let channels = if file.color { 3 } else { 1 };
+        let mut scaler = Downscaler::new(
+            file.width,
+            file.height,
+            (u32::from(width), u32::from(height)),
+            channels,
+        )
+        .ok()?;
+        let mut sink = Pack {
+            depth,
+            width: 0,
+            height: 0,
+            rows: 0,
+            pixels: Vec::new(),
+        };
+        sink.start(scaler.out_width(), scaler.out_height()).ok()?;
+        let row = file.width as usize * channels;
+        let rows = (ROWS_BYTES / row.max(1)).max(1);
+        let mut data = Vec::new();
+        data.try_reserve_exact(rows * row).ok()?;
+        data.resize(rows * row, 0);
+        let mut y = 0;
+        while y < file.height {
+            let got = if file.color {
+                ColorFile {
+                    path: file.path.clone(),
+                    width: file.width,
+                    height: file.height,
+                }
+                .read_rows(storage, y, &mut data)
+            } else {
+                GrayFile {
+                    path: file.path.clone(),
+                    width: file.width,
+                    height: file.height,
+                }
+                .read_rows(storage, y, &mut data)
+            };
+            if got == 0 {
+                return None;
+            }
+            for pixels in data.chunks(row).take(got as usize) {
+                scaler.row(pixels, &mut sink).ok()?;
+            }
+            y += got;
+        }
+        scaler.finish(&mut sink).ok()?;
+        Some(Self {
+            width: sink.width,
+            height: sink.height,
+            depth,
+            pixels: sink.pixels,
+        })
+    }
+
+    /// The thumbnail kept at `path` by [`Thumbnail::keep`] with `stamp`,
+    /// if it is there: e.g. a cover in a list, read as a few kilobytes
+    /// instead of the picture.
+    pub fn kept(storage: &dyn Storage, path: &str, stamp: u64) -> Option<Self> {
+        let mut header = [0u8; HEADER];
+        if storage.read_at(path, 0, &mut header).ok()? != HEADER || &header[..4] != MAGIC {
+            return None;
+        }
+        let mut kept_stamp = [0u8; 8];
+        kept_stamp.copy_from_slice(&header[9..]);
+        if u64::from_le_bytes(kept_stamp) != stamp {
+            return None;
+        }
+        let width = u16::from_le_bytes([header[4], header[5]]);
+        let height = u16::from_le_bytes([header[6], header[7]]);
+        let depth = Depth::of_bits(header[8])?;
+        let len = depth.row(width) * usize::from(height);
+        let mut pixels = Vec::new();
+        pixels.try_reserve_exact(len).ok()?;
+        pixels.resize(len, 0);
+        if storage.read_at(path, HEADER as u64, &mut pixels).ok()? != pixels.len() {
+            return None;
+        }
+        Some(Self {
+            width,
+            height,
+            depth,
+            pixels,
+        })
+    }
+
+    /// Keeps it at `path` with `stamp`, what it was made of and for (e.g.
+    /// a hash of the picture's file and the size asked), for
+    /// [`Thumbnail::kept`]; whether it was kept.
+    pub fn keep(&self, storage: &dyn Storage, path: &str, stamp: u64) -> bool {
+        let mut data = Vec::new();
+        if data.try_reserve_exact(HEADER + self.pixels.len()).is_err() {
+            return false;
+        }
+        data.extend_from_slice(MAGIC);
+        data.extend_from_slice(&self.width.to_le_bytes());
+        data.extend_from_slice(&self.height.to_le_bytes());
+        data.push(self.depth.bits());
+        data.extend_from_slice(&stamp.to_le_bytes());
+        data.extend_from_slice(&self.pixels);
+        storage.write(path, &data).is_ok()
+    }
+
+    pub fn width(&self) -> u16 {
+        self.width
+    }
+
+    pub fn height(&self) -> u16 {
+        self.height
+    }
+
+    /// The bytes it keeps.
+    pub fn bytes(&self) -> usize {
+        self.pixels.len()
+    }
+
+    /// Draws it with its top left corner at `x`, `y`: the rows inside the
+    /// canvas clip only. A picture made small: it does not count as a
+    /// large one that leaves ghosts ([`Canvas::small_pictures`]).
+    pub fn draw(&self, canvas: &mut Canvas<'_>, x: u16, y: u16) {
+        canvas.small_pictures(|canvas| self.draw_rows(canvas, x, y));
+    }
+
+    fn draw_rows(&self, canvas: &mut Canvas<'_>, x: u16, y: u16) {
+        let clip = canvas.clip();
+        let top = u32::from(y);
+        let first = top.max(u32::from(clip.y));
+        let last = (top + u32::from(self.height)).min(clip.bottom());
+        if first >= last {
+            return;
+        }
+        let width = usize::from(self.width);
+        let stride = self.depth.row(self.width);
+        if self.depth == Depth::Rgb {
+            for row_y in first..last {
+                let at = (row_y - top) as usize * stride;
+                canvas.draw_rgb_row(i32::from(x), row_y as i32, &self.pixels[at..at + stride]);
+            }
+            return;
+        }
+        let mut row = alloc::vec![0u8; width];
+        for row_y in first..last {
+            let at = (row_y - top) as usize * stride;
+            let bytes = &self.pixels[at..at + stride];
+            for (i, out) in row.iter_mut().enumerate() {
+                *out = match self.depth {
+                    Depth::Mono => {
+                        if bytes[i / 8] & (0x80 >> (i % 8)) != 0 {
+                            255
+                        } else {
+                            0
+                        }
+                    }
+                    _ => {
+                        let byte = bytes[i / 2];
+                        let level = if i % 2 == 0 { byte >> 4 } else { byte & 0x0F };
+                        level * 17
+                    }
+                };
+            }
+            canvas.draw_gray_row(i32::from(x), row_y as i32, &row);
+        }
+    }
+}
+
+/// Packs the rows of a picture made small.
+struct Pack {
+    depth: Depth,
+    width: u16,
+    height: u16,
+    /// Rows packed so far.
+    rows: u16,
+    pixels: Vec<u8>,
+}
+
+impl Pack {
+    fn push_gray(&mut self, gray: impl Iterator<Item = u8>) {
+        if self.depth == Depth::Mono {
+            /// 4×4 Bayer matrix, as the framebuffer dithers.
+            const BAYER: [[i32; 4]; 4] =
+                [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
+            let y = usize::from(self.rows % 4);
+            let mut byte = 0u8;
+            let mut n = 0;
+            for (x, g) in gray.enumerate() {
+                let offset = (2 * BAYER[y][x % 4] - 15) * 255 / 32;
+                if i32::from(g) + offset >= 128 {
+                    byte |= 0x80 >> n;
+                }
+                n += 1;
+                if n == 8 {
+                    self.pixels.push(byte);
+                    (byte, n) = (0, 0);
+                }
+            }
+            if n > 0 {
+                self.pixels.push(byte);
+            }
+        } else {
+            let mut high = None;
+            for g in gray {
+                // To 16 levels, rounded.
+                let level = (u16::from(g) * 15 + 127) / 255;
+                match high.take() {
+                    None => high = Some(level as u8),
+                    Some(h) => self.pixels.push(h << 4 | level as u8),
+                }
+            }
+            if let Some(h) = high {
+                self.pixels.push(h << 4);
+            }
+        }
+        self.rows += 1;
+    }
+}
+
+impl ImageSink for Pack {
+    fn start(&mut self, width: u32, height: u32) -> Result<(), ImageError> {
+        let (w, h) = (
+            u16::try_from(width).map_err(|_| ImageError::Unsupported("picture this large"))?,
+            u16::try_from(height).map_err(|_| ImageError::Unsupported("picture this large"))?,
+        );
+        self.width = w;
+        self.height = h;
+        let bytes = self.depth.row(w) * usize::from(h);
+        self.pixels
+            .try_reserve_exact(bytes)
+            .map_err(|_| ImageError::OutOfMemory)
+    }
+
+    fn row(&mut self, gray: &[u8]) -> Result<(), ImageError> {
+        if self.depth == Depth::Rgb {
+            for &g in gray {
+                self.pixels.extend_from_slice(&[g, g, g]);
+            }
+        } else {
+            self.push_gray(gray.iter().copied());
+        }
+        Ok(())
+    }
+
+    fn wants_color(&self) -> bool {
+        self.depth == Depth::Rgb
+    }
+
+    fn row_rgb(&mut self, rgb: &[u8]) -> Result<(), ImageError> {
+        if self.depth == Depth::Rgb {
+            self.pixels.extend_from_slice(rgb);
+        } else {
+            let gray = rgb
+                .as_chunks::<3>()
+                .0
+                .iter()
+                .map(|p| luma(u32::from(p[0]), u32::from(p[1]), u32::from(p[2])));
+            self.push_gray(gray);
+        }
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::MemoryStorage;
+    use paperpaw_graphics::Framebuffer;
+    use paperpaw_image::GrayWriter;
+    use paperpaw_platform::{Color, PixelFormat, Rect};
+
+    fn picture(storage: &MemoryStorage) -> ImageRef {
+        // 200 × 100: black on the left half, white on the right.
+        let mut writer = GrayWriter::new(storage, "p.gray");
+        writer.start(200, 100).unwrap();
+        let row: Vec<u8> = (0..200).map(|x| if x < 100 { 0 } else { 255 }).collect();
+        for _ in 0..100 {
+            writer.row(&row).unwrap();
+        }
+        writer.finish().unwrap();
+        ImageRef {
+            path: "p.gray".into(),
+            width: 200,
+            height: 100,
+        }
+    }
+
+    #[test]
+    fn made_small_once_and_drawn_from_memory() {
+        let storage = MemoryStorage::new();
+        let image = picture(&storage);
+        let thumb = Thumbnail::new(&storage, &image, 21, 10, PixelFormat::Gray8).unwrap();
+        assert_eq!((thumb.width(), thumb.height()), (21, 10));
+        // Two pixels a byte, rows whole bytes.
+        assert_eq!(thumb.bytes(), 11 * 10);
+        // Gone from the storage: drawn from memory all the same.
+        storage.remove("p.gray").unwrap();
+        let mut frame = Framebuffer::new(40, 20, PixelFormat::Gray8).unwrap();
+        let mut canvas = frame.canvas();
+        canvas.clear(Color::WHITE);
+        thumb.draw(&mut canvas, 5, 5);
+        let view = frame.view();
+        assert_eq!(view.pixel(5, 5), Color::BLACK);
+        assert_eq!(view.pixel(25, 14), Color::WHITE);
+        // Outside it, untouched.
+        assert_eq!(view.pixel(4, 5), Color::WHITE);
+        // Only the rows in the clip.
+        let mut frame = Framebuffer::new(40, 20, PixelFormat::Gray8).unwrap();
+        let mut canvas = frame.canvas();
+        canvas.clear(Color::WHITE);
+        thumb.draw(&mut canvas.clipped(Rect::new(0, 0, 40, 8)), 5, 5);
+        assert_eq!(frame.view().pixel(5, 7), Color::BLACK);
+        assert_eq!(frame.view().pixel(5, 9), Color::WHITE);
+    }
+
+    #[test]
+    fn kept_and_read_again_with_its_stamp() {
+        let storage = MemoryStorage::new();
+        let image = picture(&storage);
+        let made = Thumbnail::new(&storage, &image, 21, 10, PixelFormat::Gray8).unwrap();
+        assert!(made.keep(&storage, "p.thumb", 7));
+        assert_eq!(
+            storage.size("p.thumb").unwrap() as usize,
+            HEADER + made.bytes()
+        );
+        // Read from its own file, the picture gone.
+        storage.remove("p.gray").unwrap();
+        let read = Thumbnail::kept(&storage, "p.thumb", 7).unwrap();
+        assert_eq!(
+            (read.width, read.height, read.depth, &read.pixels),
+            (made.width, made.height, made.depth, &made.pixels)
+        );
+        // Another stamp, a broken file, none: not kept.
+        assert!(Thumbnail::kept(&storage, "p.thumb", 8).is_none());
+        storage.write("p.thumb", b"QIT1").unwrap();
+        assert!(Thumbnail::kept(&storage, "p.thumb", 7).is_none());
+        assert!(Thumbnail::kept(&storage, "none.thumb", 7).is_none());
+    }
+
+    #[test]
+    fn kept_in_black_and_white_for_such_panels() {
+        let storage = MemoryStorage::new();
+        let image = picture(&storage);
+        let thumb = Thumbnail::new(&storage, &image, 21, 10, PixelFormat::Mono1).unwrap();
+        // Eight pixels a byte, rows whole bytes: a quarter of the grays.
+        assert_eq!(thumb.bytes(), 3 * 10);
+        assert!(thumb.keep(&storage, "m.thumb", 1));
+        let read = Thumbnail::kept(&storage, "m.thumb", 1).unwrap();
+        assert_eq!((read.depth, read.bytes()), (Depth::Mono, 30));
+        let mut frame = Framebuffer::new(30, 12, PixelFormat::Mono1).unwrap();
+        let mut canvas = frame.canvas();
+        canvas.clear(Color::WHITE);
+        read.draw(&mut canvas, 2, 1);
+        let view = frame.view();
+        assert_eq!(view.pixel(2, 1), Color::BLACK);
+        assert_eq!(view.pixel(22, 10), Color::WHITE);
+    }
+
+    #[test]
+    fn unreadable_pictures_make_none() {
+        let storage = MemoryStorage::new();
+        let image = ImageRef {
+            path: "none.gray".into(),
+            width: 10,
+            height: 10,
+        };
+        assert!(Thumbnail::new(&storage, &image, 5, 5, PixelFormat::Gray8).is_none());
+    }
+}

@@ -9,8 +9,8 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use quireink_core::{Effects, Kernel, SocketCall, SocketEvent};
-use quireink_platform::Instant;
+use paperpaw_core::{Effects, Kernel, SocketCall, SocketEvent};
+use paperpaw_platform::Instant;
 use smoltcp::iface::SocketHandle;
 use smoltcp::socket::{dns, tcp};
 use smoltcp::wire::IpAddress;

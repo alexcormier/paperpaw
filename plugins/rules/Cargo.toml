@@ -1,6 +1,6 @@
 [package]
-name = "quireink-plugin-rules"
-description = "QuireInk rules: when something happens, do something (e.g. night mode at 22:00, sync catalogs at start)"
+name = "paperpaw-plugin-rules"
+description = "PaperPaw rules: when something happens, do something (e.g. night mode at 22:00, sync catalogs at start)"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,10 +11,10 @@ authors.workspace = true
 categories = ["no-std"]
 
 [dependencies]
-quireink-sdk.workspace = true
+paperpaw-sdk.workspace = true
 
 [dev-dependencies]
-quireink-i18n.workspace = true
+paperpaw-i18n.workspace = true
 
 [lints]
 workspace = true

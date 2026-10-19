@@ -1,7 +1,7 @@
 //! Lua values as KOReader keeps its settings: a file `return { … }` of
 //! nested tables, strings, numbers and booleans, as its `dump` writes
 //! them. Read in full and written back in the same form, so what
-//! QuireInk does not know of an annotation stays as it was.
+//! PaperPaw does not know of an annotation stays as it was.
 
 use alloc::string::String;
 use alloc::vec::Vec;

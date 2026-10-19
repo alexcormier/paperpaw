@@ -1,6 +1,6 @@
 [package]
-name = "quireink-plugin-format-txt"
-description = "QuireInk plain text format: encodings, paragraph detection, Project Gutenberg metadata"
+name = "paperpaw-plugin-format-txt"
+description = "PaperPaw plain text format: encodings, paragraph detection, Project Gutenberg metadata"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,10 +11,10 @@ authors.workspace = true
 categories = ["no-std", "text-processing"]
 
 [dependencies]
-quireink-sdk.workspace = true
+paperpaw-sdk.workspace = true
 
 [dev-dependencies]
-quireink-i18n.workspace = true
+paperpaw-i18n.workspace = true
 
 [lints]
 workspace = true

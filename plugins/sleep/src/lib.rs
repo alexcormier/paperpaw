@@ -13,7 +13,7 @@
 //! - *Page*: the screen stays as it is.
 //!
 //! Without a cover or a picture the message shows. The screen closes when
-//! the device wakes. Only where QuireInk shows the sleep screen itself
+//! the device wakes. Only where PaperPaw shows the sleep screen itself
 //! (the X4, not Android): elsewhere its settings are hidden.
 
 #![no_std]
@@ -26,13 +26,13 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::builtin::{events, groups, slots};
-use quireink_sdk::document::ImageRef;
-use quireink_sdk::library;
-use quireink_sdk::setting::{Setting, Text};
-use quireink_sdk::ui::{self, UiStyle};
-use quireink_sdk::widgets::Widget;
-use quireink_sdk::{
+use paperpaw_sdk::builtin::{events, groups, slots};
+use paperpaw_sdk::document::ImageRef;
+use paperpaw_sdk::library;
+use paperpaw_sdk::setting::{Setting, Text};
+use paperpaw_sdk::ui::{self, UiStyle};
+use paperpaw_sdk::widgets::Widget;
+use paperpaw_sdk::{
     Canvas, Color, Command, Cx, Env, Handled, Id, Manifest, MenuNeed, Params, Plugin, Priority,
     Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen, ScreenSpec, SettingSpec,
     Version,
@@ -68,11 +68,11 @@ pub struct Sleep;
 
 /// The sleep screen's part of the display settings, its folder and its
 /// widgets each chosen on a screen of their own.
-static IN_SLEEP: quireink_sdk::SettingExtra = quireink_sdk::SettingExtra::new().section(SECTION);
-static FOLDER_EXTRA: quireink_sdk::SettingExtra = quireink_sdk::SettingExtra::new()
+static IN_SLEEP: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new().section(SECTION);
+static FOLDER_EXTRA: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new()
     .section(SECTION)
     .editor(CHOOSE_FOLDER);
-static WIDGETS_EXTRA: quireink_sdk::SettingExtra = quireink_sdk::SettingExtra::new()
+static WIDGETS_EXTRA: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new()
     .section(SECTION)
     .editor(EDIT_WIDGETS);
 
@@ -99,8 +99,8 @@ static SETTINGS: [SettingSpec; 3] = [
     SettingSpec::fixed(
         WIDGET_LIST.static_str(),
         "sleep.setting.widgets",
-        quireink_sdk::SettingKind::List,
-        quireink_sdk::SettingValue::Text(Cow::Borrowed(
+        paperpaw_sdk::SettingKind::List,
+        paperpaw_sdk::SettingValue::Text(Cow::Borrowed(
             "home.date, home.continue, stats.widget.today, home.recent",
         )),
         groups::DISPLAY,
@@ -128,7 +128,7 @@ impl Plugin for Sleep {
             r.set_menu_need(item, MenuNeed::Sleep)?;
         }
         // Asleep, the buttons do nothing but wake the device.
-        r.set_screen_hints(SCREEN, quireink_sdk::Hints::Hidden)?;
+        r.set_screen_hints(SCREEN, paperpaw_sdk::Hints::Hidden)?;
         r.add_screen(ScreenSpec {
             id: SCREEN,
             title: Cow::Borrowed("sleep.title"),
@@ -180,9 +180,9 @@ fn picture(env: &Env<'_>) -> Option<ImageRef> {
         .storage
         .write(&data("next.txt"), format!("{}", next + 1).as_bytes());
     let display = env.device.display;
-    let fit = quireink_sdk::image::Fit::screen(display.width.into(), display.height.into());
+    let fit = paperpaw_sdk::image::Fit::screen(display.width.into(), display.height.into());
     // In colour on colour screens (ADR 0015).
-    quireink_sdk::image::picture_from_file(
+    paperpaw_sdk::image::picture_from_file(
         env.storage,
         &format!("{folder}/{name}"),
         &data("picture.gray"),
@@ -204,8 +204,8 @@ fn place_widgets(env: &Env<'_>) -> Vec<(Box<dyn Widget>, Rect)> {
     let mut made: Vec<Option<(Box<dyn Widget>, u16)>> = Vec::new();
     let mut total = 0u16;
     let mut shown = 0;
-    for id in quireink_sdk::status::item_ids(env.settings.read(&WIDGET_LIST)) {
-        if id == quireink_sdk::widgets::FILL {
+    for id in paperpaw_sdk::status::item_ids(env.settings.read(&WIDGET_LIST)) {
+        if id == paperpaw_sdk::widgets::FILL {
             made.push(None);
             continue;
         }
@@ -229,7 +229,7 @@ fn place_widgets(env: &Env<'_>) -> Vec<(Box<dyn Widget>, Rect)> {
     }
     let fills = made.iter().filter(|m| m.is_none()).count();
     let fill =
-        quireink_sdk::widgets::fill_height(u32::from(display.height), u32::from(total), fills);
+        paperpaw_sdk::widgets::fill_height(u32::from(display.height), u32::from(total), fills);
     let mut y = if fills == 0 {
         (display.height - total) / 2
     } else {
@@ -339,8 +339,8 @@ impl Screen for SleepScreen {
 }
 
 /// Which picture comes next, counted on from the first (`next.txt`).
-fn next_picture(storage: &dyn quireink_sdk::Storage) -> usize {
-    quireink_sdk::read_file(storage, &data("next.txt"), 32)
+fn next_picture(storage: &dyn paperpaw_sdk::Storage) -> usize {
+    paperpaw_sdk::read_file(storage, &data("next.txt"), 32)
         .ok()
         .and_then(|n| String::from_utf8(n).ok()?.trim().parse::<usize>().ok())
         .unwrap_or(0)
@@ -348,7 +348,7 @@ fn next_picture(storage: &dyn quireink_sdk::Storage) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use quireink_i18n::{Catalog, check};
+    use paperpaw_i18n::{Catalog, check};
 
     #[test]
     fn translations_are_complete() {
@@ -361,7 +361,7 @@ mod tests {
     /// What version 1 wrote stays readable (see `docs/data-files.md`).
     #[test]
     fn the_next_picture_of_version_1_is_read() {
-        let storage = quireink_sdk::MemoryStorage::new().with(
+        let storage = paperpaw_sdk::MemoryStorage::new().with(
             &super::data("next.txt"),
             include_str!("../testdata/next.txt.v1"),
         );

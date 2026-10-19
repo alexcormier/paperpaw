@@ -22,12 +22,12 @@ use alloc::borrow::Cow;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_digest::fnv1a64;
-use quireink_sdk::Storage;
-use quireink_sdk::config;
-use quireink_sdk::document::{DocumentError, Metadata};
-use quireink_sdk::xml::{Token, Tokenizer, decode, local_name};
-use quireink_sdk::zip::ZipArchive;
+use paperpaw_digest::fnv1a64;
+use paperpaw_sdk::Storage;
+use paperpaw_sdk::config;
+use paperpaw_sdk::document::{DocumentError, Metadata};
+use paperpaw_sdk::xml::{Token, Tokenizer, decode, local_name};
+use paperpaw_sdk::zip::ZipArchive;
 
 use crate::css;
 use crate::obfuscation::Method;
@@ -71,10 +71,10 @@ fn path(cache: &str, name: &str) -> String {
     alloc::format!("{cache}/{name}")
 }
 
-pub(crate) fn error(e: quireink_sdk::zip::ZipError) -> DocumentError {
+pub(crate) fn error(e: paperpaw_sdk::zip::ZipError) -> DocumentError {
     match e {
-        quireink_sdk::zip::ZipError::Storage(e) => DocumentError::Storage(e),
-        quireink_sdk::zip::ZipError::OutOfMemory => DocumentError::OutOfMemory,
+        paperpaw_sdk::zip::ZipError::Storage(e) => DocumentError::Storage(e),
+        paperpaw_sdk::zip::ZipError::OutOfMemory => DocumentError::OutOfMemory,
         other => DocumentError::Malformed(Cow::Owned(other.to_string())),
     }
 }
@@ -207,7 +207,7 @@ fn read_u32(storage: &dyn Storage, path: &str, offset: u64) -> Option<u32> {
 
 /// The package from the cache, if it is complete and matches the book.
 pub(crate) fn load(storage: &dyn Storage, cache: &str, book_size: u64) -> Option<Package> {
-    let data = quireink_sdk::read_file(storage, &path(cache, "package.ini"), 16 * 1024).ok()?;
+    let data = paperpaw_sdk::read_file(storage, &path(cache, "package.ini"), 16 * 1024).ok()?;
     let source = core::str::from_utf8(&data).ok()?;
     let mut metadata = Metadata::default();
     let (mut version, mut size, mut sections, mut toc_len) = (None, None, None, None);
@@ -242,7 +242,7 @@ pub(crate) fn load(storage: &dyn Storage, cache: &str, book_size: u64) -> Option
         return None;
     }
     let sections = sections? as usize;
-    let data = quireink_sdk::read_file(storage, &path(cache, "spine.bin"), sections * 8).ok()?;
+    let data = paperpaw_sdk::read_file(storage, &path(cache, "spine.bin"), sections * 8).ok()?;
     if data.len() != sections * 8 || sections == 0 {
         return None;
     }
@@ -324,7 +324,7 @@ pub(crate) struct FontEntry {
 
 /// The book's identifier and embedded fonts from the cache.
 pub(crate) fn fonts(storage: &dyn Storage, cache: &str) -> (String, Vec<FontEntry>) {
-    let Ok(data) = quireink_sdk::read_file(storage, &path(cache, "fonts.txt"), 64 * 1024) else {
+    let Ok(data) = paperpaw_sdk::read_file(storage, &path(cache, "fonts.txt"), 64 * 1024) else {
         return (String::new(), Vec::new());
     };
     let text = String::from_utf8_lossy(&data);
@@ -354,7 +354,7 @@ pub(crate) fn fonts(storage: &dyn Storage, cache: &str) -> (String, Vec<FontEntr
 
 /// The book's stylesheet rules from the cache.
 pub(crate) fn styles(storage: &dyn Storage, cache: &str) -> css::Rules {
-    quireink_sdk::read_file(storage, &path(cache, "styles.txt"), 64 * 1024)
+    paperpaw_sdk::read_file(storage, &path(cache, "styles.txt"), 64 * 1024)
         .ok()
         .and_then(|data| String::from_utf8(data).ok())
         .map(|text| css::Rules::decode(&text))

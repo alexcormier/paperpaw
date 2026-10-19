@@ -1,6 +1,6 @@
 [package]
-name = "quireink-plugin-news"
-description = "QuireInk news: feeds (RSS, Atom) fetched as books to read"
+name = "paperpaw-plugin-news"
+description = "PaperPaw news: feeds (RSS, Atom) fetched as books to read"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,14 +11,14 @@ authors.workspace = true
 categories = ["no-std"]
 
 [dependencies]
-quireink-sdk.workspace = true
+paperpaw-sdk.workspace = true
 
 [dev-dependencies]
-quireink-i18n.workspace = true
-quireink-core.workspace = true
-quireink-platform.workspace = true
-quireink-plugin-home.workspace = true
-quireink-plugin-fonts-default = { workspace = true, features = ["packs"] }
+paperpaw-i18n.workspace = true
+paperpaw-core.workspace = true
+paperpaw-platform.workspace = true
+paperpaw-plugin-home.workspace = true
+paperpaw-plugin-fonts-default = { workspace = true, features = ["packs"] }
 
 [lints]
 workspace = true

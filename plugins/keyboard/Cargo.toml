@@ -1,6 +1,6 @@
 [package]
-name = "quireink-plugin-keyboard"
-description = "QuireInk on-screen keyboard: enters text with touch or buttons"
+name = "paperpaw-plugin-keyboard"
+description = "PaperPaw on-screen keyboard: enters text with touch or buttons"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,10 +11,10 @@ authors.workspace = true
 categories = ["no-std"]
 
 [dependencies]
-quireink-sdk.workspace = true
+paperpaw-sdk.workspace = true
 
 [dev-dependencies]
-quireink-i18n.workspace = true
+paperpaw-i18n.workspace = true
 
 [lints]
 workspace = true

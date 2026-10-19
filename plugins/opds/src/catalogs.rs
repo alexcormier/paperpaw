@@ -2,15 +2,15 @@
 //! catalog a line with its fields separated by tabs. Until the user
 //! changes it, the list holds a free catalog to start with. Their
 //! passwords are kept with the other passwords and keys (see
-//! `quireink_sdk::secrets`), by the catalog's address.
+//! `paperpaw_sdk::secrets`), by the catalog's address.
 
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::secrets::SecretChange;
-use quireink_sdk::web::{clean_name, host};
-use quireink_sdk::{Arg, Command, Env};
+use paperpaw_sdk::secrets::SecretChange;
+use paperpaw_sdk::web::{clean_name, host};
+use paperpaw_sdk::{Arg, Command, Env};
 
 use crate::PLUGIN;
 
@@ -46,7 +46,7 @@ impl Catalog {
         if !self.folder.trim().is_empty() {
             return self.folder.trim().trim_matches('/').to_string();
         }
-        let library = quireink_sdk::library::folder(env);
+        let library = paperpaw_sdk::library::folder(env);
         let name = clean_name(&self.name, 60).unwrap_or_else(|| String::from("OPDS"));
         if library.is_empty() {
             name
@@ -57,7 +57,7 @@ impl Catalog {
 
     /// The `Authorization` header for it, if it needs one.
     pub(crate) fn authorization(&self) -> Option<String> {
-        (!self.user.is_empty()).then(|| quireink_sdk::web::basic_auth(&self.user, &self.password))
+        (!self.user.is_empty()).then(|| paperpaw_sdk::web::basic_auth(&self.user, &self.password))
     }
 }
 
@@ -70,13 +70,13 @@ const SECRETS: &str = "opds.";
 
 /// The id of the password of the catalog at `url`.
 fn secret_id(url: &str) -> String {
-    let digest = quireink_digest::md5::of(url);
+    let digest = paperpaw_digest::md5::of(url);
     format!("{SECRETS}{}", &digest[..16])
 }
 
 /// The catalogs; until the user changes them, one to start with.
 pub(crate) fn load(env: &Env<'_>) -> Vec<Catalog> {
-    let Ok(data) = quireink_sdk::read_file(env.storage, &path(), 64 * 1024) else {
+    let Ok(data) = paperpaw_sdk::read_file(env.storage, &path(), 64 * 1024) else {
         return Vec::from([Catalog {
             name: String::from("Project Gutenberg"),
             url: String::from("https://www.gutenberg.org/ebooks.opds/"),
@@ -100,7 +100,7 @@ pub(crate) fn load(env: &Env<'_>) -> Vec<Catalog> {
 /// Moves passwords kept in the list by earlier versions to the other
 /// passwords and keys.
 pub(crate) fn move_passwords(env: &Env<'_>, out: &mut Vec<Command>) {
-    let Ok(data) = quireink_sdk::read_file(env.storage, &path(), 64 * 1024) else {
+    let Ok(data) = paperpaw_sdk::read_file(env.storage, &path(), 64 * 1024) else {
         return;
     };
     let catalogs = parse(&String::from_utf8_lossy(&data));

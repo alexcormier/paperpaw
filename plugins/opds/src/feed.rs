@@ -11,9 +11,9 @@
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::Storage;
-use quireink_sdk::web::{encode, join_url, percent_decode};
-use quireink_sdk::xml::{Token, Tokenizer, decode, local_name};
+use paperpaw_sdk::Storage;
+use paperpaw_sdk::web::{encode, join_url, percent_decode};
+use paperpaw_sdk::xml::{Token, Tokenizer, decode, local_name};
 
 /// Entries kept of one page; catalogs page longer lists with *next*.
 pub(crate) const MAX_ENTRIES: usize = 100;
@@ -452,7 +452,7 @@ pub(crate) fn read_webdav(storage: &dyn Storage, path: &str, base: &str) -> Feed
 /// The address an OpenSearch description in file `path` (from `base`)
 /// gives for searches in OPDS, with `{searchTerms}` in it.
 pub(crate) fn search_template(storage: &dyn Storage, path: &str, base: &str) -> Option<String> {
-    let data = quireink_sdk::read_file(storage, path, 64 * 1024).ok()?;
+    let data = paperpaw_sdk::read_file(storage, path, 64 * 1024).ok()?;
     let mut template = None;
     Tokenizer::parse(&data, &mut |token| {
         if let Token::Start { name, attrs, .. } = token
@@ -491,7 +491,7 @@ pub(crate) fn search_url(template: &str, terms: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quireink_sdk::MemoryStorage;
+    use paperpaw_sdk::MemoryStorage;
 
     const NAVIGATION: &str = r#"<?xml version="1.0" encoding="utf-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom" xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/">

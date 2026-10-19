@@ -1,4 +1,4 @@
-//! Short messages ([`slots::NOTICE`](quireink_sdk::builtin::slots::NOTICE)):
+//! Short messages ([`slots::NOTICE`](paperpaw_sdk::builtin::slots::NOTICE)):
 //! a dark box with rounded corners above the bottom of the screen, between
 //! the margins, with the text centred in white in at most three lines. The kernel shows it over
 //! whatever is open and takes it away after a few seconds.
@@ -6,9 +6,9 @@
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::builtin::params;
-use quireink_sdk::ui::{self, UiStyle};
-use quireink_sdk::{Canvas, Color, Cx, Env, Handled, Id, Params, Rect, Screen};
+use paperpaw_sdk::builtin::params;
+use paperpaw_sdk::ui::{self, UiStyle};
+use paperpaw_sdk::{Canvas, Color, Cx, Env, Handled, Id, Params, Rect, Screen};
 
 /// Lines of a message, at most.
 const LINES: usize = 3;

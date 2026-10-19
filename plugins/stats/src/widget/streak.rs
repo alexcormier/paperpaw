@@ -7,9 +7,9 @@ use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use quireink_sdk::ui::{self, UiStyle};
-use quireink_sdk::widgets::{self, Align, Frame, Look, Size, Widget, WidgetSpec, WidgetTarget};
-use quireink_sdk::{Arg, Canvas, Env, Id, Point, Rect, RegisterError, Registrar, SettingSpec};
+use paperpaw_sdk::ui::{self, UiStyle};
+use paperpaw_sdk::widgets::{self, Align, Frame, Look, Size, Widget, WidgetSpec, WidgetTarget};
+use paperpaw_sdk::{Arg, Canvas, Env, Id, Point, Rect, RegisterError, Registrar, SettingSpec};
 
 use super::{caption_room, chosen, frame_height, goal, line, middle};
 use crate::fmt;

@@ -1,6 +1,6 @@
 [package]
-name = "quireink-plugin-fonts-default"
-description = "QuireInk default fonts: Literata for reading, Source Sans 3 for the UI"
+name = "paperpaw-plugin-fonts-default"
+description = "PaperPaw default fonts: Literata for reading, Source Sans 3 for the UI"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -17,19 +17,19 @@ include = ["src", "fonts", "i18n", "build.rs"]
 default = ["outline"]
 # Ship the scalable fonts. Without it, bitmap font packs are generated at
 # build time (for devices like the ESP32-C3); sizes can be chosen with the
-# QUIREINK_FONT_SIZES environment variable, e.g. "20,24,28,32".
-outline = ["quireink-sdk/outline"]
+# PAPERPAW_FONT_SIZES environment variable, e.g. "20,24,28,32".
+outline = ["paperpaw-sdk/outline"]
 # Also ship bitmap packs next to the scalable fonts (DefaultFontPacks).
 packs = []
 
 [dependencies]
-quireink-sdk.workspace = true
+paperpaw-sdk.workspace = true
 
 [build-dependencies]
-quireink-text = { workspace = true, features = ["outline"] }
+paperpaw-text = { workspace = true, features = ["outline"] }
 
 [dev-dependencies]
-quireink-i18n.workspace = true
+paperpaw-i18n.workspace = true
 
 [lints]
 workspace = true

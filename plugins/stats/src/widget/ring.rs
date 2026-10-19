@@ -15,10 +15,10 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::builtin::{params, slots};
-use quireink_sdk::ui::{self, UiStyle};
-use quireink_sdk::widgets::{self, Align, Frame, Look, Size, Widget, WidgetSpec, WidgetTarget};
-use quireink_sdk::{
+use paperpaw_sdk::builtin::{params, slots};
+use paperpaw_sdk::ui::{self, UiStyle};
+use paperpaw_sdk::widgets::{self, Align, Frame, Look, Size, Widget, WidgetSpec, WidgetTarget};
+use paperpaw_sdk::{
     Arg, Canvas, Command, Env, Id, Params, Rect, RegisterError, Registrar, SettingSpec,
 };
 
@@ -150,7 +150,7 @@ impl Widget for Ring {
 
 /// The ring's largest diameter by the size setting (as large as fits:
 /// what a medium one has, for the height it asks for).
-fn largest(env: &Env<'_>, style: &UiStyle, font: &quireink_sdk::FontHandle<'_>) -> u16 {
+fn largest(env: &Env<'_>, style: &UiStyle, font: &paperpaw_sdk::FontHandle<'_>) -> u16 {
     let title = line(font, style.title);
     match widgets::size(env, NAME) {
         Size::Small => title * 3,
@@ -159,7 +159,7 @@ fn largest(env: &Env<'_>, style: &UiStyle, font: &quireink_sdk::FontHandle<'_>) 
     }
 }
 
-fn note_height(env: &Env<'_>, font: &quireink_sdk::FontHandle<'_>, style: &UiStyle) -> u16 {
+fn note_height(env: &Env<'_>, font: &paperpaw_sdk::FontHandle<'_>, style: &UiStyle) -> u16 {
     if widgets::shows(env, NAME, "note") || goal(env).is_none() {
         line(font, style.small) + style.gap as u16 / 2
     } else {

@@ -6,7 +6,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use android_activity::AndroidApp;
 use jni::JNIEnv;
 use jni::objects::{JObject, JValue};
-use quireink_platform::{Battery, Instant, SystemStatus, WallClock};
+use paperpaw_platform::{Battery, Instant, SystemStatus, WallClock};
 
 use crate::access::with_activity;
 

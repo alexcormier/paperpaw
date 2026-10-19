@@ -30,7 +30,7 @@ jobs:
         env:
           RUSTDOCFLAGS: -D warnings
       # Builds without runtime font rendering use bitmap font packs.
-      - run: cargo test -p quireink-text -p quireink-plugin-fonts-default --no-default-features
+      - run: cargo test -p paperpaw-text -p paperpaw-plugin-fonts-default --no-default-features
 
   msrv:
     name: Oldest Rust
@@ -63,10 +63,10 @@ jobs:
         # once it has one.
         run: |
           packages=()
-          for crate in quireink-sdk quireink-platform quireink-graphics quireink-i18n \
-            quireink-config quireink-text quireink-document quireink-layout quireink-xml \
-            quireink-zip quireink-hyphen quireink-image quireink-update quireink-digest \
-            quireink-json quireink-qr quireink-sqlite; do
+          for crate in paperpaw-sdk paperpaw-platform paperpaw-graphics paperpaw-i18n \
+            paperpaw-config paperpaw-text paperpaw-document paperpaw-layout paperpaw-xml \
+            paperpaw-zip paperpaw-hyphen paperpaw-image paperpaw-update paperpaw-digest \
+            paperpaw-json paperpaw-qr paperpaw-sqlite; do
             if curl -sfo /dev/null "https://index.crates.io/${crate:0:2}/${crate:2:2}/$crate"; then
               packages+=(-p "$crate")
             else
@@ -74,10 +74,10 @@ jobs:
             fi
           done
           cargo semver-checks "${packages[@]}"
-      - name: The SDK's public API is crates/quireink-sdk/api.txt
+      - name: The SDK's public API is crates/paperpaw-sdk/api.txt
         run: |
-          cargo "+$NIGHTLY" public-api -p quireink-sdk -sss > api.txt
-          diff -u crates/quireink-sdk/api.txt api.txt
+          cargo "+$NIGHTLY" public-api -p paperpaw-sdk -sss > api.txt
+          diff -u crates/paperpaw-sdk/api.txt api.txt
 
   embedded:
     name: no_std targets
@@ -96,9 +96,9 @@ jobs:
         # one is built here without being listed.
         run: >
           cargo build --release --target ${{ matrix.target }}
-          -p quireink-app --no-default-features --features packs
-          -p quireink-image -p quireink-sqlite -p quireink-stardict
-          -p quireink-sample-hello -p quireink-x4 -p quireink-fat
+          -p paperpaw-app --no-default-features --features packs
+          -p paperpaw-image -p paperpaw-sqlite -p paperpaw-stardict
+          -p paperpaw-sample-hello -p paperpaw-x4 -p paperpaw-fat
 
   firmware:
     name: X4 firmware
@@ -131,8 +131,8 @@ jobs:
         run: |
           status=0
           for manifest in plugins/*/Cargo.toml samples/*/Cargo.toml; do
-            if awk '/^\[/ { part = $0 } part == "[dependencies]" && /^quireink-core/' "$manifest" | grep -q .; then
-              echo "::error file=$manifest::plugins must depend on quireink-sdk, not quireink-core"
+            if awk '/^\[/ { part = $0 } part == "[dependencies]" && /^paperpaw-core/' "$manifest" | grep -q .; then
+              echo "::error file=$manifest::plugins must depend on paperpaw-sdk, not paperpaw-core"
               status=1
             fi
           done
@@ -148,11 +148,11 @@ jobs:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: cargo build -p quireink-emulator
+      - run: cargo build -p paperpaw-emulator
       - name: Headless smoke test on every profile
         shell: bash
         run: |
-          emu="cargo run -q -p quireink-emulator --"
+          emu="cargo run -q -p paperpaw-emulator --"
           for profile in $($emu --list-profiles | cut -d' ' -f1); do
             $emu --headless --profile "$profile" --script "wait:600" --screenshot "out/$profile.png"
           done
@@ -202,13 +202,13 @@ jobs:
       - name: Find the NDK
         run: echo "ANDROID_NDK_HOME=${ANDROID_NDK_LATEST_HOME:-$ANDROID_NDK_ROOT}" >> "$GITHUB_ENV"
       - name: Lint the Android shell
-        run: cargo ndk -t arm64-v8a --platform 26 clippy -p quireink-android
+        run: cargo ndk -t arm64-v8a --platform 26 clippy -p paperpaw-android
       - name: Build the APK
         run: shells/android/build-apk.sh
       - uses: actions/upload-artifact@v7
         with:
-          name: quireink-android-apk
-          path: target/android/quireink.apk
+          name: paperpaw-android-apk
+          path: target/android/paperpaw.apk
 
   fuzz:
     name: Fuzz parsers
@@ -226,7 +226,7 @@ jobs:
           cp samples/library/books/*.epub fuzz/corpus/epub/
           cp samples/library/books/*.txt fuzz/corpus/txt/
           mkdir -p fuzz/corpus/image
-          cp crates/quireink-image/tests/data/*.jpg crates/quireink-image/tests/data/*.png fuzz/corpus/image/
+          cp crates/paperpaw-image/tests/data/*.jpg crates/paperpaw-image/tests/data/*.png fuzz/corpus/image/
           # `+nightly` overrides rust-toolchain.toml, which pins stable.
           for target in epub txt xml hyphen image lua; do
             cargo +nightly fuzz run "$target" -- -max_total_time=60 -rss_limit_mb=1024

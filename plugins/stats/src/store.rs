@@ -23,7 +23,7 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use quireink_sdk::{Env, Storage, StorageError};
+use paperpaw_sdk::{Env, Storage, StorageError};
 
 /// A stay on a page (KOReader: a row of `page_stat_data`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -132,12 +132,12 @@ pub(crate) fn sizes(storage: &dyn Storage) -> (u64, u64) {
 
 /// The books, by id.
 pub(crate) fn books(storage: &dyn Storage) -> Vec<Book> {
-    let Ok(data) = quireink_sdk::read_file(storage, &path("books.ini"), 1 << 20) else {
+    let Ok(data) = paperpaw_sdk::read_file(storage, &path("books.ini"), 1 << 20) else {
         return Vec::new();
     };
     let text = core::str::from_utf8(&data).unwrap_or_default();
     let mut books: Vec<Book> = Vec::new();
-    for entry in quireink_sdk::config::parse(text).filter_map(Result::ok) {
+    for entry in paperpaw_sdk::config::parse(text).filter_map(Result::ok) {
         let Some(id) = entry
             .section
             .strip_prefix("book.")
@@ -177,14 +177,14 @@ pub(crate) fn save_books(storage: &dyn Storage, books: &[Book]) {
         text.push_str(&format!(
             "[book.{}]\ntitle = {}\nauthors = {}\nmd5 = {}\npages = {}\nlanguage = {}\nseries = {}\nlast-open = {}\npath = {}\nfinished = {}\n\n",
             b.id,
-            quireink_sdk::config::quote(&b.title),
-            quireink_sdk::config::quote(&b.authors),
+            paperpaw_sdk::config::quote(&b.title),
+            paperpaw_sdk::config::quote(&b.authors),
             b.md5,
             b.pages,
-            quireink_sdk::config::quote(&b.language),
-            quireink_sdk::config::quote(&b.series),
+            paperpaw_sdk::config::quote(&b.language),
+            paperpaw_sdk::config::quote(&b.series),
             b.last_open,
-            quireink_sdk::config::quote(&b.path),
+            paperpaw_sdk::config::quote(&b.path),
             b.finished,
         ));
     }
@@ -229,7 +229,7 @@ pub(crate) fn replace_log(storage: &dyn Storage, file: &str) -> Result<(), Stora
     // day totals go.
     if storage.rename(&new, &path("pages.bin")).is_err() {
         let data =
-            quireink_sdk::read_file(storage, &new, 256 << 20).map_err(|_| StorageError::Io)?;
+            paperpaw_sdk::read_file(storage, &new, 256 << 20).map_err(|_| StorageError::Io)?;
         storage.write(&path("pages.bin"), &data)?;
         let _ = storage.remove(&new);
     }
@@ -241,7 +241,7 @@ pub(crate) fn replace_log(storage: &dyn Storage, file: &str) -> Result<(), Stora
 /// from Unix seconds; brings `days.bin` up to date with the log first.
 pub(crate) fn days(storage: &dyn Storage, day_of: impl Fn(u32) -> i32) -> Vec<Day> {
     let file = path("days.bin");
-    let data = quireink_sdk::read_file(storage, &file, 1 << 20).unwrap_or_default();
+    let data = paperpaw_sdk::read_file(storage, &file, 1 << 20).unwrap_or_default();
     let (mut covered, mut days) = match data.split_first_chunk::<8>() {
         Some((head, rest)) => (
             u64::from_le_bytes(*head),
@@ -354,7 +354,7 @@ pub(crate) fn scan_recent(storage: &dyn Storage, since: u32, mut visit: impl FnM
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quireink_sdk::MemoryStorage;
+    use paperpaw_sdk::MemoryStorage;
 
     /// The files as version 1 wrote them stay readable (see
     /// `docs/data-files.md`).

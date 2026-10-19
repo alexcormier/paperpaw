@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- QuireInk for Android: a native activity; its only Java code is the
+<!-- PaperPaw for Android: a native activity; its only Java code is the
      speech listener (classes.dex). The version is the workspace's
      (Cargo.toml), its code 1.2.3 → 10203; build-apk.sh checks both. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="io.github.hthoene.quireink"
+    package="io.github.hthoene.paperpaw"
     android:versionCode="400"
     android:versionName="0.4.0-dev">
 
@@ -28,7 +28,7 @@
          and runs from there. usesCleartextTraffic: self-hosted sync servers often answer over
          plain http in the home network. -->
     <application
-        android:label="QuireInk"
+        android:label="PaperPaw"
         android:icon="@mipmap/ic_launcher"
         android:hasCode="true"
         android:extractNativeLibs="false"
@@ -45,7 +45,7 @@
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|density|fontScale|locale">
             <meta-data
                 android:name="android.app.lib_name"
-                android:value="quireink" />
+                android:value="paperpaw" />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

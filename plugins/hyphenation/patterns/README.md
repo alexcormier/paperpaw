@@ -3,7 +3,7 @@
 The pattern files are taken unchanged from the
 [hyph-utf8](https://github.com/hyphenation/tex-hyphen) project
 (`hyph-utf8/tex/generic/hyph-utf8/patterns/txt`). The build script compiles
-them into tables for `quireink-hyphen`.
+them into tables for `paperpaw-hyphen`.
 
 ## German, reformed spelling (`hyph-de-1996.pat.txt`)
 

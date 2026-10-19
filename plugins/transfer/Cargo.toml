@@ -1,6 +1,6 @@
 [package]
-name = "quireink-plugin-transfer"
-description = "QuireInk transfer by browser: put files on the device from a phone or computer in the same network"
+name = "paperpaw-plugin-transfer"
+description = "PaperPaw transfer by browser: put files on the device from a phone or computer in the same network"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,12 +11,12 @@ authors.workspace = true
 categories = ["no-std"]
 
 [dependencies]
-quireink-qr.workspace = true
-quireink-digest.workspace = true
-quireink-sdk.workspace = true
+paperpaw-qr.workspace = true
+paperpaw-digest.workspace = true
+paperpaw-sdk.workspace = true
 
 [dev-dependencies]
-quireink-i18n.workspace = true
+paperpaw-i18n.workspace = true
 
 [lints]
 workspace = true

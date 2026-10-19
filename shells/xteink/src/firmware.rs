@@ -9,15 +9,15 @@
 use esp_hal::delay::Delay;
 use esp_hal::gpio::{Event, Output, WakeupConfig};
 use log::{info, warn};
-use quireink_core::{
+use paperpaw_core::{
     Effects, FirmwareCommand, FirmwareState, InstallFailure, Io, Kernel, SpeechCall,
 };
-use quireink_platform::{
+use paperpaw_platform::{
     Battery, ButtonState, InputEvent, Instant, Point, PointerEvent, PointerPhase, PointerTool,
     Rect, RefreshMode, SystemStatus,
 };
-use quireink_x4::display::{Planes, Refresh};
-use quireink_x4::sent::{Check, Sent};
+use paperpaw_x4::display::{Planes, Refresh};
+use paperpaw_x4::sent::{Check, Sent};
 
 use crate::board::Panel;
 use crate::network::{Network, NetworkIo};
@@ -260,7 +260,7 @@ impl Firmware {
                     } else {
                         ButtonState::Released
                     };
-                    let name = quireink_platform::buttons::HOME;
+                    let name = paperpaw_platform::buttons::HOME;
                     (InputEvent::Button { name, state }, at)
                 }
                 input::Change::Touch(touch, at) => (self.pointer(touch), at),
@@ -276,7 +276,7 @@ impl Firmware {
         }
     }
 
-    /// A touch on the upright screen, on the screen QuireInk draws (it may
+    /// A touch on the upright screen, on the screen PaperPaw draws (it may
     /// be turned).
     fn pointer(&self, touch: input::Touch) -> InputEvent {
         let (phase, x, y) = match touch {
@@ -289,7 +289,7 @@ impl Firmware {
             // A button, taken apart before.
             input::Touch::Home(_) => (PointerPhase::Cancel, 0, 0),
         };
-        let (x, y) = quireink_x4::uc8179::turned(self.panel.rotation(), x, y);
+        let (x, y) = paperpaw_x4::uc8179::turned(self.panel.rotation(), x, y);
         InputEvent::Pointer(PointerEvent {
             id: 0,
             phase,
@@ -616,7 +616,7 @@ impl Firmware {
         // memory of the new frame changed, and the next fast refresh
         // compares the two (sent again as kept, or drawn anew).
         let panel = &mut self.panel;
-        let mut again = |top: u16, rows: quireink_platform::FrameView<'_>| {
+        let mut again = |top: u16, rows: paperpaw_platform::FrameView<'_>| {
             if let Err(e) = panel.write_rows(top, rows, Planes::BOTH) {
                 failed = Some(e);
             }
@@ -683,9 +683,9 @@ impl Firmware {
     }
 
     /// Carries out a command over USB that changes the X4's state.
-    fn remote_command(&mut self, command: quireink_x4::remote::Command) {
+    fn remote_command(&mut self, command: paperpaw_x4::remote::Command) {
         use crate::remote;
-        use quireink_x4::remote::Command;
+        use paperpaw_x4::remote::Command;
         match command {
             Command::Network(ask) => self.network.ask_remote(ask),
             Command::IdleSleep(seconds) => {
@@ -694,7 +694,7 @@ impl Firmware {
                 remote::ok();
             }
             Command::Run(action) => {
-                let Ok(id) = quireink_sdk::Id::parse(&action) else {
+                let Ok(id) = paperpaw_sdk::Id::parse(&action) else {
                     return remote::error(&action);
                 };
                 let at = self.kernel_now();
@@ -718,8 +718,8 @@ impl Firmware {
             Command::Open(path) => {
                 let at = self.kernel_now();
                 let params =
-                    quireink_sdk::Params::new().with(quireink_sdk::builtin::params::PATH, path);
-                let reader = quireink_sdk::builtin::slots::READER;
+                    paperpaw_sdk::Params::new().with(paperpaw_sdk::builtin::params::PATH, path);
+                let reader = paperpaw_sdk::builtin::slots::READER;
                 let effects = self.kernel.open_slot(at, reader, params);
                 self.apply(effects);
                 remote::ok();
@@ -766,7 +766,7 @@ impl Firmware {
     /// A command while asleep on USB: what only asks is answered, and
     /// `press power` wakes the X4 (`true`).
     fn remote_while_asleep(&mut self) -> bool {
-        use quireink_x4::remote::Command;
+        use paperpaw_x4::remote::Command;
         let Some(command) = self.remote.poll() else {
             return false;
         };
@@ -774,7 +774,7 @@ impl Firmware {
             None => false,
             Some(Command::Press { button, .. }) => {
                 crate::remote::ok();
-                button == quireink_platform::buttons::POWER
+                button == paperpaw_platform::buttons::POWER
             }
             Some(_) => {
                 crate::remote::error("asleep");

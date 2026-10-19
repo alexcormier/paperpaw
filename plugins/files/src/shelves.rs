@@ -15,16 +15,16 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::builtin::{actions, params, slots};
-use quireink_sdk::ui::{self, ListView, UiStyle};
-use quireink_sdk::{
+use paperpaw_sdk::builtin::{actions, params, slots};
+use paperpaw_sdk::ui::{self, ListView, UiStyle};
+use paperpaw_sdk::{
     Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, RefreshMode,
     Screen, Storage, files,
 };
 
 use crate::ROOT;
-use quireink_sdk::library;
-use quireink_sdk::library::catalog::{self, Record, Walk};
+use paperpaw_sdk::library;
+use paperpaw_sdk::library::catalog::{self, Record, Walk};
 
 /// The view of authors (`mode` = `authors`), series (`series`) or tags
 /// (`tags`).
@@ -421,7 +421,7 @@ impl Screen for ShelfScreen {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quireink_sdk::MemoryStorage;
+    use paperpaw_sdk::MemoryStorage;
 
     #[test]
     fn catalog_lines_and_views() {

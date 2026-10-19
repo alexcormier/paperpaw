@@ -24,13 +24,13 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::cell::Cell;
 
-use quireink_digest::fnv1a64;
-use quireink_sdk::document::{
+use paperpaw_digest::fnv1a64;
+use paperpaw_sdk::document::{
     Block, Document, DocumentError, ImageRef, Link, Locator, Metadata, TocEntry,
 };
-use quireink_sdk::image::Fit;
-use quireink_sdk::xml::{Token, Tokenizer, decode, local_name};
-use quireink_sdk::{Env, Storage};
+use paperpaw_sdk::image::Fit;
+use paperpaw_sdk::xml::{Token, Tokenizer, decode, local_name};
+use paperpaw_sdk::{Env, Storage};
 
 use crate::PLUGIN;
 use crate::cached;
@@ -114,7 +114,7 @@ pub(crate) fn feed(
 
 /// The value of an attribute by its name without prefix (`l:href`,
 /// `xlink:href`).
-pub(crate) fn attr(attrs: &quireink_sdk::xml::Attrs<'_>, name: &str) -> Option<String> {
+pub(crate) fn attr(attrs: &paperpaw_sdk::xml::Attrs<'_>, name: &str) -> Option<String> {
     attrs
         .iter()
         .find(|(n, _)| local_name(n) == name)
@@ -308,7 +308,7 @@ pub(crate) fn decode_binaries(
 ) -> Result<(), DocumentError> {
     let wanted: Vec<&(String, String, Fit)> = wanted
         .iter()
-        .filter(|(_, cache, _)| quireink_sdk::image::ImageFile::open(storage, cache).is_none())
+        .filter(|(_, cache, _)| paperpaw_sdk::image::ImageFile::open(storage, cache).is_none())
         .collect();
     if wanted.is_empty() {
         return Ok(());
@@ -384,7 +384,7 @@ impl Fb2Document {
     /// of its own (FictionBook has no style sheets, but the setting keeps
     /// caches apart).
     pub fn open(storage: &dyn Storage, path: &str, styles: bool) -> Result<Self, DocumentError> {
-        let options = quireink_sdk::OpenOptions::default().publisher_styles(styles);
+        let options = paperpaw_sdk::OpenOptions::default().publisher_styles(styles);
         Self::open_options(storage, path, &options)
     }
 
@@ -392,7 +392,7 @@ impl Fb2Document {
     pub fn open_options(
         storage: &dyn Storage,
         path: &str,
-        options: &quireink_sdk::OpenOptions,
+        options: &paperpaw_sdk::OpenOptions,
     ) -> Result<Self, DocumentError> {
         let (styles, color) = (options.publisher_styles, options.color);
         let (image_fit, cover_fit) = (options.image_fit, options.cover_fit);
@@ -424,7 +424,7 @@ impl Fb2Document {
         );
         let stamp_path = format!("{cache}/source");
         let info_path = format!("{cache}/book.txt");
-        let fresh = quireink_sdk::read_file(storage, &stamp_path, 256).ok()
+        let fresh = paperpaw_sdk::read_file(storage, &stamp_path, 256).ok()
             == Some(stamp.clone().into_bytes());
         // A zipped book is read from its unpacked copy.
         let zipped = path.to_ascii_lowercase().ends_with(".zip");
@@ -501,7 +501,7 @@ impl Fb2Document {
 
 /// Unpacks the first `.fb2` of the archive at `zip` into `to`.
 fn unpack(storage: &dyn Storage, zip: &str, to: &str) -> Result<(), DocumentError> {
-    use quireink_sdk::zip::ZipArchive;
+    use paperpaw_sdk::zip::ZipArchive;
     let bad = |_| DocumentError::Malformed(alloc::borrow::Cow::Borrowed("zip"));
     let archive = ZipArchive::open(storage, zip).map_err(bad)?;
     let entry = archive
@@ -559,7 +559,7 @@ fn save_info(found: &Scan) -> String {
 }
 
 fn load_info(storage: &dyn Storage, path: &str) -> Option<Scan> {
-    let data = quireink_sdk::read_file(storage, path, 1 << 20).ok()?;
+    let data = paperpaw_sdk::read_file(storage, path, 1 << 20).ok()?;
     let text = core::str::from_utf8(&data).ok()?;
     let mut found = Scan::default();
     for line in text.lines() {
@@ -735,7 +735,7 @@ impl crate::convert::Dialect for Fb2Dialect {
     fn enter(
         &mut self,
         tag: &str,
-        attrs: &quireink_sdk::xml::Attrs<'_>,
+        attrs: &paperpaw_sdk::xml::Attrs<'_>,
     ) -> crate::convert::Entered {
         let mut entered = crate::convert::Entered::default();
         match tag {
@@ -775,8 +775,8 @@ impl crate::convert::Dialect for Fb2Dialect {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quireink_sdk::MemoryStorage;
-    use quireink_sdk::document::BlockKind;
+    use paperpaw_sdk::MemoryStorage;
+    use paperpaw_sdk::document::BlockKind;
 
     const BOOK: &str = r##"<?xml version="1.0" encoding="utf-8"?>
 <FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0" xmlns:l="http://www.w3.org/1999/xlink">
@@ -893,7 +893,7 @@ mod tests {
 
     #[test]
     fn zipped_books_open_too() {
-        use quireink_sdk::zip::testing::ZipBuilder;
+        use paperpaw_sdk::zip::testing::ZipBuilder;
         let zip = ZipBuilder::new()
             .deflated("book.fb2", BOOK.as_bytes())
             .build();

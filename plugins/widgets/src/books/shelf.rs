@@ -5,9 +5,9 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use quireink_sdk::ui::UiStyle;
-use quireink_sdk::widgets::{Align, Look, line_height};
-use quireink_sdk::{Canvas, Env, Point, Rect};
+use paperpaw_sdk::ui::UiStyle;
+use paperpaw_sdk::widgets::{Align, Look, line_height};
+use paperpaw_sdk::{Canvas, Env, Point, Rect};
 
 use super::{Book, cover_size, draw_cover, draw_line};
 
@@ -130,7 +130,7 @@ pub(crate) fn draw_caption(
         .map_or(0, |p| p.cover.y.saturating_sub(rest.y));
     let mut above = *look;
     above.area = super::below(look.area, free);
-    quireink_sdk::widgets::draw_caption(canvas, env, id, &above, text);
+    paperpaw_sdk::widgets::draw_caption(canvas, env, id, &above, text);
 }
 
 /// The height of a label below a cover.
@@ -183,7 +183,7 @@ pub(crate) fn draw(
         if shelved.current {
             // The book being read: its label light on dark.
             let text =
-                quireink_sdk::ui::fit(font, style.small, &shelved.label, f32::from(row.width));
+                paperpaw_sdk::ui::fit(font, style.small, &shelved.label, f32::from(row.width));
             let pad = style.gap as u16 / 2;
             let w = (font.measure(style.small, &text) as u16 + 2 * pad).min(row.width);
             let pill = Rect::new(row.x + (row.width - w) / 2, row.y, w, row.height);

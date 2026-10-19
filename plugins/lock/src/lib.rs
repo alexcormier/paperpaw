@@ -1,5 +1,5 @@
 //! The screen lock: a PIN, a pattern or a password asked for when
-//! QuireInk starts and when the device wakes up, before anything else can
+//! PaperPaw starts and when the device wakes up, before anything else can
 //! be used. Off by default.
 //!
 //! - Set up under Settings › System › *Screen lock*: the code in use is
@@ -28,9 +28,9 @@ use alloc::rc::Rc;
 use alloc::vec::Vec;
 use core::cell::Cell;
 
-use quireink_sdk::builtin::{events, groups};
-use quireink_sdk::setting::{Setting, Text};
-use quireink_sdk::{
+use paperpaw_sdk::builtin::{events, groups};
+use paperpaw_sdk::setting::{Setting, Text};
+use paperpaw_sdk::{
     ActionSpec, Command, Env, Id, Manifest, Params, Plugin, RegisterError, Registrar, SDK_VERSION,
     ScreenSpec, SettingSpec, Version,
 };
@@ -77,7 +77,7 @@ fn lock(env: &Env<'_>, locked: &Locked, out: &mut Vec<Command>) {
 pub struct Lock;
 
 /// The kind, chosen (and its code set) on the lock's page.
-static ON_PAGE: quireink_sdk::SettingExtra = quireink_sdk::SettingExtra::new().editor(SCREEN);
+static ON_PAGE: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new().editor(SCREEN);
 
 /// The kind of lock, and whether waking up asks for it.
 static SETTINGS: [SettingSpec; 2] = [
@@ -139,12 +139,12 @@ impl Plugin for Lock {
             }
         })?;
         // The first-run setup: a lock, off unless chosen.
-        r.add_setup_step(quireink_sdk::setup::SetupStepSpec {
+        r.add_setup_step(paperpaw_sdk::setup::SetupStepSpec {
             id: Id::new_static("lock.setup"),
             title: Cow::Borrowed(""),
             help: Cow::Borrowed(""),
             order: 70,
-            page: quireink_sdk::setup::SetupPage::Setting(KIND.into()),
+            page: paperpaw_sdk::setup::SetupPage::Setting(KIND.into()),
             applies: None,
         })?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
@@ -155,7 +155,7 @@ impl Plugin for Lock {
 
 #[cfg(test)]
 mod tests {
-    use quireink_i18n::{Catalog, check};
+    use paperpaw_i18n::{Catalog, check};
 
     /// The setting's values are the kinds after the prefix.
     #[test]

@@ -8,9 +8,9 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
-cargo build -q -p quireink-emulator
-emu=target/debug/quireink-emu
-[[ -x "$emu" ]] || emu=target/debug/quireink-emu.exe
+cargo build -q -p paperpaw-emulator
+emu=target/debug/paperpaw-emu
+[[ -x "$emu" ]] || emu=target/debug/paperpaw-emu.exe
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 

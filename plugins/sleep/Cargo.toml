@@ -1,6 +1,6 @@
 [package]
-name = "quireink-plugin-sleep"
-description = "QuireInk sleep screen: the book's cover, own pictures or a message while the device sleeps"
+name = "paperpaw-plugin-sleep"
+description = "PaperPaw sleep screen: the book's cover, own pictures or a message while the device sleeps"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,10 +11,10 @@ authors.workspace = true
 categories = ["no-std"]
 
 [dependencies]
-quireink-sdk.workspace = true
+paperpaw-sdk.workspace = true
 
 [dev-dependencies]
-quireink-i18n.workspace = true
+paperpaw-i18n.workspace = true
 
 [lints]
 workspace = true

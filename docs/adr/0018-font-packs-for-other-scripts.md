@@ -21,10 +21,10 @@ them, showed question marks.
 ## Decision
 
 - **Packs for other scripts are data plugins on the card**, built from
-  Literata by `tools/script-pack.py` (`quireink-fontgen --chars`), each
+  Literata by `tools/script-pack.py` (`paperpaw-fontgen --chars`), each
   pack naming the built-in font it extends in `plugin.ini`
-  (`[extends] literata.qifp = fonts-default.literata`).
-- **Read a glyph at a time** (`quireink_text::StoredPack`): only the
+  (`[extends] literata.ppfp = fonts-default.literata`).
+- **Read a glyph at a time** (`paperpaw_text::StoredPack`): only the
   characters a pack holds, and the advances of the sizes in use, stay in
   memory (a few hundred bytes each); a glyph is read from the card when
   first drawn and kept in the glyph cache (12 KB on the X4, empty until a

@@ -1,7 +1,7 @@
 //! Converting frames to the window's RGBA pixels, in the colours of the
 //! settings (`Kernel::colors`), and what kind of screen the device has.
 
-use quireink_platform::{ColorPanel, FrameView};
+use paperpaw_platform::{ColorPanel, FrameView};
 
 /// What a screen shows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -80,7 +80,7 @@ pub fn to_rgba(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quireink_platform::PixelFormat;
+    use paperpaw_platform::PixelFormat;
 
     const BLACK_ON_WHITE: [[u8; 3]; 2] = [[0, 0, 0], [255, 255, 255]];
 

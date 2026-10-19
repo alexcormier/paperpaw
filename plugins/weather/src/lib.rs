@@ -11,7 +11,7 @@
 //! found with Open-Meteo's search, see `place`); then only its
 //! coordinates. The weather is fetched while a weather widget is placed
 //! on a page (or was just shown), at most each hour or as set, and only
-//! while there is a network: where QuireInk manages Wi-Fi it does not
+//! while there is a network: where PaperPaw manages Wi-Fi it does not
 //! switch the radio on for it, but waits until it is on. A tap on a
 //! widget fetches it at once. The last answer is kept in a small file,
 //! so the widgets show it at once after a start, with its age when old.
@@ -35,13 +35,13 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::cell::RefCell;
 
-use quireink_sdk::builtin::{events, params};
-use quireink_sdk::event::Event;
-use quireink_sdk::replies::HttpReply;
-use quireink_sdk::setting::{Setting, Text};
-use quireink_sdk::status::item_ids;
-use quireink_sdk::widgets;
-use quireink_sdk::{
+use paperpaw_sdk::builtin::{events, params};
+use paperpaw_sdk::event::Event;
+use paperpaw_sdk::replies::HttpReply;
+use paperpaw_sdk::setting::{Setting, Text};
+use paperpaw_sdk::status::item_ids;
+use paperpaw_sdk::widgets;
+use paperpaw_sdk::{
     ActionSpec, Command, Env, HttpRequest, Id, Instant, Manifest, Params, Plugin, RegisterError,
     Registrar, SDK_VERSION, ScreenSpec, SettingGroupSpec, SettingSpec, Version, time,
 };
@@ -76,8 +76,8 @@ pub const EVERY_HOURS: [&str; 4] = [
 ];
 /// The settings of the weather but the place, kept in the program.
 /// The place, edited on its own screen.
-static ON_PLACE_SCREEN: quireink_sdk::SettingExtra =
-    quireink_sdk::SettingExtra::new().editor(PLACE_SCREEN);
+static ON_PLACE_SCREEN: paperpaw_sdk::SettingExtra =
+    paperpaw_sdk::SettingExtra::new().editor(PLACE_SCREEN);
 static PLACE_SETTING: [SettingSpec; 1] =
     [
         SettingSpec::fixed_text(PLACE.static_str(), "weather.setting.place", "", GROUP)
@@ -176,7 +176,7 @@ impl State {
             return;
         }
         self.loaded = true;
-        self.weather = quireink_sdk::read_file(env.storage, &weather_file(), 4 * 1024)
+        self.weather = paperpaw_sdk::read_file(env.storage, &weather_file(), 4 * 1024)
             .ok()
             .and_then(|bytes| data::Weather::from_text(&String::from_utf8_lossy(&bytes)));
     }
@@ -321,7 +321,7 @@ fn every(env: &Env<'_>) -> i64 {
         * 3600
 }
 
-/// Whether the network can be used now: where QuireInk manages Wi-Fi,
+/// Whether the network can be used now: where PaperPaw manages Wi-Fi,
 /// only while it is in a network (the radio is not switched on for the
 /// weather).
 fn online(env: &Env<'_>) -> bool {
@@ -386,7 +386,7 @@ fn check(env: &Env<'_>, state: &Shared, why: Why, out: &mut Vec<Command>) {
     let mut request = HttpRequest::new("GET", &url, FETCHED);
     request.headers.push((
         String::from("User-Agent"),
-        String::from("QuireInk/0.1 (e-reader)"),
+        String::from("PaperPaw/0.1 (e-reader)"),
     ));
     request.params = Params::new().with(params::ID, coordinates);
     if why == Why::Asked {
@@ -541,7 +541,7 @@ pub(crate) fn tap(shown: &Shown) -> Command {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quireink_i18n::{Catalog, check};
+    use paperpaw_i18n::{Catalog, check};
 
     #[test]
     fn translations_are_complete() {

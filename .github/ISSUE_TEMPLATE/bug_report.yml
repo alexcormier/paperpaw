@@ -19,14 +19,14 @@ body:
   - type: input
     id: version
     attributes:
-      label: QuireInk version or commit
+      label: PaperPaw version or commit
   - type: textarea
     id: reproduce
     attributes:
       label: Steps to reproduce
       description: >
         If possible, an emulator command such as
-        `quireink-emu --headless --profile xteink-x4 --script "page-forward,long:confirm" --screenshot bug.png`.
+        `paperpaw-emu --headless --profile xteink-x4 --script "page-forward,long:confirm" --screenshot bug.png`.
   - type: textarea
     id: logs
     attributes:

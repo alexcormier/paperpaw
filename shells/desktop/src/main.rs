@@ -1,4 +1,4 @@
-//! QuireInk desktop emulator.
+//! PaperPaw desktop emulator.
 //!
 //! Runs the real kernel and plugins against an emulated e-ink device,
 //! interactively in a window, or headless for screenshots and CI.
@@ -21,15 +21,15 @@ use device::Device;
 static ALLOCATOR: budget::BudgetAllocator = budget::BudgetAllocator;
 
 const USAGE: &str = "\
-QuireInk emulator
+PaperPaw emulator
 
 USAGE:
-    quireink-emu [OPTIONS]
+    paperpaw-emu [OPTIONS]
 
 OPTIONS:
     --profile <id>        Device to emulate (default: xteink-x4)
     --list-profiles       List available device profiles
-    --config <file>       User configuration file (quireink.ini)
+    --config <file>       User configuration file (paperpaw.ini)
     --set <key>=<value>   Override configuration, e.g. --set core.language=de
                           or --set slots.core.home=core.placeholder
     --headless            Run without a window
@@ -89,7 +89,7 @@ fn run() -> Result<(), String> {
         .library
         .clone()
         .unwrap_or_else(|| PathBuf::from("samples/library"));
-    let storage = quireink_fs::DirStorage::new(&library)
+    let storage = paperpaw_fs::DirStorage::new(&library)
         .map_err(|e| format!("library {}: {e}", library.display()))?;
     if options.heap_report {
         if !options.headless {

@@ -20,14 +20,14 @@ use alloc::rc::Rc;
 use alloc::vec::Vec;
 use core::cell::RefCell;
 
-use quireink_sdk::builtin::{events, groups, menus};
-use quireink_sdk::{
+use paperpaw_sdk::builtin::{events, groups, menus};
+use paperpaw_sdk::{
     ActionSpec, Command, Env, Id, Manifest, MenuEntry, Params, Plugin, RegisterError, Registrar,
     SDK_VERSION, ScreenSpec, SettingSpec, Version, time,
 };
 
 use log::{Kind, Reading};
-use quireink_sdk::setting::Setting;
+use paperpaw_sdk::setting::Setting;
 
 pub const PLUGIN: Id = Id::new_static("battery");
 /// Records the battery's use.

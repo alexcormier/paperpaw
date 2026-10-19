@@ -19,8 +19,8 @@ use alloc::string::{String, ToString};
 use alloc::vec;
 use alloc::vec::Vec;
 
-use quireink_sdk::{Storage, StorageError};
-use quireink_sqlite::{Database, Error};
+use paperpaw_sdk::{Storage, StorageError};
+use paperpaw_sqlite::{Database, Error};
 
 use crate::koreader::{self, KoBook, STAT, fields, stat_record};
 use crate::store::{self, Book};
@@ -457,9 +457,9 @@ impl<'s> Source<'s> {
 mod tests {
     use super::*;
     use crate::store::PageStat;
-    use quireink_sdk::MemoryStorage;
+    use paperpaw_sdk::MemoryStorage;
 
-    const DIR: &str = ".quireink/plugins/stats";
+    const DIR: &str = ".paperpaw/plugins/stats";
 
     fn book(id: u16, md5: &str) -> Book {
         Book {
@@ -615,14 +615,14 @@ mod tests {
 
     /// Merges a real KOReader file into made-up statistics and writes the
     /// result for SQLite to check:
-    /// `QUIREINK_KO_IN=… QUIREINK_KO_OUT=… cargo test -p quireink-plugin-stats -- --ignored`.
+    /// `PAPERPAW_KO_IN=… PAPERPAW_KO_OUT=… cargo test -p paperpaw-plugin-stats -- --ignored`.
     #[test]
     #[ignore]
     fn real_koreader_file() {
         extern crate std;
         let (Ok(input), Ok(output)) = (
-            std::env::var("QUIREINK_KO_IN"),
-            std::env::var("QUIREINK_KO_OUT"),
+            std::env::var("PAPERPAW_KO_IN"),
+            std::env::var("PAPERPAW_KO_OUT"),
         ) else {
             return;
         };

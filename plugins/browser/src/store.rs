@@ -5,7 +5,7 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::{Env, Storage};
+use paperpaw_sdk::{Env, Storage};
 
 use crate::PLUGIN;
 
@@ -47,7 +47,7 @@ pub(crate) fn page_path(url: &str) -> String {
 
 /// A list, or `None` if it was never saved.
 pub(crate) fn load(storage: &dyn Storage, path: &str) -> Option<Vec<Entry>> {
-    let data = quireink_sdk::read_file(storage, path, 256 * 1024).ok()?;
+    let data = paperpaw_sdk::read_file(storage, path, 256 * 1024).ok()?;
     let text = String::from_utf8_lossy(&data);
     Some(
         text.lines()
@@ -97,7 +97,7 @@ pub(crate) fn remember(storage: &dyn Storage, entry: Entry) -> Vec<Entry> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quireink_sdk::MemoryStorage;
+    use paperpaw_sdk::MemoryStorage;
 
     #[test]
     fn the_history_keeps_the_latest_pages() {
@@ -129,7 +129,7 @@ mod tests {
     /// What version 1 wrote stays readable (see `docs/data-files.md`).
     #[test]
     fn lists_of_version_1_are_read() {
-        let storage = quireink_sdk::MemoryStorage::new().with(
+        let storage = paperpaw_sdk::MemoryStorage::new().with(
             &super::bookmarks_path(),
             include_str!("../testdata/bookmarks.txt.v1"),
         );

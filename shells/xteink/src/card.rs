@@ -1,5 +1,5 @@
-//! The microSD card's blocks (read and written by [`quireink_x4::card`])
-//! for QuireInk's FAT storage.
+//! The microSD card's blocks (read and written by [`paperpaw_x4::card`])
+//! for PaperPaw's FAT storage.
 
 use alloc::boxed::Box;
 
@@ -8,13 +8,13 @@ use embedded_hal::digital::OutputPin;
 use embedded_hal::spi::SpiBus;
 use esp_hal::time::Rate;
 use log::{info, warn};
-use quireink_fat::{BLOCK, Blocks, DiskError};
-use quireink_platform::{NoStorage, Storage};
+use paperpaw_fat::{BLOCK, Blocks, DiskError};
+use paperpaw_platform::{NoStorage, Storage};
 
 use crate::board::{self, CardParts};
 
-/// The card's FAT file system as QuireInk's storage, then the bus at full
-/// speed; without a card or one QuireInk cannot read, no storage.
+/// The card's FAT file system as PaperPaw's storage, then the bus at full
+/// speed; without a card or one PaperPaw cannot read, no storage.
 pub fn mount(parts: CardParts) -> Box<dyn Storage> {
     let CardParts {
         bus,
@@ -24,7 +24,7 @@ pub fn mount(parts: CardParts) -> Box<dyn Storage> {
     } = parts;
     // A card wants clocks with nothing selected before it starts.
     let _ = bus.borrow_mut().write(&[0xFF; 10]);
-    let sd = match quireink_x4::card::Card::new(bus, select, delay) {
+    let sd = match paperpaw_x4::card::Card::new(bus, select, delay) {
         Ok(sd) => sd,
         Err(e) => {
             warn!("SD card: {e:?}");
@@ -39,7 +39,7 @@ pub fn mount(parts: CardParts) -> Box<dyn Storage> {
 }
 
 /// The card, as blocks.
-pub struct Card<'a, BUS, CS, D>(pub quireink_x4::card::Card<'a, BUS, CS, D>);
+pub struct Card<'a, BUS, CS, D>(pub paperpaw_x4::card::Card<'a, BUS, CS, D>);
 
 impl<BUS: SpiBus, CS: OutputPin, D: DelayNs> Blocks for Card<'_, BUS, CS, D> {
     fn read_block(&mut self, index: u32, block: &mut [u8; BLOCK]) -> Result<(), DiskError> {

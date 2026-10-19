@@ -11,11 +11,11 @@
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::builtin::{actions, params};
-use quireink_sdk::semantics::Role;
-use quireink_sdk::setup::SetupPage;
-use quireink_sdk::ui::{self, UiStyle};
-use quireink_sdk::{
+use paperpaw_sdk::builtin::{actions, params};
+use paperpaw_sdk::semantics::Role;
+use paperpaw_sdk::setup::SetupPage;
+use paperpaw_sdk::ui::{self, UiStyle};
+use paperpaw_sdk::{
     Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Point, Rect,
     RefreshMode, Screen, SettingKind, SettingSpec, SettingValue,
 };
@@ -131,7 +131,7 @@ impl Guide {
     }
 
     /// The step of the page shown; `None` at the end.
-    fn step<'a>(&self, env: &'a Env<'_>) -> Option<&'a quireink_sdk::setup::SetupStepSpec> {
+    fn step<'a>(&self, env: &'a Env<'_>) -> Option<&'a paperpaw_sdk::setup::SetupStepSpec> {
         let id = self.steps.get(self.page)?;
         env.setup.applying(env).into_iter().find(|s| s.id == *id)
     }
@@ -579,11 +579,11 @@ impl Screen for Guide {
         self.redraw(cx, RefreshMode::Partial);
     }
 
-    fn hint(&self, action: &Id, env: &Env<'_>) -> quireink_sdk::Hint {
+    fn hint(&self, action: &Id, env: &Env<'_>) -> paperpaw_sdk::Hint {
         if *action == actions::BACK && self.page == 0 {
-            quireink_sdk::Hint::Text(env.i18n.tr("setup.skip-short").to_string())
+            paperpaw_sdk::Hint::Text(env.i18n.tr("setup.skip-short").to_string())
         } else {
-            quireink_sdk::Hint::Default
+            paperpaw_sdk::Hint::Default
         }
     }
 

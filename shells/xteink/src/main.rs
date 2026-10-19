@@ -1,4 +1,4 @@
-//! QuireInk on the Xteink X4 (ESP32-C3) and the X4 Pro (ESP32-S3, with a
+//! PaperPaw on the Xteink X4 (ESP32-C3) and the X4 Pro (ESP32-S3, with a
 //! touch screen): the kernel with the standard app, its screen, buttons,
 //! battery and SD card. The feature `x4` or `x4-pro` says which.
 //!
@@ -6,11 +6,11 @@
 //!   `board_pro`; its card `card_pro`).
 //! - **Screen**: the kernel draws in bands of [`FRAME_ROWS`] rows; each
 //!   goes straight into the display controller's memory, which keeps the
-//!   frame (see `quireink_x4::display`).
+//!   frame (see `paperpaw_x4::display`).
 //! - **Buttons**: read in a timer's interrupt and debounced, so presses
-//!   count while QuireInk is busy (`input`, `quireink_x4::buttons`).
+//!   count while PaperPaw is busy (`input`, `paperpaw_x4::buttons`).
 //! - **Storage**: the SD card's FAT file system, with long file names
-//!   (`quireink_fat`). Without a card, QuireInk starts with nothing to
+//!   (`paperpaw_fat`). Without a card, PaperPaw starts with nothing to
 //!   read.
 //! - **Sleep**: the sleep screen stays shown; the battery's power is cut,
 //!   and the power button starts the X4 again, where it was.
@@ -70,27 +70,27 @@ use esp_hal::main;
 use esp_hal::rtc_cntl::sleep::LowPower;
 use esp_hal::timer::PeriodicTimer;
 use log::{info, warn};
-use quireink_core::Kernel;
+use paperpaw_core::Kernel;
 #[cfg(feature = "x4-pro")]
-use quireink_platform::buttons as names;
-use quireink_platform::{
+use paperpaw_platform::buttons as names;
+use paperpaw_platform::{
     DeviceInfo, DisplayInfo, InputCaps, Instant, MemoryClass, PixelFormat, Rotation, Storage,
 };
-use quireink_sdk::builtin::settings;
+use paperpaw_sdk::builtin::settings;
 #[cfg(feature = "x4")]
-use quireink_x4::buttons;
+use paperpaw_x4::buttons;
 #[cfg(feature = "x4")]
-use quireink_x4::display;
+use paperpaw_x4::display;
 #[cfg(feature = "x4-pro")]
-use quireink_x4::uc8179 as display;
+use paperpaw_x4::uc8179 as display;
 
 use crate::board::Board;
 use crate::firmware::{Firmware, State};
 
-// QuireInk's version and which firmware this is, read from updates.
+// PaperPaw's version and which firmware this is, read from updates.
 esp_bootloader_esp_idf::esp_app_desc!(
-    env!("QUIREINK_VERSION"),
-    "quireink-xteink",
+    env!("PAPERPAW_VERSION"),
+    "paperpaw-xteink",
     esp_bootloader_esp_idf::BUILD_TIME,
     esp_bootloader_esp_idf::BUILD_DATE,
     esp_bootloader_esp_idf::ESP_IDF_COMPATIBLE_VERSION,
@@ -100,10 +100,10 @@ esp_bootloader_esp_idf::esp_app_desc!(
     esp_bootloader_esp_idf::SECURE_VERSION
 );
 
-/// Heap for QuireInk: what the emulator's X4 profile allows.
+/// Heap for PaperPaw: what the emulator's X4 profile allows.
 const HEAP_SIZE: usize = 192 * 1024;
 /// More heap in the memory the bootloader used (65 KB are free after it):
-/// room for the frame kept for the panel (see `quireink_x4::sent`).
+/// room for the frame kept for the panel (see `paperpaw_x4::sent`).
 const RECLAIMED_SIZE: usize = 64 * 1024;
 /// Rows the kernel draws at once: 11.3 KiB of black and white. Fewer
 /// bands draw faster: each costs the screens a pass over what they show.
@@ -183,7 +183,7 @@ fn now() -> Instant {
 fn main() -> ! {
     stack::paint();
     let p = esp_hal::init(esp_hal::Config::default().with_cpu_clock(CpuClock::max()));
-    // The X4 Pro's PSRAM first, so QuireInk's memory comes from there and
+    // The X4 Pro's PSRAM first, so PaperPaw's memory comes from there and
     // the chip's own stays for the radio and DMA, which need it.
     #[cfg(feature = "x4-pro")]
     // SAFETY: only taken here; the board does not use it.
@@ -199,7 +199,7 @@ fn main() -> ! {
     power::note_start();
     let panicked = crash::take_last();
     let (place, naps, reason) = power::last_run();
-    info!("QuireInk starting (reset: {reason:?}, last at {place}, naps {naps})");
+    info!("PaperPaw starting (reset: {reason:?}, last at {place}, naps {naps})");
     if let Some(message) = &panicked {
         warn!("the last run panicked: {message}");
     }
@@ -290,15 +290,15 @@ fn kernel(storage: Box<dyn Storage>, ota: Option<&ota::Ota>) -> Kernel {
         .setting_default(&settings::FLASH_SCREENS, false)
         .setting_default(&settings::UI_SIZE, 9)
         .setting_default(&settings::FONT_SIZE, 9)
-        // QuireInk switches the radio (`network`); on USB it stays on in a
+        // PaperPaw switches the radio (`network`); on USB it stays on in a
         // network joined before, for transfers and for trying things.
         .wifi(true)
-        .setting_default(&quireink_plugin_wifi::WHILE_CHARGING, true);
+        .setting_default(&paperpaw_plugin_wifi::WHILE_CHARGING, true);
     let builder = match ota {
         Some(ota) => builder.firmware(ota.firmware()),
         None => builder,
     };
-    let builder = quireink_app::install(builder, quireink_app::Fonts::Packs).plugin(device::X4);
+    let builder = paperpaw_app::install(builder, paperpaw_app::Fonts::Packs).plugin(device::X4);
     let mut kernel = builder.build().expect("kernel");
     for warning in kernel.take_warnings() {
         warn!("{warning}");

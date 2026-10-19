@@ -1,9 +1,9 @@
-# QuireInk
+# PaperPaw
 
 **A lean, fast and endlessly customisable e-reader for e-ink devices, from a
 380 KB microcontroller to Linux and Android e-readers, from one codebase.**
 
-> **Status: early releases (0.3).** QuireInk runs on Android e-readers
+> **Status: early releases (0.3).** PaperPaw runs on Android e-readers
 > (tested on a Boox Go 7) and in the desktop emulator: EPUB, FB2,
 > Markdown, text, comics and PDF, colour pictures on colour screens,
 > reading positions, bookmarks and highlights shared with KOReader,
@@ -24,24 +24,24 @@
 ## Get it
 
 The Android app (arm64, Android 8 or later) is attached to each
-[release](https://github.com/hthoene/quireink/releases); F-Droid is to
+[release](https://github.com/hthoene/paperpaw/releases); F-Droid is to
 follow. To build it yourself, see [shells/android](shells/android/README.md).
 
-To read your books, QuireInk needs *All files access*; the home screen
+To read your books, PaperPaw needs *All files access*; the home screen
 asks for it. Android 13 and later may grey out that switch for apps
 installed from a browser or a file manager (a "restricted setting"). Open
-*Settings, Apps, QuireInk*, choose *Allow restricted settings* in the
+*Settings, Apps, PaperPaw*, choose *Allow restricted settings* in the
 menu at the top, then turn the switch on. Where that menu has no such
 entry, a computer with `adb` lifts the restriction:
 
 ```sh
-adb shell appops set --user 0 io.github.hthoene.quireink ACCESS_RESTRICTED_SETTINGS allow
+adb shell appops set --user 0 io.github.hthoene.paperpaw ACCESS_RESTRICTED_SETTINGS allow
 ```
 
 For updates as they are released, [Obtainium](https://github.com/ImranR98/Obtainium)
 installs new versions from the releases page.
 
-## Why QuireInk?
+## Why PaperPaw?
 
 - **Runs where others can't.** The smallest target is the Xteink X4 with an
   ESP32-C3 and no PSRAM. Everything is designed for that budget, so larger
@@ -58,17 +58,17 @@ installs new versions from the releases page.
 
 ## How it's made
 
-QuireInk is a one-person project. Much of its code and documentation is
+PaperPaw is a one-person project. Much of its code and documentation is
 written with the help of an AI model (Claude, by Anthropic); its maker
 decides what goes in, every change has to pass more than 400 tests,
 snapshot tests of its screens and the other checks before it is merged,
 and releases are built reproducibly and tried on a real reader first.
-QuireInk is young and may have rough edges; issues and wishes are welcome.
-More at [quireink.org/about](https://quireink.org/about).
+PaperPaw is young and may have rough edges; issues and wishes are welcome.
+More at [paperpaw.org/about](https://paperpaw.org/about).
 
 ## Customisation at a glance
 
-A plain text file (`quireink.ini`) on the device changes behaviour without
+A plain text file (`paperpaw.ini`) on the device changes behaviour without
 any programming:
 
 ```ini
@@ -96,14 +96,14 @@ some-plugin = off
 ```
 
 Plugins contribute screens, actions, settings, key maps and translations
-through the [`quireink-sdk`](crates/quireink-sdk) crate. See
+through the [`paperpaw-sdk`](crates/paperpaw-sdk) crate. See
 [docs/PLANNING.md §7](docs/PLANNING.md#7-extensibility) for the full
 extension model.
 
 ### Plugins without code
 
 A folder with a few text files is a plugin too. Copy it into the `plugins`
-folder of the device (on Android: `QuireInk/plugins` on the device's
+folder of the device (on Android: `PaperPaw/plugins` on the device's
 storage) and restart; it shows up in *Settings → Plugins*, where it can be
 switched off again. These work on every device, including the Xteink X4.
 
@@ -111,7 +111,7 @@ switched off again. These work on every device, including the Xteink X4.
 plugins/large-print/
   plugin.ini     [plugin] id, name, description, version
   i18n/*.ini     translations, also whole new languages
-  keymap.ini     key bindings, as in quireink.ini
+  keymap.ini     key bindings, as in paperpaw.ini
   settings.ini   new defaults for any setting, e.g. [reader] font-size = 14
   fonts/*.ttf    fonts to read with (also .otf, .ttc)
 ```
@@ -129,11 +129,11 @@ You need a recent stable [Rust toolchain](https://rustup.rs). The required
 targets are installed automatically from `rust-toolchain.toml`.
 
 ```bash
-cargo run -p quireink-emulator -- --profile xteink-x4
+cargo run -p paperpaw-emulator -- --profile xteink-x4
 ```
 
 ```bash
-cargo run -p quireink-emulator -- --list-profiles
+cargo run -p paperpaw-emulator -- --list-profiles
 ```
 
 Keys: `PageDown`/`Space` next page, `PageUp` previous page, arrow keys,
@@ -148,7 +148,7 @@ press moves forward or back, a long press on forward confirms or opens the
 menu, a long press on back goes back. Try it with
 `--profile two-buttons`.
 
-Settings changed in the UI are saved to `quireink.ini` in the library
+Settings changed in the UI are saved to `paperpaw.ini` in the library
 folder, the same file you can edit by hand.
 
 The emulator uses `samples/library` as the device storage; two
@@ -164,28 +164,28 @@ site). Headless
 runs produce screenshots for tests and bug reports:
 
 ```bash
-cargo run -p quireink-emulator -- --headless --profile boox-go-7 --set core.language=de --script "page-forward,long:page-forward" --screenshot out/go7.png
+cargo run -p paperpaw-emulator -- --headless --profile boox-go-7 --set core.language=de --script "page-forward,long:page-forward" --screenshot out/go7.png
 ```
 
 ## Repository layout
 
 | Path | Contents |
 |------|----------|
-| `crates/quireink-platform` | Vocabulary shared by shells and kernel: display info, pixel formats, raw input |
-| `crates/quireink-config` | The human-editable config format used for settings, key maps and translations |
-| `crates/quireink-i18n` | Message catalogs, fallback chains and plural rules |
-| `crates/quireink-graphics` | Framebuffers in native pixel formats, clipped canvas |
-| `crates/quireink-text` | Fonts (runtime outlines or bitmap packs), rasterizer, glyph cache, line breaking |
-| `crates/quireink-document` | Format-independent document model: locators, blocks, offset maps |
-| `crates/quireink-layout` | Deterministic page layout usable by any reader plugin |
-| `crates/quireink-zip` | Streaming ZIP reader with small, bounded memory use |
-| `crates/quireink-xml` | Incremental XML/XHTML tokenizer |
-| `crates/quireink-stardict` | StarDict dictionaries looked up in place (dictzip, synonyms) |
-| `crates/quireink-sdk` | **The plugin SDK**: the only API plugins use |
-| `crates/quireink-core` | The kernel: plugin host, registries, input routing, refresh policy |
-| `crates/quireink-app` | The standard app: the first-party plugin set shells install |
-| `crates/quireink-fs` | Storage in a host directory, for shells with an operating system |
-| `plugins/` | First-party plugins: home screen, reader, library, file manager, menu, settings, plugin manager, menu editor, keyboard, profiles, dictionary, vocabulary, translation, Readwise, Wikipedia, news feeds, Wallabag, sleep screen, reading statistics, progress sync, catalogs (OPDS), browser, Wi-Fi (where QuireInk manages it), Wi-Fi transfer, formats (EPUB, FB2, CBZ, Markdown, TXT, XTC), hyphenation, reading aids, default fonts, diagnostics, about (version and licences) |
+| `crates/paperpaw-platform` | Vocabulary shared by shells and kernel: display info, pixel formats, raw input |
+| `crates/paperpaw-config` | The human-editable config format used for settings, key maps and translations |
+| `crates/paperpaw-i18n` | Message catalogs, fallback chains and plural rules |
+| `crates/paperpaw-graphics` | Framebuffers in native pixel formats, clipped canvas |
+| `crates/paperpaw-text` | Fonts (runtime outlines or bitmap packs), rasterizer, glyph cache, line breaking |
+| `crates/paperpaw-document` | Format-independent document model: locators, blocks, offset maps |
+| `crates/paperpaw-layout` | Deterministic page layout usable by any reader plugin |
+| `crates/paperpaw-zip` | Streaming ZIP reader with small, bounded memory use |
+| `crates/paperpaw-xml` | Incremental XML/XHTML tokenizer |
+| `crates/paperpaw-stardict` | StarDict dictionaries looked up in place (dictzip, synonyms) |
+| `crates/paperpaw-sdk` | **The plugin SDK**: the only API plugins use |
+| `crates/paperpaw-core` | The kernel: plugin host, registries, input routing, refresh policy |
+| `crates/paperpaw-app` | The standard app: the first-party plugin set shells install |
+| `crates/paperpaw-fs` | Storage in a host directory, for shells with an operating system |
+| `plugins/` | First-party plugins: home screen, reader, library, file manager, menu, settings, plugin manager, menu editor, keyboard, profiles, dictionary, vocabulary, translation, Readwise, Wikipedia, news feeds, Wallabag, sleep screen, reading statistics, progress sync, catalogs (OPDS), browser, Wi-Fi (where PaperPaw manages it), Wi-Fi transfer, formats (EPUB, FB2, CBZ, Markdown, TXT, XTC), hyphenation, reading aids, default fonts, diagnostics, about (version and licences) |
 | `tools/fontgen` | Converts fonts into bitmap font packs for small devices |
 | `shells/desktop` | Desktop emulator with device profiles |
 | `shells/android` | Android app for e-readers such as Boox ([build and install](shells/android/README.md)) |
@@ -200,7 +200,7 @@ testing on real hardware. Please read [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-QuireInk is licensed under the [Apache License, Version 2.0](LICENSE).
+PaperPaw is licensed under the [Apache License, Version 2.0](LICENSE).
 The bundled fonts, [Literata](https://github.com/googlefonts/literata) and
 [Source Sans 3](https://github.com/adobe-fonts/source-sans),
 are licensed under the [SIL Open Font License 1.1](plugins/fonts-default/fonts/).

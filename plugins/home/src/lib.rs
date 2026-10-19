@@ -2,7 +2,7 @@
 //!
 //! - **Pages**: each a grid of cells (4 columns by default, rows to fit
 //!   the screen) in a setting of its own (see `pages`; the grid is the
-//!   SDK's, `quireink_sdk::widgets::grid`): by default
+//!   SDK's, `paperpaw_sdk::widgets::grid`): by default
 //!   the clock, the book being read and the recent ones, then a page with
 //!   all tools. The status line sits above the grid. Swipes and the page
 //!   buttons go from page to page; dots below show where one is.
@@ -27,7 +27,7 @@
 //!   `Registrar::add_menu_entry`.
 //!
 //! The recently read books and their covers come from the library service
-//! (`quireink_sdk::library`), which follows the standard reading events,
+//! (`paperpaw_sdk::library`), which follows the standard reading events,
 //! so any reader plugin works.
 //! The home screen is bound to `core.home`; replace it with any other
 //! screen by configuration or with a plugin of higher priority.
@@ -51,12 +51,12 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use quireink_sdk::builtin::{actions, events, params, slots};
-use quireink_sdk::event::Event;
-use quireink_sdk::ui::choice::{self, Choice};
-use quireink_sdk::ui::{self, UiStyle};
-use quireink_sdk::widgets::grid::{self, Geometry, GridResponse, GridView, Item};
-use quireink_sdk::{
+use paperpaw_sdk::builtin::{actions, events, params, slots};
+use paperpaw_sdk::event::Event;
+use paperpaw_sdk::ui::choice::{self, Choice};
+use paperpaw_sdk::ui::{self, UiStyle};
+use paperpaw_sdk::widgets::grid::{self, Geometry, GridResponse, GridView, Item};
+use paperpaw_sdk::{
     Canvas, Color, Command, Cx, Env, Gesture, Handled, Hint, Id, Manifest, MenuEntry, Params,
     Plugin, PointerEvent, Priority, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION,
     Screen, ScreenSpec, Version,
@@ -84,11 +84,11 @@ const TIPS_SCREEN: Id = Id::new_static("home.tips");
 const CHOSEN: Event<choice::Picked> = Event::new("home.item-chosen");
 
 /// Whether the home screen tells how to swipe, until tried.
-static TIPS: [quireink_sdk::SettingSpec; 1] = [quireink_sdk::SettingSpec::fixed_switch(
+static TIPS: [paperpaw_sdk::SettingSpec; 1] = [paperpaw_sdk::SettingSpec::fixed_switch(
     drawer::TIPS_SETTING.static_str(),
     "home.setting.gesture-tips",
     true,
-    quireink_sdk::builtin::groups::LOOK,
+    paperpaw_sdk::builtin::groups::LOOK,
 )
 .advanced()
 .described("home.setting.gesture-tips.help")];
@@ -153,7 +153,7 @@ impl Plugin for Home {
             factory: Box::new(|env, _| Box::new(drawer::TipsScreen::new(env))),
         })?;
         r.add_action(
-            quireink_sdk::ActionSpec::new(ALL_TOOLS, "home.drawer").handler(
+            paperpaw_sdk::ActionSpec::new(ALL_TOOLS, "home.drawer").handler(
                 |_: &Env<'_>, out: &mut Vec<Command>| {
                     out.push(Command::OpenScreen(DRAWER_SCREEN, Params::new()));
                 },
@@ -163,7 +163,7 @@ impl Plugin for Home {
         // Shown, the home screen edits itself; from elsewhere it opens
         // editing.
         r.add_action(
-            quireink_sdk::ActionSpec::new(EDIT_PAGES, "home.edit-pages").handler(
+            paperpaw_sdk::ActionSpec::new(EDIT_PAGES, "home.edit-pages").handler(
                 |_: &Env<'_>, out: &mut Vec<Command>| {
                     let params = Params::new().with(params::MODE, "edit");
                     out.push(Command::OpenSlot(slots::HOME, params));
@@ -172,7 +172,7 @@ impl Plugin for Home {
         )?;
         r.add_icon(EDIT_PAGES, Cow::Borrowed("pencil"))?;
         r.add_menu_entry(MenuEntry {
-            menu: quireink_sdk::builtin::menus::MAIN,
+            menu: paperpaw_sdk::builtin::menus::MAIN,
             item: EDIT_PAGES,
             order: 40,
         })?;
@@ -223,8 +223,8 @@ struct Dashboard {
 }
 
 /// The next full minute, when the clock shows another time.
-fn next_minute(env: &Env<'_>) -> quireink_sdk::Instant {
-    quireink_sdk::time::next_minute(env).unwrap_or(env.now.add_millis(60_000))
+fn next_minute(env: &Env<'_>) -> paperpaw_sdk::Instant {
+    paperpaw_sdk::time::next_minute(env).unwrap_or(env.now.add_millis(60_000))
 }
 
 /// Where the parts of the home screen go: the status line, the grid, the
@@ -459,7 +459,7 @@ impl Dashboard {
             if let Some(font) = font {
                 let margin = style.margin as u16;
                 let width = (f.width / 2).saturating_sub(margin + style.gap as u16 * 3);
-                let line = quireink_sdk::status::StatusLine {
+                let line = paperpaw_sdk::status::StatusLine {
                     area: Rect::new(margin, f.y, width, f.height),
                     lists: [env.settings.read(&pages::FOOTER_ITEMS), "", ""],
                     size: style.small,
@@ -654,7 +654,7 @@ impl Screen for Dashboard {
                     self.choose(tap, cx);
                     Handled::Yes
                 }
-                None if gesture.kind == quireink_sdk::GestureKind::Tap && !on_sheet => Handled::Yes,
+                None if gesture.kind == paperpaw_sdk::GestureKind::Tap && !on_sheet => Handled::Yes,
                 None => Handled::No,
             };
         }
@@ -665,7 +665,7 @@ impl Screen for Dashboard {
 
 #[cfg(test)]
 mod tests {
-    use quireink_i18n::{Catalog, check};
+    use paperpaw_i18n::{Catalog, check};
 
     #[test]
     fn translations_are_complete() {

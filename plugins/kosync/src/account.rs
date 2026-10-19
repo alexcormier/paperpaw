@@ -10,18 +10,18 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::ask;
-use quireink_sdk::builtin::actions;
-use quireink_sdk::event::Event;
-use quireink_sdk::replies::{HttpReply, Typed};
-use quireink_sdk::ui::{self, ListView, UiStyle};
-use quireink_sdk::{
+use paperpaw_sdk::ask;
+use paperpaw_sdk::builtin::actions;
+use paperpaw_sdk::event::Event;
+use paperpaw_sdk::replies::{HttpReply, Typed};
+use paperpaw_sdk::ui::{self, ListView, UiStyle};
+use paperpaw_sdk::{
     Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, RefreshMode,
     Screen,
 };
 
-use quireink_digest::md5;
-use quireink_json as json;
+use paperpaw_digest::md5;
+use paperpaw_json as json;
 
 use crate::{
     ACCOUNT_CHANGED, SERVER, USER, normalize_server, save_key, server, server_label, server_request,

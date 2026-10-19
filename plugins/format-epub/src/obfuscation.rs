@@ -51,7 +51,7 @@ pub(crate) fn reveal(data: &mut [u8], method: Method, identifier: &str) {
         Method::None => return,
         Method::Idpf => {
             let id: String = identifier.chars().filter(|c| !c.is_whitespace()).collect();
-            let mut sha = quireink_digest::sha1::Sha1::new();
+            let mut sha = paperpaw_digest::sha1::Sha1::new();
             sha.update(id.as_bytes());
             (sha.finish().to_vec(), 1040)
         }

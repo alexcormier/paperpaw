@@ -11,13 +11,13 @@
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::ask;
-use quireink_sdk::builtin::actions;
-use quireink_sdk::event::Event;
-use quireink_sdk::replies::Typed;
-use quireink_sdk::semantics::Role;
-use quireink_sdk::ui::{self, UiStyle};
-use quireink_sdk::{
+use paperpaw_sdk::ask;
+use paperpaw_sdk::builtin::actions;
+use paperpaw_sdk::event::Event;
+use paperpaw_sdk::replies::Typed;
+use paperpaw_sdk::semantics::Role;
+use paperpaw_sdk::ui::{self, UiStyle};
+use paperpaw_sdk::{
     Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Instant, Metrics,
     Params, Point, PointerEvent, PointerPhase, Rect, RefreshMode, Screen,
 };
@@ -488,12 +488,12 @@ impl LockScreen {
         let Some(font) = style.font(env) else {
             return;
         };
-        let time = quireink_sdk::time::clock_text(env).unwrap_or_default();
+        let time = paperpaw_sdk::time::clock_text(env).unwrap_or_default();
         let big = line(env, style, l.clock_size);
         let top = Rect::new(l.clock.x, l.clock.y, l.clock.width, big);
         let x = (f32::from(top.width) - font.measure(l.clock_size, &time)) / 2.0;
         ui::draw_label(canvas, &font, l.clock_size, x, top, &time, Color::BLACK);
-        if let Some(date) = quireink_sdk::time::date_text(env) {
+        if let Some(date) = paperpaw_sdk::time::date_text(env) {
             let below = Rect::new(top.x, top.y + big, top.width, line(env, style, style.small));
             let x = (f32::from(below.width) - font.measure(style.small, &date)) / 2.0;
             ui::draw_label(canvas, &font, style.small, x, below, &date, style.faint(70));
@@ -563,11 +563,11 @@ fn ring(canvas: &mut Canvas<'_>, at: Point, r: i32, width: u32) {
 
 impl Screen for LockScreen {
     /// Unlocking, *Back* takes the last digit or dot away.
-    fn hint(&self, action: &Id, env: &Env<'_>) -> quireink_sdk::Hint {
+    fn hint(&self, action: &Id, env: &Env<'_>) -> paperpaw_sdk::Hint {
         if self.step == Step::Unlock && *action == actions::BACK {
-            quireink_sdk::Hint::Text(env.i18n.tr("lock.delete").to_string())
+            paperpaw_sdk::Hint::Text(env.i18n.tr("lock.delete").to_string())
         } else {
-            quireink_sdk::Hint::Default
+            paperpaw_sdk::Hint::Default
         }
     }
 

@@ -1,12 +1,12 @@
 //! Reading progress synced with KOReader's sync server ("kosync"), so a
-//! book opens where one stopped on another device, QuireInk or KOReader.
+//! book opens where one stopped on another device, PaperPaw or KOReader.
 //!
 //! - Books are identified as KOReader does (a partial MD5 of the file), so
 //!   the same file matches on every device.
 //! - Positions are KOReader's XPointers where the format has them (EPUB),
 //!   besides the percentage.
 //! - The progress is sent at most once a minute while reading (where
-//!   QuireInk runs the radio itself, only while it is on anyway: turning
+//!   PaperPaw runs the radio itself, only while it is on anyway: turning
 //!   pages never keeps it on), and when a book is closed and the device
 //!   sleeps or the app goes to the background; it is fetched when a book
 //!   opens and when the app comes back. If another device is further, a dialog offers to
@@ -18,7 +18,7 @@
 //!   below a path (`https://example.org/kosync`) or over plain `http` in a
 //!   home network.
 //!
-//! Needs a device with network ([`Capabilities::network`](quireink_sdk::Capabilities)).
+//! Needs a device with network ([`Capabilities::network`](paperpaw_sdk::Capabilities)).
 
 #![no_std]
 
@@ -27,7 +27,7 @@ extern crate alloc;
 mod account;
 mod confirm;
 
-use quireink_digest::md5;
+use paperpaw_digest::md5;
 
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
@@ -37,14 +37,14 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::cell::RefCell;
 
-use quireink_json as json;
-use quireink_sdk::builtin::{events, params};
-use quireink_sdk::document::Locator;
-use quireink_sdk::event::Event;
-use quireink_sdk::replies::HttpReply;
-use quireink_sdk::secrets::SecretChange;
-use quireink_sdk::setting::{Setting, Text};
-use quireink_sdk::{
+use paperpaw_json as json;
+use paperpaw_sdk::builtin::{events, params};
+use paperpaw_sdk::document::Locator;
+use paperpaw_sdk::event::Event;
+use paperpaw_sdk::replies::HttpReply;
+use paperpaw_sdk::secrets::SecretChange;
+use paperpaw_sdk::setting::{Setting, Text};
+use paperpaw_sdk::{
     ActionSpec, Arg, Command, Env, HttpRequest, Id, Instant, Manifest, MenuEntry, Params, Plugin,
     RegisterError, Registrar, SDK_VERSION, ScreenSpec, SettingGroupSpec, SettingSpec, Version,
 };
@@ -70,7 +70,7 @@ const PULLED: Event<HttpReply> = Event::new("kosync.pulled");
 const PUSHED: Event<HttpReply> = Event::new("kosync.pushed");
 
 /// Whether sending now keeps no radio on that would be off otherwise: the
-/// system runs Wi-Fi, or QuireInk's radio is in a network already.
+/// system runs Wi-Fi, or PaperPaw's radio is in a network already.
 fn radio_on_anyway(env: &Env<'_>) -> bool {
     env.wifi.is_none_or(|w| w.state.is_online())
 }
@@ -121,17 +121,17 @@ fn dir() -> String {
 }
 
 /// The account's key (the MD5 of its password), kept with the other
-/// passwords and keys (see `quireink_sdk::secrets`).
+/// passwords and keys (see `paperpaw_sdk::secrets`).
 pub(crate) const SECRET: &str = "kosync.key";
 
 fn key<'a>(env: &Env<'a>) -> Option<&'a str> {
     env.secrets.get(SECRET).filter(|k| !k.is_empty())
 }
 
-fn read_value(storage: &dyn quireink_sdk::Storage, file: &str, key: &str) -> Option<String> {
-    let data = quireink_sdk::read_file(storage, file, 4096).ok()?;
+fn read_value(storage: &dyn paperpaw_sdk::Storage, file: &str, key: &str) -> Option<String> {
+    let data = paperpaw_sdk::read_file(storage, file, 4096).ok()?;
     let text = core::str::from_utf8(&data).ok()?;
-    quireink_sdk::config::parse(text)
+    paperpaw_sdk::config::parse(text)
         .filter_map(Result::ok)
         .find(|e| e.key == key)
         .map(|e| e.value.as_str().into_owned())
@@ -280,7 +280,7 @@ impl State {
 
 /// How this device shows up on others.
 fn device_name(env: &Env<'_>) -> String {
-    format!("QuireInk ({})", env.device.name)
+    format!("PaperPaw ({})", env.device.name)
 }
 
 /// The server's base URL.
@@ -412,8 +412,8 @@ fn pulled(state: &State, env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command
 pub struct Kosync;
 
 /// The account, signed in on a screen of its own.
-static ACCOUNT: quireink_sdk::SettingExtra =
-    quireink_sdk::SettingExtra::new().editor(ACCOUNT_SCREEN);
+static ACCOUNT: paperpaw_sdk::SettingExtra =
+    paperpaw_sdk::SettingExtra::new().editor(ACCOUNT_SCREEN);
 
 /// The account, whether books sync by themselves, and the server.
 static SETTINGS: [SettingSpec; 3] = [
@@ -572,7 +572,7 @@ impl Plugin for Kosync {
             },
         ))?;
         r.add_menu_entry(MenuEntry {
-            menu: quireink_sdk::builtin::menus::READER_MORE,
+            menu: paperpaw_sdk::builtin::menus::READER_MORE,
             item: SYNC_NOW,
             order: 25,
         })?;
@@ -585,7 +585,7 @@ impl Plugin for Kosync {
 
 #[cfg(test)]
 mod tests {
-    use quireink_i18n::{Catalog, check};
+    use paperpaw_i18n::{Catalog, check};
 
     use super::*;
 
@@ -599,7 +599,7 @@ mod tests {
 
     #[test]
     fn positions_come_from_reading_events() {
-        let reading = quireink_sdk::builtin::events::Reading {
+        let reading = paperpaw_sdk::builtin::events::Reading {
             path: "books/a.epub".into(),
             title: String::new(),
             progress: 42.5,
@@ -648,7 +648,7 @@ mod tests {
     /// What version 1 wrote stays readable (see `docs/data-files.md`).
     #[test]
     fn files_of_version_1_are_read() {
-        let storage = quireink_sdk::MemoryStorage::new()
+        let storage = paperpaw_sdk::MemoryStorage::new()
             .with("device.ini", include_str!("../testdata/device.ini.v1"))
             .with("account.ini", include_str!("../testdata/account.ini.v1"));
         assert_eq!(

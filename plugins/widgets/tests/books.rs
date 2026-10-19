@@ -10,11 +10,11 @@ use std::borrow::Cow;
 use std::cell::Cell;
 use std::rc::Rc;
 
-use quireink_core::Kernel;
-use quireink_platform::Rotation;
-use quireink_plugin_widgets::Widgets;
-use quireink_sdk::builtin::events;
-use quireink_sdk::{
+use paperpaw_core::Kernel;
+use paperpaw_platform::Rotation;
+use paperpaw_plugin_widgets::Widgets;
+use paperpaw_sdk::builtin::events;
+use paperpaw_sdk::{
     ActionSpec, Command, DeviceInfo, DisplayInfo, Env, Id, InputCaps, Instant, Manifest,
     MemoryClass, MemoryStorage, PixelFormat, Plugin, RegisterError, Registrar, SDK_VERSION,
 };
@@ -107,11 +107,11 @@ impl Home {
     fn new(settings: &[(&str, &str)]) -> Self {
         let storage = MemoryStorage::new()
             .with(BOOK, "a book")
-            .with(".quireink/plugins/setup/done", "");
+            .with(".paperpaw/plugins/setup/done", "");
         let mut kernel = Kernel::builder(DEVICE)
             .storage(storage)
-            .plugin(quireink_plugin_fonts_default::DefaultFontPacks)
-            .plugin(quireink_plugin_home::Home)
+            .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
+            .plugin(paperpaw_plugin_home::Home)
             .plugin(Widgets)
             .plugin(StandIn(Rc::new(Cell::new(40))))
             .build()

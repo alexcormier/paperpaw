@@ -1,4 +1,4 @@
-// Modified for QuireInk: the maps and sets below hash with fixed keys
+// Modified for PaperPaw: the maps and sets below hash with fixed keys
 // (FixedState) instead of random ones, so the macro writes the same code in
 // every build and the app built with it is reproducible.
 

@@ -5,9 +5,9 @@
 // Tests panic on purpose when something is wrong.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use quireink_core::Kernel;
-use quireink_platform::{Rotation, SystemStatus, WallClock};
-use quireink_sdk::{
+use paperpaw_core::Kernel;
+use paperpaw_platform::{Rotation, SystemStatus, WallClock};
+use paperpaw_sdk::{
     DeviceInfo, DisplayInfo, InputCaps, Instant, MemoryClass, MemoryStorage, PixelFormat, Storage,
 };
 
@@ -35,7 +35,7 @@ const DEVICE: DeviceInfo = DeviceInfo {
 /// 14 October 2026, 10:41 in Berlin (UTC+2): local day 20 740.
 const NOW_MILLIS: i64 = 1_791_967_260_000;
 const TODAY: i64 = 20_740;
-const DIR: &str = ".quireink/plugins/stats";
+const DIR: &str = ".paperpaw/plugins/stats";
 
 /// A card with reading: `minutes` on each day back from today (0), a
 /// page a minute from 19:00, and books, two finished this year.
@@ -80,9 +80,9 @@ fn home(storage: MemoryStorage, page: &str, config: &str) -> (String, usize) {
     let mut kernel = Kernel::builder(DEVICE)
         .storage(storage)
         .user_config(user)
-        .plugin(quireink_plugin_fonts_default::DefaultFontPacks)
-        .plugin(quireink_plugin_home::Home)
-        .plugin(quireink_plugin_stats::Stats)
+        .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
+        .plugin(paperpaw_plugin_home::Home)
+        .plugin(paperpaw_plugin_stats::Stats)
         .build()
         .unwrap();
     let clock = WallClock {

@@ -7,7 +7,7 @@
 //! carry them. So this widget records them itself ([`Recorder`]): the
 //! page and the chapter of the book read last, and how long a page took
 //! (the time between pages turned, pauses left out), kept small in
-//! `.quireink/plugins/widgets/reading.ini` when the book is closed.
+//! `.paperpaw/plugins/widgets/reading.ini` when the book is closed.
 
 use alloc::boxed::Box;
 use alloc::format;
@@ -16,10 +16,10 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::cell::RefCell;
 
-use quireink_sdk::builtin::{actions, events};
-use quireink_sdk::ui::UiStyle;
-use quireink_sdk::widgets::{self, Align, Frame, Look, Size, Widget, WidgetSpec, WidgetTarget};
-use quireink_sdk::{
+use paperpaw_sdk::builtin::{actions, events};
+use paperpaw_sdk::ui::UiStyle;
+use paperpaw_sdk::widgets::{self, Align, Frame, Look, Size, Widget, WidgetSpec, WidgetTarget};
+use paperpaw_sdk::{
     Arg, Canvas, Command, Env, Id, Rect, RegisterError, Registrar, Storage, config,
 };
 
@@ -28,7 +28,7 @@ use super::{
     percent_text, text_size,
 };
 use crate::PLUGIN;
-use quireink_sdk::SettingSpec;
+use paperpaw_sdk::SettingSpec;
 
 pub(crate) const ID: Id = Id::new_static(WIDGET);
 /// Its id, as text.
@@ -94,7 +94,7 @@ impl Position {
     }
 
     pub(crate) fn load(storage: &dyn Storage) -> Position {
-        let Ok(data) = quireink_sdk::read_file(storage, &Self::file(), 4096) else {
+        let Ok(data) = paperpaw_sdk::read_file(storage, &Self::file(), 4096) else {
             return Position::default();
         };
         let mut position = Position::default();
@@ -592,7 +592,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, book: &Book, positi
 /// else as many words in each as fit (the last shortened where it is
 /// drawn).
 pub(crate) fn wrap_words(
-    font: &quireink_sdk::FontHandle<'_>,
+    font: &paperpaw_sdk::FontHandle<'_>,
     size: f32,
     text: &str,
     width: u16,

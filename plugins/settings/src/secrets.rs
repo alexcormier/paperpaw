@@ -1,17 +1,17 @@
 //! *Passwords and keys*: every password and key plugins keep (see
-//! [`quireink_sdk::secrets`]) at a glance, never shown; a tap offers to
+//! [`paperpaw_sdk::secrets`]) at a glance, never shown; a tap offers to
 //! type it anew (on the keyboard or, where offered, on a phone) or to
 //! remove it.
 
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::builtin::actions;
-use quireink_sdk::event::Event;
-use quireink_sdk::replies::Typed;
-use quireink_sdk::secrets::SecretChange;
-use quireink_sdk::ui::{self, ListView, UiStyle};
-use quireink_sdk::{Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Screen};
+use paperpaw_sdk::builtin::actions;
+use paperpaw_sdk::event::Event;
+use paperpaw_sdk::replies::Typed;
+use paperpaw_sdk::secrets::SecretChange;
+use paperpaw_sdk::ui::{self, ListView, UiStyle};
+use paperpaw_sdk::{Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Screen};
 
 use crate::{ID, page};
 
@@ -171,7 +171,7 @@ impl SecretPage {
     fn choose(&self, index: usize, cx: &mut Cx<'_, '_>) {
         match self.choices.get(index) {
             Some(Choice::Change) => cx.command(
-                quireink_sdk::ask::text(self.title.clone(), &ENTERED)
+                paperpaw_sdk::ask::text(self.title.clone(), &ENTERED)
                     .password()
                     .with(ID, self.id.clone())
                     .command(),

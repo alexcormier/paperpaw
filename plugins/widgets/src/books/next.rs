@@ -13,11 +13,11 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::cell::RefCell;
 
-use quireink_sdk::builtin::actions;
-use quireink_sdk::library;
-use quireink_sdk::ui::UiStyle;
-use quireink_sdk::widgets::{self, Align, Frame, Look, Size, Widget, WidgetSpec, WidgetTarget};
-use quireink_sdk::{Arg, Canvas, Command, Env, Id, Rect, RegisterError, Registrar, Storage};
+use paperpaw_sdk::builtin::actions;
+use paperpaw_sdk::library;
+use paperpaw_sdk::ui::UiStyle;
+use paperpaw_sdk::widgets::{self, Align, Frame, Look, Size, Widget, WidgetSpec, WidgetTarget};
+use paperpaw_sdk::{Arg, Canvas, Command, Env, Id, Rect, RegisterError, Registrar, Storage};
 
 use super::series::{Member, members};
 use super::{
@@ -25,7 +25,7 @@ use super::{
     draw_message, each_book, frame_height, mix, path_hash, text_size, today,
 };
 use crate::PLUGIN;
-use quireink_sdk::SettingSpec;
+use paperpaw_sdk::SettingSpec;
 
 pub(crate) const ID: Id = Id::new_static(WIDGET);
 /// Its id, as text.
@@ -159,14 +159,14 @@ fn in_series(env: &Env<'_>, book: &Book) -> Option<String> {
 fn seen_file() -> String {
     format!(
         "{}/seen.bin",
-        quireink_sdk::Env::plugin_dir(PLUGIN.as_str())
+        paperpaw_sdk::Env::plugin_dir(PLUGIN.as_str())
     )
 }
 
 fn newest_file() -> String {
     format!(
         "{}/newest.txt",
-        quireink_sdk::Env::plugin_dir(PLUGIN.as_str())
+        paperpaw_sdk::Env::plugin_dir(PLUGIN.as_str())
     )
 }
 
@@ -199,7 +199,7 @@ pub(crate) fn new_books(
 /// returns the newest, newest first.
 fn newest(env: &Env<'_>) -> Vec<String> {
     let storage = env.storage;
-    let seen: Option<Vec<u64>> = quireink_sdk::read_file(storage, &seen_file(), MAX_SEEN * 8)
+    let seen: Option<Vec<u64>> = paperpaw_sdk::read_file(storage, &seen_file(), MAX_SEEN * 8)
         .ok()
         .map(|data| {
             data.as_chunks::<8>()
@@ -208,7 +208,7 @@ fn newest(env: &Env<'_>) -> Vec<String> {
                 .map(|b| u64::from_le_bytes(*b))
                 .collect()
         });
-    let kept: Vec<String> = quireink_sdk::read_file(storage, &newest_file(), MAX_NEWEST * 512)
+    let kept: Vec<String> = paperpaw_sdk::read_file(storage, &newest_file(), MAX_NEWEST * 512)
         .map(|data| {
             String::from_utf8_lossy(&data)
                 .lines()
@@ -237,7 +237,7 @@ fn newest(env: &Env<'_>) -> Vec<String> {
     let list = new_books(seen.as_deref(), &unseen, kept.clone());
     // Written only when something changed.
     if seen.as_deref() != Some(hashes.as_slice()) {
-        let dir = quireink_sdk::Env::plugin_dir(PLUGIN.as_str());
+        let dir = paperpaw_sdk::Env::plugin_dir(PLUGIN.as_str());
         let _ = storage.create_dir(&dir);
         let bytes: Vec<u8> = hashes.iter().flat_map(|h| h.to_le_bytes()).collect();
         let _ = storage.write(&seen_file(), &bytes);

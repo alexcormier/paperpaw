@@ -1,12 +1,12 @@
 //! The recently read books, from the library service
-//! ([`quireink_sdk::library`]), which follows the standard reading
+//! ([`paperpaw_sdk::library`]), which follows the standard reading
 //! events, so any reader plugin works.
 
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use quireink_sdk::document::ImageRef;
-use quireink_sdk::{Storage, library};
+use paperpaw_sdk::document::ImageRef;
+use paperpaw_sdk::{Storage, library};
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Recent {

@@ -45,7 +45,7 @@ what the user is doing.
 - **Sockets end with their screen**, like servers: closing the screen
   that was showing when a socket was opened closes it.
 - **Shells with the standard library** (the emulator, Android) do it in
-  `quireink-serve`: a thread per connection for reading, one for writing,
+  `paperpaw-serve`: a thread per connection for reading, one for writing,
   bounded channels between them and the shell, so a fast network waits
   for a slow storage. Shells without a network (the X4 for now) report
   no network, so the commands fail.

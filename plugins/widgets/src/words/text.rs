@@ -6,11 +6,11 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use quireink_sdk::FontHandle;
-use quireink_sdk::builtin::fonts;
-use quireink_sdk::ui::{self, UiStyle};
-use quireink_sdk::widgets::Align;
-use quireink_sdk::{Canvas, Color, Env, Rect};
+use paperpaw_sdk::FontHandle;
+use paperpaw_sdk::builtin::fonts;
+use paperpaw_sdk::ui::{self, UiStyle};
+use paperpaw_sdk::widgets::Align;
+use paperpaw_sdk::{Canvas, Color, Env, Rect};
 
 /// The values of a widget's font setting: the menus' font, the book's,
 /// the book's italic.

@@ -8,10 +8,10 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::cell::Cell;
 
-use quireink_digest::fnv1a64;
-use quireink_sdk::document::{Block, Document, DocumentError, Link, Locator, Metadata};
-use quireink_sdk::xml::{Token, Tokenizer, decode, local_name};
-use quireink_sdk::{Env, Storage};
+use paperpaw_digest::fnv1a64;
+use paperpaw_sdk::document::{Block, Document, DocumentError, Link, Locator, Metadata};
+use paperpaw_sdk::xml::{Token, Tokenizer, decode, local_name};
+use paperpaw_sdk::{Env, Storage};
 
 use crate::PLUGIN;
 use crate::cached;
@@ -138,7 +138,7 @@ impl HtmlDocument {
             fnv1a64(&head)
         );
         let stamp_path = format!("{cache}/source");
-        if quireink_sdk::read_file(storage, &stamp_path, 256).ok()
+        if paperpaw_sdk::read_file(storage, &stamp_path, 256).ok()
             != Some(stamp.clone().into_bytes())
         {
             let _ = storage.remove(&paths.end);
@@ -246,8 +246,8 @@ impl Document for HtmlDocument {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quireink_sdk::MemoryStorage;
-    use quireink_sdk::document::BlockKind;
+    use paperpaw_sdk::MemoryStorage;
+    use paperpaw_sdk::document::BlockKind;
 
     const PAGE: &str = r##"<!DOCTYPE html>
 <html lang="de"><head><meta charset="utf-8"><title>Ein   Artikel</title>

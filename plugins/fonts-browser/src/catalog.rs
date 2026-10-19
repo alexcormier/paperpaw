@@ -1,15 +1,15 @@
 //! The catalog of fonts: a JSON file from the font library (by default
-//! quireink.org's), read as it streams. Each font comes ready to install
+//! paperpaw.org's), read as it streams. Each font comes ready to install
 //! as a data plugin: its files for devices that draw scalable fonts
 //! (`outline`, the font files as they are) and for those that draw font
-//! packs (`packs`, made for QuireInk), each with its size and SHA-1.
+//! packs (`packs`, made for PaperPaw), each with its size and SHA-1.
 //!
 //! ```json
 //! {"format": 1, "fonts": [{
 //!   "id": "fredoka", "name": "Fredoka", "category": "sans",
 //!   "author": "…", "licence": "OFL-1.1", "version": "2.1.0",
-//!   "styles": 2, "sample": "https://…/fredoka/sample.qifp",
-//!   "packs": [{"path": "fonts/regular.qifp", "url": "https://…",
+//!   "styles": 2, "sample": "https://…/fredoka/sample.ppfp",
+//!   "packs": [{"path": "fonts/regular.ppfp", "url": "https://…",
 //!              "size": 201234, "sha1": "…"}, …],
 //!   "outline": […]}]}
 //! ```
@@ -18,9 +18,9 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_json::stream::{Event, read_file};
-use quireink_sdk::web::join_url;
-use quireink_sdk::{Env, MemoryClass, Storage, Version};
+use paperpaw_json::stream::{Event, read_file};
+use paperpaw_sdk::web::join_url;
+use paperpaw_sdk::{Env, MemoryClass, Storage, Version};
 
 use crate::PLUGIN;
 
@@ -33,7 +33,7 @@ const MAX_FILES: usize = 16;
 /// One file of a font's plugin.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct FontFile {
-    /// Where it goes in the plugin's folder, e.g. `fonts/regular.qifp`.
+    /// Where it goes in the plugin's folder, e.g. `fonts/regular.ppfp`.
     pub path: String,
     pub url: String,
     pub size: u64,
@@ -115,7 +115,7 @@ impl Font {
 
 /// Whether this device takes font files rather than packs.
 fn outlines(env: &Env<'_>) -> bool {
-    quireink_sdk::text::OUTLINES && env.device.memory == MemoryClass::Large
+    paperpaw_sdk::text::OUTLINES && env.device.memory == MemoryClass::Large
 }
 
 /// Whether `id` is usable in a plugin's id and a file's name.

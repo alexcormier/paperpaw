@@ -12,7 +12,7 @@ and allocation-heavy; Fluent (for translations) needs `std`.
 
 ## Decision
 
-QuireInk uses one small INI dialect (`quireink-config`) everywhere:
+PaperPaw uses one small INI dialect (`paperpaw-config`) everywhere:
 `[section]`, `key = value`, `#`/`;` comments, quoted values with escapes.
 The parser is zero-copy and `no_std`. Settings are namespaced by section
 (`[core] language = de` → `core.language`). Translations use the same format

@@ -1,4 +1,4 @@
-//! Plain text (`.txt`) support for QuireInk.
+//! Plain text (`.txt`) support for PaperPaw.
 //!
 //! - Encodings: UTF-8 (with or without BOM); otherwise Windows-1252.
 //! - Paragraphs: separated by blank lines when the text uses them (typical
@@ -19,8 +19,8 @@ use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::vec;
 
-use quireink_sdk::document::Document;
-use quireink_sdk::{
+use paperpaw_sdk::document::Document;
+use paperpaw_sdk::{
     FormatSpec, Id, Manifest, Plugin, RegisterError, Registrar, SDK_VERSION, Version,
 };
 
@@ -63,7 +63,7 @@ impl Plugin for TxtFormat {
 
 #[cfg(test)]
 mod tests {
-    use quireink_i18n::{Catalog, check};
+    use paperpaw_i18n::{Catalog, check};
 
     #[test]
     fn translations_are_complete() {

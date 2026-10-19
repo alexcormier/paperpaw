@@ -8,10 +8,10 @@
 
 use std::rc::Rc;
 
-use quireink_core::Kernel;
-use quireink_platform::Rotation;
-use quireink_plugin_widgets::Widgets;
-use quireink_sdk::{
+use paperpaw_core::Kernel;
+use paperpaw_platform::Rotation;
+use paperpaw_plugin_widgets::Widgets;
+use paperpaw_sdk::{
     DeviceInfo, DirEntry, DisplayInfo, InputCaps, Instant, MemoryClass, MemoryStorage, PixelFormat,
     Storage, StorageError,
 };
@@ -36,7 +36,7 @@ const DEVICE: DeviceInfo = DeviceInfo {
     memory: MemoryClass::Small,
 };
 
-const TODO: &str = ".quireink/plugins/widgets/todo.txt";
+const TODO: &str = ".paperpaw/plugins/widgets/todo.txt";
 
 /// A storage the test looks into while the kernel has it.
 #[derive(Clone, Default)]
@@ -87,8 +87,8 @@ impl Home {
             .unwrap();
         let mut kernel = Kernel::builder(DEVICE)
             .storage(storage.clone())
-            .plugin(quireink_plugin_fonts_default::DefaultFontPacks)
-            .plugin(quireink_plugin_home::Home)
+            .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
+            .plugin(paperpaw_plugin_home::Home)
             .plugin(Widgets)
             .build()
             .unwrap();
@@ -170,14 +170,14 @@ fn a_to_do_is_ticked_off_from_the_widget() {
     home.now += 100;
     home.kernel.run_action(
         Instant(home.now),
-        quireink_sdk::builtin::actions::RIGHT.clone(),
+        paperpaw_sdk::builtin::actions::RIGHT.clone(),
     );
     home.now += 100;
     home.kernel.run_action(
         Instant(home.now),
-        quireink_sdk::builtin::actions::CONFIRM.clone(),
+        paperpaw_sdk::builtin::actions::CONFIRM.clone(),
     );
-    let kept = quireink_sdk::read_file(&home.storage, TODO, 1024).unwrap();
+    let kept = paperpaw_sdk::read_file(&home.storage, TODO, 1024).unwrap();
     let kept = String::from_utf8(kept).unwrap();
     assert!(kept.starts_with("x "), "{kept}");
     assert!(kept.contains("Return the library book"), "{kept}");

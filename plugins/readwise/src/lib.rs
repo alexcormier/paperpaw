@@ -7,7 +7,7 @@
 //! Readwise needs one's access token (readwise.io/access_token): the
 //! first export asks for it on the keyboard (or a phone, where offered);
 //! it is kept with the other passwords and keys (see
-//! `quireink_sdk::secrets`). Shipped switched off: switch it on in the
+//! `paperpaw_sdk::secrets`). Shipped switched off: switch it on in the
 //! plugins.
 //!
 //! It reads the Markdown the reader writes (see [`parse`]), so it works
@@ -23,12 +23,12 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_json as json;
-use quireink_sdk::builtin::{events, params};
-use quireink_sdk::event::Event;
-use quireink_sdk::replies::{HttpReply, Typed};
-use quireink_sdk::secrets::SecretChange;
-use quireink_sdk::{
+use paperpaw_json as json;
+use paperpaw_sdk::builtin::{events, params};
+use paperpaw_sdk::event::Event;
+use paperpaw_sdk::replies::{HttpReply, Typed};
+use paperpaw_sdk::secrets::SecretChange;
+use paperpaw_sdk::{
     Arg, Command, Env, HttpRequest, Id, Manifest, Params, Plugin, RegisterError, Registrar,
     SDK_VERSION, Version,
 };
@@ -130,7 +130,7 @@ pub fn request(notes: &Notes, token: &str) -> HttpRequest {
             body.push(',');
         }
         body.push_str(&format!(
-            "{{\"text\":{},\"title\":{},\"source_type\":\"quireink\",\"category\":\"books\",\
+            "{{\"text\":{},\"title\":{},\"source_type\":\"paperpaw\",\"category\":\"books\",\
              \"location\":{},\"location_type\":\"order\"",
             json::string(&h.text),
             json::string(&notes.title),
@@ -171,14 +171,14 @@ fn send(env: &Env<'_>, path: &str, out: &mut Vec<Command>) {
     let Some(token) = env.secrets.get(SECRET) else {
         notify(env, "readwise.needs-token", out);
         out.push(
-            quireink_sdk::ask::text(env.i18n.tr("readwise.token"), &TOKEN_ENTERED)
+            paperpaw_sdk::ask::text(env.i18n.tr("readwise.token"), &TOKEN_ENTERED)
                 .password()
                 .with(params::PATH, path.to_string())
                 .command(),
         );
         return;
     };
-    let Ok(data) = quireink_sdk::read_file(env.storage, path, MAX_FILE) else {
+    let Ok(data) = paperpaw_sdk::read_file(env.storage, path, MAX_FILE) else {
         return notify(env, "readwise.failed", out);
     };
     let notes = parse(&String::from_utf8_lossy(&data));
@@ -246,7 +246,7 @@ impl Plugin for Readwise {
             let Some(path) = typed.context.get(params::PATH) else {
                 return;
             };
-            let Ok(data) = quireink_sdk::read_file(env.storage, path, MAX_FILE) else {
+            let Ok(data) = paperpaw_sdk::read_file(env.storage, path, MAX_FILE) else {
                 return;
             };
             let notes = parse(&String::from_utf8_lossy(&data));
@@ -264,7 +264,7 @@ impl Plugin for Readwise {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quireink_i18n::{Catalog, check};
+    use paperpaw_i18n::{Catalog, check};
 
     const NOTES: &str = "# Alice's Adventures\n\nLewis Carroll\n\n## Highlights\n\n\
         > Curiouser and curiouser!\n>\n> 12 %\n\n\

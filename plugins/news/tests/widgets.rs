@@ -5,9 +5,9 @@
 // Tests panic on purpose when something is wrong.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use quireink_core::Kernel;
-use quireink_platform::Rotation;
-use quireink_sdk::{
+use paperpaw_core::Kernel;
+use paperpaw_platform::Rotation;
+use paperpaw_sdk::{
     DeviceInfo, DisplayInfo, InputCaps, Instant, MemoryClass, MemoryStorage, PixelFormat, Storage,
 };
 
@@ -46,7 +46,7 @@ fn card() -> MemoryStorage {
                      A reading garden\tNews/Guardian.html\n\
                      Strike ends\tNews/Tagesschau.html";
     storage
-        .write(".quireink/plugins/news/headlines.txt", headlines.as_bytes())
+        .write(".paperpaw/plugins/news/headlines.txt", headlines.as_bytes())
         .unwrap();
     storage
 }
@@ -61,9 +61,9 @@ fn home(storage: MemoryStorage, page: &str, config: &str) -> (String, usize) {
     let mut kernel = Kernel::builder(DEVICE)
         .storage(storage)
         .user_config(user)
-        .plugin(quireink_plugin_fonts_default::DefaultFontPacks)
-        .plugin(quireink_plugin_home::Home)
-        .plugin(quireink_plugin_news::News)
+        .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
+        .plugin(paperpaw_plugin_home::Home)
+        .plugin(paperpaw_plugin_news::News)
         .build()
         .unwrap();
     let mut effects = kernel.start(Instant(0));

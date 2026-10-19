@@ -8,9 +8,9 @@
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::builtin::actions;
-use quireink_sdk::ui::{self, UiStyle};
-use quireink_sdk::{Canvas, Color, Env, Id, Point, Rect};
+use paperpaw_sdk::builtin::actions;
+use paperpaw_sdk::ui::{self, UiStyle};
+use paperpaw_sdk::{Canvas, Color, Env, Id, Point, Rect};
 
 use crate::SELECTION_MENU;
 use crate::actions::{CANCEL, EXTEND, HIGHLIGHT, MORE, NOTE, TRANSLATE};
@@ -162,7 +162,7 @@ pub(crate) fn items(env: &Env<'_>, highlight: Option<bool>) -> Vec<Item> {
 /// Whether selected text can be translated: a translator is installed
 /// and there is a network.
 pub(crate) fn translates(env: &Env<'_>) -> bool {
-    env.caps.network && env.has_slot(&quireink_sdk::builtin::slots::TRANSLATE)
+    env.caps.network && env.has_slot(&paperpaw_sdk::builtin::slots::TRANSLATE)
 }
 
 /// Where the bar is: over the status line at the bottom.

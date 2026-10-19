@@ -3,10 +3,10 @@
 // Tests panic on purpose when something is wrong.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use quireink_plugin_format_epub::EpubDocument;
-use quireink_sdk::MemoryStorage;
-use quireink_sdk::document::Document;
-use quireink_sdk::image::GrayFile;
+use paperpaw_plugin_format_epub::EpubDocument;
+use paperpaw_sdk::MemoryStorage;
+use paperpaw_sdk::document::Document;
+use paperpaw_sdk::image::GrayFile;
 
 #[test]
 fn covers_are_decoded_small_and_cached() {

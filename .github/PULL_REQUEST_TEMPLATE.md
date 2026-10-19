@@ -10,6 +10,6 @@
 
 - [ ] `cargo fmt`, `cargo clippy` and `cargo test` pass
 - [ ] Kernel and plugins still build for `riscv32imc-unknown-none-elf`
-- [ ] Plugins use `quireink-sdk` only; a community plugin could do the same
+- [ ] Plugins use `paperpaw-sdk` only; a community plugin could do the same
 - [ ] New user-facing strings have English and German translations
 - [ ] Commits are signed off (`git commit -s`)

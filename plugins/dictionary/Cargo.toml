@@ -1,6 +1,6 @@
 [package]
-name = "quireink-plugin-dictionary"
-description = "QuireInk dictionary: looks up words in StarDict dictionaries from the device's storage"
+name = "paperpaw-plugin-dictionary"
+description = "PaperPaw dictionary: looks up words in StarDict dictionaries from the device's storage"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,12 +11,12 @@ authors.workspace = true
 categories = ["no-std"]
 
 [dependencies]
-quireink-digest.workspace = true
-quireink-sdk.workspace = true
-quireink-stardict.workspace = true
+paperpaw-digest.workspace = true
+paperpaw-sdk.workspace = true
+paperpaw-stardict.workspace = true
 
 [dev-dependencies]
-quireink-i18n.workspace = true
+paperpaw-i18n.workspace = true
 
 [lints]
 workspace = true

@@ -1,6 +1,6 @@
 //! The network over Wi-Fi: smoltcp (a TCP/IP stack made for devices
 //! without an operating system) on the radio's station interface. It is
-//! polled from the main loop (QuireInk's firmware runs no async code). Its
+//! polled from the main loop (PaperPaw's firmware runs no async code). Its
 //! address, router and name servers come by DHCP. What goes over it is in
 //! `http` (requests), `serve` (servers) and `sockets` (plugins' own
 //! connections and broadcasts).

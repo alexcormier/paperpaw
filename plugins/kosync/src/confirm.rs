@@ -8,11 +8,11 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::builtin::{actions, params};
-use quireink_sdk::document::{Document, Locator};
-use quireink_sdk::event::Event;
-use quireink_sdk::ui::{self, UiStyle};
-use quireink_sdk::{
+use paperpaw_sdk::builtin::{actions, params};
+use paperpaw_sdk::document::{Document, Locator};
+use paperpaw_sdk::event::Event;
+use paperpaw_sdk::ui::{self, UiStyle};
+use paperpaw_sdk::{
     Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect,
     RefreshMode, Screen,
 };
@@ -28,7 +28,7 @@ pub(crate) const XPOINTER: &str = "xpointer";
 /// that position is not offered again.
 pub(crate) const DECLINED: Event<Declined> = Event::new("kosync.declined");
 
-quireink_sdk::event_data! {
+paperpaw_sdk::event_data! {
     /// The book and the position on another device the user stayed away
     /// from ([`DECLINED`]).
     pub(crate) struct Declined {
@@ -135,8 +135,8 @@ impl ConfirmScreen {
             .and_then(|x| document.locate_xpointer(env.storage, x))
             .unwrap_or_else(|| at_progress(&*document, *percentage));
         cx.command(
-            quireink_sdk::builtin::events::GOTO
-                .emit(quireink_sdk::builtin::events::Goto::new(path.clone(), at)),
+            paperpaw_sdk::builtin::events::GOTO
+                .emit(paperpaw_sdk::builtin::events::Goto::new(path.clone(), at)),
         );
     }
 }
@@ -236,8 +236,8 @@ impl Screen for ConfirmScreen {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quireink_sdk::Storage;
-    use quireink_sdk::document::{Block, DocumentError, Metadata};
+    use paperpaw_sdk::Storage;
+    use paperpaw_sdk::document::{Block, DocumentError, Metadata};
 
     struct Sections(Vec<u32>, Metadata);
 

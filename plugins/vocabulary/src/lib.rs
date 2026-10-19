@@ -30,18 +30,18 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::builtin::{actions, events, groups, menus, params, slots};
-use quireink_sdk::decorations::{Decoration, LineKind};
-use quireink_sdk::event::Event;
-use quireink_sdk::ui::choice::{self, Choice};
-use quireink_sdk::ui::{self, ListChange, ListView, UiStyle};
-use quireink_sdk::{
+use paperpaw_sdk::builtin::{actions, events, groups, menus, params, slots};
+use paperpaw_sdk::decorations::{Decoration, LineKind};
+use paperpaw_sdk::event::Event;
+use paperpaw_sdk::ui::choice::{self, Choice};
+use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
+use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
     MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen,
     ScreenSpec, SettingExtra, SettingSpec, Version,
 };
 
-use quireink_sdk::setting::Setting;
+use paperpaw_sdk::setting::Setting;
 use store::Word;
 
 pub const PLUGIN: Id = Id::new_static("vocabulary");
@@ -83,7 +83,7 @@ static SETTINGS: [SettingSpec; 2] = [
 ];
 
 /// How the words being learnt look in books.
-static LEARNING_LOOK: [SettingSpec; 7] = quireink_sdk::role_settings!(
+static LEARNING_LOOK: [SettingSpec; 7] = paperpaw_sdk::role_settings!(
     "vocabulary.learning",
     "vocabulary.role.learning",
     Decoration::NONE.line(LineKind::Dotted)
@@ -177,8 +177,8 @@ fn record(env: &Env<'_>, looked_up: &events::WordLookedUp) {
 
 /// The folder exports go to: `Notes` beside the library folder.
 fn notes_dir(env: &Env<'_>) -> String {
-    let library = quireink_sdk::library::folder(env);
-    let parent = quireink_sdk::files::parent(library);
+    let library = paperpaw_sdk::library::folder(env);
+    let parent = paperpaw_sdk::files::parent(library);
     if parent.is_empty() {
         String::from(NOTES)
     } else {
@@ -431,7 +431,7 @@ impl Screen for WordsScreen {
                 ));
                 cx.command(events::GOTO.emit(events::Goto::new(
                     word.path.clone(),
-                    quireink_sdk::document::Locator::new(word.section, word.offset),
+                    paperpaw_sdk::document::Locator::new(word.section, word.offset),
                 )));
             }
             "delete" => {
@@ -447,7 +447,7 @@ impl Screen for WordsScreen {
 
 #[cfg(test)]
 mod tests {
-    use quireink_i18n::{Catalog, check};
+    use paperpaw_i18n::{Catalog, check};
 
     #[test]
     fn translations_are_complete() {
@@ -461,8 +461,8 @@ mod tests {
     /// and is in the reader's menu.
     #[test]
     fn marking_is_off_at_first() {
-        use quireink_sdk::contribution::Contribution;
-        use quireink_sdk::{Plugin, Registrar, SettingValue};
+        use paperpaw_sdk::contribution::Contribution;
+        use paperpaw_sdk::{Plugin, Registrar, SettingValue};
 
         let plugin = super::Vocabulary;
         let mut r = Registrar::new(plugin.manifest().id);
@@ -481,7 +481,7 @@ mod tests {
         assert!(contributions.iter().any(|c| matches!(
             c,
             Contribution::MenuEntry(e)
-                if e.menu == quireink_sdk::builtin::menus::READER_MORE
+                if e.menu == paperpaw_sdk::builtin::menus::READER_MORE
                     && e.item == *super::MARK.id()
         )));
     }

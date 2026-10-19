@@ -38,7 +38,7 @@ MEMORY
 
     /* Instruction ROM: all 8 MB the chip maps (esp-hal takes 4). Code
        comes after the read-only data in the same flash, so the two share
-       this space, and QuireInk's fonts are read-only data. */
+       this space, and PaperPaw's fonts are read-only data. */
     IROM : ORIGIN =   0x42000000 + 0x20, LENGTH = 0x800000 - 0x20
     /* Data ROM */
     DROM : ORIGIN = 0x3C000000 + 0x20, LENGTH = 0x800000 - 0x20

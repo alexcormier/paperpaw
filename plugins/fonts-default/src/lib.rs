@@ -1,4 +1,4 @@
-//! QuireInk's default fonts, contributed like any other plugin:
+//! PaperPaw's default fonts, contributed like any other plugin:
 //!
 //! - **Literata** for reading (`fonts-default.literata`), designed for long
 //!   texts on screens, with bold, italic and bold italic faces.
@@ -6,7 +6,7 @@
 //!   humanist sans serif: calm and clear, with a warmer, livelier hand
 //!   than a technical face. Shipped unchanged (its licence reserves the
 //!   name "Source" for the original).
-//! - **QuireInk Icons** (`fonts-default.icons`): the icons of the menus,
+//! - **PaperPaw Icons** (`fonts-default.icons`): the icons of the menus,
 //!   taken from Tabler Icons (MIT licence; see `tools/icons/subset.py`).
 //!
 //! [`DefaultFonts`] ships them as scalable fonts when built with the
@@ -27,8 +27,8 @@ extern crate alloc;
 
 use alloc::borrow::Cow;
 
-use quireink_sdk::builtin::fonts;
-use quireink_sdk::{
+use paperpaw_sdk::builtin::fonts;
+use paperpaw_sdk::{
     Font, FontSpec, Id, Manifest, Plugin, Priority, RegisterError, Registrar, SDK_VERSION, Version,
 };
 
@@ -52,7 +52,7 @@ mod outlines {
     const LITERATA: &[u8] = include_bytes!("../fonts/Literata.ttf");
     const LITERATA_ITALIC: &[u8] = include_bytes!("../fonts/Literata-Italic.ttf");
     const SOURCE_SANS: &[u8] = include_bytes!("../fonts/SourceSans3.ttf");
-    pub const ICONS: &[u8] = include_bytes!("../fonts/QuireInkIcons.ttf");
+    pub const ICONS: &[u8] = include_bytes!("../fonts/PaperPawIcons.ttf");
 
     /// Bold faces are instances of the variable fonts.
     pub fn faces() -> super::Faces {
@@ -81,7 +81,7 @@ mod outlines {
 mod packs {
     macro_rules! pack {
         ($name:literal) => {
-            include_bytes!(concat!(env!("OUT_DIR"), "/", $name, ".qifp"))
+            include_bytes!(concat!(env!("OUT_DIR"), "/", $name, ".ppfp"))
         };
     }
 

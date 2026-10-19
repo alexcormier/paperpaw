@@ -5,7 +5,7 @@
 
 ## Context
 
-The Xteink X4 is QuireInk's smallest target: an ESP32-C3 (RISC-V, about
+The Xteink X4 is PaperPaw's smallest target: an ESP32-C3 (RISC-V, about
 400 KB of RAM, 16 MB of flash) with a 4.26" 800 × 480 panel driven by an
 SSD1677 controller, seven buttons, a microSD card and a battery. Its
 hardware is documented by the community that writes open firmware for it
@@ -26,10 +26,10 @@ UC8179 controller instead of the SSD1677.
 ## Decision
 
 - **Three crates.**
-  - `quireink-x4` (`no_std`, published): the display, the buttons and the
+  - `paperpaw-x4` (`no_std`, published): the display, the buttons and the
     battery against `embedded-hal`, tested on a computer against a
     simulated controller.
-  - `quireink-fat` (`no_std`): QuireInk's `Storage` on a FAT file system
+  - `paperpaw-fat` (`no_std`): PaperPaw's `Storage` on a FAT file system
     with long file names, and a disk of 512-byte blocks as bytes; tested
     on disks in memory. Its FAT library is not released with `no_std`
     support yet, so it is pinned to a commit and not published.
@@ -48,7 +48,7 @@ UC8179 controller instead of the SSD1677.
   device.
 - **Sleep is power off.** After the sleep screen the firmware releases the
   battery latch (GPIO 13), which cuts the power on battery; the power
-  button starts the X4 again, and QuireInk reopens the book. On USB power
+  button starts the X4 again, and PaperPaw reopens the book. On USB power
   it sleeps deeply until the button. A power button still down at start
   counts only once released.
 - **Fonts as packs in flash**, up to 36 px: code and data share a 4 MB
@@ -76,10 +76,10 @@ builds for either device, chosen by the feature `x4` (the default) or
 `x4-pro`, so the main loop, the network, updates and remote control stay
 one. What differs is the board (`board_pro.rs`), the card on the
 ESP32-S3's SD host (`card_pro.rs`), the front light (`light.rs`) and the
-drivers in `quireink-x4` (`uc8179`, `gt911`, `cw2017`, `bm8563`). Its
+drivers in `paperpaw-x4` (`uc8179`, `gt911`, `cw2017`, `bm8563`). Its
 8 MB of PSRAM is the heap, so its UC8179 keeps a whole frame; its touch
 controller also reports the home key below the screen. Its power latch
 is held through resets (a pad hold), so it stays on while flashed.
 Measured on the device: a UC8179 (its VER register's third byte 0x01;
 Papyrix also knows X4 Pros with a UC8279, from 0x02, 0x68 or 0x69, which
-QuireInk does not drive yet).
+PaperPaw does not drive yet).

@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::{Duration, Instant as StdInstant};
 
-use quireink_platform::{
+use paperpaw_platform::{
     ButtonState, InputEvent, Point, PointerEvent, PointerPhase, PointerTool, buttons,
 };
 use winit::application::ApplicationHandler;
@@ -96,7 +96,7 @@ impl App {
                 .map(ToString::to_string)
                 .unwrap_or_default();
             window.set_title(&format!(
-                "QuireInk Emulator | {} | {} | {}",
+                "PaperPaw Emulator | {} | {} | {}",
                 self.device.profile.device.name,
                 screen,
                 budget::stats()
@@ -213,7 +213,7 @@ impl ApplicationHandler for App {
         // Start at a comfortable size; the window is freely resizable.
         let scale = (900.0 / ph).min(1.0);
         let attributes = Window::default_attributes()
-            .with_title("QuireInk Emulator")
+            .with_title("PaperPaw Emulator")
             .with_inner_size(winit::dpi::LogicalSize::new(pw * scale, ph * scale));
         let result = event_loop
             .create_window(attributes)

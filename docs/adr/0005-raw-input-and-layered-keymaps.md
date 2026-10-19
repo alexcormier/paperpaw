@@ -13,7 +13,7 @@ made gestures, long-press tuning and pen input impossible to customize.
 
 - Shells report raw input only: named buttons going down and up, and pointer
   samples (down/move/up, tool, pressure). Standard button names are defined
-  in `quireink-platform`.
+  in `paperpaw-platform`.
 - The kernel recognizes long presses, taps, long taps and swipes, with
   thresholds from settings. Screens may capture a pointer to receive raw
   samples (drawing, handwriting).

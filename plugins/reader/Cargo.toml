@@ -1,6 +1,6 @@
 [package]
-name = "quireink-plugin-reader"
-description = "QuireInk paged reader: page layout, progress, background pagination"
+name = "paperpaw-plugin-reader"
+description = "PaperPaw paged reader: page layout, progress, background pagination"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,16 +11,16 @@ authors.workspace = true
 categories = ["no-std"]
 
 [dependencies]
-quireink-digest.workspace = true
-quireink-sdk.workspace = true
+paperpaw-digest.workspace = true
+paperpaw-sdk.workspace = true
 
 [dev-dependencies]
-quireink-i18n.workspace = true
-quireink-core.workspace = true
-quireink-platform.workspace = true
-quireink-plugin-format-epub.workspace = true
-quireink-plugin-format-txt.workspace = true
-quireink-plugin-fonts-default = { workspace = true, features = ["packs"] }
+paperpaw-i18n.workspace = true
+paperpaw-core.workspace = true
+paperpaw-platform.workspace = true
+paperpaw-plugin-format-epub.workspace = true
+paperpaw-plugin-format-txt.workspace = true
+paperpaw-plugin-fonts-default = { workspace = true, features = ["packs"] }
 
 [lints]
 workspace = true

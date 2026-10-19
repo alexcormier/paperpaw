@@ -8,7 +8,7 @@ use std::sync::mpsc::{Receiver, Sender, channel};
 use std::thread;
 use std::time::Duration;
 
-use quireink_core::{HttpCall, HttpResponse};
+use paperpaw_core::{HttpCall, HttpResponse};
 
 /// Requests in flight and their answers.
 #[derive(Debug)]

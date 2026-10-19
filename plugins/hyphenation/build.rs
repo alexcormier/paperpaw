@@ -22,13 +22,13 @@ fn main() {
     );
     let read = |path: &str| std::fs::read_to_string(path).unwrap_or_else(|e| panic!("{path}: {e}"));
     for &(name, patterns, exceptions, left, right) in LANGUAGES {
-        let table = quireink_hyphen::compile(
+        let table = paperpaw_hyphen::compile(
             &read(patterns),
             &exceptions.map(read).unwrap_or_default(),
             left,
             right,
         );
-        let path = out.join(format!("{name}.qihp"));
+        let path = out.join(format!("{name}.pphp"));
         std::fs::write(&path, table).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
     }
 }

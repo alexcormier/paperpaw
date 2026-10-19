@@ -22,15 +22,15 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::ask;
-use quireink_sdk::builtin::{actions, groups, menus, params, slots};
-use quireink_sdk::event::Event;
-use quireink_sdk::replies::{HttpReply, Typed};
-use quireink_sdk::setting::Setting;
-use quireink_sdk::ui::choice::{self, Choice};
-use quireink_sdk::ui::{self, ListView, UiStyle};
-use quireink_sdk::web::{clean_name, host};
-use quireink_sdk::{
+use paperpaw_sdk::ask;
+use paperpaw_sdk::builtin::{actions, groups, menus, params, slots};
+use paperpaw_sdk::event::Event;
+use paperpaw_sdk::replies::{HttpReply, Typed};
+use paperpaw_sdk::setting::Setting;
+use paperpaw_sdk::ui::choice::{self, Choice};
+use paperpaw_sdk::ui::{self, ListView, UiStyle};
+use paperpaw_sdk::web::{clean_name, host};
+use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, HttpRequest, Id,
     Manifest, MemoryClass, MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar,
     SDK_VERSION, Screen, ScreenSpec, SettingSpec, Storage, Version,
@@ -103,7 +103,7 @@ fn short_title(title: &str) -> String {
 
 /// The folder of the news: `News` in the library.
 fn folder(env: &Env<'_>) -> String {
-    let library = quireink_sdk::library::folder(env);
+    let library = paperpaw_sdk::library::folder(env);
     if library.is_empty() {
         String::from(FOLDER)
     } else {
@@ -112,7 +112,7 @@ fn folder(env: &Env<'_>) -> String {
 }
 
 fn load(storage: &dyn Storage) -> Vec<Feed> {
-    let Ok(data) = quireink_sdk::read_file(storage, &data("feeds.txt"), 64 * 1024) else {
+    let Ok(data) = paperpaw_sdk::read_file(storage, &data("feeds.txt"), 64 * 1024) else {
         return Vec::new();
     };
     String::from_utf8_lossy(&data)
@@ -140,7 +140,7 @@ fn request(feed: &Feed, index: usize, last: usize, (done, failed): (usize, usize
     let mut request = HttpRequest::new("GET", &feed.url, FETCHED);
     request.headers.push((
         String::from("User-Agent"),
-        String::from("QuireInk/0.1 (e-reader)"),
+        String::from("PaperPaw/0.1 (e-reader)"),
     ));
     request.save_to = Some(data("feed.tmp"));
     request.params = Params::new()
@@ -237,7 +237,7 @@ fn keep_headlines(env: &Env<'_>, book: &str, titles: &[String]) {
         .iter()
         .map(|t| format!("{}\t{book}", t.replace(['\t', '\n'], " ")))
         .collect();
-    if let Ok(old) = quireink_sdk::read_file(env.storage, &headlines_file(), 32 * 1024) {
+    if let Ok(old) = paperpaw_sdk::read_file(env.storage, &headlines_file(), 32 * 1024) {
         for line in String::from_utf8_lossy(&old).lines() {
             if !line.ends_with(&format!("\t{book}")) && lines.len() < 40 {
                 lines.push(line.to_string());
@@ -251,7 +251,7 @@ fn keep_headlines(env: &Env<'_>, book: &str, titles: &[String]) {
 
 /// The newest headlines and their books, at most `max`.
 fn headlines(env: &Env<'_>, max: usize) -> Vec<(String, String)> {
-    let Ok(data) = quireink_sdk::read_file(env.storage, &headlines_file(), 32 * 1024) else {
+    let Ok(data) = paperpaw_sdk::read_file(env.storage, &headlines_file(), 32 * 1024) else {
         return Vec::new();
     };
     String::from_utf8_lossy(&data)
@@ -268,7 +268,7 @@ fn headlines(env: &Env<'_>, max: usize) -> Vec<(String, String)> {
 pub struct News;
 
 /// How many articles a feed keeps, in steps of five.
-static STEP_5: quireink_sdk::SettingExtra = quireink_sdk::SettingExtra::new().step(5);
+static STEP_5: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new().step(5);
 static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_number(
     ARTICLES.static_str(),
     "news.setting.articles",
@@ -563,8 +563,8 @@ impl Screen for FeedsScreen {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quireink_i18n::{Catalog, check};
-    use quireink_sdk::MemoryStorage;
+    use paperpaw_i18n::{Catalog, check};
+    use paperpaw_sdk::MemoryStorage;
 
     #[test]
     fn translations_are_complete() {

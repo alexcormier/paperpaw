@@ -6,7 +6,7 @@ what the built-in fonts lack.
 Usage:
     python tools/script-pack.py OUT_DIR [SET ...]
 
-SET defaults to cyrillic and greek (see quireink_text::charset::named).
+SET defaults to cyrillic and greek (see paperpaw_text::charset::named).
 The plugin is written to OUT_DIR/<id>; copy that folder into the device's
 plugins folder (e.g. plugins/ on the X4's card).
 """
@@ -17,7 +17,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-FONTGEN = ROOT / "target/release/quireink-fontgen"
+FONTGEN = ROOT / "target/release/paperpaw-fontgen"
 FONTS = ROOT / "plugins/fonts-default/fonts"
 
 # Pack, font file, weight, the built-in font it extends.
@@ -42,13 +42,13 @@ def main():
     out = Path(sys.argv[1]) / id
     shutil.rmtree(out, ignore_errors=True)
     (out / "fonts").mkdir(parents=True)
-    subprocess.run(["cargo", "build", "-q", "--release", "-p", "quireink-fontgen"],
+    subprocess.run(["cargo", "build", "-q", "--release", "-p", "paperpaw-fontgen"],
                    cwd=ROOT, check=True)
     for name, file, weight, _ in FACES:
-        subprocess.run([str(FONTGEN), str(FONTS / file), str(out / "fonts" / f"{name}.qifp"),
+        subprocess.run([str(FONTGEN), str(FONTS / file), str(out / "fonts" / f"{name}.ppfp"),
                         "--chars", ",".join(sets), "--axis", f"wght={weight}"], check=True)
     title = " and ".join(NAMES[s] for s in sets)
-    extends = "\n".join(f"{name}.qifp = {font}" for name, _, _, font in FACES)
+    extends = "\n".join(f"{name}.ppfp = {font}" for name, _, _, font in FACES)
     (out / "plugin.ini").write_text(
         "[plugin]\n"
         f"id = {id}\n"

@@ -6,10 +6,10 @@ use alloc::borrow::Cow;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::builtin::{actions, events, params};
-use quireink_sdk::ui::{self, ListChange, ListView, UiStyle};
-use quireink_sdk::wifi::{self, WifiCommand, WifiNetwork, WifiState};
-use quireink_sdk::{
+use paperpaw_sdk::builtin::{actions, events, params};
+use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
+use paperpaw_sdk::wifi::{self, WifiCommand, WifiNetwork, WifiState};
+use paperpaw_sdk::{
     Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Hint, Id, Params, Rect,
     RefreshMode, Screen,
 };
@@ -159,7 +159,7 @@ impl WifiPage {
                         .i18n
                         .format("wifi.password", &[("ssid", Arg::Str(&network.ssid))]);
                     cx.command(
-                        quireink_sdk::ask::text(title, &PASSWORD_ENTERED)
+                        paperpaw_sdk::ask::text(title, &PASSWORD_ENTERED)
                             .password()
                             .with(params::ID, network.ssid.clone())
                             .command(),

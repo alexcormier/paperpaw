@@ -8,14 +8,14 @@
 The smallest target, the Xteink X4, has an ESP32-C3 with about 380 KB of RAM
 and no PSRAM. Languages with a garbage collector or a large runtime are ruled
 out. The same code must also run on ARM Linux, Android, desktop and in the
-browser. QuireInk parses untrusted files and hosts third-party plugins.
+browser. PaperPaw parses untrusted files and hosts third-party plugins.
 
 The alternative was C++ building on the CrossPoint Reader firmware, which
 would give a faster start on the X4.
 
 ## Decision
 
-QuireInk is written in Rust. All core crates are `#![no_std]` with `alloc`
+PaperPaw is written in Rust. All core crates are `#![no_std]` with `alloc`
 and must build for `riscv32imc-unknown-none-elf`. Shells may use `std`.
 CrossPoint Reader (MIT) serves as a reference for hardware details; ported
 algorithms are attributed.

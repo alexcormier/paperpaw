@@ -7,12 +7,12 @@ use alloc::borrow::Cow;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::ask;
-use quireink_sdk::builtin::actions;
-use quireink_sdk::event::Event;
-use quireink_sdk::replies::{HttpReply, Typed};
-use quireink_sdk::ui::{self, ListView, UiStyle};
-use quireink_sdk::{
+use paperpaw_sdk::ask;
+use paperpaw_sdk::builtin::actions;
+use paperpaw_sdk::event::Event;
+use paperpaw_sdk::replies::{HttpReply, Typed};
+use paperpaw_sdk::ui::{self, ListView, UiStyle};
+use paperpaw_sdk::{
     Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, HttpRequest, Id, Params, Rect,
     RefreshMode, Screen,
 };
@@ -258,7 +258,7 @@ impl Screen for PlaceScreen {
                 let mut request = HttpRequest::new("GET", &url, SEARCHED);
                 request.headers.push((
                     String::from("User-Agent"),
-                    String::from("QuireInk/0.1 (e-reader)"),
+                    String::from("PaperPaw/0.1 (e-reader)"),
                 ));
                 cx.command(Command::Http(request));
                 self.search = Search::Searching(name);
@@ -274,7 +274,7 @@ impl Screen for PlaceScreen {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quireink_sdk::Params;
+    use paperpaw_sdk::Params;
 
     #[test]
     fn answers_become_places() {

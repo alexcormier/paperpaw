@@ -4,16 +4,16 @@
 use std::borrow::Cow;
 
 use android_activity::AndroidApp;
-use quireink_sdk::builtin::{events, groups, menus, params};
-use quireink_sdk::document::Document;
-use quireink_sdk::{
+use paperpaw_sdk::builtin::{events, groups, menus, params};
+use paperpaw_sdk::document::Document;
+use paperpaw_sdk::{
     ActionSpec, Canvas, Command, Cx, Env, FormatSpec, Handled, Id, Manifest, MenuEntry, MenuNeed,
     Params, Plugin, Rect, RegisterError, Registrar, SDK_VERSION, Screen, ScreenSpec, SettingSpec,
     Version,
 };
 
 use crate::lights::Lights;
-use quireink_sdk::setting::{Setting, Text};
+use paperpaw_sdk::setting::{Setting, Text};
 
 pub const PLUGIN: Id = Id::new_static("android");
 /// Asks for access to the shared storage, where the books are.
@@ -24,7 +24,7 @@ pub const PDF: Id = Id::new_static("android.pdf");
 pub const VOICE: Setting<Text> = Setting::new("android.voice");
 const VOICE_SCREEN: Id = Id::new_static("android.voice-screen");
 /// The settings for reading aloud, every reader's.
-const ALOUD_SECTION: &str = quireink_sdk::builtin::setting_sections::ALOUD;
+const ALOUD_SECTION: &str = paperpaw_sdk::builtin::setting_sections::ALOUD;
 /// Frontlight brightness (0 switches it off).
 pub const FRONTLIGHT: Setting<i64> = Setting::new("android.frontlight");
 /// Frontlight colour temperature (higher is warmer).
@@ -32,9 +32,9 @@ pub const WARMTH: Setting<i64> = Setting::new("android.warmth");
 /// The home screen's shortcuts (see the `home` plugin).
 const HOME_ACTIONS: Id = Id::new_static("home.actions");
 /// The reader's panel of font and layout, every reader's.
-const READER_PANEL: Id = quireink_sdk::builtin::menus::READER_PANEL;
+const READER_PANEL: Id = paperpaw_sdk::builtin::menus::READER_PANEL;
 
-/// The device's frontlight and its levels when QuireInk started.
+/// The device's frontlight and its levels when PaperPaw started.
 #[derive(Clone, Copy)]
 pub struct Frontlight {
     pub lights: Lights,
@@ -45,7 +45,7 @@ pub struct Frontlight {
 /// The Android plugin.
 pub struct AndroidPlugin {
     pub app: AndroidApp,
-    /// QuireInk can already read the shared storage.
+    /// PaperPaw can already read the shared storage.
     pub shared_storage: bool,
     pub frontlight: Option<Frontlight>,
     /// The screen's size in pixels, which PDF pages are rendered to fit.
@@ -57,7 +57,7 @@ impl Plugin for AndroidPlugin {
         Manifest {
             id: PLUGIN,
             name: Cow::Borrowed("Android"),
-            description: Cow::Borrowed("Connects QuireInk to Android, e.g. to your book folders."),
+            description: Cow::Borrowed("Connects PaperPaw to Android, e.g. to your book folders."),
             version: Version::new(0, 1, 0),
             sdk: SDK_VERSION,
         }

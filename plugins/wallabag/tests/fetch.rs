@@ -6,11 +6,11 @@
 
 use std::rc::Rc;
 
-use quireink_core::{HttpCall, HttpResponse, Io, Kernel};
-use quireink_platform::{ButtonState, InputEvent, Rotation};
-use quireink_plugin_wallabag::Wallabag;
-use quireink_sdk::secrets::{FILE, SecretChange, Secrets};
-use quireink_sdk::{
+use paperpaw_core::{HttpCall, HttpResponse, Io, Kernel};
+use paperpaw_platform::{ButtonState, InputEvent, Rotation};
+use paperpaw_plugin_wallabag::Wallabag;
+use paperpaw_sdk::secrets::{FILE, SecretChange, Secrets};
+use paperpaw_sdk::{
     DeviceInfo, DirEntry, DisplayInfo, InputCaps, Instant, MemoryClass, MemoryStorage, PixelFormat,
     Storage, StorageError,
 };
@@ -166,7 +166,7 @@ fn fetches_new_articles_and_archives_read_ones() {
     // removed; nothing new to download.
     storage
         .0
-        .write(".quireink/plugins/wallabag/finished.txt", b"7\n")
+        .write(".paperpaw/plugins/wallabag/finished.txt", b"7\n")
         .unwrap();
     let calls = fetch(&mut kernel, 20);
     let calls = answer(&mut kernel, &calls[0], 200, r#"{"access_token": "U"}"#);

@@ -5,17 +5,17 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
-use quireink_sdk::builtin::actions;
-use quireink_sdk::ui::UiStyle;
-use quireink_sdk::widgets::{self, Align, Frame, Look, Size, Widget, WidgetSpec, WidgetTarget};
-use quireink_sdk::{Canvas, Command, Env, Id, Point, Rect, RegisterError, Registrar};
+use paperpaw_sdk::builtin::actions;
+use paperpaw_sdk::ui::UiStyle;
+use paperpaw_sdk::widgets::{self, Align, Frame, Look, Size, Widget, WidgetSpec, WidgetTarget};
+use paperpaw_sdk::{Canvas, Command, Env, Id, Point, Rect, RegisterError, Registrar};
 
 use super::{
     Book, Lines, THICKNESSES, add_settings, caption, chosen, cover_size, current, draw_bar,
     draw_cover, draw_message, draw_percent_alone, draw_ring, draw_ring_percent, frame_height,
     percent_text, place_x, text_size, thickness,
 };
-use quireink_sdk::SettingSpec;
+use paperpaw_sdk::SettingSpec;
 
 pub(crate) const ID: Id = Id::new_static(WIDGET);
 /// Its id, as text.
@@ -376,7 +376,7 @@ fn draw_bar_and_text(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, area: 
     let percent = percent_text(env, book.percent());
     let row_area = Rect::new(area.x, y, area.width, row);
     let text_w = font.measure(style.small, &percent) as u16;
-    quireink_sdk::ui::draw_label(
+    paperpaw_sdk::ui::draw_label(
         canvas,
         &font,
         style.small,

@@ -8,7 +8,7 @@
 //! KOReader, GoldenDict and many e-readers; they are found anywhere below
 //! the dictionary folder. The first lookup prepares a small index for each
 //! dictionary in the background; lookups then take a few milliseconds and
-//! little memory (see `quireink-stardict`).
+//! little memory (see `paperpaw-stardict`).
 //!
 //! Buttons: next/previous page or up/down scroll long definitions, confirm
 //! or back closes. Touch: tap the right part to scroll, the left part to go
@@ -24,16 +24,16 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_digest::fnv1a64;
-use quireink_sdk::builtin::{actions, groups, params, slots};
-use quireink_sdk::setting::{Setting, Text};
-use quireink_sdk::ui::{self, UiStyle};
-use quireink_sdk::{
+use paperpaw_digest::fnv1a64;
+use paperpaw_sdk::builtin::{actions, groups, params, slots};
+use paperpaw_sdk::setting::{Setting, Text};
+use paperpaw_sdk::ui::{self, UiStyle};
+use paperpaw_sdk::{
     Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest, Params,
     Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen, ScreenSpec,
     SettingSpec, Storage, Version,
 };
-use quireink_stardict::{Builder, Dictionary};
+use paperpaw_stardict::{Builder, Dictionary};
 
 pub const PLUGIN: Id = Id::new_static("dictionary");
 /// The panel with the definitions; parameters `word` and `language`.
@@ -54,7 +54,7 @@ pub struct DictionaryPlugin;
 
 /// The folder of the dictionaries, in their part of the reading settings,
 /// chosen on the folder chooser.
-static FOLDER_EXTRA: quireink_sdk::SettingExtra = quireink_sdk::SettingExtra::new()
+static FOLDER_EXTRA: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new()
     .section("dictionary.section")
     .editor(CHOOSE_FOLDER);
 static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_text(
@@ -345,11 +345,11 @@ impl Popup {
 
 impl Screen for Popup {
     /// *Select* closes it; the arrows scroll.
-    fn hint(&self, action: &Id, env: &Env<'_>) -> quireink_sdk::Hint {
+    fn hint(&self, action: &Id, env: &Env<'_>) -> paperpaw_sdk::Hint {
         if *action == actions::CONFIRM {
-            quireink_sdk::Hint::Text(env.i18n.tr("core.hint.close").to_string())
+            paperpaw_sdk::Hint::Text(env.i18n.tr("core.hint.close").to_string())
         } else {
-            quireink_sdk::Hint::Default
+            paperpaw_sdk::Hint::Default
         }
     }
 
@@ -529,7 +529,7 @@ impl Screen for Popup {
 
 #[cfg(test)]
 mod tests {
-    use quireink_i18n::{Catalog, check};
+    use paperpaw_i18n::{Catalog, check};
 
     #[test]
     fn translations_are_complete() {

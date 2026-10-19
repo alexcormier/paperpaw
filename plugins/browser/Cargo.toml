@@ -1,6 +1,6 @@
 [package]
-name = "quireink-plugin-browser"
-description = "QuireInk browser: reads web pages like books and fetches books and fonts from the web"
+name = "paperpaw-plugin-browser"
+description = "PaperPaw browser: reads web pages like books and fetches books and fonts from the web"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,11 +11,11 @@ authors.workspace = true
 categories = ["no-std"]
 
 [dependencies]
-quireink-digest.workspace = true
-quireink-sdk.workspace = true
+paperpaw-digest.workspace = true
+paperpaw-sdk.workspace = true
 
 [dev-dependencies]
-quireink-i18n.workspace = true
+paperpaw-i18n.workspace = true
 
 [lints]
 workspace = true

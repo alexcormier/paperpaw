@@ -6,8 +6,8 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use quireink_sdk::ui::{self, UiStyle};
-use quireink_sdk::{
+use paperpaw_sdk::ui::{self, UiStyle};
+use paperpaw_sdk::{
     Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Rect, Screen,
 };
 
@@ -64,7 +64,7 @@ fn volts(env: &Env<'_>, millivolts: u16) -> String {
 /// Plugins listed in each section.
 const PLUGINS_SHOWN: usize = 4;
 
-/// A plugin's name; the kernel's work is QuireInk's.
+/// A plugin's name; the kernel's work is PaperPaw's.
 fn plugin_name(env: &Env<'_>, id: &str) -> String {
     match env.plugins.get(id) {
         Some(info) => String::from(info.name(env.i18n)),
@@ -180,7 +180,7 @@ impl BatteryView {
         // code running): for developers.
         let developer = env
             .settings
-            .bool(quireink_sdk::builtin::settings::DEVELOPER.as_str())
+            .bool(paperpaw_sdk::builtin::settings::DEVELOPER.as_str())
             && env.settings.read(&crate::BY_PLUGIN);
         let mut shown: Vec<_> = env
             .usage
@@ -231,7 +231,7 @@ impl BatteryView {
         // Where the log is, for those who look into files: developers.
         let footer = if env
             .settings
-            .read(&quireink_sdk::builtin::settings::DEVELOPER)
+            .read(&paperpaw_sdk::builtin::settings::DEVELOPER)
         {
             env.i18n.format(
                 "battery.log-file",
@@ -250,9 +250,9 @@ impl BatteryView {
 }
 
 impl Screen for BatteryView {
-    fn hint(&self, action: &Id, _: &Env<'_>) -> quireink_sdk::Hint {
+    fn hint(&self, action: &Id, _: &Env<'_>) -> paperpaw_sdk::Hint {
         // Only back does anything here.
-        quireink_sdk::Hint::only_back(action)
+        paperpaw_sdk::Hint::only_back(action)
     }
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {

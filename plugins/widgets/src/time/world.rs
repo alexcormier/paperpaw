@@ -1,5 +1,5 @@
 //! The world clock: the time in up to three other places (of the time
-//! zones QuireInk knows), each with its name and whether it is already
+//! zones PaperPaw knows), each with its name and whether it is already
 //! tomorrow or still yesterday there ("Tokyo, tomorrow 18:41"); as rows
 //! one below the other, or side by side in a wide row.
 
@@ -7,11 +7,11 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use quireink_sdk::time::{self, LocalTime, TIME_ZONES, TimeZone};
-use quireink_sdk::widgets::{self, Align, Drawn, Frame};
-use quireink_sdk::{Arg, Canvas, Env, FontHandle, Id, Rect, RegisterError, Registrar};
+use paperpaw_sdk::time::{self, LocalTime, TIME_ZONES, TimeZone};
+use paperpaw_sdk::widgets::{self, Align, Drawn, Frame};
+use paperpaw_sdk::{Arg, Canvas, Env, FontHandle, Id, Rect, RegisterError, Registrar};
 
-use quireink_sdk::SettingSpec;
+use paperpaw_sdk::SettingSpec;
 
 use super::{chosen, dates, frame_height, line, ui};
 
@@ -302,7 +302,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
             } else {
                 Rect::new(cell.x, cell.y - gap / 2 - thick / 2, cell.width, thick)
             };
-            canvas.fill_shaded(between, quireink_sdk::Color::gray(200));
+            canvas.fill_shaded(between, paperpaw_sdk::Color::gray(200));
         }
     }
 }

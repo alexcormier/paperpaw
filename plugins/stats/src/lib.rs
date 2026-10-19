@@ -40,14 +40,14 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::cell::RefCell;
 
-use quireink_digest::md5;
-use quireink_sdk::builtin::{events, menus, params};
-use quireink_sdk::{
+use paperpaw_digest::md5;
+use paperpaw_sdk::builtin::{events, menus, params};
+use paperpaw_sdk::{
     ActionSpec, Command, Env, Id, Manifest, MenuEntry, Params, Plugin, RegisterError, Registrar,
     SDK_VERSION, ScreenSpec, SettingGroupSpec, SettingSpec, Version, time,
 };
 
-use quireink_sdk::setting::Setting;
+use paperpaw_sdk::setting::Setting;
 use store::{Book, PageStat};
 
 pub const PLUGIN: Id = Id::new_static("stats");
@@ -275,9 +275,9 @@ static SETTINGS: [SettingSpec; 3] = [
 ];
 
 /// Seconds, in steps of one and of ten.
-static SECONDS: quireink_sdk::SettingExtra =
-    quireink_sdk::SettingExtra::new().unit("stats.unit.seconds");
-static SECONDS_10: quireink_sdk::SettingExtra = quireink_sdk::SettingExtra::new()
+static SECONDS: paperpaw_sdk::SettingExtra =
+    paperpaw_sdk::SettingExtra::new().unit("stats.unit.seconds");
+static SECONDS_10: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new()
     .unit("stats.unit.seconds")
     .step(10);
 
@@ -422,7 +422,7 @@ fn enabled(env: &Env<'_>) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use quireink_i18n::{Catalog, check};
+    use paperpaw_i18n::{Catalog, check};
 
     use super::*;
 
@@ -444,7 +444,7 @@ mod tests {
 
     #[test]
     fn pages_come_from_the_reader_or_the_progress() {
-        let counted = quireink_sdk::builtin::events::Reading {
+        let counted = paperpaw_sdk::builtin::events::Reading {
             path: "books/a.epub".into(),
             title: String::new(),
             progress: 4.0,
@@ -456,7 +456,7 @@ mod tests {
             chapter_left: None,
         };
         assert_eq!(page_of(&counted), (12, 300));
-        let estimated = quireink_sdk::builtin::events::Reading {
+        let estimated = paperpaw_sdk::builtin::events::Reading {
             page: None,
             pages: None,
             progress: 42.5,

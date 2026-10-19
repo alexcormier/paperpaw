@@ -2,9 +2,9 @@
 
 use std::time::Instant as StdInstant;
 
-use quireink_core::{Effects, Io, Kernel, KernelError, SpeechCall};
-use quireink_graphics::Framebuffer;
-use quireink_platform::{
+use paperpaw_core::{Effects, Io, Kernel, KernelError, SpeechCall};
+use paperpaw_graphics::Framebuffer;
+use paperpaw_platform::{
     Battery, ButtonState, DeviceInfo, InputEvent, Instant, Rotation, SystemStatus, WallClock,
     buttons,
 };
@@ -12,7 +12,7 @@ use quireink_platform::{
 use crate::budget;
 use crate::panel::Panel;
 use crate::profiles::Profile;
-use quireink_fs::DirStorage;
+use paperpaw_fs::DirStorage;
 
 /// A running device. All kernel calls go through here, so they are
 /// counted against the profile's heap budget.
@@ -34,8 +34,8 @@ pub struct Device {
     /// HTTP requests in flight.
     pub http: crate::http::Http,
     /// Plugins' servers.
-    pub servers: quireink_serve::Servers,
-    pub sockets: quireink_serve::Sockets,
+    pub servers: paperpaw_serve::Servers,
+    pub sockets: paperpaw_serve::Sockets,
     /// The pretend radio, where the profile's device manages Wi-Fi.
     wifi: crate::wifi::Wifi,
     /// The texts being spoken (emulated), in order: number and when each
@@ -84,8 +84,8 @@ impl Device {
             panel: Panel::new(display.width, display.height, display.color),
             wake_at: None,
             http: crate::http::Http::new(),
-            servers: quireink_serve::Servers::new(|| {}),
-            sockets: quireink_serve::Sockets::new(|| {}),
+            servers: paperpaw_serve::Servers::new(|| {}),
+            sockets: paperpaw_serve::Sockets::new(|| {}),
             wifi: crate::wifi::Wifi::default(),
             speech: std::collections::VecDeque::new(),
             asleep: false,
@@ -154,7 +154,7 @@ impl Device {
     }
 
     /// Runs an action as a button bound to it would (scripts' `run:`).
-    pub fn run_action(&mut self, action: quireink_core::sdk::Id) {
+    pub fn run_action(&mut self, action: paperpaw_core::sdk::Id) {
         let now = self.now();
         let effects = budget::track(|| self.kernel.run_action(now, action));
         self.execute(effects);
@@ -274,7 +274,7 @@ impl Device {
                 Io::Http(mut call) => {
                     if let Err(e) = call.load_body(self.kernel.storage()) {
                         let now = self.now();
-                        let failed = quireink_core::HttpResponse::failed(call.id, &e.to_string());
+                        let failed = paperpaw_core::HttpResponse::failed(call.id, &e.to_string());
                         let effects = budget::track(|| self.kernel.http_response(now, failed));
                         self.execute(effects);
                         continue;
@@ -408,9 +408,9 @@ fn build_kernel(
 ) -> Result<Kernel, KernelError> {
     budget::track(|| {
         let fonts = if profile.font_packs {
-            quireink_app::Fonts::Packs
+            paperpaw_app::Fonts::Packs
         } else {
-            quireink_app::Fonts::Outline
+            paperpaw_app::Fonts::Outline
         };
         let mut device = turned(profile.device, rotation);
         device.input.keys = profile.buttons;
@@ -428,10 +428,10 @@ fn build_kernel(
         if !profile.font_packs {
             builder = builder.font_dir("fonts");
         }
-        let mut builder = quireink_app::install(builder, fonts);
+        let mut builder = paperpaw_app::install(builder, fonts);
         #[cfg(feature = "hello")]
         {
-            builder = builder.plugin(quireink_sample_hello::Hello);
+            builder = builder.plugin(paperpaw_sample_hello::Hello);
         }
         if let Some(rows) = profile.frame_rows {
             builder = builder.frame_rows(rows);

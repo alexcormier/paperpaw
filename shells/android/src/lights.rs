@@ -32,7 +32,7 @@ pub struct Lights {
 }
 
 impl Lights {
-    /// The device's light, if it has one QuireInk can drive.
+    /// The device's light, if it has one PaperPaw can drive.
     pub fn detect(app: &AndroidApp) -> Option<Self> {
         with_activity(app, |env, activity| {
             let manufacturer = env

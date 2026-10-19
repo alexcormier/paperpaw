@@ -13,7 +13,7 @@ the kernel free of I/O.
 ## Decision
 
 - **Storage is a platform service.** Shells implement the `Storage` trait
-  (`quireink-platform`): random-access reads, atomic whole-file writes,
+  (`paperpaw-platform`): random-access reads, atomic whole-file writes,
   appends, listing and removal on relative, `/`-separated paths. Local
   storage is accessed synchronously: reading kilobytes from an SD card is
   fast enough everywhere and keeps plugins simple. Slow, remote resources
@@ -27,11 +27,11 @@ the kernel free of I/O.
   text and an offset map back to the source. `Document::block_at` returns
   the block containing a `Locator`, and every position inside a block yields
   the same block. Very long paragraphs are split into deterministic pieces.
-- **Layout is a library** (`quireink-layout`), deterministic and able to
+- **Layout is a library** (`paperpaw-layout`), deterministic and able to
   start at any line, so readers only store page *starts*. Any reader plugin
   can use it.
 - **Reader state lives in the plugin's storage namespace**
-  (`.quireink/plugins/<id>/`): reading position per book and a page index
+  (`.paperpaw/plugins/<id>/`): reading position per book and a page index
   built in the background (one 8-byte entry per page, read in place).
 
 ## Consequences

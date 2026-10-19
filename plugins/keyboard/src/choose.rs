@@ -8,9 +8,9 @@ use alloc::format;
 use alloc::string::ToString;
 use alloc::vec::Vec;
 
-use quireink_sdk::builtin::actions;
-use quireink_sdk::ui::{self, ListView, UiStyle};
-use quireink_sdk::{
+use paperpaw_sdk::builtin::actions;
+use paperpaw_sdk::ui::{self, ListView, UiStyle};
+use paperpaw_sdk::{
     Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Rect, RefreshMode, Screen,
 };
 

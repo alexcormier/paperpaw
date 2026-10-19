@@ -1,12 +1,12 @@
 //! KOReader's statistics database (`statistics.sqlite3`, schema version
 //! 20221111): reading its books and page stays, and writing the same kind
-//! of file from QuireInk's statistics, so KOReader can merge it.
+//! of file from PaperPaw's statistics, so KOReader can merge it.
 
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::Storage;
-use quireink_sqlite::{
+use paperpaw_sdk::Storage;
+use paperpaw_sqlite::{
     Database, Error, SchemaEntry, Value, Writer, compare_records, encode_record,
 };
 

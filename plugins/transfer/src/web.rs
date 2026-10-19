@@ -3,15 +3,15 @@
 //!
 //! Every request carries the key shown on the device (`k=`); without it
 //! the answer is *403*. Paths are relative to the top of the storage;
-//! hidden ones (a part starting with `.`, e.g. QuireInk's own data) are
+//! hidden ones (a part starting with `.`, e.g. PaperPaw's own data) are
 //! out of reach.
 
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::files;
-use quireink_sdk::{ServerResponse, Storage, StorageError};
+use paperpaw_sdk::files;
+use paperpaw_sdk::{ServerResponse, Storage, StorageError};
 
 /// What a request changed, to tell on the device.
 #[derive(Debug, Clone, PartialEq, Eq)]

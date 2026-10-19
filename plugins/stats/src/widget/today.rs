@@ -7,9 +7,9 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::ui::{self, UiStyle};
-use quireink_sdk::widgets::{self, Align, Frame, Size, Widget, WidgetSpec, WidgetTarget};
-use quireink_sdk::{Arg, Canvas, Env, Id, Rect, RegisterError, Registrar, SettingSpec};
+use paperpaw_sdk::ui::{self, UiStyle};
+use paperpaw_sdk::widgets::{self, Align, Frame, Size, Widget, WidgetSpec, WidgetTarget};
+use paperpaw_sdk::{Arg, Canvas, Env, Id, Rect, RegisterError, Registrar, SettingSpec};
 
 use super::{caption_room, frame_height, goal, line, seconds_on, shade};
 use crate::{fmt, overview, totals};

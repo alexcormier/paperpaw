@@ -1,5 +1,5 @@
 //! The X4 Pro's microSD card, on the ESP32-S3's SD host (SDMMC, one data
-//! line), for QuireInk's FAT storage: started as the SD specification
+//! line), for PaperPaw's FAT storage: started as the SD specification
 //! says, then read and written block by block through a buffer in the
 //! chip's own RAM (its DMA does not reach the PSRAM).
 
@@ -13,8 +13,8 @@ use esp_hal::sdmmc::{
     BusWidth, CommandFlags, Config, ResponseLen, SdHostController, Slot, SlotConfig,
 };
 use log::{info, warn};
-use quireink_fat::{BLOCK, Blocks, DiskError};
-use quireink_platform::{NoStorage, Storage};
+use paperpaw_fat::{BLOCK, Blocks, DiskError};
+use paperpaw_platform::{NoStorage, Storage};
 
 use crate::board::CardParts;
 
@@ -35,8 +35,8 @@ static BUFFER: Shared = Shared(UnsafeCell::new(InternalMemory::new([0; BLOCK * A
 
 type CardSlot = Slot<'static, 1, Blocking>;
 
-/// The card's FAT file system as QuireInk's storage; without a card or
-/// one QuireInk cannot read, no storage.
+/// The card's FAT file system as PaperPaw's storage; without a card or
+/// one PaperPaw cannot read, no storage.
 pub fn mount(parts: CardParts) -> Box<dyn Storage> {
     let CardParts {
         host,

@@ -5,14 +5,14 @@
 use super::*;
 
 /// The book as the layout sees it: every block through the text
-/// filters of plugins (see `quireink_sdk::filters`).
+/// filters of plugins (see `paperpaw_sdk::filters`).
 pub(super) struct Filtered<'d, 'e> {
     pub(super) document: &'d dyn Document,
     pub(super) env: &'d Env<'e>,
 }
 
 impl Document for Filtered<'_, '_> {
-    fn metadata(&self) -> &quireink_sdk::document::Metadata {
+    fn metadata(&self) -> &paperpaw_sdk::document::Metadata {
         self.document.metadata()
     }
 
@@ -26,9 +26,9 @@ impl Document for Filtered<'_, '_> {
 
     fn block_at(
         &self,
-        storage: &dyn quireink_sdk::Storage,
+        storage: &dyn paperpaw_sdk::Storage,
         at: Locator,
-    ) -> Result<Option<quireink_sdk::document::Block>, DocumentError> {
+    ) -> Result<Option<paperpaw_sdk::document::Block>, DocumentError> {
         let mut block = self.document.block_at(storage, at)?;
         if let Some(block) = &mut block {
             self.env.text_filters.apply(self.env, block);
@@ -55,7 +55,7 @@ pub(super) struct Book {
     pub(super) history: Vec<Locator>,
     /// When the position was written last, and whether the page shown has
     /// changed since.
-    pub(super) saved_at: Option<quireink_sdk::Instant>,
+    pub(super) saved_at: Option<paperpaw_sdk::Instant>,
     pub(super) unsaved: bool,
     pub(super) index: Option<PageIndex>,
     /// Where background pagination continues.
@@ -92,7 +92,7 @@ pub(super) struct Book {
     pub(super) finished: bool,
     /// What plugins' decorators mark on the page, and what they were
     /// asked for: the page's start and their signature.
-    pub(super) decorated: Vec<quireink_sdk::decorations::Mark>,
+    pub(super) decorated: Vec<paperpaw_sdk::decorations::Mark>,
     pub(super) decorated_for: Option<(Locator, u64)>,
 }
 
@@ -109,7 +109,7 @@ pub(super) enum Target {
 /// The position kept in a book's `progress.ini`.
 pub(super) fn position_in(text: &str) -> Option<Locator> {
     let (mut section, mut offset) = (None, None);
-    for entry in quireink_sdk::config::parse(text).filter_map(Result::ok) {
+    for entry in paperpaw_sdk::config::parse(text).filter_map(Result::ok) {
         match (entry.section, entry.key) {
             ("progress", "section") => section = entry.value.as_u32(),
             ("progress", "offset") => offset = entry.value.as_u32(),
@@ -120,8 +120,8 @@ pub(super) fn position_in(text: &str) -> Option<Locator> {
 }
 
 /// Remembers `path` as the book read last (reopened at start-up).
-pub(crate) fn remember_last(storage: &dyn quireink_sdk::Storage, path: &str) {
-    let state = format!("[reader]\nlast = {}\n", quireink_sdk::config::quote(path));
+pub(crate) fn remember_last(storage: &dyn paperpaw_sdk::Storage, path: &str) {
+    let state = format!("[reader]\nlast = {}\n", paperpaw_sdk::config::quote(path));
     let _ = storage.write(&state_path(), state.as_bytes());
 }
 
@@ -164,7 +164,7 @@ impl Book {
         if env.storage.exists(&old) {
             let _ = env
                 .storage
-                .rename(&old, &quireink_sdk::annotations::file(path));
+                .rename(&old, &paperpaw_sdk::annotations::file(path));
         }
         let marks = annotations::marks(env.storage, path);
         let title = document
@@ -318,7 +318,7 @@ impl Book {
     }
 
     /// Whether the page shown has pictures: shown in grays where the
-    /// panel can ([`Screen::grays`](quireink_sdk::Screen::grays)).
+    /// panel can ([`Screen::grays`](paperpaw_sdk::Screen::grays)).
     pub(super) fn pictured(&self) -> bool {
         !self.page.images.is_empty()
     }
@@ -392,7 +392,7 @@ impl Book {
     }
 
     pub(super) fn saved_position(&self, env: &Env<'_>) -> Option<Locator> {
-        let data = quireink_sdk::read_file(env.storage, &self.progress_path(), 4096).ok()?;
+        let data = paperpaw_sdk::read_file(env.storage, &self.progress_path(), 4096).ok()?;
         position_in(core::str::from_utf8(&data).ok()?)
     }
 
@@ -504,7 +504,7 @@ impl Book {
             },
         };
         let per_step = match env.device.memory {
-            quireink_sdk::MemoryClass::Small => PAGES_PER_STEP_SMALL,
+            paperpaw_sdk::MemoryClass::Small => PAGES_PER_STEP_SMALL,
             _ => PAGES_PER_STEP,
         };
         let mut starts = Vec::with_capacity(per_step);
@@ -561,7 +561,7 @@ impl Book {
     /// e.g. a web page: it is not reported as read (see
     /// [`events::BOOK_OPENED`]) nor opened again at start-up.
     pub(super) fn web(&self) -> bool {
-        quireink_sdk::files::is_hidden(&self.path)
+        paperpaw_sdk::files::is_hidden(&self.path)
     }
 
     /// Reads the links of the page.
@@ -584,7 +584,7 @@ impl Book {
         let web = env.has_slot(&slots::BROWSER);
         let section = self.page.start.section;
         let mut order: Vec<(Locator, Target)> = (0..self.links.len())
-            .filter(|&i| web || !quireink_sdk::document::is_external(&self.links[i].href))
+            .filter(|&i| web || !paperpaw_sdk::document::is_external(&self.links[i].href))
             .map(|i| (Locator::new(section, self.links[i].start), Target::Link(i)))
             .collect();
         // Marks whose plugins hear taps on them, chosen as links are.
@@ -621,7 +621,7 @@ impl Book {
             let Ok(Some(block)) = self.document.block_at(env.storage, at) else {
                 break;
             };
-            if matches!(block.kind, quireink_sdk::document::BlockKind::Heading(_))
+            if matches!(block.kind, paperpaw_sdk::document::BlockKind::Heading(_))
                 && !text.is_empty()
             {
                 break;
@@ -833,7 +833,7 @@ impl Book {
 
 /// How the reader opens books: with the publisher's styles as set, and
 /// the plugins' stylesheets.
-pub(super) fn open_options(env: &Env<'_>) -> quireink_sdk::OpenOptions {
+pub(super) fn open_options(env: &Env<'_>) -> paperpaw_sdk::OpenOptions {
     let styles = env
         .settings
         .bool(crate::settings::PUBLISHER_STYLES.as_str());

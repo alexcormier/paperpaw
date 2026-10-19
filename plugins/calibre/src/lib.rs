@@ -24,20 +24,20 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_json as json;
-use quireink_sdk::builtin::{actions, groups, menus};
-use quireink_sdk::event::Event;
-use quireink_sdk::replies::{SocketNotice, Typed};
-use quireink_sdk::secrets::SecretChange;
-use quireink_sdk::ui::{self, UiStyle};
-use quireink_sdk::{
+use paperpaw_json as json;
+use paperpaw_sdk::builtin::{actions, groups, menus};
+use paperpaw_sdk::event::Event;
+use paperpaw_sdk::replies::{SocketNotice, Typed};
+use paperpaw_sdk::secrets::SecretChange;
+use paperpaw_sdk::ui::{self, UiStyle};
+use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Hint, Id,
     Manifest, MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION,
     Screen, ScreenSpec, SettingSpec, SocketRead, Version,
 };
 
+use paperpaw_sdk::setting::{Setting, Text};
 use protocol::{Message, op};
-use quireink_sdk::setting::{Setting, Text};
 
 pub const PLUGIN: Id = Id::new_static("calibre");
 /// Opens the connection screen.
@@ -58,14 +58,14 @@ const FIND_MS: u32 = 3000;
 const SPACE: u64 = 64 << 30;
 
 /// What Calibre's metadata of a book says of it, for the library.
-fn provided(metadata: &str) -> quireink_sdk::library::Provided {
+fn provided(metadata: &str) -> paperpaw_sdk::library::Provided {
     let text = |key: &str| json::raw_member(metadata, key).and_then(json::unquote);
     let list = |key: &str| {
         json::raw_member(metadata, key)
             .map(json::string_array)
             .unwrap_or_default()
     };
-    quireink_sdk::library::Provided {
+    paperpaw_sdk::library::Provided {
         title: text("title"),
         author: list("authors").into_iter().next(),
         series: text("series"),
@@ -296,13 +296,13 @@ impl CalibreScreen {
                         let _ = env.storage.remove(&coming.path);
                         if env.storage.rename(&coming.part, &coming.path).is_ok() {
                             library::remember(env.storage, &coming.lpath, &coming.metadata);
-                            quireink_sdk::library::provide(
+                            paperpaw_sdk::library::provide(
                                 env.storage,
                                 &coming.path,
                                 provided(&coming.metadata),
                             );
                             self.received += 1;
-                            cx.command(quireink_sdk::library::changed());
+                            cx.command(paperpaw_sdk::library::changed());
                         }
                     }
                     // A book dropped (its path led out of the library).
@@ -349,7 +349,7 @@ impl CalibreScreen {
                     .flat_map(|f| f.extensions.iter().map(|e| e.as_ref()))
                     .collect();
                 let version = format!("{}", SDK_VERSION);
-                let name = format!("QuireInk ({})", env.device.name);
+                let name = format!("PaperPaw ({})", env.device.name);
                 let device = protocol::Device {
                     name: &name,
                     extensions: &extensions,
@@ -373,7 +373,7 @@ impl CalibreScreen {
             op::GET_DEVICE_INFORMATION => {
                 let stored = library::device_info(env.storage);
                 let version = format!("{}", SDK_VERSION);
-                let name = format!("QuireInk ({})", env.device.name);
+                let name = format!("PaperPaw ({})", env.device.name);
                 let info = protocol::device_information(stored.as_deref(), &name, &version);
                 self.send(op::OK, &info, cx);
             }
@@ -409,13 +409,13 @@ impl CalibreScreen {
                     if let Some(path) = protocol::safe_path(&lpath) {
                         let _ = env
                             .storage
-                            .remove(&quireink_sdk::files::join(library_folder(&env), &path));
+                            .remove(&paperpaw_sdk::files::join(library_folder(&env), &path));
                     }
                     let uuid = library::forget(env.storage, &lpath).unwrap_or_default();
-                    let reply = format!("{{\"uuid\": {}}}", quireink_json::string(&uuid));
+                    let reply = format!("{{\"uuid\": {}}}", paperpaw_json::string(&uuid));
                     self.send(op::OK, &reply, cx);
                 }
-                cx.command(quireink_sdk::library::changed());
+                cx.command(paperpaw_sdk::library::changed());
             }
             op::NOOP => {
                 if protocol::member(args, "ejecting").is_some() {
@@ -442,7 +442,7 @@ impl CalibreScreen {
                 }
             }
             op::GET_BOOK_FILE_SEGMENT | op::GET_BOOK_METADATA => {
-                let error = "{\"message\": \"QuireInk does not send books\"}";
+                let error = "{\"message\": \"PaperPaw does not send books\"}";
                 self.send(op::ERROR, error, cx);
             }
             op::ERROR => {
@@ -471,7 +471,7 @@ impl CalibreScreen {
         // A path out of the library: the bytes are taken, then dropped.
         let (path, part) = match protocol::safe_path(&lpath) {
             Some(safe) => {
-                let path = quireink_sdk::files::join(library_folder(&env), &safe);
+                let path = paperpaw_sdk::files::join(library_folder(&env), &safe);
                 if let Some(dir) = path.rsplit_once('/').map(|(d, _)| d) {
                     let _ = env.storage.create_dir(dir);
                 }
@@ -506,7 +506,7 @@ impl CalibreScreen {
     fn type_password(&self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
         cx.command(
-            quireink_sdk::ask::text(env.i18n.tr("calibre.password"), &PASSWORD_TYPED)
+            paperpaw_sdk::ask::text(env.i18n.tr("calibre.password"), &PASSWORD_TYPED)
                 .password()
                 .command(),
         );
@@ -522,7 +522,7 @@ impl CalibreScreen {
 
 /// The library folder, where Calibre's books go.
 fn library_folder<'e>(env: &Env<'e>) -> &'e str {
-    quireink_sdk::library::folder(env)
+    paperpaw_sdk::library::folder(env)
 }
 
 impl Screen for CalibreScreen {

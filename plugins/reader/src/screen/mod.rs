@@ -15,17 +15,17 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_digest::fnv1a64;
-use quireink_sdk::ask;
-use quireink_sdk::builtin::{actions, events, fonts, params, slots};
-use quireink_sdk::document::{Document, DocumentError, Link, Locator};
-use quireink_sdk::event::EventData;
-use quireink_sdk::layout::{
+use paperpaw_digest::fnv1a64;
+use paperpaw_sdk::ask;
+use paperpaw_sdk::builtin::{actions, events, fonts, params, slots};
+use paperpaw_sdk::document::{Document, DocumentError, Link, Locator};
+use paperpaw_sdk::event::EventData;
+use paperpaw_sdk::layout::{
     Face, Hyphenate, LayoutContext, Page, PageImage, Style, Typesetter, layout_page, line_start,
 };
-use quireink_sdk::status::context as status_context;
-use quireink_sdk::ui::{self, UiStyle};
-use quireink_sdk::{
+use paperpaw_sdk::status::context as status_context;
+use paperpaw_sdk::ui::{self, UiStyle};
+use paperpaw_sdk::{
     Arg, Canvas, Color, Command, Cx, Env, FontHandle, FontSet, Gesture, GestureKind, Handled, Id,
     Params, Point, Rect, RefreshMode, Screen,
 };
@@ -85,7 +85,7 @@ pub(crate) struct ReaderScreen {
     /// Where reading aloud was paused: the page and its word.
     resume: Option<(Locator, usize)>,
     /// When the page turns by itself next, while it does.
-    auto_turn: Option<quireink_sdk::Instant>,
+    auto_turn: Option<paperpaw_sdk::Instant>,
     /// Where skimming began, while skimming.
     skim_from: Option<Locator>,
     /// The book to open once the screen says it is being prepared (the
@@ -133,7 +133,7 @@ impl ReaderScreen {
         cx.request_redraw();
         let flash = env
             .settings
-            .bool(quireink_sdk::builtin::settings::FLASH_SCREENS.as_str());
+            .bool(paperpaw_sdk::builtin::settings::FLASH_SCREENS.as_str());
         cx.request_refresh(if flash {
             RefreshMode::Full
         } else {
@@ -218,7 +218,7 @@ impl ReaderScreen {
             }
             cx.request_refresh(RefreshMode::Fast);
         }
-        let next = quireink_sdk::time::next_minute(&env).unwrap_or(env.now.add_millis(60_000));
+        let next = paperpaw_sdk::time::next_minute(&env).unwrap_or(env.now.add_millis(60_000));
         cx.wake_at(next);
         if let Some(at) = self.auto_turn {
             cx.wake_at(at);
@@ -273,7 +273,7 @@ impl ReaderScreen {
                         noted: false,
                     },
                     percent: (book.percent() + 0.5) as u8,
-                    created: quireink_sdk::time::unix_seconds(&env).unwrap_or(0),
+                    created: paperpaw_sdk::time::unix_seconds(&env).unwrap_or(0),
                     updated: 0,
                     text: annotations::snippet(&text.join(" ")),
                     note: String::new(),
@@ -297,11 +297,11 @@ impl Screen for ReaderScreen {
     }
 
     /// *Select* opens the reading menu, so its hint says so.
-    fn hint(&self, action: &Id, env: &Env<'_>) -> quireink_sdk::Hint {
+    fn hint(&self, action: &Id, env: &Env<'_>) -> paperpaw_sdk::Hint {
         if *action == actions::CONFIRM {
-            quireink_sdk::Hint::Text(env.i18n.tr("core.hint.core.menu").to_string())
+            paperpaw_sdk::Hint::Text(env.i18n.tr("core.hint.core.menu").to_string())
         } else {
-            quireink_sdk::Hint::Default
+            paperpaw_sdk::Hint::Default
         }
     }
 
@@ -766,7 +766,7 @@ impl Screen for ReaderScreen {
         {
             let env = *cx.env();
             let note = typed.text.as_str();
-            let now = quireink_sdk::time::unix_seconds(&env).unwrap_or(0);
+            let now = paperpaw_sdk::time::unix_seconds(&env).unwrap_or(0);
             annotations::set_note(env.storage, &book.path, at, note, now);
             book.marks = annotations::marks(env.storage, &book.path);
             cx.command(annotations::changed(&book.path));
@@ -807,7 +807,7 @@ impl Screen for ReaderScreen {
         // Which setting changed, if one did.
         let changed = events::SETTING_CHANGED.read(event, params).map(|c| c.id);
         let id = changed.as_ref().map_or("", Id::as_str);
-        let font_changed = id == quireink_sdk::builtin::settings::READING_FONT.as_str();
+        let font_changed = id == paperpaw_sdk::builtin::settings::READING_FONT.as_str();
         // How marks look, or what decorators mark (a switch, their data):
         // the page drawn again as it is laid out.
         if changed.is_some()
@@ -817,7 +817,7 @@ impl Screen for ReaderScreen {
             let look = env
                 .settings
                 .specs()
-                .any(|s| s.id.as_str() == id && s.group == quireink_sdk::builtin::groups::MARKS);
+                .any(|s| s.id.as_str() == id && s.group == paperpaw_sdk::builtin::groups::MARKS);
             let marked = book
                 .decorated_for
                 .is_some_and(|(_, signature)| signature != env.decorators.signature(&env))
@@ -848,7 +848,7 @@ impl Screen for ReaderScreen {
         };
         // The book's fonts are loaded with it.
         let reopen = id == crate::settings::PUBLISHER_STYLES.as_str()
-            || id == quireink_sdk::builtin::settings::READING_FONT.as_str();
+            || id == paperpaw_sdk::builtin::settings::READING_FONT.as_str();
         if changed.is_some() && reopen {
             // Another conversion of the book: open it again where it was.
             let env = *cx.env();
@@ -905,7 +905,7 @@ mod tests {
     fn positions_of_version_1_are_read() {
         assert_eq!(
             super::book::position_in(include_str!("../../testdata/progress.ini.v1")),
-            Some(quireink_sdk::document::Locator::new(7, 1234))
+            Some(paperpaw_sdk::document::Locator::new(7, 1234))
         );
     }
 

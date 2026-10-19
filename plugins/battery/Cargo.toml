@@ -1,6 +1,6 @@
 [package]
-name = "quireink-plugin-battery"
-description = "QuireInk battery use: records the battery while the device is awake, with what it did, and shows how long it lasts"
+name = "paperpaw-plugin-battery"
+description = "PaperPaw battery use: records the battery while the device is awake, with what it did, and shows how long it lasts"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,7 +11,7 @@ authors.workspace = true
 categories = ["no-std"]
 
 [dependencies]
-quireink-sdk.workspace = true
+paperpaw-sdk.workspace = true
 
 [lints]
 workspace = true

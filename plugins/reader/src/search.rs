@@ -11,14 +11,14 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::builtin::{actions, params};
-use quireink_sdk::document::{Block, Document, Locator};
-use quireink_sdk::ui::{self, ListView, UiStyle};
-use quireink_sdk::{
+use paperpaw_sdk::builtin::{actions, params};
+use paperpaw_sdk::document::{Block, Document, Locator};
+use paperpaw_sdk::ui::{self, ListView, UiStyle};
+use paperpaw_sdk::{
     Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, RefreshMode, Screen,
 };
 
-use quireink_sdk::builtin::events;
+use paperpaw_sdk::builtin::events;
 
 /// Most hits kept; more are counted as "100+".
 const MAX_HITS: usize = 100;
@@ -69,7 +69,7 @@ impl SearchScreen {
         let display = env.device.display;
         let header = ui::Header::new(env, &style, true);
         let top = header.area.height + style.gap as u16;
-        let area = quireink_sdk::Rect::new(0, top, display.width, display.height - top);
+        let area = paperpaw_sdk::Rect::new(0, top, display.width, display.height - top);
         let next = (document.is_some() && !needle.is_empty()).then_some(Locator::START);
         Self {
             path,

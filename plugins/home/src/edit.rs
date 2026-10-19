@@ -13,13 +13,13 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::builtin::{actions, events, params, slots};
-use quireink_sdk::event::Event;
-use quireink_sdk::status::item_ids;
-use quireink_sdk::ui::choice;
-use quireink_sdk::ui::{self, ListChange, ListView, Reorder, ReorderStep, UiStyle};
-use quireink_sdk::widgets;
-use quireink_sdk::{
+use paperpaw_sdk::builtin::{actions, events, params, slots};
+use paperpaw_sdk::event::Event;
+use paperpaw_sdk::status::item_ids;
+use paperpaw_sdk::ui::choice;
+use paperpaw_sdk::ui::{self, ListChange, ListView, Reorder, ReorderStep, UiStyle};
+use paperpaw_sdk::widgets;
+use paperpaw_sdk::{
     Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, PointerEvent, Rect,
     RefreshMode, Screen, SettingValue,
 };
@@ -221,9 +221,9 @@ impl Screen for EditScreen {
             rows.len(),
             |canvas, index, rect, focused| {
                 let ink = if focused {
-                    quireink_sdk::Color::WHITE
+                    paperpaw_sdk::Color::WHITE
                 } else {
-                    quireink_sdk::Color::BLACK
+                    paperpaw_sdk::Color::BLACK
                 };
                 let (icon, title, value) = match rows[index] {
                     Row::Widget(at) => {

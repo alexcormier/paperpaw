@@ -15,7 +15,7 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use quireink_sdk::document::{Align, MAX_FAMILIES};
+use paperpaw_sdk::document::{Align, MAX_FAMILIES};
 
 use crate::package::resolve;
 

@@ -5,7 +5,7 @@
 
 ## Context
 
-Plugins are built against one version of `quireink-sdk` and declare it
+Plugins are built against one version of `paperpaw-sdk` and declare it
 in their `Manifest` (`sdk`); the kernel loads a plugin only if its
 version satisfies that one, following SemVer. That promise is only as
 good as the versions: a change that breaks plugins in a release that
@@ -15,10 +15,10 @@ rebuild them.
 - Whether a change breaks plugins is easy to miss by eye: a new field in
   a public struct, a new variant in a public enum, a bound added to a
   trait.
-- The SDK is built from several crates (`quireink-platform`,
-  `quireink-graphics`, `quireink-text` and others it re-exports, and the
-  helpers plugins use beside it: `quireink-digest`, `quireink-json`,
-  `quireink-qr`, `quireink-sqlite`).
+- The SDK is built from several crates (`paperpaw-platform`,
+  `paperpaw-graphics`, `paperpaw-text` and others it re-exports, and the
+  helpers plugins use beside it: `paperpaw-digest`, `paperpaw-json`,
+  `paperpaw-qr`, `paperpaw-sqlite`).
 - Releases come from tags, with a commit that sets the version; between
   them, `main` changes the SDK every day.
 
@@ -32,7 +32,7 @@ rebuild them.
   with their last release on crates.io. A change that breaks them fails
   the build unless the version already says the next release breaks
   (the next minor version before 1.0, the next major after).
-- **The public API as a file**: `crates/quireink-sdk/api.txt` lists
+- **The public API as a file**: `crates/paperpaw-sdk/api.txt` lists
   every public item of the SDK (`cargo-public-api`), and CI fails if it
   is out of date. Every change to what plugins see is a diff in the
   commit that makes it, to read and to question.

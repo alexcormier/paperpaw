@@ -1,4 +1,4 @@
-# Contributing to QuireInk
+# Contributing to PaperPaw
 
 Thank you for helping! This guide explains how to get started and what we
 expect from contributions.
@@ -9,7 +9,7 @@ expect from contributions.
 - Everything in the repository is written in **English**: code, comments,
   documentation, commit messages, issues and pull requests.
 - Discuss larger changes in an issue first, especially changes to the SDK
-  (`crates/quireink-sdk`), which is a public API.
+  (`crates/paperpaw-sdk`), which is a public API.
 
 ## Development setup
 
@@ -21,19 +21,19 @@ expect from contributions.
    cargo fmt --all --check
    cargo clippy --workspace --all-targets -- -D warnings
    cargo test --workspace
-   cargo build --release --target riscv32imc-unknown-none-elf -p quireink-core -p quireink-plugin-diagnostics
+   cargo build --release --target riscv32imc-unknown-none-elf -p paperpaw-core -p paperpaw-plugin-diagnostics
    ```
 
 3. Try your change in the emulator:
-   `cargo run -p quireink-emulator -- --profile xteink-x4`.
+   `cargo run -p paperpaw-emulator -- --profile xteink-x4`.
 
 ## Architecture rules
 
-These keep QuireInk small, portable and extensible. Reviews check them.
+These keep PaperPaw small, portable and extensible. Reviews check them.
 
 1. **The kernel contains no product features.** Screens, formats, themes and
    the like are plugins.
-2. **Plugins depend on `quireink-sdk` only**, never on `quireink-core`.
+2. **Plugins depend on `paperpaw-sdk` only**, never on `paperpaw-core`.
    First-party plugins have no special access.
 3. **If a community plugin could not build a feature, extend the SDK first.**
 4. **Core crates are `no_std`.** They must build for
@@ -47,9 +47,9 @@ These keep QuireInk small, portable and extensible. Reviews check them.
    no borrowed host state kept across calls), so WebAssembly plugins can use
    them too.
 8. **The SDK changes visibly and compatibly** ([ADR 0020](docs/adr/0020-sdk-compatibility.md)):
-   a change to its public API comes with `crates/quireink-sdk/api.txt`
+   a change to its public API comes with `crates/paperpaw-sdk/api.txt`
    brought up to date
-   (`cargo +nightly-2026-10-17 public-api -p quireink-sdk -sss > crates/quireink-sdk/api.txt`),
+   (`cargo +nightly-2026-10-17 public-api -p paperpaw-sdk -sss > crates/paperpaw-sdk/api.txt`),
    and what goes is `#[deprecated]` first.
 
 Significant decisions are recorded as [Architecture Decision Records](docs/adr/).
@@ -58,10 +58,10 @@ Significant decisions are recorded as [Architecture Decision Records](docs/adr/)
 
 Each plugin keeps its catalogs in `i18n/<language>.ini`. To add a language:
 
-1. Copy `i18n/en.ini` of the kernel (`crates/quireink-core/i18n/`) and of each
+1. Copy `i18n/en.ini` of the kernel (`crates/paperpaw-core/i18n/`) and of each
    plugin to `i18n/<language>.ini`.
 2. Set `language`, `name` and `plural` in `[meta]` (see `PluralRule` in
-   `crates/quireink-i18n/src/plural.rs` for the available rules).
+   `crates/paperpaw-i18n/src/plural.rs` for the available rules).
 3. Translate the messages; keep `{placeholders}` unchanged.
 4. Register the catalog in the plugin's `register` function and run
    `cargo test`: the tests report missing, unknown and mismatched messages.

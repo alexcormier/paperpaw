@@ -5,9 +5,9 @@
 use alloc::format;
 use alloc::string::String;
 
-use quireink_sdk::ui::UiStyle;
-use quireink_sdk::widgets::{self, Look};
-use quireink_sdk::{Canvas, Color, Env, FontHandle, Id, Rect, SettingSpec, time};
+use paperpaw_sdk::ui::UiStyle;
+use paperpaw_sdk::widgets::{self, Look};
+use paperpaw_sdk::{Canvas, Color, Env, FontHandle, Id, Rect, SettingSpec, time};
 
 use crate::data::Symbol;
 use crate::symbol::{self, Style};
@@ -84,7 +84,7 @@ pub(crate) fn draw_digits(
         row.width,
         (metrics.ascent + metrics.descent) as u16,
     );
-    quireink_sdk::ui::draw_label(canvas, font, size, x, area, text, color);
+    paperpaw_sdk::ui::draw_label(canvas, font, size, x, area, text, color);
 }
 
 /// The size digits `size` pixels large are drawn in: smaller where the
@@ -113,7 +113,7 @@ pub(crate) fn clock(env: &Env<'_>, minutes: u16) -> String {
     let (hour, minute) = (minutes / 60, minutes % 60);
     let twelve = env
         .settings
-        .read(&quireink_sdk::builtin::settings::CLOCK_FORMAT)
+        .read(&paperpaw_sdk::builtin::settings::CLOCK_FORMAT)
         == time::CLOCK_12H;
     if !twelve {
         return format!("{hour:02}:{minute:02}");
@@ -129,7 +129,7 @@ pub(crate) fn clock(env: &Env<'_>, minutes: u16) -> String {
     };
     let text = format!("{shown}:{minute:02}");
     env.i18n
-        .format(key, &[("time", quireink_sdk::Arg::Str(&text))])
+        .format(key, &[("time", paperpaw_sdk::Arg::Str(&text))])
 }
 
 /// Draws what `widget` says while it has no weather: why, under a faint
@@ -147,7 +147,7 @@ pub(crate) fn draw_waiting(
         // The place is set: its name with the message.
         Waiting::NoNetwork if !shown.place.is_empty() => env.i18n.format(
             "weather.no-network-for",
-            &[("place", quireink_sdk::Arg::Str(&shown.place))],
+            &[("place", paperpaw_sdk::Arg::Str(&shown.place))],
         ),
         waiting => String::from(env.i18n.tr(waiting.key())),
     };

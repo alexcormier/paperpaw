@@ -14,9 +14,9 @@ page.
 
 ## Decision
 
-- **Shared building blocks in the SDK.** `quireink-zip` reads the central
+- **Shared building blocks in the SDK.** `paperpaw-zip` reads the central
   directory entry by entry and inflates entries as a stream.
-  `quireink-xml` is an incremental, allocation-light tokenizer. Both are
+  `paperpaw-xml` is an incremental, allocation-light tokenizer. Both are
   re-exported by the SDK (`sdk::zip`, `sdk::xml`), so other ZIP- or
   XML-based format plugins (FB2, CBZ, DOCX, …) can reuse them.
 - **Inflate with the smallest window that works.** The decoder state is
@@ -32,7 +32,7 @@ page.
   `toc_target`); anchors are resolved only when an entry is chosen.
 - **Chapters are converted once, on first use.** The XHTML is tokenized
   while it is inflated and written to the plugin's cache
-  (`.quireink/plugins/format-epub/<hash>/`):
+  (`.paperpaw/plugins/format-epub/<hash>/`):
   - `<n>.txt` holds block records (header and text);
   - `<n>.idx` holds the offset of every block, for binary search;
   - `<n>.anc` holds anchor ids and their offsets, for the table of contents;

@@ -5,10 +5,10 @@
 use alloc::format;
 use alloc::string::String;
 
-use quireink_sdk::setting::{Setting, Text};
-use quireink_sdk::ui::{self, UiStyle};
-use quireink_sdk::widgets::{self, Align, Drawn, Frame, Size, WidgetSpec};
-use quireink_sdk::{Arg, Canvas, Env, Id, Rect, RegisterError, Registrar, SettingSpec, time};
+use paperpaw_sdk::setting::{Setting, Text};
+use paperpaw_sdk::ui::{self, UiStyle};
+use paperpaw_sdk::widgets::{self, Align, Drawn, Frame, Size, WidgetSpec};
+use paperpaw_sdk::{Arg, Canvas, Env, Id, Rect, RegisterError, Registrar, SettingSpec, time};
 
 use super::frame_height;
 use super::text::{self, FACES};

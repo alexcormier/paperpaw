@@ -6,7 +6,7 @@
 //!   confirm), offers what can be done with it; deleting asks first.
 //! - *Move* and *Copy* pick the entry: then go to the folder it belongs in
 //!   and choose *Paste here* in the bar at the bottom.
-//! - Files starting with `.` (e.g. QuireInk's own data) are hidden unless
+//! - Files starting with `.` (e.g. PaperPaw's own data) are hidden unless
 //!   the setting *Show hidden files* says otherwise.
 //!
 //! With buttons only, down from the last entry reaches the bar.
@@ -20,20 +20,20 @@ use alloc::boxed::Box;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::ask;
-use quireink_sdk::builtin::{actions, events, groups, menus, params, slots};
-use quireink_sdk::event::Event;
-use quireink_sdk::replies::Typed;
-use quireink_sdk::ui::choice::{self, Choice};
-use quireink_sdk::ui::{self, ListChange, ListView, UiStyle};
-use quireink_sdk::{
+use paperpaw_sdk::ask;
+use paperpaw_sdk::builtin::{actions, events, groups, menus, params, slots};
+use paperpaw_sdk::event::Event;
+use paperpaw_sdk::replies::Typed;
+use paperpaw_sdk::ui::choice::{self, Choice};
+use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
+use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
     MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen,
     ScreenSpec, SettingSpec, Version,
 };
 
-use quireink_sdk::files::{self as ops, Entry};
-use quireink_sdk::setting::Setting;
+use paperpaw_sdk::files::{self as ops, Entry};
+use paperpaw_sdk::setting::Setting;
 
 pub const PLUGIN: Id = Id::new_static("file-manager");
 /// Opens the file manager.
@@ -299,7 +299,7 @@ impl Browser {
                     moved
                 };
                 if result.is_ok() && picked.copy {
-                    cx.command(quireink_sdk::library::changed());
+                    cx.command(paperpaw_sdk::library::changed());
                 }
                 self.message = result.err().map(|e| error(&env, e));
                 self.focus = Focus::List;
@@ -363,7 +363,7 @@ impl Browser {
                 // The books in it, said gone once it is: what is kept
                 // for them goes too.
                 let mut books = Vec::new();
-                quireink_sdk::library::books_in(env.storage, env.formats, path, &mut |book| {
+                paperpaw_sdk::library::books_in(env.storage, env.formats, path, &mut |book| {
                     books.push(String::from(book));
                 });
                 let deleted = ops::delete(env.storage, path);
@@ -371,7 +371,7 @@ impl Browser {
                     for path in books {
                         cx.command(events::BOOK_REMOVED.emit(events::BookRemoved { path }));
                     }
-                    cx.command(quireink_sdk::library::changed());
+                    cx.command(paperpaw_sdk::library::changed());
                 }
                 self.message = deleted.err().map(|e| error(&env, e));
                 if self.picked.as_ref().is_some_and(|p| p.path == path) {
@@ -416,8 +416,8 @@ impl Browser {
 }
 
 /// What to tell the user about a failed operation.
-fn error(env: &Env<'_>, e: quireink_sdk::StorageError) -> String {
-    use quireink_sdk::StorageError as E;
+fn error(env: &Env<'_>, e: paperpaw_sdk::StorageError) -> String {
+    use paperpaw_sdk::StorageError as E;
     let key = match e {
         E::NotFound => "file-manager.error.not-found",
         E::InvalidPath => "file-manager.error.invalid",
@@ -678,7 +678,7 @@ fn tell_moved(env: &Env<'_>, from: &str, to: &str, cx: &mut Cx<'_, '_>) {
 
 #[cfg(test)]
 mod tests {
-    use quireink_i18n::{Catalog, check};
+    use paperpaw_i18n::{Catalog, check};
 
     use super::*;
 

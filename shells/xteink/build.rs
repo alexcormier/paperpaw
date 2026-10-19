@@ -7,7 +7,7 @@
 //! `.cargo/config.toml`: `RUSTFLAGS` (as CI sets it) replaces the
 //! configuration's flags, not this.
 //!
-//! The X4's memory map is QuireInk's own (`memory-x4.x`, copied as
+//! The X4's memory map is PaperPaw's own (`memory-x4.x`, copied as
 //! `memory.x`; not named so here, where the linker would find it for the
 //! X4 Pro too): esp-hal's maps 4 MB
 //! of flash for code and read-only data together, and the fonts take much
@@ -15,7 +15,7 @@
 //! have their own 32 MB window; its linker (GCC) takes the script through
 //! `-Wl`.
 //!
-//! Also gives the firmware QuireInk's version (`QUIREINK_VERSION`), the
+//! Also gives the firmware PaperPaw's version (`PAPERPAW_VERSION`), the
 //! workspace's: the firmware is outside it.
 
 use std::path::PathBuf;
@@ -28,7 +28,7 @@ fn main() {
         .and_then(|part| part.lines().find_map(|l| l.strip_prefix("version = ")))
         .map(|v| v.trim().trim_matches('"').to_string())
         .expect("the workspace's version");
-    println!("cargo::rustc-env=QUIREINK_VERSION={version}");
+    println!("cargo::rustc-env=PAPERPAW_VERSION={version}");
     println!("cargo::rerun-if-changed=../../Cargo.toml");
     println!("cargo::rerun-if-changed=memory-x4.x");
     if std::env::var_os("CARGO_FEATURE_X4_PRO").is_some() {

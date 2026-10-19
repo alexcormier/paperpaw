@@ -6,7 +6,7 @@
 //!   so switching it off would leave no way back; once another plugin
 //!   provides them too, it can be switched off) or *Error*.
 //! - Confirming or tapping a row switches the plugin. The choice is saved
-//!   to `quireink.ini` (`[plugins] id = off`) and applies after a restart:
+//!   to `paperpaw.ini` (`[plugins] id = off`) and applies after a restart:
 //!   the bar at the bottom then offers *Restart now*. The bar is always
 //!   there (with a hint before), so nothing moves when it changes.
 //! - Below each name: what happens to the plugin (if anything), its
@@ -25,9 +25,9 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::builtin::{CORE_PLUGIN, actions, menus};
-use quireink_sdk::ui::{self, ListView, UiStyle};
-use quireink_sdk::{
+use paperpaw_sdk::builtin::{CORE_PLUGIN, actions, menus};
+use paperpaw_sdk::ui::{self, ListView, UiStyle};
+use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
     MenuEntry, Params, Plugin, PluginInfo, PluginState, Rect, RefreshMode, RegisterError,
     Registrar, SDK_VERSION, Screen, ScreenSpec, Version,
@@ -265,7 +265,7 @@ impl Screen for PluginList {
         // The bar: a line above it, the hint or what a restart does, and
         // the button.
         let line = Rect::new(0, self.bar.y, self.bar.width, (style.line as u16).max(1));
-        canvas.fill(line, quireink_sdk::Color::gray(150));
+        canvas.fill(line, paperpaw_sdk::Color::gray(150));
         let button = self.restart_button(env);
         if let Some(button) = button {
             let label = env.i18n.tr("plugin-manager.restart");
@@ -376,7 +376,7 @@ impl Screen for PluginList {
 
 #[cfg(test)]
 mod tests {
-    use quireink_i18n::{Catalog, check};
+    use paperpaw_i18n::{Catalog, check};
 
     use super::*;
 

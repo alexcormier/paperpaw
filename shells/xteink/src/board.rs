@@ -26,8 +26,8 @@ use esp_hal::spi::Mode;
 use esp_hal::spi::master::{Config as SpiConfig, Spi, SpiDma};
 use esp_hal::time::Rate;
 use esp_hal::timer::timg::TimerGroup;
-use quireink_x4::buttons::State;
-use quireink_x4::display::Display;
+use paperpaw_x4::buttons::State;
+use paperpaw_x4::display::Display;
 
 use crate::input::Touch;
 
@@ -79,8 +79,8 @@ impl Keys {
     /// The battery's charge (percent) and voltage (millivolts).
     pub fn battery(&mut self) -> Option<(u8, u16)> {
         let raw = nb::block!(self.adc.read_oneshot(&mut self.cell)).ok()?;
-        let millivolts = quireink_x4::battery::millivolts(raw);
-        Some((quireink_x4::battery::percent(millivolts), millivolts))
+        let millivolts = paperpaw_x4::battery::millivolts(raw);
+        Some((paperpaw_x4::battery::percent(millivolts), millivolts))
     }
 
     /// The buttons down, with the power button's `power_down`, and the

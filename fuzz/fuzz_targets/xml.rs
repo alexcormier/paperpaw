@@ -4,7 +4,7 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use quireink_sdk::xml::{Token, Tokenizer, decode};
+use paperpaw_sdk::xml::{Token, Tokenizer, decode};
 
 fuzz_target!(|data: &[u8]| {
     let Some((&size, data)) = data.split_first() else {

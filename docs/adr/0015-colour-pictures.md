@@ -5,9 +5,9 @@
 
 ## Context
 
-QuireInk decodes every picture to gray ([ADR 0012](0012-banded-rendering.md),
-`quireink-image`): e-ink shows gray, and gray takes a third of the memory.
-Colour screens are common among QuireInk's devices: Android phones and
+PaperPaw decodes every picture to gray ([ADR 0012](0012-banded-rendering.md),
+`paperpaw-image`): e-ink shows gray, and gray takes a third of the memory.
+Colour screens are common among PaperPaw's devices: Android phones and
 tablets, colour e-ink (Kaleido and its successors, on Boox, Kobo and
 PocketBook). The plan (§3.7) keeps the reader e-ink-first: text and the
 interface in gray at full resolution, colour where it adds something,
@@ -28,7 +28,7 @@ pay for colour in flash or RAM.
   otherwise gray rows as before. PNG and GIF have their colours anyway;
   JPEG decodes its chroma too, upsampled to luma's resolution, and
   progressive JPEG keeps the chroma coefficients as it keeps luma's.
-- **Colour pictures have a cache of their own** (`ColorFile`, `QICI`:
+- **Colour pictures have a cache of their own** (`ColorFile`, `PPCI`:
   width, height, then RGB rows) beside the gray one (`GrayFile`), so a
   book read on two devices, or a device switched, keeps both right. A
   format opened with `OpenOptions::color` decodes its pictures in colour.
@@ -40,7 +40,7 @@ pay for colour in flash or RAM.
 - **Colour e-ink** gets a profile per panel (`ColorPanel`): stronger
   saturation where the colour filter mutes it. Dithering for the filter
   follows once a panel is at hand to tune it on.
-- **Tier S** builds without the `color` feature of `quireink-graphics`
+- **Tier S** builds without the `color` feature of `paperpaw-graphics`
   and never asks for colour: no colour code, no colour buffers.
 
 ## Consequences

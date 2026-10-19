@@ -1,4 +1,4 @@
-//! EPUB 2 and 3 support for QuireInk.
+//! EPUB 2 and 3 support for PaperPaw.
 //!
 //! - Metadata (title, authors, language) from the package document.
 //! - Reading order from the spine; table of contents from the EPUB 3
@@ -40,8 +40,8 @@ use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::vec;
 
-use quireink_sdk::document::Document;
-use quireink_sdk::{
+use paperpaw_sdk::document::Document;
+use paperpaw_sdk::{
     FormatSpec, Id, Manifest, Plugin, RegisterError, Registrar, SDK_VERSION, Version,
 };
 
@@ -96,7 +96,7 @@ impl Plugin for EpubFormat {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         // What is converted of each book, moved and removed with it.
-        r.add_book_data(quireink_sdk::Env::plugin_dir(PLUGIN.as_str()), "")?;
+        r.add_book_data(paperpaw_sdk::Env::plugin_dir(PLUGIN.as_str()), "")?;
         r.add_format(FormatSpec {
             id: FORMAT,
             title: Cow::Borrowed("format-epub.title"),
@@ -129,7 +129,7 @@ impl Plugin for HtmlFormat {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         // What is converted of each book, moved and removed with it.
-        r.add_book_data(quireink_sdk::Env::plugin_dir(PLUGIN.as_str()), "html-")?;
+        r.add_book_data(paperpaw_sdk::Env::plugin_dir(PLUGIN.as_str()), "html-")?;
         r.add_format(FormatSpec {
             id: HTML,
             title: Cow::Borrowed("format-html.title"),
@@ -165,7 +165,7 @@ impl Plugin for Fb2Format {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         // What is converted of each book, moved and removed with it.
-        r.add_book_data(quireink_sdk::Env::plugin_dir(PLUGIN.as_str()), "fb2-")?;
+        r.add_book_data(paperpaw_sdk::Env::plugin_dir(PLUGIN.as_str()), "fb2-")?;
         r.add_format(FormatSpec {
             id: FB2,
             title: Cow::Borrowed("format-fb2.title"),
@@ -197,7 +197,7 @@ impl Plugin for MarkdownFormat {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         // What is converted of each book, moved and removed with it.
-        r.add_book_data(quireink_sdk::Env::plugin_dir(PLUGIN.as_str()), "md-")?;
+        r.add_book_data(paperpaw_sdk::Env::plugin_dir(PLUGIN.as_str()), "md-")?;
         r.add_format(FormatSpec {
             id: MARKDOWN,
             title: Cow::Borrowed("format-markdown.title"),
@@ -229,7 +229,7 @@ impl Plugin for CbzFormat {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         // What is converted of each book, moved and removed with it.
-        r.add_book_data(quireink_sdk::Env::plugin_dir(PLUGIN.as_str()), "cbz-")?;
+        r.add_book_data(paperpaw_sdk::Env::plugin_dir(PLUGIN.as_str()), "cbz-")?;
         r.add_format(FormatSpec {
             id: CBZ,
             title: Cow::Borrowed("format-cbz.title"),
@@ -249,9 +249,9 @@ impl Plugin for CbzFormat {
 /// The first bytes of `path`, at most 4 KB: to know a file again, or what
 /// it is. On the heap: books are opened deep in the stack.
 pub(crate) fn head(
-    storage: &dyn quireink_sdk::Storage,
+    storage: &dyn paperpaw_sdk::Storage,
     path: &str,
-) -> Result<alloc::vec::Vec<u8>, quireink_sdk::StorageError> {
+) -> Result<alloc::vec::Vec<u8>, paperpaw_sdk::StorageError> {
     let mut head = vec![0u8; 4096];
     let n = storage.read_at(path, 0, &mut head)?;
     head.truncate(n);
@@ -263,10 +263,10 @@ mod tests {
     use super::*;
     use alloc::string::String;
     use alloc::vec::Vec;
-    use quireink_i18n::{Catalog, check};
-    use quireink_sdk::MemoryStorage;
-    use quireink_sdk::document::{Align, BlockKind, Locator, TextStyle};
-    use quireink_sdk::zip::testing::ZipBuilder;
+    use paperpaw_i18n::{Catalog, check};
+    use paperpaw_sdk::MemoryStorage;
+    use paperpaw_sdk::document::{Align, BlockKind, Locator, TextStyle};
+    use paperpaw_sdk::zip::testing::ZipBuilder;
 
     #[test]
     fn translations_are_complete() {
@@ -354,7 +354,7 @@ mod tests {
             .deflated("OEBPS/text/ch 2.xhtml", ch2)
             .stored(
                 "OEBPS/images/dot.png",
-                &include_bytes!("../../../crates/quireink-image/tests/data/gray.png")[..],
+                &include_bytes!("../../../crates/paperpaw-image/tests/data/gray.png")[..],
             )
             .deflated(
                 "OEBPS/style.css",
@@ -424,7 +424,7 @@ mod tests {
         }
         assert_eq!(at("div/p[2]/text()[2].5"), Some(blocks[1] + 14));
         assert_eq!(at("div[1]/p[2]/b/text().1"), Some(blocks[1] + 6));
-        // Elements, and text QuireInk does not show: the block.
+        // Elements, and text PaperPaw does not show: the block.
         assert_eq!(at("div[2]"), Some(blocks[2]));
         assert_eq!(at("div[2]/p[2]/text().0"), Some(blocks[4]));
         assert_eq!(at("div[1]/p[2]/b"), Some(blocks[1]));
@@ -589,7 +589,7 @@ mod tests {
         );
         // The ranges cover the link texts.
         let first = doc.block_at(&storage, Locator::new(1, 0)).unwrap().unwrap();
-        let text_of = |link: &quireink_sdk::document::Link| {
+        let text_of = |link: &paperpaw_sdk::document::Link| {
             let from = first.text_index(link.start);
             let to = first.text_index(link.end);
             String::from(&first.text[from..to])
@@ -739,13 +739,13 @@ mod tests {
         let image = block.image.unwrap();
         assert_eq!((image.width, image.height), (37, 23));
         assert!(
-            quireink_sdk::Storage::size(&storage, &image.path).is_err(),
+            paperpaw_sdk::Storage::size(&storage, &image.path).is_err(),
             "not decoded with its chapter"
         );
         // Decoded when asked, before its page is drawn; then nothing to do.
         let decoded = doc.prepare_image(&storage, &image).unwrap();
         assert_eq!((decoded.width, decoded.height), (37, 23));
-        assert!(quireink_sdk::Storage::size(&storage, &decoded.path).is_ok());
+        assert!(paperpaw_sdk::Storage::size(&storage, &decoded.path).is_ok());
         assert_eq!(doc.prepare_image(&storage, &decoded), None);
     }
 
@@ -905,7 +905,7 @@ mod tests {
              <p class=\"c\">Mitte</p></body></html>",
         );
         let storage = epub(ch2);
-        use quireink_sdk::Storage;
+        use paperpaw_sdk::Storage;
         let align = |storage: &MemoryStorage| {
             let doc = EpubDocument::open(storage, "books/test.epub").unwrap();
             doc.block_at(storage, Locator::new(1, 0))
@@ -936,7 +936,7 @@ mod tests {
              <p class=\"c\">Mitte</p></body></html>",
         );
         let storage = epub(ch2);
-        use quireink_sdk::{OpenOptions, Storage};
+        use paperpaw_sdk::{OpenOptions, Storage};
         let align = |storage: &MemoryStorage, options: &OpenOptions| {
             let doc = EpubDocument::open_options(storage, "books/test.epub", options).unwrap();
             doc.block_at(storage, Locator::new(1, 0))

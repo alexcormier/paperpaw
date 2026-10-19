@@ -9,7 +9,7 @@ use android_activity::{AndroidApp, AndroidAppWaker};
 use jni::JNIEnv;
 use jni::JavaVM;
 use jni::objects::{JObject, JValue};
-use quireink_core::{HttpCall, HttpResponse};
+use paperpaw_core::{HttpCall, HttpResponse};
 
 /// Requests in flight and their answers.
 pub struct Net {

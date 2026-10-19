@@ -5,10 +5,10 @@
 
 use alloc::vec::Vec;
 
-use quireink_sdk::builtin::actions;
-use quireink_sdk::setting::Setting;
-use quireink_sdk::ui::{self, ListView, UiStyle};
-use quireink_sdk::{
+use paperpaw_sdk::builtin::actions;
+use paperpaw_sdk::setting::Setting;
+use paperpaw_sdk::ui::{self, ListView, UiStyle};
+use paperpaw_sdk::{
     Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Rect, Screen,
 };
 
@@ -73,7 +73,7 @@ impl Screen for DrawerScreen {
             let rect = list.row_rect(slot);
             let focused = list.shown && index == list.focus;
             canvas.describe(
-                quireink_sdk::semantics::Role::Button,
+                paperpaw_sdk::semantics::Role::Button,
                 "",
                 rect,
                 focused,
@@ -133,7 +133,7 @@ impl Screen for DrawerScreen {
                 }
             }
             // Down again: back to the home screen.
-            GestureKind::Swipe(quireink_sdk::Direction::Down) => {
+            GestureKind::Swipe(paperpaw_sdk::Direction::Down) => {
                 cx.command(Command::Back);
                 Handled::Yes
             }
@@ -193,8 +193,8 @@ impl TipsScreen {
 
 impl Screen for TipsScreen {
     /// Only *Back* shows: nothing else does more than close it.
-    fn hint(&self, action: &Id, _: &Env<'_>) -> quireink_sdk::Hint {
-        quireink_sdk::Hint::only_back(action)
+    fn hint(&self, action: &Id, _: &Env<'_>) -> paperpaw_sdk::Hint {
+        paperpaw_sdk::Hint::only_back(action)
     }
 
     fn region(&self, _: &Env<'_>) -> Option<Rect> {

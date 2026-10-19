@@ -9,7 +9,7 @@
 //!   that are not on the device yet into its folder (see `sync`); the
 //!   action can also be put into menus.
 //! - Books go to the library folder when downloaded one by one, in the
-//!   format QuireInk reads best of those offered.
+//!   format PaperPaw reads best of those offered.
 //!
 //! Feeds are read in pieces and books written straight to storage, so
 //! catalogs of any size work on small devices too.
@@ -33,18 +33,18 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::cell::RefCell;
 
-use quireink_sdk::builtin::{events, groups, menus, params};
-use quireink_sdk::event::Event;
-use quireink_sdk::replies::HttpReply;
-use quireink_sdk::ui::choice::Choice;
-use quireink_sdk::{
+use paperpaw_sdk::builtin::{events, groups, menus, params};
+use paperpaw_sdk::event::Event;
+use paperpaw_sdk::replies::HttpReply;
+use paperpaw_sdk::ui::choice::Choice;
+use paperpaw_sdk::{
     ActionSpec, Command, Env, HttpRequest, Id, Manifest, MenuEntry, Params, Plugin, RegisterError,
     Registrar, SDK_VERSION, ScreenSpec, SettingSpec, Version,
 };
 
 use crate::catalogs::Catalog;
 use crate::sync::Sync;
-use quireink_sdk::setting::Setting;
+use paperpaw_sdk::setting::Setting;
 
 pub const PLUGIN: Id = Id::new_static("opds");
 /// Opens the list of catalogs.
@@ -62,7 +62,7 @@ const OPTION_LABELS: &str = "opds.option.";
 const URL: &str = params::URL;
 const ID: &str = params::ID;
 
-const USER_AGENT: &str = "QuireInk/0.1 (e-reader)";
+const USER_AGENT: &str = "PaperPaw/0.1 (e-reader)";
 /// Setting: covers in the lists of catalogs (on devices with the memory).
 const COVERS: Setting<bool> = Setting::new("opds.covers");
 
@@ -115,7 +115,7 @@ fn list_request(
 /// Reads a list of a catalog from `path`, which came from `base`.
 fn read_list(
     catalog: &Catalog,
-    storage: &dyn quireink_sdk::Storage,
+    storage: &dyn paperpaw_sdk::Storage,
     path: &str,
     base: &str,
 ) -> feed::Feed {
@@ -138,9 +138,9 @@ fn marked(env: &Env<'_>) -> Vec<Catalog> {
 pub struct Opds;
 
 /// The catalogs' part of the library settings.
-static IN_CATALOGS: quireink_sdk::SettingExtra =
-    quireink_sdk::SettingExtra::new().section("opds.section");
-static IN_CATALOGS_10: quireink_sdk::SettingExtra = quireink_sdk::SettingExtra::new()
+static IN_CATALOGS: paperpaw_sdk::SettingExtra =
+    paperpaw_sdk::SettingExtra::new().section("opds.section");
+static IN_CATALOGS_10: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new()
     .section("opds.section")
     .step(10);
 
@@ -240,7 +240,7 @@ impl Plugin for Opds {
 
 #[cfg(test)]
 mod tests {
-    use quireink_i18n::{Catalog, check};
+    use paperpaw_i18n::{Catalog, check};
 
     #[test]
     fn translations_are_complete() {

@@ -4,8 +4,8 @@
 //! role's look; where spans meet on a word their looks are combined, the
 //! earlier source winning an aspect both set.
 
-use quireink_sdk::builtin::roles;
-use quireink_sdk::decorations::{self, Decoration, PageText, PageWord};
+use paperpaw_sdk::builtin::roles;
+use paperpaw_sdk::decorations::{self, Decoration, PageText, PageWord};
 
 use super::*;
 
@@ -181,7 +181,7 @@ impl Book {
         for link in self
             .links
             .iter()
-            .filter(|l| web || !quireink_sdk::document::is_external(&l.href))
+            .filter(|l| web || !paperpaw_sdk::document::is_external(&l.href))
         {
             spans.push(Span {
                 start: Locator::new(section, link.start),

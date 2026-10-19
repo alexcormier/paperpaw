@@ -18,9 +18,9 @@ extern crate alloc;
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
 
-use quireink_sdk::builtin::{actions, fonts, groups, slots};
-use quireink_sdk::setting::Setting;
-use quireink_sdk::{
+use paperpaw_sdk::builtin::{actions, fonts, groups, slots};
+use paperpaw_sdk::setting::Setting;
+use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Color, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest, Metrics,
     Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen, ScreenSpec,
     SettingSpec, Version,
@@ -426,7 +426,7 @@ fn draw_label(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quireink_i18n::{Catalog, check};
+    use paperpaw_i18n::{Catalog, check};
 
     #[test]
     fn translations_are_complete() {

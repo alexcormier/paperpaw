@@ -4,8 +4,8 @@
 
 use alloc::string::String;
 
-use quireink_sdk::Storage;
-use quireink_sdk::document::Locator;
+use paperpaw_sdk::Storage;
+use paperpaw_sdk::document::Locator;
 
 const ENTRY: u64 = 8;
 const SENTINEL: Locator = Locator::new(u32::MAX, u32::MAX);
@@ -122,7 +122,7 @@ impl PageIndex {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quireink_sdk::MemoryStorage;
+    use paperpaw_sdk::MemoryStorage;
 
     #[test]
     fn appends_locates_and_completes() {

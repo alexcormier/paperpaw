@@ -1,6 +1,6 @@
 [package]
-name = "quireink-plugin-about"
-description = "QuireInk about page: version, licence and the licences of what it bundles"
+name = "paperpaw-plugin-about"
+description = "PaperPaw about page: version, licence and the licences of what it bundles"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -12,10 +12,10 @@ categories = ["no-std"]
 include = ["src", "i18n", "licences.md"]
 
 [dependencies]
-quireink-sdk.workspace = true
+paperpaw-sdk.workspace = true
 
 [dev-dependencies]
-quireink-i18n.workspace = true
+paperpaw-i18n.workspace = true
 
 [lints]
 workspace = true

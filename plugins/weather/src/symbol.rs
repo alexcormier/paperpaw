@@ -11,8 +11,8 @@
 
 use alloc::vec::Vec;
 
-use quireink_sdk::round::sin_cos;
-use quireink_sdk::{Canvas, Color, Rect};
+use paperpaw_sdk::round::sin_cos;
+use paperpaw_sdk::{Canvas, Color, Rect};
 
 use crate::data::Symbol;
 

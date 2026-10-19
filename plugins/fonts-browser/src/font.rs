@@ -6,11 +6,11 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::builtin::{actions, events, params, settings};
-use quireink_sdk::event::Event;
-use quireink_sdk::ui::choice::{self, Picked};
-use quireink_sdk::ui::{self, ListView, UiStyle};
-use quireink_sdk::{
+use paperpaw_sdk::builtin::{actions, events, params, settings};
+use paperpaw_sdk::event::Event;
+use paperpaw_sdk::ui::choice::{self, Picked};
+use paperpaw_sdk::ui::{self, ListView, UiStyle};
+use paperpaw_sdk::{
     Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect,
     RefreshMode, Screen, SettingValue, files,
 };

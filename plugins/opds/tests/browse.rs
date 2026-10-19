@@ -8,11 +8,11 @@
 
 use std::rc::Rc;
 
-use quireink_core::{HttpCall, HttpResponse, Io, Kernel};
-use quireink_platform::Rotation;
-use quireink_plugin_opds::{OPEN, Opds};
-use quireink_sdk::builtin::actions;
-use quireink_sdk::{
+use paperpaw_core::{HttpCall, HttpResponse, Io, Kernel};
+use paperpaw_platform::Rotation;
+use paperpaw_plugin_opds::{OPEN, Opds};
+use paperpaw_sdk::builtin::actions;
+use paperpaw_sdk::{
     DeviceInfo, DirEntry, DisplayInfo, Id, InputCaps, Instant, MemoryClass, MemoryStorage,
     PixelFormat, Storage, StorageError,
 };
@@ -113,8 +113,8 @@ impl Browsing {
         let mut kernel = Kernel::builder(DEVICE)
             .storage(storage.clone())
             .network(true)
-            .plugin(quireink_plugin_fonts_default::DefaultFontPacks)
-            .plugin(quireink_plugin_format_epub::EpubFormat)
+            .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
+            .plugin(paperpaw_plugin_format_epub::EpubFormat)
             .plugin(Opds)
             .build()
             .unwrap();

@@ -5,9 +5,9 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
-use quireink_sdk::ui::{self, UiStyle};
-use quireink_sdk::widgets::{self, Align, Frame, Look, Widget, WidgetSpec, WidgetTarget};
-use quireink_sdk::{Arg, Canvas, Env, Id, Rect, RegisterError, Registrar, SettingSpec};
+use paperpaw_sdk::ui::{self, UiStyle};
+use paperpaw_sdk::widgets::{self, Align, Frame, Look, Widget, WidgetSpec, WidgetTarget};
+use paperpaw_sdk::{Arg, Canvas, Env, Id, Rect, RegisterError, Registrar, SettingSpec};
 
 use super::{caption_room, chosen, frame_height, goal, line, seconds_on, shade};
 use crate::fmt;
@@ -156,7 +156,7 @@ impl Widget for Week {
 }
 
 /// The height of the row of weekdays below the bars, if it shows.
-fn labels_height(env: &Env<'_>, font: &quireink_sdk::FontHandle<'_>, style: &UiStyle) -> u16 {
+fn labels_height(env: &Env<'_>, font: &paperpaw_sdk::FontHandle<'_>, style: &UiStyle) -> u16 {
     if widgets::shows(env, NAME, "labels") {
         line(font, style.small) + style.gap as u16 / 2
     } else {

@@ -4,7 +4,7 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use quireink_plugin_koreader::lua;
+use paperpaw_plugin_koreader::lua;
 
 fuzz_target!(|data: &[u8]| {
     let text = String::from_utf8_lossy(data);

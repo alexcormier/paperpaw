@@ -1,5 +1,5 @@
 //! The quote of the day: a quote about reading, books and life, another
-//! each day, in the reader's language, from those QuireInk brings (in
+//! each day, in the reader's language, from those PaperPaw brings (in
 //! `data/quotes.<language>.txt`) and the reader's own (`quotes.txt` in
 //! the plugin's folder, a quote per line: `text | author`). A tap shows
 //! the next one.
@@ -9,11 +9,11 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::cell::Cell;
 
-use quireink_sdk::event::Event;
-use quireink_sdk::setting::{Setting, Text};
-use quireink_sdk::ui::UiStyle;
-use quireink_sdk::widgets::{self, Align, Frame, Size, Widget, WidgetSpec, WidgetTarget};
-use quireink_sdk::{Canvas, Env, Id, Rect, RegisterError, Registrar, SettingSpec};
+use paperpaw_sdk::event::Event;
+use paperpaw_sdk::setting::{Setting, Text};
+use paperpaw_sdk::ui::UiStyle;
+use paperpaw_sdk::widgets::{self, Align, Frame, Size, Widget, WidgetSpec, WidgetTarget};
+use paperpaw_sdk::{Canvas, Env, Id, Rect, RegisterError, Registrar, SettingSpec};
 
 use super::text::{self, FACES};
 use super::{Turns, changed, changes, data, each_line, frame_height, of_the_day, today};
@@ -21,7 +21,7 @@ use super::{Turns, changed, changes, data, each_line, frame_height, of_the_day, 
 pub(super) const ID: Id = Id::new_static("widgets.quote");
 /// Whose quotes: one of [`SOURCES`].
 const SOURCE: Setting<Text> = Setting::new("widgets.quote.source");
-/// QuireInk's, the reader's own, or both.
+/// PaperPaw's, the reader's own, or both.
 const SOURCES: [&str; 3] = [
     "widgets.quote.source.shipped",
     "widgets.quote.source.own",
@@ -151,7 +151,7 @@ fn parse(line: &str) -> Option<(&str, &str)> {
     (!text.is_empty()).then_some((text, author.trim()))
 }
 
-/// The quotes QuireInk brings in `language`, English where it brings none.
+/// The quotes PaperPaw brings in `language`, English where it brings none.
 fn shipped(language: &str) -> &'static str {
     if language.starts_with("de") {
         GERMAN
@@ -169,7 +169,7 @@ fn quotes_in(text: &str) -> impl Iterator<Item = (&str, &str)> {
 /// reader's own (in the file at `own`), and how many there are in all;
 /// `None` without any.
 fn quote_at(
-    storage: &dyn quireink_sdk::Storage,
+    storage: &dyn paperpaw_sdk::Storage,
     shipped: Option<&str>,
     own: Option<&str>,
     position: impl Fn(usize) -> usize,
@@ -337,9 +337,9 @@ impl Widget for QuoteWidget {
             top += (style.gap as f32 * 0.75) as u16;
             let small = widgets::line_height(env, style.small);
             let row = Rect::new(area.x, top, area.width, small);
-            let name = quireink_sdk::ui::fit(&ui, style.small, author, width);
+            let name = paperpaw_sdk::ui::fit(&ui, style.small, author, width);
             let x = align.x(area, ui.measure(style.small, &name));
-            quireink_sdk::ui::draw_label(canvas, &ui, style.small, x, row, &name, look.faint);
+            paperpaw_sdk::ui::draw_label(canvas, &ui, style.small, x, row, &name, look.faint);
         }
     }
 
@@ -385,7 +385,7 @@ impl Layout {
     }
 
     /// The height of it all with `lines` lines at `size`.
-    fn height(&self, font: &quireink_sdk::FontHandle<'_>, size: f32, lines: usize) -> f32 {
+    fn height(&self, font: &paperpaw_sdk::FontHandle<'_>, size: f32, lines: usize) -> f32 {
         self.mark_height(size) + text::line_height(font, size) * lines as f32 + self.author
     }
 }
@@ -414,10 +414,10 @@ mod tests {
         assert!(super::SETTINGS.iter().all(|s| s.group == super::ID));
     }
     use super::*;
-    use quireink_sdk::MemoryStorage;
+    use paperpaw_sdk::MemoryStorage;
 
     #[test]
-    fn enough_quotes_come_with_quireink() {
+    fn enough_quotes_come_with_paperpaw() {
         for (text, language) in [(ENGLISH, "en"), (GERMAN, "de")] {
             let quotes: Vec<_> = quotes_in(text).collect();
             assert!(quotes.len() >= 60, "{language}: {}", quotes.len());

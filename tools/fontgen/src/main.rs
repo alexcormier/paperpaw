@@ -1,16 +1,16 @@
-//! `quireink-fontgen`: converts fonts into QuireInk bitmap font packs.
+//! `paperpaw-fontgen`: converts fonts into PaperPaw bitmap font packs.
 //!
-//! Devices without runtime font rendering (ESP32-C3) read `.qifp` packs
+//! Devices without runtime font rendering (ESP32-C3) read `.ppfp` packs
 //! directly from flash or storage. Packs are rendered with the same
-//! rasterizer QuireInk uses at runtime, so text looks identical.
+//! rasterizer PaperPaw uses at runtime, so text looks identical.
 
 use std::process::ExitCode;
 
 const USAGE: &str = "\
-quireink-fontgen: build QuireInk bitmap font packs
+paperpaw-fontgen: build PaperPaw bitmap font packs
 
 USAGE:
-    quireink-fontgen <font.ttf|otf> <output.qifp> [OPTIONS]
+    paperpaw-fontgen <font.ttf|otf> <output.ppfp> [OPTIONS]
 
 OPTIONS:
     --sizes <px,...>      Pixel sizes to render (default: 20,24,28,32,36,40,48)
@@ -78,19 +78,19 @@ fn run(args: Vec<String>) -> Result<(), String> {
     let data = std::fs::read(input).map_err(|e| format!("{input}: {e}"))?;
     let variations: Vec<(&str, f32)> = axes.iter().map(|(t, v)| (t.as_str(), *v)).collect();
     let font =
-        quireink_text::OutlineFont::new(data, &variations).map_err(|e| format!("{input}: {e}"))?;
+        paperpaw_text::OutlineFont::new(data, &variations).map_err(|e| format!("{input}: {e}"))?;
     let mut ranges = Vec::new();
     for set in &sets {
-        if let Some(named) = quireink_text::charset::named(set) {
+        if let Some(named) = paperpaw_text::charset::named(set) {
             ranges.extend_from_slice(named);
-        } else if let Some(points) = quireink_text::charset::code_points(set) {
+        } else if let Some(points) = paperpaw_text::charset::code_points(set) {
             ranges.push(points);
         } else {
             return Err(format!("unknown character set `{set}`"));
         }
     }
-    let chars = quireink_text::charset::chars(&ranges);
-    let pack = quireink_text::build_pack(&font, &sizes, chars);
+    let chars = paperpaw_text::charset::chars(&ranges);
+    let pack = paperpaw_text::build_pack(&font, &sizes, chars);
     std::fs::write(output, &pack).map_err(|e| format!("{output}: {e}"))?;
     println!(
         "{output}: {} sizes, {:.1} KiB",

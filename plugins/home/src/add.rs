@@ -10,15 +10,15 @@ use alloc::boxed::Box;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::builtin::actions;
-use quireink_sdk::ui::{self, ListView, UiStyle};
-use quireink_sdk::widgets::{self, Widget, categories};
-use quireink_sdk::{
+use paperpaw_sdk::builtin::actions;
+use paperpaw_sdk::ui::{self, ListView, UiStyle};
+use paperpaw_sdk::widgets::{self, Widget, categories};
+use paperpaw_sdk::{
     Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, Screen,
 };
 
 use crate::pages::{self, MAX_PAGES, STATUS, STATUS_BAR, TOOLS};
-use quireink_sdk::widgets::grid::{self, Cells, What};
+use paperpaw_sdk::widgets::grid::{self, Cells, What};
 
 /// Parameter: the page added to (0 the first).
 pub(crate) const PAGE: &str = "page";
@@ -403,7 +403,7 @@ impl AddScreen {
             let focused = shown && preview.row == focus;
             let name = env.i18n.tr(title);
             canvas.describe(
-                quireink_sdk::semantics::Role::Row,
+                paperpaw_sdk::semantics::Role::Row,
                 name,
                 preview.title.union(&preview.area),
                 focused,

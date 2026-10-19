@@ -1,6 +1,6 @@
 [package]
-name = "quireink-plugin-koreader"
-description = "QuireInk KOReader: bookmarks and highlights shared with KOReader"
+name = "paperpaw-plugin-koreader"
+description = "PaperPaw KOReader: bookmarks and highlights shared with KOReader"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,12 +11,12 @@ authors.workspace = true
 categories = ["no-std"]
 
 [dependencies]
-quireink-sdk.workspace = true
+paperpaw-sdk.workspace = true
 
 [dev-dependencies]
-quireink-i18n.workspace = true
-quireink-plugin-format-epub.workspace = true
-quireink-zip = { workspace = true, features = ["testing"] }
+paperpaw-i18n.workspace = true
+paperpaw-plugin-format-epub.workspace = true
+paperpaw-zip = { workspace = true, features = ["testing"] }
 
 [lints]
 workspace = true

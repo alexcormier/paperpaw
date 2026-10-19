@@ -1,5 +1,5 @@
 //! Wikipedia: a word looked up online, the short summary of its article,
-//! in the language of the book (else of QuireInk). Bound to the slot
+//! in the language of the book (else of PaperPaw). Bound to the slot
 //! `core.lookup-online`, so the dictionary offers it beside its own
 //! entries when there is a network; another plugin (a translator, an
 //! online dictionary) can take its place.
@@ -17,13 +17,13 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_json as json;
-use quireink_sdk::builtin::{actions, params, slots};
-use quireink_sdk::event::Event;
-use quireink_sdk::replies::HttpReply;
-use quireink_sdk::ui::{self, UiStyle};
-use quireink_sdk::web::encode;
-use quireink_sdk::{
+use paperpaw_json as json;
+use paperpaw_sdk::builtin::{actions, params, slots};
+use paperpaw_sdk::event::Event;
+use paperpaw_sdk::replies::HttpReply;
+use paperpaw_sdk::ui::{self, UiStyle};
+use paperpaw_sdk::web::encode;
+use paperpaw_sdk::{
     Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, HttpRequest, Id, Manifest,
     Params, Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen,
     ScreenSpec, Version,
@@ -205,11 +205,11 @@ impl Summary {
 
 impl Screen for Summary {
     /// *Select* closes it; the arrows scroll.
-    fn hint(&self, action: &Id, env: &Env<'_>) -> quireink_sdk::Hint {
+    fn hint(&self, action: &Id, env: &Env<'_>) -> paperpaw_sdk::Hint {
         if *action == actions::CONFIRM {
-            quireink_sdk::Hint::Text(env.i18n.tr("core.hint.close").to_string())
+            paperpaw_sdk::Hint::Text(env.i18n.tr("core.hint.close").to_string())
         } else {
-            quireink_sdk::Hint::Default
+            paperpaw_sdk::Hint::Default
         }
     }
 
@@ -288,7 +288,7 @@ impl Screen for Summary {
             HttpRequest::new("GET", &summary_url(&self.language, &self.word), ANSWERED);
         request.headers.push((
             String::from("User-Agent"),
-            String::from("QuireInk/0.1 (e-reader)"),
+            String::from("PaperPaw/0.1 (e-reader)"),
         ));
         request
             .headers
@@ -350,7 +350,7 @@ impl Screen for Summary {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quireink_i18n::{Catalog, check};
+    use paperpaw_i18n::{Catalog, check};
 
     #[test]
     fn addresses() {

@@ -11,12 +11,12 @@
 use alloc::format;
 use alloc::string::{String, ToString};
 
-use quireink_qr::QrCode;
-use quireink_sdk::builtin::{actions, params};
-use quireink_sdk::event::{Event, EventData};
-use quireink_sdk::replies::{ServerNotice, Typed};
-use quireink_sdk::ui::{self, UiStyle};
-use quireink_sdk::{
+use paperpaw_qr::QrCode;
+use paperpaw_sdk::builtin::{actions, params};
+use paperpaw_sdk::event::{Event, EventData};
+use paperpaw_sdk::replies::{ServerNotice, Typed};
+use paperpaw_sdk::ui::{self, UiStyle};
+use paperpaw_sdk::{
     Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, RefreshMode,
     Screen, ServerResponse,
 };
@@ -96,7 +96,7 @@ impl PhoneScreen {
                     method: &method,
                     target: &target,
                     body: body_file.and_then(|file| {
-                        quireink_sdk::read_file(env.storage, &file, MAX_TEXT).ok()
+                        paperpaw_sdk::read_file(env.storage, &file, MAX_TEXT).ok()
                     }),
                 };
                 let (response, text) = answer(number, &self.key, &self.page, &request);
@@ -204,9 +204,9 @@ fn page(env: &Env<'_>, params: &Params) -> String {
 }
 
 impl Screen for PhoneScreen {
-    fn hint(&self, action: &Id, _: &Env<'_>) -> quireink_sdk::Hint {
+    fn hint(&self, action: &Id, _: &Env<'_>) -> paperpaw_sdk::Hint {
         // Only back does anything here.
-        quireink_sdk::Hint::only_back(action)
+        paperpaw_sdk::Hint::only_back(action)
     }
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {

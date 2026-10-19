@@ -1,4 +1,4 @@
-"""Draws QuireInk's Android launcher icon: a white Literata "Q" on a black
+"""Draws PaperPaw's Android launcher icon: a white Literata "Q" on a black
 rounded square, at every launcher density.
 
 Usage: python tools/android-icon.py   (needs Pillow; writes

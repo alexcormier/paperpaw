@@ -1,6 +1,6 @@
 //! The home screen's pages: each a grid of items in a setting of its own,
 //! `home.page-1` to `home.page-4`, their layout as
-//! `quireink_sdk::widgets::grid` writes it. The first page always
+//! `paperpaw_sdk::widgets::grid` writes it. The first page always
 //! shows; the others where they have items. Above the grid sits the
 //! status line, below it the page dots and the pencil.
 
@@ -9,17 +9,17 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::builtin::groups;
-use quireink_sdk::widgets;
-use quireink_sdk::{
+use paperpaw_sdk::builtin::groups;
+use paperpaw_sdk::widgets;
+use paperpaw_sdk::{
     Command, Env, Id, RegisterError, Registrar, SettingExtra, SettingKind, SettingSpec,
     SettingValue,
 };
 
 use crate::{ACTIONS, SCREEN};
-use quireink_sdk::builtin::{actions, menus};
-use quireink_sdk::setting::{Setting, Text};
-use quireink_sdk::widgets::grid::{self, Item, What};
+use paperpaw_sdk::builtin::{actions, menus};
+use paperpaw_sdk::setting::{Setting, Text};
+use paperpaw_sdk::widgets::grid::{self, Item, What};
 
 /// Pages at most.
 pub(crate) const MAX_PAGES: usize = 4;
@@ -66,7 +66,7 @@ static PAGE: SettingExtra = SettingExtra::new().section(SECTION).editor(SCREEN);
 /// The status items below the page, chosen on their picker.
 static ITEMS: SettingExtra = SettingExtra::new()
     .section(SECTION)
-    .editor(quireink_sdk::builtin::screens::STATUS_ITEMS);
+    .editor(paperpaw_sdk::builtin::screens::STATUS_ITEMS);
 
 /// The setting of page `n` (1 the first).
 const fn page(id: &'static str, title: &'static str, default: &'static str) -> SettingSpec {
@@ -157,7 +157,7 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     r.add_settings(&SETTINGS)?;
     r.set_menu_need(
         crate::blocks::FOCUS_AT_ONCE,
-        quireink_sdk::MenuNeed::NoTouch,
+        paperpaw_sdk::MenuNeed::NoTouch,
     )?;
     Ok(())
 }

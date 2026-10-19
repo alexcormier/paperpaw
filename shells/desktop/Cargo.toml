@@ -1,6 +1,6 @@
 [package]
-name = "quireink-emulator"
-description = "QuireInk desktop shell: an e-ink device emulator with device profiles and memory budgets"
+name = "paperpaw-emulator"
+description = "PaperPaw desktop shell: an e-ink device emulator with device profiles and memory budgets"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,16 +11,16 @@ authors.workspace = true
 publish = false
 
 [[bin]]
-name = "quireink-emu"
+name = "paperpaw-emu"
 path = "src/main.rs"
 
 [dependencies]
-quireink-app = { workspace = true, features = ["outline", "packs"] }
-quireink-core = { workspace = true, features = ["color", "outline"] }
-quireink-fs.workspace = true
-quireink-serve.workspace = true
-quireink-graphics = { workspace = true, features = ["color"] }
-quireink-platform.workspace = true
+paperpaw-app = { workspace = true, features = ["outline", "packs"] }
+paperpaw-core = { workspace = true, features = ["color", "outline"] }
+paperpaw-fs.workspace = true
+paperpaw-serve.workspace = true
+paperpaw-graphics = { workspace = true, features = ["color"] }
+paperpaw-platform.workspace = true
 # The computer's time zone for the emulated clock.
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 png = "0.17"
@@ -29,10 +29,10 @@ softbuffer = "0.4"
 # `ttf-parser` (RUSTSEC-2026-0192).
 winit = { version = "0.30", default-features = false, features = ["rwh_06", "x11", "wayland", "wayland-dlopen"] }
 # The sample plugin of `docs/plugins.md`, with `--features hello`.
-quireink-sample-hello = { path = "../../samples/hello-plugin", optional = true }
+paperpaw-sample-hello = { path = "../../samples/hello-plugin", optional = true }
 
 [features]
-hello = ["dep:quireink-sample-hello"]
+hello = ["dep:paperpaw-sample-hello"]
 
 [lints]
 workspace = true

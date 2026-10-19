@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds an installable QuireInk APK for arm64 Android devices without
+# Builds an installable PaperPaw APK for arm64 Android devices without
 # Gradle: cargo-ndk compiles the Rust library, the Android SDK's build tools
 # package and sign it. Sample books from samples/library/books are bundled.
 #
@@ -8,16 +8,16 @@
 # a JDK (for `javac` and `apksigner`); Python 3.
 #
 # Usage: shells/android/build-apk.sh [--debug]
-# Output: target/android/quireink.apk
-#   adb install -r target/android/quireink.apk
+# Output: target/android/paperpaw.apk
+#   adb install -r target/android/paperpaw.apk
 #
-# Signing: with the release key when QUIREINK_KEYSTORE (a .jks or .p12
-# file), QUIREINK_KEYSTORE_PASSWORD and QUIREINK_KEY_ALIAS are set
-# (QUIREINK_KEY_PASSWORD if the key has its own); not at all with
-# QUIREINK_UNSIGNED=1 (target/android/quireink-unsigned.apk, as F-Droid
+# Signing: with the release key when PAPERPAW_KEYSTORE (a .jks or .p12
+# file), PAPERPAW_KEYSTORE_PASSWORD and PAPERPAW_KEY_ALIAS are set
+# (PAPERPAW_KEY_PASSWORD if the key has its own); not at all with
+# PAPERPAW_UNSIGNED=1 (target/android/paperpaw-unsigned.apk, as F-Droid
 # builds it); otherwise with a debug key made on this computer.
 #
-# Releases: with QUIREINK_REPRODUCIBLE=1 the tools must be the versions in
+# Releases: with PAPERPAW_REPRODUCIBLE=1 the tools must be the versions in
 # shells/android/versions.env, so the app comes out byte for byte the same
 # on every computer.
 
@@ -37,7 +37,7 @@ fail() { echo "error: $*" >&2; exit 1; }
 
 # shellcheck source=versions.env
 source shells/android/versions.env
-reproducible="${QUIREINK_REPRODUCIBLE:-}"
+reproducible="${PAPERPAW_REPRODUCIBLE:-}"
 # The pinned version in `dir` if it is there; otherwise the newest, but
 # not for a reproducible build.
 pick() {
@@ -111,17 +111,17 @@ if command -v cygpath > /dev/null; then
     src="$(cygpath -w "$src")"
     cargo_home="$(cygpath -w "$cargo_home")"
 fi
-export RUSTFLAGS="${RUSTFLAGS:-} --remap-path-prefix=$src=/quireink --remap-path-prefix=$cargo_home=/cargo"
+export RUSTFLAGS="${RUSTFLAGS:-} --remap-path-prefix=$src=/paperpaw --remap-path-prefix=$cargo_home=/cargo"
 export CARGO_PROFILE_RELEASE_STRIP=symbols
-cargo ndk -t arm64-v8a --platform 26 -o "$out/apk/lib" build "${cargo_profile[@]}" -p quireink-android
+cargo ndk -t arm64-v8a --platform 26 -o "$out/apk/lib" build "${cargo_profile[@]}" -p paperpaw-android
 
 echo "Compiling the speech listener (the only Java class)"
 rm -rf "$out/classes" "$out/dex"
 mkdir -p "$out/classes" "$out/dex"
 "$javac" -source 8 -target 8 -nowarn -Xlint:-options -classpath "$platform" -d "$out/classes" \
-    shells/android/java/io/github/hthoene/quireink/*.java
+    shells/android/java/io/github/hthoene/paperpaw/*.java
 "$java" -cp "$tools/lib/d8.jar" com.android.tools.r8.D8 --release --min-api 26 \
-    --lib "$platform" --output "$out/dex" "$out"/classes/io/github/hthoene/quireink/*.class
+    --lib "$platform" --output "$out/dex" "$out"/classes/io/github/hthoene/paperpaw/*.class
 cp "$out/dex/classes.dex" "$out/apk/"
 
 echo "Packaging"
@@ -151,25 +151,25 @@ rm -f "$out/res.zip" "$out/unsigned.apk"
 "$python" shells/android/pack.py "$out/unsigned.apk" "$out/apk"
 "$zipalign" -f -p 4 "$out/unsigned.apk" "$out/aligned.apk"
 
-if [[ -n "${QUIREINK_UNSIGNED:-}" ]]; then
-    mv "$out/aligned.apk" "$out/quireink-unsigned.apk"
+if [[ -n "${PAPERPAW_UNSIGNED:-}" ]]; then
+    mv "$out/aligned.apk" "$out/paperpaw-unsigned.apk"
     rm -f "$out/unsigned.apk"
-    echo "Done: $out/quireink-unsigned.apk"
+    echo "Done: $out/paperpaw-unsigned.apk"
     exit 0
-elif [[ -n "${QUIREINK_KEYSTORE:-}" ]]; then
-    [[ -f "$QUIREINK_KEYSTORE" ]] || fail "no keystore at $QUIREINK_KEYSTORE"
-    [[ -n "${QUIREINK_KEYSTORE_PASSWORD:-}" && -n "${QUIREINK_KEY_ALIAS:-}" ]] \
-        || fail "QUIREINK_KEYSTORE needs QUIREINK_KEYSTORE_PASSWORD and QUIREINK_KEY_ALIAS"
-    export QUIREINK_KEY_PASSWORD="${QUIREINK_KEY_PASSWORD:-$QUIREINK_KEYSTORE_PASSWORD}"
+elif [[ -n "${PAPERPAW_KEYSTORE:-}" ]]; then
+    [[ -f "$PAPERPAW_KEYSTORE" ]] || fail "no keystore at $PAPERPAW_KEYSTORE"
+    [[ -n "${PAPERPAW_KEYSTORE_PASSWORD:-}" && -n "${PAPERPAW_KEY_ALIAS:-}" ]] \
+        || fail "PAPERPAW_KEYSTORE needs PAPERPAW_KEYSTORE_PASSWORD and PAPERPAW_KEY_ALIAS"
+    export PAPERPAW_KEY_PASSWORD="${PAPERPAW_KEY_PASSWORD:-$PAPERPAW_KEYSTORE_PASSWORD}"
     echo "Signing with the release key"
     # The passwords come from the environment, never on a command line.
     # The alignment stays as zipalign made it (apksigner 35 and later pad
     # anew), so the signature fits F-Droid's unsigned build too.
     "$java" -jar "$tools/lib/apksigner.jar" sign --alignment-preserved true \
-        --ks "$QUIREINK_KEYSTORE" \
-        --ks-key-alias "$QUIREINK_KEY_ALIAS" \
-        --ks-pass env:QUIREINK_KEYSTORE_PASSWORD --key-pass env:QUIREINK_KEY_PASSWORD \
-        --out "$out/quireink.apk" "$out/aligned.apk"
+        --ks "$PAPERPAW_KEYSTORE" \
+        --ks-key-alias "$PAPERPAW_KEY_ALIAS" \
+        --ks-pass env:PAPERPAW_KEYSTORE_PASSWORD --key-pass env:PAPERPAW_KEY_PASSWORD \
+        --out "$out/paperpaw.apk" "$out/aligned.apk"
 else
     keystore="$HOME/.android/debug.keystore"
     if [[ ! -f "$keystore" ]]; then
@@ -181,7 +181,7 @@ else
     echo "Signing with the debug key (not for releases)"
     "$java" -jar "$tools/lib/apksigner.jar" sign --alignment-preserved true --ks "$keystore" \
         --ks-pass pass:android --key-pass pass:android \
-        --out "$out/quireink.apk" "$out/aligned.apk"
+        --out "$out/paperpaw.apk" "$out/aligned.apk"
 fi
-rm -f "$out/unsigned.apk" "$out/aligned.apk" "$out/quireink.apk.idsig"
-echo "Done: $out/quireink.apk"
+rm -f "$out/unsigned.apk" "$out/aligned.apk" "$out/paperpaw.apk.idsig"
+echo "Done: $out/paperpaw.apk"

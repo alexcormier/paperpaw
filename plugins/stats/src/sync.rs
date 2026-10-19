@@ -15,22 +15,22 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::cell::RefCell;
 
-use quireink_sdk::builtin::actions;
-use quireink_sdk::event::Event;
-use quireink_sdk::replies::{HttpReply, Typed};
-use quireink_sdk::ui::{self, ListChange, ListView, UiStyle};
-use quireink_sdk::{
+use paperpaw_sdk::builtin::actions;
+use paperpaw_sdk::event::Event;
+use paperpaw_sdk::replies::{HttpReply, Typed};
+use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
+use paperpaw_sdk::{
     Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, HttpRequest, Id, Params, Rect,
     RefreshMode, Screen,
 };
 
-use quireink_sdk::secrets::SecretChange;
+use paperpaw_sdk::secrets::SecretChange;
 
 use crate::merge::{self, Outcome};
-use quireink_sdk::setting::{Setting, Text};
+use paperpaw_sdk::setting::{Setting, Text};
 
 /// The folder (its address) and the user; the password is kept with the
-/// other passwords and keys (see `quireink_sdk::secrets`) as [`SECRET`].
+/// other passwords and keys (see `paperpaw_sdk::secrets`) as [`SECRET`].
 pub const URL: Setting<Text> = Setting::new("stats.webdav-url");
 pub const USER: Setting<Text> = Setting::new("stats.webdav-user");
 pub(crate) const SCREEN: Id = Id::new_static("stats.sync");
@@ -42,7 +42,7 @@ const UPLOADED: Event<HttpReply> = Event::new("stats.uploaded");
 /// Emitted with a message (`text`) when a sync or import ends.
 pub(crate) const DONE: Event<Finished> = Event::new("stats.sync-done");
 
-quireink_sdk::event_data! {
+paperpaw_sdk::event_data! {
     /// How a sync ended ([`DONE`]), in words.
     pub(crate) struct Finished {
         pub(crate) text: String,
@@ -51,12 +51,12 @@ quireink_sdk::event_data! {
 const URL_ENTERED: Event<Typed> = Event::new("stats.url-entered");
 
 /// The WebDAV folder and its user, both set on the sync page.
-static ON_PAGE: quireink_sdk::SettingExtra = quireink_sdk::SettingExtra::new().editor(SCREEN);
-static SETTINGS: [quireink_sdk::SettingSpec; 2] = [
-    quireink_sdk::SettingSpec::fixed_text(URL.static_str(), "stats.setting.sync", "", crate::GROUP)
+static ON_PAGE: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new().editor(SCREEN);
+static SETTINGS: [paperpaw_sdk::SettingSpec; 2] = [
+    paperpaw_sdk::SettingSpec::fixed_text(URL.static_str(), "stats.setting.sync", "", crate::GROUP)
         .with_extra(&ON_PAGE)
         .described("stats.setting.sync.help"),
-    quireink_sdk::SettingSpec::fixed_text(USER.static_str(), "stats.sync.user", "", crate::GROUP)
+    paperpaw_sdk::SettingSpec::fixed_text(USER.static_str(), "stats.sync.user", "", crate::GROUP)
         .with_extra(&ON_PAGE)
         .advanced()
         .described("stats.sync.user.help"),
@@ -121,7 +121,7 @@ fn save_password(password: &str) -> Command {
 /// the other passwords and keys.
 pub(crate) fn move_password(env: &Env<'_>, out: &mut Vec<Command>) {
     let path = file("webdav.ini");
-    let Ok(data) = quireink_sdk::read_file(env.storage, &path, 4096) else {
+    let Ok(data) = paperpaw_sdk::read_file(env.storage, &path, 4096) else {
         return;
     };
     let old = old_password(core::str::from_utf8(&data).unwrap_or_default());
@@ -133,7 +133,7 @@ pub(crate) fn move_password(env: &Env<'_>, out: &mut Vec<Command>) {
 
 /// The password in the `webdav.ini` of earlier versions.
 fn old_password(text: &str) -> String {
-    quireink_sdk::config::parse(text)
+    paperpaw_sdk::config::parse(text)
         .filter_map(Result::ok)
         .find(|e| e.key == "password")
         .map(|e| e.value.as_str().into_owned())
@@ -147,7 +147,7 @@ fn request(env: &Env<'_>, method: &str, reply: &Event<HttpReply>) -> HttpRequest
     if !user.is_empty() {
         request.headers.push((
             String::from("Authorization"),
-            quireink_sdk::web::basic_auth(user, password(env)),
+            paperpaw_sdk::web::basic_auth(user, password(env)),
         ));
     }
     request
@@ -233,7 +233,7 @@ impl Sync {
                 let upload = file(FILE);
                 let cached = file(&format!("{FILE}.sync"));
                 if env.storage.rename(&upload, &cached).is_err()
-                    && let Ok(data) = quireink_sdk::read_file(env.storage, &upload, 256 << 20)
+                    && let Ok(data) = paperpaw_sdk::read_file(env.storage, &upload, 256 << 20)
                 {
                     let _ = env.storage.write(&cached, &data);
                 }
@@ -308,11 +308,11 @@ fn import(env: &Env<'_>) -> String {
 
 /// Registers the sync's settings, events and screen.
 pub(crate) fn register(
-    r: &mut quireink_sdk::Registrar,
+    r: &mut paperpaw_sdk::Registrar,
     sync: SharedSync,
-) -> Result<(), quireink_sdk::RegisterError> {
-    use quireink_sdk::ScreenSpec;
-    r.on(quireink_sdk::builtin::events::STARTED, |env, (), out| {
+) -> Result<(), paperpaw_sdk::RegisterError> {
+    use paperpaw_sdk::ScreenSpec;
+    r.on(paperpaw_sdk::builtin::events::STARTED, |env, (), out| {
         move_password(env, out);
     })?;
     r.add_settings(&SETTINGS)?;
@@ -392,7 +392,7 @@ impl SyncScreen {
     fn activate(&mut self, row: Row, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
         let keyboard = |title: &str, text: String, reply: &Event<Typed>, password: bool| {
-            let question = quireink_sdk::ask::text(env.i18n.tr(title), reply).initial(text);
+            let question = paperpaw_sdk::ask::text(env.i18n.tr(title), reply).initial(text);
             if password {
                 question.password().command()
             } else {

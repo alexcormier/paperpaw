@@ -1,8 +1,8 @@
 //! A bar chart for e-ink: black bars on a thin base line, a label below
 //! each, the value of the highest above it.
 
-use quireink_sdk::ui::{self, UiStyle};
-use quireink_sdk::{Canvas, Color, Env, Rect};
+use paperpaw_sdk::ui::{self, UiStyle};
+use paperpaw_sdk::{Canvas, Color, Env, Rect};
 
 /// Bars are never wider than those of a week.
 const MIN_SLOTS: usize = 7;

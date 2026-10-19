@@ -85,132 +85,132 @@ dependencies = [
 ]
 
 [[package]]
-name = "quireink-config"
+name = "paperpaw-config"
 version = "0.3.0"
 
 [[package]]
-name = "quireink-document"
+name = "paperpaw-document"
 version = "0.3.0"
 dependencies = [
- "quireink-platform",
+ "paperpaw-platform",
 ]
 
 [[package]]
-name = "quireink-fuzz"
+name = "paperpaw-fuzz"
 version = "0.0.0"
 dependencies = [
  "libfuzzer-sys",
- "quireink-hyphen",
- "quireink-image",
- "quireink-plugin-format-epub",
- "quireink-plugin-format-txt",
- "quireink-plugin-koreader",
- "quireink-sdk",
+ "paperpaw-hyphen",
+ "paperpaw-image",
+ "paperpaw-plugin-format-epub",
+ "paperpaw-plugin-format-txt",
+ "paperpaw-plugin-koreader",
+ "paperpaw-sdk",
 ]
 
 [[package]]
-name = "quireink-graphics"
+name = "paperpaw-graphics"
 version = "0.3.0"
 dependencies = [
- "quireink-platform",
+ "paperpaw-platform",
 ]
 
 [[package]]
-name = "quireink-hyphen"
+name = "paperpaw-hyphen"
 version = "0.3.0"
 
 [[package]]
-name = "quireink-i18n"
+name = "paperpaw-i18n"
 version = "0.3.0"
 dependencies = [
- "quireink-config",
+ "paperpaw-config",
 ]
 
 [[package]]
-name = "quireink-image"
-version = "0.3.0"
-dependencies = [
- "miniz_oxide",
- "quireink-platform",
-]
-
-[[package]]
-name = "quireink-layout"
-version = "0.3.0"
-dependencies = [
- "quireink-document",
- "quireink-text",
-]
-
-[[package]]
-name = "quireink-platform"
-version = "0.3.0"
-
-[[package]]
-name = "quireink-plugin-format-epub"
+name = "paperpaw-image"
 version = "0.3.0"
 dependencies = [
  "miniz_oxide",
- "quireink-sdk",
+ "paperpaw-platform",
 ]
 
 [[package]]
-name = "quireink-plugin-format-txt"
+name = "paperpaw-layout"
 version = "0.3.0"
 dependencies = [
- "quireink-sdk",
+ "paperpaw-document",
+ "paperpaw-text",
 ]
 
 [[package]]
-name = "quireink-plugin-koreader"
-version = "0.3.0"
-dependencies = [
- "quireink-sdk",
-]
-
-[[package]]
-name = "quireink-sdk"
-version = "0.3.0"
-dependencies = [
- "quireink-config",
- "quireink-document",
- "quireink-graphics",
- "quireink-hyphen",
- "quireink-i18n",
- "quireink-image",
- "quireink-layout",
- "quireink-platform",
- "quireink-sqlite",
- "quireink-text",
- "quireink-xml",
- "quireink-zip",
-]
-
-[[package]]
-name = "quireink-sqlite"
-version = "0.3.0"
-dependencies = [
- "quireink-platform",
-]
-
-[[package]]
-name = "quireink-text"
-version = "0.3.0"
-dependencies = [
- "quireink-graphics",
- "quireink-platform",
-]
-
-[[package]]
-name = "quireink-xml"
+name = "paperpaw-platform"
 version = "0.3.0"
 
 [[package]]
-name = "quireink-zip"
+name = "paperpaw-plugin-format-epub"
 version = "0.3.0"
 dependencies = [
  "miniz_oxide",
- "quireink-platform",
+ "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-plugin-format-txt"
+version = "0.3.0"
+dependencies = [
+ "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-plugin-koreader"
+version = "0.3.0"
+dependencies = [
+ "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-sdk"
+version = "0.3.0"
+dependencies = [
+ "paperpaw-config",
+ "paperpaw-document",
+ "paperpaw-graphics",
+ "paperpaw-hyphen",
+ "paperpaw-i18n",
+ "paperpaw-image",
+ "paperpaw-layout",
+ "paperpaw-platform",
+ "paperpaw-sqlite",
+ "paperpaw-text",
+ "paperpaw-xml",
+ "paperpaw-zip",
+]
+
+[[package]]
+name = "paperpaw-sqlite"
+version = "0.3.0"
+dependencies = [
+ "paperpaw-platform",
+]
+
+[[package]]
+name = "paperpaw-text"
+version = "0.3.0"
+dependencies = [
+ "paperpaw-graphics",
+ "paperpaw-platform",
+]
+
+[[package]]
+name = "paperpaw-xml"
+version = "0.3.0"
+
+[[package]]
+name = "paperpaw-zip"
+version = "0.3.0"
+dependencies = [
+ "miniz_oxide",
+ "paperpaw-platform",
 ]
 
 [[package]]

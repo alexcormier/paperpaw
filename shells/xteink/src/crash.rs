@@ -50,18 +50,18 @@ fn panic(info: &core::panic::PanicInfo<'_>) -> ! {
 
 /// Where panics are kept on the card, for bug reports: a line each, the
 /// version and the message.
-const FILE: &str = quireink_sdk::data_path!("crashes.txt");
+const FILE: &str = paperpaw_sdk::data_path!("crashes.txt");
 /// The file starts anew once it is this large.
 const MAX_FILE: u64 = 16 * 1024;
 
 /// Writes the last run's panic `message` to the card.
-pub fn keep(storage: &dyn quireink_platform::Storage, message: &str) {
+pub fn keep(storage: &dyn paperpaw_platform::Storage, message: &str) {
     let line = alloc::format!(
         "{}\t{}\n",
-        env!("QUIREINK_VERSION"),
+        env!("PAPERPAW_VERSION"),
         message.replace(['\n', '\t'], " ")
     );
-    let _ = storage.create_dir(quireink_sdk::data::DIR);
+    let _ = storage.create_dir(paperpaw_sdk::data::DIR);
     let full = storage.size(FILE).is_ok_and(|size| size > MAX_FILE);
     let _ = if full {
         storage.write(FILE, line.as_bytes())

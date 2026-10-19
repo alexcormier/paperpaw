@@ -15,15 +15,15 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_digest::md5;
-use quireink_sdk::event::Event;
-use quireink_sdk::replies::HttpReply;
-use quireink_sdk::web::{clean_name, file_name};
-use quireink_sdk::{Command, Env, HttpRequest, Id, Params, files};
+use paperpaw_digest::md5;
+use paperpaw_sdk::event::Event;
+use paperpaw_sdk::replies::HttpReply;
+use paperpaw_sdk::web::{clean_name, file_name};
+use paperpaw_sdk::{Command, Env, HttpRequest, Id, Params, files};
 
 use crate::catalogs::Catalog;
 use crate::{PLUGIN, feed};
-use quireink_sdk::setting::Setting;
+use paperpaw_sdk::setting::Setting;
 
 /// Answers to the sync's requests.
 pub(crate) const FEED_LOADED: Event<HttpReply> = Event::new("opds.sync-feed");
@@ -146,7 +146,7 @@ impl Sync {
         waiting: VecDeque<Catalog>,
         out: &mut Vec<Command>,
     ) {
-        let synced = quireink_sdk::read_file(env.storage, &record_path(&catalog.url), 1024 * 1024)
+        let synced = paperpaw_sdk::read_file(env.storage, &record_path(&catalog.url), 1024 * 1024)
             .map(|data| {
                 String::from_utf8_lossy(&data)
                     .lines()
@@ -318,7 +318,7 @@ impl Sync {
         };
         let report = self.report.get_or_insert_with(Report::default);
         if stored {
-            out.push(quireink_sdk::library::changed());
+            out.push(paperpaw_sdk::library::changed());
             run.count += 1;
             run.synced.push(item.id.clone());
             let _ = env.storage.append(

@@ -3,7 +3,7 @@
 use alloc::vec;
 use alloc::vec::Vec;
 
-use quireink_sdk::Storage;
+use paperpaw_sdk::Storage;
 
 use crate::store::{self, Book, PageStat};
 
@@ -125,7 +125,7 @@ pub(crate) fn streaks(days: &[store::Day], today: i32, least: u32) -> Streaks {
 mod tests {
     use super::*;
     use crate::store::Day;
-    use quireink_sdk::MemoryStorage;
+    use paperpaw_sdk::MemoryStorage;
 
     #[test]
     fn pages_rescale_like_koreader() {

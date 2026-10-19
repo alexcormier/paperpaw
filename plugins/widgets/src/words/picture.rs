@@ -11,13 +11,13 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::document::ImageRef;
-use quireink_sdk::event::Event;
-use quireink_sdk::image::{ColorFile, Fit, GrayFile, ImageFile};
-use quireink_sdk::setting::{Setting, Text};
-use quireink_sdk::ui::{self, UiStyle};
-use quireink_sdk::widgets::{self, Align, Frame, Widget, WidgetSpec, WidgetTarget};
-use quireink_sdk::{Arg, Canvas, Env, Id, Rect, RegisterError, Registrar, SettingSpec, Storage};
+use paperpaw_sdk::document::ImageRef;
+use paperpaw_sdk::event::Event;
+use paperpaw_sdk::image::{ColorFile, Fit, GrayFile, ImageFile};
+use paperpaw_sdk::setting::{Setting, Text};
+use paperpaw_sdk::ui::{self, UiStyle};
+use paperpaw_sdk::widgets::{self, Align, Frame, Widget, WidgetSpec, WidgetTarget};
+use paperpaw_sdk::{Arg, Canvas, Env, Id, Rect, RegisterError, Registrar, SettingSpec, Storage};
 
 use super::quote::CHANGES;
 use super::{Turns, changed, changes, data, of_the_day, today};
@@ -56,8 +56,8 @@ fn stamp_file() -> String {
 /// The picture's settings kept in the program (its folder is not: it
 /// has an editor).
 /// The folder of the pictures, chosen on the folder chooser.
-static CHOSEN_FOLDER: quireink_sdk::SettingExtra =
-    quireink_sdk::SettingExtra::new().editor(CHOOSE_FOLDER);
+static CHOSEN_FOLDER: paperpaw_sdk::SettingExtra =
+    paperpaw_sdk::SettingExtra::new().editor(CHOOSE_FOLDER);
 static FOLDER_SETTING: [SettingSpec; 1] = [SettingSpec::fixed_text(
     FOLDER.static_str(),
     "widgets.picture.setting.folder",
@@ -188,7 +188,7 @@ fn picture(env: &Env<'_>, day: i64) -> Option<Shown> {
         display.width, display.height
     );
     let pixels = pixels_file();
-    let kept = quireink_sdk::read_file(env.storage, &stamp_file(), 1024)
+    let kept = paperpaw_sdk::read_file(env.storage, &stamp_file(), 1024)
         .is_ok_and(|kept| kept == stamp.as_bytes());
     let image = match ImageFile::open(env.storage, &pixels).filter(|_| kept) {
         Some(file) => ImageRef {
@@ -199,7 +199,7 @@ fn picture(env: &Env<'_>, day: i64) -> Option<Shown> {
         None => {
             let fit = Fit::screen(display.width.into(), display.height.into());
             let image =
-                quireink_sdk::image::picture_from_file(env.storage, &path, &pixels, fit, color)?;
+                paperpaw_sdk::image::picture_from_file(env.storage, &path, &pixels, fit, color)?;
             let _ = env.storage.write(&stamp_file(), stamp.as_bytes());
             image
         }
@@ -421,7 +421,7 @@ mod tests {
         assert!(super::SETTINGS.iter().all(|s| s.group == super::ID));
     }
     use super::*;
-    use quireink_sdk::MemoryStorage;
+    use paperpaw_sdk::MemoryStorage;
 
     #[test]
     fn pictures_are_found_in_their_folder() {

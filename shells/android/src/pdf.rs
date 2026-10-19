@@ -12,12 +12,12 @@ use std::cell::RefCell;
 use android_activity::AndroidApp;
 use jni::JNIEnv;
 use jni::objects::{GlobalRef, JObject, JValue};
-use quireink_digest::fnv1a64;
-use quireink_sdk::document::{
+use paperpaw_digest::fnv1a64;
+use paperpaw_sdk::document::{
     Align, Block, BlockKind, Document, DocumentError, ImageRef, Locator, Metadata, OffsetMap,
 };
-use quireink_sdk::image::{GrayFile, GrayWriter, ImageSink};
-use quireink_sdk::{Env, Storage};
+use paperpaw_sdk::image::{GrayFile, GrayWriter, ImageSink};
+use paperpaw_sdk::{Env, Storage};
 
 use crate::access::with_activity;
 
@@ -110,7 +110,7 @@ impl PdfDocument {
         // Pages rendered from another file or for another screen go.
         let stamp = format!("{} {pages} {}x{}\n", storage.size(path)?, fit.0, fit.1);
         let stamp_path = format!("{cache}/source");
-        if quireink_sdk::read_file(storage, &stamp_path, 64).ok()
+        if paperpaw_sdk::read_file(storage, &stamp_path, 64).ok()
             != Some(stamp.clone().into_bytes())
         {
             let _ = storage.remove_dir_all(&cache);

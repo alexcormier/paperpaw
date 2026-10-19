@@ -7,11 +7,11 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use quireink_sdk::time::{self, LocalTime};
-use quireink_sdk::widgets::{self, Align, Drawn, Frame};
-use quireink_sdk::{Canvas, Color, Env, Id, Point, Rect, RegisterError, Registrar};
+use paperpaw_sdk::time::{self, LocalTime};
+use paperpaw_sdk::widgets::{self, Align, Drawn, Frame};
+use paperpaw_sdk::{Canvas, Color, Env, Id, Point, Rect, RegisterError, Registrar};
 
-use quireink_sdk::SettingSpec;
+use paperpaw_sdk::SettingSpec;
 
 use super::{chosen, frame_height, line, ui};
 
@@ -127,7 +127,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         };
         String::from(
             env.i18n
-                .format(key, &[("time", quireink_sdk::Arg::Str(""))])
+                .format(key, &[("time", paperpaw_sdk::Arg::Str(""))])
                 .trim(),
         )
     });
@@ -226,7 +226,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         }
     }
     canvas.describe(
-        quireink_sdk::semantics::Role::Text,
+        paperpaw_sdk::semantics::Role::Text,
         &super::clock_text(env, &now),
         Rect::new(left as u16, top as u16, total as u16, h as u16),
         false,

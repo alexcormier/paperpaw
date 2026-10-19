@@ -5,9 +5,9 @@
 //! DeepL needs an API key of one's own: free at deepl.com for up to
 //! 500,000 characters a month. Without one, the panel says so and a tap
 //! asks for it; it is kept with the other passwords and keys (see
-//! `quireink_sdk::secrets`), where it can be changed or removed. The text
+//! `paperpaw_sdk::secrets`), where it can be changed or removed. The text
 //! is translated into the language chosen (setting `translate.to`), by
-//! default QuireInk's own.
+//! default PaperPaw's own.
 //!
 //! The translation shows over the page like a dictionary entry: the page
 //! buttons or taps scroll it, confirm or a tap at its end closes it.
@@ -22,15 +22,15 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_json as json;
-use quireink_sdk::builtin::{actions, groups, params, slots};
-use quireink_sdk::event::Event;
-use quireink_sdk::replies::{HttpReply, Typed};
-use quireink_sdk::secrets::SecretChange;
-use quireink_sdk::setting::{Setting, Text};
-use quireink_sdk::ui::{self, UiStyle};
-use quireink_sdk::web::encode;
-use quireink_sdk::{
+use paperpaw_json as json;
+use paperpaw_sdk::builtin::{actions, groups, params, slots};
+use paperpaw_sdk::event::Event;
+use paperpaw_sdk::replies::{HttpReply, Typed};
+use paperpaw_sdk::secrets::SecretChange;
+use paperpaw_sdk::setting::{Setting, Text};
+use paperpaw_sdk::ui::{self, UiStyle};
+use paperpaw_sdk::web::encode;
+use paperpaw_sdk::{
     Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, HttpRequest, Id, Manifest,
     Params, Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen,
     ScreenSpec, SettingSpec, Version,
@@ -39,7 +39,7 @@ use quireink_sdk::{
 pub const PLUGIN: Id = Id::new_static("translate");
 /// The DeepL API key.
 pub const KEY: Id = Id::new_static("translate.deepl-key");
-/// The language translated into: [`AUTO`] (QuireInk's) or one of
+/// The language translated into: [`AUTO`] (PaperPaw's) or one of
 /// [`LANGUAGES`].
 pub const TO: Setting<Text> = Setting::new("translate.to");
 pub const AUTO: &str = "translate.to.auto";
@@ -89,7 +89,7 @@ pub const LANGUAGES: &[&str] = &[
     "translate.to.zh-hans",
 ];
 
-/// DeepL's target language for the setting `to`, with `ui` QuireInk's
+/// DeepL's target language for the setting `to`, with `ui` PaperPaw's
 /// language for [`AUTO`] (`en` → `EN-GB`, `de-AT` → `DE`).
 fn target(to: &str, ui: &str) -> String {
     if let Some(code) = to.strip_prefix("translate.to.")
@@ -135,7 +135,7 @@ fn request(key: &str, text: &str, target: &str) -> HttpRequest {
     ));
     request.headers.push((
         String::from("User-Agent"),
-        String::from("QuireInk/0.1 (e-reader)"),
+        String::from("PaperPaw/0.1 (e-reader)"),
     ));
     request.body = Some(format!(
         "text={}&target_lang={}",
@@ -170,8 +170,8 @@ const TARGETS: [&str; LANGUAGES.len() + 1] = {
 };
 
 /// The translation's part of the reading settings.
-static IN_TRANSLATION: quireink_sdk::SettingExtra =
-    quireink_sdk::SettingExtra::new().section(SECTION);
+static IN_TRANSLATION: paperpaw_sdk::SettingExtra =
+    paperpaw_sdk::SettingExtra::new().section(SECTION);
 
 /// The language to translate into.
 static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_choice(
@@ -283,7 +283,7 @@ impl Panel {
     /// Asks for the key on the keyboard.
     fn ask_key(&self, env: &Env<'_>, cx: &mut Cx<'_, '_>) {
         cx.command(
-            quireink_sdk::ask::text(env.i18n.tr("translate.key"), &KEY_ENTERED)
+            paperpaw_sdk::ask::text(env.i18n.tr("translate.key"), &KEY_ENTERED)
                 .password()
                 .command(),
         );
@@ -354,11 +354,11 @@ impl Panel {
 impl Screen for Panel {
     /// *Select* closes it, or asks for the key while there is none; the
     /// arrows scroll.
-    fn hint(&self, action: &Id, env: &Env<'_>) -> quireink_sdk::Hint {
+    fn hint(&self, action: &Id, env: &Env<'_>) -> paperpaw_sdk::Hint {
         if *action == actions::CONFIRM && !self.needs_key {
-            quireink_sdk::Hint::Text(env.i18n.tr("core.hint.close").to_string())
+            paperpaw_sdk::Hint::Text(env.i18n.tr("core.hint.close").to_string())
         } else {
-            quireink_sdk::Hint::Default
+            paperpaw_sdk::Hint::Default
         }
     }
 
@@ -518,7 +518,7 @@ impl Screen for Panel {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quireink_i18n::{Catalog, check};
+    use paperpaw_i18n::{Catalog, check};
 
     #[test]
     fn targets() {

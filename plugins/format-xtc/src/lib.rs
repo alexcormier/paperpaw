@@ -25,13 +25,13 @@ use alloc::string::{String, ToString};
 use alloc::vec;
 use alloc::vec::Vec;
 
-use quireink_digest::fnv1a64;
-use quireink_sdk::document::{
+use paperpaw_digest::fnv1a64;
+use paperpaw_sdk::document::{
     Align, Block, BlockKind, Document, DocumentError, ImageRef, Locator, Metadata, OffsetMap,
     TocEntry,
 };
-use quireink_sdk::image::{GrayFile, GrayWriter, ImageError, ImageSink};
-use quireink_sdk::{
+use paperpaw_sdk::image::{GrayFile, GrayWriter, ImageError, ImageSink};
+use paperpaw_sdk::{
     Env, FormatSpec, Id, Manifest, Plugin, RegisterError, Registrar, SDK_VERSION, Storage, Version,
 };
 
@@ -208,7 +208,7 @@ impl XtcDocument {
         // Pages decoded from another file of the same name go.
         let stamp = format!("{} {pages}\n", storage.size(path)?);
         let stamp_path = format!("{cache}/source");
-        if quireink_sdk::read_file(storage, &stamp_path, 64).ok()
+        if paperpaw_sdk::read_file(storage, &stamp_path, 64).ok()
             != Some(stamp.clone().into_bytes())
         {
             let _ = storage.remove_dir_all(&cache);
@@ -424,8 +424,8 @@ impl Plugin for XtcFormat {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quireink_i18n::{Catalog, check};
-    use quireink_sdk::MemoryStorage;
+    use paperpaw_i18n::{Catalog, check};
+    use paperpaw_sdk::MemoryStorage;
 
     #[test]
     fn translations_are_complete() {

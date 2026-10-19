@@ -1,6 +1,6 @@
 ## Notice
 
-QuireInk Copyright 2026 Hannes Thoene and the QuireInk contributors
+PaperPaw Copyright 2026 Hannes Thoene and the PaperPaw contributors
 
 This product is licensed under the Apache License, Version 2.0. See the LICENSE file for details.
 
@@ -10,7 +10,7 @@ Bundled fonts (plugins/fonts-default/fonts) are licensed under the SIL Open Font
 
 - Source Sans 3, Copyright 2010-2020 Adobe (http://www.adobe.com/), with Reserved Font Name 'Source' (https://github.com/adobe-fonts/source-sans), bundled unmodified
 
-The icon font (plugins/fonts-default/fonts/QuireInkIcons.ttf) is a subset of Tabler Icons, Copyright 2020-2025 Paweł Kuna (https://tabler.io/icons), licensed under the MIT License (fonts/TablerIcons-MIT.txt).
+The icon font (plugins/fonts-default/fonts/PaperPawIcons.ttf) is a subset of Tabler Icons, Copyright 2020-2025 Paweł Kuna (https://tabler.io/icons), licensed under the MIT License (fonts/TablerIcons-MIT.txt).
 
 Bundled hyphenation patterns (plugins/hyphenation/patterns) come from the hyph-utf8 project (https://github.com/hyphenation/tex-hyphen):
 
@@ -20,7 +20,7 @@ Bundled hyphenation patterns (plugins/hyphenation/patterns) come from the hyph-u
 
 Their notices are in plugins/hyphenation/patterns/README.md.
 
-## QuireInk: Apache License 2.0
+## PaperPaw: Apache License 2.0
 
 Apache License Version 2.0, January 2004 http://www.apache.org/licenses/
 

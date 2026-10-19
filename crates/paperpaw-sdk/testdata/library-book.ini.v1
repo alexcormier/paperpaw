@@ -1,0 +1,17 @@
+[book]
+size = 5
+indexed = on
+version = 3
+title = Anna Karenina
+author = Leo Tolstoy
+series = "  Classics "
+series-index = 2
+tag.1 = Novel
+tag.2 = Russia
+cover = .paperpaw/library/covers/0001.gray
+cover-width = 120
+cover-height = 180
+progress = 42
+
+[field]
+calibre.rating = 4

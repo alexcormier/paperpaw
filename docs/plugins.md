@@ -1,6 +1,6 @@
 # Writing plugins
 
-Everything QuireInk shows and does comes from plugins: the home screen,
+Everything PaperPaw shows and does comes from plugins: the home screen,
 the reader, the library, the menus, the settings, even the keyboard. The
 kernel only hosts them. A plugin you write can do anything these do, and
 replace any of them.
@@ -11,18 +11,18 @@ There are two kinds:
   They bring translations (also whole new languages), key maps, new
   defaults for any setting, and fonts. They work on every device as they
   are; see [Plugins without code](#plugins-without-code).
-- **Code plugins**: Rust crates against the SDK (`quireink-sdk`). They
+- **Code plugins**: Rust crates against the SDK (`paperpaw-sdk`). They
   bring screens, actions, settings, formats, widgets, services, anything.
-  Today they are compiled into a build of QuireInk; plugins loaded at run
+  Today they are compiled into a build of PaperPaw; plugins loaded at run
   time (WebAssembly, with the same API) are planned.
 
 This guide walks through a code plugin, then lists what plugins can
 contribute. Working with an AI assistant: the skill in
-[`.claude/skills/quireink-plugin-development`](../.claude/skills/quireink-plugin-development/SKILL.md)
-tells it how to write a plugin for QuireInk as it is (without changing
-QuireInk), try it in the emulator and on an X4, and measure it; copy the
+[`.claude/skills/paperpaw-plugin-development`](../.claude/skills/paperpaw-plugin-development/SKILL.md)
+tells it how to write a plugin for PaperPaw as it is (without changing
+PaperPaw), try it in the emulator and on an X4, and measure it; copy the
 folder into a plugin's own project (or one's own skills) to use it
-there. The SDK's API documentation (`cargo doc -p quireink-sdk
+there. The SDK's API documentation (`cargo doc -p paperpaw-sdk
 --open`) has every detail.
 
 ## The sample plugin
@@ -33,7 +33,7 @@ screen greeting you by a name set in the settings, with the number of
 books opened since the start. Try it in the emulator:
 
 ```sh
-cargo run -p quireink-emulator --features hello -- --profile boox-go-7 --set hello.name=Ada
+cargo run -p paperpaw-emulator --features hello -- --profile boox-go-7 --set hello.name=Ada
 ```
 
 Open the main menu (a tap at the bottom of the home screen), then
@@ -79,7 +79,7 @@ Every id starts with the plugin's id (`hello.open`); `core` is the
 kernel's. Titles are translation keys, translated where they are shown.
 
 Icons are named as in [Tabler Icons](https://tabler.io/icons), any of
-them (`quireink_sdk::icons` knows every name). QuireInk's icon font holds
+them (`paperpaw_sdk::icons` knows every name). PaperPaw's icon font holds
 the ones it uses itself; for another, bring its drawing as an icon pack
 (see below), else none shows.
 
@@ -151,9 +151,9 @@ Some rules every screen should follow:
   types into, a notice) does not. A screen whose content is best in
   grays (a picture) says so (`grays`): panels with few grays then show
   it in more, as slowly as a full refresh.
-- **Use the SDK's UI parts** (`quireink_sdk::ui`): headers, rows, lists,
+- **Use the SDK's UI parts** (`paperpaw_sdk::ui`): headers, rows, lists,
   switches, numbers with − and +, messages, icons. They follow the user's
-  appearance settings and line up with the rest of QuireInk.
+  appearance settings and line up with the rest of PaperPaw.
 
 Screens say what they show, for reading the interface aloud,
 automation and tests: the `ui` helpers (list rows, buttons, switches,
@@ -183,7 +183,7 @@ out.push(Command::set(&NAME, "Ada".into()));
 `SettingSpec::switch`, `number`, `choice`, `language`, `list` and
 `text` make the others, their defaults of the setting's type. The
 settings screens list every setting by its group, with its description
-below it; the kernel saves changes to `quireink.ini`. Settings can be
+below it; the kernel saves changes to `paperpaw.ini`. Settings can be
 numbers with units and steps, switches, choices, languages or text;
 `advanced()` hides rarely needed ones, `scoped()` lets one be set per
 book, `editor(screen)` opens a screen of your own instead. Settings
@@ -291,7 +291,7 @@ and answer them (`Kernel::http_response`). The emulator then shows how it
 looks and how much memory it needs on each device:
 
 ```sh
-cargo run -p quireink-emulator -- --profile xteink-x4 --headless --script "confirm" --screenshot out.png
+cargo run -p paperpaw-emulator -- --profile xteink-x4 --headless --script "confirm" --screenshot out.png
 ```
 
 ## What plugins contribute
@@ -380,7 +380,7 @@ each with a *role*. The reader draws them; the plugin knows neither the
 reader nor the panel.
 
 ```rust
-use quireink_sdk::decorations::{self, Decorated, Decoration, DecoratorSpec, LineKind};
+use paperpaw_sdk::decorations::{self, Decorated, Decoration, DecoratorSpec, LineKind};
 
 const LEARNING: Id = Id::new_static("vocabulary.learning");
 
@@ -494,7 +494,7 @@ placement's values when it goes (`Settings::placement_values`).
 `height` counts its frame (`widgets::look::look` gives the area inside
 it without drawing). For round things there are `Canvas::fill_circle`,
 `stroke_circle`, `fill_ring` (arcs, e.g. a progress ring) and
-`draw_hand`, with angles as on a clock face (`quireink_sdk::round`);
+`draw_hand`, with angles as on a clock face (`paperpaw_sdk::round`);
 light grays are drawn with `fill_shaded` or `fill_round_shaded`, which
 dither them on black and white panels.
 
@@ -507,7 +507,7 @@ be in a list more than once (`widgets::repeatable`).
 ### Presets and home screen layouts
 
 A preset is a ready-made set of setting values chosen as a whole
-(`quireink_sdk::presets`), such as a layout of the home screen. It has a
+(`paperpaw_sdk::presets`), such as a layout of the home screen. It has a
 kind, named by the plugin that offers such presets: the home screen
 offers those of `home.layout` in its chooser (in the first-run setup,
 and under *Add* while editing it), shows each on itself before it is
@@ -558,8 +558,8 @@ place for a key.
 (`env.caps.network`); the answer comes as the request's reply event, an
 `HttpReply` with the status and the body, or saved to a file (`save_to`)
 for large ones.
-Read large JSON answers as they stream with `quireink_json::stream`
-(the crate `quireink-json`), so they
+Read large JSON answers as they stream with `paperpaw_json::stream`
+(the crate `paperpaw-json`), so they
 need little memory. `Command::Serve` serves HTTP to the local network,
 e.g. for transfers from a computer or typing on a phone; what happens
 to it comes as `ServerNotice`s, and to sockets (`Command::Connect`,
@@ -567,7 +567,7 @@ to it comes as `ServerNotice`s, and to sockets (`Command::Connect`,
 
 ### Firmware updates
 
-Where QuireInk is the device's firmware (the X4), `env.firmware` says
+Where PaperPaw is the device's firmware (the X4), `env.firmware` says
 which version runs and how an install goes; elsewhere it is `None`.
 `Command::Firmware(FirmwareCommand::Install { path })` installs a
 signed update file, `FirmwareCommand::Restart` restarts into it once
@@ -602,8 +602,8 @@ plugins/large-print/
   keymap.ini     key bindings
   settings.ini   new defaults for any plugin's settings ([reader] font-size = 14)
   fonts/*.ttf    fonts to read with (also .otf, .ttc), by family
-  fonts/*.qifp   packs with letters other fonts lack, named in plugin.ini:
-                 [extends] cyrillic.qifp = fonts-default.literata
+  fonts/*.ppfp   packs with letters other fonts lack, named in plugin.ini:
+                 [extends] cyrillic.ppfp = fonts-default.literata
   fonts/…        a family's faces, named in plugin.ini: [family] name,
                  regular, bold, italic, bold-italic (packs, or .ttf/.otf
                  where scalable fonts are drawn)
@@ -612,7 +612,7 @@ plugins/large-print/
 ```
 
 `formats` says which version of these files' formats the plugin is made
-for (1 now, and if it is left out); a QuireInk that reads an older one
+for (1 now, and if it is left out); a PaperPaw that reads an older one
 leaves the plugin out and says why, rather than reading it wrongly.
 
 Packs for other scripts (`tools/script-pack.py` builds Cyrillic and
@@ -620,7 +620,7 @@ Greek for Literata) are read a glyph at a time, so devices with little
 memory can use them ([ADR 0018](adr/0018-font-packs-for-other-scripts.md)).
 Icon packs are such packs for the icon font: `tools/icons/pack.py` builds
 one with the Tabler icons named
-(`[extends] icons.qifp = fonts-default.icons`).
+(`[extends] icons.ppfp = fonts-default.icons`).
 
 A family of its own needs a name and a regular face; its faces are
 packs, drawn on every device and read a glyph at a time, or font files,
@@ -629,12 +629,12 @@ drawn where scalable fonts are, a variable font at its style's weight:
 ```ini
 [family]
 name = Fredoka
-regular = regular.qifp
-bold = bold.qifp
+regular = regular.ppfp
+bold = bold.ppfp
 ```
 
 The fonts browser (`plugins/fonts-browser`) downloads fonts as such
-plugins from quireink.org: font files for devices with scalable fonts
+plugins from paperpaw.org: font files for devices with scalable fonts
 and the memory for them, packs for the others.
 
 Copy it into the `plugins` folder of a device (or of the emulator's
@@ -662,12 +662,12 @@ So anyone can make a home screen layout and share it: it is offered
 with the home screen's own. [`samples/plugins`](../samples/plugins) has
 three: large print, an airy theme and a layout (reading nook).
 
-[`Plugin`]: ../crates/quireink-sdk/src/plugin.rs
-[`Registrar`]: ../crates/quireink-sdk/src/plugin.rs
-[`Env`]: ../crates/quireink-sdk/src/env.rs
-[`Command`]: ../crates/quireink-sdk/src/command.rs
-[`Screen`]: ../crates/quireink-sdk/src/screen.rs
-[`Widget`]: ../crates/quireink-sdk/src/widgets.rs
+[`Plugin`]: ../crates/paperpaw-sdk/src/plugin.rs
+[`Registrar`]: ../crates/paperpaw-sdk/src/plugin.rs
+[`Env`]: ../crates/paperpaw-sdk/src/env.rs
+[`Command`]: ../crates/paperpaw-sdk/src/command.rs
+[`Screen`]: ../crates/paperpaw-sdk/src/screen.rs
+[`Widget`]: ../crates/paperpaw-sdk/src/widgets.rs
 
 Other protocols go over sockets ([ADR 0014](adr/0014-sockets-for-plugins.md)):
 `Command::Connect` opens a TCP connection, `Command::SocketSend` sends,

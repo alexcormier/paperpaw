@@ -8,14 +8,14 @@
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::builtin::{actions, events};
-use quireink_sdk::firmware::{
+use paperpaw_sdk::builtin::{actions, events};
+use paperpaw_sdk::firmware::{
     FirmwareCommand, FirmwareState, InstallFailure, Signer, Update, fingerprint, trust,
     trusted_keys,
 };
-use quireink_sdk::semantics::Role;
-use quireink_sdk::ui::{self, UiStyle};
-use quireink_sdk::{
+use paperpaw_sdk::semantics::Role;
+use paperpaw_sdk::ui::{self, UiStyle};
+use paperpaw_sdk::{
     Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect,
     RefreshMode, Screen,
 };
@@ -404,12 +404,12 @@ impl Screen for UpdatePage {
         }
     }
 
-    fn hint(&self, _: &Id, _: &Env<'_>) -> quireink_sdk::Hint {
+    fn hint(&self, _: &Id, _: &Env<'_>) -> paperpaw_sdk::Hint {
         // Nothing can be done while it installs.
         if matches!(self.view, View::Installing { .. } | View::Installed) {
-            quireink_sdk::Hint::Hidden
+            paperpaw_sdk::Hint::Hidden
         } else {
-            quireink_sdk::Hint::Default
+            paperpaw_sdk::Hint::Default
         }
     }
 

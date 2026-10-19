@@ -19,9 +19,9 @@
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::builtin::{actions, events, params};
-use quireink_sdk::ui::{self, UiStyle};
-use quireink_sdk::{
+use paperpaw_sdk::builtin::{actions, events, params};
+use paperpaw_sdk::ui::{self, UiStyle};
+use paperpaw_sdk::{
     Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, RefreshMode,
     Screen, SettingKind, SettingValue,
 };
@@ -30,9 +30,9 @@ use crate::{CHOOSE_SCREEN, DEPTH, SCREEN, is_menu};
 
 /// The bar's font: the reading status lines' (it opens over a book), as
 /// `core.status-font` chooses.
-fn bar_font<'e>(env: &Env<'e>) -> Option<quireink_sdk::FontHandle<'e>> {
+fn bar_font<'e>(env: &Env<'e>) -> Option<paperpaw_sdk::FontHandle<'e>> {
     env.fonts
-        .role(quireink_sdk::builtin::fonts::STATUS.as_str())
+        .role(paperpaw_sdk::builtin::fonts::STATUS.as_str())
 }
 
 /// The value of [`params::MODE`] for a bar.
@@ -79,7 +79,7 @@ impl BarScreen {
             .menus
             .items(menu)
             .into_iter()
-            .filter(|item| !item.section && !quireink_sdk::Menus::hidden(params, item.id.as_str()))
+            .filter(|item| !item.section && !paperpaw_sdk::Menus::hidden(params, item.id.as_str()))
             .map(|item| Entry {
                 id: item.id.clone(),
                 label: env

@@ -1,6 +1,6 @@
 //! Remote control over USB, for testing on the device (built with the
-//! `remote` feature): the commands of [`quireink_x4::remote`] read from
-//! the USB unit, and every `QI:` answer. What only asks (the screen, the
+//! `remote` feature): the commands of [`paperpaw_x4::remote`] read from
+//! the USB unit, and every `PP:` answer. What only asks (the screen, the
 //! heap, a file) is answered here; what changes the X4's state (a press,
 //! an action, the network) is the main loop's (`firmware`).
 
@@ -10,9 +10,9 @@ use core::fmt::Write;
 
 use esp_hal::peripherals::USB_DEVICE;
 use esp_println::println;
-use quireink_core::{HttpResponse, JoinFailure, Kernel, WifiNetwork, WifiState};
-use quireink_platform::FrameView;
-use quireink_x4::remote::{Command, hex_bytes, part_state, runs};
+use paperpaw_core::{HttpResponse, JoinFailure, Kernel, WifiNetwork, WifiState};
+use paperpaw_platform::FrameView;
+use paperpaw_x4::remote::{Command, hex_bytes, part_state, runs};
 
 /// A line is never longer: `data` and 512 bytes in hexadecimal.
 const MAX_LINE: usize = 1100;
@@ -65,7 +65,7 @@ impl Remote {
     pub fn poll(&mut self) -> Option<Command> {
         let line = self.next_line()?;
         let line = String::from_utf8_lossy(&line);
-        let command = quireink_x4::remote::parse(&line);
+        let command = paperpaw_x4::remote::parse(&line);
         if command.is_none() {
             error(&line);
         }
@@ -81,12 +81,12 @@ impl Remote {
             Command::Describe => describe(kernel),
             Command::Screen => {
                 let id = kernel.active_screen().map_or("", |id| id.as_str());
-                println!("QI:SCREEN {id}");
+                println!("PP:SCREEN {id}");
             }
             Command::Heap => {
                 let (left, size) = crate::stack::left();
                 println!(
-                    "QI:HEAP {} {} {left} {size} {}",
+                    "PP:HEAP {} {} {left} {size} {}",
                     esp_alloc::HEAP.used(),
                     esp_alloc::HEAP.free(),
                     largest_block()
@@ -95,21 +95,21 @@ impl Remote {
             Command::Put { size, path } => self.receive(kernel, size, &path),
             Command::Get(path) => send(kernel, &path),
             Command::Hang(seconds) => {
-                println!("QI:HANGING");
+                println!("PP:HANGING");
                 let until = esp_hal::time::Instant::now()
                     + esp_hal::time::Duration::from_secs(seconds.min(60));
                 while esp_hal::time::Instant::now() < until {}
                 ok();
             }
             Command::Nap(seconds) => {
-                println!("QI:NAPPING");
+                println!("PP:NAPPING");
                 crate::power::try_long_nap(seconds.min(60));
             }
             Command::Boot => {
                 let (place, naps, reason) = crate::power::last_run();
-                println!("QI:BOOT {reason:?} {place} {naps}");
+                println!("PP:BOOT {reason:?} {place} {naps}");
                 if let Some(message) = critical_section::with(|cs| PANIC.borrow_ref(cs).clone()) {
-                    println!("QI:PANIC {message}");
+                    println!("PP:PANIC {message}");
                 }
             }
             Command::Profile(true) => {
@@ -124,9 +124,9 @@ impl Remote {
                     for pc in chunk {
                         let _ = write!(line, " {pc:x}");
                     }
-                    println!("QI:PC{line}");
+                    println!("PP:PC{line}");
                 }
-                println!("QI:END");
+                println!("PP:END");
             }
             Command::Trace(true) => {
                 crate::traced::trace(true);
@@ -134,9 +134,9 @@ impl Remote {
             }
             Command::Trace(false) => {
                 for line in crate::traced::trace(false).unwrap_or_default() {
-                    println!("QI:IO {line}");
+                    println!("PP:IO {line}");
                 }
-                println!("QI:END");
+                println!("PP:END");
             }
             Command::Peek { at, words } => {
                 let mut line = String::new();
@@ -149,18 +149,18 @@ impl Remote {
                         let word = unsafe { core::ptr::read_volatile(address) };
                         let _ = write!(line, " {word:x}");
                     }
-                    println!("QI:MEM {:x}{line}", at + start * 4);
+                    println!("PP:MEM {:x}{line}", at + start * 4);
                 }
-                println!("QI:END");
+                println!("PP:END");
             }
             Command::Input => {
                 let (samples, front, side) = crate::input::stats();
                 let power = crate::input::power_down();
                 let millivolts = crate::input::millivolts();
-                println!("QI:INPUT {samples} {front} {side} {power} {millivolts}");
+                println!("PP:INPUT {samples} {front} {side} {power} {millivolts}");
             }
             Command::Setting(id) => match kernel.settings().get(&id) {
-                Some(value) => println!("QI:SETTING {}", value.to_config_text()),
+                Some(value) => println!("PP:SETTING {}", value.to_config_text()),
                 None => error("no such setting"),
             },
             command @ (Command::Press { .. }
@@ -180,9 +180,9 @@ impl Remote {
     fn receive(&mut self, kernel: &Kernel, size: usize, path: &str) {
         let storage = kernel.storage();
         if let Err(e) = storage.write(path, &[]) {
-            return println!("QI:ERR {path}: {e:?}");
+            return println!("PP:ERR {path}: {e:?}");
         }
-        println!("QI:READY");
+        println!("PP:READY");
         let millis = || {
             esp_hal::time::Instant::now()
                 .duration_since_epoch()
@@ -194,28 +194,28 @@ impl Remote {
             crate::power::feed();
             let Some(line) = self.next_line() else {
                 if millis() - last > QUIET_MS {
-                    return println!("QI:ERR {path}: {got} of {size} bytes came");
+                    return println!("PP:ERR {path}: {got} of {size} bytes came");
                 }
                 continue;
             };
             last = millis();
             let Some(bytes) = line.strip_prefix(b"data ").and_then(hex_bytes) else {
-                return println!("QI:ERR {path}: not data");
+                return println!("PP:ERR {path}: not data");
             };
             got += bytes.len();
             piece.extend_from_slice(&bytes);
             if piece.len() >= CHUNK || got >= size {
                 if let Err(e) = storage.append(path, &piece) {
-                    return println!("QI:ERR {path}: {e:?}");
+                    return println!("PP:ERR {path}: {e:?}");
                 }
                 piece.clear();
             }
         }
         // On the card before saying so: the X4 may be reset right after.
         if let Err(e) = storage.sync() {
-            return println!("QI:ERR {path}: {e:?}");
+            return println!("PP:ERR {path}: {e:?}");
         }
-        println!("QI:OK {got}");
+        println!("PP:OK {got}");
     }
 }
 
@@ -223,16 +223,16 @@ impl Remote {
 fn send(kernel: &Kernel, path: &str) {
     let storage = kernel.storage();
     let Ok(size) = storage.size(path) else {
-        return println!("QI:ERR {path}: not found");
+        return println!("PP:ERR {path}: not found");
     };
-    println!("QI:SIZE {size}");
+    println!("PP:SIZE {size}");
     let mut buf = [0u8; 256];
     let mut line = String::with_capacity(buf.len() * 2);
     let mut at = 0u64;
     while at < size {
         crate::power::feed();
         let Ok(n) = storage.read_at(path, at, &mut buf) else {
-            return println!("QI:ERR {path}: not readable");
+            return println!("PP:ERR {path}: not readable");
         };
         if n == 0 {
             break;
@@ -241,10 +241,10 @@ fn send(kernel: &Kernel, path: &str) {
         for byte in &buf[..n] {
             let _ = write!(line, "{byte:02x}");
         }
-        println!("QI:DATA {line}");
+        println!("PP:DATA {line}");
         at += n as u64;
     }
-    println!("QI:END");
+    println!("PP:END");
 }
 
 /// The last run's panic, said by `boot`.
@@ -273,36 +273,36 @@ fn largest_block() -> usize {
 
 /// Done.
 pub fn ok() {
-    println!("QI:OK");
+    println!("PP:OK");
 }
 
 /// Not now, e.g. a press while another is held.
 pub fn busy() {
-    println!("QI:BUSY");
+    println!("PP:BUSY");
 }
 
 /// Not understood, or not done.
 pub fn error(what: &str) {
-    println!("QI:ERR {what}");
+    println!("PP:ERR {what}");
 }
 
 /// The panel refreshed from what its controller holds, and how it went.
 pub fn refreshed(result: impl core::fmt::Debug) {
-    println!("QI:OK {result:?}");
+    println!("PP:OK {result:?}");
 }
 
 /// The networks a scan asked over USB found.
 pub fn networks(networks: &[WifiNetwork]) {
     for net in networks {
-        println!("QI:NET {} {} {}", net.signal, net.secured, net.ssid);
+        println!("PP:NET {} {} {}", net.signal, net.secured, net.ssid);
     }
-    println!("QI:END");
+    println!("PP:END");
 }
 
 /// The network asked over USB was joined.
 pub fn connected(ssid: &str, address: &str) {
-    println!("QI:CONNECTED {ssid}");
-    println!("QI:IP {address}");
+    println!("PP:CONNECTED {ssid}");
+    println!("PP:IP {address}");
 }
 
 /// The network asked over USB was not joined.
@@ -312,10 +312,10 @@ pub fn not_connected(ssid: &str, reason: JoinFailure) {
 
 pub fn wifi_state(state: &WifiState) {
     match state {
-        WifiState::Off => println!("QI:WIFI off"),
-        WifiState::On => println!("QI:WIFI on"),
-        WifiState::Joining { ssid } => println!("QI:WIFI joining {ssid}"),
-        WifiState::Online { ssid, address } => println!("QI:WIFI online {ssid} {address}"),
+        WifiState::Off => println!("PP:WIFI off"),
+        WifiState::On => println!("PP:WIFI on"),
+        WifiState::Joining { ssid } => println!("PP:WIFI joining {ssid}"),
+        WifiState::Online { ssid, address } => println!("PP:WIFI online {ssid} {address}"),
     }
 }
 
@@ -327,7 +327,7 @@ pub fn http_answer(answer: &HttpResponse, ms: u64) {
         String::new()
     };
     println!(
-        "QI:HTTP {} {} saved {} {ms} ms heap {} {} {why}",
+        "PP:HTTP {} {} saved {} {ms} ms heap {} {} {why}",
         answer.status,
         answer.body.len(),
         answer.saved,
@@ -337,7 +337,7 @@ pub fn http_answer(answer: &HttpResponse, ms: u64) {
 }
 
 /// Sends the whole screen, as turned (screens may have less of it), or
-/// `QI:BUSY` while changes wait to be shown (ask again).
+/// `PP:BUSY` while changes wait to be shown (ask again).
 fn shot(kernel: &mut Kernel) {
     let display = kernel.device().display;
     let header = (
@@ -349,7 +349,7 @@ fn shot(kernel: &mut Kernel) {
     let mut hex = String::new();
     let done = kernel.capture(&mut |top, rows: FrameView<'_>| {
         if !started {
-            println!("QI:FRAME {} {} {}", header.0, header.1, header.2);
+            println!("PP:FRAME {} {} {}", header.0, header.1, header.2);
             started = true;
         }
         for y in 0..rows.height {
@@ -357,11 +357,11 @@ fn shot(kernel: &mut Kernel) {
             let row = rows.data.get(at..at + rows.stride).unwrap_or(&[]);
             hex.clear();
             runs(row, &mut hex);
-            println!("QI:ROW {} {hex}", top + y);
+            println!("PP:ROW {} {hex}", top + y);
         }
     });
     if done {
-        println!("QI:END");
+        println!("PP:END");
     } else {
         busy();
     }
@@ -374,9 +374,9 @@ fn describe(kernel: &mut Kernel) {
         let a = part.area;
         let label = part.label.replace('\n', " ");
         println!(
-            "QI:PART {:?} {} {} {} {} {state} {label}",
+            "PP:PART {:?} {} {} {} {} {state} {label}",
             part.role, a.x, a.y, a.width, a.height
         );
     }
-    println!("QI:END");
+    println!("PP:END");
 }

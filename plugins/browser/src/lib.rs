@@ -29,14 +29,14 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::cell::RefCell;
 
-use quireink_sdk::ask;
-use quireink_sdk::builtin::{actions, menus, params, slots};
-use quireink_sdk::event::Event;
-use quireink_sdk::files;
-use quireink_sdk::replies::{HttpReply, Typed};
-use quireink_sdk::ui::choice::{self, Choice};
-use quireink_sdk::ui::{self, ListChange, ListView, UiStyle};
-use quireink_sdk::{
+use paperpaw_sdk::ask;
+use paperpaw_sdk::builtin::{actions, menus, params, slots};
+use paperpaw_sdk::event::Event;
+use paperpaw_sdk::files;
+use paperpaw_sdk::replies::{HttpReply, Typed};
+use paperpaw_sdk::ui::choice::{self, Choice};
+use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
+use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, HttpRequest, Id,
     Manifest, MenuEntry, Params, Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar,
     SDK_VERSION, Screen, ScreenSpec, Version,
@@ -210,7 +210,7 @@ impl BrowserScreen {
     /// Loads `url`; what it is decides where it goes once it is there.
     fn load(&mut self, url: &str, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        let host = quireink_sdk::web::host(url).to_string();
+        let host = paperpaw_sdk::web::host(url).to_string();
         if !env.caps.network {
             let message = env.i18n.tr("browser.no-network").to_string();
             return self.say(message, cx);
@@ -224,7 +224,7 @@ impl BrowserScreen {
             headers: Vec::from([
                 (
                     String::from("User-Agent"),
-                    String::from("QuireInk/0.1 (e-reader)"),
+                    String::from("PaperPaw/0.1 (e-reader)"),
                 ),
                 (
                     String::from("Accept"),
@@ -263,7 +263,7 @@ impl BrowserScreen {
         }
         self.loading = None;
         let url = reply.final_url.clone().unwrap_or(requested);
-        let host = quireink_sdk::web::host(&url).to_string();
+        let host = paperpaw_sdk::web::host(&url).to_string();
         let status = reply.status;
         let tmp = download_path();
         if status == 0 {
@@ -298,7 +298,7 @@ impl BrowserScreen {
                 self.show(Entry::new(&title, &url), cx);
             }
             Kind::Book => {
-                let dir = quireink_sdk::library::folder(&env).to_string();
+                let dir = paperpaw_sdk::library::folder(&env).to_string();
                 self.save(&tmp, &dir, &url, "browser.saved-book", true, cx);
             }
             Kind::Font => match env.font_dirs.first() {
@@ -329,7 +329,7 @@ impl BrowserScreen {
     ) {
         let env = *cx.env();
         let _ = env.storage.create_dir(dir);
-        let name = quireink_sdk::web::file_name(url);
+        let name = paperpaw_sdk::web::file_name(url);
         let target = files::free_path(env.storage, dir, &name);
         if files::move_to(env.storage, tmp, &target).is_err() {
             let _ = env.storage.remove(tmp);
@@ -477,7 +477,7 @@ fn named_book(env: &Env<'_>, path: &str) -> Option<String> {
     };
     drop(document);
     let extension = path.rsplit_once('.').map_or("", |(_, ext)| ext);
-    let name = quireink_sdk::web::clean_name(&name, 100)?;
+    let name = paperpaw_sdk::web::clean_name(&name, 100)?;
     let dir = files::parent(path);
     if files::name(path) == format!("{name}.{extension}") {
         return None;
@@ -517,11 +517,11 @@ impl Screen for BrowserScreen {
                     ),
                     Row::Bookmark(i) => (
                         bookmarks[i].title.clone(),
-                        quireink_sdk::web::host(&bookmarks[i].url).to_string(),
+                        paperpaw_sdk::web::host(&bookmarks[i].url).to_string(),
                     ),
                     Row::History(i) => (
                         history[i].title.clone(),
-                        quireink_sdk::web::host(&history[i].url).to_string(),
+                        paperpaw_sdk::web::host(&history[i].url).to_string(),
                     ),
                 };
                 ui::draw_value_row(canvas, env, &style, rect, focused, &title, &value);
@@ -621,7 +621,7 @@ impl Screen for BrowserScreen {
 
 #[cfg(test)]
 mod tests {
-    use quireink_i18n::{Catalog, check};
+    use paperpaw_i18n::{Catalog, check};
 
     #[test]
     fn translations_are_complete() {

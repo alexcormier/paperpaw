@@ -1,4 +1,4 @@
-//! Converts an XHTML chapter into QuireInk's compact block format while it
+//! Converts an XHTML chapter into PaperPaw's compact block format while it
 //! is inflated, and stores the result in the plugin's cache:
 //!
 //! - `<n>.txt`: records of an 8-byte header (kind, heading level, flags,
@@ -19,7 +19,7 @@
 //!   other readers understand (KOReader's XPointers).
 //! - `<n>.xpt`: `offset<TAB>node<TAB>char` lines: where the text of each
 //!   text node of the chapter begins in `<n>.txt` (and goes on, where
-//!   what QuireInk shows leaves out characters the node has), as the node
+//!   what PaperPaw shows leaves out characters the node has), as the node
 //!   below `<body>` such as `div[2]/p[22]/em[1]/text()[1]` and the
 //!   character in it, for exact positions in KOReader's XPointers. Nodes
 //!   and characters are counted as KOReader's engine (crengine) keeps
@@ -41,11 +41,11 @@ use alloc::rc::Rc;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use quireink_sdk::Storage;
-use quireink_sdk::document::{Align, BlockKind, DocumentError, Run, TextStyle};
-use quireink_sdk::image::Fit;
-use quireink_sdk::xml::{Token, Tokenizer, decode, local_name};
-use quireink_sdk::zip::{Entry, ZipArchive};
+use paperpaw_sdk::Storage;
+use paperpaw_sdk::document::{Align, BlockKind, DocumentError, Run, TextStyle};
+use paperpaw_sdk::image::Fit;
+use paperpaw_sdk::xml::{Token, Tokenizer, decode, local_name};
+use paperpaw_sdk::zip::{Entry, ZipArchive};
 
 use crate::css::{self, Props, Rules, parse_align};
 use crate::package::error;
@@ -99,7 +99,7 @@ pub(crate) enum Source<'a> {
 /// the converter. XHTML needs none.
 pub(crate) trait Dialect {
     /// Element `tag` entered.
-    fn enter(&mut self, tag: &str, attrs: &quireink_sdk::xml::Attrs<'_>) -> Entered;
+    fn enter(&mut self, tag: &str, attrs: &paperpaw_sdk::xml::Attrs<'_>) -> Entered;
     /// Element `tag` left: the HTML element it was read as.
     fn leave(&mut self, tag: &str) -> String;
     /// Where the picture `href` points is kept as, if not as a path
@@ -134,7 +134,7 @@ pub(crate) struct CachePaths {
 
 /// Images are decoded at most this large where the screen does not say
 /// (see `OpenOptions::image_fit`); readers scale them to the page.
-pub(crate) const IMAGE_FIT: Fit = quireink_sdk::IMAGE_FIT;
+pub(crate) const IMAGE_FIT: Fit = paperpaw_sdk::IMAGE_FIT;
 
 pub(crate) fn encode_kind(kind: BlockKind) -> (u8, u8) {
     match kind {
@@ -157,7 +157,7 @@ pub(crate) fn decode_kind(kind: u8, level: u8) -> BlockKind {
 /// The cache name of the image at `archive_path`, without its kind (see
 /// `pictures`).
 pub(crate) fn image_path(dir: &str, archive_path: &str) -> String {
-    let hash = quireink_digest::fnv1a64(archive_path);
+    let hash = paperpaw_digest::fnv1a64(archive_path);
     alloc::format!("{dir}/img-{hash:016x}")
 }
 
@@ -233,7 +233,7 @@ struct Origin {
 /// `styles`).
 fn element_props(
     tag: &str,
-    attrs: &quireink_sdk::xml::Attrs<'_>,
+    attrs: &paperpaw_sdk::xml::Attrs<'_>,
     rules: &mut Rules,
     styles: bool,
 ) -> Props {
@@ -496,13 +496,13 @@ impl Converter<'_> {
     /// Where a link goes, as stored in `<n>.lnk`; `None` for none.
     fn target(&self, href: &str) -> Option<String> {
         let href: String = href.trim().chars().filter(|c| !c.is_control()).collect();
-        if href.is_empty() || quireink_sdk::document::is_external(&href) {
+        if href.is_empty() || paperpaw_sdk::document::is_external(&href) {
             return (!href.is_empty()).then_some(href);
         }
         if let Some(html) = &self.html {
             return Some(match (href.strip_prefix('#'), &html.base) {
                 (Some(_), _) => href,
-                (None, Some(base)) => quireink_sdk::web::join_url(base, &href),
+                (None, Some(base)) => paperpaw_sdk::web::join_url(base, &href),
                 (None, None) => crate::package::resolve(&self.base, &href).0,
             });
         }
@@ -517,7 +517,7 @@ impl Converter<'_> {
         })
     }
 
-    fn start(&mut self, name: &str, attrs: quireink_sdk::xml::Attrs<'_>, self_closing: bool) {
+    fn start(&mut self, name: &str, attrs: paperpaw_sdk::xml::Attrs<'_>, self_closing: bool) {
         let _ = self_closing;
         self.end_node();
         let tag = local_name(name).to_ascii_lowercase();
@@ -1105,7 +1105,7 @@ const FURNITURE: [&str; 24] = [
 /// menus and the like, by element, ARIA role or class name. Headers and
 /// footers belong to the reading matter when it is marked (an article's
 /// title), else they are the site's.
-fn furniture(tag: &str, attrs: &quireink_sdk::xml::Attrs<'_>, focus: bool) -> bool {
+fn furniture(tag: &str, attrs: &paperpaw_sdk::xml::Attrs<'_>, focus: bool) -> bool {
     let role = attrs.get("role");
     if matches!(
         role.as_deref(),
@@ -1380,8 +1380,8 @@ struct StorageSource<'a> {
     end: u64,
 }
 
-impl quireink_sdk::image::Source for StorageSource<'_> {
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize, quireink_sdk::image::ImageError> {
+impl paperpaw_sdk::image::Source for StorageSource<'_> {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, paperpaw_sdk::image::ImageError> {
         let left = (self.end - self.offset).min(buf.len() as u64) as usize;
         if left == 0 {
             return Ok(0);
@@ -1389,7 +1389,7 @@ impl quireink_sdk::image::Source for StorageSource<'_> {
         let n = self
             .storage
             .read_at(self.path, self.offset, &mut buf[..left])
-            .map_err(|_| quireink_sdk::image::ImageError::Io)?;
+            .map_err(|_| paperpaw_sdk::image::ImageError::Io)?;
         self.offset += n as u64;
         Ok(n)
     }
@@ -1434,19 +1434,19 @@ fn image_size(storage: &dyn Storage, archive: &ZipArchive, path: &str) -> Option
             }
         }
     }
-    quireink_sdk::image::dimensions(&head[..filled])
+    paperpaw_sdk::image::dimensions(&head[..filled])
 }
 
 struct EntrySource<'a> {
     storage: &'a dyn Storage,
-    reader: quireink_sdk::zip::EntryReader<'a>,
+    reader: paperpaw_sdk::zip::EntryReader<'a>,
 }
 
-impl quireink_sdk::image::Source for EntrySource<'_> {
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize, quireink_sdk::image::ImageError> {
+impl paperpaw_sdk::image::Source for EntrySource<'_> {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, paperpaw_sdk::image::ImageError> {
         self.reader
             .read(self.storage, buf)
-            .map_err(|_| quireink_sdk::image::ImageError::Io)
+            .map_err(|_| paperpaw_sdk::image::ImageError::Io)
     }
 }
 
@@ -1456,11 +1456,11 @@ struct Headed<'a> {
     head: [u8; 8],
     len: usize,
     at: usize,
-    rest: &'a mut dyn quireink_sdk::image::Source,
+    rest: &'a mut dyn paperpaw_sdk::image::Source,
 }
 
-impl quireink_sdk::image::Source for Headed<'_> {
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize, quireink_sdk::image::ImageError> {
+impl paperpaw_sdk::image::Source for Headed<'_> {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, paperpaw_sdk::image::ImageError> {
         if self.at < self.len {
             let n = (self.len - self.at).min(buf.len());
             buf[..n].copy_from_slice(&self.head[self.at..self.at + n]);
@@ -1506,12 +1506,12 @@ pub(crate) fn decode_image(
             let mut source = EntrySource { storage, reader };
             decode_source(storage, &mut source, cache, fit, color)
         }
-        Err(quireink_sdk::zip::ZipError::OutOfMemory) => {
-            Err(quireink_sdk::image::ImageError::OutOfMemory)
+        Err(paperpaw_sdk::zip::ZipError::OutOfMemory) => {
+            Err(paperpaw_sdk::image::ImageError::OutOfMemory)
         }
         Err(e) => return Err(error(e)),
     };
-    if streamed != Err(quireink_sdk::image::ImageError::OutOfMemory) {
+    if streamed != Err(paperpaw_sdk::image::ImageError::OutOfMemory) {
         return streamed.map_err(image_error);
     }
     let temp = alloc::format!("{dir}/image.tmp");
@@ -1567,12 +1567,12 @@ fn decode_range(
 /// `cache` if it fails.
 fn decode_source(
     storage: &dyn Storage,
-    source: &mut dyn quireink_sdk::image::Source,
+    source: &mut dyn paperpaw_sdk::image::Source,
     cache: &str,
     fit: Fit,
     color: bool,
-) -> Result<(), quireink_sdk::image::ImageError> {
-    use quireink_sdk::image::{ColorWriter, Format, GrayWriter, ImageError, decode};
+) -> Result<(), paperpaw_sdk::image::ImageError> {
+    use paperpaw_sdk::image::{ColorWriter, Format, GrayWriter, ImageError, decode};
 
     let mut head = [0u8; 8];
     let mut len = 0;
@@ -1606,14 +1606,14 @@ fn decode_source(
     result
 }
 
-fn image_error(e: quireink_sdk::image::ImageError) -> DocumentError {
+fn image_error(e: paperpaw_sdk::image::ImageError) -> DocumentError {
     DocumentError::Malformed(alloc::borrow::Cow::Owned(alloc::format!("{e}")))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quireink_sdk::xml::{Token, Tokenizer};
+    use paperpaw_sdk::xml::{Token, Tokenizer};
 
     fn is_furniture(tag: &str) -> bool {
         let mut found = None;
@@ -1627,7 +1627,7 @@ mod tests {
 
     /// A storage that notes the largest piece appended to a file.
     struct Spy {
-        inner: quireink_sdk::MemoryStorage,
+        inner: paperpaw_sdk::MemoryStorage,
         watched: String,
         largest: core::cell::Cell<usize>,
     }
@@ -1638,16 +1638,16 @@ mod tests {
             path: &str,
             offset: u64,
             buf: &mut [u8],
-        ) -> Result<usize, quireink_sdk::StorageError> {
+        ) -> Result<usize, paperpaw_sdk::StorageError> {
             self.inner.read_at(path, offset, buf)
         }
-        fn size(&self, path: &str) -> Result<u64, quireink_sdk::StorageError> {
+        fn size(&self, path: &str) -> Result<u64, paperpaw_sdk::StorageError> {
             self.inner.size(path)
         }
-        fn write(&self, path: &str, data: &[u8]) -> Result<(), quireink_sdk::StorageError> {
+        fn write(&self, path: &str, data: &[u8]) -> Result<(), paperpaw_sdk::StorageError> {
             self.inner.write(path, data)
         }
-        fn append(&self, path: &str, data: &[u8]) -> Result<(), quireink_sdk::StorageError> {
+        fn append(&self, path: &str, data: &[u8]) -> Result<(), paperpaw_sdk::StorageError> {
             if path == self.watched {
                 self.largest.set(self.largest.get().max(data.len()));
             }
@@ -1656,11 +1656,11 @@ mod tests {
         fn list(
             &self,
             dir: &str,
-            visit: &mut dyn FnMut(quireink_sdk::DirEntry<'_>),
-        ) -> Result<(), quireink_sdk::StorageError> {
+            visit: &mut dyn FnMut(paperpaw_sdk::DirEntry<'_>),
+        ) -> Result<(), paperpaw_sdk::StorageError> {
             self.inner.list(dir, visit)
         }
-        fn remove(&self, path: &str) -> Result<(), quireink_sdk::StorageError> {
+        fn remove(&self, path: &str) -> Result<(), paperpaw_sdk::StorageError> {
             self.inner.remove(path)
         }
     }
@@ -1687,7 +1687,7 @@ mod tests {
             end: String::from("c/0.end"),
         };
         let storage = Spy {
-            inner: quireink_sdk::MemoryStorage::new().with("page.html", page.as_str()),
+            inner: paperpaw_sdk::MemoryStorage::new().with("page.html", page.as_str()),
             watched: paths.xpointers.clone(),
             largest: core::cell::Cell::new(0),
         };

@@ -7,7 +7,7 @@ use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 
-use quireink_sdk::{Storage, StorageError};
+use paperpaw_sdk::{Storage, StorageError};
 
 /// Bytes sorted in memory at once.
 const RUN: usize = 32 * 1024;
@@ -212,7 +212,7 @@ impl Iterator for Records<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quireink_sdk::MemoryStorage;
+    use paperpaw_sdk::MemoryStorage;
 
     #[test]
     fn sorts_large_files_in_runs() {

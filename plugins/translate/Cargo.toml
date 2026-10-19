@@ -1,6 +1,6 @@
 [package]
-name = "quireink-plugin-translate"
-description = "QuireInk translation: selected text translated online, by DeepL"
+name = "paperpaw-plugin-translate"
+description = "PaperPaw translation: selected text translated online, by DeepL"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,11 +11,11 @@ authors.workspace = true
 categories = ["no-std"]
 
 [dependencies]
-quireink-json.workspace = true
-quireink-sdk.workspace = true
+paperpaw-json.workspace = true
+paperpaw-sdk.workspace = true
 
 [dev-dependencies]
-quireink-i18n.workspace = true
+paperpaw-i18n.workspace = true
 
 [lints]
 workspace = true

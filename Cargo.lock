@@ -1147,6 +1147,711 @@ dependencies = [
 ]
 
 [[package]]
+name = "paperpaw-android"
+version = "0.4.0-dev"
+dependencies = [
+ "android-activity",
+ "android_logger",
+ "jni 0.21.1",
+ "log",
+ "ndk",
+ "paperpaw-app",
+ "paperpaw-core",
+ "paperpaw-digest",
+ "paperpaw-fs",
+ "paperpaw-graphics",
+ "paperpaw-platform",
+ "paperpaw-plugin-dictionary",
+ "paperpaw-sdk",
+ "paperpaw-serve",
+]
+
+[[package]]
+name = "paperpaw-app"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-core",
+ "paperpaw-platform",
+ "paperpaw-plugin-about",
+ "paperpaw-plugin-aids",
+ "paperpaw-plugin-battery",
+ "paperpaw-plugin-browser",
+ "paperpaw-plugin-calibre",
+ "paperpaw-plugin-diagnostics",
+ "paperpaw-plugin-dictionary",
+ "paperpaw-plugin-file-manager",
+ "paperpaw-plugin-files",
+ "paperpaw-plugin-fonts-browser",
+ "paperpaw-plugin-fonts-default",
+ "paperpaw-plugin-format-epub",
+ "paperpaw-plugin-format-txt",
+ "paperpaw-plugin-format-xtc",
+ "paperpaw-plugin-home",
+ "paperpaw-plugin-hyphenation",
+ "paperpaw-plugin-keyboard",
+ "paperpaw-plugin-keys",
+ "paperpaw-plugin-koreader",
+ "paperpaw-plugin-kosync",
+ "paperpaw-plugin-lock",
+ "paperpaw-plugin-menu",
+ "paperpaw-plugin-menu-editor",
+ "paperpaw-plugin-news",
+ "paperpaw-plugin-opds",
+ "paperpaw-plugin-plugin-manager",
+ "paperpaw-plugin-profiles",
+ "paperpaw-plugin-reader",
+ "paperpaw-plugin-readwise",
+ "paperpaw-plugin-rules",
+ "paperpaw-plugin-settings",
+ "paperpaw-plugin-setup",
+ "paperpaw-plugin-sleep",
+ "paperpaw-plugin-stats",
+ "paperpaw-plugin-transfer",
+ "paperpaw-plugin-translate",
+ "paperpaw-plugin-update",
+ "paperpaw-plugin-vocabulary",
+ "paperpaw-plugin-wallabag",
+ "paperpaw-plugin-weather",
+ "paperpaw-plugin-widgets",
+ "paperpaw-plugin-wifi",
+ "paperpaw-plugin-wikipedia",
+ "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-config"
+version = "0.4.0-dev"
+
+[[package]]
+name = "paperpaw-core"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-config",
+ "paperpaw-graphics",
+ "paperpaw-i18n",
+ "paperpaw-platform",
+ "paperpaw-sdk",
+ "paperpaw-text",
+]
+
+[[package]]
+name = "paperpaw-digest"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-platform",
+]
+
+[[package]]
+name = "paperpaw-document"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-platform",
+]
+
+[[package]]
+name = "paperpaw-emulator"
+version = "0.4.0-dev"
+dependencies = [
+ "chrono",
+ "paperpaw-app",
+ "paperpaw-core",
+ "paperpaw-fs",
+ "paperpaw-graphics",
+ "paperpaw-platform",
+ "paperpaw-sample-hello",
+ "paperpaw-serve",
+ "png",
+ "softbuffer",
+ "winit",
+]
+
+[[package]]
+name = "paperpaw-fat"
+version = "0.4.0-dev"
+dependencies = [
+ "fatfs",
+ "paperpaw-platform",
+]
+
+[[package]]
+name = "paperpaw-fontgen"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-text",
+]
+
+[[package]]
+name = "paperpaw-fs"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-platform",
+]
+
+[[package]]
+name = "paperpaw-graphics"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-platform",
+]
+
+[[package]]
+name = "paperpaw-http"
+version = "0.4.0-dev"
+
+[[package]]
+name = "paperpaw-hyphen"
+version = "0.4.0-dev"
+
+[[package]]
+name = "paperpaw-i18n"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-config",
+]
+
+[[package]]
+name = "paperpaw-image"
+version = "0.4.0-dev"
+dependencies = [
+ "miniz_oxide 0.8.9",
+ "paperpaw-platform",
+]
+
+[[package]]
+name = "paperpaw-json"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-platform",
+]
+
+[[package]]
+name = "paperpaw-layout"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-document",
+ "paperpaw-text",
+]
+
+[[package]]
+name = "paperpaw-platform"
+version = "0.4.0-dev"
+
+[[package]]
+name = "paperpaw-plugin-about"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-i18n",
+ "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-plugin-aids"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-i18n",
+ "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-plugin-battery"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-plugin-browser"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-digest",
+ "paperpaw-i18n",
+ "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-plugin-calibre"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-core",
+ "paperpaw-digest",
+ "paperpaw-i18n",
+ "paperpaw-json",
+ "paperpaw-platform",
+ "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-plugin-diagnostics"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-i18n",
+ "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-plugin-dictionary"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-digest",
+ "paperpaw-i18n",
+ "paperpaw-sdk",
+ "paperpaw-stardict",
+]
+
+[[package]]
+name = "paperpaw-plugin-file-manager"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-i18n",
+ "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-plugin-files"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-i18n",
+ "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-plugin-fonts-browser"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-core",
+ "paperpaw-digest",
+ "paperpaw-i18n",
+ "paperpaw-json",
+ "paperpaw-platform",
+ "paperpaw-plugin-fonts-default",
+ "paperpaw-sdk",
+ "paperpaw-text",
+]
+
+[[package]]
+name = "paperpaw-plugin-fonts-default"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-i18n",
+ "paperpaw-sdk",
+ "paperpaw-text",
+]
+
+[[package]]
+name = "paperpaw-plugin-format-epub"
+version = "0.4.0-dev"
+dependencies = [
+ "miniz_oxide 0.8.9",
+ "paperpaw-digest",
+ "paperpaw-i18n",
+ "paperpaw-sdk",
+ "paperpaw-zip",
+]
+
+[[package]]
+name = "paperpaw-plugin-format-txt"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-i18n",
+ "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-plugin-format-xtc"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-digest",
+ "paperpaw-i18n",
+ "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-plugin-home"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-i18n",
+ "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-plugin-hyphenation"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-hyphen",
+ "paperpaw-i18n",
+ "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-plugin-keyboard"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-i18n",
+ "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-plugin-keys"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-i18n",
+ "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-plugin-koreader"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-i18n",
+ "paperpaw-plugin-format-epub",
+ "paperpaw-sdk",
+ "paperpaw-zip",
+]
+
+[[package]]
+name = "paperpaw-plugin-kosync"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-digest",
+ "paperpaw-i18n",
+ "paperpaw-json",
+ "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-plugin-lock"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-digest",
+ "paperpaw-i18n",
+ "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-plugin-menu"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-i18n",
+ "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-plugin-menu-editor"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-i18n",
+ "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-plugin-news"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-core",
+ "paperpaw-i18n",
+ "paperpaw-platform",
+ "paperpaw-plugin-fonts-default",
+ "paperpaw-plugin-home",
+ "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-plugin-opds"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-core",
+ "paperpaw-digest",
+ "paperpaw-i18n",
+ "paperpaw-json",
+ "paperpaw-platform",
+ "paperpaw-plugin-fonts-default",
+ "paperpaw-plugin-format-epub",
+ "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-plugin-plugin-manager"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-i18n",
+ "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-plugin-profiles"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-i18n",
+ "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-plugin-reader"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-core",
+ "paperpaw-digest",
+ "paperpaw-i18n",
+ "paperpaw-platform",
+ "paperpaw-plugin-fonts-default",
+ "paperpaw-plugin-format-epub",
+ "paperpaw-plugin-format-txt",
+ "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-plugin-readwise"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-i18n",
+ "paperpaw-json",
+ "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-plugin-rules"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-i18n",
+ "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-plugin-settings"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-i18n",
+ "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-plugin-setup"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-i18n",
+ "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-plugin-sleep"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-i18n",
+ "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-plugin-stats"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-core",
+ "paperpaw-digest",
+ "paperpaw-i18n",
+ "paperpaw-platform",
+ "paperpaw-plugin-fonts-default",
+ "paperpaw-plugin-home",
+ "paperpaw-sdk",
+ "paperpaw-sqlite",
+]
+
+[[package]]
+name = "paperpaw-plugin-transfer"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-digest",
+ "paperpaw-i18n",
+ "paperpaw-qr",
+ "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-plugin-translate"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-i18n",
+ "paperpaw-json",
+ "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-plugin-update"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-i18n",
+ "paperpaw-sdk",
+ "paperpaw-update",
+]
+
+[[package]]
+name = "paperpaw-plugin-vocabulary"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-core",
+ "paperpaw-i18n",
+ "paperpaw-platform",
+ "paperpaw-plugin-fonts-default",
+ "paperpaw-plugin-home",
+ "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-plugin-wallabag"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-core",
+ "paperpaw-i18n",
+ "paperpaw-json",
+ "paperpaw-platform",
+ "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-plugin-weather"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-app",
+ "paperpaw-core",
+ "paperpaw-i18n",
+ "paperpaw-json",
+ "paperpaw-platform",
+ "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-plugin-widgets"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-core",
+ "paperpaw-graphics",
+ "paperpaw-i18n",
+ "paperpaw-platform",
+ "paperpaw-plugin-fonts-default",
+ "paperpaw-plugin-home",
+ "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-plugin-wifi"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-plugin-wikipedia"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-i18n",
+ "paperpaw-json",
+ "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-qr"
+version = "0.4.0-dev"
+
+[[package]]
+name = "paperpaw-sample-hello"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-core",
+ "paperpaw-i18n",
+ "paperpaw-platform",
+ "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-sdk"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-config",
+ "paperpaw-digest",
+ "paperpaw-document",
+ "paperpaw-graphics",
+ "paperpaw-hyphen",
+ "paperpaw-i18n",
+ "paperpaw-image",
+ "paperpaw-layout",
+ "paperpaw-platform",
+ "paperpaw-text",
+ "paperpaw-update",
+ "paperpaw-xml",
+ "paperpaw-zip",
+]
+
+[[package]]
+name = "paperpaw-serve"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-core",
+ "paperpaw-http",
+]
+
+[[package]]
+name = "paperpaw-sign"
+version = "0.4.0-dev"
+dependencies = [
+ "ed25519-compact",
+ "paperpaw-update",
+]
+
+[[package]]
+name = "paperpaw-sqlite"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-platform",
+]
+
+[[package]]
+name = "paperpaw-stardict"
+version = "0.4.0-dev"
+dependencies = [
+ "miniz_oxide 0.8.9",
+ "paperpaw-fs",
+ "paperpaw-platform",
+ "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-text"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-graphics",
+ "paperpaw-platform",
+ "skrifa",
+]
+
+[[package]]
+name = "paperpaw-update"
+version = "0.4.0-dev"
+dependencies = [
+ "ed25519-compact",
+]
+
+[[package]]
+name = "paperpaw-x4"
+version = "0.4.0-dev"
+dependencies = [
+ "embedded-hal",
+ "paperpaw-app",
+ "paperpaw-core",
+ "paperpaw-platform",
+]
+
+[[package]]
+name = "paperpaw-xml"
+version = "0.4.0-dev"
+
+[[package]]
+name = "paperpaw-zip"
+version = "0.4.0-dev"
+dependencies = [
+ "miniz_oxide 0.8.9",
+ "paperpaw-platform",
+ "paperpaw-zip",
+]
+
+[[package]]
 name = "percent-encoding"
 version = "2.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1242,711 +1947,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e660451e55124f798a69a5af3f49ccfbefbd41910eefd25caf2393e1f3473ec1"
 dependencies = [
  "memchr",
-]
-
-[[package]]
-name = "quireink-android"
-version = "0.4.0-dev"
-dependencies = [
- "android-activity",
- "android_logger",
- "jni 0.21.1",
- "log",
- "ndk",
- "quireink-app",
- "quireink-core",
- "quireink-digest",
- "quireink-fs",
- "quireink-graphics",
- "quireink-platform",
- "quireink-plugin-dictionary",
- "quireink-sdk",
- "quireink-serve",
-]
-
-[[package]]
-name = "quireink-app"
-version = "0.4.0-dev"
-dependencies = [
- "quireink-core",
- "quireink-platform",
- "quireink-plugin-about",
- "quireink-plugin-aids",
- "quireink-plugin-battery",
- "quireink-plugin-browser",
- "quireink-plugin-calibre",
- "quireink-plugin-diagnostics",
- "quireink-plugin-dictionary",
- "quireink-plugin-file-manager",
- "quireink-plugin-files",
- "quireink-plugin-fonts-browser",
- "quireink-plugin-fonts-default",
- "quireink-plugin-format-epub",
- "quireink-plugin-format-txt",
- "quireink-plugin-format-xtc",
- "quireink-plugin-home",
- "quireink-plugin-hyphenation",
- "quireink-plugin-keyboard",
- "quireink-plugin-keys",
- "quireink-plugin-koreader",
- "quireink-plugin-kosync",
- "quireink-plugin-lock",
- "quireink-plugin-menu",
- "quireink-plugin-menu-editor",
- "quireink-plugin-news",
- "quireink-plugin-opds",
- "quireink-plugin-plugin-manager",
- "quireink-plugin-profiles",
- "quireink-plugin-reader",
- "quireink-plugin-readwise",
- "quireink-plugin-rules",
- "quireink-plugin-settings",
- "quireink-plugin-setup",
- "quireink-plugin-sleep",
- "quireink-plugin-stats",
- "quireink-plugin-transfer",
- "quireink-plugin-translate",
- "quireink-plugin-update",
- "quireink-plugin-vocabulary",
- "quireink-plugin-wallabag",
- "quireink-plugin-weather",
- "quireink-plugin-widgets",
- "quireink-plugin-wifi",
- "quireink-plugin-wikipedia",
- "quireink-sdk",
-]
-
-[[package]]
-name = "quireink-config"
-version = "0.4.0-dev"
-
-[[package]]
-name = "quireink-core"
-version = "0.4.0-dev"
-dependencies = [
- "quireink-config",
- "quireink-graphics",
- "quireink-i18n",
- "quireink-platform",
- "quireink-sdk",
- "quireink-text",
-]
-
-[[package]]
-name = "quireink-digest"
-version = "0.4.0-dev"
-dependencies = [
- "quireink-platform",
-]
-
-[[package]]
-name = "quireink-document"
-version = "0.4.0-dev"
-dependencies = [
- "quireink-platform",
-]
-
-[[package]]
-name = "quireink-emulator"
-version = "0.4.0-dev"
-dependencies = [
- "chrono",
- "png",
- "quireink-app",
- "quireink-core",
- "quireink-fs",
- "quireink-graphics",
- "quireink-platform",
- "quireink-sample-hello",
- "quireink-serve",
- "softbuffer",
- "winit",
-]
-
-[[package]]
-name = "quireink-fat"
-version = "0.4.0-dev"
-dependencies = [
- "fatfs",
- "quireink-platform",
-]
-
-[[package]]
-name = "quireink-fontgen"
-version = "0.4.0-dev"
-dependencies = [
- "quireink-text",
-]
-
-[[package]]
-name = "quireink-fs"
-version = "0.4.0-dev"
-dependencies = [
- "quireink-platform",
-]
-
-[[package]]
-name = "quireink-graphics"
-version = "0.4.0-dev"
-dependencies = [
- "quireink-platform",
-]
-
-[[package]]
-name = "quireink-http"
-version = "0.4.0-dev"
-
-[[package]]
-name = "quireink-hyphen"
-version = "0.4.0-dev"
-
-[[package]]
-name = "quireink-i18n"
-version = "0.4.0-dev"
-dependencies = [
- "quireink-config",
-]
-
-[[package]]
-name = "quireink-image"
-version = "0.4.0-dev"
-dependencies = [
- "miniz_oxide 0.8.9",
- "quireink-platform",
-]
-
-[[package]]
-name = "quireink-json"
-version = "0.4.0-dev"
-dependencies = [
- "quireink-platform",
-]
-
-[[package]]
-name = "quireink-layout"
-version = "0.4.0-dev"
-dependencies = [
- "quireink-document",
- "quireink-text",
-]
-
-[[package]]
-name = "quireink-platform"
-version = "0.4.0-dev"
-
-[[package]]
-name = "quireink-plugin-about"
-version = "0.4.0-dev"
-dependencies = [
- "quireink-i18n",
- "quireink-sdk",
-]
-
-[[package]]
-name = "quireink-plugin-aids"
-version = "0.4.0-dev"
-dependencies = [
- "quireink-i18n",
- "quireink-sdk",
-]
-
-[[package]]
-name = "quireink-plugin-battery"
-version = "0.4.0-dev"
-dependencies = [
- "quireink-sdk",
-]
-
-[[package]]
-name = "quireink-plugin-browser"
-version = "0.4.0-dev"
-dependencies = [
- "quireink-digest",
- "quireink-i18n",
- "quireink-sdk",
-]
-
-[[package]]
-name = "quireink-plugin-calibre"
-version = "0.4.0-dev"
-dependencies = [
- "quireink-core",
- "quireink-digest",
- "quireink-i18n",
- "quireink-json",
- "quireink-platform",
- "quireink-sdk",
-]
-
-[[package]]
-name = "quireink-plugin-diagnostics"
-version = "0.4.0-dev"
-dependencies = [
- "quireink-i18n",
- "quireink-sdk",
-]
-
-[[package]]
-name = "quireink-plugin-dictionary"
-version = "0.4.0-dev"
-dependencies = [
- "quireink-digest",
- "quireink-i18n",
- "quireink-sdk",
- "quireink-stardict",
-]
-
-[[package]]
-name = "quireink-plugin-file-manager"
-version = "0.4.0-dev"
-dependencies = [
- "quireink-i18n",
- "quireink-sdk",
-]
-
-[[package]]
-name = "quireink-plugin-files"
-version = "0.4.0-dev"
-dependencies = [
- "quireink-i18n",
- "quireink-sdk",
-]
-
-[[package]]
-name = "quireink-plugin-fonts-browser"
-version = "0.4.0-dev"
-dependencies = [
- "quireink-core",
- "quireink-digest",
- "quireink-i18n",
- "quireink-json",
- "quireink-platform",
- "quireink-plugin-fonts-default",
- "quireink-sdk",
- "quireink-text",
-]
-
-[[package]]
-name = "quireink-plugin-fonts-default"
-version = "0.4.0-dev"
-dependencies = [
- "quireink-i18n",
- "quireink-sdk",
- "quireink-text",
-]
-
-[[package]]
-name = "quireink-plugin-format-epub"
-version = "0.4.0-dev"
-dependencies = [
- "miniz_oxide 0.8.9",
- "quireink-digest",
- "quireink-i18n",
- "quireink-sdk",
- "quireink-zip",
-]
-
-[[package]]
-name = "quireink-plugin-format-txt"
-version = "0.4.0-dev"
-dependencies = [
- "quireink-i18n",
- "quireink-sdk",
-]
-
-[[package]]
-name = "quireink-plugin-format-xtc"
-version = "0.4.0-dev"
-dependencies = [
- "quireink-digest",
- "quireink-i18n",
- "quireink-sdk",
-]
-
-[[package]]
-name = "quireink-plugin-home"
-version = "0.4.0-dev"
-dependencies = [
- "quireink-i18n",
- "quireink-sdk",
-]
-
-[[package]]
-name = "quireink-plugin-hyphenation"
-version = "0.4.0-dev"
-dependencies = [
- "quireink-hyphen",
- "quireink-i18n",
- "quireink-sdk",
-]
-
-[[package]]
-name = "quireink-plugin-keyboard"
-version = "0.4.0-dev"
-dependencies = [
- "quireink-i18n",
- "quireink-sdk",
-]
-
-[[package]]
-name = "quireink-plugin-keys"
-version = "0.4.0-dev"
-dependencies = [
- "quireink-i18n",
- "quireink-sdk",
-]
-
-[[package]]
-name = "quireink-plugin-koreader"
-version = "0.4.0-dev"
-dependencies = [
- "quireink-i18n",
- "quireink-plugin-format-epub",
- "quireink-sdk",
- "quireink-zip",
-]
-
-[[package]]
-name = "quireink-plugin-kosync"
-version = "0.4.0-dev"
-dependencies = [
- "quireink-digest",
- "quireink-i18n",
- "quireink-json",
- "quireink-sdk",
-]
-
-[[package]]
-name = "quireink-plugin-lock"
-version = "0.4.0-dev"
-dependencies = [
- "quireink-digest",
- "quireink-i18n",
- "quireink-sdk",
-]
-
-[[package]]
-name = "quireink-plugin-menu"
-version = "0.4.0-dev"
-dependencies = [
- "quireink-i18n",
- "quireink-sdk",
-]
-
-[[package]]
-name = "quireink-plugin-menu-editor"
-version = "0.4.0-dev"
-dependencies = [
- "quireink-i18n",
- "quireink-sdk",
-]
-
-[[package]]
-name = "quireink-plugin-news"
-version = "0.4.0-dev"
-dependencies = [
- "quireink-core",
- "quireink-i18n",
- "quireink-platform",
- "quireink-plugin-fonts-default",
- "quireink-plugin-home",
- "quireink-sdk",
-]
-
-[[package]]
-name = "quireink-plugin-opds"
-version = "0.4.0-dev"
-dependencies = [
- "quireink-core",
- "quireink-digest",
- "quireink-i18n",
- "quireink-json",
- "quireink-platform",
- "quireink-plugin-fonts-default",
- "quireink-plugin-format-epub",
- "quireink-sdk",
-]
-
-[[package]]
-name = "quireink-plugin-plugin-manager"
-version = "0.4.0-dev"
-dependencies = [
- "quireink-i18n",
- "quireink-sdk",
-]
-
-[[package]]
-name = "quireink-plugin-profiles"
-version = "0.4.0-dev"
-dependencies = [
- "quireink-i18n",
- "quireink-sdk",
-]
-
-[[package]]
-name = "quireink-plugin-reader"
-version = "0.4.0-dev"
-dependencies = [
- "quireink-core",
- "quireink-digest",
- "quireink-i18n",
- "quireink-platform",
- "quireink-plugin-fonts-default",
- "quireink-plugin-format-epub",
- "quireink-plugin-format-txt",
- "quireink-sdk",
-]
-
-[[package]]
-name = "quireink-plugin-readwise"
-version = "0.4.0-dev"
-dependencies = [
- "quireink-i18n",
- "quireink-json",
- "quireink-sdk",
-]
-
-[[package]]
-name = "quireink-plugin-rules"
-version = "0.4.0-dev"
-dependencies = [
- "quireink-i18n",
- "quireink-sdk",
-]
-
-[[package]]
-name = "quireink-plugin-settings"
-version = "0.4.0-dev"
-dependencies = [
- "quireink-i18n",
- "quireink-sdk",
-]
-
-[[package]]
-name = "quireink-plugin-setup"
-version = "0.4.0-dev"
-dependencies = [
- "quireink-i18n",
- "quireink-sdk",
-]
-
-[[package]]
-name = "quireink-plugin-sleep"
-version = "0.4.0-dev"
-dependencies = [
- "quireink-i18n",
- "quireink-sdk",
-]
-
-[[package]]
-name = "quireink-plugin-stats"
-version = "0.4.0-dev"
-dependencies = [
- "quireink-core",
- "quireink-digest",
- "quireink-i18n",
- "quireink-platform",
- "quireink-plugin-fonts-default",
- "quireink-plugin-home",
- "quireink-sdk",
- "quireink-sqlite",
-]
-
-[[package]]
-name = "quireink-plugin-transfer"
-version = "0.4.0-dev"
-dependencies = [
- "quireink-digest",
- "quireink-i18n",
- "quireink-qr",
- "quireink-sdk",
-]
-
-[[package]]
-name = "quireink-plugin-translate"
-version = "0.4.0-dev"
-dependencies = [
- "quireink-i18n",
- "quireink-json",
- "quireink-sdk",
-]
-
-[[package]]
-name = "quireink-plugin-update"
-version = "0.4.0-dev"
-dependencies = [
- "quireink-i18n",
- "quireink-sdk",
- "quireink-update",
-]
-
-[[package]]
-name = "quireink-plugin-vocabulary"
-version = "0.4.0-dev"
-dependencies = [
- "quireink-core",
- "quireink-i18n",
- "quireink-platform",
- "quireink-plugin-fonts-default",
- "quireink-plugin-home",
- "quireink-sdk",
-]
-
-[[package]]
-name = "quireink-plugin-wallabag"
-version = "0.4.0-dev"
-dependencies = [
- "quireink-core",
- "quireink-i18n",
- "quireink-json",
- "quireink-platform",
- "quireink-sdk",
-]
-
-[[package]]
-name = "quireink-plugin-weather"
-version = "0.4.0-dev"
-dependencies = [
- "quireink-app",
- "quireink-core",
- "quireink-i18n",
- "quireink-json",
- "quireink-platform",
- "quireink-sdk",
-]
-
-[[package]]
-name = "quireink-plugin-widgets"
-version = "0.4.0-dev"
-dependencies = [
- "quireink-core",
- "quireink-graphics",
- "quireink-i18n",
- "quireink-platform",
- "quireink-plugin-fonts-default",
- "quireink-plugin-home",
- "quireink-sdk",
-]
-
-[[package]]
-name = "quireink-plugin-wifi"
-version = "0.4.0-dev"
-dependencies = [
- "quireink-sdk",
-]
-
-[[package]]
-name = "quireink-plugin-wikipedia"
-version = "0.4.0-dev"
-dependencies = [
- "quireink-i18n",
- "quireink-json",
- "quireink-sdk",
-]
-
-[[package]]
-name = "quireink-qr"
-version = "0.4.0-dev"
-
-[[package]]
-name = "quireink-sample-hello"
-version = "0.4.0-dev"
-dependencies = [
- "quireink-core",
- "quireink-i18n",
- "quireink-platform",
- "quireink-sdk",
-]
-
-[[package]]
-name = "quireink-sdk"
-version = "0.4.0-dev"
-dependencies = [
- "quireink-config",
- "quireink-digest",
- "quireink-document",
- "quireink-graphics",
- "quireink-hyphen",
- "quireink-i18n",
- "quireink-image",
- "quireink-layout",
- "quireink-platform",
- "quireink-text",
- "quireink-update",
- "quireink-xml",
- "quireink-zip",
-]
-
-[[package]]
-name = "quireink-serve"
-version = "0.4.0-dev"
-dependencies = [
- "quireink-core",
- "quireink-http",
-]
-
-[[package]]
-name = "quireink-sign"
-version = "0.4.0-dev"
-dependencies = [
- "ed25519-compact",
- "quireink-update",
-]
-
-[[package]]
-name = "quireink-sqlite"
-version = "0.4.0-dev"
-dependencies = [
- "quireink-platform",
-]
-
-[[package]]
-name = "quireink-stardict"
-version = "0.4.0-dev"
-dependencies = [
- "miniz_oxide 0.8.9",
- "quireink-fs",
- "quireink-platform",
- "quireink-sdk",
-]
-
-[[package]]
-name = "quireink-text"
-version = "0.4.0-dev"
-dependencies = [
- "quireink-graphics",
- "quireink-platform",
- "skrifa",
-]
-
-[[package]]
-name = "quireink-update"
-version = "0.4.0-dev"
-dependencies = [
- "ed25519-compact",
-]
-
-[[package]]
-name = "quireink-x4"
-version = "0.4.0-dev"
-dependencies = [
- "embedded-hal",
- "quireink-app",
- "quireink-core",
- "quireink-platform",
-]
-
-[[package]]
-name = "quireink-xml"
-version = "0.4.0-dev"
-
-[[package]]
-name = "quireink-zip"
-version = "0.4.0-dev"
-dependencies = [
- "miniz_oxide 0.8.9",
- "quireink-platform",
- "quireink-zip",
 ]
 
 [[package]]

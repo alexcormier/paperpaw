@@ -1,6 +1,6 @@
-//! Wi-Fi, where QuireInk manages it itself (the X4): when the radio is on,
+//! Wi-Fi, where PaperPaw manages it itself (the X4): when the radio is on,
 //! which network it joins, and the page to choose networks (see
-//! `quireink_sdk::wifi`). Another plugin may take its place: the shell
+//! `paperpaw_sdk::wifi`). Another plugin may take its place: the shell
 //! only does what it is told, and the networks joined are kept with the
 //! passwords and keys, the same for any plugin.
 //!
@@ -23,17 +23,17 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::cell::RefCell;
 
-use quireink_sdk::builtin::{events, params};
-use quireink_sdk::event::Event;
-use quireink_sdk::replies::Typed;
-use quireink_sdk::wifi::{self, JoinFailure, WifiCommand, WifiState};
-use quireink_sdk::{
+use paperpaw_sdk::builtin::{events, params};
+use paperpaw_sdk::event::Event;
+use paperpaw_sdk::replies::Typed;
+use paperpaw_sdk::wifi::{self, JoinFailure, WifiCommand, WifiState};
+use paperpaw_sdk::{
     Arg, Command, Env, Id, Manifest, MenuNeed, Params, Plugin, RegisterError, Registrar,
     SDK_VERSION, ScreenSpec, SettingGroupSpec, SettingSpec, StatusItemSpec, StatusValue, Version,
 };
 
+use paperpaw_sdk::setting::{Setting, Text};
 use policy::{Goal, Policy};
-use quireink_sdk::setting::{Setting, Text};
 
 pub const PLUGIN: Id = Id::new_static("wifi");
 /// The settings group, shown as the Wi-Fi page.
@@ -182,7 +182,7 @@ impl Plugin for Wifi {
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let policy: Shared = Rc::new(RefCell::new(Policy::default()));
 
-        // The settings, on the group's own page; only where QuireInk
+        // The settings, on the group's own page; only where PaperPaw
         // manages Wi-Fi.
         r.add_setting_group(SettingGroupSpec {
             id: GROUP,
@@ -400,14 +400,14 @@ impl Plugin for Wifi {
             )?;
         }
 
-        // The first-run setup: a network to join, where QuireInk runs
+        // The first-run setup: a network to join, where PaperPaw runs
         // the radio.
-        r.add_setup_step(quireink_sdk::setup::SetupStepSpec {
+        r.add_setup_step(paperpaw_sdk::setup::SetupStepSpec {
             id: Id::new_static("wifi.setup"),
             title: Cow::Borrowed("wifi.title"),
             help: Cow::Borrowed("wifi.setup.help"),
             order: 50,
-            page: quireink_sdk::setup::SetupPage::Screen(PAGE),
+            page: paperpaw_sdk::setup::SetupPage::Screen(PAGE),
             applies: Some(Box::new(|env: &Env<'_>| env.wifi.is_some())),
         })?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;

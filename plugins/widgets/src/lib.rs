@@ -1,6 +1,6 @@
 //! The widget pack: many more widgets for the home screen (and any screen
 //! that shows widgets), each with settings of its own and the shared look
-//! of `quireink_sdk::widgets` (its frame, size and alignment):
+//! of `paperpaw_sdk::widgets` (its frame, size and alignment):
 //!
 //! - time: clocks of several kinds, a calendar, the year so far (`time`);
 //! - words and pictures: quotes, notes, to-dos, pictures (`words`);
@@ -18,7 +18,7 @@ mod words;
 
 use alloc::borrow::Cow;
 
-use quireink_sdk::{Id, Manifest, Plugin, RegisterError, Registrar, SDK_VERSION, Version};
+use paperpaw_sdk::{Id, Manifest, Plugin, RegisterError, Registrar, SDK_VERSION, Version};
 
 pub const PLUGIN: Id = Id::new_static("widgets");
 
@@ -49,7 +49,7 @@ impl Plugin for Widgets {
 
 #[cfg(test)]
 mod tests {
-    use quireink_i18n::{Catalog, check};
+    use paperpaw_i18n::{Catalog, check};
 
     #[test]
     fn translations_are_complete() {

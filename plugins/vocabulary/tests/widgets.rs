@@ -5,9 +5,9 @@
 // Tests panic on purpose when something is wrong.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use quireink_core::Kernel;
-use quireink_platform::{Rotation, SystemStatus, WallClock};
-use quireink_sdk::{
+use paperpaw_core::Kernel;
+use paperpaw_platform::{Rotation, SystemStatus, WallClock};
+use paperpaw_sdk::{
     DeviceInfo, DisplayInfo, InputCaps, Instant, MemoryClass, MemoryStorage, PixelFormat, Storage,
 };
 
@@ -39,7 +39,7 @@ fn card() -> MemoryStorage {
                  Ungeziefer\tde\t1\t20\tbooks/kafka.epub\tDie Verwandlung\tZu einem ungeheueren Ungeziefer verwandelt.\n\
                  curious\ten\t5\t9\tbooks/alice.epub\tAlice\tCuriouser and curiouser!\n";
     storage
-        .write(".quireink/plugins/vocabulary/words.txt", words.as_bytes())
+        .write(".paperpaw/plugins/vocabulary/words.txt", words.as_bytes())
         .unwrap();
     storage
 }
@@ -54,9 +54,9 @@ fn home(storage: MemoryStorage, page: &str, config: &str) -> (String, usize) {
     let mut kernel = Kernel::builder(DEVICE)
         .storage(storage)
         .user_config(user)
-        .plugin(quireink_plugin_fonts_default::DefaultFontPacks)
-        .plugin(quireink_plugin_home::Home)
-        .plugin(quireink_plugin_vocabulary::Vocabulary)
+        .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
+        .plugin(paperpaw_plugin_home::Home)
+        .plugin(paperpaw_plugin_vocabulary::Vocabulary)
         .build()
         .unwrap();
     let status = SystemStatus {

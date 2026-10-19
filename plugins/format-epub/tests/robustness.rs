@@ -11,11 +11,11 @@
 // Tests panic on purpose when something is wrong.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use quireink_plugin_format_epub::EpubDocument;
-use quireink_sdk::MemoryStorage;
-use quireink_sdk::document::{Document, Locator};
-use quireink_sdk::zip::ZipArchive;
-use quireink_sdk::zip::testing::ZipBuilder;
+use paperpaw_plugin_format_epub::EpubDocument;
+use paperpaw_sdk::MemoryStorage;
+use paperpaw_sdk::document::{Document, Locator};
+use paperpaw_sdk::zip::ZipArchive;
+use paperpaw_sdk::zip::testing::ZipBuilder;
 
 const BOOKS: [&[u8]; 2] = [
     include_bytes!("../../../samples/library/books/alice-in-wonderland.epub"),
@@ -179,8 +179,8 @@ fn exercise(data: Vec<u8>) -> usize {
 
 #[test]
 fn damaged_books_fail_cleanly() {
-    // QUIREINK_FUZZ_ITERATIONS raises the count for longer local runs.
-    let iterations: u64 = std::env::var("QUIREINK_FUZZ_ITERATIONS")
+    // PAPERPAW_FUZZ_ITERATIONS raises the count for longer local runs.
+    let iterations: u64 = std::env::var("PAPERPAW_FUZZ_ITERATIONS")
         .ok()
         .and_then(|n| n.parse().ok())
         .unwrap_or(150);
@@ -205,7 +205,7 @@ fn damaged_books_fail_cleanly() {
 
 #[test]
 fn damaged_documents_fail_cleanly() {
-    let iterations: u64 = std::env::var("QUIREINK_FUZZ_ITERATIONS")
+    let iterations: u64 = std::env::var("PAPERPAW_FUZZ_ITERATIONS")
         .ok()
         .and_then(|n| n.parse().ok())
         .unwrap_or(40);

@@ -4,7 +4,7 @@
 //!
 //! Android 11 and later need "All files access" for that
 //! (`MANAGE_EXTERNAL_STORAGE`, granted on a system settings page); older
-//! versions need the storage permission. QuireInk never asks on its own: the
+//! versions need the storage permission. PaperPaw never asks on its own: the
 //! home screen offers it, and the app restarts with the shared storage when
 //! the user comes back with access granted.
 
@@ -63,7 +63,7 @@ fn sdk_int(env: &mut JNIEnv<'_>) -> jni::errors::Result<i32> {
         .i()
 }
 
-/// Whether QuireInk may read the shared storage.
+/// Whether PaperPaw may read the shared storage.
 pub fn granted(app: &AndroidApp) -> bool {
     with_activity(app, |env, activity| {
         if sdk_int(env)? >= ANDROID_11 {
@@ -145,7 +145,7 @@ pub fn removable_dirs(app: &AndroidApp) -> Vec<PathBuf> {
 }
 
 /// Asks the user for access: opens the "All files access" page for
-/// QuireInk (Android 11+) or shows the permission dialog.
+/// PaperPaw (Android 11+) or shows the permission dialog.
 pub fn request(app: &AndroidApp) {
     let opened = with_activity(app, |env, activity| {
         if sdk_int(env)? < ANDROID_11 {

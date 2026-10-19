@@ -10,10 +10,10 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::cell::RefCell;
 
-use quireink_sdk::builtin::{events, params, slots};
-use quireink_sdk::decorations::{Decorated, DecoratorSpec, PageText};
-use quireink_sdk::words::{WordSet, fold};
-use quireink_sdk::{Command, Env, Id, Params, Storage};
+use paperpaw_sdk::builtin::{events, params, slots};
+use paperpaw_sdk::decorations::{Decorated, DecoratorSpec, PageText};
+use paperpaw_sdk::words::{WordSet, fold};
+use paperpaw_sdk::{Command, Env, Id, Params, Storage};
 
 use crate::store;
 use crate::{LEARNING, MARK};
@@ -147,9 +147,9 @@ fn language_of(storage: &dyn Storage, word: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quireink_sdk::MemoryStorage;
-    use quireink_sdk::decorations::PageWord;
-    use quireink_sdk::document::Locator;
+    use paperpaw_sdk::MemoryStorage;
+    use paperpaw_sdk::decorations::PageWord;
+    use paperpaw_sdk::document::Locator;
 
     const WORDS: &str = "Rabbit\ten\t1\t10\tbooks/alice.txt\tAlice\tThe White Rabbit.\n\
                          white rabbit\ten-GB\t1\t10\tbooks/alice.txt\tAlice\t\n\

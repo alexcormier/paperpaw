@@ -8,10 +8,10 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use quireink_sdk::event::Event;
-use quireink_sdk::replies::HttpReply;
-use quireink_sdk::ui::UiStyle;
-use quireink_sdk::{Command, Env, FontHandle, FontSet, HttpRequest, Id, Params};
+use paperpaw_sdk::event::Event;
+use paperpaw_sdk::replies::HttpReply;
+use paperpaw_sdk::ui::UiStyle;
+use paperpaw_sdk::{Command, Env, FontHandle, FontSet, HttpRequest, Id, Params};
 
 use crate::PLUGIN;
 use crate::catalog::Font;
@@ -82,7 +82,7 @@ impl Samples {
             .filter(|c| c.is_ascii_alphanumeric() || *c == '.')
             .collect();
         format!(
-            "{}/{}-{version}-{}-{}.qifp",
+            "{}/{}-{version}-{}-{}.ppfp",
             dir(),
             font.id,
             self.size,
@@ -112,9 +112,9 @@ impl Samples {
             if !env.storage.exists(&path) {
                 continue;
             }
-            let loaded = quireink_sdk::read_file(env.storage, &path, MAX_SAMPLE)
+            let loaded = paperpaw_sdk::read_file(env.storage, &path, MAX_SAMPLE)
                 .ok()
-                .and_then(|data| quireink_sdk::Font::from_data(data, &[]).ok());
+                .and_then(|data| paperpaw_sdk::Font::from_data(data, &[]).ok());
             let index = loaded.map(|f| self.set.add(Id::new_static("fonts-browser.sample"), f));
             if index.is_none() {
                 // Not a pack after all: fetched again.
@@ -134,7 +134,7 @@ impl Samples {
                 "{}{separator}size={}&text={}",
                 font.sample,
                 self.size,
-                quireink_sdk::web::encode(&characters(env, font))
+                paperpaw_sdk::web::encode(&characters(env, font))
             );
             let mut request = HttpRequest::new("GET", &url, SAMPLE);
             let _ = env.storage.create_dir(&dir());

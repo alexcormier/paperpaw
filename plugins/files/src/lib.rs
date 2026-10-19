@@ -31,18 +31,18 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::ask;
-use quireink_sdk::builtin::{
+use paperpaw_sdk::ask;
+use paperpaw_sdk::builtin::{
     actions as core_actions, events, groups, params, settings as core_settings, slots,
 };
-use quireink_sdk::event::Event;
-use quireink_sdk::files;
-use quireink_sdk::library::listing::{Entry, Listing, UNRANKED};
-use quireink_sdk::library::{self, Book};
-use quireink_sdk::replies::Typed;
-use quireink_sdk::setting::{Setting, Text};
-use quireink_sdk::ui::{self, ListChange, ListView, Thumbnail, UiStyle};
-use quireink_sdk::{
+use paperpaw_sdk::event::Event;
+use paperpaw_sdk::files;
+use paperpaw_sdk::library::listing::{Entry, Listing, UNRANKED};
+use paperpaw_sdk::library::{self, Book};
+use paperpaw_sdk::replies::Typed;
+use paperpaw_sdk::setting::{Setting, Text};
+use paperpaw_sdk::ui::{self, ListChange, ListView, Thumbnail, UiStyle};
+use paperpaw_sdk::{
     Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest, MenuEntry,
     Params, Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen,
     ScreenSpec, SettingSpec, Version,
@@ -51,7 +51,7 @@ use quireink_sdk::{
 pub const PLUGIN: Id = Id::new_static("files");
 pub const SCREEN: Id = Id::new_static("files.browser");
 /// The library folder, relative to the storage root.
-pub const ROOT: Setting<Text> = quireink_sdk::library::FOLDER;
+pub const ROOT: Setting<Text> = paperpaw_sdk::library::FOLDER;
 /// The order of books: [`SORT_RECENT`] or [`SORT_NAME`].
 pub const SORT: Setting<Text> = Setting::new("files.sort");
 /// Recently read books first, then the others by name.
@@ -81,7 +81,7 @@ pub const SEARCH: Id = Id::new_static("files.search");
 const SEARCH_ENTERED: Event<Typed> = Event::new("files.search-entered");
 /// What can be done with a book (held in the list).
 const CHOICE: Id = Id::new_static("files.choice");
-const CHOSEN: Event<quireink_sdk::ui::choice::Picked> = Event::new("files.book-chosen");
+const CHOSEN: Event<paperpaw_sdk::ui::choice::Picked> = Event::new("files.book-chosen");
 /// Book information; parameter `path`.
 pub const INFO_SCREEN: Id = Id::new_static("files.info");
 /// The submenu with the views above ("Shelves").
@@ -93,7 +93,7 @@ const SHELF_SCREEN: Id = Id::new_static("files.shelf");
 pub struct Files;
 
 /// Folders chosen on the folder chooser.
-static FOLDER: quireink_sdk::SettingExtra = quireink_sdk::SettingExtra::new().editor(CHOOSE_FOLDER);
+static FOLDER: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new().editor(CHOOSE_FOLDER);
 
 /// Where the books and the archive are, and how the library shows them.
 static SETTINGS: [SettingSpec; 4] = [
@@ -158,7 +158,7 @@ impl Plugin for Files {
             id: CHOICE,
             title: Cow::Borrowed("files.title"),
             factory: Box::new(|env, params| {
-                Box::new(quireink_sdk::ui::choice::Choice::new(env, params))
+                Box::new(paperpaw_sdk::ui::choice::Choice::new(env, params))
             }),
         })?;
         r.add_screen(ScreenSpec {
@@ -188,7 +188,7 @@ impl Plugin for Files {
             ),
         ] {
             r.add_action(
-                quireink_sdk::ActionSpec::new(action.clone(), title).handler(
+                paperpaw_sdk::ActionSpec::new(action.clone(), title).handler(
                     move |_: &Env<'_>, out: &mut Vec<Command>| {
                         out.push(Command::OpenScreen(
                             SHELF_SCREEN,
@@ -205,7 +205,7 @@ impl Plugin for Files {
         r.bind_slot(slots::LIBRARY, SCREEN, Priority::DEFAULT)?;
         r.add_settings(&SETTINGS)?;
         r.add_action(
-            quireink_sdk::ActionSpec::new(SEARCH, "files.search").handler(
+            paperpaw_sdk::ActionSpec::new(SEARCH, "files.search").handler(
                 |env: &Env<'_>, out: &mut Vec<Command>| {
                     out.push(
                         ask::text(env.i18n.tr("files.search.prompt"), &SEARCH_ENTERED).command(),
@@ -235,7 +235,7 @@ impl Plugin for Files {
         })?;
         // The shelves as a submenu: an action named like its menu.
         r.add_action(
-            quireink_sdk::ActionSpec::new(SHELVES_MENU, "files.shelves").handler(
+            paperpaw_sdk::ActionSpec::new(SHELVES_MENU, "files.shelves").handler(
                 |_: &Env<'_>, out: &mut Vec<Command>| {
                     out.push(Command::OpenSlot(
                         slots::MENU,
@@ -584,7 +584,7 @@ impl Browser {
         let title = book
             .and_then(|b| b.title)
             .unwrap_or_else(|| entry.name.clone());
-        cx.command(quireink_sdk::ui::choice::open(
+        cx.command(paperpaw_sdk::ui::choice::open(
             CHOICE,
             &CHOSEN,
             &title,
@@ -1162,7 +1162,7 @@ fn shown_title<'a>(book: Option<&'a library::Book>, stem: &'a str) -> Cow<'a, st
 
 #[cfg(test)]
 mod tests {
-    use quireink_i18n::{Catalog, check};
+    use paperpaw_i18n::{Catalog, check};
 
     #[test]
     fn translations_are_complete() {

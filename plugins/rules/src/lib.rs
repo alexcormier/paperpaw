@@ -1,8 +1,8 @@
-//! Rules: when something happens, QuireInk does something. For example
+//! Rules: when something happens, PaperPaw does something. For example
 //! "every day at 22:00: night mode on", "on weekdays at 7:00: sync the
 //! catalogs", "when the battery falls below 20 %: the light off".
 //!
-//! - When: QuireInk starts; at a time of day (every day, on weekdays, at
+//! - When: PaperPaw starts; at a time of day (every day, on weekdays, at
 //!   weekends or on one day); every so many minutes; a book is opened,
 //!   closed or read to its end; the device wakes up or goes to sleep; the
 //!   battery falls below a percentage; charging begins or ends; a switch
@@ -32,9 +32,9 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::cell::Cell;
 
-use quireink_sdk::builtin::{events, menus};
-use quireink_sdk::ui::choice::Choice;
-use quireink_sdk::{
+use paperpaw_sdk::builtin::{events, menus};
+use paperpaw_sdk::ui::choice::Choice;
+use paperpaw_sdk::{
     ActionSpec, Arg, Command, Env, Id, Manifest, MenuEntry, Params, Plugin, RegisterError,
     Registrar, SDK_VERSION, ScreenSpec, SettingValue, Version, time,
 };
@@ -442,7 +442,7 @@ fn add(env: &Env<'_>, rule: Rule, out: &mut Vec<Command>) {
 
 #[cfg(test)]
 mod tests {
-    use quireink_i18n::{Catalog, check};
+    use paperpaw_i18n::{Catalog, check};
 
     #[test]
     fn translations_are_complete() {

@@ -8,7 +8,7 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::{Env, Storage};
+use paperpaw_sdk::{Env, Storage};
 
 use crate::PLUGIN;
 
@@ -249,7 +249,7 @@ pub(crate) fn export(storage: &dyn Storage, path: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quireink_sdk::MemoryStorage;
+    use paperpaw_sdk::MemoryStorage;
 
     fn word(word: &str) -> Word {
         Word {
@@ -277,7 +277,7 @@ mod tests {
         remove(&storage, 0);
         assert_eq!(range(&storage, 0, 10)[0].1.word, "Quire");
         assert!(export(&storage, "out.tsv"));
-        let data = quireink_sdk::read_file(&storage, "out.tsv", 1024).unwrap();
+        let data = paperpaw_sdk::read_file(&storage, "out.tsv", 1024).unwrap();
         assert_eq!(data, b"Quire\tThe Quire is here.\tA\n");
     }
 
@@ -317,7 +317,7 @@ mod tests {
     /// What version 1 wrote stays readable (see `docs/data-files.md`).
     #[test]
     fn words_of_version_1_are_read() {
-        let storage = quireink_sdk::MemoryStorage::new()
+        let storage = paperpaw_sdk::MemoryStorage::new()
             .with(&super::file(), include_str!("../testdata/words.txt.v1"));
         let mut words = alloc::vec::Vec::new();
         super::each_line(&storage, &super::file(), |line| {

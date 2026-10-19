@@ -28,17 +28,17 @@ mod year;
 use alloc::borrow::Cow;
 use alloc::vec::Vec;
 
-use quireink_sdk::round::point_at;
-use quireink_sdk::ui::UiStyle;
-use quireink_sdk::widgets::{self, Look, Size, WidgetTarget};
-use quireink_sdk::{
+use paperpaw_sdk::round::point_at;
+use paperpaw_sdk::ui::UiStyle;
+use paperpaw_sdk::widgets::{self, Look, Size, WidgetTarget};
+use paperpaw_sdk::{
     Canvas, Color, Command, Env, FontHandle, Id, Point, Rect, RegisterError, Registrar,
     SettingSpec, SettingValue,
 };
 
 use crate::store::{self, Day};
 use crate::{OPEN, fmt};
-use quireink_sdk::setting::{Setting, Text};
+use paperpaw_sdk::setting::{Setting, Text};
 
 pub(crate) use today::TODAY;
 
@@ -87,7 +87,7 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     // A goal set shows on the home screen: the widget goes onto its first
     // page, after the book being read, if no page shows it yet.
     r.on(
-        quireink_sdk::builtin::events::SETTING_CHANGED,
+        paperpaw_sdk::builtin::events::SETTING_CHANGED,
         |env, changed, out| {
             if changed.id != GOAL || goal(env).is_none() {
                 return;
@@ -95,13 +95,13 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
             let pages: [&str; 4] = ["home.page-1", "home.page-2", "home.page-3", "home.page-4"];
             let shown = pages.iter().any(|page| {
                 // Also placed in a grid: `stats.today 0/2 4x1`.
-                quireink_sdk::status::item_ids(env.settings.text(page))
+                paperpaw_sdk::status::item_ids(env.settings.text(page))
                     .any(|item| item.split_whitespace().next() == Some(TODAY.as_str()))
             });
             if let Some(SettingValue::Text(list)) = env.settings.get(pages[0])
                 && !shown
             {
-                let mut ids: Vec<&str> = quireink_sdk::status::item_ids(list).collect();
+                let mut ids: Vec<&str> = paperpaw_sdk::status::item_ids(list).collect();
                 let at = ids
                     .iter()
                     .position(|item| item.split_whitespace().next() == Some("home.continue"))
@@ -408,13 +408,13 @@ fn dashed(canvas: &mut Canvas<'_>, x: i32, end: i32, y: i32, thickness: u32, col
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quireink_sdk::widgets::Frame;
+    use paperpaw_sdk::widgets::Frame;
 
     /// Every widget's settings have ids of their own, named after their
     /// widget (its group): the plugin loads, the widgets read them.
     #[test]
     fn the_widgets_register() {
-        use quireink_sdk::contribution::Contribution;
+        use paperpaw_sdk::contribution::Contribution;
         let mut r = Registrar::new(crate::PLUGIN);
         assert!(register(&mut r).is_ok());
         let mut ids: Vec<&str> = r

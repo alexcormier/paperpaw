@@ -1,7 +1,7 @@
 //! Plugins' servers (the kernel's `ServerCall`s) over the network of
 //! `net`, a step at a time from the main loop: each server has a few
 //! sockets waiting for connections, one request on each (its head read by
-//! `quireink_http::server`), passed to the kernel with its body in parts as
+//! `paperpaw_http::server`), passed to the kernel with its body in parts as
 //! it comes, and the plugin's answer sent back, a file read from storage
 //! as the connection takes it. So neither a large upload nor a large
 //! download needs to fit in memory.
@@ -10,9 +10,9 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use quireink_core::{Effects, Kernel, ServedFile, ServerCall, ServerEvent};
-use quireink_http::server::{self as http, RequestHead};
-use quireink_platform::Instant;
+use paperpaw_core::{Effects, Kernel, ServedFile, ServerCall, ServerEvent};
+use paperpaw_http::server::{self as http, RequestHead};
+use paperpaw_platform::Instant;
 use smoltcp::iface::SocketHandle;
 use smoltcp::socket::tcp;
 

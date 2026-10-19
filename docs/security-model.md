@@ -1,6 +1,6 @@
 # Security model
 
-Who can do what with a device running QuireInk, and what protects the
+Who can do what with a device running PaperPaw, and what protects the
 reader's books, settings and passwords. It is short on purpose: a map of
 the boundaries, so that changes can be judged against it. Vulnerabilities
 are reported as [SECURITY.md](../SECURITY.md) says.
@@ -8,14 +8,14 @@ are reported as [SECURITY.md](../SECURITY.md) says.
 ## What is protected
 
 - **The firmware.** A device installs only firmware signed with
-  QuireInk's key (Ed25519), checked while it is written; a new version that
+  PaperPaw's key (Ed25519), checked while it is written; a new version that
   does not start cleanly is undone ([ADR 0019](adr/0019-firmware-updates.md)).
-  The image quireink.org offers for flashing in the browser is signed
+  The image paperpaw.org offers for flashing in the browser is signed
   too; the site and the browser check it before it is written.
   Further keys are trusted only by the reader's choice
-  (`.quireink/firmware-keys.txt`).
+  (`.paperpaw/firmware-keys.txt`).
 - **Passwords and keys** (Wi-Fi, catalogs, sync accounts) are kept in
-  `.quireink/secrets.txt`, veiled so that they do not show at a glance,
+  `.paperpaw/secrets.txt`, veiled so that they do not show at a glance,
   **not encrypted**: whoever has the card has them. They are never shown
   in full; screens show dots and ask for them afresh.
 - **Books and notes** are files on the card, as readable as the card is.
@@ -24,7 +24,7 @@ are reported as [SECURITY.md](../SECURITY.md) says.
 
 - **Physical access (the card, USB).** Whoever holds the device can read
   and change the card and flash any firmware over USB (the chip's own
-  bootloader); QuireInk does not try to stop that. Firmware built for
+  bootloader); PaperPaw does not try to stop that. Firmware built for
   testing has a remote control over USB (files in and out, presses, the
   screen); released firmware is built without it (the X4's `remote`
   feature).
@@ -50,7 +50,7 @@ are reported as [SECURITY.md](../SECURITY.md) says.
   granted ([ADR 0004](adr/0004-everything-is-a-plugin.md)).
 - **Data plugins** (folders with `plugin.ini`) carry no code: translations,
   key maps, defaults of settings, fonts and stylesheets. They can change
-  what QuireInk shows and does through those, not reach past them.
+  what PaperPaw shows and does through those, not reach past them.
 
 ## What is not protected
 

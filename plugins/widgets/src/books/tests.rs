@@ -11,13 +11,13 @@ use alloc::string::{String, ToString};
 use alloc::vec;
 use alloc::vec::Vec;
 
-use quireink_graphics::Framebuffer;
-use quireink_i18n::{Catalog, Translator};
-use quireink_sdk::builtin::settings as core_settings;
-use quireink_sdk::document::Locator;
-use quireink_sdk::library::{self, catalog};
-use quireink_sdk::widgets::{Widgets, categories};
-use quireink_sdk::{
+use paperpaw_graphics::Framebuffer;
+use paperpaw_i18n::{Catalog, Translator};
+use paperpaw_sdk::builtin::settings as core_settings;
+use paperpaw_sdk::document::Locator;
+use paperpaw_sdk::library::{self, catalog};
+use paperpaw_sdk::widgets::{Widgets, categories};
+use paperpaw_sdk::{
     Actions, Battery, Capabilities, Color, Contribution, DeviceInfo, DisplayInfo, Env, EnvParts,
     Fonts, Formats, Hyphenation, Id, InputCaps, Instant, MemoryClass, MemoryStorage, Menus,
     Metrics, PixelFormat, Plugin, Plugins, Rect, Registrar, SettingKind, SettingSpec, SettingValue,
@@ -38,7 +38,7 @@ const DEVICE: DeviceInfo = DeviceInfo {
         height: 800,
         dpi: 220,
         format: PixelFormat::Gray4,
-        rotation: quireink_platform::Rotation::Deg0,
+        rotation: paperpaw_platform::Rotation::Deg0,
         color: None,
     },
     input: InputCaps {
@@ -52,7 +52,7 @@ const DEVICE: DeviceInfo = DeviceInfo {
 
 struct NoKeys;
 
-impl quireink_sdk::keys::KeyBindings for NoKeys {
+impl paperpaw_sdk::keys::KeyBindings for NoKeys {
     fn bound(&self, _: &[&str], _: &str) -> Option<Id> {
         None
     }
@@ -70,14 +70,14 @@ struct Harness {
     actions: Actions,
     plugins: Plugins,
     status: SystemStatus,
-    usage: quireink_sdk::usage::Usage,
+    usage: paperpaw_sdk::usage::Usage,
     status_items: StatusItems,
-    text_filters: quireink_sdk::filters::TextFilters,
-    decorators: quireink_sdk::decorations::Decorators,
+    text_filters: paperpaw_sdk::filters::TextFilters,
+    decorators: paperpaw_sdk::decorations::Decorators,
     widgets: Widgets,
-    setup: quireink_sdk::setup::SetupSteps,
-    services: quireink_sdk::services::Services,
-    secrets: quireink_sdk::secrets::Secrets,
+    setup: paperpaw_sdk::setup::SetupSteps,
+    services: paperpaw_sdk::services::Services,
+    secrets: paperpaw_sdk::secrets::Secrets,
     storage: MemoryStorage,
 }
 
@@ -133,7 +133,7 @@ impl Harness {
                 .unwrap();
         }
         let mut r = Registrar::new(Id::new_static("fonts-default"));
-        quireink_plugin_fonts_default::DefaultFonts
+        paperpaw_plugin_fonts_default::DefaultFonts
             .register(&mut r)
             .unwrap();
         h.apply(r);
@@ -259,19 +259,19 @@ fn library() -> MemoryStorage {
     storage = add(storage, "books/a.epub", "Alone", "", "", None);
     storage = add(storage, "books/b.epub", "Begun", "", "", Some(10));
     catalog::write(&storage, &records);
-    let _ = quireink_sdk::Storage::write(
+    let _ = paperpaw_sdk::Storage::write(
         &storage,
-        ".quireink/library/opened.txt",
+        ".paperpaw/library/opened.txt",
         b"books/s3.epub\nbooks/b.epub\nbooks/s1.epub",
     );
     library::set_favourite(&storage, "books/a.epub", true);
     library::set_favourite(&storage, "books/s1.epub", true);
-    quireink_sdk::annotations::add(
+    paperpaw_sdk::annotations::add(
         &storage,
         "books/s3.epub",
-        quireink_sdk::annotations::Annotation {
-            mark: quireink_sdk::annotations::Mark {
-                kind: quireink_sdk::annotations::Kind::Highlight,
+        paperpaw_sdk::annotations::Annotation {
+            mark: paperpaw_sdk::annotations::Mark {
+                kind: paperpaw_sdk::annotations::Kind::Highlight,
                 start: Locator::new(2, 10),
                 end: Locator::new(2, 60),
                 noted: false,
@@ -339,7 +339,7 @@ fn every_widget_draws_in_every_frame_and_size() {
         assert!(h.widgets.has(id), "{id}");
         let kind = h.widgets.category(id).unwrap();
         assert!(categories::ALL.contains(&kind), "{id}: {kind}");
-        for frame in quireink_sdk::widgets::look::FRAMES {
+        for frame in paperpaw_sdk::widgets::look::FRAMES {
             h.set(
                 &alloc::format!("{id}.frame"),
                 SettingValue::Text(Cow::Borrowed(frame)),
@@ -583,7 +583,7 @@ fn time_left_from_the_pages_read() {
 fn reading_ini_of_every_version_is_read() {
     // Version 1, as written before the chapter was kept.
     let storage = MemoryStorage::new().with(
-        ".quireink/plugins/widgets/reading.ini",
+        ".paperpaw/plugins/widgets/reading.ini",
         include_str!("../../testdata/reading.ini.v1"),
     );
     let position = Position::load(&storage);
@@ -623,7 +623,7 @@ fn whats_left_of_the_chapter_as_room_allows() {
         "12 pages left in the chapter"
     );
     let env = h.env();
-    let font = quireink_sdk::ui::UiStyle::new(&env).font(&env).unwrap();
+    let font = paperpaw_sdk::ui::UiStyle::new(&env).font(&env).unwrap();
     let width = |text: &str| font.measure(12.0, text).ceil() as u16;
     let narrow = width("12 pages left · about 6 min");
     assert_eq!(
@@ -666,7 +666,7 @@ fn whats_left_of_the_chapter_as_room_allows() {
 fn long_titles_in_lines_as_even_as_can_be() {
     let h = Harness::new(MemoryStorage::new());
     let env = h.env();
-    let font = quireink_sdk::ui::UiStyle::new(&env).font(&env).unwrap();
+    let font = paperpaw_sdk::ui::UiStyle::new(&env).font(&env).unwrap();
     let width = |text: &str| font.measure(12.0, text).ceil() as u16;
     let title = "Alice's Adventures in Wonderland";
     let wrap = |most, room| wrap_words(&font, 12.0, title, room, most);

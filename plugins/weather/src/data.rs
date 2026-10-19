@@ -11,8 +11,8 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_json::stream::{Event, Parser};
-use quireink_sdk::web::encode;
+use paperpaw_json::stream::{Event, Parser};
+use paperpaw_sdk::web::encode;
 
 /// Days of the forecast asked for and kept.
 pub(crate) const DAYS: usize = 8;

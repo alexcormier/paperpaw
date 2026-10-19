@@ -1,4 +1,4 @@
-//! *About QuireInk*, in the device's settings: its version, its licence
+//! *About PaperPaw*, in the device's settings: its version, its licence
 //! and the licences of what it bundles (fonts, icons, hyphenation
 //! patterns), which every copy of it must carry. Shown by the reader (as
 //! Markdown), so it pages and reads like a book.
@@ -11,8 +11,8 @@ use alloc::borrow::Cow;
 use alloc::format;
 use alloc::vec::Vec;
 
-use quireink_sdk::builtin::{menus, params, slots};
-use quireink_sdk::{
+use paperpaw_sdk::builtin::{menus, params, slots};
+use paperpaw_sdk::{
     ActionSpec, Command, Env, Id, Manifest, MenuEntry, Params, Plugin, RegisterError, Registrar,
     SDK_VERSION, Version,
 };
@@ -32,7 +32,7 @@ fn page_path() -> alloc::string::String {
 fn page(env: &Env<'_>) -> alloc::string::String {
     let intro = env.i18n.tr("about.intro");
     format!(
-        "# QuireInk {}\n\n{intro}\n\nhttps://github.com/hthoene/quireink\n\n{LICENCES}",
+        "# PaperPaw {}\n\n{intro}\n\nhttps://github.com/hthoene/paperpaw\n\n{LICENCES}",
         env!("CARGO_PKG_VERSION")
     )
 }
@@ -46,7 +46,7 @@ impl Plugin for About {
         Manifest {
             id: PLUGIN,
             name: Cow::Borrowed("About"),
-            description: Cow::Borrowed("QuireInk's version and licences."),
+            description: Cow::Borrowed("PaperPaw's version and licences."),
             version: Version::new(0, 1, 0),
             sdk: SDK_VERSION,
         }
@@ -82,7 +82,7 @@ impl Plugin for About {
 mod tests {
     extern crate std;
 
-    use quireink_i18n::{Catalog, check};
+    use paperpaw_i18n::{Catalog, check};
 
     use super::LICENCES;
 

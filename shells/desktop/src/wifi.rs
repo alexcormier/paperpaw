@@ -1,16 +1,16 @@
-//! A pretend radio for profiles of devices where QuireInk manages Wi-Fi
+//! A pretend radio for profiles of devices where PaperPaw manages Wi-Fi
 //! (the X4): it answers the kernel's Wi-Fi calls as such a device would,
 //! with made-up networks and delays, so that the `wifi` plugin and what
 //! waits for a network can be tried and tested here. Once "online", the
 //! computer's own network is used.
 //!
-//! The networks: `QuireInk Test` (any password but `wrong`), `Cafe`
+//! The networks: `PaperPaw Test` (any password but `wrong`), `Cafe`
 //! (open) and `Far Away` (out of reach once joined).
 
 use std::collections::VecDeque;
 
-use quireink_core::{JoinFailure, WifiCommand, WifiEvent, WifiNetwork, WifiState};
-use quireink_platform::Instant;
+use paperpaw_core::{JoinFailure, WifiCommand, WifiEvent, WifiNetwork, WifiState};
+use paperpaw_platform::Instant;
 
 /// How long the pretend radio takes to start, scan and join.
 const START_MS: u64 = 200;
@@ -27,7 +27,7 @@ fn networks() -> Vec<WifiNetwork> {
         secured,
     };
     vec![
-        net("QuireInk Test", -48, true),
+        net("PaperPaw Test", -48, true),
         net("Cafe", -70, false),
         net("Far Away", -88, true),
     ]
@@ -141,14 +141,14 @@ mod tests {
         assert_eq!(run(&mut wifi, 1000), [WifiEvent::State(WifiState::On)]);
         wifi.apply(
             WifiCommand::Join {
-                ssid: String::from("QuireInk Test"),
+                ssid: String::from("PaperPaw Test"),
                 password: String::from("wrong"),
             },
             Instant(1000),
         );
         let events = run(&mut wifi, 3000);
         assert!(events.contains(&WifiEvent::Failed {
-            ssid: String::from("QuireInk Test"),
+            ssid: String::from("PaperPaw Test"),
             reason: JoinFailure::Password
         }));
         wifi.apply(

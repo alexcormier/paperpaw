@@ -1,7 +1,7 @@
 //! The system's clipboard, through `ClipboardManager`.
 //!
 //! Android 12 and later tell the user when an app reads text another app
-//! copied, so QuireInk only checks whether there is text when it comes to
+//! copied, so PaperPaw only checks whether there is text when it comes to
 //! the front, and reads it when the user asks to paste.
 
 use android_activity::AndroidApp;
@@ -28,7 +28,7 @@ fn manager<'a>(env: &mut JNIEnv<'a>, activity: &JObject<'_>) -> jni::errors::Res
 pub fn write(app: &AndroidApp, text: &str) {
     let done = with_activity(app, |env, activity| {
         let manager = manager(env, activity)?;
-        let label = env.new_string("QuireInk")?;
+        let label = env.new_string("PaperPaw")?;
         let text = env.new_string(text)?;
         let clip = env
             .call_static_method(

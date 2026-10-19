@@ -5,9 +5,9 @@
 
 use alloc::borrow::Cow;
 
-use quireink_sdk::builtin::groups;
-use quireink_sdk::setting::Setting;
-use quireink_sdk::{
+use paperpaw_sdk::builtin::groups;
+use paperpaw_sdk::setting::Setting;
+use paperpaw_sdk::{
     Id, Manifest, Plugin, RegisterError, Registrar, SDK_VERSION, SettingSpec, Version,
 };
 
@@ -36,7 +36,7 @@ static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_switch(
 /// The X4 Pro's front light, set with sliders.
 #[cfg(feature = "x4-pro")]
 static LIGHT_SETTINGS: [SettingSpec; 2] = {
-    use quireink_sdk::SettingExtra;
+    use paperpaw_sdk::SettingExtra;
     static PERCENT: SettingExtra = SettingExtra::new()
         .unit("core.unit.percent")
         .step(5)
@@ -97,8 +97,8 @@ impl Plugin for X4 {
 /// the quick panel, and with the device's settings in the main menu.
 #[cfg(feature = "x4-pro")]
 fn register_light(r: &mut Registrar) -> Result<(), RegisterError> {
-    use quireink_sdk::MenuEntry;
-    use quireink_sdk::builtin::menus;
+    use paperpaw_sdk::MenuEntry;
+    use paperpaw_sdk::builtin::menus;
     r.add_settings(&LIGHT_SETTINGS)?;
     for (n, item) in [FRONTLIGHT, WARMTH].into_iter().enumerate() {
         for (menu, order) in [

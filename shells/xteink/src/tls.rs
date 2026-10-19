@@ -244,7 +244,7 @@ fn dates(from: mbedtls_x509_time, to: mbedtls_x509_time) -> u32 {
         return 0;
     };
     let seconds = |t: mbedtls_x509_time| {
-        quireink_x4::sntp::unix_seconds(
+        paperpaw_x4::sntp::unix_seconds(
             t.year,
             t.mon as u32,
             t.day as u32,

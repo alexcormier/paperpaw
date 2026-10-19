@@ -12,7 +12,7 @@ use alloc::borrow::Cow;
 
 extern crate alloc;
 
-use quireink_sdk::{
+use paperpaw_sdk::{
     HyphenationSpec, Id, Manifest, Plugin, RegisterError, Registrar, SDK_VERSION, Version,
 };
 
@@ -20,8 +20,8 @@ pub const PLUGIN: Id = Id::new_static("hyphenation");
 pub const GERMAN: Id = Id::new_static("hyphenation.de");
 pub const ENGLISH: Id = Id::new_static("hyphenation.en");
 
-const DE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/de.qihp"));
-const EN: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/en.qihp"));
+const DE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/de.pphp"));
+const EN: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/en.pphp"));
 
 /// The hyphenation plugin.
 #[derive(Debug, Default)]
@@ -58,7 +58,7 @@ mod tests {
     use super::*;
     use alloc::string::String;
     use alloc::vec::Vec;
-    use quireink_sdk::hyphen::Patterns;
+    use paperpaw_sdk::hyphen::Patterns;
 
     fn hyphenated(table: &[u8], word: &str) -> String {
         let patterns = Patterns::new(table).unwrap();

@@ -5,7 +5,7 @@
 
 ## Context
 
-QuireInk should be the most customizable e-reader software: users want
+PaperPaw should be the most customizable e-reader software: users want
 different home screens (not just a file browser), reading modes, gestures,
 sync services and many more features. A core with a few "extension points"
 would leave everything else fixed, and first-party features would drift
@@ -23,7 +23,7 @@ ahead of what plugins can do.
 - UI roles are **slots** (`core.home`, `core.reader`, …). Plugins propose
   screens for slots with a priority; the user's configuration overrides any
   binding. Plugins can define new slots.
-- Plugins depend on **`quireink-sdk` only**. First-party plugins have no
+- Plugins depend on **`paperpaw-sdk` only**. First-party plugins have no
   privileged access, so the SDK is always sufficient to replace them.
 - Registration is **transactional**: a plugin whose registration fails
   leaves no contributions behind.
@@ -45,7 +45,7 @@ ahead of what plugins can do.
   `<id>.plugin.name` and `<id>.plugin.description`; for plugins that are
   off, the kernel loads only their translations.
 - `Command::SetPluginEnabled` writes `[plugins] id = on|off` to
-  `quireink.ini`; the change applies after `Command::Restart`, which shells
+  `paperpaw.ini`; the change applies after `Command::Restart`, which shells
   answer by building a new kernel. Contributions are never removed from a
   running kernel, which keeps registries simple and small.
 - To keep users from locking themselves out, the kernel refuses to switch
@@ -57,7 +57,7 @@ ahead of what plugins can do.
 
 ## Consequences
 
-- Any part of QuireInk can be replaced or removed by configuration.
+- Any part of PaperPaw can be replaced or removed by configuration.
 - The SDK becomes the most important API and is versioned with SemVer.
 - Some indirection (registries, ids) where a direct call would be simpler;
   kept at coarse granularity so the cost is negligible.

@@ -7,13 +7,13 @@
 use alloc::boxed::Box;
 use alloc::string::ToString;
 
-use quireink_sdk::builtin::settings::BATTERY_LOW;
-use quireink_sdk::ui::UiStyle;
-use quireink_sdk::widgets::{self, Align, Frame, Look, Size, Widget, WidgetSpec};
-use quireink_sdk::{Canvas, Color, Env, FontHandle, Id, Point, Rect, RegisterError, Registrar};
+use paperpaw_sdk::builtin::settings::BATTERY_LOW;
+use paperpaw_sdk::ui::UiStyle;
+use paperpaw_sdk::widgets::{self, Align, Frame, Look, Size, Widget, WidgetSpec};
+use paperpaw_sdk::{Canvas, Color, Env, FontHandle, Id, Point, Rect, RegisterError, Registrar};
 
 use super::{add_settings, caption, chosen, draw_message, draw_ring, frame_height};
-use quireink_sdk::SettingSpec;
+use paperpaw_sdk::SettingSpec;
 
 pub(crate) const ID: Id = Id::new_static(WIDGET);
 /// Its id, as text.

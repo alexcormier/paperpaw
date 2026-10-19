@@ -1,9 +1,9 @@
-//! Android key codes to QuireInk button names.
+//! Android key codes to PaperPaw button names.
 //!
 //! E-readers report their page buttons as page or volume keys; keyboards
 //! and Bluetooth page turners use arrows, Enter and Space as well.
 
-use quireink_platform::buttons;
+use paperpaw_platform::buttons;
 
 // From `android.view.KeyEvent`.
 const KEYCODE_BACK: u32 = 4;

@@ -13,7 +13,7 @@ pub(super) const ENTRY: &str = "entry";
 pub(super) fn cover_download_path() -> String {
     format!(
         "{}/cover.tmp",
-        quireink_sdk::Env::plugin_dir(PLUGIN.as_str())
+        paperpaw_sdk::Env::plugin_dir(PLUGIN.as_str())
     )
 }
 
@@ -21,8 +21,8 @@ pub(super) fn cover_download_path() -> String {
 pub(super) fn cover_path(url: &str) -> String {
     format!(
         "{}/covers/{}.gray",
-        quireink_sdk::Env::plugin_dir(PLUGIN.as_str()),
-        quireink_digest::md5::of(url)
+        paperpaw_sdk::Env::plugin_dir(PLUGIN.as_str()),
+        paperpaw_digest::md5::of(url)
     )
 }
 
@@ -49,7 +49,7 @@ impl BrowseScreen {
                 continue;
             };
             let kept = cover_path(&url);
-            if let Some(file) = quireink_sdk::image::ImageFile::open(env.storage, &kept) {
+            if let Some(file) = paperpaw_sdk::image::ImageFile::open(env.storage, &kept) {
                 self.covers[i] = Some(ImageRef {
                     path: file.path,
                     width: file.width,
@@ -95,11 +95,11 @@ impl BrowseScreen {
             .contains(&reply.status)
             .then(|| {
                 let color = env.device.display.format.is_color();
-                quireink_sdk::image::picture_from_file(
+                paperpaw_sdk::image::picture_from_file(
                     env.storage,
                     &tmp,
                     &cover_path(&url),
-                    quireink_sdk::image::Fit::side(side),
+                    paperpaw_sdk::image::Fit::side(side),
                     color,
                 )
             })

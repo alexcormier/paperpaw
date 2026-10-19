@@ -12,14 +12,14 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::cmp::Ordering;
 
-use quireink_digest::fnv1a64;
-use quireink_sdk::document::{
+use paperpaw_digest::fnv1a64;
+use paperpaw_sdk::document::{
     Align, Block, BlockKind, Document, DocumentError, ImageRef, Locator, Metadata, OffsetMap,
 };
-use quireink_sdk::image::Fit;
-use quireink_sdk::xml::{Token, Tokenizer, decode, local_name};
-use quireink_sdk::zip::ZipArchive;
-use quireink_sdk::{Env, Storage};
+use paperpaw_sdk::image::Fit;
+use paperpaw_sdk::xml::{Token, Tokenizer, decode, local_name};
+use paperpaw_sdk::zip::ZipArchive;
+use paperpaw_sdk::{Env, Storage};
 
 use crate::PLUGIN;
 use crate::convert;
@@ -45,7 +45,7 @@ pub struct CbzDocument {
     cover_fit: Fit,
 }
 
-/// Whether `name` is a picture QuireInk shows.
+/// Whether `name` is a picture PaperPaw shows.
 fn is_picture(name: &str) -> bool {
     let lower = name.to_ascii_lowercase();
     !lower.starts_with("__macosx/")
@@ -90,14 +90,14 @@ fn natural(a: &str, b: &str) -> Ordering {
 
 impl CbzDocument {
     pub fn open(storage: &dyn Storage, path: &str) -> Result<Self, DocumentError> {
-        Self::open_options(storage, path, &quireink_sdk::OpenOptions::default())
+        Self::open_options(storage, path, &paperpaw_sdk::OpenOptions::default())
     }
 
     /// Opens a comic as `options` say (pages in colour or gray).
     pub fn open_options(
         storage: &dyn Storage,
         path: &str,
-        options: &quireink_sdk::OpenOptions,
+        options: &paperpaw_sdk::OpenOptions,
     ) -> Result<Self, DocumentError> {
         let archive = ZipArchive::open(storage, path).map_err(error)?;
         let mut pages: Vec<String> = Vec::new();
@@ -123,7 +123,7 @@ impl CbzDocument {
         // Pictures decoded from another file of the same name go.
         let stamp = format!("{} {}\n", storage.size(path)?, pages.len());
         let stamp_path = format!("{cache}/source");
-        if quireink_sdk::read_file(storage, &stamp_path, 64).ok()
+        if paperpaw_sdk::read_file(storage, &stamp_path, 64).ok()
             != Some(stamp.clone().into_bytes())
         {
             let _ = storage.remove_dir_all(&cache);
@@ -180,7 +180,7 @@ impl CbzDocument {
 fn comic_info(
     storage: &dyn Storage,
     archive: &ZipArchive,
-    entry: &quireink_sdk::zip::Entry,
+    entry: &paperpaw_sdk::zip::Entry,
 ) -> Option<Metadata> {
     let mut data = Vec::new();
     archive
@@ -293,8 +293,8 @@ impl Document for CbzDocument {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quireink_sdk::MemoryStorage;
-    use quireink_sdk::zip::testing::ZipBuilder;
+    use paperpaw_sdk::MemoryStorage;
+    use paperpaw_sdk::zip::testing::ZipBuilder;
 
     #[test]
     fn pages_in_natural_order() {

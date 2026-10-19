@@ -1,6 +1,6 @@
 [package]
-name = "quireink-plugin-format-xtc"
-description = "QuireInk XTC and XTCH: the Xteink readers' pre-rendered page format"
+name = "paperpaw-plugin-format-xtc"
+description = "PaperPaw XTC and XTCH: the Xteink readers' pre-rendered page format"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,11 +11,11 @@ authors.workspace = true
 categories = ["no-std", "multimedia::images"]
 
 [dependencies]
-quireink-digest.workspace = true
-quireink-sdk.workspace = true
+paperpaw-digest.workspace = true
+paperpaw-sdk.workspace = true
 
 [dev-dependencies]
-quireink-i18n.workspace = true
+paperpaw-i18n.workspace = true
 
 [lints]
 workspace = true

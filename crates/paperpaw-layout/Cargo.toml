@@ -1,0 +1,19 @@
+[package]
+name = "paperpaw-layout"
+description = "Page layout for PaperPaw: lays out documents into pages (no_std)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+categories = ["no-std", "text-processing"]
+keywords = ["e-reader", "layout", "pagination"]
+
+[dependencies]
+paperpaw-document.workspace = true
+paperpaw-text.workspace = true
+
+[lints]
+workspace = true

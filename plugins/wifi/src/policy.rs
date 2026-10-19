@@ -15,7 +15,7 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use quireink_sdk::wifi::{WifiCommand, WifiNetwork, WifiState};
+use paperpaw_sdk::wifi::{WifiCommand, WifiNetwork, WifiState};
 
 /// What the radio is for now.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]

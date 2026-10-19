@@ -1,5 +1,5 @@
 //! Installing a font: its files downloaded one after another into a
-//! folder of their own (`plugins/.font-….part`, which QuireInk does not
+//! folder of their own (`plugins/.font-….part`, which PaperPaw does not
 //! load), each checked by its size and SHA-1; once all are there, the
 //! folder becomes the font's plugin and is loaded at once. What is left
 //! to do is kept in a file, so a download goes on when the screens that
@@ -9,10 +9,10 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use quireink_sdk::builtin::{PLUGIN_DIR, settings};
-use quireink_sdk::event::Event;
-use quireink_sdk::replies::HttpReply;
-use quireink_sdk::{Arg, Command, Env, HttpRequest, Id, Params, SettingValue, Storage};
+use paperpaw_sdk::builtin::{PLUGIN_DIR, settings};
+use paperpaw_sdk::event::Event;
+use paperpaw_sdk::replies::HttpReply;
+use paperpaw_sdk::{Arg, Command, Env, HttpRequest, Id, Params, SettingValue, Storage};
 
 use crate::PLUGIN;
 use crate::catalog::Font;
@@ -85,7 +85,7 @@ impl Job {
 
 /// The installation going on, if any.
 pub(crate) fn current(storage: &dyn Storage) -> Option<Job> {
-    let text = quireink_sdk::read_file(storage, &job_path(), 16 * 1024).ok()?;
+    let text = paperpaw_sdk::read_file(storage, &job_path(), 16 * 1024).ok()?;
     Job::decode(core::str::from_utf8(&text).ok()?)
 }
 
@@ -155,7 +155,7 @@ fn next(job: &Job, out: &mut Vec<Command>) {
 
 /// The SHA-1 of a file as hex, read in pieces.
 fn sha1_of(storage: &dyn Storage, path: &str) -> Option<String> {
-    let mut sha = quireink_digest::sha1::Sha1::new();
+    let mut sha = paperpaw_digest::sha1::Sha1::new();
     let mut buf = alloc::vec![0u8; 1024];
     let mut at = 0u64;
     loop {
@@ -257,7 +257,7 @@ mod tests {
                     "https://x/plugin.ini".into()
                 ),
                 (
-                    "fonts/regular.qifp".into(),
+                    "fonts/regular.ppfp".into(),
                     9000,
                     "cd".into(),
                     "https://x/r?a=b".into()
