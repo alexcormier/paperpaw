@@ -6,6 +6,43 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Many new widgets for the home screen (C26), each with settings of its
+  own: what it shows, its style, its size and alignment, and a frame
+  (none, a line, a light card, a dark card with light text) that every
+  widget has. A widget pack (`widgets`): an analogue clock, a word clock
+  (as a sentence or a grid of letters, English and German), a clock in
+  tiles, a world clock, a calendar, the year so far, a countdown, the
+  moon's phase, the day and date, a quote of the day (shipped quotes or
+  one's own), a picture from a folder, a note, a to-do list with its own
+  screen, a greeting, a book's progress as a ring, the book being read
+  with the time left, the next book to read, a series, favourites, a
+  highlight of one's own, the library in numbers and the battery. The
+  reading statistics add a daily goal ring, a reading calendar, books
+  this year (with a yearly goal) and a streak; vocabulary adds *Words
+  saved*; a weather plugin (`weather`, Open-Meteo, nothing sent before a
+  place is chosen) adds the weather now and a forecast. The widgets
+  there before (clock, date, status line, continue reading, recently
+  read, read today, the last days, the word of the day, news) have the
+  same settings. Adding a widget shows the kinds of widgets first, then
+  each widget of a kind drawn as it would show.
+- SDK for widgets: a shared look (`widgets::Frame`, `Size`, `Look`,
+  `draw_frame`, `frame_setting`, `size_setting`, `part_setting`,
+  `shows`, `choice`, `draw_caption`, `draw_message`, `draw_wrapped`,
+  `line_height`, `look::look`), kinds (`WidgetSpec::category`,
+  `widgets::categories`, `Widgets::category`), `events::WIDGET_CHANGED`
+  (`widgets::changed`) for a widget whose content changed. Graphics:
+  `Canvas::fill_circle`, `stroke_circle`, `fill_ring` (arcs, smooth
+  where the panel has grays), `draw_hand`, `fill_round_shaded`,
+  `quireink_sdk::round` (angles as on a clock face, whole numbers).
+  `Kernel::widgets`.
+- SDK: settings kept in the program (`SettingSpec::fixed`,
+  `fixed_switch`, `fixed_number`, `fixed_choice`, `fixed_text`,
+  `described`, `for_advanced`; `Registrar::add_settings`;
+  `widgets::frame_spec`, `size_spec`, `part_spec`, `align_spec`) take
+  next to no memory, where one built at start takes about 200 bytes. A
+  choice's values are `Choices` (`SettingKind::Choice`,
+  `SettingSpec::choice`, `Settings::set_choices`): lists in the program
+  cost nothing.
 - X4: highlights were lost each time their book was opened: renaming a
   file that is not there removed the file at the new place (the reader
   looks for highlights kept where they were before). Such a rename now
