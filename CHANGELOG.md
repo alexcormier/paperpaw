@@ -11,10 +11,11 @@ change the plugin SDK.
   engine, type, margins at the sides, justification, indents and
   hyphenation, in the interface's language), following each value at
   once while a slider moves or the buttons change it, before it is
-  kept. On the X4 an update costs a third to a half of laying out one
-  book page and about 3 KB of the heap, and only the preview and the
-  row changed are drawn again, with a quick refresh; the full picture
-  with its grays comes once the value is chosen.
+  kept. In the emulator's X4 profile an update takes a third to a half
+  of the time one book page takes to lay out, and about 3 KB of the
+  heap; only the preview and the row changed are drawn again, with a
+  quick refresh, and the full picture with its grays comes once the
+  value is chosen.
   SDK: a widget can preview a group of settings instead of being one
   for screens (`WidgetSpec::previews`, `Widgets::preview`); settings
   pages show it above the group, and `Widgets::iter` leaves such
@@ -39,7 +40,9 @@ change the plugin SDK.
   takes the knob along in the slider's steps and lifting it chooses the
   value, with the buttons left and right move it a step. Screen readers
   hear it as `semantics::Role::Slider`. The panel's sliders (the
-  frontlight) are drawn with it and keep to their steps.
+  frontlight) are drawn with it and keep to their steps. The help texts
+  of the margins and the word spacing say more plainly what they do, and
+  a test checks that every slider shows its unit.
 - X4: downloads into a file (updates, books, fonts) no longer run out of
   memory half way: pieces of an answer gathered before writing them to
   the card grew without bound when the connection handed over a lot at

@@ -1,5 +1,6 @@
 //! Every setting of the settings pages says what it does: a help text
-//! below its name, in every language shipped (E2 in docs/PLANNING.md).
+//! below its name, in every language shipped (E2 in docs/PLANNING.md);
+//! sliders show their value with its unit.
 
 // Tests panic on purpose when something is wrong.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
@@ -43,12 +44,18 @@ fn is_widget_group(kernel: &Kernel, group: &str) -> bool {
     kernel.widgets().has(group)
 }
 
-#[test]
-fn every_setting_has_a_help_text() {
+/// The standard app, started.
+fn app() -> Kernel {
     let storage = MemoryStorage::new().with(".paperpaw/plugins/setup/done", "");
     let builder = Kernel::builder(DEVICE).storage(storage);
     let mut kernel = paperpaw_app::install(builder, fonts()).build().unwrap();
     let _ = kernel.start(Instant(0));
+    kernel
+}
+
+#[test]
+fn every_setting_has_a_help_text() {
+    let kernel = app();
     let settings = kernel.settings();
     let missing: Vec<String> = settings
         .specs()
@@ -60,4 +67,18 @@ fn every_setting_has_a_help_text() {
         missing.is_empty(),
         "settings without a help text: {missing:#?}"
     );
+}
+
+/// A slider is set by eye, but its value says what was chosen: with its
+/// unit ("135 %", "4 mm"), never a bare number.
+#[test]
+fn sliders_show_their_unit() {
+    let kernel = app();
+    let bare: Vec<String> = kernel
+        .settings()
+        .specs()
+        .filter(|spec| paperpaw_sdk::ui::slider::shows(spec) && spec.extra().unit.is_none())
+        .map(|spec| spec.id.to_string())
+        .collect();
+    assert!(bare.is_empty(), "sliders without a unit: {bare:#?}");
 }
