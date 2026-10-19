@@ -6,6 +6,33 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Screens draw without reading the card (PLANNING §12.3, B3). The X4
+  draws a frame in five bands, and what a screen read or worked out as it
+  drew, it did five times over, and again for every frame. Covers on the
+  home screen, in the book widgets, on the book information and in OPDS
+  catalogs are made small once and drawn from memory (the home screen
+  read its cover's 65 KB from the card in every frame); the highlight,
+  note, quote and word of the day widgets lay their text out where they
+  are placed; the menu editor's lists are made when the menus change (a
+  frame 30 times faster), and so are which profiles are in use; weather
+  now lays itself out where placed, the keyboard's field and the
+  translation's heading are measured once; the logo widget and the
+  words marked in books read nothing while drawing. Screens below a full screen let go of what
+  they keep to draw, so a book opened from the home screen has more
+  memory, and a screen on top only for a moment (the home screen below a
+  menu that opens another screen) reads nothing. A test opens every
+  screen of the standard app as on an X4 and fails where drawing reads
+  the card; the guide says the rule.
+  SDK: `Widget::place` (where a widget is drawn, before it is),
+  `widgets::Wrapped` (a text broken into lines once, drawn as often as
+  needed), `Screen::on_hide`, `GridView::release`; `Screen::on_show`
+  comes once the commands of a call are done. A decorator's signature is
+  asked as pages are drawn: it says it from memory. Kernel:
+  `Kernel::open_screen`, `Kernel::known_screens`.
+- Emulator: `--trace` prints what drawing each frame asks of the
+  storage, band by band, how long it took and what was asked before it;
+  scripts open any screen with its parameters (`open:`) and draw the
+  screen again (`redraw`).
 - X4: downloads into a file (updates, books, fonts) no longer run out of
   memory half way: pieces of an answer gathered before writing them to
   the card grew without bound when the connection handed over a lot at
