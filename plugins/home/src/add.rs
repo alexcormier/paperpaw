@@ -377,24 +377,24 @@ impl AddScreen {
             if preview.widget.is_none() {
                 preview.widget = env.widgets.make(id, env);
             }
-            // The widget in its place, a faint line round it so its size
-            // shows; the focused one in a strong frame.
+            // The widget in its place, as on the page; round it, outside
+            // it so that nothing of it is covered, a faint line so its
+            // size shows, or a strong frame round the focused one.
             let around = preview.area;
             if let Some(widget) = &preview.widget {
-                let mut inside = canvas.clipped(around);
-                widget.draw(&mut inside, env, around);
+                widget.draw(canvas, env, around);
             }
+            let pad = (style.gap / 2) as u16;
+            let ring = Rect::new(
+                around.x.saturating_sub(pad),
+                around.y.saturating_sub(pad),
+                around.width + 2 * pad,
+                around.height + 2 * pad,
+            );
             if focused {
-                let pad = (style.gap / 2) as u16;
-                let ring = Rect::new(
-                    around.x.saturating_sub(pad),
-                    around.y.saturating_sub(pad),
-                    around.width + 2 * pad,
-                    around.height + 2 * pad,
-                );
                 ui::stroke_round(canvas, &style, ring, style.line * 3, Color::BLACK);
             } else {
-                ui::stroke_round(canvas, &style, around, style.line, Color::gray(170));
+                ui::stroke_round(canvas, &style, ring, style.line, Color::gray(170));
             }
         }
     }

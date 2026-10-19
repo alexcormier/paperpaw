@@ -345,7 +345,16 @@ impl GridView {
                 }
             }
             if editing {
-                canvas.stroke(shown.area, line, Color::BLACK);
+                // In the gap round it, not over what it shows (and apart
+                // from its neighbour's).
+                let pad = (self.style.gap / 2).saturating_sub(line) as u16;
+                let around = Rect::new(
+                    shown.area.x.saturating_sub(pad),
+                    shown.area.y.saturating_sub(pad),
+                    shown.area.width + 2 * pad,
+                    shown.area.height + 2 * pad,
+                );
+                canvas.stroke(around, line, Color::BLACK);
                 canvas.fill(handle(shown.area, &self.style), Color::BLACK);
             }
         }
