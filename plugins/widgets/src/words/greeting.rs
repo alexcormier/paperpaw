@@ -25,40 +25,43 @@ const ICON: &str = "icon";
 /// The font of the greeting: one of [`FACES`].
 const FACE: Setting<Text> = Setting::new("widgets.greeting.face");
 
-pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
-    r.add_setting_group(widgets::settings_group(&ID, "widgets.greeting"))?;
-    r.add_setting(
-        SettingSpec::text(&NAME, "widgets.greeting.setting.name", "")
-            .group(ID)
-            .description("widgets.greeting.setting.name.help"),
-    )?;
-    r.add_setting(
-        SettingSpec::choice(
-            &LINE,
-            "widgets.greeting.setting.line",
-            LINES.iter().map(|s| (*s).into()).collect(),
-            LINES[1],
-        )
-        .group(ID),
-    )?;
-    r.add_setting(widgets::part_setting(
-        &ID,
-        ICON,
+/// The greeting's settings, kept in the program.
+static SETTINGS: [SettingSpec; 7] = [
+    SettingSpec::fixed_text(
+        "widgets.greeting.name",
+        "widgets.greeting.setting.name",
+        "",
+        ID,
+    )
+    .described("widgets.greeting.setting.name.help"),
+    SettingSpec::fixed_choice(
+        "widgets.greeting.line",
+        "widgets.greeting.setting.line",
+        &LINES,
+        LINES[1],
+        ID,
+    ),
+    widgets::part_spec(
+        "widgets.greeting.icon",
+        ID,
         "widgets.greeting.setting.icon",
         false,
-    ))?;
-    r.add_setting(
-        SettingSpec::choice(
-            &FACE,
-            "widgets.setting.face",
-            FACES.iter().map(|s| (*s).into()).collect(),
-            FACES[0],
-        )
-        .group(ID),
-    )?;
-    r.add_setting(widgets::size_setting(&ID, Size::Fit, true))?;
-    r.add_setting(widgets::align_setting(&ID, Align::Center))?;
-    r.add_setting(widgets::frame_setting(&ID, Frame::None))?;
+    ),
+    SettingSpec::fixed_choice(
+        "widgets.greeting.face",
+        "widgets.setting.face",
+        &FACES,
+        FACES[0],
+        ID,
+    ),
+    widgets::size_spec("widgets.greeting.size", ID, Size::Fit, true),
+    widgets::align_spec("widgets.greeting.align", ID, Align::Center),
+    widgets::frame_spec("widgets.greeting.frame", ID, Frame::None),
+];
+
+pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
+    r.add_setting_group(widgets::settings_group(&ID, "widgets.greeting"))?;
+    r.add_settings(&SETTINGS)?;
     r.add_widget(
         WidgetSpec::drawn(
             ID,
@@ -242,6 +245,24 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn its_settings_are_those_read() {
+        let ids: alloc::vec::Vec<&str> = super::SETTINGS.iter().map(|s| s.id.as_str()).collect();
+        for read in [
+            super::NAME.as_str(),
+            super::LINE.as_str(),
+            super::FACE.as_str(),
+            "widgets.greeting.icon",
+        ] {
+            assert!(ids.contains(&read), "{read}");
+        }
+        for look in ["size", "align", "frame"] {
+            let id = alloc::format!("{}.{look}", super::ID);
+            assert!(ids.contains(&id.as_str()), "{id}");
+        }
+        assert!(super::SETTINGS.iter().all(|s| s.group == super::ID));
+    }
     use super::*;
 
     #[test]

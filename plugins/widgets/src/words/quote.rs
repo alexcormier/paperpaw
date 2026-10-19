@@ -55,63 +55,62 @@ fn turns_file() -> String {
     data("quote.txt")
 }
 
-pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
-    r.add_setting_group(widgets::settings_group(&ID, "widgets.quote"))?;
-    r.add_setting(
-        SettingSpec::choice(
-            &SOURCE,
-            "widgets.quote.setting.source",
-            SOURCES.iter().map(|s| (*s).into()).collect(),
-            SOURCES[2],
-        )
-        .group(ID)
-        .description("widgets.quote.setting.source.help"),
-    )?;
-    r.add_setting(
-        SettingSpec::choice(
-            &CHANGE,
-            "widgets.setting.change",
-            CHANGES.iter().map(|s| (*s).into()).collect(),
-            CHANGES[0],
-        )
-        .group(ID),
-    )?;
-    r.add_setting(widgets::part_setting(
-        &ID,
-        AUTHOR,
+/// The quote's settings, kept in the program.
+static SETTINGS: [SettingSpec; 10] = [
+    SettingSpec::fixed_choice(
+        "widgets.quote.source",
+        "widgets.quote.setting.source",
+        &SOURCES,
+        SOURCES[2],
+        ID,
+    )
+    .described("widgets.quote.setting.source.help"),
+    SettingSpec::fixed_choice(
+        "widgets.quote.change",
+        "widgets.setting.change",
+        &CHANGES,
+        CHANGES[0],
+        ID,
+    ),
+    widgets::part_spec(
+        "widgets.quote.author",
+        ID,
         "widgets.quote.setting.author",
         true,
-    ))?;
-    r.add_setting(widgets::part_setting(
-        &ID,
-        MARKS,
+    ),
+    widgets::part_spec(
+        "widgets.quote.marks",
+        ID,
         "widgets.quote.setting.marks",
         true,
-    ))?;
-    r.add_setting(widgets::part_setting(
-        &ID,
-        MARK,
+    ),
+    widgets::part_spec(
+        "widgets.quote.mark",
+        ID,
         "widgets.quote.setting.mark",
         false,
-    ))?;
-    r.add_setting(widgets::part_setting(
-        &ID,
-        CAPTION,
+    ),
+    widgets::part_spec(
+        "widgets.quote.caption",
+        ID,
         "widgets.quote.setting.caption",
         false,
-    ))?;
-    r.add_setting(
-        SettingSpec::choice(
-            &FACE,
-            "widgets.setting.face",
-            FACES.iter().map(|s| (*s).into()).collect(),
-            FACES[2],
-        )
-        .group(ID),
-    )?;
-    r.add_setting(widgets::size_setting(&ID, Size::Fit, true))?;
-    r.add_setting(widgets::align_setting(&ID, Align::Center))?;
-    r.add_setting(widgets::frame_setting(&ID, Frame::None))?;
+    ),
+    SettingSpec::fixed_choice(
+        "widgets.quote.face",
+        "widgets.setting.face",
+        &FACES,
+        FACES[2],
+        ID,
+    ),
+    widgets::size_spec("widgets.quote.size", ID, Size::Fit, true),
+    widgets::align_spec("widgets.quote.align", ID, Align::Center),
+    widgets::frame_spec("widgets.quote.frame", ID, Frame::None),
+];
+
+pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
+    r.add_setting_group(widgets::settings_group(&ID, "widgets.quote"))?;
+    r.add_settings(&SETTINGS)?;
     r.on(NEXT, |env, _, out| {
         Turns::turn(env.storage, &turns_file(), today(env), daily(env));
         changed(out, &ID);
@@ -393,6 +392,27 @@ impl Layout {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn its_settings_are_those_read() {
+        let ids: alloc::vec::Vec<&str> = super::SETTINGS.iter().map(|s| s.id.as_str()).collect();
+        for read in [
+            super::SOURCE.as_str(),
+            super::CHANGE.as_str(),
+            super::FACE.as_str(),
+            "widgets.quote.author",
+            "widgets.quote.marks",
+            "widgets.quote.mark",
+            "widgets.quote.caption",
+        ] {
+            assert!(ids.contains(&read), "{read}");
+        }
+        for look in ["size", "align", "frame"] {
+            let id = alloc::format!("{}.{look}", super::ID);
+            assert!(ids.contains(&id.as_str()), "{id}");
+        }
+        assert!(super::SETTINGS.iter().all(|s| s.group == super::ID));
+    }
     use super::*;
     use quireink_sdk::MemoryStorage;
 

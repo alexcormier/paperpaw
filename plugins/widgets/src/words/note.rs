@@ -31,30 +31,32 @@ const FACE: Setting<Text> = Setting::new("widgets.note.face");
 /// The text typed for it on the keyboard.
 const TYPED: Event<Typed> = Event::new("widgets.note.typed");
 
+/// The note's settings, kept in the program.
+static SETTINGS: [SettingSpec; 6] = [
+    SettingSpec::fixed_text("widgets.note.text", "widgets.note.setting.text", "", ID)
+        .described("widgets.note.setting.text.help"),
+    SettingSpec::fixed_text(
+        "widgets.note.heading",
+        "widgets.note.setting.heading",
+        "",
+        ID,
+    )
+    .described("widgets.note.setting.heading.help"),
+    SettingSpec::fixed_choice(
+        "widgets.note.face",
+        "widgets.setting.face",
+        &FACES,
+        FACES[0],
+        ID,
+    ),
+    widgets::size_spec("widgets.note.size", ID, Size::Fit, true),
+    widgets::align_spec("widgets.note.align", ID, Align::Center),
+    widgets::frame_spec("widgets.note.frame", ID, Frame::None),
+];
+
 pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     r.add_setting_group(widgets::settings_group(&ID, "widgets.note"))?;
-    r.add_setting(
-        SettingSpec::text(&TEXT, "widgets.note.setting.text", "")
-            .group(ID)
-            .description("widgets.note.setting.text.help"),
-    )?;
-    r.add_setting(
-        SettingSpec::text(&HEADING, "widgets.note.setting.heading", "")
-            .group(ID)
-            .description("widgets.note.setting.heading.help"),
-    )?;
-    r.add_setting(
-        SettingSpec::choice(
-            &FACE,
-            "widgets.setting.face",
-            FACES.iter().map(|s| (*s).into()).collect(),
-            FACES[0],
-        )
-        .group(ID),
-    )?;
-    r.add_setting(widgets::size_setting(&ID, Size::Fit, true))?;
-    r.add_setting(widgets::align_setting(&ID, Align::Center))?;
-    r.add_setting(widgets::frame_setting(&ID, Frame::None))?;
+    r.add_settings(&SETTINGS)?;
     r.on(TYPED, |_, typed, out| {
         let text = typed.text.trim();
         out.push(Command::SetSetting(
@@ -154,5 +156,26 @@ fn heading_height(env: &Env<'_>) -> u16 {
         0
     } else {
         widgets::caption_height(env)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    #[test]
+    fn its_settings_are_those_read() {
+        let ids: alloc::vec::Vec<&str> = super::SETTINGS.iter().map(|s| s.id.as_str()).collect();
+        for read in [
+            super::TEXT.as_str(),
+            super::HEADING.as_str(),
+            super::FACE.as_str(),
+        ] {
+            assert!(ids.contains(&read), "{read}");
+        }
+        for look in ["size", "align", "frame"] {
+            let id = alloc::format!("{}.{look}", super::ID);
+            assert!(ids.contains(&id.as_str()), "{id}");
+        }
+        assert!(super::SETTINGS.iter().all(|s| s.group == super::ID));
     }
 }
