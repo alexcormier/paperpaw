@@ -437,6 +437,9 @@ fn build_kernel(
             builder = builder.frame_rows(rows);
         }
         builder = builder.row_align(profile.row_align);
+        if let Some(name) = profile.catalog_device {
+            builder = builder.catalog_device(name);
+        }
         for (id, value) in profile.settings {
             builder = builder.setting_default_text(id, value);
         }

@@ -45,6 +45,10 @@ pub struct Profile {
     /// PaperPaw manages Wi-Fi itself, as on the X4 (emulated: made-up
     /// networks, see `wifi`); elsewhere the system does.
     pub wifi: bool,
+    /// What plugin libraries call the device (see
+    /// `KernelBuilder::catalog_device`): `None` where PaperPaw has no
+    /// build for it yet, and its plugin store offers nothing.
+    pub catalog_device: Option<&'static str>,
     /// PaperPaw shows its sleep screen and the device sleeps (the power
     /// button); Android shows its own.
     pub sleep: bool,
@@ -108,6 +112,7 @@ pub const PROFILES: &[Profile] = &[
         ],
         speech: false,
         wifi: true,
+        catalog_device: Some("x4"),
         sleep: true,
         button_row: &X4_ROW,
         summary: "ESP32-C3, 4.3\" 800x480, buttons only, 256 KiB heap budget",
@@ -155,6 +160,7 @@ pub const PROFILES: &[Profile] = &[
         ],
         speech: false,
         wifi: true,
+        catalog_device: Some("x4-pro"),
         sleep: true,
         button_row: &[],
         summary: "ESP32-S3 (unverified), 4.3\" 800x480, touch + buttons, 256 KiB heap budget",
@@ -188,6 +194,7 @@ pub const PROFILES: &[Profile] = &[
         settings: &[],
         speech: true,
         wifi: false,
+        catalog_device: Some("android"),
         sleep: false,
         button_row: &[],
         summary: "Android, 7\" Carta 1300 1264x1680, touch + page buttons",
@@ -224,6 +231,7 @@ pub const PROFILES: &[Profile] = &[
         settings: &[],
         speech: false,
         wifi: false,
+        catalog_device: None,
         sleep: true,
         button_row: &[],
         summary: "Linux, 7\" Kaleido 3 colour 1264x1680, touch + page buttons",
@@ -257,6 +265,7 @@ pub const PROFILES: &[Profile] = &[
         settings: &[],
         speech: false,
         wifi: false,
+        catalog_device: None,
         sleep: true,
         button_row: &[],
         summary: "Linux, 6.8\" 1236x1648, touch only",
@@ -290,6 +299,7 @@ pub const PROFILES: &[Profile] = &[
         settings: &[],
         speech: false,
         wifi: false,
+        catalog_device: None,
         sleep: true,
         button_row: &[],
         summary: "Linux, 6\" 1072x1448, touch only",
@@ -324,6 +334,7 @@ pub const PROFILES: &[Profile] = &[
         settings: &[("core.keymap-preset", "core.two-buttons")],
         speech: false,
         wifi: false,
+        catalog_device: None,
         sleep: true,
         button_row: &[],
         summary: "Generic 6\" 600x800, only page buttons (also: Bluetooth page turners)",

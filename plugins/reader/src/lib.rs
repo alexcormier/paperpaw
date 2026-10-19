@@ -86,6 +86,9 @@ const SKIM: Id = Id::new_static("reader.skim");
 const SKIMMED: Id = Id::new_static("reader.skimmed");
 /// A footnote over the page (see `footnote`).
 pub const FOOTNOTE_SCREEN: Id = Id::new_static("reader.footnote");
+/// A sample of text set as the reading settings say, the preview above
+/// them on their settings page (a widget, see `screen::Sample`).
+pub const SAMPLE: Id = Id::new_static("reader.sample");
 
 /// Settings of the reader.
 pub mod settings {
@@ -204,7 +207,8 @@ pub mod actions {
 #[derive(Debug, Default)]
 pub struct Reader;
 
-/// The parts of the reading settings, with units and steps.
+/// The parts of the reading settings, with units and steps; those set by
+/// eye with sliders.
 mod extras {
     use paperpaw_sdk::SettingExtra;
     use paperpaw_sdk::builtin::setting_sections::{ALOUD, BEHAVIOUR, FONT, PAGE};
@@ -212,15 +216,20 @@ mod extras {
     pub(crate) static LINE_SPACING: SettingExtra = SettingExtra::new()
         .unit("core.unit.percent")
         .step(5)
-        .section(PAGE);
+        .section(PAGE)
+        .slider();
     pub(crate) static WEIGHT: SettingExtra =
         SettingExtra::new().unit("reader.unit.weight").section(FONT);
     pub(crate) static IN_FONT: SettingExtra = SettingExtra::new().section(FONT);
     pub(crate) static WORD_SPACING: SettingExtra = SettingExtra::new()
         .unit("core.unit.percent")
         .step(10)
-        .section(FONT);
-    pub(crate) static MARGIN: SettingExtra = SettingExtra::new().unit("core.unit.mm").section(PAGE);
+        .section(FONT)
+        .slider();
+    pub(crate) static MARGIN: SettingExtra = SettingExtra::new()
+        .unit("core.unit.mm")
+        .section(PAGE)
+        .slider();
     pub(crate) static IN_PAGE: SettingExtra = SettingExtra::new().section(PAGE);
     pub(crate) static IN_BEHAVIOUR: SettingExtra = SettingExtra::new().section(BEHAVIOUR);
     pub(crate) static AUTO_TURN: SettingExtra = SettingExtra::new()
@@ -230,7 +239,8 @@ mod extras {
     pub(crate) static ALOUD_SPEED: SettingExtra = SettingExtra::new()
         .unit("core.unit.percent")
         .step(10)
-        .section(ALOUD);
+        .section(ALOUD)
+        .slider();
     pub(crate) static IN_ALOUD: SettingExtra = SettingExtra::new().section(ALOUD);
 }
 
@@ -498,6 +508,13 @@ impl Plugin for Reader {
         }
 
         r.add_settings(&SETTINGS)?;
+        // A sample of text above the reading settings, set as they say.
+        r.add_widget(
+            paperpaw_sdk::widgets::WidgetSpec::new(SAMPLE, "reader.sample", |_| {
+                Box::new(screen::Sample::new())
+            })
+            .previews(groups::READING),
+        )?;
 
         let font_step = |step: i64| -> paperpaw_sdk::ActionHandler {
             Box::new(move |env: &Env<'_>, out: &mut Vec<Command>| {

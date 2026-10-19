@@ -209,6 +209,7 @@ impl Harness {
             slots: &[],
             screens: &[],
             font_dirs: &[],
+            catalog_device: None,
             secrets: &self.secrets,
             storage: &self.storage,
         })

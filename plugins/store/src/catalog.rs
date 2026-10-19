@@ -1,17 +1,22 @@
-//! The plugin library's list (`plugins.json`, format 1, ADR 0023), read
-//! as it streams from the file it was saved to: only the data plugins fit
-//! for this device are kept, without their files; a plugin's files are
-//! read again when it is installed.
+//! The plugin library's list and its plugins (ADR 0023, format 2), read
+//! as they stream from the files they were saved to.
+//!
+//! The list (`plugins.json?device=x4&lang=de`) holds only the plugins for
+//! this device, in the order to show them (by group, then by name in the
+//! language asked for), without their files:
 //!
 //! ```json
-//! {"format": 1, "plugins": [{
-//!   "id": "airy-theme", "name": "Airy", "summary": "…",
-//!   "i18n": {"de": {"name": "Luftig", "summary": "…"}},
-//!   "kind": "data", "group": "look", "author": "…", "licence": "…",
-//!   "devices": ["android", "x4", "x4-pro"], "built_in": false,
-//!   "latest": {"version": "1.0.0", "sdk": "0.4", "formats": 1,
-//!     "files": [{"path": "plugin.ini", "url": "…", "size": 412, "sha1": "…"}]}}]}
+//! {"format": 2, "plugins": [{
+//!   "id": "airy-theme", "name": "Luftig", "summary": "…", "group": "look",
+//!   "author": "…", "licence": "Apache-2.0", "kind": "data",
+//!   "latest": {"version": "1.0.0", "sdk": "0.4", "formats": 1, "size": 2345}}]}
 //! ```
+//!
+//! The plugins that fit go to an index on the storage: a line each, and
+//! where each line begins (4 bytes each). In memory are only the runs of
+//! plugins of one group, so the list may grow without limit. A plugin's
+//! page asks for it with its files (`plugins/<id>.json`, the same fields
+//! and `latest.files`), read when it comes.
 
 use alloc::format;
 use alloc::string::{String, ToString};
@@ -19,15 +24,13 @@ use alloc::vec::Vec;
 
 use paperpaw_json::stream::{Event, read_file};
 use paperpaw_sdk::install::{self, MAX_FILES, Package, PackageFile};
-use paperpaw_sdk::web::join_url;
+use paperpaw_sdk::web::{encode, join_url};
 use paperpaw_sdk::{Env, Storage, Version};
 
-use crate::{CATALOG, PLUGIN};
+use crate::PLUGIN;
 
-/// The list's format this plugin reads.
-const FORMAT: u32 = 1;
-/// Plugins kept at most.
-const MAX_PLUGINS: usize = 200;
+/// The format of the list and of a plugin's page this plugin reads.
+const FORMAT: u32 = 2;
 /// The longest summary kept, in bytes, and the longest name and other
 /// short texts.
 const MAX_SUMMARY: usize = 300;
@@ -36,19 +39,30 @@ const MAX_NAME: usize = 80;
 const MAX_LINE: usize = 1024;
 /// The index is written in pieces of about this many bytes.
 const WRITE_AT: usize = 2048;
-/// Bytes of a name its place in the list is sorted by.
-const SORT_BYTES: usize = 12;
+/// Runs of plugins of one group at most: a list in the website's order
+/// has one a group; plugins of a list out of order beyond these go with
+/// the last run.
+const MAX_RUNS: usize = 32;
 
 /// The groups, in the order the website shows them.
 pub(crate) const GROUPS: [&str; 7] = [
     "reading", "formats", "library", "sync", "home", "look", "system",
 ];
 
+/// The group of `name`, the last (`system`) for one this plugin does not
+/// know.
+pub(crate) fn group(name: &str) -> usize {
+    GROUPS
+        .iter()
+        .position(|g| *g == name)
+        .unwrap_or(GROUPS.len() - 1)
+}
+
 /// A data plugin the library offers for this device.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct Entry {
     pub id: String,
-    /// In the UI's language where the list has it.
+    /// In the UI's language where the library has it.
     pub name: String,
     pub summary: String,
     /// Index into [`GROUPS`].
@@ -73,200 +87,7 @@ impl Entry {
             _ => false,
         }
     }
-}
 
-/// What is known of the plugin being read.
-#[derive(Default)]
-struct Item {
-    entry: Entry,
-    /// Name and summary in the UI's language.
-    name: String,
-    summary: String,
-    group: String,
-    kind: String,
-    built_in: bool,
-    /// `devices` named any device, and this one.
-    devices: bool,
-    device: bool,
-    sdk: String,
-    formats: u32,
-    files: usize,
-    /// Every file so far fits; a `plugin.ini` among them.
-    files_fit: bool,
-    manifest: bool,
-    /// The file being read.
-    file: PackageFile,
-    /// The files, kept only when asked for.
-    package: Vec<PackageFile>,
-}
-
-impl Item {
-    fn new() -> Self {
-        Self {
-            files_fit: true,
-            formats: 1,
-            ..Self::default()
-        }
-    }
-
-    /// The file just read is done.
-    fn file_done(&mut self, keep: bool) {
-        let file = core::mem::take(&mut self.file);
-        self.files += 1;
-        self.manifest |= file.path == "plugin.ini";
-        if !file.is_valid() || self.files > MAX_FILES {
-            self.files_fit = false;
-        } else if keep {
-            self.package.push(file);
-        }
-    }
-
-    /// Whether this device can install it.
-    fn fits(&self) -> bool {
-        let entry = &self.entry;
-        self.kind == "data"
-            && !self.built_in
-            && (!self.devices || self.device)
-            && install::is_plugin_name(&entry.id)
-            && !entry.name.is_empty()
-            && Version::parse(&entry.version).is_some()
-            && install::fits(&self.sdk, self.formats)
-            && self.files > 0
-            && self.files_fit
-            && self.manifest
-    }
-
-    fn finish(mut self) -> Entry {
-        if !self.name.is_empty() {
-            self.entry.name = self.name;
-        }
-        if !self.summary.is_empty() {
-            self.entry.summary = self.summary;
-        }
-        self.entry.group = GROUPS
-            .iter()
-            .position(|g| *g == self.group)
-            .unwrap_or(GROUPS.len() - 1);
-        self.entry
-    }
-}
-
-/// Cuts `text` to at most `max` bytes, at a character's end.
-fn cut(text: &str, max: usize) -> String {
-    let mut end = text.len().min(max);
-    while !text.is_char_boundary(end) {
-        end -= 1;
-    }
-    text[..end].to_string()
-}
-
-/// Reads the list at `path` for the device `device` (as libraries name
-/// it) in the language `language`, handing each plugin that fits to
-/// `found`; with `wanted`, also that plugin's files, as the list gives
-/// their addresses. `None` if it is no list this plugin reads.
-fn read(
-    storage: &dyn Storage,
-    path: &str,
-    device: &str,
-    language: &str,
-    wanted: Option<&str>,
-    found: &mut dyn FnMut(Entry),
-) -> Option<Option<Package>> {
-    let mut package = None;
-    let mut format = None;
-    let mut item: Option<Item> = None;
-    let mut count = 0;
-    read_file(storage, path, &mut |event| match event {
-        Event::Value([key], value) if key == "format" => format = value.parse::<u32>().ok(),
-        Event::Open([list, at]) if list == "plugins" && at == "[]" => item = Some(Item::new()),
-        Event::Close([list, at]) if list == "plugins" && at == "[]" => {
-            let Some(mut done) = item.take() else {
-                return;
-            };
-            if !done.fits() {
-                return;
-            }
-            if wanted == Some(done.entry.id.as_str()) {
-                package = Some(Package {
-                    plugin: done.entry.id.clone(),
-                    name: String::new(),
-                    files: core::mem::take(&mut done.package),
-                });
-            }
-            if count < MAX_PLUGINS {
-                count += 1;
-                found(done.finish());
-            }
-        }
-        Event::Close([list, at, latest, files, file])
-            if list == "plugins"
-                && at == "[]"
-                && latest == "latest"
-                && files == "files"
-                && file == "[]" =>
-        {
-            if let Some(item) = item.as_mut() {
-                // Files are kept only for the plugin asked for; its id
-                // may come after them.
-                item.file_done(wanted.is_some());
-            }
-        }
-        Event::Value([list, at, rest @ ..], value) if list == "plugins" && at == "[]" => {
-            let Some(item) = item.as_mut() else {
-                return;
-            };
-            let entry = &mut item.entry;
-            match rest {
-                [key] => match key.as_str() {
-                    "id" => entry.id = cut(value, MAX_NAME),
-                    "name" => entry.name = cut(value, MAX_NAME),
-                    "summary" => entry.summary = cut(value, MAX_SUMMARY),
-                    "author" => entry.author = cut(value, MAX_NAME),
-                    "licence" => entry.licence = cut(value, MAX_NAME),
-                    "group" => item.group = cut(value, MAX_NAME),
-                    "kind" => item.kind = cut(value, MAX_NAME),
-                    "built_in" => item.built_in = value == "true",
-                    _ => {}
-                },
-                [devices, at] if devices == "devices" && at == "[]" => {
-                    item.devices = true;
-                    item.device |= value == device;
-                }
-                [i18n, lang, key] if i18n == "i18n" && lang == language => match key.as_str() {
-                    "name" => item.name = cut(value, MAX_NAME),
-                    "summary" => item.summary = cut(value, MAX_SUMMARY),
-                    _ => {}
-                },
-                [latest, key] if latest == "latest" => match key.as_str() {
-                    "version" => entry.version = cut(value, MAX_NAME),
-                    "sdk" => item.sdk = cut(value, MAX_NAME),
-                    "formats" => item.formats = value.parse().unwrap_or(u32::MAX),
-                    _ => {}
-                },
-                [latest, files, at, key]
-                    if latest == "latest" && files == "files" && at == "[]" =>
-                {
-                    let file = &mut item.file;
-                    match key.as_str() {
-                        "path" => file.path = value.to_string(),
-                        "url" => file.url = value.to_string(),
-                        "size" => {
-                            file.size = value.parse().unwrap_or(0);
-                            entry.size += file.size;
-                        }
-                        "sha1" => file.sha1 = value.to_ascii_lowercase(),
-                        _ => {}
-                    }
-                }
-                _ => {}
-            }
-        }
-        _ => {}
-    });
-    (format == Some(FORMAT)).then_some(package)
-}
-
-impl Entry {
     /// Its line in the index, tabs and line ends of the list left out.
     fn line(&self) -> String {
         let clean = |s: &str| s.replace(['\t', '\n', '\r'], " ");
@@ -298,30 +119,269 @@ impl Entry {
     }
 }
 
-/// The first line of an index: for which device and language it is.
-fn header(device: &str, language: &str) -> String {
-    format!("store-index 1\t{device}\t{language}\n")
+/// What is known of the plugin being read.
+#[derive(Default)]
+struct Item {
+    entry: Entry,
+    kind: String,
+    built_in: bool,
+    /// `devices`, where the library names them: any, and this one.
+    devices: bool,
+    device: bool,
+    sdk: String,
+    formats: u32,
+    /// The files read so far (a plugin's page only), and the one being
+    /// read.
+    files: Vec<PackageFile>,
+    file: PackageFile,
 }
 
-/// Writes the index of the list at `json` to `index`: a line for each
-/// plugin that fits, so that nothing of the list is held in memory.
-/// `false` (and no index) if it is no list this plugin reads.
-fn build(storage: &dyn Storage, json: &str, index: &str, device: &str, language: &str) -> bool {
-    let mut text = header(device, language);
-    let mut written = storage.write(index, text.as_bytes()).is_ok();
-    text.clear();
-    let read = read(storage, json, device, language, None, &mut |entry| {
-        text.push_str(&entry.line());
-        if text.len() > WRITE_AT {
-            written &= storage.append(index, text.as_bytes()).is_ok();
-            text.clear();
+impl Item {
+    fn new() -> Self {
+        Self {
+            formats: 1,
+            ..Self::default()
+        }
+    }
+
+    /// Whether this device can install it.
+    fn fits(&self) -> bool {
+        let entry = &self.entry;
+        self.kind == "data"
+            && !self.built_in
+            && (!self.devices || self.device)
+            && install::is_plugin_name(&entry.id)
+            && !entry.name.is_empty()
+            && Version::parse(&entry.version).is_some()
+            && install::fits(&self.sdk, self.formats)
+    }
+
+    /// Takes what `key` (the path below the plugin) says.
+    fn read(&mut self, key: &[String], value: &str, device: &str) {
+        let entry = &mut self.entry;
+        match key {
+            [key] => match key.as_str() {
+                "id" => entry.id = cut(value, MAX_NAME),
+                "name" => entry.name = cut(value, MAX_NAME),
+                "summary" => entry.summary = cut(value, MAX_SUMMARY),
+                "author" => entry.author = cut(value, MAX_NAME),
+                "licence" => entry.licence = cut(value, MAX_NAME),
+                "group" => entry.group = group(value),
+                "kind" => self.kind = cut(value, MAX_NAME),
+                "built_in" => self.built_in = value == "true",
+                _ => {}
+            },
+            [devices, at] if devices == "devices" && at == "[]" => {
+                self.devices = true;
+                self.device |= value == device;
+            }
+            [latest, key] if latest == "latest" => match key.as_str() {
+                "version" => entry.version = cut(value, MAX_NAME),
+                "sdk" => self.sdk = cut(value, MAX_NAME),
+                "formats" => self.formats = value.parse().unwrap_or(u32::MAX),
+                "size" => entry.size = value.parse().unwrap_or(0),
+                _ => {}
+            },
+            [latest, files, at, key] if latest == "latest" && files == "files" && at == "[]" => {
+                let file = &mut self.file;
+                match key.as_str() {
+                    "path" => file.path = value.to_string(),
+                    "url" => file.url = value.to_string(),
+                    "size" => file.size = value.parse().unwrap_or(0),
+                    "sha1" => file.sha1 = value.to_ascii_lowercase(),
+                    _ => {}
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// A file of `latest.files` was read whole (one more than a package
+    /// may have is kept, so that it is refused).
+    fn file_done(&mut self) {
+        let file = core::mem::take(&mut self.file);
+        if self.files.len() <= MAX_FILES {
+            self.files.push(file);
+        }
+    }
+}
+
+/// Cuts `text` to at most `max` bytes, at a character's end.
+fn cut(text: &str, max: usize) -> String {
+    let mut end = text.len().min(max);
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    text[..end].to_string()
+}
+
+/// Whether `path` (below a plugin) is that of a file of `latest.files`.
+fn is_file(path: &[String]) -> bool {
+    matches!(path, [latest, files, at] if latest == "latest" && files == "files" && at == "[]")
+}
+
+/// Reads the list at `path` for the device `device`, handing each plugin
+/// that fits to `found`. `false` if it is no list this plugin reads.
+fn read_list(
+    storage: &dyn Storage,
+    path: &str,
+    device: &str,
+    found: &mut dyn FnMut(Entry),
+) -> bool {
+    let mut format = None;
+    let mut item: Option<Item> = None;
+    read_file(storage, path, &mut |event| match event {
+        Event::Value([key], value) if key == "format" => format = value.parse::<u32>().ok(),
+        Event::Open([list, at]) if list == "plugins" && at == "[]" => item = Some(Item::new()),
+        Event::Close([list, at]) if list == "plugins" && at == "[]" => {
+            if let Some(done) = item.take().filter(Item::fits) {
+                found(done.entry);
+            }
+        }
+        Event::Value([list, at, rest @ ..], value) if list == "plugins" && at == "[]" => {
+            if let Some(item) = item.as_mut() {
+                item.read(rest, value, device);
+            }
+        }
+        _ => {}
+    });
+    format == Some(FORMAT)
+}
+
+/// Reads a plugin's page at `path` (`{"format": 2, "plugin": {…}}`): the
+/// plugin if it fits this device, with its files, their addresses
+/// relative to `base` (the page's).
+fn read_plugin(
+    storage: &dyn Storage,
+    path: &str,
+    device: &str,
+    base: &str,
+) -> Option<(Entry, Package)> {
+    let mut format = None;
+    let mut item = Item::new();
+    read_file(storage, path, &mut |event| match event {
+        Event::Value([key], value) if key == "format" => format = value.parse::<u32>().ok(),
+        Event::Close([plugin, rest @ ..]) if plugin == "plugin" && is_file(rest) => {
+            item.file_done();
+        }
+        Event::Value([plugin, rest @ ..], value) if plugin == "plugin" => {
+            item.read(rest, value, device);
+        }
+        _ => {}
+    });
+    if format != Some(FORMAT) || !item.fits() {
+        return None;
+    }
+    let files = core::mem::take(&mut item.files)
+        .into_iter()
+        .map(|mut file| {
+            file.url = join_url(base, &file.url);
+            file
+        })
+        .collect();
+    let package = Package {
+        plugin: item.entry.id.clone(),
+        name: item.entry.name.clone(),
+        files,
+    };
+    package.is_valid().then_some((item.entry, package))
+}
+
+/// A file of the store: the list fetched, the index and where its lines
+/// begin, a plugin's page, the hits of a search.
+fn file(name: &str) -> String {
+    format!("{}/{name}", Env::plugin_dir(PLUGIN.as_str()))
+}
+
+pub(crate) fn list_part() -> String {
+    file("list.part")
+}
+
+pub(crate) fn plugin_part() -> String {
+    file("plugin.part")
+}
+
+fn index_path() -> String {
+    file("index.txt")
+}
+
+fn head_path() -> String {
+    file("index.head")
+}
+
+fn offsets_path() -> String {
+    file("index.bin")
+}
+
+fn hits_path() -> String {
+    file("search.bin")
+}
+
+/// The first line of an index's head: its format, then the runs of
+/// plugins of one group (`group:count`), in order.
+const HEADER: &str = "store-index 2";
+
+/// The address of the list at `list` for `device` in `language`.
+pub(crate) fn list_url(list: &str, device: &str, language: &str) -> String {
+    let join = if list.contains('?') { '&' } else { '?' };
+    format!(
+        "{list}{join}device={}&lang={}",
+        encode(device),
+        encode(language)
+    )
+}
+
+/// The address of plugin `id`'s page, beside the list at `list` (the
+/// setting's, without the device and the language), for `device` in
+/// `language`.
+pub(crate) fn plugin_url(list: &str, device: &str, language: &str, id: &str) -> String {
+    let page = join_url(list, &format!("plugins/{}.json", encode(id)));
+    list_url(&page, device, language)
+}
+
+/// Writes the index of the list at `json` (`index`, `offsets`, `head` on
+/// the storage). `false` (and no index) if it is no list this plugin
+/// reads.
+fn build(
+    storage: &dyn Storage,
+    json: &str,
+    [index, offsets, head]: [&str; 3],
+    device: &str,
+) -> bool {
+    let mut runs: Vec<(usize, u32)> = Vec::new();
+    let mut lines = String::new();
+    let mut starts: Vec<u8> = Vec::new();
+    let mut offset = 0u32;
+    let mut written = storage.write(index, b"").is_ok() && storage.write(offsets, b"").is_ok();
+    let read = read_list(storage, json, device, &mut |entry| {
+        let full = runs.len() >= MAX_RUNS;
+        match runs.last_mut() {
+            Some((group, count)) if *group == entry.group || full => *count += 1,
+            _ => runs.push((entry.group, 1)),
+        }
+        let line = entry.line();
+        starts.extend_from_slice(&offset.to_le_bytes());
+        offset = offset.saturating_add(line.len() as u32);
+        lines.push_str(&line);
+        if lines.len() > WRITE_AT {
+            written &= storage.append(index, lines.as_bytes()).is_ok();
+            written &= storage.append(offsets, &starts).is_ok();
+            lines.clear();
+            starts.clear();
         }
     });
-    if !text.is_empty() {
-        written &= storage.append(index, text.as_bytes()).is_ok();
-    }
-    if read.is_none() || !written {
-        let _ = storage.remove(index);
+    written &= storage.append(index, lines.as_bytes()).is_ok();
+    written &= storage.append(offsets, &starts).is_ok();
+    let runs: Vec<String> = runs
+        .iter()
+        .map(|(group, count)| format!("{group}:{count}"))
+        .collect();
+    let text = format!("{HEADER}\t{}\n", runs.join(","));
+    written &= storage.write(head, text.as_bytes()).is_ok();
+    if !read || !written {
+        for path in [index, offsets, head] {
+            let _ = storage.remove(path);
+        }
         return false;
     }
     true
@@ -350,172 +410,127 @@ fn line_at(storage: &dyn Storage, path: &str, offset: u32) -> Option<String> {
     String::from_utf8(line).ok()
 }
 
-/// The plugins of an index, by group and name: each one's group and
-/// where its line is (8 bytes each; the lines stay on the storage).
+/// The `n`th number of 4 bytes in the file at `path`.
+fn number_at(storage: &dyn Storage, path: &str, n: usize) -> Option<u32> {
+    let mut bytes = [0u8; 4];
+    let read = storage.read_at(path, (n as u64) * 4, &mut bytes).ok()?;
+    (read == 4).then(|| u32::from_le_bytes(bytes))
+}
+
+/// The plugins of the index on the storage: in memory only the runs of
+/// plugins of one group, in order.
 #[derive(Debug, Default)]
 pub(crate) struct Index {
-    path: String,
-    rows: Vec<(u8, u32)>,
+    runs: Vec<(usize, usize)>,
 }
 
 impl Index {
-    /// The index at `path` if it is for `device` and `language`.
-    fn open(storage: &dyn Storage, path: &str, device: &str, language: &str) -> Option<Index> {
-        let wanted = header(device, language);
-        let mut first = [0u8; 128];
-        let n = storage.read_at(path, 0, &mut first).ok()?;
-        if !first[..n].starts_with(wanted.as_bytes()) {
+    /// The index kept on the storage, if there is one.
+    pub(crate) fn kept(storage: &dyn Storage) -> Option<Index> {
+        Self::open(storage, &head_path())
+    }
+
+    fn open(storage: &dyn Storage, head: &str) -> Option<Index> {
+        let text = line_at(storage, head, 0)?;
+        let (format, runs) = text.split_once('\t').unwrap_or((&text, ""));
+        if format != HEADER {
             return None;
         }
-        // By group, then by the first letters of the name.
-        let mut keys: Vec<(u8, [u8; SORT_BYTES], u32)> = Vec::new();
-        let mut buf = [0u8; 512];
-        let mut at = 0u64;
-        let mut start = 0u64;
-        let mut line: Vec<u8> = Vec::new();
-        loop {
-            let n = storage.read_at(path, at, &mut buf).ok()?;
-            if n == 0 {
-                break;
-            }
-            for (i, &byte) in buf[..n].iter().enumerate() {
-                if byte != b'\n' {
-                    if line.len() < MAX_LINE {
-                        line.push(byte);
-                    }
-                    continue;
-                }
-                // The header (at 0) is no plugin.
-                if start > 0
-                    && let Some((group, name)) = sort_key(&line)
-                {
-                    keys.push((group, name, start as u32));
-                }
-                line.clear();
-                start = at + i as u64 + 1;
-            }
-            at += n as u64;
-        }
-        keys.sort_unstable();
-        // A list of its own: the keys' would stay, two and a half times
-        // as large.
-        let mut rows = Vec::with_capacity(keys.len());
-        rows.extend(keys.iter().map(|&(group, _, at)| (group, at)));
-        Some(Index {
-            path: path.to_string(),
-            rows,
-        })
+        let runs = runs
+            .split(',')
+            .filter(|run| !run.is_empty())
+            .filter_map(|run| {
+                let (group, count) = run.split_once(':')?;
+                Some((group.parse().ok()?, count.parse().ok()?))
+            })
+            .filter(|&(group, _)| group < GROUPS.len())
+            .collect();
+        Some(Index { runs })
+    }
+
+    /// The runs of plugins of one group, in order: (group, how many).
+    pub(crate) fn runs(&self) -> &[(usize, usize)] {
+        &self.runs
     }
 
     pub(crate) fn len(&self) -> usize {
-        self.rows.len()
-    }
-
-    /// The group of plugin `n`.
-    pub(crate) fn group(&self, n: usize) -> usize {
-        self.rows.get(n).map_or(0, |(group, _)| usize::from(*group))
+        self.runs.iter().map(|(_, count)| count).sum()
     }
 
     /// Plugin `n`, read from the storage.
     pub(crate) fn entry(&self, storage: &dyn Storage, n: usize) -> Option<Entry> {
-        let (_, at) = self.rows.get(n)?;
-        Entry::parse(&line_at(storage, &self.path, *at)?)
+        let offset = number_at(storage, &offsets_path(), n)?;
+        Entry::parse(&line_at(storage, &index_path(), offset)?)
+    }
+
+    /// Searches the names and summaries for `query` (the case of letters
+    /// left aside), keeping the hits on the storage; how many there are.
+    pub(crate) fn search(&self, storage: &dyn Storage, query: &str) -> usize {
+        let query = query.trim().to_lowercase();
+        let hits = hits_path();
+        let mut written = storage.write(&hits, b"").is_ok();
+        let mut found: Vec<u8> = Vec::new();
+        let mut count = 0;
+        for n in 0..self.len() {
+            let Some(entry) = self.entry(storage, n) else {
+                continue;
+            };
+            if entry.name.to_lowercase().contains(&query)
+                || entry.summary.to_lowercase().contains(&query)
+            {
+                found.extend_from_slice(&(n as u32).to_le_bytes());
+                count += 1;
+                if found.len() >= WRITE_AT {
+                    written &= storage.append(&hits, &found).is_ok();
+                    found.clear();
+                }
+            }
+        }
+        written &= storage.append(&hits, &found).is_ok();
+        if written { count } else { 0 }
     }
 }
 
-/// A line's group and the first bytes of its name, lower case.
-fn sort_key(line: &[u8]) -> Option<(u8, [u8; SORT_BYTES])> {
-    let mut fields = line.split(|&b| b == b'\t');
-    let group = core::str::from_utf8(fields.next()?).ok()?.parse().ok()?;
-    let name = fields.nth(5)?;
-    let mut key = [0u8; SORT_BYTES];
-    for (k, b) in key.iter_mut().zip(name) {
-        *k = b.to_ascii_lowercase();
-    }
-    Some((group, key))
+/// The plugin of hit `n` of the last search.
+pub(crate) fn hit(storage: &dyn Storage, n: usize) -> Option<usize> {
+    number_at(storage, &hits_path(), n).map(|n| n as usize)
 }
 
-/// Where the list is kept between visits, its index, and the address it
-/// came from.
-pub(crate) fn path() -> String {
-    format!("{}/plugins.json", Env::plugin_dir(PLUGIN.as_str()))
-}
-
-fn index_path() -> String {
-    format!("{}/index.txt", Env::plugin_dir(PLUGIN.as_str()))
-}
-
-fn base_path() -> String {
-    format!("{}/address.txt", Env::plugin_dir(PLUGIN.as_str()))
-}
-
-/// The address of the list kept: where it came from (after redirects),
-/// else the setting's.
-fn base(env: &Env<'_>) -> String {
-    paperpaw_sdk::read_file(env.storage, &base_path(), 1024)
-        .ok()
-        .and_then(|text| String::from_utf8(text).ok())
-        .map(|text| text.trim().to_string())
-        .filter(|text| !text.is_empty())
-        .unwrap_or_else(|| env.settings.read(&CATALOG).trim().to_string())
-}
-
-fn device(env: &Env<'_>) -> &'static str {
-    install::device_name(env.device)
-}
-
-/// Takes the list fetched to `fetched` (from `address`): its index, and
-/// the list kept for the next visits. `None` (and the file gone) if it
-/// is no list this plugin reads.
-pub(crate) fn take(env: &Env<'_>, fetched: &str, address: &str) -> Option<Index> {
-    let storage = env.storage;
-    let part = format!("{}.part", index_path());
-    let language = env.i18n.language();
-    if !build(storage, fetched, &part, device(env), language) {
-        let _ = storage.remove(fetched);
+/// Takes the list fetched to `fetched`: its index, kept for the next
+/// visits. `None` (and the file gone) if it is no list this plugin reads.
+pub(crate) fn take(storage: &dyn Storage, fetched: &str, device: &str) -> Option<Index> {
+    let fresh = [index_path(), offsets_path(), head_path()].map(|path| format!("{path}.part"));
+    let built = build(storage, fetched, [&fresh[0], &fresh[1], &fresh[2]], device);
+    let _ = storage.remove(fetched);
+    if !built {
         return None;
     }
-    let _ = paperpaw_sdk::files::move_to(storage, fetched, &path());
-    let _ = paperpaw_sdk::files::move_to(storage, &part, &index_path());
-    let _ = storage.write(&base_path(), address.as_bytes());
-    Index::open(storage, &index_path(), device(env), language)
-}
-
-/// The index of the list kept from the last visit, made anew where it was
-/// for another language.
-pub(crate) fn kept(env: &Env<'_>) -> Option<Index> {
-    let storage = env.storage;
-    let (device, language) = (device(env), env.i18n.language());
-    Index::open(storage, &index_path(), device, language).or_else(|| {
-        build(storage, &path(), &index_path(), device, language)
-            .then(|| Index::open(storage, &index_path(), device, language))
-            .flatten()
-    })
-}
-
-/// The plugin `id` of the list kept, and its files to install.
-pub(crate) fn find(env: &Env<'_>, id: &str) -> Option<(Entry, Package)> {
-    let mut entry = None;
-    let package = read(
-        env.storage,
-        &path(),
-        device(env),
-        env.i18n.language(),
-        Some(id),
-        &mut |found| {
-            if found.id == id {
-                entry = Some(found);
-            }
-        },
-    )??;
-    let entry = entry?;
-    let mut package = package;
-    let base = base(env);
-    for file in &mut package.files {
-        file.url = join_url(&base, &file.url);
+    // The head last: an index is whole where its head is.
+    let _ = storage.remove(&head_path());
+    for (from, to) in fresh
+        .iter()
+        .zip([index_path(), offsets_path(), head_path()])
+    {
+        if paperpaw_sdk::files::move_to(storage, from, &to).is_err() {
+            return None;
+        }
     }
-    package.name = entry.name.clone();
-    Some((entry, package))
+    // The hits of a search before were of the list before.
+    let _ = storage.remove(&hits_path());
+    Index::kept(storage)
+}
+
+/// The plugin of the page fetched to `fetched` from `address`, and its
+/// files to install.
+pub(crate) fn plugin(
+    storage: &dyn Storage,
+    fetched: &str,
+    address: &str,
+    device: &str,
+) -> Option<(Entry, Package)> {
+    let read = read_plugin(storage, fetched, device, address);
+    let _ = storage.remove(fetched);
+    read
 }
 
 #[cfg(test)]
@@ -524,135 +539,165 @@ mod tests {
     use paperpaw_sdk::MemoryStorage;
 
     const SHA: &str = "0123456789abcdef0123456789abcdef01234567";
+    const FILES: [&str; 3] = ["i.txt", "i.bin", "i.head"];
 
-    fn plugin(id: &str, extra: &str, files: &str) -> String {
+    fn plugin(id: &str, group: &str, extra: &str) -> String {
         format!(
-            r#"{{"id": "{id}", "name": "Name {id}", "summary": "Does {id}.",
-  "kind": "data", "group": "look", "author": "A", "licence": "MIT",
-  {extra}
-  "latest": {{"version": "1.0.0", "sdk": "0.4", "formats": 1, "files": [{files}]}}}}"#
+            r#"{{"id": "{id}", "name": "Name {id}", "summary": "Does {id}.", "group": "{group}",
+  "kind": "data", "author": "A", "licence": "MIT", {extra}
+  "latest": {{"version": "1.0.0", "sdk": "0.4", "formats": 1, "size": 30}}}}"#
         )
     }
 
-    fn file(path: &str) -> String {
-        format!(r#"{{"path": "{path}", "url": "/f/{path}", "size": 10, "sha1": "{SHA}"}}"#)
-    }
-
     fn list(plugins: &[String]) -> MemoryStorage {
-        let text = format!(r#"{{"format": 1, "plugins": [{}]}}"#, plugins.join(","));
+        let text = format!(r#"{{"format": 2, "plugins": [{}]}}"#, plugins.join(","));
         MemoryStorage::new().with("p.json", text)
     }
 
-    /// The plugins of the list for `device` in `language`, through the
-    /// index, in its order.
-    fn entries(storage: &MemoryStorage, device: &str, language: &str) -> Vec<Entry> {
-        assert!(build(storage, "p.json", "i.txt", device, language));
-        let index = Index::open(storage, "i.txt", device, language).unwrap();
-        (0..index.len())
-            .map(|n| index.entry(storage, n).unwrap())
-            .collect()
+    /// Plugin `n` of the index built in `storage`.
+    fn entry(storage: &MemoryStorage, n: usize) -> Entry {
+        let offset = number_at(storage, "i.bin", n).unwrap();
+        Entry::parse(&line_at(storage, "i.txt", offset).unwrap()).unwrap()
     }
 
-    fn ids(storage: &MemoryStorage, device: &str) -> Vec<String> {
-        entries(storage, device, "de")
-            .into_iter()
-            .map(|e| e.id)
-            .collect()
+    /// The plugins of the list through the index, in its order, and its
+    /// runs of groups.
+    fn entries(storage: &MemoryStorage) -> (Vec<Entry>, Vec<(usize, usize)>) {
+        assert!(build(storage, "p.json", FILES, "x4"));
+        let index = Index::open(storage, "i.head").unwrap();
+        let entries = (0..index.len()).map(|n| entry(storage, n)).collect();
+        (entries, index.runs)
     }
 
     #[test]
-    fn only_what_fits_is_listed() {
-        let ini = file("plugin.ini");
+    fn only_what_fits_is_listed_in_its_order() {
         let storage = list(&[
-            plugin("plain", "", &ini),
-            plugin("only-x4", r#""devices": ["x4"],"#, &ini),
-            plugin("only-pro", r#""devices": ["x4-pro", "android"],"#, &ini),
-            plugin("code", r#""kind": "code","#, &ini),
-            plugin("built", r#""built_in": true,"#, &ini),
-            plugin("later", "", &ini).replace(r#""formats": 1"#, r#""formats": 2"#),
-            plugin("next-sdk", "", &ini).replace(r#""sdk": "0.4""#, r#""sdk": "0.9""#),
-            plugin("no-ini", "", &file("theme.ini")),
-            plugin("no-files", "", ""),
-            plugin("Bad_Id", "", &ini),
+            plugin("plain", "reading", ""),
+            plugin("code", "reading", "").replace(r#""kind": "data""#, r#""kind": "code""#),
+            plugin("built", "reading", r#""built_in": true,"#),
+            plugin("later", "look", "").replace(r#""formats": 1"#, r#""formats": 2"#),
+            plugin("next-sdk", "look", "").replace(r#""sdk": "0.4""#, r#""sdk": "0.9""#),
+            plugin("Bad_Id", "look", ""),
+            plugin("phone", "look", r#""devices": ["android"],"#),
+            plugin("theme", "look", r#""devices": ["x4", "x4-pro"],"#),
+            plugin("odd", "elsewhere", ""),
         ]);
-        assert_eq!(ids(&storage, "x4"), ["only-x4", "plain"]);
-        assert_eq!(ids(&storage, "x4-pro"), ["only-pro", "plain"]);
+        let (entries, runs) = entries(&storage);
+        let ids: Vec<&str> = entries.iter().map(|e| e.id.as_str()).collect();
+        assert_eq!(ids, ["plain", "theme", "odd"]);
+        // Groups as they come, an unknown one under `system`.
+        assert_eq!(runs, [(0, 1), (5, 1), (6, 1)]);
+        assert_eq!(entries[0].summary, "Does plain.");
+        assert_eq!(entries[0].size, 30);
     }
 
     #[test]
-    fn unsafe_paths_are_rejected() {
-        for bad in ["../evil.ini", "/abs.ini", "a/../../b", ".hidden/x"] {
-            let files = format!("{},{}", file("plugin.ini"), file(bad));
-            let storage = list(&[plugin("p", "", &files)]);
-            assert!(ids(&storage, "x4").is_empty(), "{bad}");
-        }
-        let short_sha = file("plugin.ini").replace(SHA, "abc");
-        assert!(ids(&list(&[plugin("p", "", &short_sha)]), "x4").is_empty());
-    }
-
-    #[test]
-    fn names_come_in_the_language_shown() {
-        let i18n = r#""i18n": {"de": {"name": "Luftig", "summary": "Viel Raum."}, "fr": {"name": "Aéré"}},"#;
-        let storage = list(&[plugin("airy", i18n, &file("plugin.ini"))]);
-        let de = entries(&storage, "x4", "de");
-        assert_eq!(
-            (de[0].name.as_str(), de[0].summary.as_str()),
-            ("Luftig", "Viel Raum.")
-        );
-        let en = entries(&storage, "x4", "en");
-        assert_eq!(
-            (en[0].name.as_str(), en[0].summary.as_str()),
-            ("Name airy", "Does airy.")
-        );
-        let fr = entries(&storage, "x4", "fr");
-        assert_eq!(
-            (fr[0].name.as_str(), fr[0].summary.as_str()),
-            ("Aéré", "Does airy.")
-        );
-    }
-
-    #[test]
-    fn groups_go_in_the_websites_order() {
-        let ini = file("plugin.ini");
-        let storage = list(&[
-            plugin("b", "", &ini),
-            plugin("a", "", &ini).replace(r#""group": "look""#, r#""group": "system""#),
-            plugin("c", "", &ini).replace(r#""group": "look""#, r#""group": "reading""#),
-            plugin("d", "", &ini).replace(r#""group": "look""#, r#""group": "odd""#),
-        ]);
-        assert_eq!(ids(&storage, "x4"), ["c", "b", "a", "d"]);
-    }
-
-    #[test]
-    fn a_plugins_files_are_read_when_asked() {
-        let files = format!("{},{}", file("plugin.ini"), file("i18n/de.ini"));
-        // The id after the files.
-        let late = r#"{"name": "Late", "kind": "data", "latest": {"version": "2.0", "files": [FILES]}, "id": "late"}"#
-            .replace("FILES", &files);
-        let storage = list(&[plugin("p", "", &files), late]);
-        let mut entries = Vec::new();
-        let package = read(&storage, "p.json", "x4", "en", Some("late"), &mut |e| {
-            entries.push(e)
-        });
-        let package = package.unwrap();
-        assert_eq!(entries.len(), 2);
-        let package = package.unwrap();
-        assert_eq!(package.plugin, "late");
-        let paths: Vec<&str> = package.files.iter().map(|f| f.path.as_str()).collect();
-        assert_eq!(paths, ["plugin.ini", "i18n/de.ini"]);
-        assert_eq!(entries[0].size, 20);
+    fn many_plugins_take_no_memory_each() {
+        let plugins: Vec<String> = (0..500)
+            .map(|n| plugin(&format!("p{n}"), "look", ""))
+            .collect();
+        let storage = list(&plugins);
+        let (_, runs) = entries(&storage);
+        assert_eq!(runs, [(5, 500)]);
+        assert_eq!(entry(&storage, 499).id, "p499");
     }
 
     #[test]
     fn other_lists_are_not_read() {
-        let storage = MemoryStorage::new().with("p.json", r#"{"format": 2, "plugins": []}"#);
-        assert!(!build(&storage, "p.json", "i.txt", "x4", "en"));
-        assert!(!build(&storage, "missing.json", "i.txt", "x4", "en"));
+        let storage = MemoryStorage::new().with("p.json", r#"{"format": 1, "plugins": []}"#);
+        assert!(!build(&storage, "p.json", FILES, "x4"));
+        assert!(!build(&storage, "missing.json", FILES, "x4"));
         assert!(!storage.exists("i.txt"));
-        // An index for another device or language is made anew.
-        let storage = list(&[plugin("p", "", &file("plugin.ini"))]);
-        assert!(build(&storage, "p.json", "i.txt", "x4", "en"));
-        assert!(Index::open(&storage, "i.txt", "x4", "de").is_none());
-        assert!(Index::open(&storage, "i.txt", "x4-pro", "en").is_none());
+        assert!(Index::open(&storage, "i.head").is_none());
+    }
+
+    fn page(files: &str) -> MemoryStorage {
+        let text = format!(
+            r#"{{"format": 2, "plugin": {{"id": "airy", "name": "Airy", "summary": "Roomy.",
+  "group": "look", "kind": "data", "author": "A", "licence": "MIT",
+  "latest": {{"version": "1.0.0", "sdk": "0.4", "formats": 1, "size": 20, "files": [{files}]}}}}}}"#
+        );
+        MemoryStorage::new().with("a.json", text)
+    }
+
+    fn file(path: &str) -> String {
+        format!(
+            r#"{{"path": "{path}", "url": "/api/v1/plugins/airy/1.0.0/{path}", "size": 10, "sha1": "{SHA}"}}"#
+        )
+    }
+
+    #[test]
+    fn a_plugins_files_come_with_its_page() {
+        let storage = page(&format!("{},{}", file("i18n/de.ini"), file("plugin.ini")));
+        let base = "https://paperpaw.org/api/v1/plugins/airy.json?device=x4&lang=en";
+        let (entry, package) = read_plugin(&storage, "a.json", "x4", base).unwrap();
+        assert_eq!((entry.id.as_str(), entry.name.as_str()), ("airy", "Airy"));
+        assert_eq!(package.plugin, "airy");
+        let urls: Vec<&str> = package.files.iter().map(|f| f.url.as_str()).collect();
+        assert_eq!(
+            urls,
+            [
+                "https://paperpaw.org/api/v1/plugins/airy/1.0.0/i18n/de.ini",
+                "https://paperpaw.org/api/v1/plugins/airy/1.0.0/plugin.ini"
+            ]
+        );
+    }
+
+    #[test]
+    fn unsafe_files_are_refused() {
+        for bad in ["../evil.ini", "/abs.ini", "a/../../b", ".hidden/x"] {
+            let storage = page(&format!("{},{}", file("plugin.ini"), file(bad)));
+            let read = read_plugin(&storage, "a.json", "x4", "https://x/");
+            assert!(read.is_none(), "{bad}");
+        }
+        let short = file("plugin.ini").replace(SHA, "abc");
+        assert!(read_plugin(&page(&short), "a.json", "x4", "https://x/").is_none());
+        // No plugin.ini.
+        assert!(read_plugin(&page(&file("theme.ini")), "a.json", "x4", "https://x/").is_none());
+        // More files than a package may have.
+        let many: Vec<String> = (0..=MAX_FILES)
+            .map(|n| file(&format!("f{n}.ini")))
+            .chain([file("plugin.ini")])
+            .collect();
+        assert!(read_plugin(&page(&many.join(",")), "a.json", "x4", "https://x/").is_none());
+    }
+
+    #[test]
+    fn addresses_name_the_device_and_the_language() {
+        let list = "https://paperpaw.org/api/v1/plugins.json";
+        assert_eq!(
+            list_url(list, "x4-pro", "de"),
+            "https://paperpaw.org/api/v1/plugins.json?device=x4-pro&lang=de"
+        );
+        assert_eq!(
+            list_url("https://x/p.json?key=1", "x4", "en"),
+            "https://x/p.json?key=1&device=x4&lang=en"
+        );
+        assert_eq!(
+            plugin_url(list, "x4", "en", "airy"),
+            "https://paperpaw.org/api/v1/plugins/airy.json?device=x4&lang=en"
+        );
+    }
+
+    #[test]
+    fn searches_find_names_and_summaries() {
+        let storage = list(&[
+            plugin("airy", "look", ""),
+            plugin("dark", "look", "").replace("Does dark.", "Night colours for AIRY rooms."),
+            plugin("keys", "system", ""),
+        ]);
+        let index = take(&storage, "p.json", "x4").unwrap();
+        assert!(!storage.exists("p.json"));
+        assert_eq!(index.search(&storage, " Airy "), 2);
+        assert_eq!((hit(&storage, 0), hit(&storage, 1)), (Some(0), Some(1)));
+        assert_eq!(hit(&storage, 2), None);
+        assert_eq!(index.entry(&storage, 2).unwrap().id, "keys");
+        assert_eq!(index.search(&storage, "nothing"), 0);
+        // A list fetched anew: the hits of the one before go.
+        index.search(&storage, "keys");
+        let storage = storage.with("p.json", r#"{"format": 2, "plugins": []}"#);
+        let index = take(&storage, "p.json", "x4").unwrap();
+        assert_eq!(index.len(), 0);
+        assert_eq!(hit(&storage, 0), None);
     }
 }

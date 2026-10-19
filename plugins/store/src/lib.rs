@@ -1,12 +1,14 @@
 //! The plugin store: the data plugins of a plugin library (paperpaw.org's
-//! by default) fit for this device, by group as the website shows them,
-//! each with a page to install, update or remove it (ADR 0023). Fonts are
-//! one more entry, which opens the fonts browser where it is installed.
+//! by default) for this device, by group as the website shows them, with
+//! a search, each with a page to install, update or remove it (ADR 0023).
+//! Fonts are one more entry, which opens the fonts browser where it is
+//! installed.
 //!
-//! The list is read as it streams and kept on the storage between
-//! visits; a plugin's files go straight to the storage, one after another,
-//! each checked ([`paperpaw_sdk::install`]). Built-in plugins and plugins
-//! with code are not listed: those come with the firmware.
+//! The list is read as it streams into an index kept on the storage, so
+//! it may be as long as it likes; a plugin's files go straight to the
+//! storage, one after another, each checked ([`paperpaw_sdk::install`]).
+//! Built-in plugins and plugins with code are not listed: those come with
+//! the firmware.
 
 #![no_std]
 
@@ -15,6 +17,7 @@ extern crate alloc;
 mod catalog;
 mod list;
 mod page;
+mod search;
 
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
@@ -36,6 +39,7 @@ pub const PLUGIN: Id = Id::new_static("store");
 pub const OPEN: Id = Id::new_static("store.open");
 const LIST_SCREEN: Id = Id::new_static("store.list");
 const PAGE_SCREEN: Id = Id::new_static("store.plugin");
+const SEARCH_SCREEN: Id = Id::new_static("store.search");
 const CHOICE: Id = Id::new_static("store.choice");
 /// The fonts browser's list, offered as the entry *Fonts*.
 const FONTS: Id = Id::new_static("fonts-browser.open");
@@ -69,7 +73,7 @@ impl Plugin for Store {
     fn manifest(&self) -> Manifest {
         Manifest {
             id: PLUGIN,
-            name: Cow::Borrowed("Plugins"),
+            name: Cow::Borrowed("More plugins"),
             description: Cow::Borrowed(
                 "Finds plugins for this device on the internet and installs, updates and removes them.",
             ),
@@ -89,6 +93,11 @@ impl Plugin for Store {
             id: PAGE_SCREEN,
             title: Cow::Borrowed("store.title"),
             factory: Box::new(|env, params| Box::new(page::PageScreen::new(env, params))),
+        })?;
+        r.add_screen(ScreenSpec {
+            id: SEARCH_SCREEN,
+            title: Cow::Borrowed("store.title"),
+            factory: Box::new(|env, params| Box::new(search::SearchScreen::new(env, params))),
         })?;
         r.add_screen(ScreenSpec {
             id: CHOICE,

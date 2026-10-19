@@ -650,8 +650,9 @@ plugin library made for the device and installs, updates and removes it
 ([ADR 0023](adr/0023-plugin-store.md)). Both build on the SDK's
 `install` module: an `Installer` downloads a `Package`'s files one after
 another into `plugins/.<id>.part`, checks each by its size and SHA-1,
-then renames the folder and loads it in place of the version before;
-the job is kept on the storage, so it goes on with no screen open.
+then has the kernel install it (`Command::InstallPlugin`) in place of
+every version of it before, what was chosen from it still chosen; the
+job is kept on the storage, so it goes on with no screen open.
 
 Copy it into the `plugins` folder of a device (or of the emulator's
 library) and restart, or have a plugin load it at once
