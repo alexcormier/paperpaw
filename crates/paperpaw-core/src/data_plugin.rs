@@ -39,12 +39,8 @@ use paperpaw_sdk::{Id, Manifest, Plugin, RegisterError, Registrar, SDK_VERSION, 
 const MAX_FILE: usize = 64 * 1024;
 /// Largest `plugin.ini`.
 const MAX_MANIFEST: usize = 4 * 1024;
-/// The version of the formats of data plugins this PaperPaw reads (its
-/// `plugin.ini`, translations, key maps, `settings.ini`, styles). A
-/// plugin says which it is made for with `formats` in `[plugin]` (1 if
-/// it does not); one made for a later version is not loaded, rather than
-/// read wrongly.
-pub(crate) const FORMATS: u32 = 1;
+/// The version of the formats of data plugins this PaperPaw reads.
+pub(crate) const FORMATS: u32 = paperpaw_sdk::DATA_FORMATS;
 
 /// The styles of a family's faces in `[family]`: (key, bold, italic).
 const FACES: [(&str, bool, bool); 4] = [

@@ -48,6 +48,7 @@ mod gesture;
 mod hyphenation;
 pub mod icons;
 mod id;
+pub mod install;
 pub mod keys;
 pub mod library;
 pub mod logo;
@@ -102,7 +103,7 @@ pub use settings::{
     Choices, Level, SettingError, SettingExtra, SettingGroupSpec, SettingKind, SettingSpec,
     SettingValue, Settings,
 };
-pub use version::{SDK_VERSION, Version};
+pub use version::{DATA_FORMATS, SDK_VERSION, Version};
 
 pub use paperpaw_graphics::Canvas;
 /// Round shapes' geometry: angles as on a clock face, points around a

@@ -170,7 +170,7 @@ impl ListScreen {
     /// What the row of `font` says at its end.
     fn state(env: &Env<'_>, font: &Font) -> String {
         if let Some(job) = install::current(env.storage).filter(|j| j.plugin == font.plugin()) {
-            return format!("{} / {}", job.done(), job.total);
+            return format!("{} / {}", job.done, job.total);
         }
         let key = if font.chosen_for(env, settings::READING_FONT.as_str()) {
             "fonts-browser.state.reading"

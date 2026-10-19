@@ -11,11 +11,11 @@ authors.workspace = true
 categories = ["no-std"]
 
 [dependencies]
-paperpaw-digest.workspace = true
 paperpaw-json.workspace = true
 paperpaw-sdk.workspace = true
 
 [dev-dependencies]
+paperpaw-digest.workspace = true
 paperpaw-i18n.workspace = true
 paperpaw-core.workspace = true
 paperpaw-plugin-fonts-default = { workspace = true, features = ["packs"] }

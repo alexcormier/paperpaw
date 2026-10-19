@@ -201,7 +201,7 @@ impl FontScreen {
                 let job = install::current(env.storage).unwrap_or_default();
                 (
                     env.i18n.tr("fonts-browser.stop").to_string(),
-                    format!("{} / {}", job.done(), job.total),
+                    format!("{} / {}", job.done, job.total),
                 )
             }
             Row::Read => (
