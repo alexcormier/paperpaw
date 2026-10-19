@@ -123,6 +123,13 @@ fn path(name: &str) -> String {
     format!("{}/{name}", dir())
 }
 
+/// The sizes of the log and of the books: they change as one reads and
+/// finishes books (or the statistics are merged).
+pub(crate) fn sizes(storage: &dyn Storage) -> (u64, u64) {
+    let size = |name: &str| storage.size(&path(name)).unwrap_or(0);
+    (size("pages.bin"), size("books.ini"))
+}
+
 /// The books, by id.
 pub(crate) fn books(storage: &dyn Storage) -> Vec<Book> {
     let Ok(data) = quireink_sdk::read_file(storage, &path("books.ini"), 1 << 20) else {

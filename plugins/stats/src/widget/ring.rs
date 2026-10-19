@@ -80,10 +80,14 @@ struct Numbers {
 #[derive(Default)]
 pub(super) struct Ring {
     numbers: Option<Numbers>,
+    read_for: Option<super::Stamp>,
 }
 
 impl Widget for Ring {
     fn update(&mut self, env: &Env<'_>) -> bool {
+        if !super::stale(env, &mut self.read_for) {
+            return false;
+        }
         let numbers = super::days(env).map(|(today, days)| {
             let least = goal(env).map_or(1, |g| g.min(u64::from(u32::MAX)) as u32);
             Numbers {
@@ -97,7 +101,9 @@ impl Widget for Ring {
     }
 
     fn live(&self) -> bool {
-        false
+        // Asked each minute for a new day; read again only then, or
+        // when there is more reading.
+        true
     }
 
     fn height(&self, env: &Env<'_>, width: u16) -> u16 {
@@ -248,7 +254,8 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, numbers: Numbers) {
             .min(area.height.saturating_sub(note_h))
             .min(limit)
     };
-    let (note, note_h) = if note_h > 0 && progress.is_some() && ring_in(note_h) < area.width / 2 {
+    let (note, note_h) = if note_h > 0 && progress.is_some() && ring_in(note_h) < area.width * 2 / 5
+    {
         (None, 0)
     } else {
         (note, note_h)
@@ -294,7 +301,9 @@ fn draw_ring(
         Some(2) => d / 8,
         _ => d / 12,
     }
-    .max(3);
+    // Small rings thicker, to tell the share from the track.
+    .max(3)
+    .max(if d < 80 { d / 8 } else { 0 });
     let gauge = chosen(env, id, "style") == STYLES[1];
     super::draw_arc(canvas, env, look, at, progress, thick, gauge);
     let track = style.line.max(1).min(thick);
@@ -304,7 +313,7 @@ fn draw_ring(
     let unit = unit && widgets::shows(env, id, "unit");
     let unit_h = if unit { line(&font, style.small) } else { 0 };
     let room = (u32::from(inner) * 45 / 100) as u16;
-    let size = fit_size(&font, &style, "000", inner * 3 / 5, room).max(style.text);
+    let size = fit_size(&font, &style, "000", inner * 3 / 5, room);
     let big = line(&font, size);
     let unit_h = if unit_h + big <= inner { unit_h } else { 0 };
     let shown = middle(
@@ -312,6 +321,10 @@ fn draw_ring(
         big + unit_h,
     );
     let w = font.measure(size, &minutes);
+    if w > f32::from(inner) * 0.9 || big > inner {
+        // A ring too small for the minutes: the ring alone.
+        return;
+    }
     let row = Rect::new(at.x, shown.y, at.width, big);
     let cx = f32::from(at.x) + d as f32 / 2.0;
     ui::draw_label(canvas, &font, size, cx - w / 2.0, row, &minutes, look.ink);

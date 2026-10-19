@@ -99,6 +99,15 @@ fn caption_room(env: &Env<'_>, widget: &str) -> u16 {
     }
 }
 
+/// The caption's height in `height` pixels, if `widget` shows it and
+/// there is room for a line of text below it as well (else the content
+/// goes first).
+fn caption_in(env: &Env<'_>, widget: &str, height: u16) -> u16 {
+    let cap = caption_room(env, widget);
+    let least = widgets::line_height(env, UiStyle::new(env).text);
+    if cap + least <= height { cap } else { 0 }
+}
+
 /// Places content `height` high with `widget`'s caption `text` above
 /// it (if it shows), the two together in the middle of `look`'s area,
 /// and draws the caption; where the content goes.
@@ -110,7 +119,14 @@ fn captioned(
     text: &str,
     height: u16,
 ) -> Rect {
-    let total = (caption_room(env, widget) + height).min(look.area.height);
+    // Where they do not fit together, the content goes first.
+    let cap = caption_room(env, widget);
+    let cap = if cap + height <= look.area.height {
+        cap
+    } else {
+        0
+    };
+    let total = (cap + height).min(look.area.height);
     let area = look.area;
     let block = Rect::new(
         area.x,
@@ -118,16 +134,14 @@ fn captioned(
         area.width,
         total,
     );
-    let below = if widgets::shows(env, widget, "caption") {
+    if cap > 0 {
         let at = Look {
             area: block,
             ..*look
         };
-        widgets::draw_caption(canvas, env, widget, &at, text)
-    } else {
-        block
-    };
-    Rect::new(below.x, below.y, below.width, height.min(below.height))
+        widgets::draw_caption(canvas, env, widget, &at, text);
+    }
+    Rect::new(block.x, block.y + cap, block.width, height.min(total - cap))
 }
 
 /// The size of `widget`'s main text: as its setting says, smaller where
@@ -144,13 +158,16 @@ fn text_size(
     let base = style.title;
     let line = font.line_metrics(base).line_height.max(1.0);
     let by_height = base * f32::from(height) / line;
+    let wide = font.measure(base, text).max(1.0);
+    let by_width = base * f32::from(width) / wide;
     match widgets::size(env, widget) {
-        Size::Fit => {
-            let wide = font.measure(base, text).max(1.0);
-            let by_width = base * f32::from(width) / wide;
-            by_width.min(by_height).clamp(style.small, base * 3.0)
-        }
-        size => size.text(&style).min(by_height.max(style.small)),
+        Size::Fit => by_width.min(by_height).clamp(style.small, base * 3.0),
+        // Smaller where wider than the room (down to the body's size;
+        // then it is shortened) or higher.
+        size => size
+            .text(&style)
+            .min(by_width.max(style.text))
+            .min(by_height.max(style.small)),
     }
 }
 
@@ -256,7 +273,7 @@ fn draw_word(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, word: &Word) {
     let id = WORD_NAME;
     let small = line(&font, style.small);
     let area = look.area;
-    let room = area.height.saturating_sub(caption_room(env, id));
+    let room = area.height.saturating_sub(caption_in(env, id, area.height));
     let width = f32::from(area.width);
     let book = if widgets::shows(env, id, "book") && !word.title.is_empty() {
         small
@@ -415,7 +432,7 @@ fn draw_saved(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, summary: &Sum
     let id = SAVED_NAME;
     let small = line(&font, style.small);
     let area = look.area;
-    let room = area.height.saturating_sub(caption_room(env, id));
+    let room = area.height.saturating_sub(caption_in(env, id, area.height));
     let headline = env
         .i18n
         .plural("vocabulary.widget.words", summary.count as i64, &[]);
@@ -434,6 +451,12 @@ fn draw_saved(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, summary: &Sum
     let block = captioned(canvas, env, id, look, caption, big + notes_h);
     let align = widgets::align(env, id);
     let row = |y: u16, h: u16| Rect::new(area.x, y, area.width, h);
+    // Too wide: the number alone ("128 words": "128").
+    let headline = if font.measure(size, &headline) > width {
+        format!("{}", summary.count)
+    } else {
+        headline
+    };
     let headline = ui::fit(&font, size, &headline, width);
     let x = align.x(area, font.measure(size, &headline));
     ui::draw_label(

@@ -159,10 +159,14 @@ fn shown(env: &Env<'_>) -> Option<Shown> {
 #[derive(Default)]
 pub(super) struct Calendar {
     shown: Option<Shown>,
+    read_for: Option<super::Stamp>,
 }
 
 impl Widget for Calendar {
     fn update(&mut self, env: &Env<'_>) -> bool {
+        if !super::stale(env, &mut self.read_for) {
+            return false;
+        }
         let shown = shown(env);
         let changed = shown != self.shown;
         self.shown = shown;
@@ -170,7 +174,9 @@ impl Widget for Calendar {
     }
 
     fn live(&self) -> bool {
-        false
+        // Asked each minute for a new day; read again only then, or
+        // when there is more reading.
+        true
     }
 
     fn height(&self, env: &Env<'_>, width: u16) -> u16 {

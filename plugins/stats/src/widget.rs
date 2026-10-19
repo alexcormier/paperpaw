@@ -13,9 +13,10 @@
 //! - *Reading streak* (`streak`): the days read in a row, the longest
 //!   streak and the last days as marks.
 //!
-//! They read the statistics when they are updated (when shown and after
-//! events, as `live` says nothing changes by itself), never as they are
-//! drawn, and keep only the few numbers they show.
+//! They read the statistics when they are updated, never as they are
+//! drawn, and keep only the few numbers they show. Asked each minute (a
+//! new day changes them), they read again only when the day or the files
+//! of the statistics changed ([`Stamp`]).
 
 mod calendar;
 mod ring;
@@ -182,18 +183,19 @@ fn caption_room(env: &Env<'_>, widget: &str) -> u16 {
     }
 }
 
-/// Draws `text` as `widget`'s caption, if it shows it; the area below.
-fn caption(canvas: &mut Canvas<'_>, env: &Env<'_>, widget: &str, look: &Look, text: &str) -> Rect {
-    if widgets::shows(env, widget, "caption") {
-        widgets::draw_caption(canvas, env, widget, look, text)
-    } else {
-        look.area
-    }
+/// The caption's height in `height` pixels, if `widget` shows it and
+/// there is room for a line of text below it as well (else the content
+/// goes first).
+fn caption_in(env: &Env<'_>, widget: &str, height: u16) -> u16 {
+    let cap = caption_room(env, widget);
+    let least = widgets::line_height(env, UiStyle::new(env).text);
+    if cap + least <= height { cap } else { 0 }
 }
 
-/// The room below `widget`'s caption in `area`.
+/// The room below `widget`'s caption in `area` (all of it where the
+/// caption has no room).
 fn below_caption(env: &Env<'_>, widget: &str, area: Rect) -> Rect {
-    let cap = caption_room(env, widget).min(area.height);
+    let cap = caption_in(env, widget, area.height);
     Rect::new(area.x, area.y + cap, area.width, area.height - cap)
 }
 
@@ -208,13 +210,26 @@ fn captioned(
     text: &str,
     height: u16,
 ) -> Rect {
-    let block = middle(look.area, caption_room(env, widget) + height);
-    let at = Look {
-        area: block,
-        ..*look
+    let cap = caption_room(env, widget);
+    let cap = if cap + height <= look.area.height {
+        caption_in(env, widget, look.area.height)
+    } else {
+        0
     };
-    let below = caption(canvas, env, widget, &at, text);
-    Rect::new(below.x, below.y, below.width, height.min(below.height))
+    let block = middle(look.area, cap + height);
+    if cap > 0 {
+        let at = Look {
+            area: block,
+            ..*look
+        };
+        widgets::draw_caption(canvas, env, widget, &at, text);
+    }
+    Rect::new(
+        block.x,
+        block.y + cap,
+        block.width,
+        height.min(block.height - cap),
+    )
 }
 
 /// The colour between `look`'s paper and its ink at `level` of 4 (4: the
@@ -269,10 +284,14 @@ fn text_size(
     let style = UiStyle::new(env);
     let size = widgets::size(env, widget);
     if size != Size::Fit {
-        // Smaller where a line of it is higher than the room.
+        // Smaller where a line of it is higher than the room, or wider
+        // (down to the body's size; then it is shortened).
         let line = font.line_metrics(style.title).line_height.max(1.0);
         let by_height = style.title * f32::from(height) / line;
-        return size.text(&style).min(by_height.max(style.small));
+        let wide = font.measure(style.title, text).max(1.0);
+        let by_width = style.title * f32::from(width) / wide;
+        let size = size.text(&style).min(by_width.max(style.text));
+        return size.min(by_height.max(style.small));
     }
     fit_size(font, &style, text, width, height)
 }
@@ -288,9 +307,40 @@ fn fit_size(font: &FontHandle<'_>, style: &UiStyle, text: &str, width: u16, heig
     by_width.min(by_height).clamp(style.small, base * 3.0)
 }
 
+/// `text`, or where it is wider than `width` at `size`, the number it
+/// begins with alone ("5 days": "5").
+fn number_if_narrow<'t>(font: &FontHandle<'_>, size: f32, text: &'t str, width: u16) -> &'t str {
+    if font.measure(size, text) <= f32::from(width) {
+        return text;
+    }
+    let digits = text
+        .char_indices()
+        .find(|(_, c)| !c.is_ascii_digit())
+        .map_or(text.len(), |(at, _)| at);
+    if digits == 0 { text } else { &text[..digits] }
+}
+
 /// The height of a line of text `size` pixels large.
 fn line(font: &FontHandle<'_>, size: f32) -> u16 {
     font.line_metrics(size).line_height as u16
+}
+
+/// What a widget read its numbers for: today, and the sizes of the log
+/// and of the books. Read again only when that changed, so that being
+/// asked each minute (for a new day) costs little; screens make widgets
+/// anew when a setting changes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct Stamp(Option<i32>, (u64, u64));
+
+/// Whether what a widget read for `last` is out of date; `last` becomes
+/// what it is read for now.
+fn stale(env: &Env<'_>, last: &mut Option<Stamp>) -> bool {
+    let now = Some(Stamp(fmt::today(env), store::sizes(env.storage)));
+    if *last == now {
+        return false;
+    }
+    *last = now;
+    true
 }
 
 /// Today and the days read, if the device knows the time.
@@ -351,7 +401,16 @@ fn draw_arc(
     // The track, thin, in the middle of where the ring is drawn.
     let track = style.line.max(1).min(thick);
     let track_radius = radius - (thick - track) / 2;
-    canvas.fill_ring(center, track_radius, track, from, sweep, look.faint);
+    // Halfway between paper and ink where the panel has grays to show
+    // it, else faint (black or white, told apart by its thinness).
+    let grays = env
+        .device
+        .display
+        .format
+        .gray_levels()
+        .is_none_or(|g| g > 4);
+    let color = if grays { shade(look, 2) } else { look.faint };
+    canvas.fill_ring(center, track_radius, track, from, sweep, color);
     if let Some(progress) = progress.filter(|p| *p > 0) {
         let done = (sweep * progress.min(1000) / 1000).max(1);
         canvas.fill_ring(center, radius, thick, from, done, look.ink);

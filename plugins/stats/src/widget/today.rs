@@ -128,10 +128,14 @@ fn lines(env: &Env<'_>, numbers: &Numbers) -> (String, String) {
 #[derive(Default)]
 pub(super) struct Today {
     numbers: Option<Numbers>,
+    read_for: Option<super::Stamp>,
 }
 
 impl Widget for Today {
     fn update(&mut self, env: &Env<'_>) -> bool {
+        if !super::stale(env, &mut self.read_for) {
+            return false;
+        }
         let numbers = numbers(env);
         let changed = numbers != self.numbers;
         self.numbers = numbers;
@@ -139,7 +143,9 @@ impl Widget for Today {
     }
 
     fn live(&self) -> bool {
-        false
+        // Asked each minute for a new day; read again only then, or
+        // when there is more reading.
+        true
     }
 
     fn height(&self, env: &Env<'_>, _: u16) -> u16 {

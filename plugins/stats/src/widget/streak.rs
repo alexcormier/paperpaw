@@ -120,10 +120,14 @@ fn shown(env: &Env<'_>) -> Option<Shown> {
 #[derive(Default)]
 pub(super) struct Streak {
     shown: Option<Shown>,
+    read_for: Option<super::Stamp>,
 }
 
 impl Widget for Streak {
     fn update(&mut self, env: &Env<'_>) -> bool {
+        if !super::stale(env, &mut self.read_for) {
+            return false;
+        }
         let shown = shown(env);
         let changed = shown != self.shown;
         self.shown = shown;
@@ -131,7 +135,9 @@ impl Widget for Streak {
     }
 
     fn live(&self) -> bool {
-        false
+        // Asked each minute for a new day; read again only then, or
+        // when there is more reading.
+        true
     }
 
     fn height(&self, env: &Env<'_>, _: u16) -> u16 {
@@ -272,7 +278,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown) {
 }
 
 /// Draws the streak and the note below it in the middle of `area`, as
-/// `align` places them, the streak as large as the size says (or fits);
+/// `align` places them, the streak as large as the size says (or fits).
 fn draw_texts(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
@@ -291,6 +297,7 @@ fn draw_texts(
     let big = line(&font, size);
     let block = middle(area, big + small);
     let row = |y: u16, h: u16| Rect::new(area.x, y, area.width, h);
+    let first = super::number_if_narrow(&font, size, first, area.width);
     let first = ui::fit(&font, size, first, f32::from(area.width));
     let x = align.x(area, font.measure(size, &first));
     ui::draw_label(canvas, &font, size, x, row(block.y, big), &first, look.ink);

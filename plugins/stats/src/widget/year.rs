@@ -181,10 +181,14 @@ fn shown(env: &Env<'_>) -> Option<Shown> {
 #[derive(Default)]
 pub(super) struct Year {
     shown: Option<Shown>,
+    read_for: Option<super::Stamp>,
 }
 
 impl Widget for Year {
     fn update(&mut self, env: &Env<'_>) -> bool {
+        if !super::stale(env, &mut self.read_for) {
+            return false;
+        }
         let shown = shown(env);
         let changed = shown != self.shown;
         self.shown = shown;
@@ -192,7 +196,9 @@ impl Widget for Year {
     }
 
     fn live(&self) -> bool {
-        false
+        // Asked each minute for a new day; read again only then, or
+        // when there is more reading.
+        true
     }
 
     fn height(&self, env: &Env<'_>, _: u16) -> u16 {
@@ -328,7 +334,14 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown) {
     };
     let block = super::captioned(canvas, env, id, look, &title, big + band + notes_h);
     let row = |y: u16, h: u16| Rect::new(area.x, y, area.width, h);
-    let headline = ui::fit(&font, size, &headline, f32::from(area.width));
+    // Too wide: "3 / 12", or the number alone.
+    let short = goal.map(|g| alloc::format!("{} / {g}", shown.done));
+    let headline = match short {
+        Some(short) if font.measure(size, &headline) > f32::from(area.width) => short,
+        _ => headline,
+    };
+    let headline = super::number_if_narrow(&font, size, &headline, area.width);
+    let headline = ui::fit(&font, size, headline, f32::from(area.width));
     let x = align.x(area, font.measure(size, &headline));
     ui::draw_label(
         canvas,

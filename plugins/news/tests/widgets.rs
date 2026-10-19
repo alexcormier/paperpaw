@@ -98,7 +98,12 @@ fn the_newest_headlines_show_as_many_as_wanted() {
     let (shown, _) = home(card(), "news.widget.headlines 0/0 4x4", "");
     assert!(shown.contains("News\n"), "{shown}");
     // Four at first.
-    for title in ["Budget agreed", "Storm warning", "Water on the Moon", "A reading garden"] {
+    for title in [
+        "Budget agreed",
+        "Storm warning",
+        "Water on the Moon",
+        "A reading garden",
+    ] {
         assert!(shown.contains(title), "{title}: {shown}");
     }
     assert!(!shown.contains("Strike ends"), "{shown}");

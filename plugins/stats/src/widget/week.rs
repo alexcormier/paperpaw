@@ -9,7 +9,7 @@ use quireink_sdk::ui::{self, UiStyle};
 use quireink_sdk::widgets::{self, Align, Look, Widget, WidgetSpec, WidgetTarget};
 use quireink_sdk::{Arg, Canvas, Env, Id, Rect, RegisterError, Registrar};
 
-use super::{caption, caption_room, chosen, frame_height, goal, line, seconds_on, shade};
+use super::{caption_room, chosen, frame_height, goal, line, seconds_on, shade};
 use crate::fmt;
 
 pub(super) const WEEK: Id = Id::new_static(NAME);
@@ -97,10 +97,14 @@ fn days(env: &Env<'_>) -> Vec<Shown> {
 #[derive(Default)]
 pub(super) struct Week {
     days: Vec<Shown>,
+    read_for: Option<super::Stamp>,
 }
 
 impl Widget for Week {
     fn update(&mut self, env: &Env<'_>) -> bool {
+        if !super::stale(env, &mut self.read_for) {
+            return false;
+        }
         let days = days(env);
         let changed = days != self.days;
         self.days = days;
@@ -108,7 +112,9 @@ impl Widget for Week {
     }
 
     fn live(&self) -> bool {
-        false
+        // Asked each minute for a new day; read again only then, or
+        // when there is more reading.
+        true
     }
 
     fn height(&self, env: &Env<'_>, _: u16) -> u16 {
@@ -173,7 +179,8 @@ fn draw_week(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, days: &[Shown]
         return;
     };
     let id = NAME;
-    let area = caption(canvas, env, id, look, &label(env, days));
+    let area = super::below_caption(env, id, look.area);
+    let area = super::captioned(canvas, env, id, look, &label(env, days), area.height);
     let small = line(&font, style.small);
     let labels = labels_height(env, &font, &style);
     // Where the bars would be low, the weekdays go.
