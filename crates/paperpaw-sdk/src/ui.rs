@@ -12,11 +12,14 @@ pub mod items;
 pub mod reorder;
 #[path = "rows.rs"]
 mod rows;
+#[path = "sections.rs"]
+pub mod sections;
 #[path = "thumbnail.rs"]
 mod thumbnail;
 
 pub use reorder::{Reorder, ReorderStep};
 pub use rows::Rows;
+pub use sections::Sections;
 pub use thumbnail::Thumbnail;
 
 use crate::semantics::Role;

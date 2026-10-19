@@ -152,6 +152,7 @@ impl Kernel {
             Command::Restart => self.restart = true,
             Command::LoadPlugin(folder) => self.load_plugin(&folder),
             Command::RemovePlugin(id) => self.remove_plugin(&id),
+            Command::InstallPlugin(id, folder) => self.install_plugin(&id, &folder),
             Command::Sleep => self.sleep = self.shared.caps.sleep,
             command @ (Command::SetSetting(..)
             | Command::ResetSetting(_)

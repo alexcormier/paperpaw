@@ -144,6 +144,13 @@ impl Plugins {
         self.list.iter().find(|p| p.manifest.id.as_str() == id)
     }
 
+    /// The plugin that added `id` (an action, a screen, a setting …): what
+    /// a plugin adds is in its namespace, the registrar refuses anything
+    /// else ([`Registrar::add`](crate::Registrar::add)).
+    pub fn owner(&self, id: &Id) -> Option<&PluginInfo> {
+        self.get(id.namespace())
+    }
+
     /// Whether a plugin was switched since the start.
     pub fn restart_needed(&self) -> bool {
         self.list.iter().any(PluginInfo::restart_needed)

@@ -5,10 +5,11 @@
 //! and SHA-1, as a plugin library lists them. An [`Installer`] downloads
 //! them one after another into a folder PaperPaw does not load
 //! (`plugins/.<id>.part`), checks each by its size and SHA-1, and once all
-//! are there renames the folder into the plugins' folder and loads it
-//! ([`Command::LoadPlugin`]), in place of the version installed before.
-//! Nothing is unpacked and nothing is held whole in memory: each file goes
-//! from the network straight to the storage.
+//! are there has the kernel install it ([`Command::InstallPlugin`]): in
+//! place of every version of it before, which stays until the new one is
+//! all there, and with what was chosen from it still chosen. Nothing is
+//! unpacked and nothing is held whole in memory: each file goes from the
+//! network straight to the storage.
 //!
 //! What is left to do is kept in the plugin's own folder, so a download
 //! goes on while none of its screens is open: the plugin hears the
@@ -35,7 +36,7 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use paperpaw_platform::{DeviceInfo, Storage};
+use paperpaw_platform::Storage;
 
 use crate::builtin::PLUGIN_DIR;
 use crate::event::Event;
@@ -49,20 +50,10 @@ const MAX_PATH: usize = 100;
 /// The longest line of a job kept on the storage.
 const MAX_LINE: usize = 2048;
 
-/// Parameters of a download: the plugin and the file's path in its
-/// folder, to tell answers to downloads stopped before.
-const PLUGIN: &str = "install-plugin";
+/// Parameters of a download: the job and the file's path in the plugin's
+/// folder, to tell answers to downloads of jobs stopped before.
+const JOB: &str = "install-job";
 const FILE: &str = "install-file";
-
-/// The name plugin libraries give this kind of device (ADR 0023): `x4`
-/// and `x4-pro` for the Xteink X4 and X4 Pro, `android` for the others.
-pub fn device_name(device: &DeviceInfo) -> &'static str {
-    match device.id {
-        "xteink-x4" => "x4",
-        "xteink-x4-pro" => "x4-pro",
-        _ => "android",
-    }
-}
 
 /// Whether a data plugin made for the SDK `sdk` (e.g. `0.4`) and the data
 /// formats `formats` is read by this PaperPaw: its SDK not later than this
@@ -167,17 +158,16 @@ pub struct Progress {
 /// What became of an answer handed to [`Installer::received`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Received {
-    /// None of this installer's downloads, or one stopped before.
+    /// None of the downloads of this installer's job, e.g. one of a job
+    /// stopped before.
     Other,
     /// A file is here; the next one is asked for.
     Next(Progress),
-    /// All files are here: the plugin replaces the version before
-    /// ([`Command::RemovePlugin`]) and is loaded
-    /// ([`Command::LoadPlugin`]); those commands are in `out` already.
+    /// All files are here: the kernel installs the plugin
+    /// ([`Command::InstallPlugin`], in `out` already).
     Installed(Progress),
-    /// A file did not come or came damaged, or the folder could not be
-    /// renamed: what was downloaded is gone, and the version installed
-    /// before stays.
+    /// A file did not come or came damaged: what was downloaded is gone,
+    /// and the version installed before stays.
     Failed(Progress),
 }
 
@@ -191,11 +181,23 @@ pub struct Installer {
 
 /// The job kept on the storage: what its first line says.
 struct Job {
+    /// Told apart from the jobs before by the time it started.
+    id: u64,
     plugin: String,
     name: String,
-    staging: String,
-    target: String,
     total: usize,
+}
+
+impl Job {
+    /// Where its files go meanwhile.
+    fn staging(&self) -> String {
+        staging(&self.plugin)
+    }
+}
+
+/// The folder a plugin is downloaded into, which PaperPaw does not load.
+fn staging(plugin: &str) -> String {
+    format!("{PLUGIN_DIR}/.{plugin}.part")
 }
 
 impl Installer {
@@ -223,10 +225,9 @@ impl Installer {
         let header = nth_line(storage, &self.job_path(), 0)?;
         let mut parts = header.split('\t');
         Some(Job {
+            id: parts.next()?.parse().ok()?,
             plugin: parts.next()?.to_string(),
             name: parts.next()?.to_string(),
-            staging: parts.next()?.to_string(),
-            target: parts.next()?.to_string(),
             total: parts.next()?.parse().ok()?,
         })
     }
@@ -250,7 +251,8 @@ impl Installer {
         })
     }
 
-    /// The installation going on, if any.
+    /// The installation going on, if any (read from the storage: screens
+    /// keep it, and ask again when an answer came).
     pub fn progress(&self, storage: &dyn Storage) -> Option<Progress> {
         let job = self.job(storage)?;
         Some(Progress {
@@ -263,23 +265,22 @@ impl Installer {
 
     /// Starts installing `package`, a new plugin or a newer version of
     /// one installed (which stays until the new one is all here); an
-    /// installation going on is stopped. `false` (and nothing done) if
-    /// the package is not valid ([`Package::is_valid`]).
+    /// installation going on is stopped, and answers to its downloads are
+    /// passed over. `false` (and nothing done) if the package is not
+    /// valid ([`Package::is_valid`]) or the job could not be kept.
     pub fn start(&self, env: &Env<'_>, package: &Package, out: &mut Vec<Command>) -> bool {
         if !package.is_valid() {
             return false;
         }
         let storage = env.storage;
         self.cancel(storage);
-        let staging = format!("{PLUGIN_DIR}/.{}.part", package.plugin);
-        let _ = storage.remove_dir_all(&staging);
-        let target = free_folder(storage, &package.plugin);
-        let mut text = format!(
-            "{}\t{}\t{staging}\t{target}\t{}\n",
-            package.plugin,
-            plain(&package.name),
-            package.files.len()
-        );
+        let job = Job {
+            id: env.now.millis(),
+            plugin: package.plugin.clone(),
+            name: plain(&package.name),
+            total: package.files.len(),
+        };
+        let mut text = format!("{}\t{}\t{}\t{}\n", job.id, job.plugin, job.name, job.total);
         for file in &package.files {
             text.push_str(&format!(
                 "{}\t{}\t{}\t{}\n",
@@ -293,15 +294,14 @@ impl Installer {
         let _ = storage.create_dir(&format!("{}/plugins", crate::data::DIR));
         let _ = storage.create_dir(&Env::plugin_dir(self.owner.as_str()));
         let _ = storage.create_dir(PLUGIN_DIR);
+        let staging = job.staging();
+        let _ = storage.remove_dir_all(&staging);
         let _ = storage.create_dir(&staging);
         if storage.write(&self.job_path(), text.as_bytes()).is_err() {
             let _ = storage.remove_dir_all(&staging);
             return false;
         }
-        let _ = storage.remove(&self.done_path());
-        if let Some(job) = self.job(storage) {
-            self.ask(storage, &job, 0, out);
-        }
+        self.ask(storage, &job, 0, out);
         true
     }
 
@@ -310,7 +310,8 @@ impl Installer {
         let Some(file) = self.file(storage, n) else {
             return;
         };
-        let mut dir = job.staging.clone();
+        let staging = job.staging();
+        let mut dir = staging.clone();
         let parts: Vec<&str> = file.path.split('/').collect();
         for part in &parts[..parts.len().saturating_sub(1)] {
             dir.push('/');
@@ -318,17 +319,18 @@ impl Installer {
             let _ = storage.create_dir(&dir);
         }
         let mut request = HttpRequest::new("GET", &file.url, self.reply.clone());
-        request.save_to = Some(format!("{}/{}", job.staging, file.path));
+        request.save_to = Some(format!("{staging}/{}", file.path));
         request.params = Params::new()
-            .with(PLUGIN, job.plugin.clone())
+            .with(JOB, job.id.to_string())
             .with(FILE, file.path);
         out.push(Command::Http(request));
     }
 
-    /// Stops the installation going on and forgets what it downloaded.
+    /// Stops the installation going on and forgets what it downloaded;
+    /// answers to its downloads are passed over.
     pub fn cancel(&self, storage: &dyn Storage) {
         if let Some(job) = self.job(storage) {
-            let _ = storage.remove_dir_all(&job.staging);
+            let _ = storage.remove_dir_all(&job.staging());
         }
         let _ = storage.remove(&self.job_path());
         let _ = storage.remove(&self.done_path());
@@ -338,8 +340,8 @@ impl Installer {
     /// stopping its installation if one is going on.
     pub fn remove(&self, env: &Env<'_>, plugin: &Id, out: &mut Vec<Command>) {
         if self
-            .progress(env.storage)
-            .is_some_and(|p| p.plugin == plugin.as_str())
+            .job(env.storage)
+            .is_some_and(|job| job.plugin == plugin.as_str())
         {
             self.cancel(env.storage);
         }
@@ -357,8 +359,10 @@ impl Installer {
         let Some(file) = self.file(storage, done) else {
             return Received::Other;
         };
-        // An answer to a download stopped before.
-        if reply.context.get(PLUGIN) != Some(job.plugin.as_str())
+        // An answer to a download of a job stopped before, or to one asked
+        // for twice.
+        let job_id = job.id.to_string();
+        if reply.context.get(JOB) != Some(job_id.as_str())
             || reply.context.get(FILE) != Some(file.path.as_str())
         {
             return Received::Other;
@@ -369,7 +373,7 @@ impl Installer {
             done,
             total: job.total,
         };
-        let saved = format!("{}/{}", job.staging, file.path);
+        let saved = format!("{}/{}", job.staging(), file.path);
         let whole = (200..300).contains(&reply.status)
             && storage.size(&saved).ok() == Some(file.size)
             && sha1_of(storage, &saved).as_deref() == Some(file.sha1.as_str());
@@ -383,19 +387,19 @@ impl Installer {
             self.ask(storage, &job, progress.done, out);
             return Received::Next(progress);
         }
-        // All here: the folder becomes the plugin, in place of the version
-        // before.
+        // All here: the kernel puts it in place of the version before.
         let _ = storage.remove(&self.job_path());
         let _ = storage.remove(&self.done_path());
-        if storage.rename(&job.staging, &job.target).is_err() {
-            let _ = storage.remove_dir_all(&job.staging);
-            return Received::Failed(progress);
+        match Id::parse(&job.plugin) {
+            Ok(id) => {
+                out.push(Command::InstallPlugin(id, job.staging()));
+                Received::Installed(progress)
+            }
+            Err(_) => {
+                let _ = storage.remove_dir_all(&job.staging());
+                Received::Failed(progress)
+            }
         }
-        if let Some(info) = env.plugins.get(&job.plugin) {
-            out.push(Command::RemovePlugin(info.manifest.id.clone()));
-        }
-        out.push(Command::LoadPlugin(job.target));
-        Received::Installed(progress)
     }
 }
 
@@ -404,24 +408,6 @@ fn plain(text: &str) -> String {
     text.chars()
         .map(|c| if c.is_control() { ' ' } else { c })
         .collect()
-}
-
-/// A folder in the plugins' folder not taken yet, from `name`: the version
-/// installed before keeps its own until the new one is loaded.
-fn free_folder(storage: &dyn Storage, name: &str) -> String {
-    let taken = |dir: &str| {
-        let mut any = false;
-        let _ = storage.list(dir, &mut |_| any = true);
-        any || storage.exists(dir)
-    };
-    let first = format!("{PLUGIN_DIR}/{name}");
-    if !taken(&first) {
-        return first;
-    }
-    (2..100)
-        .map(|n| format!("{PLUGIN_DIR}/{name}-{n}"))
-        .find(|dir| !taken(dir))
-        .unwrap_or(first)
 }
 
 /// Line `n` (from 0) of the text file at `path`, read in pieces.

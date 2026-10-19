@@ -127,6 +127,10 @@ pub struct Env<'a> {
     /// PaperPaw's own (where new fonts go); empty where the device has
     /// only its built-in fonts.
     pub font_dirs: &'a [alloc::string::String],
+    /// What plugin libraries call this kind of device, e.g. `x4`, `x4-pro`
+    /// or `android` for paperpaw.org's (ADR 0023); `None` where the shell
+    /// names none, and a store has nothing made for it.
+    pub catalog_device: Option<&'a str>,
     /// Passwords and keys, kept for every plugin in one place (see
     /// [`secrets`](crate::secrets)).
     pub secrets: &'a crate::secrets::Secrets,
@@ -209,6 +213,10 @@ pub struct EnvParts<'a> {
     /// PaperPaw's own (where new fonts go); empty where the device has
     /// only its built-in fonts.
     pub font_dirs: &'a [alloc::string::String],
+    /// What plugin libraries call this kind of device, e.g. `x4`, `x4-pro`
+    /// or `android` for paperpaw.org's (ADR 0023); `None` where the shell
+    /// names none, and a store has nothing made for it.
+    pub catalog_device: Option<&'a str>,
     /// Passwords and keys, kept for every plugin in one place (see
     /// [`secrets`](crate::secrets)).
     pub secrets: &'a crate::secrets::Secrets,
@@ -250,6 +258,7 @@ impl<'a> From<EnvParts<'a>> for Env<'a> {
             slots: p.slots,
             screens: p.screens,
             font_dirs: p.font_dirs,
+            catalog_device: p.catalog_device,
             secrets: p.secrets,
             storage: p.storage,
         }

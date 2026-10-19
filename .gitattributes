@@ -2,6 +2,8 @@
 
 # Sample books are kept byte-for-byte as published.
 samples/library/books/** -text
+# The plugin store's kept index: its offsets count the bytes.
+shells/desktop/tests/fixtures/store/** -text
 
 *.png binary
 *.bin binary
