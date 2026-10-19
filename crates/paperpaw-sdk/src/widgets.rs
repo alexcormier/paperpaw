@@ -50,7 +50,7 @@ pub mod grid;
 pub mod look;
 
 pub use look::{
-    Frame, Look, Size, caption_height, choice, draw_caption, draw_frame, draw_message,
+    Frame, Look, Size, Wrapped, caption_height, choice, draw_caption, draw_frame, draw_message,
     draw_wrapped, frame, frame_setting, frame_spec, line_height, part_setting, part_spec,
     setting_id, shows, size, size_setting, size_spec,
 };
