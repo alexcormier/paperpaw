@@ -10,6 +10,8 @@
 //! translation of an entry's title key followed by `.short` where there is
 //! one (`reader.toc.short` = "Contents"), else its title.
 //!
+//! Its text is in the status lines' font, as the lines it opens over.
+//!
 //! Switches show their state (an icon on black is on) and change in
 //! place; choices open their list; submenus open as a list below; actions
 //! close the bar and run.
@@ -25,6 +27,13 @@ use quireink_sdk::{
 };
 
 use crate::{CHOOSE_SCREEN, DEPTH, SCREEN, is_menu};
+
+/// The bar's font: the reading status lines' (it opens over a book), as
+/// `core.status-font` chooses.
+fn bar_font<'e>(env: &Env<'e>) -> Option<quireink_sdk::FontHandle<'e>> {
+    env.fonts
+        .role(quireink_sdk::builtin::fonts::STATUS.as_str())
+}
 
 /// The value of [`params::MODE`] for a bar.
 pub(crate) const MODE: &str = "bar";
@@ -84,7 +93,7 @@ impl BarScreen {
         let title = params.get(params::TITLE).unwrap_or_default().to_string();
         let text = params.get(params::TEXT).unwrap_or_default().to_string();
         let page = params.get(params::PAGE).unwrap_or_default().to_string();
-        let (line, small) = style.font(env).map_or((style.text, style.small), |font| {
+        let (line, small) = bar_font(env).map_or((style.text, style.small), |font| {
             (
                 font.line_metrics(style.text).line_height,
                 font.line_metrics(style.small).line_height,
@@ -106,9 +115,7 @@ impl BarScreen {
         let widths: Vec<f32> = entries
             .iter()
             .map(|e| {
-                let label = style
-                    .font(env)
-                    .map_or(0.0, |f| f.measure(style.small, &e.label));
+                let label = bar_font(env).map_or(0.0, |f| f.measure(style.small, &e.label));
                 let icon = e
                     .icon
                     .as_deref()
@@ -266,7 +273,7 @@ impl Screen for BarScreen {
             Rect::new(r.x, r.y + r.height - border, r.width, border),
             Color::BLACK,
         );
-        let Some(font) = style.font(env) else {
+        let Some(font) = bar_font(env) else {
             return;
         };
         let margin = style.margin as f32;
