@@ -6,7 +6,8 @@
 //! opened last, a book's details, the favourites, the catalog of all
 //! books) and the annotations ([`annotations`]), never a reader's own
 //! files, and shows only covers looked up before: no book is opened to
-//! show it. What takes longer to read (the catalog's books, highlights) is
+//! show it. Covers are made small for where they go once a widget is
+//! placed ([`Covers`]), and drawn from memory in every band. What takes longer to read (the catalog's books, highlights) is
 //! read when the widget shows and kept until it may have changed
 //! ([`Generation`]); widgets of books are not read each minute.
 //!
@@ -34,7 +35,7 @@ use core::cell::Cell;
 use paperpaw_sdk::builtin::{events, params, slots};
 use paperpaw_sdk::document::ImageRef;
 use paperpaw_sdk::library::{self, catalog};
-use paperpaw_sdk::ui::{self, UiStyle};
+use paperpaw_sdk::ui::{self, Thumbnail, UiStyle};
 use paperpaw_sdk::widgets::{self, Align, Look, line_height};
 use paperpaw_sdk::{
     Arg, Canvas, Color, Command, Env, FontHandle, Id, Params, Point, Rect, RegisterError,
@@ -414,23 +415,64 @@ pub(crate) fn cover_size(book: &Book, width: u16, height: u16) -> (u16, u16) {
     }
 }
 
-/// Draws `book`'s cover into `at` (as large as [`cover_size`] says); a
-/// book without one as a frame with its title.
+/// Covers made small for the places a widget draws them at, when it is
+/// placed ([`Widget::place`](paperpaw_sdk::widgets::Widget::place)) or
+/// its books change: each picture read once, then drawn from memory in
+/// every band of every frame.
+#[derive(Debug, Default)]
+pub(crate) struct Covers(Vec<(Rect, Thumbnail)>);
+
+impl Covers {
+    /// The covers of the books in `places`, each made small for the
+    /// place it goes ([`cover_size`] large), as the panel shows it.
+    pub(crate) fn make<'b>(
+        env: &Env<'_>,
+        places: impl IntoIterator<Item = (&'b Book, Rect)>,
+    ) -> Self {
+        let format = env.device.display.format;
+        let made = places
+            .into_iter()
+            .filter_map(|(book, at)| {
+                let cover = book.cover.as_ref()?;
+                let small = Thumbnail::new(env.storage, cover, at.width, at.height, format)?;
+                Some((at, small))
+            })
+            .collect();
+        Self(made)
+    }
+
+    /// The cover made for `at`, if one was.
+    fn at(&self, at: Rect) -> Option<&Thumbnail> {
+        self.0
+            .iter()
+            .find(|(place, small)| {
+                *place == at && (small.width(), small.height()) == (at.width, at.height)
+            })
+            .map(|(_, small)| small)
+    }
+}
+
+/// Draws `book`'s cover into `at` (as large as [`cover_size`] says): as
+/// made small in `covers`, else from its picture (where there was no
+/// memory to make it small); a book without one as a frame with its
+/// title.
 pub(crate) fn draw_cover(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
     look: &Look,
     at: Rect,
     book: &Book,
+    covers: &Covers,
 ) {
     if at.width < 2 || at.height < 2 {
         return;
     }
-    match &book.cover {
-        Some(cover) => canvas.small_pictures(|canvas| {
+    match (&book.cover, covers.at(at)) {
+        (Some(_), Some(small)) => small.draw(canvas, at.x, at.y),
+        (Some(cover), None) => canvas.small_pictures(|canvas| {
             ui::draw_image(canvas, env.storage, cover, at);
         }),
-        None => draw_placeholder(canvas, env, look, at, &book.title),
+        (None, _) => draw_placeholder(canvas, env, look, at, &book.title),
     }
 }
 
@@ -626,10 +668,19 @@ pub(crate) fn caption(
     look: &Look,
     text: &str,
 ) -> Rect {
+    let rest = below_caption(env, id, look);
+    if rest != look.area {
+        widgets::draw_caption(canvas, env, id, look, text);
+    }
+    rest
+}
+
+/// The area [`caption`] leaves below it, without drawing it.
+pub(crate) fn below_caption(env: &Env<'_>, id: &str, look: &Look) -> Rect {
     if !widgets::shows(env, id, "caption") || look.area.height < 3 * caption_room(env) {
         return look.area;
     }
-    widgets::draw_caption(canvas, env, id, look, text)
+    below(look.area, caption_room(env))
 }
 
 /// The height of a caption, if widget `id` shows one.

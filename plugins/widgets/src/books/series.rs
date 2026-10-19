@@ -17,8 +17,8 @@ use paperpaw_sdk::{Arg, Canvas, Env, Id, Rect, RegisterError, Registrar, Setting
 
 use super::shelf::{self, Place, Shelved};
 use super::{
-    Book, Generation, add_settings, catalog_stamp, chosen, count, current, draw_message, each_book,
-    frame_height, has_catalog, series_rank,
+    Book, Covers, Generation, add_settings, catalog_stamp, chosen, count, current, draw_message,
+    each_book, frame_height, has_catalog, series_rank,
 };
 
 pub(crate) const ID: Id = Id::new_static(WIDGET);
@@ -96,6 +96,8 @@ pub(crate) fn register(r: &mut Registrar, generation: &Generation) -> Result<(),
                 kept: kept.clone(),
                 generation: generation.clone(),
                 shown: Shown::default(),
+                area: None,
+                covers: Covers::default(),
             })
         })
         .category(widgets::categories::BOOKS),
@@ -180,6 +182,9 @@ struct Series {
     kept: Kept,
     generation: Generation,
     shown: Shown,
+    /// Where it is drawn, once placed.
+    area: Option<Rect>,
+    covers: Covers,
 }
 
 impl Series {
@@ -290,6 +295,18 @@ impl Series {
         (places, &books[shown])
     }
 
+    /// The covers shown, made small for where they go.
+    fn make_covers(&mut self, env: &Env<'_>) {
+        self.covers = match self.area {
+            Some(area) if self.shown.empty.is_none() => {
+                let look = widgets::look::look(env, WIDGET, area);
+                let (places, books) = self.places(env, self.content(env, &look));
+                shelf::covers(env, &places, books)
+            }
+            _ => Covers::default(),
+        };
+    }
+
     /// The area below the caption.
     fn content(&self, env: &Env<'_>, look: &Look) -> Rect {
         if widgets::shows(env, WIDGET, "caption")
@@ -307,7 +324,17 @@ impl Widget for Series {
         let shown = self.read(env);
         let changed = shown != self.shown;
         self.shown = shown;
+        if changed {
+            self.make_covers(env);
+        }
         changed
+    }
+
+    fn place(&mut self, env: &Env<'_>, area: Rect) {
+        if self.area != Some(area) {
+            self.area = Some(area);
+            self.make_covers(env);
+        }
     }
 
     fn live(&self) -> bool {
@@ -353,7 +380,7 @@ impl Widget for Series {
         let rest = self.content(env, &look);
         let (places, books) = self.places(env, rest);
         shelf::draw_caption(canvas, env, WIDGET, &look, rest, &places, &title);
-        shelf::draw(canvas, env, &look, &places, books);
+        shelf::draw(canvas, env, &look, &places, books, &self.covers);
     }
 
     fn targets(&self, env: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
