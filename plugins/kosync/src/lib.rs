@@ -597,6 +597,8 @@ mod tests {
             offset: 120,
             page: None,
             pages: None,
+            chapter: String::new(),
+            chapter_left: None,
         };
         let found = position(&reading);
         assert_eq!(found.path, "books/a.epub");

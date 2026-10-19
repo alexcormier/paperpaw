@@ -1,0 +1,6 @@
+[reading]
+path = books/a.epub
+page = 34
+pages = 210
+seconds = 600
+turned = 20

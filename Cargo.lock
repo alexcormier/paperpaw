@@ -1677,6 +1677,7 @@ dependencies = [
  "quireink-i18n",
  "quireink-platform",
  "quireink-plugin-fonts-default",
+ "quireink-plugin-format-epub",
  "quireink-plugin-format-txt",
  "quireink-sdk",
 ]

@@ -64,9 +64,14 @@ pub(super) struct Book {
     pub(super) marks: Vec<Mark>,
     /// Text to point out on this page, e.g. a search hit.
     pub(super) found: Option<(Locator, Locator)>,
-    /// The chapter of the page, for status lines: where it starts, where
-    /// the next one starts and its title (empty before the first).
+    /// The chapter of the page, for status lines and the reading events:
+    /// where it starts, where the next one starts and its title (empty
+    /// before the first).
     pub(super) chapter: Option<(Locator, Option<Locator>, String)>,
+    /// The chapter's last page as the page index has it: where the next
+    /// chapter starts, the index's pages then, and the page (found once
+    /// a chapter, not every page turned).
+    pub(super) chapter_end: core::cell::Cell<Option<(Locator, u32, u32)>>,
     /// The book's own fonts, if used.
     pub(super) embedded: Option<Embedded>,
     /// The links on the page.
@@ -184,6 +189,7 @@ impl Book {
             marks,
             found: None,
             chapter: None,
+            chapter_end: core::cell::Cell::new(None),
             embedded: None,
             links: Vec::new(),
             returns: Vec::new(),
@@ -229,6 +235,7 @@ impl Book {
                 Some((page, true)) => Some((page + 1, index.pages())),
                 _ => None,
             });
+        let chapter = self.chapter.as_ref().map(|(_, _, title)| title.clone());
         events::Reading {
             path: self.path.clone(),
             title: self.title.clone(),
@@ -238,7 +245,37 @@ impl Book {
             offset: self.page.start.offset,
             page: counted.map(|(page, _)| page),
             pages: counted.map(|(_, pages)| pages),
+            chapter: chapter.unwrap_or_default(),
+            chapter_left: counted.and_then(|(page, _)| self.chapter_left(env, page - 1)),
         }
+    }
+
+    /// The pages after page `page` (from 0) up to the chapter's end, where
+    /// the chapter is known and the pages are counted.
+    fn chapter_left(&self, env: &Env<'_>, page: u32) -> Option<u32> {
+        let index = self.index.as_ref().filter(|i| i.is_complete())?;
+        let (_, next, title) = self.chapter.as_ref()?;
+        if title.is_empty() {
+            return None;
+        }
+        let last = match *next {
+            // The last chapter ends with the book.
+            None => index.pages().checked_sub(1)?,
+            Some(next) => match self.chapter_end.get() {
+                Some((at, pages, last)) if at == next && pages == index.pages() => last,
+                _ => {
+                    // The page the next chapter starts on, or the one
+                    // before if it starts with its page.
+                    let last = match index.locate(env.storage, next)? {
+                        (page, true) => page.checked_sub(1)?,
+                        (page, false) => page,
+                    };
+                    self.chapter_end.set(Some((next, index.pages(), last)));
+                    last
+                }
+            },
+        };
+        Some(last.saturating_sub(page))
     }
 
     pub(super) fn open_index(&self, env: &Env<'_>) -> PageIndex {
@@ -260,9 +297,11 @@ impl Book {
             self.page = page;
             self.prepare_images(env);
         }
+        self.update_chapter(env);
         self.update_links(env);
         self.history.clear();
         self.index = Some(self.open_index(env));
+        self.chapter_end.set(None);
         self.indexing = None;
     }
 
@@ -757,8 +796,9 @@ impl Book {
         }
     }
 
-    /// Finds the chapter of the page when a status line shows it; the
-    /// table of contents is read only when the page leaves the chapter.
+    /// Finds the chapter of the page, before the page is shown and said
+    /// ([`events::PAGE_TURNED`]); the table of contents is read only when
+    /// the page leaves the chapter.
     pub(super) fn update_chapter(&mut self, env: &Env<'_>) {
         let at = self.page.start;
         if let Some((from, to, _)) = &self.chapter
@@ -768,9 +808,6 @@ impl Book {
             return;
         }
         self.chapter = None;
-        if !status::uses(env, &status::items::CHAPTER) {
-            return;
-        }
         let (document, storage) = (&self.document, env.storage);
         let mut chapter = (Locator::START, None, String::new());
         for index in 0..document.toc_len(storage) {

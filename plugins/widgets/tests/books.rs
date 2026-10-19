@@ -1,0 +1,213 @@
+//! "Now reading" on the real home screen, told where a book is read by
+//! the standard reading events alone (as any reader sends them): the
+//! page, the chapter and the pages left in it, and the time they take at
+//! the speed read.
+
+// Tests panic on purpose when something is wrong.
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
+use std::borrow::Cow;
+use std::cell::Cell;
+use std::rc::Rc;
+
+use quireink_core::Kernel;
+use quireink_platform::Rotation;
+use quireink_plugin_widgets::Widgets;
+use quireink_sdk::builtin::events;
+use quireink_sdk::{
+    ActionSpec, Command, DeviceInfo, DisplayInfo, Env, Id, InputCaps, Instant, Manifest,
+    MemoryClass, MemoryStorage, PixelFormat, Plugin, RegisterError, Registrar, SDK_VERSION,
+};
+
+const DEVICE: DeviceInfo = DeviceInfo {
+    id: "test",
+    name: "Test device",
+    display: DisplayInfo {
+        width: 480,
+        height: 800,
+        dpi: 220,
+        format: PixelFormat::Mono1,
+        rotation: Rotation::Deg0,
+        color: None,
+    },
+    input: InputCaps {
+        buttons: true,
+        touch: false,
+        pen: false,
+        keys: &[],
+    },
+    memory: MemoryClass::Small,
+};
+
+const BOOK: &str = "books/alice.epub";
+const OPEN: Id = Id::new_static("stand-in.open");
+const TURN: Id = Id::new_static("stand-in.turn");
+const CLOSE: Id = Id::new_static("stand-in.close");
+
+/// A reader that only says where it is: page 40 of 200 at first, each
+/// turn a page on, in a chapter that ends with page 60.
+struct StandIn(Rc<Cell<u32>>);
+
+impl StandIn {
+    fn reading(page: u32) -> events::Reading {
+        events::Reading {
+            path: BOOK.into(),
+            title: "Alice's Adventures in Wonderland".into(),
+            progress: page as f32 / 2.0,
+            section: 3,
+            offset: page * 100,
+            page: Some(page),
+            pages: Some(200),
+            chapter: "Down the Rabbit-Hole".into(),
+            chapter_left: Some(60 - page),
+        }
+    }
+}
+
+impl Plugin for StandIn {
+    fn manifest(&self) -> Manifest {
+        Manifest {
+            id: Id::new_static("stand-in"),
+            name: Cow::Borrowed("Stand-in"),
+            description: Cow::Borrowed("Says where a book is read."),
+            version: SDK_VERSION,
+            sdk: SDK_VERSION,
+        }
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        for (id, event) in [
+            (OPEN, events::BOOK_OPENED),
+            (TURN, events::PAGE_TURNED),
+            (CLOSE, events::BOOK_CLOSED),
+        ] {
+            let page = self.0.clone();
+            r.add_action(ActionSpec::new(id.clone(), "stand-in.action").handler(
+                move |_: &Env<'_>, out: &mut Vec<Command>| {
+                    if id == TURN {
+                        page.set(page.get() + 1);
+                    }
+                    out.push(event.emit(StandIn::reading(page.get())));
+                },
+            ))?;
+        }
+        Ok(())
+    }
+}
+
+struct Home {
+    kernel: Kernel,
+    now: u64,
+    /// Where the widget is: one row down or not.
+    moved: bool,
+}
+
+impl Home {
+    /// The home screen showing "Now reading", with `settings` set.
+    fn new(settings: &[(&str, &str)]) -> Self {
+        let storage = MemoryStorage::new()
+            .with(BOOK, "a book")
+            .with(".quireink/plugins/setup/done", "");
+        let mut kernel = Kernel::builder(DEVICE)
+            .storage(storage)
+            .plugin(quireink_plugin_fonts_default::DefaultFontPacks)
+            .plugin(quireink_plugin_home::Home)
+            .plugin(Widgets)
+            .plugin(StandIn(Rc::new(Cell::new(40))))
+            .build()
+            .unwrap();
+        kernel.start(Instant(0));
+        let mut home = Self {
+            kernel,
+            now: 0,
+            moved: false,
+        };
+        for (id, value) in settings {
+            home.set(id, value);
+        }
+        home
+    }
+
+    fn set(&mut self, id: &str, value: &str) {
+        self.now += 100;
+        self.kernel
+            .set_setting(Instant(self.now), id, value)
+            .unwrap();
+    }
+
+    /// Reads `pages` pages, `millis` each.
+    fn read(&mut self, pages: u32, millis: u64) {
+        self.run(OPEN);
+        for _ in 0..pages {
+            self.now += millis;
+            self.run(TURN);
+        }
+        self.run(CLOSE);
+    }
+
+    fn run(&mut self, action: Id) {
+        self.now += 10;
+        self.kernel.run_action(Instant(self.now), action);
+    }
+
+    /// The texts on the screen, in order, the widget made anew (as when
+    /// the home screen shows again after reading).
+    fn shown(&mut self) -> Vec<String> {
+        self.moved = !self.moved;
+        let row = if self.moved { 1 } else { 0 };
+        self.set("home.page-1", &format!("widgets.reading 0/{row} 4x4"));
+        self.kernel.render(&mut |_, _| {});
+        self.kernel
+            .describe()
+            .into_iter()
+            .map(|p| p.label)
+            .collect()
+    }
+}
+
+fn has(shown: &[String], text: &str) -> bool {
+    shown.iter().any(|l| l.contains(text))
+}
+
+#[test]
+fn the_chapter_and_whats_left_of_it() {
+    let mut home = Home::new(&[]);
+    home.read(2, 1000);
+    let shown = home.shown();
+    assert!(has(&shown, "Page 42 of 200"), "{shown:?}");
+    assert!(has(&shown, "Down the Rabbit-Hole"), "{shown:?}");
+    assert!(has(&shown, "18 pages left in the chapter"), "{shown:?}");
+    // Read at a page in 30 seconds: the time left in it too.
+    home.read(10, 30_000);
+    let shown = home.shown();
+    assert!(has(&shown, "8 pages left"), "{shown:?}");
+    assert!(has(&shown, "about 4 min"), "{shown:?}");
+    assert!(has(&shown, "About 1 h 14 min left"), "{shown:?}");
+}
+
+#[test]
+fn the_chapter_is_a_part_to_switch_off() {
+    let mut home = Home::new(&[
+        ("widgets.reading.chapter", "false"),
+        ("widgets.reading.chapter-left", "false"),
+    ]);
+    home.read(2, 1000);
+    let shown = home.shown();
+    assert!(has(&shown, "Page 42 of 200"), "{shown:?}");
+    assert!(!has(&shown, "Rabbit-Hole"), "{shown:?}");
+    assert!(!has(&shown, "in the chapter"), "{shown:?}");
+}
+
+#[test]
+fn the_chapter_in_german() {
+    let mut home = Home::new(&[("core.language", "de")]);
+    home.read(19, 30_000);
+    let shown = home.shown();
+    assert!(has(&shown, "Down the Rabbit-Hole"), "{shown:?}");
+    assert!(has(&shown, "Noch 1 Seite"), "{shown:?}");
+    assert!(has(&shown, "etwa 1 Min."), "{shown:?}");
+    // Its last page.
+    home.read(1, 30_000);
+    let shown = home.shown();
+    assert!(has(&shown, "Letzte Seite des Kapitels"), "{shown:?}");
+}

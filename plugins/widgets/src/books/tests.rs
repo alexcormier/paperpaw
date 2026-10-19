@@ -27,7 +27,7 @@ use quireink_sdk::{
 use super::highlight::{self, Found};
 use super::next;
 use super::numbers::Numbers;
-use super::reading::{Position, left_text};
+use super::reading::{Position, chapter_left_text, left_text, wrap_words};
 use super::series::{self, Member};
 
 const DEVICE: DeviceInfo = DeviceInfo {
@@ -287,6 +287,8 @@ fn library() -> MemoryStorage {
         path: "books/s3.epub".to_string(),
         page: Some(40),
         pages: Some(100),
+        chapter: "Chapter Three, in Which Something Happens at Last".to_string(),
+        chapter_left: Some(6),
         seconds: 600,
         turned: 20,
     }
@@ -566,11 +568,125 @@ fn time_left_from_the_pages_read() {
     let env = h.env();
     assert_eq!(left_text(&env, 4500), "About 1 h 15 min left");
     assert_eq!(left_text(&env, 600), "About 10 min left");
-    // Kept and read again.
+    // Kept and read again, the chapter too.
     let storage = MemoryStorage::new();
     position.path = "books/a.epub".to_string();
+    position.chapter = "Down the Rabbit-Hole".to_string();
+    position.chapter_left = Some(12);
     position.save(&storage);
     assert_eq!(Position::load(&storage), position);
+    // 12 pages at 30 seconds.
+    assert_eq!(position.chapter_seconds(), Some(360));
+}
+
+#[test]
+fn reading_ini_of_every_version_is_read() {
+    // Version 1, as written before the chapter was kept.
+    let storage = MemoryStorage::new().with(
+        ".quireink/plugins/widgets/reading.ini",
+        include_str!("../../testdata/reading.ini.v1"),
+    );
+    let position = Position::load(&storage);
+    assert_eq!(position.path, "books/a.epub");
+    assert_eq!((position.page, position.pages), (Some(34), Some(210)));
+    assert_eq!((position.seconds, position.turned), (600, 20));
+    assert_eq!(position.chapter, "");
+    assert_eq!(position.chapter_left, None);
+    assert_eq!(position.chapter_seconds(), None);
+}
+
+#[test]
+fn whats_left_of_the_chapter_as_room_allows() {
+    let mut h = Harness::new(MemoryStorage::new());
+    let mut position = Position {
+        chapter: "Down the Rabbit-Hole".to_string(),
+        chapter_left: Some(12),
+        ..Position::default()
+    };
+    let text = |h: &Harness, position: &Position, timed, titled, width| {
+        chapter_left_text(&h.env(), position, timed, titled, 12.0, width).unwrap()
+    };
+    let wide = 1000;
+    assert_eq!(
+        text(&h, &position, true, true, wide),
+        "12 pages left in the chapter"
+    );
+    // With a speed, the time too; less where there is less room.
+    position.seconds = 300;
+    position.turned = 10;
+    assert_eq!(
+        text(&h, &position, true, true, wide),
+        "12 pages left in the chapter · about 6 min"
+    );
+    assert_eq!(
+        text(&h, &position, false, true, wide),
+        "12 pages left in the chapter"
+    );
+    let env = h.env();
+    let font = quireink_sdk::ui::UiStyle::new(&env).font(&env).unwrap();
+    let width = |text: &str| font.measure(12.0, text).ceil() as u16;
+    let narrow = width("12 pages left · about 6 min");
+    assert_eq!(
+        text(&h, &position, true, true, narrow),
+        "12 pages left · about 6 min"
+    );
+    assert_eq!(text(&h, &position, true, true, narrow - 1), "12 pages left");
+    assert_eq!(text(&h, &position, true, true, 10), "12 pages left");
+    // Without the chapter's title above it, it says which pages are meant.
+    assert_eq!(
+        text(&h, &position, true, false, 10),
+        "12 pages left in the chapter"
+    );
+    position.chapter_left = Some(1);
+    assert_eq!(
+        text(&h, &position, false, true, wide),
+        "1 page left in the chapter"
+    );
+    position.chapter_left = Some(0);
+    assert_eq!(
+        text(&h, &position, true, true, wide),
+        "Last page of the chapter"
+    );
+    position.chapter_left = None;
+    let env = h.env();
+    assert_eq!(
+        chapter_left_text(&env, &position, true, true, 12.0, wide),
+        None
+    );
+    h.i18n.set_language("de");
+    position.chapter_left = Some(12);
+    assert_eq!(
+        text(&h, &position, true, true, wide),
+        "Noch 12 Seiten im Kapitel · etwa 6 Min."
+    );
+    assert_eq!(text(&h, &position, false, true, 10), "Noch 12 Seiten");
+}
+
+#[test]
+fn long_titles_in_lines_as_even_as_can_be() {
+    let h = Harness::new(MemoryStorage::new());
+    let env = h.env();
+    let font = quireink_sdk::ui::UiStyle::new(&env).font(&env).unwrap();
+    let width = |text: &str| font.measure(12.0, text).ceil() as u16;
+    let title = "Alice's Adventures in Wonderland";
+    let wrap = |most, room| wrap_words(&font, 12.0, title, room, most);
+    // Where it fits, or one line is all there is room for: as it is.
+    assert_eq!(wrap(3, width(title)), [title]);
+    assert_eq!(wrap(1, width("Alice's")), [title]);
+    // In two, the longer line as short as can be.
+    assert_eq!(
+        wrap(3, width("Alice's Adventures in")),
+        ["Alice's Adventures", "in Wonderland"]
+    );
+    // Narrower: as many words as fit, the rest last.
+    assert_eq!(
+        wrap(3, width("Adventures in")),
+        ["Alice's", "Adventures in", "Wonderland"]
+    );
+    assert_eq!(
+        wrap(2, width("Adventures in")),
+        ["Alice's", "Adventures in Wonderland"]
+    );
 }
 
 #[test]

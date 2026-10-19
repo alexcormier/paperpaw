@@ -157,6 +157,8 @@ impl quireink_sdk::event::EventData for quireink_sdk::builtin::events::NotesExpo
 pub fn quireink_sdk::builtin::events::NotesExported::from_params(&quireink_sdk::Params) -> core::option::Option<Self>
 pub fn quireink_sdk::builtin::events::NotesExported::to_params(&self) -> quireink_sdk::Params
 pub struct quireink_sdk::builtin::events::Reading
+pub quireink_sdk::builtin::events::Reading::chapter: alloc::string::String
+pub quireink_sdk::builtin::events::Reading::chapter_left: core::option::Option<u32>
 pub quireink_sdk::builtin::events::Reading::offset: u32
 pub quireink_sdk::builtin::events::Reading::page: core::option::Option<u32>
 pub quireink_sdk::builtin::events::Reading::pages: core::option::Option<u32>

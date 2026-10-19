@@ -1,7 +1,7 @@
-//! Reading a book with the real kernel, the text format and the default
-//! fonts: pages turn both ways, the position is
+//! Reading a book with the real kernel, the text and EPUB formats and the
+//! default fonts: pages turn both ways, the position is
 //! kept and the book continues there, a larger font keeps the place,
-//! bookmarks are kept, and plugins hear of it all.
+//! bookmarks are kept, and plugins hear of it all, the chapter too.
 
 // Tests panic on purpose when something is wrong.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
@@ -41,6 +41,8 @@ const DEVICE: DeviceInfo = DeviceInfo {
 };
 
 const BOOK: &str = "books/alice.txt";
+/// The same book with a table of contents.
+const EPUB: &str = "books/alice.epub";
 
 /// A storage the test looks into while kernels have it.
 #[derive(Clone, Default)]
@@ -76,8 +78,8 @@ impl Storage for Shared {
     }
 }
 
-/// What a plugin hears of the reading: the event and the progress.
-type Heard = Rc<RefCell<Vec<(&'static str, f32)>>>;
+/// What a plugin hears of the reading: the event and what it carries.
+type Heard = Rc<RefCell<Vec<(&'static str, events::Reading)>>>;
 
 /// A plugin that listens to the reading events.
 struct Listener(Heard);
@@ -101,8 +103,7 @@ impl Plugin for Listener {
         ] {
             let heard = self.0.clone();
             r.on(event, move |_, reading, _| {
-                assert_eq!(reading.path, BOOK);
-                heard.borrow_mut().push((name, reading.progress));
+                heard.borrow_mut().push((name, reading.clone()));
             })?;
         }
         Ok(())
@@ -114,21 +115,29 @@ struct Reading {
     storage: Shared,
     heard: Heard,
     now: u64,
+    /// The book read.
+    book: &'static str,
 }
 
 impl Reading {
     /// A kernel over `storage`, with the book on it.
     fn new(storage: Shared) -> Self {
-        if !storage.exists(BOOK) {
-            let text = include_str!("../../../samples/library/books/alice-in-wonderland.txt");
+        let text = include_str!("../../../samples/library/books/alice-in-wonderland.txt");
+        Self::with_book(storage, BOOK, text.as_bytes())
+    }
+
+    /// A kernel over `storage`, with book `data` at `path`.
+    fn with_book(storage: Shared, path: &'static str, data: &[u8]) -> Self {
+        if !storage.exists(path) {
             storage.create_dir("books").unwrap();
-            storage.write(BOOK, text.as_bytes()).unwrap();
+            storage.write(path, data).unwrap();
         }
         let heard = Heard::default();
         let kernel = Kernel::builder(DEVICE)
             .storage(storage.clone())
             .plugin(quireink_plugin_fonts_default::DefaultFontPacks)
             .plugin(quireink_plugin_format_txt::TxtFormat)
+            .plugin(quireink_plugin_format_epub::EpubFormat)
             .plugin(Reader)
             .plugin(Listener(heard.clone()))
             .build()
@@ -138,6 +147,7 @@ impl Reading {
             storage,
             heard,
             now: 0,
+            book: path,
         };
         let effects = reading.kernel.start(Instant(0));
         reading.settle(effects);
@@ -161,7 +171,7 @@ impl Reading {
 
     fn open(&mut self) {
         self.now += 10;
-        let params = Params::new().with(params::PATH, BOOK);
+        let params = Params::new().with(params::PATH, self.book);
         let effects = self
             .kernel
             .open_slot(Instant(self.now), slots::READER, params);
@@ -187,7 +197,7 @@ impl Reading {
         self.settle(effects);
         let dir = format!(
             ".quireink/plugins/reader/books/{:016x}",
-            quireink_digest::fnv1a64(BOOK)
+            quireink_digest::fnv1a64(self.book)
         );
         let Some(data) = self.storage.0.get(&format!("{dir}/progress.ini")) else {
             return (0, 0);
@@ -296,6 +306,55 @@ fn plugins_hear_the_reading() {
     let heard = reading.heard();
     assert_eq!(heard.first(), Some(&"opened"));
     assert_eq!(heard.iter().filter(|e| **e == "turned").count(), 2);
-    let progress: Vec<f32> = reading.heard.borrow().iter().map(|(_, p)| *p).collect();
+    let events = reading.heard.borrow();
+    assert!(events.iter().all(|(_, r)| r.path == BOOK));
+    let progress: Vec<f32> = events.iter().map(|(_, r)| r.progress).collect();
     assert!(progress.windows(2).all(|p| p[0] <= p[1]), "{progress:?}");
+}
+
+#[test]
+fn plugins_hear_the_chapter() {
+    let epub = include_bytes!("../../../samples/library/books/alice-in-wonderland.epub");
+    let mut reading = Reading::with_book(Shared::default(), EPUB, epub);
+    reading.open();
+    // Until every page is counted.
+    let counted = |reading: &Reading| {
+        let heard = reading.heard.borrow();
+        heard.last().is_some_and(|(_, r)| r.pages.is_some())
+    };
+    let mut turned = 0;
+    while !counted(&reading) {
+        reading.run(core_actions::NEXT_PAGE);
+        turned += 1;
+        assert!(turned < 400, "the pages are never counted");
+    }
+    // Then through the chapters: each page in one, as many pages left in
+    // it as come before the next.
+    let from = reading.heard.borrow().len() - 1;
+    for _ in 0..60 {
+        reading.run(core_actions::NEXT_PAGE);
+    }
+    let heard = reading.heard.borrow();
+    let pages: Vec<&events::Reading> = heard[from..].iter().map(|(_, r)| r).collect();
+    assert!(pages.iter().all(|r| r.path == EPUB && r.page.is_some()));
+    let titles: std::collections::BTreeSet<&str> =
+        pages.iter().map(|r| r.chapter.as_str()).collect();
+    for chapter in ["Down the Rabbit-Hole", "The Pool of Tears"] {
+        assert!(titles.iter().any(|t| t.ends_with(chapter)), "{titles:?}");
+    }
+    for pair in pages.windows(2) {
+        let (this, next) = (pair[0], pair[1]);
+        assert_eq!(next.page, this.page.map(|p| p + 1));
+        // Before the first chapter (the title page): none.
+        if this.chapter.is_empty() {
+            assert_eq!(this.chapter_left, None);
+            continue;
+        }
+        let left = this.chapter_left.expect("pages left once counted");
+        if next.chapter == this.chapter {
+            assert_eq!(next.chapter_left, Some(left - 1), "{this:?} {next:?}");
+        } else {
+            assert_eq!(left, 0, "{this:?} {next:?}");
+        }
+    }
 }

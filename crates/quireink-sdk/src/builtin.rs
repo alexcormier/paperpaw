@@ -269,6 +269,14 @@ pub mod events {
             /// The page and the pages, once the reader counted them.
             pub page: Option<u32>,
             pub pages: Option<u32>,
+            /// The title of the chapter the page is in: empty where the
+            /// book has no table of contents or the page comes before
+            /// its first entry.
+            pub chapter: String,
+            /// The pages after this one in the chapter (0 on its last
+            /// page), once the reader counted the pages and where the
+            /// chapter is known.
+            pub chapter_left: Option<u32>,
         }
     }
 
@@ -944,6 +952,37 @@ mod tests {
             (back.start(), back.end()),
             (Locator::new(1, 10), Locator::new(1, 15))
         );
+    }
+
+    #[test]
+    fn reading_carries_the_chapter() {
+        use super::events::Reading;
+        let reading = Reading {
+            path: "books/a.epub".into(),
+            title: "Alice".into(),
+            progress: 12.5,
+            section: 3,
+            offset: 120,
+            page: Some(40),
+            pages: Some(300),
+            chapter: "Down the Rabbit-Hole".into(),
+            chapter_left: Some(7),
+        };
+        let params = reading.to_params();
+        assert_eq!(params.get("chapter_left"), Some("7"));
+        assert_eq!(Reading::from_params(&params).unwrap(), reading);
+        assert_eq!(reading.at(), Locator::new(3, 120));
+        // A book without a table of contents, its pages not counted.
+        let unknown = Reading {
+            page: None,
+            pages: None,
+            chapter: "".into(),
+            chapter_left: None,
+            ..reading
+        };
+        let params = unknown.to_params();
+        assert_eq!(params.get("chapter_left"), None, "absent, not empty");
+        assert_eq!(Reading::from_params(&params).unwrap(), unknown);
     }
 
     #[test]

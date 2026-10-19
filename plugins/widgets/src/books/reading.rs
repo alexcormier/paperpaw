@@ -1,11 +1,12 @@
 //! "Now reading": the book being read, its title and author, the page it
-//! is at, a bar of how far, and the time left to read it at one's speed.
+//! is at, a bar of how far, the chapter and the pages left in it, and the
+//! time left to read them at one's speed.
 //!
 //! No plugin may read the chapter a reader is at, nor the pages it
 //! counted, from what the library keeps; the standard reading events
-//! carry the page and the pages. So this widget records them itself
-//! ([`Recorder`]): the page of the book read last, and how long a page
-//! took (the time between pages turned, pauses left out), kept small in
+//! carry them. So this widget records them itself ([`Recorder`]): the
+//! page and the chapter of the book read last, and how long a page took
+//! (the time between pages turned, pauses left out), kept small in
 //! `.quireink/plugins/widgets/reading.ini` when the book is closed.
 
 use alloc::boxed::Box;
@@ -47,6 +48,10 @@ pub(crate) struct Position {
     /// The page (from 1) and the pages, once the reader counted them.
     pub page: Option<u32>,
     pub pages: Option<u32>,
+    /// The chapter's title (empty where not known) and the pages after
+    /// this one in it, once counted.
+    pub chapter: String,
+    pub chapter_left: Option<u32>,
     /// Seconds read and the pages they took, for the speed.
     pub seconds: u32,
     pub turned: u32,
@@ -69,12 +74,19 @@ impl Position {
     /// Seconds left to read in the book, if its pages are counted and
     /// enough was read for a speed.
     pub(crate) fn left(&self) -> Option<u64> {
-        if self.turned < MIN_PAGES {
-            return None;
-        }
         let pages = self.pages?;
-        let left = pages.saturating_sub(self.page?);
-        Some(u64::from(left) * u64::from(self.seconds) / u64::from(self.turned))
+        self.seconds_for(pages.saturating_sub(self.page?))
+    }
+
+    /// Seconds left to read in the chapter, likewise.
+    pub(crate) fn chapter_seconds(&self) -> Option<u64> {
+        self.seconds_for(self.chapter_left?)
+    }
+
+    /// Seconds `pages` take at one's speed, once there is one.
+    fn seconds_for(&self, pages: u32) -> Option<u64> {
+        (self.turned >= MIN_PAGES)
+            .then(|| u64::from(pages) * u64::from(self.seconds) / u64::from(self.turned))
     }
 
     fn file() -> String {
@@ -92,6 +104,8 @@ impl Position {
                 "path" => position.path = entry.value.as_str().into_owned(),
                 "page" => position.page = entry.value.as_u32(),
                 "pages" => position.pages = entry.value.as_u32(),
+                "chapter" => position.chapter = entry.value.as_str().into_owned(),
+                "chapter-left" => position.chapter_left = entry.value.as_u32(),
                 "seconds" => position.seconds = entry.value.as_u32().unwrap_or(0),
                 "turned" => position.turned = entry.value.as_u32().unwrap_or(0),
                 _ => {}
@@ -109,6 +123,12 @@ impl Position {
         }
         if let Some(pages) = self.pages {
             set("pages", &pages.to_string());
+        }
+        if !self.chapter.is_empty() {
+            set("chapter", &self.chapter);
+        }
+        if let Some(left) = self.chapter_left {
+            set("chapter-left", &left.to_string());
         }
         set("seconds", &self.seconds.to_string());
         set("turned", &self.turned.to_string());
@@ -146,6 +166,10 @@ impl Recorder {
         }
         position.page = reading.page;
         position.pages = reading.pages;
+        if position.chapter != reading.chapter {
+            position.chapter.clone_from(&reading.chapter);
+        }
+        position.chapter_left = reading.chapter_left;
         self.unsaved = true;
     }
 
@@ -158,7 +182,7 @@ impl Recorder {
 }
 
 /// Its settings, kept in the program.
-static SETTINGS: [SettingSpec; 9] = [
+static SETTINGS: [SettingSpec; 11] = [
     widgets::align_spec("widgets.reading.align", ID, Align::Left),
     widgets::frame_spec("widgets.reading.frame", ID, Frame::None),
     widgets::size_spec("widgets.reading.size", ID, Size::Medium, false),
@@ -188,6 +212,18 @@ static SETTINGS: [SettingSpec; 9] = [
     ),
     widgets::part_spec("widgets.reading.bar", ID, "widgets.books.part.bar", true),
     widgets::part_spec("widgets.reading.left", ID, "widgets.books.part.left", true),
+    widgets::part_spec(
+        "widgets.reading.chapter",
+        ID,
+        "widgets.books.part.chapter",
+        true,
+    ),
+    widgets::part_spec(
+        "widgets.reading.chapter-left",
+        ID,
+        "widgets.books.part.chapter-left",
+        true,
+    ),
 ];
 
 pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
@@ -300,16 +336,22 @@ pub(crate) fn where_text(env: &Env<'_>, book: &Book, position: &Position) -> Str
 
 /// "About 2 h 5 min left", "About 40 min left".
 pub(crate) fn left_text(env: &Env<'_>, seconds: u64) -> String {
+    duration(env, seconds, "widgets.reading.left")
+}
+
+/// `seconds` in whole minutes (at least one), as message `key`-minutes
+/// or `key`-hours says.
+fn duration(env: &Env<'_>, seconds: u64, key: &str) -> String {
     let minutes = seconds.div_ceil(60).max(1);
     let (hours, minutes) = (minutes / 60, minutes % 60);
     if hours == 0 {
         env.i18n.format(
-            "widgets.reading.left-minutes",
+            &format!("{key}-minutes"),
             &[("minutes", Arg::Int(minutes as i64))],
         )
     } else {
         env.i18n.format(
-            "widgets.reading.left-hours",
+            &format!("{key}-hours"),
             &[
                 ("hours", Arg::Int(hours as i64)),
                 ("minutes", Arg::Int(minutes as i64)),
@@ -318,17 +360,82 @@ pub(crate) fn left_text(env: &Env<'_>, seconds: u64) -> String {
     }
 }
 
-/// The parts of "Now reading" below the cover's side, in the order they
-/// give way where there is too little room: the time left first, the
-/// title never.
+/// What is left of the chapter, the longest way that fits `width` at
+/// `size`: "12 pages left in the chapter · about 6 min" where the time is
+/// known and wanted (`timed`), "12 pages left · about 6 min" below the
+/// chapter's title (`titled`), or either without the time; "Last page of
+/// the chapter" on its last.
+pub(crate) fn chapter_left_text(
+    env: &Env<'_>,
+    position: &Position,
+    timed: bool,
+    titled: bool,
+    size: f32,
+    width: u16,
+) -> Option<String> {
+    let left = position.chapter_left?;
+    if left == 0 {
+        return Some(env.i18n.tr("widgets.reading.chapter-last").to_string());
+    }
+    let count = i64::from(left);
+    let long = env.i18n.plural("widgets.reading.chapter-left", count, &[]);
+    let short = titled.then(|| env.i18n.plural("widgets.reading.chapter-short", count, &[]));
+    let time = position
+        .chapter_seconds()
+        .filter(|_| timed)
+        .map(|seconds| duration(env, seconds, "widgets.reading.chapter"));
+    let with_time = |pages: &str| {
+        time.as_ref().map(|time| {
+            env.i18n.format(
+                "widgets.reading.chapter-time",
+                &[("left", Arg::Str(pages)), ("time", Arg::Str(time))],
+            )
+        })
+    };
+    let mut ways = Vec::with_capacity(4);
+    ways.extend(with_time(&long));
+    ways.extend(short.as_deref().and_then(with_time));
+    ways.push(long);
+    ways.extend(short);
+    let font = UiStyle::new(env).font(env);
+    let fits = |text: &str| {
+        font.as_ref()
+            .is_none_or(|font| font.measure(size, text) <= f32::from(width))
+    };
+    let at = ways
+        .iter()
+        .position(|way| fits(way))
+        .unwrap_or(ways.len() - 1);
+    Some(ways.swap_remove(at))
+}
+
+/// The parts of "Now reading" beside the cover, in the order they are
+/// drawn. Where there is too little room, they give way as [`DROPPED`]
+/// says; the title never.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Part {
-    Left,
     Caption,
     Author,
     Bar,
     Pages,
+    Left,
+    Chapter,
+    ChapterLeft,
 }
+
+/// The parts in the order they give way: the time left in the book
+/// first, the heading and the author (known anyway) next, then what is
+/// left of the chapter, the bar (the percentage says it too), the
+/// chapter, the page last.
+const DROPPED: [Part; 7] = [
+    Part::Left,
+    Part::Caption,
+    Part::Author,
+    Part::ChapterLeft,
+    Part::Bar,
+    Part::Chapter,
+    Part::Pages,
+];
 
 fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, book: &Book, position: &Position) {
     let style = UiStyle::new(env);
@@ -350,22 +457,31 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, book: &Book, positi
     } else {
         area
     };
-    let left = position.left().map(|s| left_text(env, s));
+    let timed = widgets::shows(env, id, "left");
+    let left = position.left().filter(|_| timed).map(|s| left_text(env, s));
     let mut parts: Vec<Part> = [
-        (Part::Caption, "caption"),
-        (Part::Author, "author"),
-        (Part::Bar, "bar"),
-        (Part::Pages, "pages"),
-        (Part::Left, "left"),
+        (Part::Caption, "caption", true),
+        (Part::Author, "author", !book.author.is_empty()),
+        (Part::Bar, "bar", true),
+        (Part::Pages, "pages", true),
+        (Part::Left, "left", left.is_some()),
+        (Part::Chapter, "chapter", !position.chapter.is_empty()),
+        (
+            Part::ChapterLeft,
+            "chapter-left",
+            position.chapter_left.is_some(),
+        ),
     ]
     .into_iter()
-    .filter(|(part, name)| widgets::shows(env, id, name) && (*part != Part::Left || left.is_some()))
-    .map(|(part, _)| part)
+    .filter(|(_, name, there)| *there && widgets::shows(env, id, name))
+    .map(|(part, _, _)| part)
     .collect();
     let small = widgets::line_height(env, style.small);
     let line_gap = gap / 4;
     let bar_h = (style.line as u16 * 3).max(4);
     let title_size = text_size(env, id);
+    // The chapter set a little apart from the book's page and time.
+    let apart = gap / 2;
     let height = |parts: &[Part]| -> u16 {
         let mut total = widgets::line_height(env, title_size);
         for part in parts {
@@ -374,22 +490,49 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, book: &Book, positi
                 _ => small + line_gap,
             };
         }
-        total
+        let book = parts.iter().any(|p| matches!(p, Part::Pages | Part::Left));
+        let chapter = parts
+            .iter()
+            .any(|p| matches!(p, Part::Chapter | Part::ChapterLeft));
+        total + if book && chapter { apart } else { 0 }
     };
-    for drop in [
-        Part::Left,
-        Part::Caption,
-        Part::Bar,
-        Part::Author,
-        Part::Pages,
-    ] {
+    for drop in DROPPED {
         if height(&parts) <= rest.height {
             break;
         }
         parts.retain(|p| *p != drop);
     }
     let has = |part: Part| parts.contains(&part);
-    let total = height(&parts).min(rest.height);
+    // Room to spare: a long title in more lines, then a long chapter.
+    let mut total = height(&parts);
+    let font = style.font(env);
+    let mut wrapped = |size: f32, text: &str| -> Vec<String> {
+        let line = widgets::line_height(env, size) + line_gap;
+        let more = usize::from(rest.height.saturating_sub(total) / line);
+        let lines = match font.as_ref() {
+            Some(font) if more > 0 => wrap_words(font, size, text, rest.width, more + 1),
+            _ => alloc::vec![String::from(text)],
+        };
+        total += line * (lines.len() as u16 - 1);
+        lines
+    };
+    // As the lines are drawn: a title too wide in the body size.
+    let wide = |size: f32| {
+        font.as_ref()
+            .is_some_and(|font| font.measure(size, &book.title) > f32::from(rest.width))
+    };
+    let title_size = if title_size > style.text && wide(title_size) {
+        style.text
+    } else {
+        title_size
+    };
+    let title = wrapped(title_size, &book.title);
+    let chapter = if has(Part::Chapter) {
+        wrapped(style.small, &position.chapter)
+    } else {
+        Vec::new()
+    };
+    let total = total.min(rest.height);
     let mut y = rest.y + (rest.height - total) / 2;
     let align = widgets::align(env, id);
     let mut top = Lines::new();
@@ -400,7 +543,9 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, book: &Book, positi
             look.faint,
         );
     }
-    top.add(title_size, book.title.as_str(), look.ink);
+    for line in title {
+        top.add(title_size, line, look.ink);
+    }
     if has(Part::Author) {
         top.add(style.small, book.author.as_str(), look.faint);
     }
@@ -412,20 +557,86 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, book: &Book, positi
         draw_bar(canvas, env, look, bar, book.percent());
         y += bar_h + gap;
     }
-    let mut bottom = Lines::new();
+    let mut place = Lines::new();
     if has(Part::Pages) {
-        bottom.add(style.small, where_text(env, book, position), look.ink);
+        place.add(style.small, where_text(env, book, position), look.ink);
     }
     if let (true, Some(left)) = (has(Part::Left), left) {
-        bottom.add(style.small, left, look.faint);
+        place.add(style.small, left, look.faint);
     }
-    if !bottom.lines.is_empty() {
-        let h = bottom.height(env);
-        bottom.draw(
-            canvas,
-            env,
-            Rect::new(rest.x, y + line_gap, rest.width, h),
-            align,
-        );
+    let mut chapter_lines = Lines::new();
+    for line in chapter {
+        chapter_lines.add(style.small, line, look.ink);
     }
+    if has(Part::ChapterLeft) {
+        let titled = has(Part::Chapter);
+        let left = chapter_left_text(env, position, timed, titled, style.small, rest.width);
+        chapter_lines.add(style.small, left.unwrap_or_default(), look.faint);
+    }
+    y += line_gap;
+    for (i, mut lines) in [place, chapter_lines].into_iter().enumerate() {
+        if lines.lines.is_empty() {
+            continue;
+        }
+        if i == 1 && (has(Part::Pages) || has(Part::Left)) {
+            y += line_gap + apart;
+        }
+        let h = lines.height(env);
+        lines.draw(canvas, env, Rect::new(rest.x, y, rest.width, h), align);
+        y += h;
+    }
+}
+
+/// `text` in at most `most` lines `width` wide at `size`, broken between
+/// words: in two where it needs two, where the longer line is shortest;
+/// else as many words in each as fit (the last shortened where it is
+/// drawn).
+pub(crate) fn wrap_words(
+    font: &quireink_sdk::FontHandle<'_>,
+    size: f32,
+    text: &str,
+    width: u16,
+    most: usize,
+) -> Vec<String> {
+    let width = f32::from(width);
+    let fits = |text: &str| font.measure(size, text) <= width;
+    if most < 2 || fits(text) {
+        return alloc::vec![String::from(text)];
+    }
+    let head = |at: usize| text[..at].trim_end();
+    let tail = |at: usize| text[at..].trim_start();
+    // Two lines, as even as can be.
+    let even = text
+        .match_indices(' ')
+        .map(|(at, _)| at)
+        .filter(|&at| !head(at).is_empty() && !tail(at).is_empty())
+        .map(|at| {
+            (
+                at,
+                font.measure(size, head(at))
+                    .max(font.measure(size, tail(at))),
+            )
+        })
+        .filter(|(_, widest)| *widest <= width)
+        .min_by(|a, b| a.1.total_cmp(&b.1));
+    if let Some((at, _)) = even {
+        return alloc::vec![String::from(head(at)), String::from(tail(at))];
+    }
+    let mut lines: Vec<String> = Vec::new();
+    let mut rest = text.trim();
+    while lines.len() + 1 < most && !fits(rest) {
+        // The most words that fit; a word too long alone on its line.
+        let at = rest
+            .match_indices(' ')
+            .map(|(at, _)| at)
+            .take_while(|&at| fits(rest[..at].trim_end()))
+            .last();
+        let Some(at) = at.or_else(|| rest.find(' ')) else {
+            break;
+        };
+        lines.push(String::from(rest[..at].trim_end()));
+        rest = rest[at..].trim_start();
+    }
+    lines.push(String::from(rest));
+    lines
 }

@@ -378,13 +378,6 @@ fn draw_progress(canvas: &mut Canvas<'_>, env: &Env<'_>, frame: &StatusFrame<'_>
     }
 }
 
-/// Whether any part shows item `id`.
-pub(crate) fn uses(env: &Env<'_>, id: &Id) -> bool {
-    PARTS
-        .iter()
-        .any(|part| item_ids(env.settings.text(part.as_str())).any(|i| i == id.as_str()))
-}
-
 /// Whether there is a line at the top (or bottom): some status line to
 /// show there.
 pub(crate) fn shown(env: &Env<'_>, top: bool) -> bool {

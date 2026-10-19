@@ -439,6 +439,8 @@ mod tests {
             offset: 120,
             page: Some(12),
             pages: Some(300),
+            chapter: String::new(),
+            chapter_left: None,
         };
         assert_eq!(page_of(&counted), (12, 300));
         let estimated = quireink_sdk::builtin::events::Reading {
