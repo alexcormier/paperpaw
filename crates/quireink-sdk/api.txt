@@ -424,7 +424,7 @@ pub mod quireink_sdk::contribution
 pub quireink_sdk::contribution::Contribution::Action(quireink_sdk::ActionSpec)
 pub quireink_sdk::contribution::Contribution::BookData(quireink_sdk::library::BookData)
 pub quireink_sdk::contribution::Contribution::Decorator(alloc::boxed::Box<quireink_sdk::decorations::DecoratorSpec>)
-pub quireink_sdk::contribution::Contribution::FixedSetting(&'static quireink_sdk::SettingSpec)
+pub quireink_sdk::contribution::Contribution::FixedSettings(&'static [quireink_sdk::SettingSpec])
 pub quireink_sdk::contribution::Contribution::Font(alloc::boxed::Box<quireink_sdk::FontSpec>)
 pub quireink_sdk::contribution::Contribution::FontBinding
 pub quireink_sdk::contribution::Contribution::FontBinding::font: quireink_sdk::Id
@@ -1968,7 +1968,7 @@ pub fn quireink_sdk::Command::set<T: quireink_sdk::setting::SettingType>(&quirei
 pub quireink_sdk::Contribution::Action(quireink_sdk::ActionSpec)
 pub quireink_sdk::Contribution::BookData(quireink_sdk::library::BookData)
 pub quireink_sdk::Contribution::Decorator(alloc::boxed::Box<quireink_sdk::decorations::DecoratorSpec>)
-pub quireink_sdk::Contribution::FixedSetting(&'static quireink_sdk::SettingSpec)
+pub quireink_sdk::Contribution::FixedSettings(&'static [quireink_sdk::SettingSpec])
 pub quireink_sdk::Contribution::Font(alloc::boxed::Box<quireink_sdk::FontSpec>)
 pub quireink_sdk::Contribution::FontBinding
 pub quireink_sdk::Contribution::FontBinding::font: quireink_sdk::Id

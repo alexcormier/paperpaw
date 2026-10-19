@@ -191,6 +191,25 @@ known only at run time (one per widget, say) are read by their ids,
 `env.settings.text("…")` and so on. Passwords and keys do not belong in
 settings: see [Passwords and keys](#passwords-and-keys).
 
+Each setting built this way takes about 200 bytes while the device
+runs. A plugin with many settings keeps them in the program instead, in
+a `static` list (on the X4 it stays in flash, next to no memory):
+
+```rust
+const GROUP: Id = Id::new_static("hello.clock");
+static SETTINGS: [SettingSpec; 2] = [
+    SettingSpec::fixed_switch("hello.clock.date", "hello.setting.date", true, GROUP),
+    SettingSpec::fixed_choice("hello.clock.face", "hello.setting.face",
+        &["hello.face.plain", "hello.face.ticks"], "hello.face.ticks", GROUP)
+        .described("hello.setting.face.help"),
+];
+
+r.add_settings(&SETTINGS)?;
+```
+
+Such settings are read like any other; those that need a unit, a step,
+a section or an editor screen are made as above.
+
 ### Events
 
 ```rust
@@ -438,9 +457,15 @@ Widgets of all plugins share a look the reader shapes for each, so that
 they sit well together on a page: give yours a frame and draw in it.
 
 ```rust
-r.add_setting(widgets::frame_setting(&ID, Frame::None))?; // none, line, light or dark card
-r.add_setting(widgets::size_setting(&ID, Size::Medium, true))?; // true: also "as large as it fits"
-r.add_setting(widgets::part_setting(&ID, "author", "my.show-author", true))?;
+const ID: Id = Id::new_static("my.card");
+static SETTINGS: [SettingSpec; 4] = [
+    widgets::align_spec("my.card.align", ID, Align::Left),
+    widgets::frame_spec("my.card.frame", ID, Frame::None), // none, line, light or dark card
+    widgets::size_spec("my.card.size", ID, Size::Medium, true), // true: also "as large as it fits"
+    widgets::part_spec("my.card.author", ID, "my.show-author", true),
+];
+r.add_setting_group(widgets::settings_group(&ID, "my.card"))?;
+r.add_settings(&SETTINGS)?;
 
 fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     let look = widgets::draw_frame(canvas, env, ID.as_str(), area);
