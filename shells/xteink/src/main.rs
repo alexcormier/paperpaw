@@ -47,6 +47,7 @@ mod net;
 mod network;
 mod ota;
 mod power;
+mod probe;
 #[cfg(feature = "remote")]
 mod remote;
 mod roots;
@@ -215,6 +216,8 @@ fn main() -> ! {
     #[cfg(feature = "remote")]
     remote::note_panic(panicked);
     let mut panel = board.panel;
+    // For reports from devices with other controllers: what it answered.
+    info!("display: {}, driven as {}", board.display, panel.controller());
     if let Err(e) = panel.init() {
         warn!("display: {e:?}");
     }

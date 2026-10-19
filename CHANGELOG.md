@@ -6,6 +6,20 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- X4 and X4 Pro: the display controller is found at start, so devices
+  from other batches show something: the first X4 Pros have an SSD1677,
+  later ones a UC8179 or a UC8279 (ADR 0013). The firmware asks the panel
+  on its lines before the SPI bus takes them, logs what it answered
+  (`display: UC8179 (FLG 13, REV 00 00 01 FF FF, BUSY high at rest),
+  driven as UC8179`) and drives it with its controller's driver; without
+  a sure answer, with the one the device always had. Not yet tried on a
+  device with another controller; on a UC8279, and on an X4 with an
+  UltraChip, grays are shown in black and white for now.
+  `paperpaw-x4`: `probe` (the controller asked), `panel` (`Panel`, the
+  driver for the controller found, `Device`), `uc8179::Display` for the
+  UC8279 too (`Chip`) and without a frame of its own (`Frame`, the bands
+  written through windows of the controller's memory); its `new` takes
+  the chip and where the frame is kept.
 - X4: downloads into a file (updates, books, fonts) no longer run out of
   memory half way: pieces of an answer gathered before writing them to
   the card grew without bound when the connection handed over a lot at

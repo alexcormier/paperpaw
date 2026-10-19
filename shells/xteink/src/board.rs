@@ -4,7 +4,7 @@
 //!
 //! | Part | Connection |
 //! |---|---|
-//! | 4.26" panel, 800 × 480, SSD1677 controller | SPI: clock GPIO 8, data out GPIO 10, select GPIO 21; data/command GPIO 4, reset GPIO 5, busy GPIO 6 |
+//! | 4.26" panel, 800 × 480, SSD1677 controller (an UltraChip found at start is driven too) | SPI: clock GPIO 8, data out GPIO 10, select GPIO 21; data/command GPIO 4, reset GPIO 5, busy GPIO 6 |
 //! | microSD card | the same SPI (data in GPIO 7), select GPIO 12 |
 //! | Back, confirm, left, right | resistor ladder on ADC GPIO 1 |
 //! | The side buttons (up, down) | resistor ladder on ADC GPIO 2 |
@@ -27,7 +27,8 @@ use esp_hal::spi::master::{Config as SpiConfig, Spi, SpiDma};
 use esp_hal::time::Rate;
 use esp_hal::timer::timg::TimerGroup;
 use paperpaw_x4::buttons::State;
-use paperpaw_x4::display::Display;
+use paperpaw_x4::panel::Device;
+use paperpaw_x4::probe::{Controller, Probe};
 
 use crate::input::Touch;
 
@@ -44,7 +45,7 @@ const DMA_COPY: usize = 1024;
 /// The SPI bus the panel and the card share.
 pub type Bus = SpiDma<'static, Blocking>;
 /// The panel, on its share of the bus.
-pub type Panel = Display<
+pub type Panel = paperpaw_x4::panel::Panel<
     RefCellDevice<'static, Bus, Output<'static>, Delay>,
     Output<'static>,
     Output<'static>,
@@ -107,6 +108,8 @@ pub struct Board {
     pub power_latch: Output<'static>,
     /// The panel, still to be started.
     pub panel: Panel,
+    /// What its controller answered at start.
+    pub display: Probe,
     pub card: CardParts,
     pub keys: Keys,
     pub power_button: Input<'static>,
@@ -133,9 +136,22 @@ impl Board {
         clippy::expect_used,
         reason = "without its bus the X4 can do nothing; a panic shows why"
     )]
-    pub fn take(p: Peripherals) -> Self {
+    pub fn take(mut p: Peripherals) -> Self {
         let power_latch = Output::new(p.GPIO13, Level::High, OutputConfig::default());
         let delay = Delay::new();
+        // Which controller the panel has, asked on its lines before the
+        // bus takes them (the card not selected meanwhile); without a sure
+        // answer, the X4's SSD1677.
+        let card_select = Output::new(p.GPIO12, Level::High, OutputConfig::default());
+        let display = crate::probe::ask(
+            p.GPIO8.reborrow(),
+            p.GPIO10.reborrow(),
+            p.GPIO21.reborrow(),
+            p.GPIO4.reborrow(),
+            p.GPIO5.reborrow(),
+            p.GPIO6.reborrow(),
+            delay,
+        );
         // One SPI bus for the display and the card, with DMA for all but
         // short transfers: the processor fed the bus a word at a time and
         // waited, a third of the time a book took to open.
@@ -154,8 +170,9 @@ impl Board {
             .with_buffers(rx, tx);
         let bus: &'static RefCell<Bus> = Box::leak(Box::new(RefCell::new(bus)));
         let display_select = Output::new(p.GPIO21, Level::High, OutputConfig::default());
-        let card_select = Output::new(p.GPIO12, Level::High, OutputConfig::default());
-        let panel = Display::new(
+        let panel = Panel::new(
+            Device::X4,
+            display.controller().unwrap_or(Controller::Ssd1677),
             RefCellDevice::new(bus, display_select, delay).expect("display SPI"),
             Output::new(p.GPIO4, Level::High, OutputConfig::default()),
             Output::new(p.GPIO5, Level::High, OutputConfig::default()),
@@ -181,6 +198,7 @@ impl Board {
         Self {
             power_latch,
             panel,
+            display,
             card: CardParts {
                 bus,
                 spi,
