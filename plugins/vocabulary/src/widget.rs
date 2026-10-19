@@ -11,13 +11,16 @@
 //! they are updated (when shown and after events), never as they are
 //! drawn: one pass over the file, keeping a word.
 
+use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
 use paperpaw_sdk::ui::{self, UiStyle};
-use paperpaw_sdk::widgets::{self, Align, Frame, Look, Size, Widget, WidgetSpec, WidgetTarget};
+use paperpaw_sdk::widgets::{
+    self, Align, Frame, Look, Size, Widget, WidgetSpec, WidgetTarget, Wrapped,
+};
 use paperpaw_sdk::{
     Arg, Canvas, Command, Env, FontHandle, Id, Rect, RegisterError, Registrar, SettingSpec,
 };
@@ -145,6 +148,23 @@ fn caption_in(env: &Env<'_>, widget: &str, height: u16) -> u16 {
     if cap + least <= height { cap } else { 0 }
 }
 
+/// Where content `height` high goes with `widget`'s caption above it
+/// (if it shows), the two together in the middle of `area`: the block of
+/// both, and the caption's height in it.
+fn captioned_block(env: &Env<'_>, widget: &str, area: Rect, height: u16) -> (Rect, u16) {
+    // Where they do not fit together, the content goes first.
+    let cap = caption_room(env, widget);
+    let cap = if cap + height <= area.height { cap } else { 0 };
+    let total = (cap + height).min(area.height);
+    let block = Rect::new(
+        area.x,
+        area.y + (area.height - total) / 2,
+        area.width,
+        total,
+    );
+    (block, cap)
+}
+
 /// Places content `height` high with `widget`'s caption `text` above
 /// it (if it shows), the two together in the middle of `look`'s area,
 /// and draws the caption; where the content goes.
@@ -156,21 +176,8 @@ fn captioned(
     text: &str,
     height: u16,
 ) -> Rect {
-    // Where they do not fit together, the content goes first.
-    let cap = caption_room(env, widget);
-    let cap = if cap + height <= look.area.height {
-        cap
-    } else {
-        0
-    };
-    let total = (cap + height).min(look.area.height);
-    let area = look.area;
-    let block = Rect::new(
-        area.x,
-        area.y + (area.height - total) / 2,
-        area.width,
-        total,
-    );
+    let (block, cap) = captioned_block(env, widget, look.area, height);
+    let total = block.height;
     if cap > 0 {
         let at = Look {
             area: block,
@@ -239,6 +246,89 @@ struct WordWidget {
     /// What it was read for: the day, the size of the file of words and
     /// the choice of word.
     read_for: Option<(i64, u64, bool)>,
+    /// Where it is drawn, once placed, and the word laid out there.
+    area: Option<Rect>,
+    laid: Option<Laid>,
+}
+
+impl WordWidget {
+    fn lay_out(&mut self, env: &Env<'_>) {
+        self.laid = match (self.area, &self.word) {
+            (Some(area), Some(word)) => lay_out(env, area, word),
+            _ => None,
+        };
+    }
+}
+
+/// The word of the day laid out in a widget's area, drawn as it is in
+/// every band.
+#[derive(Debug, Clone, PartialEq)]
+struct Laid {
+    /// The caption, the word, its sentence and its book together, and
+    /// the caption's height in it (0 where it does not show).
+    block: Rect,
+    caption: u16,
+    /// The word, as large as fits, and its line's height.
+    size: f32,
+    shown: String,
+    big: u16,
+    /// The sentence: the lines it needs, three at most, as far as they
+    /// fit.
+    sentence: Option<Wrapped>,
+    sentence_h: u16,
+    /// The book it is from, if shown.
+    book: Option<String>,
+}
+
+/// `word` laid out in widget area `area`: the caption, the word, its
+/// sentence (as many lines as fit, three at most) and its book.
+fn lay_out(env: &Env<'_>, area: Rect, word: &Word) -> Option<Laid> {
+    let style = UiStyle::new(env);
+    let font = style.font(env)?;
+    let id = WORD_NAME;
+    let small = line(&font, style.small);
+    let area = widgets::look::look(env, id, area).area;
+    let room = area.height.saturating_sub(caption_in(env, id, area.height));
+    let width = f32::from(area.width);
+    let book = if widgets::shows(env, id, "book") && !word.title.is_empty() {
+        small
+    } else {
+        0
+    };
+    let size = text_size(
+        env,
+        &font,
+        id,
+        &word.word,
+        (area.width, room.saturating_sub(book)),
+    );
+    let big = line(&font, size);
+    let sentence_h = if widgets::shows(env, id, "sentence") && !word.sentence.is_empty() {
+        let lines = font.wrap(style.small, &word.sentence, width).len().min(3) as u16;
+        let fit = room.saturating_sub(big + book) / small.max(1);
+        lines.min(fit) * small
+    } else {
+        0
+    };
+    let (block, caption) = captioned_block(env, id, area, big + sentence_h + book);
+    let from = (book > 0).then(|| {
+        let text = env.i18n.format(
+            "vocabulary.widget.from",
+            &[("title", Arg::Str(&word.title))],
+        );
+        ui::fit(&font, style.small, &text, width)
+    });
+    Some(Laid {
+        block,
+        caption,
+        size,
+        shown: ui::fit(&font, size, &word.word, width),
+        big,
+        sentence: (sentence_h > 0)
+            .then(|| Wrapped::new(env, &word.sentence, style.small, area.width, sentence_h)),
+        sentence_h,
+        book: from,
+    })
 }
 
 impl Widget for WordWidget {
@@ -256,7 +346,17 @@ impl Widget for WordWidget {
         let word = pick(env);
         let changed = word != self.word;
         self.word = word;
+        if changed {
+            self.lay_out(env);
+        }
         changed
+    }
+
+    fn place(&mut self, env: &Env<'_>, area: Rect) {
+        if self.area != Some(area) {
+            self.area = Some(area);
+            self.lay_out(env);
+        }
     }
 
     fn live(&self) -> bool {
@@ -287,12 +387,19 @@ impl Widget for WordWidget {
 
     fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         let look = widgets::draw_frame(canvas, env, WORD_NAME, area);
-        match &self.word {
-            Some(word) => draw_word(canvas, env, &look, word),
-            None => {
-                widgets::draw_message(canvas, env, &look, env.i18n.tr("vocabulary.widget.empty"))
-            }
-        }
+        let Some(word) = &self.word else {
+            widgets::draw_message(canvas, env, &look, env.i18n.tr("vocabulary.widget.empty"));
+            return;
+        };
+        // Laid out when placed; drawn elsewhere, laid out for that.
+        let laid = match &self.laid {
+            Some(laid) if self.area == Some(area) => Cow::Borrowed(laid),
+            _ => match lay_out(env, area, word) {
+                Some(laid) => Cow::Owned(laid),
+                None => return,
+            },
+        };
+        draw_word(canvas, env, &look, &laid);
     }
 
     fn targets(&self, _: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
@@ -300,80 +407,50 @@ impl Widget for WordWidget {
     }
 }
 
-/// The caption, the word, its sentence (as many lines as fit, three at
-/// most) and its book.
-fn draw_word(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, word: &Word) {
+/// The caption, the word, its sentence and its book, as laid out.
+fn draw_word(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, laid: &Laid) {
     let style = UiStyle::new(env);
     let Some(font) = style.font(env) else {
         return;
     };
     let id = WORD_NAME;
-    let small = line(&font, style.small);
     let area = look.area;
-    let room = area.height.saturating_sub(caption_in(env, id, area.height));
-    let width = f32::from(area.width);
-    let book = if widgets::shows(env, id, "book") && !word.title.is_empty() {
-        small
-    } else {
-        0
-    };
-    let size = text_size(
-        env,
-        &font,
-        id,
-        &word.word,
-        (area.width, room.saturating_sub(book)),
-    );
-    let big = line(&font, size);
-    // The sentence: the lines it needs, as far as they fit.
-    let sentence = if widgets::shows(env, id, "sentence") && !word.sentence.is_empty() {
-        let lines = font.wrap(style.small, &word.sentence, width).len().min(3) as u16;
-        let fit = room.saturating_sub(big + book) / small.max(1);
-        lines.min(fit) * small
-    } else {
-        0
-    };
-    let pick = env.settings.text(&format!("{id}.pick"));
-    let caption = if pick == PICKS[1] {
-        env.i18n.tr("vocabulary.widget.newest")
-    } else {
-        env.i18n.tr("vocabulary.widget.word")
-    };
-    let block = captioned(canvas, env, id, look, caption, big + sentence + book);
-    let align = widgets::align(env, id);
-    let shown = ui::fit(&font, size, &word.word, width);
-    let x = align.x(area, font.measure(size, &shown));
-    let row = |y: u16, h: u16| Rect::new(area.x, y, area.width, h);
-    ui::draw_label(canvas, &font, size, x, row(block.y, big), &shown, look.ink);
-    let y = block.y + big;
-    if sentence > 0 {
-        let at = row(y, sentence);
-        widgets::draw_wrapped(
-            canvas,
-            env,
-            at,
-            align,
-            style.small,
-            &word.sentence,
-            look.faint,
-        );
+    if laid.caption > 0 {
+        let pick = env.settings.text(&format!("{id}.pick"));
+        let caption = if pick == PICKS[1] {
+            env.i18n.tr("vocabulary.widget.newest")
+        } else {
+            env.i18n.tr("vocabulary.widget.word")
+        };
+        let at = Look {
+            area: laid.block,
+            ..*look
+        };
+        widgets::draw_caption(canvas, env, id, &at, caption);
     }
-    if book > 0 {
-        let text = env.i18n.format(
-            "vocabulary.widget.from",
-            &[("title", Arg::Str(&word.title))],
-        );
-        let text = ui::fit(&font, style.small, &text, width);
-        let x = align.x(area, font.measure(style.small, &text));
-        ui::draw_label(
-            canvas,
-            &font,
-            style.small,
-            x,
-            row(y + sentence, book),
-            &text,
-            look.faint,
-        );
+    let align = widgets::align(env, id);
+    let row = |y: u16, h: u16| Rect::new(area.x, y, area.width, h);
+    let top = laid.block.y + laid.caption;
+    let x = align.x(area, font.measure(laid.size, &laid.shown));
+    let shown = &laid.shown;
+    ui::draw_label(
+        canvas,
+        &font,
+        laid.size,
+        x,
+        row(top, laid.big),
+        shown,
+        look.ink,
+    );
+    let y = top + laid.big;
+    if let Some(sentence) = &laid.sentence {
+        sentence.draw(canvas, env, row(y, laid.sentence_h), align, look.faint);
+    }
+    if let Some(book) = &laid.book {
+        let small = line(&font, style.small);
+        let x = align.x(area, font.measure(style.small, book));
+        let at = row(y + laid.sentence_h, small);
+        ui::draw_label(canvas, &font, style.small, x, at, book, look.faint);
     }
 }
 
