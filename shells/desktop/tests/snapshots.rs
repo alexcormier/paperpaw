@@ -94,9 +94,10 @@ const CASES: &[Case] = &[
         script: "right,right",
         colour: 0,
     },
-    // The reading settings: their sliders, and a sample of text above
-    // them. On the X4 the text size changed with the buttons, shown
-    // there before it is kept; on the Boox in German, as touched.
+    // The reading settings with a sample of text above them. On the X4
+    // (buttons alone, compact rows) the text size changed with the
+    // buttons, shown there before it is kept; on the Boox in German, its
+    // sliders as touched.
     Case {
         name: "x4-reading-preview",
         profile: "xteink-x4",

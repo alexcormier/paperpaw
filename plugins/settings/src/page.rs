@@ -215,7 +215,7 @@ impl GroupPage {
             .iter()
             .map(|e| match e {
                 Row::Heading(_) => heading,
-                Row::Setting(spec) if ui::slider::shows(spec) => slider_row,
+                Row::Setting(spec) if ui::slider::shows(env, spec) => slider_row,
                 Row::Setting(_) => row,
                 Row::Reset => style.row as u16,
             })
@@ -342,7 +342,7 @@ impl GroupPage {
     /// a slider's in its band, else beside the value.
     fn steps(&self, env: &Env<'_>, index: usize, rect: Rect) -> Option<(Rect, Rect)> {
         let spec = self.spec(index)?;
-        if ui::slider::shows(spec) {
+        if ui::slider::shows(env, spec) {
             let parts = ui::slider::parts(&self.style, ui::slider::band(&self.style, rect));
             return Some((parts.minus, parts.plus));
         }
@@ -442,19 +442,19 @@ impl Screen for GroupPage {
                 let note = spec.description.as_deref().map_or("", |d| env.i18n.tr(d));
                 let note = if noted { note } else { "" };
                 let mut value = ui::setting_value(env, spec);
-                if let Some(slider) = ui::Slider::of(spec).filter(|_| ui::slider::shows(spec)) {
+                if let Some(slider) = ui::Slider::of(spec).filter(|_| ui::slider::shows(env, spec))
+                {
                     let focus = match (focused, editing) {
                         (false, _) => ui::SliderFocus::None,
                         (true, false) => ui::SliderFocus::Focused,
                         (true, true) => ui::SliderFocus::Editing,
                     };
-                    let labels = ui::SliderLabels {
-                        title,
-                        value: &value,
-                        note,
-                    };
-                    let shown = env.settings.int(spec.id.as_str());
-                    slider.draw_row(canvas, env, &style, rect, shown, &labels, focus);
+                    let view =
+                        ui::SliderView::new(rect, env.settings.int(spec.id.as_str()), &value)
+                            .title(title)
+                            .note(note)
+                            .focus(focus);
+                    slider.draw_row(canvas, env, &style, &view);
                     return;
                 }
                 match spec.kind {
@@ -609,7 +609,7 @@ impl Screen for GroupPage {
             None => None,
         };
         let Some((index, slider, id, rect)) = index.and_then(|i| {
-            let spec = self.spec(i).filter(|s| ui::slider::shows(s))?;
+            let spec = self.spec(i).filter(|s| ui::slider::shows(&env, s))?;
             let slider = ui::Slider::of(spec)?;
             Some((i, slider, spec.id.clone(), self.rows.rect_of(i)?))
         }) else {

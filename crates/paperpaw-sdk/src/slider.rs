@@ -19,11 +19,15 @@
 //! setting), so that what it changes shows at once; it is kept when
 //! chosen.
 //!
+//! Sliders are for touch screens, where a finger sets a value by eye;
+//! with buttons alone a number is changed a step at a time all the same,
+//! and a compact row with `−` and `+` serves it better ([`shows`]).
+//!
 //! A screen keeps a [`Slider`] for each (from a setting with
 //! [`Slider::of`]), draws rows of [`row_height`] with
-//! [`Slider::draw_row`], or only the track with [`Slider::draw_track`]
-//! where it places the buttons itself, and passes pointer samples to
-//! [`SliderDrag::on_pointer`] from
+//! [`Slider::draw_row`] (what it shows in a [`SliderView`]), or only the
+//! track with [`Slider::draw_track`] where it places the buttons itself,
+//! and passes pointer samples to [`SliderDrag::on_pointer`] from
 //! [`Screen::on_pointer`](crate::Screen::on_pointer).
 
 use crate::builtin::actions;
@@ -59,14 +63,50 @@ pub enum SliderFocus {
     Editing,
 }
 
-/// The texts of a slider's row (see [`Slider::draw_row`]).
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct SliderLabels<'a> {
-    pub title: &'a str,
+/// What a slider shows and where (see [`Slider::draw_row`] and
+/// [`Slider::draw_band`]): made with [`SliderView::new`] and the builder
+/// methods, so that it can grow without breaking plugins.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct SliderView<'a> {
+    /// The row (for [`Slider::draw_row`]) or the band
+    /// ([`Slider::draw_band`]).
+    pub area: Rect,
+    pub value: i64,
     /// The value as shown, with its unit (e.g. "135 %").
-    pub value: &'a str,
+    pub shown: &'a str,
+    /// The title on the row's first line; empty for none.
+    pub title: &'a str,
     /// A short help text below it; empty for none.
     pub note: &'a str,
+    pub focus: SliderFocus,
+}
+
+impl<'a> SliderView<'a> {
+    /// `value` in `area`, shown as `shown`; no title or note, not
+    /// focused.
+    pub fn new(area: Rect, value: i64, shown: &'a str) -> Self {
+        Self {
+            area,
+            value,
+            shown,
+            title: "",
+            note: "",
+            focus: SliderFocus::None,
+        }
+    }
+
+    pub fn title(self, title: &'a str) -> Self {
+        Self { title, ..self }
+    }
+
+    pub fn note(self, note: &'a str) -> Self {
+        Self { note, ..self }
+    }
+
+    pub fn focus(self, focus: SliderFocus) -> Self {
+        Self { focus, ..self }
+    }
 }
 
 /// Where the parts of a slider are in its band (see [`parts`]).
@@ -184,20 +224,18 @@ impl Slider {
         }
     }
 
-    /// Draws a slider's band (see [`band`]): `−`, the track at `value`
-    /// and `+`, as `focus` says; `value_text` (the value as shown) tells
+    /// Draws a slider's band, `view.area` (see [`band`]): `−`, the track
+    /// at the value and `+`, as its focus says; the value as shown tells
     /// screen readers what it is set to.
-    #[allow(clippy::too_many_arguments)]
     pub fn draw_band(
         &self,
         canvas: &mut Canvas<'_>,
         env: &Env<'_>,
         style: &UiStyle,
-        band: Rect,
-        value: i64,
-        value_text: &str,
-        focus: SliderFocus,
+        view: &SliderView<'_>,
     ) {
+        let band = view.area;
+        let focus = view.focus;
         let SliderParts { minus, track, plus } = parts(style, band);
         let ink = match focus {
             SliderFocus::None => {
@@ -215,53 +253,53 @@ impl Slider {
         };
         canvas.describe(
             Role::Slider,
-            value_text,
+            view.shown,
             track,
             focus != SliderFocus::None,
             None,
         );
-        self.draw_track(canvas, style, track, value, ink);
+        self.draw_track(canvas, style, track, view.value, ink);
     }
 
-    /// Draws a row of [`row_height`] with a slider: the title and the
-    /// value on its first line, as other rows have them, the slider's
-    /// band below, and the note below that (if `labels` has one; the row
-    /// is then as high as `row_height(style, true)` says). A focused row
-    /// is drawn white, for the focus bar below it.
-    #[allow(clippy::too_many_arguments)]
+    /// Draws a row of [`row_height`] with a slider, `view.area`: the
+    /// title and the value on its first line, as other rows have them,
+    /// the slider's band below, and the note below that (if the view has
+    /// one; the row is then as high as `row_height(style, true)` says). A
+    /// focused row is drawn white, for the focus bar below it.
     pub fn draw_row(
         &self,
         canvas: &mut Canvas<'_>,
         env: &Env<'_>,
         style: &UiStyle,
-        row: Rect,
-        value: i64,
-        labels: &SliderLabels<'_>,
-        focus: SliderFocus,
+        view: &SliderView<'_>,
     ) {
-        let focused = focus != SliderFocus::None;
+        let row = view.area;
+        let focused = view.focus != SliderFocus::None;
         let title = title_area(style, row);
-        draw_value_row(
-            canvas,
-            env,
-            style,
-            title,
-            focused,
-            labels.title,
-            labels.value,
-        );
+        draw_value_row(canvas, env, style, title, focused, view.title, view.shown);
         let band = band(style, row);
-        self.draw_band(canvas, env, style, band, value, labels.value, focus);
-        if !labels.note.is_empty() {
+        let band_view = SliderView {
+            area: band,
+            ..*view
+        };
+        self.draw_band(canvas, env, style, &band_view);
+        if !view.note.is_empty() {
             let below = band.y + band.height;
-            draw_note_below(canvas, env, style, row, below, focused, labels.note);
+            draw_note_below(canvas, env, style, row, below, focused, view.note);
         }
     }
 }
 
-/// Whether settings pages show `spec` as a slider: a number marked so
-/// ([`SettingExtra::slider`](crate::SettingExtra::slider)).
-pub fn shows(spec: &SettingSpec) -> bool {
+/// Whether `spec` is shown as a slider here: a number marked so
+/// ([`SettingExtra::slider`](crate::SettingExtra::slider)), on a touch
+/// screen. With buttons alone it keeps its compact row with `−` and `+`.
+pub fn shows(env: &Env<'_>, spec: &SettingSpec) -> bool {
+    env.device.input.touch && marked(spec)
+}
+
+/// Whether `spec` is a number marked to be set with a slider, wherever
+/// one is shown ([`shows`]).
+pub fn marked(spec: &SettingSpec) -> bool {
     matches!(spec.kind, SettingKind::Int { .. }) && spec.extra().slider
 }
 
@@ -493,15 +531,15 @@ mod tests {
         )
         .step(5);
         assert_eq!(Slider::of(&spec), Some(Slider::new(100, 250).step(5)));
-        assert!(!shows(&spec));
-        assert!(shows(&spec.clone().slider()));
+        assert!(!marked(&spec));
+        assert!(marked(&spec.clone().slider()));
         let switch = crate::SettingSpec::switch(
             &crate::setting::Setting::new("a.on"),
             Cow::Borrowed("a.on"),
             true,
         );
         assert_eq!(Slider::of(&switch), None);
-        assert!(!shows(&switch.slider()));
+        assert!(!marked(&switch.slider()));
     }
 
     #[test]

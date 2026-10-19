@@ -20,25 +20,28 @@ change the plugin SDK.
   for screens (`WidgetSpec::previews`, `Widgets::preview`); settings
   pages show it above the group, and `Widgets::iter` leaves such
   widgets out.
-- Settings: numbers better set by eye are sliders on the settings
-  pages (PLANNING §6.7): the text size, word and line spacing, the
-  margins, the speed of reading aloud, the interface's size, row height
-  and margins, the frontlight. A number changed with the buttons now
+- Settings: on touch screens, numbers better set by eye are sliders on
+  the settings pages (PLANNING §6.7): the text size, word and line
+  spacing, the margins, the speed of reading aloud, the interface's
+  size, row height and margins, the frontlight; with buttons alone they
+  keep their compact rows with `−` and `+`. A number changed with the buttons now
   shows each value at once without keeping it; *Select* keeps it,
   *Back* goes back to the value before, and the row of hints says so
   (`−`, `+`, *Keep*, *Cancel*). By touch, a slider's knob follows the
   finger and the value is kept where it is lifted; `−` and `+` change it
   a step at once, as before. The reader's panel shows its sliders'
   values, and gives them `−` and `+` alone where the screen is too
-  narrow for a track (the X4).
+  narrow for a track (the X4 Pro).
 - SDK: sliders as a building block for any plugin (`ui::slider`:
-  `Slider`, `SliderDrag`, `SliderFocus`, `SliderLabels`, `SliderParts`,
-  `SliderStep`, `band`, `band_height`, `key_step`, `parts`,
-  `row_height`, `shows`): a track filled up to the value with a knob
+  `Slider`, `SliderDrag`, `SliderFocus`, `SliderParts`, `SliderStep`,
+  `SliderView`, `band`, `band_height`, `key_step`, `marked`, `parts`,
+  `row_height`, `shows`; what a slider draws goes in a `SliderView`, so
+  it can grow without breaking plugins): a track filled up to the value with a knob
   there, between a `−` and a `+` flush with the margins, the title and
   the value with its unit above it as in other rows. By touch a finger
   takes the knob along in the slider's steps and lifting it chooses the
-  value, with the buttons left and right move it a step. Screen readers
+  value, with the buttons left and right move it a step; `shows` says
+  whether a setting gets one here (a touch screen). Screen readers
   hear it as `semantics::Role::Slider`. The panel's sliders (the
   frontlight) are drawn with it and keep to their steps. The help texts
   of the margins and the word spacing say more plainly what they do, and

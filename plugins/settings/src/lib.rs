@@ -17,8 +17,9 @@
 //! Changes apply immediately and are saved to `paperpaw.ini` by the
 //! kernel.
 //!
-//! - Numbers marked as sliders (`SettingExtra::slider`) show one below
-//!   their title (`ui::slider`).
+//! - On touch screens, numbers marked as sliders (`SettingExtra::slider`)
+//!   show one below their title (`ui::slider`); with buttons alone they
+//!   keep their compact row with − and +.
 //!
 //! Buttons: move to an item, *confirm* opens a group, toggles a switch,
 //! opens a choice or starts changing a number; then left/right (or

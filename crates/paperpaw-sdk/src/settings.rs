@@ -194,8 +194,9 @@ pub struct SettingExtra {
     /// How much one step changes a number (e.g. 10 for percentages).
     pub step: i64,
     /// A number better set by eye than by its value, such as the line
-    /// spacing or a light's brightness: settings pages and panels show it
-    /// as a slider ([`ui::slider`](crate::ui::slider)), in its steps.
+    /// spacing or a light's brightness: on touch screens settings pages
+    /// and panels show it as a slider ([`ui::slider`](crate::ui::slider)),
+    /// in its steps; with buttons alone it keeps `−` and `+`.
     pub slider: bool,
     /// Translation key of the part of its group it belongs to (e.g.
     /// [`setting_sections::FONT`](crate::builtin::setting_sections::FONT)),

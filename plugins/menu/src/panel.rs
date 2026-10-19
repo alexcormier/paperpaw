@@ -265,7 +265,7 @@ impl PanelScreen {
         let sliders = items
             .iter()
             .filter_map(|item| spec(env, item.id))
-            .filter(|s| ui::slider::shows(s));
+            .filter(|s| ui::slider::shows(env, s));
         let value = measure(&ui::number_room(env, &style, sliders)) as u16;
         let head = if top {
             let size = env
@@ -378,7 +378,7 @@ fn lines(env: &Env<'_>, style: &UiStyle, items: &[MenuItem<'_>], g: Geometry) ->
         flush(&mut group, &mut lines);
         let line = match spec(env, &id).map(|s| &s.kind) {
             Some(SettingKind::Int { .. })
-                if setting.is_some_and(ui::slider::shows) && slider_fits(rest, g) =>
+                if setting.is_some_and(|s| ui::slider::shows(env, s)) && slider_fits(rest, g) =>
             {
                 Line::Slider(id)
             }

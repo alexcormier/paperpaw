@@ -1528,8 +1528,8 @@ pub paperpaw_sdk::ui::slider::Slider::min: i64
 pub paperpaw_sdk::ui::slider::Slider::step: i64
 impl paperpaw_sdk::ui::slider::Slider
 pub fn paperpaw_sdk::ui::slider::Slider::clamp(&self, i64) -> i64
-pub fn paperpaw_sdk::ui::slider::Slider::draw_band(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, i64, &str, paperpaw_sdk::ui::slider::SliderFocus)
-pub fn paperpaw_sdk::ui::slider::Slider::draw_row(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, i64, &paperpaw_sdk::ui::slider::SliderLabels<'_>, paperpaw_sdk::ui::slider::SliderFocus)
+pub fn paperpaw_sdk::ui::slider::Slider::draw_band(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, &paperpaw_sdk::ui::slider::SliderView<'_>)
+pub fn paperpaw_sdk::ui::slider::Slider::draw_row(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, &paperpaw_sdk::ui::slider::SliderView<'_>)
 pub fn paperpaw_sdk::ui::slider::Slider::draw_track(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, i64, paperpaw_platform::pixel::Color)
 pub const fn paperpaw_sdk::ui::slider::Slider::new(i64, i64) -> Self
 pub fn paperpaw_sdk::ui::slider::Slider::of(&paperpaw_sdk::SettingSpec) -> core::option::Option<Self>
@@ -1541,20 +1541,29 @@ pub struct paperpaw_sdk::ui::slider::SliderDrag
 impl paperpaw_sdk::ui::slider::SliderDrag
 pub fn paperpaw_sdk::ui::slider::SliderDrag::dragging(&self) -> core::option::Option<i64>
 pub fn paperpaw_sdk::ui::slider::SliderDrag::on_pointer(&mut self, &paperpaw_platform::input::PointerEvent, &paperpaw_sdk::ui::slider::Slider, paperpaw_platform::geometry::Rect) -> core::option::Option<paperpaw_sdk::ui::slider::SliderStep>
-pub struct paperpaw_sdk::ui::slider::SliderLabels<'a>
-pub paperpaw_sdk::ui::slider::SliderLabels::note: &'a str
-pub paperpaw_sdk::ui::slider::SliderLabels::title: &'a str
-pub paperpaw_sdk::ui::slider::SliderLabels::value: &'a str
 pub struct paperpaw_sdk::ui::slider::SliderParts
 pub paperpaw_sdk::ui::slider::SliderParts::minus: paperpaw_platform::geometry::Rect
 pub paperpaw_sdk::ui::slider::SliderParts::plus: paperpaw_platform::geometry::Rect
 pub paperpaw_sdk::ui::slider::SliderParts::track: paperpaw_platform::geometry::Rect
+#[non_exhaustive] pub struct paperpaw_sdk::ui::slider::SliderView<'a>
+pub paperpaw_sdk::ui::slider::SliderView::area: paperpaw_platform::geometry::Rect
+pub paperpaw_sdk::ui::slider::SliderView::focus: paperpaw_sdk::ui::slider::SliderFocus
+pub paperpaw_sdk::ui::slider::SliderView::note: &'a str
+pub paperpaw_sdk::ui::slider::SliderView::shown: &'a str
+pub paperpaw_sdk::ui::slider::SliderView::title: &'a str
+pub paperpaw_sdk::ui::slider::SliderView::value: i64
+impl<'a> paperpaw_sdk::ui::slider::SliderView<'a>
+pub fn paperpaw_sdk::ui::slider::SliderView<'a>::focus(self, paperpaw_sdk::ui::slider::SliderFocus) -> Self
+pub fn paperpaw_sdk::ui::slider::SliderView<'a>::new(paperpaw_platform::geometry::Rect, i64, &'a str) -> Self
+pub fn paperpaw_sdk::ui::slider::SliderView<'a>::note(self, &'a str) -> Self
+pub fn paperpaw_sdk::ui::slider::SliderView<'a>::title(self, &'a str) -> Self
 pub fn paperpaw_sdk::ui::slider::band(&paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect) -> paperpaw_platform::geometry::Rect
 pub fn paperpaw_sdk::ui::slider::band_height(&paperpaw_sdk::ui::UiStyle) -> u16
 pub fn paperpaw_sdk::ui::slider::key_step(&paperpaw_sdk::Id) -> core::option::Option<i64>
+pub fn paperpaw_sdk::ui::slider::marked(&paperpaw_sdk::SettingSpec) -> bool
 pub fn paperpaw_sdk::ui::slider::parts(&paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect) -> paperpaw_sdk::ui::slider::SliderParts
 pub fn paperpaw_sdk::ui::slider::row_height(&paperpaw_sdk::ui::UiStyle, bool) -> u16
-pub fn paperpaw_sdk::ui::slider::shows(&paperpaw_sdk::SettingSpec) -> bool
+pub fn paperpaw_sdk::ui::slider::shows(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::SettingSpec) -> bool
 pub enum paperpaw_sdk::ui::ListChange
 pub paperpaw_sdk::ui::ListChange::Focus
 pub paperpaw_sdk::ui::ListChange::None
@@ -1642,8 +1651,8 @@ pub paperpaw_sdk::ui::Slider::min: i64
 pub paperpaw_sdk::ui::Slider::step: i64
 impl paperpaw_sdk::ui::slider::Slider
 pub fn paperpaw_sdk::ui::slider::Slider::clamp(&self, i64) -> i64
-pub fn paperpaw_sdk::ui::slider::Slider::draw_band(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, i64, &str, paperpaw_sdk::ui::slider::SliderFocus)
-pub fn paperpaw_sdk::ui::slider::Slider::draw_row(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, i64, &paperpaw_sdk::ui::slider::SliderLabels<'_>, paperpaw_sdk::ui::slider::SliderFocus)
+pub fn paperpaw_sdk::ui::slider::Slider::draw_band(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, &paperpaw_sdk::ui::slider::SliderView<'_>)
+pub fn paperpaw_sdk::ui::slider::Slider::draw_row(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, &paperpaw_sdk::ui::slider::SliderView<'_>)
 pub fn paperpaw_sdk::ui::slider::Slider::draw_track(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, i64, paperpaw_platform::pixel::Color)
 pub const fn paperpaw_sdk::ui::slider::Slider::new(i64, i64) -> Self
 pub fn paperpaw_sdk::ui::slider::Slider::of(&paperpaw_sdk::SettingSpec) -> core::option::Option<Self>
@@ -1655,14 +1664,22 @@ pub struct paperpaw_sdk::ui::SliderDrag
 impl paperpaw_sdk::ui::slider::SliderDrag
 pub fn paperpaw_sdk::ui::slider::SliderDrag::dragging(&self) -> core::option::Option<i64>
 pub fn paperpaw_sdk::ui::slider::SliderDrag::on_pointer(&mut self, &paperpaw_platform::input::PointerEvent, &paperpaw_sdk::ui::slider::Slider, paperpaw_platform::geometry::Rect) -> core::option::Option<paperpaw_sdk::ui::slider::SliderStep>
-pub struct paperpaw_sdk::ui::SliderLabels<'a>
-pub paperpaw_sdk::ui::SliderLabels::note: &'a str
-pub paperpaw_sdk::ui::SliderLabels::title: &'a str
-pub paperpaw_sdk::ui::SliderLabels::value: &'a str
 pub struct paperpaw_sdk::ui::SliderParts
 pub paperpaw_sdk::ui::SliderParts::minus: paperpaw_platform::geometry::Rect
 pub paperpaw_sdk::ui::SliderParts::plus: paperpaw_platform::geometry::Rect
 pub paperpaw_sdk::ui::SliderParts::track: paperpaw_platform::geometry::Rect
+#[non_exhaustive] pub struct paperpaw_sdk::ui::SliderView<'a>
+pub paperpaw_sdk::ui::SliderView::area: paperpaw_platform::geometry::Rect
+pub paperpaw_sdk::ui::SliderView::focus: paperpaw_sdk::ui::slider::SliderFocus
+pub paperpaw_sdk::ui::SliderView::note: &'a str
+pub paperpaw_sdk::ui::SliderView::shown: &'a str
+pub paperpaw_sdk::ui::SliderView::title: &'a str
+pub paperpaw_sdk::ui::SliderView::value: i64
+impl<'a> paperpaw_sdk::ui::slider::SliderView<'a>
+pub fn paperpaw_sdk::ui::slider::SliderView<'a>::focus(self, paperpaw_sdk::ui::slider::SliderFocus) -> Self
+pub fn paperpaw_sdk::ui::slider::SliderView<'a>::new(paperpaw_platform::geometry::Rect, i64, &'a str) -> Self
+pub fn paperpaw_sdk::ui::slider::SliderView<'a>::note(self, &'a str) -> Self
+pub fn paperpaw_sdk::ui::slider::SliderView<'a>::title(self, &'a str) -> Self
 pub struct paperpaw_sdk::ui::Thumbnail
 impl paperpaw_sdk::ui::Thumbnail
 pub fn paperpaw_sdk::ui::Thumbnail::bytes(&self) -> usize

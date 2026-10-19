@@ -19,7 +19,7 @@ mod thumbnail;
 
 pub use reorder::{Reorder, ReorderStep};
 pub use rows::Rows;
-pub use slider::{Slider, SliderDrag, SliderFocus, SliderLabels, SliderParts, SliderStep};
+pub use slider::{Slider, SliderDrag, SliderFocus, SliderParts, SliderStep, SliderView};
 pub use thumbnail::Thumbnail;
 
 use crate::semantics::Role;
