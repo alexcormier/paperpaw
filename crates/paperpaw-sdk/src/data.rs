@@ -33,6 +33,26 @@ use paperpaw_platform::{Storage, StorageError};
 /// needed.
 pub const DIR: &str = ".paperpaw";
 
+/// The name PaperPaw had up to 0.3.
+const OLD_NAME: &str = "quireink"; // now paperpaw
+
+/// Moves what PaperPaw kept on the card under its old name (its folder and
+/// configuration file) to where it is kept now, once: the kernel does it as
+/// it starts.
+pub fn take_over_old_name(storage: &dyn Storage) {
+    // A file or a directory.
+    let there = |path: &str| storage.exists(path) || storage.list(path, &mut |_| {}).is_ok();
+    let names = [
+        (format!(".{OLD_NAME}"), DIR),
+        (format!("{OLD_NAME}.ini"), crate::builtin::CONFIG_FILE),
+    ];
+    for (old, new) in names {
+        if !there(new) && there(&old) {
+            let _ = storage.rename(&old, new);
+        }
+    }
+}
+
 /// The first line of a file from version 2 on, before the number.
 pub const MARK: &str = "# format ";
 
@@ -214,6 +234,31 @@ mod tests {
         assert_eq!(
             crate::read_file(&storage, "b.txt", 1024).unwrap(),
             b"a\nb\n"
+        );
+    }
+
+    #[test]
+    fn the_old_name_is_taken_over_once() {
+        let storage = MemoryStorage::new()
+            .with(&format!(".{OLD_NAME}/secrets.txt"), "s")
+            .with(&format!("{OLD_NAME}.ini"), "[core]\n");
+        take_over_old_name(&storage);
+        assert_eq!(
+            crate::read_file(&storage, &format!("{DIR}/secrets.txt"), 8).unwrap(),
+            b"s"
+        );
+        assert_eq!(
+            crate::read_file(&storage, crate::builtin::CONFIG_FILE, 8).unwrap(),
+            b"[core]\n"
+        );
+        // What is kept under the new name stays.
+        let storage = MemoryStorage::new()
+            .with(&format!(".{OLD_NAME}/a.txt"), "old")
+            .with(&format!("{DIR}/a.txt"), "new");
+        take_over_old_name(&storage);
+        assert_eq!(
+            crate::read_file(&storage, &format!("{DIR}/a.txt"), 8).unwrap(),
+            b"new"
         );
     }
 }

@@ -228,6 +228,7 @@ impl KernelBuilder {
 
     pub fn build(mut self) -> Result<Kernel, KernelError> {
         let mut kernel = self.new_kernel()?;
+        paperpaw_sdk::data::take_over_old_name(kernel.shared.storage.as_ref());
         kernel.read_secrets();
         paperpaw_sdk::library::take_over_old(kernel.shared.storage.as_ref());
         // The configuration file on the device, then the shell's overrides.

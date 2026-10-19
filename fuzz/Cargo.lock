@@ -33,6 +33,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4e7648175b45a9a48536d676f68d918270699102aa8dab5496df06904c914600"
 
 [[package]]
+name = "ed25519-compact"
+version = "2.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1454db4f2edb7f0e8fe0c5b375b0c978fc63244cc9f010d160e417eb10139aa8"
+
+[[package]]
 name = "find-msvc-tools"
 version = "0.1.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -86,11 +92,18 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-config"
-version = "0.3.0"
+version = "0.4.0-dev"
+
+[[package]]
+name = "paperpaw-digest"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-platform",
+]
 
 [[package]]
 name = "paperpaw-document"
-version = "0.3.0"
+version = "0.4.0-dev"
 dependencies = [
  "paperpaw-platform",
 ]
@@ -110,25 +123,25 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-graphics"
-version = "0.3.0"
+version = "0.4.0-dev"
 dependencies = [
  "paperpaw-platform",
 ]
 
 [[package]]
 name = "paperpaw-hyphen"
-version = "0.3.0"
+version = "0.4.0-dev"
 
 [[package]]
 name = "paperpaw-i18n"
-version = "0.3.0"
+version = "0.4.0-dev"
 dependencies = [
  "paperpaw-config",
 ]
 
 [[package]]
 name = "paperpaw-image"
-version = "0.3.0"
+version = "0.4.0-dev"
 dependencies = [
  "miniz_oxide",
  "paperpaw-platform",
@@ -136,7 +149,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-layout"
-version = "0.3.0"
+version = "0.4.0-dev"
 dependencies = [
  "paperpaw-document",
  "paperpaw-text",
@@ -144,35 +157,37 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-platform"
-version = "0.3.0"
+version = "0.4.0-dev"
 
 [[package]]
 name = "paperpaw-plugin-format-epub"
-version = "0.3.0"
+version = "0.4.0-dev"
 dependencies = [
  "miniz_oxide",
+ "paperpaw-digest",
  "paperpaw-sdk",
 ]
 
 [[package]]
 name = "paperpaw-plugin-format-txt"
-version = "0.3.0"
+version = "0.4.0-dev"
 dependencies = [
  "paperpaw-sdk",
 ]
 
 [[package]]
 name = "paperpaw-plugin-koreader"
-version = "0.3.0"
+version = "0.4.0-dev"
 dependencies = [
  "paperpaw-sdk",
 ]
 
 [[package]]
 name = "paperpaw-sdk"
-version = "0.3.0"
+version = "0.4.0-dev"
 dependencies = [
  "paperpaw-config",
+ "paperpaw-digest",
  "paperpaw-document",
  "paperpaw-graphics",
  "paperpaw-hyphen",
@@ -180,34 +195,34 @@ dependencies = [
  "paperpaw-image",
  "paperpaw-layout",
  "paperpaw-platform",
- "paperpaw-sqlite",
  "paperpaw-text",
+ "paperpaw-update",
  "paperpaw-xml",
  "paperpaw-zip",
 ]
 
 [[package]]
-name = "paperpaw-sqlite"
-version = "0.3.0"
-dependencies = [
- "paperpaw-platform",
-]
-
-[[package]]
 name = "paperpaw-text"
-version = "0.3.0"
+version = "0.4.0-dev"
 dependencies = [
  "paperpaw-graphics",
  "paperpaw-platform",
 ]
 
 [[package]]
+name = "paperpaw-update"
+version = "0.4.0-dev"
+dependencies = [
+ "ed25519-compact",
+]
+
+[[package]]
 name = "paperpaw-xml"
-version = "0.3.0"
+version = "0.4.0-dev"
 
 [[package]]
 name = "paperpaw-zip"
-version = "0.3.0"
+version = "0.4.0-dev"
 dependencies = [
  "miniz_oxide",
  "paperpaw-platform",
