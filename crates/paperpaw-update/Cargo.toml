@@ -1,6 +1,6 @@
 [package]
 name = "paperpaw-update"
-description = "PaperPaw's firmware updates: the signed update file, what its image says about itself, and the signature checked as it is read (no_std)"
+description = "PaperPaw's firmware updates: the signed update file, what its image says about itself, and the signature checked as it is read; signatures of native plugin files (no_std)"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
