@@ -1,0 +1,195 @@
+//! Every widget of the standard app, drawn on the home screen of an X4
+//! (black and white, buttons) and of a Boox (grays, touch): in many sizes,
+//! from a single cell to the whole page, in each frame, in English and
+//! German, with a book read and without. None may fail to draw, and each
+//! has settings of its own, its frame among them, so that the reader can
+//! shape it.
+
+// Tests panic on purpose when something is wrong.
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
+use quireink_core::{Effects, Kernel};
+use quireink_platform::{
+    DeviceInfo, DisplayInfo, InputCaps, Instant, MemoryClass, PixelFormat, Rotation,
+};
+use quireink_sdk::builtin::{params, slots};
+use quireink_sdk::widgets::{self, look::FRAMES};
+use quireink_sdk::{MemoryStorage, Params};
+
+const X4: DeviceInfo = DeviceInfo {
+    id: "test-x4",
+    name: "Test X4",
+    display: DisplayInfo {
+        width: 480,
+        height: 800,
+        dpi: 220,
+        format: PixelFormat::Mono1,
+        rotation: Rotation::Deg0,
+        color: None,
+    },
+    input: InputCaps {
+        buttons: true,
+        touch: false,
+        pen: false,
+        keys: &["back", "confirm", "left", "right", "up", "down", "power"],
+    },
+    memory: MemoryClass::Small,
+};
+
+const BOOX: DeviceInfo = DeviceInfo {
+    id: "test-boox",
+    name: "Test Boox",
+    display: DisplayInfo {
+        width: 1264,
+        height: 1680,
+        dpi: 300,
+        format: PixelFormat::Gray4,
+        rotation: Rotation::Deg0,
+        color: None,
+    },
+    input: InputCaps {
+        buttons: true,
+        touch: true,
+        pen: false,
+        keys: &[],
+    },
+    memory: MemoryClass::Large,
+};
+
+const BOOK: &str = "books/alice-in-wonderland.txt";
+
+/// Sizes in cells (columns, rows), on a grid of four columns.
+const SIZES: [(u8, u8); 7] = [(1, 1), (2, 1), (2, 2), (4, 1), (4, 2), (3, 3), (4, 6)];
+
+fn fonts() -> quireink_app::Fonts {
+    #[cfg(any(feature = "packs", not(feature = "outline")))]
+    return quireink_app::Fonts::Packs;
+    #[cfg(all(feature = "outline", not(feature = "packs")))]
+    return quireink_app::Fonts::Outline;
+}
+
+struct App {
+    kernel: Kernel,
+    now: u64,
+}
+
+impl App {
+    fn new(device: DeviceInfo, language: &str) -> Self {
+        let storage = MemoryStorage::new()
+            .with(
+                BOOK,
+                include_str!("../../../samples/library/books/alice-in-wonderland.txt"),
+            )
+            .with(".quireink/plugins/setup/done", "");
+        let builder = Kernel::builder(device)
+            .storage(storage)
+            .user_config(format!("[core]\nlanguage = {language}\n"));
+        let mut kernel = quireink_app::install(builder, fonts()).build().unwrap();
+        let effects = kernel.start(Instant(0));
+        let mut app = Self { kernel, now: 0 };
+        app.settle(effects);
+        app
+    }
+
+    fn settle(&mut self, mut effects: Effects) {
+        for _ in 0..10_000 {
+            let Some(at) = effects.wake_at() else {
+                return;
+            };
+            if at.0 > self.now + 1000 {
+                return;
+            }
+            self.now = self.now.max(at.0);
+            effects = self.kernel.tick(Instant(self.now));
+        }
+    }
+
+    /// Sets `id` to `value` where it exists (not every widget has every
+    /// setting).
+    fn set(&mut self, id: &str, value: &str) {
+        self.now += 10;
+        if let Ok(effects) = self.kernel.set_setting(Instant(self.now), id, value) {
+            self.settle(effects);
+        }
+    }
+
+    fn read_a_book(&mut self) {
+        self.now += 100;
+        let open = Params::new().with(params::PATH, BOOK);
+        let effects = self
+            .kernel
+            .open_slot(Instant(self.now), slots::READER, open);
+        self.settle(effects);
+        self.kernel.render(&mut |_, _| {});
+        self.now += 100;
+        let effects = self
+            .kernel
+            .open_slot(Instant(self.now), slots::HOME, Params::new());
+        self.settle(effects);
+    }
+
+    /// Draws what changed; whether anything was.
+    fn draw(&mut self) -> bool {
+        let mut drawn = false;
+        self.kernel.render(&mut |_, _| drawn = true);
+        drawn
+    }
+
+    /// The widgets to draw: all but the room between others.
+    fn widget_ids(&self) -> Vec<String> {
+        self.kernel
+            .widgets()
+            .iter()
+            .map(|(id, _)| id.as_str().to_string())
+            .filter(|id| !widgets::repeatable(id) && id != "home.tools")
+            .collect()
+    }
+}
+
+/// Each widget alone on the first page, in every size and frame.
+fn draw_all(device: DeviceInfo, language: &str, read: bool) {
+    let mut app = App::new(device, language);
+    if read {
+        app.read_a_book();
+    }
+    for id in app.widget_ids() {
+        for frame in FRAMES {
+            app.set(&format!("{id}.frame"), frame);
+            for (w, h) in SIZES {
+                app.set("home.page-1", &format!("{id} 0/0 {w}x{h}"));
+                assert!(app.draw(), "{id} {w}x{h} in {frame} not drawn");
+            }
+        }
+        app.set(&format!("{id}.frame"), widgets::Frame::None.value());
+    }
+}
+
+#[test]
+fn every_widget_draws_on_the_x4() {
+    draw_all(X4, "en", true);
+}
+
+#[test]
+fn every_widget_draws_on_the_boox() {
+    draw_all(BOOX, "de", false);
+}
+
+#[test]
+fn every_widget_can_be_shaped() {
+    let app = App::new(X4, "en");
+    let settings = app.kernel.settings();
+    let mut missing = Vec::new();
+    for id in app.widget_ids() {
+        let group = settings.groups().any(|g| g.id.as_str() == id);
+        let frame = settings
+            .specs()
+            .any(|s| s.id.as_str() == format!("{id}.frame"));
+        if !group || !frame {
+            missing.push(id);
+        }
+    }
+    assert!(
+        missing.is_empty(),
+        "widgets without settings or a frame: {missing:?}"
+    );
+}

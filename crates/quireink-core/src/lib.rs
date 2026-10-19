@@ -702,6 +702,11 @@ impl Kernel {
         &self.shared.formats
     }
 
+    /// The widgets every plugin added (e.g. for a test that draws each).
+    pub fn widgets(&self) -> &quireink_sdk::widgets::Widgets {
+        &self.shared.widgets
+    }
+
     /// Every plugin with its state, `core` first.
     pub fn plugins(&self) -> &Plugins {
         &self.shared.plugins

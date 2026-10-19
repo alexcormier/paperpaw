@@ -107,6 +107,7 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     // battery on the right.
     let status = Id::new_static(STATUS);
     r.add_setting_group(widgets::settings_group(&status, "home.widget.status"))?;
+    r.add_setting(widgets::frame_setting(&status, Frame::None))?;
     let parts = [
         ("home.status.left", "core.status.clock"),
         ("home.status.center", ""),
@@ -198,7 +199,7 @@ fn centred(area: Rect, height: u16) -> u16 {
 
 pub(crate) fn status_height(env: &Env<'_>, _: u16) -> u16 {
     let style = UiStyle::new(env);
-    line_height(env, style.small) + style.gap as u16 / 2
+    line_height(env, style.small) + style.gap as u16 / 2 + frame_height(env, STATUS)
 }
 
 /// The status line: the status items chosen for its left, centre and
@@ -208,11 +209,16 @@ pub(crate) fn draw_status(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     let Some(font) = style.font(env) else {
         return;
     };
+    let look = widgets::draw_frame(canvas, env, STATUS, area);
     let line = StatusLine {
-        area,
+        area: look.area,
         lists: STATUS_PARTS.each_ref().map(|part| env.settings.read(part)),
         size: style.small,
-        color: style.faint(60),
+        color: if look.frame == Frame::Dark {
+            look.faint
+        } else {
+            style.faint(60)
+        },
         percent: true,
     };
     line.draw(canvas, env, &font, &Params::new());
