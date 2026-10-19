@@ -1,0 +1,237 @@
+//! Covers in a row or a grid, each with a label below (its number in a
+//! series, its title), the books read marked: for the series and the
+//! favourites.
+
+use alloc::string::String;
+use alloc::vec::Vec;
+
+use quireink_sdk::ui::UiStyle;
+use quireink_sdk::widgets::{Align, Look, line_height};
+use quireink_sdk::{Canvas, Env, Point, Rect};
+
+use super::{Book, cover_size, draw_cover, draw_line};
+
+/// A book on the shelf, as shown.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct Shelved {
+    pub book: Book,
+    /// Below its cover (its number, its title), if anything.
+    pub label: String,
+    /// Marked as read.
+    pub read: bool,
+    /// Marked as the one being read.
+    pub current: bool,
+}
+
+/// Where a cover goes and its label below it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Place {
+    pub cover: Rect,
+    pub label: Rect,
+}
+
+/// The least width of a cover, so that one is still told from another.
+fn least_width(env: &Env<'_>) -> u16 {
+    env.metrics.mm(5).max(24) as u16
+}
+
+/// The places of up to `count` covers in `area`, in a row (`grid`
+/// false) or in rows: as large as the area allows them, each cell with
+/// `label` pixels below its cover, the cells together in the middle (or
+/// at the side `align` says). Fewer places than books where they would
+/// be too small.
+pub(crate) fn places(
+    env: &Env<'_>,
+    area: Rect,
+    count: usize,
+    grid: bool,
+    label: u16,
+    align: Align,
+) -> Vec<Place> {
+    if count == 0 || area.width == 0 || area.height <= label {
+        return Vec::new();
+    }
+    let gap = UiStyle::new(env).gap as u16;
+    let (w, h) = (u32::from(area.width), u32::from(area.height));
+    let size = |columns: u32, rows: u32| -> u32 {
+        let by_width = (w / columns).saturating_sub(u32::from(gap));
+        let cell_h = (h / rows).saturating_sub(u32::from(label));
+        let cell_h = if rows > 1 {
+            cell_h.saturating_sub(u32::from(gap) / 2)
+        } else {
+            cell_h
+        };
+        by_width.min(cell_h * 2 / 3)
+    };
+    let n = count as u32;
+    let least = u32::from(least_width(env));
+    // The columns and rows that make the covers largest, all of them
+    // shown where they are not too small.
+    let mut best = (1, 1, 0);
+    for columns in 1..=n {
+        let rows = if grid { n.div_ceil(columns) } else { 1 };
+        let width = size(columns, rows);
+        if width > best.2 && (grid || columns == n) {
+            best = (columns, rows, width);
+        }
+    }
+    let (mut columns, mut rows, mut width) = best;
+    if width < least {
+        // Fewer, each as small as allowed.
+        columns = (w / (least + u32::from(gap))).clamp(1, n);
+        rows = if grid {
+            (h / (least * 3 / 2 + u32::from(label) + u32::from(gap) / 2)).clamp(1, n)
+        } else {
+            1
+        };
+        width = size(columns, rows);
+    }
+    let shown = (columns * rows).min(n) as usize;
+    let cover_w = width as u16;
+    let cover_h = (width * 3 / 2) as u16;
+    let column = (w / columns) as u16;
+    let used_columns = (shown as u32).min(columns) as u16;
+    let row_w = column * used_columns;
+    let left = super::place_x(area, row_w, align);
+    let row_h = cover_h + label + if rows > 1 { gap / 2 } else { 0 };
+    let used_rows = (shown as u32).div_ceil(columns) as u16;
+    let block = (row_h * used_rows).min(area.height);
+    let top = area.y + (area.height - block) / 2;
+    (0..shown)
+        .map(|i| {
+            let (col, row) = ((i as u32 % columns) as u16, (i as u32 / columns) as u16);
+            let x = left + col * column;
+            let y = top + row * row_h;
+            Place {
+                cover: Rect::new(x + (column - cover_w) / 2, y, cover_w, cover_h),
+                label: Rect::new(x, y + cover_h, column, label),
+            }
+        })
+        .collect()
+}
+
+/// Draws the caption `text` of widget `id` just above the covers in
+/// `places` (where it shows: `rest` is the area below it), so that the
+/// two stay together.
+pub(crate) fn draw_caption(
+    canvas: &mut Canvas<'_>,
+    env: &Env<'_>,
+    id: &str,
+    look: &Look,
+    rest: Rect,
+    places: &[Place],
+    text: &str,
+) {
+    if rest == look.area {
+        return;
+    }
+    let free = places
+        .first()
+        .map_or(0, |p| p.cover.y.saturating_sub(rest.y));
+    let mut above = *look;
+    above.area = super::below(look.area, free);
+    quireink_sdk::widgets::draw_caption(canvas, env, id, &above, text);
+}
+
+/// The height of a label below a cover.
+pub(crate) fn label_height(env: &Env<'_>) -> u16 {
+    let style = UiStyle::new(env);
+    line_height(env, style.small) + style.gap as u16 / 4
+}
+
+/// Draws `books` in their `places`: each cover at the bottom of its
+/// place (covers of other shapes stand on the same line), its label
+/// below, a mark on those read and a line below the one being read.
+pub(crate) fn draw(
+    canvas: &mut Canvas<'_>,
+    env: &Env<'_>,
+    look: &Look,
+    places: &[Place],
+    books: &[Shelved],
+) {
+    let style = UiStyle::new(env);
+    let font = style.font(env);
+    for (place, shelved) in places.iter().zip(books) {
+        let slot = place.cover;
+        let (w, h) = cover_size(&shelved.book, slot.width, slot.height);
+        let at = Rect::new(
+            slot.x + (slot.width - w) / 2,
+            slot.y + slot.height - h,
+            w,
+            h,
+        );
+        draw_cover(canvas, env, look, at, &shelved.book);
+        if shelved.read {
+            draw_read_mark(canvas, env, look, at);
+        }
+        let label = place.label;
+        let labelled = font.is_some() && !shelved.label.is_empty() && label.height > 0;
+        if shelved.current && !labelled {
+            // A line below the cover: here one is.
+            let line = (style.line as u16 * 3).max(3);
+            let gap = (style.gap as u16 / 4).max(1);
+            canvas.fill(
+                Rect::new(at.x, at.y + at.height + gap, at.width, line),
+                look.ink,
+            );
+        }
+        let Some(font) = font.as_ref().filter(|_| labelled) else {
+            continue;
+        };
+        let row_h = line_height(env, style.small).min(label.height);
+        let row = Rect::new(label.x, label.y + label.height - row_h, label.width, row_h);
+        if shelved.current {
+            // The book being read: its label light on dark.
+            let text =
+                quireink_sdk::ui::fit(font, style.small, &shelved.label, f32::from(row.width));
+            let pad = style.gap as u16 / 2;
+            let w = (font.measure(style.small, &text) as u16 + 2 * pad).min(row.width);
+            let pill = Rect::new(row.x + (row.width - w) / 2, row.y, w, row.height);
+            canvas.fill_round(pill, u32::from(row.height / 2), look.ink);
+            draw_line(
+                canvas,
+                env,
+                font,
+                style.small,
+                row,
+                Align::Center,
+                &text,
+                look.paper,
+            );
+        } else {
+            draw_line(
+                canvas,
+                env,
+                font,
+                style.small,
+                row,
+                Align::Center,
+                &shelved.label,
+                look.ink,
+            );
+        }
+    }
+}
+
+/// A round mark with a tick at the top right corner of a cover: read.
+fn draw_read_mark(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, cover: Rect) {
+    let style = UiStyle::new(env);
+    let radius = u32::from(cover.width / 6)
+        .min(style.small as u32 * 2 / 3)
+        .max(5);
+    let inset = (radius / 3) as i32;
+    let center = Point::new(
+        i32::from(cover.x + cover.width) - radius as i32 - inset,
+        i32::from(cover.y) + radius as i32 + inset,
+    );
+    // A ring of paper round it, so it stands out on any cover.
+    canvas.fill_circle(center, radius + (radius / 4).max(1), look.paper);
+    canvas.fill_circle(center, radius, look.ink);
+    let r = radius as i32;
+    let width = (radius / 4).max(1);
+    let a = Point::new(center.x - r / 2, center.y);
+    let b = Point::new(center.x - r / 8, center.y + r * 3 / 8);
+    let c = Point::new(center.x + r / 2, center.y - r * 3 / 8);
+    canvas.draw_line(a, b, width, look.paper);
+    canvas.draw_line(b, c, width, look.paper);
+}
