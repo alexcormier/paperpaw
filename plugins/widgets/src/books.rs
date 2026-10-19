@@ -371,6 +371,25 @@ impl<'t> Lines<'t> {
                 *size = style.text;
             }
         }
+        // A title still too long goes on in a second line, where there is
+        // room for one more.
+        let width = f32::from(area.width);
+        let room = self.height(env)
+            + line_height(env, self.lines.first().map_or(0.0, |l| l.0))
+            + Self::gap(env)
+            <= area.height;
+        if let Some((size, text, color)) = self.lines.first().cloned()
+            && room
+            && font.measure(size, &text) > width
+        {
+            let ranges = font.wrap(size, &text, width);
+            if let (Some(first), Some(second)) = (ranges.first(), ranges.get(1)) {
+                let head = String::from(text[first.clone()].trim_end());
+                let rest = String::from(text[second.start..].trim());
+                self.lines[0].1 = Cow::Owned(head);
+                self.lines.insert(1, (size, Cow::Owned(rest), color));
+            }
+        }
         self.fit(env, area.height);
         let total = self.height(env).min(area.height);
         let top = area.y + (area.height - total) / 2;

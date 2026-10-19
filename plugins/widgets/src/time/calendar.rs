@@ -323,9 +323,11 @@ fn draw_mark(
     cell_h: f32,
     size: f32,
 ) -> Color {
+    // Round the number, but never into the next row or column.
     let radius = (cell_w.min(cell_h) * 0.46)
         .min(size * 1.15)
-        .max(size * 0.78);
+        .max(size * 0.78)
+        .min(cell_w.min(cell_h) * 0.5);
     let center = Point::new(x as i32, y as i32);
     match mark {
         "square" => {

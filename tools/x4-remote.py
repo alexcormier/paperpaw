@@ -1,4 +1,4 @@
-"""Drives QuireInk on an Xteink X4 over USB: presses its buttons, takes
+r"""Drives QuireInk on an Xteink X4 over USB: presses its buttons, takes
 screenshots and tells what the screen shows, as the emulator's scripts do
 (see shells/desktop/src/headless.rs). The commands are described in
 crates/quireink-x4/src/remote.rs, the firmware's side is in
@@ -23,7 +23,8 @@ STEPS, separated by commas:
   run:calibre.open   run an action, as a button bound to it would (e.g. a
                      tool's, to open it at once)
   set:core.night-mode=on   set a setting, as the settings screen would (the
-                     value as configuration files write it)
+                     value as configuration files write it; `\,` for a
+                     comma in it, e.g. a home page's widgets)
   setting:reader.font-size print a setting's value
   wait:500           500 ms pass
   screen             print the screen's id
@@ -45,6 +46,7 @@ import bisect
 import getpass
 import glob
 import os
+import re
 import struct
 import subprocess
 import sys
@@ -368,7 +370,9 @@ def main():
         x4.ask("profile start", "OK")
     if args.trace:
         x4.ask("trace start", "OK")
-    for step in filter(None, (s.strip() for s in args.script.split(","))):
+    # Steps apart at commas, but for those written `\,`.
+    steps = re.split(r"(?<!\\),", args.script)
+    for step in filter(None, (s.strip().replace("\\,", ",") for s in steps)):
         run(x4, step)
     if args.trace:
         for answer in x4.ask("trace stop", "END")[:-1]:
