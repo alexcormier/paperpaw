@@ -67,36 +67,44 @@ fn file() -> String {
     data("todo.txt")
 }
 
-pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
-    r.add_setting_group(widgets::settings_group(&ID, "widgets.todo"))?;
-    r.add_setting(SettingSpec::number(&COUNT, "widgets.todo.setting.count", 1, 12, 5).group(ID))?;
-    r.add_setting(
-        SettingSpec::choice(
-            &DONE_SETTING,
-            "widgets.todo.setting.done",
-            DONE.iter().map(|s| (*s).into()).collect(),
-            DONE[0],
-        )
-        .group(ID),
-    )?;
-    r.add_setting(
-        SettingSpec::choice(
-            &BOX,
-            "widgets.todo.setting.box",
-            BOXES.iter().map(|s| (*s).into()).collect(),
-            BOXES[0],
-        )
-        .group(ID),
-    )?;
-    r.add_setting(widgets::part_setting(
-        &ID,
-        CAPTION,
+/// The list's settings, kept in the program.
+static SETTINGS: [SettingSpec; 7] = [
+    SettingSpec::fixed_number(
+        "widgets.todo.count",
+        "widgets.todo.setting.count",
+        1,
+        12,
+        5,
+        ID,
+    ),
+    SettingSpec::fixed_choice(
+        "widgets.todo.done",
+        "widgets.todo.setting.done",
+        &DONE,
+        DONE[0],
+        ID,
+    ),
+    SettingSpec::fixed_choice(
+        "widgets.todo.box",
+        "widgets.todo.setting.box",
+        &BOXES,
+        BOXES[0],
+        ID,
+    ),
+    widgets::part_spec(
+        "widgets.todo.caption",
+        ID,
         "widgets.todo.setting.caption",
         true,
-    ))?;
-    r.add_setting(widgets::size_setting(&ID, Size::Small, false))?;
-    r.add_setting(widgets::align_setting(&ID, Align::Left))?;
-    r.add_setting(widgets::frame_setting(&ID, Frame::None))?;
+    ),
+    widgets::size_spec("widgets.todo.size", ID, Size::Small, false),
+    widgets::align_spec("widgets.todo.align", ID, Align::Left),
+    widgets::frame_spec("widgets.todo.frame", ID, Frame::None),
+];
+
+pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
+    r.add_setting_group(widgets::settings_group(&ID, "widgets.todo"))?;
+    r.add_settings(&SETTINGS)?;
     r.on(TICKED, |env, params, out| {
         let Some(text) = params.get(TEXT) else {
             return;
@@ -783,6 +791,24 @@ impl Screen for TodoScreen {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn its_settings_are_those_read() {
+        let ids: alloc::vec::Vec<&str> = super::SETTINGS.iter().map(|s| s.id.as_str()).collect();
+        for read in [
+            super::COUNT.as_str(),
+            super::DONE_SETTING.as_str(),
+            super::BOX.as_str(),
+            "widgets.todo.caption",
+        ] {
+            assert!(ids.contains(&read), "{read}");
+        }
+        for look in ["size", "align", "frame"] {
+            let id = alloc::format!("{}.{look}", super::ID);
+            assert!(ids.contains(&id.as_str()), "{id}");
+        }
+        assert!(super::SETTINGS.iter().all(|s| s.group == super::ID));
+    }
     use super::*;
     use quireink_sdk::MemoryStorage;
 

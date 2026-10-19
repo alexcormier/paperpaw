@@ -53,6 +53,33 @@ fn stamp_file() -> String {
     data("picture.stamp")
 }
 
+/// The picture's settings kept in the program (its folder is not: it
+/// has an editor).
+static SETTINGS: [SettingSpec; 5] = [
+    SettingSpec::fixed_choice(
+        "widgets.picture.change",
+        "widgets.setting.change",
+        &CHANGES,
+        CHANGES[0],
+        ID,
+    ),
+    SettingSpec::fixed_choice(
+        "widgets.picture.fit",
+        "widgets.picture.setting.fit",
+        &FITS,
+        FITS[0],
+        ID,
+    ),
+    widgets::part_spec(
+        "widgets.picture.caption",
+        ID,
+        "widgets.picture.setting.caption",
+        false,
+    ),
+    widgets::align_spec("widgets.picture.align", ID, Align::Center),
+    widgets::frame_spec("widgets.picture.frame", ID, Frame::None),
+];
+
 pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     r.add_setting_group(widgets::settings_group(&ID, "widgets.picture"))?;
     r.add_setting(
@@ -61,32 +88,7 @@ pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
             .editor(CHOOSE_FOLDER)
             .description("widgets.picture.setting.folder.help"),
     )?;
-    r.add_setting(
-        SettingSpec::choice(
-            &CHANGE,
-            "widgets.setting.change",
-            CHANGES.iter().map(|s| (*s).into()).collect(),
-            CHANGES[0],
-        )
-        .group(ID),
-    )?;
-    r.add_setting(
-        SettingSpec::choice(
-            &FIT,
-            "widgets.picture.setting.fit",
-            FITS.iter().map(|s| (*s).into()).collect(),
-            FITS[0],
-        )
-        .group(ID),
-    )?;
-    r.add_setting(widgets::part_setting(
-        &ID,
-        CAPTION,
-        "widgets.picture.setting.caption",
-        false,
-    ))?;
-    r.add_setting(widgets::align_setting(&ID, Align::Center))?;
-    r.add_setting(widgets::frame_setting(&ID, Frame::None))?;
+    r.add_settings(&SETTINGS)?;
     r.on(NEXT, |env, _, out| {
         Turns::turn(env.storage, &turns_file(), today(env), daily(env));
         changed(out, &ID);
@@ -394,6 +396,23 @@ fn draw_filled(canvas: &mut Canvas<'_>, storage: &dyn Storage, image: &ImageRef,
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn its_settings_are_those_read() {
+        let ids: alloc::vec::Vec<&str> = super::SETTINGS.iter().map(|s| s.id.as_str()).collect();
+        for read in [
+            super::CHANGE.as_str(),
+            super::FIT.as_str(),
+            "widgets.picture.caption",
+        ] {
+            assert!(ids.contains(&read), "{read}");
+        }
+        for look in ["align", "frame"] {
+            let id = alloc::format!("{}.{look}", super::ID);
+            assert!(ids.contains(&id.as_str()), "{id}");
+        }
+        assert!(super::SETTINGS.iter().all(|s| s.group == super::ID));
+    }
     use super::*;
     use quireink_sdk::MemoryStorage;
 
