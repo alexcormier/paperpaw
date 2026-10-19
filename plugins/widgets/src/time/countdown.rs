@@ -26,47 +26,55 @@ const STYLES: [&str; 2] = [
     "widgets.countdown.style.sentence",
 ];
 
+/// Its settings, kept in the program.
+static SETTINGS: [SettingSpec; 9] = [
+    widgets::align_spec("widgets.countdown.align", ID, Align::Left),
+    widgets::frame_spec("widgets.countdown.frame", ID, Frame::None),
+    SettingSpec::fixed_text(
+        "widgets.countdown.title",
+        "widgets.setting.countdown-title",
+        "",
+        ID,
+    )
+    .described("widgets.setting.countdown-title.help"),
+    SettingSpec::fixed_text(
+        "widgets.countdown.date",
+        "widgets.setting.countdown-date",
+        "12-24",
+        ID,
+    )
+    .described("widgets.setting.countdown-date.help"),
+    SettingSpec::fixed_choice(
+        "widgets.countdown.style",
+        "widgets.setting.style",
+        &STYLES,
+        STYLES[0],
+        ID,
+    ),
+    widgets::size_spec("widgets.countdown.size", ID, Size::Fit, true),
+    widgets::part_spec(
+        "widgets.countdown.show-date",
+        ID,
+        "widgets.setting.show-date",
+        true,
+    ),
+    widgets::part_spec(
+        "widgets.countdown.weeks",
+        ID,
+        "widgets.setting.weeks",
+        false,
+    ),
+    super::date_format_spec("widgets.countdown.date-format", ID, super::DATE_FORMATS[1]),
+];
+
 pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     super::add_settable(
         r,
         &ID,
         "widgets.countdown",
         Drawn::new(height, draw).shows(shows),
-        Align::Left,
-        Frame::None,
     )?;
-    r.add_setting(
-        SettingSpec::text(&TITLE, "widgets.setting.countdown-title", "")
-            .group(ID.clone())
-            .description("widgets.setting.countdown-title.help"),
-    )?;
-    r.add_setting(
-        SettingSpec::text(&DATE, "widgets.setting.countdown-date", "12-24")
-            .group(ID.clone())
-            .description("widgets.setting.countdown-date.help"),
-    )?;
-    r.add_setting(widgets::choice(
-        &ID,
-        "style",
-        "widgets.setting.style",
-        &STYLES,
-        STYLES[0],
-    ))?;
-    r.add_setting(widgets::size_setting(&ID, Size::Fit, true))?;
-    r.add_setting(widgets::part_setting(
-        &ID,
-        "show-date",
-        "widgets.setting.show-date",
-        true,
-    ))?;
-    r.add_setting(widgets::part_setting(
-        &ID,
-        "weeks",
-        "widgets.setting.weeks",
-        false,
-    ))?;
-    r.add_setting(super::date_format_setting(&ID, super::DATE_FORMATS[1]))?;
-    Ok(())
+    r.add_settings(&SETTINGS)
 }
 
 /// A date to count to.

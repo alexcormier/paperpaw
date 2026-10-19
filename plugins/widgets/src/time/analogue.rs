@@ -9,6 +9,8 @@ use quireink_sdk::time::{self, LocalTime};
 use quireink_sdk::widgets::{self, Align, Drawn, Frame};
 use quireink_sdk::{Canvas, Color, Env, Id, Point, Rect, RegisterError, Registrar};
 
+use quireink_sdk::SettingSpec;
+
 use super::{chosen, frame_height, line, ui};
 
 const ID: Id = Id::new_static("widgets.analogue-clock");
@@ -37,51 +39,59 @@ const DATES: [&str; 3] = [
     "widgets.clock-date.inside",
 ];
 
+/// Its settings, kept in the program.
+static SETTINGS: [SettingSpec; 8] = [
+    widgets::align_spec("widgets.analogue-clock.align", ID, Align::Center),
+    widgets::frame_spec("widgets.analogue-clock.frame", ID, Frame::None),
+    SettingSpec::fixed_choice(
+        "widgets.analogue-clock.face",
+        "widgets.setting.face",
+        &FACES,
+        FACES[1],
+        ID,
+    ),
+    SettingSpec::fixed_choice(
+        "widgets.analogue-clock.ring",
+        "widgets.setting.ring",
+        &RINGS,
+        RINGS[1],
+        ID,
+    ),
+    SettingSpec::fixed_choice(
+        "widgets.analogue-clock.hands",
+        "widgets.setting.hands",
+        &HANDS,
+        HANDS[1],
+        ID,
+    ),
+    SettingSpec::fixed_choice(
+        "widgets.analogue-clock.date",
+        "widgets.setting.clock-date",
+        &DATES,
+        DATES[0],
+        ID,
+    ),
+    super::date_format_spec(
+        "widgets.analogue-clock.date-format",
+        ID,
+        super::DATE_FORMATS[1],
+    ),
+    widgets::part_spec(
+        "widgets.analogue-clock.centre",
+        ID,
+        "widgets.setting.centre-dot",
+        true,
+    ),
+];
+
 pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     super::add(
         r,
         &ID,
         "widgets.analogue-clock",
         Drawn::new(height, draw).shows(super::minute_shows),
-        Align::Center,
-        Frame::None,
     )?;
-    r.add_setting(widgets::choice(
-        &ID,
-        "face",
-        "widgets.setting.face",
-        &FACES,
-        FACES[1],
-    ))?;
-    r.add_setting(widgets::choice(
-        &ID,
-        "ring",
-        "widgets.setting.ring",
-        &RINGS,
-        RINGS[1],
-    ))?;
-    r.add_setting(widgets::choice(
-        &ID,
-        "hands",
-        "widgets.setting.hands",
-        &HANDS,
-        HANDS[1],
-    ))?;
-    r.add_setting(widgets::choice(
-        &ID,
-        "date",
-        "widgets.setting.clock-date",
-        &DATES,
-        DATES[0],
-    ))?;
-    r.add_setting(super::date_format_setting(&ID, super::DATE_FORMATS[1]))?;
-    r.add_setting(widgets::part_setting(
-        &ID,
-        "centre",
-        "widgets.setting.centre-dot",
-        true,
-    ))?;
-    Ok(())
+    r.add_settings(&SETTINGS)
 }
 
 fn height(env: &Env<'_>, width: u16) -> u16 {

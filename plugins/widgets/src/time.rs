@@ -35,9 +35,10 @@ use alloc::vec::Vec;
 use quireink_sdk::builtin::{params, slots};
 use quireink_sdk::time::{self, LocalTime};
 use quireink_sdk::ui::UiStyle;
-use quireink_sdk::widgets::{self, Align, Drawn, Frame, Widget, WidgetSpec, WidgetTarget};
+use quireink_sdk::widgets::{self, Align, Drawn, Widget, WidgetSpec, WidgetTarget};
 use quireink_sdk::{
     Arg, Canvas, Color, Command, Env, FontHandle, Id, Params, Rect, RegisterError, Registrar,
+    SettingSpec,
 };
 
 pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
@@ -56,30 +57,11 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
 }
 
 /// Adds widget `id`, drawn by `drawn`, to the kind "Time and date", with
-/// its settings group, where its text sits and its frame.
-fn add(
-    r: &mut Registrar,
-    id: &Id,
-    title: &'static str,
-    drawn: Drawn,
-    align: Align,
-    frame: Frame,
-) -> Result<(), RegisterError> {
+/// its settings group (its settings come from a list kept in the
+/// program, each module's `SETTINGS`).
+fn add(r: &mut Registrar, id: &Id, title: &'static str, drawn: Drawn) -> Result<(), RegisterError> {
     r.add_widget(WidgetSpec::drawn(id.clone(), title, drawn).category(widgets::categories::TIME))?;
-    add_look(r, id, title, align, frame)
-}
-
-/// Adds widget `id`'s settings group, where its text sits and its frame.
-fn add_look(
-    r: &mut Registrar,
-    id: &Id,
-    title: &'static str,
-    align: Align,
-    frame: Frame,
-) -> Result<(), RegisterError> {
-    r.add_setting_group(widgets::settings_group(id, title))?;
-    r.add_setting(widgets::align_setting(id, align))?;
-    r.add_setting(widgets::frame_setting(id, frame))
+    r.add_setting_group(widgets::settings_group(id, title))
 }
 
 /// Adds widget `id` like [`add`], with a tap on it opening its settings:
@@ -89,8 +71,6 @@ fn add_settable(
     id: &Id,
     title: &'static str,
     drawn: Drawn,
-    align: Align,
-    frame: Frame,
 ) -> Result<(), RegisterError> {
     let widget = id.clone();
     r.add_widget(
@@ -103,7 +83,7 @@ fn add_settable(
         })
         .category(widgets::categories::TIME),
     )?;
-    add_look(r, id, title, align, frame)
+    r.add_setting_group(widgets::settings_group(id, title))
 }
 
 /// A widget that draws from the clock and its settings, which a tap
@@ -198,7 +178,7 @@ fn month_name<'a>(env: &'a Env<'_>, n: u8) -> &'a str {
     env.i18n.tr(KEYS[usize::from(n.clamp(1, 12) - 1)])
 }
 
-/// The values of a date format setting ([`date_format_setting`]).
+/// The values of a date format setting ([`date_format_spec`]).
 const DATE_FORMATS: [&str; 4] = [
     "widgets.date-format.long",
     "widgets.date-format.weekday",
@@ -207,19 +187,20 @@ const DATE_FORMATS: [&str; 4] = [
 ];
 
 /// A setting of how `widget` writes dates: "14 October 2026",
-/// "Wednesday, 14 October", "14/10/2026" or "2026-10-14".
-fn date_format_setting(widget: &Id, default: &'static str) -> quireink_sdk::SettingSpec {
-    widgets::choice(
-        widget,
-        "date-format",
+/// "Wednesday, 14 October", "14/10/2026" or "2026-10-14"; `id` is
+/// `<widget>.date-format`.
+const fn date_format_spec(id: &'static str, widget: Id, default: &'static str) -> SettingSpec {
+    SettingSpec::fixed_choice(
+        id,
         "widgets.setting.date-format",
         &DATE_FORMATS,
         default,
+        widget,
     )
 }
 
 /// `year`-`month`-`day` written as `widget`'s date format says
-/// ([`date_format_setting`]); `year` left out where `with_year` is not
+/// ([`date_format_spec`]); `year` left out where `with_year` is not
 /// set (but in numbers).
 fn date_text(
     env: &Env<'_>,

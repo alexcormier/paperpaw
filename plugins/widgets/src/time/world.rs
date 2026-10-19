@@ -11,23 +11,110 @@ use quireink_sdk::time::{self, LocalTime, TIME_ZONES, TimeZone};
 use quireink_sdk::widgets::{self, Align, Drawn, Frame};
 use quireink_sdk::{Arg, Canvas, Env, FontHandle, Id, Rect, RegisterError, Registrar};
 
+use quireink_sdk::SettingSpec;
+
 use super::{chosen, dates, frame_height, line, ui};
 
 const ID: Id = Id::new_static("widgets.world-clock");
 
 /// No place.
 const NONE: &str = "widgets.world-clock.none";
-/// The settings of the places, and their defaults.
-const PLACES: [(&str, &str); 3] = [
-    ("place-1", "core.tz.new-york"),
-    ("place-2", "core.tz.tokyo"),
-    ("place-3", NONE),
+/// The settings of the places.
+const PLACES: [&str; 3] = ["place-1", "place-2", "place-3"];
+/// The values of the first place's setting: the ids of
+/// [`TIME_ZONES`], written out to stay in the program (a test keeps
+/// them the same).
+const ZONES: [&str; 22] = [
+    "core.tz.utc",
+    "core.tz.honolulu",
+    "core.tz.anchorage",
+    "core.tz.los-angeles",
+    "core.tz.phoenix",
+    "core.tz.denver",
+    "core.tz.chicago",
+    "core.tz.new-york",
+    "core.tz.sao-paulo",
+    "core.tz.london",
+    "core.tz.lisbon",
+    "core.tz.berlin",
+    "core.tz.helsinki",
+    "core.tz.istanbul",
+    "core.tz.moscow",
+    "core.tz.dubai",
+    "core.tz.india",
+    "core.tz.bangkok",
+    "core.tz.china",
+    "core.tz.tokyo",
+    "core.tz.sydney",
+    "core.tz.auckland",
 ];
+/// The values of the other places' settings: none, or one of [`ZONES`].
+const ZONES_OR_NONE: [&str; 23] = {
+    let mut values = [NONE; 23];
+    let mut n = 0;
+    while n < ZONES.len() {
+        values[n + 1] = ZONES[n];
+        n += 1;
+    }
+    values
+};
 /// The values of the layout setting: as fits, rows, side by side.
 const LAYOUTS: [&str; 3] = [
     "widgets.layout.auto",
     "widgets.layout.rows",
     "widgets.layout.columns",
+];
+
+/// Its settings, kept in the program.
+static SETTINGS: [SettingSpec; 9] = [
+    widgets::align_spec("widgets.world-clock.align", ID, Align::Left),
+    widgets::frame_spec("widgets.world-clock.frame", ID, Frame::None),
+    SettingSpec::fixed_choice(
+        "widgets.world-clock.place-1",
+        "widgets.setting.place-1",
+        &ZONES,
+        "core.tz.new-york",
+        ID,
+    ),
+    SettingSpec::fixed_choice(
+        "widgets.world-clock.place-2",
+        "widgets.setting.place-2",
+        &ZONES_OR_NONE,
+        "core.tz.tokyo",
+        ID,
+    ),
+    SettingSpec::fixed_choice(
+        "widgets.world-clock.place-3",
+        "widgets.setting.place-3",
+        &ZONES_OR_NONE,
+        NONE,
+        ID,
+    ),
+    SettingSpec::fixed_choice(
+        "widgets.world-clock.layout",
+        "widgets.setting.layout",
+        &LAYOUTS,
+        LAYOUTS[0],
+        ID,
+    ),
+    widgets::part_spec(
+        "widgets.world-clock.here",
+        ID,
+        "widgets.setting.here",
+        false,
+    ),
+    widgets::part_spec(
+        "widgets.world-clock.day",
+        ID,
+        "widgets.setting.day-difference",
+        true,
+    ),
+    widgets::part_spec(
+        "widgets.world-clock.offset",
+        ID,
+        "widgets.setting.offset",
+        false,
+    ),
 ];
 
 pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
@@ -36,58 +123,8 @@ pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
         &ID,
         "widgets.world-clock",
         Drawn::new(height, draw).shows(super::minute_shows),
-        Align::Left,
-        Frame::None,
     )?;
-    let zones: Vec<&'static str> = TIME_ZONES.iter().map(|(id, _)| *id).collect();
-    for (n, (key, default)) in PLACES.into_iter().enumerate() {
-        let none = (n > 0).then_some(NONE);
-        let values: quireink_sdk::Choices = none
-            .into_iter()
-            .chain(zones.iter().copied())
-            .map(alloc::borrow::Cow::Borrowed)
-            .collect();
-        let title = [
-            "widgets.setting.place-1",
-            "widgets.setting.place-2",
-            "widgets.setting.place-3",
-        ][n];
-        r.add_setting(
-            quireink_sdk::SettingSpec::new(
-                widgets::setting_id(&ID, key),
-                title,
-                quireink_sdk::SettingKind::Choice(values),
-                quireink_sdk::SettingValue::Text(alloc::borrow::Cow::Borrowed(default)),
-            )
-            .group(ID),
-        )?;
-    }
-    r.add_setting(widgets::choice(
-        &ID,
-        "layout",
-        "widgets.setting.layout",
-        &LAYOUTS,
-        LAYOUTS[0],
-    ))?;
-    r.add_setting(widgets::part_setting(
-        &ID,
-        "here",
-        "widgets.setting.here",
-        false,
-    ))?;
-    r.add_setting(widgets::part_setting(
-        &ID,
-        "day",
-        "widgets.setting.day-difference",
-        true,
-    ))?;
-    r.add_setting(widgets::part_setting(
-        &ID,
-        "offset",
-        "widgets.setting.offset",
-        false,
-    ))?;
-    Ok(())
+    r.add_settings(&SETTINGS)
 }
 
 /// A place shown: its name, its time, how many days it is ahead of here,
@@ -134,7 +171,7 @@ fn places(env: &Env<'_>) -> Vec<Place> {
             minutes: 0,
         });
     }
-    for (key, _) in PLACES {
+    for key in PLACES {
         let id = env.settings.text(&format!("{ID}.{key}"));
         if let Some((id, rule)) = TIME_ZONES.iter().find(|(z, _)| *z == id)
             && let Some(place) = place(env.i18n.tr(id), rule, unix, here)
@@ -432,6 +469,14 @@ mod tests {
     /// Wednesday, 14 October 2026, 10:41 in Berlin (summer time).
     const NOW: i64 = 1_791_967_260;
     const BERLIN: i64 = 7200;
+
+    #[test]
+    fn the_places_offered_are_the_time_zones() {
+        let zones: Vec<&str> = TIME_ZONES.iter().map(|(id, _)| *id).collect();
+        assert_eq!(ZONES[..], zones[..]);
+        assert_eq!(ZONES_OR_NONE[0], NONE);
+        assert_eq!(ZONES_OR_NONE[1..], zones[..]);
+    }
 
     #[test]
     fn places_are_ahead_or_behind() {

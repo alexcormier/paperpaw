@@ -9,6 +9,8 @@ use quireink_sdk::time;
 use quireink_sdk::widgets::{self, Align, Drawn, Frame};
 use quireink_sdk::{Canvas, Color, Env, FontHandle, Id, Point, Rect, RegisterError, Registrar};
 
+use quireink_sdk::SettingSpec;
+
 use super::dates::MonthGrid;
 use super::{chosen, frame_height, ui};
 
@@ -32,48 +34,78 @@ const MARKS: [&str; 4] = [
 /// The weekdays' names above the columns: one letter, two.
 const INITIALS: [&str; 2] = ["widgets.initials.one", "widgets.initials.two"];
 
+/// Its settings, kept in the program.
+static SETTINGS: [SettingSpec; 12] = [
+    widgets::align_spec("widgets.calendar.align", ID, Align::Center),
+    widgets::frame_spec("widgets.calendar.frame", ID, Frame::None),
+    SettingSpec::fixed_choice(
+        "widgets.calendar.week-start",
+        "widgets.setting.week-start",
+        &WEEK_STARTS,
+        WEEK_STARTS[0],
+        ID,
+    ),
+    SettingSpec::fixed_choice(
+        "widgets.calendar.mark",
+        "widgets.setting.today-mark",
+        &MARKS,
+        MARKS[0],
+        ID,
+    ),
+    SettingSpec::fixed_choice(
+        "widgets.calendar.initials",
+        "widgets.setting.initials",
+        &INITIALS,
+        INITIALS[0],
+        ID,
+    ),
+    widgets::part_spec(
+        "widgets.calendar.heading",
+        ID,
+        "widgets.setting.month-name",
+        true,
+    ),
+    widgets::part_spec("widgets.calendar.year", ID, "widgets.setting.year", false),
+    widgets::part_spec(
+        "widgets.calendar.weekdays",
+        ID,
+        "widgets.setting.weekdays",
+        true,
+    ),
+    widgets::part_spec(
+        "widgets.calendar.weeks",
+        ID,
+        "widgets.setting.week-numbers",
+        false,
+    ),
+    widgets::part_spec(
+        "widgets.calendar.others",
+        ID,
+        "widgets.setting.other-days",
+        false,
+    ),
+    widgets::part_spec(
+        "widgets.calendar.weekends",
+        ID,
+        "widgets.setting.weekends-faint",
+        false,
+    ),
+    widgets::part_spec(
+        "widgets.calendar.next",
+        ID,
+        "widgets.setting.next-month",
+        false,
+    ),
+];
+
 pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     super::add(
         r,
         &ID,
         "widgets.calendar",
         Drawn::new(height, draw).shows(super::today_shows),
-        Align::Center,
-        Frame::None,
     )?;
-    r.add_setting(widgets::choice(
-        &ID,
-        "week-start",
-        "widgets.setting.week-start",
-        &WEEK_STARTS,
-        WEEK_STARTS[0],
-    ))?;
-    r.add_setting(widgets::choice(
-        &ID,
-        "mark",
-        "widgets.setting.today-mark",
-        &MARKS,
-        MARKS[0],
-    ))?;
-    r.add_setting(widgets::choice(
-        &ID,
-        "initials",
-        "widgets.setting.initials",
-        &INITIALS,
-        INITIALS[0],
-    ))?;
-    for (part, title, default) in [
-        ("heading", "widgets.setting.month-name", true),
-        ("year", "widgets.setting.year", false),
-        ("weekdays", "widgets.setting.weekdays", true),
-        ("weeks", "widgets.setting.week-numbers", false),
-        ("others", "widgets.setting.other-days", false),
-        ("weekends", "widgets.setting.weekends-faint", false),
-        ("next", "widgets.setting.next-month", false),
-    ] {
-        r.add_setting(widgets::part_setting(&ID, part, title, default))?;
-    }
-    Ok(())
+    r.add_settings(&SETTINGS)
 }
 
 /// The first day of the week, 0 (Sunday) or 1 (Monday), as `widget`'s
