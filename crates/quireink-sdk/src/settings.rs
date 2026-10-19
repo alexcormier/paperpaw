@@ -344,7 +344,7 @@ impl SettingSpec {
     /// cannot use [`description`](Self::description)).
     pub const fn described(self, key: &'static str) -> Self {
         let mut spec = self;
-        let old = core::mem::replace(&mut spec.description, Some(Cow::Borrowed(key)));
+        let old = spec.description.replace(Cow::Borrowed(key));
         core::mem::forget(old);
         spec
     }

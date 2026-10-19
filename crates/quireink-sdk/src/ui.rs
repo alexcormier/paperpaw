@@ -1719,7 +1719,7 @@ pub fn next_value(env: &Env<'_>, spec: &SettingSpec, step: i64) -> Option<Settin
             SettingValue::Int((v + step * spec.extra().step).clamp(*min, *max))
         }
         (SettingKind::Choice(options), SettingValue::Text(v)) => {
-            let options: Vec<&str> = options.iter().map(|o| o.as_ref()).collect();
+            let options: Vec<&str> = options.iter().collect();
             cycle(&options, v)
         }
         (SettingKind::Language, SettingValue::Text(v)) => {
