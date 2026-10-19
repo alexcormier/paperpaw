@@ -181,7 +181,8 @@ pub struct Installer {
 
 /// The job kept on the storage: what its first line says.
 struct Job {
-    /// Told apart from the jobs before by the time it started.
+    /// Told apart from the jobs before: one more than the last (see
+    /// [`Installer::next_job`]).
     id: u64,
     plugin: String,
     name: String,
@@ -219,6 +220,24 @@ impl Installer {
 
     fn done_path(&self) -> String {
         format!("{}/install.done", Env::plugin_dir(self.owner.as_str()))
+    }
+
+    fn count_path(&self) -> String {
+        format!("{}/install.count", Env::plugin_dir(self.owner.as_str()))
+    }
+
+    /// A number no job of this installer had: the jobs are counted on the
+    /// storage, across restarts.
+    fn next_job(&self, storage: &dyn Storage) -> Option<u64> {
+        let last: u64 = crate::read_file(storage, &self.count_path(), 24)
+            .ok()
+            .and_then(|text| core::str::from_utf8(&text).ok()?.trim().parse().ok())
+            .unwrap_or(0);
+        let next = last.wrapping_add(1);
+        storage
+            .write(&self.count_path(), next.to_string().as_bytes())
+            .ok()
+            .map(|()| next)
     }
 
     fn job(&self, storage: &dyn Storage) -> Option<Job> {
@@ -266,7 +285,8 @@ impl Installer {
     /// Starts installing `package`, a new plugin or a newer version of
     /// one installed (which stays until the new one is all here); an
     /// installation going on is stopped, and answers to its downloads are
-    /// passed over. `false` (and nothing done) if the package is not
+    /// passed over (each job has a number of its own, counted in the
+    /// owner's folder). `false` (and nothing done) if the package is not
     /// valid ([`Package::is_valid`]) or the job could not be kept.
     pub fn start(&self, env: &Env<'_>, package: &Package, out: &mut Vec<Command>) -> bool {
         if !package.is_valid() {
@@ -274,8 +294,14 @@ impl Installer {
         }
         let storage = env.storage;
         self.cancel(storage);
+        let _ = storage.create_dir(crate::data::DIR);
+        let _ = storage.create_dir(&format!("{}/plugins", crate::data::DIR));
+        let _ = storage.create_dir(&Env::plugin_dir(self.owner.as_str()));
+        let Some(id) = self.next_job(storage) else {
+            return false;
+        };
         let job = Job {
-            id: env.now.millis(),
+            id,
             plugin: package.plugin.clone(),
             name: plain(&package.name),
             total: package.files.len(),
@@ -290,9 +316,6 @@ impl Installer {
                 file.url
             ));
         }
-        let _ = storage.create_dir(crate::data::DIR);
-        let _ = storage.create_dir(&format!("{}/plugins", crate::data::DIR));
-        let _ = storage.create_dir(&Env::plugin_dir(self.owner.as_str()));
         let _ = storage.create_dir(PLUGIN_DIR);
         let staging = job.staging();
         let _ = storage.remove_dir_all(&staging);
@@ -532,5 +555,17 @@ mod tests {
         assert_eq!(nth_line(&storage, "f.txt", 3).as_deref(), Some("last"));
         assert_eq!(nth_line(&storage, "f.txt", 4), None);
         assert_eq!(nth_line(&storage, "missing", 0), None);
+    }
+
+    #[test]
+    fn jobs_are_counted_across_restarts() {
+        let storage = MemoryStorage::new();
+        let installer = Installer::new(Id::new_static("store"), Event::new("store.downloaded"));
+        assert_eq!(installer.next_job(&storage), Some(1));
+        assert_eq!(installer.next_job(&storage), Some(2));
+        // A new start: the count is on the storage, not in memory.
+        let installer = Installer::new(Id::new_static("store"), Event::new("store.downloaded"));
+        assert_eq!(installer.next_job(&storage), Some(3));
+        assert!(storage.exists(".paperpaw/plugins/store/install.count"));
     }
 }

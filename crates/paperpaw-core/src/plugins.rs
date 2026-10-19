@@ -443,19 +443,29 @@ impl Kernel {
     /// Loads the data plugin in `folder` while running (see
     /// [`Command::LoadPlugin`](paperpaw_sdk::Command::LoadPlugin)).
     pub(crate) fn load_plugin(&mut self, folder: &str) {
+        if self.register_folder(folder) {
+            self.plugins_changed();
+        }
+    }
+
+    /// Registers the data plugin in `folder` (switched off where the
+    /// configuration says so) and applies its defaults; `false`, with a
+    /// warning, if it could not be.
+    fn register_folder(&mut self, folder: &str) -> bool {
         let storage = self.shared.storage.clone();
         let plugin = match crate::data_plugin::load_folder(storage.as_ref(), folder) {
             Ok(plugin) => plugin,
-            Err(problem) => return self.warn_runtime(problem),
+            Err(problem) => {
+                self.warn_runtime(problem);
+                return false;
+            }
         };
         let manifest = plugin.manifest();
         let id = manifest.id.clone();
         if self.shared.plugins.get(id.as_str()).is_some() {
-            return self.warn(
-                WarningSource::Plugin(id),
-                None,
-                "a plugin with this id is already loaded".into(),
-            );
+            let problem = "a plugin with this id is already loaded".into();
+            self.warn(WarningSource::Plugin(id), None, problem);
+            return false;
         }
         let off = read_config(storage.as_ref())
             .is_some_and(|c| crate::config::plugin_switches(&c, false).contains(&id.to_string()));
@@ -468,7 +478,7 @@ impl Kernel {
             .data_folders
             .push((id, plugin.folder().to_string()));
         self.apply_defaults(&[]);
-        self.plugins_changed();
+        true
     }
 
     /// Removes a data plugin while running (see
@@ -481,7 +491,6 @@ impl Kernel {
             return self.warn_runtime(format!("{folder}: not removed ({error:?})"));
         }
         self.unload_plugin(id);
-        self.keep_offered_choices();
         self.plugins_changed();
     }
 
@@ -497,7 +506,8 @@ impl Kernel {
 
     /// Forgets the data plugin `id`: its folder, fonts and presets, and
     /// it in the list of plugins. What was chosen from it stays chosen
-    /// (see [`keep_offered_choices`](Self::keep_offered_choices)).
+    /// until [`plugins_changed`](Self::plugins_changed) finds it no longer
+    /// offered.
     fn unload_plugin(&mut self, id: &Id) {
         self.shared.data_folders.retain(|(p, _)| p != id);
         self.shared.fonts.remove_plugin(id.as_str());
@@ -506,7 +516,6 @@ impl Kernel {
             .presets_mut()
             .remove_plugin(id.as_str());
         self.shared.plugins.remove(id.as_str());
-        self.offer_choices();
     }
 
     /// A font chosen that is no longer offered gives way to the default.
@@ -591,16 +600,18 @@ impl Kernel {
             let _ = storage.remove_dir_all(path);
         }
         let _ = storage.remove_dir_all(&aside);
-        self.load_plugin(&target);
-        self.keep_offered_choices();
-        self.apply_reading_font();
-        self.apply_status_font();
+        // Changed even where the new one does not load: the old ones are
+        // gone.
+        self.register_folder(&target);
+        self.plugins_changed();
     }
 
     /// After a plugin was loaded or removed while running: the choices of
-    /// fonts and key map presets, menu labels, fonts and keys anew.
+    /// fonts and key map presets (a font chosen that is no longer offered
+    /// giving way), menu labels, fonts and keys anew.
     fn plugins_changed(&mut self) {
         self.offer_choices();
+        self.keep_offered_choices();
         self.set_menu_titles();
         self.apply_reading_font();
         self.apply_status_font();
