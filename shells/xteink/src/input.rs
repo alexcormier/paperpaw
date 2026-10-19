@@ -1,4 +1,5 @@
-//! The buttons and the battery, read in a timer's interrupt every
+//! The buttons, the touch screen (the X4 Pro's) and the battery, read in a
+//! timer's interrupt every
 //! [`SAMPLE_MS`]: a press is seen while QuireInk is busy for a second or
 //! more (laying out a page, counting a book's pages), and waits in a queue
 //! until the main loop takes it ([`next`]). Each keeps the time it came,
@@ -18,10 +19,9 @@ use esp_hal::gpio::Input;
 use esp_hal::handler;
 use esp_hal::time::Duration;
 use esp_hal::timer::PeriodicTimer;
-use quireink_x4::battery;
-use quireink_x4::buttons::{Debouncer, State};
+use quireink_x4::buttons::Debouncer;
 
-use crate::board::Ladders;
+use crate::board::Keys;
 
 /// How often the buttons are read.
 const SAMPLE_MS: u64 = 5;
@@ -30,13 +30,34 @@ const BATTERY_MS: u64 = 1000;
 /// Presses and releases waiting; more are dropped.
 const QUEUE: usize = 32;
 
-/// A button that went down (`true`) or up, and when (ms).
-pub type Change = (&'static str, bool, u64);
+/// A finger on the touch screen, on the upright screen: down (with where
+/// the controller had it, to look into), moved, lifted.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(
+    feature = "x4",
+    expect(dead_code, reason = "the X4 has no touch screen")
+)]
+pub enum Touch {
+    Down(u16, u16, (u16, u16)),
+    Move(u16, u16),
+    Up(u16, u16),
+    /// The home key (a touch key below the X4 Pro's screen) went down or
+    /// up: a button.
+    Home(bool),
+}
+
+/// What happened, and when (ms).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Change {
+    /// A button went down (`true`) or up.
+    Button(&'static str, bool, u64),
+    Touch(Touch, u64),
+}
 
 /// What the interrupt reads with, and what it found.
 pub struct Sampler {
     timer: PeriodicTimer<'static, Blocking>,
-    ladders: Ladders,
+    keys: Keys,
     power: Input<'static>,
     debouncer: Debouncer,
     /// Woken by the power button, it is still down: it counts once let go.
@@ -46,6 +67,8 @@ pub struct Sampler {
     head: usize,
     len: usize,
     battery_read: u64,
+    /// A time to give the clock chip (the X4 Pro's), ms since 1970.
+    clock: Option<i64>,
 }
 
 static SAMPLER: Mutex<RefCell<Option<Sampler>>> = Mutex::new(RefCell::new(None));
@@ -58,8 +81,10 @@ const PROFILE_SAMPLES: usize = 3000;
 /// Memory left free for QuireInk while profiling.
 #[cfg(feature = "remote")]
 const PROFILE_SPARE: usize = 64 * 1024;
-/// The battery's voltage, in millivolts (0 until first read).
+/// The battery's voltage, in millivolts, and its charge in percent (0
+/// until first read).
 static MILLIVOLTS: AtomicU32 = AtomicU32::new(0);
+static PERCENT: AtomicU32 = AtomicU32::new(0);
 /// The power button is down now (not debounced).
 static POWER_DOWN: AtomicBool = AtomicBool::new(false);
 /// Readings so far, and the last ones of the two ladders, to look into.
@@ -75,13 +100,13 @@ fn millis() -> u64 {
 impl Sampler {
     pub fn new(
         mut timer: PeriodicTimer<'static, Blocking>,
-        ladders: Ladders,
+        keys: Keys,
         power: Input<'static>,
     ) -> Self {
         timer.set_interrupt_handler(sample);
         Self {
             timer,
-            ladders,
+            keys,
             power,
             debouncer: Debouncer::new(),
             power_armed: false,
@@ -89,6 +114,7 @@ impl Sampler {
             head: 0,
             len: 0,
             battery_read: 0,
+            clock: None,
         }
     }
 
@@ -97,31 +123,36 @@ impl Sampler {
         let now = millis();
         if self.battery_read == 0 || now - self.battery_read >= BATTERY_MS {
             self.battery_read = now;
-            let l = &mut self.ladders;
-            if let Ok(raw) = nb::block!(l.adc.read_oneshot(&mut l.cell)) {
-                MILLIVOLTS.store(u32::from(battery::millivolts(raw)), Ordering::Relaxed);
+            if let Some((percent, millivolts)) = self.keys.battery() {
+                MILLIVOLTS.store(u32::from(millivolts), Ordering::Relaxed);
+                PERCENT.store(u32::from(percent), Ordering::Relaxed);
             }
         }
-        let l = &mut self.ladders;
-        let front = nb::block!(l.adc.read_oneshot(&mut l.front)).unwrap_or(4095);
-        let side = nb::block!(l.adc.read_oneshot(&mut l.side)).unwrap_or(4095);
-        // Only the interrupt writes it (the chip has no atomic adds).
+        if let Some(unix_ms) = self.clock.take() {
+            self.keys.set_clock(unix_ms);
+        }
+        let power_down = self.power.is_low();
+        POWER_DOWN.store(power_down, Ordering::Relaxed);
+        self.power_armed |= !power_down;
+        let (reading, levels) = self.keys.read(self.power_armed && power_down);
+        // Only the interrupt writes it (the X4's chip has no atomic adds).
         SAMPLES.store(
             SAMPLES.load(Ordering::Relaxed).wrapping_add(1),
             Ordering::Relaxed,
         );
-        LEVELS.store(u32::from(front) << 16 | u32::from(side), Ordering::Relaxed);
-        let power_down = self.power.is_low();
-        POWER_DOWN.store(power_down, Ordering::Relaxed);
-        self.power_armed |= !power_down;
-        let reading = State::read(front, side, self.power_armed && power_down);
+        LEVELS.store(levels, Ordering::Relaxed);
         let (queue, head, len) = (&mut self.queue, &mut self.head, &mut self.len);
-        self.debouncer.update(reading, now, &mut |name, down| {
+        let mut push = |change: Change| {
             if *len < QUEUE {
-                queue[(*head + *len) % QUEUE] = Some((name, down, now));
+                queue[(*head + *len) % QUEUE] = Some(change);
                 *len += 1;
             }
+        };
+        self.debouncer.update(reading, now, &mut |name, down| {
+            push(Change::Button(name, down, now));
         });
+        self.keys
+            .touch(&mut |touch| push(Change::Touch(touch, now)));
     }
 }
 
@@ -133,10 +164,13 @@ fn sample() {
             && places.len() < places.capacity()
         {
             // The place the interrupt came at.
-            let pc: u32;
-            // SAFETY: reads a register, changes nothing.
-            unsafe { core::arch::asm!("csrr {0}, mepc", out(reg) pc) };
-            places.push(pc);
+            #[cfg(target_arch = "riscv32")]
+            {
+                let pc: u32;
+                // SAFETY: reads a register, changes nothing.
+                unsafe { core::arch::asm!("csrr {0}, mepc", out(reg) pc) };
+                places.push(pc);
+            }
         }
         if let Some(sampler) = SAMPLER.borrow_ref_mut(cs).as_mut() {
             sampler.timer.clear_interrupt();
@@ -197,9 +231,24 @@ pub fn profile(start: bool) -> Option<Vec<u32>> {
     })
 }
 
+/// Gives the clock chip the time (on the X4 Pro; the X4 has none), from
+/// the interrupt that owns its bus.
+pub fn keep_time(unix_ms: i64) {
+    critical_section::with(|cs| {
+        if let Some(s) = SAMPLER.borrow_ref_mut(cs).as_mut() {
+            s.clock = Some(unix_ms);
+        }
+    });
+}
+
 /// The battery's voltage, in millivolts.
 pub fn millivolts() -> u16 {
     MILLIVOLTS.load(Ordering::Relaxed) as u16
+}
+
+/// The battery's charge, in percent.
+pub fn percent() -> u8 {
+    PERCENT.load(Ordering::Relaxed) as u8
 }
 
 /// Readings so far, and the last readings of the front and side ladders.

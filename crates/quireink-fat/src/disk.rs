@@ -228,10 +228,13 @@ impl<B: Blocks> BlockDisk<B> {
         }
         let mut exfat = false;
         for (first, count) in partitions(&mut disk, &block)? {
-            if first == 0 || count == 0 || first.saturating_add(count) > u64::from(blocks) {
+            if first == 0 || count == 0 || first >= u64::from(blocks) {
                 continue;
             }
-            // Within the disk, so both fit in a u32.
+            // A partition said to go past the card's end (as on some cards
+            // as sold, by some 90 MB) ends there: other readers read them
+            // too. Within the disk, so both fit in a u32.
+            let count = count.min(u64::from(blocks) - first);
             let (first, count) = (first as u32, count as u32);
             disk.read_block(first, &mut block)?;
             match boot(&block) {

@@ -262,6 +262,7 @@ impl Network {
                 if let Some(unix_ms) = time {
                     net.release_udp(socket);
                     clock::set(now, unix_ms);
+                    crate::input::keep_time(unix_ms);
                     self.synced = Some(ms);
                     log::info!("clock: set over the network");
                     Sync::Idle { not_before: 0 }

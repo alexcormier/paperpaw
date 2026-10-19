@@ -2,30 +2,26 @@
 //! for QuireInk's FAT storage.
 
 use alloc::boxed::Box;
-use core::cell::RefCell;
 
 use embedded_hal::delay::DelayNs;
 use embedded_hal::digital::OutputPin;
 use embedded_hal::spi::SpiBus;
-use esp_hal::delay::Delay;
-use esp_hal::gpio::Output;
-use esp_hal::spi::master::Config as SpiConfig;
 use esp_hal::time::Rate;
 use log::{info, warn};
-use quireink_fat::fatfs::{FileSystem, FsOptions};
-use quireink_fat::{BLOCK, BlockDisk, Blocks, DiskError, FatStorage, SharedDisk, VolumeError};
+use quireink_fat::{BLOCK, Blocks, DiskError};
 use quireink_platform::{NoStorage, Storage};
 
-use crate::board::{self, Bus};
+use crate::board::{self, CardParts};
 
 /// The card's FAT file system as QuireInk's storage, then the bus at full
 /// speed; without a card or one QuireInk cannot read, no storage.
-pub fn mount(
-    bus: &'static RefCell<Bus>,
-    spi: SpiConfig,
-    select: Output<'static>,
-    delay: Delay,
-) -> Box<dyn Storage> {
+pub fn mount(parts: CardParts) -> Box<dyn Storage> {
+    let CardParts {
+        bus,
+        spi,
+        select,
+        delay,
+    } = parts;
     // A card wants clocks with nothing selected before it starts.
     let _ = bus.borrow_mut().write(&[0xFF; 10]);
     let sd = match quireink_x4::card::Card::new(bus, select, delay) {
@@ -39,26 +35,7 @@ pub fn mount(
         .borrow_mut()
         .apply_config(&spi.with_frequency(Rate::from_mhz(board::SPI_MHZ)));
     info!("SD card: {} MB", sd.blocks() >> 11);
-    // The disk shared with the storage, which writes back its changed
-    // blocks (folders, the FAT) on sync.
-    let fs = BlockDisk::volume(Card(sd))
-        .map(SharedDisk::new)
-        .and_then(|disk| {
-            FileSystem::new(disk.clone(), FsOptions::new())
-                .map(|fs| (fs, disk))
-                .map_err(|_| VolumeError::NoFat)
-        });
-    match fs {
-        Ok((fs, disk)) => Box::new(FatStorage::new(Box::leak(Box::new(fs))).with_disk(disk)),
-        Err(e) => {
-            match e {
-                VolumeError::ExFat => warn!("SD card: exFAT; QuireInk reads FAT32"),
-                VolumeError::NoFat => warn!("SD card: no FAT file system"),
-                VolumeError::Disk => warn!("SD card: not readable"),
-            }
-            Box::new(NoStorage)
-        }
-    }
+    crate::volume::mount(Card(sd))
 }
 
 /// The card, as blocks.

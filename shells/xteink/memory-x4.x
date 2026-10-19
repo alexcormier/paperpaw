@@ -1,5 +1,5 @@
 /* esp-hal 1.2's memory.x for the ESP32-C3, with the flash mapped in full
-   (see IROM below). Found before esp-hal's own: build.rs puts it first. */
+   (see IROM below). Found before esp-hal's own: build.rs puts it first, as memory.x. */
 
 MEMORY
 {

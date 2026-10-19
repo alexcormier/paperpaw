@@ -7,15 +7,15 @@
 //! ([`Firmware::apply`]); when it says so, the X4 sleeps.
 
 use esp_hal::delay::Delay;
-use esp_hal::gpio::{Event, Input, Output, WakeupConfig};
+use esp_hal::gpio::{Event, Output, WakeupConfig};
 use log::{info, warn};
 use quireink_core::{
     Effects, FirmwareCommand, FirmwareState, InstallFailure, Io, Kernel, SpeechCall,
 };
 use quireink_platform::{
-    Battery, ButtonState, InputEvent, Instant, Rect, RefreshMode, SystemStatus,
+    Battery, ButtonState, InputEvent, Instant, Point, PointerEvent, PointerPhase, PointerTool,
+    Rect, RefreshMode, SystemStatus,
 };
-use quireink_x4::battery;
 use quireink_x4::display::{Planes, Refresh};
 use quireink_x4::sent::{Check, Sent};
 
@@ -46,10 +46,13 @@ pub struct Firmware {
     /// Holds the battery's power on.
     pub power_latch: Output<'static>,
     /// High while on USB power.
-    pub usb_power: Input<'static>,
+    pub usb_power: crate::board::UsbPower,
     pub delay: Delay,
     #[cfg(feature = "remote")]
     pub remote: crate::remote::Remote,
+    /// The X4 Pro's front light.
+    #[cfg(feature = "x4-pro")]
+    pub light: Option<crate::light::Light>,
     pub state: State,
 }
 
@@ -115,9 +118,12 @@ impl Firmware {
             self.apply(effects);
         }
         self.firmware_step();
-        // Not while the radio is on: its tasks run in between.
+        let light = self.light();
+        // Not while the radio is on: its tasks run in between. Nor while
+        // the X4 Pro's light is on: its PWM stops in a light sleep.
         let battery = !self.network.radio_on()
             && !installing
+            && !light
             && ((self.usb_power.is_low() && self.kernel.settings().read(&device::LIGHT_SLEEP))
                 || self.trying_sleep());
         power::allow(battery);
@@ -127,6 +133,24 @@ impl Firmware {
         self.remote();
         self.tick();
         self.rest(battery, installing);
+    }
+
+    /// Shows the front light as its settings say; whether it is on.
+    #[cfg(feature = "x4-pro")]
+    fn light(&mut self) -> bool {
+        let settings = self.kernel.settings();
+        let level = settings.read(&device::FRONTLIGHT);
+        let warmth = settings.read(&device::WARMTH);
+        if let Some(light) = self.light.as_mut() {
+            light.show(level, warmth);
+        }
+        level > 0 && self.light.is_some()
+    }
+
+    /// The X4 has no light.
+    #[cfg(feature = "x4")]
+    fn light(&mut self) -> bool {
+        false
     }
 
     /// The time for the kernel now, never before one it was given.
@@ -208,7 +232,7 @@ impl Firmware {
         let status = SystemStatus {
             clock: clock::wall(at),
             battery: Some(Battery {
-                percent: battery::percent(millivolts),
+                percent: input::percent(),
                 charging: self.usb_power.is_high(),
                 millivolts: Some(millivolts),
             }),
@@ -220,22 +244,59 @@ impl Firmware {
     /// The presses and releases that came, before any work in the
     /// background.
     fn buttons(&mut self) {
-        while let Some((name, down, at)) = input::next() {
-            let state = if down {
-                ButtonState::Pressed
-            } else {
-                ButtonState::Released
+        while let Some(change) = input::next() {
+            let (event, at) = match change {
+                input::Change::Button(name, down, at) => {
+                    let state = if down {
+                        ButtonState::Pressed
+                    } else {
+                        ButtonState::Released
+                    };
+                    (InputEvent::Button { name, state }, at)
+                }
+                input::Change::Touch(input::Touch::Home(down), at) => {
+                    let state = if down {
+                        ButtonState::Pressed
+                    } else {
+                        ButtonState::Released
+                    };
+                    let name = quireink_platform::buttons::HOME;
+                    (InputEvent::Button { name, state }, at)
+                }
+                input::Change::Touch(touch, at) => (self.pointer(touch), at),
             };
             self.state.kernel_time = at.max(self.state.kernel_time);
             let started = now();
             power::mark(power::at::INPUT);
-            let effects = self.kernel.handle(
-                Instant(self.state.kernel_time),
-                InputEvent::Button { name, state },
-            );
-            info!("{name}: {} ms", now().since(started));
+            let effects = self.kernel.handle(Instant(self.state.kernel_time), event);
+            if let InputEvent::Button { name, .. } = event {
+                info!("{name}: {} ms", now().since(started));
+            }
             self.apply(effects);
         }
+    }
+
+    /// A touch on the upright screen, on the screen QuireInk draws (it may
+    /// be turned).
+    fn pointer(&self, touch: input::Touch) -> InputEvent {
+        let (phase, x, y) = match touch {
+            input::Touch::Down(x, y, raw) => {
+                info!("touch at {x},{y} (controller {},{})", raw.0, raw.1);
+                (PointerPhase::Down, x, y)
+            }
+            input::Touch::Move(x, y) => (PointerPhase::Move, x, y),
+            input::Touch::Up(x, y) => (PointerPhase::Up, x, y),
+            // A button, taken apart before.
+            input::Touch::Home(_) => (PointerPhase::Cancel, 0, 0),
+        };
+        let (x, y) = quireink_x4::uc8179::turned(self.panel.rotation(), x, y);
+        InputEvent::Pointer(PointerEvent {
+            id: 0,
+            phase,
+            point: Point::new(i32::from(x), i32::from(y)),
+            tool: PointerTool::Finger,
+            pressure: 1000,
+        })
     }
 
     /// Wakes the kernel when it asked to be.
@@ -324,6 +385,10 @@ impl Firmware {
         let effects = self.kernel.suspend(now());
         self.apply(effects);
         let _ = self.panel.sleep();
+        #[cfg(feature = "x4-pro")]
+        if let Some(light) = self.light.as_mut() {
+            light.off();
+        }
         info!("sleeping");
         // Released first: held, the button would wake it at once.
         self.wait_for_power_release();
@@ -331,6 +396,9 @@ impl Firmware {
             return self.sleep_on_usb();
         }
         let mut power = input::stop().expect("the power button");
+        // The X4 Pro holds its latch through resets: let go first.
+        #[cfg(feature = "x4-pro")]
+        self.power_latch.set_pad_hold(false);
         self.power_latch.set_low();
         power.listen(Event::LowLevel);
         let _ = power.apply_wakeup_config(&WakeupConfig::default().with_low_power_path(true));

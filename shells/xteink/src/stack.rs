@@ -29,7 +29,17 @@ fn bottom() -> usize {
 fn pointer() -> usize {
     let sp: usize;
     // SAFETY: reads a register.
-    unsafe { core::arch::asm!("mv {}, sp", out(reg) sp) };
+    #[cfg(target_arch = "riscv32")]
+    unsafe {
+        core::arch::asm!("mv {}, sp", out(reg) sp)
+    };
+    // On Xtensa (no stable inline assembly): where a local lies, a few
+    // bytes from it.
+    #[cfg(target_arch = "xtensa")]
+    {
+        let here = 0u8;
+        sp = core::ptr::addr_of!(here) as usize;
+    }
     sp
 }
 

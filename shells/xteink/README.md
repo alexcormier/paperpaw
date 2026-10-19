@@ -7,8 +7,8 @@ hardware parts are in [`quireink-x4`](../../crates/quireink-x4) and
 
 > Save the stock firmware first (below), so the X4 can always go back.
 
-It is for the X4 with an SSD1677 display controller. Not for the X4 Pro,
-which has another chip.
+It is for the X4 with an SSD1677 display controller and, built with the
+feature `x4-pro`, for the X4 Pro (ESP32-S3) with a UC8179.
 
 ## Build
 
@@ -70,3 +70,29 @@ python tools/x4-remote.py --script "page-forward,right,describe" --screenshot ou
   made with `quireink-sign`, a failed update undone at the next start.
 - To come: 4 gray levels, the UC8179 controller of newer X4s, updates
   fetched over the network.
+
+## The X4 Pro
+
+Its chip is an ESP32-S3 (Xtensa): install the `esp` toolchain with
+[espup](https://github.com/esp-rs/espup) (with the Xtensa GCC 14.2:
+`espup install --targets esp32s3 --crosstool-toolchain-version
+14.2.0_20241119`; newer ones reject esp-hal's linker scripts), load its
+environment (`export-esp.ps1` or `export-esp.sh`), then
+
+```sh
+cargo +esp x4pro          # build
+cargo +esp x4pro-run      # flash and show the log
+cargo +esp x4pro-clippy   # lints
+```
+
+The first flash over the stock firmware needs its power button held
+until the flashing ends (its boot loader does not keep it on); QuireInk
+holds its power through resets, so later flashes need nothing held. Its
+USB comes through the pogo pins (Espressif's `303A:1001`).
+
+What works: the screen (black and white; four grays are shown in black
+and white for now), touch and the home key, the page and power buttons,
+the SD card (SDMMC), the battery from its fuel gauge, the clock chip,
+the front light (brightness and warmth, in the quick panel), sleep, the
+network as on the X4. To come: four grays on the UC8179, the UC8279 of
+other X4 Pros, battery life measured.

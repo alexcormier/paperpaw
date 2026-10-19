@@ -65,6 +65,17 @@ impl State {
         Self(bits)
     }
 
+    /// The buttons down on a device with the page buttons and the power
+    /// button on pins of their own (the X4 Pro).
+    pub fn pins(page_back: bool, page_forward: bool, power: bool) -> Self {
+        let side = FRONT.len();
+        Self(
+            u8::from(page_back) << side
+                | u8::from(page_forward) << (side + 1)
+                | u8::from(power) << (side + SIDE.len()),
+        )
+    }
+
     pub fn is_down(self, button: &str) -> bool {
         ALL.iter()
             .position(|b| *b == button)

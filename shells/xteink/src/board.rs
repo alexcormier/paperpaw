@@ -26,7 +26,10 @@ use esp_hal::spi::Mode;
 use esp_hal::spi::master::{Config as SpiConfig, Spi, SpiDma};
 use esp_hal::time::Rate;
 use esp_hal::timer::timg::TimerGroup;
+use quireink_x4::buttons::State;
 use quireink_x4::display::Display;
+
+use crate::input::Touch;
 
 /// SPI speeds: an SD card starts slowly.
 const CARD_START_KHZ: u32 = 400;
@@ -49,8 +52,20 @@ pub type Panel = Display<
     Delay,
 >;
 
+/// The SD card's parts: the bus it shares with the panel, its settings
+/// at the card's starting speed, and its select line.
+pub struct CardParts {
+    pub bus: &'static RefCell<Bus>,
+    pub spi: SpiConfig,
+    pub select: Output<'static>,
+    pub delay: Delay,
+}
+
+/// On USB power while high.
+pub type UsbPower = Input<'static>;
+
 /// How the buttons and the battery are read: the ADC and its pins.
-pub struct Ladders {
+pub struct Keys {
     pub adc: Adc<'static, ADC1<'static>, Blocking>,
     /// Back, confirm, left and right.
     pub front: AdcPin<GPIO1<'static>, ADC1<'static>, AdcCalBasic<ADC1<'static>>>,
@@ -60,20 +75,43 @@ pub struct Ladders {
     pub cell: AdcPin<GPIO0<'static>, ADC1<'static>, AdcCalCurve<ADC1<'static>>>,
 }
 
+impl Keys {
+    /// The battery's charge (percent) and voltage (millivolts).
+    pub fn battery(&mut self) -> Option<(u8, u16)> {
+        let raw = nb::block!(self.adc.read_oneshot(&mut self.cell)).ok()?;
+        let millivolts = quireink_x4::battery::millivolts(raw);
+        Some((quireink_x4::battery::percent(millivolts), millivolts))
+    }
+
+    /// The buttons down, with the power button's `power_down`, and the
+    /// ladders' readings (front, side) to look into.
+    pub fn read(&mut self, power_down: bool) -> (State, u32) {
+        let front = nb::block!(self.adc.read_oneshot(&mut self.front)).unwrap_or(4095);
+        let side = nb::block!(self.adc.read_oneshot(&mut self.side)).unwrap_or(4095);
+        (
+            State::read(front, side, power_down),
+            u32::from(front) << 16 | u32::from(side),
+        )
+    }
+
+    /// The X4 has no touch screen.
+    pub fn touch(&mut self, _: &mut dyn FnMut(Touch)) {}
+
+    /// The X4 has no clock that runs while it is off.
+    pub fn set_clock(&mut self, _: i64) {}
+}
+
 /// The X4's parts, each once.
 pub struct Board {
     /// Holds the battery's power on; low, it is cut.
     pub power_latch: Output<'static>,
-    pub bus: &'static RefCell<Bus>,
-    /// The bus's settings, at the card's starting speed.
-    pub spi: SpiConfig,
-    pub card_select: Output<'static>,
     /// The panel, still to be started.
     pub panel: Panel,
-    pub ladders: Ladders,
+    pub card: CardParts,
+    pub keys: Keys,
     pub power_button: Input<'static>,
     /// High while on USB power.
-    pub usb_power: Input<'static>,
+    pub usb_power: UsbPower,
     pub timers: TimerGroup<'static, esp_hal::peripherals::TIMG0<'static>>,
     pub timers1: TimerGroup<'static, esp_hal::peripherals::TIMG1<'static>>,
     pub rtc: RTC_TIMER<'static>,
@@ -133,7 +171,7 @@ impl Board {
             adc.enable_pin_with_cal::<_, AdcCalBasic<ADC1<'_>>>(p.GPIO1, Attenuation::_11dB);
         let side = adc.enable_pin_with_cal::<_, AdcCalBasic<ADC1<'_>>>(p.GPIO2, Attenuation::_11dB);
         let cell = adc.enable_pin_with_cal::<_, AdcCalCurve<ADC1<'_>>>(p.GPIO0, Attenuation::_11dB);
-        let ladders = Ladders {
+        let keys = Keys {
             adc: Adc::new(p.ADC1, adc),
             front,
             side,
@@ -142,11 +180,14 @@ impl Board {
 
         Self {
             power_latch,
-            bus,
-            spi,
-            card_select,
             panel,
-            ladders,
+            card: CardParts {
+                bus,
+                spi,
+                select: card_select,
+                delay,
+            },
+            keys,
             power_button: Input::new(p.GPIO3, InputConfig::default().with_pull(Pull::Up)),
             usb_power: Input::new(p.GPIO20, InputConfig::default()),
             timers: TimerGroup::new(p.TIMG0),

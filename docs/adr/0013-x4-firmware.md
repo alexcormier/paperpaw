@@ -68,3 +68,18 @@ UC8179 controller instead of the SSD1677.
 - Still to come on the device: Wi-Fi (time, sync, transfers), lighter
   sleep between button reads (power), 4 gray levels, the UC8179 and a
   larger flash window.
+
+## Later: the X4 Pro (2026-10-19)
+
+The X4 Pro did not get a firmware of its own after all: `shells/xteink`
+builds for either device, chosen by the feature `x4` (the default) or
+`x4-pro`, so the main loop, the network, updates and remote control stay
+one. What differs is the board (`board_pro.rs`), the card on the
+ESP32-S3's SD host (`card_pro.rs`), the front light (`light.rs`) and the
+drivers in `quireink-x4` (`uc8179`, `gt911`, `cw2017`, `bm8563`). Its
+8 MB of PSRAM is the heap, so its UC8179 keeps a whole frame; its touch
+controller also reports the home key below the screen. Its power latch
+is held through resets (a pad hold), so it stays on while flashed.
+Measured on the device: a UC8179 (its VER register's third byte 0x01;
+Papyrix also knows X4 Pros with a UC8279, from 0x02, 0x68 or 0x69, which
+QuireInk does not drive yet).

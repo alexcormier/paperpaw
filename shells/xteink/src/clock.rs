@@ -1,8 +1,9 @@
-//! The time of day on the X4, which has no clock that runs while it is
-//! off: set over the network (SNTP, by `network` once the radio is online)
-//! and then counted on with the processor's timer, which runs through
-//! light sleep. It is gone when the X4 is switched off, until the network
-//! sets it again.
+//! The time of day: set over the network (SNTP, by `network` once the
+//! radio is online) and then counted on with the processor's timer, which
+//! runs through light sleep. The X4 has no clock that runs while it is
+//! off: its time is gone then, until the network sets it again. The X4
+//! Pro's clock chip keeps it: read at start (`main`), and set whenever the
+//! network sets the time (`input::keep_time`).
 //!
 //! The SNTP messages are `quireink_x4::sntp`.
 

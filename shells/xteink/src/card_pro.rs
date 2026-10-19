@@ -1,0 +1,247 @@
+//! The X4 Pro's microSD card, on the ESP32-S3's SD host (SDMMC, one data
+//! line), for QuireInk's FAT storage: started as the SD specification
+//! says, then read and written block by block through a buffer in the
+//! chip's own RAM (its DMA does not reach the PSRAM).
+
+use alloc::boxed::Box;
+use core::cell::UnsafeCell;
+
+use esp_hal::Blocking;
+use esp_hal::delay::Delay;
+use esp_hal::dma::aligned::{DmaAlignedMut, InternalMemory};
+use esp_hal::sdmmc::{
+    BusWidth, CommandFlags, Config, ResponseLen, SdHostController, Slot, SlotConfig,
+};
+use log::{info, warn};
+use quireink_fat::{BLOCK, Blocks, DiskError};
+use quireink_platform::{NoStorage, Storage};
+
+use crate::board::CardParts;
+
+/// The card's clock while it starts, and after (the default speed's most).
+const START_HZ: u32 = 400_000;
+const RUN_HZ: u32 = 20_000_000;
+/// Blocks moved at once through the buffer.
+const AT_ONCE: usize = 16;
+
+/// The buffer the SD host's DMA moves blocks through: in the chip's RAM
+/// (a static, never on the heap, which reaches into PSRAM).
+type Buffer = InternalMemory<[u8; BLOCK * AT_ONCE]>;
+struct Shared(UnsafeCell<Buffer>);
+// SAFETY: only the card takes it, once (`mount`), and uses it from the
+// main loop alone.
+unsafe impl Sync for Shared {}
+static BUFFER: Shared = Shared(UnsafeCell::new(InternalMemory::new([0; BLOCK * AT_ONCE])));
+
+type CardSlot = Slot<'static, 1, Blocking>;
+
+/// The card's FAT file system as QuireInk's storage; without a card or
+/// one QuireInk cannot read, no storage.
+pub fn mount(parts: CardParts) -> Box<dyn Storage> {
+    let CardParts {
+        host,
+        clock,
+        command,
+        data,
+        delay,
+    } = parts;
+    delay.delay_millis(20);
+    let Ok(host) = SdHostController::new(host, Config::default()) else {
+        warn!("SD card: no host");
+        return Box::new(NoStorage);
+    };
+    let host: &'static SdHostController<'static> = Box::leak(Box::new(host));
+    let Ok(slot) = host.slot::<1>(SlotConfig::default()) else {
+        warn!("SD card: no slot");
+        return Box::new(NoStorage);
+    };
+    let slot = slot.with_clk(clock).with_cmd(command).with_data0(data);
+    // SAFETY: mounted once, so the buffer is taken once.
+    let buffer = unsafe { &mut *BUFFER.0.get() };
+    match Card::start(slot, buffer, delay) {
+        Ok(card) => {
+            info!("SD card: {} MB", card.blocks >> 11);
+            crate::volume::mount(card)
+        }
+        Err(e) => {
+            warn!("SD card: {e}");
+            Box::new(NoStorage)
+        }
+    }
+}
+
+/// A started card.
+struct Card {
+    slot: CardSlot,
+    buffer: &'static mut Buffer,
+    /// Its address, for the commands that name it.
+    rca: u32,
+    /// Addressed by block (SDHC, SDXC), else by byte.
+    by_block: bool,
+    blocks: u32,
+}
+
+const NONE: CommandFlags = CommandFlags {
+    wait_complete: false,
+    stop_abort: false,
+    busy: false,
+};
+
+impl Card {
+    fn start(
+        mut slot: CardSlot,
+        buffer: &'static mut Buffer,
+        delay: Delay,
+    ) -> Result<Self, &'static str> {
+        slot.set_bus_low_level(BusWidth::Bit1, START_HZ)
+            .map_err(|_| "bus")?;
+        slot.send_init_sequence().map_err(|_| "no clock")?;
+        let _ = slot.command_blocking(0, 0, ResponseLen::None, false, NONE);
+        // Version 2 cards echo the pattern.
+        let v2 = matches!(
+            slot.command_blocking(8, 0x1AA, ResponseLen::Short, true, NONE),
+            Ok(r) if r[0] & 0xFFF == 0x1AA
+        );
+        let mut ocr = 0;
+        for _ in 0..200 {
+            slot.command_blocking(55, 0, ResponseLen::Short, true, NONE)
+                .map_err(|_| "no card")?;
+            let capacity = if v2 { 0x4000_0000 } else { 0 };
+            let r = slot
+                .command_blocking(41, 0x0030_0000 | capacity, ResponseLen::Short, false, NONE)
+                .map_err(|_| "no answer")?;
+            if r[0] & 0x8000_0000 != 0 {
+                ocr = r[0];
+                break;
+            }
+            delay.delay_millis(10);
+        }
+        if ocr == 0 {
+            return Err("never ready");
+        }
+        let by_block = ocr & 0x4000_0000 != 0;
+        slot.command_blocking(2, 0, ResponseLen::Long, false, NONE)
+            .map_err(|_| "no identity")?;
+        let r = slot
+            .command_blocking(3, 0, ResponseLen::Short, true, NONE)
+            .map_err(|_| "no address")?;
+        let rca = r[0] & 0xFFFF_0000;
+        let csd = slot
+            .command_blocking(9, rca, ResponseLen::Long, false, NONE)
+            .map_err(|_| "no size")?;
+        let blocks = blocks_of(csd);
+        let busy = CommandFlags { busy: true, ..NONE };
+        slot.command_blocking(7, rca, ResponseLen::Short, true, busy)
+            .map_err(|_| "not selected")?;
+        if !by_block {
+            slot.command_blocking(16, BLOCK as u32, ResponseLen::Short, true, NONE)
+                .map_err(|_| "block size")?;
+        }
+        slot.set_bus_low_level(BusWidth::Bit1, RUN_HZ)
+            .map_err(|_| "speed")?;
+        Ok(Self {
+            slot,
+            buffer,
+            rca,
+            by_block,
+            blocks,
+        })
+    }
+
+    fn address(&self, index: u32) -> u32 {
+        if self.by_block {
+            index
+        } else {
+            index * BLOCK as u32
+        }
+    }
+
+    /// Waits until the card is ready for the next transfer (after a write).
+    fn ready(&mut self) -> Result<(), DiskError> {
+        for _ in 0..10_000 {
+            let r = self
+                .slot
+                .command_blocking(13, self.rca, ResponseLen::Short, true, NONE)
+                .map_err(|_| DiskError)?;
+            // Ready for data, in the transfer state.
+            if r[0] & 0x100 != 0 && (r[0] >> 9) & 0xF == 4 {
+                return Ok(());
+            }
+        }
+        Err(DiskError)
+    }
+}
+
+/// The card's size in blocks, from its CSD (the four words as the host
+/// gives them: bits 127..96 first).
+fn blocks_of(csd: [u32; 4]) -> u32 {
+    // The host shifts the 136-bit answer: word 0 holds bits 31..0 of the
+    // CSD without its CRC. The structure version is in bits 127..126.
+    let bit = |n: u32| (csd[(n / 32) as usize] >> (n % 32)) & 1;
+    let bits = |high: u32, low: u32| (low..=high).rev().fold(0u32, |v, n| (v << 1) | bit(n));
+    match bits(127, 126) {
+        // CSD 2.0: (C_SIZE + 1) × 512 KiB.
+        1 => (bits(69, 48) + 1).saturating_mul(1024),
+        // CSD 1.0: (C_SIZE + 1) × 2^(C_SIZE_MULT + 2) × 2^READ_BL_LEN bytes.
+        _ => {
+            let c_size = bits(73, 62);
+            let mult = bits(49, 47);
+            let read_bl_len = bits(83, 80);
+            let bytes = u64::from(c_size + 1) << (mult + 2 + read_bl_len);
+            (bytes / BLOCK as u64) as u32
+        }
+    }
+}
+
+impl Blocks for Card {
+    fn read_block(&mut self, index: u32, block: &mut [u8; BLOCK]) -> Result<(), DiskError> {
+        self.read_blocks(index, block)
+    }
+
+    fn write_block(&mut self, index: u32, block: &[u8; BLOCK]) -> Result<(), DiskError> {
+        self.write_blocks(index, block)
+    }
+
+    fn read_blocks(&mut self, index: u32, data: &mut [u8]) -> Result<(), DiskError> {
+        #[cfg(feature = "remote")]
+        crate::traced::blocks(index, (data.len() / BLOCK) as u32, 0);
+        let mut at = index;
+        for chunk in data.chunks_mut(BLOCK * AT_ONCE) {
+            let count = chunk.len() / BLOCK;
+            let command = if count == 1 { 17 } else { 18 };
+            let address = self.address(at);
+            let mut aligned = self.buffer.get_mut();
+            let into = DmaAlignedMut::new(&mut aligned[..chunk.len()]).map_err(|_| DiskError)?;
+            self.slot
+                .read_blocks_blocking(command, address, into, BLOCK as u16, count as u32)
+                .map_err(|_| DiskError)?;
+            chunk.copy_from_slice(&aligned[..chunk.len()]);
+            at += count as u32;
+        }
+        Ok(())
+    }
+
+    fn write_blocks(&mut self, index: u32, data: &[u8]) -> Result<(), DiskError> {
+        #[cfg(feature = "remote")]
+        crate::traced::blocks(index, 0, (data.len() / BLOCK) as u32);
+        let mut at = index;
+        for chunk in data.chunks(BLOCK * AT_ONCE) {
+            let count = chunk.len() / BLOCK;
+            let command = if count == 1 { 24 } else { 25 };
+            let address = self.address(at);
+            let mut aligned = self.buffer.get_mut();
+            aligned[..chunk.len()].copy_from_slice(chunk);
+            let from = DmaAlignedMut::new(&mut aligned[..chunk.len()]).map_err(|_| DiskError)?;
+            self.slot
+                .write_blocks_blocking(command, address, from, BLOCK as u16, count as u32)
+                .map_err(|_| DiskError)?;
+            self.ready()?;
+            at += count as u32;
+        }
+        Ok(())
+    }
+
+    fn blocks(&mut self) -> Result<u32, DiskError> {
+        Ok(self.blocks)
+    }
+}

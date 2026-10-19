@@ -2,8 +2,20 @@
 # with espflash (`cargo install espflash`) and shows its log. The OTA data
 # is erased, so the firmware flashed starts rather than one installed as
 # an update before.
+#
+# The X4 Pro's: an ESP32-S3 (Xtensa), with the `esp` toolchain (espup):
+# `cargo +esp x4pro` builds it, `cargo +esp x4pro-run` flashes it (hold
+# its power button meanwhile: the boot loader does not keep it on).
 [build]
 target = "riscv32imc-unknown-none-elf"
+
+[alias]
+x4pro = "build --release --target xtensa-esp32s3-none-elf --no-default-features --features x4-pro,remote -Zbuild-std=core,alloc"
+x4pro-run = "run --release --target xtensa-esp32s3-none-elf --no-default-features --features x4-pro,remote -Zbuild-std=core,alloc"
+x4pro-clippy = "clippy --release --target xtensa-esp32s3-none-elf --no-default-features --features x4-pro,remote -Zbuild-std=core,alloc"
+
+[target.xtensa-esp32s3-none-elf]
+runner = "espflash flash --monitor --chip esp32s3 --erase-parts otadata"
 
 [target.riscv32imc-unknown-none-elf]
 runner = "espflash flash --monitor --chip esp32c3 --erase-parts otadata"

@@ -7,8 +7,13 @@
 //! `.cargo/config.toml`: `RUSTFLAGS` (as CI sets it) replaces the
 //! configuration's flags, not this.
 //!
-//! The memory map is QuireInk's own (`memory.x`): esp-hal's maps 4 MB of
-//! flash for code and read-only data together, and the fonts take much of it.
+//! The X4's memory map is QuireInk's own (`memory-x4.x`, copied as
+//! `memory.x`; not named so here, where the linker would find it for the
+//! X4 Pro too): esp-hal's maps 4 MB
+//! of flash for code and read-only data together, and the fonts take much
+//! of it. The X4 Pro (ESP32-S3) keeps esp-hal's, whose code and data each
+//! have their own 32 MB window; its linker (GCC) takes the script through
+//! `-Wl`.
 //!
 //! Also gives the firmware QuireInk's version (`QUIREINK_VERSION`), the
 //! workspace's: the firmware is outside it.
@@ -25,9 +30,14 @@ fn main() {
         .expect("the workspace's version");
     println!("cargo::rustc-env=QUIREINK_VERSION={version}");
     println!("cargo::rerun-if-changed=../../Cargo.toml");
+    println!("cargo::rerun-if-changed=memory-x4.x");
+    if std::env::var_os("CARGO_FEATURE_X4_PRO").is_some() {
+        println!("cargo::rustc-link-arg=-nostartfiles");
+        println!("cargo::rustc-link-arg=-Wl,-Tlinkall.x");
+        return;
+    }
     let out = PathBuf::from(std::env::var_os("OUT_DIR").expect("OUT_DIR"));
-    std::fs::copy("memory.x", out.join("memory.x")).expect("memory.x");
+    std::fs::copy("memory-x4.x", out.join("memory.x")).expect("memory-x4.x");
     println!("cargo::rustc-link-search={}", out.display());
-    println!("cargo::rerun-if-changed=memory.x");
     println!("cargo::rustc-link-arg=-Tlinkall.x");
 }

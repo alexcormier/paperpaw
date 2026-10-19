@@ -6,6 +6,17 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- QuireInk runs on the Xteink X4 Pro (ESP32-S3): the X4's firmware built
+  with the feature `x4-pro` (`cargo +esp x4pro`). Its UC8179 display,
+  touch screen and home key, page and power buttons, SD card (SDMMC),
+  fuel gauge, clock chip (the time is kept while it is off), front light
+  with brightness and warmth (in the quick panel and the reader's
+  panel), sleep and Wi-Fi. Its 8 MB of PSRAM is the heap. It stays on
+  while flashed (its power held through resets). `quireink-x4` has the
+  drivers: `uc8179`, `gt911`, `cw2017`, `bm8563`. Cards whose partition
+  table says more than the card holds (as an X4 Pro's card as sold) are
+  read up to the card's end.
+
 - Ready-made home screen layouts to start from: *Calm* (as it comes),
   *Covers* (the books first), *At a glance* (daily goal, today
   and the streak), *Clock* (a large clock face) and *Minimal* (the book

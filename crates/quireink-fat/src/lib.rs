@@ -737,6 +737,11 @@ mod tests {
         let entry = mbr_entry(0x0C, first as u32, (blocks - first) as u32);
         let table = [(446 + 16, &entry[..]), (510, &[0x55, 0xAA][..])];
         assert_eq!(opens(card_with(blocks, first, &table)), Ok(()));
+        // Its table saying more blocks than the card has, as an X4 Pro's
+        // card as sold.
+        let entry = mbr_entry(0x0C, first as u32, (blocks - first + 512) as u32);
+        let table = [(446, &entry[..]), (510, &[0x55, 0xAA][..])];
+        assert_eq!(opens(card_with(blocks, first, &table)), Ok(()));
         // A GPT: a protective MBR, the header in block 1, entries in 2.
         let protective = mbr_entry(0xEE, 1, (blocks - 1) as u32);
         let mut header = [0u8; 92];

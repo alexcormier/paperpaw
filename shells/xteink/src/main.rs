@@ -1,7 +1,9 @@
-//! QuireInk on the Xteink X4 (ESP32-C3): the kernel with the standard
-//! app, its screen, buttons, battery and SD card.
+//! QuireInk on the Xteink X4 (ESP32-C3) and the X4 Pro (ESP32-S3, with a
+//! touch screen): the kernel with the standard app, its screen, buttons,
+//! battery and SD card. The feature `x4` or `x4-pro` says which.
 //!
-//! - **Board**: which pin does what, in one place (`board`).
+//! - **Board**: which pin does what, in one place (`board`, for the X4 Pro
+//!   `board_pro`; its card `card_pro`).
 //! - **Screen**: the kernel draws in bands of [`FRAME_ROWS`] rows; each
 //!   goes straight into the display controller's memory, which keeps the
 //!   frame (see `quireink_x4::display`).
@@ -20,7 +22,15 @@
 
 extern crate alloc;
 
+#[cfg(feature = "x4")]
 mod board;
+#[cfg(feature = "x4-pro")]
+#[path = "board_pro.rs"]
+mod board;
+#[cfg(feature = "x4")]
+mod card;
+#[cfg(feature = "x4-pro")]
+#[path = "card_pro.rs"]
 mod card;
 mod clock;
 mod crash;
@@ -30,6 +40,8 @@ mod firmware;
 mod gray_test;
 mod http;
 mod input;
+#[cfg(feature = "x4-pro")]
+mod light;
 mod link;
 mod net;
 mod network;
@@ -44,7 +56,11 @@ mod stack;
 mod tls;
 #[cfg(feature = "remote")]
 mod traced;
+mod volume;
 mod wifi;
+
+#[cfg(all(feature = "x4", feature = "x4-pro"))]
+compile_error!("build for one device: the feature `x4` or `x4-pro`");
 
 use alloc::boxed::Box;
 
@@ -55,12 +71,18 @@ use esp_hal::rtc_cntl::sleep::LowPower;
 use esp_hal::timer::PeriodicTimer;
 use log::{info, warn};
 use quireink_core::Kernel;
+#[cfg(feature = "x4-pro")]
+use quireink_platform::buttons as names;
 use quireink_platform::{
     DeviceInfo, DisplayInfo, InputCaps, Instant, MemoryClass, PixelFormat, Rotation, Storage,
 };
 use quireink_sdk::builtin::settings;
+#[cfg(feature = "x4")]
 use quireink_x4::buttons;
+#[cfg(feature = "x4")]
 use quireink_x4::display;
+#[cfg(feature = "x4-pro")]
+use quireink_x4::uc8179 as display;
 
 use crate::board::Board;
 use crate::firmware::{Firmware, State};
@@ -91,6 +113,7 @@ const FRAME_ROWS: u16 = 192;
 /// RTC's watchdog (counting in light sleep too), and the timer group's.
 const WATCHDOG_S: (u64, u64) = (20, 30);
 
+#[cfg(feature = "x4")]
 const DEVICE: DeviceInfo = DeviceInfo {
     id: "xteink-x4",
     name: "Xteink X4",
@@ -113,6 +136,34 @@ const DEVICE: DeviceInfo = DeviceInfo {
     memory: MemoryClass::Small,
 };
 
+/// The X4 Pro: touch besides its page and power buttons, and the memory
+/// of larger devices (8 MB of PSRAM).
+#[cfg(feature = "x4-pro")]
+const DEVICE: DeviceInfo = DeviceInfo {
+    id: "xteink-x4-pro",
+    name: "Xteink X4 Pro",
+    display: DisplayInfo {
+        width: display::WIDTH,
+        height: display::HEIGHT,
+        dpi: 217,
+        format: PixelFormat::Mono1,
+        rotation: Rotation::Deg90,
+        color: None,
+    },
+    input: InputCaps {
+        buttons: true,
+        touch: true,
+        pen: false,
+        keys: &[
+            names::PAGE_BACK,
+            names::PAGE_FORWARD,
+            names::HOME,
+            names::POWER,
+        ],
+    },
+    memory: MemoryClass::Large,
+};
+
 /// Microseconds since start, for measuring what plugins take.
 pub fn micros() -> u64 {
     esp_hal::time::Instant::now()
@@ -132,7 +183,15 @@ fn now() -> Instant {
 fn main() -> ! {
     stack::paint();
     let p = esp_hal::init(esp_hal::Config::default().with_cpu_clock(CpuClock::max()));
-    // The heap first: the board keeps its bus there.
+    // The X4 Pro's PSRAM first, so QuireInk's memory comes from there and
+    // the chip's own stays for the radio and DMA, which need it.
+    #[cfg(feature = "x4-pro")]
+    // SAFETY: only taken here; the board does not use it.
+    esp_alloc::psram_allocator!(
+        unsafe { esp_hal::peripherals::PSRAM::steal() },
+        esp_hal::psram
+    );
+    // The heap before the board: the board keeps its bus there.
     esp_alloc::heap_allocator!(size: HEAP_SIZE);
     esp_alloc::heap_allocator!(#[esp_hal::ram(reclaimed)] size: RECLAIMED_SIZE);
     let board = Board::take(p);
@@ -148,7 +207,7 @@ fn main() -> ! {
     // (a restart into the firmware before it).
     let ota = ota::Ota::start(board.flash);
 
-    let storage = card::mount(board.bus, board.spi, board.card_select, board.delay);
+    let storage = card::mount(board.card);
     // For bug reports: on the card, and said over USB.
     if let Some(message) = &panicked {
         crash::keep(storage.as_ref(), message);
@@ -172,9 +231,14 @@ fn main() -> ! {
     });
     input::start(input::Sampler::new(
         PeriodicTimer::new(board.timers.timer0),
-        board.ladders,
+        board.keys,
         board.power_button,
     ));
+    // The X4 Pro's clock chip kept the time while it was off.
+    #[cfg(feature = "x4-pro")]
+    if let Some(unix_ms) = board.clock_ms {
+        clock::set(now(), unix_ms);
+    }
     let kernel = kernel(storage, ota.as_ref());
     // Light sleeps while idle on battery, the deep one at the end.
     power::init(LowPower::new(board.low_power));
@@ -189,6 +253,8 @@ fn main() -> ! {
         // Commands from a computer on USB; the log goes out the same way.
         #[cfg(feature = "remote")]
         remote: remote::Remote::new(board.usb),
+        #[cfg(feature = "x4-pro")]
+        light: board.light,
         state: State::default(),
     }
     .run()
@@ -215,8 +281,11 @@ fn kernel(storage: Box<dyn Storage>, ota: Option<&ota::Ota>) -> Kernel {
         .row_align(8)
         // The panel takes bands turned any way (`display`).
         .rotation(true)
-        .sleep(true)
-        .button_row(&buttons::ROW)
+        .sleep(true);
+    // The X4's row of hints under the screen; the X4 Pro is touched.
+    #[cfg(feature = "x4")]
+    let builder = builder.button_row(&buttons::ROW);
+    let builder = builder
         // A full refresh takes 3.5 s on its panel: screens change fast.
         .setting_default(&settings::FLASH_SCREENS, false)
         .setting_default(&settings::UI_SIZE, 9)

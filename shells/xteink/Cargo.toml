@@ -1,6 +1,6 @@
 [package]
 name = "quireink-xteink"
-description = "QuireInk's firmware for the Xteink X4 (ESP32-C3)"
+description = "QuireInk's firmware for the Xteink X4 (ESP32-C3) and X4 Pro (ESP32-S3)"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.95"
@@ -14,7 +14,34 @@ test = false
 bench = false
 
 [features]
-default = ["remote"]
+default = ["x4", "remote"]
+# Which device: the X4 (ESP32-C3, built with the repository's stable
+# toolchain) or the X4 Pro (ESP32-S3, Xtensa: the `esp` toolchain from
+# espup, `cargo +esp x4pro`). Exactly one.
+x4 = [
+    "esp-hal/esp32c3",
+    "esp-alloc/esp32c3",
+    "esp-backtrace/esp32c3",
+    "esp-println/esp32c3",
+    "esp-println/auto",
+    "esp-bootloader-esp-idf/esp32c3",
+    "esp-storage/esp32c3",
+    "esp-radio/esp32c3",
+    "esp-rtos/esp32c3",
+]
+x4-pro = [
+    "esp-hal/esp32s3",
+    # The SD card's own bus (SDMMC).
+    "esp-hal/__sdmmc",
+    "esp-alloc/esp32s3",
+    "esp-backtrace/esp32s3",
+    "esp-println/esp32s3",
+    "esp-println/jtag-serial",
+    "esp-bootloader-esp-idf/esp32s3",
+    "esp-storage/esp32s3",
+    "esp-radio/esp32s3",
+    "esp-rtos/esp32s3",
+]
 # Remote control over USB for testing on the device (`src/remote.rs`):
 # files in and out, presses, the screen, profiling. Not in released
 # firmware: it costs flash and memory, and anyone with a cable could use
@@ -32,14 +59,16 @@ quireink-http = { path = "../../crates/quireink-http" }
 # Their settings' ids, for the X4's defaults.
 quireink-plugin-reader = { path = "../../plugins/reader" }
 quireink-plugin-wifi = { path = "../../plugins/wifi" }
-esp-hal = { version = "1.2", features = ["esp32c3", "unstable"] }
-esp-alloc = { version = "0.11", features = ["esp32c3"] }
-esp-backtrace = { version = "0.20", features = ["esp32c3", "println"] }
-esp-println = { version = "0.18", features = ["esp32c3", "log-04"] }
-esp-bootloader-esp-idf = { version = "0.6", features = ["esp32c3"] }
+esp-hal = { version = "1.2", features = ["unstable"] }
+esp-alloc = "0.11"
+esp-backtrace = { version = "0.20", features = ["println"] }
+# The log over USB: the X4 picks USB or its UART by itself, the X4 Pro
+# always USB (choosing by the USB frames lost parts of lines there).
+esp-println = { version = "0.18", default-features = false, features = ["log-04", "critical-section", "colors"] }
+esp-bootloader-esp-idf = "0.6"
 # The flash, for updates (`src/ota.rs`); with interrupts held while it is
 # written, as code runs from it.
-esp-storage = { version = "0.10", features = ["esp32c3", "critical-section"] }
+esp-storage = { version = "0.10", features = ["critical-section"] }
 embedded-hal = "1.0"
 embedded-hal-bus = "0.3"
 log = "0.4"
@@ -47,8 +76,8 @@ nb = "1"
 critical-section = "1.2"
 # Wi-Fi: the radio's driver is a beta of its 1.0, pinned to the version
 # tried; only `src/wifi.rs` uses it.
-esp-radio = { version = "=1.0.0-beta.1", features = ["esp32c3", "wifi", "unstable", "esp-alloc"] }
-esp-rtos = { version = "0.4", features = ["esp32c3", "esp-radio", "esp-alloc"] }
+esp-radio = { version = "=1.0.0-beta.1", features = ["wifi", "unstable", "esp-alloc"] }
+esp-rtos = { version = "0.4", features = ["esp-radio", "esp-alloc"] }
 smoltcp = { version = "0.12", default-features = false, features = ["medium-ethernet", "proto-ipv4", "proto-dhcpv4", "proto-dns", "socket-tcp", "socket-udp", "socket-dhcpv4", "socket-dns", "alloc"] }
 embassy-net-driver = "0.2"
 mbedtls-rs = "0.3"

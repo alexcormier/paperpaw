@@ -1,5 +1,8 @@
-//! The Xteink X4's hardware, for QuireInk's firmware: its display, its
-//! microSD card, its buttons and its battery. Written against
+//! The Xteink X4's and X4 Pro's hardware, for QuireInk's firmware: their
+//! displays (the X4's SSD1677 in [`display`], the X4 Pro's UC8179 in
+//! [`uc8179`]), the X4's microSD card, buttons and battery, and the X4
+//! Pro's touch screen ([`gt911`]), fuel gauge ([`cw2017`]) and clock
+//! ([`bm8563`]). Written against
 //! `embedded-hal`, so all of it is tested on a computer, against
 //! simulated hardware; the firmware only connects the ESP32-C3's pins to
 //! it (which pin does what: the firmware's `board` module,
@@ -17,9 +20,13 @@
 extern crate alloc;
 
 pub mod battery;
+pub mod bm8563;
 pub mod buttons;
 pub mod card;
+pub mod cw2017;
 pub mod display;
+pub mod gt911;
 pub mod remote;
 pub mod sent;
 pub mod sntp;
+pub mod uc8179;

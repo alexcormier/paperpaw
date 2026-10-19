@@ -1,5 +1,7 @@
-//! The X4's own plugin: what only this device has to set (for
-//! developers, in their group of settings).
+//! The device's own plugin: what only the X4 or the X4 Pro has to set.
+//! Both sleep lightly between readings of their buttons (for developers,
+//! in their group of settings); the X4 Pro's front light has its
+//! brightness and warmth, in the quick panel and the reader's panel too.
 
 use alloc::borrow::Cow;
 
@@ -12,11 +14,17 @@ use quireink_sdk::{
 pub const PLUGIN: Id = Id::new_static("x4");
 /// The processor sleeps lightly while idle on battery (see `power`).
 pub const LIGHT_SLEEP: Setting<bool> = Setting::new("x4.light-sleep");
+/// The X4 Pro's front light: how bright, in percent (0 off).
+#[cfg_attr(feature = "x4", expect(dead_code, reason = "the X4 has no light"))]
+pub const FRONTLIGHT: Setting<i64> = Setting::new("x4.frontlight");
+/// How much of the light is warm, in percent.
+#[cfg_attr(feature = "x4", expect(dead_code, reason = "the X4 has no light"))]
+pub const WARMTH: Setting<i64> = Setting::new("x4.warmth");
 
 #[derive(Debug, Default)]
 pub struct X4;
 
-/// Whether the X4 sleeps lightly between button reads.
+/// Whether it sleeps lightly between button reads.
 static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_switch(
     LIGHT_SLEEP.static_str(),
     "x4.light-sleep",
@@ -25,12 +33,51 @@ static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_switch(
 )
 .described("x4.light-sleep.help")];
 
+/// The X4 Pro's front light, set with sliders.
+#[cfg(feature = "x4-pro")]
+static LIGHT_SETTINGS: [SettingSpec; 2] = {
+    use quireink_sdk::SettingExtra;
+    static PERCENT: SettingExtra = SettingExtra::new()
+        .unit("core.unit.percent")
+        .step(5)
+        .slider();
+    [
+        SettingSpec::fixed_number(
+            FRONTLIGHT.static_str(),
+            "x4.frontlight",
+            0,
+            100,
+            0,
+            groups::DISPLAY,
+        )
+        .with_extra(&PERCENT)
+        .described("x4.frontlight.help"),
+        SettingSpec::fixed_number(
+            WARMTH.static_str(),
+            "x4.warmth",
+            0,
+            100,
+            30,
+            groups::DISPLAY,
+        )
+        .with_extra(&PERCENT)
+        .described("x4.warmth.help"),
+    ]
+};
+
 impl Plugin for X4 {
     fn manifest(&self) -> Manifest {
+        #[cfg(feature = "x4")]
+        let (name, description) = ("Xteink X4", "What only the Xteink X4 has to set.");
+        #[cfg(feature = "x4-pro")]
+        let (name, description) = (
+            "Xteink X4 Pro",
+            "What only the Xteink X4 Pro has to set: its front light.",
+        );
         Manifest {
             id: PLUGIN,
-            name: Cow::Borrowed("Xteink X4"),
-            description: Cow::Borrowed("What only the Xteink X4 has to set."),
+            name: Cow::Borrowed(name),
+            description: Cow::Borrowed(description),
             version: Version::new(0, 1, 0),
             sdk: SDK_VERSION,
         }
@@ -38,8 +85,35 @@ impl Plugin for X4 {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_settings(&SETTINGS)?;
+        #[cfg(feature = "x4-pro")]
+        register_light(r)?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())
     }
+}
+
+/// The front light's settings, also first in the reader's panel and in
+/// the quick panel, and with the device's settings in the main menu.
+#[cfg(feature = "x4-pro")]
+fn register_light(r: &mut Registrar) -> Result<(), RegisterError> {
+    use quireink_sdk::MenuEntry;
+    use quireink_sdk::builtin::menus;
+    r.add_settings(&LIGHT_SETTINGS)?;
+    for (n, item) in [FRONTLIGHT, WARMTH].into_iter().enumerate() {
+        for (menu, order) in [
+            (menus::READER_PANEL, -10),
+            (menus::MAIN, 82),
+            (menus::QUICK, 20),
+        ] {
+            r.add_menu_entry(MenuEntry {
+                menu,
+                item: item.clone().into(),
+                order: order + n as i16,
+            })?;
+        }
+    }
+    r.add_icon(&FRONTLIGHT, Cow::Borrowed("bulb"))?;
+    r.add_icon(&WARMTH, Cow::Borrowed("temperature"))?;
+    Ok(())
 }
