@@ -1778,7 +1778,11 @@ dependencies = [
 name = "quireink-plugin-widgets"
 version = "0.4.0-dev"
 dependencies = [
+ "quireink-core",
  "quireink-i18n",
+ "quireink-platform",
+ "quireink-plugin-fonts-default",
+ "quireink-plugin-home",
  "quireink-sdk",
 ]
 
