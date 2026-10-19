@@ -330,6 +330,14 @@ impl GroupPage {
         cx.request_refresh(RefreshMode::Partial);
     }
 
+    /// Stops changing a number with the buttons without keeping what was
+    /// shown, e.g. for a tap elsewhere.
+    fn leave_editing(&mut self, env: &Env<'_>, cx: &mut Cx<'_, '_>) {
+        if self.editing.take().is_some() {
+            end_preview(env, cx);
+        }
+    }
+
     /// The − and + of number row `index` in `rect`, where it shows them:
     /// a slider's in its band, else beside the value.
     fn steps(&self, env: &Env<'_>, index: usize, rect: Rect) -> Option<(Rect, Rect)> {
@@ -535,7 +543,7 @@ impl Screen for GroupPage {
             // elsewhere on the row nothing happens.
             self.rows.focus = index;
             self.keys = false;
-            self.editing = None;
+            self.leave_editing(&env, cx);
             let Some(rect) = self.rows.rect_of(index) else {
                 return Handled::Yes;
             };
@@ -558,7 +566,7 @@ impl Screen for GroupPage {
             if index != self.rows.focus || !self.keys {
                 self.rows.focus = index;
                 self.keys = true;
-                self.editing = None;
+                self.leave_editing(&env, cx);
                 cx.request_redraw();
                 cx.request_refresh(RefreshMode::Fast);
                 return Handled::Yes;
@@ -582,7 +590,7 @@ impl Screen for GroupPage {
         if index != self.rows.focus || keys != self.keys {
             self.rows.focus = index;
             self.keys = keys;
-            self.editing = None;
+            self.leave_editing(&env, cx);
             cx.request_redraw();
         }
         self.activate(&env, cx);
@@ -619,7 +627,7 @@ impl Screen for GroupPage {
                 // The focus hides, as after other taps.
                 self.rows.focus = index;
                 self.keys = false;
-                self.editing = None;
+                self.leave_editing(&env, cx);
                 cx.request_redraw();
                 before
             }
