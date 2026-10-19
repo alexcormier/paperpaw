@@ -781,6 +781,14 @@ pub mod settings {
     pub const FONT_SIZE: Setting<i64> = Setting::new("core.font-size");
     /// The value of [`READING_FONT`] for the plugins' choice.
     pub const DEFAULT_FONT: &str = "core.font.default";
+    /// The font of the status lines while reading
+    /// ([`fonts::STATUS`](super::fonts::STATUS)): [`STATUS_FONT_UI`],
+    /// [`STATUS_FONT_BOOK`] or a font family's name.
+    pub const STATUS_FONT: Setting<Text> = Setting::new("core.status-font");
+    /// [`STATUS_FONT`]: as the menus.
+    pub const STATUS_FONT_UI: &str = "core.status-font.ui";
+    /// [`STATUS_FONT`]: as the book.
+    pub const STATUS_FONT_BOOK: &str = "core.status-font.book";
     /// `core.clock.24h` or `core.clock.12h`.
     pub const CLOCK_FORMAT: Setting<Text> = Setting::new("core.clock-format");
     /// The first day of the week, one of
@@ -915,6 +923,11 @@ pub mod fonts {
     /// Icons (see [`icons`](crate::icons)); without a font here, menus
     /// show text only.
     pub const ICONS: Id = Id::new_static("core.font-icons");
+    /// The status lines while reading: as the menus ([`UI`]), as the book
+    /// ([`READING`]) or a family of their own, as
+    /// [`settings::STATUS_FONT`](super::settings::STATUS_FONT) says.
+    /// Readers draw their status lines in it.
+    pub const STATUS: Id = Id::new_static("core.font-status");
 }
 
 /// The name of the key map layer that applies everywhere.

@@ -49,7 +49,7 @@ static SETTINGS: [SettingSpec; 7] = [
     ),
     SettingSpec::fixed_choice(
         "widgets.greeting.face",
-        "widgets.setting.face",
+        "widgets.setting.font",
         &FACES,
         FACES[0],
         ID,

@@ -254,6 +254,7 @@ impl KernelBuilder {
         }
         kernel.set_menu_titles();
         kernel.apply_reading_font();
+        kernel.apply_status_font();
         kernel.validate();
         kernel.rebuild_keymap();
         kernel.apply_display_settings();
@@ -495,9 +496,17 @@ impl Kernel {
                 .into_iter()
                 .map(|f| Cow::Owned(f.to_string())),
         );
+        let mut status: Vec<Cow<'static, str>> = alloc::vec![
+            Cow::Borrowed(core_settings::STATUS_FONT_UI),
+            Cow::Borrowed(core_settings::STATUS_FONT_BOOK),
+        ];
+        status.extend(families.iter().skip(1).cloned());
         self.shared
             .settings
             .set_choices(core_settings::READING_FONT.as_str(), families);
+        self.shared
+            .settings
+            .set_choices(core_settings::STATUS_FONT.as_str(), status);
     }
 
     /// Defaults from plugins (e.g. themes), then the device's.

@@ -661,10 +661,22 @@ impl Specs {
 ///
 /// Plugins receive it read-only through [`Env`](crate::Env) and change values
 /// with [`Command::SetSetting`](crate::Command::SetSetting).
+///
+/// Something placed more than once, such as a widget on two pages, has
+/// values of its own for each placement: the setting `widgets.clock.face`
+/// of the placement `widgets.clock@2` is `widgets.clock@2.face` (see
+/// [`Id::placement`]), with the spec of `widgets.clock.face`; it is set,
+/// saved and reset like any other, and where it is not set the setting's
+/// own value applies. While a placement is shown, its values are those of
+/// the setting itself ([`Settings::with_placement`]), so a widget reads
+/// its settings as always.
 #[derive(Debug, Default)]
 pub struct Settings {
     specs: Specs,
     values: VecMap<Id, SettingValue>,
+    /// The placement whose values its settings have now, e.g.
+    /// `widgets.clock@2` (see [`Settings::with_placement`]).
+    placement: core::cell::RefCell<Option<String>>,
     /// Groups by order.
     groups: Vec<SettingGroupSpec>,
     /// The values of the active scope (e.g. the open book), if any.
@@ -757,14 +769,73 @@ impl Settings {
         Ok(())
     }
 
+    /// The spec of setting `id`; for a placement's (`widgets.clock@2.face`)
+    /// the setting's own (`widgets.clock.face`).
+    pub fn spec(&self, id: &str) -> Option<&SettingSpec> {
+        match crate::id::unplaced(id) {
+            Some(plain) => self.specs.get(&plain),
+            None => self.specs.get(id),
+        }
+    }
+
+    /// The id a value of `id` is kept under: the spec's, or the
+    /// placement's own.
+    fn value_id(&self, id: &str) -> Result<Id, SettingError> {
+        let spec = self.spec(id).ok_or(SettingError::Unknown)?;
+        if id == spec.id.as_str() {
+            Ok(spec.id.clone())
+        } else {
+            Id::parse(id).map_err(|_| SettingError::Unknown)
+        }
+    }
+
     /// Sets a value after validating it.
     pub fn set(&mut self, id: &str, value: SettingValue) -> Result<(), SettingError> {
-        let spec = self.specs.get(id).ok_or(SettingError::Unknown)?;
+        let spec = self.spec(id).ok_or(SettingError::Unknown)?;
         if !spec.kind.accepts(&value) {
             return Err(SettingError::InvalidValue);
         }
-        self.values.insert(spec.id.clone(), value);
+        let id = self.value_id(id)?;
+        self.values.insert(id, value);
         Ok(())
+    }
+
+    /// Makes the values of `placement` (e.g. `widgets.clock@2`, see
+    /// [`Id::placement`]) those of its settings while `f` runs: a widget
+    /// placed there reads `widgets.clock.face` and gets
+    /// `widgets.clock@2.face` where that is set. `None` runs `f` as it is.
+    pub fn with_placement<R>(&self, placement: Option<&str>, f: impl FnOnce() -> R) -> R {
+        let Some(placement) = placement.filter(|p| p.contains('@')) else {
+            return f();
+        };
+        let before = self.placement.replace(Some(String::from(placement)));
+        let out = f();
+        self.placement.replace(before);
+        out
+    }
+
+    /// The value the active placement has for `id`, if it sets one.
+    fn placed_value(&self, id: &str) -> Option<&SettingValue> {
+        let placement = self.placement.borrow();
+        let placed = placement.as_deref()?;
+        let plain = &placed[..placed.find('@')?];
+        let rest = id.strip_prefix(plain).filter(|r| r.starts_with('.'))?;
+        let key = alloc::format!("{placed}{rest}");
+        self.values.get(key.as_str())
+    }
+
+    /// The ids of the values `placement` sets (e.g. to forget them when it
+    /// goes).
+    pub fn placement_values(&self, placement: &str) -> Vec<Id> {
+        self.values
+            .keys()
+            .filter(|id| {
+                id.as_str()
+                    .strip_prefix(placement)
+                    .is_some_and(|rest| rest.starts_with('.'))
+            })
+            .cloned()
+            .collect()
     }
 
     /// Forgets the value set for `id`, so that its default applies again;
@@ -773,8 +844,7 @@ impl Settings {
     /// global one applies again (for "only this book", the scope's values
     /// all go, as when it is switched off).
     pub fn reset(&mut self, id: &str) -> Result<(), SettingError> {
-        let spec = self.specs.get(id).ok_or(SettingError::Unknown)?;
-        let id = spec.id.clone();
+        let id = self.value_id(id)?;
         if self.goes_to_scope(id.as_str()) {
             if let Some(scope) = self.scope.as_mut() {
                 if id == crate::builtin::settings::SCOPE_ONLY {
@@ -791,20 +861,31 @@ impl Settings {
 
     /// Sets a value from configuration-file text.
     pub fn set_from_text(&mut self, id: &str, text: &str) -> Result<(), SettingError> {
-        let spec = self.specs.get(id).ok_or(SettingError::Unknown)?;
+        let spec = self.spec(id).ok_or(SettingError::Unknown)?;
         let value = spec.kind.parse(text).ok_or(SettingError::InvalidValue)?;
-        self.values.insert(spec.id.clone(), value);
+        let id = self.value_id(id)?;
+        self.values.insert(id, value);
         Ok(())
     }
 
     /// The current value: the active scope's if it sets one (see
     /// [`Settings::scope`]), else the global value, else the default.
     pub fn get(&self, id: &str) -> Option<&SettingValue> {
+        if let Some(value) = self.placed_value(id) {
+            return Some(value);
+        }
+        if let Some(plain) = crate::id::unplaced(id) {
+            return self.values.get(id).or_else(|| self.get(&plain));
+        }
         self.scoped_value(id).or_else(|| self.global(id))
     }
 
-    /// The value outside any scope, or the default if none was set.
+    /// The value outside any scope, or the default if none was set; for a
+    /// placement's, the setting's own where the placement sets none.
     pub fn global(&self, id: &str) -> Option<&SettingValue> {
+        if let Some(plain) = crate::id::unplaced(id) {
+            return self.values.get(id).or_else(|| self.global(&plain));
+        }
         self.values
             .get(id)
             .or_else(|| self.specs.get(id).map(|spec| &spec.default))
@@ -1080,5 +1161,48 @@ mod tests {
         bad.id = Id::new_static("test.bad");
         bad.default = SettingValue::Int(1);
         assert!(matches!(s.define(bad), Err(RegisterError::Invalid { .. })));
+    }
+
+    #[test]
+    fn placements_have_values_of_their_own() {
+        let mut s = Settings::new();
+        static SPECS: [SettingSpec; 1] = [SettingSpec::fixed_switch(
+            "widgets.clock.date",
+            "widgets.clock.date",
+            true,
+            Id::new_static("widgets.clock"),
+        )];
+        s.define_fixed(&SPECS[0]).unwrap();
+        // Unset, a placement has the setting's value.
+        assert!(s.bool("widgets.clock@2.date"));
+        s.set("widgets.clock@2.date", SettingValue::Bool(false))
+            .unwrap();
+        assert!(!s.bool("widgets.clock@2.date"));
+        assert!(s.bool("widgets.clock.date"));
+        // Its spec is the setting's: its kind holds.
+        assert_eq!(
+            s.set("widgets.clock@2.date", SettingValue::Int(1)),
+            Err(SettingError::InvalidValue)
+        );
+        assert_eq!(
+            s.spec("widgets.clock@2.date").unwrap().id.as_str(),
+            "widgets.clock.date"
+        );
+        // While the placement is shown, it is the setting's value.
+        let date = s.with_placement(Some("widgets.clock@2"), || s.bool("widgets.clock.date"));
+        assert!(!date);
+        assert!(s.with_placement(Some("widgets.clock@3"), || s.bool("widgets.clock.date")));
+        assert!(s.bool("widgets.clock.date"));
+        // Read from configuration text, and forgotten again.
+        s.set_from_text("widgets.clock@3.date", "off").unwrap();
+        assert_eq!(s.placement_values("widgets.clock@3").len(), 1);
+        s.reset("widgets.clock@3.date").unwrap();
+        assert!(s.bool("widgets.clock@3.date"));
+        assert!(s.placement_values("widgets.clock@3").is_empty());
+        // Another widget's setting is not the placement's.
+        assert_eq!(
+            s.set("widgets.other@2.date", SettingValue::Bool(true)),
+            Err(SettingError::Unknown)
+        );
     }
 }

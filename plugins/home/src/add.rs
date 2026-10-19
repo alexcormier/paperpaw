@@ -56,8 +56,9 @@ fn kind_icon(kind: &str) -> &'static str {
     }
 }
 
-/// Every widget and tool not on `page` yet, with its kind and the
-/// translation key of its name.
+/// Every widget, and every tool not on `page` yet, with its kind and the
+/// translation key of its name: a widget may be placed more than once,
+/// each placement with settings of its own.
 fn addable(env: &Env<'_>, page: usize) -> Vec<(String, What, String)> {
     let all = pages::pages(env);
     let shown = all
@@ -91,8 +92,26 @@ fn addable(env: &Env<'_>, page: usize) -> Vec<(String, What, String)> {
                 .into_iter()
                 .map(|(action, title)| (TOOLS_KIND.to_string(), What::Tool(action), title)),
         )
-        .filter(|(_, what, _)| !on_page(what))
+        .filter(|(_, what, _)| matches!(what, What::Widget(_)) || !on_page(what))
         .collect()
+}
+
+/// A placement of widget `id` (`id@n`) that no page holds and that has
+/// no values set: each widget added gets one, so that its settings are
+/// its own.
+fn placement(env: &Env<'_>, pages: &[Vec<grid::Item>], id: &str) -> String {
+    let base = Id::parse(id).unwrap_or(Id::new_static("home"));
+    let used = |placed: &str| {
+        pages
+            .iter()
+            .flatten()
+            .any(|i| matches!(&i.what, What::Widget(w) if w == placed))
+            || !env.settings.placement_values(placed).is_empty()
+    };
+    (1..)
+        .map(|n| base.placement(n))
+        .find(|placed| !used(placed.as_str()))
+        .map_or_else(|| id.to_string(), |placed| placed.as_str().to_string())
 }
 
 /// The kinds that have something to add, in the order of
@@ -269,13 +288,17 @@ impl AddScreen {
                 return;
             }
             Some(Row::Add(what, _)) => {
+                let what = match what {
+                    What::Widget(id) => What::Widget(placement(&env, &all, id)),
+                    other => other.clone(),
+                };
                 let Some(items) = all.get_mut(self.page) else {
                     return;
                 };
                 let (_, geometry, _) = crate::frame(&env);
                 // The page as shown, every item with its place, and the new one.
                 let shown = pages::expand(&env, items);
-                let Some(added) = grid::add(&env, &geometry, &shown, what.clone()) else {
+                let Some(added) = grid::add(&env, &geometry, &shown, what) else {
                     let message = env.i18n.tr("home.grid.no-room").to_string();
                     cx.command(Command::Notify(message));
                     return;
@@ -285,7 +308,14 @@ impl AddScreen {
             Some(Row::AddPage) => all.push(Vec::new()),
             Some(Row::RemovePage) => {
                 if self.page < all.len() && all.len() > 1 {
-                    all.remove(self.page);
+                    // What its widgets' placements set goes with them.
+                    for item in all.remove(self.page) {
+                        if let What::Widget(id) = item.what {
+                            for value in env.settings.placement_values(&id) {
+                                cx.command(Command::ResetSetting(value));
+                            }
+                        }
+                    }
                 }
             }
             None => return,

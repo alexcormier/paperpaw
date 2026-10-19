@@ -6,6 +6,19 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- The status lines while reading have a font of their own (*Status
+  lines → Font*): as the menus (as before), as the book, or any font
+  installed. SDK: `fonts::STATUS` (readers draw their status lines in
+  it), `settings::STATUS_FONT`, `Fonts::set_status`.
+- The same widget can be on the home screen more than once, each in a
+  look of its own: every widget added has its own settings (its frame,
+  size, what it shows), set from its *Settings* in the editor. Pages made
+  before keep their widgets; one gets settings of its own when they are
+  first opened. SDK: placements (`Id::placement`, `Id::placed`; ids such
+  as `widgets.clock@2` and settings such as `widgets.clock@2.face`, saved
+  in `quireink.ini` like others), `Settings::with_placement`,
+  `Settings::spec`, `Settings::placement_values`, `widgets::base`;
+  `Widgets::make` gives a placement's widget in its own values.
 - *First day of the week* (System): Monday, Sunday, or as the language
   has it (Monday in English and German). The statistics' weeks and every
   calendar follow it (a calendar widget may choose its own). SDK:

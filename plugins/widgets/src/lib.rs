@@ -73,5 +73,19 @@ mod tests {
             let issues = check::compare(&en, &de);
             assert!(issues.is_empty(), "{issues:?}");
         }
+        // The parts share one namespace: a key in two of them says the
+        // same in both (the later would hide the earlier).
+        let mut seen: alloc::vec::Vec<(&str, &str)> = alloc::vec::Vec::new();
+        for (en, _) in parts {
+            for line in en.lines() {
+                let Some((key, text)) = line.split_once(" = ") else {
+                    continue;
+                };
+                match seen.iter().find(|(k, _)| *k == key) {
+                    Some((_, before)) => assert_eq!(*before, text, "{key}"),
+                    None => seen.push((key, text)),
+                }
+            }
+        }
     }
 }

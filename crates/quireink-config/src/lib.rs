@@ -212,10 +212,12 @@ impl<'a> Iterator for Parser<'a> {
     }
 }
 
+/// Letters, digits, `_`, `-`, `.`, and `@` (the settings of one
+/// placement of something placed more than once, e.g. `clock@2.face`).
 fn is_identifier(s: &str) -> bool {
     !s.is_empty()
         && s.bytes()
-            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-' | b'.'))
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-' | b'.' | b'@'))
 }
 
 fn parse_value(text: &str) -> Result<Value<'_>, ErrorKind> {

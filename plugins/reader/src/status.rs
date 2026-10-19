@@ -170,7 +170,7 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
         id: lines::ITEMS,
         title: Cow::Borrowed("reader.status.line.items"),
         draw: Box::new(|canvas, env, frame| {
-            let Some(font) = env.fonts.role(fonts::UI.as_str()) else {
+            let Some(font) = env.fonts.role(fonts::STATUS.as_str()) else {
                 return;
             };
             let line = StatusLine {
@@ -327,7 +327,7 @@ pub(crate) fn color(env: &Env<'_>) -> quireink_sdk::Color {
 /// The book as a bar from the left, filled up to where the page is, with
 /// a mark where each chapter begins; the page on the right.
 fn draw_progress(canvas: &mut Canvas<'_>, env: &Env<'_>, frame: &StatusFrame<'_>) {
-    let Some(font) = env.fonts.role(fonts::UI.as_str()) else {
+    let Some(font) = env.fonts.role(fonts::STATUS.as_str()) else {
         return;
     };
     let area = frame.area;

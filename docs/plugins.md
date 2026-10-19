@@ -477,6 +477,17 @@ fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
 }
 ```
 
+A widget may be placed more than once, each placement with its own
+values of the widget's settings: the home screen places a clock as
+`widgets.clock@1` and `widgets.clock@2`, whose frames are the settings
+`widgets.clock@1.frame` and `widgets.clock@2.frame` (saved like any
+other, the widget's own `widgets.clock.frame` where one sets none).
+`env.widgets.make` gives a placement's widget, which reads its settings
+by their usual ids and gets that placement's values
+(`Settings::with_placement`); a widget need do nothing for it. Screens
+of their own that place widgets use `Id::placement` and forget a
+placement's values when it goes (`Settings::placement_values`).
+
 `widgets::shows(env, id, "author")` reads a part's switch,
 `widgets::choice` makes other choices of the widget's own, and
 `widgets::draw_message` says kindly what is not there yet. A widget's

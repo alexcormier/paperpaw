@@ -7,6 +7,11 @@ use core::fmt;
 /// Ids consist of one or more segments of lowercase ASCII letters, digits
 /// and `-`, separated by `.`. The first segment is the namespace: the id of
 /// the plugin that owns the contribution.
+///
+/// A segment may end in `@` and a number for one placement of something
+/// placed more than once, e.g. `widgets.clock@2` for a clock's second
+/// place and `widgets.clock@2.face` for that place's own setting (see
+/// [`Id::placed`]).
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Id(Cow<'static, str>);
 
@@ -52,6 +57,18 @@ impl Id {
         self.0.split('.').next().unwrap_or_default()
     }
 
+    /// The id without its placement (`widgets.clock@2.face` is
+    /// `widgets.clock.face`), if it names one; see [`Id::placement`].
+    pub fn placed(&self) -> Option<String> {
+        unplaced(self.as_str())
+    }
+
+    /// The id of placement `n` of this: `widgets.clock` and 2 make
+    /// `widgets.clock@2`.
+    pub fn placement(&self, n: u32) -> Id {
+        Id(Cow::Owned(alloc::format!("{self}@{n}")))
+    }
+
     /// Whether this id belongs to the plugin `plugin`.
     pub fn is_owned_by(&self, plugin: &Id) -> bool {
         self.namespace() == plugin.as_str()
@@ -82,6 +99,8 @@ const fn is_valid(id: &str) -> bool {
         return false;
     }
     let mut segment_start = true;
+    // After `@`: digits only, at least one, to the segment's end.
+    let mut placement = false;
     let mut i = 0;
     while i < bytes.len() {
         let b = bytes[i];
@@ -90,6 +109,15 @@ const fn is_valid(id: &str) -> bool {
                 return false;
             }
             segment_start = true;
+            placement = false;
+        } else if b == b'@' {
+            if segment_start || placement || i + 1 >= bytes.len() {
+                return false;
+            }
+            placement = true;
+            segment_start = true;
+        } else if placement && !b.is_ascii_digit() {
+            return false;
         } else if b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' {
             segment_start = false;
         } else {
@@ -100,9 +128,34 @@ const fn is_valid(id: &str) -> bool {
     !segment_start
 }
 
+/// Where `id` names a placement (`@` and its number), the id without it.
+pub(crate) fn unplaced(id: &str) -> Option<String> {
+    let at = id.find('@')?;
+    let end = id[at..].find('.').map_or(id.len(), |dot| at + dot);
+    let mut plain = String::with_capacity(id.len());
+    plain.push_str(&id[..at]);
+    plain.push_str(&id[end..]);
+    Some(plain)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn placements_are_ids_of_their_own() {
+        for valid in ["widgets.clock@2", "widgets.clock@12.face", "a@1"] {
+            assert!(Id::parse(valid).is_ok(), "{valid}");
+        }
+        for invalid in ["widgets.clock@", "widgets.@2", "a@2b", "a@1@2", "@1"] {
+            assert!(Id::parse(invalid).is_err(), "{invalid}");
+        }
+        let id = Id::parse("widgets.clock@2.face").unwrap();
+        assert_eq!(id.placed().as_deref(), Some("widgets.clock.face"));
+        assert_eq!(Id::new_static("widgets.clock").placed(), None);
+        let clock = Id::new_static("widgets.clock");
+        assert_eq!(clock.placement(3).as_str(), "widgets.clock@3");
+    }
 
     #[test]
     fn validates_ids() {
