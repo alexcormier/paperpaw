@@ -10,7 +10,12 @@
 //!   the bar at the bottom then offers *Restart now*. The bar is always
 //!   there (with a hint before), so nothing moves when it changes.
 //! - Below each name: what happens to the plugin (if anything), its
-//!   description and version, readable without tapping it.
+//!   description and version, readable without tapping it. Plugins with
+//!   native code (ADR 0024) say so, and why one does not run (built for
+//!   another PaperPaw, switched off by safe mode, …).
+//! - After a start in safe mode (without code plugins), a notice says why
+//!   and which plugin was loaded last; the plugins it switched off are
+//!   switched on again here, one at a time.
 //!
 //! - Above the plugins: where more come from, e.g. the store
 //!   ([`MORE`]): a row each, which opens it.
@@ -24,16 +29,16 @@ extern crate alloc;
 
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
-use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use paperpaw_sdk::builtin::{CORE_PLUGIN, actions, menus};
+use paperpaw_sdk::builtin::{CORE_PLUGIN, actions, events, menus};
+use paperpaw_sdk::native::{SafeMode, SafeModeReason};
 use paperpaw_sdk::ui::{self, ListView, UiStyle};
 use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
-    MenuEntry, Params, Plugin, PluginInfo, PluginState, Rect, RefreshMode, RegisterError,
-    Registrar, SDK_VERSION, Screen, ScreenSpec, Version,
+    MenuEntry, Params, Plugin, PluginInfo, PluginKind, PluginProblem, PluginState, Rect,
+    RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen, ScreenSpec, Version,
 };
 
 pub const PLUGIN: Id = Id::new_static("plugin-manager");
@@ -77,6 +82,11 @@ impl Plugin for PluginManager {
             order: 220,
         })?;
         r.add_icon(OPEN, Cow::Borrowed("puzzle"))?;
+        r.on(events::STARTED, |env, _, out| {
+            if let Some(safe_mode) = env.native.and_then(|n| n.safe_mode.as_ref()) {
+                out.push(Command::Notify(safe_mode_notice(env, safe_mode)));
+            }
+        })?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())
@@ -219,6 +229,8 @@ fn details(env: &Env<'_>, info: &PluginInfo) -> String {
     );
     let note = if info.manifest.id == CORE_PLUGIN {
         None
+    } else if let Some(problem) = info.problem {
+        Some(i18n.tr(problem_key(problem)).to_string())
     } else if info.manifest.id == PLUGIN && info.required_for.is_empty() {
         Some(i18n.tr("plugin-manager.self").to_string())
     } else if !info.required_for.is_empty() {
@@ -246,9 +258,70 @@ fn details(env: &Env<'_>, info: &PluginInfo) -> String {
         None
     };
     let description = info.description(i18n);
-    match note {
-        Some(note) => format!("{note} {description} {version}"),
-        None => format!("{description} {version}"),
+    let code = if info.kind == PluginKind::Code {
+        i18n.tr("plugin-manager.code")
+    } else {
+        ""
+    };
+    [
+        note.as_deref().unwrap_or_default(),
+        description,
+        code,
+        &version,
+    ]
+    .into_iter()
+    .filter(|part| !part.is_empty())
+    .collect::<Vec<_>>()
+    .join(" ")
+}
+
+/// What a start in safe mode says: why, the plugin loaded last, what it
+/// switched off.
+fn safe_mode_notice(env: &Env<'_>, safe_mode: &SafeMode) -> String {
+    let i18n = env.i18n;
+    let why = match safe_mode.reason {
+        SafeModeReason::KeyHeld => i18n.tr("plugin-manager.safe-mode.key"),
+        _ => i18n.tr("plugin-manager.safe-mode.failed"),
+    };
+    let name = |id: &str| {
+        env.plugins
+            .get(id)
+            .map_or_else(|| String::from(id), |p| String::from(p.name(i18n)))
+    };
+    let last = match (&safe_mode.crashed, &safe_mode.last_loaded) {
+        (Some(id), _) => i18n.format(
+            "plugin-manager.safe-mode.crashed",
+            &[("name", Arg::Str(&name(id)))],
+        ),
+        (None, Some(id)) => i18n.format(
+            "plugin-manager.safe-mode.last",
+            &[("name", Arg::Str(&name(id)))],
+        ),
+        (None, None) => String::new(),
+    };
+    let again = if safe_mode.switched_off.is_empty() {
+        ""
+    } else {
+        i18n.tr("plugin-manager.safe-mode.again")
+    };
+    [why, &last, again]
+        .into_iter()
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// Why a code plugin does not run, as said below its name.
+fn problem_key(problem: PluginProblem) -> &'static str {
+    match problem {
+        PluginProblem::OtherBuild => "plugin-manager.code.other-build",
+        PluginProblem::Damaged => "plugin-manager.code.damaged",
+        PluginProblem::Mismatch => "plugin-manager.code.mismatch",
+        PluginProblem::NoRoom => "plugin-manager.code.no-room",
+        PluginProblem::Unsupported => "plugin-manager.code.unsupported",
+        PluginProblem::SafeMode => "plugin-manager.code.safe-mode",
+        PluginProblem::Crashed => "plugin-manager.code.crashed",
+        _ => "plugin-manager.failed",
     }
 }
 
