@@ -340,7 +340,8 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, book: &Book) {
     let area = look.area;
     let align = widgets::align(env, id);
     let mut lines = Lines::new();
-    if widgets::shows(env, id, "caption") {
+    let caption = widgets::shows(env, id, "caption");
+    if caption {
         lines.add(style.small, env.i18n.tr("widgets.next.caption"), look.faint);
     }
     lines.add(text_size(env, id), book.title.as_str(), look.ink);
@@ -354,9 +355,10 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, book: &Book) {
         lines.draw(canvas, env, area, align);
         return;
     }
-    if area.width >= area.height {
+    let (w, h) = cover_size(book, area.width * 2 / 5, area.height);
+    let text_room = f32::from(area.width.saturating_sub(w + gap));
+    if area.width >= area.height && text_room >= style.small * 7.0 {
         // Wide: the cover on the left, the text beside it.
-        let (w, h) = cover_size(book, area.width * 2 / 5, area.height);
         let at = Rect::new(area.x, area.y + (area.height - h) / 2, w, h);
         draw_cover(canvas, env, look, at, book);
         let shift = (w + gap).min(area.width);
@@ -365,7 +367,12 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, book: &Book) {
         return;
     }
     // High: the cover above, the text below it (what fits in half).
-    lines.fit(env, (area.height / 2).saturating_sub(gap / 2));
+    let half = (area.height / 2).saturating_sub(gap / 2);
+    if caption && lines.height(env) > half {
+        // The title rather than the caption.
+        lines.lines.remove(0);
+    }
+    lines.fit(env, half);
     let text_h = lines.height(env);
     let room = area.height.saturating_sub(text_h + gap / 2);
     let (with_text, room) = if room >= area.height / 3 {
