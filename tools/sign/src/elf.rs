@@ -17,7 +17,10 @@ pub const SHT_REL: u32 = 9;
 pub const SHF_WRITE: u32 = 1;
 pub const SHF_ALLOC: u32 = 2;
 pub const SHN_UNDEF: u16 = 0;
+/// The first of the section indices with a meaning of their own.
+pub const SHN_LORESERVE: u16 = 0xff00;
 pub const SHN_ABS: u16 = 0xfff1;
+pub const SHN_COMMON: u16 = 0xfff2;
 pub const STT_SECTION: u8 = 3;
 
 const EHDR_LEN: usize = 52;

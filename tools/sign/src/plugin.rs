@@ -1,11 +1,12 @@
 //! The commands for native plugins: making a plugin file, showing what
-//! one holds, signing it as its author and checking its signature.
+//! one holds, signing it as its author and checking its signature, and
+//! the check that crates keep no mutable statics.
 
 use paperpaw_digest::{hex, sha256::Sha256};
 use paperpaw_native::Header;
 use paperpaw_update::{PluginSignature, fingerprint, key_hex};
 
-use crate::secret_key;
+use crate::{secret_key, statics};
 
 fn read(path: &str) -> Result<Vec<u8>, String> {
     std::fs::read(path).map_err(|e| format!("{path}: {e}"))
@@ -111,6 +112,28 @@ pub fn check(path: &str, signature: Option<&str>) -> Result<(), String> {
         header.fingerprint
     );
     print_signer(&signed);
+    Ok(())
+}
+
+pub fn statics(archives: &[&str]) -> Result<(), String> {
+    let mut count = 0;
+    for path in archives {
+        let found = statics::statics(&read(path)?).map_err(|e| format!("{path}: {e}"))?;
+        let name = statics::crate_name(path);
+        for s in &found {
+            println!(
+                "{name}: {}: {} ({}, {} bytes)",
+                s.object, s.symbol, s.section, s.size
+            );
+        }
+        count += found.len();
+    }
+    if count > 0 {
+        return Err(format!(
+            "{count} mutable statics: a native plugin with these crates could not load"
+        ));
+    }
+    println!("no mutable statics in {} archives", archives.len());
     Ok(())
 }
 

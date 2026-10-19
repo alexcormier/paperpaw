@@ -1,7 +1,9 @@
 //! `paperpaw-sign`: signs firmware images as update files (see
 //! `paperpaw-update`), makes signing keys and shows what an update file
 //! holds; makes native plugin files (`.ppn`, see `paperpaw-native`) from
-//! linked plugins, signs them as their author and shows what they hold.
+//! linked plugins, signs them as their author and shows what they hold;
+//! and checks that crates keep no mutable statics, as a plugin's copy of
+//! the SDK must not.
 //!
 //! A device installs updates signed with PaperPaw's key, and those signed
 //! with a key its reader chose to trust (their own builds). A plugin file
@@ -15,6 +17,7 @@ mod firmware;
 mod pack;
 mod plugin;
 mod relocation;
+mod statics;
 
 const USAGE: &str = "\
 paperpaw-sign: sign PaperPaw firmware updates, make and sign native plugins
@@ -57,6 +60,11 @@ USAGE:
         signature (64).
     paperpaw-sign check-plugin <plugin.ppn> [<plugin.ppn.sig>]
         Shows the signer of a plugin file and whether its signature holds.
+    paperpaw-sign statics <crate.rlib>...
+        Lists the symbols in writable memory (mutable statics) of the
+        objects in rlibs (built without LTO); fails if there is one. A
+        native plugin has no writable data, so the SDK's crates must keep
+        none.
 ";
 
 fn main() -> ExitCode {
@@ -88,6 +96,7 @@ fn run(args: Vec<String>) -> Result<(), String> {
         ["sign-plugin", file, "--key", key] => plugin::sign(file, Some(key)),
         ["check-plugin", file] => plugin::check(file, None),
         ["check-plugin", file, signature] => plugin::check(file, Some(signature)),
+        ["statics", archives @ ..] if !archives.is_empty() => plugin::statics(archives),
         ["-h" | "--help"] => {
             print!("{USAGE}");
             Ok(())
