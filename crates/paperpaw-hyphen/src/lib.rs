@@ -35,6 +35,8 @@ pub use compile::compile;
 /// Patterns per index entry.
 pub const BLOCK: usize = 16;
 const MAGIC: &[u8; 5] = b"PPHP\x01";
+/// Patterns made before PaperPaw had its name (the same format): still read.
+const OLD_MAGIC: &[u8; 5] = b"QIHP\x01"; // before PPHP
 const HEADER: usize = 24;
 /// Longest word that is hyphenated, in characters.
 const MAX_WORD: usize = 48;
@@ -77,7 +79,7 @@ fn u32_at(data: &[u8], at: usize) -> Option<usize> {
 
 impl<'a> Patterns<'a> {
     pub fn new(data: &'a [u8]) -> Result<Self, InvalidPatterns> {
-        if data.len() < HEADER || &data[..5] != MAGIC {
+        if data.len() < HEADER || (&data[..5] != MAGIC && &data[..5] != OLD_MAGIC) {
             return Err(InvalidPatterns);
         }
         let blocks = u32_at(data, 12).ok_or(InvalidPatterns)?;

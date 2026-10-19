@@ -17,6 +17,8 @@ use crate::font::{FontError, LineMetrics};
 use crate::glyph::Glyph;
 
 const MAGIC: &[u8; 4] = b"PPFP";
+/// Packs made before PaperPaw had its name (the same format): still read.
+const OLD_MAGIC: &[u8; 4] = b"QIFP"; // before PPFP
 const VERSION: u8 = 1;
 const HEADER: usize = 12;
 const STRIKE: usize = 32;
@@ -84,7 +86,7 @@ impl StoredPack {
     /// Reads the pack's header and its characters.
     pub fn open(source: Rc<dyn PackSource>) -> Result<StoredPack, FontError> {
         let mut header = [0u8; HEADER];
-        if !source.read_at(0, &mut header) || &header[..4] != MAGIC {
+        if !source.read_at(0, &mut header) || (&header[..4] != MAGIC && &header[..4] != OLD_MAGIC) {
             return Err(FontError::Invalid);
         }
         if header[4] != VERSION {

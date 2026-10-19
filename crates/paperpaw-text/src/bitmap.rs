@@ -24,6 +24,8 @@ use crate::font::{FontError, LineMetrics};
 use crate::glyph::{Glyph, GlyphRef};
 
 const MAGIC: &[u8; 4] = b"PPFP";
+/// Packs made before PaperPaw had its name (the same format): still read.
+const OLD_MAGIC: &[u8; 4] = b"QIFP"; // before PPFP
 const VERSION: u8 = 1;
 const HEADER: usize = 12;
 const STRIKE: usize = 32;
@@ -57,7 +59,7 @@ struct Strike {
 
 impl BitmapFont {
     pub fn is_pack(data: &[u8]) -> bool {
-        data.starts_with(MAGIC)
+        data.starts_with(MAGIC) || data.starts_with(OLD_MAGIC)
     }
 
     /// Validates the pack's structure.
@@ -380,5 +382,12 @@ mod tests {
             FontError::UnsupportedVersion
         );
         assert!(BitmapFont::new(b"nope".to_vec()).is_err());
+    }
+
+    #[test]
+    fn reads_packs_made_under_the_old_name() {
+        let mut data = pack().data.into_owned();
+        data[..4].copy_from_slice(OLD_MAGIC);
+        assert!(BitmapFont::new(data).unwrap().has_char('b'));
     }
 }

@@ -13,8 +13,10 @@ change the plugin SDK.
   `data::take_over_old_name`, so settings, statistics and passwords stay);
   the Android app is `io.github.hthoene.paperpaw`, a new app beside
   the old one. Formats with new magics: font packs `.ppfp` (were `.qifp`),
-  hyphenation `.pphp`, cached pictures `PPGI` and `PPCI`, made again
-  where they are kept. The USB remote answers `PP:` lines. The website is
+  hyphenation `.pphp` (packs and patterns made before, `QIFP` and `QIHP`
+  inside, are still read: PaperPaw's own format), cached pictures `PPGI`
+  and `PPCI`, made again where they are kept. The USB remote answers
+  `PP:` lines. The website is
   paperpaw.org, the repository github.com/hthoene/paperpaw.
 - More fonts, from the internet: *More fonts* below the fonts to choose
   from (Settings, Reading, Font, and the status lines' font) lists the
