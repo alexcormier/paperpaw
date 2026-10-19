@@ -808,6 +808,26 @@ impl Screen for ReaderScreen {
         let changed = events::SETTING_CHANGED.read(event, params).map(|c| c.id);
         let id = changed.as_ref().map_or("", Id::as_str);
         let font_changed = id == quireink_sdk::builtin::settings::READING_FONT.as_str();
+        // How marks look, or what decorators mark (a switch, their data):
+        // the page drawn again as it is laid out.
+        if changed.is_some()
+            && let Ok(book) = &self.book
+        {
+            let env = *cx.env();
+            let look = env
+                .settings
+                .specs()
+                .any(|s| s.id.as_str() == id && s.group == quireink_sdk::builtin::groups::MARKS);
+            let marked = book
+                .decorated_for
+                .is_some_and(|(_, signature)| signature != env.decorators.signature(&env))
+                || book.decorated_for.is_none() && !env.decorators.is_empty();
+            if look || marked {
+                cx.request_redraw();
+                cx.request_refresh(RefreshMode::Partial);
+                return;
+            }
+        }
         if *event == events::STATUS_CHANGED
             || changed.is_some() && !font_changed && id.starts_with("core.")
         {

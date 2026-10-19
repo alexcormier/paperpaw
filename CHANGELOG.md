@@ -15,7 +15,10 @@ change the plugin SDK.
   loses nothing; files sent over USB are on the card before the X4 says
   so. quireink-fat: `SharedDisk`, `FatStorage::with_disk`.
 - Decorators get a word split over two lines (hyphenated) whole, in
-  both parts, so words being learnt are marked there too.
+  both parts, so words being learnt are marked there too. The page is
+  drawn again at once when how marks look or what decorators mark
+  changes (a setting of *Marks in the text*, *Mark vocabulary*), not
+  only at the next page.
 - Marks in the text (ADR 0021): plugins mark words on book pages through
   decorators, drawn the same by every reader. How a mark looks is
   settings, one per aspect (background, text, a line under the text that
