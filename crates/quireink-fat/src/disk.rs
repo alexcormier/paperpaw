@@ -429,3 +429,59 @@ impl<B: Blocks> Seek for BlockDisk<B> {
         Ok(self.position)
     }
 }
+
+/// A [`BlockDisk`] the file system and the storage share: the file system
+/// reads and writes it, the storage writes back its changed blocks on
+/// [`Storage::sync`](quireink_platform::Storage::sync) (see
+/// [`FatStorage::with_disk`](crate::FatStorage::with_disk)), also those
+/// of folders and of the FAT, which no file's flush would reach.
+pub struct SharedDisk<B: Blocks>(alloc::rc::Rc<core::cell::RefCell<BlockDisk<B>>>);
+
+impl<B: Blocks> SharedDisk<B> {
+    pub fn new(disk: BlockDisk<B>) -> Self {
+        Self(alloc::rc::Rc::new(core::cell::RefCell::new(disk)))
+    }
+
+    /// Writes back every changed block.
+    pub fn flush_all(&self) -> Result<(), DiskError> {
+        self.0.borrow_mut().flush()
+    }
+}
+
+impl<B: Blocks> Clone for SharedDisk<B> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+
+impl<B: Blocks> core::fmt::Debug for SharedDisk<B> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("SharedDisk").finish_non_exhaustive()
+    }
+}
+
+impl<B: Blocks> IoBase for SharedDisk<B> {
+    type Error = DiskError;
+}
+
+impl<B: Blocks> Read for SharedDisk<B> {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, DiskError> {
+        self.0.borrow_mut().read(buf)
+    }
+}
+
+impl<B: Blocks> Write for SharedDisk<B> {
+    fn write(&mut self, buf: &[u8]) -> Result<usize, DiskError> {
+        self.0.borrow_mut().write(buf)
+    }
+
+    fn flush(&mut self) -> Result<(), DiskError> {
+        self.0.borrow_mut().flush()
+    }
+}
+
+impl<B: Blocks> Seek for SharedDisk<B> {
+    fn seek(&mut self, to: SeekFrom) -> Result<u64, DiskError> {
+        self.0.borrow_mut().seek(to)
+    }
+}

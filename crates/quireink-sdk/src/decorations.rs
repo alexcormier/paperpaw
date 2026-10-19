@@ -520,8 +520,9 @@ fn draw_line(
     }
 }
 
-/// A word of a page given to decorators: its text as on the page and
-/// where it is in the book.
+/// A word of a page given to decorators: its text and where it is in the
+/// book. A word split over two lines (hyphenated) is two page words, each
+/// with the whole word as its text and its own part's place.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PageWord<'a> {
     pub text: &'a str,

@@ -154,11 +154,13 @@ impl Book {
         let typography = Typography::new(env, &font, &language, document.whole_pages());
         let dir = book_dir(path);
         // Kept with the reader's data of the book before plugins shared
-        // them.
-        let _ = env.storage.rename(
-            &format!("{dir}/annotations.txt"),
-            &quireink_sdk::annotations::file(path),
-        );
+        // them: moved where they are now, if any are there.
+        let old = format!("{dir}/annotations.txt");
+        if env.storage.exists(&old) {
+            let _ = env
+                .storage
+                .rename(&old, &quireink_sdk::annotations::file(path));
+        }
         let marks = annotations::marks(env.storage, path);
         let title = document
             .metadata()

@@ -6,6 +6,16 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- X4: highlights were lost each time their book was opened: renaming a
+  file that is not there removed the file at the new place (the reader
+  looks for highlights kept where they were before). Such a rename now
+  changes nothing, and the reader moves old highlights only where there
+  are any. What is written reaches the card two seconds after the last
+  work, not only before sleep, so a reset, a flash or an empty battery
+  loses nothing; files sent over USB are on the card before the X4 says
+  so. quireink-fat: `SharedDisk`, `FatStorage::with_disk`.
+- Decorators get a word split over two lines (hyphenated) whole, in
+  both parts, so words being learnt are marked there too.
 - Marks in the text (ADR 0021): plugins mark words on book pages through
   decorators, drawn the same by every reader. How a mark looks is
   settings, one per aspect (background, text, a line under the text that

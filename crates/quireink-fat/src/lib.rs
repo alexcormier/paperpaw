@@ -9,7 +9,10 @@
 //! the same way, written back only when they are wanted otherwise (listed,
 //! renamed, removed, replaced), when they make room for another file, or on
 //! [`Storage::sync`]: a picture decoded into a file in hundreds of pieces
-//! is not looked up and written back hundreds of times. Files are replaced
+//! is not looked up and written back hundreds of times. A [`BlockDisk`]
+//! keeps changed blocks too (folders, the FAT): shared with the storage
+//! ([`SharedDisk`], [`FatStorage::with_disk`]), `sync` writes them back
+//! as well, so nothing written is lost when the device is cut off after. Files are replaced
 //! through a temporary file beside them, so a write cut short by an empty
 //! battery leaves the old content.
 //!
@@ -23,7 +26,7 @@ extern crate alloc;
 
 mod disk;
 
-pub use disk::{BLOCK, BlockDisk, Blocks, DiskError, VolumeError};
+pub use disk::{BLOCK, BlockDisk, Blocks, DiskError, SharedDisk, VolumeError};
 
 use alloc::format;
 use alloc::string::{String, ToString};
@@ -74,6 +77,8 @@ pub struct FatStorage<IO: ReadWriteSeek + 'static> {
     open: RefCell<alloc::vec::Vec<Open<IO>>>,
     /// The folders looked up last, the latest last, by their paths.
     folders: RefCell<alloc::vec::Vec<(String, FatDir<IO>)>>,
+    /// Writes back the disk's changed blocks, where the disk is shared.
+    flush_disk: Option<alloc::boxed::Box<dyn Fn() -> bool>>,
 }
 
 impl<IO: ReadWriteSeek + 'static> core::fmt::Debug for FatStorage<IO> {
@@ -117,7 +122,28 @@ impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
             fs,
             open: RefCell::new(alloc::vec::Vec::new()),
             folders: RefCell::new(alloc::vec::Vec::new()),
+            flush_disk: None,
         }
+    }
+
+    /// The same, with the file system's disk shared ([`SharedDisk`]):
+    /// [`Storage::sync`] writes back its changed blocks too.
+    pub fn with_disk<B: Blocks + 'static>(mut self, disk: SharedDisk<B>) -> Self {
+        self.flush_disk = Some(alloc::boxed::Box::new(move || disk.flush_all().is_ok()));
+        self
+    }
+
+    /// Whether a file or a folder is at `path`, looked up in its folder
+    /// (no file opened).
+    fn is_there(&self, path: &str) -> bool {
+        let Ok(dir) = self.dir(parent(path)) else {
+            return false;
+        };
+        // As FAT compares long names: without regard to case.
+        let name = name(path).to_lowercase();
+        dir.iter()
+            .filter_map(Result::ok)
+            .any(|entry| entry.file_name().to_lowercase() == name)
     }
 
     fn root(&self) -> FatDir<IO> {
@@ -281,6 +307,13 @@ impl<IO: ReadWriteSeek + 'static> Storage for FatStorage<IO> {
                 result = Err(e);
             }
         }
+        // What no file's flush reaches: folders and the FAT changed by
+        // files written whole, created, renamed or removed.
+        if let Some(flush) = &self.flush_disk
+            && !flush()
+        {
+            result = Err(StorageError::Io);
+        }
         result
     }
 
@@ -321,6 +354,10 @@ impl<IO: ReadWriteSeek + 'static> Storage for FatStorage<IO> {
         check(to)?;
         if from == to {
             return Ok(());
+        }
+        // Nothing to move (a file or a folder): what is at `to` stays.
+        if !self.is_there(from) {
+            return Err(StorageError::NotFound);
         }
         self.close(from)?;
         self.close(to)?;
@@ -410,6 +447,71 @@ mod tests {
             .unwrap();
         out.sort();
         out
+    }
+
+    /// A card as blocks in memory, to look at as it is (after a cut).
+    #[derive(Clone)]
+    struct Cut(alloc::rc::Rc<RefCell<Vec<u8>>>);
+
+    impl Blocks for Cut {
+        fn read_block(&mut self, index: u32, block: &mut [u8; BLOCK]) -> Result<(), DiskError> {
+            let at = index as usize * BLOCK;
+            block.copy_from_slice(&self.0.borrow()[at..at + BLOCK]);
+            Ok(())
+        }
+
+        fn write_block(&mut self, index: u32, block: &[u8; BLOCK]) -> Result<(), DiskError> {
+            let at = index as usize * BLOCK;
+            self.0.borrow_mut()[at..at + BLOCK].copy_from_slice(block);
+            Ok(())
+        }
+
+        fn blocks(&mut self) -> Result<u32, DiskError> {
+            Ok((self.0.borrow().len() / BLOCK) as u32)
+        }
+    }
+
+    #[test]
+    fn synced_is_on_the_card() {
+        let mut formatted = StdIoWrapper::from(Cursor::new(vec![0u8; 4 << 20]));
+        fatfs::format_volume(&mut formatted, FormatVolumeOptions::new()).unwrap();
+        let card = Cut(alloc::rc::Rc::new(RefCell::new(
+            formatted.into_inner().into_inner(),
+        )));
+        let disk = SharedDisk::new(BlockDisk::new(card.clone()).unwrap());
+        let fs = FileSystem::new(disk.clone(), FsOptions::new()).unwrap();
+        let s = FatStorage::new(Box::leak(Box::new(fs))).with_disk(disk);
+        // Emptied, then appended to in pieces (as files come over USB or
+        // the network): the pieces stay in the open file until written
+        // back.
+        s.write("notes/a book.txt", b"").unwrap();
+        s.append("notes/a book.txt", b"a high").unwrap();
+        s.append("notes/a book.txt", b"light").unwrap();
+        let before = card.0.borrow().clone();
+        s.sync().unwrap();
+        // Not on the card before the sync: cut off then, it would be lost.
+        let fs =
+            FileSystem::new(StdIoWrapper::from(Cursor::new(before)), FsOptions::new()).unwrap();
+        let cut = FatStorage::new(Box::leak(Box::new(fs)));
+        assert_ne!(cut.size("notes/a book.txt"), Ok(11));
+        // The card as it is after it, as after a reset: the file is there.
+        let bytes = card.0.borrow().clone();
+        let fs = FileSystem::new(StdIoWrapper::from(Cursor::new(bytes)), FsOptions::new()).unwrap();
+        let after = FatStorage::new(Box::leak(Box::new(fs)));
+        let mut read = [0u8; 32];
+        let n = after.read_at("notes/a book.txt", 0, &mut read).unwrap();
+        assert_eq!(&read[..n], b"a highlight");
+    }
+
+    #[test]
+    fn a_rename_of_nothing_keeps_what_is_there() {
+        let s = storage();
+        s.write("notes/kept.txt", b"highlights").unwrap();
+        assert_eq!(
+            s.rename("old/gone.txt", "notes/kept.txt"),
+            Err(StorageError::NotFound)
+        );
+        assert_eq!(s.size("notes/kept.txt"), Ok(10));
     }
 
     #[test]

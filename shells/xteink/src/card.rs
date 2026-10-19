@@ -13,7 +13,7 @@ use esp_hal::spi::master::Config as SpiConfig;
 use esp_hal::time::Rate;
 use log::{info, warn};
 use quireink_fat::fatfs::{FileSystem, FsOptions};
-use quireink_fat::{BLOCK, BlockDisk, Blocks, DiskError, FatStorage, VolumeError};
+use quireink_fat::{BLOCK, BlockDisk, Blocks, DiskError, FatStorage, SharedDisk, VolumeError};
 use quireink_platform::{NoStorage, Storage};
 
 use crate::board::{self, Bus};
@@ -39,10 +39,17 @@ pub fn mount(
         .borrow_mut()
         .apply_config(&spi.with_frequency(Rate::from_mhz(board::SPI_MHZ)));
     info!("SD card: {} MB", sd.blocks() >> 11);
+    // The disk shared with the storage, which writes back its changed
+    // blocks (folders, the FAT) on sync.
     let fs = BlockDisk::volume(Card(sd))
-        .and_then(|disk| FileSystem::new(disk, FsOptions::new()).map_err(|_| VolumeError::NoFat));
+        .map(SharedDisk::new)
+        .and_then(|disk| {
+            FileSystem::new(disk.clone(), FsOptions::new())
+                .map(|fs| (fs, disk))
+                .map_err(|_| VolumeError::NoFat)
+        });
     match fs {
-        Ok(fs) => Box::new(FatStorage::new(Box::leak(Box::new(fs)))),
+        Ok((fs, disk)) => Box::new(FatStorage::new(Box::leak(Box::new(fs))).with_disk(disk)),
         Err(e) => {
             match e {
                 VolumeError::ExFat => warn!("SD card: exFAT; QuireInk reads FAT32"),

@@ -31,6 +31,9 @@ const STATUS_MS: u64 = 60_000;
 /// On battery, the longest the processor sleeps between readings of the
 /// buttons (a press lasts 80 ms and more).
 const IDLE_MS: u64 = 30;
+/// How long after the last work what was written is written back to the
+/// card (not at once: a download writes in many pieces).
+const SYNC_MS: u64 = 2_000;
 
 /// The X4's firmware: the kernel, the parts it drives, and where the main
 /// loop is.
@@ -73,6 +76,10 @@ pub struct State {
     /// gray test over USB): the next change is shown with the whole screen
     /// drawn again.
     gray_shown: bool,
+    /// When the kernel last worked, if what it wrote may not be on the
+    /// card yet: written back [`SYNC_MS`] after, so nothing is lost when
+    /// the X4 is cut off (reset, flashed, an empty battery).
+    unsynced: Option<u64>,
 }
 
 impl Firmware {
@@ -274,6 +281,17 @@ impl Firmware {
         if let Some(at) = self.state.wake_at {
             until = until.min(at.0);
         }
+        if let Some(worked) = self.state.unsynced {
+            let due = worked + SYNC_MS;
+            if now().0 >= due {
+                self.state.unsynced = None;
+                if self.kernel.storage().sync().is_err() {
+                    warn!("card: not all written back");
+                }
+            } else {
+                until = until.min(due);
+            }
+        }
         if let Some(read) = self.state.status_read {
             until = until.min(read.0 + STATUS_MS);
         }
@@ -354,6 +372,7 @@ impl Firmware {
     /// Carries out what the kernel asks: shows what changed, notes when to
     /// wake it, restarts, notes whether to sleep.
     pub fn apply(&mut self, mut effects: Effects) {
+        self.state.unsynced = Some(now().0);
         loop {
             if effects.restart() {
                 esp_hal::system::software_reset();

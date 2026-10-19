@@ -211,6 +211,10 @@ impl Remote {
                 piece.clear();
             }
         }
+        // On the card before saying so: the X4 may be reset right after.
+        if let Err(e) = storage.sync() {
+            return println!("QI:ERR {path}: {e:?}");
+        }
         println!("QI:OK {got}");
     }
 }

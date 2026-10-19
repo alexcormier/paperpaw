@@ -39,6 +39,33 @@ impl PageMarks {
     }
 }
 
+/// The whole word for the parts of a word split over two lines: both
+/// parts get it, so a decorator finds `Kaninchen` in `Kan-` and `inchen`.
+/// A part ends with `-` and the next one goes on at once in the book, on
+/// another line; the hyphen is the layout's (left out) where the book has
+/// none there, the book's own (kept) where it has.
+fn whole_words(words: &[WordBox]) -> Vec<Option<String>> {
+    let mut whole: Vec<Option<String>> = alloc::vec![None; words.len()];
+    for (i, pair) in words.windows(2).enumerate() {
+        let (first, next) = (&pair[0], &pair[1]);
+        let split =
+            first.text.ends_with('-') && next.start == first.end && first.area.y != next.area.y;
+        if !split {
+            continue;
+        }
+        let in_book = first.end.offset.saturating_sub(first.start.offset) as usize;
+        let head = if in_book < first.text.len() {
+            &first.text[..first.text.len() - 1]
+        } else {
+            first.text.as_str()
+        };
+        let word = format!("{head}{}", next.text);
+        whole[i] = Some(word.clone());
+        whole[i + 1] = Some(word);
+    }
+    whole
+}
+
 impl Book {
     /// Asks the decorators for this page's marks if the page or what their
     /// marks depend on changed since they were asked.
@@ -51,10 +78,12 @@ impl Book {
         if self.decorated_for == Some(key) {
             return;
         }
+        let whole = whole_words(words);
         let page_words: Vec<PageWord<'_>> = words
             .iter()
-            .map(|w| PageWord {
-                text: &w.text,
+            .zip(&whole)
+            .map(|(w, whole)| PageWord {
+                text: whole.as_deref().unwrap_or(&w.text),
                 start: w.start,
                 end: w.end,
             })
@@ -202,5 +231,42 @@ impl Book {
             groups.push((done, decorations::join_boxes(members)));
         }
         PageMarks { groups, inks }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn word(text: &str, y: u16, start: u32, end: u32) -> WordBox {
+        WordBox {
+            area: Rect::new(0, y, 10, 10),
+            text: String::from(text),
+            start: Locator::new(0, start),
+            end: Locator::new(0, end),
+        }
+    }
+
+    #[test]
+    fn words_split_over_lines_are_whole_for_decorators() {
+        let words = [
+            // `Kan-` and `inchen`: the hyphen is the layout's.
+            word("Kan-", 0, 10, 13),
+            word("inchen", 20, 13, 19),
+            // `waistcoat-` and `pocket`: the book's own hyphen.
+            word("waistcoat-", 20, 20, 30),
+            word("pocket", 40, 30, 36),
+            // On one line, or with a space between: two words.
+            word("well-", 40, 37, 42),
+            word("known", 40, 42, 47),
+            word("end-", 40, 48, 52),
+            word("start", 60, 53, 58),
+        ];
+        let whole = whole_words(&words);
+        assert_eq!(whole[0].as_deref(), Some("Kaninchen"));
+        assert_eq!(whole[1].as_deref(), Some("Kaninchen"));
+        assert_eq!(whole[2].as_deref(), Some("waistcoat-pocket"));
+        assert_eq!(whole[3].as_deref(), Some("waistcoat-pocket"));
+        assert!(whole[4..].iter().all(Option::is_none));
     }
 }
