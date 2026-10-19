@@ -2088,6 +2088,153 @@ regular = round.ppfp
     assert!(kernel.plugins().get("core").is_some());
 }
 
+/// A font plugin `font-round` in `version`, its family Round.
+fn round_plugin(version: &str, extra: &str) -> String {
+    alloc::format!(
+        "[plugin]
+id = font-round
+name = Round
+version = {version}
+{extra}
+[family]
+name = Round
+regular = round.ppfp
+"
+    )
+}
+
+fn round_pack() -> Vec<u8> {
+    use paperpaw_text::{Glyph, LineMetrics, PackBuilder};
+    let mut builder = PackBuilder::new();
+    let metrics = LineMetrics {
+        ascent: 8.0,
+        descent: 2.0,
+        line_height: 12.0,
+    };
+    builder.add_strike(10.0, metrics, alloc::vec![('a', Glyph::empty(5.0))]);
+    builder.build()
+}
+
+#[test]
+fn data_plugins_are_installed_in_place_of_every_version() {
+    use paperpaw_sdk::PluginState::{Off, Running};
+
+    let pack = round_pack();
+    let storage = paperpaw_sdk::MemoryStorage::new()
+        // Loaded at start, in a folder of another name.
+        .with("plugins/round-old/plugin.ini", round_plugin("1.0.0", ""))
+        .with("plugins/round-old/fonts/round.ppfp", pack.clone())
+        // Refused at start: made for later formats.
+        .with(
+            "plugins/round-later/plugin.ini",
+            round_plugin("3.0.0", "formats = 99"),
+        )
+        .with("plugins/other/plugin.ini", "[plugin]\nname = Other\n");
+    let mut kernel = Kernel::builder(DEVICE).storage(storage).build().unwrap();
+    kernel.take_warnings();
+    kernel.apply(Command::SetSetting(
+        settings::READING_FONT.id().clone(),
+        SettingValue::Text("Round".into()),
+    ));
+    let storage = kernel.shared.storage.clone();
+    let stage = |version: &str| {
+        storage
+            .write(
+                "plugins/.font-round.part/plugin.ini",
+                round_plugin(version, "").as_bytes(),
+            )
+            .unwrap();
+        storage
+            .write("plugins/.font-round.part/fonts/round.ppfp", &pack)
+            .unwrap();
+    };
+
+    // A newer version: in its own folder, the others gone, the font one
+    // reads with still chosen.
+    stage("1.1.0");
+    kernel.apply(Command::InstallPlugin(
+        Id::new_static("font-round"),
+        "plugins/.font-round.part".into(),
+    ));
+    assert!(kernel.take_warnings().is_empty());
+    let round = kernel.plugins().get("font-round").unwrap();
+    assert_eq!((round.state, round.manifest.version.minor), (Running, 1));
+    assert!(storage.exists("plugins/font-round/fonts/round.ppfp"));
+    for gone in [
+        "plugins/round-old/plugin.ini",
+        "plugins/round-later/plugin.ini",
+        "plugins/.font-round.part/plugin.ini",
+        "plugins/.font-round.old/plugin.ini",
+    ] {
+        assert!(!storage.exists(gone), "{gone}");
+    }
+    assert!(storage.exists("plugins/other/plugin.ini"));
+    assert_eq!(
+        kernel.settings().text(settings::READING_FONT.as_str()),
+        "Round"
+    );
+    let reading = kernel
+        .shared
+        .fonts
+        .role(paperpaw_sdk::builtin::fonts::READING.as_str())
+        .unwrap();
+    assert_eq!(reading.id().as_str(), "font-round.regular");
+
+    // Updated while switched off: it stays off, in its folder.
+    let storage = paperpaw_sdk::MemoryStorage::new()
+        .with(
+            "paperpaw.ini",
+            "[plugins]
+font-round = off
+",
+        )
+        .with("plugins/font-round/plugin.ini", round_plugin("1.1.0", ""))
+        .with("plugins/font-round/fonts/round.ppfp", pack.clone())
+        .with(
+            "plugins/other/plugin.ini",
+            "[plugin]
+name = Other
+",
+        );
+    let mut kernel = Kernel::builder(DEVICE).storage(storage).build().unwrap();
+    assert_eq!(kernel.plugins().get("font-round").unwrap().state, Off);
+    let storage = kernel.shared.storage.clone();
+    let stage = |version: &str| {
+        storage
+            .write(
+                "plugins/.font-round.part/plugin.ini",
+                round_plugin(version, "").as_bytes(),
+            )
+            .unwrap();
+        storage
+            .write("plugins/.font-round.part/fonts/round.ppfp", &pack)
+            .unwrap();
+    };
+    stage("1.2.0");
+    kernel.apply(Command::InstallPlugin(
+        Id::new_static("font-round"),
+        "plugins/.font-round.part".into(),
+    ));
+    let round = kernel.plugins().get("font-round").unwrap();
+    assert_eq!((round.state, round.manifest.version.minor), (Off, 2));
+    assert!(storage.exists("plugins/font-round/plugin.ini"));
+    assert!(!storage.exists("plugins/.font-round.part/plugin.ini"));
+
+    // A folder holding another plugin than it says: refused, the version
+    // before stays.
+    kernel.take_warnings();
+    stage("2.0.0");
+    kernel.apply(Command::InstallPlugin(
+        Id::new_static("other"),
+        "plugins/.font-round.part".into(),
+    ));
+    assert_eq!(kernel.take_warnings().len(), 1);
+    assert!(!storage.exists("plugins/.font-round.part/plugin.ini"));
+    let round = kernel.plugins().get("font-round").unwrap();
+    assert_eq!(round.manifest.version.minor, 2);
+    assert!(storage.exists("plugins/other/plugin.ini"));
+}
+
 #[test]
 fn keymap_presets_follow_device_defaults_and_switch_at_runtime() {
     let log = log();

@@ -9,6 +9,7 @@ use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::{actions, events, params, settings};
 use paperpaw_sdk::event::Event;
+use paperpaw_sdk::install::Progress;
 use paperpaw_sdk::replies::HttpReply;
 use paperpaw_sdk::ui::{self, ListView, UiStyle};
 use paperpaw_sdk::{
@@ -17,7 +18,7 @@ use paperpaw_sdk::{
 };
 
 use crate::catalog::{self, Font};
-use crate::install::{self, DOWNLOADED};
+use crate::install::{DOWNLOADED, INSTALLER};
 use crate::samples::{self, SAMPLE, Samples};
 use crate::{CATALOG, FONT_SCREEN};
 
@@ -46,6 +47,9 @@ pub(crate) struct ListScreen {
     fonts: Vec<Font>,
     samples: Samples,
     trouble: Trouble,
+    /// The download going on, kept here: drawing reads nothing from the
+    /// storage.
+    job: Option<Progress>,
 }
 
 impl ListScreen {
@@ -68,6 +72,7 @@ impl ListScreen {
             fonts: catalog::kept(env),
             samples: Samples::new(&style),
             trouble: Trouble::None,
+            job: INSTALLER.progress(env.storage),
             style,
             header,
         }
@@ -168,8 +173,8 @@ impl ListScreen {
     }
 
     /// What the row of `font` says at its end.
-    fn state(env: &Env<'_>, font: &Font) -> String {
-        if let Some(job) = install::current(env.storage).filter(|j| j.plugin == font.plugin()) {
+    fn state(env: &Env<'_>, job: Option<&Progress>, font: &Font) -> String {
+        if let Some(job) = job.filter(|j| j.plugin == font.plugin()) {
             return format!("{} / {}", job.done, job.total);
         }
         let key = if font.chosen_for(env, settings::READING_FONT.as_str()) {
@@ -239,12 +244,12 @@ impl Screen for ListScreen {
             );
             return;
         }
-        let (fonts, samples) = (&self.fonts, &self.samples);
+        let (fonts, samples, job) = (&self.fonts, &self.samples, self.job.as_ref());
         let size = samples.size as f32;
         self.list
             .draw(canvas, &style, len, |canvas, index, rect, focused| {
                 let font = &fonts[index];
-                let state = ListScreen::state(env, font);
+                let state = ListScreen::state(env, job, font);
                 // The name in its own font, once its sample is here, in the
                 // room the state leaves.
                 let band = ui::title_area(&style, rect);
@@ -271,6 +276,7 @@ impl Screen for ListScreen {
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
+        self.job = INSTALLER.progress(cx.env().storage);
         self.fetch(cx);
         self.want_samples(cx);
     }
@@ -326,6 +332,7 @@ impl Screen for ListScreen {
             || *event == events::SETTING_CHANGED
         {
             // Progress, or a font installed, removed or chosen.
+            self.job = INSTALLER.progress(cx.env().storage);
             self.redraw(cx);
         }
     }

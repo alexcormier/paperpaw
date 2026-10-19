@@ -894,6 +894,11 @@ struct Shared {
     font_dirs: Vec<String>,
     /// The folders of data plugins, by plugin, for removing them.
     data_folders: Vec<(Id, String)>,
+    /// The folders data plugins are found in.
+    plugin_dirs: Vec<String>,
+    /// What plugin libraries call this kind of device (see
+    /// [`KernelBuilder::catalog_device`]).
+    catalog_device: Option<&'static str>,
     /// Passwords and keys (see [`paperpaw_sdk::secrets`]).
     secrets: paperpaw_sdk::secrets::Secrets,
     /// Shared with font packs read where they are (see `Fonts::load`).
@@ -937,6 +942,7 @@ impl Shared {
             slots: &self.slots,
             screens: &self.screens,
             font_dirs: &self.font_dirs,
+            catalog_device: self.catalog_device,
             secrets: &self.secrets,
             storage: self.storage.as_ref(),
             keys: &self.keymap,

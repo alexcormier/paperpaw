@@ -40,15 +40,20 @@ const DEVICE: DeviceInfo = DeviceInfo {
 
 const CATALOG: &str = "https://paperpaw.org/api/v1/fonts.json";
 
-const PLUGIN_INI: &str = "[plugin]
+/// The font's `plugin.ini` in `version`.
+fn plugin_ini(version: &str) -> String {
+    format!(
+        "[plugin]
 id = font-round
 name = Round
-version = 1.0.0
+version = {version}
 
 [family]
 name = Round
 regular = regular.ppfp
-";
+"
+    )
+}
 
 /// A pack with a few letters.
 fn pack() -> Vec<u8> {
@@ -64,10 +69,16 @@ fn pack() -> Vec<u8> {
 }
 
 fn catalog(pack: &[u8], pack_sha1: &str) -> String {
+    catalog_of(pack, pack_sha1, "1.0.0")
+}
+
+/// The catalog with the font in `version`.
+fn catalog_of(pack: &[u8], pack_sha1: &str, version: &str) -> String {
+    let ini = plugin_ini(version);
     format!(
         r#"{{"format": 1, "fonts": [{{
   "id": "round", "name": "Round", "category": "sans", "author": "Someone",
-  "licence": "OFL-1.1", "version": "1.0.0", "styles": 1,
+  "licence": "OFL-1.1", "version": "{version}", "styles": 1,
   "sample": "https://paperpaw.org/api/v1/fonts/round/sample.ppfp",
   "packs": [
     {{"path": "plugin.ini", "url": "https://paperpaw.org/f/round/plugin.ini",
@@ -77,8 +88,8 @@ fn catalog(pack: &[u8], pack_sha1: &str) -> String {
   ]}},
   {{"id": "../bad", "name": "Bad", "packs": []}}
 ]}}"#,
-        PLUGIN_INI.len(),
-        paperpaw_digest::sha1::hex(PLUGIN_INI.as_bytes()),
+        ini.len(),
+        paperpaw_digest::sha1::hex(ini.as_bytes()),
         pack.len(),
     )
 }
@@ -203,12 +214,17 @@ impl Browsing {
         // The font's page, then *Download*.
         self.run(actions::CONFIRM);
         self.run(actions::CONFIRM);
+        self.answer_files("1.0.0", pack);
+    }
+
+    /// Answers the requests for the font's files in `version`.
+    fn answer_files(&mut self, version: &str, pack: &[u8]) {
         let call = self.request("https://paperpaw.org/f/round/plugin.ini");
         assert_eq!(
             call.save_to.as_deref(),
             Some("plugins/.font-round.part/plugin.ini")
         );
-        self.answer(&call, 200, PLUGIN_INI.as_bytes());
+        self.answer(&call, 200, plugin_ini(version).as_bytes());
         let call = self.request("https://paperpaw.org/f/round/regular.ppfp");
         self.answer(&call, 200, pack);
     }
@@ -307,4 +323,38 @@ fn a_damaged_download_is_not_installed() {
     // Offered again.
     let shown = browsing.shown();
     assert!(shown.contains("Download"), "{shown}");
+}
+
+#[test]
+fn updating_the_font_one_reads_with_keeps_it() {
+    let pack = pack();
+    let sha1 = paperpaw_digest::sha1::hex(&pack);
+    let mut browsing = Browsing::new(&catalog(&pack, &sha1));
+    browsing.download(&pack);
+    // *Read with Round*.
+    browsing.run(actions::CONFIRM);
+    let reading = |browsing: &Browsing| {
+        String::from(
+            browsing
+                .kernel
+                .settings()
+                .text(settings::READING_FONT.as_str()),
+        )
+    };
+    assert_eq!(reading(&browsing), "Round");
+
+    // A newer version in the catalog, fetched back on the list: its page
+    // offers *Update*, after *Read with*, *Status lines*.
+    browsing.run(actions::BACK);
+    let call = browsing.request(CATALOG);
+    browsing.answer(&call, 200, catalog_of(&pack, &sha1, "1.1.0").as_bytes());
+    browsing.run(actions::CONFIRM);
+    browsing.run(actions::DOWN);
+    browsing.run(actions::DOWN);
+    browsing.run(actions::CONFIRM);
+    browsing.answer_files("1.1.0", &pack);
+    let round = browsing.kernel.plugins().get("font-round").unwrap();
+    assert_eq!(round.manifest.version.minor, 1);
+    assert_eq!(reading(&browsing), "Round");
+    assert!(browsing.storage.exists("plugins/font-round/plugin.ini"));
 }

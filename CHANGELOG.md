@@ -16,19 +16,33 @@ change the plugin SDK.
   plugin manager, PLANNING O6, ADR 0023): the data plugins of
   paperpaw.org's plugin library made for this device, PaperPaw version
   and data format, by group as on the website, named and described in
-  the language shown, with *Fonts* opening the fonts browser. A plugin's
-  page tells what it does, who made it, its licence, version and size,
-  and installs, updates or removes it; downloads go on when the page is
-  closed. The list is read as it streams and kept on the card; the
-  setting *Plugin library* (developers) names another one.
+  the language shown, with *Search* (by name and what a plugin does)
+  and *Fonts*, which opens the fonts browser. A plugin's page tells what
+  it does, who made it, its licence, version and size, and installs,
+  updates or removes it; downloads go on when the page is closed. The
+  library sends a list made for the device
+  (`plugins.json?device=…&lang=…`, format 2), which the store reads as it
+  streams into an index on the card: however many plugins it lists,
+  only a page of them is in memory (a list of 1001 plugins takes about
+  3 KB on the X4). A plugin's files come with its own page
+  (`plugins/<id>.json`). The setting *Plugin library* (developers) names
+  another library.
   SDK: `install` (`Installer`, `Package`, `PackageFile`, `Progress`,
-  `Received`, `device_name`, `fits`, `is_plugin_name`, `is_safe_path`,
-  `MAX_FILES`): installing data plugins from the internet, file by
-  file, each checked, the job kept on the storage, the version before
-  replaced once all is there; the fonts browser uses it too.
-  `DATA_FORMATS`: the data plugins' formats this PaperPaw reads. The
-  plugin manager lists the actions of the menu `plugin-manager.more`
-  above the plugins.
+  `Received`, `fits`, `is_plugin_name`, `is_safe_path`, `MAX_FILES`):
+  installing data plugins from the internet, file by file, each
+  checked, the job kept on the storage, answers to jobs stopped passed
+  over; the fonts browser uses it too. `Command::InstallPlugin`: a data
+  plugin downloaded takes the place of every version of it on the
+  storage (loaded, switched off or refused at start), stays off where
+  it was switched off, and keeps what was chosen from it (updating the
+  font one reads with keeps it). `KernelBuilder::catalog_device` and
+  `Env::catalog_device`: what plugin libraries call the device (`x4`,
+  `x4-pro`, `android`; the shells say it). `ui::Sections`: entries under
+  the headings of their sections on pages, in memory that does not grow
+  with the entries. `Plugins::owner`: the plugin that added an action,
+  a screen or a setting. `DATA_FORMATS`: the data plugins' formats this
+  PaperPaw reads. The plugin manager lists the actions of the menu
+  `plugin-manager.more` above the plugins.
 - X4: removing or copying a large folder (e.g. one with many books, or
   their caches) no longer starts the device again half way: work on the
   card keeps the watchdogs from taking it for hung (it took 20 s before

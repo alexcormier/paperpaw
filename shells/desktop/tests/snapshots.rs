@@ -204,7 +204,8 @@ const CASES: &[Case] = &[
         colour: 0,
     },
     // The plugin store on the X4, its list kept from before (the library
-    // asked for does not answer): the plugins for the X4 by group.
+    // asked for does not answer): search, then the plugins for the X4 by
+    // group.
     Case {
         name: "x4-store",
         profile: "xteink-x4",
@@ -286,12 +287,16 @@ fn library(case: &Case) -> PathBuf {
             }
         }
     }
-    // The plugin store's list, as if kept from a visit before.
+    // The plugin store's index of the list, as if kept from a visit
+    // before.
     if case.name.contains("store") {
         let store = dir.join(".paperpaw/plugins/store");
         fs::create_dir_all(&store).unwrap();
-        let list = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/store/plugins.json");
-        fs::copy(list, store.join("plugins.json")).unwrap();
+        let kept = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/store");
+        for entry in fs::read_dir(kept).unwrap() {
+            let entry = entry.unwrap();
+            fs::copy(entry.path(), store.join(entry.file_name())).unwrap();
+        }
     }
     // The first-run setup only where it is what is shown.
     if !case.name.contains("setup") {

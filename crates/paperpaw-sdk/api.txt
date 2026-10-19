@@ -1003,7 +1003,6 @@ pub paperpaw_sdk::install::Progress::name: alloc::string::String
 pub paperpaw_sdk::install::Progress::plugin: alloc::string::String
 pub paperpaw_sdk::install::Progress::total: usize
 pub const paperpaw_sdk::install::MAX_FILES: usize
-pub fn paperpaw_sdk::install::device_name(&paperpaw_platform::DeviceInfo) -> &'static str
 pub fn paperpaw_sdk::install::fits(&str, u32) -> bool
 pub fn paperpaw_sdk::install::is_plugin_name(&str) -> bool
 pub fn paperpaw_sdk::install::is_safe_path(&str) -> bool
@@ -1512,6 +1511,31 @@ pub fn paperpaw_sdk::ui::reorder::Reorder::draw_grip(&mut paperpaw_graphics::can
 pub fn paperpaw_sdk::ui::reorder::Reorder::grip(paperpaw_platform::geometry::Rect) -> paperpaw_platform::geometry::Rect
 pub fn paperpaw_sdk::ui::reorder::Reorder::on_pointer(&mut self, &paperpaw_platform::input::PointerEvent, &paperpaw_sdk::ui::ListView, usize) -> core::option::Option<paperpaw_sdk::ui::reorder::ReorderStep>
 pub fn paperpaw_sdk::ui::reorder::moved<T>(&mut alloc::vec::Vec<T>, usize, usize)
+pub mod paperpaw_sdk::ui::sections
+pub enum paperpaw_sdk::ui::sections::Item
+pub paperpaw_sdk::ui::sections::Item::Entry(usize)
+pub paperpaw_sdk::ui::sections::Item::Heading(usize)
+pub struct paperpaw_sdk::ui::sections::Section
+pub paperpaw_sdk::ui::sections::Section::count: usize
+pub paperpaw_sdk::ui::sections::Section::heading: bool
+pub struct paperpaw_sdk::ui::sections::Sections
+pub paperpaw_sdk::ui::sections::Sections::area: paperpaw_platform::geometry::Rect
+pub paperpaw_sdk::ui::sections::Sections::focus: usize
+impl paperpaw_sdk::ui::sections::Sections
+pub fn paperpaw_sdk::ui::sections::Sections::draw(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::ui::UiStyle, bool, impl core::ops::function::FnMut(&mut paperpaw_graphics::canvas::Canvas<'_>, paperpaw_sdk::ui::sections::Item, paperpaw_platform::geometry::Rect, bool))
+pub fn paperpaw_sdk::ui::sections::Sections::focus_on(&mut self, usize) -> paperpaw_sdk::ui::ListChange
+pub fn paperpaw_sdk::ui::sections::Sections::hit(&self, paperpaw_platform::geometry::Point) -> core::option::Option<usize>
+pub fn paperpaw_sdk::ui::sections::Sections::is_empty(&self) -> bool
+pub fn paperpaw_sdk::ui::sections::Sections::len(&self) -> usize
+pub fn paperpaw_sdk::ui::sections::Sections::new(paperpaw_platform::geometry::Rect, u16, u16, alloc::vec::Vec<paperpaw_sdk::ui::sections::Section>) -> Self
+pub fn paperpaw_sdk::ui::sections::Sections::page_entries(&self) -> core::ops::range::Range<usize>
+pub fn paperpaw_sdk::ui::sections::Sections::paging(&self) -> (usize, usize)
+pub fn paperpaw_sdk::ui::sections::Sections::rect_of(&self, usize) -> core::option::Option<paperpaw_platform::geometry::Rect>
+pub fn paperpaw_sdk::ui::sections::Sections::request(&self, paperpaw_sdk::ui::ListChange, &mut paperpaw_sdk::Cx<'_, '_>)
+pub fn paperpaw_sdk::ui::sections::Sections::section_of(&self, usize) -> core::option::Option<(usize, usize)>
+pub fn paperpaw_sdk::ui::sections::Sections::step(&mut self, bool) -> paperpaw_sdk::ui::ListChange
+pub fn paperpaw_sdk::ui::sections::Sections::turn(&mut self, bool) -> paperpaw_sdk::ui::ListChange
+pub fn paperpaw_sdk::ui::sections::Sections::visible(&self) -> alloc::vec::Vec<(paperpaw_sdk::ui::sections::Item, paperpaw_platform::geometry::Rect)>
 pub enum paperpaw_sdk::ui::ListChange
 pub paperpaw_sdk::ui::ListChange::Focus
 pub paperpaw_sdk::ui::ListChange::None
@@ -1584,6 +1608,24 @@ pub fn paperpaw_sdk::ui::Rows::request(&self, paperpaw_sdk::ui::ListChange, &mut
 pub fn paperpaw_sdk::ui::Rows::step(&mut self, bool) -> paperpaw_sdk::ui::ListChange
 pub fn paperpaw_sdk::ui::Rows::turn(&mut self, bool) -> paperpaw_sdk::ui::ListChange
 pub fn paperpaw_sdk::ui::Rows::visible(&self) -> alloc::vec::Vec<(usize, paperpaw_platform::geometry::Rect)>
+pub struct paperpaw_sdk::ui::Sections
+pub paperpaw_sdk::ui::Sections::area: paperpaw_platform::geometry::Rect
+pub paperpaw_sdk::ui::Sections::focus: usize
+impl paperpaw_sdk::ui::sections::Sections
+pub fn paperpaw_sdk::ui::sections::Sections::draw(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::ui::UiStyle, bool, impl core::ops::function::FnMut(&mut paperpaw_graphics::canvas::Canvas<'_>, paperpaw_sdk::ui::sections::Item, paperpaw_platform::geometry::Rect, bool))
+pub fn paperpaw_sdk::ui::sections::Sections::focus_on(&mut self, usize) -> paperpaw_sdk::ui::ListChange
+pub fn paperpaw_sdk::ui::sections::Sections::hit(&self, paperpaw_platform::geometry::Point) -> core::option::Option<usize>
+pub fn paperpaw_sdk::ui::sections::Sections::is_empty(&self) -> bool
+pub fn paperpaw_sdk::ui::sections::Sections::len(&self) -> usize
+pub fn paperpaw_sdk::ui::sections::Sections::new(paperpaw_platform::geometry::Rect, u16, u16, alloc::vec::Vec<paperpaw_sdk::ui::sections::Section>) -> Self
+pub fn paperpaw_sdk::ui::sections::Sections::page_entries(&self) -> core::ops::range::Range<usize>
+pub fn paperpaw_sdk::ui::sections::Sections::paging(&self) -> (usize, usize)
+pub fn paperpaw_sdk::ui::sections::Sections::rect_of(&self, usize) -> core::option::Option<paperpaw_platform::geometry::Rect>
+pub fn paperpaw_sdk::ui::sections::Sections::request(&self, paperpaw_sdk::ui::ListChange, &mut paperpaw_sdk::Cx<'_, '_>)
+pub fn paperpaw_sdk::ui::sections::Sections::section_of(&self, usize) -> core::option::Option<(usize, usize)>
+pub fn paperpaw_sdk::ui::sections::Sections::step(&mut self, bool) -> paperpaw_sdk::ui::ListChange
+pub fn paperpaw_sdk::ui::sections::Sections::turn(&mut self, bool) -> paperpaw_sdk::ui::ListChange
+pub fn paperpaw_sdk::ui::sections::Sections::visible(&self) -> alloc::vec::Vec<(paperpaw_sdk::ui::sections::Item, paperpaw_platform::geometry::Rect)>
 pub struct paperpaw_sdk::ui::Thumbnail
 impl paperpaw_sdk::ui::Thumbnail
 pub fn paperpaw_sdk::ui::Thumbnail::bytes(&self) -> usize
@@ -2037,6 +2079,7 @@ pub paperpaw_sdk::Command::Disconnect(paperpaw_sdk::Id)
 pub paperpaw_sdk::Command::Emit(paperpaw_sdk::Id, paperpaw_sdk::Params)
 pub paperpaw_sdk::Command::Firmware(paperpaw_sdk::firmware::FirmwareCommand)
 pub paperpaw_sdk::Command::Http(paperpaw_sdk::HttpRequest)
+pub paperpaw_sdk::Command::InstallPlugin(paperpaw_sdk::Id, alloc::string::String)
 pub paperpaw_sdk::Command::LoadPlugin(alloc::string::String)
 pub paperpaw_sdk::Command::NoNetwork
 pub paperpaw_sdk::Command::Notify(alloc::string::String)
@@ -2344,6 +2387,7 @@ pub fn paperpaw_sdk::Cx<'a, 'e>::wake_at(&mut self, paperpaw_platform::input::In
 pub paperpaw_sdk::Env::actions: &'a paperpaw_sdk::Actions
 pub paperpaw_sdk::Env::book_data: &'a [paperpaw_sdk::library::BookData]
 pub paperpaw_sdk::Env::caps: paperpaw_sdk::Capabilities
+pub paperpaw_sdk::Env::catalog_device: core::option::Option<&'a str>
 pub paperpaw_sdk::Env::clipboard: bool
 pub paperpaw_sdk::Env::decorators: &'a paperpaw_sdk::decorations::Decorators
 pub paperpaw_sdk::Env::device: &'a paperpaw_platform::DeviceInfo
@@ -2687,6 +2731,7 @@ pub fn paperpaw_sdk::Plugins::is_empty(&self) -> bool
 pub fn paperpaw_sdk::Plugins::iter(&self) -> impl core::iter::traits::iterator::Iterator<Item = &paperpaw_sdk::PluginInfo>
 pub fn paperpaw_sdk::Plugins::len(&self) -> usize
 pub const fn paperpaw_sdk::Plugins::new() -> Self
+pub fn paperpaw_sdk::Plugins::owner(&self, &paperpaw_sdk::Id) -> core::option::Option<&paperpaw_sdk::PluginInfo>
 pub fn paperpaw_sdk::Plugins::push(&mut self, paperpaw_sdk::PluginInfo)
 pub fn paperpaw_sdk::Plugins::remove(&mut self, &str) -> core::option::Option<paperpaw_sdk::PluginInfo>
 pub fn paperpaw_sdk::Plugins::restart_needed(&self) -> bool

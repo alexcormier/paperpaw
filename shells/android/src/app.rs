@@ -404,6 +404,7 @@ fn start_kernel(
         .clock(micros)
         .plugin_dir("plugins")
         .network(true)
+        .catalog_device("android")
         .system_clipboard(true)
         .speech(true)
         .rotation(true)
