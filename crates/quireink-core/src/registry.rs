@@ -100,7 +100,7 @@ impl Registry {
 /// A plugin's setting before it is defined: built at start, or kept in
 /// the program ([`SettingSpec::fixed`]).
 pub(crate) enum Staged {
-    Owned(SettingSpec),
+    Owned(alloc::boxed::Box<SettingSpec>),
     Fixed(&'static SettingSpec),
 }
 
@@ -217,8 +217,10 @@ pub(crate) fn stage(
                 screen,
                 priority,
             }),
-            Contribution::Setting(setting) => staging.settings.push(Staged::Owned(*setting)),
-            Contribution::FixedSetting(setting) => staging.settings.push(Staged::Fixed(setting)),
+            Contribution::Setting(setting) => staging.settings.push(Staged::Owned(setting)),
+            Contribution::FixedSettings(list) => {
+                staging.settings.extend(list.iter().map(Staged::Fixed));
+            }
             Contribution::SettingGroup(group) => staging.setting_groups.push(group),
             Contribution::SettingDefault { setting, value } => {
                 staging.setting_defaults.push((setting, value));

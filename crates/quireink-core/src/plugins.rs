@@ -199,7 +199,7 @@ impl Kernel {
         for setting in staging.settings.drain(..) {
             // Cannot fail: checked above.
             let _ = match setting {
-                registry::Staged::Owned(spec) => self.shared.settings.define(spec),
+                registry::Staged::Owned(spec) => self.shared.settings.define(*spec),
                 registry::Staged::Fixed(spec) => self.shared.settings.define_fixed(spec),
             };
         }

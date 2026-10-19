@@ -54,8 +54,8 @@ pub enum Contribution {
         priority: Priority,
     },
     Setting(Box<SettingSpec>),
-    /// A setting kept in the program ([`SettingSpec::fixed`]).
-    FixedSetting(&'static SettingSpec),
+    /// Settings kept in the program ([`SettingSpec::fixed`]).
+    FixedSettings(&'static [SettingSpec]),
     SettingGroup(SettingGroupSpec),
     /// Another default for any plugin's setting (see
     /// [`Registrar::set_setting_default`]).
@@ -136,7 +136,7 @@ impl Contribution {
             Contribution::Screen(_) => "screen",
             Contribution::Slot(_) => "slot",
             Contribution::SlotBinding { .. } => "slot-binding",
-            Contribution::Setting(_) | Contribution::FixedSetting(_) => "setting",
+            Contribution::Setting(_) | Contribution::FixedSettings(_) => "setting",
             Contribution::SettingGroup(_) => "setting-group",
             Contribution::SettingDefault { .. } => "setting-default",
             Contribution::Keymap(_) => "keymap",
@@ -179,7 +179,6 @@ impl Contribution {
             Contribution::Screen(s) => &s.id,
             Contribution::Slot(s) => &s.id,
             Contribution::Setting(s) => &s.id,
-            Contribution::FixedSetting(s) => &s.id,
             Contribution::SettingGroup(g) => &g.id,
             Contribution::KeymapPreset { id, .. } => id,
             Contribution::Font(f) => &f.id,
@@ -303,6 +302,12 @@ impl Registrar {
     }
 
     pub fn add_setting(&mut self, setting: SettingSpec) -> Result<(), RegisterError> {
+        let fixed = self.contributions.iter().any(|c| {
+            matches!(c, Contribution::FixedSettings(list) if list.iter().any(|s| s.id == setting.id))
+        });
+        if fixed {
+            return Err(RegisterError::Duplicate { id: setting.id });
+        }
         self.add(Contribution::Setting(Box::new(setting)))
     }
 
@@ -311,9 +316,25 @@ impl Registrar {
     /// each added with [`add_setting`](Self::add_setting) takes about
     /// 200 bytes.
     pub fn add_settings(&mut self, settings: &'static [SettingSpec]) -> Result<(), RegisterError> {
-        for setting in settings {
-            self.add(Contribution::FixedSetting(setting))?;
+        // Each in the plugin's namespace, and once.
+        let added = |id: &Id| {
+            self.contributions.iter().any(|c| match c {
+                Contribution::Setting(s) => s.id == *id,
+                Contribution::FixedSettings(list) => list.iter().any(|s| s.id == *id),
+                _ => false,
+            })
+        };
+        for (n, setting) in settings.iter().enumerate() {
+            let id = &setting.id;
+            if !id.is_owned_by(&self.plugin) {
+                return Err(RegisterError::Namespace { id: id.clone() });
+            }
+            if added(id) || settings[..n].iter().any(|s| s.id == *id) {
+                return Err(RegisterError::Duplicate { id: id.clone() });
+            }
         }
+        self.contributions
+            .push(Contribution::FixedSettings(settings));
         Ok(())
     }
 
