@@ -1334,6 +1334,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "paperpaw-native"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-digest",
+]
+
+[[package]]
 name = "paperpaw-platform"
 version = "0.4.0-dev"
 
