@@ -86,6 +86,9 @@ const SKIM: Id = Id::new_static("reader.skim");
 const SKIMMED: Id = Id::new_static("reader.skimmed");
 /// A footnote over the page (see `footnote`).
 pub const FOOTNOTE_SCREEN: Id = Id::new_static("reader.footnote");
+/// A sample of text set as the reading settings say, the preview above
+/// them on their settings page (a widget, see `screen::Sample`).
+pub const SAMPLE: Id = Id::new_static("reader.sample");
 
 /// Settings of the reader.
 pub mod settings {
@@ -505,6 +508,13 @@ impl Plugin for Reader {
         }
 
         r.add_settings(&SETTINGS)?;
+        // A sample of text above the reading settings, set as they say.
+        r.add_widget(
+            paperpaw_sdk::widgets::WidgetSpec::new(SAMPLE, "reader.sample", |_| {
+                Box::new(screen::Sample::new())
+            })
+            .previews(groups::READING),
+        )?;
 
         let font_step = |step: i64| -> paperpaw_sdk::ActionHandler {
             Box::new(move |env: &Env<'_>, out: &mut Vec<Command>| {

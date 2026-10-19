@@ -6,6 +6,19 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Settings: a live preview above the reading settings (PLANNING §6.7):
+  two short paragraphs set exactly as book pages are (the same layout
+  engine, type, margins at the sides, justification, indents and
+  hyphenation, in the interface's language), following each value at
+  once while a slider moves or the buttons change it, before it is
+  kept. On the X4 an update costs a third to a half of laying out one
+  book page and about 3 KB of the heap, and only the preview and the
+  row changed are drawn again, with a quick refresh; the full picture
+  with its grays comes once the value is chosen.
+  SDK: a widget can preview a group of settings instead of being one
+  for screens (`WidgetSpec::previews`, `Widgets::preview`); settings
+  pages show it above the group, and `Widgets::iter` leaves such
+  widgets out.
 - Settings: numbers better set by eye are sliders on the settings
   pages (PLANNING §6.7): the text size, word and line spacing, the
   margins, the speed of reading aloud, the interface's size, row height

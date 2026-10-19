@@ -27,6 +27,86 @@ pub(super) fn refocus(rows: &mut ui::Rows, focus: usize) {
 
 // ---- Group page: settings ----------------------------------------------
 
+/// The most of the screen a group's preview takes.
+const PREVIEW_SHARE: u16 = 3;
+
+/// What a group's settings do, shown above them (a widget that previews
+/// the group, e.g. a sample of text for the reading settings), under a
+/// heading.
+pub(super) struct Preview {
+    widget: Box<dyn Widget>,
+    heading: Rect,
+    area: Rect,
+}
+
+impl core::fmt::Debug for Preview {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Preview")
+            .field("heading", &self.heading)
+            .field("area", &self.area)
+            .finish_non_exhaustive()
+    }
+}
+
+impl Preview {
+    /// The preview of `group`, if a widget previews it, at the top of
+    /// `area`; `area` is left with the room below it.
+    fn of(env: &Env<'_>, style: &UiStyle, group: &Id, area: &mut Rect) -> Option<Self> {
+        let id = env.widgets.preview(group.as_str())?;
+        let widget = env.widgets.make(id.as_str(), env)?;
+        let heading = ui::heading_height(env, style);
+        let most = (env.device.display.height / PREVIEW_SHARE).saturating_sub(heading);
+        let height = widget.height(env, area.width).min(most);
+        if height == 0 {
+            return None;
+        }
+        let heading = Rect::new(area.x, area.y, area.width, heading);
+        let shown = Rect::new(area.x, heading.y + heading.height, area.width, height);
+        // A line below it, then the settings.
+        let used = heading.height + height + style.gap as u16;
+        *area = Rect::new(
+            area.x,
+            area.y + used,
+            area.width,
+            area.height.saturating_sub(used),
+        );
+        Some(Self {
+            widget,
+            heading,
+            area: shown,
+        })
+    }
+
+    fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle) {
+        let all = self.heading.union(&self.area);
+        if all.intersection(&canvas.clip()).is_none() {
+            return;
+        }
+        ui::draw_heading(
+            canvas,
+            env,
+            style,
+            self.heading,
+            env.i18n.tr("settings.preview"),
+        );
+        self.widget.draw(canvas, env, self.area);
+        // As the lines between rows.
+        let margin = style.margin as u16;
+        let line = Rect::new(
+            self.area.x + margin,
+            self.area.y + self.area.height + style.gap as u16 / 2,
+            self.area.width.saturating_sub(2 * margin),
+            style.line as u16,
+        );
+        canvas.fill_tint(line, Color::gray(170));
+    }
+
+    /// Lays it out anew for the values shown; `true` if it changed.
+    fn update(&mut self, env: &Env<'_>) -> bool {
+        self.widget.update(env)
+    }
+}
+
 /// A row of a group page.
 #[derive(Debug)]
 pub(super) enum Row {
@@ -59,6 +139,8 @@ pub(super) struct GroupPage {
     pub(super) noted: bool,
     /// The widest value of the page's numbers, so their − and + line up.
     pub(super) number_room: String,
+    /// What the settings do, shown above them, where the group has it.
+    pub(super) preview: Option<Preview>,
 }
 
 impl GroupPage {
@@ -120,7 +202,12 @@ impl GroupPage {
             entries.push(Row::Reset);
         }
         let noted = specs.iter().any(|spec| spec.description.is_some());
-        let (style, header, area) = page(env);
+        let (style, header, mut area) = page(env);
+        // A placement's settings have none (they are the widget's).
+        let preview = own
+            .is_none()
+            .then(|| Preview::of(env, &style, &group, &mut area))
+            .flatten();
         let heading = ui::heading_height(env, &style);
         let row = if noted { style.noted_row() } else { style.row } as u16;
         let slider_row = ui::slider::row_height(&style, noted);
@@ -158,6 +245,7 @@ impl GroupPage {
             dragged: None,
             noted,
             number_room,
+            preview,
         }
     }
 
@@ -237,8 +325,9 @@ impl GroupPage {
             cx.command(Command::SetSetting(spec.id.clone(), shown.clone()));
         }
         end_preview(env, cx);
+        // Quick while it moved; now with its grays again.
         cx.request_redraw();
-        cx.request_refresh(RefreshMode::Fast);
+        cx.request_refresh(RefreshMode::Partial);
     }
 
     /// The − and + of number row `index` in `rect`, where it shows them:
@@ -318,6 +407,9 @@ impl Screen for GroupPage {
         let style = self.style;
         self.header
             .draw(canvas, env, &style, &self.title, None, paging(&self.rows));
+        if let Some(preview) = &self.preview {
+            preview.draw(canvas, env, &style);
+        }
         let entries = &self.entries;
         let editing = self.editing.is_some();
         let noted = self.noted;
@@ -546,10 +638,14 @@ impl Screen for GroupPage {
                     cx.command(Command::SetSetting(id, SettingValue::Int(value)));
                 }
                 end_preview(&env, cx);
+                cx.request_redraw();
+                cx.request_refresh(RefreshMode::Partial);
             }
             ui::SliderStep::Cancelled => {
                 self.dragged = None;
                 end_preview(&env, cx);
+                cx.request_redraw();
+                cx.request_refresh(RefreshMode::Partial);
             }
         }
         Handled::Yes
@@ -594,9 +690,15 @@ impl Screen for GroupPage {
             self.dragged = dragged;
             cx.request_redraw();
         } else if *event == events::PREVIEW_CHANGED {
-            // A value being chosen, shown: its row.
+            // A value being chosen, shown: its row and what it does.
+            let env = *cx.env();
             let index = self.dragged.map_or(self.rows.focus, |(index, _)| index);
             self.redraw_row(index, cx);
+            if let Some(preview) = self.preview.as_mut()
+                && preview.update(&env)
+            {
+                cx.request_redraw_area(preview.area);
+            }
         }
     }
 }

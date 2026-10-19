@@ -52,6 +52,7 @@ use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::setting::Setting;
 use paperpaw_sdk::ui::choice::{self, Choice};
 use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
+use paperpaw_sdk::widgets::Widget;
 use paperpaw_sdk::{ActionSpec, MenuEntry};
 use paperpaw_sdk::{
     Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Hint, Id, Level, Manifest,

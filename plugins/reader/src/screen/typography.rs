@@ -389,6 +389,27 @@ impl Typography {
     }
 }
 
+impl Typography {
+    /// The type of a sample of text `height` pixels high in `language`
+    /// (see `sample`): as wide as book pages and with their margins at the
+    /// sides, `pad` above and below, without status lines.
+    pub(super) fn sample(
+        env: &Env<'_>,
+        font: &FontHandle<'_>,
+        language: &str,
+        height: f32,
+        pad: f32,
+    ) -> Self {
+        Self {
+            y: pad,
+            height: (height - 2.0 * pad).max(1.0),
+            top_status: None,
+            status: None,
+            ..Self::new(env, font, language, false)
+        }
+    }
+}
+
 /// The font bound to an optional reading face, for the layout key.
 pub(super) fn face_id(env: &Env<'_>, role: &paperpaw_sdk::Id) -> String {
     env.fonts
