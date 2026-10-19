@@ -265,8 +265,14 @@ fn draw_date(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     let look = widgets::draw_frame(canvas, env, DATE, area);
     let area = look.area;
     if let Some(font) = style.font(env) {
-        let size = widgets::size(env, DATE).text(&style);
-        let date = ui::fit(&font, size, &date_text(env), f32::from(area.width));
+        // Smaller rather than cut short, down to the body's size.
+        let text = date_text(env);
+        let width = f32::from(area.width);
+        let mut size = widgets::size(env, DATE).text(&style);
+        while size > style.text && font.measure(size, &text) > width {
+            size = (size * 0.9).max(style.text);
+        }
+        let date = ui::fit(&font, size, &text, width);
         let x = widgets::align(env, DATE).x(area, font.measure(size, &date));
         ui::draw_label(canvas, &font, size, x, area, &date, look.ink);
     }
@@ -756,8 +762,11 @@ pub(crate) fn books_shown(env: &Env<'_>, items: &[grid::Item]) -> usize {
     items
         .iter()
         .map(|item| match &item.what {
-            grid::What::Widget(id) if id == RECENT => shelf_count(env) + 1,
-            grid::What::Widget(id) if id == CONTINUE => 1,
+            // Each shelf as many as its placement shows.
+            grid::What::Widget(id) if widgets::base(id) == RECENT => {
+                env.settings.with_placement(Some(id), || shelf_count(env)) + 1
+            }
+            grid::What::Widget(id) if widgets::base(id) == CONTINUE => 1,
             _ => 0,
         })
         .max()

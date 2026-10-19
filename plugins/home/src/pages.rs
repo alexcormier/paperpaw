@@ -176,7 +176,7 @@ pub(crate) fn expand(env: &Env<'_>, items: &[Item]) -> Vec<Item> {
             What::Widget(id)
                 if id == widgets::SPACE
                     || id == widgets::FILL
-                    || (id == STATUS && env.settings.read(&STATUS_BAR)) => {}
+                    || (widgets::base(id) == STATUS && env.settings.read(&STATUS_BAR)) => {}
             What::Widget(id) if !env.widgets.has(id) => {}
             _ => out.push(item.clone()),
         }

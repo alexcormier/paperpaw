@@ -3,6 +3,17 @@
 
 use super::*;
 
+/// The id of setting `id` of group `of` for its placement `placement`:
+/// `widgets.clock.face` of `widgets.clock@2` is `widgets.clock@2.face`.
+/// Settings of the group named otherwise stay as they are.
+pub(super) fn placed(id: &Id, of: &Id, placement: &Id) -> Id {
+    id.as_str()
+        .strip_prefix(of.as_str())
+        .filter(|rest| rest.starts_with('.'))
+        .and_then(|rest| Id::parse(&alloc::format!("{placement}{rest}")).ok())
+        .unwrap_or_else(|| id.clone())
+}
+
 /// Puts the focus of rebuilt `rows` back at `focus`, or the nearest entry.
 pub(super) fn refocus(rows: &mut ui::Rows, focus: usize) {
     if rows.is_empty() {
@@ -46,16 +57,26 @@ pub(super) struct GroupPage {
 
 impl GroupPage {
     pub(super) fn new(env: &Env<'_>, group: Id) -> Self {
+        // A placement's group (`widgets.clock@2`): the widget's settings,
+        // as that placement has them.
+        let own = group.placed().and_then(|plain| Id::parse(&plain).ok());
+        let of = own.as_ref().unwrap_or(&group);
         let title = env
             .settings
             .groups()
-            .find(|g| g.id == group)
+            .find(|g| g.id == *of)
             .map_or_else(String::new, |g| env.i18n.tr(&g.title).to_string());
         let specs = env
             .settings
             .specs()
-            .filter(|spec| env.settings.group_of(spec) == group && visible(env, spec))
+            .filter(|spec| env.settings.group_of(spec) == *of && visible(env, spec))
             .cloned()
+            .map(|mut spec| {
+                if own.is_some() {
+                    spec.id = placed(&spec.id, of, &group);
+                }
+                spec
+            })
             .collect::<Vec<SettingSpec>>();
         // Sections: settings without one first, then the standard ones,
         // then the others as they come.

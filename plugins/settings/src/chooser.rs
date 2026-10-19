@@ -17,7 +17,13 @@ pub(super) struct Chooser {
 impl Chooser {
     pub(super) fn new(env: &Env<'_>, id: &str) -> Self {
         let (style, header, mut list) = frame(env, false);
-        let spec = env.settings.specs().find(|s| s.id.as_str() == id).cloned();
+        // Of a placement too (`widgets.clock@2.face`), as that one.
+        let spec = env.settings.spec(id).cloned().map(|mut spec| {
+            if let Ok(id) = Id::parse(id) {
+                spec.id = id;
+            }
+            spec
+        });
         let options: Vec<(String, String)> = match spec.as_ref().map(|s| (&s.kind, s)) {
             Some((SettingKind::Language, _)) => env
                 .i18n

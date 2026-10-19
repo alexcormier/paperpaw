@@ -300,7 +300,9 @@ impl GridView {
     /// The same for the items showing widget `id` alone, e.g. once
     /// something they show was looked up.
     pub fn update_widget(&mut self, id: &str, env: &Env<'_>, cx: &mut Cx<'_, '_>) -> bool {
-        self.update(env, cx, |shown| shown == id)
+        self.update(env, cx, |shown| {
+            crate::widgets::base(shown) == id || shown == id
+        })
     }
 
     fn update(&mut self, env: &Env<'_>, cx: &mut Cx<'_, '_>, which: impl Fn(&str) -> bool) -> bool {
@@ -447,6 +449,22 @@ impl GridView {
         GridResponse::Handled
     }
 
+    /// A placement of widget `id` (`id@n`) no item here and no values set
+    /// so far use.
+    fn place(&self, env: &Env<'_>, id: &str) -> alloc::string::String {
+        let base = Id::parse(id).unwrap_or_else(|_| Id::new_static("core"));
+        (1..)
+            .map(|n| base.placement(n))
+            .find(|placed| {
+                let used = self
+                    .items
+                    .iter()
+                    .any(|i| matches!(&i.item.what, What::Widget(w) if w == placed.as_str()));
+                !used && env.settings.placement_values(placed.as_str()).is_empty()
+            })
+            .map_or_else(|| id.into(), |placed| placed.as_str().into())
+    }
+
     /// Offers what can be done with item `index`.
     fn options(&self, index: usize, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
@@ -549,12 +567,32 @@ impl GridView {
                 cx.request_refresh(RefreshMode::Fast);
             }
             "settings" => {
-                if let What::Widget(id) = &self.items[index].item.what {
-                    let params = Params::new().with(params::ID, id.clone());
-                    cx.command(Command::OpenSlot(slots::SETTINGS, params));
+                let What::Widget(id) = self.items[index].item.what.clone() else {
+                    return GridResponse::Handled;
+                };
+                // Each placement has settings of its own: one placed before
+                // there were placements gets its number first.
+                let placed = if id.contains('@') {
+                    id
+                } else {
+                    self.place(&env, &id)
+                };
+                let params = Params::new().with(params::ID, placed.clone());
+                cx.command(Command::OpenSlot(slots::SETTINGS, params));
+                if self.items[index].item.what != What::Widget(placed.clone()) {
+                    self.items[index].item.what = What::Widget(placed);
+                    return GridResponse::Changed(self.items());
                 }
             }
             "remove" => {
+                // What the placement set goes with it.
+                if let What::Widget(id) = &self.items[index].item.what
+                    && id.contains('@')
+                {
+                    for value in env.settings.placement_values(id) {
+                        cx.command(Command::ResetSetting(value));
+                    }
+                }
                 self.items.remove(index);
                 self.target(&env);
                 cx.request_redraw();

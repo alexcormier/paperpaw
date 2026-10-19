@@ -755,14 +755,10 @@ impl Kernel {
         id: &str,
         text: &str,
     ) -> Result<Effects, &'static str> {
-        let spec = self
-            .shared
-            .settings
-            .specs()
-            .find(|spec| spec.id.as_str() == id)
-            .ok_or("no such setting")?;
+        // A placement's too (`widgets.clock@2.face`).
+        let spec = self.shared.settings.spec(id).ok_or("no such setting")?;
         let value = spec.kind.parse(text).ok_or("not a value of this setting")?;
-        let id = spec.id.clone();
+        let id = Id::parse(id).map_err(|_| "no such setting")?;
         let _running = self.shared.meter.enter(meter::CORE);
         self.now = now;
         self.last_activity = now;

@@ -44,7 +44,7 @@ static SETTINGS: [SettingSpec; 6] = [
     .described("widgets.note.setting.heading.help"),
     SettingSpec::fixed_choice(
         "widgets.note.face",
-        "widgets.setting.face",
+        "widgets.setting.font",
         &FACES,
         FACES[0],
         ID,

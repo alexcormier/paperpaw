@@ -291,7 +291,9 @@ impl Widgets {
         self.widgets.shrink_to_fit();
     }
 
+    /// Widget `id`, also of a placement of it (`widgets.clock@2`).
     fn get(&self, id: &str) -> Option<&WidgetSpec> {
+        let id = base(id);
         self.widgets.iter().find(|w| w.id.as_str() == id)
     }
 
@@ -318,10 +320,74 @@ impl Widgets {
     /// Widget `id` for a screen, what it shows read; `None` if there is
     /// none. Screens keep it while they show it and
     /// [`update`](Widget::update) it.
+    ///
+    /// For a placement of a widget (`widgets.clock@2`, see
+    /// [`Id::placement`]), the widget reads, measures and draws itself in
+    /// the placement's own values of its settings
+    /// ([`Settings::with_placement`](crate::Settings::with_placement)).
     pub fn make(&self, id: &str, env: &Env<'_>) -> Option<Box<dyn Widget>> {
-        let mut widget = (self.get(id)?.factory)(env);
+        let spec = self.get(id)?;
+        let mut widget = if id.contains('@') {
+            let inner = env
+                .settings
+                .with_placement(Some(id), || (spec.factory)(env));
+            Box::new(Placed {
+                placement: String::from(id),
+                inner,
+            })
+        } else {
+            (spec.factory)(env)
+        };
         widget.update(env);
         Some(widget)
+    }
+}
+
+/// The widget a placement shows: `widgets.clock` for `widgets.clock@2`.
+pub fn base(id: &str) -> &str {
+    id.split_once('@').map_or(id, |(base, _)| base)
+}
+
+/// A widget in a placement of its own, in the placement's values.
+struct Placed {
+    placement: String,
+    inner: Box<dyn Widget>,
+}
+
+impl Placed {
+    fn with<R>(&self, env: &Env<'_>, f: impl FnOnce() -> R) -> R {
+        env.settings.with_placement(Some(&self.placement), f)
+    }
+}
+
+impl Widget for Placed {
+    fn update(&mut self, env: &Env<'_>) -> bool {
+        let placement = core::mem::take(&mut self.placement);
+        let changed = env
+            .settings
+            .with_placement(Some(&placement), || self.inner.update(env));
+        self.placement = placement;
+        changed
+    }
+
+    fn live(&self) -> bool {
+        self.inner.live()
+    }
+
+    fn height(&self, env: &Env<'_>, width: u16) -> u16 {
+        self.with(env, || self.inner.height(env, width))
+    }
+
+    fn min_height(&self, env: &Env<'_>, width: u16) -> u16 {
+        self.with(env, || self.inner.min_height(env, width))
+    }
+
+    fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
+        self.with(env, || self.inner.draw(canvas, env, area));
+    }
+
+    fn targets(&self, env: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
+        self.with(env, || self.inner.targets(env, area))
     }
 }
 
@@ -427,6 +493,7 @@ pub const fn align_spec(id: &'static str, widget: Id, default: Align) -> Setting
 /// Whether widget `id` has settings of its own (a settings group with its
 /// id holding settings, see [`settings_group`]).
 pub fn has_settings(env: &Env<'_>, id: &str) -> bool {
+    let id = base(id);
     env.settings.groups().any(|group| group.id.as_str() == id)
         && env
             .settings

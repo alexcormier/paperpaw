@@ -20,9 +20,9 @@ const ID: Id = Id::new_static("widgets.year-progress");
 
 /// The values of the style setting: a bar, a ring, a dot for each month.
 const STYLES: [&str; 3] = [
-    "widgets.progress.bar",
-    "widgets.progress.ring",
-    "widgets.progress.months",
+    "widgets.year.bar",
+    "widgets.year.ring",
+    "widgets.year.months",
 ];
 
 /// Its settings, kept in the program.

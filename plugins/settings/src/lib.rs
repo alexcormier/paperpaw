@@ -213,6 +213,16 @@ fn reset(env: &Env<'_>, picked: &choice::Picked, cx: &mut Cx<'_, '_>) {
         return;
     }
     let group = Id::parse(&picked.path).ok();
+    // A placement's: what it set goes, the widget's own values apply.
+    if let Some(group) = group.as_ref().filter(|g| g.as_str().contains('@')) {
+        for value in env.settings.placement_values(group.as_str()) {
+            cx.command(Command::ResetSetting(value));
+        }
+        cx.command(Command::Notify(
+            env.i18n.tr("settings.reset-done").to_string(),
+        ));
+        return;
+    }
     let language = quireink_sdk::builtin::settings::LANGUAGE;
     for spec in env.settings.specs() {
         let chosen = match &group {

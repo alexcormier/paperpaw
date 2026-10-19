@@ -209,3 +209,53 @@ fn one_week_start_for_all() {
     );
     assert!(app.draw());
 }
+
+#[test]
+fn a_widget_placed_twice_has_two_looks() {
+    let mut app = App::new(X4, "en");
+    app.set(
+        "home.page-1",
+        "widgets.analogue-clock@1 0/0 2x2, widgets.analogue-clock@2 2/0 2x2",
+    );
+    app.set("widgets.analogue-clock@2.frame", "core.frame.dark");
+    let settings = app.kernel.settings();
+    assert_eq!(
+        settings.text("widgets.analogue-clock@2.frame"),
+        "core.frame.dark"
+    );
+    assert_eq!(
+        settings.text("widgets.analogue-clock@1.frame"),
+        "core.frame.none"
+    );
+    assert_eq!(
+        settings.text("widgets.analogue-clock.frame"),
+        "core.frame.none"
+    );
+    assert!(app.draw());
+    // Kept in the configuration, as other settings are, and read back.
+    let config = quireink_sdk::read_file(
+        app.kernel.storage(),
+        quireink_sdk::builtin::CONFIG_FILE,
+        1 << 16,
+    )
+    .unwrap();
+    let config = String::from_utf8(config).unwrap();
+    assert!(config.contains("analogue-clock@2.frame"), "{config}");
+    let storage = MemoryStorage::new().with(".quireink/plugins/setup/done", "");
+    let builder = Kernel::builder(X4).storage(storage).user_config(config);
+    let kernel = quireink_app::install(builder, fonts()).build().unwrap();
+    let settings = kernel.settings();
+    assert_eq!(
+        settings.text("widgets.analogue-clock@2.frame"),
+        "core.frame.dark"
+    );
+    assert_eq!(
+        settings.text("widgets.analogue-clock@1.frame"),
+        "core.frame.none"
+    );
+    // While placement 2 is drawn, its widget reads its own.
+    let frame = settings.with_placement(Some("widgets.analogue-clock@2"), || {
+        settings.text("widgets.analogue-clock.frame").to_string()
+    });
+    assert_eq!(frame, "core.frame.dark");
+}

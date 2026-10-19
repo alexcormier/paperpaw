@@ -98,7 +98,7 @@ static SETTINGS: [SettingSpec; 10] = [
     ),
     SettingSpec::fixed_choice(
         "widgets.quote.face",
-        "widgets.setting.face",
+        "widgets.setting.font",
         &FACES,
         FACES[2],
         ID,

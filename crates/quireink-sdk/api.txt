@@ -1796,6 +1796,7 @@ pub fn quireink_sdk::widgets::Widget::update(&mut self, &quireink_sdk::Env<'_>) 
 pub fn quireink_sdk::widgets::align(&quireink_sdk::Env<'_>, &str) -> quireink_sdk::widgets::Align
 pub fn quireink_sdk::widgets::align_setting(&quireink_sdk::Id, quireink_sdk::widgets::Align) -> quireink_sdk::SettingSpec
 pub const fn quireink_sdk::widgets::align_spec(&'static str, quireink_sdk::Id, quireink_sdk::widgets::Align) -> quireink_sdk::SettingSpec
+pub fn quireink_sdk::widgets::base(&str) -> &str
 pub fn quireink_sdk::widgets::caption_height(&quireink_sdk::Env<'_>) -> u16
 pub fn quireink_sdk::widgets::changed(&quireink_sdk::Id) -> quireink_sdk::Command
 pub fn quireink_sdk::widgets::choice(&quireink_sdk::Id, &str, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, &'static [&'static str], &'static str) -> quireink_sdk::SettingSpec
@@ -2411,6 +2412,8 @@ pub fn quireink_sdk::Id::is_owned_by(&self, &quireink_sdk::Id) -> bool
 pub fn quireink_sdk::Id::namespace(&self) -> &str
 pub const fn quireink_sdk::Id::new_static(&'static str) -> quireink_sdk::Id
 pub fn quireink_sdk::Id::parse(&str) -> core::result::Result<quireink_sdk::Id, quireink_sdk::InvalidId>
+pub fn quireink_sdk::Id::placed(&self) -> core::option::Option<alloc::string::String>
+pub fn quireink_sdk::Id::placement(&self, u32) -> quireink_sdk::Id
 impl core::borrow::Borrow<str> for quireink_sdk::Id
 pub fn quireink_sdk::Id::borrow(&self) -> &str
 impl core::fmt::Debug for quireink_sdk::Id
@@ -2707,6 +2710,7 @@ pub fn quireink_sdk::Settings::groups(&self) -> impl core::iter::traits::iterato
 pub fn quireink_sdk::Settings::int(&self, &str) -> i64
 pub fn quireink_sdk::Settings::is_scoped(&self, &str) -> bool
 pub fn quireink_sdk::Settings::new() -> Self
+pub fn quireink_sdk::Settings::placement_values(&self, &str) -> alloc::vec::Vec<quireink_sdk::Id>
 pub fn quireink_sdk::Settings::read<T: quireink_sdk::setting::SettingType>(&self, &quireink_sdk::setting::Setting<T>) -> <T as quireink_sdk::setting::SettingType>::Value
 pub fn quireink_sdk::Settings::reset(&mut self, &str) -> core::result::Result<(), quireink_sdk::SettingError>
 pub fn quireink_sdk::Settings::scope(&self) -> core::option::Option<&quireink_sdk::collections::VecMap<quireink_sdk::Id, quireink_sdk::SettingValue>>
@@ -2718,8 +2722,10 @@ pub fn quireink_sdk::Settings::set_from_text(&mut self, &str, &str) -> core::res
 pub fn quireink_sdk::Settings::set_in_scope(&mut self, &str, quireink_sdk::SettingValue) -> core::result::Result<(), quireink_sdk::SettingError>
 pub fn quireink_sdk::Settings::set_scope(&mut self, core::option::Option<quireink_sdk::collections::VecMap<quireink_sdk::Id, quireink_sdk::SettingValue>>)
 pub fn quireink_sdk::Settings::shrink_to_fit(&mut self)
+pub fn quireink_sdk::Settings::spec(&self, &str) -> core::option::Option<&quireink_sdk::SettingSpec>
 pub fn quireink_sdk::Settings::specs(&self) -> impl core::iter::traits::iterator::Iterator<Item = &quireink_sdk::SettingSpec>
 pub fn quireink_sdk::Settings::text(&self, &str) -> &str
+pub fn quireink_sdk::Settings::with_placement<R>(&self, core::option::Option<&str>, impl core::ops::function::FnOnce() -> R) -> R
 pub struct quireink_sdk::SlotSpec
 pub quireink_sdk::SlotSpec::id: quireink_sdk::Id
 pub quireink_sdk::SlotSpec::title: alloc::borrow::Cow<'static, str>
