@@ -2041,6 +2041,7 @@ dependencies = [
  "quireink-plugin-update",
  "quireink-plugin-vocabulary",
  "quireink-plugin-wallabag",
+ "quireink-plugin-widgets",
  "quireink-plugin-wifi",
  "quireink-plugin-wikipedia",
 ]
@@ -2417,6 +2418,13 @@ name = "quireink-plugin-wallabag"
 version = "0.4.0-dev"
 dependencies = [
  "quireink-json",
+ "quireink-sdk",
+]
+
+[[package]]
+name = "quireink-plugin-widgets"
+version = "0.4.0-dev"
+dependencies = [
  "quireink-sdk",
 ]
 

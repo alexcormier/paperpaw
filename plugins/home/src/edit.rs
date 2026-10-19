@@ -348,8 +348,18 @@ impl AddScreen {
             })
             .map(|(id, title)| (id.clone(), title.to_string()))
             .collect();
-        // The spaces after the widgets that show something.
-        offered.sort_by_key(|(id, _)| widgets::repeatable(id.as_str()));
+        // By their kind, as `categories::ALL` orders them (the spaces,
+        // which are room, after the widgets that show something).
+        let kind = |id: &Id| env.widgets.category(id.as_str()).unwrap_or_default();
+        let rank = |id: &Id| {
+            let kind = kind(id);
+            let order = widgets::categories::ALL.iter().position(|k| *k == kind);
+            (
+                widgets::repeatable(id.as_str()),
+                order.unwrap_or(usize::MAX),
+            )
+        };
+        offered.sort_by_key(|(id, _)| rank(id));
         Self {
             widgets: offered,
             list: ListView::new(area, style.row).focus_on_keys(env),
@@ -398,8 +408,12 @@ impl Screen for AddScreen {
         let widgets = &self.widgets;
         self.list
             .draw(canvas, &style, len, |canvas, index, rect, focused| {
-                let title = env.i18n.tr(&widgets[index].1);
-                ui::draw_value_row(canvas, env, &style, rect, focused, title, "+");
+                // Its kind beside it, so that widgets of a kind are seen
+                // together.
+                let (id, title) = &widgets[index];
+                let kind = env.widgets.category(id.as_str()).unwrap_or_default();
+                let title = env.i18n.tr(title);
+                ui::draw_value_row(canvas, env, &style, rect, focused, title, env.i18n.tr(kind));
             });
     }
 

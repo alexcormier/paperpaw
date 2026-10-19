@@ -419,7 +419,10 @@ read again each minute; one that can be drawn smaller says how small
 (`min_height`), so that a grid fits it where its full height has no
 room. `widgets::grid` puts widgets
 and tools in a grid as the home screen does, edited in place
-(`GridView`).
+(`GridView`). Say which kind a widget is
+(`.category(widgets::categories::TIME)`, or `BOOKS`, `READING`, `WORDS`,
+`PERSONAL`, `WORLD`, `DEVICE`): the home screen offers widgets by their
+kind, each drawn as it would show.
 
 ### Widgets with settings
 
@@ -430,6 +433,34 @@ and the home screen's editor offers them as the widget's *Settings*. For
 the alignment there is a ready setting: register
 `widgets::align_setting(&id, Align::Left)` and place each text with
 `widgets::align(env, id).x(area, width)`.
+
+Widgets of all plugins share a look the reader shapes for each, so that
+they sit well together on a page: give yours a frame and draw in it.
+
+```rust
+r.add_setting(widgets::frame_setting(&ID, Frame::None))?; // none, line, light or dark card
+r.add_setting(widgets::size_setting(&ID, Size::Medium, true))?; // true: also "as large as it fits"
+r.add_setting(widgets::part_setting(&ID, "author", "my.show-author", true))?;
+
+fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
+    let look = widgets::draw_frame(canvas, env, ID.as_str(), area);
+    let rest = widgets::draw_caption(canvas, env, ID.as_str(), &look, "Today");
+    let size = widgets::size(env, ID.as_str()).text(&UiStyle::new(env));
+    // ... the content in `rest`, in `look.ink` (and `look.faint` for
+    // what matters less), never in a fixed black: on a dark card it is
+    // light.
+}
+```
+
+`widgets::shows(env, id, "author")` reads a part's switch,
+`widgets::choice` makes other choices of the widget's own, and
+`widgets::draw_message` says kindly what is not there yet. A widget's
+`height` counts its frame (`widgets::look::look` gives the area inside
+it without drawing). For round things there are `Canvas::fill_circle`,
+`stroke_circle`, `fill_ring` (arcs, e.g. a progress ring) and
+`draw_hand`, with angles as on a clock face (`quireink_sdk::round`);
+light grays are drawn with `fill_shaded` or `fill_round_shaded`, which
+dither them on black and white panels.
 
 Screens that place widgets one below the other should know the kernel's
 two widgets for room between them: `widgets::SPACE` is an ordinary
