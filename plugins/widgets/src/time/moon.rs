@@ -1,0 +1,502 @@
+//! The moon's phase: today's moon drawn, its lit part bounded by the
+//! terminator as it is seen, with the phase's name and when the moon is
+//! full next.
+//!
+//! The new and full moons are reckoned as astronomers do (Meeus,
+//! *Astronomical Algorithms*, chapter 49: the mean lunation and its
+//! largest periodic terms), in whole numbers: within minutes of the true
+//! times, enough for the day.
+
+use alloc::format;
+use alloc::string::String;
+use alloc::vec::Vec;
+
+use quireink_sdk::round::{UNIT, sin_cos};
+use quireink_sdk::time::{self, LocalTime};
+use quireink_sdk::widgets::{self, Align, Drawn, Frame};
+use quireink_sdk::{Arg, Canvas, Color, Env, Id, Point, Rect, RegisterError, Registrar};
+
+use super::{chosen, dates, frame_height, line, ui};
+
+const ID: Id = Id::new_static("widgets.moon");
+
+/// The values of the hemisphere setting: the moon as seen from the north
+/// (waxing lit on the right), or from the south.
+const HEMISPHERES: [&str; 2] = ["widgets.moon.north", "widgets.moon.south"];
+/// The values of the shadow setting: dark, light.
+const SHADOWS: [&str; 2] = ["widgets.moon.shadow.dark", "widgets.moon.shadow.light"];
+
+/// A lunation, in milliseconds (29.530588861 days).
+const LUNATION: i64 = 2_551_442_877;
+/// The mean new moon of 6 January 2000 (lunation 0), in milliseconds
+/// since 1970 (UTC).
+const EPOCH: i64 = 947_168_373_824;
+
+pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
+    super::add(
+        r,
+        &ID,
+        "widgets.moon",
+        Drawn::new(height, draw).shows(super::today_shows),
+        Align::Left,
+        Frame::None,
+    )?;
+    for (part, title, default) in [
+        ("name", "widgets.setting.phase-name", true),
+        ("full", "widgets.setting.next-full-moon", true),
+        ("lit", "widgets.setting.lit-percent", false),
+    ] {
+        r.add_setting(widgets::part_setting(&ID, part, title, default))?;
+    }
+    r.add_setting(widgets::choice(
+        &ID,
+        "shadow",
+        "widgets.setting.shadow",
+        &SHADOWS,
+        SHADOWS[0],
+    ))?;
+    r.add_setting(widgets::choice(
+        &ID,
+        "hemisphere",
+        "widgets.setting.hemisphere",
+        &HEMISPHERES,
+        HEMISPHERES[0],
+    ))?;
+    r.add_setting(super::date_format_setting(&ID, super::DATE_FORMATS[0]))?;
+    Ok(())
+}
+
+/// When the moon is new (`half` even) or full (`half` odd) in half
+/// lunation `half` since that of January 2000, in milliseconds since
+/// 1970 (UTC).
+pub(super) fn phase_time(half: i64) -> i64 {
+    // The sun's and the moon's mean anomaly and the moon's argument of
+    // latitude, in millionths of a degree.
+    let angle = |at_zero: i64, per_lunation: i64| at_zero + per_lunation * half / 2;
+    let m = angle(2_553_400, 29_105_357);
+    let m1 = angle(201_564_300, 385_816_935);
+    let f = angle(160_710_800, 390_670_503);
+    let sin = |micro: i64| {
+        let degrees = (micro.rem_euclid(360_000_000) + 500_000) / 1_000_000;
+        i64::from(sin_cos(degrees as i32).0)
+    };
+    let full = half % 2 != 0;
+    // The largest terms, in hundred-thousandths of a day.
+    let terms: [(i64, i64); 10] = [
+        (if full { -40_614 } else { -40_720 }, sin(m1)),
+        (if full { 17_302 } else { 17_241 }, sin(m)),
+        (if full { 1_614 } else { 1_608 }, sin(2 * m1)),
+        (if full { 1_043 } else { 1_039 }, sin(2 * f)),
+        (if full { 734 } else { 739 }, sin(m1 - m)),
+        (if full { -515 } else { -514 }, sin(m1 + m)),
+        (if full { 209 } else { 208 }, sin(2 * m)),
+        (-111, sin(m1 - 2 * f)),
+        (-57, sin(m1 + 2 * f)),
+        (56, sin(2 * m1 + m)),
+    ];
+    let correction: i64 = terms.iter().map(|(c, s)| c * s).sum::<i64>() / i64::from(UNIT);
+    EPOCH + LUNATION * half / 2 + correction * 864
+}
+
+/// The moon at a time.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct Moon {
+    /// How far round its lunation it is, in degrees: 0 new, 180 full.
+    pub degrees: i32,
+    /// When it is full next (or was, today), in milliseconds since 1970.
+    pub next_full: i64,
+    /// Days since it was new.
+    pub age: i64,
+}
+
+/// The moon at `unix_ms` milliseconds since 1970 (UTC).
+pub(super) fn moon(unix_ms: i64) -> Moon {
+    let mut k = (unix_ms - EPOCH).div_euclid(LUNATION);
+    while phase_time(2 * k) > unix_ms {
+        k -= 1;
+    }
+    while phase_time(2 * k + 2) <= unix_ms {
+        k += 1;
+    }
+    let (new, next) = (phase_time(2 * k), phase_time(2 * k + 2));
+    let degrees = ((unix_ms - new) * 360 / (next - new)) as i32;
+    // The full moon of this lunation, or the next one once it passed
+    // (but for the rest of its day).
+    let full = phase_time(2 * k + 1);
+    let next_full = if full + 86_400_000 > unix_ms {
+        full
+    } else {
+        phase_time(2 * k + 3)
+    };
+    Moon {
+        degrees,
+        next_full,
+        age: (unix_ms - new) / 86_400_000,
+    }
+}
+
+/// The phase's name, one of eight: new moon, waxing crescent, first
+/// quarter, waxing gibbous, full moon, waning gibbous, last quarter,
+/// waning crescent; each principal phase for a day and a half round it.
+pub(super) fn phase(degrees: i32) -> u8 {
+    const PRINCIPAL: i32 = 18;
+    let d = degrees.rem_euclid(360);
+    let near = |at: i32| (d - at).abs() <= PRINCIPAL;
+    if !(PRINCIPAL..360 - PRINCIPAL).contains(&d) {
+        0
+    } else if near(90) {
+        2
+    } else if near(180) {
+        4
+    } else if near(270) {
+        6
+    } else {
+        // Between them: 1, 3, 5, 7.
+        (d / 90) as u8 * 2 + 1
+    }
+}
+
+/// How much of the moon is lit, in percent.
+pub(super) fn lit(degrees: i32) -> u8 {
+    let (_, cos) = sin_cos(degrees);
+    ((UNIT - cos) * 100 / (2 * UNIT)) as u8
+}
+
+fn height(env: &Env<'_>, width: u16) -> u16 {
+    let (style, _) = ui(env);
+    (width / 2).min((style.row * 3) as u16) + frame_height(env, ID.as_str())
+}
+
+/// The lines of text beside the moon.
+fn lines(env: &Env<'_>, moon: &Moon, today: &LocalTime) -> Vec<String> {
+    let mut lines = Vec::new();
+    if widgets::shows(env, ID.as_str(), "name") {
+        let key = format!("widgets.moon.phase.{}", phase(moon.degrees));
+        lines.push(String::from(env.i18n.tr(&key)));
+    }
+    if widgets::shows(env, ID.as_str(), "full") {
+        let local = time::local_seconds(env, moon.next_full.div_euclid(1000));
+        let day = LocalTime::from_seconds(local);
+        let days = dates::days_from_civil(day.year, day.month, day.day)
+            - dates::days_from_civil(today.year, today.month, today.day);
+        let text = match days {
+            0 => String::from(env.i18n.tr("widgets.moon.full-today")),
+            1 => String::from(env.i18n.tr("widgets.moon.full-tomorrow")),
+            _ => {
+                let date = super::date_text(env, ID.as_str(), day.year, day.month, day.day, false);
+                env.i18n
+                    .format("widgets.moon.full-on", &[("date", Arg::Str(&date))])
+            }
+        };
+        lines.push(text);
+    }
+    if widgets::shows(env, ID.as_str(), "lit") {
+        lines.push(env.i18n.format(
+            "widgets.moon.lit",
+            &[("percent", Arg::Int(i64::from(lit(moon.degrees))))],
+        ));
+    }
+    lines
+}
+
+fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
+    let look = widgets::draw_frame(canvas, env, ID.as_str(), area);
+    let (style, font) = ui(env);
+    let (Some(unix), Some(today)) = (time::unix_seconds(env), time::local_time(env)) else {
+        return;
+    };
+    let moon = moon(unix * 1000);
+    let lines = lines(env, &moon, &today);
+    let area = look.area;
+    let align = widgets::align(env, ID.as_str());
+    let first = style.text;
+    let small = style.small;
+    let gap = style.gap as u16 * 2;
+    // Beside the text where the place is wide, else above it.
+    let beside = !lines.is_empty() && area.width >= area.height * 3 / 2;
+    // The lines as they fit: broken in two where they are wider.
+    let width = if beside {
+        area.width.saturating_sub(area.height + gap)
+    } else {
+        area.width
+    };
+    // Where even single words have no room beside it, the moon alone.
+    let words_fit = font.as_ref().is_some_and(|font| {
+        lines.iter().flat_map(|l| l.split_whitespace()).all(|word| {
+            let size = super::fit_size(font, small, word, f32::from(width));
+            font.measure(size, word) <= f32::from(width)
+        })
+    });
+    let (lines, beside) = if words_fit {
+        (lines, beside)
+    } else {
+        (Vec::new(), false)
+    };
+    let build = |count: usize, most: usize, scale: f32| -> Vec<(String, f32, Color)> {
+        let Some(font) = &font else {
+            return Vec::new();
+        };
+        lines
+            .iter()
+            .take(count)
+            .enumerate()
+            .flat_map(|(n, text)| {
+                let (size, color) = if n == 0 {
+                    (first, look.ink)
+                } else {
+                    (small, look.faint)
+                };
+                let size = size * scale;
+                let size = super::fit_words(font, size, text, f32::from(width));
+                super::wrap(font, size, text, f32::from(width), most)
+                    .into_iter()
+                    .map(move |l| (l, size, color))
+            })
+            .collect()
+    };
+    let height_of = |rows: &[(String, f32, Color)]| -> f32 {
+        font.as_ref().map_or(0.0, |font| {
+            rows.iter().map(|(_, size, _)| line(font, *size)).sum()
+        })
+    };
+    // Where they are too many for the place: a little smaller, then the
+    // last ones left out, then the first one alone, shortened.
+    let room = if beside {
+        f32::from(area.height)
+    } else {
+        f32::from(area.height) * 0.6
+    };
+    let mut rows = Vec::new();
+    for count in (1..=lines.len()).rev() {
+        rows = build(count, 2, 1.0);
+        let high = height_of(&rows);
+        if high > room {
+            rows = build(count, 2, (room / high).max(0.75));
+        }
+        if height_of(&rows) <= room {
+            break;
+        }
+        if count == 1 {
+            rows = build(1, 1, 1.0);
+        }
+    }
+    let heights: Vec<f32> = match &font {
+        Some(font) => rows.iter().map(|(_, size, _)| line(font, *size)).collect(),
+        None => Vec::new(),
+    };
+    let text_h: f32 = heights.iter().sum();
+    let side = if beside {
+        area.height
+    } else {
+        area.height
+            .saturating_sub(text_h as u16 + if lines.is_empty() { 0 } else { gap / 2 })
+            .min(area.width)
+    };
+    let radius = u32::from(side / 2).saturating_sub(1);
+    if radius < 4 {
+        return;
+    }
+    let (moon_x, text_room) = if beside {
+        let rest = area.width - side - gap;
+        match align {
+            Align::Right => (
+                area.x + area.width - side,
+                Rect::new(area.x, area.y, rest, area.height),
+            ),
+            Align::Center => {
+                // The moon and the text together in the middle.
+                let widest = font.as_ref().map_or(0.0, |font| {
+                    rows.iter()
+                        .map(|(l, size, _)| font.measure(*size, l))
+                        .fold(0.0, f32::max)
+                });
+                let used = (f32::from(side + gap) + widest).min(f32::from(area.width)) as u16;
+                let left = area.x + (area.width - used) / 2;
+                (
+                    left,
+                    Rect::new(left + side + gap, area.y, rest, area.height),
+                )
+            }
+            Align::Left => (
+                area.x,
+                Rect::new(area.x + side + gap, area.y, rest, area.height),
+            ),
+        }
+    } else {
+        (align.x(area, f32::from(side)) as u16, area)
+    };
+    let top = if beside {
+        area.y
+    } else {
+        area.y + area.height.saturating_sub(side + gap / 2 + text_h as u16) / 2
+    };
+    let center = Point::new(
+        i32::from(moon_x) + i32::from(side / 2),
+        i32::from(top) + i32::from(side / 2),
+    );
+    let south = chosen(env, ID.as_str(), "hemisphere") == "south";
+    let light = chosen(env, ID.as_str(), "shadow") == "light";
+    draw_moon(canvas, &look, center, radius, moon.degrees, south, light);
+
+    let Some(font) = font else {
+        return;
+    };
+    let text_room = if beside {
+        text_room
+    } else {
+        Rect::new(
+            text_room.x,
+            top + side + gap / 2,
+            text_room.width,
+            text_h as u16,
+        )
+    };
+    let text_align = if beside && align == Align::Center {
+        Align::Left
+    } else {
+        align
+    };
+    let mut y = f32::from(text_room.y) + (f32::from(text_room.height) - text_h).max(0.0) / 2.0;
+    for ((text, size, color), h) in rows.iter().zip(&heights) {
+        let row = Rect::new(text_room.x, y as u16, text_room.width, *h as u16);
+        super::label(canvas, &font, *size, text_align, row, text, *color);
+        y += h;
+    }
+}
+
+/// Draws the moon `degrees` round its lunation as a disc of `radius`
+/// round `center`: its lit part light, the rest dark (or a light gray),
+/// a fine ring round it.
+fn draw_moon(
+    canvas: &mut Canvas<'_>,
+    look: &widgets::Look,
+    center: Point,
+    radius: u32,
+    degrees: i32,
+    south: bool,
+    light_shadow: bool,
+) {
+    let (lit_color, dark) = super::light_and_dark(look);
+    let r = radius as i32;
+    if light_shadow {
+        // Shaded where the panel has few grays: row by row.
+        let gray = if look.paper.luma() < 128 { 90 } else { 190 };
+        for dy in -r..r {
+            let y = 2 * dy + 1;
+            let w = ((4 * r * r - y * y).max(0) as u32).isqrt() as i32 / 2;
+            let row = Rect::new(
+                (center.x - w).max(0) as u16,
+                (center.y + dy).max(0) as u16,
+                (2 * w) as u16,
+                1,
+            );
+            canvas.fill_shaded(row, Color::gray(gray));
+        }
+    } else {
+        canvas.fill_circle(center, radius, dark);
+    }
+    // The lit part of each eighth of a row: from the terminator to the
+    // edge, in eighths of a pixel from the centre.
+    let (_, cos) = sin_cos(degrees);
+    let waxing = degrees.rem_euclid(360) < 180;
+    let right = waxing != south;
+    let r8 = 8 * i64::from(radius);
+    let spans: Vec<(i32, i32)> = (0..2 * r * 4)
+        .map(|sub| {
+            let y8 = 2 * i64::from(sub) + 1 - r8;
+            let w = (r8 * r8 - y8 * y8).max(0).isqrt();
+            let terminator = w * i64::from(cos) / i64::from(UNIT);
+            let (lo, hi) = if right {
+                (terminator, w)
+            } else {
+                (-w, -terminator)
+            };
+            (lo as i32, hi as i32)
+        })
+        .collect();
+    let size = 2 * radius;
+    canvas.draw_mask(center.x - r, center.y - r, size, size, lit_color, |x, y| {
+        let left = 8 * x as i32 - r * 8;
+        let mut covered = 0;
+        for sub in 0..4 {
+            let (lo, hi) = spans[(y * 4 + sub) as usize];
+            covered += (hi.min(left + 8) - lo.max(left)).max(0);
+        }
+        (covered * 255 / 32) as u8
+    });
+    let ring = (radius / 30).max(1);
+    canvas.stroke_circle(center, radius, ring, look.ink);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Milliseconds since 1970 of a time (UTC).
+    fn utc(year: i32, month: u8, day: u8, hour: i64, minute: i64) -> i64 {
+        (dates::days_from_civil(year, month, day) * 86_400 + hour * 3600 + minute * 60) * 1000
+    }
+
+    /// Whether `at` lies within `hours` of `expected`.
+    fn near(at: i64, expected: i64, hours: i64) -> bool {
+        (at - expected).abs() <= hours * 3_600_000
+    }
+
+    #[test]
+    fn new_and_full_moons_on_known_dates() {
+        // New moons with solar eclipses, full moons with lunar ones.
+        for (expected, full) in [
+            (utc(2024, 4, 8, 18, 21), false),
+            (utc(2026, 2, 17, 12, 1), false),
+            (utc(2026, 8, 12, 17, 37), false),
+            (utc(2025, 3, 14, 6, 55), true),
+            (utc(2026, 3, 3, 11, 38), true),
+            (utc(2026, 8, 28, 4, 18), true),
+            (utc(2000, 1, 6, 18, 14), false),
+        ] {
+            let k = (expected - EPOCH + LUNATION / 4).div_euclid(LUNATION / 2);
+            assert_eq!(k % 2 != 0, full);
+            let at = phase_time(k);
+            assert!(near(at, expected, 1), "{k}: {}", (at - expected) / 60_000);
+        }
+    }
+
+    #[test]
+    fn the_moon_on_known_days() {
+        // 14 October 2026, a few days after the new moon of 10 October:
+        // a waxing crescent, full on 26 October.
+        let m = moon(utc(2026, 10, 14, 8, 41));
+        assert_eq!(phase(m.degrees), 1);
+        assert_eq!(m.age, 3);
+        let full = LocalTime::from_seconds(m.next_full / 1000);
+        assert_eq!((full.month, full.day), (10, 26));
+        assert!(lit(m.degrees) < 25);
+        // The night of the full moon of 3 March 2026.
+        let m = moon(utc(2026, 3, 3, 12, 0));
+        assert_eq!(phase(m.degrees), 4);
+        assert!(lit(m.degrees) >= 99);
+        assert_eq!(LocalTime::from_seconds(m.next_full / 1000).day, 3);
+        // A week after: waning gibbous, then last quarter.
+        assert_eq!(phase(moon(utc(2026, 3, 7, 12, 0)).degrees), 5);
+        assert_eq!(phase(moon(utc(2026, 3, 11, 12, 0)).degrees), 6);
+        // Before the new moon of 17 February: a waning crescent.
+        assert_eq!(phase(moon(utc(2026, 2, 14, 12, 0)).degrees), 7);
+        assert_eq!(phase(moon(utc(2026, 2, 17, 13, 0)).degrees), 0);
+    }
+
+    #[test]
+    fn phases_and_light() {
+        assert_eq!(phase(0), 0);
+        assert_eq!(phase(359), 0);
+        assert_eq!(phase(45), 1);
+        assert_eq!(phase(90), 2);
+        assert_eq!(phase(135), 3);
+        assert_eq!(phase(180), 4);
+        assert_eq!(phase(225), 5);
+        assert_eq!(phase(270), 6);
+        assert_eq!(phase(315), 7);
+        assert_eq!(lit(0), 0);
+        assert_eq!(lit(90), 50);
+        assert_eq!(lit(180), 100);
+    }
+}
