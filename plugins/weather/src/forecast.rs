@@ -38,52 +38,57 @@ const NAMES: [&str; 3] = [
     "weather.names.initial",
     "weather.names.long",
 ];
-/// Its parts: the setting's key, its title, whether shown at first.
-const PARTS: [(&str, &str, bool); 7] = [
-    ("symbol", "weather.part.symbol", true),
-    ("low", "weather.part.low", true),
-    ("rain", "weather.part.rain-days", false),
-    ("bars", "weather.part.bars", true),
-    ("today", "weather.part.today", true),
-    ("place", "weather.part.place", false),
-    ("lines", "weather.part.lines", false),
+/// Its look, kept in the program.
+static LOOK: [SettingSpec; 3] = [
+    widgets::frame_spec("weather.forecast.frame", ID, Frame::None),
+    widgets::size_spec("weather.forecast.size", ID, Size::Fit, true),
+    widgets::align_spec("weather.forecast.align", ID, Align::Center),
+];
+/// The rest of its settings after the days, kept in the program: what
+/// it shows and how.
+static SETTINGS: [SettingSpec; 11] = [
+    SettingSpec::fixed_choice(
+        "weather.forecast.start",
+        "weather.setting.start",
+        &STARTS,
+        STARTS[0],
+        ID,
+    ),
+    SettingSpec::fixed_choice(
+        "weather.forecast.layout",
+        "weather.setting.layout",
+        &LAYOUTS,
+        LAYOUTS[0],
+        ID,
+    ),
+    SettingSpec::fixed_choice(
+        "weather.forecast.names",
+        "weather.setting.names",
+        &NAMES,
+        NAMES[0],
+        ID,
+    ),
+    draw::style_spec("weather.forecast.style", ID),
+    widgets::part_spec("weather.forecast.symbol", ID, "weather.part.symbol", true),
+    widgets::part_spec("weather.forecast.low", ID, "weather.part.low", true),
+    widgets::part_spec("weather.forecast.rain", ID, "weather.part.rain-days", false),
+    widgets::part_spec("weather.forecast.bars", ID, "weather.part.bars", true),
+    widgets::part_spec("weather.forecast.today", ID, "weather.part.today", true),
+    widgets::part_spec("weather.forecast.place", ID, "weather.part.place", false),
+    widgets::part_spec("weather.forecast.lines", ID, "weather.part.lines", false),
 ];
 
 pub(crate) fn register(r: &mut Registrar, state: &Shared) -> Result<(), RegisterError> {
     r.add_setting_group(widgets::settings_group(&ID, "weather.widget.forecast"))?;
-    r.add_setting(widgets::frame_setting(&ID, Frame::None))?;
-    r.add_setting(widgets::size_setting(&ID, Size::Fit, true))?;
-    r.add_setting(widgets::align_setting(&ID, Align::Center))?;
+    r.add_settings(&LOOK)?;
+    // The days are counted with their unit, which a setting kept in the
+    // program cannot have: made here.
     r.add_setting(
         SettingSpec::number(&DAYS, "weather.setting.days", 3, 7, 5)
             .unit("weather.unit.days")
             .group(ID),
     )?;
-    r.add_setting(widgets::choice(
-        &ID,
-        "start",
-        "weather.setting.start",
-        &STARTS,
-        STARTS[0],
-    ))?;
-    r.add_setting(widgets::choice(
-        &ID,
-        "layout",
-        "weather.setting.layout",
-        &LAYOUTS,
-        LAYOUTS[0],
-    ))?;
-    r.add_setting(widgets::choice(
-        &ID,
-        "names",
-        "weather.setting.names",
-        &NAMES,
-        NAMES[0],
-    ))?;
-    r.add_setting(draw::style_setting(&ID))?;
-    for (part, title, default) in PARTS {
-        r.add_setting(widgets::part_setting(&ID, part, title, default))?;
-    }
+    r.add_settings(&SETTINGS)?;
     let state = state.clone();
     r.add_widget(
         WidgetSpec::new(ID, "weather.widget.forecast", move |env| {
@@ -323,6 +328,24 @@ impl Context<'_, '_> {
         };
         while words_of(high, with_low) > area.height && high > style.small * 0.8 {
             high -= 1.0;
+        }
+        // The symbols rather than the largest digits: smaller digits where
+        // that leaves room for them.
+        if with_symbol {
+            // As the symbol is placed below: at least a name's height.
+            let room = |high: f32| {
+                let name = widgets::line_height(self.env, name_of(high));
+                area.height
+                    .saturating_sub(words_of(high, with_low) + gap * 2)
+                    >= name
+            };
+            let mut smaller = high;
+            while !room(smaller) && smaller > style.text {
+                smaller -= 1.0;
+            }
+            if room(smaller) {
+                high = smaller;
+            }
         }
         if with_low && words_of(high, true) > area.height {
             with_low = false;
@@ -585,12 +608,28 @@ mod tests {
 
     #[test]
     fn calm_parts_at_first() {
-        let shown: Vec<&str> = PARTS
+        use quireink_sdk::SettingValue;
+        for spec in LOOK.iter().chain(&SETTINGS) {
+            assert!(
+                spec.id.as_str().starts_with("weather.forecast."),
+                "{}",
+                spec.id
+            );
+            assert_eq!(spec.group, ID);
+        }
+        let shown: Vec<&str> = SETTINGS
             .iter()
-            .filter(|(_, _, on)| *on)
-            .map(|(k, _, _)| *k)
+            .filter(|s| s.default == SettingValue::Bool(true))
+            .map(|s| s.id.as_str())
             .collect();
-        assert_eq!(shown, ["symbol", "low", "bars", "today"]);
-        assert_eq!(STARTS.len(), 2);
+        assert_eq!(
+            shown,
+            [
+                "weather.forecast.symbol",
+                "weather.forecast.low",
+                "weather.forecast.bars",
+                "weather.forecast.today"
+            ]
+        );
     }
 }

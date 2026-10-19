@@ -74,6 +74,39 @@ pub const EVERY_HOURS: [&str; 4] = [
     "weather.every.3",
     "weather.every.6",
 ];
+/// The settings of the weather but the place, kept in the program.
+static SETTINGS: [SettingSpec; 4] = [
+    SettingSpec::fixed_choice(
+        "weather.temperature",
+        "weather.setting.temperature",
+        &TEMPERATURES,
+        TEMPERATURES[0],
+        GROUP,
+    ),
+    SettingSpec::fixed_choice(
+        "weather.wind",
+        "weather.setting.wind",
+        &WINDS,
+        WINDS[0],
+        GROUP,
+    ),
+    SettingSpec::fixed_choice(
+        "weather.every",
+        "weather.setting.every",
+        &EVERY_HOURS,
+        EVERY_HOURS[0],
+        GROUP,
+    )
+    .described("weather.setting.every.help"),
+    SettingSpec::fixed_text(
+        "weather.coordinates",
+        "weather.setting.coordinates",
+        "",
+        GROUP,
+    )
+    .described("weather.setting.coordinates.help")
+    .for_advanced(),
+];
 /// Fetches the weather now.
 pub const REFRESH: Id = Id::new_static("weather.refresh");
 /// Opens the place's screen.
@@ -431,31 +464,15 @@ impl Plugin for Weather {
             page: None,
         })?;
         r.add_icon(GROUP, Cow::Borrowed("sun"))?;
-        let choices = |values: &[&'static str]| values.iter().map(|v| Cow::Borrowed(*v)).collect();
-        for spec in [
+        // The place is edited on its own screen, so it is made here; the
+        // others are kept in the program.
+        r.add_setting(
             SettingSpec::text(&PLACE, "weather.setting.place", "")
                 .editor(PLACE_SCREEN)
-                .description("weather.setting.place.help"),
-            SettingSpec::choice(
-                &TEMPERATURE,
-                "weather.setting.temperature",
-                choices(&TEMPERATURES),
-                TEMPERATURES[0],
-            ),
-            SettingSpec::choice(&WIND, "weather.setting.wind", choices(&WINDS), WINDS[0]),
-            SettingSpec::choice(
-                &EVERY,
-                "weather.setting.every",
-                choices(&EVERY_HOURS),
-                EVERY_HOURS[0],
-            )
-            .description("weather.setting.every.help"),
-            SettingSpec::text(&COORDINATES, "weather.setting.coordinates", "")
-                .advanced()
-                .description("weather.setting.coordinates.help"),
-        ] {
-            r.add_setting(spec.group(GROUP))?;
-        }
+                .description("weather.setting.place.help")
+                .group(GROUP),
+        )?;
+        r.add_settings(&SETTINGS)?;
         r.add_screen(ScreenSpec {
             id: PLACE_SCREEN,
             title: Cow::Borrowed("weather.setting.place"),
