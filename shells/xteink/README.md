@@ -68,8 +68,8 @@ python tools/x4-remote.py --script "page-forward,right,describe" --screenshot ou
 - Updates from the card (ADR 0019): two app partitions
   (`partitions.csv`, which `espflash.toml` names), signed update files
   made with `quireink-sign`, a failed update undone at the next start.
-- To come: 4 gray levels, the UC8179 controller of newer X4s, updates
-  fetched over the network.
+- To come: the UC8179 controller of newer X4s, updates fetched over the
+  network.
 
 ## The X4 Pro
 
@@ -90,9 +90,9 @@ until the flashing ends (its boot loader does not keep it on); QuireInk
 holds its power through resets, so later flashes need nothing held. Its
 USB comes through the pogo pins (Espressif's `303A:1001`).
 
-What works: the screen (black and white; four grays are shown in black
-and white for now), touch and the home key, the page and power buttons,
+What works: the screen (black and white, and four grays for pictures),
+touch and the home key, the page and power buttons,
 the SD card (SDMMC), the battery from its fuel gauge, the clock chip,
 the front light (brightness and warmth, in the quick panel), sleep, the
-network as on the X4. To come: four grays on the UC8179, the UC8279 of
-other X4 Pros, battery life measured.
+network as on the X4. To come: the UC8279 of other X4 Pros, battery
+life measured.

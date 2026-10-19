@@ -22,9 +22,15 @@
 //! These sequences are the ones the FreeInk SDK records for the X4 Pro
 //! (MIT licence), as Papyrix uses them.
 //!
-//! Four grays are not drawn yet: [`Display::write_gray_rows`] draws them
-//! in black and white (light grays white) and [`Display::refresh_gray`]
-//! shows them with a half refresh.
+//! Four grays ([`Display::write_gray_rows`], [`Display::refresh_gray`])
+//! come in two steps, as in the FreeInk SDK: the frame is shown in black
+//! and white first, every gray black; then the SDK's gray waveforms
+//! (`PSR` 0x3F, from the LUT registers) lighten the grays, chosen by a
+//! code in *old* and *new*: 00 not at all (black), 11 a little (dark
+//! gray), 10 more (light gray); white, already white, takes 11 too. The next
+//! refresh after them drives every pixel back to black or white, as a
+//! half refresh if a fast one was asked (the SDK's waveforms for a fast
+//! one leave the grays a little light).
 
 use alloc::vec;
 use alloc::vec::Vec;
@@ -74,6 +80,42 @@ mod cmd {
 const ACTIVE_INTERVAL: [u8; 2] = [0x29, 0x07];
 const IDLE_INTERVAL: [u8; 2] = [0xA9, 0x07];
 
+/// Bytes of a waveform register; the tables below give the first 12, the
+/// rest are 0.
+const LUT_LEN: usize = 42;
+
+/// The waveforms for four grays (registers 0x20 to 0x24: VCOM, then by
+/// *old* and *new* bit: 11, 01, 10, 00), from the panel showing every
+/// gray black: 11 lightens one frame, 01 and 10 two, 00 none.
+const GRAY_LUTS: [[u8; 13]; 5] = [
+    [
+        0x20, 0x00, 0x02, 0x02, 0x01, 0x01, 0x01, 0, 0, 0, 0, 0, 0x01,
+    ],
+    [
+        0x21, 0x08, 0x02, 0x02, 0x01, 0x01, 0x01, 0, 0, 0, 0, 0, 0x01,
+    ],
+    [
+        0x22, 0x20, 0x02, 0x02, 0x01, 0x01, 0x01, 0, 0, 0, 0, 0, 0x01,
+    ],
+    [
+        0x23, 0x20, 0x02, 0x02, 0x01, 0x01, 0x01, 0, 0, 0, 0, 0, 0x01,
+    ],
+    [
+        0x24, 0x00, 0x02, 0x02, 0x01, 0x01, 0x01, 0, 0, 0, 0, 0, 0x01,
+    ],
+];
+
+/// A picture of the panel as [`Display`] keeps it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Plane {
+    /// The frame in black and white.
+    Frame,
+    /// The grays' code in *old*: set but for black.
+    Old,
+    /// In *new*: set for dark gray and white.
+    New,
+}
+
 /// What [`Display::wait`] does once the controller is done refreshing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Pending {
@@ -92,6 +134,12 @@ pub struct Display<SPI, DC, RST, BUSY, D> {
     delay: D,
     /// The frame, line by line as the panel lies (480 lines of 100 bytes).
     frame: Vec<u8>,
+    /// The grays' codes for *old* and *new*, laid out as `frame`; empty
+    /// until grays are first written.
+    old: Vec<u8>,
+    new: Vec<u8>,
+    /// The panel shows grays: the next fast refresh drives them away.
+    gray_shown: bool,
     /// The controller's *old* memory holds the frame shown, for a fast
     /// refresh to compare with.
     old_valid: bool,
@@ -116,6 +164,9 @@ where
             busy,
             delay,
             frame: vec![0xFF; LINE * usize::from(PANEL_HEIGHT)],
+            old: Vec::new(),
+            new: Vec::new(),
+            gray_shown: false,
             old_valid: false,
             powered: false,
             rotation: Rotation::Deg0,
@@ -163,6 +214,7 @@ where
         self.command(cmd::GATE_SCAN, &[0x02])?;
         self.command(cmd::POWER_SAVING, &[0x22])?;
         self.old_valid = false;
+        self.gray_shown = false;
         self.powered = false;
         self.pending = None;
         Ok(())
@@ -203,29 +255,25 @@ where
                     let c = rows.pixel(x, y);
                     u16::from(c.r) * 77 + u16::from(c.g) * 150 + u16::from(c.b) * 29 >= 128 * 256
                 };
-                self.set(x, top + y, light);
+                let place = self.place(x, top + y);
+                put(&mut self.frame, place, light);
             }
         }
         Ok(())
     }
 
-    /// Sets the pixel at `(x, y)` of the turned screen white or black.
-    fn set(&mut self, x: u16, y: u16, white: bool) {
+    /// The byte and bit of the turned screen's pixel `(x, y)` in a plane.
+    fn place(&self, x: u16, y: u16) -> (usize, u8) {
         let (sx, sy) = upright(self.rotation, x, y);
         let (column, line) = panel_place(sx, sy);
         let at = usize::from(line) * LINE + usize::from(column / 8);
-        let bit = 0x80 >> (column % 8);
-        if let Some(byte) = self.frame.get_mut(at) {
-            if white {
-                *byte |= bit;
-            } else {
-                *byte &= !bit;
-            }
-        }
+        (at, 0x80 >> (column % 8))
     }
 
-    /// Writes four grays (2 bits a pixel, 0 black, 3 white) in black and
-    /// white for now: the two lighter grays white.
+    /// Writes screen rows in four grays (2 bits a pixel, 0 black, 3
+    /// white; `top` and `rows` as for [`Display::write_rows`]), shown with
+    /// [`Display::refresh_gray`]. The frame gets them in black and white,
+    /// only white white.
     pub fn write_gray_rows(&mut self, top: u16, rows: FrameView<'_>) -> Result<(), Error> {
         let (width, screen_height) = self.size();
         if top >= screen_height
@@ -235,22 +283,53 @@ where
         {
             return Err(Error::Rows);
         }
+        if self.old.is_empty() {
+            self.old = vec![0; self.frame.len()];
+            self.new = vec![0; self.frame.len()];
+        }
         let height = rows.height.min(screen_height - top);
         for y in 0..height {
             for x in 0..width {
                 let at = usize::from(y) * rows.stride + usize::from(x / 4);
                 let byte = rows.data.get(at).copied().unwrap_or(0xFF);
                 let level = (byte >> (6 - 2 * (x % 4))) & 0b11;
-                self.set(x, top + y, level >= 2);
+                let place = self.place(x, top + y);
+                put(&mut self.frame, place, level == 3);
+                put(&mut self.old, place, level != 0);
+                put(&mut self.new, place, level & 1 != 0);
             }
         }
         Ok(())
     }
 
-    /// Shows what [`Display::write_gray_rows`] wrote (in black and white,
-    /// with a half refresh).
+    /// Shows what [`Display::write_gray_rows`] wrote: the frame in black
+    /// and white with a fast refresh, then the grays lightened from it
+    /// (about a second more). The next fast refresh drives every pixel.
     pub fn refresh_gray(&mut self) -> Result<(), Error> {
-        self.refresh(Refresh::Half, false)
+        if self.old.is_empty() {
+            return self.refresh(Refresh::Half, false);
+        }
+        self.refresh(Refresh::Fast, false)?;
+        self.send(cmd::OLD, Plane::Old, false)?;
+        self.send(cmd::NEW, Plane::New, false)?;
+        self.command(cmd::PANEL_SETTING, &[0x3F, 0x0A])?;
+        self.load_luts(&GRAY_LUTS)?;
+        self.command(cmd::VCOM_DATA_INTERVAL, &ACTIVE_INTERVAL)?;
+        self.power_on()?;
+        self.command(cmd::REFRESH, &[])?;
+        let done = self.wait_ready();
+        self.command(cmd::VCOM_DATA_INTERVAL, &IDLE_INTERVAL)?;
+        if let Err(e) = done {
+            self.old_valid = false;
+            return Err(e);
+        }
+        // Both memories the frame in black and white, the grays black:
+        // what the next fast refresh starts from.
+        self.send(cmd::OLD, Plane::Frame, false)?;
+        self.send(cmd::NEW, Plane::Frame, false)?;
+        self.old_valid = true;
+        self.gray_shown = true;
+        Ok(())
     }
 
     /// Shows the frame; `power_off` turns the panel's power off after it.
@@ -264,12 +343,18 @@ where
     pub fn start_refresh(&mut self, refresh: Refresh, power_off: bool) -> Result<(), Error> {
         self.wait()?;
         // A fast refresh compares with the frame shown: without it, every
-        // pixel is driven.
-        let fast = refresh == Refresh::Fast && self.old_valid;
-        self.send_frame(cmd::NEW, false)?;
+        // pixel is driven; after grays, as a half refresh.
+        let fast = refresh == Refresh::Fast && self.old_valid && !self.gray_shown;
+        let refresh = if refresh == Refresh::Fast && self.gray_shown {
+            Refresh::Half
+        } else {
+            refresh
+        };
+        self.gray_shown = false;
+        self.send(cmd::NEW, Plane::Frame, false)?;
         match refresh {
             _ if fast => {}
-            Refresh::Half => self.send_frame(cmd::OLD, true)?,
+            Refresh::Half => self.send(cmd::OLD, Plane::Frame, true)?,
             _ => self.fill_old(0xFF)?,
         }
         self.command(cmd::VCOM_DATA_INTERVAL, &ACTIVE_INTERVAL)?;
@@ -280,11 +365,7 @@ where
             self.command(cmd::POWER_OFF_SEQUENCE, &[0x20])?;
             self.command(cmd::GATE_SCAN, &[0x02])?;
         }
-        if !self.powered {
-            self.command(cmd::POWER_ON, &[])?;
-            self.wait_ready()?;
-            self.powered = true;
-        }
+        self.power_on()?;
         if fast {
             self.command(cmd::PARTIAL_IN, &[])?;
         }
@@ -293,6 +374,26 @@ where
             partial: fast,
             power_off,
         });
+        Ok(())
+    }
+
+    /// Loads waveforms into their registers.
+    fn load_luts(&mut self, luts: &[[u8; 13]; 5]) -> Result<(), Error> {
+        let mut lut = [0u8; LUT_LEN];
+        for row in luts {
+            lut[..12].copy_from_slice(&row[1..]);
+            self.command(row[0], &lut)?;
+        }
+        Ok(())
+    }
+
+    /// Turns the panel's power on, if it is not.
+    fn power_on(&mut self) -> Result<(), Error> {
+        if !self.powered {
+            self.command(cmd::POWER_ON, &[])?;
+            self.wait_ready()?;
+            self.powered = true;
+        }
         Ok(())
     }
 
@@ -306,6 +407,7 @@ where
             self.powered = false;
         }
         self.old_valid = false;
+        self.gray_shown = false;
         self.command(cmd::DEEP_SLEEP, &[0xA5])
     }
 
@@ -324,7 +426,7 @@ where
             self.old_valid = false;
             return Err(e);
         }
-        self.send_frame(cmd::OLD, false)?;
+        self.send(cmd::OLD, Plane::Frame, false)?;
         self.old_valid = true;
         if pending.power_off {
             self.command(cmd::POWER_OFF, &[])?;
@@ -345,14 +447,19 @@ where
         Err(Error::Timeout)
     }
 
-    /// Sends the frame into memory `command`, inverted if asked: its lines
+    /// Sends `plane` into memory `command`, inverted if asked: its lines
     /// last first, then the lines past the panel white.
-    fn send_frame(&mut self, command: u8, invert: bool) -> Result<(), Error> {
+    fn send(&mut self, command: u8, plane: Plane, invert: bool) -> Result<(), Error> {
         self.command(command, &[])?;
         self.dc.set_high().map_err(|_| Error::Pin)?;
+        let plane = match plane {
+            Plane::Frame => &self.frame,
+            Plane::Old => &self.old,
+            Plane::New => &self.new,
+        };
         let mut line = [0u8; LINE];
         for index in (0..usize::from(PANEL_HEIGHT)).rev() {
-            let from = &self.frame[index * LINE..(index + 1) * LINE];
+            let from = &plane[index * LINE..(index + 1) * LINE];
             if invert {
                 for (to, byte) in line.iter_mut().zip(from) {
                     *to = !byte;
@@ -388,6 +495,18 @@ where
             self.spi.write(data).map_err(|_| Error::Spi)?;
         }
         Ok(())
+    }
+}
+
+/// Sets the bit at `place` (from [`Display::place`]) of `plane`, or
+/// clears it.
+fn put(plane: &mut [u8], (at, bit): (usize, u8), on: bool) {
+    if let Some(byte) = plane.get_mut(at) {
+        if on {
+            *byte |= bit;
+        } else {
+            *byte &= !bit;
+        }
     }
 }
 
@@ -438,6 +557,8 @@ mod tests {
         old: Vec<u8>,
         /// The temperatures told, by refresh.
         temperatures: Vec<u8>,
+        /// The memories at each refresh: *old*, then *new*.
+        refreshed: Vec<(Vec<u8>, Vec<u8>)>,
     }
 
     impl Controller {
@@ -448,6 +569,7 @@ mod tests {
                 match b {
                     cmd::NEW => self.new.clear(),
                     cmd::OLD => self.old.clear(),
+                    cmd::REFRESH => self.refreshed.push((self.old.clone(), self.new.clone())),
                     _ => {}
                 }
                 return;
@@ -579,6 +701,75 @@ mod tests {
         assert_eq!(c.temperatures, [0x1E, 0x5A]);
         assert!(c.commands.contains(&cmd::PARTIAL_IN));
         assert!(c.commands.contains(&cmd::PARTIAL_OUT));
+    }
+
+    /// A gray band of the upright screen, white but for its first four
+    /// pixels: black, dark gray, light gray, white.
+    fn gray_band() -> Vec<u8> {
+        let mut data = vec![0xFF; usize::from(WIDTH / 4) * 8];
+        data[0] = 0b00_01_10_11;
+        data
+    }
+
+    fn gray_view(data: &[u8]) -> FrameView<'_> {
+        FrameView {
+            width: WIDTH,
+            height: 8,
+            stride: usize::from(WIDTH / 4),
+            format: PixelFormat::Gray2,
+            data,
+        }
+    }
+
+    /// The bit of the upright screen's pixel `(x, 0)` in memory as sent:
+    /// the panel's line `479 - x`, sent as the `x`th, its first bit.
+    fn bit(memory: &[u8], x: usize) -> u8 {
+        memory[x * LINE] >> 7
+    }
+
+    #[test]
+    fn grays_are_lightened_from_black() {
+        let (mut d, c) = display();
+        let band = gray_band();
+        d.write_gray_rows(0, gray_view(&band)).unwrap();
+        d.refresh_gray().unwrap();
+        let c = c.borrow();
+        let [shown, (old, new)] = &c.refreshed[..] else {
+            panic!("two refreshes: {}", c.refreshed.len());
+        };
+        // First the frame in black and white: only white white.
+        let levels = 0..4;
+        assert_eq!(
+            levels.clone().map(|x| bit(&shown.1, x)).collect::<Vec<_>>(),
+            [0, 0, 0, 1]
+        );
+        // Then the codes: black 00, dark gray 11, light gray 10, white 11.
+        assert_eq!(
+            levels.clone().map(|x| bit(old, x)).collect::<Vec<_>>(),
+            [0, 1, 1, 1]
+        );
+        assert_eq!(
+            levels.map(|x| bit(new, x)).collect::<Vec<_>>(),
+            [0, 1, 0, 1]
+        );
+        // With waveforms of our own.
+        assert!((0x20..=0x24).all(|r| c.commands.contains(&r)));
+        // After: both memories the frame in black and white.
+        assert_eq!(c.old, c.new);
+        assert_eq!(c.new, shown.1);
+    }
+
+    #[test]
+    fn the_refresh_after_grays_drives_every_pixel() {
+        let (mut d, c) = display();
+        let band = gray_band();
+        d.write_gray_rows(0, gray_view(&band)).unwrap();
+        d.refresh_gray().unwrap();
+        d.refresh(Refresh::Fast, false).unwrap();
+        d.refresh(Refresh::Fast, false).unwrap();
+        // Fast (the first after init: full), the grays, then a half
+        // refresh in place of a fast one, then fast again.
+        assert_eq!(c.borrow().temperatures, [0x1E, 0x1E, 0x5A]);
     }
 
     #[test]
