@@ -1,6 +1,6 @@
 //! Web addresses and HTTP helpers shared by plugins that fetch things:
-//! resolving links, file names for downloads, query encoding and `Basic`
-//! authorisation.
+//! resolving links, file names for downloads, query encoding, HTTP dates
+//! and `Basic` authorisation.
 
 use alloc::format;
 use alloc::string::{String, ToString};
@@ -153,6 +153,41 @@ pub fn basic_auth(user: &str, password: &str) -> String {
     format!("Basic {}", base64(format!("{user}:{password}").as_bytes()))
 }
 
+/// The seconds since 1970 (UTC) of an HTTP date as servers send them,
+/// e.g. in `Last-Modified` or WebDAV's `getlastmodified`:
+/// `Tue, 20 Oct 2026 08:00:00 GMT` (RFC 9110's preferred form; the
+/// obsolete ones are not read).
+pub fn http_date(text: &str) -> Option<i64> {
+    const MONTHS: [&str; 12] = [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    ];
+    let (_, rest) = text.trim().split_once(", ")?;
+    let mut parts = rest.split_ascii_whitespace();
+    let day = parts.next()?.parse().ok()?;
+    let month = parts.next()?;
+    let month = MONTHS.iter().position(|m| *m == month)? as u8 + 1;
+    let year = parts.next()?.parse().ok()?;
+    let mut clock = parts.next()?.splitn(3, ':').map(str::parse::<u8>);
+    let (hour, minute, second) = (
+        clock.next()?.ok()?,
+        clock.next()?.ok()?,
+        clock.next()?.ok()?,
+    );
+    if parts.next()? != "GMT" || hour > 23 || minute > 59 || second > 60 || day > 31 {
+        return None;
+    }
+    let time = crate::time::LocalTime {
+        year,
+        month,
+        day,
+        hour,
+        minute,
+        second,
+        weekday: 0,
+    };
+    Some(time.to_seconds())
+}
+
 /// Standard base64 with padding.
 pub fn base64(data: &[u8]) -> String {
     const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -178,6 +213,25 @@ pub fn base64(data: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn http_dates() {
+        assert_eq!(
+            http_date("Tue, 20 Oct 2026 08:00:00 GMT"),
+            Some(1_792_483_200)
+        );
+        assert_eq!(http_date("Thu, 01 Jan 1970 00:00:00 GMT"), Some(0));
+        for wrong in [
+            "",
+            "20 Oct 2026 08:00:00 GMT",
+            "Tue, 20 Okt 2026 08:00:00 GMT",
+            "Tue, 20 Oct 2026 08:00:00 CET",
+            "Tue, 20 Oct 2026 25:00:00 GMT",
+            "Tuesday, 20-Oct-26 08:00:00 GMT",
+        ] {
+            assert_eq!(http_date(wrong), None, "{wrong}");
+        }
+    }
 
     #[test]
     fn links_resolve_as_in_browsers() {
