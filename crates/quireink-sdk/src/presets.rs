@@ -202,6 +202,12 @@ impl Presets {
         self.owned.push(preset);
     }
 
+    /// Forgets the presets made at start by plugin `plugin` (ids
+    /// `<plugin>.…`), e.g. of a data plugin removed while running.
+    pub fn remove_plugin(&mut self, plugin: &str) {
+        self.owned.retain(|p| p.id.namespace() != plugin);
+    }
+
     pub fn shrink_to_fit(&mut self) {
         self.fixed.shrink_to_fit();
         self.owned.shrink_to_fit();

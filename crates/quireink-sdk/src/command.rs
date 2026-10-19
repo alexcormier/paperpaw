@@ -226,6 +226,20 @@ pub enum Command {
     /// restart. The kernel refuses plugins that cannot be switched off
     /// (see [`PluginInfo::can_switch_off`](crate::PluginInfo)).
     SetPluginEnabled(Id, bool),
+    /// Loads the data plugin in this folder on the storage (e.g.
+    /// `plugins/font-fredoka`, just downloaded) at once, as if QuireInk
+    /// had found it at start: its fonts can be chosen, its translations,
+    /// key bindings and presets apply. The event
+    /// [`PLUGINS_CHANGED`](crate::builtin::events::PLUGINS_CHANGED)
+    /// follows; problems are warnings, as at start.
+    LoadPlugin(String),
+    /// Removes a data plugin: its folder is deleted and its fonts and
+    /// presets go at once (a font chosen from it gives way to the
+    /// default); what else it brought (translations, key bindings,
+    /// styles, defaults) is gone after the next start. The event
+    /// [`PLUGINS_CHANGED`](crate::builtin::events::PLUGINS_CHANGED)
+    /// follows. Plugins with code are not removed this way.
+    RemovePlugin(Id),
     /// Makes an HTTP request (see [`HttpRequest`]); the answer comes as
     /// the request's reply event. Check [`Capabilities::network`](crate::Capabilities) first.
     Http(HttpRequest),

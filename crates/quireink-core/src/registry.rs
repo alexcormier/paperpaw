@@ -127,6 +127,7 @@ pub(crate) struct Staging {
     pub(crate) fonts: Vec<FontSpec>,
     pub(crate) font_files: Vec<(Id, alloc::string::String)>,
     pub(crate) font_extensions: Vec<(Id, alloc::string::String, Id)>,
+    pub(crate) font_faces: Vec<quireink_sdk::FontFace>,
     pub(crate) font_roles: Vec<(Id, Id, Priority)>,
     pub(crate) formats: Vec<FormatSpec>,
     pub(crate) hyphenation: Vec<HyphenationSpec>,
@@ -242,6 +243,7 @@ pub(crate) fn stage(
             Contribution::FontExtension { id, path, extends } => {
                 staging.font_extensions.push((id, path, extends));
             }
+            Contribution::FontFace(face) => staging.font_faces.push(*face),
             Contribution::FontBinding {
                 role,
                 font,

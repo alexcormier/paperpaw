@@ -154,6 +154,16 @@ impl Plugins {
         self.list.push(info);
     }
 
+    /// Removes a plugin (kernel only), e.g. a data plugin removed while
+    /// running.
+    pub fn remove(&mut self, id: &str) -> Option<PluginInfo> {
+        let index = self
+            .list
+            .iter()
+            .position(|p| p.manifest.id.as_str() == id)?;
+        Some(self.list.remove(index))
+    }
+
     /// Mutable access for the kernel.
     pub fn get_mut(&mut self, id: &str) -> Option<&mut PluginInfo> {
         self.list.iter_mut().find(|p| p.manifest.id.as_str() == id)

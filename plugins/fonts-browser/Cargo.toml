@@ -1,0 +1,26 @@
+[package]
+name = "quireink-plugin-fonts-browser"
+description = "QuireInk fonts from the internet: browse a catalog of fonts with a sample of each, download one and read with it"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+categories = ["no-std"]
+
+[dependencies]
+quireink-digest.workspace = true
+quireink-json.workspace = true
+quireink-sdk.workspace = true
+
+[dev-dependencies]
+quireink-i18n.workspace = true
+quireink-core.workspace = true
+quireink-plugin-fonts-default = { workspace = true, features = ["packs"] }
+quireink-platform.workspace = true
+quireink-text.workspace = true
+
+[lints]
+workspace = true

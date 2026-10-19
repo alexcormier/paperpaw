@@ -82,7 +82,7 @@ pub use command::{
 pub use contribution::{Contribution, Registrar};
 pub use env::{Capabilities, Env, EnvParts, Metrics};
 pub use event::{Event, EventData, EventHandler};
-pub use fonts::{FontHandle, FontSet, FontSpec, Fonts};
+pub use fonts::{FontFace, FontHandle, FontSet, FontSpec, Fonts};
 pub use formats::{
     COVER_FIT, FormatOpener, FormatPrepared, FormatSpec, Formats, IMAGE_FIT, OpenOptions, cover_fit,
 };

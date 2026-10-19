@@ -150,6 +150,10 @@ pub mod slots {
 /// Standard menus. Plugins add entries with
 /// [`Registrar::add_menu_entry`](crate::Registrar::add_menu_entry); users can
 /// redefine any menu in `[menus]`.
+///
+/// A menu named like a setting with choices (e.g. `core.reading-font`)
+/// holds more ways to choose: where its options are listed, its entries
+/// follow them (e.g. *More fonts*, to download one).
 pub mod menus {
     use crate::Id;
 
@@ -536,6 +540,11 @@ pub mod events {
     /// ([`Widget::update`](crate::widgets::Widget::update)). See
     /// [`widgets::changed`](crate::widgets::changed).
     pub const WIDGET_CHANGED: Event<WidgetChanged> = Event::new("core.widget-changed");
+    /// A data plugin was loaded or removed while running
+    /// ([`Command::LoadPlugin`](crate::Command::LoadPlugin),
+    /// [`Command::RemovePlugin`](crate::Command::RemovePlugin)): lists of
+    /// plugins, fonts and presets read them anew.
+    pub const PLUGINS_CHANGED: Event<()> = Event::new("core.plugins-changed");
     /// A menu was redefined or reset ([`MenuChanged`]).
     pub const MENU_CHANGED: Event<MenuChanged> = Event::new("core.menu-changed");
     /// The device goes to sleep or the app to the background: a moment to

@@ -1279,6 +1279,7 @@ dependencies = [
  "quireink-plugin-dictionary",
  "quireink-plugin-file-manager",
  "quireink-plugin-files",
+ "quireink-plugin-fonts-browser",
  "quireink-plugin-fonts-default",
  "quireink-plugin-format-epub",
  "quireink-plugin-format-txt",
@@ -1509,6 +1510,20 @@ version = "0.4.0-dev"
 dependencies = [
  "quireink-i18n",
  "quireink-sdk",
+]
+
+[[package]]
+name = "quireink-plugin-fonts-browser"
+version = "0.4.0-dev"
+dependencies = [
+ "quireink-core",
+ "quireink-digest",
+ "quireink-i18n",
+ "quireink-json",
+ "quireink-platform",
+ "quireink-plugin-fonts-default",
+ "quireink-sdk",
+ "quireink-text",
 ]
 
 [[package]]

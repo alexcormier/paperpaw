@@ -10,6 +10,7 @@ PROFILE defaults to xteink-x4 and boox-go-7. Builds the emulator first
 (cargo build -p quireink-emulator).
 """
 
+import os
 import shutil
 import subprocess
 import sys
@@ -18,6 +19,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 EMULATOR = ROOT / "target/debug/quireink-emu"
+
+# The font library the fonts browser asks: quireink.org's, or another
+# (e.g. one running here) named in QUIREINK_FONTS_CATALOG.
+FONTS = ([f"fonts-browser.catalog={os.environ['QUIREINK_FONTS_CATALOG']}"]
+         if os.environ.get("QUIREINK_FONTS_CATALOG") else [])
 
 # Name, script, settings; a book open at start where the script says so.
 SCREENS = [
@@ -36,6 +42,8 @@ SCREENS = [
     ("transfer", "run:transfer.open,wait:500", []),
     ("calibre", "run:calibre.open,wait:500", []),
     ("catalogs", "run:opds.open", []),
+    ("fonts", "run:fonts-browser.open,wait:6000", FONTS),
+    ("font", "run:fonts-browser.open,wait:6000,run:core.confirm,wait:3000", FONTS),
     ("files", "run:file-manager.open", []),
     ("news", "run:news.open", []),
     ("battery", "run:battery.open", []),
@@ -58,13 +66,19 @@ SCREENS += [
 
 BOOK = "pride-and-prejudice.epub"
 
+# Screens that go online: the emulated X4 knows an open network
+# (`Cafe`, see shells/desktop/src/wifi.rs).
+ONLINE = {"fonts", "font"}
 
-def library(book):
+
+def library(book, online=False):
     dir = Path(tempfile.mkdtemp(prefix="quireink-screens-"))
     books = dir / "books"
     shutil.copytree(ROOT / "samples/library/books", books)
     (dir / ".quireink/plugins/setup").mkdir(parents=True)
     (dir / ".quireink/plugins/setup/done").write_text("")
+    if online:
+        (dir / ".quireink/secrets.txt").write_text("wifi.Cafe\tWi-Fi Cafe\tc\t\n")
     if book:
         names = sorted(p.name for p in books.iterdir() if p.suffix == ".epub")
         name = BOOK if BOOK in names else names[0]
@@ -91,7 +105,7 @@ def main():
         for name, script, sets in SCREENS:
             book = script.startswith("@book")
             script = script.removeprefix("@book").lstrip(",")
-            dir = library(book)
+            dir = library(book, name in ONLINE)
             shot = out / f"{profile}-{name}.png"
             command = [str(EMULATOR), "--profile", profile, "--headless",
                        "--library", str(dir), "--screenshot", str(shot),

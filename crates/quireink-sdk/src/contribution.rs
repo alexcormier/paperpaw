@@ -28,7 +28,7 @@ use core::fmt;
 use crate::action::ActionSpec;
 use crate::event::EventHandler;
 use crate::filters::{InputFilterSpec, RefreshFilterSpec, TextFilterSpec};
-use crate::fonts::FontSpec;
+use crate::fonts::{FontFace, FontSpec};
 use crate::formats::FormatSpec;
 use crate::hyphenation::HyphenationSpec;
 use crate::id::Id;
@@ -82,6 +82,8 @@ pub enum Contribution {
         path: String,
         extends: Id,
     },
+    /// A face of a family in a file (see [`Registrar::add_font_face`]).
+    FontFace(Box<FontFace>),
     FontBinding {
         role: Id,
         font: Id,
@@ -151,6 +153,7 @@ impl Contribution {
             Contribution::Font(_) => "font",
             Contribution::FontFile { .. } => "font-file",
             Contribution::FontExtension { .. } => "font-extension",
+            Contribution::FontFace(_) => "font-face",
             Contribution::FontBinding { .. } => "font-binding",
             Contribution::Format(_) => "format",
             Contribution::Hyphenation(_) => "hyphenation",
@@ -190,6 +193,7 @@ impl Contribution {
             Contribution::Font(f) => &f.id,
             Contribution::FontFile { id, .. } => id,
             Contribution::FontExtension { id, .. } => id,
+            Contribution::FontFace(f) => &f.id,
             Contribution::Format(f) => &f.id,
             Contribution::Hyphenation(h) => &h.id,
             Contribution::MenuSection(s) => &s.id,
@@ -210,7 +214,7 @@ impl Contribution {
     /// The kind its id is unique within.
     fn id_kind(&self) -> &'static str {
         match self {
-            Contribution::FontFile { .. } => "font",
+            Contribution::FontFile { .. } | Contribution::FontFace(_) => "font",
             other => other.kind(),
         }
     }
@@ -415,6 +419,14 @@ impl Registrar {
         extends: Id,
     ) -> Result<(), RegisterError> {
         self.add(Contribution::FontExtension { id, path, extends })
+    }
+
+    /// Adds a face of a family in a file on the storage: a font pack
+    /// (`.qifp`), drawn on every device, or an OpenType/TrueType file,
+    /// drawn where scalable fonts are (see [`FontFace`]). It is loaded
+    /// only while its family is chosen, for reading or the status lines.
+    pub fn add_font_face(&mut self, face: FontFace) -> Result<(), RegisterError> {
+        self.add(Contribution::FontFace(Box::new(face)))
     }
 
     /// Proposes a font for a role such as
@@ -691,6 +703,25 @@ mod tests {
             ),
             Ok(())
         ));
+        // Faces share their ids with fonts and font files.
+        assert!(matches!(
+            r.add_font_face(FontFace::new(
+                Id::new_static("demo.serif"),
+                "c.qifp",
+                "Serif",
+                false,
+                false
+            )),
+            Err(RegisterError::Duplicate { .. })
+        ));
+        r.add_font_face(FontFace::new(
+            Id::new_static("demo.serif-bold"),
+            "c.qifp",
+            "Serif",
+            true,
+            false,
+        ))
+        .unwrap();
         let kinds: Vec<&str> = r.contributions().iter().map(Contribution::kind).collect();
         // Kept small: a plugin's list is held while it registers.
         assert!(core::mem::size_of::<Contribution>() <= 96);
@@ -701,7 +732,8 @@ mod tests {
                 "menu-section",
                 "icon",
                 "font-file",
-                "font-extension"
+                "font-extension",
+                "font-face"
             ]
         );
     }

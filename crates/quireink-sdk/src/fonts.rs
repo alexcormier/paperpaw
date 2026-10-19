@@ -57,6 +57,55 @@ impl FontSpec {
     }
 }
 
+/// A face of a family in a file on the storage, as a data plugin names
+/// it (`[family]` in its `plugin.ini`): a font pack (`.qifp`), read a
+/// glyph at a time and drawn on every device, or an OpenType/TrueType
+/// file, drawn where scalable fonts are, at its style's weight (400 or
+/// 700) where it is a variable font. Loaded only while its family is
+/// chosen.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct FontFace {
+    /// `<plugin>.<name>`, e.g. `font-fredoka.bold`.
+    pub id: Id,
+    /// The file on the storage.
+    pub path: String,
+    /// The family it belongs to, e.g. `Fredoka`.
+    pub family: Cow<'static, str>,
+    pub bold: bool,
+    pub italic: bool,
+}
+
+impl FontFace {
+    pub fn new(
+        id: Id,
+        path: impl Into<String>,
+        family: impl Into<Cow<'static, str>>,
+        bold: bool,
+        italic: bool,
+    ) -> Self {
+        Self {
+            id,
+            path: path.into(),
+            family: family.into(),
+            bold,
+            italic,
+        }
+    }
+
+    /// Whether its file is a font pack, by its name.
+    pub fn is_pack(&self) -> bool {
+        is_pack(&self.path)
+    }
+}
+
+/// Whether `path` names a font pack (`.qifp`).
+fn is_pack(path: &str) -> bool {
+    path.len() > 5
+        && path.is_char_boundary(path.len() - 5)
+        && path[path.len() - 5..].eq_ignore_ascii_case(".qifp")
+}
+
 /// One registered font.
 #[derive(Debug)]
 struct Entry {
@@ -73,6 +122,9 @@ struct Entry {
     /// For a pack that adds characters to another font (e.g. Cyrillic to
     /// a font for Latin): that font.
     extends: Option<Id>,
+    /// A face named by its plugin ([`FontFace`]): a pack, or a scalable
+    /// font drawn at its style's weight.
+    face: bool,
 }
 
 /// Fonts asked in turn for a character a font lacks: its extensions, the
@@ -144,6 +196,7 @@ impl Fonts {
             italic: spec.italic,
             file: None,
             extends: None,
+            face: false,
         });
         Ok(())
     }
@@ -168,6 +221,7 @@ impl Fonts {
             weight: 400,
             file: Some(path),
             extends: Some(extends),
+            face: false,
         });
         Ok(())
     }
@@ -186,8 +240,43 @@ impl Fonts {
             weight: info.weight,
             file: Some(path),
             extends: None,
+            face: false,
         });
         Ok(())
+    }
+
+    /// Adds a face of a family in a file on the storage (see
+    /// [`FontFace`]); it is loaded only when its family is chosen.
+    pub fn add_face(&mut self, face: FontFace) -> Result<(), RegisterError> {
+        self.check_new(&face.id)?;
+        self.entries.push(Entry {
+            id: face.id,
+            font: None,
+            family: Some(face.family),
+            weight: if face.bold { 700 } else { 400 },
+            bold: face.bold,
+            italic: face.italic,
+            file: Some(face.path),
+            extends: None,
+            face: true,
+        });
+        Ok(())
+    }
+
+    /// Forgets every font of plugin `plugin` (ids `<plugin>.…`), e.g. of a
+    /// data plugin removed while running; returns how many. Glyphs drawn
+    /// so far are forgotten too.
+    pub fn remove_plugin(&mut self, plugin: &str) -> usize {
+        let before = self.entries.len();
+        self.entries.retain(|e| e.id.namespace() != plugin);
+        self.candidates
+            .retain(|(_, font, _)| font.namespace() != plugin);
+        let removed = before - self.entries.len();
+        if removed > 0 {
+            // The cache knows fonts by their place in the list.
+            self.cache.borrow_mut().clear();
+        }
+        removed
     }
 
     /// Proposes `font` for `role`; the highest priority wins.
@@ -335,7 +424,18 @@ impl Fonts {
             if entry.font.is_some() {
                 continue;
             }
-            match read_font(storage.as_ref(), path) {
+            let font = if entry.face && is_pack(path) {
+                let source = Rc::new(Stored {
+                    storage: storage.clone(),
+                    path: path.clone(),
+                });
+                StoredPack::open(source).ok().map(Font::Stored)
+            } else {
+                // A variable font at its style's weight.
+                let weight = entry.face.then(|| f32::from(entry.weight));
+                read_font(storage.as_ref(), path, weight)
+            };
+            match font {
                 Some(font) => entry.font = Some(font),
                 None => failed.push(path.clone()),
             }
@@ -501,7 +601,7 @@ impl PackSource for Stored {
 }
 
 /// Reads a font file into memory.
-fn read_font(storage: &dyn Storage, path: &str) -> Option<Font> {
+fn read_font(storage: &dyn Storage, path: &str, weight: Option<f32>) -> Option<Font> {
     let size = storage.size(path).ok()?;
     if size > MAX_FONT_FILE {
         return None;
@@ -515,7 +615,10 @@ fn read_font(storage: &dyn Storage, path: &str) -> Option<Font> {
         }
         at += n;
     }
-    Font::from_data(data, &[]).ok()
+    match weight {
+        Some(weight) => Font::from_data(data, &[("wght", weight)]).ok(),
+        None => Font::from_data(data, &[]).ok(),
+    }
 }
 
 /// Fonts a plugin loads itself, e.g. the fonts embedded in a book, with
@@ -779,5 +882,62 @@ mod tests {
         assert!(fonts.get("a.ui").unwrap().has_char('щ'));
         assert_eq!(fonts.get("a.ui").unwrap().measure(10.0, "aж"), 10.0);
         assert!(!fonts.get("a.ui").unwrap().has_char('ю'));
+    }
+
+    /// A family of packs on the storage: its faces read a glyph at a time
+    /// while it is chosen, freed when another is, forgotten with their
+    /// plugin.
+    #[test]
+    fn families_of_packs_are_chosen_and_removed() {
+        let storage: Rc<dyn Storage> = Rc::new(
+            MemoryStorage::new()
+                .with("plugins/round/fonts/round.qifp", pack("ab"))
+                .with("plugins/round/fonts/round-bold.qifp", pack("abc")),
+        );
+        let mut fonts = Fonts::new(4096);
+        let builtin = Font::from_data(pack("a"), &[]).unwrap();
+        fonts
+            .add(FontSpec::new(Id::new_static("a.serif"), builtin).family("Serif", false, false))
+            .unwrap();
+        fonts.propose(roles::READING, Id::new_static("a.serif"), Priority::DEFAULT);
+        for (name, bold) in [("round", false), ("round-bold", true)] {
+            let face = FontFace::new(
+                Id::parse(&alloc::format!("round.{name}")).unwrap(),
+                alloc::format!("plugins/round/fonts/{name}.qifp"),
+                "Round",
+                bold,
+                false,
+            );
+            assert!(face.is_pack());
+            fonts.add_face(face).unwrap();
+        }
+        assert_eq!(fonts.families(), ["Serif", "Round"]);
+        assert!(
+            fonts.get("round.round").is_none(),
+            "not before it is chosen"
+        );
+
+        fonts.set_family(Some("Round"));
+        assert!(fonts.load(&storage).is_empty());
+        let reading = fonts.role(roles::READING.as_str()).unwrap();
+        assert_eq!(reading.id().as_str(), "round.round");
+        assert!(reading.has_char('b') && !reading.has_char('c'));
+        let bold = fonts.bound(roles::READING_BOLD.as_str()).unwrap();
+        assert!(bold.has_char('c'));
+        // No italic: the regular face stands in, not another family's.
+        assert!(fonts.bound(roles::READING_ITALIC.as_str()).is_none());
+
+        fonts.set_family(None);
+        assert!(fonts.load(&storage).is_empty());
+        assert!(fonts.get("round.round").is_none(), "freed");
+
+        fonts.set_family(Some("Round"));
+        assert!(fonts.load(&storage).is_empty());
+        assert_eq!(fonts.remove_plugin("round"), 2);
+        assert_eq!(fonts.families(), ["Serif"]);
+        assert_eq!(
+            fonts.role(roles::READING.as_str()).unwrap().id().as_str(),
+            "a.serif"
+        );
     }
 }

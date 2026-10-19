@@ -2015,6 +2015,80 @@ large = off
 }
 
 #[test]
+fn data_plugins_load_and_go_while_running() {
+    use quireink_sdk::PluginState::Running;
+    use quireink_text::{Glyph, LineMetrics, PackBuilder};
+
+    let mut builder = PackBuilder::new();
+    let metrics = LineMetrics {
+        ascent: 8.0,
+        descent: 2.0,
+        line_height: 12.0,
+    };
+    builder.add_strike(10.0, metrics, alloc::vec![('a', Glyph::empty(5.0))]);
+    let pack = builder.build();
+
+    let mut kernel = Kernel::builder(DEVICE)
+        .storage(quireink_sdk::MemoryStorage::new())
+        .build()
+        .unwrap();
+    kernel.take_warnings();
+    // Downloaded while running: a family of one face.
+    let storage = kernel.shared.storage.clone();
+    storage
+        .write(
+            "plugins/font-round/plugin.ini",
+            b"[plugin]
+name = Round
+
+[family]
+name = Round
+regular = round.qifp
+",
+        )
+        .unwrap();
+    storage
+        .write("plugins/font-round/fonts/round.qifp", &pack)
+        .unwrap();
+    kernel.apply(Command::LoadPlugin("plugins/font-round".into()));
+    assert!(kernel.take_warnings().is_empty());
+    assert_eq!(kernel.plugins().get("font-round").unwrap().state, Running);
+    assert!(kernel.shared.fonts.families().contains(&"Round"));
+    assert!(kernel.output.commands.iter().any(
+        |c| matches!(c, Command::Emit(e, _) if *e == quireink_sdk::builtin::events::PLUGINS_CHANGED)
+    ));
+
+    // Chosen for reading at once.
+    kernel.apply(Command::SetSetting(
+        settings::READING_FONT.id().clone(),
+        SettingValue::Text("Round".into()),
+    ));
+    assert!(kernel.take_warnings().is_empty());
+    let reading = kernel
+        .shared
+        .fonts
+        .role(quireink_sdk::builtin::fonts::READING.as_str())
+        .unwrap();
+    assert_eq!(reading.id().as_str(), "font-round.regular");
+
+    // Removed: its folder, its fonts, and the choice gives way.
+    kernel.apply(Command::RemovePlugin(Id::new_static("font-round")));
+    assert!(kernel.take_warnings().is_empty());
+    assert!(!storage.exists("plugins/font-round/plugin.ini"));
+    assert!(kernel.plugins().get("font-round").is_none());
+    assert!(!kernel.shared.fonts.families().contains(&"Round"));
+    assert_eq!(
+        kernel.settings().text(settings::READING_FONT.as_str()),
+        settings::DEFAULT_FONT
+    );
+
+    // Plugins with code stay.
+    kernel.apply(Command::RemovePlugin(Id::new_static("core")));
+    assert_eq!(kernel.take_warnings().len(), 1);
+    assert!(kernel.plugins().get("core").is_some());
+}
+
+#[test]
 fn keymap_presets_follow_device_defaults_and_switch_at_runtime() {
     let log = log();
     let mut kernel = Kernel::builder(DEVICE)

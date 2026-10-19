@@ -229,6 +229,7 @@ pub const quireink_sdk::builtin::events::NETWORK_IDLE: quireink_sdk::event::Even
 pub const quireink_sdk::builtin::events::NETWORK_WANTED: quireink_sdk::event::Event<()>
 pub const quireink_sdk::builtin::events::NOTES_EXPORTED: quireink_sdk::event::Event<quireink_sdk::builtin::events::NotesExported>
 pub const quireink_sdk::builtin::events::PAGE_TURNED: quireink_sdk::event::Event<quireink_sdk::builtin::events::Reading>
+pub const quireink_sdk::builtin::events::PLUGINS_CHANGED: quireink_sdk::event::Event<()>
 pub const quireink_sdk::builtin::events::PREVIEW_CHANGED: quireink_sdk::event::Event<()>
 pub const quireink_sdk::builtin::events::RESUME: quireink_sdk::event::Event<()>
 pub const quireink_sdk::builtin::events::SETTING_CHANGED: quireink_sdk::event::Event<quireink_sdk::builtin::events::SettingChanged>
@@ -444,6 +445,7 @@ pub quireink_sdk::contribution::Contribution::FontExtension
 pub quireink_sdk::contribution::Contribution::FontExtension::extends: quireink_sdk::Id
 pub quireink_sdk::contribution::Contribution::FontExtension::id: quireink_sdk::Id
 pub quireink_sdk::contribution::Contribution::FontExtension::path: alloc::string::String
+pub quireink_sdk::contribution::Contribution::FontFace(alloc::boxed::Box<quireink_sdk::FontFace>)
 pub quireink_sdk::contribution::Contribution::FontFile
 pub quireink_sdk::contribution::Contribution::FontFile::id: quireink_sdk::Id
 pub quireink_sdk::contribution::Contribution::FontFile::path: alloc::string::String
@@ -507,6 +509,7 @@ pub fn quireink_sdk::contribution::Registrar::add_book_data(&mut self, impl core
 pub fn quireink_sdk::contribution::Registrar::add_decorator(&mut self, quireink_sdk::decorations::DecoratorSpec) -> core::result::Result<(), quireink_sdk::RegisterError>
 pub fn quireink_sdk::contribution::Registrar::add_font(&mut self, quireink_sdk::FontSpec) -> core::result::Result<(), quireink_sdk::RegisterError>
 pub fn quireink_sdk::contribution::Registrar::add_font_extension(&mut self, quireink_sdk::Id, alloc::string::String, quireink_sdk::Id) -> core::result::Result<(), quireink_sdk::RegisterError>
+pub fn quireink_sdk::contribution::Registrar::add_font_face(&mut self, quireink_sdk::FontFace) -> core::result::Result<(), quireink_sdk::RegisterError>
 pub fn quireink_sdk::contribution::Registrar::add_font_file(&mut self, quireink_sdk::Id, alloc::string::String) -> core::result::Result<(), quireink_sdk::RegisterError>
 pub fn quireink_sdk::contribution::Registrar::add_format(&mut self, quireink_sdk::FormatSpec) -> core::result::Result<(), quireink_sdk::RegisterError>
 pub fn quireink_sdk::contribution::Registrar::add_hyphenation(&mut self, quireink_sdk::HyphenationSpec) -> core::result::Result<(), quireink_sdk::RegisterError>
@@ -1081,6 +1084,7 @@ pub fn quireink_sdk::presets::Presets::get(&self, &str) -> core::option::Option<
 pub fn quireink_sdk::presets::Presets::iter(&self) -> impl core::iter::traits::iterator::Iterator<Item = &quireink_sdk::presets::Preset>
 pub fn quireink_sdk::presets::Presets::new() -> Self
 pub fn quireink_sdk::presets::Presets::of_kind<'a>(&'a self, &'a str) -> impl core::iter::traits::iterator::Iterator<Item = &'a quireink_sdk::presets::Preset> + 'a
+pub fn quireink_sdk::presets::Presets::remove_plugin(&mut self, &str)
 pub fn quireink_sdk::presets::Presets::shrink_to_fit(&mut self)
 pub fn quireink_sdk::presets::applied(&quireink_sdk::Settings, &[(quireink_sdk::Id, core::option::Option<quireink_sdk::SettingValue>)]) -> bool
 pub fn quireink_sdk::presets::commands(&quireink_sdk::Settings, &[(quireink_sdk::Id, core::option::Option<quireink_sdk::SettingValue>)]) -> alloc::vec::Vec<quireink_sdk::Command>
@@ -1977,6 +1981,7 @@ pub quireink_sdk::Command::Disconnect(quireink_sdk::Id)
 pub quireink_sdk::Command::Emit(quireink_sdk::Id, quireink_sdk::Params)
 pub quireink_sdk::Command::Firmware(quireink_sdk::firmware::FirmwareCommand)
 pub quireink_sdk::Command::Http(quireink_sdk::HttpRequest)
+pub quireink_sdk::Command::LoadPlugin(alloc::string::String)
 pub quireink_sdk::Command::NoNetwork
 pub quireink_sdk::Command::Notify(alloc::string::String)
 pub quireink_sdk::Command::OpenScreen(quireink_sdk::Id, quireink_sdk::Params)
@@ -1984,6 +1989,7 @@ pub quireink_sdk::Command::OpenSlot(quireink_sdk::Id, quireink_sdk::Params)
 pub quireink_sdk::Command::PreviewSettings(alloc::vec::Vec<(quireink_sdk::Id, core::option::Option<quireink_sdk::SettingValue>)>)
 pub quireink_sdk::Command::ReadClipboard(quireink_sdk::Id, quireink_sdk::Params)
 pub quireink_sdk::Command::Redraw(quireink_platform::display::RefreshMode)
+pub quireink_sdk::Command::RemovePlugin(quireink_sdk::Id)
 pub quireink_sdk::Command::ResetSetting(quireink_sdk::Id)
 pub quireink_sdk::Command::Respond(quireink_sdk::ServerResponse)
 pub quireink_sdk::Command::Restart
@@ -2030,6 +2036,7 @@ pub quireink_sdk::Contribution::FontExtension
 pub quireink_sdk::Contribution::FontExtension::extends: quireink_sdk::Id
 pub quireink_sdk::Contribution::FontExtension::id: quireink_sdk::Id
 pub quireink_sdk::Contribution::FontExtension::path: alloc::string::String
+pub quireink_sdk::Contribution::FontFace(alloc::boxed::Box<quireink_sdk::FontFace>)
 pub quireink_sdk::Contribution::FontFile
 pub quireink_sdk::Contribution::FontFile::id: quireink_sdk::Id
 pub quireink_sdk::Contribution::FontFile::path: alloc::string::String
@@ -2337,6 +2344,15 @@ impl<P: quireink_sdk::event::EventData> core::convert::From<quireink_sdk::event:
 pub fn quireink_sdk::Id::from(quireink_sdk::event::Event<P>) -> quireink_sdk::Id
 impl<P: quireink_sdk::event::EventData> core::fmt::Debug for quireink_sdk::event::Event<P>
 pub fn quireink_sdk::event::Event<P>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub struct quireink_sdk::FontFace
+pub quireink_sdk::FontFace::bold: bool
+pub quireink_sdk::FontFace::family: alloc::borrow::Cow<'static, str>
+pub quireink_sdk::FontFace::id: quireink_sdk::Id
+pub quireink_sdk::FontFace::italic: bool
+pub quireink_sdk::FontFace::path: alloc::string::String
+impl quireink_sdk::FontFace
+pub fn quireink_sdk::FontFace::is_pack(&self) -> bool
+pub fn quireink_sdk::FontFace::new(quireink_sdk::Id, impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, bool, bool) -> Self
 pub struct quireink_sdk::FontHandle<'a>
 impl<'a> quireink_sdk::FontHandle<'a>
 pub fn quireink_sdk::FontHandle<'a>::advance(&self, f32, char) -> f32
@@ -2371,6 +2387,7 @@ pub struct quireink_sdk::Fonts
 impl quireink_sdk::Fonts
 pub fn quireink_sdk::Fonts::add(&mut self, quireink_sdk::FontSpec) -> core::result::Result<(), quireink_sdk::RegisterError>
 pub fn quireink_sdk::Fonts::add_extension(&mut self, quireink_sdk::Id, alloc::string::String, quireink_sdk::Id) -> core::result::Result<(), quireink_sdk::RegisterError>
+pub fn quireink_sdk::Fonts::add_face(&mut self, quireink_sdk::FontFace) -> core::result::Result<(), quireink_sdk::RegisterError>
 pub fn quireink_sdk::Fonts::add_file(&mut self, quireink_sdk::Id, alloc::string::String, quireink_text::sfnt::FontInfo) -> core::result::Result<(), quireink_sdk::RegisterError>
 pub fn quireink_sdk::Fonts::bind_user(&mut self, quireink_sdk::Id, quireink_sdk::Id)
 pub fn quireink_sdk::Fonts::bound(&self, &str) -> core::option::Option<quireink_sdk::FontHandle<'_>>
@@ -2383,6 +2400,7 @@ pub fn quireink_sdk::Fonts::ids(&self) -> impl core::iter::traits::iterator::Ite
 pub fn quireink_sdk::Fonts::load(&mut self, &alloc::rcs::rc::Rc<dyn quireink_platform::storage::Storage>) -> alloc::vec::Vec<alloc::string::String>
 pub fn quireink_sdk::Fonts::new(usize) -> Self
 pub fn quireink_sdk::Fonts::propose(&mut self, quireink_sdk::Id, quireink_sdk::Id, quireink_sdk::Priority)
+pub fn quireink_sdk::Fonts::remove_plugin(&mut self, &str) -> usize
 pub fn quireink_sdk::Fonts::role(&self, &str) -> core::option::Option<quireink_sdk::FontHandle<'_>>
 pub fn quireink_sdk::Fonts::set_family(&mut self, core::option::Option<&str>)
 pub fn quireink_sdk::Fonts::set_status(&mut self, &str)
@@ -2613,6 +2631,7 @@ pub fn quireink_sdk::Plugins::iter(&self) -> impl core::iter::traits::iterator::
 pub fn quireink_sdk::Plugins::len(&self) -> usize
 pub const fn quireink_sdk::Plugins::new() -> Self
 pub fn quireink_sdk::Plugins::push(&mut self, quireink_sdk::PluginInfo)
+pub fn quireink_sdk::Plugins::remove(&mut self, &str) -> core::option::Option<quireink_sdk::PluginInfo>
 pub fn quireink_sdk::Plugins::restart_needed(&self) -> bool
 pub fn quireink_sdk::Plugins::shrink_to_fit(&mut self)
 pub struct quireink_sdk::Priority(pub i16)
@@ -2628,6 +2647,7 @@ pub fn quireink_sdk::contribution::Registrar::add_book_data(&mut self, impl core
 pub fn quireink_sdk::contribution::Registrar::add_decorator(&mut self, quireink_sdk::decorations::DecoratorSpec) -> core::result::Result<(), quireink_sdk::RegisterError>
 pub fn quireink_sdk::contribution::Registrar::add_font(&mut self, quireink_sdk::FontSpec) -> core::result::Result<(), quireink_sdk::RegisterError>
 pub fn quireink_sdk::contribution::Registrar::add_font_extension(&mut self, quireink_sdk::Id, alloc::string::String, quireink_sdk::Id) -> core::result::Result<(), quireink_sdk::RegisterError>
+pub fn quireink_sdk::contribution::Registrar::add_font_face(&mut self, quireink_sdk::FontFace) -> core::result::Result<(), quireink_sdk::RegisterError>
 pub fn quireink_sdk::contribution::Registrar::add_font_file(&mut self, quireink_sdk::Id, alloc::string::String) -> core::result::Result<(), quireink_sdk::RegisterError>
 pub fn quireink_sdk::contribution::Registrar::add_format(&mut self, quireink_sdk::FormatSpec) -> core::result::Result<(), quireink_sdk::RegisterError>
 pub fn quireink_sdk::contribution::Registrar::add_hyphenation(&mut self, quireink_sdk::HyphenationSpec) -> core::result::Result<(), quireink_sdk::RegisterError>

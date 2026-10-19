@@ -604,6 +604,9 @@ plugins/large-print/
   fonts/*.ttf    fonts to read with (also .otf, .ttc), by family
   fonts/*.qifp   packs with letters other fonts lack, named in plugin.ini:
                  [extends] cyrillic.qifp = fonts-default.literata
+  fonts/…        a family's faces, named in plugin.ini: [family] name,
+                 regular, bold, italic, bold-italic (packs, or .ttf/.otf
+                 where scalable fonts are drawn)
   styles.css     a stylesheet for books, after a book's own (EPUB)
   presets.ini    ready-made sets of settings, e.g. home screen layouts
 ```
@@ -619,8 +622,25 @@ Icon packs are such packs for the icon font: `tools/icons/pack.py` builds
 one with the Tabler icons named
 (`[extends] icons.qifp = fonts-default.icons`).
 
+A family of its own needs a name and a regular face; its faces are
+packs, drawn on every device and read a glyph at a time, or font files,
+drawn where scalable fonts are, a variable font at its style's weight:
+
+```ini
+[family]
+name = Fredoka
+regular = regular.qifp
+bold = bold.qifp
+```
+
+The fonts browser (`plugins/fonts-browser`) downloads fonts as such
+plugins from quireink.org: font files for devices with scalable fonts
+and the memory for them, packs for the others.
+
 Copy it into the `plugins` folder of a device (or of the emulator's
-library) and restart. A plugin's `styles.css` comes after a book's own
+library) and restart, or have a plugin load it at once
+(`Command::LoadPlugin` with its folder; `Command::RemovePlugin` removes
+one, its fonts and presets at once, the rest after the next start). A plugin's `styles.css` comes after a book's own
 stylesheets and before one's own (`styles.css` beside the books, then
 the one named like a book), so the more particular wins; plugins with
 code add theirs with `Registrar::add_stylesheet`.

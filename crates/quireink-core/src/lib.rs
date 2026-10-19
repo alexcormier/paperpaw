@@ -861,6 +861,8 @@ struct Shared {
     screens: Vec<(Id, Cow<'static, str>)>,
     /// Folders fonts are read from.
     font_dirs: Vec<String>,
+    /// The folders of data plugins, by plugin, for removing them.
+    data_folders: Vec<(Id, String)>,
     /// Passwords and keys (see [`quireink_sdk::secrets`]).
     secrets: quireink_sdk::secrets::Secrets,
     /// Shared with font packs read where they are (see `Fonts::load`).

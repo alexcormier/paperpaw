@@ -11,6 +11,9 @@
 //!   fonts/*.ttf    fonts to read with (also .otf, .ttc), by family
 //!   fonts/*.qifp   packs with characters other fonts lack, named in
 //!                  plugin.ini: [extends] cyrillic.qifp = fonts-default.literata
+//!   fonts/…        a family's faces, named in plugin.ini: [family] name =
+//!                  Fredoka, regular = fredoka.qifp, bold, italic,
+//!                  bold-italic (packs, or .ttf/.otf where those are drawn)
 //!   styles.css     a stylesheet for books, after a book's own
 //!   presets.ini    ready-made sets of settings, e.g. home screen layouts,
 //!                  a section each: [nook] kind = home.layout, name,
@@ -28,6 +31,7 @@ use alloc::vec::Vec;
 use core::cell::RefCell;
 
 use quireink_platform::Storage;
+use quireink_sdk::FontFace;
 use quireink_sdk::presets::Preset;
 use quireink_sdk::{Id, Manifest, Plugin, RegisterError, Registrar, SDK_VERSION, Version};
 
@@ -42,9 +46,19 @@ const MAX_MANIFEST: usize = 4 * 1024;
 /// read wrongly.
 pub(crate) const FORMATS: u32 = 1;
 
+/// The styles of a family's faces in `[family]`: (key, bold, italic).
+const FACES: [(&str, bool, bool); 4] = [
+    ("regular", false, false),
+    ("bold", true, false),
+    ("italic", false, true),
+    ("bold-italic", true, true),
+];
+
 /// A plugin made of data files.
 pub(crate) struct DataPlugin {
     manifest: Manifest,
+    /// Its folder, e.g. `plugins/large-print`.
+    folder: String,
     /// Taken by `register`, which runs once.
     translations: RefCell<Vec<String>>,
     keymap: RefCell<Option<String>>,
@@ -55,6 +69,16 @@ pub(crate) struct DataPlugin {
     fonts: RefCell<Vec<String>>,
     /// Packs that extend other fonts: their paths and those fonts' ids.
     extensions: RefCell<Vec<(String, String)>>,
+    /// A family's faces: their key in `[family]` and file, the family.
+    faces: RefCell<Vec<(&'static str, String)>>,
+    family: Option<String>,
+}
+
+impl DataPlugin {
+    /// Its folder on the storage.
+    pub(crate) fn folder(&self) -> &str {
+        &self.folder
+    }
 }
 
 impl Plugin for DataPlugin {
@@ -98,6 +122,20 @@ impl Plugin for DataPlugin {
                 });
             };
             r.add_font_extension(id, path, extends)?;
+        }
+        if let Some(family) = &self.family {
+            for (key, path) in self.faces.take() {
+                let (bold, italic) = FACES
+                    .iter()
+                    .find(|(k, ..)| *k == key)
+                    .map_or((false, false), |&(_, b, i)| (b, i));
+                let id = Id::parse(&format!("{}.{key}", self.manifest.id)).map_err(|_| {
+                    RegisterError::Invalid {
+                        message: Cow::Owned(format!("{path}: unusable name")),
+                    }
+                })?;
+                r.add_font_face(FontFace::new(id, path, family.clone(), bold, italic))?;
+            }
         }
         if let Some(source) = self.settings.take() {
             for entry in quireink_config::parse(&source) {
@@ -197,6 +235,13 @@ pub(crate) fn discover(
         .collect()
 }
 
+/// The plugin in folder `path`, e.g. `plugins/font-fredoka`.
+pub(crate) fn load_folder(storage: &dyn Storage, path: &str) -> Result<DataPlugin, String> {
+    let path = path.trim_end_matches('/');
+    let name = path.rsplit('/').next().unwrap_or(path);
+    load(storage, path, name)
+}
+
 /// The plugin in folder `path`.
 fn load(storage: &dyn Storage, path: &str, folder: &str) -> Result<DataPlugin, String> {
     let manifest = read(storage, &format!("{path}/plugin.ini"), MAX_MANIFEST)
@@ -218,15 +263,22 @@ fn load(storage: &dyn Storage, path: &str, folder: &str) -> Result<DataPlugin, S
         translations
             .push(read(storage, &path, MAX_FILE).ok_or_else(|| format!("{path}: unreadable"))?);
     }
+    let (family, faces) = family(&source, path);
+    let mut fonts = font_files(storage, &format!("{path}/fonts"));
+    // A family's faces are not fonts of their own as well.
+    fonts.retain(|file| !faces.iter().any(|(_, face)| face == file));
     Ok(DataPlugin {
         manifest,
+        folder: path.to_string(),
         translations: RefCell::new(translations),
         keymap: RefCell::new(read(storage, &format!("{path}/keymap.ini"), MAX_FILE)),
         styles: RefCell::new(read(storage, &format!("{path}/styles.css"), MAX_FILE)),
         settings: RefCell::new(read(storage, &format!("{path}/settings.ini"), MAX_FILE)),
         presets: RefCell::new(read(storage, &format!("{path}/presets.ini"), MAX_FILE)),
-        fonts: RefCell::new(font_files(storage, &format!("{path}/fonts"))),
+        fonts: RefCell::new(fonts),
         extensions: RefCell::new(extensions(&source, path)),
+        faces: RefCell::new(faces),
+        family,
     })
 }
 
@@ -282,6 +334,8 @@ pub(crate) fn font_folder(storage: &dyn Storage, dirs: &[String]) -> Option<Data
             version: Version::new(0, 1, 0),
             sdk: SDK_VERSION,
         },
+        // Folders the shell names; not removed by QuireInk.
+        folder: String::new(),
         translations: RefCell::new(Vec::new()),
         keymap: RefCell::new(None),
         styles: RefCell::new(None),
@@ -289,6 +343,8 @@ pub(crate) fn font_folder(storage: &dyn Storage, dirs: &[String]) -> Option<Data
         presets: RefCell::new(None),
         fonts: RefCell::new(fonts),
         extensions: RefCell::new(Vec::new()),
+        faces: RefCell::new(Vec::new()),
+        family: None,
     })
 }
 
@@ -305,6 +361,32 @@ fn extensions(source: &str, path: &str) -> Vec<(String, String)> {
             )
         })
         .collect()
+}
+
+/// The family `[family]` in a `plugin.ini` names, with its faces' keys and
+/// paths under the plugin's `fonts` folder; no faces without a name or a
+/// regular face.
+fn family(source: &str, path: &str) -> (Option<String>, Vec<(&'static str, String)>) {
+    let mut name = None;
+    let mut faces = Vec::new();
+    for entry in quireink_config::parse(source).filter_map(Result::ok) {
+        if entry.section != "family" {
+            continue;
+        }
+        let value = entry.value.as_str().trim().to_string();
+        if entry.key == "name" {
+            name = Some(value);
+        } else if let Some((key, ..)) = FACES.iter().find(|(k, ..)| *k == entry.key)
+            && !value.is_empty()
+            && !value.contains("..")
+        {
+            faces.push((*key, format!("{path}/fonts/{value}")));
+        }
+    }
+    match name.filter(|n| !n.is_empty()) {
+        Some(name) if faces.iter().any(|(key, _)| *key == "regular") => (Some(name), faces),
+        _ => (None, Vec::new()),
+    }
 }
 
 /// An id segment from a file name: `Book Antiqua-Bold.ttf` gives
@@ -455,6 +537,66 @@ literata.qifp = fonts-default.literata
             )]
         );
         assert_eq!(slug("….ttf"), "font");
+    }
+
+    #[test]
+    fn families_name_their_faces() {
+        let storage = MemoryStorage::new()
+            .with(
+                "plugins/font-round/plugin.ini",
+                "[plugin]
+name = Round
+[family]
+name = Round
+regular = Round.ttf
+bold = round-bold.qifp
+oblique = nothing.qifp
+italic = ../escape.qifp
+",
+            )
+            .with("plugins/font-round/fonts/Round.ttf", "x")
+            .with("plugins/font-round/fonts/Extra.ttf", "x");
+        let plugin = load_folder(&storage, "plugins/font-round/").unwrap();
+        assert_eq!(plugin.folder(), "plugins/font-round");
+        assert_eq!(plugin.family.as_deref(), Some("Round"));
+        assert_eq!(
+            *plugin.faces.borrow(),
+            [
+                (
+                    "regular",
+                    String::from("plugins/font-round/fonts/Round.ttf")
+                ),
+                (
+                    "bold",
+                    String::from("plugins/font-round/fonts/round-bold.qifp")
+                ),
+            ]
+        );
+        // A face is no font of its own as well.
+        assert_eq!(
+            *plugin.fonts.borrow(),
+            ["plugins/font-round/fonts/Extra.ttf"]
+        );
+        // No family without a name and a regular face.
+        assert_eq!(
+            family(
+                "[family]
+bold = a.qifp
+name = A
+",
+                "p"
+            ),
+            (None, Vec::new())
+        );
+        assert_eq!(
+            family(
+                "[family]
+regular = a.qifp
+",
+                "p"
+            ),
+            (None, Vec::new())
+        );
     }
 
     #[test]

@@ -9,6 +9,9 @@ pub(super) struct Chooser {
     pub(super) spec: Option<SettingSpec>,
     /// (value, display name)
     pub(super) options: Vec<(String, String)>,
+    /// More ways to choose, after the options: entries of the menu named
+    /// like the setting (action, name).
+    pub(super) more: Vec<(Id, String)>,
     pub(super) style: UiStyle,
     pub(super) header: ui::Header,
     pub(super) list: ListView,
@@ -16,7 +19,27 @@ pub(super) struct Chooser {
 
 impl Chooser {
     pub(super) fn new(env: &Env<'_>, id: &str) -> Self {
-        let (style, header, mut list) = frame(env, false);
+        let (style, header, list) = frame(env, false);
+        let mut chooser = Self {
+            spec: None,
+            options: Vec::new(),
+            more: Vec::new(),
+            style,
+            header,
+            list,
+        };
+        chooser.read(env, id);
+        let current = env.settings.text(id);
+        chooser.list.focus = chooser
+            .options
+            .iter()
+            .position(|(v, _)| v == current)
+            .unwrap_or(0);
+        chooser
+    }
+
+    /// The setting's options and more ways to choose, read anew.
+    fn read(&mut self, env: &Env<'_>, id: &str) {
         // Of a placement too (`widgets.clock@2.face`), as that one.
         let spec = env.settings.spec(id).cloned().map(|mut spec| {
             if let Ok(id) = Id::parse(id) {
@@ -37,18 +60,30 @@ impl Chooser {
                 .collect(),
             _ => Vec::new(),
         };
-        let current = env.settings.text(id);
-        list.focus = options.iter().position(|(v, _)| v == current).unwrap_or(0);
-        Self {
-            spec,
-            options,
-            style,
-            header,
-            list,
-        }
+        self.more = spec.as_ref().map_or_else(Vec::new, |spec| {
+            env.menus
+                .items(spec.id.as_str())
+                .iter()
+                .filter(|item| !item.section)
+                .map(|item| (item.id.clone(), env.i18n.tr(item.title).to_string()))
+                .collect()
+        });
+        self.spec = spec;
+        self.options = options;
+    }
+
+    fn len(&self) -> usize {
+        self.options.len() + self.more.len()
     }
 
     pub(super) fn choose(&self, index: usize, cx: &mut Cx<'_, '_>) {
+        if let Some((action, ..)) = index
+            .checked_sub(self.options.len())
+            .and_then(|i| self.more.get(i))
+        {
+            cx.command(Command::RunAction(action.clone()));
+            return;
+        }
         let (Some(spec), Some((value, _))) = (&self.spec, self.options.get(index)) else {
             return;
         };
@@ -63,28 +98,45 @@ impl Chooser {
 impl Screen for Chooser {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
-        let len = self.options.len();
+        let len = self.len();
         let title = self
             .spec
             .as_ref()
             .map_or("", |spec| env.i18n.tr(&spec.title));
         self.header
             .draw(canvas, env, &style, title, None, self.list.paging(len));
-        let options = &self.options;
+        let (options, more) = (&self.options, &self.more);
         let current = self
             .spec
             .as_ref()
             .map_or("", |spec| env.settings.text(spec.id.as_str()));
         self.list
             .draw(canvas, &style, len, |canvas, index, rect, focused| {
+                // Lined up with the options, leading on.
+                if let Some((_, name)) = index.checked_sub(options.len()).map(|i| &more[i]) {
+                    ui::draw_value_row(canvas, env, &style, rect, focused, name, "›");
+                    return;
+                }
                 let (value, name) = &options[index];
                 let mark = if value == current { "•" } else { "" };
                 ui::draw_value_row(canvas, env, &style, rect, focused, name, mark);
             });
     }
 
+    fn on_event(&mut self, event: &Id, _params: &Params, cx: &mut Cx<'_, '_>) {
+        // Fonts downloaded or removed meanwhile.
+        if *event == events::PLUGINS_CHANGED
+            && let Some(id) = self.spec.as_ref().map(|s| s.id.to_string())
+        {
+            let env = *cx.env();
+            self.read(&env, &id);
+            cx.request_redraw();
+            cx.request_refresh(RefreshMode::Partial);
+        }
+    }
+
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
-        let len = self.options.len();
+        let len = self.len();
         if let Some(change) = self.list.navigate(action, len) {
             change.request(cx);
         } else if *action == actions::CONFIRM {
@@ -99,7 +151,7 @@ impl Screen for Chooser {
         if gesture.kind != GestureKind::Tap {
             return Handled::No;
         }
-        let paging = self.list.paging(self.options.len());
+        let paging = self.list.paging(self.len());
         let tapped = self
             .header
             .tap(cx.env(), &self.style, gesture.start, paging);
@@ -107,7 +159,7 @@ impl Screen for Chooser {
             cx.command(Command::RunAction(action));
             return Handled::Yes;
         }
-        match self.list.hit(gesture.start, self.options.len()) {
+        match self.list.hit(gesture.start, self.len()) {
             Some(index) => {
                 self.choose(index, cx);
                 Handled::Yes

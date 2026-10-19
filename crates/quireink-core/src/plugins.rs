@@ -228,6 +228,9 @@ impl Kernel {
                 );
             }
         }
+        for face in staging.font_faces.drain(..) {
+            self.add_font_face(plugin, face);
+        }
         for (role, font, priority) in staging.font_roles.drain(..) {
             self.shared.fonts.propose(role, font, priority);
         }
@@ -390,6 +393,22 @@ impl Kernel {
         }
     }
 
+    /// Adds a face of a family `plugin` names in a file: packs everywhere,
+    /// scalable fonts where they are drawn.
+    pub(crate) fn add_font_face(&mut self, plugin: &Id, face: quireink_sdk::FontFace) {
+        let source = WarningSource::Plugin(plugin.clone());
+        if !face.is_pack() && !quireink_text_outlines() {
+            let message = format!(
+                "{}: this device only reads fonts made for it (.qifp)",
+                face.path
+            );
+            return self.warn(source, None, message);
+        }
+        if let Err(error) = self.shared.fonts.add_face(face) {
+            self.warn(source, None, format!("{error}"));
+        }
+    }
+
     /// Chooses the reading font family from `core.reading-font` and loads
     /// its files.
     pub(crate) fn apply_reading_font(&mut self) {
@@ -419,6 +438,82 @@ impl Kernel {
         for path in self.shared.fonts.load(&self.shared.storage) {
             self.warn_runtime(format!("{path}: font could not be loaded"));
         }
+    }
+
+    /// Loads the data plugin in `folder` while running (see
+    /// [`Command::LoadPlugin`](quireink_sdk::Command::LoadPlugin)).
+    pub(crate) fn load_plugin(&mut self, folder: &str) {
+        let storage = self.shared.storage.clone();
+        let plugin = match crate::data_plugin::load_folder(storage.as_ref(), folder) {
+            Ok(plugin) => plugin,
+            Err(problem) => return self.warn_runtime(problem),
+        };
+        let manifest = plugin.manifest();
+        let id = manifest.id.clone();
+        if self.shared.plugins.get(id.as_str()).is_some() {
+            return self.warn(
+                WarningSource::Plugin(id),
+                None,
+                "a plugin with this id is already loaded".into(),
+            );
+        }
+        let off = read_config(storage.as_ref())
+            .is_some_and(|c| crate::config::plugin_switches(&c, false).contains(&id.to_string()));
+        if off {
+            self.register_off(&plugin, manifest);
+        } else {
+            self.register_plugin(&plugin, manifest);
+        }
+        self.shared
+            .data_folders
+            .push((id, plugin.folder().to_string()));
+        self.apply_defaults(&[]);
+        self.plugins_changed();
+    }
+
+    /// Removes a data plugin while running (see
+    /// [`Command::RemovePlugin`](quireink_sdk::Command::RemovePlugin)).
+    pub(crate) fn remove_plugin(&mut self, id: &Id) {
+        let Some(index) = self.shared.data_folders.iter().position(|(p, _)| p == id) else {
+            return self.warn_runtime(format!("`{id}` is no data plugin; not removed"));
+        };
+        let folder = self.shared.data_folders[index].1.clone();
+        if let Err(error) = self.shared.storage.remove_dir_all(&folder) {
+            return self.warn_runtime(format!("{folder}: not removed ({error:?})"));
+        }
+        self.shared.data_folders.remove(index);
+        self.shared.fonts.remove_plugin(id.as_str());
+        self.shared
+            .settings
+            .presets_mut()
+            .remove_plugin(id.as_str());
+        self.shared.plugins.remove(id.as_str());
+        self.offer_choices();
+        // A font chosen from it gives way to the default.
+        for setting in [core_settings::READING_FONT, core_settings::STATUS_FONT] {
+            let chosen = String::from(self.shared.settings.text(setting.as_str()));
+            let value = quireink_sdk::SettingValue::Text(chosen.into());
+            let offered = self
+                .shared
+                .settings
+                .spec(setting.as_str())
+                .is_some_and(|spec| spec.kind.accepts(&value));
+            if !offered {
+                self.reset_setting(setting.id());
+            }
+        }
+        self.plugins_changed();
+    }
+
+    /// After a plugin was loaded or removed while running: the choices of
+    /// fonts and key map presets, menu labels, fonts and keys anew.
+    fn plugins_changed(&mut self) {
+        self.offer_choices();
+        self.set_menu_titles();
+        self.apply_reading_font();
+        self.apply_status_font();
+        self.rebuild_keymap();
+        self.output.commands.push(events::PLUGINS_CHANGED.emit(()));
     }
 
     /// Releases memory reserved while plugins registered: on small devices

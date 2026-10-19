@@ -151,6 +151,8 @@ impl Kernel {
                 self.scheduled.push((at, event, params));
             }
             Command::Restart => self.restart = true,
+            Command::LoadPlugin(folder) => self.load_plugin(&folder),
+            Command::RemovePlugin(id) => self.remove_plugin(&id),
             Command::Sleep => self.sleep = self.shared.caps.sleep,
             command @ (Command::SetSetting(..)
             | Command::ResetSetting(_)

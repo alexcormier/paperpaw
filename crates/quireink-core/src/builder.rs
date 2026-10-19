@@ -322,6 +322,7 @@ impl KernelBuilder {
                 slots: Vec::new(),
                 screens: Vec::new(),
                 font_dirs: Vec::new(),
+                data_folders: Vec::new(),
                 secrets: Default::default(),
                 storage,
                 recall,
@@ -451,6 +452,9 @@ impl Kernel {
             }
             for plugin in found {
                 self.add_plugin(&plugin, &disabled);
+                self.shared
+                    .data_folders
+                    .push((plugin.manifest().id, plugin.folder().to_string()));
             }
         }
         if !font_dirs.is_empty()
@@ -476,7 +480,7 @@ impl Kernel {
 
     /// The choices of settings that plugins add to: key map presets and
     /// reading fonts.
-    fn offer_choices(&mut self) {
+    pub(crate) fn offer_choices(&mut self) {
         let mut presets: Vec<Cow<'static, str>> =
             alloc::vec![Cow::Borrowed(keymap_presets::STANDARD_NAME)];
         presets.extend(
@@ -511,7 +515,7 @@ impl Kernel {
     }
 
     /// Defaults from plugins (e.g. themes), then the device's.
-    fn apply_defaults(&mut self, device: &[(String, String)]) {
+    pub(crate) fn apply_defaults(&mut self, device: &[(String, String)]) {
         for (plugin, id, value) in mem::take(&mut self.plugin_defaults) {
             if let Err(error) = self
                 .shared

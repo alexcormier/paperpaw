@@ -6,6 +6,28 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- More fonts, from the internet: *More fonts* below the fonts to choose
+  from (Settings, Reading, Font, and the status lines' font) lists the
+  fonts of quireink.org's font library, each name set in its own font;
+  one shows larger with a sentence in it, its licence and size, and is
+  downloaded, read with at once (no restart), set for the status lines,
+  updated or removed. Nothing of a font is built in: devices with
+  scalable fonts and the memory for them get its font files, the others
+  (the X4) font packs made for them, read a glyph at a time from the
+  card. Each file is checked by its size and SHA-1; a download goes on
+  when the screen is left. First fonts: Atkinson Hyperlegible Next,
+  Crimson Pro, EB Garamond, Figtree, Fredoka and Nunito (all OFL, none
+  with a reserved font name). The library's address is a developer
+  setting (`fonts-browser.catalog`). SDK: a data plugin names a family
+  of its own in `[family]` (`name`, `regular`, `bold`, `italic`,
+  `bold-italic`), its faces packs or font files (`FontFace`,
+  `Registrar::add_font_face`, `Fonts::add_face`; `Fonts::remove_plugin`,
+  `Presets::remove_plugin`, `Plugins::remove`); data plugins loaded and
+  removed while running (`Command::LoadPlugin`, `Command::RemovePlugin`,
+  the event `events::PLUGINS_CHANGED`); a menu named like a setting with
+  choices holds more ways to choose, listed after its options (the
+  settings' chooser, `ui::two_options`).
+
 - QuireInk runs on the Xteink X4 Pro (ESP32-S3): the X4's firmware built
   with the feature `x4-pro` (`cargo +esp x4pro`). Its UC8179 display,
   touch screen and home key, page and power buttons, SD card (SDMMC),

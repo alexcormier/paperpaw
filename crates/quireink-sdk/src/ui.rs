@@ -1825,6 +1825,10 @@ pub fn step_focus(focus: usize, delta: isize, len: usize) -> usize {
 /// switches to the other at once, as a switch does, instead of opening a
 /// list that would only offer that one (fewer presses).
 pub fn two_options(env: &Env<'_>, spec: &SettingSpec) -> bool {
+    // More ways to choose are listed with the options.
+    if !env.menus.items(spec.id.as_str()).is_empty() {
+        return false;
+    }
     match &spec.kind {
         SettingKind::Choice(options) => options.len() == 2,
         SettingKind::Language => env.i18n.languages().len() == 2,
