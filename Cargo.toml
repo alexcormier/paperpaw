@@ -63,6 +63,7 @@ members = [
     "plugins/about",
     "plugins/setup",
     "plugins/update",
+    "plugins/widgets",
     "samples/hello-plugin",
     "plugins/news",
     "plugins/plugin-manager",
@@ -140,6 +141,7 @@ quireink-plugin-about = { path = "plugins/about", version = "0.4.0-dev" }
 quireink-plugin-setup = { path = "plugins/setup", version = "0.4.0-dev" }
 quireink-plugin-update = { path = "plugins/update", version = "0.4.0-dev" }
 quireink-plugin-news = { path = "plugins/news", version = "0.4.0-dev" }
+quireink-plugin-widgets = { path = "plugins/widgets", version = "0.4.0-dev" }
 quireink-plugin-keyboard = { path = "plugins/keyboard", version = "0.4.0-dev" }
 quireink-plugin-plugin-manager = { path = "plugins/plugin-manager", version = "0.4.0-dev" }
 quireink-plugin-hyphenation = { path = "plugins/hyphenation", version = "0.4.0-dev" }
