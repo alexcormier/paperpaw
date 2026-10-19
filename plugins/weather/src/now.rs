@@ -14,7 +14,7 @@ use alloc::vec::Vec;
 
 use quireink_sdk::ui::{self, UiStyle};
 use quireink_sdk::widgets::{self, Align, Frame, Size, Widget, WidgetSpec, WidgetTarget};
-use quireink_sdk::{Arg, Canvas, Env, FontHandle, Id, Rect, RegisterError, Registrar};
+use quireink_sdk::{Arg, Canvas, Env, FontHandle, Id, Rect, RegisterError, Registrar, SettingSpec};
 
 use crate::data::{self, Current, Day};
 use crate::draw::{self, cap, digits_height, draw_digits};
@@ -35,43 +35,41 @@ const PLACINGS: [&str; 3] = [
     "weather.placing.beside",
     "weather.placing.above",
 ];
-/// Its parts: the setting's key, its title, whether shown at first.
-const PARTS: [(&str, &str, bool); 10] = [
-    ("place", "weather.part.place", true),
-    ("condition", "weather.part.condition", true),
-    ("range", "weather.part.range", true),
-    ("feels", "weather.part.feels", false),
-    ("wind", "weather.part.wind", false),
-    ("rain", "weather.part.rain", false),
-    ("humidity", "weather.part.humidity", false),
-    ("sun", "weather.part.sun", false),
-    ("unit", "weather.part.unit", false),
-    ("age", "weather.part.age", true),
+/// Its settings, kept in the program: its look, its symbol, its parts.
+static SETTINGS: [SettingSpec; 16] = [
+    widgets::frame_spec("weather.now.frame", ID, Frame::None),
+    widgets::size_spec("weather.now.size", ID, Size::Fit, true),
+    widgets::align_spec("weather.now.align", ID, Align::Center),
+    SettingSpec::fixed_choice(
+        "weather.now.symbol",
+        "weather.setting.symbol",
+        &SYMBOLS,
+        SYMBOLS[0],
+        ID,
+    ),
+    SettingSpec::fixed_choice(
+        "weather.now.placing",
+        "weather.setting.placing",
+        &PLACINGS,
+        PLACINGS[0],
+        ID,
+    ),
+    draw::style_spec("weather.now.style", ID),
+    widgets::part_spec("weather.now.place", ID, "weather.part.place", true),
+    widgets::part_spec("weather.now.condition", ID, "weather.part.condition", true),
+    widgets::part_spec("weather.now.range", ID, "weather.part.range", true),
+    widgets::part_spec("weather.now.feels", ID, "weather.part.feels", false),
+    widgets::part_spec("weather.now.wind", ID, "weather.part.wind", false),
+    widgets::part_spec("weather.now.rain", ID, "weather.part.rain", false),
+    widgets::part_spec("weather.now.humidity", ID, "weather.part.humidity", false),
+    widgets::part_spec("weather.now.sun", ID, "weather.part.sun", false),
+    widgets::part_spec("weather.now.unit", ID, "weather.part.unit", false),
+    widgets::part_spec("weather.now.age", ID, "weather.part.age", true),
 ];
 
 pub(crate) fn register(r: &mut Registrar, state: &Shared) -> Result<(), RegisterError> {
     r.add_setting_group(widgets::settings_group(&ID, "weather.widget.now"))?;
-    r.add_setting(widgets::frame_setting(&ID, Frame::None))?;
-    r.add_setting(widgets::size_setting(&ID, Size::Fit, true))?;
-    r.add_setting(widgets::align_setting(&ID, Align::Center))?;
-    r.add_setting(widgets::choice(
-        &ID,
-        "symbol",
-        "weather.setting.symbol",
-        &SYMBOLS,
-        SYMBOLS[0],
-    ))?;
-    r.add_setting(widgets::choice(
-        &ID,
-        "placing",
-        "weather.setting.placing",
-        &PLACINGS,
-        PLACINGS[0],
-    ))?;
-    r.add_setting(draw::style_setting(&ID))?;
-    for (part, title, default) in PARTS {
-        r.add_setting(widgets::part_setting(&ID, part, title, default))?;
-    }
+    r.add_settings(&SETTINGS)?;
     let state = state.clone();
     r.add_widget(
         WidgetSpec::new(ID, "weather.widget.now", move |env| {
@@ -663,15 +661,26 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parts_have_settings() {
-        let keys: Vec<&str> = PARTS.iter().map(|(k, _, _)| *k).collect();
-        assert!(keys.contains(&"place") && keys.contains(&"sun"));
+    fn settings_are_the_widgets() {
+        use quireink_sdk::SettingValue;
+        for spec in &SETTINGS {
+            assert!(spec.id.as_str().starts_with("weather.now."), "{}", spec.id);
+            assert_eq!(spec.group, ID);
+        }
         // Calm at first: the place, the condition, today's range.
-        let shown: Vec<&str> = PARTS
+        let shown: Vec<&str> = SETTINGS
             .iter()
-            .filter(|(_, _, on)| *on)
-            .map(|(k, _, _)| *k)
+            .filter(|s| s.default == SettingValue::Bool(true))
+            .map(|s| s.id.as_str())
             .collect();
-        assert_eq!(shown, ["place", "condition", "range", "age"]);
+        assert_eq!(
+            shown,
+            [
+                "weather.now.place",
+                "weather.now.condition",
+                "weather.now.range",
+                "weather.now.age"
+            ]
+        );
     }
 }
