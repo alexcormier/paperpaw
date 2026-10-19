@@ -11,6 +11,8 @@ use quireink_sdk::time::{self, LocalTime};
 use quireink_sdk::widgets::{self, Align, Drawn, Frame};
 use quireink_sdk::{Canvas, Color, Env, Id, Point, Rect, RegisterError, Registrar};
 
+use quireink_sdk::SettingSpec;
+
 use super::{chosen, frame_height, line, ui};
 
 const ID: Id = Id::new_static("widgets.tile-clock");
@@ -24,49 +26,53 @@ const LOOKS: [&str; 3] = [
 /// What goes on a tile: a digit, or the hours and the minutes.
 const GROUPS: [&str; 2] = ["widgets.tiles.digits", "widgets.tiles.pairs"];
 
+/// Its settings, kept in the program.
+static SETTINGS: [SettingSpec; 8] = [
+    widgets::align_spec("widgets.tile-clock.align", ID, Align::Center),
+    widgets::frame_spec("widgets.tile-clock.frame", ID, Frame::None),
+    SettingSpec::fixed_choice(
+        "widgets.tile-clock.tiles",
+        "widgets.setting.tiles",
+        &LOOKS,
+        LOOKS[0],
+        ID,
+    ),
+    SettingSpec::fixed_choice(
+        "widgets.tile-clock.group",
+        "widgets.setting.tile-group",
+        &GROUPS,
+        GROUPS[0],
+        ID,
+    ),
+    widgets::part_spec(
+        "widgets.tile-clock.hinge",
+        ID,
+        "widgets.setting.hinge",
+        true,
+    ),
+    widgets::part_spec(
+        "widgets.tile-clock.colon",
+        ID,
+        "widgets.setting.colon",
+        false,
+    ),
+    widgets::part_spec(
+        "widgets.tile-clock.date",
+        ID,
+        "widgets.setting.show-date",
+        false,
+    ),
+    super::date_format_spec("widgets.tile-clock.date-format", ID, super::DATE_FORMATS[1]),
+];
+
 pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     super::add(
         r,
         &ID,
         "widgets.tile-clock",
         Drawn::new(height, draw).shows(super::minute_shows),
-        Align::Center,
-        Frame::None,
     )?;
-    r.add_setting(widgets::choice(
-        &ID,
-        "tiles",
-        "widgets.setting.tiles",
-        &LOOKS,
-        LOOKS[0],
-    ))?;
-    r.add_setting(widgets::choice(
-        &ID,
-        "group",
-        "widgets.setting.tile-group",
-        &GROUPS,
-        GROUPS[0],
-    ))?;
-    r.add_setting(widgets::part_setting(
-        &ID,
-        "hinge",
-        "widgets.setting.hinge",
-        true,
-    ))?;
-    r.add_setting(widgets::part_setting(
-        &ID,
-        "colon",
-        "widgets.setting.colon",
-        false,
-    ))?;
-    r.add_setting(widgets::part_setting(
-        &ID,
-        "date",
-        "widgets.setting.show-date",
-        false,
-    ))?;
-    r.add_setting(super::date_format_setting(&ID, super::DATE_FORMATS[1]))?;
-    Ok(())
+    r.add_settings(&SETTINGS)
 }
 
 fn height(env: &Env<'_>, width: u16) -> u16 {

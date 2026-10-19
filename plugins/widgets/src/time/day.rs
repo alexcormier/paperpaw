@@ -10,6 +10,8 @@ use quireink_sdk::time;
 use quireink_sdk::widgets::{self, Align, Drawn, Frame, Size};
 use quireink_sdk::{Arg, Canvas, Env, Id, Rect, RegisterError, Registrar};
 
+use quireink_sdk::SettingSpec;
+
 use super::{chosen, frame_height, line, ui};
 
 const ID: Id = Id::new_static("widgets.day");
@@ -22,31 +24,31 @@ const STYLES: [&str; 3] = [
     "widgets.day.style.sheet",
 ];
 
+/// Its settings, kept in the program.
+static SETTINGS: [SettingSpec; 7] = [
+    widgets::align_spec("widgets.day.align", ID, Align::Left),
+    widgets::frame_spec("widgets.day.frame", ID, Frame::None),
+    SettingSpec::fixed_choice(
+        "widgets.day.style",
+        "widgets.setting.style",
+        &STYLES,
+        STYLES[0],
+        ID,
+    ),
+    widgets::size_spec("widgets.day.size", ID, Size::Fit, true),
+    super::date_format_spec("widgets.day.date-format", ID, super::DATE_FORMATS[0]),
+    widgets::part_spec("widgets.day.year", ID, "widgets.setting.year", true),
+    widgets::part_spec("widgets.day.week", ID, "widgets.setting.week-number", false),
+];
+
 pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     super::add(
         r,
         &ID,
         "widgets.day",
         Drawn::new(height, draw).shows(super::today_shows),
-        Align::Left,
-        Frame::None,
     )?;
-    r.add_setting(widgets::choice(
-        &ID,
-        "style",
-        "widgets.setting.style",
-        &STYLES,
-        STYLES[0],
-    ))?;
-    r.add_setting(widgets::size_setting(&ID, Size::Fit, true))?;
-    r.add_setting(super::date_format_setting(&ID, super::DATE_FORMATS[0]))?;
-    for (part, title, default) in [
-        ("year", "widgets.setting.year", true),
-        ("week", "widgets.setting.week-number", false),
-    ] {
-        r.add_setting(widgets::part_setting(&ID, part, title, default))?;
-    }
-    Ok(())
+    r.add_settings(&SETTINGS)
 }
 
 fn height(env: &Env<'_>, _: u16) -> u16 {

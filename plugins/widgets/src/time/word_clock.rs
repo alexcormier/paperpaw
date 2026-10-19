@@ -22,6 +22,8 @@ use quireink_sdk::{
     Arg, Canvas, Color, Env, FontHandle, Id, Point, Rect, RegisterError, Registrar, Translator,
 };
 
+use quireink_sdk::SettingSpec;
+
 use super::{chosen, frame_height, line, ui};
 
 const ID: Id = Id::new_static("widgets.word-clock");
@@ -48,50 +50,54 @@ const LEADS: [&str; 3] = [
 /// The minute keys' prefix.
 const KEY: &str = "widgets.word-clock";
 
+/// Its settings, kept in the program.
+static SETTINGS: [SettingSpec; 8] = [
+    widgets::align_spec("widgets.word-clock.align", ID, Align::Left),
+    widgets::frame_spec("widgets.word-clock.frame", ID, Frame::None),
+    SettingSpec::fixed_choice(
+        "widgets.word-clock.style",
+        "widgets.setting.style",
+        &STYLES,
+        STYLES[0],
+        ID,
+    ),
+    widgets::size_spec("widgets.word-clock.size", ID, Size::Fit, true),
+    SettingSpec::fixed_choice(
+        "widgets.word-clock.lead",
+        "widgets.setting.word-clock-lead",
+        &LEADS,
+        LEADS[1],
+        ID,
+    ),
+    SettingSpec::fixed_choice(
+        "widgets.word-clock.quarters",
+        "widgets.setting.quarters",
+        &QUARTERS,
+        QUARTERS[0],
+        ID,
+    ),
+    widgets::part_spec(
+        "widgets.word-clock.capitals",
+        ID,
+        "widgets.setting.capitals",
+        false,
+    ),
+    widgets::part_spec(
+        "widgets.word-clock.dots",
+        ID,
+        "widgets.setting.minute-dots",
+        false,
+    ),
+];
+
 pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     super::add(
         r,
         &ID,
         "widgets.word-clock",
         Drawn::new(height, draw).shows(shows),
-        Align::Left,
-        Frame::None,
     )?;
-    r.add_setting(widgets::choice(
-        &ID,
-        "style",
-        "widgets.setting.style",
-        &STYLES,
-        STYLES[0],
-    ))?;
-    r.add_setting(widgets::size_setting(&ID, Size::Fit, true))?;
-    r.add_setting(widgets::choice(
-        &ID,
-        "lead",
-        "widgets.setting.word-clock-lead",
-        &LEADS,
-        LEADS[1],
-    ))?;
-    r.add_setting(widgets::choice(
-        &ID,
-        "quarters",
-        "widgets.setting.quarters",
-        &QUARTERS,
-        QUARTERS[0],
-    ))?;
-    r.add_setting(widgets::part_setting(
-        &ID,
-        "capitals",
-        "widgets.setting.capitals",
-        false,
-    ))?;
-    r.add_setting(widgets::part_setting(
-        &ID,
-        "dots",
-        "widgets.setting.minute-dots",
-        false,
-    ))?;
-    Ok(())
+    r.add_settings(&SETTINGS)
 }
 
 /// The time told: the five minutes it says (rounded, or the last five

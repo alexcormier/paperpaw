@@ -16,6 +16,8 @@ use quireink_sdk::time::{self, LocalTime};
 use quireink_sdk::widgets::{self, Align, Drawn, Frame};
 use quireink_sdk::{Arg, Canvas, Color, Env, Id, Point, Rect, RegisterError, Registrar};
 
+use quireink_sdk::SettingSpec;
+
 use super::{chosen, dates, frame_height, line, ui};
 
 const ID: Id = Id::new_static("widgets.moon");
@@ -32,38 +34,43 @@ const LUNATION: i64 = 2_551_442_877;
 /// since 1970 (UTC).
 const EPOCH: i64 = 947_168_373_824;
 
+/// Its settings, kept in the program.
+static SETTINGS: [SettingSpec; 8] = [
+    widgets::align_spec("widgets.moon.align", ID, Align::Left),
+    widgets::frame_spec("widgets.moon.frame", ID, Frame::None),
+    widgets::part_spec("widgets.moon.name", ID, "widgets.setting.phase-name", true),
+    widgets::part_spec(
+        "widgets.moon.full",
+        ID,
+        "widgets.setting.next-full-moon",
+        true,
+    ),
+    widgets::part_spec("widgets.moon.lit", ID, "widgets.setting.lit-percent", false),
+    SettingSpec::fixed_choice(
+        "widgets.moon.shadow",
+        "widgets.setting.shadow",
+        &SHADOWS,
+        SHADOWS[0],
+        ID,
+    ),
+    SettingSpec::fixed_choice(
+        "widgets.moon.hemisphere",
+        "widgets.setting.hemisphere",
+        &HEMISPHERES,
+        HEMISPHERES[0],
+        ID,
+    ),
+    super::date_format_spec("widgets.moon.date-format", ID, super::DATE_FORMATS[0]),
+];
+
 pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     super::add(
         r,
         &ID,
         "widgets.moon",
         Drawn::new(height, draw).shows(super::today_shows),
-        Align::Left,
-        Frame::None,
     )?;
-    for (part, title, default) in [
-        ("name", "widgets.setting.phase-name", true),
-        ("full", "widgets.setting.next-full-moon", true),
-        ("lit", "widgets.setting.lit-percent", false),
-    ] {
-        r.add_setting(widgets::part_setting(&ID, part, title, default))?;
-    }
-    r.add_setting(widgets::choice(
-        &ID,
-        "shadow",
-        "widgets.setting.shadow",
-        &SHADOWS,
-        SHADOWS[0],
-    ))?;
-    r.add_setting(widgets::choice(
-        &ID,
-        "hemisphere",
-        "widgets.setting.hemisphere",
-        &HEMISPHERES,
-        HEMISPHERES[0],
-    ))?;
-    r.add_setting(super::date_format_setting(&ID, super::DATE_FORMATS[0]))?;
-    Ok(())
+    r.add_settings(&SETTINGS)
 }
 
 /// When the moon is new (`half` even) or full (`half` odd) in half

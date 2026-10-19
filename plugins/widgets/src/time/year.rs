@@ -12,6 +12,8 @@ use quireink_sdk::{
     Arg, Canvas, Color, Env, FontHandle, Id, Point, Rect, RegisterError, Registrar,
 };
 
+use quireink_sdk::SettingSpec;
+
 use super::{chosen, dates, frame_height, line, ui};
 
 const ID: Id = Id::new_static("widgets.year-progress");
@@ -23,32 +25,57 @@ const STYLES: [&str; 3] = [
     "widgets.progress.months",
 ];
 
+/// Its settings, kept in the program.
+static SETTINGS: [SettingSpec; 8] = [
+    widgets::align_spec("widgets.year-progress.align", ID, Align::Left),
+    widgets::frame_spec("widgets.year-progress.frame", ID, Frame::None),
+    SettingSpec::fixed_choice(
+        "widgets.year-progress.style",
+        "widgets.setting.style",
+        &STYLES,
+        STYLES[0],
+        ID,
+    ),
+    widgets::part_spec(
+        "widgets.year-progress.year",
+        ID,
+        "widgets.setting.year",
+        true,
+    ),
+    widgets::part_spec(
+        "widgets.year-progress.percent",
+        ID,
+        "widgets.setting.percent",
+        true,
+    ),
+    widgets::part_spec(
+        "widgets.year-progress.day",
+        ID,
+        "widgets.setting.day-of-year",
+        true,
+    ),
+    widgets::part_spec(
+        "widgets.year-progress.week",
+        ID,
+        "widgets.setting.week-number",
+        false,
+    ),
+    widgets::part_spec(
+        "widgets.year-progress.left",
+        ID,
+        "widgets.setting.days-left",
+        false,
+    ),
+];
+
 pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     super::add(
         r,
         &ID,
         "widgets.year-progress",
         Drawn::new(height, draw).shows(shows),
-        Align::Left,
-        Frame::None,
     )?;
-    r.add_setting(widgets::choice(
-        &ID,
-        "style",
-        "widgets.setting.style",
-        &STYLES,
-        STYLES[0],
-    ))?;
-    for (part, title, default) in [
-        ("year", "widgets.setting.year", true),
-        ("percent", "widgets.setting.percent", true),
-        ("day", "widgets.setting.day-of-year", true),
-        ("week", "widgets.setting.week-number", false),
-        ("left", "widgets.setting.days-left", false),
-    ] {
-        r.add_setting(widgets::part_setting(&ID, part, title, default))?;
-    }
-    Ok(())
+    r.add_settings(&SETTINGS)
 }
 
 /// How far the year is.
