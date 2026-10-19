@@ -6,6 +6,10 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- X4: removing or copying a large folder (e.g. one with many books, or
+  their caches) no longer starts the device again half way: work on the
+  card keeps the watchdogs from taking it for hung (it took 20 s before
+  they did, removing the books' caches over a minute).
 - X4: more memory left while the radio is on (on USB power it stays on
   by default, and a book opening then came close to the heap's end): the
   radio keeps 5 receive buffers instead of 10 and takes at most 16 more

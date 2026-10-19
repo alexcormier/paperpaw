@@ -203,6 +203,9 @@ impl Blocks for Card {
     }
 
     fn read_blocks(&mut self, index: u32, data: &mut [u8]) -> Result<(), DiskError> {
+        // Work on the card is life: long work (a folder removed or copied,
+        // a large file written) must not look hung to the watchdogs.
+        crate::power::feed();
         #[cfg(feature = "remote")]
         crate::traced::blocks(index, (data.len() / BLOCK) as u32, 0);
         let mut at = index;
@@ -222,6 +225,7 @@ impl Blocks for Card {
     }
 
     fn write_blocks(&mut self, index: u32, data: &[u8]) -> Result<(), DiskError> {
+        crate::power::feed();
         #[cfg(feature = "remote")]
         crate::traced::blocks(index, 0, (data.len() / BLOCK) as u32);
         let mut at = index;

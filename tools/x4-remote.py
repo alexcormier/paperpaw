@@ -105,6 +105,8 @@ USB_ID = (0x303A, 0x1001)
 LONG_MS = 1200
 # A command that takes longer has failed.
 TIMEOUT_S = 60
+# Removing a large folder (e.g. the books' caches) takes minutes.
+REMOVE_TIMEOUT_S = 900
 
 
 def find_port():
@@ -144,18 +146,18 @@ class X4:
         line, self.buffer = self.buffer.split(b"\n", 1)
         return line.decode("utf-8", "replace").rstrip("\r")
 
-    def ask(self, command, until):
+    def ask(self, command, until, timeout=TIMEOUT_S):
         """Sends a command and returns the X4's answers (lines with "PP:")
         up to the one starting with `until`."""
         self.port.reset_input_buffer()
         self.buffer = b""
         self.port.write(command.encode() + b"\n")
-        return self.expect(command, until)
+        return self.expect(command, until, timeout)
 
-    def expect(self, command, until):
+    def expect(self, command, until, timeout=TIMEOUT_S):
         """The X4's answers to `command` up to the one starting with `until`."""
         answers = []
-        deadline = time.monotonic() + TIMEOUT_S
+        deadline = time.monotonic() + timeout
         while True:
             line = self.line(deadline)
             if line is None:
@@ -501,7 +503,7 @@ def run(x4, step):
         case ["cat", *_]:
             sys.stdout.write(x4.read(rest).decode("utf-8", "replace"))
         case ["rm", *_]:
-            x4.ask(f"rm {rest}", "OK")
+            x4.ask(f"rm {rest}", "OK", REMOVE_TIMEOUT_S)
         case ["mkdir", *_]:
             x4.ask(f"mkdir {rest}", "OK")
         case ["mv", *_] if ">" in rest:
