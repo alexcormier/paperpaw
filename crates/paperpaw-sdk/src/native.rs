@@ -169,17 +169,14 @@ pub unsafe fn take(made: *mut core::ffi::c_void) -> Option<alloc::boxed::Box<dyn
 
 /// Makes a crate a native plugin file: defines its entry, its heap (the
 /// kernel's) and its panic handler, around the plugin `$plugin` makes.
-/// The crate is `#![no_std]` and `#![no_main]` and builds for the X4
-/// (`riscv32imc-unknown-none-elf`) or the X4 Pro
-/// (`xtensa-esp32s3-none-elf`); see the [module documentation](crate::native).
+/// The crate is `#![no_std]`; for the X4 (`riscv32imc-unknown-none-elf`)
+/// and the X4 Pro (`xtensa-esp32s3-none-elf`) a `#![no_main]` binary,
+/// linked with `paperpaw-plugin.x` and packed by `paperpaw-sign pack`;
+/// where a system loads libraries (a computer, Android) a `cdylib` with
+/// the same entry. See the [module documentation](crate::native).
 #[macro_export]
 macro_rules! plugin {
     ($plugin:expr) => {
-        #[cfg(not(target_os = "none"))]
-        compile_error!(
-            "a native plugin builds for the X4 (riscv32imc-unknown-none-elf) or the X4 Pro (xtensa-esp32s3-none-elf)"
-        );
-
         /// The firmware's table, whose address the loader wrote into the
         /// word `paperpaw-plugin.x` makes before any code of the plugin
         /// ran.
@@ -192,41 +189,81 @@ macro_rules! plugin {
             unsafe { &*PAPERPAW_API }
         }
 
-        #[cfg(target_os = "none")]
+        /// Where the shell puts its table before it makes the plugin: a
+        /// library the system loads may have data of its own.
+        #[cfg(not(target_os = "none"))]
+        #[unsafe(no_mangle)]
+        pub static PAPERPAW_API: $crate::native::support::ApiSlot =
+            $crate::native::support::ApiSlot::new();
+
+        #[cfg(not(target_os = "none"))]
+        fn paperpaw_api() -> &'static $crate::native::support::Api {
+            PAPERPAW_API.get()
+        }
+
         #[global_allocator]
         static PAPERPAW_HEAP: $crate::native::support::Heap =
             $crate::native::support::Heap(paperpaw_api);
 
-        #[cfg(target_os = "none")]
         #[panic_handler]
         fn paperpaw_panic(info: &::core::panic::PanicInfo<'_>) -> ! {
             $crate::native::support::panic(paperpaw_api(), info)
         }
 
-        #[cfg(target_os = "none")]
         unsafe extern "C" fn paperpaw_make() -> *mut ::core::ffi::c_void {
             $crate::native::support::make($plugin)
         }
 
-        #[cfg(target_os = "none")]
         #[unsafe(no_mangle)]
-        #[unsafe(link_section = ".rodata.paperpaw_entry")]
-        pub static PAPERPAW_ENTRY: $crate::native::support::Entry = $crate::native::support::Entry {
-            fingerprint: $crate::native::FINGERPRINT.0,
-            make: paperpaw_make,
-        };
+        #[cfg_attr(target_os = "none", unsafe(link_section = ".rodata.paperpaw_entry"))]
+        pub static PAPERPAW_ENTRY: $crate::native::support::Entry =
+            $crate::native::support::Entry {
+                fingerprint: $crate::native::FINGERPRINT.0,
+                make: paperpaw_make,
+            };
     };
 }
 
-/// What [`plugin!`] expands to uses; not for plugins themselves.
-#[cfg(target_os = "none")]
+/// What [`plugin!`] expands to uses, and what a shell that loads plugins
+/// as libraries hands them; not for plugins themselves.
 #[doc(hidden)]
 pub mod support {
     use alloc::boxed::Box;
     use core::alloc::{GlobalAlloc, Layout};
     use core::fmt::Write;
+    use core::sync::atomic::{AtomicPtr, Ordering};
 
     pub use paperpaw_native::{Api, Entry};
+
+    /// The shell's table, where a library the system loads keeps it
+    /// (`PAPERPAW_API`): set before the plugin is made.
+    #[derive(Debug)]
+    pub struct ApiSlot(AtomicPtr<Api>);
+
+    impl ApiSlot {
+        pub const fn new() -> Self {
+            Self(AtomicPtr::new(core::ptr::null_mut()))
+        }
+
+        /// Gives the plugin the shell's table (the shell, once, before it
+        /// makes the plugin).
+        pub fn set(&self, api: &'static Api) {
+            self.0
+                .store(core::ptr::from_ref(api).cast_mut(), Ordering::Release);
+        }
+
+        pub fn get(&self) -> &'static Api {
+            // SAFETY: set by the shell before it made the plugin, to a
+            // table that lives as long as the shell runs.
+            unsafe { &*self.0.load(Ordering::Acquire) }
+        }
+    }
+
+    impl Default for ApiSlot {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
 
     /// The plugin's heap: the kernel's (through the table the function
     /// gives), so boxes cross both ways.
