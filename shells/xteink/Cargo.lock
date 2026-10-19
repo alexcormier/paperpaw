@@ -2105,6 +2105,7 @@ dependencies = [
  "quireink-plugin-dictionary",
  "quireink-plugin-file-manager",
  "quireink-plugin-files",
+ "quireink-plugin-fonts-browser",
  "quireink-plugin-fonts-default",
  "quireink-plugin-format-epub",
  "quireink-plugin-format-txt",
@@ -2291,6 +2292,15 @@ dependencies = [
 name = "quireink-plugin-files"
 version = "0.4.0-dev"
 dependencies = [
+ "quireink-sdk",
+]
+
+[[package]]
+name = "quireink-plugin-fonts-browser"
+version = "0.4.0-dev"
+dependencies = [
+ "quireink-digest",
+ "quireink-json",
  "quireink-sdk",
 ]
 
