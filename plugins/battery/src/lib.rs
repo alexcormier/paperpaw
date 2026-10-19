@@ -110,7 +110,7 @@ fn record(env: &Env<'_>, state: &mut State, kind: Kind) {
             log::PLUGINS,
             "plugins.old.csv",
             log::PLUGINS_HEADER,
-            &log::plugin_lines(now.ms, &env.usage.plugins),
+            &log::plugin_lines(now.ms, &env.plugin_usage()),
         );
     }
     // On the card at once: an empty battery ends it all without warning.

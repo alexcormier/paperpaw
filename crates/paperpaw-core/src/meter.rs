@@ -22,8 +22,9 @@ pub(crate) const CORE: &str = "core";
 
 pub(crate) struct Meter {
     clock: Option<fn() -> u64>,
-    /// By plugin, `core` first.
-    table: RefCell<Vec<PluginUsage>>,
+    /// By plugin, `core` first; plugins read it through
+    /// `Env::plugin_usage`, the one copy kept.
+    pub(crate) table: RefCell<Vec<PluginUsage>>,
     /// The plugins whose code runs, the innermost last, with when it began
     /// (or went on after an inner one), in microseconds.
     running: RefCell<Vec<(usize, u64)>>,
@@ -140,11 +141,6 @@ impl Meter {
             .pixels
             .saturating_add(u64::from(area.width) * u64::from(area.height));
     }
-
-    /// Every plugin's numbers so far.
-    pub(crate) fn snapshot(&self, into: &mut Vec<PluginUsage>) {
-        into.clone_from(&self.table.borrow());
-    }
 }
 
 /// The storage, with what is read and written counted for the code
@@ -237,8 +233,7 @@ mod tests {
         meter.io(1, 0);
         meter.refreshed("reader", RefreshMode::Partial, Rect::new(0, 0, 10, 20));
         meter.shown("reader", 1500);
-        let mut table = Vec::new();
-        meter.snapshot(&mut table);
+        let table = meter.table.borrow().clone();
         let row = |id: &str| table.iter().find(|p| p.plugin.as_str() == id).unwrap();
         assert_eq!(row("reader").busy_us, 30 + 20);
         assert_eq!(row("stats").busy_us, 50);

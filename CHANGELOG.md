@@ -6,6 +6,20 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- X4: more memory left while the radio is on (on USB power it stays on
+  by default, and a book opening then came close to the heap's end): the
+  radio keeps 5 receive buffers instead of 10 and takes at most 16 more
+  each way instead of 32, about 6 KB less all the time and up to 11 KB
+  less at the peaks, downloads as fast as before (6 MB in about 33 s).
+  What each plugin took is kept once instead of twice.
+  SDK: `Env::plugin_usage()` gives it, `Usage::plugins` is gone (it was a
+  copy made on every call).
+- X4 test builds, for finding what takes the memory: a panic keeps the
+  calls that led to it (also a failed allocation), and
+  `tools/x4-remote.py --crashes` names them from the firmware's symbols;
+  `heap` says the most the heap held since start, the log says the heap
+  after every frame, and failed requests are logged with their host
+  (`wifi:status`, `wifi:scan`, `http:get:` as script steps).
 - The X4's remote control over USB (test builds) does much more, for
   developing on the device: the card (`ls`, `stat`, `md5`, `rm` also of
   folders, `mkdir`, `mv`, `sync`; `tools/x4-remote.py` pushes and pulls

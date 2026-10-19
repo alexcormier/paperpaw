@@ -4,12 +4,20 @@
 //! starts the X4 again, where halting would leave it on with nothing to
 //! be done until a watchdog came. Started again, it writes the message to
 //! the card ([`keep`]), for bug reports.
+//!
+//! The message ends with where the code was, `@` and the addresses of the
+//! calls that led there, innermost first (the firmware is built with frame
+//! pointers): `tools/x4-remote.py --crashes` names their functions from
+//! the firmware's symbols. An allocation that failed says so this way
+//! too, with the code that asked for it.
 
 use core::fmt::Write;
 
 /// The last panic's message (zero-terminated), kept through the reset.
 #[esp_hal::ram(unstable(rtc_fast, persistent))]
 static mut LAST: [u8; 400] = [0; 400];
+/// The calls kept with a panic, at most.
+const CALLS: usize = 16;
 
 /// Writes into a fixed buffer, cutting what does not fit.
 struct Cut<'a> {
@@ -42,6 +50,23 @@ fn panic(info: &core::panic::PanicInfo<'_>) -> ! {
     if let Some(at) = info.location() {
         let file = at.file().rsplit(['/', '\\']).next().unwrap_or(at.file());
         let _ = write!(cut, " ({file}:{})", at.line());
+    }
+    // Where it came from, without the panic's own machinery (the
+    // addresses inside `core` and `alloc` are named the same way).
+    let _ = write!(cut, " @");
+    let mut last = 0;
+    for frame in esp_backtrace::Backtrace::capture()
+        .frames()
+        .iter()
+        .take(CALLS)
+    {
+        // The start's frame repeats to the end.
+        let pc = frame.program_counter();
+        if pc == last {
+            break;
+        }
+        last = pc;
+        let _ = write!(cut, " {pc:x}");
     }
     // SAFETY: one core, the firmware stopped: nothing else touches it.
     unsafe { core::ptr::addr_of_mut!(LAST).write_volatile(buf) };

@@ -1638,7 +1638,6 @@ pub struct paperpaw_sdk::usage::Usage
 pub paperpaw_sdk::usage::Usage::inputs: u32
 pub paperpaw_sdk::usage::Usage::panel_ms: u64
 pub paperpaw_sdk::usage::Usage::pixels: u64
-pub paperpaw_sdk::usage::Usage::plugins: alloc::vec::Vec<paperpaw_sdk::usage::PluginUsage>
 pub paperpaw_sdk::usage::Usage::refreshes: [u32; 3]
 pub paperpaw_sdk::usage::Usage::sleeps: u32
 impl paperpaw_sdk::usage::Usage
@@ -2337,6 +2336,7 @@ pub paperpaw_sdk::Env::wifi: core::option::Option<&'a paperpaw_sdk::wifi::Wifi>
 impl paperpaw_sdk::Env<'_>
 pub fn paperpaw_sdk::Env<'_>::has_slot(&self, &paperpaw_sdk::Id) -> bool
 pub fn paperpaw_sdk::Env<'_>::plugin_dir(&str) -> alloc::string::String
+pub fn paperpaw_sdk::Env<'_>::plugin_usage(&self) -> alloc::vec::Vec<paperpaw_sdk::usage::PluginUsage>
 impl core::fmt::Debug for paperpaw_sdk::Env<'_>
 pub fn paperpaw_sdk::Env<'_>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct paperpaw_sdk::Event<P: paperpaw_sdk::event::EventData>

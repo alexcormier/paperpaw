@@ -77,8 +77,11 @@ pub struct Env<'a> {
     /// (see [`time`](crate::time) for the local time).
     pub status: &'a SystemStatus,
     /// What the device did since PaperPaw started: refreshes, input (see
-    /// [`usage`](crate::usage)).
+    /// [`usage`](crate::usage)); what each plugin took is
+    /// [`Env::plugin_usage`].
     pub usage: &'a crate::usage::Usage,
+    /// What each plugin took, kept by the kernel as it goes.
+    plugin_usage: &'a core::cell::RefCell<alloc::vec::Vec<crate::usage::PluginUsage>>,
     /// Items for status lines, from every plugin.
     pub status_items: &'a StatusItems,
     /// Filters of book text before it is laid out, from every plugin.
@@ -158,6 +161,9 @@ pub struct EnvParts<'a> {
     /// What the device did since PaperPaw started: refreshes, input (see
     /// [`usage`](crate::usage)).
     pub usage: &'a crate::usage::Usage,
+    /// What each plugin took, kept by the kernel as it goes (see
+    /// [`Env::plugin_usage`]).
+    pub plugin_usage: &'a core::cell::RefCell<alloc::vec::Vec<crate::usage::PluginUsage>>,
     /// Items for status lines, from every plugin.
     pub status_items: &'a StatusItems,
     /// Filters of book text before it is laid out, from every plugin.
@@ -227,6 +233,7 @@ impl<'a> From<EnvParts<'a>> for Env<'a> {
             plugins: p.plugins,
             status: p.status,
             usage: p.usage,
+            plugin_usage: p.plugin_usage,
             status_items: p.status_items,
             text_filters: p.text_filters,
             decorators: p.decorators,
@@ -264,6 +271,13 @@ impl Env<'_> {
     /// ([`slots::BROWSER`](crate::builtin::slots::BROWSER)).
     pub fn has_slot(&self, slot: &crate::Id) -> bool {
         self.slots.contains(slot)
+    }
+
+    /// What each plugin took since PaperPaw started (`core`: the kernel
+    /// itself), up to now: a copy made when asked, as the kernel keeps
+    /// one table only (memory is short on small devices).
+    pub fn plugin_usage(&self) -> alloc::vec::Vec<crate::usage::PluginUsage> {
+        self.plugin_usage.borrow().clone()
     }
 
     /// The directory where plugin `plugin` keeps its data, e.g.

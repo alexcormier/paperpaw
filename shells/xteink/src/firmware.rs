@@ -645,6 +645,13 @@ impl Firmware {
             shown.since(drawn),
             now().since(shown)
         );
+        // Where the heap stands, for finding what takes it (test builds).
+        #[cfg(feature = "remote")]
+        info!(
+            "heap {} used, peak {}",
+            esp_alloc::HEAP.used(),
+            esp_alloc::HEAP.stats().max_usage
+        );
     }
 }
 

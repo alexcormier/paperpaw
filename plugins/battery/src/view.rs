@@ -182,9 +182,13 @@ impl BatteryView {
             .settings
             .bool(paperpaw_sdk::builtin::settings::DEVELOPER.as_str())
             && env.settings.read(&crate::BY_PLUGIN);
-        let mut shown: Vec<_> = env
-            .usage
-            .plugins
+        // Asked for only where shown (a copy of the kernel's table).
+        let usage = if developer {
+            env.plugin_usage()
+        } else {
+            Vec::new()
+        };
+        let mut shown: Vec<_> = usage
             .iter()
             .filter(|p| developer && p.shown_ms >= 60_000)
             .collect();
@@ -205,9 +209,7 @@ impl BatteryView {
                 ));
             }
         }
-        let mut busy: Vec<_> = env
-            .usage
-            .plugins
+        let mut busy: Vec<_> = usage
             .iter()
             .filter(|p| developer && p.busy_us >= 100_000)
             .collect();

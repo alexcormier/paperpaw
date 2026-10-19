@@ -16,6 +16,8 @@ Usage:
   python tools/x4-remote.py --ls books   --cat paperpaw.ini   --rm updates/old.bin
   python tools/x4-remote.py --mkdir books/new   --mv books/a.epub books/b.epub
   python tools/x4-remote.py --info     (version, plugins, the screens open, the time)
+  python tools/x4-remote.py --crashes  (the crash file, its calls named from the
+      firmware's symbols: the build that crashed must be the one built here)
   python tools/x4-remote.py --profile --script "page-forward,wait:2000"
       (where the time goes during the steps: the functions the processor
       was in most, from the firmware's symbols; needs rustup's llvm-tools)
@@ -69,6 +71,9 @@ STEPS, separated by commas:
                      refreshes, bytes read and written (busiest first)
   time               the clock; time:set sets it to this computer's
   log:debug          how much the log says (off, error, warn, info, debug, trace)
+  wifi:status  wifi:scan  wifi:off   the radio (join with --wifi-connect)
+  http:get:http://host/file>books/f.epub   a plain-HTTP request as plugins make
+                     them, into memory or a file, with its time and the heap
   emit:core.book-opened:path=books/a.epub   an event, as a plugin sends it
   restart            the X4 starts again (waits until it is back)
   panic:why          a panic, to try what a crash leaves (waits until back)
@@ -223,12 +228,14 @@ class X4:
 
     def boot(self):
         """Prints why the X4 last started, and the panic of the run
-        before if it panicked."""
+        before if it panicked, with its calls named."""
         print(self.ask("boot", "BOOT")[-1])
         deadline = time.monotonic() + 0.5
         while (line := self.line(deadline)) is not None:
             if line.startswith("PP:PANIC"):
                 print(line[3:])
+                for name in calls(line):
+                    print(f"    {name}")
 
     def parts(self):
         """What the screen shows: (role, x, y, width, height, state, label)."""
@@ -322,6 +329,26 @@ def symbols(elf):
             # Without the hash and the generic arguments, which only differ.
             names.append(parts[3].rsplit("::h", 1)[0])
     return starts, sizes, names
+
+
+def calls(line):
+    """The functions of the addresses a panic's message ends with (after
+    `@`), innermost first, from the firmware built here."""
+    if " @ " not in line or not FIRMWARE.exists():
+        return []
+    starts, sizes, names = symbols(FIRMWARE)
+    named = []
+    for word in line.rsplit(" @ ", 1)[1].split():
+        try:
+            pc = int(word, 16)
+        except ValueError:
+            continue
+        i = bisect.bisect_right(starts, pc) - 1
+        if i >= 0 and pc < starts[i] + max(sizes[i], 1):
+            named.append(f"{pc:x} {names[i]}")
+        else:
+            named.append(f"{pc:x} ?")
+    return named
 
 
 def rom_functions(x4):
@@ -449,6 +476,19 @@ def run(x4, step):
             run(x4, f"tap:{x + w // 2}:{y + h // 2}")
         case ["boot"]:
             x4.boot()
+        case ["wifi", "status"]:
+            print(x4.ask("wifi status", "WIFI")[-1])
+        case ["wifi", "scan"]:
+            for answer in x4.ask("wifi scan", "END")[:-1]:
+                print(answer.split(" ", 1)[1])
+        case ["wifi", "off"]:
+            x4.ask("wifi off", "OK")
+        case ["http", *_] if rest.startswith("get:"):
+            # `http:get:<url>` into memory, `http:get:<url>><path>` into a file.
+            url, _, path = rest[4:].partition(">")
+            started = time.monotonic()
+            answer = x4.ask(f"http get {url} {path}".strip(), "HTTP")[-1]
+            print(f"{answer}  ({time.monotonic() - started:.1f} s)")
         case ["screens"]:
             print(x4.ask("screens", "SCREENS")[-1].split(" ", 1)[-1])
         case ["ls", *_]:
@@ -541,6 +581,8 @@ def run(x4, step):
                 print(f"stack: {stack[0]} of {stack[1]} bytes never used")
             if len(stack) > 2:
                 print(f"largest free block: {stack[2]} bytes")
+            if len(stack) > 3:
+                print(f"peak: {stack[3]} bytes used at most since start")
         case ["describe"]:
             for answer in x4.ask("describe", "END")[:-1]:
                 _, role, x, y, w, h, state, *label = answer.split(" ")
@@ -575,6 +617,7 @@ def main():
     parser.add_argument("--mkdir", action="append", default=[], metavar="PATH")
     parser.add_argument("--mv", nargs=2, action="append", default=[], metavar=("FROM", "TO"))
     parser.add_argument("--info", action="store_true", help="version, plugins, screens, time")
+    parser.add_argument("--crashes", action="store_true", help="the crash file, its calls named")
     parser.add_argument(
         "--wifi-connect", metavar="NAME", help="join a network (asks for its password, not shown)"
     )
@@ -592,6 +635,12 @@ def main():
     if args.info:
         for step in ["version", "plugins", "screens", "time"]:
             run(x4, step)
+    if args.crashes:
+        text = x4.read(".paperpaw/crashes.txt").decode("utf-8", "replace")
+        for line in text.splitlines():
+            print(line)
+            for name in calls(line):
+                print(f"    {name}")
     # Made, brought, fetched, moved, shown, then removed.
     for path in args.mkdir:
         run(x4, f"mkdir:{path}")

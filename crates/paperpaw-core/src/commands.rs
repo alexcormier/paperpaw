@@ -7,12 +7,11 @@ use super::*;
 impl Kernel {
     pub(crate) fn finish(&mut self) -> Effects {
         self.run_commands();
-        // The time since, to the screen on top; the numbers for plugins.
+        // The time since, to the screen on top.
         let top = self.stack.last().map_or(meter::CORE, |s| s.id.namespace());
         let shown = self.now.since(self.shown_since);
         self.shared.meter.shown(top, shown);
         self.shown_since = self.now;
-        self.shared.meter.snapshot(&mut self.shared.usage.plugins);
         // A screen that set a scope may have closed.
         self.check_scope_owner();
         self.check_preview_owner();

@@ -56,7 +56,9 @@ struct Upload {
 
 /// Requests at a time.
 pub const MAX_CALLS: usize = 2;
-/// A connection's buffers: much to receive (downloads), little to send.
+/// A connection's buffers: more to receive (downloads), little to send.
+/// 8 KB of window keep a download at what the radio and the card take
+/// (about 190 KB/s on the X4), with memory left while a book is open.
 const BUFFERS: net::Buffers = net::Buffers {
     receive: 16 * 1024,
     send: 1024,
@@ -166,6 +168,11 @@ impl Calls {
                     answers.push(match result {
                         Ok(answer) => call.finish(answer, storage),
                         Err(reason) => {
+                            // The host only: addresses may carry keys.
+                            let url = call.call.url.as_str();
+                            let host = url.split("://").nth(1).unwrap_or(url);
+                            let host = host.split(['/', '?']).next().unwrap_or(host);
+                            log::warn!("http {} {host}: {reason}", call.call.method);
                             call.discard(storage);
                             HttpResponse::failed(call.call.id, reason)
                         }

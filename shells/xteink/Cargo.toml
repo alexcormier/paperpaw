@@ -43,10 +43,10 @@ x4-pro = [
     "esp-rtos/esp32s3",
 ]
 # Remote control over USB for testing on the device (`src/remote.rs`):
-# files in and out, presses, the screen, profiling. Not in released
-# firmware: it costs flash and memory, and anyone with a cable could use
-# it.
-remote = []
+# files in and out, presses, the screen, profiling, the heap's peak (the
+# allocator counts it). Not in released firmware: it costs flash and
+# memory, and anyone with a cable could use it.
+remote = ["esp-alloc/internal-heap-stats"]
 
 [dependencies]
 paperpaw-app = { path = "../../crates/paperpaw-app", default-features = false, features = ["packs"] }

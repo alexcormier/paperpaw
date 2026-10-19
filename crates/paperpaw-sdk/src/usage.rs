@@ -3,8 +3,6 @@
 //! battery's use to it. Refreshing the screen takes much of an e-reader's
 //! power; the processor being awake much of the rest.
 
-use alloc::vec::Vec;
-
 use paperpaw_platform::{Rect, RefreshMode};
 
 use crate::id::Id;
@@ -24,12 +22,9 @@ pub struct Usage {
     /// Time the panel took for its refreshes, where the shell says
     /// (the kernel's `panel_busy`).
     pub panel_ms: u64,
-    /// What each plugin took (`core`: the kernel itself), as of the last
-    /// input or tick.
-    pub plugins: Vec<PluginUsage>,
 }
 
-/// What a plugin took.
+/// What a plugin took ([`Env::plugin_usage`](crate::Env::plugin_usage)).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PluginUsage {
     pub plugin: Id,

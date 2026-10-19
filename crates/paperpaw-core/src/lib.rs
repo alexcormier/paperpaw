@@ -725,10 +725,14 @@ impl Kernel {
         self.stack.iter().map(|s| &s.id)
     }
 
-    /// What the device and each plugin did since start, as of the last
-    /// input or tick (see [`paperpaw_sdk::usage`]).
+    /// What the device did since start (see [`paperpaw_sdk::usage`]).
     pub fn usage(&self) -> &paperpaw_sdk::usage::Usage {
         &self.shared.usage
+    }
+
+    /// What each plugin took since start, `core` first.
+    pub fn plugin_usage(&self) -> Vec<paperpaw_sdk::usage::PluginUsage> {
+        self.shared.meter.table.borrow().clone()
     }
 
     /// Every action plugins added.
@@ -917,6 +921,7 @@ impl Shared {
             plugins: &self.plugins,
             status: &self.status,
             usage: &self.usage,
+            plugin_usage: &self.meter.table,
             status_items: &self.status_items,
             widgets: &self.widgets,
             setup: &self.setup,

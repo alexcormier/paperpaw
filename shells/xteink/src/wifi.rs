@@ -25,8 +25,8 @@ use esp_hal::timer::timg::Timer;
 use esp_radio::wifi::scan::ScanConfig;
 use esp_radio::wifi::sta::{ScanMethod, StationConfig};
 use esp_radio::wifi::{
-    AuthenticationMethod, AuthenticationMethodConfig, Config, ConnectionError, DisconnectReason,
-    WifiController,
+    AuthenticationMethod, AuthenticationMethodConfig, Config, ConnectionError, ControllerConfig,
+    DisconnectReason, WifiController,
 };
 use paperpaw_core::{JoinFailure, WifiCommand, WifiEvent, WifiNetwork, WifiState};
 
@@ -184,7 +184,7 @@ impl Radio {
             // it.
             unsafe { WIFI::steal() }
         });
-        let mut controller = match WifiController::new(peripheral, Default::default()) {
+        let mut controller = match WifiController::new(peripheral, controller_config()) {
             Ok(controller) => controller,
             Err(e) => {
                 log::warn!("wifi: driver: {e:?}");
@@ -428,3 +428,22 @@ extern "C" fn phy_i2c_exit_critical() {
         }
     }
 }
+
+/// The radio's buffers, fewer than the driver's defaults (10 kept for
+/// receiving, up to 32 more each way): each takes about 1.6 KB, and the
+/// X4's memory is short while a book opens with the radio on (charging).
+/// An e-reader's requests and transfers need no more.
+fn controller_config() -> ControllerConfig {
+    ControllerConfig::default()
+        .with_static_rx_buf_num(STATIC_RX)
+        .with_dynamic_rx_buf_num(DYNAMIC)
+        .with_dynamic_tx_buf_num(DYNAMIC)
+        // Below the receive buffers, as the driver requires.
+        .with_rx_ba_win(STATIC_RX - 1)
+}
+
+/// Receive buffers kept while the radio is on.
+const STATIC_RX: u8 = 5;
+/// Buffers taken as frames come and go, at most, each way: a connection's
+/// window (8 KB, `http`) in frames, and some.
+const DYNAMIC: u16 = 16;

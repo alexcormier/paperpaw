@@ -86,10 +86,11 @@ impl Remote {
             Command::Heap => {
                 let (left, size) = crate::stack::left();
                 println!(
-                    "PP:HEAP {} {} {left} {size} {}",
+                    "PP:HEAP {} {} {left} {size} {} {}",
                     esp_alloc::HEAP.used(),
                     esp_alloc::HEAP.free(),
-                    largest_block()
+                    largest_block(),
+                    esp_alloc::HEAP.stats().max_usage
                 );
             }
             Command::Put { size, path } => self.receive(kernel, size, &path),
@@ -259,7 +260,7 @@ impl Remote {
                     "PP:USAGE {fast} {partial} {full} {} {} {} {}",
                     u.pixels, u.inputs, u.sleeps, u.panel_ms
                 );
-                for p in &u.plugins {
+                for p in &kernel.plugin_usage() {
                     let [fast, partial, full] = p.refreshes;
                     println!(
                         "PP:USE {} {} {} {} {fast} {partial} {full} {} {}",

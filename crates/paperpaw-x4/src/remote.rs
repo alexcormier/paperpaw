@@ -22,9 +22,10 @@
 //! - `describe`: what it shows, a `PP:PART <role> <x> <y> <width> <height>
 //!   <state> <label>` for each row, button or heading (state: see
 //!   [`part_state`]), then `PP:END`;
-//! - `heap`: `PP:HEAP <used> <free> <stack left> <stack size> <largest>`,
-//!   in bytes (the stack: what it never used since start; the largest
-//!   block that could be had now, of the free memory in pieces);
+//! - `heap`: `PP:HEAP <used> <free> <stack left> <stack size> <largest>
+//!   <peak>`, in bytes (the stack: what it never used since start; the
+//!   largest block that could be had now, of the free memory in pieces;
+//!   the most the heap ever held since start);
 //! - `input`: `PP:INPUT <readings> <front> <side> <power> <millivolts>`, how
 //!   the buttons and the battery are read;
 //! - `profile start`, `profile stop`: notes where the processor is every
