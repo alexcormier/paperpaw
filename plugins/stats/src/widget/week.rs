@@ -6,8 +6,8 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 
 use quireink_sdk::ui::{self, UiStyle};
-use quireink_sdk::widgets::{self, Align, Look, Widget, WidgetSpec, WidgetTarget};
-use quireink_sdk::{Arg, Canvas, Env, Id, Rect, RegisterError, Registrar};
+use quireink_sdk::widgets::{self, Align, Frame, Look, Widget, WidgetSpec, WidgetTarget};
+use quireink_sdk::{Arg, Canvas, Env, Id, Rect, RegisterError, Registrar, SettingSpec};
 
 use super::{caption_room, chosen, frame_height, goal, line, seconds_on, shade};
 use crate::fmt;
@@ -25,32 +25,44 @@ const PERIODS: [&str; 4] = [
 /// The bars' ends: round or square.
 const SHAPES: [&str; 2] = ["stats.shape.round", "stats.shape.square"];
 
-pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
-    super::look_settings(r, &WEEK, "stats.widget.week", Align::Left, None)?;
-    r.add_setting(widgets::choice(
-        &WEEK,
-        "period",
+/// Its settings, kept in the program: its look, its choices and
+/// switches for its parts.
+static SETTINGS: [SettingSpec; 8] = [
+    widgets::frame_spec("stats.widget.week.frame", WEEK, Frame::None),
+    widgets::align_spec("stats.widget.week.align", WEEK, Align::Left),
+    SettingSpec::fixed_choice(
+        "stats.widget.week.period",
         "stats.setting.period",
         &PERIODS,
         PERIODS[0],
-    ))?;
-    r.add_setting(widgets::choice(
-        &WEEK,
-        "shape",
+        WEEK,
+    ),
+    SettingSpec::fixed_choice(
+        "stats.widget.week.shape",
         "stats.setting.bars",
         &SHAPES,
         SHAPES[0],
-    ))?;
-    super::parts(
-        r,
-        &WEEK,
-        &[
-            ("caption", "stats.part.caption", true),
-            ("labels", "stats.part.weekdays", true),
-            ("goal", "stats.part.goal-line", true),
-            ("today", "stats.part.today", true),
-        ],
-    )?;
+        WEEK,
+    ),
+    widgets::part_spec(
+        "stats.widget.week.caption",
+        WEEK,
+        "stats.part.caption",
+        true,
+    ),
+    widgets::part_spec(
+        "stats.widget.week.labels",
+        WEEK,
+        "stats.part.weekdays",
+        true,
+    ),
+    widgets::part_spec("stats.widget.week.goal", WEEK, "stats.part.goal-line", true),
+    widgets::part_spec("stats.widget.week.today", WEEK, "stats.part.today", true),
+];
+
+pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
+    r.add_setting_group(widgets::settings_group(&WEEK, "stats.widget.week"))?;
+    r.add_settings(&SETTINGS)?;
     r.add_widget(
         WidgetSpec::new(WEEK, "stats.widget.week", |_| Box::new(Week::default()))
             .category(widgets::categories::READING),

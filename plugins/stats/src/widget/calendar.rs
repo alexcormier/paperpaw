@@ -10,8 +10,10 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use quireink_sdk::ui::{self, UiStyle};
-use quireink_sdk::widgets::{self, Align, Look, Widget, WidgetSpec, WidgetTarget};
-use quireink_sdk::{Arg, Canvas, Env, FontHandle, Id, Point, Rect, RegisterError, Registrar};
+use quireink_sdk::widgets::{self, Align, Frame, Look, Widget, WidgetSpec, WidgetTarget};
+use quireink_sdk::{
+    Arg, Canvas, Env, FontHandle, Id, Point, Rect, RegisterError, Registrar, SettingSpec,
+};
 
 use super::{caption_room, chosen, frame_height, goal, line, shade};
 use crate::{fmt, totals};
@@ -31,40 +33,67 @@ const WEEKS: [&str; 4] = [
 /// The days' shape.
 const CELLS: [&str; 2] = ["stats.cells.square", "stats.cells.round"];
 
-pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
-    super::look_settings(r, &CALENDAR, "stats.widget.calendar", Align::Center, None)?;
-    r.add_setting(widgets::choice(
-        &CALENDAR,
-        "style",
+/// Its settings, kept in the program: its look, its choices and
+/// switches for its parts.
+static SETTINGS: [SettingSpec; 10] = [
+    widgets::frame_spec("stats.widget.calendar.frame", CALENDAR, Frame::None),
+    widgets::align_spec("stats.widget.calendar.align", CALENDAR, Align::Center),
+    SettingSpec::fixed_choice(
+        "stats.widget.calendar.style",
         "stats.setting.calendar",
         &STYLES,
         STYLES[0],
-    ))?;
-    r.add_setting(widgets::choice(
-        &CALENDAR,
-        "weeks",
+        CALENDAR,
+    ),
+    SettingSpec::fixed_choice(
+        "stats.widget.calendar.weeks",
         "stats.setting.weeks",
         &WEEKS,
         WEEKS[1],
-    ))?;
-    r.add_setting(widgets::choice(
-        &CALENDAR,
-        "cells",
+        CALENDAR,
+    ),
+    SettingSpec::fixed_choice(
+        "stats.widget.calendar.cells",
         "stats.setting.cells",
         &CELLS,
         CELLS[0],
-    ))?;
-    super::parts(
-        r,
-        &CALENDAR,
-        &[
-            ("caption", "stats.part.caption", true),
-            ("weekdays", "stats.part.weekdays", true),
-            ("numbers", "stats.part.numbers", true),
-            ("streak", "stats.part.streak", true),
-            ("total", "stats.part.total", true),
-        ],
-    )?;
+        CALENDAR,
+    ),
+    widgets::part_spec(
+        "stats.widget.calendar.caption",
+        CALENDAR,
+        "stats.part.caption",
+        true,
+    ),
+    widgets::part_spec(
+        "stats.widget.calendar.weekdays",
+        CALENDAR,
+        "stats.part.weekdays",
+        true,
+    ),
+    widgets::part_spec(
+        "stats.widget.calendar.numbers",
+        CALENDAR,
+        "stats.part.numbers",
+        true,
+    ),
+    widgets::part_spec(
+        "stats.widget.calendar.streak",
+        CALENDAR,
+        "stats.part.streak",
+        true,
+    ),
+    widgets::part_spec(
+        "stats.widget.calendar.total",
+        CALENDAR,
+        "stats.part.total",
+        true,
+    ),
+];
+
+pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
+    r.add_setting_group(widgets::settings_group(&CALENDAR, "stats.widget.calendar"))?;
+    r.add_settings(&SETTINGS)?;
     r.add_widget(
         WidgetSpec::new(CALENDAR, "stats.widget.calendar", |_| {
             Box::new(Calendar::default())

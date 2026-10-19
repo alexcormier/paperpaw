@@ -246,6 +246,13 @@ fn mark_finished(env: &Env<'_>, path: &str, now: i64) {
     }
 }
 
+/// The settings kept in the program (see [`SettingSpec::fixed`]).
+static SETTINGS: [SettingSpec; 1] =
+    [
+        SettingSpec::fixed_switch("stats.enabled", "stats.setting.enabled", true, GROUP)
+            .described("stats.setting.enabled.help"),
+    ];
+
 /// The statistics plugin.
 #[derive(Debug, Default)]
 pub struct Stats;
@@ -280,9 +287,9 @@ impl Plugin for Stats {
                 .step(step)
                 .advanced()
         };
+        r.add_settings(&SETTINGS)?;
+        // With a unit and a step: made at start.
         for spec in [
-            SettingSpec::switch(&ENABLED, "stats.setting.enabled", true)
-                .description("stats.setting.enabled.help"),
             seconds(MIN_SECONDS, "stats.setting.min", (1, 60, 5), 1)
                 .description("stats.setting.min.help"),
             seconds(MAX_SECONDS, "stats.setting.max", (30, 600, 120), 10)

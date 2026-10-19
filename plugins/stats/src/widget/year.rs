@@ -15,8 +15,10 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use quireink_sdk::ui::{self, UiStyle};
-use quireink_sdk::widgets::{self, Align, Look, Size, Widget, WidgetSpec, WidgetTarget};
-use quireink_sdk::{Arg, Canvas, Command, Env, Id, Params, Point, Rect, RegisterError, Registrar};
+use quireink_sdk::widgets::{self, Align, Frame, Look, Size, Widget, WidgetSpec, WidgetTarget};
+use quireink_sdk::{
+    Arg, Canvas, Command, Env, Id, Params, Point, Rect, RegisterError, Registrar, SettingSpec,
+};
 
 use super::{caption_room, chosen, fit_size, frame_height, line, middle, shade};
 use crate::store::{self, Book};
@@ -42,37 +44,39 @@ const LIBRARY_LOOKUPS: usize = 24;
 /// Dots drawn at most.
 const MOST_DOTS: u32 = 60;
 
-pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
-    super::look_settings(
-        r,
-        &YEAR,
-        "stats.widget.year",
-        Align::Left,
-        Some(Size::Medium),
-    )?;
-    r.add_setting(widgets::choice(
-        &YEAR,
-        "goal",
+/// Its settings, kept in the program: its look, its choices and
+/// switches for its parts.
+static SETTINGS: [SettingSpec; 8] = [
+    widgets::frame_spec("stats.widget.year.frame", YEAR, Frame::None),
+    widgets::size_spec("stats.widget.year.size", YEAR, Size::Medium, true),
+    widgets::align_spec("stats.widget.year.align", YEAR, Align::Left),
+    SettingSpec::fixed_choice(
+        "stats.widget.year.goal",
         "stats.setting.books-goal",
         &GOALS,
         GOALS[2],
-    ))?;
-    r.add_setting(widgets::choice(
-        &YEAR,
-        "style",
+        YEAR,
+    ),
+    SettingSpec::fixed_choice(
+        "stats.widget.year.style",
         "stats.setting.year-style",
         &STYLES,
         STYLES[0],
-    ))?;
-    super::parts(
-        r,
-        &YEAR,
-        &[
-            ("caption", "stats.part.caption", true),
-            ("plan", "stats.part.plan", true),
-            ("last", "stats.part.last-book", true),
-        ],
-    )?;
+        YEAR,
+    ),
+    widgets::part_spec(
+        "stats.widget.year.caption",
+        YEAR,
+        "stats.part.caption",
+        true,
+    ),
+    widgets::part_spec("stats.widget.year.plan", YEAR, "stats.part.plan", true),
+    widgets::part_spec("stats.widget.year.last", YEAR, "stats.part.last-book", true),
+];
+
+pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
+    r.add_setting_group(widgets::settings_group(&YEAR, "stats.widget.year"))?;
+    r.add_settings(&SETTINGS)?;
     r.add_widget(
         WidgetSpec::new(YEAR, "stats.widget.year", |_| Box::new(Year::default()))
             .category(widgets::categories::READING),

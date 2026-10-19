@@ -18,7 +18,9 @@ use alloc::vec::Vec;
 
 use quireink_sdk::ui::{self, UiStyle};
 use quireink_sdk::widgets::{self, Align, Frame, Look, Size, Widget, WidgetSpec, WidgetTarget};
-use quireink_sdk::{Arg, Canvas, Command, Env, FontHandle, Id, Rect, RegisterError, Registrar};
+use quireink_sdk::{
+    Arg, Canvas, Command, Env, FontHandle, Id, Rect, RegisterError, Registrar, SettingSpec,
+};
 
 use crate::OPEN;
 use crate::store::{self, Summary, Word};
@@ -32,51 +34,86 @@ const SAVED_NAME: &str = "vocabulary.widget.saved";
 /// Which word the word of the day is: another each day, or the newest.
 const PICKS: [&str; 2] = ["vocabulary.pick.daily", "vocabulary.pick.newest"];
 
-pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
-    look_settings(r, &WORD, "vocabulary.widget.word")?;
-    r.add_setting(widgets::choice(
-        &WORD,
-        "pick",
+/// The word of the day's settings, kept in the program.
+static WORD_SETTINGS: [SettingSpec; 7] = [
+    widgets::frame_spec("vocabulary.widget.word.frame", WORD, Frame::None),
+    widgets::size_spec("vocabulary.widget.word.size", WORD, Size::Medium, true),
+    widgets::align_spec("vocabulary.widget.word.align", WORD, Align::Left),
+    SettingSpec::fixed_choice(
+        "vocabulary.widget.word.pick",
         "vocabulary.setting.pick",
         &PICKS,
         PICKS[0],
-    ))?;
-    for (key, title, default) in [
-        ("caption", "vocabulary.part.caption", true),
-        ("sentence", "vocabulary.part.sentence", true),
-        ("book", "vocabulary.part.book", false),
-    ] {
-        r.add_setting(widgets::part_setting(&WORD, key, title, default))?;
-    }
+        WORD,
+    ),
+    widgets::part_spec(
+        "vocabulary.widget.word.caption",
+        WORD,
+        "vocabulary.part.caption",
+        true,
+    ),
+    widgets::part_spec(
+        "vocabulary.widget.word.sentence",
+        WORD,
+        "vocabulary.part.sentence",
+        true,
+    ),
+    widgets::part_spec(
+        "vocabulary.widget.word.book",
+        WORD,
+        "vocabulary.part.book",
+        false,
+    ),
+];
+
+/// The words saved's settings, kept in the program.
+static SAVED_SETTINGS: [SettingSpec; 7] = [
+    widgets::frame_spec("vocabulary.widget.saved.frame", SAVED, Frame::None),
+    widgets::size_spec("vocabulary.widget.saved.size", SAVED, Size::Medium, true),
+    widgets::align_spec("vocabulary.widget.saved.align", SAVED, Align::Left),
+    widgets::part_spec(
+        "vocabulary.widget.saved.caption",
+        SAVED,
+        "vocabulary.part.caption",
+        true,
+    ),
+    widgets::part_spec(
+        "vocabulary.widget.saved.newest",
+        SAVED,
+        "vocabulary.part.newest",
+        true,
+    ),
+    widgets::part_spec(
+        "vocabulary.widget.saved.books",
+        SAVED,
+        "vocabulary.part.books",
+        false,
+    ),
+    widgets::part_spec(
+        "vocabulary.widget.saved.languages",
+        SAVED,
+        "vocabulary.part.languages",
+        false,
+    ),
+];
+
+pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
+    r.add_setting_group(widgets::settings_group(&WORD, "vocabulary.widget.word"))?;
+    r.add_settings(&WORD_SETTINGS)?;
     r.add_widget(
         WidgetSpec::new(WORD, "vocabulary.widget.word", |_| {
             Box::new(WordWidget::default())
         })
         .category(widgets::categories::WORDS),
     )?;
-    look_settings(r, &SAVED, "vocabulary.widget.saved")?;
-    for (key, title, default) in [
-        ("caption", "vocabulary.part.caption", true),
-        ("newest", "vocabulary.part.newest", true),
-        ("books", "vocabulary.part.books", false),
-        ("languages", "vocabulary.part.languages", false),
-    ] {
-        r.add_setting(widgets::part_setting(&SAVED, key, title, default))?;
-    }
+    r.add_setting_group(widgets::settings_group(&SAVED, "vocabulary.widget.saved"))?;
+    r.add_settings(&SAVED_SETTINGS)?;
     r.add_widget(
         WidgetSpec::new(SAVED, "vocabulary.widget.saved", |_| {
             Box::new(Saved::default())
         })
         .category(widgets::categories::WORDS),
     )
-}
-
-/// A widget's settings group with its frame, size and alignment.
-fn look_settings(r: &mut Registrar, id: &Id, title: &'static str) -> Result<(), RegisterError> {
-    r.add_setting_group(widgets::settings_group(id, title))?;
-    r.add_setting(widgets::frame_setting(id, Frame::None))?;
-    r.add_setting(widgets::size_setting(id, Size::Medium, true))?;
-    r.add_setting(widgets::align_setting(id, Align::Left))
 }
 
 /// The height of a line of text `size` pixels large.
@@ -473,5 +510,23 @@ fn draw_saved(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, summary: &Sum
         let x = align.x(area, font.measure(style.small, &note));
         let at = row(block.y + big + n as u16 * small, small);
         ui::draw_label(canvas, &font, style.small, x, at, &note, look.faint);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The settings kept in the program are named after their widget, as
+    /// it reads them.
+    #[test]
+    fn settings_are_the_widgets() {
+        for (settings, widget) in [(&WORD_SETTINGS, WORD_NAME), (&SAVED_SETTINGS, SAVED_NAME)] {
+            for spec in settings {
+                let prefix = format!("{widget}.");
+                assert!(spec.id.as_str().starts_with(&prefix), "{}", spec.id);
+                assert_eq!(spec.group.as_str(), widget);
+            }
+        }
     }
 }

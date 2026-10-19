@@ -30,7 +30,7 @@ use alloc::vec::Vec;
 
 use quireink_sdk::round::point_at;
 use quireink_sdk::ui::UiStyle;
-use quireink_sdk::widgets::{self, Align, Frame, Look, Size, WidgetTarget};
+use quireink_sdk::widgets::{self, Look, Size, WidgetTarget};
 use quireink_sdk::{
     Canvas, Color, Command, Env, FontHandle, Id, Point, Rect, RegisterError, Registrar,
     SettingSpec, SettingValue,
@@ -72,17 +72,18 @@ pub(crate) fn goal(env: &Env<'_>) -> Option<u64> {
         .map(|m| u64::from(m) * 60)
 }
 
+/// The plugin's settings for the widgets, kept in the program.
+static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_choice(
+    "stats.goal",
+    "stats.setting.goal",
+    &GOALS,
+    GOALS[0],
+    crate::GROUP,
+)
+.described("stats.setting.goal.help")];
+
 pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
-    r.add_setting(
-        SettingSpec::choice(
-            &GOAL,
-            "stats.setting.goal",
-            GOALS.iter().map(|g| Cow::Borrowed(*g)).collect(),
-            GOALS[0],
-        )
-        .group(crate::GROUP)
-        .description("stats.setting.goal.help"),
-    )?;
+    r.add_settings(&SETTINGS)?;
     // A goal set shows on the home screen: the widget goes onto its first
     // page, after the book being read, if no page shows it yet.
     r.on(
@@ -120,36 +121,6 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     calendar::register(r)?;
     year::register(r)?;
     streak::register(r)
-}
-
-/// A widget's settings group with its frame, its size (where it has one,
-/// with "as large as fits") and its alignment, in that order.
-fn look_settings(
-    r: &mut Registrar,
-    id: &Id,
-    title: &'static str,
-    align: Align,
-    size: Option<Size>,
-) -> Result<(), RegisterError> {
-    r.add_setting_group(widgets::settings_group(id, title))?;
-    r.add_setting(widgets::frame_setting(id, Frame::None))?;
-    if let Some(size) = size {
-        r.add_setting(widgets::size_setting(id, size, true))?;
-    }
-    r.add_setting(widgets::align_setting(id, align))
-}
-
-/// Switches for the parts of widget `id`: each its key, its title and
-/// whether it shows at first.
-fn parts(
-    r: &mut Registrar,
-    id: &Id,
-    parts: &[(&str, &'static str, bool)],
-) -> Result<(), RegisterError> {
-    for (key, title, default) in parts {
-        r.add_setting(widgets::part_setting(id, key, *title, *default))?;
-    }
-    Ok(())
 }
 
 /// The value of widget `widget`'s choice `key`.
@@ -437,8 +408,10 @@ fn dashed(canvas: &mut Canvas<'_>, x: i32, end: i32, y: i32, thickness: u32, col
 #[cfg(test)]
 mod tests {
     use super::*;
+    use quireink_sdk::widgets::Frame;
 
-    /// Every widget's settings have ids of their own: the plugin loads.
+    /// Every widget's settings have ids of their own, named after their
+    /// widget (its group): the plugin loads, the widgets read them.
     #[test]
     fn the_widgets_register() {
         use quireink_sdk::contribution::Contribution;
@@ -448,8 +421,18 @@ mod tests {
             .contributions()
             .iter()
             .filter_map(|c| match c {
-                Contribution::Setting(spec) => Some(spec.id.as_str()),
+                Contribution::Setting(spec) => Some(&**spec),
+                Contribution::FixedSetting(spec) => Some(*spec),
                 _ => None,
+            })
+            .map(|spec| {
+                let (id, group) = (spec.id.as_str(), spec.group.as_str());
+                let widget = group.starts_with("stats.widget.");
+                assert!(
+                    !widget || id.starts_with(&alloc::format!("{group}.")),
+                    "{id}"
+                );
+                id
             })
             .collect();
         let all = ids.len();
