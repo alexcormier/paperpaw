@@ -289,6 +289,10 @@ pub struct Kernel {
     subscriptions: Vec<(Id, Id, EventHandler)>,
     /// When the active screen wants `on_timer`.
     screen_timer: Option<Instant>,
+    /// The screen on top changed: it is told ([`Screen::on_show`]) once
+    /// the commands of the call are done, so that one shown for a moment
+    /// (e.g. below a menu that closes to open another screen) is not.
+    show_pending: bool,
     /// Events plugins asked for at a time ([`Command::Schedule`]).
     scheduled: Vec<(Instant, Id, Params)>,
     /// The short message showing ([`Command::Notify`]) and until when.

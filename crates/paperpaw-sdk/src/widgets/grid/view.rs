@@ -238,6 +238,16 @@ impl GridView {
         &self.geometry
     }
 
+    /// Lets go of the widgets and what they keep (e.g. covers made
+    /// small), while the screen is hidden
+    /// ([`Screen::on_hide`](crate::Screen::on_hide)): nothing of them is
+    /// drawn until [`layout`](Self::layout) makes them anew.
+    pub fn release(&mut self) {
+        for shown in &mut self.items {
+            shown.widget = None;
+        }
+    }
+
     /// Whether the grid is edited.
     pub fn editing(&self) -> bool {
         self.edit.is_some()

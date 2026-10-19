@@ -18,6 +18,9 @@ impl Kernel {
         let running = self.shared.meter.enter(id.namespace());
         let screen = (spec.factory)(&self.shared.env(self.now), params);
         drop(running);
+        if screen.region(&self.shared.env(self.now)).is_none() {
+            self.hide_from(self.shown_base());
+        }
         self.screens_changed = true;
         self.stack.push(ActiveScreen {
             id,
@@ -29,6 +32,23 @@ impl Kernel {
         let top = self.stack.len() - 1;
         let overlay = self.overlay(top);
         self.screen_changed(self.changed_region(top), overlay.is_some());
+    }
+
+    /// The topmost full screen: it and the overlays above it show.
+    fn shown_base(&self) -> usize {
+        (0..self.stack.len())
+            .rev()
+            .find(|&i| self.overlay(i).is_none())
+            .unwrap_or(0)
+    }
+
+    /// Tells the screens from `index` on that a full screen covers them
+    /// now ([`Screen::on_hide`]).
+    fn hide_from(&mut self, index: usize) {
+        for active in self.stack.iter_mut().skip(index) {
+            let _running = self.shared.meter.enter(active.id.namespace());
+            active.screen.on_hide();
+        }
     }
 
     /// Shows `text` with the screen bound to the notice slot until the
@@ -189,6 +209,12 @@ impl Kernel {
             let _running = self.shared.meter.enter(active.id.namespace());
             active.screen = (spec.factory)(&env, &active.params);
         }
+        // Made anew, those below the screen shown are hidden again.
+        let base = self.shown_base();
+        for active in self.stack.iter_mut().take(base) {
+            let _running = self.shared.meter.enter(active.id.namespace());
+            active.screen.on_hide();
+        }
         self.hint.shown.clear();
         self.end_notice();
         self.sync_content();
@@ -258,10 +284,7 @@ impl Kernel {
         } else {
             RefreshMode::Full
         });
-        self.with_top(|screen, cx| {
-            screen.on_show(cx);
-            Handled::Yes
-        });
+        self.show_pending = true;
     }
 
     /// Stops what closed screens started: servers, sockets, speech.
