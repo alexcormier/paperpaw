@@ -1,0 +1,396 @@
+//! The year so far: how much of it has passed, as a bar, a ring or a dot
+//! for each month, with the percent, the day of the year, the week and
+//! the days left, as wished.
+
+use alloc::format;
+use alloc::string::String;
+use alloc::vec::Vec;
+
+use quireink_sdk::time::{self, LocalTime};
+use quireink_sdk::widgets::{self, Align, Drawn, Frame};
+use quireink_sdk::{
+    Arg, Canvas, Color, Env, FontHandle, Id, Point, Rect, RegisterError, Registrar,
+};
+
+use super::{chosen, dates, frame_height, line, ui};
+
+const ID: Id = Id::new_static("widgets.year-progress");
+
+/// The values of the style setting: a bar, a ring, a dot for each month.
+const STYLES: [&str; 3] = [
+    "widgets.progress.bar",
+    "widgets.progress.ring",
+    "widgets.progress.months",
+];
+
+pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
+    super::add(
+        r,
+        &ID,
+        "widgets.year-progress",
+        Drawn::new(height, draw).shows(shows),
+        Align::Left,
+        Frame::None,
+    )?;
+    r.add_setting(widgets::choice(
+        &ID,
+        "style",
+        "widgets.setting.style",
+        &STYLES,
+        STYLES[0],
+    ))?;
+    for (part, title, default) in [
+        ("year", "widgets.setting.year", true),
+        ("percent", "widgets.setting.percent", true),
+        ("day", "widgets.setting.day-of-year", true),
+        ("week", "widgets.setting.week-number", false),
+        ("left", "widgets.setting.days-left", false),
+    ] {
+        r.add_setting(widgets::part_setting(&ID, part, title, default))?;
+    }
+    Ok(())
+}
+
+/// How far the year is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct Progress {
+    /// Today, 1 to 366.
+    pub day: u16,
+    /// The year's days.
+    pub days: u16,
+    /// Of the year passed, in tenths of a percent (the time of day
+    /// counted).
+    pub permille: u16,
+    pub week: u8,
+    /// Days after today.
+    pub left: u16,
+}
+
+pub(super) fn progress(t: &LocalTime) -> Progress {
+    let day = dates::day_of_year(t.year, t.month, t.day);
+    let days = dates::days_in_year(t.year);
+    let minutes = (u32::from(day) - 1) * 1440 + u32::from(t.hour) * 60 + u32::from(t.minute);
+    Progress {
+        day,
+        days,
+        permille: (minutes * 1000 / (u32::from(days) * 1440)) as u16,
+        week: dates::iso_week(t.year, t.month, t.day),
+        left: days - day,
+    }
+}
+
+fn shows(env: &Env<'_>) -> String {
+    time::local_time(env).map_or_else(String::new, |t| {
+        let p = progress(&t);
+        format!("{}/{}", p.day, p.permille / 10)
+    })
+}
+
+/// The notes below the bar, as the settings want them: "Day 287 of
+/// 365", "Week 42", "78 days left".
+fn notes(env: &Env<'_>, p: &Progress) -> Vec<String> {
+    let mut notes = Vec::new();
+    if widgets::shows(env, ID.as_str(), "day") {
+        notes.push(env.i18n.format(
+            "widgets.year.day",
+            &[
+                ("day", Arg::Int(i64::from(p.day))),
+                ("days", Arg::Int(i64::from(p.days))),
+            ],
+        ));
+    }
+    if widgets::shows(env, ID.as_str(), "week") {
+        notes.push(env.i18n.format(
+            "widgets.year.week",
+            &[("week", Arg::Int(i64::from(p.week)))],
+        ));
+    }
+    if widgets::shows(env, ID.as_str(), "left") {
+        notes.push(env.i18n.plural("widgets.year.left", i64::from(p.left), &[]));
+    }
+    notes
+}
+
+fn percent_text(p: &Progress) -> String {
+    format!("{} %", p.permille / 10)
+}
+
+fn height(env: &Env<'_>, _: u16) -> u16 {
+    let (style, _) = ui(env);
+    widgets::line_height(env, style.title * 1.6)
+        + widgets::line_height(env, style.small) * 2
+        + style.gap as u16 * 2
+        + frame_height(env, ID.as_str())
+}
+
+/// The track's colour: a light gray on light paper, a dark one on dark.
+fn track(look: &widgets::Look) -> Color {
+    if look.paper.luma() < 128 {
+        Color::gray(80)
+    } else {
+        Color::gray(205)
+    }
+}
+
+fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
+    let look = widgets::draw_frame(canvas, env, ID.as_str(), area);
+    let (_, font) = ui(env);
+    let (Some(font), Some(now)) = (font, time::local_time(env)) else {
+        return;
+    };
+    let p = progress(&now);
+    let mut area = look.area;
+    if widgets::shows(env, ID.as_str(), "year") {
+        area = widgets::draw_caption(canvas, env, ID.as_str(), &look, &format!("{}", now.year));
+    }
+    match chosen(env, ID.as_str(), "style") {
+        "ring" => draw_ring(canvas, env, &font, &look, area, &p),
+        "months" => draw_bar(canvas, env, &font, &look, area, &p, Some(&now)),
+        _ => draw_bar(canvas, env, &font, &look, area, &p, None),
+    }
+}
+
+/// The percent large, a bar (or a dot for each month of `months`) and
+/// the notes below.
+#[allow(clippy::too_many_arguments)]
+fn draw_bar(
+    canvas: &mut Canvas<'_>,
+    env: &Env<'_>,
+    font: &FontHandle<'_>,
+    look: &widgets::Look,
+    area: Rect,
+    p: &Progress,
+    months: Option<&LocalTime>,
+) {
+    let (style, _) = ui(env);
+    let align = widgets::align(env, ID.as_str());
+    let small = line(font, style.small);
+    let gap = style.gap as f32 / 2.0;
+    // The notes in two lines where they are wider and there is room.
+    let most = if f32::from(area.height) >= small * 5.0 {
+        2
+    } else {
+        1
+    };
+    let notes = super::pack(
+        font,
+        style.small,
+        &notes(env, p),
+        f32::from(area.width),
+        most,
+    );
+    let note_h = if notes.is_empty() {
+        0.0
+    } else {
+        small * notes.len() as f32 + gap
+    };
+    let bar_h = if months.is_some() {
+        (f32::from(area.width) / 12.0 * 0.7).min(f32::from(area.height) * 0.3)
+    } else {
+        (f32::from(area.height) * 0.1).clamp(style.line as f32 * 4.0, style.gap as f32 * 1.5)
+    };
+    let percent = widgets::shows(env, ID.as_str(), "percent");
+    let text = percent_text(p);
+    let room = f32::from(area.height) - note_h - bar_h - gap;
+    let size = if percent {
+        super::fit_size(
+            font,
+            (room * 0.8).min(style.title * 2.2),
+            &text,
+            f32::from(area.width),
+        )
+    } else {
+        0.0
+    };
+    let big = if percent && size >= style.small {
+        line(font, size)
+    } else {
+        0.0
+    };
+    let total = big + gap + bar_h + note_h;
+    let mut y = f32::from(area.y) + (f32::from(area.height) - total).max(0.0) / 2.0;
+    if big > 0.0 {
+        let row = Rect::new(area.x, y as u16, area.width, big as u16);
+        super::label(canvas, font, size, align, row, &text, look.ink);
+        y += big + gap;
+    }
+    match months {
+        Some(t) => draw_months(canvas, look, area, y, bar_h, t),
+        None => {
+            let bar = Rect::new(area.x, y as u16, area.width, bar_h as u16);
+            let radius = bar_h as u32 / 2;
+            canvas.fill_round_shaded(bar, radius, track(look));
+            let done = (u32::from(area.width) * u32::from(p.permille) / 1000) as u16;
+            if done > 0 {
+                let filled = Rect::new(bar.x, bar.y, done.max(bar.height), bar.height);
+                canvas.fill_round(filled, radius, look.ink);
+            }
+        }
+    }
+    y += bar_h + gap;
+    for note in &notes {
+        let row = Rect::new(area.x, y as u16, area.width, small as u16);
+        super::label(canvas, font, style.small, align, row, note, look.faint);
+        y += small;
+    }
+}
+
+/// A dot for each month: those passed filled, this one as far as it
+/// went, those to come as rings.
+fn draw_months(
+    canvas: &mut Canvas<'_>,
+    look: &widgets::Look,
+    area: Rect,
+    y: f32,
+    height: f32,
+    t: &LocalTime,
+) {
+    let step = f32::from(area.width) / 12.0;
+    let radius = (height / 2.0).min(step * 0.42).max(2.0) as u32;
+    let thick = (radius / 6).max(1);
+    let days = u32::from(dates::days_in_month(t.year, t.month));
+    for month in 1..=12u8 {
+        let x = f32::from(area.x) + step * (f32::from(month) - 0.5);
+        let center = Point::new(x as i32, (y + height / 2.0) as i32);
+        if month < t.month {
+            canvas.fill_circle(center, radius, look.ink);
+        } else if month == t.month {
+            canvas.fill_circle(center, radius, track(look));
+            let sweep = (u32::from(t.day) - 1) * 360 / days + 360 / days / 2;
+            canvas.fill_ring(center, radius, radius, 0, sweep.max(8), look.ink);
+            canvas.stroke_circle(center, radius, thick, look.ink);
+        } else {
+            canvas.stroke_circle(center, radius, thick, look.ink);
+        }
+    }
+}
+
+/// A ring as far round as the year went, the percent in it, the notes
+/// beside it where there is room.
+fn draw_ring(
+    canvas: &mut Canvas<'_>,
+    env: &Env<'_>,
+    font: &FontHandle<'_>,
+    look: &widgets::Look,
+    area: Rect,
+    p: &Progress,
+) {
+    let (style, _) = ui(env);
+    let align = widgets::align(env, ID.as_str());
+    let notes = notes(env, p);
+    let small = line(font, style.small);
+    let side = area.height.min(area.width);
+    // Beside it where the notes have room there, else below it.
+    let widest = notes
+        .iter()
+        .map(|n| font.measure(style.text, n))
+        .fold(0.0, f32::max);
+    let rest = f32::from(area.width) - f32::from(side) - style.gap as f32 * 2.0;
+    let beside = !notes.is_empty() && widest <= rest;
+    // Not beside: below it, the notes in a line.
+    let below = if beside || notes.is_empty() {
+        0
+    } else {
+        (small + style.gap as f32 / 2.0) as u16
+    };
+    let side = side.min(area.height.saturating_sub(below));
+    let ring_x = if beside {
+        match align {
+            Align::Right => area.x + area.width - side,
+            _ => area.x,
+        }
+    } else {
+        align.x(area, f32::from(side)) as u16
+    };
+    let radius = u32::from(side / 2);
+    let top = area.y + (area.height - side - below) / 2;
+    let center = Point::new(
+        i32::from(ring_x) + radius as i32,
+        i32::from(top) + radius as i32,
+    );
+    let thick = (radius / 7).max(3);
+    canvas.fill_ring(center, radius, thick, 0, 360, track(look));
+    let sweep = u32::from(p.permille) * 360 / 1000;
+    canvas.fill_ring(center, radius, thick, 0, sweep, look.ink);
+    if widgets::shows(env, ID.as_str(), "percent") {
+        let text = percent_text(p);
+        let inner = (radius - thick) as f32 * 2.0 * 0.78;
+        let size = super::fit_size(font, inner * 0.42, &text, inner);
+        super::draw_centred(
+            canvas,
+            font,
+            size,
+            center.x as f32,
+            center.y as f32,
+            &text,
+            look.ink,
+        );
+    }
+    if !beside {
+        if below > 0 {
+            let row = Rect::new(
+                area.x,
+                top + side + style.gap as u16 / 2,
+                area.width,
+                small as u16,
+            );
+            let text = notes.join(" · ");
+            super::label(canvas, font, style.small, align, row, &text, look.faint);
+        }
+        return;
+    }
+    let gap = style.gap as u16 * 2;
+    let text_x = if align == Align::Right {
+        area.x
+    } else {
+        area.x + side + gap
+    };
+    let room = Rect::new(text_x, area.y, area.width - side - gap, area.height);
+    let small = line(font, style.text);
+    let total = small * notes.len() as f32;
+    let mut y = f32::from(room.y) + (f32::from(room.height) - total).max(0.0) / 2.0;
+    let text_align = if align == Align::Right {
+        Align::Right
+    } else {
+        Align::Left
+    };
+    for note in &notes {
+        if y + small > f32::from(room.y) + f32::from(room.height) + 1.0 {
+            break;
+        }
+        let row = Rect::new(room.x, y as u16, room.width, small as u16);
+        super::label(canvas, font, style.text, text_align, row, note, look.ink);
+        y += small;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn at(year: i32, month: u8, day: u8, hour: u8) -> LocalTime {
+        LocalTime {
+            year,
+            month,
+            day,
+            hour,
+            minute: 0,
+            second: 0,
+            weekday: dates::weekday(year, month, day),
+        }
+    }
+
+    #[test]
+    fn the_year_so_far() {
+        let p = progress(&at(2026, 10, 14, 10));
+        assert_eq!((p.day, p.days, p.week, p.left), (287, 365, 42, 78));
+        assert_eq!(p.permille / 10, 78);
+        let first = progress(&at(2026, 1, 1, 0));
+        assert_eq!((first.day, first.permille, first.left), (1, 0, 364));
+        let last = progress(&at(2024, 12, 31, 23));
+        assert_eq!((last.day, last.days, last.left), (366, 366, 0));
+        assert_eq!(last.permille, 999);
+        // Half the year: 2 July at noon, in a common year.
+        assert_eq!(progress(&at(2026, 7, 2, 12)).permille, 500);
+    }
+}

@@ -1,0 +1,288 @@
+//! The clock in tiles, as a flip clock looks: each digit (or each pair)
+//! on a rounded tile of its own, dark with light digits, light, or
+//! outlined; twelve or twenty-four hours as the clock is set, the date
+//! below if wished.
+
+use alloc::format;
+use alloc::string::String;
+use alloc::vec::Vec;
+
+use quireink_sdk::time::{self, LocalTime};
+use quireink_sdk::widgets::{self, Align, Drawn, Frame};
+use quireink_sdk::{Canvas, Color, Env, Id, Point, Rect, RegisterError, Registrar};
+
+use super::{chosen, frame_height, line, ui};
+
+const ID: Id = Id::new_static("widgets.tile-clock");
+
+/// The values of the tiles' look: dark, light, outlined.
+const LOOKS: [&str; 3] = [
+    "widgets.tiles.dark",
+    "widgets.tiles.light",
+    "widgets.tiles.outline",
+];
+/// What goes on a tile: a digit, or the hours and the minutes.
+const GROUPS: [&str; 2] = ["widgets.tiles.digits", "widgets.tiles.pairs"];
+
+pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
+    super::add(
+        r,
+        &ID,
+        "widgets.tile-clock",
+        Drawn::new(height, draw).shows(super::minute_shows),
+        Align::Center,
+        Frame::None,
+    )?;
+    r.add_setting(widgets::choice(
+        &ID,
+        "tiles",
+        "widgets.setting.tiles",
+        &LOOKS,
+        LOOKS[0],
+    ))?;
+    r.add_setting(widgets::choice(
+        &ID,
+        "group",
+        "widgets.setting.tile-group",
+        &GROUPS,
+        GROUPS[0],
+    ))?;
+    r.add_setting(widgets::part_setting(
+        &ID,
+        "hinge",
+        "widgets.setting.hinge",
+        true,
+    ))?;
+    r.add_setting(widgets::part_setting(
+        &ID,
+        "colon",
+        "widgets.setting.colon",
+        false,
+    ))?;
+    r.add_setting(widgets::part_setting(
+        &ID,
+        "date",
+        "widgets.setting.show-date",
+        false,
+    ))?;
+    r.add_setting(super::date_format_setting(&ID, super::DATE_FORMATS[1]))?;
+    Ok(())
+}
+
+fn height(env: &Env<'_>, width: u16) -> u16 {
+    let (style, _) = ui(env);
+    let tiles = (u32::from(width) * 2 / 5).min(style.row * 3) as u16;
+    let date = if widgets::shows(env, ID.as_str(), "date") {
+        widgets::line_height(env, style.small) + style.gap as u16
+    } else {
+        0
+    };
+    tiles + date + frame_height(env, ID.as_str())
+}
+
+/// The tiles at `t`: the hours' and the minutes' (each a digit, or both
+/// digits on one), and "AM" or "PM" on a twelve-hour clock.
+pub(super) fn tiles(t: &LocalTime, twelve: bool, pairs: bool) -> (Vec<String>, Vec<String>) {
+    let hours = if twelve {
+        format!("{}", super::twelve(t.hour))
+    } else {
+        format!("{:02}", t.hour)
+    };
+    let minutes = format!("{:02}", t.minute);
+    let split = |s: &str| -> Vec<String> {
+        if pairs {
+            alloc::vec![String::from(s)]
+        } else {
+            s.chars().map(String::from).collect()
+        }
+    };
+    (split(&hours), split(&minutes))
+}
+
+fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
+    let look = widgets::draw_frame(canvas, env, ID.as_str(), area);
+    let (style, font) = ui(env);
+    let (Some(font), Some(now)) = (font, time::local_time(env)) else {
+        return;
+    };
+    let area = look.area;
+    let twelve = super::twelve_hours(env);
+    let pairs = chosen(env, ID.as_str(), "group") == "pairs";
+    let (hours, minutes) = tiles(&now, twelve, pairs);
+    let colon = widgets::shows(env, ID.as_str(), "colon");
+    let small = line(&font, style.small);
+    let date = widgets::shows(env, ID.as_str(), "date")
+        .then(|| super::date_text(env, ID.as_str(), now.year, now.month, now.day, false));
+    let meridiem = twelve.then(|| {
+        let key = if now.hour < 12 {
+            "core.clock.am"
+        } else {
+            "core.clock.pm"
+        };
+        String::from(
+            env.i18n
+                .format(key, &[("time", quireink_sdk::Arg::Str(""))])
+                .trim(),
+        )
+    });
+    let below = if date.is_some() || meridiem.is_some() {
+        small + style.gap as f32 / 2.0
+    } else {
+        0.0
+    };
+
+    // Each tile `w` wide (pairs wider), `w * 1.4` high; tiles of a group
+    // apart by a small gap, the groups by a larger one.
+    let tile_w = |text: &str| if text.chars().count() > 1 { 1.55 } else { 1.0 };
+    let units: f32 = hours.iter().chain(&minutes).map(|t| tile_w(t)).sum();
+    let gap = 0.08;
+    let group_gap = if colon { 0.42 } else { 0.24 };
+    let gaps = gap * (hours.len() + minutes.len() - 2) as f32 + group_gap;
+    let room_h = (f32::from(area.height) - below).max(0.0);
+    let mut w = (f32::from(area.width) / (units + gaps)).min(room_h / 1.4);
+    if w < 6.0 {
+        return;
+    }
+    // Fonts of fixed sizes have a largest: the tiles no larger than its
+    // digits fill well.
+    let digits = super::cap_height(&font, w * 1.4 * 0.66);
+    w = w.min(digits / 0.48 / 1.4);
+    let h = w * 1.4;
+    let total = w * (units + gaps);
+    let align = widgets::align(env, ID.as_str());
+    let left = align.x(area, total);
+    let top = f32::from(area.y) + (f32::from(area.height) - h - below).max(0.0) / 2.0;
+    let size = h * 0.66;
+    let radius = (w * 0.14) as u32;
+    let kind = chosen(env, ID.as_str(), "tiles");
+    let hinge = widgets::shows(env, ID.as_str(), "hinge");
+    let (light, dark) = super::light_and_dark(&look);
+    let on_dark = look.paper.luma() < 128;
+
+    let mut x = left;
+    for (group, texts) in [&hours, &minutes].into_iter().enumerate() {
+        if group == 1 {
+            let space = w * group_gap;
+            if colon {
+                let dot = (w * 0.07).max(1.5) as u32;
+                let cx = (x + space / 2.0) as i32;
+                for dy in [-0.17, 0.17] {
+                    let cy = (top + h / 2.0 + h * dy) as i32;
+                    canvas.fill_circle(Point::new(cx, cy), dot, look.ink);
+                }
+            }
+            x += space;
+        }
+        for (n, text) in texts.iter().enumerate() {
+            if n > 0 {
+                x += w * gap;
+            }
+            let width = w * tile_w(text);
+            let tile = Rect::new(x as u16, top as u16, width as u16, h as u16);
+            let digits = match kind {
+                "light" => {
+                    let gray = if on_dark { 70 } else { 215 };
+                    canvas.fill_round_shaded(tile, radius, Color::gray(gray));
+                    look.ink
+                }
+                "outline" => {
+                    let thick = ((w / 30.0) as u32).max(style.line * 2);
+                    canvas.stroke_round(tile, thick, radius, look.ink);
+                    look.ink
+                }
+                _ => {
+                    canvas.fill_round(tile, radius, look.ink);
+                    look.paper
+                }
+            };
+            let digit_size = super::fit_size(&font, size, text, width * 0.86);
+            let cx = x + width / 2.0;
+            let cy = top + h / 2.0;
+            super::draw_centred(canvas, &font, digit_size, cx, cy, text, digits);
+            if hinge {
+                // The line where a flip clock's leaves meet.
+                let thick = ((h / 70.0) as u16).max(1);
+                let line = Rect::new(
+                    tile.x,
+                    (cy as u16).saturating_sub(thick / 2),
+                    tile.width,
+                    thick,
+                );
+                let color = match kind {
+                    "outline" => look.ink,
+                    "light" if on_dark => dark,
+                    "light" => light,
+                    _ => look.paper,
+                };
+                canvas.fill(line, color);
+            }
+            x += width;
+        }
+    }
+    canvas.describe(
+        quireink_sdk::semantics::Role::Text,
+        &super::clock_text(env, &now),
+        Rect::new(left as u16, top as u16, total as u16, h as u16),
+        false,
+        None,
+    );
+
+    // The date below, and "AM" or "PM" at the right end.
+    let row = Rect::new(
+        left as u16,
+        (top + h + style.gap as f32 / 2.0) as u16,
+        total as u16,
+        small as u16,
+    );
+    let meridiem_width = meridiem
+        .as_ref()
+        .map_or(0.0, |m| font.measure(style.small, m) + style.gap as f32);
+    if let Some(m) = &meridiem {
+        super::label(canvas, &font, style.small, Align::Right, row, m, look.faint);
+    }
+    if let Some(date) = &date {
+        let room = Rect::new(
+            row.x,
+            row.y,
+            (f32::from(row.width) - meridiem_width).max(0.0) as u16,
+            row.height,
+        );
+        let place = if meridiem.is_some() {
+            Align::Left
+        } else {
+            Align::Center
+        };
+        super::label(canvas, &font, style.small, place, room, date, look.faint);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn at(hour: u8, minute: u8) -> LocalTime {
+        LocalTime {
+            year: 2026,
+            month: 10,
+            day: 14,
+            hour,
+            minute,
+            second: 0,
+            weekday: 3,
+        }
+    }
+
+    #[test]
+    fn digits_on_tiles() {
+        let (h, m) = tiles(&at(9, 5), false, false);
+        assert_eq!((h.join("|"), m.join("|")), ("0|9".into(), "0|5".into()));
+        // Twelve hours: no leading zero, one tile fewer.
+        let (h, m) = tiles(&at(21, 41), true, false);
+        assert_eq!((h.join("|"), m.join("|")), ("9".into(), "4|1".into()));
+        let (h, _) = tiles(&at(0, 0), true, false);
+        assert_eq!(h.join("|"), "1|2");
+        // In pairs.
+        let (h, m) = tiles(&at(10, 41), false, true);
+        assert_eq!((h.join("|"), m.join("|")), ("10".into(), "41".into()));
+    }
+}
