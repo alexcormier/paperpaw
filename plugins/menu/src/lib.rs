@@ -92,10 +92,7 @@ impl Plugin for Menu {
             SettingSpec::new(
                 STYLE,
                 "menu.setting.style",
-                SettingKind::Choice(alloc::vec![
-                    Cow::Borrowed(STYLE_LIST),
-                    Cow::Borrowed(STYLE_TILES),
-                ]),
+                SettingKind::Choice(quireink_sdk::Choices::Fixed(&[STYLE_LIST, STYLE_TILES])),
                 quireink_sdk::SettingValue::Text(Cow::Borrowed(STYLE_LIST)),
             )
             .group(quireink_sdk::builtin::groups::LOOK)

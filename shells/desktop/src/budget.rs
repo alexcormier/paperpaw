@@ -167,9 +167,21 @@ pub fn track<R>(f: impl FnOnce() -> R) -> R {
     f()
 }
 
-/// Sets the heap budget; `None` removes it.
+/// Whether the budget was given on the command line, over the profile's.
+static OVERRIDDEN: AtomicBool = AtomicBool::new(false);
+
+/// Sets the heap budget; `None` removes it. A budget given on the command
+/// line ([`override_limit`]) stays.
 pub fn set_limit(limit: Option<usize>) {
+    if !OVERRIDDEN.load(Ordering::Relaxed) {
+        LIMIT.store(limit.unwrap_or(usize::MAX), Ordering::Relaxed);
+    }
+}
+
+/// Sets the heap budget for the whole run, the profile's left aside.
+pub fn override_limit(limit: Option<usize>) {
     LIMIT.store(limit.unwrap_or(usize::MAX), Ordering::Relaxed);
+    OVERRIDDEN.store(true, Ordering::Relaxed);
 }
 
 /// Prints every tracked allocation of at least `bytes` to stderr, to find

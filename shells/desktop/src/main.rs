@@ -97,11 +97,11 @@ fn run() -> Result<(), String> {
         }
         budget::profile();
     }
+    if let Some(limit) = options.heap_budget {
+        budget::override_limit(limit);
+    }
     let mut device = Device::new(profile, user_config(&options)?, storage, options.headless)
         .map_err(|e| format!("{}: {e}", profile.device.id))?;
-    if let Some(limit) = options.heap_budget {
-        budget::set_limit(limit);
-    }
 
     if options.headless {
         device.start();

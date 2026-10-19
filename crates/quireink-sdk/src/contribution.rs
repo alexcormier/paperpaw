@@ -54,6 +54,8 @@ pub enum Contribution {
         priority: Priority,
     },
     Setting(Box<SettingSpec>),
+    /// A setting kept in the program ([`SettingSpec::fixed`]).
+    FixedSetting(&'static SettingSpec),
     SettingGroup(SettingGroupSpec),
     /// Another default for any plugin's setting (see
     /// [`Registrar::set_setting_default`]).
@@ -134,7 +136,7 @@ impl Contribution {
             Contribution::Screen(_) => "screen",
             Contribution::Slot(_) => "slot",
             Contribution::SlotBinding { .. } => "slot-binding",
-            Contribution::Setting(_) => "setting",
+            Contribution::Setting(_) | Contribution::FixedSetting(_) => "setting",
             Contribution::SettingGroup(_) => "setting-group",
             Contribution::SettingDefault { .. } => "setting-default",
             Contribution::Keymap(_) => "keymap",
@@ -177,6 +179,7 @@ impl Contribution {
             Contribution::Screen(s) => &s.id,
             Contribution::Slot(s) => &s.id,
             Contribution::Setting(s) => &s.id,
+            Contribution::FixedSetting(s) => &s.id,
             Contribution::SettingGroup(g) => &g.id,
             Contribution::KeymapPreset { id, .. } => id,
             Contribution::Font(f) => &f.id,
@@ -301,6 +304,17 @@ impl Registrar {
 
     pub fn add_setting(&mut self, setting: SettingSpec) -> Result<(), RegisterError> {
         self.add(Contribution::Setting(Box::new(setting)))
+    }
+
+    /// Adds settings kept in the program ([`SettingSpec::fixed`]), e.g. a
+    /// `static` list of a widget's: they take next to no memory, where
+    /// each added with [`add_setting`](Self::add_setting) takes about
+    /// 200 bytes.
+    pub fn add_settings(&mut self, settings: &'static [SettingSpec]) -> Result<(), RegisterError> {
+        for setting in settings {
+            self.add(Contribution::FixedSetting(setting))?;
+        }
+        Ok(())
     }
 
     /// Adds default key bindings in the QuireInk config format:

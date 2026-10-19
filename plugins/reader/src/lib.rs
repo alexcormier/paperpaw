@@ -381,10 +381,10 @@ impl Plugin for Reader {
             SettingSpec::choice(
                 &settings::FOOTNOTES,
                 "reader.setting.footnotes",
-                alloc::vec![
-                    Cow::Borrowed(settings::FOOTNOTES_POPUP),
-                    Cow::Borrowed(settings::FOOTNOTES_JUMP),
-                ],
+                quireink_sdk::Choices::Fixed(&[
+                    settings::FOOTNOTES_POPUP,
+                    settings::FOOTNOTES_JUMP,
+                ]),
                 settings::FOOTNOTES_POPUP,
             )
             .group(groups::READING)

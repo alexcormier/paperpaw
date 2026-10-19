@@ -26,7 +26,7 @@ use quireink_platform::{Color, Rect};
 
 use crate::env::Env;
 use crate::id::Id;
-use crate::settings::{SettingKind, SettingSpec, SettingValue};
+use crate::settings::{Choices, SettingKind, SettingSpec, SettingValue};
 use crate::ui::{self, UiStyle};
 
 /// The values of a widget's frame setting ([`frame_setting`]).
@@ -62,7 +62,7 @@ impl Frame {
     }
 
     /// Its value in [`FRAMES`].
-    pub fn value(self) -> &'static str {
+    pub const fn value(self) -> &'static str {
         FRAMES[self as usize]
     }
 }
@@ -74,6 +74,14 @@ pub const SIZES: [&str; 4] = [
     "core.size.large",
     "core.size.fit",
 ];
+
+/// [`SIZES`] but "as large as fits".
+const SIZES_SET: [&str; 3] = [SIZES[0], SIZES[1], SIZES[2]];
+
+/// The sizes offered: with `fit`, also "as large as fits".
+const fn sizes(fit: bool) -> &'static [&'static str] {
+    if fit { &SIZES } else { &SIZES_SET }
+}
 
 /// How large a widget's text is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -97,7 +105,7 @@ impl Size {
     }
 
     /// Its value in [`SIZES`].
-    pub fn value(self) -> &'static str {
+    pub const fn value(self) -> &'static str {
         SIZES[self as usize]
     }
 
@@ -143,6 +151,30 @@ pub fn frame_setting(widget: &Id, default: Frame) -> SettingSpec {
     )
 }
 
+/// [`frame_setting`] kept in the program ([`SettingSpec::fixed`]), for a
+/// `static` list of the widget's settings: `id` must be
+/// `<widget>.frame`.
+pub const fn frame_spec(id: &'static str, widget: Id, default: Frame) -> SettingSpec {
+    SettingSpec::fixed_choice(id, "core.setting.frame", &FRAMES, default.value(), widget)
+}
+
+/// [`size_setting`] kept in the program ([`SettingSpec::fixed`]): `id`
+/// must be `<widget>.size`.
+pub const fn size_spec(id: &'static str, widget: Id, default: Size, fit: bool) -> SettingSpec {
+    SettingSpec::fixed_choice(id, "core.setting.size", sizes(fit), default.value(), widget)
+}
+
+/// [`part_setting`] kept in the program ([`SettingSpec::fixed`]): `id`
+/// must be `<widget>.<part>`.
+pub const fn part_spec(
+    id: &'static str,
+    widget: Id,
+    title: &'static str,
+    default: bool,
+) -> SettingSpec {
+    SettingSpec::fixed_switch(id, title, default, widget)
+}
+
 /// What `widget` is drawn in, by its [`frame_setting`]; none without one.
 pub fn frame(env: &Env<'_>, widget: &str) -> Frame {
     Frame::of(env.settings.text(&format!("{widget}.frame")))
@@ -152,8 +184,13 @@ pub fn frame(env: &Env<'_>, widget: &str) -> Frame {
 /// widget's settings group; with `fit`, also "as large as fits". [`size`]
 /// reads it.
 pub fn size_setting(widget: &Id, default: Size, fit: bool) -> SettingSpec {
-    let sizes = if fit { &SIZES[..] } else { &SIZES[..3] };
-    choice(widget, "size", "core.setting.size", sizes, default.value())
+    choice(
+        widget,
+        "size",
+        "core.setting.size",
+        sizes(fit),
+        default.value(),
+    )
 }
 
 /// How large `widget`'s text is, by its [`size_setting`]; medium without
@@ -190,13 +227,13 @@ pub fn choice(
     widget: &Id,
     key: &str,
     title: impl Into<Cow<'static, str>>,
-    values: &[&'static str],
+    values: &'static [&'static str],
     default: &'static str,
 ) -> SettingSpec {
     SettingSpec::new(
         setting_id(widget, key),
         title,
-        SettingKind::Choice(values.iter().map(|v| Cow::Borrowed(*v)).collect()),
+        SettingKind::Choice(Choices::Fixed(values)),
         SettingValue::Text(Cow::Borrowed(default)),
     )
     .group(widget.clone())

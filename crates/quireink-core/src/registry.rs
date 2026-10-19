@@ -97,6 +97,22 @@ impl Registry {
     }
 }
 
+/// A plugin's setting before it is defined: built at start, or kept in
+/// the program ([`SettingSpec::fixed`]).
+pub(crate) enum Staged {
+    Owned(SettingSpec),
+    Fixed(&'static SettingSpec),
+}
+
+impl Staged {
+    pub(crate) fn spec(&self) -> &SettingSpec {
+        match self {
+            Staged::Owned(spec) => spec,
+            Staged::Fixed(spec) => spec,
+        }
+    }
+}
+
 /// Contributions of one plugin, collected during `register` and merged only
 /// if the whole registration succeeds; a failing plugin leaves no traces.
 #[derive(Default)]
@@ -105,7 +121,7 @@ pub(crate) struct Staging {
     screens: Vec<ScreenSpec>,
     slots: Vec<SlotSpec>,
     candidates: Vec<SlotCandidate>,
-    pub(crate) settings: Vec<SettingSpec>,
+    pub(crate) settings: Vec<Staged>,
     pub(crate) keymaps: Vec<Cow<'static, str>>,
     pub(crate) catalogs: Vec<Catalog>,
     pub(crate) fonts: Vec<FontSpec>,
@@ -201,7 +217,8 @@ pub(crate) fn stage(
                 screen,
                 priority,
             }),
-            Contribution::Setting(setting) => staging.settings.push(*setting),
+            Contribution::Setting(setting) => staging.settings.push(Staged::Owned(*setting)),
+            Contribution::FixedSetting(setting) => staging.settings.push(Staged::Fixed(setting)),
             Contribution::SettingGroup(group) => staging.setting_groups.push(group),
             Contribution::SettingDefault { setting, value } => {
                 staging.setting_defaults.push((setting, value));

@@ -27,13 +27,82 @@ pub enum SettingKind {
         max: i64,
     },
     /// One of a fixed set of values.
-    Choice(Vec<Cow<'static, str>>),
+    Choice(Choices),
     Text,
     /// A UI language tag; settings UIs offer the installed translations.
     Language,
     /// Ids separated by commas, e.g. the status items of a status line;
     /// shown by their names, chosen on the setting's editor screen.
     List,
+}
+
+/// The values of a [`SettingKind::Choice`], each the translation key of
+/// its name: a list in the program ([`Choices::Fixed`], costing no
+/// memory) or one made at run time.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Choices {
+    Fixed(&'static [&'static str]),
+    Owned(Vec<Cow<'static, str>>),
+}
+
+impl Choices {
+    /// The values in their order.
+    pub fn iter(&self) -> impl Iterator<Item = &str> {
+        let (fixed, owned): (&[&str], &[Cow<'static, str>]) = match self {
+            Choices::Fixed(values) => (values, &[]),
+            Choices::Owned(values) => (&[], values),
+        };
+        fixed
+            .iter()
+            .copied()
+            .chain(owned.iter().map(|v| v.as_ref()))
+    }
+
+    pub fn len(&self) -> usize {
+        match self {
+            Choices::Fixed(values) => values.len(),
+            Choices::Owned(values) => values.len(),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// Value `index`.
+    pub fn get(&self, index: usize) -> Option<&str> {
+        match self {
+            Choices::Fixed(values) => values.get(index).copied(),
+            Choices::Owned(values) => values.get(index).map(|v| v.as_ref()),
+        }
+    }
+
+    /// Where `value` is among them.
+    pub fn position(&self, value: &str) -> Option<usize> {
+        self.iter().position(|v| v == value)
+    }
+
+    pub fn contains(&self, value: &str) -> bool {
+        self.position(value).is_some()
+    }
+}
+
+impl From<Vec<Cow<'static, str>>> for Choices {
+    fn from(values: Vec<Cow<'static, str>>) -> Self {
+        Choices::Owned(values)
+    }
+}
+
+impl FromIterator<Cow<'static, str>> for Choices {
+    fn from_iter<I: IntoIterator<Item = Cow<'static, str>>>(values: I) -> Self {
+        Choices::Owned(values.into_iter().collect())
+    }
+}
+
+impl From<&'static [&'static str]> for Choices {
+    fn from(values: &'static [&'static str]) -> Self {
+        Choices::Fixed(values)
+    }
 }
 
 impl SettingKind {
@@ -161,6 +230,133 @@ impl SettingSpec {
         }
     }
 
+    /// A setting kept in the program rather than built at start: in a
+    /// `static` list registered with
+    /// [`Registrar::add_settings`](crate::Registrar::add_settings), it
+    /// takes next to no memory (on small devices the list stays in flash).
+    /// Plugins with many settings, such as widgets with their looks, use
+    /// these. Its unit, editor and the like ([`SettingSpec::extra`]) are
+    /// not set here; settings that need them are made with
+    /// [`SettingSpec::new`].
+    ///
+    /// ```
+    /// use quireink_sdk::{Id, SettingSpec};
+    /// const GROUP: Id = Id::new_static("my.clock");
+    /// static SETTINGS: [SettingSpec; 2] = [
+    ///     SettingSpec::fixed_switch("my.clock.date", "my.clock.date", true, GROUP),
+    ///     SettingSpec::fixed_choice(
+    ///         "my.clock.face",
+    ///         "my.clock.face",
+    ///         &["my.plain", "my.ticks"],
+    ///         "my.ticks",
+    ///         GROUP,
+    ///     ),
+    /// ];
+    /// ```
+    pub const fn fixed(
+        id: &'static str,
+        title: &'static str,
+        kind: SettingKind,
+        default: SettingValue,
+        group: Id,
+    ) -> Self {
+        Self {
+            id: Id::new_static(id),
+            title: Cow::Borrowed(title),
+            kind,
+            default,
+            group,
+            level: Level::Basic,
+            description: None,
+            scoped: false,
+            extra: None,
+        }
+    }
+
+    /// A fixed switch ([`SettingSpec::fixed`]).
+    pub const fn fixed_switch(
+        id: &'static str,
+        title: &'static str,
+        default: bool,
+        group: Id,
+    ) -> Self {
+        Self::fixed(
+            id,
+            title,
+            SettingKind::Bool,
+            SettingValue::Bool(default),
+            group,
+        )
+    }
+
+    /// A fixed whole number from `min` to `max` ([`SettingSpec::fixed`]).
+    pub const fn fixed_number(
+        id: &'static str,
+        title: &'static str,
+        min: i64,
+        max: i64,
+        default: i64,
+        group: Id,
+    ) -> Self {
+        Self::fixed(
+            id,
+            title,
+            SettingKind::Int { min, max },
+            SettingValue::Int(default),
+            group,
+        )
+    }
+
+    /// A fixed choice of `options` ([`SettingSpec::fixed`]).
+    pub const fn fixed_choice(
+        id: &'static str,
+        title: &'static str,
+        options: &'static [&'static str],
+        default: &'static str,
+        group: Id,
+    ) -> Self {
+        Self::fixed(
+            id,
+            title,
+            SettingKind::Choice(Choices::Fixed(options)),
+            SettingValue::Text(Cow::Borrowed(default)),
+            group,
+        )
+    }
+
+    /// A fixed text, typed in ([`SettingSpec::fixed`]).
+    pub const fn fixed_text(
+        id: &'static str,
+        title: &'static str,
+        default: &'static str,
+        group: Id,
+    ) -> Self {
+        Self::fixed(
+            id,
+            title,
+            SettingKind::Text,
+            SettingValue::Text(Cow::Borrowed(default)),
+            group,
+        )
+    }
+
+    /// The same with a help text (for [`SettingSpec::fixed`] ones, which
+    /// cannot use [`description`](Self::description)).
+    pub const fn described(self, key: &'static str) -> Self {
+        let mut spec = self;
+        let old = core::mem::replace(&mut spec.description, Some(Cow::Borrowed(key)));
+        core::mem::forget(old);
+        spec
+    }
+
+    /// The same, shown only with advanced settings (for
+    /// [`SettingSpec::fixed`] ones).
+    pub const fn for_advanced(self) -> Self {
+        let mut spec = self;
+        spec.level = Level::Advanced;
+        spec
+    }
+
     /// Its unit, editor, step, slider, section and whether it is a secret
     /// (the defaults for a setting that sets none of them).
     pub fn extra(&self) -> &SettingExtra {
@@ -205,7 +401,7 @@ impl SettingSpec {
     pub fn choice(
         setting: &Setting<Text>,
         title: impl Into<Cow<'static, str>>,
-        options: Vec<Cow<'static, str>>,
+        options: Choices,
         default: impl Into<Cow<'static, str>>,
     ) -> Self {
         Self::new(
@@ -363,42 +559,100 @@ impl fmt::Display for SettingError {
 impl core::error::Error for SettingError {}
 
 /// The settings' specs in registration order, found by id through an
-/// index sorted by it: each id kept once.
+/// index sorted by it: each id kept once. Specs registered as fixed
+/// ([`SettingSpec::fixed`], kept in the program, e.g. in flash) are held
+/// by reference, the others as they are.
 #[derive(Debug, Default)]
 struct Specs {
-    list: Vec<SettingSpec>,
-    /// Places in `list`, sorted by the specs' ids.
+    owned: Vec<SettingSpec>,
+    fixed: Vec<&'static SettingSpec>,
+    /// Every spec in registration order: a place in `owned`, or in
+    /// `fixed` with [`FIXED`] set.
+    order: Vec<u16>,
+    /// The same places, sorted by the specs' ids.
     by_id: Vec<u16>,
 }
 
+/// Marks a place in [`Specs::fixed`].
+const FIXED: u16 = 1 << 15;
+
 impl Specs {
+    fn at(&self, place: u16) -> &SettingSpec {
+        if place & FIXED == 0 {
+            &self.owned[usize::from(place)]
+        } else {
+            self.fixed[usize::from(place & !FIXED)]
+        }
+    }
+
     /// Where `id` is in `by_id`, or would go.
     fn find(&self, id: &str) -> Result<usize, usize> {
         self.by_id
-            .binary_search_by(|&at| self.list[usize::from(at)].id.as_str().cmp(id))
+            .binary_search_by(|&at| self.at(at).id.as_str().cmp(id))
     }
 
     fn get(&self, id: &str) -> Option<&SettingSpec> {
         let at = self.find(id).ok()?;
-        Some(&self.list[usize::from(self.by_id[at])])
+        Some(self.at(self.by_id[at]))
     }
 
+    /// The spec `id` to change: a fixed one is copied first.
     fn get_mut(&mut self, id: &str) -> Option<&mut SettingSpec> {
         let at = self.find(id).ok()?;
-        Some(&mut self.list[usize::from(self.by_id[at])])
+        let place = self.by_id[at];
+        let place = if place & FIXED == 0 {
+            place
+        } else {
+            let copy = self.fixed[usize::from(place & !FIXED)].clone();
+            let owned = self.owned.len() as u16;
+            self.owned.push(copy);
+            self.by_id[at] = owned;
+            if let Some(o) = self.order.iter_mut().find(|o| **o == place) {
+                *o = owned;
+            }
+            owned
+        };
+        Some(&mut self.owned[usize::from(place)])
+    }
+
+    /// Adds `place`, whose spec's id is not there yet.
+    fn index(&mut self, id: &str, place: u16) {
+        let Err(at) = self.find(id) else {
+            return;
+        };
+        self.by_id.insert(at, place);
+        self.order.push(place);
     }
 
     /// Adds `spec`, whose id is not there yet.
     fn insert(&mut self, spec: SettingSpec) {
-        let Err(at) = self.find(spec.id.as_str()) else {
+        if self.find(spec.id.as_str()).is_ok() {
             return;
-        };
-        self.by_id.insert(at, self.list.len() as u16);
-        self.list.push(spec);
+        }
+        let place = self.owned.len() as u16;
+        let id = spec.id.clone();
+        self.owned.push(spec);
+        self.index(id.as_str(), place);
+    }
+
+    /// Adds the fixed `spec`, whose id is not there yet.
+    fn insert_fixed(&mut self, spec: &'static SettingSpec) {
+        if self.find(spec.id.as_str()).is_ok() {
+            return;
+        }
+        let place = self.fixed.len() as u16 | FIXED;
+        self.fixed.push(spec);
+        self.index(spec.id.as_str(), place);
+    }
+
+    fn iter(&self) -> impl Iterator<Item = &SettingSpec> {
+        self.order.iter().map(|&place| self.at(place))
     }
 
     fn shrink_to_fit(&mut self) {
-        self.list.shrink_to_fit();
+        self.owned.shrink_to_fit();
+        self.fixed.shrink_to_fit();
+        self.order.shrink_to_fit();
         self.by_id.shrink_to_fit();
     }
 }
@@ -470,11 +724,28 @@ impl Settings {
         Ok(())
     }
 
+    /// Registers a fixed setting ([`SettingSpec::fixed`]), kept by
+    /// reference. Its default must be valid.
+    pub fn define_fixed(&mut self, spec: &'static SettingSpec) -> Result<(), RegisterError> {
+        if self.specs.get(spec.id.as_str()).is_some() {
+            return Err(RegisterError::Duplicate {
+                id: spec.id.clone(),
+            });
+        }
+        if !spec.kind.accepts(&spec.default) {
+            return Err(RegisterError::Invalid {
+                message: Cow::Borrowed("default value does not match the setting kind"),
+            });
+        }
+        self.specs.insert_fixed(spec);
+        Ok(())
+    }
+
     /// Replaces the options of a [`SettingKind::Choice`] setting, e.g. once
     /// all contributions it chooses from are known.
-    pub fn set_choices(&mut self, id: &str, options: Vec<Cow<'static, str>>) {
+    pub fn set_choices(&mut self, id: &str, options: impl Into<Choices>) {
         if let Some(spec) = self.specs.get_mut(id) {
-            spec.kind = SettingKind::Choice(options);
+            spec.kind = SettingKind::Choice(options.into());
         }
     }
 
@@ -645,7 +916,7 @@ impl Settings {
     /// All settings in registration order: plugins registered first come
     /// first, each in the order it declared its settings.
     pub fn specs(&self) -> impl Iterator<Item = &SettingSpec> {
-        self.specs.list.iter()
+        self.specs.iter()
     }
 }
 
@@ -724,7 +995,7 @@ mod tests {
             .define(SettingSpec::new(
                 Id::new_static("test.mode"),
                 "test.mode",
-                SettingKind::Choice(alloc::vec![Cow::Borrowed("a"), Cow::Borrowed("b")]),
+                SettingKind::Choice(crate::settings::Choices::Fixed(&["a", "b"])),
                 SettingValue::Text(Cow::Borrowed("a")),
             ))
             .unwrap();

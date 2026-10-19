@@ -51,8 +51,8 @@ pub mod look;
 
 pub use look::{
     Frame, Look, Size, caption_height, choice, draw_caption, draw_frame, draw_message,
-    draw_wrapped, frame, frame_setting, line_height, part_setting, setting_id, shows, size,
-    size_setting,
+    draw_wrapped, frame, frame_setting, frame_spec, line_height, part_setting, part_spec,
+    setting_id, shows, size, size_setting, size_spec,
 };
 
 /// The kinds of widgets ([`WidgetSpec::category`]), each the translation
@@ -372,7 +372,7 @@ impl Align {
     }
 
     /// Its value in [`ALIGNMENTS`].
-    pub fn value(self) -> &'static str {
+    pub const fn value(self) -> &'static str {
         ALIGNMENTS[self as usize]
     }
 
@@ -405,10 +405,23 @@ pub fn align_setting(widget: &Id, default: Align) -> SettingSpec {
     SettingSpec::new(
         id,
         "core.setting.align",
-        SettingKind::Choice(ALIGNMENTS.iter().map(|a| Cow::Borrowed(*a)).collect()),
+        SettingKind::Choice(crate::settings::Choices::Fixed(&ALIGNMENTS)),
         SettingValue::Text(Cow::Borrowed(default.value())),
     )
     .group(widget.clone())
+}
+
+/// [`align_setting`] kept in the program
+/// ([`SettingSpec::fixed`](crate::SettingSpec::fixed)), for a `static`
+/// list of the widget's settings: `id` must be `<widget>.align`.
+pub const fn align_spec(id: &'static str, widget: Id, default: Align) -> SettingSpec {
+    SettingSpec::fixed_choice(
+        id,
+        "core.setting.align",
+        &ALIGNMENTS,
+        default.value(),
+        widget,
+    )
 }
 
 /// Whether widget `id` has settings of its own (a settings group with its

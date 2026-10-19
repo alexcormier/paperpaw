@@ -180,7 +180,7 @@ impl Plugin for Files {
             SettingSpec::choice(
                 &VIEW,
                 "files.setting.view",
-                alloc::vec![Cow::Borrowed(VIEW_LIST), Cow::Borrowed(VIEW_COVERS),],
+                quireink_sdk::Choices::Fixed(&[VIEW_LIST, VIEW_COVERS]),
                 VIEW_LIST,
             )
             .group(groups::LIBRARY)
@@ -190,7 +190,7 @@ impl Plugin for Files {
             SettingSpec::choice(
                 &SORT,
                 "files.setting.sort",
-                alloc::vec![Cow::Borrowed(SORT_RECENT), Cow::Borrowed(SORT_NAME),],
+                quireink_sdk::Choices::Fixed(&[SORT_RECENT, SORT_NAME]),
                 SORT_RECENT,
             )
             .group(groups::LIBRARY)

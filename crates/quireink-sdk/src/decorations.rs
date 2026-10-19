@@ -339,25 +339,25 @@ pub fn add_role(
     r.add_setting(in_role(SettingSpec::new(
         id("background")?,
         "core.mark.background",
-        SettingKind::Choice(tones(NONE)),
+        SettingKind::Choice(tones(NONE).into()),
         tone_value(default.background, NONE),
     )))?;
     r.add_setting(in_role(SettingSpec::new(
         id("ink")?,
         "core.mark.ink",
-        SettingKind::Choice(tones(AS_IS)),
+        SettingKind::Choice(tones(AS_IS).into()),
         tone_value(default.ink, AS_IS),
     )))?;
     r.add_setting(in_role(SettingSpec::new(
         id("line")?,
         "core.mark.line",
-        SettingKind::Choice(lines),
+        SettingKind::Choice(lines.into()),
         SettingValue::Text(Cow::Borrowed(default.line.map_or(NONE, LineKind::id))),
     )))?;
     r.add_setting(in_role(SettingSpec::new(
         id("line-tone")?,
         "core.mark.line-tone",
-        SettingKind::Choice(tones(AS_IS)),
+        SettingKind::Choice(tones(AS_IS).into()),
         tone_value(default.line_tone, AS_IS),
     )))?;
     let thickness = if default.thickness == 0 {

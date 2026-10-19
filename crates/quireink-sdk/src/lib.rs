@@ -97,7 +97,8 @@ pub use replies::{Chosen, HttpReply, ServerNotice, SocketNotice, Typed};
 pub use screen::{Cx, Handled, Hint, Hints, Output, Screen, ScreenFactory, ScreenSpec};
 pub use setting::{Setting, Text};
 pub use settings::{
-    Level, SettingError, SettingGroupSpec, SettingKind, SettingSpec, SettingValue, Settings,
+    Choices, Level, SettingError, SettingGroupSpec, SettingKind, SettingSpec, SettingValue,
+    Settings,
 };
 pub use version::{SDK_VERSION, Version};
 

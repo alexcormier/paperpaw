@@ -626,7 +626,7 @@ fn slider_value(min: i64, max: i64, rect: Rect, x: i32) -> i64 {
 fn fits_segments(
     env: &Env<'_>,
     style: &UiStyle,
-    options: &[alloc::borrow::Cow<'static, str>],
+    options: &quireink_sdk::Choices,
     area: Rect,
 ) -> bool {
     let Some(font) = style.font(env) else {

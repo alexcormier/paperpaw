@@ -544,10 +544,7 @@ fn register_look_settings(r: &mut Registrar) -> Result<(), RegisterError> {
         SettingSpec::choice(
             &settings::UI_HEADER,
             "core.setting.ui-header",
-            alloc::vec![
-                Cow::Borrowed(settings::HEADER_DARK),
-                Cow::Borrowed(settings::HEADER_LIGHT),
-            ],
+            quireink_sdk::Choices::Fixed(&[settings::HEADER_DARK, settings::HEADER_LIGHT]),
             settings::HEADER_LIGHT,
         )
         .group(groups::LOOK)
@@ -570,10 +567,7 @@ fn register_look_settings(r: &mut Registrar) -> Result<(), RegisterError> {
         SettingSpec::choice(
             &settings::UI_CONTRAST,
             "core.setting.ui-contrast",
-            alloc::vec![
-                Cow::Borrowed(settings::CONTRAST_NORMAL),
-                Cow::Borrowed(settings::CONTRAST_STRONG),
-            ],
+            quireink_sdk::Choices::Fixed(&[settings::CONTRAST_NORMAL, settings::CONTRAST_STRONG]),
             settings::CONTRAST_NORMAL,
         )
         .group(groups::LOOK)
@@ -629,7 +623,7 @@ fn register_device_settings(r: &mut Registrar) -> Result<(), RegisterError> {
         SettingSpec::choice(
             &settings::KEYMAP_PRESET,
             "core.setting.keymap-preset",
-            alloc::vec![Cow::Borrowed(keymap_presets::STANDARD_NAME)],
+            quireink_sdk::Choices::Fixed(&[keymap_presets::STANDARD_NAME]),
             keymap_presets::STANDARD_NAME,
         )
         .group(groups::CONTROLS)
@@ -772,7 +766,7 @@ fn register_reading_settings(r: &mut Registrar) -> Result<(), RegisterError> {
         SettingSpec::choice(
             &settings::READING_FONT,
             "core.setting.reading-font",
-            alloc::vec![Cow::Borrowed(settings::DEFAULT_FONT)],
+            quireink_sdk::Choices::Fixed(&[settings::DEFAULT_FONT]),
             settings::DEFAULT_FONT,
         )
         .group(groups::READING)
@@ -839,7 +833,7 @@ fn register_time_and_battery(r: &mut Registrar) -> Result<(), RegisterError> {
         SettingSpec::choice(
             &settings::CLOCK_FORMAT,
             "core.setting.clock-format",
-            alloc::vec![Cow::Borrowed(CLOCK_24H), Cow::Borrowed(CLOCK_12H)],
+            quireink_sdk::Choices::Fixed(&[CLOCK_24H, CLOCK_12H]),
             CLOCK_24H,
         )
         .group(groups::SYSTEM),
@@ -847,9 +841,14 @@ fn register_time_and_battery(r: &mut Registrar) -> Result<(), RegisterError> {
     let mut zones = alloc::vec![Cow::Borrowed(AUTO)];
     zones.extend(TIME_ZONES.iter().map(|(id, _)| Cow::Borrowed(*id)));
     r.add_setting(
-        SettingSpec::choice(&settings::TIME_ZONE, "core.setting.time-zone", zones, AUTO)
-            .group(groups::SYSTEM)
-            .description("core.setting.time-zone.help"),
+        SettingSpec::choice(
+            &settings::TIME_ZONE,
+            "core.setting.time-zone",
+            zones.into(),
+            AUTO,
+        )
+        .group(groups::SYSTEM)
+        .description("core.setting.time-zone.help"),
     )?;
     r.add_setting(
         SettingSpec::text(&settings::TIME_ZONE_RULE, "core.setting.time-zone-rule", "")

@@ -424,6 +424,7 @@ pub mod quireink_sdk::contribution
 pub quireink_sdk::contribution::Contribution::Action(quireink_sdk::ActionSpec)
 pub quireink_sdk::contribution::Contribution::BookData(quireink_sdk::library::BookData)
 pub quireink_sdk::contribution::Contribution::Decorator(alloc::boxed::Box<quireink_sdk::decorations::DecoratorSpec>)
+pub quireink_sdk::contribution::Contribution::FixedSetting(&'static quireink_sdk::SettingSpec)
 pub quireink_sdk::contribution::Contribution::Font(alloc::boxed::Box<quireink_sdk::FontSpec>)
 pub quireink_sdk::contribution::Contribution::FontBinding
 pub quireink_sdk::contribution::Contribution::FontBinding::font: quireink_sdk::Id
@@ -509,6 +510,7 @@ pub fn quireink_sdk::contribution::Registrar::add_screen(&mut self, quireink_sdk
 pub fn quireink_sdk::contribution::Registrar::add_service(&mut self, quireink_sdk::Id, alloc::boxed::Box<dyn core::any::Any>) -> core::result::Result<(), quireink_sdk::RegisterError>
 pub fn quireink_sdk::contribution::Registrar::add_setting(&mut self, quireink_sdk::SettingSpec) -> core::result::Result<(), quireink_sdk::RegisterError>
 pub fn quireink_sdk::contribution::Registrar::add_setting_group(&mut self, quireink_sdk::SettingGroupSpec) -> core::result::Result<(), quireink_sdk::RegisterError>
+pub fn quireink_sdk::contribution::Registrar::add_settings(&mut self, &'static [quireink_sdk::SettingSpec]) -> core::result::Result<(), quireink_sdk::RegisterError>
 pub fn quireink_sdk::contribution::Registrar::add_setup_step(&mut self, quireink_sdk::setup::SetupStepSpec) -> core::result::Result<(), quireink_sdk::RegisterError>
 pub fn quireink_sdk::contribution::Registrar::add_slot(&mut self, quireink_sdk::SlotSpec) -> core::result::Result<(), quireink_sdk::RegisterError>
 pub fn quireink_sdk::contribution::Registrar::add_status_item(&mut self, quireink_sdk::status::StatusItemSpec) -> core::result::Result<(), quireink_sdk::RegisterError>
@@ -1676,7 +1678,7 @@ pub quireink_sdk::widgets::look::Frame::Line
 pub quireink_sdk::widgets::look::Frame::None
 impl quireink_sdk::widgets::look::Frame
 pub fn quireink_sdk::widgets::look::Frame::of(&str) -> Self
-pub fn quireink_sdk::widgets::look::Frame::value(self) -> &'static str
+pub const fn quireink_sdk::widgets::look::Frame::value(self) -> &'static str
 pub enum quireink_sdk::widgets::look::Size
 pub quireink_sdk::widgets::look::Size::Fit
 pub quireink_sdk::widgets::look::Size::Large
@@ -1685,7 +1687,7 @@ pub quireink_sdk::widgets::look::Size::Small
 impl quireink_sdk::widgets::look::Size
 pub fn quireink_sdk::widgets::look::Size::of(&str) -> Self
 pub fn quireink_sdk::widgets::look::Size::text(self, &quireink_sdk::ui::UiStyle) -> f32
-pub fn quireink_sdk::widgets::look::Size::value(self) -> &'static str
+pub const fn quireink_sdk::widgets::look::Size::value(self) -> &'static str
 pub struct quireink_sdk::widgets::look::Look
 pub quireink_sdk::widgets::look::Look::area: quireink_platform::geometry::Rect
 pub quireink_sdk::widgets::look::Look::faint: quireink_platform::pixel::Color
@@ -1695,27 +1697,30 @@ pub quireink_sdk::widgets::look::Look::paper: quireink_platform::pixel::Color
 pub const quireink_sdk::widgets::look::FRAMES: [&str; 4]
 pub const quireink_sdk::widgets::look::SIZES: [&str; 4]
 pub fn quireink_sdk::widgets::look::caption_height(&quireink_sdk::Env<'_>) -> u16
-pub fn quireink_sdk::widgets::look::choice(&quireink_sdk::Id, &str, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, &[&'static str], &'static str) -> quireink_sdk::SettingSpec
+pub fn quireink_sdk::widgets::look::choice(&quireink_sdk::Id, &str, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, &'static [&'static str], &'static str) -> quireink_sdk::SettingSpec
 pub fn quireink_sdk::widgets::look::draw_caption(&mut quireink_graphics::canvas::Canvas<'_>, &quireink_sdk::Env<'_>, &str, &quireink_sdk::widgets::look::Look, &str) -> quireink_platform::geometry::Rect
 pub fn quireink_sdk::widgets::look::draw_frame(&mut quireink_graphics::canvas::Canvas<'_>, &quireink_sdk::Env<'_>, &str, quireink_platform::geometry::Rect) -> quireink_sdk::widgets::look::Look
 pub fn quireink_sdk::widgets::look::draw_message(&mut quireink_graphics::canvas::Canvas<'_>, &quireink_sdk::Env<'_>, &quireink_sdk::widgets::look::Look, &str)
 pub fn quireink_sdk::widgets::look::draw_wrapped(&mut quireink_graphics::canvas::Canvas<'_>, &quireink_sdk::Env<'_>, quireink_platform::geometry::Rect, quireink_sdk::widgets::Align, f32, &str, quireink_platform::pixel::Color) -> u16
 pub fn quireink_sdk::widgets::look::frame(&quireink_sdk::Env<'_>, &str) -> quireink_sdk::widgets::look::Frame
 pub fn quireink_sdk::widgets::look::frame_setting(&quireink_sdk::Id, quireink_sdk::widgets::look::Frame) -> quireink_sdk::SettingSpec
+pub const fn quireink_sdk::widgets::look::frame_spec(&'static str, quireink_sdk::Id, quireink_sdk::widgets::look::Frame) -> quireink_sdk::SettingSpec
 pub fn quireink_sdk::widgets::look::line_height(&quireink_sdk::Env<'_>, f32) -> u16
 pub fn quireink_sdk::widgets::look::look(&quireink_sdk::Env<'_>, &str, quireink_platform::geometry::Rect) -> quireink_sdk::widgets::look::Look
 pub fn quireink_sdk::widgets::look::part_setting(&quireink_sdk::Id, &str, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, bool) -> quireink_sdk::SettingSpec
+pub const fn quireink_sdk::widgets::look::part_spec(&'static str, quireink_sdk::Id, &'static str, bool) -> quireink_sdk::SettingSpec
 pub fn quireink_sdk::widgets::look::setting_id(&quireink_sdk::Id, &str) -> quireink_sdk::Id
 pub fn quireink_sdk::widgets::look::shows(&quireink_sdk::Env<'_>, &str, &str) -> bool
 pub fn quireink_sdk::widgets::look::size(&quireink_sdk::Env<'_>, &str) -> quireink_sdk::widgets::look::Size
 pub fn quireink_sdk::widgets::look::size_setting(&quireink_sdk::Id, quireink_sdk::widgets::look::Size, bool) -> quireink_sdk::SettingSpec
+pub const fn quireink_sdk::widgets::look::size_spec(&'static str, quireink_sdk::Id, quireink_sdk::widgets::look::Size, bool) -> quireink_sdk::SettingSpec
 pub enum quireink_sdk::widgets::Align
 pub quireink_sdk::widgets::Align::Center
 pub quireink_sdk::widgets::Align::Left
 pub quireink_sdk::widgets::Align::Right
 impl quireink_sdk::widgets::Align
 pub fn quireink_sdk::widgets::Align::of(&str) -> Self
-pub fn quireink_sdk::widgets::Align::value(self) -> &'static str
+pub const fn quireink_sdk::widgets::Align::value(self) -> &'static str
 pub fn quireink_sdk::widgets::Align::x(self, quireink_platform::geometry::Rect, f32) -> f32
 pub enum quireink_sdk::widgets::Frame
 pub quireink_sdk::widgets::Frame::Card
@@ -1724,7 +1729,7 @@ pub quireink_sdk::widgets::Frame::Line
 pub quireink_sdk::widgets::Frame::None
 impl quireink_sdk::widgets::look::Frame
 pub fn quireink_sdk::widgets::look::Frame::of(&str) -> Self
-pub fn quireink_sdk::widgets::look::Frame::value(self) -> &'static str
+pub const fn quireink_sdk::widgets::look::Frame::value(self) -> &'static str
 pub enum quireink_sdk::widgets::Size
 pub quireink_sdk::widgets::Size::Fit
 pub quireink_sdk::widgets::Size::Large
@@ -1733,7 +1738,7 @@ pub quireink_sdk::widgets::Size::Small
 impl quireink_sdk::widgets::look::Size
 pub fn quireink_sdk::widgets::look::Size::of(&str) -> Self
 pub fn quireink_sdk::widgets::look::Size::text(self, &quireink_sdk::ui::UiStyle) -> f32
-pub fn quireink_sdk::widgets::look::Size::value(self) -> &'static str
+pub const fn quireink_sdk::widgets::look::Size::value(self) -> &'static str
 pub struct quireink_sdk::widgets::Drawn
 pub quireink_sdk::widgets::Drawn::draw: fn(&mut quireink_graphics::canvas::Canvas<'_>, &quireink_sdk::Env<'_>, quireink_platform::geometry::Rect)
 pub quireink_sdk::widgets::Drawn::height: fn(&quireink_sdk::Env<'_>, u16) -> u16
@@ -1787,9 +1792,10 @@ pub fn quireink_sdk::widgets::Widget::targets(&self, &quireink_sdk::Env<'_>, qui
 pub fn quireink_sdk::widgets::Widget::update(&mut self, &quireink_sdk::Env<'_>) -> bool
 pub fn quireink_sdk::widgets::align(&quireink_sdk::Env<'_>, &str) -> quireink_sdk::widgets::Align
 pub fn quireink_sdk::widgets::align_setting(&quireink_sdk::Id, quireink_sdk::widgets::Align) -> quireink_sdk::SettingSpec
+pub const fn quireink_sdk::widgets::align_spec(&'static str, quireink_sdk::Id, quireink_sdk::widgets::Align) -> quireink_sdk::SettingSpec
 pub fn quireink_sdk::widgets::caption_height(&quireink_sdk::Env<'_>) -> u16
 pub fn quireink_sdk::widgets::changed(&quireink_sdk::Id) -> quireink_sdk::Command
-pub fn quireink_sdk::widgets::choice(&quireink_sdk::Id, &str, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, &[&'static str], &'static str) -> quireink_sdk::SettingSpec
+pub fn quireink_sdk::widgets::choice(&quireink_sdk::Id, &str, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, &'static [&'static str], &'static str) -> quireink_sdk::SettingSpec
 pub fn quireink_sdk::widgets::draw_caption(&mut quireink_graphics::canvas::Canvas<'_>, &quireink_sdk::Env<'_>, &str, &quireink_sdk::widgets::look::Look, &str) -> quireink_platform::geometry::Rect
 pub fn quireink_sdk::widgets::draw_frame(&mut quireink_graphics::canvas::Canvas<'_>, &quireink_sdk::Env<'_>, &str, quireink_platform::geometry::Rect) -> quireink_sdk::widgets::look::Look
 pub fn quireink_sdk::widgets::draw_message(&mut quireink_graphics::canvas::Canvas<'_>, &quireink_sdk::Env<'_>, &quireink_sdk::widgets::look::Look, &str)
@@ -1797,15 +1803,18 @@ pub fn quireink_sdk::widgets::draw_wrapped(&mut quireink_graphics::canvas::Canva
 pub fn quireink_sdk::widgets::fill_height(u32, u32, usize) -> u16
 pub fn quireink_sdk::widgets::frame(&quireink_sdk::Env<'_>, &str) -> quireink_sdk::widgets::look::Frame
 pub fn quireink_sdk::widgets::frame_setting(&quireink_sdk::Id, quireink_sdk::widgets::look::Frame) -> quireink_sdk::SettingSpec
+pub const fn quireink_sdk::widgets::frame_spec(&'static str, quireink_sdk::Id, quireink_sdk::widgets::look::Frame) -> quireink_sdk::SettingSpec
 pub fn quireink_sdk::widgets::has_settings(&quireink_sdk::Env<'_>, &str) -> bool
 pub fn quireink_sdk::widgets::line_height(&quireink_sdk::Env<'_>, f32) -> u16
 pub fn quireink_sdk::widgets::part_setting(&quireink_sdk::Id, &str, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, bool) -> quireink_sdk::SettingSpec
+pub const fn quireink_sdk::widgets::part_spec(&'static str, quireink_sdk::Id, &'static str, bool) -> quireink_sdk::SettingSpec
 pub fn quireink_sdk::widgets::repeatable(&str) -> bool
 pub fn quireink_sdk::widgets::setting_id(&quireink_sdk::Id, &str) -> quireink_sdk::Id
 pub fn quireink_sdk::widgets::settings_group(&quireink_sdk::Id, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> quireink_sdk::SettingGroupSpec
 pub fn quireink_sdk::widgets::shows(&quireink_sdk::Env<'_>, &str, &str) -> bool
 pub fn quireink_sdk::widgets::size(&quireink_sdk::Env<'_>, &str) -> quireink_sdk::widgets::look::Size
 pub fn quireink_sdk::widgets::size_setting(&quireink_sdk::Id, quireink_sdk::widgets::look::Size, bool) -> quireink_sdk::SettingSpec
+pub const fn quireink_sdk::widgets::size_spec(&'static str, quireink_sdk::Id, quireink_sdk::widgets::look::Size, bool) -> quireink_sdk::SettingSpec
 pub type quireink_sdk::widgets::WidgetFactory = alloc::boxed::Box<dyn core::ops::function::Fn(&quireink_sdk::Env<'_>) -> alloc::boxed::Box<dyn quireink_sdk::widgets::Widget>>
 pub mod quireink_sdk::wifi
 pub enum quireink_sdk::wifi::JoinFailure
@@ -1882,6 +1891,22 @@ pub quireink_sdk::ActionHint::Hidden
 pub quireink_sdk::ActionHint::Icon(&'static str)
 pub quireink_sdk::ActionHint::Label(alloc::borrow::Cow<'static, str>)
 pub quireink_sdk::ActionHint::Title
+pub enum quireink_sdk::Choices
+pub quireink_sdk::Choices::Fixed(&'static [&'static str])
+pub quireink_sdk::Choices::Owned(alloc::vec::Vec<alloc::borrow::Cow<'static, str>>)
+impl quireink_sdk::Choices
+pub fn quireink_sdk::Choices::contains(&self, &str) -> bool
+pub fn quireink_sdk::Choices::get(&self, usize) -> core::option::Option<&str>
+pub fn quireink_sdk::Choices::is_empty(&self) -> bool
+pub fn quireink_sdk::Choices::iter(&self) -> impl core::iter::traits::iterator::Iterator<Item = &str>
+pub fn quireink_sdk::Choices::len(&self) -> usize
+pub fn quireink_sdk::Choices::position(&self, &str) -> core::option::Option<usize>
+impl core::convert::From<&'static [&'static str]> for quireink_sdk::Choices
+pub fn quireink_sdk::Choices::from(&'static [&'static str]) -> Self
+impl core::convert::From<alloc::vec::Vec<alloc::borrow::Cow<'static, str>>> for quireink_sdk::Choices
+pub fn quireink_sdk::Choices::from(alloc::vec::Vec<alloc::borrow::Cow<'static, str>>) -> Self
+impl core::iter::traits::collect::FromIterator<alloc::borrow::Cow<'static, str>> for quireink_sdk::Choices
+pub fn quireink_sdk::Choices::from_iter<I: core::iter::traits::collect::IntoIterator<Item = alloc::borrow::Cow<'static, str>>>(I) -> Self
 #[non_exhaustive] pub enum quireink_sdk::Command
 pub quireink_sdk::Command::Back
 pub quireink_sdk::Command::Bind
@@ -1943,6 +1968,7 @@ pub fn quireink_sdk::Command::set<T: quireink_sdk::setting::SettingType>(&quirei
 pub quireink_sdk::Contribution::Action(quireink_sdk::ActionSpec)
 pub quireink_sdk::Contribution::BookData(quireink_sdk::library::BookData)
 pub quireink_sdk::Contribution::Decorator(alloc::boxed::Box<quireink_sdk::decorations::DecoratorSpec>)
+pub quireink_sdk::Contribution::FixedSetting(&'static quireink_sdk::SettingSpec)
 pub quireink_sdk::Contribution::Font(alloc::boxed::Box<quireink_sdk::FontSpec>)
 pub quireink_sdk::Contribution::FontBinding
 pub quireink_sdk::Contribution::FontBinding::font: quireink_sdk::Id
@@ -2091,7 +2117,7 @@ impl core::fmt::Display for quireink_sdk::SettingError
 pub fn quireink_sdk::SettingError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 #[non_exhaustive] pub enum quireink_sdk::SettingKind
 pub quireink_sdk::SettingKind::Bool
-pub quireink_sdk::SettingKind::Choice(alloc::vec::Vec<alloc::borrow::Cow<'static, str>>)
+pub quireink_sdk::SettingKind::Choice(quireink_sdk::Choices)
 pub quireink_sdk::SettingKind::Int
 pub quireink_sdk::SettingKind::Int::max: i64
 pub quireink_sdk::SettingKind::Int::min: i64
@@ -2559,6 +2585,7 @@ pub fn quireink_sdk::contribution::Registrar::add_screen(&mut self, quireink_sdk
 pub fn quireink_sdk::contribution::Registrar::add_service(&mut self, quireink_sdk::Id, alloc::boxed::Box<dyn core::any::Any>) -> core::result::Result<(), quireink_sdk::RegisterError>
 pub fn quireink_sdk::contribution::Registrar::add_setting(&mut self, quireink_sdk::SettingSpec) -> core::result::Result<(), quireink_sdk::RegisterError>
 pub fn quireink_sdk::contribution::Registrar::add_setting_group(&mut self, quireink_sdk::SettingGroupSpec) -> core::result::Result<(), quireink_sdk::RegisterError>
+pub fn quireink_sdk::contribution::Registrar::add_settings(&mut self, &'static [quireink_sdk::SettingSpec]) -> core::result::Result<(), quireink_sdk::RegisterError>
 pub fn quireink_sdk::contribution::Registrar::add_setup_step(&mut self, quireink_sdk::setup::SetupStepSpec) -> core::result::Result<(), quireink_sdk::RegisterError>
 pub fn quireink_sdk::contribution::Registrar::add_slot(&mut self, quireink_sdk::SlotSpec) -> core::result::Result<(), quireink_sdk::RegisterError>
 pub fn quireink_sdk::contribution::Registrar::add_status_item(&mut self, quireink_sdk::status::StatusItemSpec) -> core::result::Result<(), quireink_sdk::RegisterError>
@@ -2639,10 +2666,17 @@ pub quireink_sdk::SettingSpec::scoped: bool
 pub quireink_sdk::SettingSpec::title: alloc::borrow::Cow<'static, str>
 impl quireink_sdk::SettingSpec
 pub fn quireink_sdk::SettingSpec::advanced(self) -> Self
-pub fn quireink_sdk::SettingSpec::choice(&quireink_sdk::setting::Setting<quireink_sdk::setting::Text>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, alloc::vec::Vec<alloc::borrow::Cow<'static, str>>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
+pub fn quireink_sdk::SettingSpec::choice(&quireink_sdk::setting::Setting<quireink_sdk::setting::Text>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, quireink_sdk::Choices, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
+pub const fn quireink_sdk::SettingSpec::described(self, &'static str) -> Self
 pub fn quireink_sdk::SettingSpec::description(self, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
 pub fn quireink_sdk::SettingSpec::editor(self, quireink_sdk::Id) -> Self
 pub fn quireink_sdk::SettingSpec::extra(&self) -> &quireink_sdk::settings::SettingExtra
+pub const fn quireink_sdk::SettingSpec::fixed(&'static str, &'static str, quireink_sdk::SettingKind, quireink_sdk::SettingValue, quireink_sdk::Id) -> Self
+pub const fn quireink_sdk::SettingSpec::fixed_choice(&'static str, &'static str, &'static [&'static str], &'static str, quireink_sdk::Id) -> Self
+pub const fn quireink_sdk::SettingSpec::fixed_number(&'static str, &'static str, i64, i64, i64, quireink_sdk::Id) -> Self
+pub const fn quireink_sdk::SettingSpec::fixed_switch(&'static str, &'static str, bool, quireink_sdk::Id) -> Self
+pub const fn quireink_sdk::SettingSpec::fixed_text(&'static str, &'static str, &'static str, quireink_sdk::Id) -> Self
+pub const fn quireink_sdk::SettingSpec::for_advanced(self) -> Self
 pub fn quireink_sdk::SettingSpec::group(self, quireink_sdk::Id) -> Self
 pub fn quireink_sdk::SettingSpec::language(&quireink_sdk::setting::Setting<quireink_sdk::setting::Text>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
 pub fn quireink_sdk::SettingSpec::list(&quireink_sdk::setting::Setting<quireink_sdk::setting::Text>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
@@ -2661,6 +2695,7 @@ impl quireink_sdk::Settings
 pub fn quireink_sdk::Settings::add_group(&mut self, quireink_sdk::SettingGroupSpec) -> core::result::Result<(), quireink_sdk::RegisterError>
 pub fn quireink_sdk::Settings::bool(&self, &str) -> bool
 pub fn quireink_sdk::Settings::define(&mut self, quireink_sdk::SettingSpec) -> core::result::Result<(), quireink_sdk::RegisterError>
+pub fn quireink_sdk::Settings::define_fixed(&mut self, &'static quireink_sdk::SettingSpec) -> core::result::Result<(), quireink_sdk::RegisterError>
 pub fn quireink_sdk::Settings::get(&self, &str) -> core::option::Option<&quireink_sdk::SettingValue>
 pub fn quireink_sdk::Settings::global(&self, &str) -> core::option::Option<&quireink_sdk::SettingValue>
 pub fn quireink_sdk::Settings::goes_to_scope(&self, &str) -> bool
@@ -2674,7 +2709,7 @@ pub fn quireink_sdk::Settings::reset(&mut self, &str) -> core::result::Result<()
 pub fn quireink_sdk::Settings::scope(&self) -> core::option::Option<&quireink_sdk::collections::VecMap<quireink_sdk::Id, quireink_sdk::SettingValue>>
 pub fn quireink_sdk::Settings::scoped_value(&self, &str) -> core::option::Option<&quireink_sdk::SettingValue>
 pub fn quireink_sdk::Settings::set(&mut self, &str, quireink_sdk::SettingValue) -> core::result::Result<(), quireink_sdk::SettingError>
-pub fn quireink_sdk::Settings::set_choices(&mut self, &str, alloc::vec::Vec<alloc::borrow::Cow<'static, str>>)
+pub fn quireink_sdk::Settings::set_choices(&mut self, &str, impl core::convert::Into<quireink_sdk::Choices>)
 pub fn quireink_sdk::Settings::set_default_from_text(&mut self, &str, &str) -> core::result::Result<(), quireink_sdk::SettingError>
 pub fn quireink_sdk::Settings::set_from_text(&mut self, &str, &str) -> core::result::Result<(), quireink_sdk::SettingError>
 pub fn quireink_sdk::Settings::set_in_scope(&mut self, &str, quireink_sdk::SettingValue) -> core::result::Result<(), quireink_sdk::SettingError>

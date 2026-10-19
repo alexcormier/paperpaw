@@ -41,16 +41,26 @@ pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     )?;
     let zones: Vec<&'static str> = TIME_ZONES.iter().map(|(id, _)| *id).collect();
     for (n, (key, default)) in PLACES.into_iter().enumerate() {
-        let mut values = zones.clone();
-        if n > 0 {
-            values.insert(0, NONE);
-        }
+        let none = (n > 0).then_some(NONE);
+        let values: quireink_sdk::Choices = none
+            .into_iter()
+            .chain(zones.iter().copied())
+            .map(alloc::borrow::Cow::Borrowed)
+            .collect();
         let title = [
             "widgets.setting.place-1",
             "widgets.setting.place-2",
             "widgets.setting.place-3",
         ][n];
-        r.add_setting(widgets::choice(&ID, key, title, &values, default))?;
+        r.add_setting(
+            quireink_sdk::SettingSpec::new(
+                widgets::setting_id(&ID, key),
+                title,
+                quireink_sdk::SettingKind::Choice(values),
+                quireink_sdk::SettingValue::Text(alloc::borrow::Cow::Borrowed(default)),
+            )
+            .group(ID),
+        )?;
     }
     r.add_setting(widgets::choice(
         &ID,
