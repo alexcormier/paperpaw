@@ -41,9 +41,11 @@ use core::fmt;
 
 use ed25519_compact::{PublicKey, Signature, VerifyingState};
 
+mod extent;
 mod plugin_signature;
 mod plugins;
 
+pub use extent::ImageExtent;
 pub use plugin_signature::{
     PLUGIN_DOMAIN, PLUGIN_SIGNATURE_FORMAT, PLUGIN_SIGNATURE_LEN, PLUGIN_SIGNATURE_MAGIC,
     PluginCheck, PluginSignature, SignatureProblem, check_plugin, sign_plugin,

@@ -90,10 +90,12 @@ impl Firmware {
     pub fn run(mut self) -> ! {
         let effects = self.kernel.start(now());
         self.apply(effects);
-        // Its first frame is shown: an update on trial started cleanly.
+        // Its first frame is shown: an update on trial started cleanly,
+        // and so did its code plugins.
         if let Some(ota) = &mut self.ota {
             ota.confirm();
         }
+        crate::safe_mode::started();
         loop {
             self.step();
         }

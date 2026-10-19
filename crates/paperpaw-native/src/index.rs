@@ -239,6 +239,11 @@ impl Layout {
         })
     }
 
+    /// The region plugins are placed in.
+    pub fn region(&self) -> Region {
+        self.region
+    }
+
     /// The end in flash of the last image placed (the region's first byte
     /// after its index if none was).
     pub fn end(&self) -> u32 {

@@ -150,6 +150,11 @@ impl Ota {
         })
     }
 
+    /// Whether the running firmware is on trial (an update's first start).
+    pub fn on_trial(&self) -> bool {
+        self.trial
+    }
+
     /// The running firmware got to its first frame: no longer on trial.
     pub fn confirm(&mut self) {
         if !self.trial {

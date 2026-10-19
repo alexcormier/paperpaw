@@ -2149,6 +2149,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "paperpaw-native"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-digest",
+]
+
+[[package]]
 name = "paperpaw-platform"
 version = "0.4.0-dev"
 
@@ -2504,6 +2511,7 @@ dependencies = [
  "paperpaw-i18n",
  "paperpaw-image",
  "paperpaw-layout",
+ "paperpaw-native",
  "paperpaw-platform",
  "paperpaw-text",
  "paperpaw-update",
@@ -2578,6 +2586,7 @@ dependencies = [
  "paperpaw-digest",
  "paperpaw-fat",
  "paperpaw-http",
+ "paperpaw-native",
  "paperpaw-platform",
  "paperpaw-plugin-reader",
  "paperpaw-plugin-wifi",
