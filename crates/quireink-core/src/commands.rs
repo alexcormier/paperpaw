@@ -278,6 +278,11 @@ impl Kernel {
                     self.warn_runtime(String::from("QuireInk is not this device's firmware"));
                 }
             }
+            Command::NoNetwork => {
+                if self.network_work_waiting() {
+                    self.fail_waiting_network();
+                }
+            }
             Command::Wifi(command) => match &mut self.shared.wifi {
                 Some(wifi) => {
                     if command == WifiCommand::Scan {

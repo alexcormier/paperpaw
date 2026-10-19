@@ -1,6 +1,6 @@
 //! Short messages ([`slots::NOTICE`](quireink_sdk::builtin::slots::NOTICE)):
-//! a framed box above the bottom of the screen, between the margins, with
-//! the text centred in at most three lines. The kernel shows it over
+//! a dark box with rounded corners above the bottom of the screen, between
+//! the margins, with the text centred in white in at most three lines. The kernel shows it over
 //! whatever is open and takes it away after a few seconds.
 
 use alloc::string::{String, ToString};
@@ -24,7 +24,7 @@ impl NoticeScreen {
         let style = UiStyle::new(env);
         let display = env.device.display;
         let margin = style.margin as u16;
-        let pad = style.gap as u16;
+        let pad = style.gap as u16 * 3 / 2;
         let width = display.width.saturating_sub(2 * margin);
         let inner = f32::from(width.saturating_sub(2 * pad));
         let text = params.get(params::TEXT).unwrap_or_default();
@@ -65,18 +65,19 @@ impl Screen for NoticeScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let r = self.region;
-        canvas.fill(r, Color::WHITE);
-        canvas.stroke(r, style.line * 2, Color::BLACK);
+        // Round, with what is below in the corners; never quite square.
+        let corner = style.corner.max(style.gap / 2);
+        canvas.fill_round(r, corner, Color::BLACK);
         let Some(font) = style.font(env) else {
             return;
         };
         let line_height = font.line_metrics(style.text).line_height as u16;
-        let mut y = r.y + style.gap as u16;
+        let mut y = r.y + style.gap as u16 * 3 / 2;
         for line in &self.lines {
             let width = font.measure(style.text, line);
             let x = f32::from(r.x) + (f32::from(r.width) - width) / 2.0;
             let area = Rect::new(r.x, y, r.width, line_height);
-            ui::draw_label(canvas, &font, style.text, x, area, line, Color::BLACK);
+            ui::draw_label(canvas, &font, style.text, x, area, line, Color::WHITE);
             y += line_height;
         }
     }

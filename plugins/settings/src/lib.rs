@@ -169,7 +169,7 @@ impl Plugin for SettingsPlugin {
             item: secrets::OPEN,
             order: 95,
         })?;
-        r.add_icon(secrets::OPEN, Cow::Borrowed("lock"))?;
+        r.add_icon(secrets::OPEN, Cow::Borrowed("key"))?;
         r.on(secrets::ENTERED, secrets::entered)?;
         r.bind_slot(slots::SETTINGS, SCREEN, Priority::DEFAULT)?;
         r.add_settings(&SETTINGS)?;

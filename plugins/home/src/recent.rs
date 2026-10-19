@@ -2,7 +2,7 @@
 //! ([`quireink_sdk::library`]), which follows the standard reading
 //! events, so any reader plugin works.
 
-use alloc::string::{String, ToString};
+use alloc::string::String;
 use alloc::vec::Vec;
 
 use quireink_sdk::document::ImageRef;
@@ -35,7 +35,7 @@ pub(crate) fn load(storage: &dyn Storage, limit: usize) -> Vec<Recent> {
                 None => return None,
             };
             Some(Recent {
-                title: book.title_or(&path).to_string(),
+                title: book.shown_title(&path).into_owned(),
                 progress: f32::from(book.progress.unwrap_or(0)),
                 indexed: book.indexed,
                 cover: book.cover,

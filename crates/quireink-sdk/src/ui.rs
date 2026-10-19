@@ -119,13 +119,13 @@ impl UiStyle {
         }
     }
 
-    /// Draws a header's background in `area`: dark, or light with a line
-    /// below.
+    /// Draws a header's background in `area`: dark, or light with a thin
+    /// line below.
     fn header_background(&self, canvas: &mut Canvas<'_>, area: Rect) {
         let (paper, ink) = self.header_colors();
         canvas.fill(area, paper);
         if !self.dark_header {
-            let line = (self.line * 2) as u16;
+            let line = self.line.max(1) as u16;
             canvas.fill(
                 Rect::new(
                     area.x,
@@ -343,6 +343,20 @@ pub fn has_icons(env: &Env<'_>) -> bool {
     env.fonts
         .bound(crate::builtin::fonts::ICONS.as_str())
         .is_some()
+}
+
+/// The translation of `key` for how the device is used: where there is
+/// no touch screen, `<key>.buttons` if there is one (e.g. "Select a rule
+/// to pause it" for "Tap a rule to pause it"), else `key`'s own. Notes
+/// that tell what a tap or a hold does use it, so they never speak of
+/// taps on a device without a touch screen.
+pub fn tr_input<'a>(env: &Env<'a>, key: &'a str) -> &'a str {
+    if !env.device.input.touch
+        && let Some(text) = env.i18n.get(&format!("{key}.buttons"))
+    {
+        return text;
+    }
+    env.i18n.tr(key)
 }
 
 /// Draws `text` vertically centred in `area`, starting at `x`; text
@@ -969,6 +983,133 @@ pub fn draw_button_hints(
     }
 }
 
+/// Where the focus of a row or an item in `rect` is drawn: a little in
+/// from the sides, so it sits within the screen's margins as a rounded
+/// bar, and off the lines between rows.
+pub fn focus_rect(style: &UiStyle, rect: Rect) -> Rect {
+    let side = (style.margin / 2) as u16;
+    let edge = (style.line as u16).min(rect.height / 8);
+    rect.inset(side.min(rect.width / 8), edge)
+}
+
+/// Draws the focus of the row or item in `rect` (see [`focus_rect`]):
+/// black, for content drawn white on it. Every list draws its focus this
+/// way, so it looks the same everywhere.
+pub fn draw_focus(canvas: &mut Canvas<'_>, style: &UiStyle, rect: Rect) {
+    fill_round(canvas, style, focus_rect(style, rect), Color::BLACK);
+}
+
+/// An empty screen or list, saying what would be here and how it gets
+/// filled: a large `icon` in gray, a short `title`, and `text` below it,
+/// together a little above the middle of `area`. The icon is left out
+/// where there is not room for all of it, the text shortened last.
+#[allow(clippy::too_many_arguments)]
+pub fn draw_empty(
+    canvas: &mut Canvas<'_>,
+    env: &Env<'_>,
+    style: &UiStyle,
+    area: Rect,
+    icon: &str,
+    title: &str,
+    text: &str,
+) {
+    let Some(font) = style.font(env) else {
+        return;
+    };
+    let margin = style.margin as f32 * 2.0;
+    let width = (f32::from(area.width) - 2.0 * margin).max(1.0);
+    let icon_size = style.title * 2.4;
+    let gap = style.gap as f32;
+    let title_line = font.line_metrics(style.title).line_height;
+    let line = font.line_metrics(style.text).line_height;
+    let mut lines = if text.is_empty() {
+        Vec::new()
+    } else {
+        font.wrap(style.text, text, width)
+    };
+    let room = f32::from(area.height);
+    let text_height = |n: usize| line * n as f32;
+    let words = if title.is_empty() { 0.0 } else { title_line };
+    let with_icon = icon_width(env, icon, icon_size) > 0.0
+        && icon_size + gap * 2.0 + words + gap + text_height(lines.len()) <= room;
+    let icon_room = if with_icon {
+        icon_size + gap * 2.0
+    } else {
+        0.0
+    };
+    // As many lines of the text as fit, the last saying there is more.
+    let fits = ((room - icon_room - words - gap) / line).max(0.0) as usize;
+    let cut = lines.len() > fits;
+    lines.truncate(fits);
+    let total =
+        icon_room + words + if lines.is_empty() { 0.0 } else { gap } + text_height(lines.len());
+    // A little above the middle, where the eye looks first.
+    let mut y = f32::from(area.y) + ((room - total) * 0.42).max(0.0);
+    let centre = |w: f32| f32::from(area.x) + (f32::from(area.width) - w) / 2.0;
+    if with_icon {
+        let w = icon_width(env, icon, icon_size);
+        let at = Rect::new(area.x, y as u16, area.width, icon_size as u16);
+        draw_icon(
+            canvas,
+            env,
+            icon,
+            icon_size,
+            centre(w),
+            at,
+            style.faint(120),
+        );
+        y += icon_room;
+    }
+    if !title.is_empty() {
+        let shown = fit(&font, style.title, title, width);
+        let at = Rect::new(area.x, y as u16, area.width, title_line as u16);
+        draw_label(
+            canvas,
+            &font,
+            style.title,
+            centre(font.measure(style.title, &shown)),
+            at,
+            &shown,
+            Color::BLACK,
+        );
+        y += title_line + gap;
+    }
+    if lines.is_empty() {
+        return;
+    }
+    let block = Rect::new(
+        area.x,
+        y as u16,
+        area.width,
+        text_height(lines.len()) as u16,
+    );
+    canvas.describe(Role::Text, text, block, false, None);
+    let ascent = font.line_metrics(style.text).ascent;
+    let count = lines.len();
+    for (n, range) in lines.into_iter().enumerate() {
+        let shown = if cut && n + 1 == count {
+            fit(
+                &font,
+                style.text,
+                &format!("{} …", text[range.start..].trim_end()),
+                width,
+            )
+        } else {
+            text[range].trim().to_string()
+        };
+        let x = centre(font.measure(style.text, &shown));
+        font.draw(
+            canvas,
+            style.text,
+            x,
+            (y + ascent) as i32,
+            &shown,
+            style.faint(70),
+        );
+        y += line;
+    }
+}
+
 /// Fills a rectangle with the style's corners.
 pub fn fill_round(canvas: &mut Canvas<'_>, style: &UiStyle, area: Rect, color: Color) {
     canvas.fill_round(area, style.corner, color);
@@ -1195,7 +1336,7 @@ impl ListView {
             let focused = self.active && self.shown && index == self.focus;
             canvas.describe(Role::Row, "", rect, focused, None);
             if focused {
-                fill_round(canvas, style, rect, Color::BLACK);
+                draw_focus(canvas, style, rect);
             } else if self.columns == 1 {
                 let separator = Rect::new(
                     rect.x + style.margin as u16,

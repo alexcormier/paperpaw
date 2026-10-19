@@ -107,7 +107,7 @@ impl Plugin for Profiles {
                 order,
             })?;
         }
-        r.add_icon(OPEN, Cow::Borrowed("user"))?;
+        r.add_icon(OPEN, Cow::Borrowed("stack-2"))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())
@@ -265,13 +265,33 @@ impl Screen for ListScreen {
                 }
             },
         );
+        if self.profiles.is_empty() {
+            // Below the row that saves one: what profiles are for.
+            let top = self.list.area.y + self.list.row as u16;
+            let area = Rect::new(
+                0,
+                top,
+                self.list.area.width,
+                self.status.y.saturating_sub(top),
+            );
+            ui::draw_empty(
+                canvas,
+                env,
+                &style,
+                area,
+                "stack-2",
+                env.i18n.tr("profiles.empty.title"),
+                env.i18n.tr("profiles.empty"),
+            );
+            return;
+        }
         canvas.fill(self.status, Color::WHITE);
         ui::draw_note_line(
             canvas,
             env,
             &style,
             self.status,
-            env.i18n.tr("profiles.hint"),
+            ui::tr_input(env, "profiles.hint"),
         );
     }
 

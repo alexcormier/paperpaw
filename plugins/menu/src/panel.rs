@@ -536,7 +536,7 @@ impl PanelScreen {
                     return;
                 };
                 if focused {
-                    ui::fill_round(canvas, &style, rect, Color::BLACK);
+                    ui::draw_focus(canvas, &style, rect);
                 }
                 let color = if focused { Color::WHITE } else { Color::BLACK };
                 let value = alloc::format!("{} ›", ui::setting_value(env, spec));

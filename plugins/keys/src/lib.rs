@@ -295,7 +295,7 @@ impl Plugin for Keys {
             item: OPEN,
             order: 75,
         })?;
-        r.add_icon(OPEN, Cow::Borrowed("keyboard"))?;
+        r.add_icon(OPEN, Cow::Borrowed("hand-finger"))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())
@@ -463,7 +463,7 @@ impl Screen for ListScreen {
                     }
                     Row::Place => {
                         let title = env.i18n.tr("keys.place");
-                        let note = env.i18n.tr("keys.place.help");
+                        let note = ui::tr_input(env, "keys.place.help");
                         ui::draw_noted_row(
                             canvas,
                             env,

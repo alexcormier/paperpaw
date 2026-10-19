@@ -330,11 +330,13 @@ impl Screen for WordsScreen {
             self.list.paging(len),
         );
         if len == 0 {
-            ui::draw_message(
+            ui::draw_empty(
                 canvas,
                 env,
                 &style,
                 self.list.area,
+                "vocabulary",
+                env.i18n.tr("vocabulary.empty.title"),
                 env.i18n.tr("vocabulary.empty"),
             );
             return;

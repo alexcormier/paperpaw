@@ -193,7 +193,7 @@ impl ListScreen {
         }
         match &self.sync.borrow().report {
             Some(report) => report_text(env, report),
-            None => env.i18n.tr("opds.hint").to_string(),
+            None => ui::tr_input(env, "opds.hint").to_string(),
         }
     }
 

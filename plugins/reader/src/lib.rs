@@ -603,10 +603,10 @@ impl Plugin for Reader {
             (actions::ANNOTATIONS, "bookmarks"),
             (actions::QUICK_SETTINGS, "typography"),
             (actions::TOGGLE_BOOKMARK, "bookmark"),
-            (actions::SELECT, "highlight"),
+            (actions::SELECT, "cursor-text"),
             (actions::READ_ALOUD, "volume"),
-            (actions::AUTO_TURN, "clock"),
-            (actions::SKIM_BOOK, "adjustments-horizontal"),
+            (actions::AUTO_TURN, "clock-play"),
+            (actions::SKIM_BOOK, "arrows-horizontal"),
         ] {
             r.add_icon(item, Cow::Borrowed(icon))?;
         }

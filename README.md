@@ -202,5 +202,5 @@ testing on real hardware. Please read [CONTRIBUTING.md](CONTRIBUTING.md).
 
 QuireInk is licensed under the [Apache License, Version 2.0](LICENSE).
 The bundled fonts, [Literata](https://github.com/googlefonts/literata) and
-[Atkinson Hyperlegible Next](https://github.com/googlefonts/atkinson-hyperlegible-next),
+[Source Sans 3](https://github.com/adobe-fonts/source-sans),
 are licensed under the [SIL Open Font License 1.1](plugins/fonts-default/fonts/).

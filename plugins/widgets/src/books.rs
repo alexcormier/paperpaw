@@ -113,7 +113,7 @@ impl Book {
             None => return None,
         };
         Some(Book {
-            title: details.title_or(path).to_string(),
+            title: details.shown_title(path).into_owned(),
             path: path.to_string(),
             author: details.author.clone().unwrap_or_default(),
             series: details.series.clone().unwrap_or_default(),

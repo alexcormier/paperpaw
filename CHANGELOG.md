@@ -6,6 +6,23 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- A new look, calmer and more modern, on every screen: rounded corners
+  by default, the focus a rounded bar within the margins, thinner lines,
+  dark rounded notices, and Source Sans 3 as the menus' font (warmer than
+  Atkinson Hyperlegible Next, which it replaces). Empty screens say what
+  belongs there and how to fill it, with an icon: the home screen before
+  the first book (*Start reading*), the library, vocabulary, notes,
+  rules, profiles, news, an empty folder, and Wi-Fi transfer without
+  Wi-Fi. Every setting has a help text; notes speak of buttons on devices
+  without touch; errors say what to do. Icons were chosen again, one
+  idea one icon. Books without a title show their file's name readably
+  ("Alice In Wonderland" for `alice-in-wonderland.txt`). The quick panel
+  shows a short date. SDK: `ui::draw_empty`, `ui::draw_focus`,
+  `ui::focus_rect`, `ui::tr_input` (a `<key>.buttons` text on devices
+  without touch), `Command::NoNetwork` (work waiting for a network fails
+  at once), `status_items::DATE_SHORT` with `time::short_date_text`,
+  `library::readable_name` and `Book::shown_title`.
+
 - Settings take much less memory: the kernel's and every first-party
   plugin's are kept in the program, also those with a unit, a section or
   an editor of their own. In the emulator's X4 profile the home screen

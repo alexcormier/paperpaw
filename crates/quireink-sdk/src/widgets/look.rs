@@ -287,7 +287,13 @@ pub fn draw_frame(canvas: &mut Canvas<'_>, env: &Env<'_>, widget: &str, area: Re
     let look = look(env, widget, area);
     match look.frame {
         Frame::None => {}
-        Frame::Line => ui::stroke_round(canvas, &style, area, style.line * 2, Color::BLACK),
+        Frame::Line => ui::stroke_round(
+            canvas,
+            &style,
+            area,
+            ui::button_border(&style),
+            Color::BLACK,
+        ),
         Frame::Card => canvas.fill_round_shaded(area, style.corner, Color::gray(225)),
         Frame::Dark => ui::fill_round(canvas, &style, area, Color::BLACK),
     }

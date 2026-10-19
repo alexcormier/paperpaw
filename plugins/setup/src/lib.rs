@@ -82,7 +82,7 @@ impl Plugin for Setup {
             item: OPEN,
             order: 97,
         })?;
-        r.add_icon(OPEN, Cow::Borrowed("adjustments"))?;
+        r.add_icon(OPEN, Cow::Borrowed("wand"))?;
         // The first start: the guide, once.
         r.on(events::STARTED, |env, _, out| {
             if env.storage.exists(&done_file()) {

@@ -2,8 +2,10 @@
 //!
 //! - **Literata** for reading (`fonts-default.literata`), designed for long
 //!   texts on screens, with bold, italic and bold italic faces.
-//! - **Atkinson Hyperlegible Next** for the UI (`fonts-default.atkinson`),
-//!   designed for maximum legibility.
+//! - **Source Sans 3** for the UI (`fonts-default.source-sans`), a
+//!   humanist sans serif: calm and clear, with a warmer, livelier hand
+//!   than a technical face. Shipped unchanged (its licence reserves the
+//!   name "Source" for the original).
 //! - **QuireInk Icons** (`fonts-default.icons`): the icons of the menus,
 //!   taken from Tabler Icons (MIT licence; see `tools/icons/subset.py`).
 //!
@@ -35,8 +37,12 @@ pub const LITERATA: Id = Id::new_static("fonts-default.literata");
 pub const LITERATA_BOLD: Id = Id::new_static("fonts-default.literata-bold");
 pub const LITERATA_ITALIC: Id = Id::new_static("fonts-default.literata-italic");
 pub const LITERATA_BOLD_ITALIC: Id = Id::new_static("fonts-default.literata-bold-italic");
-pub const ATKINSON: Id = Id::new_static("fonts-default.atkinson");
+pub const SOURCE_SANS: Id = Id::new_static("fonts-default.source-sans");
 pub const ICONS: Id = Id::new_static("fonts-default.icons");
+
+/// The weight of the UI font: a little above regular, so thin strokes
+/// hold on e-ink panels with one bit a pixel. Also in `build.rs`.
+pub const UI_WEIGHT: f32 = 430.0;
 
 /// The faces: id, role, font data and weight (for variable fonts).
 type Faces = [(Id, Id, &'static [u8], f32); 5];
@@ -45,7 +51,7 @@ type Faces = [(Id, Id, &'static [u8], f32); 5];
 mod outlines {
     const LITERATA: &[u8] = include_bytes!("../fonts/Literata.ttf");
     const LITERATA_ITALIC: &[u8] = include_bytes!("../fonts/Literata-Italic.ttf");
-    const ATKINSON: &[u8] = include_bytes!("../fonts/AtkinsonHyperlegibleNext.ttf");
+    const SOURCE_SANS: &[u8] = include_bytes!("../fonts/SourceSans3.ttf");
     pub const ICONS: &[u8] = include_bytes!("../fonts/QuireInkIcons.ttf");
 
     /// Bold faces are instances of the variable fonts.
@@ -66,7 +72,7 @@ mod outlines {
                 self::LITERATA_ITALIC,
                 700.0,
             ),
-            (ATKINSON, fonts::UI, self::ATKINSON, 400.0),
+            (SOURCE_SANS, fonts::UI, self::SOURCE_SANS, UI_WEIGHT),
         ]
     }
 }
@@ -103,7 +109,7 @@ mod packs {
                 pack!("literata-bold-italic"),
                 700.0,
             ),
-            (ATKINSON, fonts::UI, pack!("atkinson"), 400.0),
+            (SOURCE_SANS, fonts::UI, pack!("source-sans"), UI_WEIGHT),
         ]
     }
 }
@@ -126,7 +132,7 @@ fn manifest() -> Manifest {
     Manifest {
         id: PLUGIN,
         name: Cow::Borrowed("Default fonts"),
-        description: Cow::Borrowed("Literata for reading and Atkinson Hyperlegible for menus."),
+        description: Cow::Borrowed("Literata for reading and Source Sans for menus."),
         version: Version::new(0, 1, 0),
         sdk: SDK_VERSION,
     }
@@ -140,7 +146,7 @@ fn register(r: &mut Registrar, faces: Faces, icons: &'static [u8]) -> Result<(),
                 message: Cow::Owned(alloc::format!("{id}: {e}")),
             })?;
         let family = if role == fonts::UI {
-            "Atkinson Hyperlegible"
+            "Source Sans 3"
         } else {
             "Literata"
         };

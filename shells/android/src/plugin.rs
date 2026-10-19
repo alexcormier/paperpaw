@@ -195,7 +195,7 @@ impl AndroidPlugin {
                 })?;
             }
         }
-        r.add_icon(FRONTLIGHT, Cow::Borrowed("sun"))?;
+        r.add_icon(FRONTLIGHT, Cow::Borrowed("bulb"))?;
         r.add_icon(WARMTH, Cow::Borrowed("temperature"))?;
         let app = self.app.clone();
         r.subscribe(

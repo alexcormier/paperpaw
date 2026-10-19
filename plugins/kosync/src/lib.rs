@@ -453,7 +453,7 @@ impl Plugin for Kosync {
             order: 28,
             page: None,
         })?;
-        r.add_icon(GROUP, Cow::Borrowed("refresh"))?;
+        r.add_icon(GROUP, Cow::Borrowed("devices"))?;
         r.add_settings(&SETTINGS)?;
         r.add_screen(ScreenSpec {
             id: ACCOUNT_SCREEN,

@@ -136,7 +136,7 @@ pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
             out.push(Command::OpenScreen(SCREEN, Params::new()));
         },
     ))?;
-    r.add_icon(OPEN, Cow::Borrowed("list"))?;
+    r.add_icon(OPEN, Cow::Borrowed("list-check"))?;
     r.add_widget(
         WidgetSpec::new(ID, "widgets.todo", |_| Box::new(TodoWidget::default()))
             .category(widgets::categories::PERSONAL),

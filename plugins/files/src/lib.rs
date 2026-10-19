@@ -217,7 +217,7 @@ impl Plugin for Files {
         // The menu's settings, with icons as its other rows.
         for (setting, icon) in [
             (Id::from(SORT), "sort-ascending"),
-            (VIEW.into(), "layout"),
+            (VIEW.into(), "layout-grid"),
             (ROOT.into(), "folder"),
         ] {
             r.add_icon(setting, Cow::Borrowed(icon))?;
@@ -747,11 +747,11 @@ fn draw_row(
             ui::draw_image(canvas, env.storage, cover, area);
         }
         (None, None) => {
-            let title = book.and_then(|b| b.title.as_deref()).unwrap_or(stem);
+            let title = &*shown_title(book, stem);
             draw_placeholder(canvas, env, style, thumb, title, &format, fg);
         }
     }
-    let title = book.and_then(|b| b.title.as_deref()).unwrap_or(stem);
+    let title = &*shown_title(book, stem);
     let progress = match book.and_then(|b| b.progress) {
         Some(100) => env.i18n.tr("files.finished").to_string(),
         Some(p) if p > 0 => format!("{p} %"),
@@ -828,7 +828,7 @@ fn draw_cell(
     }
     let name = entry.name.as_str();
     let (stem, extension) = name.rsplit_once('.').unwrap_or((name, ""));
-    let title = book.and_then(|b| b.title.as_deref()).unwrap_or(stem);
+    let title = &*shown_title(book, stem);
     match (small, book.and_then(|b| b.cover.as_ref())) {
         // On the line its title starts, at the bottom of its place.
         (Some(small), _) => {
@@ -896,7 +896,7 @@ fn draw_placeholder(
     format: &str,
     color: Color,
 ) {
-    canvas.stroke(area, style.line.max(2), color);
+    ui::stroke_round(canvas, style, area, ui::button_border(style), color);
     let Some(font) = style.font(env) else {
         return;
     };
@@ -907,10 +907,15 @@ fn draw_placeholder(
         .chars()
         .find(|c| c.is_alphanumeric())
         .map(|c| c.to_uppercase().collect::<String>());
-    let size = style.title * 1.3;
     let (upper, lower) = (area.height * 3 / 5, area.height * 2 / 5);
+    // As large as titles and a bit, or as fits in the upper part.
+    let mut size = style.title * 1.3;
+    let height = font.line_metrics(size).line_height;
+    if height > f32::from(upper) {
+        size *= f32::from(upper) / height;
+    }
     match initial {
-        Some(initial) if font.line_metrics(size).line_height < f32::from(upper) => {
+        Some(initial) if size >= style.text => {
             let top = Rect::new(area.x, area.y, area.width, upper);
             ui::draw_label(
                 canvas,
@@ -961,13 +966,11 @@ impl Screen for Browser {
         );
 
         if self.len == 0 {
-            let message = format!(
-                "{}\n{}",
-                env.i18n
-                    .format("files.empty", &[("dir", Arg::Str(&self.dir))]),
-                env.i18n.tr("files.hint")
-            );
-            ui::draw_message(canvas, env, &style, self.list.area, &message);
+            let text = env
+                .i18n
+                .format("files.empty", &[("dir", Arg::Str(&self.dir))]);
+            let title = env.i18n.tr("files.empty.title");
+            ui::draw_empty(canvas, env, &style, self.list.area, "books", title, &text);
             return;
         }
         let (first, page, thumbs) = (self.first, &self.page, &self.thumbs);
@@ -1146,6 +1149,14 @@ impl Screen for Browser {
             cx.request_redraw();
             cx.wake_at(env.now);
         }
+    }
+}
+
+/// A book's title, else its file's name made readable.
+fn shown_title<'a>(book: Option<&'a library::Book>, stem: &'a str) -> Cow<'a, str> {
+    match book.and_then(|b| b.title.as_deref()) {
+        Some(title) if !title.is_empty() => Cow::Borrowed(title),
+        _ => library::readable_name(stem),
     }
 }
 

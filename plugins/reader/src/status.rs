@@ -136,6 +136,16 @@ const fn list(
     .with_extra(extra)
 }
 
+/// A part of *Text and symbols*: its status items.
+const fn part(
+    id: Id,
+    title: &'static str,
+    default: &'static str,
+    extra: &'static SettingExtra,
+) -> SettingSpec {
+    list(id, title, default, extra).described("reader.status.part.help")
+}
+
 /// The text size and place of the lines, which lines show above and
 /// below the text (below: the items, the progress bar, nothing; above:
 /// none), what each part of *Text and symbols* shows (the chapter, the
@@ -157,22 +167,22 @@ static SETTINGS: [SettingSpec; 11] = [
         &BOTTOM_LINES_EXTRA,
     )
     .described("reader.status.lines.help"),
-    list(TOP_LEFT, "reader.status.top-left", "", &TOP_ITEMS),
-    list(TOP_CENTER, "reader.status.top-center", "", &TOP_ITEMS),
-    list(TOP_RIGHT, "reader.status.top-right", "", &TOP_ITEMS),
-    list(
+    part(TOP_LEFT, "reader.status.top-left", "", &TOP_ITEMS),
+    part(TOP_CENTER, "reader.status.top-center", "", &TOP_ITEMS),
+    part(TOP_RIGHT, "reader.status.top-right", "", &TOP_ITEMS),
+    part(
         BOTTOM_LEFT,
         "reader.status.bottom-left",
         "reader.status.aloud, reader.status.chapter",
         &BOTTOM_ITEMS,
     ),
-    list(
+    part(
         BOTTOM_CENTER,
         "reader.status.bottom-center",
         "core.status.clock",
         &BOTTOM_ITEMS,
     ),
-    list(
+    part(
         BOTTOM_RIGHT,
         "reader.status.bottom-right",
         "wifi.status, core.status.battery, reader.status.page",

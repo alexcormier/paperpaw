@@ -118,7 +118,7 @@ impl Plugin for Calibre {
             item: OPEN,
             order: 47,
         })?;
-        r.add_icon(OPEN, Cow::Borrowed("transfer"))?;
+        r.add_icon(OPEN, Cow::Borrowed("device-desktop"))?;
         r.add_settings(&SETTINGS)?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
@@ -261,8 +261,10 @@ impl CalibreScreen {
                 }
             }
             SocketNotice::Done { reason, .. } if self.state == State::Finding => {
-                let text = if reason == "no network" {
+                let text = if reason == "no network" && env.wifi.is_some() {
                     env.i18n.tr("calibre.no-network")
+                } else if reason == "no network" {
+                    env.i18n.tr("calibre.no-network.system")
                 } else {
                     env.i18n.tr("calibre.not-found")
                 };

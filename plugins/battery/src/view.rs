@@ -228,10 +228,18 @@ impl BatteryView {
             lines.extend(recent.into_iter().map(|s| session_line(env, s)));
         }
 
-        let footer = env.i18n.format(
-            "battery.log-file",
-            &[("path", Arg::Str(&format!("{dir}/{}", log::FILE)))],
-        );
+        // Where the log is, for those who look into files: developers.
+        let footer = if env
+            .settings
+            .read(&quireink_sdk::builtin::settings::DEVELOPER)
+        {
+            env.i18n.format(
+                "battery.log-file",
+                &[("path", Arg::Str(&format!("{dir}/{}", log::FILE)))],
+            )
+        } else {
+            String::new()
+        };
         Self {
             style,
             header,

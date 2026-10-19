@@ -294,11 +294,33 @@ impl Screen for RulesScreen {
                 }
             },
         );
+        if self.rules.is_empty() {
+            // Below the row that adds one: what rules are for.
+            let top = self.list.area.y + self.list.row as u16;
+            let area = Rect::new(
+                0,
+                top,
+                self.list.area.width,
+                self.status.y.saturating_sub(top),
+            );
+            ui::draw_empty(
+                canvas,
+                env,
+                &style,
+                area,
+                "automation",
+                env.i18n.tr("rules.empty.title"),
+                env.i18n.tr("rules.empty"),
+            );
+            if self.message.is_none() {
+                return;
+            }
+        }
         canvas.fill(self.status, Color::WHITE);
         let text = self
             .message
             .clone()
-            .unwrap_or_else(|| env.i18n.tr("rules.hint").to_string());
+            .unwrap_or_else(|| ui::tr_input(env, "rules.hint").to_string());
         ui::draw_note_line(canvas, env, &style, self.status, &text);
     }
 

@@ -175,7 +175,7 @@ impl BrowseScreen {
         let message = match status {
             200..=299 => return true,
             0 => env.i18n.format("opds.failed-host", &[("host", host)]),
-            401 | 403 => env.i18n.tr("opds.unauthorized").to_string(),
+            401 | 403 => quireink_sdk::ui::tr_input(&env, "opds.unauthorized").to_string(),
             status => env.i18n.format(
                 "opds.error",
                 &[("host", host), ("status", Arg::Int(i64::from(status)))],

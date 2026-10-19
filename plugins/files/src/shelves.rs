@@ -269,7 +269,7 @@ impl Screen for ShelfScreen {
                 None if self.shelf == Shelf::Series => env.i18n.tr("files.no-series").to_string(),
                 None if self.shelf == Shelf::Tags => env.i18n.tr("files.no-tags").to_string(),
                 _ if self.shelf == Shelf::Favourites => {
-                    env.i18n.tr("files.no-favourites").to_string()
+                    ui::tr_input(env, "files.no-favourites").to_string()
                 }
                 _ if self.shelf == Shelf::Search => env.i18n.tr("files.search.none").to_string(),
                 None => env.i18n.tr("files.no-books").to_string(),

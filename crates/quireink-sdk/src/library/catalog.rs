@@ -50,7 +50,7 @@ impl Record {
         Record {
             path: path.to_string(),
             author: book.author.clone().unwrap_or_default(),
-            title: book.title_or(path).to_string(),
+            title: book.shown_title(path).into_owned(),
             series: book.series.clone().unwrap_or_default(),
             number: book.series_index.clone().unwrap_or_default(),
             tags: book

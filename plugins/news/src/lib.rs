@@ -329,7 +329,8 @@ impl Plugin for News {
     }
 }
 
-/// The feeds: *Fetch the news* first, the feeds, then *Add a feed*.
+/// The feeds: *Fetch the news* first, the feeds, then *Add a feed*;
+/// before there is a feed only *Add a feed*, and what feeds are.
 struct FeedsScreen {
     style: UiStyle,
     header: ui::Header,
@@ -353,7 +354,16 @@ impl FeedsScreen {
     }
 
     fn len(&self) -> usize {
-        self.feeds.len() + 2
+        if self.feeds.is_empty() {
+            1
+        } else {
+            self.feeds.len() + 2
+        }
+    }
+
+    /// Whether `row` is *Add a feed*, the last.
+    fn is_add(&self, row: usize) -> bool {
+        row + 1 == self.len()
     }
 
     fn redraw(&self, cx: &mut Cx<'_, '_>) {
@@ -363,16 +373,16 @@ impl FeedsScreen {
 
     fn open(&mut self, row: usize, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        if row == 0 {
-            fetch_into(&env, 0, usize::MAX, cx);
-            return;
-        }
-        if row == self.feeds.len() + 1 {
+        if self.is_add(row) {
             cx.command(
                 ask::text(env.i18n.tr("news.address"), &ADDED)
                     .initial("https://")
                     .command(),
             );
+            return;
+        }
+        if row == 0 {
+            fetch_into(&env, 0, usize::MAX, cx);
             return;
         }
         let index = row - 1;
@@ -427,26 +437,41 @@ impl Screen for FeedsScreen {
             self.list.paging(len),
         );
         let feeds = &self.feeds;
-        let count = feeds.len();
         self.list
             .draw(canvas, &style, len, |canvas, row, rect, focused| {
-                let (title, value, note) = if row == 0 {
-                    let note = if count == 0 {
-                        env.i18n.tr("news.empty").to_string()
-                    } else {
-                        env.i18n
-                            .format("news.fetch.help", &[("folder", Arg::Str(FOLDER))])
-                    };
-                    (env.i18n.tr("news.fetch").to_string(), "", note)
-                } else if row == count + 1 {
+                let (title, value, note) = if row + 1 == len {
                     let note = env.i18n.tr("news.add.help").to_string();
                     (env.i18n.tr("news.add").to_string(), "›", note)
+                } else if row == 0 {
+                    let note = env
+                        .i18n
+                        .format("news.fetch.help", &[("folder", Arg::Str(FOLDER))]);
+                    (env.i18n.tr("news.fetch").to_string(), "", note)
                 } else {
                     let feed = &feeds[row - 1];
                     (feed.shown(), "", feed.url.clone())
                 };
                 ui::draw_noted_row(canvas, env, &style, rect, focused, &title, value, &note);
             });
+        if feeds.is_empty() {
+            let area = self.list.area;
+            let top = area.y + self.list.row as u16;
+            let below = Rect::new(
+                area.x,
+                top,
+                area.width,
+                area.bottom().saturating_sub(u32::from(top)) as u16,
+            );
+            ui::draw_empty(
+                canvas,
+                env,
+                &style,
+                below,
+                "rss",
+                env.i18n.tr("news.empty.title"),
+                env.i18n.tr("news.empty"),
+            );
+        }
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {

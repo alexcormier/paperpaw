@@ -329,7 +329,7 @@ impl Plugin for Rules {
             item: OPEN,
             order: 230,
         })?;
-        r.add_icon(OPEN, Cow::Borrowed("clock"))?;
+        r.add_icon(OPEN, Cow::Borrowed("automation"))?;
         let reading: Reading = Rc::new(Cell::new(false));
         let book = reading.clone();
         r.on(events::STARTED, move |env, _, out| {

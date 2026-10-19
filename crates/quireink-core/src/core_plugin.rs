@@ -306,7 +306,7 @@ fn register_library(r: &mut Registrar) -> Result<(), RegisterError> {
         item: actions::CLEAN_UP,
         order: 98,
     })?;
-    r.add_icon(actions::CLEAN_UP, Cow::Borrowed("trash"))?;
+    r.add_icon(actions::CLEAN_UP, Cow::Borrowed("eraser"))?;
     Ok(())
 }
 
@@ -409,8 +409,11 @@ fn register_menus(r: &mut Registrar) -> Result<(), RegisterError> {
             order,
         })?;
     }
-    r.add_icon(actions::QUICK_PANEL, Cow::Borrowed("adjustments"))?;
-    r.add_icon(actions::REFRESH_SCREEN, Cow::Borrowed("refresh"))?;
+    r.add_icon(
+        actions::QUICK_PANEL,
+        Cow::Borrowed("adjustments-horizontal"),
+    )?;
+    r.add_icon(actions::REFRESH_SCREEN, Cow::Borrowed("sparkles"))?;
 
     // The settings' main page: reading, the device, customising.
     for (id, title, order) in [
@@ -440,10 +443,15 @@ fn register_menus(r: &mut Registrar) -> Result<(), RegisterError> {
     for (id, title, order, icon) in [
         (groups::READING, "core.group.reading", 10, "book"),
         (groups::LIBRARY, "core.group.library", 20, "books"),
-        (groups::STATUS_LINES, "core.group.status", 15, "layout"),
+        (
+            groups::STATUS_LINES,
+            "core.group.status",
+            15,
+            "layout-bottombar",
+        ),
         (groups::MARKS, "core.group.marks", 17, "highlight"),
         (groups::DISPLAY, "core.group.display", 60, "contrast"),
-        (groups::CONTROLS, "core.group.controls", 70, "adjustments"),
+        (groups::CONTROLS, "core.group.controls", 70, "hand-finger"),
         (groups::SYSTEM, "core.group.system", 90, "device-tablet"),
         (groups::LOOK, "core.group.look", 210, "palette"),
         (groups::OTHER, "core.group.other", 100, "dots"),
@@ -579,7 +587,7 @@ static LOOK: [SettingSpec; 7] = [
         settings::UI_CORNERS.static_str(),
         "core.setting.ui-corners",
         &settings::CORNERS,
-        settings::CORNERS[0],
+        settings::CORNERS[1],
         groups::LOOK,
     )
     .described("core.setting.ui-corners.help"),
@@ -606,7 +614,7 @@ static LOOK: [SettingSpec; 7] = [
         "core.setting.ui-row",
         120,
         300,
-        180,
+        160,
         groups::LOOK,
     )
     .with_extra(&PERCENT_10)
@@ -875,14 +883,16 @@ static TIME: [SettingSpec; 4] = [
         &[CLOCK_24H, CLOCK_12H],
         CLOCK_24H,
         groups::SYSTEM,
-    ),
+    )
+    .described("core.setting.clock-format.help"),
     SettingSpec::fixed_choice(
         settings::WEEK_START.static_str(),
         "core.setting.week-start",
         &time::WEEK_STARTS,
         time::WEEK_STARTS[0],
         groups::SYSTEM,
-    ),
+    )
+    .described("core.setting.week-start.help"),
     SettingSpec::fixed_choice(
         settings::TIME_ZONE.static_str(),
         "core.setting.time-zone",
@@ -926,6 +936,11 @@ fn register_time_and_battery(r: &mut Registrar) -> Result<(), RegisterError> {
         id: status_items::DATE,
         title: Cow::Borrowed("core.status.date"),
         value: Box::new(|env, _| time::date_text(env).map(StatusValue::Text)),
+    })?;
+    r.add_status_item(StatusItemSpec {
+        id: status_items::DATE_SHORT,
+        title: Cow::Borrowed("core.status.date-short"),
+        value: Box::new(|env, _| time::short_date_text(env).map(StatusValue::Text)),
     })?;
     r.add_status_item(StatusItemSpec {
         id: status_items::BATTERY,

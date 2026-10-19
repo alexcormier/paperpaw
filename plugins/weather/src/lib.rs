@@ -92,14 +92,16 @@ static SETTINGS: [SettingSpec; 4] = [
         &TEMPERATURES,
         TEMPERATURES[0],
         GROUP,
-    ),
+    )
+    .described("weather.setting.temperature.help"),
     SettingSpec::fixed_choice(
         "weather.wind",
         "weather.setting.wind",
         &WINDS,
         WINDS[0],
         GROUP,
-    ),
+    )
+    .described("weather.setting.wind.help"),
     SettingSpec::fixed_choice(
         "weather.every",
         "weather.setting.every",

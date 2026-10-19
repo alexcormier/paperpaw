@@ -1,5 +1,6 @@
 screen menu.list
-Text "No book opened yet. Find one in the library."
+Text "Start reading"
+Text "Choose a book from your library."
 Row "Reading statistics" (focused)
 Row "Vocabulary"
 Row "Battery"

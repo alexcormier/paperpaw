@@ -12,7 +12,8 @@ const FONTS: &[(&str, &str, f32)] = &[
     ("literata-bold", "fonts/Literata.ttf", 700.0),
     ("literata-italic", "fonts/Literata-Italic.ttf", 400.0),
     ("literata-bold-italic", "fonts/Literata-Italic.ttf", 700.0),
-    ("atkinson", "fonts/AtkinsonHyperlegibleNext.ttf", 400.0),
+    // The UI font's weight is `UI_WEIGHT` in the plugin.
+    ("source-sans", "fonts/SourceSans3.ttf", 430.0),
 ];
 
 fn main() {

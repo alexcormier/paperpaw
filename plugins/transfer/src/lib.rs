@@ -20,7 +20,7 @@ mod web;
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::format;
-use alloc::string::{String, ToString};
+use alloc::string::String;
 use alloc::vec::Vec;
 
 use quireink_qr::QrCode;
@@ -85,7 +85,7 @@ impl Plugin for Transfer {
             item: OPEN,
             order: 46,
         })?;
-        r.add_icon(OPEN, Cow::Borrowed("wifi"))?;
+        r.add_icon(OPEN, Cow::Borrowed("transfer"))?;
         r.add_screen(ScreenSpec {
             id: PHONE_SCREEN,
             title: Cow::Borrowed("transfer.phone.title"),
@@ -107,6 +107,8 @@ enum State {
         qr: Option<QrCode>,
     },
     Failed(String),
+    /// Without a network: how to get one.
+    NoNetwork,
 }
 
 struct TransferScreen {
@@ -164,11 +166,11 @@ impl TransferScreen {
                 } else {
                     "transfer.failed"
                 };
-                self.state = State::Failed(if reason == "no network" {
-                    env.i18n.tr("transfer.no-network").to_string()
+                self.state = if reason == "no network" {
+                    State::NoNetwork
                 } else {
-                    env.i18n.format(key, &[("reason", Arg::Str(&reason))])
-                });
+                    State::Failed(env.i18n.format(key, &[("reason", Arg::Str(&reason))]))
+                };
                 self.redraw(cx);
             }
             ServerNotice::Request {
@@ -385,6 +387,24 @@ impl Screen for TransferScreen {
             }
             State::Failed(message) => {
                 return ui::draw_message(canvas, env, &style, area, message);
+            }
+            State::NoNetwork => {
+                // Where QuireInk runs Wi-Fi, its settings join a network;
+                // elsewhere the system's.
+                let text = if env.wifi.is_some() {
+                    "transfer.no-network"
+                } else {
+                    "transfer.no-network.system"
+                };
+                return ui::draw_empty(
+                    canvas,
+                    env,
+                    &style,
+                    area,
+                    "wifi-off",
+                    env.i18n.tr("transfer.no-network.title"),
+                    env.i18n.tr(text),
+                );
             }
             State::Serving { url, qr } => (url, qr),
         };

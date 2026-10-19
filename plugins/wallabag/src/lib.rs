@@ -493,7 +493,7 @@ impl Plugin for Wallabag {
             item: OPEN,
             order: 48,
         })?;
-        r.add_icon(OPEN, Cow::Borrowed("bookmarks"))?;
+        r.add_icon(OPEN, Cow::Borrowed("article"))?;
         r.add_icon(FETCH, Cow::Borrowed("refresh"))?;
         type Step = fn(&mut Fetch, &Env<'_>, &HttpReply, &mut Vec<Command>);
         let steps: [(Event<HttpReply>, Step); 4] = [

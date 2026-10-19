@@ -17,7 +17,6 @@ extern crate alloc;
 
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
-use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
@@ -28,7 +27,7 @@ use quireink_sdk::replies::Typed;
 use quireink_sdk::ui::choice::{self, Choice};
 use quireink_sdk::ui::{self, ListChange, ListView, UiStyle};
 use quireink_sdk::{
-    ActionSpec, Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
+    ActionSpec, Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
     MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen,
     ScreenSpec, SettingSpec, Version,
 };
@@ -452,15 +451,18 @@ impl Screen for Browser {
         self.header
             .draw(canvas, env, &style, &title, None, self.list.paging(len));
         if len == 0 {
-            ui::draw_message(
+            ui::draw_empty(
                 canvas,
                 env,
                 &style,
                 self.list.area,
+                "folder-open",
+                "",
                 env.i18n.tr("file-manager.empty"),
             );
         }
         let decimal = env.i18n.tr("file-manager.decimal");
+        let room = ui::icon_room(env, &style, true);
         let entries = &self.entries;
         let active = self.focus == Focus::List;
         self.list.active = active;
@@ -472,12 +474,12 @@ impl Screen for Browser {
                 } else {
                     ops::size(entry.size, decimal)
                 };
-                let name = if entry.is_dir {
-                    format!("{}/", entry.name)
-                } else {
-                    entry.name.clone()
-                };
-                ui::draw_value_row(canvas, env, &style, rect, focused, &name, &value);
+                // Folders with a folder before their name, files with a
+                // page: told apart at a glance.
+                let ink = if focused { Color::WHITE } else { Color::BLACK };
+                let icon = if entry.is_dir { "folder" } else { "file" };
+                let rest = ui::draw_row_icon(canvas, env, &style, rect, room, Some(icon), ink);
+                ui::draw_value_row(canvas, env, &style, rest, focused, &entry.name, &value);
             });
         // The message line above the bar.
         if let (Some(message), Some(font)) = (&self.message, style.font(env)) {

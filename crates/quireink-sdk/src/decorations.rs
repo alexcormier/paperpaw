@@ -438,8 +438,13 @@ pub fn add_role(
             SettingValue::Bool(default.struck),
         ),
     ];
-    for spec in specs {
-        r.add_setting(spec.group(groups::MARKS).section(title.clone()))?;
+    for (spec, aspect) in specs.into_iter().zip(ASPECTS) {
+        let help = format!("core.mark.{aspect}.help");
+        r.add_setting(
+            spec.group(groups::MARKS)
+                .section(title.clone())
+                .description(help),
+        )?;
     }
     Ok(())
 }
@@ -465,7 +470,8 @@ pub const fn fixed_role(
             tone_value(default.background, NONE),
             groups::MARKS,
         )
-        .with_extra(section),
+        .with_extra(section)
+        .described("core.mark.background.help"),
         choice(
             ids[1],
             "core.mark.ink",
@@ -473,7 +479,8 @@ pub const fn fixed_role(
             tone_value(default.ink, AS_IS),
             groups::MARKS,
         )
-        .with_extra(section),
+        .with_extra(section)
+        .described("core.mark.ink.help"),
         choice(
             ids[2],
             "core.mark.line",
@@ -481,7 +488,8 @@ pub const fn fixed_role(
             line_value(default.line),
             groups::MARKS,
         )
-        .with_extra(section),
+        .with_extra(section)
+        .described("core.mark.line.help"),
         choice(
             ids[3],
             "core.mark.line-tone",
@@ -489,7 +497,8 @@ pub const fn fixed_role(
             tone_value(default.line_tone, AS_IS),
             groups::MARKS,
         )
-        .with_extra(section),
+        .with_extra(section)
+        .described("core.mark.line-tone.help"),
         SettingSpec::fixed_number(
             ids[4],
             "core.mark.thickness",
@@ -498,11 +507,14 @@ pub const fn fixed_role(
             default_thickness(default),
             groups::MARKS,
         )
-        .with_extra(thickness),
+        .with_extra(thickness)
+        .described("core.mark.thickness.help"),
         SettingSpec::fixed_switch(ids[5], "core.mark.frame", default.frame, groups::MARKS)
-            .with_extra(section),
+            .with_extra(section)
+            .described("core.mark.frame.help"),
         SettingSpec::fixed_switch(ids[6], "core.mark.struck", default.struck, groups::MARKS)
-            .with_extra(section),
+            .with_extra(section)
+            .described("core.mark.struck.help"),
     ]
 }
 

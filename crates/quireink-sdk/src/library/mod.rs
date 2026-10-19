@@ -21,6 +21,7 @@
 pub mod catalog;
 pub mod listing;
 
+use alloc::borrow::Cow;
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -95,6 +96,47 @@ impl Book {
             }
         }
     }
+
+    /// The title to show: the book's own, else its file's name made
+    /// readable ([`readable_name`]), e.g. "Alice In Wonderland" for
+    /// `alice-in-wonderland.txt`.
+    pub fn shown_title<'a>(&'a self, path: &'a str) -> Cow<'a, str> {
+        match &self.title {
+            Some(title) if !title.is_empty() => Cow::Borrowed(title),
+            _ => readable_name(self.title_or(path)),
+        }
+    }
+}
+
+/// A file's name as a title: a name written as one word joined by `-`,
+/// `_` or `.` and in small letters only (`alice-in-wonderland`) gets
+/// spaces and capitals (`Alice In Wonderland`); any other is kept as it
+/// is, since its writer chose it.
+pub fn readable_name(stem: &str) -> Cow<'_, str> {
+    let joined = |c: char| matches!(c, '-' | '_' | '.');
+    let slug = stem.contains(joined)
+        && !stem.contains(' ')
+        && !stem.chars().any(char::is_uppercase)
+        && stem.chars().any(char::is_alphabetic);
+    if !slug {
+        return Cow::Borrowed(stem);
+    }
+    let mut out = String::with_capacity(stem.len());
+    let mut start = true;
+    for c in stem.chars() {
+        if joined(c) {
+            if !out.ends_with(' ') && !out.is_empty() {
+                out.push(' ');
+            }
+            start = true;
+        } else if start {
+            out.extend(c.to_uppercase());
+            start = false;
+        } else {
+            out.push(c);
+        }
+    }
+    Cow::Owned(out.trim_end().into())
 }
 
 /// The key that names what is kept for the book at `path`: 16
@@ -829,6 +871,21 @@ books/b.txt",
         assert_eq!(favourites(&storage), ["b.epub"]);
         moved(&storage, "b.epub", "c.epub");
         assert_eq!(favourites(&storage), ["c.epub"]);
+    }
+
+    #[test]
+    fn file_names_are_made_readable() {
+        assert_eq!(readable_name("alice-in-wonderland"), "Alice In Wonderland");
+        assert_eq!(readable_name("die_verwandlung"), "Die Verwandlung");
+        assert_eq!(readable_name("Alice in Wonderland"), "Alice in Wonderland");
+        assert_eq!(readable_name("McCarthy-The-Road"), "McCarthy-The-Road");
+        assert_eq!(readable_name("2024-10-01"), "2024-10-01");
+        assert_eq!(readable_name("plain"), "plain");
+        let book = Book::default();
+        assert_eq!(
+            book.shown_title("books/die-verwandlung.txt"),
+            "Die Verwandlung"
+        );
     }
 
     #[test]

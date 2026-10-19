@@ -124,7 +124,7 @@ impl Rows {
                 canvas.describe(crate::semantics::Role::Row, "", rect, focused, None);
             }
             if focused {
-                crate::ui::fill_round(canvas, style, rect, Color::BLACK);
+                crate::ui::draw_focus(canvas, style, rect);
             } else if !self.is_heading(index)
                 && visible
                     .get(n + 1)

@@ -8,7 +8,7 @@ Bundled fonts (plugins/fonts-default/fonts) are licensed under the SIL Open Font
 
 - Literata, Copyright 2017 The Literata Project Authors (https://github.com/googlefonts/literata)
 
-- Atkinson Hyperlegible Next, Copyright 2020-2024 The Atkinson Hyperlegible Next Project Authors (https://github.com/googlefonts/atkinson-hyperlegible-next)
+- Source Sans 3, Copyright 2010-2020 Adobe (http://www.adobe.com/), with Reserved Font Name 'Source' (https://github.com/adobe-fonts/source-sans), bundled unmodified
 
 The icon font (plugins/fonts-default/fonts/QuireInkIcons.ttf) is a subset of Tabler Icons, Copyright 2020-2025 Paweł Kuna (https://tabler.io/icons), licensed under the MIT License (fonts/TablerIcons-MIT.txt).
 
@@ -19,8 +19,6 @@ Bundled hyphenation patterns (plugins/hyphenation/patterns) come from the hyph-u
 - American English, Copyright (C) 1990, 2004, 2005 Gerard D.C. Kuiken, under an all-permissive license.
 
 Their notices are in plugins/hyphenation/patterns/README.md.
-
-The Xteink X4's waveform for four grays (crates/quireink-x4/src/display.rs, GRAY_LUT) comes from the OpenX4 E-Paper Community SDK (https://github.com/open-x4-epaper/community-sdk), as the FreeInk SDK (https://github.com/Free-Ink/freeink-sdk) records it, both licensed under the MIT License; original e-paper driver authorship is credited to CidVonHighwind.
 
 ## QuireInk: Apache License 2.0
 
@@ -128,11 +126,13 @@ TERMINATION This license becomes null and void if any of the above conditions ar
 
 DISCLAIMER THE FONT SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO ANY WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT OF COPYRIGHT, PATENT, TRADEMARK, OR OTHER RIGHT. IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, INCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM OTHER DEALINGS IN THE FONT SOFTWARE.
 
-## Atkinson Hyperlegible Next: SIL Open Font License 1.1
+## Source Sans 3: SIL Open Font License 1.1
 
-Copyright 2020-2024 The Atkinson Hyperlegible Next Project Authors (https://github.com/googlefonts/atkinson-hyperlegible-next)
+Copyright 2010-2020 Adobe (http://www.adobe.com/), with Reserved Font Name 'Source'. All Rights Reserved. Source is a trademark of Adobe in the United States and/or other countries.
 
-This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is copied below, and is also available with a FAQ at: https://openfontlicense.org
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+
+This license is copied below, and is also available with a FAQ at: http://scripts.sil.org/OFL
 
 ----------------------------------------------------------- SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007 -----------------------------------------------------------
 

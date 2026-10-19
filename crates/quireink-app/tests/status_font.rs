@@ -78,7 +78,7 @@ fn the_status_lines_follow_their_setting() {
     assert!(families.iter().all(|f| choices.contains(f)), "{families:?}");
     let ui_family = families
         .iter()
-        .find(|f| f.contains("Atkinson"))
+        .find(|f| f.contains("Source Sans"))
         .unwrap()
         .to_string();
     let _ = kernel

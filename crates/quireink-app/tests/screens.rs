@@ -202,7 +202,7 @@ fn reading_and_its_menus() {
 #[test]
 fn home_shows_the_book_read_last() {
     let mut app = App::new();
-    assert!(app.described().contains("No book opened yet"));
+    assert!(app.described().contains("Start reading"));
     app.open_book();
     app.run(actions::HOME);
     let shown = app.described();

@@ -1,6 +1,6 @@
 [package]
 name = "quireink-plugin-fonts-default"
-description = "QuireInk default fonts: Literata for reading, Atkinson Hyperlegible Next for the UI"
+description = "QuireInk default fonts: Literata for reading, Source Sans 3 for the UI"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

@@ -110,7 +110,7 @@ mod tests {
             "NOTICE",
             "LICENSE",
             "plugins/fonts-default/fonts/Literata-OFL.txt",
-            "plugins/fonts-default/fonts/AtkinsonHyperlegibleNext-OFL.txt",
+            "plugins/fonts-default/fonts/SourceSans3-OFL.txt",
             "plugins/fonts-default/fonts/TablerIcons-MIT.txt",
         ] {
             let Ok(text) = std::fs::read_to_string(std::format!("{root}{file}")) else {

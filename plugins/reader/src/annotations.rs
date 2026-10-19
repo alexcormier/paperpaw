@@ -175,12 +175,14 @@ impl Screen for AnnotationsScreen {
             self.list.paging(len),
         );
         if len == 0 {
-            ui::draw_message(
+            ui::draw_empty(
                 canvas,
                 env,
                 &style,
                 self.list.area,
-                env.i18n.tr("reader.annotations.empty"),
+                "bookmarks",
+                env.i18n.tr("reader.annotations.empty.title"),
+                ui::tr_input(env, "reader.annotations.empty"),
             );
             return;
         }

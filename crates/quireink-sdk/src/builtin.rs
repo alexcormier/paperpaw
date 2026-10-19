@@ -580,6 +580,10 @@ pub mod status_items {
     pub const BATTERY_LOW: Id = Id::new_static("core.status.battery-low");
     /// Today in words ([`time::date_text`](crate::time::date_text)).
     pub const DATE: Id = Id::new_static("core.status.date");
+    /// Today in short words, e.g. "Thu 15 Oct"
+    /// ([`time::short_date_text`](crate::time::short_date_text)), for
+    /// narrow places.
+    pub const DATE_SHORT: Id = Id::new_static("core.status.date-short");
 }
 
 /// Standard screens.

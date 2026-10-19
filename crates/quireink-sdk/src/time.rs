@@ -378,19 +378,26 @@ pub fn clock_text(env: &Env<'_>) -> Option<String> {
 /// Today in words, e.g. "Thursday, 15 October", if the device knows the
 /// date.
 pub fn date_text(env: &Env<'_>) -> Option<String> {
+    dated(env, "core.date", "")
+}
+
+/// Today in short words, e.g. "Thu 15 Oct", if the device knows the date.
+pub fn short_date_text(env: &Env<'_>) -> Option<String> {
+    dated(env, "core.date.short", ".short")
+}
+
+/// Today as the translation `key` writes it, with the names of the
+/// weekday and the month (`core.weekday<kind>.<n>`, `core.month<kind>.<n>`).
+fn dated(env: &Env<'_>, key: &str, kind: &str) -> Option<String> {
     let now = local_time(env)?;
+    let weekday = format!("core.weekday{kind}.{}", now.weekday);
+    let month = format!("core.month{kind}.{}", now.month);
     Some(env.i18n.format(
-        "core.date",
+        key,
         &[
-            (
-                "weekday",
-                quireink_i18n::Arg::Str(env.i18n.tr(&format!("core.weekday.{}", now.weekday))),
-            ),
+            ("weekday", quireink_i18n::Arg::Str(env.i18n.tr(&weekday))),
             ("day", quireink_i18n::Arg::Int(i64::from(now.day))),
-            (
-                "month",
-                quireink_i18n::Arg::Str(env.i18n.tr(&format!("core.month.{}", now.month))),
-            ),
+            ("month", quireink_i18n::Arg::Str(env.i18n.tr(&month))),
         ],
     ))
 }

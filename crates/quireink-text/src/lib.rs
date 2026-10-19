@@ -176,8 +176,7 @@ pub fn build_pack(
 mod tests {
     use super::*;
 
-    const FONT: &[u8] =
-        include_bytes!("../../../plugins/fonts-default/fonts/AtkinsonHyperlegibleNext.ttf");
+    const FONT: &[u8] = include_bytes!("../../../plugins/fonts-default/fonts/SourceSans3.ttf");
 
     #[test]
     fn packs_render_exactly_like_runtime_rasterization() {
@@ -203,7 +202,8 @@ mod tests {
 
     #[test]
     fn rasterizes_visible_glyphs() {
-        let font = OutlineFont::new(FONT, &[]).unwrap();
+        // The font's default instance is its lightest; regular has stems.
+        let font = OutlineFont::new(FONT, &[("wght", 400.0)]).unwrap();
         let glyph = font.rasterize('H', 32.0);
         let r = glyph.as_ref();
         assert!(r.width > 10 && r.height > 15, "{r:?}");

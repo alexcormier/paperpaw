@@ -218,7 +218,7 @@ impl Plugin for Opds {
             item: OPEN,
             order: 45,
         })?;
-        r.add_icon(OPEN, Cow::Borrowed("cloud-download"))?;
+        r.add_icon(OPEN, Cow::Borrowed("book-download"))?;
         r.add_icon(SYNC, Cow::Borrowed("refresh"))?;
         r.on(events::STARTED, |env, _, out| {
             catalogs::move_passwords(env, out);

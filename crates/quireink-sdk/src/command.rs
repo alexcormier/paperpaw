@@ -263,6 +263,12 @@ pub enum Command {
     /// ([`Env::wifi`](crate::Env)); see [`wifi`](crate::wifi). Ignored
     /// elsewhere.
     Wifi(crate::wifi::WifiCommand),
+    /// No network is coming for now (none saved, none in reach): the
+    /// requests, servers and connections waiting for one fail at once, as
+    /// they would after [`NETWORK_WAIT_MS`](crate::wifi::NETWORK_WAIT_MS),
+    /// so their screens say so instead of waiting. The plugin that runs
+    /// Wi-Fi sends it.
+    NoNetwork,
     /// Installs a firmware update or restarts, where QuireInk is the
     /// device's firmware ([`Env::firmware`](crate::Env)); see
     /// [`firmware`](crate::firmware). Ignored elsewhere.

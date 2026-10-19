@@ -119,7 +119,7 @@ impl Plugin for Update {
             order: 98,
         })?;
         r.set_menu_need(OPEN, MenuNeed::Firmware)?;
-        r.add_icon(OPEN, Cow::Borrowed("download"))?;
+        r.add_icon(OPEN, Cow::Borrowed("circle-arrow-up"))?;
         r.on(events::STARTED, |env, _, out| {
             if let Some(firmware) = env.firmware {
                 started(env, firmware, out);

@@ -50,7 +50,7 @@ fn details(env: &Env<'_>, path: &str) -> Details {
     let name = files::name(path);
     let cached = library::book(storage, path);
     let mut details = Details {
-        title: name.rsplit_once('.').map_or(name, |(n, _)| n).to_string(),
+        title: library::readable_name(name.rsplit_once('.').map_or(name, |(n, _)| n)).into_owned(),
         ..Details::default()
     };
     let mut rows = Vec::new();

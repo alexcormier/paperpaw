@@ -68,6 +68,7 @@ const fn quick_part(id: Id, title: &'static str, default: &'static str) -> Setti
         quireink_sdk::builtin::groups::LOOK,
     )
     .with_extra(&QUICK_ITEMS)
+    .described("menu.quick.part.help")
 }
 
 /// How menus look, and the quick panel's head: what it shows, and how
@@ -84,7 +85,7 @@ static SETTINGS: [SettingSpec; 5] = [
     quick_part(
         panel::QUICK_LEFT,
         "menu.quick.left",
-        "core.status.clock, core.status.date",
+        "core.status.clock, core.status.date-short",
     ),
     quick_part(panel::QUICK_CENTER, "menu.quick.center", ""),
     quick_part(
@@ -435,7 +436,7 @@ impl Screen for MenuScreen {
             self.region.x,
             self.region.y,
             self.region.width,
-            (style.line * 2) as u16,
+            style.line.max(1) as u16,
         );
         canvas.fill(border, Color::BLACK);
         if style.font(env).is_none() {

@@ -58,7 +58,8 @@ static SETTINGS: [quireink_sdk::SettingSpec; 2] = [
         .described("stats.setting.sync.help"),
     quireink_sdk::SettingSpec::fixed_text(USER.static_str(), "stats.sync.user", "", crate::GROUP)
         .with_extra(&ON_PAGE)
-        .advanced(),
+        .advanced()
+        .described("stats.sync.user.help"),
 ];
 const USER_ENTERED: Event<Typed> = Event::new("stats.user-entered");
 const PASSWORD_ENTERED: Event<Typed> = Event::new("stats.password-entered");

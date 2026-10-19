@@ -241,7 +241,7 @@ impl HighlightWidget {
             |(path, (start, end, text, note))| {
                 let book = library::book(env.storage, &path).unwrap_or_default();
                 Quote {
-                    title: book.title_or(&path).to_string(),
+                    title: book.shown_title(&path).into_owned(),
                     author: book.author.clone().unwrap_or_default(),
                     path,
                     text,

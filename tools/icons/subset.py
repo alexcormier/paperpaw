@@ -30,10 +30,13 @@ TABLER = "3.35.0"
 ICONS = sorted({
     # Places
     "home", "books", "book", "book-2", "bookmark", "bookmarks", "list",
-    "list-details", "folder", "file", "file-text", "files",
+    "list-details", "folder", "folder-open", "file", "file-text", "files",
+    "wifi-off", "inbox",
     # Reading
     "search", "typography", "text-size", "letter-case", "adjustments",
-    "adjustments-horizontal", "layout", "columns", "highlight", "pencil",
+    "adjustments-horizontal", "layout", "layout-bottombar", "layout-grid",
+    "columns", "highlight", "cursor-text", "clock-play", "arrows-horizontal",
+    "pencil",
     "note", "hash", "arrow-bar-to-right", "language", "a-b", "link",
     "clipboard", "copy", "selector", "volume", "tag",
     # Light and display
@@ -43,10 +46,13 @@ ICONS = sorted({
     "chart-bar", "calendar", "clock", "wifi", "world", "cloud",
     "cloud-download", "download", "upload", "rss", "qrcode", "keyboard",
     "plug", "puzzle", "vocabulary", "transfer", "apps", "camera",
+    "book-download", "article", "devices", "device-desktop", "stack-2",
+    "automation", "circle-arrow-up", "list-check",
     # System
     "settings", "menu-2", "dots", "dots-vertical", "info-circle", "power",
     "battery", "device-tablet", "user", "lock", "palette", "bug",
-    "hourglass", "hand-click",
+    "hourglass", "hand-click", "hand-finger", "wand", "key", "eraser",
+    "sparkles", "bulb",
     # Controls
     "chevron-left", "chevron-right", "chevron-up", "chevron-down",
     "arrow-left", "arrow-right", "arrow-up", "arrow-down", "x", "check", "plus",

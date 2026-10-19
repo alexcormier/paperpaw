@@ -70,7 +70,7 @@ impl Plugin for PluginManager {
             item: OPEN,
             order: 220,
         })?;
-        r.add_icon(OPEN, Cow::Borrowed("plug"))?;
+        r.add_icon(OPEN, Cow::Borrowed("puzzle"))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())
@@ -291,7 +291,7 @@ impl Screen for PluginList {
                 style.small,
                 style.margin as f32,
                 area,
-                env.i18n.tr(key),
+                ui::tr_input(env, key),
                 style.faint(60),
             );
         }

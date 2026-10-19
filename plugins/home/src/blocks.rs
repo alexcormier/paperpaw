@@ -460,7 +460,16 @@ fn draw_card(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, shown: Option<&
     let look = widgets::draw_frame(canvas, env, CONTINUE, area);
     let r = look.area;
     let Some(Book { book, cover }) = shown else {
-        widgets::draw_message(canvas, env, &look, env.i18n.tr("home.nothing-read"));
+        // Nothing read yet: where the books are (a tap opens the library).
+        ui::draw_empty(
+            canvas,
+            env,
+            &style,
+            r,
+            "books",
+            env.i18n.tr("home.start.title"),
+            env.i18n.tr("home.start.text"),
+        );
         return;
     };
     // The cover on the left, where there is one.

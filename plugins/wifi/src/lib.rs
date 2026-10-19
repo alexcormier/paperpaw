@@ -222,7 +222,9 @@ impl Plugin for Wifi {
             }
             let known = wifi::known(env.secrets);
             if known.is_empty() {
+                // Nothing to join: what waits says so now.
                 out.push(Command::Notify(env.i18n.tr("wifi.no-saved").into()));
+                out.push(Command::NoNetwork);
             }
             wifi_commands(out, p.borrow_mut().wanted(&wifi.state, &known));
         })?;
@@ -273,6 +275,7 @@ impl Plugin for Wifi {
                     policy.goal = Goal::Nothing;
                     if wifi.wanted {
                         out.push(Command::Notify(env.i18n.tr("wifi.none-in-reach").into()));
+                        out.push(Command::NoNetwork);
                     }
                     schedule_retry(env, &policy, out);
                 }

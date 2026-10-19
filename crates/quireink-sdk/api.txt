@@ -392,6 +392,7 @@ pub const quireink_sdk::builtin::status_items::BATTERY: quireink_sdk::Id
 pub const quireink_sdk::builtin::status_items::BATTERY_LOW: quireink_sdk::Id
 pub const quireink_sdk::builtin::status_items::CLOCK: quireink_sdk::Id
 pub const quireink_sdk::builtin::status_items::DATE: quireink_sdk::Id
+pub const quireink_sdk::builtin::status_items::DATE_SHORT: quireink_sdk::Id
 pub const quireink_sdk::builtin::CONFIG_FILE: &str
 pub const quireink_sdk::builtin::CORE_PLUGIN: quireink_sdk::Id
 pub const quireink_sdk::builtin::GLOBAL_KEYMAP_LAYER: &str
@@ -1014,6 +1015,7 @@ pub quireink_sdk::library::Book::tags: alloc::vec::Vec<alloc::string::String>
 pub quireink_sdk::library::Book::title: core::option::Option<alloc::string::String>
 impl quireink_sdk::library::Book
 pub fn quireink_sdk::library::Book::field(&self, &str) -> core::option::Option<&str>
+pub fn quireink_sdk::library::Book::shown_title<'a>(&'a self, &'a str) -> alloc::borrow::Cow<'a, str>
 pub fn quireink_sdk::library::Book::title_or<'a>(&'a self, &'a str) -> &'a str
 pub struct quireink_sdk::library::BookData
 pub quireink_sdk::library::BookData::folder: alloc::borrow::Cow<'static, str>
@@ -1044,6 +1046,7 @@ pub fn quireink_sdk::library::move_data(&dyn quireink_platform::storage::Storage
 pub fn quireink_sdk::library::moved(&dyn quireink_platform::storage::Storage, &str, &str)
 pub fn quireink_sdk::library::opened_books(&dyn quireink_platform::storage::Storage) -> alloc::vec::Vec<alloc::string::String>
 pub fn quireink_sdk::library::provide(&dyn quireink_platform::storage::Storage, &str, quireink_sdk::library::Provided)
+pub fn quireink_sdk::library::readable_name(&str) -> alloc::borrow::Cow<'_, str>
 pub fn quireink_sdk::library::record(&quireink_sdk::Env<'_>, &quireink_sdk::builtin::events::Reading, bool)
 pub fn quireink_sdk::library::remove_data(&dyn quireink_platform::storage::Storage, &[quireink_sdk::library::BookData], &str)
 pub fn quireink_sdk::library::removed(&dyn quireink_platform::storage::Storage, &str)
@@ -1352,6 +1355,7 @@ pub fn quireink_sdk::time::date_text(&quireink_sdk::Env<'_>) -> core::option::Op
 pub fn quireink_sdk::time::local_seconds(&quireink_sdk::Env<'_>, i64) -> i64
 pub fn quireink_sdk::time::local_time(&quireink_sdk::Env<'_>) -> core::option::Option<quireink_sdk::time::LocalTime>
 pub fn quireink_sdk::time::next_minute(&quireink_sdk::Env<'_>) -> core::option::Option<quireink_platform::input::Instant>
+pub fn quireink_sdk::time::short_date_text(&quireink_sdk::Env<'_>) -> core::option::Option<alloc::string::String>
 pub fn quireink_sdk::time::unix_seconds(&quireink_sdk::Env<'_>) -> core::option::Option<i64>
 pub fn quireink_sdk::time::week_start(&quireink_sdk::Env<'_>) -> u8
 pub mod quireink_sdk::ui
@@ -1526,6 +1530,8 @@ pub fn quireink_sdk::ui::button_hints_height(&quireink_sdk::Env<'_>) -> u16
 pub fn quireink_sdk::ui::draw_button(&mut quireink_graphics::canvas::Canvas<'_>, &quireink_sdk::Env<'_>, &quireink_sdk::ui::UiStyle, quireink_platform::geometry::Rect, &str, bool, bool)
 pub fn quireink_sdk::ui::draw_button_hints(&mut quireink_graphics::canvas::Canvas<'_>, &quireink_sdk::Env<'_>, quireink_platform::geometry::Rect, &[quireink_sdk::Hint], &[bool], core::option::Option<usize>)
 pub fn quireink_sdk::ui::draw_chevron(&mut quireink_graphics::canvas::Canvas<'_>, &quireink_sdk::ui::UiStyle, i32, i32, bool, quireink_platform::pixel::Color)
+pub fn quireink_sdk::ui::draw_empty(&mut quireink_graphics::canvas::Canvas<'_>, &quireink_sdk::Env<'_>, &quireink_sdk::ui::UiStyle, quireink_platform::geometry::Rect, &str, &str, &str)
+pub fn quireink_sdk::ui::draw_focus(&mut quireink_graphics::canvas::Canvas<'_>, &quireink_sdk::ui::UiStyle, quireink_platform::geometry::Rect)
 pub fn quireink_sdk::ui::draw_header(&mut quireink_graphics::canvas::Canvas<'_>, &quireink_sdk::Env<'_>, &quireink_sdk::ui::UiStyle, quireink_platform::geometry::Rect, &str, core::option::Option<&str>)
 pub fn quireink_sdk::ui::draw_heading(&mut quireink_graphics::canvas::Canvas<'_>, &quireink_sdk::Env<'_>, &quireink_sdk::ui::UiStyle, quireink_platform::geometry::Rect, &str)
 pub fn quireink_sdk::ui::draw_icon(&mut quireink_graphics::canvas::Canvas<'_>, &quireink_sdk::Env<'_>, &str, f32, f32, quireink_platform::geometry::Rect, quireink_platform::pixel::Color) -> f32
@@ -1547,6 +1553,7 @@ pub fn quireink_sdk::ui::fill_round(&mut quireink_graphics::canvas::Canvas<'_>, 
 pub fn quireink_sdk::ui::fit(&quireink_sdk::FontHandle<'_>, f32, &str, f32) -> alloc::string::String
 pub fn quireink_sdk::ui::fit_image(&quireink_document::ImageRef, u16, u16) -> (u16, u16)
 pub fn quireink_sdk::ui::fit_pair(&quireink_sdk::FontHandle<'_>, f32, &str, &str, f32, f32) -> (alloc::string::String, alloc::string::String, f32)
+pub fn quireink_sdk::ui::focus_rect(&quireink_sdk::ui::UiStyle, quireink_platform::geometry::Rect) -> quireink_platform::geometry::Rect
 pub fn quireink_sdk::ui::has_icons(&quireink_sdk::Env<'_>) -> bool
 pub fn quireink_sdk::ui::heading_height(&quireink_sdk::Env<'_>, &quireink_sdk::ui::UiStyle) -> u16
 pub fn quireink_sdk::ui::icon_room(&quireink_sdk::Env<'_>, &quireink_sdk::ui::UiStyle, bool) -> u16
@@ -1562,6 +1569,7 @@ pub fn quireink_sdk::ui::stepper(&quireink_sdk::Env<'_>, &quireink_sdk::ui::UiSt
 pub fn quireink_sdk::ui::stroke_round(&mut quireink_graphics::canvas::Canvas<'_>, &quireink_sdk::ui::UiStyle, quireink_platform::geometry::Rect, u32, quireink_platform::pixel::Color)
 pub fn quireink_sdk::ui::switch_rect(&quireink_sdk::ui::UiStyle, quireink_platform::geometry::Rect) -> quireink_platform::geometry::Rect
 pub fn quireink_sdk::ui::title_area(&quireink_sdk::ui::UiStyle, quireink_platform::geometry::Rect) -> quireink_platform::geometry::Rect
+pub fn quireink_sdk::ui::tr_input<'a>(&quireink_sdk::Env<'a>, &'a str) -> &'a str
 pub fn quireink_sdk::ui::two_options(&quireink_sdk::Env<'_>, &quireink_sdk::SettingSpec) -> bool
 pub mod quireink_sdk::usage
 pub struct quireink_sdk::usage::PluginUsage
@@ -1940,6 +1948,7 @@ pub quireink_sdk::Command::Disconnect(quireink_sdk::Id)
 pub quireink_sdk::Command::Emit(quireink_sdk::Id, quireink_sdk::Params)
 pub quireink_sdk::Command::Firmware(quireink_sdk::firmware::FirmwareCommand)
 pub quireink_sdk::Command::Http(quireink_sdk::HttpRequest)
+pub quireink_sdk::Command::NoNetwork
 pub quireink_sdk::Command::Notify(alloc::string::String)
 pub quireink_sdk::Command::OpenScreen(quireink_sdk::Id, quireink_sdk::Params)
 pub quireink_sdk::Command::OpenSlot(quireink_sdk::Id, quireink_sdk::Params)
