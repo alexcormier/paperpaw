@@ -39,6 +39,8 @@ impl Psram {
         header: &Header,
         words: &[u32],
     ) -> Result<u32, PluginProblem> {
+        #[cfg(feature = "remote")]
+        super::set_room(super::Room::Psram);
         let len = header.image_len as usize;
         let align = (header.align as usize).max(CACHE_LINE);
         let layout = Layout::from_size_align(len, align).map_err(|_| PluginProblem::Damaged)?;

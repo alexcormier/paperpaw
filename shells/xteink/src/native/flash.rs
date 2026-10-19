@@ -48,26 +48,49 @@ unsafe extern "C" {
 
 /// Places images in flash.
 pub struct Flash {
-    flash: FlashStorage<'static>,
-    /// Where they go, once the region is found and mapped; `None` if there
-    /// is none (no room, no free MMU entries, a bundle to install first).
-    layout: Option<Layout>,
+    flash: crate::ota::Flash,
+    /// Where they go, found and mapped for the first plugin (once safe
+    /// mode counts the start): `None` before, `Some(None)` if there is no
+    /// room (no free MMU entries, a bundle to install first).
+    layout: Option<Option<Layout>>,
     /// The index sector was erased at this start.
     erased: bool,
 }
 
 impl Flash {
-    /// The plugins' region behind the running firmware, mapped.
-    pub fn new(flash: esp_hal::peripherals::FLASH<'static>) -> Self {
-        let mut flash = FlashStorage::new(flash);
-        let layout = region(&mut flash).map(|(region, firmware)| {
-            let found = read_index(&mut flash, region.start);
-            Layout::new(region, firmware, &API as *const _ as u32, found)
-        });
+    /// Places images behind the running firmware, in `flash`.
+    pub fn new(flash: crate::ota::Flash) -> Self {
         Self {
             flash,
-            layout,
+            layout: None,
             erased: false,
+        }
+    }
+
+    /// The plugins' region, found and mapped, with what its index says.
+    fn layout(flash: &mut FlashStorage<'static>) -> Option<Layout> {
+        match region(flash) {
+            Ok((region, firmware)) => {
+                #[cfg(feature = "remote")]
+                super::set_room(super::Room::Flash {
+                    start: region.start,
+                    end: region.end,
+                    base: region.base,
+                });
+                let found = read_index(flash, region.start);
+                Some(Layout::new(
+                    region,
+                    firmware,
+                    &API as *const _ as u32,
+                    found,
+                ))
+            }
+            Err(why) => {
+                warn!("native: no room for code plugins: {why}");
+                #[cfg(feature = "remote")]
+                super::set_room(super::Room::None(why));
+                None
+            }
         }
     }
 
@@ -80,29 +103,45 @@ impl Flash {
         header: &Header,
         words: &[u32],
     ) -> Result<u32, PluginProblem> {
-        let layout = self.layout.as_mut().ok_or(PluginProblem::NoRoom)?;
+        let flash = &self.flash;
+        let layout = self
+            .layout
+            .get_or_insert_with(|| Self::layout(&mut flash.borrow_mut()))
+            .as_mut()
+            .ok_or(PluginProblem::NoRoom)?;
         let placement = layout.place(header).map_err(|_| PluginProblem::NoRoom)?;
         if placement.present {
             info!("native: {path} lies in flash at {:#x}", placement.at);
             return Ok(placement.base);
         }
-        // Written only once checked whole: a damaged file never gets into
-        // the index.
-        check(storage, path, header, words)?;
-        if placement.erase_index && !self.erased {
-            let start = layout.region().start;
-            self.flash
-                .erase(start, start + SECTOR)
-                .map_err(|_| PluginProblem::NoRoom)?;
-            self.erased = true;
-        }
-        let relocator = Relocator::new(header, words, placement.base, &API as *const _ as u32)
-            .map_err(super::problem)?;
+        // A sector at a time, for checking and for writing; written only
+        // once checked whole, so a damaged file never gets into the index.
         let mut piece = Vec::new();
         piece
             .try_reserve_exact(SECTOR as usize)
             .map_err(|_| PluginProblem::NoRoom)?;
         piece.resize(SECTOR as usize, 0);
+        check(storage, path, header, words, &mut piece)?;
+        if placement.erase_index && !self.erased {
+            let start = layout.region().start;
+            self.flash
+                .borrow_mut()
+                .erase(start, start + SECTOR)
+                .map_err(|e| written_not(path, e))?;
+            self.erased = true;
+        }
+        // Erased at once, to the end of its last 64 KiB block: what lies
+        // behind is free or written anew, and blocks erase faster than
+        // their sectors.
+        let end = (placement.at + header.image_len)
+            .next_multiple_of(PAGE)
+            .min(layout.region().end);
+        self.flash
+            .borrow_mut()
+            .erase(placement.at, end)
+            .map_err(|e| written_not(path, e))?;
+        let relocator = Relocator::new(header, words, placement.base, &API as *const _ as u32)
+            .map_err(super::problem)?;
         let mut done = 0;
         while done < header.image_len {
             crate::power::feed();
@@ -116,9 +155,9 @@ impl Flash {
             piece[len..words_len].fill(0xFF);
             let at = placement.at + done;
             self.flash
-                .erase(at, at + SECTOR)
-                .and_then(|()| self.flash.write_nor(at, &piece[..words_len]))
-                .map_err(|_| PluginProblem::NoRoom)?;
+                .borrow_mut()
+                .write_nor(at, &piece[..words_len])
+                .map_err(|e| written_not(path, e))?;
             done += len as u32;
         }
         // Nothing of what the region held before stays in the caches.
@@ -138,7 +177,7 @@ impl Flash {
 
     /// Writes the index, if what lies in the region changed.
     pub fn finish(&mut self) {
-        let Some(layout) = &self.layout else {
+        let Some(Some(layout)) = &self.layout else {
             return;
         };
         let Some(index) = layout.index() else {
@@ -147,10 +186,10 @@ impl Flash {
         let start = layout.region().start;
         let mut bytes = index.to_bytes();
         bytes.resize(bytes.len().next_multiple_of(4), 0xFF);
-        let written = self
-            .flash
+        let mut flash = self.flash.borrow_mut();
+        let written = flash
             .erase(start, start + SECTOR)
-            .and_then(|()| self.flash.write_nor(start, &bytes));
+            .and_then(|()| flash.write_nor(start, &bytes));
         match written {
             Ok(()) => info!(
                 "native: index of {} plugins written, {} KB of the region used",
@@ -162,15 +201,22 @@ impl Flash {
     }
 }
 
-/// Checks the file's digest, reading its image once.
+/// The flash could not be written: said, and taken for no room (the
+/// region cannot be used).
+fn written_not(path: &str, error: impl core::fmt::Debug) -> PluginProblem {
+    warn!("native: {path}: the flash: {error:?}");
+    PluginProblem::NoRoom
+}
+
+/// Checks the file's digest, reading its image once, a `buf` at a time.
 fn check(
     storage: &dyn Storage,
     path: &str,
     header: &Header,
     words: &[u32],
+    buf: &mut [u8],
 ) -> Result<(), PluginProblem> {
     let mut sha = header.digest();
-    let mut buf = [0u8; 512];
     let mut done = 0u32;
     while done < header.image_len {
         let len = (header.image_len - done).min(buf.len() as u32) as usize;
@@ -193,46 +239,39 @@ fn check(
 }
 
 /// The region behind the running firmware's image, mapped, and the
-/// firmware (the SHA-256 its image ends with).
-fn region(flash: &mut FlashStorage<'static>) -> Option<(Region, [u8; 32])> {
-    let mut table = [0u8; PARTITION_TABLE_MAX_LEN];
-    let running = partitions::read_partition_table(flash, &mut table)
-        .and_then(|pt| pt.booted_partition())
-        .ok()
-        .flatten()?;
-    let (offset, size) = (running.offset(), running.len());
-    let extent = ImageExtent::read(&mut |at, buf| flash.read(offset + at, buf).is_ok());
-    let Some(extent) = extent.filter(|e| e.sha256 && e.len < size) else {
-        warn!("native: the running image cannot be measured: no code plugins");
-        return None;
-    };
+/// firmware (the SHA-256 its image ends with); or why there is none.
+fn region(flash: &mut FlashStorage<'static>) -> Result<(Region, [u8; 32]), &'static str> {
+    let (offset, size) = running_partition(flash)?;
+    let extent = ImageExtent::read(&mut |at, buf| flash.read(offset + at, buf).is_ok())
+        .filter(|e| e.sha256 && e.len < size)
+        .ok_or("the running image cannot be measured")?;
     let mut firmware = [0u8; 32];
-    flash.read(offset + extent.len - 32, &mut firmware).ok()?;
+    flash
+        .read(offset + extent.len - 32, &mut firmware)
+        .map_err(|_| "the flash cannot be read")?;
     let start = offset + extent.len.next_multiple_of(SECTOR);
     let mut head = [0u8; 4];
-    flash.read(start, &mut head).ok()?;
+    flash
+        .read(start, &mut head)
+        .map_err(|_| "the flash cannot be read")?;
     if head == BUNDLE {
-        warn!(
-            "native: a bundle of plugins waits behind the firmware: no code plugins until it is installed"
-        );
-        return None;
+        return Err("a bundle of plugins waits to be installed");
     }
     let end = offset + size;
-    // As many pages as the region spans, from the end of the MMU's table.
+    // As many pages as the region spans, in the longest run of entries the
+    // MMU leaves free.
     let first_page = start / PAGE;
-    let pages = (end.div_ceil(PAGE) - first_page).min(free_entries_at_end());
+    let (entry, free) = free_entries();
+    let pages = (end.div_ceil(PAGE) - first_page).min(free);
     if pages == 0 {
-        warn!("native: no MMU entries free: no code plugins");
-        return None;
+        return Err("no MMU entries are free");
     }
-    let entry = ENTRIES - pages;
     let vaddr = LINK_BASE + entry * PAGE;
     // SAFETY: entries found free, mapped to the region only this module
     // writes.
     let set = unsafe { Cache_Dbus_MMU_Set(0, vaddr, first_page * PAGE, 64, pages, 0) };
     if set != 0 {
-        warn!("native: the MMU did not map the region ({set})");
-        return None;
+        return Err("the MMU did not map the region");
     }
     // SAFETY: ROM functions on the addresses just mapped.
     unsafe {
@@ -242,19 +281,62 @@ fn region(flash: &mut FlashStorage<'static>) -> Option<(Region, [u8; 32])> {
     let end = end.min((first_page + pages) * PAGE);
     let base = vaddr + (start - first_page * PAGE);
     info!(
-        "native: the region {start:#x}..{end:#x} ({} KB) mapped at {base:#x}, MMU entries {entry}..{ENTRIES}",
-        (end - start) / 1024
+        "native: the region {start:#x}..{end:#x} ({} KB) mapped at {base:#x}, MMU entries {entry}..{}",
+        (end - start) / 1024,
+        entry + pages
     );
-    Region::new(start, end, base).map(|region| (region, firmware))
+    let region = Region::new(start, end, base).ok_or("the region is too small")?;
+    Ok((region, firmware))
 }
 
-/// How many MMU entries at the end of the table map nothing.
-fn free_entries_at_end() -> u32 {
+/// The app partition this code runs from (its offset and size): the one
+/// holding the flash page the MMU maps this function's address to.
+fn running_partition(flash: &mut FlashStorage<'static>) -> Result<(u32, u32), &'static str> {
+    let here = running_partition as *const () as u32;
+    let entry = here
+        .checked_sub(LINK_BASE + CODE_OFFSET)
+        .ok_or("the firmware does not run from flash")?
+        / PAGE;
+    let page = MMU_TABLE::regs().entry(entry as usize).read();
+    if page.invalid().bit() {
+        return Err("the firmware's code is not mapped");
+    }
+    let paddr = u32::from(page.paddr().bits()) * PAGE;
+    let mut table = alloc::vec![0u8; PARTITION_TABLE_MAX_LEN];
+    let table = partitions::read_partition_table(flash, &mut table).map_err(|e| {
+        warn!("native: the partition table: {e:?}");
+        "the partition table cannot be read"
+    })?;
+    table
+        .iter()
+        .filter(|p| matches!(p.partition_type(), partitions::PartitionType::App(_)))
+        .map(|p| (p.offset(), p.len()))
+        .find(|&(offset, len)| (offset..offset + len).contains(&paddr))
+        .ok_or("no app partition holds the firmware's code")
+}
+
+/// The longest run of MMU entries that map nothing (the later of two as
+/// long): its first entry and its length. The firmware's own lie at the
+/// table's start; the bootloader may leave one of its own at the end.
+fn free_entries() -> (u32, u32) {
     let table = MMU_TABLE::regs();
-    (0..ENTRIES)
-        .rev()
-        .take_while(|&i| table.entry(i as usize).read().invalid().bit())
-        .count() as u32
+    let mut best = (0, 0);
+    let mut run = (0, 0);
+    for i in 0..ENTRIES {
+        if table.entry(i as usize).read().invalid().bit() {
+            run = if run.1 == 0 {
+                (i, 1)
+            } else {
+                (run.0, run.1 + 1)
+            };
+            if run.1 >= best.1 {
+                best = run;
+            }
+        } else {
+            run = (0, 0);
+        }
+    }
+    best
 }
 
 /// The index at the region's start, if one is there.

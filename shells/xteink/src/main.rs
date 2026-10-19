@@ -207,7 +207,11 @@ fn main() -> ! {
     }
     // Before anything else: an update on trial that failed is undone here
     // (a restart into the firmware before it).
-    let ota = ota::Ota::start(board.flash);
+    // One handle on the flash, for updates and native plugins.
+    let flash: ota::Flash = alloc::rc::Rc::new(core::cell::RefCell::new(
+        esp_bootloader_esp_idf::partitions::FlashStorage::new(board.flash),
+    ));
+    let ota = ota::Ota::start(flash.clone());
 
     let storage = card::mount(board.card);
     // For bug reports: on the card, and said over USB.
@@ -241,7 +245,7 @@ fn main() -> ! {
     if let Some(unix_ms) = board.clock_ms {
         clock::set(now(), unix_ms);
     }
-    let code = code_plugins(ota.as_ref());
+    let code = code_plugins(ota.as_ref(), &flash);
     let kernel = kernel(storage, ota.as_ref(), code);
     // Light sleeps while idle on battery, the deep one at the end.
     power::init(LowPower::new(board.low_power));
@@ -293,7 +297,7 @@ impl paperpaw_core::CodeLoader for NoCode {
 
 /// Whether code plugins are loaded at this start, after the key for safe
 /// mode was looked for and the failed starts counted.
-fn code_plugins(ota: Option<&ota::Ota>) -> CodePlugins {
+fn code_plugins(ota: Option<&ota::Ota>, flash: &ota::Flash) -> CodePlugins {
     if ota.is_some_and(ota::Ota::on_trial) {
         info!("native: an update on trial starts without code plugins");
         return CodePlugins::None;
@@ -306,11 +310,12 @@ fn code_plugins(ota: Option<&ota::Ota>) -> CodePlugins {
         return CodePlugins::SafeMode(safe_mode);
     }
     #[cfg(feature = "x4-pro")]
-    let place = native::Place::default();
-    // SAFETY: the loader uses the flash only while the kernel is built,
-    // before an update can be written (the main loop's).
+    let place = {
+        let _ = flash;
+        native::Place::default()
+    };
     #[cfg(feature = "x4")]
-    let place = native::Place::new(unsafe { esp_hal::peripherals::FLASH::steal() });
+    let place = native::Place::new(flash.clone());
     CodePlugins::Load(native::Loader::new(place))
 }
 

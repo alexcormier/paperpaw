@@ -45,10 +45,86 @@ struct Image {
     /// The instruction address of the image's first byte.
     code_base: u32,
     len: u32,
+    /// What loading it took: microseconds to place it and to make its
+    /// plugin, bytes of the heap and of its internal RAM.
+    took: Option<Took>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct Took {
+    place_us: u64,
+    make_us: u64,
+    heap: isize,
+    internal: isize,
 }
 
 /// Every image loaded, for naming the plugin a panic's call was in.
 static IMAGES: Mutex<RefCell<Vec<Image>>> = Mutex::new(RefCell::new(Vec::new()));
+
+/// Where images go, as found at the start (for [`describe`]).
+#[cfg(feature = "remote")]
+#[derive(Debug, Clone, Copy)]
+pub enum Room {
+    /// Not looked for yet: no code plugin was loaded.
+    Unknown,
+    /// PSRAM (the X4 Pro).
+    #[cfg(feature = "x4-pro")]
+    Psram,
+    /// Flash from `start` to `end`, mapped at `base` (the X4).
+    #[cfg(feature = "x4")]
+    Flash { start: u32, end: u32, base: u32 },
+    /// None, and why.
+    #[cfg(feature = "x4")]
+    None(&'static str),
+}
+
+#[cfg(feature = "remote")]
+static ROOM: Mutex<core::cell::Cell<Room>> = Mutex::new(core::cell::Cell::new(Room::Unknown));
+
+/// Notes where images go.
+#[cfg(feature = "remote")]
+fn set_room(room: Room) {
+    critical_section::with(|cs| ROOM.borrow(cs).set(room));
+}
+
+/// What there is to know of native plugins, a line each: the
+/// fingerprint, where images go, and each image loaded (for the remote
+/// control over USB).
+#[cfg(feature = "remote")]
+pub fn describe(line: &mut dyn FnMut(&str)) {
+    line(&alloc::format!("fingerprint {FINGERPRINT} {TOOLCHAIN}"));
+    let room = critical_section::with(|cs| ROOM.borrow(cs).get());
+    line(&match room {
+        Room::Unknown => String::from("room unknown"),
+        #[cfg(feature = "x4-pro")]
+        Room::Psram => String::from("room psram"),
+        #[cfg(feature = "x4")]
+        Room::Flash { start, end, base } => {
+            alloc::format!("room flash {start:#x}..{end:#x} at {base:#x}")
+        }
+        #[cfg(feature = "x4")]
+        Room::None(why) => alloc::format!("room none: {why}"),
+    });
+    critical_section::with(|cs| {
+        for image in IMAGES.borrow_ref(cs).iter() {
+            let took = image.took.map_or_else(String::new, |t| {
+                alloc::format!(
+                    ", placed in {} us, made in {} us, heap {:+} B, internal RAM {:+} B",
+                    t.place_us,
+                    t.make_us,
+                    t.heap,
+                    t.internal
+                )
+            });
+            line(&alloc::format!(
+                "image {} {} bytes, code at {:#x}{took}",
+                image.id,
+                image.len,
+                image.code_base
+            ));
+        }
+    });
+}
 
 /// The plugin whose code the instruction address `pc` lies in, and the
 /// offset into its file (the image begins after the header): with the
@@ -90,6 +166,7 @@ impl Loader {
         path: &str,
     ) -> Result<Box<dyn Plugin>, PluginProblem> {
         let heap = esp_alloc::HEAP.used();
+        let internal = internal_free();
         let started = crate::micros();
         let mut head = [0; HEADER_LEN];
         read_exact(storage, path, 0, &mut head).map_err(|_| PluginProblem::Damaged)?;
@@ -123,21 +200,28 @@ impl Loader {
                 id,
                 code_base: base + CODE_OFFSET,
                 len: header.image_len,
+                took: None,
             })
         });
         // SAFETY: a plugin of this firmware's compiler, target and SDK
         // (its fingerprint), placed as its file says.
         let plugin =
             unsafe { paperpaw_sdk::native::take((entry.make)()) }.ok_or(PluginProblem::Damaged)?;
-        let made = crate::micros();
+        let took = Took {
+            place_us: placed - started,
+            make_us: crate::micros() - placed,
+            heap: esp_alloc::HEAP.used() as isize - heap as isize,
+            internal: internal as isize - internal_free() as isize,
+        };
         info!(
-            "native: {path}: {} B at {base:#x}, {} words moved; placed in {} us, made in {} us; heap {:+} B",
-            header.image_len,
-            header.relocs,
-            placed - started,
-            made - placed,
-            esp_alloc::HEAP.used() as isize - heap as isize
+            "native: {path}: {} B at {base:#x}, {} words moved; placed in {} us, made in {} us; heap {:+} B, internal RAM {:+} B",
+            header.image_len, header.relocs, took.place_us, took.make_us, took.heap, took.internal
         );
+        critical_section::with(|cs| {
+            if let Some(image) = IMAGES.borrow_ref_mut(cs).last_mut() {
+                image.took = Some(took);
+            }
+        });
         Ok(plugin)
     }
 }
@@ -156,6 +240,11 @@ impl CodeLoader for Loader {
     fn finish(&mut self, _storage: &dyn Storage) {
         self.place.finish();
     }
+}
+
+/// The internal RAM free on the heap (the X4 Pro's PSRAM apart).
+fn internal_free() -> usize {
+    esp_alloc::HEAP.free_caps(esp_alloc::MemoryCapability::Internal.into())
 }
 
 /// What the plugin manager says for a file that is not right.
