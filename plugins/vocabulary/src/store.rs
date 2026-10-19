@@ -112,6 +112,44 @@ pub(crate) fn count(storage: &dyn Storage) -> usize {
     n
 }
 
+/// Books and languages told apart at most in a [`Summary`].
+const MOST_KINDS: usize = 32;
+
+/// The words at a glance: how many, the newest, from how many books and
+/// in how many languages (up to [`MOST_KINDS`] of each).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct Summary {
+    pub count: usize,
+    pub newest: Option<Word>,
+    pub books: usize,
+    pub languages: usize,
+}
+
+/// The words at a glance, read in one pass.
+pub(crate) fn summary(storage: &dyn Storage) -> Summary {
+    let mut summary = Summary::default();
+    let mut books: Vec<String> = Vec::new();
+    let mut languages: Vec<String> = Vec::new();
+    let mut newest = String::new();
+    each_line(storage, &file(), |l| {
+        let Some(word) = Word::parse(l) else {
+            return;
+        };
+        summary.count += 1;
+        for (seen, kind) in [(&mut books, &word.path), (&mut languages, &word.language)] {
+            if !kind.is_empty() && seen.len() < MOST_KINDS && !seen.contains(kind) {
+                seen.push(kind.clone());
+            }
+        }
+        newest.clear();
+        newest.push_str(l);
+    });
+    summary.newest = Word::parse(&newest);
+    summary.books = books.len();
+    summary.languages = languages.len();
+    summary
+}
+
 /// The words with numbers in `from..to` (0 the oldest).
 pub(crate) fn range(storage: &dyn Storage, from: usize, to: usize) -> Vec<(usize, Word)> {
     let mut words = Vec::new();
@@ -241,6 +279,25 @@ mod tests {
         assert!(export(&storage, "out.tsv"));
         let data = quireink_sdk::read_file(&storage, "out.tsv", 1024).unwrap();
         assert_eq!(data, b"Quire\tThe Quire is here.\tA\n");
+    }
+
+    #[test]
+    fn the_words_at_a_glance() {
+        let storage = MemoryStorage::new();
+        assert_eq!(summary(&storage), Summary::default());
+        add(&storage, &word("quire"));
+        add(
+            &storage,
+            &Word {
+                language: "de".to_string(),
+                path: "books/b.epub".to_string(),
+                ..word("Tinte")
+            },
+        );
+        add(&storage, &word("ink"));
+        let s = summary(&storage);
+        assert_eq!((s.count, s.books, s.languages), (3, 2, 2));
+        assert_eq!(s.newest.map(|w| w.word), Some("ink".to_string()));
     }
 
     #[test]

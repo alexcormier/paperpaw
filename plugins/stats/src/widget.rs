@@ -1,27 +1,47 @@
-//! The widget "Read today" for the home screen (or any screen showing
-//! widgets): today's reading time and pages, and the time this week; with
-//! a daily goal ([`GOAL`]), how far today is towards it and for how many
-//! days in a row it was reached.
+//! The statistics' widgets for the home screen (or any screen showing
+//! widgets), each in the shared look of widgets (its frame, size and
+//! alignment) with settings of its own for what it shows:
+//!
+//! - *Read today* (`today`): today's reading time and pages, the way to
+//!   the daily goal ([`GOAL`]) and the week or the streak;
+//! - *Reading per day* (`week`): the last days as bars;
+//! - *Daily goal* (`ring`): today's reading as a ring towards the goal;
+//! - *Reading calendar* (`calendar`): this month, or the last weeks as a
+//!   heat map, each day shaded by how long one read;
+//! - *Books this year* (`year`): the books read to the end this year,
+//!   towards a yearly goal;
+//! - *Reading streak* (`streak`): the days read in a row, the longest
+//!   streak and the last days as marks.
+//!
+//! They read the statistics when they are updated, never as they are
+//! drawn, and keep only the few numbers they show. Asked each minute (a
+//! new day changes them), they read again only when the day or the files
+//! of the statistics changed ([`Stamp`]).
+
+mod calendar;
+mod ring;
+mod streak;
+mod today;
+mod week;
+mod year;
 
 use alloc::borrow::Cow;
-use alloc::boxed::Box;
-use alloc::format;
-use alloc::string::String;
-use alloc::string::ToString;
 use alloc::vec::Vec;
 
-use quireink_sdk::ui::{self, UiStyle};
-use quireink_sdk::widgets::{self, Align, Widget, WidgetSpec, WidgetTarget};
+use quireink_sdk::round::point_at;
+use quireink_sdk::ui::UiStyle;
+use quireink_sdk::widgets::{self, Align, Frame, Look, Size, WidgetTarget};
 use quireink_sdk::{
-    Arg, Canvas, Color, Env, Id, Rect, RegisterError, Registrar, SettingSpec, SettingValue,
+    Canvas, Color, Command, Env, FontHandle, Id, Point, Rect, RegisterError, Registrar,
+    SettingSpec, SettingValue,
 };
 
-use crate::{fmt, overview, store};
+use crate::store::{self, Day};
+use crate::{OPEN, fmt};
 use quireink_sdk::setting::{Setting, Text};
 
-pub(crate) const TODAY: Id = Id::new_static("stats.widget.today");
-/// The last seven days as bars.
-pub(crate) const WEEK: Id = Id::new_static("stats.widget.week");
+pub(crate) use today::TODAY;
+
 /// Setting: minutes a day to read, or none.
 pub(crate) const GOAL: Setting<Text> = Setting::new("stats.goal");
 /// Choices of [`GOAL`]: minutes, `off` for none.
@@ -40,85 +60,16 @@ const GOALS: [&str; 12] = [
     "stats.goal.300",
 ];
 
+/// The number at the end of a choice's value (`stats.goal.30`: 30).
+fn number_of(value: &str) -> Option<u32> {
+    value.rsplit('.').next()?.parse().ok()
+}
+
 /// The daily goal in seconds, if one is set.
-fn goal(env: &Env<'_>) -> Option<u64> {
-    env.settings
-        .text(GOAL.as_str())
-        .rsplit('.')
-        .next()
-        .and_then(|m| m.parse::<u64>().ok())
+pub(crate) fn goal(env: &Env<'_>) -> Option<u64> {
+    number_of(env.settings.text(GOAL.as_str()))
         .filter(|&m| m > 0)
-        .map(|m| m * 60)
-}
-
-/// What the widget shows.
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct Numbers {
-    today: u64,
-    pages: u32,
-    week: u64,
-    /// Days in a row the goal was reached, up to today (or yesterday,
-    /// while today is not done yet).
-    streak: u32,
-}
-
-fn numbers(env: &Env<'_>) -> Option<Numbers> {
-    let today = fmt::today(env)?;
-    let days = store::days(env.storage, |unix| fmt::day_of(env, unix));
-    let weekday = fmt::date_of(today).weekday;
-    let since = today - i32::from((7 + weekday - fmt::week_start(env)) % 7);
-    let seconds = |range: core::ops::RangeInclusive<i32>| -> u64 {
-        days.iter()
-            .filter(|d| range.contains(&d.day))
-            .map(|d| u64::from(d.seconds))
-            .sum()
-    };
-    let streak = goal(env).map_or(0, |goal| {
-        let reached = |day: i32| seconds(day..=day) >= goal;
-        let last = if reached(today) { today } else { today - 1 };
-        (0..).take_while(|&back| reached(last - back)).count() as u32
-    });
-    Some(Numbers {
-        today: seconds(today..=today),
-        pages: overview::distinct_pages(env, today),
-        week: seconds(since..=today),
-        streak,
-    })
-}
-
-/// "23 min · 41 pages", and below it the week or the goal: "7 min to
-/// your daily goal", "Goal reached, 3 days in a row".
-fn lines(env: &Env<'_>, numbers: &Numbers) -> (String, String) {
-    let pages = env
-        .i18n
-        .plural("stats.pages", i64::from(numbers.pages), &[]);
-    let first = format!("{} · {pages}", fmt::duration(env, numbers.today));
-    let second = match goal(env) {
-        None => env.i18n.format(
-            "stats.widget.week",
-            &[("time", Arg::Str(&fmt::duration(env, numbers.week)))],
-        ),
-        Some(goal) if numbers.today < goal => {
-            let left = fmt::duration(env, (goal - numbers.today).max(60));
-            let line = env
-                .i18n
-                .format("stats.goal.left", &[("time", Arg::Str(&left))]);
-            match numbers.streak {
-                0 => line,
-                days => format!(
-                    "{line} · {}",
-                    env.i18n.plural("stats.goal.streak", i64::from(days), &[])
-                ),
-            }
-        }
-        Some(_) => match numbers.streak {
-            0 | 1 => env.i18n.tr("stats.goal.reached").to_string(),
-            days => env
-                .i18n
-                .plural("stats.goal.reached-days", i64::from(days), &[]),
-        },
-    };
-    (first, second)
+        .map(|m| u64::from(m) * 60)
 }
 
 pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
@@ -149,267 +100,407 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
             if let Some(SettingValue::Text(list)) = env.settings.get(pages[0])
                 && !shown
             {
-                let mut ids: alloc::vec::Vec<&str> = quireink_sdk::status::item_ids(list).collect();
+                let mut ids: Vec<&str> = quireink_sdk::status::item_ids(list).collect();
                 let at = ids
                     .iter()
                     .position(|item| item.split_whitespace().next() == Some("home.continue"))
                     .map_or(ids.len(), |i| i + 1);
                 let today = TODAY;
                 ids.insert(at, today.as_str());
-                out.push(quireink_sdk::Command::SetSetting(
+                out.push(Command::SetSetting(
                     Id::new_static("home.page-1"),
                     SettingValue::Text(Cow::Owned(ids.join(", "))),
                 ));
             }
         },
     )?;
-    r.add_setting_group(widgets::settings_group(&TODAY, "stats.widget.today"))?;
-    r.add_setting(widgets::align_setting(&TODAY, Align::Left))?;
-    r.add_widget(
-        WidgetSpec::new(TODAY, "stats.widget.today", |_| Box::new(Today::default()))
-            .category(widgets::categories::READING),
-    )?;
-    r.add_widget(
-        WidgetSpec::new(WEEK, "stats.widget.week", |_| Box::new(Week::default()))
-            .category(widgets::categories::READING),
+    today::register(r)?;
+    week::register(r)?;
+    ring::register(r)?;
+    calendar::register(r)?;
+    year::register(r)?;
+    streak::register(r)
+}
+
+/// A widget's settings group with its frame, its size (where it has one,
+/// with "as large as fits") and its alignment, in that order.
+fn look_settings(
+    r: &mut Registrar,
+    id: &Id,
+    title: &'static str,
+    align: Align,
+    size: Option<Size>,
+) -> Result<(), RegisterError> {
+    r.add_setting_group(widgets::settings_group(id, title))?;
+    r.add_setting(widgets::frame_setting(id, Frame::None))?;
+    if let Some(size) = size {
+        r.add_setting(widgets::size_setting(id, size, true))?;
+    }
+    r.add_setting(widgets::align_setting(id, align))
+}
+
+/// Switches for the parts of widget `id`: each its key, its title and
+/// whether it shows at first.
+fn parts(
+    r: &mut Registrar,
+    id: &Id,
+    parts: &[(&str, &'static str, bool)],
+) -> Result<(), RegisterError> {
+    for (key, title, default) in parts {
+        r.add_setting(widgets::part_setting(id, key, *title, *default))?;
+    }
+    Ok(())
+}
+
+/// The value of widget `widget`'s choice `key`.
+fn chosen<'e>(env: &Env<'e>, widget: &str, key: &str) -> &'e str {
+    env.settings.text(&alloc::format!("{widget}.{key}"))
+}
+
+/// The height `widget`'s frame takes around its content.
+fn frame_height(env: &Env<'_>, widget: &str) -> u16 {
+    let probe = Rect::new(0, 0, 1000, 1000);
+    1000 - widgets::look::look(env, widget, probe).area.height
+}
+
+/// `height` pixels placed in the middle of `area`, top to bottom.
+fn middle(area: Rect, height: u16) -> Rect {
+    let height = height.min(area.height);
+    Rect::new(
+        area.x,
+        area.y + (area.height - height) / 2,
+        area.width,
+        height,
     )
 }
 
-/// "Read today": its numbers, read from the statistics when updated.
-#[derive(Default)]
-struct Today {
-    numbers: Option<Numbers>,
+/// The caption's height, if `widget` shows it.
+fn caption_room(env: &Env<'_>, widget: &str) -> u16 {
+    if widgets::shows(env, widget, "caption") {
+        widgets::caption_height(env)
+    } else {
+        0
+    }
 }
 
-impl Widget for Today {
-    fn update(&mut self, env: &Env<'_>) -> bool {
-        let numbers = numbers(env);
-        let changed = numbers != self.numbers;
-        self.numbers = numbers;
-        changed
-    }
+/// The caption's height in `height` pixels, if `widget` shows it and
+/// there is room for a line of text below it as well (else the content
+/// goes first).
+fn caption_in(env: &Env<'_>, widget: &str, height: u16) -> u16 {
+    let cap = caption_room(env, widget);
+    let least = widgets::line_height(env, UiStyle::new(env).text);
+    if cap + least <= height { cap } else { 0 }
+}
 
-    fn height(&self, env: &Env<'_>, _: u16) -> u16 {
-        let style = UiStyle::new(env);
-        let Some(font) = style.font(env) else {
-            return 0;
+/// The room below `widget`'s caption in `area` (all of it where the
+/// caption has no room).
+fn below_caption(env: &Env<'_>, widget: &str, area: Rect) -> Rect {
+    let cap = caption_in(env, widget, area.height);
+    Rect::new(area.x, area.y + cap, area.width, area.height - cap)
+}
+
+/// Places content `height` high with `widget`'s caption `text` above
+/// it, the two together in the middle of `look`'s area, and draws the
+/// caption; where the content goes.
+fn captioned(
+    canvas: &mut Canvas<'_>,
+    env: &Env<'_>,
+    widget: &str,
+    look: &Look,
+    text: &str,
+    height: u16,
+) -> Rect {
+    let cap = caption_room(env, widget);
+    let cap = if cap + height <= look.area.height {
+        caption_in(env, widget, look.area.height)
+    } else {
+        0
+    };
+    let block = middle(look.area, cap + height);
+    if cap > 0 {
+        let at = Look {
+            area: block,
+            ..*look
         };
-        let small = font.line_metrics(style.small).line_height;
-        let text = font.line_metrics(style.title).line_height;
-        let bar = goal(env).map_or(0.0, |_| bar_band(env));
-        (small * 2.0 + text + bar) as u16
+        widgets::draw_caption(canvas, env, widget, &at, text);
     }
+    Rect::new(
+        block.x,
+        block.y + cap,
+        block.width,
+        height.min(block.height - cap),
+    )
+}
 
-    fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
-        if let Some(numbers) = &self.numbers {
-            draw(canvas, env, area, numbers);
-        }
+/// The colour between `look`'s paper and its ink at `level` of 4 (4: the
+/// ink), for shades drawn with `fill_shaded` (dithered on panels with few
+/// grays): light on light paper, the other way round on a dark card.
+fn shade(look: &Look, level: u8) -> Color {
+    const LIGHT: [u8; 5] = [255, 205, 160, 95, 0];
+    let gray = LIGHT[usize::from(level.min(4))];
+    if look.paper.luma() < 128 {
+        Color::gray(255 - gray)
+    } else {
+        Color::gray(gray)
     }
 }
 
-/// The last seven days as bars, read from the statistics when updated.
-#[derive(Default)]
-struct Week {
-    days: Vec<(u8, u64)>,
+/// Whether text on a shade of `level` is drawn in the paper's colour.
+fn on_dark(level: u8) -> bool {
+    level >= 3
 }
 
-impl Widget for Week {
-    fn update(&mut self, env: &Env<'_>) -> bool {
-        let days = week(env);
-        let changed = days != self.days;
-        self.days = days;
-        changed
+/// How dark a day of `seconds` reading is shaded, 0 (none) to 4: with a
+/// daily goal by its share (a third, two thirds, nearly, reached), else
+/// by minutes (under 15, under 30, under 60, an hour or more).
+pub(crate) fn level(seconds: u32, goal: Option<u64>) -> u8 {
+    let seconds = u64::from(seconds);
+    if seconds == 0 {
+        return 0;
     }
-
-    fn height(&self, env: &Env<'_>, _: u16) -> u16 {
-        let style = UiStyle::new(env);
-        let Some(font) = style.font(env) else {
-            return 0;
-        };
-        let small = font.line_metrics(style.small).line_height;
-        (small * 2.0 + style.row as f32 * 1.4) as u16
-    }
-
-    fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
-        draw_week(canvas, env, area, &self.days);
-    }
-
-    fn targets(&self, _: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
-        alloc::vec![WidgetTarget {
-            area,
-            command: quireink_sdk::Command::RunAction(crate::OPEN),
-        }]
+    match goal.filter(|&g| g > 0) {
+        Some(goal) if seconds >= goal => 4,
+        Some(goal) => 1 + (seconds * 3 / goal) as u8,
+        None => match seconds / 60 {
+            0..=14 => 1,
+            15..=29 => 2,
+            30..=59 => 3,
+            _ => 4,
+        },
     }
 }
 
-/// The last seven days, oldest first: each day's weekday and seconds read.
-fn week(env: &Env<'_>) -> Vec<(u8, u64)> {
-    let Some(today) = fmt::today(env) else {
-        return Vec::new();
-    };
-    let days = store::days(env.storage, |unix| fmt::day_of(env, unix));
-    (today - 6..=today)
-        .map(|day| {
-            let seconds = days
-                .iter()
-                .filter(|d| d.day == day)
-                .map(|d| u64::from(d.seconds))
-                .sum();
-            (fmt::date_of(day).weekday, seconds)
-        })
-        .collect()
-}
-
-/// "Last 7 days · 3 h 20 min", then a bar a day with its weekday below;
-/// the daily goal, if set, as a line across.
-fn draw_week(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, days: &[(u8, u64)]) {
+/// The text size widget `widget`'s size setting gives; "as large as
+/// fits" fits `text` into `width` and `height` (up to three times a
+/// title's size).
+fn text_size(
+    env: &Env<'_>,
+    font: &FontHandle<'_>,
+    widget: &str,
+    text: &str,
+    width: u16,
+    height: u16,
+) -> f32 {
     let style = UiStyle::new(env);
-    let Some(font) = style.font(env) else {
-        return;
-    };
-    if days.is_empty() {
-        return;
+    let size = widgets::size(env, widget);
+    if size != Size::Fit {
+        // Smaller where a line of it is higher than the room, or wider
+        // (down to the body's size; then it is shortened).
+        let line = font.line_metrics(style.title).line_height.max(1.0);
+        let by_height = style.title * f32::from(height) / line;
+        let wide = font.measure(style.title, text).max(1.0);
+        let by_width = style.title * f32::from(width) / wide;
+        let size = size.text(&style).min(by_width.max(style.text));
+        return size.min(by_height.max(style.small));
     }
-    let small = font.line_metrics(style.small).line_height as u16;
-    let total: u64 = days.iter().map(|(_, s)| s).sum();
-    let label = env.i18n.format(
-        "stats.week-label",
-        &[("time", quireink_sdk::Arg::Str(&fmt::duration(env, total)))],
-    );
-    let gray = style.faint(80);
-    let x = f32::from(area.x);
-    ui::draw_label(
-        canvas,
-        &font,
-        style.small,
-        x,
-        Rect::new(area.x, area.y, area.width, small),
-        &label,
-        gray,
-    );
-    let chart_top = area.y + small;
-    let chart_h = area.height.saturating_sub(small * 2);
-    let goal = goal(env).unwrap_or(0);
-    let most = days
-        .iter()
-        .map(|(_, s)| *s)
-        .max()
-        .unwrap_or(0)
-        .max(goal)
-        .max(1);
-    let column = area.width / 7;
-    let bar_w = (column * 3 / 5).max(2);
-    let line = style.line.max(1);
-    for (i, (weekday, seconds)) in days.iter().enumerate() {
-        let cx = area.x + column * i as u16 + column / 2;
-        let h = (u64::from(chart_h) * seconds / most) as u16;
-        let bx = i32::from(cx - bar_w / 2);
-        let base = i32::from(chart_top + chart_h);
-        if h > 0 {
-            canvas.fill_rect(
-                bx,
-                base - i32::from(h),
-                u32::from(bar_w),
-                u32::from(h),
-                Color::BLACK,
-            );
-        } else {
-            canvas.fill_rect(bx, base - line as i32, u32::from(bar_w), line, gray);
-        }
-        let name = fmt::weekday_short(env, *weekday);
-        let w = font.measure(style.small, name);
-        let row = Rect::new(area.x, chart_top + chart_h, area.width, small);
-        ui::draw_label(
-            canvas,
-            &font,
-            style.small,
-            f32::from(cx) - w / 2.0,
-            row,
-            name,
-            gray,
-        );
-    }
-    if goal > 0 {
-        let y = i32::from(chart_top + chart_h) - (u64::from(chart_h) * goal / most) as i32;
-        let mut gx = i32::from(area.x);
-        let end = i32::from(area.x + area.width);
-        while gx < end {
-            canvas.fill_rect(gx, y, 6.min((end - gx) as u32), line, Color::BLACK);
-            gx += 12;
-        }
-    }
+    fit_size(font, &style, text, width, height)
 }
 
-/// How full the goal's bar is, in thousandths.
-fn progress(env: &Env<'_>, numbers: &Numbers) -> u64 {
-    goal(env).map_or(0, |goal| (numbers.today * 1000 / goal.max(1)).min(1000))
+/// The largest size (a title's at least where there is room, three times
+/// it at most) at which `text` fits `width` and a line of it `height`.
+fn fit_size(font: &FontHandle<'_>, style: &UiStyle, text: &str, width: u16, height: u16) -> f32 {
+    let base = style.title;
+    let line = font.line_metrics(base).line_height.max(1.0);
+    let wide = font.measure(base, text).max(1.0);
+    let by_width = base * f32::from(width) / wide;
+    let by_height = base * f32::from(height) / line;
+    by_width.min(by_height).clamp(style.small, base * 3.0)
 }
 
-/// The height of the goal's bar with the space around it.
-fn bar_band(env: &Env<'_>) -> f32 {
-    env.metrics.mm(3) as f32
+/// `text`, or where it is wider than `width` at `size`, the number it
+/// begins with alone ("5 days": "5").
+fn number_if_narrow<'t>(font: &FontHandle<'_>, size: f32, text: &'t str, width: u16) -> &'t str {
+    if font.measure(size, text) <= f32::from(width) {
+        return text;
+    }
+    let digits = text
+        .char_indices()
+        .find(|(_, c)| !c.is_ascii_digit())
+        .map_or(text.len(), |(at, _)| at);
+    if digits == 0 { text } else { &text[..digits] }
 }
 
-fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, numbers: &Numbers) {
+/// The height of a line of text `size` pixels large.
+fn line(font: &FontHandle<'_>, size: f32) -> u16 {
+    font.line_metrics(size).line_height as u16
+}
+
+/// What a widget read its numbers for: today, and the sizes of the log
+/// and of the books. Read again only when that changed, so that being
+/// asked each minute (for a new day) costs little; screens make widgets
+/// anew when a setting changes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct Stamp(Option<i32>, (u64, u64));
+
+/// Whether what a widget read for `last` is out of date; `last` becomes
+/// what it is read for now.
+fn stale(env: &Env<'_>, last: &mut Option<Stamp>) -> bool {
+    let now = Some(Stamp(fmt::today(env), store::sizes(env.storage)));
+    if *last == now {
+        return false;
+    }
+    *last = now;
+    true
+}
+
+/// Today and the days read, if the device knows the time.
+fn days(env: &Env<'_>) -> Option<(i32, Vec<Day>)> {
+    let today = fmt::today(env)?;
+    Some((
+        today,
+        store::days(env.storage, |unix| fmt::day_of(env, unix)),
+    ))
+}
+
+/// Seconds read on `day`.
+fn seconds_on(days: &[Day], day: i32) -> u32 {
+    days.binary_search_by_key(&day, |d| d.day)
+        .map_or(0, |i| days[i].seconds)
+}
+
+/// The first letter of a weekday's short name (0 being Sunday).
+fn initial<'a>(env: &Env<'a>, weekday: u8) -> &'a str {
+    let name = fmt::weekday_short(env, weekday);
+    name.char_indices()
+        .nth(1)
+        .map_or(name, |(at, _)| &name[..at])
+}
+
+/// A tap on the whole widget opens the statistics.
+fn open_statistics(area: Rect) -> Vec<WidgetTarget> {
+    alloc::vec![WidgetTarget {
+        area,
+        command: Command::RunAction(OPEN),
+    }]
+}
+
+/// Draws a ring into the square `at`, `thick` pixels wide: a thin track
+/// all round (three quarters open at the bottom for a `gauge`), over it
+/// `progress` (thousandths, if any) with round ends.
+fn draw_arc(
+    canvas: &mut Canvas<'_>,
+    env: &Env<'_>,
+    look: &Look,
+    at: Rect,
+    progress: Option<u32>,
+    thick: u32,
+    gauge: bool,
+) {
     let style = UiStyle::new(env);
-    let Some(font) = style.font(env) else {
+    let d = u32::from(at.width.min(at.height));
+    let radius = d / 2;
+    if radius < 4 {
         return;
-    };
-    let small = font.line_metrics(style.small).line_height as u16;
-    let text = font.line_metrics(style.title).line_height as u16;
-    let align = widgets::align(env, TODAY.as_str());
-    let x = |size: f32, text: &str| align.x(area, font.measure(size, text));
-    let (first, second) = lines(env, numbers);
-    let row = |y: u16, h: u16| Rect::new(area.x, y, area.width, h);
-    let gray = style.faint(80);
-    let label = env.i18n.tr("stats.today");
-    ui::draw_label(
-        canvas,
-        &font,
-        style.small,
-        x(style.small, label),
-        row(area.y, small),
-        label,
-        gray,
-    );
-    ui::draw_label(
-        canvas,
-        &font,
-        style.title,
-        x(style.title, &first),
-        row(area.y + small, text),
-        &first,
-        Color::BLACK,
-    );
-    let mut y = area.y + small + text;
-    if goal(env).is_some() {
-        // A bar filled up to today's share of the goal.
-        let band = bar_band(env) as u16;
-        let height = env.metrics.mm(1).max(3);
-        let line = env.metrics.tenth_mm(3).max(1);
-        let top = i32::from(y + (band - height as u16) / 2);
-        let width = u32::from(area.width);
-        canvas.stroke_rect(i32::from(area.x), top, width, height, line, Color::BLACK);
-        let filled = (u64::from(width) * progress(env, numbers) / 1000) as u32;
-        canvas.fill_rect(i32::from(area.x), top, filled, height, Color::BLACK);
-        y += band;
     }
-    let at = x(style.small, &second);
-    ui::draw_label(canvas, &font, style.small, at, row(y, small), &second, gray);
+    let thick = thick.clamp(1, radius);
+    let center = Point::new(
+        i32::from(at.x) + radius as i32,
+        i32::from(at.y) + radius as i32,
+    );
+    let (from, sweep) = if gauge { (225, 270) } else { (0, 360) };
+    // The track, thin, in the middle of where the ring is drawn.
+    let track = style.line.max(1).min(thick);
+    let track_radius = radius - (thick - track) / 2;
+    // Halfway between paper and ink where the panel has grays to show
+    // it, else faint (black or white, told apart by its thinness).
+    let grays = env
+        .device
+        .display
+        .format
+        .gray_levels()
+        .is_none_or(|g| g > 4);
+    let color = if grays { shade(look, 2) } else { look.faint };
+    canvas.fill_ring(center, track_radius, track, from, sweep, color);
+    if let Some(progress) = progress.filter(|p| *p > 0) {
+        let done = (sweep * progress.min(1000) / 1000).max(1);
+        canvas.fill_ring(center, radius, thick, from, done, look.ink);
+        // Round ends, but for a whole ring.
+        if done < 360 {
+            let middle = (radius - thick / 2) as i32;
+            for deg in [from, from + done as i32] {
+                canvas.fill_circle(point_at(center, middle, deg), thick / 2, look.ink);
+            }
+        }
+    }
+}
+
+/// Draws a dashed line across from `x` to `end` at `y`.
+fn dashed(canvas: &mut Canvas<'_>, x: i32, end: i32, y: i32, thickness: u32, color: Color) {
+    let dash = (thickness * 4).max(4) as i32;
+    let mut at = x;
+    while at < end {
+        canvas.fill_rect(at, y, dash.min(end - at) as u32, thickness, color);
+        at += dash * 2;
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::GOALS;
-    use alloc::vec::Vec;
+    use super::*;
+
+    /// Every widget's settings have ids of their own: the plugin loads.
+    #[test]
+    fn the_widgets_register() {
+        use quireink_sdk::contribution::Contribution;
+        let mut r = Registrar::new(crate::PLUGIN);
+        assert!(register(&mut r).is_ok());
+        let mut ids: Vec<&str> = r
+            .contributions()
+            .iter()
+            .filter_map(|c| match c {
+                Contribution::Setting(spec) => Some(spec.id.as_str()),
+                _ => None,
+            })
+            .collect();
+        let all = ids.len();
+        ids.sort_unstable();
+        ids.dedup();
+        assert_eq!(ids.len(), all);
+        assert!(all > 30);
+    }
 
     #[test]
     fn goals_are_minutes_or_off() {
-        let minutes: Vec<Option<u64>> = GOALS
-            .iter()
-            .map(|g| g.rsplit('.').next().and_then(|m| m.parse().ok()))
-            .collect();
+        let minutes: Vec<Option<u32>> = GOALS.iter().map(|g| number_of(g)).collect();
         assert_eq!(minutes[0], None);
         assert!(minutes[1..].iter().all(Option::is_some));
+    }
+
+    #[test]
+    fn days_are_shaded_by_time_or_the_goal() {
+        // By minutes.
+        let by_minutes: Vec<u8> = [0, 30, 14 * 60, 15 * 60, 45 * 60, 60 * 60, 5 * 3600]
+            .into_iter()
+            .map(|s| level(s, None))
+            .collect();
+        assert_eq!(by_minutes, [0, 1, 1, 2, 3, 4, 4]);
+        // By the goal's share: 30 minutes.
+        let goal = Some(1800);
+        let by_goal: Vec<u8> = [0, 60, 600, 1200, 1799, 1800, 9000]
+            .into_iter()
+            .map(|s| level(s, goal))
+            .collect();
+        assert_eq!(by_goal, [0, 1, 2, 3, 3, 4, 4]);
+    }
+
+    #[test]
+    fn shades_turn_round_on_a_dark_card() {
+        let light = Look {
+            area: Rect::new(0, 0, 10, 10),
+            ink: Color::BLACK,
+            faint: Color::gray(90),
+            paper: Color::WHITE,
+            frame: Frame::None,
+        };
+        let dark = Look {
+            ink: Color::WHITE,
+            paper: Color::BLACK,
+            frame: Frame::Dark,
+            ..light
+        };
+        assert_eq!(shade(&light, 4), Color::BLACK);
+        assert_eq!(shade(&dark, 4), Color::WHITE);
+        assert!(shade(&light, 1).luma() > shade(&light, 3).luma());
+        assert!(shade(&dark, 1).luma() < shade(&dark, 3).luma());
     }
 }

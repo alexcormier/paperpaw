@@ -1,0 +1,258 @@
+//! *Read today*: today's reading time and pages, a bar towards the daily
+//! goal ([`GOAL`](super::GOAL)), and below them the week or the goal:
+//! "7 min to your daily goal", "Daily goal reached, 3 days in a row".
+
+use alloc::boxed::Box;
+use alloc::format;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
+
+use quireink_sdk::ui::{self, UiStyle};
+use quireink_sdk::widgets::{self, Align, Size, Widget, WidgetSpec, WidgetTarget};
+use quireink_sdk::{Arg, Canvas, Env, Id, Rect, RegisterError, Registrar};
+
+use super::{caption_room, frame_height, goal, line, seconds_on, shade};
+use crate::{fmt, overview, totals};
+
+pub(crate) const TODAY: Id = Id::new_static(NAME);
+/// Its id, as text.
+const NAME: &str = "stats.widget.today";
+
+pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
+    super::look_settings(
+        r,
+        &TODAY,
+        "stats.widget.today",
+        Align::Left,
+        Some(Size::Medium),
+    )?;
+    super::parts(
+        r,
+        &TODAY,
+        &[
+            ("caption", "stats.part.caption", true),
+            ("pages", "stats.part.pages", true),
+            ("bar", "stats.part.goal-bar", true),
+            ("note", "stats.part.note", true),
+        ],
+    )?;
+    r.add_widget(
+        WidgetSpec::new(TODAY, "stats.widget.today", |_| Box::new(Today::default()))
+            .category(widgets::categories::READING),
+    )
+}
+
+/// What the widget shows.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Numbers {
+    today: u64,
+    pages: u32,
+    week: u64,
+    /// Days in a row the goal was reached, up to today (or yesterday,
+    /// while today is not done yet).
+    streak: u32,
+}
+
+fn numbers(env: &Env<'_>) -> Option<Numbers> {
+    let (today, days) = super::days(env)?;
+    let weekday = fmt::date_of(today).weekday;
+    let since = today - i32::from((7 + weekday - fmt::week_start(env)) % 7);
+    let streak = goal(env).map_or(0, |goal| {
+        let least = goal.min(u64::from(u32::MAX)) as u32;
+        totals::streaks(&days, today, least).current
+    });
+    let pages = if widgets::shows(env, NAME, "pages") {
+        overview::distinct_pages(env, today)
+    } else {
+        0
+    };
+    Some(Numbers {
+        today: u64::from(seconds_on(&days, today)),
+        pages,
+        week: (since..=today)
+            .map(|day| u64::from(seconds_on(&days, day)))
+            .sum(),
+        streak,
+    })
+}
+
+/// `text` kept on one line where the note is broken into two.
+fn unbroken(text: String) -> String {
+    text.replace(' ', "\u{a0}")
+}
+
+/// "23 min · 41 pages", and below it the week or the goal: "7 min to
+/// your daily goal", "Goal reached, 3 days in a row".
+fn lines(env: &Env<'_>, numbers: &Numbers) -> (String, String) {
+    let time = fmt::duration(env, numbers.today);
+    let first = if widgets::shows(env, NAME, "pages") {
+        let pages = env
+            .i18n
+            .plural("stats.pages", i64::from(numbers.pages), &[]);
+        format!("{time} · {pages}")
+    } else {
+        time
+    };
+    let second = match goal(env) {
+        None => env.i18n.format(
+            "stats.widget.this-week",
+            &[(
+                "time",
+                Arg::Str(&unbroken(fmt::duration(env, numbers.week))),
+            )],
+        ),
+        Some(goal) if numbers.today < goal => {
+            let left = unbroken(fmt::duration(env, (goal - numbers.today).max(60)));
+            let line = env
+                .i18n
+                .format("stats.goal.left", &[("time", Arg::Str(&left))]);
+            match numbers.streak {
+                0 => line,
+                days => format!(
+                    "{line} · {}",
+                    env.i18n.plural("stats.goal.streak", i64::from(days), &[])
+                ),
+            }
+        }
+        Some(_) => match numbers.streak {
+            0 | 1 => env.i18n.tr("stats.goal.reached").to_string(),
+            days => env
+                .i18n
+                .plural("stats.goal.reached-days", i64::from(days), &[]),
+        },
+    };
+    (first, second)
+}
+
+/// "Read today": its numbers, read from the statistics when updated.
+#[derive(Default)]
+pub(super) struct Today {
+    numbers: Option<Numbers>,
+    read_for: Option<super::Stamp>,
+}
+
+impl Widget for Today {
+    fn update(&mut self, env: &Env<'_>) -> bool {
+        if !super::stale(env, &mut self.read_for) {
+            return false;
+        }
+        let numbers = numbers(env);
+        let changed = numbers != self.numbers;
+        self.numbers = numbers;
+        changed
+    }
+
+    fn live(&self) -> bool {
+        // Asked each minute for a new day; read again only then, or
+        // when there is more reading.
+        true
+    }
+
+    fn height(&self, env: &Env<'_>, _: u16) -> u16 {
+        let style = UiStyle::new(env);
+        let Some(font) = style.font(env) else {
+            return 0;
+        };
+        let id = NAME;
+        let size = widgets::size(env, id).text(&style);
+        let note = if widgets::shows(env, id, "note") {
+            line(&font, style.small)
+        } else {
+            0
+        };
+        frame_height(env, id) + caption_room(env, id) + line(&font, size) + bar_band(env) + note
+    }
+
+    fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
+        let look = widgets::draw_frame(canvas, env, NAME, area);
+        match &self.numbers {
+            Some(numbers) => draw(canvas, env, &look, numbers),
+            None => widgets::draw_message(canvas, env, &look, env.i18n.tr("stats.no-clock")),
+        }
+    }
+
+    fn targets(&self, _: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
+        super::open_statistics(area)
+    }
+}
+
+/// The height of the goal's bar with the room around it, if it shows.
+fn bar_band(env: &Env<'_>) -> u16 {
+    if goal(env).is_some() && widgets::shows(env, NAME, "bar") {
+        env.metrics.mm(3) as u16
+    } else {
+        0
+    }
+}
+
+/// How full the goal's bar is, in thousandths.
+fn progress(env: &Env<'_>, numbers: &Numbers) -> u64 {
+    goal(env).map_or(0, |goal| (numbers.today * 1000 / goal.max(1)).min(1000))
+}
+
+fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &widgets::Look, numbers: &Numbers) {
+    let style = UiStyle::new(env);
+    let Some(font) = style.font(env) else {
+        return;
+    };
+    let id = NAME;
+    let area = super::below_caption(env, id, look.area);
+    let (first, second) = lines(env, numbers);
+    let mut band = bar_band(env);
+    let mut note = if widgets::shows(env, id, "note") {
+        line(&font, style.small)
+    } else {
+        0
+    };
+    // Where they do not all fit, the note goes, then the bar.
+    let least = line(&font, style.text);
+    if least + band + note > area.height {
+        note = 0;
+    }
+    if least + band > area.height {
+        band = 0;
+    }
+    let room = area.height.saturating_sub(band + note);
+    let size = super::text_size(env, &font, id, &first, area.width, room);
+    let big = line(&font, size);
+    // Too wide with the pages: the time alone.
+    let width = f32::from(area.width);
+    let first = if font.measure(size, &first) > width {
+        fmt::duration(env, numbers.today)
+    } else {
+        first
+    };
+    // A note too long for a line gets two, where there is room.
+    let note = if note > 0 && font.measure(style.small, &second) > width && room >= big + note {
+        note * 2
+    } else {
+        note
+    };
+    // The lines together in the middle, the caption above them.
+    let caption = env.i18n.tr("stats.today");
+    let block = super::captioned(canvas, env, id, look, caption, big + band + note);
+    let align = widgets::align(env, id);
+    let row = |y: u16, h: u16| Rect::new(area.x, y, area.width, h);
+    let first = ui::fit(&font, size, &first, width);
+    let x = align.x(area, font.measure(size, &first));
+    ui::draw_label(canvas, &font, size, x, row(block.y, big), &first, look.ink);
+    let mut y = block.y + big;
+    if band > 0 {
+        // A bar filled up to today's share of the goal, its ends round.
+        let height = env.metrics.mm(1).max(4) as u16;
+        let track = Rect::new(area.x, y + (band - height) / 2, area.width, height);
+        let radius = u32::from(height / 2);
+        canvas.fill_round_shaded(track, radius, shade(look, 1));
+        let filled = (u64::from(area.width) * progress(env, numbers) / 1000) as u16;
+        if filled > 0 {
+            let filled = filled.max(height);
+            let bar = Rect::new(track.x, track.y, filled, height);
+            canvas.fill_round(bar, radius, look.ink);
+        }
+        y += band;
+    }
+    if note > 0 {
+        let at = row(y, note);
+        widgets::draw_wrapped(canvas, env, at, align, style.small, &second, look.faint);
+    }
+}

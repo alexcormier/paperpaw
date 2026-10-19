@@ -3,8 +3,9 @@
 //!
 //! - `books.ini`: the books, one section `[book.<id>]` each, with title,
 //!   authors (separated by line breaks, as KOReader does), the partial
-//!   MD5 of the file, pages, language, series, when it was last opened and
-//!   its path here.
+//!   MD5 of the file, pages, language, series, when it was last opened,
+//!   its path here and when it was last read to the end (`finished`, Unix
+//!   seconds; added later, so missing in older files).
 //! - `pages.bin`: every stay on a page, 16 bytes each, appended as they
 //!   happen: book id (u16), page (u32, from 1), start (u32, Unix seconds),
 //!   duration (u16, seconds) and the book's pages then (u32), like KOReader's
@@ -79,6 +80,8 @@ pub(crate) struct Book {
     pub last_open: i64,
     /// Where it is on this device (empty if it is not).
     pub path: String,
+    /// When it was last read to the end (Unix seconds, 0: not yet).
+    pub finished: i64,
 }
 
 /// Reading on a local day.
@@ -120,6 +123,13 @@ fn path(name: &str) -> String {
     format!("{}/{name}", dir())
 }
 
+/// The sizes of the log and of the books: they change as one reads and
+/// finishes books (or the statistics are merged).
+pub(crate) fn sizes(storage: &dyn Storage) -> (u64, u64) {
+    let size = |name: &str| storage.size(&path(name)).unwrap_or(0);
+    (size("pages.bin"), size("books.ini"))
+}
+
 /// The books, by id.
 pub(crate) fn books(storage: &dyn Storage) -> Vec<Book> {
     let Ok(data) = quireink_sdk::read_file(storage, &path("books.ini"), 1 << 20) else {
@@ -152,6 +162,7 @@ pub(crate) fn books(storage: &dyn Storage) -> Vec<Book> {
             "series" => book.series = value,
             "last-open" => book.last_open = value.parse().unwrap_or(0),
             "path" => book.path = value,
+            "finished" => book.finished = value.parse().unwrap_or(0),
             _ => {}
         }
     }
@@ -164,7 +175,7 @@ pub(crate) fn save_books(storage: &dyn Storage, books: &[Book]) {
     let mut text = String::new();
     for b in books {
         text.push_str(&format!(
-            "[book.{}]\ntitle = {}\nauthors = {}\nmd5 = {}\npages = {}\nlanguage = {}\nseries = {}\nlast-open = {}\npath = {}\n\n",
+            "[book.{}]\ntitle = {}\nauthors = {}\nmd5 = {}\npages = {}\nlanguage = {}\nseries = {}\nlast-open = {}\npath = {}\nfinished = {}\n\n",
             b.id,
             quireink_sdk::config::quote(&b.title),
             quireink_sdk::config::quote(&b.authors),
@@ -174,6 +185,7 @@ pub(crate) fn save_books(storage: &dyn Storage, books: &[Book]) {
             quireink_sdk::config::quote(&b.series),
             b.last_open,
             quireink_sdk::config::quote(&b.path),
+            b.finished,
         ));
     }
     let _ = storage.write(&path("books.ini"), text.as_bytes());
@@ -409,6 +421,7 @@ mod tests {
                 series: String::from("N/A"),
                 last_open: 1_760_000_000,
                 path: String::from("books/d.epub"),
+                finished: 1_760_100_000,
             },
             Book {
                 id: 2,
