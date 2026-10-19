@@ -11,6 +11,7 @@ use quireink_sdk::widgets::{self, Align, Drawn, Frame, Size, WidgetSpec};
 use quireink_sdk::{Arg, Canvas, Env, Id, Rect, RegisterError, Registrar, SettingSpec, time};
 
 use super::frame_height;
+use super::text::{self, FACES};
 
 pub(super) const ID: Id = Id::new_static("widgets.greeting");
 /// The reader's name, if greeted by it.
@@ -21,6 +22,8 @@ const LINE: Setting<Text> = Setting::new("widgets.greeting.line");
 const LINES: [&str; 2] = ["widgets.greeting.line.none", "widgets.greeting.line.date"];
 /// A sun or a moon before it, by the time of day.
 const ICON: &str = "icon";
+/// The font of the greeting: one of [`FACES`].
+const FACE: Setting<Text> = Setting::new("widgets.greeting.face");
 
 pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     r.add_setting_group(widgets::settings_group(&ID, "widgets.greeting"))?;
@@ -44,6 +47,15 @@ pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
         "widgets.greeting.setting.icon",
         false,
     ))?;
+    r.add_setting(
+        SettingSpec::choice(
+            &FACE,
+            "widgets.setting.face",
+            FACES.iter().map(|s| (*s).into()).collect(),
+            FACES[0],
+        )
+        .group(ID),
+    )?;
     r.add_setting(widgets::size_setting(&ID, Size::Fit, true))?;
     r.add_setting(widgets::align_setting(&ID, Align::Center))?;
     r.add_setting(widgets::frame_setting(&ID, Frame::None))?;
@@ -152,7 +164,8 @@ fn height(env: &Env<'_>, _: u16) -> u16 {
 
 fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     let style = UiStyle::new(env);
-    let Some(font) = style.font(env) else {
+    let (Some(ui_font), Some(font)) = (style.font(env), text::font(env, env.settings.read(&FACE)))
+    else {
         return;
     };
     let look = widgets::draw_frame(canvas, env, ID.as_str(), area);
@@ -198,7 +211,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         }
         size => size.text(&style),
     };
-    let big = widgets::line_height(env, size);
+    let big = text::line_height(&font, size) as u16;
     let top = area.y + area.height.saturating_sub(big + small) / 2;
     let align = widgets::align(env, ID.as_str());
     let shown = ui::fit(&font, size, &text, width - icon_width(size));
@@ -219,11 +232,11 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         look.ink,
     );
     if let Some(below) = below {
-        let below = short_date(&below, |text| font.measure(style.small, text) <= width);
-        let below = ui::fit(&font, style.small, below, width);
-        let x = align.x(area, font.measure(style.small, &below));
+        let below = short_date(&below, |text| ui_font.measure(style.small, text) <= width);
+        let below = ui::fit(&ui_font, style.small, below, width);
+        let x = align.x(area, ui_font.measure(style.small, &below));
         let row = Rect::new(area.x, top + big, area.width, small);
-        ui::draw_label(canvas, &font, style.small, x, row, &below, look.faint);
+        ui::draw_label(canvas, &ui_font, style.small, x, row, &below, look.faint);
     }
 }
 

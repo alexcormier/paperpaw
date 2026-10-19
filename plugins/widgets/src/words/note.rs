@@ -119,7 +119,7 @@ impl Widget for Note {
             Some((at, size)) if at == area => size,
             _ => {
                 let size = match widgets::size(env, ID.as_str()) {
-                    Size::Fit => text::largest(style.small, style.title * 2.4, |size| {
+                    Size::Fit => text::largest(style.small, style.title * 1.8, |size| {
                         let lines = text::count_lines(&font, size, note, width) as f32;
                         lines * text::line_height(&font, size) <= f32::from(area.height)
                     }),
