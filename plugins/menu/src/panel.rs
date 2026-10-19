@@ -104,6 +104,8 @@ struct Geometry {
     border: u16,
     /// The labels of settings, on the left of their rows.
     label: u16,
+    /// The values of sliders, between the track and the `+`.
+    value: u16,
     /// The head with the time, the date and the battery (hanging from
     /// the top only).
     head: u16,
@@ -190,16 +192,17 @@ fn place(line: &Line, area: Rect, g: Geometry) -> Row {
             let cells = split(inner, controls.len(), g.gap / 2);
             (None, controls.iter().cloned().zip(cells).collect())
         }
-        // A wide range: − slider +.
+        // A wide range: − slider value +.
         Line::Slider(id) => {
             let size = ui::button_height(area);
             let y = area.y + (area.height - size) / 2;
             let minus = Rect::new(rest.x, y, size, size);
             let plus = Rect::new(rest.x + rest.width - size, y, size, size);
+            let value = if g.value > 0 { g.value + g.gap } else { 0 };
             let track = Rect::new(
                 minus.x + size + g.gap,
                 y,
-                rest.width.saturating_sub(2 * (size + g.gap)),
+                rest.width.saturating_sub(2 * (size + g.gap) + value),
                 size,
             );
             let controls = alloc::vec![
@@ -258,6 +261,12 @@ impl PanelScreen {
             .fold(0.0, f32::max);
         let label =
             ((longest as u16).saturating_add(style.gap as u16 * 2)).min((width - 2 * margin) / 2);
+        // Sliders' values as wide as the widest of them needs.
+        let sliders = items
+            .iter()
+            .filter_map(|item| spec(env, item.id))
+            .filter(|s| ui::slider::shows(s));
+        let value = measure(&ui::number_room(env, &style, sliders)) as u16;
         let head = if top {
             let size = env
                 .metrics
@@ -274,6 +283,7 @@ impl PanelScreen {
             row: style.row as u16,
             border: (style.line * 2).max(2) as u16,
             label,
+            value,
             head,
             pager: ui::Pager::height(&style),
             top,
@@ -296,8 +306,8 @@ impl PanelScreen {
 /// What the panel shows of `items`, row by row: switches and buttons
 /// several to a row (as many as stay readable; switches and buttons not
 /// mixed), numbers with their `−` and `+` (a slider between for those
-/// marked so), choices with few options as segments, anything else to
-/// open.
+/// marked so, where it has room), choices with few options as segments,
+/// anything else to open.
 fn lines(env: &Env<'_>, style: &UiStyle, items: &[MenuItem<'_>], g: Geometry) -> Vec<Line> {
     let font = style.font(env);
     let label_of = |control: &Control| -> String {
@@ -367,7 +377,9 @@ fn lines(env: &Env<'_>, style: &UiStyle, items: &[MenuItem<'_>], g: Geometry) ->
         }
         flush(&mut group, &mut lines);
         let line = match spec(env, &id).map(|s| &s.kind) {
-            Some(SettingKind::Int { .. }) if setting.is_some_and(|s| s.extra().slider) => {
+            Some(SettingKind::Int { .. })
+                if setting.is_some_and(ui::slider::shows) && slider_fits(rest, g) =>
+            {
                 Line::Slider(id)
             }
             Some(SettingKind::Int { .. }) if setting.is_some() => Line::Stepper(id),
@@ -598,6 +610,16 @@ fn draw_slider(
     }
 }
 
+/// Whether a slider's track has room in `rest` (beside its label) to be
+/// set by eye; where it does not (a narrow screen), the number gets its
+/// `−` and `+` alone.
+fn slider_fits(rest: Rect, g: Geometry) -> bool {
+    let size = ui::button_height(Rect::new(0, 0, g.width, g.row));
+    let value = if g.value > 0 { g.value + g.gap } else { 0 };
+    let track = rest.width.saturating_sub(2 * (size + g.gap) + value);
+    track >= 3 * size
+}
+
 /// Whether a choice's options fit side by side in `area`, readably.
 fn fits_segments(
     env: &Env<'_>,
@@ -692,6 +714,17 @@ impl Screen for PanelScreen {
             }
             for (index, (control, rect)) in (first..).zip(row.controls.iter()) {
                 self.draw_control(canvas, env, control, *rect, self.focus == Some(index));
+            }
+            // A slider's value, between its track and its +.
+            if let (Some(spec), [_, (Control::Slide(_), track), (_, plus)]) =
+                (label, row.controls.as_slice())
+            {
+                let start = track.x + track.width;
+                let room = Rect::new(start, track.y, plus.x.saturating_sub(start), track.height);
+                let value = ui::setting_value(env, spec);
+                let x = f32::from(room.x)
+                    + (f32::from(room.width) - font.measure(style.text, &value)) / 2.0;
+                ui::draw_label(canvas, &font, style.text, x, room, &value, Color::BLACK);
             }
         }
         if let Some(pager) = &self.pager {
@@ -842,6 +875,7 @@ mod layout_tests {
         row: 60,
         border: 2,
         label: 150,
+        value: 60,
         head: 40,
         pager: 45,
         top: false,
@@ -916,9 +950,10 @@ mod layout_tests {
         assert_eq!(*minus, Control::Step(id("a.light"), -1));
         assert_eq!(*track, Control::Slide(id("a.light")));
         assert_eq!(*plus, Control::Step(id("a.light"), 1));
-        // Beside the label, the track between the two.
+        // Beside the label, the track between the two, with room for the
+        // value before the +.
         assert!(m.x >= 20 + 150);
-        assert!(m.x + m.width < t.x && t.x + t.width < p.x);
+        assert!(m.x + m.width < t.x && t.x + t.width + 60 < p.x);
 
         let segments = Line::Segments(
             id("a.align"),
@@ -930,5 +965,14 @@ mod layout_tests {
             row.controls[1].0,
             Control::Option(id("a.align"), String::from("r"))
         );
+    }
+
+    #[test]
+    fn sliders_need_room_for_their_track() {
+        let rest = |width| Rect::new(0, 0, width, 42);
+        // Buttons 42 wide: − and + with their gaps, the value, and a track
+        // three buttons long.
+        assert!(slider_fits(rest(2 * 52 + 70 + 126), GEOMETRY));
+        assert!(!slider_fits(rest(2 * 52 + 70 + 125), GEOMETRY));
     }
 }

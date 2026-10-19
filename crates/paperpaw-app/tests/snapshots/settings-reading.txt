@@ -3,6 +3,8 @@ Heading "Reading"
 Heading "Text"
 Row "Font, Book's font, The book's font uses the fonts a book brings (else Literata); any other font is used for all text. Add your own: put .ttf or .otf files into the fonts folder." (focused)
 Row "Font size, 11 pt, Size of the book text."
+Button "−"
+Button "+"
+Slider "11 pt"
 Row "Font weight, +0, Darker, bolder text with any font; helps on light screens."
 Row "Smooth text, Letters with soft gray edges on screens without grays; pages turn slower and use more battery." (off)
-Row "Word spacing, 100 %, Space between words, relative to the font's."

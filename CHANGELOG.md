@@ -6,6 +6,17 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Settings: numbers better set by eye are sliders on the settings
+  pages (PLANNING §6.7): the text size, word and line spacing, the
+  margins, the speed of reading aloud, the interface's size, row height
+  and margins, the frontlight. A number changed with the buttons now
+  shows each value at once without keeping it; *Select* keeps it,
+  *Back* goes back to the value before, and the row of hints says so
+  (`−`, `+`, *Keep*, *Cancel*). By touch, a slider's knob follows the
+  finger and the value is kept where it is lifted; `−` and `+` change it
+  a step at once, as before. The reader's panel shows its sliders'
+  values, and gives them `−` and `+` alone where the screen is too
+  narrow for a track (the X4).
 - SDK: sliders as a building block for any plugin (`ui::slider`:
   `Slider`, `SliderDrag`, `SliderFocus`, `SliderLabels`, `SliderParts`,
   `SliderStep`, `band`, `band_height`, `key_step`, `parts`,

@@ -468,21 +468,27 @@ fn register_menus(r: &mut Registrar) -> Result<(), RegisterError> {
     Ok(())
 }
 
-/// Units, steps and sections of the kernel's settings.
+/// Units, steps and sections of the kernel's settings, and the numbers
+/// set by eye, with sliders.
 static MM: SettingExtra = SettingExtra::new().unit("core.unit.mm");
-static PT: SettingExtra = SettingExtra::new().unit("core.unit.pt");
+static MM_SLIDER: SettingExtra = SettingExtra::new().unit("core.unit.mm").slider();
+static PT_SLIDER: SettingExtra = SettingExtra::new().unit("core.unit.pt").slider();
 static PAGES: SettingExtra = SettingExtra::new().unit("core.unit.pages");
 static SECONDS: SettingExtra = SettingExtra::new().unit("core.unit.seconds");
 static MS: SettingExtra = SettingExtra::new().unit("core.unit.ms");
 static TENTH_MM: SettingExtra = SettingExtra::new().unit("core.unit.tenth-mm");
-static PERCENT_10: SettingExtra = SettingExtra::new().unit("core.unit.percent").step(10);
+static PERCENT_10_SLIDER: SettingExtra = SettingExtra::new()
+    .unit("core.unit.percent")
+    .step(10)
+    .slider();
 static PERCENT_5: SettingExtra = SettingExtra::new().unit("core.unit.percent").step(5);
 static MINUTES_5: SettingExtra = SettingExtra::new().unit("core.unit.minutes").step(5);
 static COLORS: SettingExtra = SettingExtra::new().section("core.section.colors");
 static FONT: SettingExtra = SettingExtra::new().section(setting_sections::FONT);
 static FONT_PT: SettingExtra = SettingExtra::new()
     .section(setting_sections::FONT)
-    .unit("core.unit.pt");
+    .unit("core.unit.pt")
+    .slider();
 
 /// The language, night mode, speech and the edges for swipes.
 static GENERAL: [SettingSpec; 8] = [
@@ -573,7 +579,7 @@ static LOOK: [SettingSpec; 8] = [
         9,
         groups::LOOK,
     )
-    .with_extra(&PT)
+    .with_extra(&PT_SLIDER)
     .described("core.setting.ui-size.help"),
     SettingSpec::fixed_choice(
         settings::UI_HEADER.static_str(),
@@ -607,7 +613,7 @@ static LOOK: [SettingSpec; 8] = [
         3,
         groups::LOOK,
     )
-    .with_extra(&MM)
+    .with_extra(&MM_SLIDER)
     .described("core.setting.ui-margin.help"),
     SettingSpec::fixed_number(
         settings::UI_ROW.static_str(),
@@ -617,7 +623,7 @@ static LOOK: [SettingSpec; 8] = [
         160,
         groups::LOOK,
     )
-    .with_extra(&PERCENT_10)
+    .with_extra(&PERCENT_10_SLIDER)
     .described("core.setting.ui-row.help"),
     SettingSpec::fixed_number(
         settings::UI_LINES.static_str(),

@@ -47,8 +47,14 @@ pub(super) struct GroupPage {
     pub(super) rows: ui::Rows,
     /// The focus shows (buttons were used, or a number was tapped).
     pub(super) keys: bool,
-    /// The focused number is being edited.
-    pub(super) editing: bool,
+    /// The focused number is being changed with the buttons: the value it
+    /// had before. What it is changed to shows without being kept
+    /// (`Command::PreviewSettings`) until it is chosen.
+    pub(super) editing: Option<SettingValue>,
+    /// A slider's knob taken along by a finger: its row and the value it
+    /// had before (shown, not kept, until the finger is lifted).
+    pub(super) drag: ui::SliderDrag,
+    pub(super) dragged: Option<(usize, i64)>,
     /// Rows have room for descriptions.
     pub(super) noted: bool,
     /// The widest value of the page's numbers, so their − and + line up.
@@ -117,10 +123,12 @@ impl GroupPage {
         let (style, header, area) = page(env);
         let heading = ui::heading_height(env, &style);
         let row = if noted { style.noted_row() } else { style.row } as u16;
+        let slider_row = ui::slider::row_height(&style, noted);
         let heights = entries
             .iter()
             .map(|e| match e {
                 Row::Heading(_) => heading,
+                Row::Setting(spec) if ui::slider::shows(spec) => slider_row,
                 Row::Setting(_) => row,
                 Row::Reset => style.row as u16,
             })
@@ -145,7 +153,9 @@ impl GroupPage {
             header,
             rows: ui::Rows::new(area, heights, headings),
             keys: !env.device.input.touch,
-            editing: false,
+            editing: None,
+            drag: ui::SliderDrag::default(),
+            dragged: None,
             noted,
             number_room,
         }
@@ -183,7 +193,8 @@ impl GroupPage {
         self.spec(self.rows.focus)
     }
 
-    /// Changes a number by `step`, or toggles a switch or a choice of two.
+    /// Changes a number by `step` at once (a tap on its − or +), or
+    /// toggles a switch or a choice of two.
     pub(super) fn change(&self, env: &Env<'_>, step: i64, cx: &mut Cx<'_, '_>) {
         let Some(spec) = self.focused() else {
             return;
@@ -195,17 +206,68 @@ impl GroupPage {
         if Some(&value) != current {
             cx.command(Command::SetSetting(spec.id.clone(), value));
             cx.request_redraw();
-            // Quick while editing with buttons; else with its grays.
-            cx.request_refresh(if self.editing {
-                RefreshMode::Fast
-            } else {
-                RefreshMode::Partial
-            });
+            cx.request_refresh(RefreshMode::Partial);
+        }
+    }
+
+    /// Moves the number being changed with the buttons by `step`: shown
+    /// at once, kept when chosen ([`GroupPage::finish`]).
+    fn preview_step(&self, env: &Env<'_>, step: i64, cx: &mut Cx<'_, '_>) {
+        let Some(spec) = self.focused() else {
+            return;
+        };
+        let current = env.settings.get(spec.id.as_str());
+        if let Some(value) = ui::next_value(env, spec, step).filter(|v| Some(v) != current) {
+            cx.command(Command::PreviewSettings(alloc::vec![(
+                spec.id.clone(),
+                Some(value)
+            )]));
+        }
+    }
+
+    /// Ends changing the focused number with the buttons: keeps the value
+    /// shown (`keep`), or shows the one before again.
+    fn finish(&mut self, env: &Env<'_>, keep: bool, cx: &mut Cx<'_, '_>) {
+        let before = self.editing.take();
+        if keep
+            && let Some(spec) = self.focused()
+            && let Some(shown) = env.settings.get(spec.id.as_str())
+            && Some(shown) != before.as_ref()
+        {
+            cx.command(Command::SetSetting(spec.id.clone(), shown.clone()));
+        }
+        end_preview(env, cx);
+        cx.request_redraw();
+        cx.request_refresh(RefreshMode::Fast);
+    }
+
+    /// The − and + of number row `index` in `rect`, where it shows them:
+    /// a slider's in its band, else beside the value.
+    fn steps(&self, env: &Env<'_>, index: usize, rect: Rect) -> Option<(Rect, Rect)> {
+        let spec = self.spec(index)?;
+        if ui::slider::shows(spec) {
+            let parts = ui::slider::parts(&self.style, ui::slider::band(&self.style, rect));
+            return Some((parts.minus, parts.plus));
+        }
+        let value = ui::setting_value(env, spec);
+        let room = if self.number_room.len() < value.len() {
+            &value
+        } else {
+            &self.number_room
+        };
+        ui::stepper(env, &self.style, self.title_area(rect), room)
+    }
+
+    /// Redraws row `index` where it is (a value shown that changed).
+    fn redraw_row(&self, index: usize, cx: &mut Cx<'_, '_>) {
+        if let Some(rect) = self.rows.rect_of(index) {
+            cx.request_redraw_area(rect);
+            cx.request_refresh(RefreshMode::Fast);
         }
     }
 
     /// What confirming (or tapping) the focused setting does.
-    pub(super) fn activate(&mut self, env: &Env<'_>, step: i64, cx: &mut Cx<'_, '_>) {
+    pub(super) fn activate(&mut self, env: &Env<'_>, cx: &mut Cx<'_, '_>) {
         if matches!(self.entries.get(self.rows.focus), Some(Row::Reset)) {
             cx.command(ask_reset(env, Some((&self.group, &self.title))));
             return;
@@ -222,9 +284,8 @@ impl GroupPage {
         }
         match spec.kind {
             SettingKind::Bool => self.change(env, 1, cx),
-            SettingKind::Int { .. } if self.editing => self.change(env, step, cx),
             SettingKind::Int { .. } => {
-                self.editing = true;
+                self.editing = env.settings.get(spec.id.as_str()).cloned();
                 cx.request_redraw();
                 cx.request_refresh(RefreshMode::Fast);
             }
@@ -258,7 +319,7 @@ impl Screen for GroupPage {
         self.header
             .draw(canvas, env, &style, &self.title, None, paging(&self.rows));
         let entries = &self.entries;
-        let editing = self.editing;
+        let editing = self.editing.is_some();
         let noted = self.noted;
         let room = self.number_room.as_str();
         let touch = env.device.input.touch;
@@ -281,6 +342,21 @@ impl Screen for GroupPage {
                 let note = spec.description.as_deref().map_or("", |d| env.i18n.tr(d));
                 let note = if noted { note } else { "" };
                 let mut value = ui::setting_value(env, spec);
+                if let Some(slider) = ui::Slider::of(spec).filter(|_| ui::slider::shows(spec)) {
+                    let focus = match (focused, editing) {
+                        (false, _) => ui::SliderFocus::None,
+                        (true, false) => ui::SliderFocus::Focused,
+                        (true, true) => ui::SliderFocus::Editing,
+                    };
+                    let labels = ui::SliderLabels {
+                        title,
+                        value: &value,
+                        note,
+                    };
+                    let shown = env.settings.int(spec.id.as_str());
+                    slider.draw_row(canvas, env, &style, rect, shown, &labels, focus);
+                    return;
+                }
                 match spec.kind {
                     SettingKind::Int { .. } if focused => {
                         let area = if noted {
@@ -323,27 +399,11 @@ impl Screen for GroupPage {
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         let env = *cx.env();
-        if self.editing {
-            let decrease = [
-                actions::LEFT,
-                actions::DOWN,
-                actions::PREV_PAGE,
-                actions::PREVIOUS,
-            ];
-            let increase = [
-                actions::RIGHT,
-                actions::UP,
-                actions::NEXT_PAGE,
-                actions::NEXT,
-            ];
-            if decrease.contains(action) {
-                self.change(&env, -1, cx);
-            } else if increase.contains(action) {
-                self.change(&env, 1, cx);
+        if self.editing.is_some() {
+            if let Some(step) = ui::slider::key_step(action) {
+                self.preview_step(&env, step, cx);
             } else if *action == actions::CONFIRM || *action == actions::BACK {
-                self.editing = false;
-                cx.request_redraw();
-                cx.request_refresh(RefreshMode::Fast);
+                self.finish(&env, *action == actions::CONFIRM, cx);
             } else {
                 return Handled::No;
             }
@@ -352,7 +412,7 @@ impl Screen for GroupPage {
         if let Some(change) = navigate_rows(&mut self.rows, &mut self.keys, action) {
             change.request(cx);
         } else if *action == actions::CONFIRM {
-            self.activate(&env, 1, cx);
+            self.activate(&env, cx);
         } else {
             return Handled::No;
         }
@@ -383,18 +443,11 @@ impl Screen for GroupPage {
             // elsewhere on the row nothing happens.
             self.rows.focus = index;
             self.keys = false;
-            self.editing = false;
-            let (Some(spec), Some(rect)) = (self.focused(), self.rows.rect_of(index)) else {
+            self.editing = None;
+            let Some(rect) = self.rows.rect_of(index) else {
                 return Handled::Yes;
             };
-            let rect = self.title_area(rect);
-            let value = ui::setting_value(&env, spec);
-            let room = if self.number_room.len() < value.len() {
-                &value
-            } else {
-                &self.number_room
-            };
-            if let Some((minus, plus)) = ui::stepper(&env, &self.style, rect, room) {
+            if let Some((minus, plus)) = self.steps(&env, index, rect) {
                 let x = gesture.start.x;
                 // A little room around the buttons: easier to hit.
                 let slack = i32::from(self.style.gap as u16);
@@ -413,22 +466,15 @@ impl Screen for GroupPage {
             if index != self.rows.focus || !self.keys {
                 self.rows.focus = index;
                 self.keys = true;
-                self.editing = false;
+                self.editing = None;
                 cx.request_redraw();
                 cx.request_refresh(RefreshMode::Fast);
                 return Handled::Yes;
             }
-            let (Some(spec), Some(rect)) = (self.focused(), self.rows.rect_of(index)) else {
+            let Some(rect) = self.rows.rect_of(index) else {
                 return Handled::Yes;
             };
-            let rect = self.title_area(rect);
-            let value = ui::setting_value(&env, spec);
-            let room = if self.number_room.len() < value.len() {
-                &value
-            } else {
-                &self.number_room
-            };
-            if let Some((minus, plus)) = ui::stepper(&env, &self.style, rect, room) {
+            if let Some((minus, plus)) = self.steps(&env, index, rect) {
                 let x = gesture.start.x;
                 let within = |r: Rect| x >= i32::from(r.x) && x < r.right() as i32;
                 if within(minus) {
@@ -444,11 +490,87 @@ impl Screen for GroupPage {
         if index != self.rows.focus || keys != self.keys {
             self.rows.focus = index;
             self.keys = keys;
-            self.editing = false;
+            self.editing = None;
             cx.request_redraw();
         }
-        self.activate(&env, 1, cx);
+        self.activate(&env, cx);
         Handled::Yes
+    }
+
+    fn on_pointer(&mut self, event: &PointerEvent, cx: &mut Cx<'_, '_>) -> Handled {
+        let env = *cx.env();
+        if !env.device.input.touch {
+            return Handled::No;
+        }
+        // The row of the knob taken, or of a finger coming down.
+        let index = match self.dragged {
+            Some((index, _)) => Some(index),
+            None if event.phase == PointerPhase::Down => self.rows.hit(event.point),
+            None => None,
+        };
+        let Some((index, slider, id, rect)) = index.and_then(|i| {
+            let spec = self.spec(i).filter(|s| ui::slider::shows(s))?;
+            let slider = ui::Slider::of(spec)?;
+            Some((i, slider, spec.id.clone(), self.rows.rect_of(i)?))
+        }) else {
+            return Handled::No;
+        };
+        let track = ui::slider::parts(&self.style, ui::slider::band(&self.style, rect)).track;
+        let Some(step) = self.drag.on_pointer(event, &slider, track) else {
+            return Handled::No;
+        };
+        let before = match self.dragged {
+            Some((_, before)) => before,
+            None => {
+                let before = env.settings.int(id.as_str());
+                self.dragged = Some((index, before));
+                // The focus hides, as after other taps.
+                self.rows.focus = index;
+                self.keys = false;
+                self.editing = None;
+                cx.request_redraw();
+                before
+            }
+        };
+        match step {
+            ui::SliderStep::Moved(value) => {
+                cx.command(Command::PreviewSettings(alloc::vec![(
+                    id,
+                    Some(SettingValue::Int(value))
+                )]));
+            }
+            ui::SliderStep::Same => {}
+            ui::SliderStep::Chosen(value) => {
+                self.dragged = None;
+                if value != before {
+                    cx.command(Command::SetSetting(id, SettingValue::Int(value)));
+                }
+                end_preview(&env, cx);
+            }
+            ui::SliderStep::Cancelled => {
+                self.dragged = None;
+                end_preview(&env, cx);
+            }
+        }
+        Handled::Yes
+    }
+
+    fn hint(&self, action: &Id, env: &Env<'_>) -> Hint {
+        // While the buttons change a number: what each does to it.
+        if self.editing.is_none() {
+            return Hint::Default;
+        }
+        match ui::slider::key_step(action) {
+            Some(step) if step < 0 => Hint::Text(String::from("−")),
+            Some(_) => Hint::Text(String::from("+")),
+            None if *action == actions::CONFIRM => {
+                Hint::Text(env.i18n.tr("settings.hint.keep").to_string())
+            }
+            None if *action == actions::BACK => {
+                Hint::Text(env.i18n.tr("settings.hint.cancel").to_string())
+            }
+            None => Hint::Default,
+        }
     }
 
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
@@ -461,12 +583,20 @@ impl Screen for GroupPage {
         }
         if *event == events::SETTING_CHANGED {
             let env = *cx.env();
-            let (focus, keys, editing) = (self.rows.focus, self.keys, self.editing);
+            let focus = self.rows.focus;
+            let (keys, drag, dragged) = (self.keys, self.drag, self.dragged);
+            let editing = self.editing.take();
             *self = Self::new(&env, self.group.clone());
             refocus(&mut self.rows, focus);
             self.keys = keys;
             self.editing = editing;
+            self.drag = drag;
+            self.dragged = dragged;
             cx.request_redraw();
+        } else if *event == events::PREVIEW_CHANGED {
+            // A value being chosen, shown: its row.
+            let index = self.dragged.map_or(self.rows.focus, |(index, _)| index);
+            self.redraw_row(index, cx);
         }
     }
 }

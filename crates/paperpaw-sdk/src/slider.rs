@@ -153,22 +153,21 @@ impl Slider {
         let left = track.x + knob / 2;
         let width = track.width.saturating_sub(knob);
         let filled = ((f32::from(width) * self.share(value)) + 0.5) as u16;
-        // Light on white and on the black of the focus alike; dithered on
-        // panels of black and white alone.
-        let rest = if ink == Color::BLACK {
-            Color::gray(170)
-        } else {
-            Color::gray(140)
-        };
-        canvas.fill_tint(
-            Rect::new(
-                left + filled,
-                mid.saturating_sub(line / 2),
-                width - filled,
-                line,
-            ),
-            rest,
+        // After the value thinner and lighter: gray on white (dithered on
+        // panels of black and white alone), a thin line on the focus.
+        let rest = Rect::new(
+            left + filled,
+            mid.saturating_sub(line / 2),
+            width - filled,
+            line,
         );
+        if ink == Color::BLACK {
+            canvas.fill_tint(rest, Color::gray(170));
+        } else {
+            let thin = (line / 2).max(1);
+            let rest = Rect::new(rest.x, mid.saturating_sub(thin / 2), rest.width, thin);
+            canvas.fill(rest, Color::gray(200));
+        }
         canvas.fill(
             Rect::new(left, mid.saturating_sub(line), filled, line * 2),
             ink,
