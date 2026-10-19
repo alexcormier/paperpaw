@@ -19,7 +19,7 @@ use paperpaw_sdk::document::ImageRef;
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::{HttpReply, Typed};
 use paperpaw_sdk::ui::choice;
-use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
+use paperpaw_sdk::ui::{self, ListChange, ListView, Thumbnail, UiStyle};
 use paperpaw_sdk::web::host;
 use paperpaw_sdk::{
     Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, MemoryClass, Params,
@@ -43,6 +43,11 @@ const DESCRIBED: Event<HttpReply> = Event::new("opds.described");
 const TERMS: Event<Typed> = Event::new("opds.terms");
 
 const CHOSEN: Event<choice::Picked> = Event::new("opds.read");
+
+/// The width of the covers in the rows: two thirds of a row's height.
+fn cover_width(style: &UiStyle) -> u16 {
+    (style.noted_row() * 2 / 3) as u16
+}
 
 fn feed_path() -> String {
     format!(
@@ -76,7 +81,7 @@ pub(crate) struct BrowseScreen {
     message: Option<String>,
     /// Covers of the feed's entries, where loaded (on devices with the
     /// memory for them).
-    covers: Vec<Option<ImageRef>>,
+    covers: Vec<Option<Thumbnail>>,
     /// Whether covers show, and the entry whose cover is loading.
     with_covers: bool,
     fetching: Option<usize>,
@@ -329,7 +334,7 @@ impl Screen for BrowseScreen {
         let covers = &self.covers;
         // A column for covers, as wide as a book's picture of the row's height.
         let column = if self.with_covers && entries.iter().any(|e| e.thumbnail.is_some()) {
-            (style.noted_row() * 2 / 3) as u16 + style.gap as u16
+            cover_width(&style) + style.gap as u16
         } else {
             0
         };
@@ -372,19 +377,8 @@ impl Screen for BrowseScreen {
                 let rect = match rows[index] {
                     Row::Entry(i) if column > 0 => {
                         if let Some(cover) = &covers[i] {
-                            let pad = style.gap as u16 / 2;
-                            let (w, h) = ui::fit_image(
-                                cover,
-                                column - style.gap as u16,
-                                rect.height.saturating_sub(2 * pad),
-                            );
-                            let area = Rect::new(
-                                rect.x + style.margin as u16,
-                                rect.y + (rect.height - h) / 2,
-                                w,
-                                h,
-                            );
-                            ui::draw_image(canvas, env.storage, cover, area);
+                            let y = rect.y + rect.height.saturating_sub(cover.height()) / 2;
+                            cover.draw(canvas, rect.x + style.margin as u16, y);
                         }
                         Rect::new(
                             rect.x + column,
