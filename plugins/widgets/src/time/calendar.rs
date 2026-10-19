@@ -189,7 +189,7 @@ fn draw_month(
         let size = (cell_h * 0.5).min(cell_w * 0.42).max(style.small * 0.7);
         let size = super::fit_size(font, size, "00", cell_w * 0.56);
         let wide = font.measure(size, "00") > cell_w * 0.8;
-        let high = super::cap_height(font, size) > cell_h * 0.62;
+        let high = super::cap_height(font, size) > cell_h * 0.72;
         if wide && weeks {
             weeks = false;
         } else if high && heading {

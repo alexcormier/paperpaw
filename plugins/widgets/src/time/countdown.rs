@@ -292,6 +292,12 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     } else {
         1
     };
+    // In one line: smaller, down to the small size, before it is cut.
+    let note_size = if most == 1 {
+        super::fit_size(&font, note_size, &shown.note, f32::from(area.width)).max(style.small)
+    } else {
+        note_size
+    };
     let note_lines = super::wrap(&font, note_size, &shown.note, f32::from(area.width), most);
     let notes_room = note_line * note_lines.len() as f32;
     let room = (f32::from(area.height) - notes_room - notes_h).max(note_line);
