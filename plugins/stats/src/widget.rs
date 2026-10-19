@@ -420,10 +420,10 @@ mod tests {
         let mut ids: Vec<&str> = r
             .contributions()
             .iter()
-            .filter_map(|c| match c {
-                Contribution::Setting(spec) => Some(&**spec),
-                Contribution::FixedSetting(spec) => Some(*spec),
-                _ => None,
+            .flat_map(|c| match c {
+                Contribution::Setting(spec) => core::slice::from_ref(&**spec),
+                Contribution::FixedSettings(list) => list,
+                _ => &[],
             })
             .map(|spec| {
                 let (id, group) = (spec.id.as_str(), spec.group.as_str());
