@@ -12,6 +12,9 @@
 //! - Below each name: what happens to the plugin (if anything), its
 //!   description and version, readable without tapping it.
 //!
+//! - Above the plugins: where more come from, e.g. the store
+//!   ([`MORE`]): a row each, which opens it.
+//!
 //! The manager is itself a plugin and reached from the main settings page
 //! (`core.settings-pages`); another plugin can replace it.
 
@@ -38,6 +41,9 @@ pub const PLUGIN: Id = Id::new_static("plugin-manager");
 pub const SCREEN: Id = Id::new_static("plugin-manager.list");
 /// Opens [`SCREEN`].
 pub const OPEN: Id = Id::new_static("plugin-manager.open");
+/// The menu of places to get more plugins (a store): plugins add their
+/// actions with [`MenuEntry`]; each is a row above the plugins.
+pub const MORE: Id = Id::new_static("plugin-manager.more");
 
 /// The plugin manager plugin.
 #[derive(Debug, Default)]
@@ -87,6 +93,8 @@ enum Focus {
 
 #[derive(Debug)]
 struct PluginList {
+    /// The actions of [`MORE`], above the plugins.
+    more: Vec<Id>,
     /// Plugin ids: the kernel first, then by name.
     plugins: Vec<Id>,
     style: UiStyle,
@@ -116,6 +124,13 @@ impl PluginList {
             )
         });
         Self {
+            more: env
+                .menus
+                .items(MORE.as_str())
+                .into_iter()
+                .filter(|item| !item.section && env.actions.contains(item.id.as_str()))
+                .map(|item| item.id.clone())
+                .collect(),
             plugins: plugins.iter().map(|p| p.manifest.id.clone()).collect(),
             style,
             header,
@@ -141,6 +156,21 @@ impl PluginList {
             width,
             height,
         ))
+    }
+
+    /// The rows: the places to get more, then the plugins.
+    fn len(&self) -> usize {
+        self.more.len() + self.plugins.len()
+    }
+
+    /// Opens a place to get more, or switches a plugin: what row `index`
+    /// does.
+    fn activate(&mut self, env: &Env<'_>, index: usize, cx: &mut Cx<'_, '_>) {
+        if let Some(action) = self.more.get(index) {
+            cx.command(Command::RunAction(action.clone()));
+        } else if let Some(id) = self.plugins.get(index - self.more.len()).cloned() {
+            self.switch(env, &id, cx);
+        }
     }
 
     /// Switches the plugin `id`.
@@ -238,7 +268,7 @@ fn slot_key(slot: &Id) -> &'static str {
 impl Screen for PluginList {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
-        let len = self.plugins.len();
+        let len = self.len();
         self.list.focus = self.list.focus.min(len.saturating_sub(1));
         if self.focus == Focus::Restart && self.restart_button(env).is_none() {
             self.focus = Focus::List;
@@ -252,10 +282,20 @@ impl Screen for PluginList {
             None,
             self.list.paging(len),
         );
-        let plugins = &self.plugins;
+        let (more, plugins) = (&self.more, &self.plugins);
         self.list
             .draw(canvas, &style, len, |canvas, index, rect, focused| {
-                if let Some(info) = env.plugins.get(plugins[index].as_str()) {
+                if let Some(action) = more.get(index) {
+                    // Named by its action, told by its plugin.
+                    let name = env.actions.get(action.as_str()).map_or("", |a| &a.title);
+                    let owner = action.as_str().split('.').next().unwrap_or_default();
+                    let note = env
+                        .plugins
+                        .get(owner)
+                        .map_or("", |p| p.description(env.i18n));
+                    let name = env.i18n.tr(name);
+                    ui::draw_noted_row(canvas, env, &style, rect, focused, name, "›", note);
+                } else if let Some(info) = env.plugins.get(plugins[index - more.len()].as_str()) {
                     let value = env.i18n.tr(state(info));
                     let name = info.name(env.i18n);
                     let note = details(env, info);
@@ -299,7 +339,7 @@ impl Screen for PluginList {
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         let env = *cx.env();
-        let len = self.plugins.len();
+        let len = self.len();
         let page = self.list.rows() as isize;
         let a = action;
         // Down from the last plugin reaches the bar's button, up comes back.
@@ -332,9 +372,7 @@ impl Screen for PluginList {
         } else if *a == actions::PREV_PAGE {
             -page
         } else if *a == actions::CONFIRM {
-            if let Some(id) = self.plugins.get(self.list.focus).cloned() {
-                self.switch(&env, &id, cx);
-            }
+            self.activate(&env, self.list.focus, cx);
             return Handled::Yes;
         } else {
             return Handled::No;
@@ -347,7 +385,7 @@ impl Screen for PluginList {
         if gesture.kind != GestureKind::Tap {
             return Handled::No;
         }
-        let paging = self.list.paging(self.plugins.len());
+        let paging = self.list.paging(self.len());
         let tapped = self
             .header
             .tap(cx.env(), &self.style, gesture.start, paging);
@@ -363,13 +401,12 @@ impl Screen for PluginList {
             cx.command(Command::Restart);
             return Handled::Yes;
         }
-        let Some(index) = self.list.hit(gesture.start, self.plugins.len()) else {
+        let Some(index) = self.list.hit(gesture.start, self.len()) else {
             return Handled::No;
         };
         self.list.focus = index;
         self.focus = Focus::List;
-        let id = self.plugins[index].clone();
-        self.switch(&env, &id, cx);
+        self.activate(&env, index, cx);
         Handled::Yes
     }
 }

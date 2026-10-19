@@ -28,6 +28,7 @@ superseded by a new record that links back.
 | [0020](0020-sdk-compatibility.md) | SDK compatibility | Accepted |
 | [0021](0021-decorations.md) | Decorations of text | Accepted |
 | [0022](0022-plugins-in-updates.md) | Plugins in updates | Accepted |
+| [0023](0023-plugin-store.md) | The plugin store | Accepted |
 
 ## Template
 

@@ -12,6 +12,13 @@ pub struct Version {
 /// they were built against in their [`Manifest`](crate::Manifest).
 pub const SDK_VERSION: Version = Version::new(0, 4, 0);
 
+/// The version of the formats of data plugins this PaperPaw reads (their
+/// `plugin.ini`, translations, key maps, `settings.ini`, styles; ADR
+/// 0020). A data plugin says which it is made for with `formats` in
+/// `[plugin]` (1 if it does not); one made for a later version is not
+/// loaded, rather than read wrongly.
+pub const DATA_FORMATS: u32 = 1;
+
 impl Version {
     pub const fn new(major: u16, minor: u16, patch: u16) -> Self {
         Self {

@@ -203,6 +203,16 @@ const CASES: &[Case] = &[
         script: "swipe:240:700:240:300,wait:300,tap-on:Settings,wait:500,page-forward,wait:300,                 tap-on:Wi-Fi,wait:500,tap:240:140,wait:2500",
         colour: 0,
     },
+    // The plugin store on the X4, its list kept from before (the library
+    // asked for does not answer): the plugins for the X4 by group.
+    Case {
+        name: "x4-store",
+        profile: "xteink-x4",
+        book: None,
+        sets: &["store.catalog=http://127.0.0.1:9/plugins.json"],
+        script: "run:store.open,wait:6000",
+        colour: 0,
+    },
     Case {
         name: "boox-all-tools",
         profile: "boox-go-7",
@@ -271,8 +281,17 @@ fn library(case: &Case) -> PathBuf {
     for dir in [root().join("samples/library/books"), fixtures] {
         for entry in fs::read_dir(dir).unwrap() {
             let entry = entry.unwrap();
-            fs::copy(entry.path(), books.join(entry.file_name())).unwrap();
+            if entry.file_type().unwrap().is_file() {
+                fs::copy(entry.path(), books.join(entry.file_name())).unwrap();
+            }
         }
+    }
+    // The plugin store's list, as if kept from a visit before.
+    if case.name.contains("store") {
+        let store = dir.join(".paperpaw/plugins/store");
+        fs::create_dir_all(&store).unwrap();
+        let list = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/store/plugins.json");
+        fs::copy(list, store.join("plugins.json")).unwrap();
     }
     // The first-run setup only where it is what is shown.
     if !case.name.contains("setup") {

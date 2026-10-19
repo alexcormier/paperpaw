@@ -1,0 +1,26 @@
+[package]
+name = "paperpaw-plugin-store"
+description = "PaperPaw plugin store: finds data plugins for this device in a plugin library and installs, updates and removes them"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+categories = ["no-std"]
+
+[dependencies]
+paperpaw-json.workspace = true
+paperpaw-sdk.workspace = true
+
+[dev-dependencies]
+paperpaw-core.workspace = true
+paperpaw-digest.workspace = true
+paperpaw-i18n.workspace = true
+paperpaw-platform.workspace = true
+paperpaw-plugin-fonts-browser.workspace = true
+paperpaw-plugin-fonts-default = { workspace = true, features = ["packs"] }
+
+[lints]
+workspace = true
