@@ -2431,6 +2431,7 @@ dependencies = [
 name = "paperpaw-plugin-update"
 version = "0.4.0-dev"
 dependencies = [
+ "paperpaw-json",
  "paperpaw-sdk",
 ]
 
@@ -2572,6 +2573,7 @@ dependencies = [
  "paperpaw-plugin-reader",
  "paperpaw-plugin-wifi",
  "paperpaw-sdk",
+ "paperpaw-update",
  "paperpaw-x4",
  "rand_core 0.10.1",
  "smoltcp",

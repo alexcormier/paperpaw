@@ -7,7 +7,7 @@
 
 use std::process::ExitCode;
 
-use paperpaw_update::{AppInfo, Check, TRAILER_LEN, Trailer};
+use paperpaw_update::{AppInfo, Check, PLUGINS_AT, Plugins, TRAILER_LEN, Trailer};
 
 const USAGE: &str = "\
 paperpaw-sign: sign PaperPaw firmware updates
@@ -29,6 +29,9 @@ USAGE:
     paperpaw-sign check <flash.bin> <flash.bin.sig>
         Shows the signer of a whole flash image and whether its signature
         holds.
+    paperpaw-sign plugins <image.bin>
+        Lists the plugin crates an app image or update file has built in;
+        fails if it lists none.
 ";
 
 fn main() -> ExitCode {
@@ -51,6 +54,7 @@ fn run(args: Vec<String>) -> Result<(), String> {
         ["sign-apart", image, signature] => sign_apart(image, signature, None),
         ["sign-apart", image, signature, "--key", file] => sign_apart(image, signature, Some(file)),
         ["check", image, signature] => check(image, signature),
+        ["plugins", image] => plugins(image),
         ["-h" | "--help"] => {
             print!("{USAGE}");
             Ok(())
@@ -141,6 +145,10 @@ fn show(update: &str) -> Result<(), String> {
     println!("firmware:    {} {}", info.project, info.version);
     println!("chip:        {}", info.chip);
     println!("image:       {} bytes", trailer.image_len);
+    match plugins_of(&data[..split]) {
+        Some(list) => println!("plugins:     {} built in", list.iter().count()),
+        None => println!("plugins:     not listed"),
+    }
     println!(
         "signer:      {} ({})",
         paperpaw_update::fingerprint(&trailer.key),
@@ -150,5 +158,22 @@ fn show(update: &str) -> Result<(), String> {
         Ok(()) => println!("signature:   holds"),
         Err(e) => return Err(format!("{update}: {e}")),
     }
+    Ok(())
+}
+
+/// The plugin list of an app image (or an update file, which begins with
+/// one).
+fn plugins_of(image: &[u8]) -> Option<Plugins> {
+    Plugins::read(image.get(PLUGINS_AT..)?)
+}
+
+fn plugins(image: &str) -> Result<(), String> {
+    let data = std::fs::read(image).map_err(|e| format!("{image}: {e}"))?;
+    AppInfo::read(&data).map_err(|e| format!("{image}: {e}"))?;
+    let list = plugins_of(&data).ok_or_else(|| format!("{image}: no list of plugins"))?;
+    if list.is_empty() {
+        return Err(format!("{image}: no plugins listed"));
+    }
+    print!("{}", list.text());
     Ok(())
 }

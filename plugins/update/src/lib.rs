@@ -3,16 +3,20 @@
 //! the card, says what it is and who signed it, and has the shell install
 //! it (see `paperpaw_sdk::firmware`). An update found at start is offered
 //! once; after the restart the plugin says how it went and removes the
-//! file.
+//! file. The page also asks the update server for a newer firmware and
+//! downloads it into `updates` ([`online`]).
 //!
 //! Updates signed by PaperPaw install at once; one's own builds, signed
-//! with one's own key, after the reader chose to trust that key.
+//! with one's own key, after the reader chose to trust that key. An
+//! update without some of the plugins built in now says which, and the
+//! reader chooses to update without them or to wait.
 
 #![no_std]
 
 extern crate alloc;
 
 mod found;
+pub mod online;
 mod page;
 
 use alloc::borrow::Cow;
@@ -21,22 +25,35 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use paperpaw_sdk::builtin::{events, menus};
+use paperpaw_sdk::builtin::{events, groups, menus};
 use paperpaw_sdk::firmware::Firmware;
 use paperpaw_sdk::{
     ActionSpec, Arg, Command, Env, Id, Manifest, MenuEntry, MenuNeed, Params, Plugin,
-    RegisterError, Registrar, SDK_VERSION, ScreenSpec, Storage, Version,
+    RegisterError, Registrar, SDK_VERSION, ScreenSpec, SettingSpec, Storage, Version,
 };
 
 pub const PLUGIN: Id = Id::new_static("update");
 /// Opens the page.
 pub const OPEN: Id = Id::new_static("update.open");
+/// Asks the update server for an update and offers one it names (e.g.
+/// from a rule); says nothing otherwise.
+pub const CHECK: Id = Id::new_static("update.check");
 const PAGE: Id = Id::new_static("update.page");
 /// The update being installed (its path and version), kept through the
 /// restart to say how it went.
 const INSTALLING: &str = "installing.txt";
-/// The update offered at start last (its path and version): offered once.
+/// The update offered at start last (its path and version; `online` and
+/// the version for one named by the update server): offered once.
 const OFFERED: &str = "offered.txt";
+
+/// The update server's address, for developers and servers of one's own.
+static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_text(
+    online::SERVER.static_str(),
+    "update.setting.server",
+    online::DEFAULT_SERVER,
+    groups::DEVELOPER,
+)
+.described("update.setting.server.help")];
 
 fn file(name: &str) -> String {
     format!("{}/{name}", Env::plugin_dir(PLUGIN.as_str()))
@@ -95,13 +112,18 @@ impl Plugin for Update {
         Manifest {
             id: PLUGIN,
             name: Cow::Borrowed("Update"),
-            description: Cow::Borrowed("Installs firmware updates from the card."),
+            description: Cow::Borrowed(
+                "Installs firmware updates, from the card or downloaded from the internet.",
+            ),
             version: Version::new(0, 1, 0),
             sdk: SDK_VERSION,
         }
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        r.add_settings(&SETTINGS)?;
+        // Only where PaperPaw updates the firmware.
+        r.set_menu_need(online::SERVER.id().clone(), MenuNeed::Firmware)?;
         r.add_screen(ScreenSpec {
             id: PAGE,
             title: Cow::Borrowed("update.title"),
@@ -112,6 +134,15 @@ impl Plugin for Update {
                 out.push(Command::OpenScreen(PAGE, Params::new()));
             },
         ))?;
+        r.add_action(
+            ActionSpec::new(CHECK, "update.check")
+                .handler(|env: &Env<'_>, out: &mut Vec<Command>| online::check(env, true, out)),
+        )?;
+        r.set_menu_need(CHECK, MenuNeed::Firmware)?;
+        r.add_icon(CHECK, Cow::Borrowed("cloud-download"))?;
+        // Answers and downloads go on while the page is closed.
+        r.on(online::CHECKED, online::checked)?;
+        r.on(online::DOWNLOADED, online::downloaded)?;
         // In the device's part of the settings, before *About*.
         r.add_menu_entry(MenuEntry {
             menu: menus::SETTINGS,

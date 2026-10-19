@@ -1,0 +1,368 @@
+//! Updates from the internet: the update server (paperpaw.org unless the
+//! setting [`SERVER`] names another) is asked for a newer firmware with
+//! the same plugins, and the update file it names is downloaded into
+//! `updates`, where it is installed as one copied there would be.
+//!
+//! Nothing is sent unless the reader asks: on the update page, or through
+//! the action `update.check` (e.g. from a rule). The request is a `POST`
+//! to `<server>/api/v1/updates` with what the device runs:
+//!
+//! ```json
+//! {"project": "paperpaw-xteink", "chip": 5, "version": "0.4.0",
+//!  "plugins": ["paperpaw-plugin-stats 0.4.0", "..."]}
+//! ```
+//!
+//! and the answer names the newest update for it, or none (`version`
+//! empty, or no newer than the one running):
+//!
+//! ```json
+//! {"version": "0.5.0", "url": "https://…/paperpaw-x4-0.5.0-update.bin",
+//!  "size": 6194784, "plugins": ["paperpaw-plugin-stats 0.5.0", "..."],
+//!  "missing": ["paperpaw-plugin-chess not-ready"]}
+//! ```
+//!
+//! `url` may be a path on the server (`/api/v1/updates/…`).
+//! `plugins` are those the update has built in; what the device has and
+//! they lack cannot come along, and `missing` may say why (`unknown`: not
+//! in the plugin library; `not-ready`: not built for that version yet).
+//! The downloaded file's own list is what counts when it is installed
+//! (see [`Update::leaves_out`](paperpaw_sdk::firmware::Update)); its
+//! signature is checked then, as always.
+//!
+//! The answer is kept in [`OFFER`] until it is downloaded or no longer
+//! newer.
+
+use alloc::format;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
+
+use paperpaw_sdk::event::Event;
+use paperpaw_sdk::firmware::{Firmware, Plugins, UPDATE_DIR, compare_versions};
+use paperpaw_sdk::replies::HttpReply;
+use paperpaw_sdk::setting::{Setting, Text};
+use paperpaw_sdk::{Arg, Command, Env, HttpRequest, Params, Storage};
+
+use crate::{OFFERED, PAGE, file, read_pair, write_pair};
+
+/// Where updates are asked for.
+pub const SERVER: Setting<Text> = Setting::new("update.server");
+/// The update server PaperPaw asks unless [`SERVER`] says otherwise.
+pub const DEFAULT_SERVER: &str = "https://paperpaw.org";
+/// The answer to the question for an update.
+pub(crate) const CHECKED: Event<HttpReply> = Event::new("update.checked");
+/// The update file, downloaded.
+pub(crate) const DOWNLOADED: Event<HttpReply> = Event::new("update.downloaded");
+/// The newest update the server named, kept until it is downloaded.
+const OFFER: &str = "offer.txt";
+/// The download until it is whole, not seen as an update before.
+const PART: &str = "updates/.download";
+/// Set on a question asked in the background (by the action): what it
+/// finds is offered by opening the page.
+const QUIET: &str = "quiet";
+
+/// An update the server named.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Offer {
+    pub version: String,
+    pub url: String,
+    /// Its size in bytes, 0 if not said.
+    pub size: u64,
+    /// The plugins it has built in.
+    pub plugins: Plugins,
+    /// Why plugins it lacks are missing: a crate and a word a line.
+    pub missing: String,
+}
+
+impl Offer {
+    /// The answer's `body`, if it names an update newer than `firmware`.
+    pub(crate) fn from_answer(body: &str, firmware: &Firmware) -> Option<Self> {
+        let members = paperpaw_json::object(body);
+        let version = paperpaw_json::text(&members, "version")?.trim().to_string();
+        let url = paperpaw_json::text(&members, "url")?.trim().to_string();
+        if version.is_empty()
+            || url.is_empty()
+            || !compare_versions(&version, &firmware.version).is_gt()
+        {
+            return None;
+        }
+        let lines = |key: &str| {
+            let mut text = String::new();
+            for line in paperpaw_json::raw_member(body, key)
+                .map(paperpaw_json::string_array)
+                .unwrap_or_default()
+            {
+                text.push_str(line.trim());
+                text.push('\n');
+            }
+            text
+        };
+        Some(Self {
+            version,
+            url,
+            size: paperpaw_json::number(&members, "size").map_or(0, |n| n.max(0.0) as u64),
+            plugins: Plugins::new(lines("plugins")),
+            missing: lines("missing"),
+        })
+    }
+
+    /// The plugin crates the running firmware has that this update lacks.
+    pub(crate) fn leaves_out<'a>(&'a self, firmware: &'a Firmware) -> Vec<&'a str> {
+        firmware.plugins.missing_from(&self.plugins).collect()
+    }
+
+    /// Why the server says `name` is missing, if it says.
+    pub(crate) fn why_missing(&self, name: &str) -> Option<&str> {
+        self.missing.lines().find_map(|line| {
+            let (crate_name, reason) = line.split_once(' ')?;
+            (crate_name == name).then_some(reason.trim())
+        })
+    }
+
+    /// The text of [`OFFER`]: the version, the address and the size a line
+    /// each, then a line for each plugin (`plugin name version`) and each
+    /// reason (`missing name word`).
+    fn to_text(&self) -> String {
+        let mut text = format!("{}\n{}\n{}\n", self.version, self.url, self.size);
+        for c in self.plugins.iter() {
+            text.push_str(&format!("plugin {} {}\n", c.name, c.version));
+        }
+        for line in self.missing.lines() {
+            text.push_str(&format!("missing {line}\n"));
+        }
+        text
+    }
+
+    fn from_text(text: &str) -> Option<Self> {
+        let mut lines = text.lines();
+        let version = lines.next()?.trim().to_string();
+        let url = lines.next()?.trim().to_string();
+        let size = lines.next()?.trim().parse().ok()?;
+        let (mut plugins, mut missing) = (String::new(), String::new());
+        for line in lines {
+            if let Some(rest) = line.strip_prefix("plugin ") {
+                plugins.push_str(rest.trim());
+                plugins.push('\n');
+            } else if let Some(rest) = line.strip_prefix("missing ") {
+                missing.push_str(rest.trim());
+                missing.push('\n');
+            }
+        }
+        Some(Self {
+            version,
+            url,
+            size,
+            plugins: Plugins::new(plugins),
+            missing,
+        })
+    }
+}
+
+/// The update the server named last, if it is still newer than
+/// `firmware`.
+pub(crate) fn offer(storage: &dyn Storage, firmware: &Firmware) -> Option<Offer> {
+    let text = paperpaw_sdk::read_file(storage, &file(OFFER), 64 * 1024).ok()?;
+    let offer = Offer::from_text(core::str::from_utf8(&text).ok()?)?;
+    compare_versions(&offer.version, &firmware.version)
+        .is_gt()
+        .then_some(offer)
+}
+
+/// The server's address, without a slash at the end.
+fn server(env: &Env<'_>) -> String {
+    let server = env.settings.read(&SERVER);
+    let server = server.trim().trim_end_matches('/');
+    String::from(if server.is_empty() {
+        DEFAULT_SERVER
+    } else {
+        server
+    })
+}
+
+/// The server's name as the reader knows it, e.g. `paperpaw.org`.
+pub(crate) fn server_name(env: &Env<'_>) -> String {
+    let server = server(env);
+    let name = server
+        .split_once("://")
+        .map_or(server.as_str(), |(_, rest)| rest);
+    String::from(name.split('/').next().unwrap_or(name))
+}
+
+/// The question's body (see the [module](self)).
+fn question(firmware: &Firmware) -> String {
+    let plugins: Vec<String> = firmware
+        .plugins
+        .iter()
+        .map(|c| paperpaw_json::string(&format!("{} {}", c.name, c.version)))
+        .collect();
+    format!(
+        "{{\"project\":{},\"chip\":{},\"version\":{},\"plugins\":[{}]}}",
+        paperpaw_json::string(&firmware.project),
+        firmware.chip,
+        paperpaw_json::string(&firmware.version),
+        plugins.join(",")
+    )
+}
+
+/// Asks the server for an update; `quiet` from the action, which offers
+/// what it finds by opening the page and says nothing otherwise.
+pub(crate) fn check(env: &Env<'_>, quiet: bool, out: &mut Vec<Command>) {
+    let Some(firmware) = env.firmware else {
+        return;
+    };
+    let url = format!("{}/api/v1/updates", server(env));
+    let mut request = HttpRequest::new("POST", &url, CHECKED);
+    request.headers.push((
+        String::from("content-type"),
+        String::from("application/json"),
+    ));
+    request.body = Some(question(firmware));
+    if quiet {
+        request.params.set(QUIET, "1");
+    }
+    out.push(Command::Http(request));
+}
+
+/// The answer: the update it names kept (or the one kept before let go),
+/// and offered if the question was asked in the background.
+pub(crate) fn checked(env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+    let Some(firmware) = env.firmware else {
+        return;
+    };
+    if !(200..300).contains(&reply.status) {
+        return;
+    }
+    let storage = env.storage;
+    let Some(offer) = Offer::from_answer(&reply.body, firmware) else {
+        let _ = storage.remove(&file(OFFER));
+        return;
+    };
+    let _ = storage.create_dir(&Env::plugin_dir(crate::PLUGIN.as_str()));
+    let _ = storage.write(&file(OFFER), offer.to_text().as_bytes());
+    let quiet = reply.context.get(QUIET).is_some();
+    let key = (String::from("online"), offer.version.clone());
+    if quiet && read_pair(storage, OFFERED) != Some(key.clone()) {
+        write_pair(storage, OFFERED, &key.0, &key.1);
+        out.push(Command::OpenScreen(PAGE, Params::new()));
+    }
+}
+
+/// Where a downloaded update of `version` is kept.
+fn path_for(firmware: &Firmware, version: &str) -> String {
+    format!("{UPDATE_DIR}/{}-{version}.bin", firmware.project)
+}
+
+/// Downloads `offer` into `updates`.
+pub(crate) fn download(env: &Env<'_>, offer: &Offer, out: &mut Vec<Command>) {
+    let _ = env.storage.create_dir(UPDATE_DIR);
+    let _ = env.storage.remove(PART);
+    // A path on the server asked.
+    let url = if offer.url.starts_with('/') {
+        format!("{}{}", server(env), offer.url)
+    } else {
+        offer.url.clone()
+    };
+    let mut request = HttpRequest::new("GET", &url, DOWNLOADED);
+    request.save_to = Some(String::from(PART));
+    request.params.set("version", offer.version.as_str());
+    request.params.set("size", offer.size.to_string());
+    out.push(Command::Http(request));
+}
+
+/// The download done: whole, it takes its name in `updates` and the
+/// offer is let go; otherwise it is removed. Either is said, also while
+/// the page is closed (downloads go on meanwhile).
+pub(crate) fn downloaded(env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+    let Some(firmware) = env.firmware else {
+        return;
+    };
+    let storage = env.storage;
+    let version = reply.context.get("version").unwrap_or_default();
+    let size: u64 = reply
+        .context
+        .get("size")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0);
+    let whole = (200..300).contains(&reply.status)
+        && storage
+            .size(PART)
+            .is_ok_and(|got| got > 0 && (size == 0 || got == size));
+    let path = path_for(firmware, version);
+    if whole && !version.is_empty() {
+        let _ = storage.remove(&path);
+        if storage.rename(PART, &path).is_ok() {
+            let _ = storage.remove(&file(OFFER));
+            out.push(Command::Notify(
+                env.i18n
+                    .format("update.downloaded", &[("version", Arg::Str(version))]),
+            ));
+            return;
+        }
+    }
+    let _ = storage.remove(PART);
+    out.push(Command::Notify(String::from(
+        env.i18n.tr("update.download-failed.title"),
+    )));
+}
+
+#[cfg(test)]
+mod tests {
+    use paperpaw_sdk::firmware::{Firmware, Plugins};
+
+    use super::{Offer, question};
+
+    fn firmware() -> Firmware {
+        Firmware {
+            version: "0.4.0".into(),
+            project: "paperpaw-xteink".into(),
+            chip: 5,
+            plugins: Plugins::new("paperpaw-plugin-stats 0.4.0\npaperpaw-plugin-chess 1.0.0\n"),
+            ..Firmware::default()
+        }
+    }
+
+    #[test]
+    fn the_question_says_what_runs() {
+        assert_eq!(
+            question(&firmware()),
+            "{\"project\":\"paperpaw-xteink\",\"chip\":5,\"version\":\"0.4.0\",\
+             \"plugins\":[\"paperpaw-plugin-stats 0.4.0\",\"paperpaw-plugin-chess 1.0.0\"]}"
+        );
+    }
+
+    #[test]
+    fn an_answer_with_an_update() {
+        let body = r#"{"version": "0.5.0", "url": "https://paperpaw.org/u.bin", "size": 6194784,
+            "plugins": ["paperpaw-plugin-stats 0.5.0"],
+            "missing": ["paperpaw-plugin-chess not-ready"]}"#;
+        let firmware = firmware();
+        let offer = Offer::from_answer(body, &firmware).unwrap();
+        assert_eq!(offer.version, "0.5.0");
+        assert_eq!(offer.size, 6_194_784);
+        assert_eq!(offer.leaves_out(&firmware), ["paperpaw-plugin-chess"]);
+        assert_eq!(
+            offer.why_missing("paperpaw-plugin-chess"),
+            Some("not-ready")
+        );
+        assert_eq!(Offer::from_text(&offer.to_text()), Some(offer));
+    }
+
+    #[test]
+    fn answers_without_a_newer_one() {
+        let firmware = firmware();
+        for body in [
+            r#"{"version": ""}"#,
+            r#"{"version": "0.4.0", "url": "https://paperpaw.org/u.bin"}"#,
+            r#"{"version": "0.3.0", "url": "https://paperpaw.org/u.bin"}"#,
+            r#"{"version": "0.5.0"}"#,
+            "not json",
+        ] {
+            assert_eq!(Offer::from_answer(body, &firmware), None, "{body}");
+        }
+        let all = Offer::from_answer(
+            r#"{"version": "0.5.0", "url": "u", "plugins": ["paperpaw-plugin-stats 0.5.0", "paperpaw-plugin-chess 1.1.0"]}"#,
+            &firmware,
+        )
+        .unwrap();
+        assert!(all.leaves_out(&firmware).is_empty());
+    }
+}

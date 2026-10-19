@@ -5,7 +5,7 @@ name: Release
 # image for its whole flash, which paperpaw.org offers for flashing in the
 # browser, with a signature file of its own, and the update file, both
 # signed with the firmware's key; the update is installed on the device),
-# their checksums, and the release notes from CHANGELOG.md.
+# the list of the plugins built in, their checksums, and the release notes from CHANGELOG.md.
 on:
   push:
     tags: ["v*"]
@@ -110,6 +110,10 @@ jobs:
             echo "::error::no PAPERPAW_SIGNING_KEY: devices install only signed updates"
             exit 1
           fi
+          # The plugins built in, which updates compare: the release fails
+          # if the image does not list them.
+          cargo run --release -p paperpaw-sign -- plugins \
+            "$RUNNER_TEMP/app.bin" > "dist/paperpaw-x4-$VERSION-plugins.txt"
           cargo run --release -p paperpaw-sign -- sign \
             "$RUNNER_TEMP/app.bin" "dist/paperpaw-x4-$VERSION-update.bin"
           # The web flasher checks the whole image against this.
@@ -158,4 +162,5 @@ jobs:
             "dist/paperpaw-$VERSION.apk" "dist/paperpaw-$VERSION.apk.sha256" \
             "dist/paperpaw-x4-$VERSION.bin" "dist/paperpaw-x4-$VERSION.bin.sha256" \
             "dist/paperpaw-x4-$VERSION.bin.sig" \
-            "dist/paperpaw-x4-$VERSION-update.bin" "dist/paperpaw-x4-$VERSION-update.bin.sha256"
+            "dist/paperpaw-x4-$VERSION-update.bin" "dist/paperpaw-x4-$VERSION-update.bin.sha256" \
+            "dist/paperpaw-x4-$VERSION-plugins.txt"

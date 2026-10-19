@@ -1677,7 +1677,11 @@ dependencies = [
 name = "paperpaw-plugin-update"
 version = "0.4.0-dev"
 dependencies = [
+ "paperpaw-core",
  "paperpaw-i18n",
+ "paperpaw-json",
+ "paperpaw-platform",
+ "paperpaw-plugin-fonts-default",
  "paperpaw-sdk",
  "paperpaw-update",
 ]

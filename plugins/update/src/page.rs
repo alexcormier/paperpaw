@@ -2,6 +2,10 @@
 //! few words below it, and up to two buttons at the bottom (the first one
 //! always the way on). While installing, a bar shows how far it is.
 //!
+//! An update on the card comes first; without one, the page offers to
+//! search online, and shows an update the server named (see [`online`]).
+//! An update that leaves out plugins built in now says which.
+//!
 //! Buttons: up and down (or left and right) move between the buttons,
 //! *Select* chooses, *Back* closes (not while installing). Touch: tap.
 
@@ -17,9 +21,10 @@ use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
     Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect,
-    RefreshMode, Screen,
+    RefreshMode, Screen, files,
 };
 
+use crate::online::{self, Offer};
 use crate::{INSTALLING, found, write_pair};
 
 /// Wi-Fi transfer, offered to put an update on the card.
@@ -36,11 +41,29 @@ enum View {
     Nothing,
     /// Files, but none for this device.
     Unfit(InstallFailure),
-    /// An update to install.
+    /// An update to install, and the plugin crates it leaves out.
     Ready {
         update: Update,
         signer: Signer,
+        leaves: Vec<String>,
     },
+    /// Asking the update server.
+    Checking,
+    /// The server knows no newer update.
+    UpToDate,
+    /// The server could not be asked (no answer, for this reason), or it
+    /// answered with this error status.
+    Unreachable {
+        status: u16,
+        reason: String,
+    },
+    /// An update the server named, and the plugin crates it leaves out.
+    Offer {
+        offer: Offer,
+        leaves: Vec<String>,
+    },
+    /// Downloading the update of this version.
+    Downloading(String),
     Installing {
         done: u64,
         total: u64,
@@ -53,6 +76,8 @@ enum View {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Button {
     Install,
+    Check,
+    Download,
     Transfer,
     Close,
 }
@@ -111,24 +136,107 @@ impl UpdatePage {
             FirmwareState::Installed => return View::Installed,
             FirmwareState::Idle | FirmwareState::Failed(_) => {}
         }
-        match found::find(env.storage, firmware) {
-            Ok(update) => {
-                let signer = update.signer(firmware, &trusted_keys(env.storage));
-                View::Ready { update, signer }
-            }
-            Err(InstallFailure::Unreadable) => View::Nothing,
+        let card = found::find(env.storage, firmware);
+        if let Ok(update) = card {
+            let signer = update.signer(firmware, &trusted_keys(env.storage));
+            let leaves = update
+                .leaves_out(firmware)
+                .into_iter()
+                .map(String::from)
+                .collect();
+            return View::Ready {
+                update,
+                signer,
+                leaves,
+            };
+        }
+        if let Some(offer) = online::offer(env.storage, firmware) {
+            let leaves = offer
+                .leaves_out(firmware)
+                .into_iter()
+                .map(String::from)
+                .collect();
+            return View::Offer { offer, leaves };
+        }
+        match card {
+            Err(InstallFailure::Unreadable) | Ok(_) => View::Nothing,
             Err(why) => View::Unfit(why),
         }
     }
 
+    /// Whether the page waits for an answer or a download (kept when it
+    /// shows again).
+    fn waiting(&self) -> bool {
+        matches!(self.view, View::Checking | View::Downloading(_))
+    }
+
+    /// The plugins `crates` leave out, by their names, and why the server
+    /// says they are missing.
+    fn plugin_names(&self, env: &Env<'_>, crates: &[String]) -> String {
+        let offer = match &self.view {
+            View::Offer { offer, .. } => Some(offer),
+            _ => None,
+        };
+        let names: Vec<String> = crates
+            .iter()
+            .map(|name| {
+                // First-party crates are named after their plugin.
+                let key = name
+                    .strip_prefix("paperpaw-plugin-")
+                    .map(|id| alloc::format!("{id}.plugin.name"));
+                let shown = key
+                    .as_deref()
+                    .and_then(|key| env.i18n.get(key))
+                    .unwrap_or(name);
+                match offer.and_then(|o| o.why_missing(name)) {
+                    Some(why @ ("unknown" | "not-ready")) => alloc::format!(
+                        "{shown} ({})",
+                        env.i18n.tr(&alloc::format!("update.missing.{why}"))
+                    ),
+                    _ => String::from(shown),
+                }
+            })
+            .collect();
+        names.join(", ")
+    }
+
+    /// `help`, followed by what cannot come along if anything.
+    fn with_leaves(&self, env: &Env<'_>, help: String, leaves: &[String]) -> String {
+        if leaves.is_empty() {
+            return help;
+        }
+        let names = self.plugin_names(env, leaves);
+        // Before a download, the choice is to download without them.
+        let key = if matches!(self.view, View::Offer { .. }) {
+            "update.leaves.download"
+        } else {
+            "update.leaves"
+        };
+        alloc::format!(
+            "{help} {}",
+            env.i18n.format(key, &[("plugins", Arg::Str(&names))])
+        )
+    }
+
     fn buttons(&self, env: &Env<'_>) -> Vec<Button> {
         match &self.view {
-            View::Nothing if env.actions.get(TRANSFER.as_str()).is_some() => {
-                alloc::vec![Button::Transfer]
+            View::Nothing => {
+                let mut buttons = Vec::new();
+                if env.caps.network {
+                    buttons.push(Button::Check);
+                }
+                if env.actions.get(TRANSFER.as_str()).is_some() {
+                    buttons.push(Button::Transfer);
+                }
+                buttons
             }
             View::Ready { .. } => alloc::vec![Button::Install, Button::Close],
-            View::Unfit(_) | View::Failed(_) => alloc::vec![Button::Close],
-            View::Nothing | View::Installing { .. } | View::Installed => Vec::new(),
+            View::Offer { .. } => alloc::vec![Button::Download, Button::Close],
+            View::Unreachable { .. } => alloc::vec![Button::Check, Button::Close],
+            View::Unfit(_) | View::Failed(_) | View::UpToDate => alloc::vec![Button::Close],
+            View::Installing { .. } | View::Installed | View::Checking | View::Downloading(_) => {
+                Vec::new()
+            }
         }
     }
 
@@ -141,9 +249,18 @@ impl UpdatePage {
                     ..
                 },
             ) => "update.trust-install",
+            (Button::Install, View::Ready { leaves, .. }) if !leaves.is_empty() => {
+                "update.install-without"
+            }
             (Button::Install, _) => "update.install",
+            (Button::Download, View::Offer { leaves, .. }) if !leaves.is_empty() => {
+                "update.download-without"
+            }
+            (Button::Download, _) => "update.download",
+            (Button::Check, View::Unreachable { .. }) => "update.retry",
+            (Button::Check, _) => "update.check",
             (Button::Transfer, _) => "update.transfer",
-            (Button::Close, View::Ready { .. }) => "update.later",
+            (Button::Close, View::Ready { .. } | View::Offer { .. }) => "update.later",
             (Button::Close, _) => "update.ok",
         })
     }
@@ -159,9 +276,13 @@ impl UpdatePage {
                 with("update.nothing.help", &[("current", Arg::Str(current))]),
             ),
             View::Unfit(why) => (tr("update.unfit.title"), tr(reason(*why))),
-            View::Ready { update, signer } => {
+            View::Ready {
+                update,
+                signer,
+                leaves,
+            } => {
                 let version = Arg::Str(&update.info.version);
-                if *signer == Signer::Unknown {
+                let (title, help) = if *signer == Signer::Unknown {
                     // Its groups kept together on one line.
                     let key = fingerprint(&update.trailer.key).replace(' ', "\u{a0}");
                     (
@@ -173,8 +294,63 @@ impl UpdatePage {
                         with("update.ready.title", &[("version", version)]),
                         with("update.ready.help", &[("current", Arg::Str(current))]),
                     )
-                }
+                };
+                (title, self.with_leaves(env, help, leaves))
             }
+            View::Checking => (
+                tr("update.checking.title"),
+                with(
+                    "update.checking.help",
+                    &[("server", Arg::Str(&online::server_name(env)))],
+                ),
+            ),
+            View::UpToDate => (
+                tr("update.up-to-date.title"),
+                with("update.up-to-date.help", &[("current", Arg::Str(current))]),
+            ),
+            View::Unreachable { status, reason } => {
+                let server = online::server_name(env);
+                let status = alloc::format!("{status}");
+                (
+                    tr("update.unreachable.title"),
+                    if reason.is_empty() {
+                        with(
+                            "update.server-error.help",
+                            &[("server", Arg::Str(&server)), ("status", Arg::Str(&status))],
+                        )
+                    } else {
+                        with(
+                            "update.unreachable.help",
+                            &[("server", Arg::Str(&server)), ("reason", Arg::Str(reason))],
+                        )
+                    },
+                )
+            }
+            View::Offer { offer, leaves } => {
+                let size = files::size(offer.size, env.i18n.tr("update.decimal"));
+                let help = with(
+                    if offer.size > 0 {
+                        "update.offer.help"
+                    } else {
+                        "update.offer.help-unsized"
+                    },
+                    &[("current", Arg::Str(current)), ("size", Arg::Str(&size))],
+                );
+                (
+                    with(
+                        "update.offer.title",
+                        &[("version", Arg::Str(&offer.version))],
+                    ),
+                    self.with_leaves(env, help, leaves),
+                )
+            }
+            View::Downloading(version) => (
+                with(
+                    "update.downloading.title",
+                    &[("version", Arg::Str(version))],
+                ),
+                tr("update.downloading.help"),
+            ),
             View::Installing { .. } => {
                 (tr("update.installing.title"), tr("update.installing.help"))
             }
@@ -222,8 +398,27 @@ impl UpdatePage {
         match button {
             Button::Close => cx.command(Command::Back),
             Button::Transfer => cx.command(Command::RunAction(TRANSFER)),
+            Button::Check => {
+                let mut out = Vec::new();
+                online::check(&env, false, &mut out);
+                out.into_iter().for_each(|command| cx.command(command));
+                self.view = View::Checking;
+                self.focus = 0;
+                self.redraw(cx, RefreshMode::Partial);
+            }
+            Button::Download => {
+                let View::Offer { offer, .. } = &self.view else {
+                    return;
+                };
+                let mut out = Vec::new();
+                online::download(&env, offer, &mut out);
+                out.into_iter().for_each(|command| cx.command(command));
+                self.view = View::Downloading(offer.version.clone());
+                self.focus = 0;
+                self.redraw(cx, RefreshMode::Partial);
+            }
             Button::Install => {
-                let View::Ready { update, signer } = &self.view else {
+                let View::Ready { update, signer, .. } = &self.view else {
                     return;
                 };
                 if *signer == Signer::Unknown {
@@ -416,7 +611,7 @@ impl Screen for UpdatePage {
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
         // Back from Wi-Fi transfer: a file may have come.
         let env = *cx.env();
-        if !matches!(self.view, View::Installing { .. } | View::Installed) {
+        if !matches!(self.view, View::Installing { .. } | View::Installed) && !self.waiting() {
             self.view = self.look(&env);
             self.focus = 0;
         }
@@ -479,11 +674,43 @@ impl Screen for UpdatePage {
         }
     }
 
-    fn on_event(&mut self, event: &Id, _: &Params, cx: &mut Cx<'_, '_>) {
+    fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
+        let env = *cx.env();
+        // The plugin kept the answer or the file before the page hears of
+        // it (see `online`).
+        if let Some(reply) = online::CHECKED.read(event, params) {
+            if self.view == View::Checking {
+                self.view = if !(200..300).contains(&reply.status) {
+                    View::Unreachable {
+                        status: reply.status,
+                        reason: if reply.status == 0 {
+                            reply.body.clone()
+                        } else {
+                            String::new()
+                        },
+                    }
+                } else {
+                    match self.look(&env) {
+                        View::Nothing | View::Unfit(_) => View::UpToDate,
+                        view => view,
+                    }
+                };
+                self.focus = 0;
+                self.redraw(cx, RefreshMode::Partial);
+            }
+            return;
+        }
+        if online::DOWNLOADED.read(event, params).is_some() {
+            if matches!(self.view, View::Downloading(_)) {
+                self.view = self.look(&env);
+                self.focus = 0;
+                self.redraw(cx, RefreshMode::Partial);
+            }
+            return;
+        }
         if *event != events::FIRMWARE_CHANGED {
             return;
         }
-        let env = *cx.env();
         let Some(firmware) = env.firmware else {
             return;
         };

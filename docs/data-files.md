@@ -60,7 +60,7 @@ plugin converts books differently; a plugin must keep that mapping.
 | `.paperpaw/plugins/battery/plugins.csv` | battery | CSV with a header, written for reading on a computer, never read back | |
 | `.paperpaw/plugins/sleep/next.txt` | sleep | the next picture, counted | version 1 |
 | `.paperpaw/plugins/setup/done` | setup | its presence | version 1 (the app's screen tests) |
-| `.paperpaw/plugins/update/installing.txt`, `offered.txt` | update | a path and a version, a line each | version 1 |
+| `.paperpaw/plugins/update/installing.txt`, `offered.txt` | update | a path and a version, a line each (`offered.txt`: `online` and the version for an update the server named) | version 1 |
 | `.paperpaw/plugins/weather/weather.txt` | weather | the last forecast (place, coordinates, when, now and the days), first line `weather 1` | version 1 |
 | `.paperpaw/plugins/widgets/todo.txt` | widgets | an item per line, done ones as `x <date> <text>` (as todo.txt has them) | version 1 |
 | `.paperpaw/plugins/widgets/quotes.txt` | widgets | the reader's own quotes, a line each: `text \| author` | version 1 |
@@ -79,6 +79,7 @@ plugin converts books differently; a plugin must keep that mapping.
 | `.paperpaw/plugins/stats/days.bin` | stats | the bytes of `pages.bin` it covers |
 | `.paperpaw/plugins/dictionary/<hash>/` | dictionary | the dictionary's `.ifo` |
 | `.paperpaw/plugins/opds/feed.json`, `news/headlines.txt`, `wallabag/entries.json` | their plugins | fetched again |
+| `.paperpaw/plugins/update/offer.txt`, `updates/.download` | update | the update server's last answer and a download until it is whole, fetched again; let go once the version is no longer newer |
 | `.paperpaw/plugins/about/about.md`, `.paperpaw/tmp/` | about, kernel | written when needed |
 
 ## Foreign

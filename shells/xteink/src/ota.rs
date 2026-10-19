@@ -26,8 +26,11 @@ use esp_bootloader_esp_idf::partitions::{
 use log::{info, warn};
 use paperpaw_platform::Storage;
 use paperpaw_sdk::firmware::{
-    Check, Firmware, FirmwareState, InstallFailure, Signer, Update, trusted_keys,
+    Check, Firmware, FirmwareState, InstallFailure, Plugins, Signer, Update, trusted_keys,
 };
+
+// The plugin crates built in (`PLUGINS`), written by `build.rs`.
+include!(concat!(env!("OUT_DIR"), "/plugins.rs"));
 
 /// PaperPaw's keys: updates signed with them install without asking.
 const KEYS: &[[u8; 32]] = &[
@@ -171,6 +174,7 @@ impl Ota {
             room: u64::from(self.room),
             undone: self.undone,
             state: FirmwareState::Idle,
+            plugins: Plugins::read_static(&PLUGINS).unwrap_or_default(),
         }
     }
 

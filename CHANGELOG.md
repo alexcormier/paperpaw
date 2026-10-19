@@ -6,6 +6,22 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Updates from the internet (X4): *Search online* on the update page
+  (Settings, *Update*) asks paperpaw.org for a newer PaperPaw, and
+  *Download* fetches it into `updates` on the card, to install as one
+  copied there; the action `update.check` searches in the background
+  (e.g. from a rule) and offers what it finds once. Nothing is sent
+  unless asked; the setting *Update server* (developers) names another
+  server (ADR 0022).
+- The firmware knows its plugins: every image lists the plugin crates
+  built in, right after its application descriptor, so that updates and
+  the web flasher can bring the same ones; *About PaperPaw* shows them.
+  An update that would leave plugins out says which, and the reader
+  chooses *Update without them* or *Not now*.
+  SDK: `Firmware::plugins`, `Update::plugins`, `Update::leaves_out`,
+  `firmware::Plugins` and `PluginCrate` (from `paperpaw-update`, which
+  also reads and writes the list). `paperpaw-sign plugins` prints an
+  image's list; releases carry it as `paperpaw-x4-<version>-plugins.txt`.
 - PaperPaw's logo, the paw on a sheet with a dog-ear: above "Sleeping" on
   the sleep screen (also what the X4 shows as it starts), at the top of
   *About PaperPaw*, and as a widget to add to the home screen (*PaperPaw

@@ -2,7 +2,9 @@
 //! and the licences of what it bundles (fonts, icons, hyphenation
 //! patterns), which every copy of it must carry. Shown by the reader (as
 //! Markdown), so it pages and reads like a book; PaperPaw's logo above it
-//! (the picture [`logo::LOGO`] names, if one does).
+//! (the picture [`logo::LOGO`] names, if one does). Where PaperPaw is the
+//! firmware, also the plugins built into it, which an update brings
+//! again.
 
 #![no_std]
 

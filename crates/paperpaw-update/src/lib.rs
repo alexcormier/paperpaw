@@ -22,6 +22,10 @@
 //! A whole flash image, as the web flasher writes it from address 0, is
 //! signed apart: its signature file (`.sig`) is the trailer alone, made
 //! and checked the same way ([`sign`], [`check_apart`]).
+//!
+//! An image also says which code plugins it has built in ([`Plugins`],
+//! right after its application descriptor), so that an update can bring
+//! the same ones.
 
 #![no_std]
 
@@ -32,6 +36,13 @@ use alloc::vec::Vec;
 use core::fmt;
 
 use ed25519_compact::{PublicKey, Signature, VerifyingState};
+
+mod plugins;
+
+pub use plugins::{
+    PLUGINS_AT, PLUGINS_FORMAT, PLUGINS_HEAD_LEN, PLUGINS_MAGIC, PLUGINS_MAX_LEN, PluginCrate,
+    Plugins,
+};
 
 /// The trailer's length.
 pub const TRAILER_LEN: usize = 128;

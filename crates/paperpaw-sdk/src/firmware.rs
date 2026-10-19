@@ -24,8 +24,8 @@ use core::cmp::Ordering;
 
 use paperpaw_platform::{Storage, StorageError};
 pub use paperpaw_update::{
-    APP_HEAD_LEN, AppInfo, CHIP_ESP32_C3, Check, Problem, TRAILER_LEN, Trailer, fingerprint,
-    key_hex, parse_key,
+    APP_HEAD_LEN, AppInfo, CHIP_ESP32_C3, Check, PLUGINS_AT, PLUGINS_HEAD_LEN, PluginCrate,
+    Plugins, Problem, TRAILER_LEN, Trailer, fingerprint, key_hex, parse_key,
 };
 
 /// The folder on the card where update files are looked for.
@@ -108,6 +108,9 @@ pub struct Firmware {
     /// before it came back at this start.
     pub undone: bool,
     pub state: FirmwareState,
+    /// The code plugins built in, as the image lists them (empty if it
+    /// does not).
+    pub plugins: Plugins,
 }
 
 /// Who signed an update.
@@ -128,6 +131,9 @@ pub struct Update {
     pub path: String,
     pub info: AppInfo,
     pub trailer: Trailer,
+    /// The code plugins it has built in; `None` for an image without the
+    /// list (older ones).
+    pub plugins: Option<Plugins>,
 }
 
 impl Update {
@@ -147,7 +153,17 @@ impl Update {
             path: String::from(path),
             info,
             trailer,
+            plugins: read_plugins(storage, path),
         })
+    }
+
+    /// The plugin crates the running firmware has that this update leaves
+    /// out (none if either does not list them).
+    pub fn leaves_out<'a>(&'a self, firmware: &'a Firmware) -> Vec<&'a str> {
+        match &self.plugins {
+            Some(plugins) => firmware.plugins.missing_from(plugins).collect(),
+            None => Vec::new(),
+        }
     }
 
     /// Whether it is for this device and has room.
@@ -172,6 +188,16 @@ impl Update {
             Signer::Unknown
         }
     }
+}
+
+/// The list of plugins in the image of the update file at `path`.
+fn read_plugins(storage: &dyn Storage, path: &str) -> Option<Plugins> {
+    let mut head = [0; PLUGINS_HEAD_LEN];
+    read_exact(storage, path, PLUGINS_AT as u64, &mut head).ok()?;
+    let len = Plugins::text_len(&head)?;
+    let mut bytes = alloc::vec![0; PLUGINS_HEAD_LEN + len];
+    read_exact(storage, path, PLUGINS_AT as u64, &mut bytes).ok()?;
+    Plugins::read(&bytes)
 }
 
 fn read_exact(

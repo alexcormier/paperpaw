@@ -27,6 +27,7 @@ superseded by a new record that links back.
 | [0019](0019-firmware-updates.md) | Firmware updates | Accepted |
 | [0020](0020-sdk-compatibility.md) | SDK compatibility | Accepted |
 | [0021](0021-decorations.md) | Decorations of text | Accepted |
+| [0022](0022-plugins-in-updates.md) | Plugins in updates | Accepted |
 
 ## Template
 
