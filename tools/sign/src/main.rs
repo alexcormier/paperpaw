@@ -1,16 +1,23 @@
 //! `paperpaw-sign`: signs firmware images as update files (see
 //! `paperpaw-update`), makes signing keys and shows what an update file
-//! holds.
+//! holds; makes native plugin files (`.ppn`, see `paperpaw-native`) from
+//! linked plugins, signs them as their author and shows what they hold.
 //!
 //! A device installs updates signed with PaperPaw's key, and those signed
-//! with a key its reader chose to trust (their own builds).
+//! with a key its reader chose to trust (their own builds). A plugin file
+//! is signed by its author, whose key a device remembers at the first
+//! install.
 
 use std::process::ExitCode;
 
+mod elf;
 mod firmware;
+mod pack;
+mod plugin;
+mod relocation;
 
 const USAGE: &str = "\
-paperpaw-sign: sign PaperPaw firmware updates
+paperpaw-sign: sign PaperPaw firmware updates, make and sign native plugins
 
 USAGE:
     paperpaw-sign key <secret-key-file>
@@ -32,6 +39,24 @@ USAGE:
     paperpaw-sign plugins <image.bin>
         Lists the plugin crates an app image or update file has built in;
         fails if it lists none.
+    paperpaw-sign pack <plugin.elf> <plugin.ppn>
+        Makes a native plugin file from a plugin linked with
+        paperpaw-plugin.x and --emit-relocs, or says what keeps it from
+        moving (writable data, undefined symbols, addresses built into
+        instructions, relative reaches out of the plugin).
+    paperpaw-sign plugin <plugin.ppn>
+        Shows what a plugin file holds, and its signer if
+        <plugin.ppn>.sig lies beside it (failing if that does not hold).
+    paperpaw-sign sign-plugin <plugin.ppn> [--key <secret-key-file>]
+        Signs a plugin file as its author: writes <plugin.ppn>.sig and
+        prints the key (64 hexadecimal digits) and the signature (128), as
+        the plugin library lists them; the key as for sign. The signature
+        is Ed25519 over \"PaperPaw plugin file\", a zero byte and the
+        whole file; the .sig file is 104 bytes: PPNS, the format (1, two
+        bytes little-endian), two zero bytes, the public key (32), the
+        signature (64).
+    paperpaw-sign check-plugin <plugin.ppn> [<plugin.ppn.sig>]
+        Shows the signer of a plugin file and whether its signature holds.
 ";
 
 fn main() -> ExitCode {
@@ -57,6 +82,12 @@ fn run(args: Vec<String>) -> Result<(), String> {
         }
         ["check", image, signature] => firmware::check(image, signature),
         ["plugins", image] => firmware::plugins(image),
+        ["pack", elf, out] => plugin::pack(elf, out),
+        ["plugin", file] => plugin::show(file),
+        ["sign-plugin", file] => plugin::sign(file, None),
+        ["sign-plugin", file, "--key", key] => plugin::sign(file, Some(key)),
+        ["check-plugin", file] => plugin::check(file, None),
+        ["check-plugin", file, signature] => plugin::check(file, Some(signature)),
         ["-h" | "--help"] => {
             print!("{USAGE}");
             Ok(())
