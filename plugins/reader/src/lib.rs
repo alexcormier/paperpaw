@@ -582,6 +582,9 @@ impl Plugin for Reader {
             (MENU, actions::ANNOTATIONS, 40),
             (MENU, actions::QUICK_SETTINGS, 50),
             (MENU, core_settings::NIGHT_MODE.into(), 60),
+            // Beside the night mode: with buttons alone (no corner to
+            // tap) as quick to reach as the contents.
+            (MENU, actions::TOGGLE_BOOKMARK, 65),
             (MENU, MORE_MENU, 70),
             // Last, so that one press back from the first entry reaches
             // it: home from a book without a further list.
@@ -595,7 +598,6 @@ impl Plugin for Reader {
             (LAYOUT_MENU, settings::JUSTIFY.into(), 40),
             (LAYOUT_MENU, settings::HYPHENATE.into(), 50),
             (LAYOUT_MENU, settings::PUBLISHER_STYLES.into(), 60),
-            (MORE_MENU, actions::TOGGLE_BOOKMARK, 10),
             (MORE_MENU, actions::SKIM_BOOK, 15),
             (MORE_MENU, actions::AUTO_TURN, 17),
             (MORE_MENU, actions::SELECT, 20),
