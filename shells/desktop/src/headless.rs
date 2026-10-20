@@ -11,6 +11,7 @@
 //! | `describe` | print what the screen shows, part by part |
 //! | `long-tap:240:400` | long press on the touch screen |
 //! | `swipe:400:400:100:400` | swipe from one point to another |
+//! | `down:240:400`, `move:300:400`, `up:300:400` | a finger put down, moved and lifted, step by step (e.g. to look at a slider while it moves) |
 //! | `wait:500` | let 500 ms pass |
 //! | `run:calibre.open` | run an action, as a button bound to it would |
 //! | `open:home.add-widget:kind=core.widgets.books` | open a screen with its parameters, as a plugin would |
@@ -46,7 +47,7 @@ fn run_step(device: &mut Device, step: &str) -> Result<(), String> {
     let parts: Vec<&str> = step.split(':').collect();
     let touch_step = matches!(
         parts.first(),
-        Some(&("tap" | "tap-on" | "long-tap" | "swipe"))
+        Some(&("tap" | "tap-on" | "long-tap" | "swipe" | "down" | "move" | "up"))
     );
     if touch_step && !device.profile.device.input.touch {
         return Err(format!(
@@ -133,6 +134,14 @@ fn run_step(device: &mut Device, step: &str) -> Result<(), String> {
             Some(Point::new(number(x2)?, number(y2)?)),
             150,
         ),
+        [phase @ ("down" | "move" | "up"), x, y] => {
+            let phase = match *phase {
+                "down" => PointerPhase::Down,
+                "move" => PointerPhase::Move,
+                _ => PointerPhase::Up,
+            };
+            device.input(finger(phase, Point::new(number(x)?, number(y)?)));
+        }
         [name] => press(device, button(device, name)?, 60),
         _ => return Err("unknown step".into()),
     }
@@ -162,16 +171,19 @@ fn press(device: &mut Device, name: &'static str, hold_ms: u64) {
     device.input(event(ButtonState::Released));
 }
 
+/// A sample of the one finger scripts use.
+fn finger(phase: PointerPhase, point: Point) -> InputEvent {
+    InputEvent::Pointer(PointerEvent {
+        id: 0,
+        phase,
+        point,
+        tool: PointerTool::Finger,
+        pressure: 1000,
+    })
+}
+
 fn touch(device: &mut Device, start: Point, end: Option<Point>, hold_ms: u64) {
-    let event = |phase, point| {
-        InputEvent::Pointer(PointerEvent {
-            id: 0,
-            phase,
-            point,
-            tool: PointerTool::Finger,
-            pressure: 1000,
-        })
-    };
+    let event = finger;
     device.input(event(PointerPhase::Down, start));
     hold(device, hold_ms);
     let end = end.unwrap_or(start);

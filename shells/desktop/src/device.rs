@@ -464,6 +464,9 @@ fn build_kernel(
         {
             builder = builder.plugin(paperpaw_sample_hello::Hello);
         }
+        if let Some(light) = profile.light {
+            builder = builder.plugin(crate::light::Emulated(light));
+        }
         if let Some(rows) = profile.frame_rows {
             builder = builder.frame_rows(rows);
         }
