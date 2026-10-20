@@ -155,3 +155,31 @@ fn installing_a_plugin_from_its_own_folder_keeps_it() {
     assert!(kernel.plugins().get("big").is_some());
     assert!(!kernel.take_warnings().is_empty());
 }
+
+/// A data plugin updated or removed while running takes its stylesheet
+/// and key bindings with it: only the new version's apply.
+#[test]
+fn a_plugin_updated_or_removed_takes_its_styles_and_bindings_along() {
+    let log = log();
+    let storage = MemoryStorage::new()
+        .with("plugins/big/styles.css", "p { line-height: 2 }")
+        .with(
+            "plugins/big/keymap.ini",
+            "[keymap.global]\nbutton.menu = core.toggle-night-mode\n",
+        )
+        .with(
+            "plugins/.big.part/plugin.ini",
+            "[plugin]\nid = big\nversion = 2.0.0\n",
+        )
+        .with("plugins/.big.part/styles.css", "p { line-height: 3 }");
+    let mut kernel = installed_kernel(storage, &log);
+    let menu = crate::keymap::InputKey::Button(Cow::Borrowed("menu"));
+    assert_eq!(kernel.shared.stylesheets, ["p { line-height: 2 }"]);
+    assert_eq!(kernel.resolve(&menu), Some(&actions::TOGGLE_NIGHT_MODE));
+    install(&mut kernel, "big", "plugins/.big.part");
+    assert_eq!(kernel.shared.stylesheets, ["p { line-height: 3 }"]);
+    assert_ne!(kernel.resolve(&menu), Some(&actions::TOGGLE_NIGHT_MODE));
+    kernel.apply(Command::RemovePlugin(Id::new_static("big")));
+    kernel.finish();
+    assert!(kernel.shared.stylesheets.is_empty());
+}

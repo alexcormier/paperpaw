@@ -450,6 +450,7 @@ impl KernelBuilder {
                 focus_spoken: false,
             },
             keys: plugins::KeySources::default(),
+            stylesheet_owners: Vec::new(),
             timing: drawing::Timing::default(),
             framebuffer,
             registry: Registry::default(),
@@ -611,7 +612,7 @@ impl Kernel {
                 problem.message.into_owned(),
             );
         }
-        self.keys.sources.push((Origin::Device, source));
+        self.keys.device = source;
     }
 
     /// The choices of settings that plugins add to: key map presets and

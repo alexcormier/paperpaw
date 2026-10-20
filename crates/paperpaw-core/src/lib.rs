@@ -354,6 +354,8 @@ pub struct Kernel {
     io: network::IoState,
     frame: drawing::FrameState,
     keys: plugins::KeySources,
+    /// The plugin of each of `Shared::stylesheets`, to drop them with it.
+    stylesheet_owners: Vec<Id>,
     timing: drawing::Timing,
 }
 

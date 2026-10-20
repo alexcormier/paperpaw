@@ -11,8 +11,11 @@ pub(crate) const RESERVED_IDS: [&str; 4] = ["plugins", "fonts", "menus", "slots"
 /// The key maps the kernel's is built from.
 #[derive(Debug, Default)]
 pub(crate) struct KeySources {
-    /// Every key map source, to rebuild the key map when the preset changes.
-    pub(crate) sources: Vec<(Origin, Cow<'static, str>)>,
+    /// The plugins' key maps, by plugin, to rebuild the key map when the
+    /// preset changes or a plugin goes.
+    pub(crate) plugins: Vec<(Id, Cow<'static, str>)>,
+    /// The device's own key map, under all others.
+    pub(crate) device: Cow<'static, str>,
     pub(crate) presets: Vec<(Id, Cow<'static, str>)>,
     /// Plugins' key maps that apply while a switch (the id) is on.
     pub(crate) when: Vec<(Id, Cow<'static, str>)>,
@@ -228,7 +231,7 @@ impl Kernel {
         for source in staging.keymaps.drain(..) {
             // Validated by the registrar.
             self.shared.keymap.load(&source, Origin::Plugin, true);
-            self.keys.sources.push((Origin::Plugin, source));
+            self.keys.plugins.push((plugin.clone(), source));
         }
         self.keys.presets.append(&mut staging.keymap_presets);
         // Loaded once the settings are known (`rebuild_keymap`).
@@ -311,6 +314,8 @@ impl Kernel {
         for widget in staging.widgets.drain(..) {
             self.shared.widgets.add(widget);
         }
+        self.stylesheet_owners
+            .extend(staging.stylesheets.iter().map(|_| plugin.clone()));
         self.shared.stylesheets.append(&mut staging.stylesheets);
         self.shared.book_data.append(&mut staging.book_data);
         for (id, service) in staging.services.drain(..) {
@@ -362,9 +367,10 @@ impl Kernel {
         {
             keymap.load(source, Origin::Preset, true);
         }
-        for (origin, source) in &self.keys.sources {
-            keymap.load(source, *origin, true);
+        for (_, source) in &self.keys.plugins {
+            keymap.load(source, Origin::Plugin, true);
         }
+        keymap.load(&self.keys.device, Origin::Device, true);
         for source in [&self.keys.user, &self.keys.shell] {
             keymap.load(source, Origin::User, false);
         }
@@ -548,6 +554,17 @@ impl Kernel {
     fn unload_plugin(&mut self, id: &Id) {
         self.shared.data_folders.retain(|(p, _)| p != id);
         self.shared.fonts.remove_plugin(id.as_str());
+        // Its key maps and stylesheets; the key map is built anew once the
+        // plugins changed (`plugins_changed`).
+        self.keys.plugins.retain(|(p, _)| p != id);
+        self.keys
+            .presets
+            .retain(|(preset, _)| preset.namespace() != id.as_str());
+        let mut owners = self.stylesheet_owners.iter();
+        self.shared
+            .stylesheets
+            .retain(|_| owners.next().is_some_and(|owner| owner != id));
+        self.stylesheet_owners.retain(|owner| owner != id);
         self.shared
             .settings
             .presets_mut()
@@ -750,7 +767,8 @@ impl Kernel {
     /// every kilobyte counts, and registries are not modified afterwards.
     pub(crate) fn shrink_to_fit(&mut self) {
         self.registry.shrink_to_fit();
-        self.keys.sources.shrink_to_fit();
+        self.keys.plugins.shrink_to_fit();
+        self.stylesheet_owners.shrink_to_fit();
         self.keys.presets.shrink_to_fit();
         self.keys.when.shrink_to_fit();
         self.keys.user.shrink_to_fit();

@@ -6,6 +6,9 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Plugins: a data plugin updated or removed while running takes its
+  stylesheet for books and its key bindings with it; before, the old
+  version's applied until a restart, beside the new one's.
 - Plugins: an update from the store that would not load (a translation
   with a mistake, say) is refused before anything changes, so the
   version before stays; before, it was removed and the new one marked
