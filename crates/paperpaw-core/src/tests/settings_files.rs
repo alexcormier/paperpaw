@@ -121,7 +121,7 @@ fn a_config_that_cannot_be_read_is_said_and_left_as_it_is() {
         // The binding applies at once all the same.
         assert_eq!(
             kernel.resolve(&crate::keymap::InputKey::Button(Cow::Borrowed("menu"))),
-            Some(actions::TOGGLE_NIGHT_MODE),
+            Some(&actions::TOGGLE_NIGHT_MODE),
             "{case}"
         );
     }
@@ -157,7 +157,7 @@ fn bindings_made_keep_the_shells_own() {
         .unwrap();
     kernel.start(Instant(0));
     let key = |name: &'static str| crate::keymap::InputKey::Button(Cow::Borrowed(name));
-    assert_eq!(kernel.resolve(&key("up")), Some(actions::HOME));
+    assert_eq!(kernel.resolve(&key("up")), Some(&actions::HOME));
     kernel.apply(Command::Bind {
         layer: String::from("global"),
         input: String::from("button.menu"),
@@ -166,9 +166,9 @@ fn bindings_made_keep_the_shells_own() {
     kernel.finish();
     assert_eq!(
         kernel.resolve(&key("menu")),
-        Some(actions::TOGGLE_NIGHT_MODE)
+        Some(&actions::TOGGLE_NIGHT_MODE)
     );
-    assert_eq!(kernel.resolve(&key("up")), Some(actions::HOME), "kept");
+    assert_eq!(kernel.resolve(&key("up")), Some(&actions::HOME), "kept");
 }
 
 const BOOK_SETTINGS: &str = "books/a/settings.ini";
