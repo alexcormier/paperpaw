@@ -21,7 +21,7 @@ use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
-use paperpaw_sdk::builtin::{groups, settings};
+use paperpaw_sdk::builtin::{events, groups, settings};
 use paperpaw_sdk::setting::Setting;
 use paperpaw_sdk::ui::choice::Choice;
 use paperpaw_sdk::{
@@ -96,8 +96,12 @@ impl Plugin for FontsBrowser {
             })?;
         }
         r.add_icon(OPEN, Cow::Borrowed("typography"))?;
-        // Downloads go on while no screen of the plugin is open.
+        // Downloads go on while no screen of the plugin is open; one cut
+        // off by a restart is begun anew from the font's page.
         r.on(install::DOWNLOADED, install::received)?;
+        r.on(events::STARTED, |env, _, _| {
+            install::INSTALLER.cancel(env.storage)
+        })?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())

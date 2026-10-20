@@ -6,6 +6,15 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Fonts browser: lighter on the X4. Only the files this device installs
+  are kept of the catalog, a font's page gets its font from the list
+  instead of reading the catalog again, and the samples held share 48 KB
+  there (the fonts past it are named in the menus' font); the list lets
+  go of its samples while a font's page is open. The catalog is fetched
+  once each time the list opens, no longer on every return to it. A
+  catalog with more fonts or files than are read no longer mixes the
+  last font kept with those after it, and a download a restart cut off
+  no longer shows as going on forever.
 - Store: a plugin of the library with the id of a plugin built into
   PaperPaw, or of the other kind (data for code, code for data), is
   neither listed nor installed (*... cannot replace*), so a library can
