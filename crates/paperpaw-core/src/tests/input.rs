@@ -286,11 +286,12 @@ fn a_finger_held_at_an_edge_is_a_long_press() {
     finger(&mut kernel, 700, 0, PointerPhase::Up, (45, 5));
     assert_eq!(*log.borrow(), ["LongPress 45,5"]);
     assert!(nothing_held(&kernel));
-    // At a side too.
+    // At a side, where a thumb rests holding the device: no long press,
+    // and lifted after as long, nothing.
     finger(&mut kernel, 1000, 0, PointerPhase::Down, (88, 45));
     kernel.tick(Instant(1500));
     finger(&mut kernel, 1600, 0, PointerPhase::Up, (88, 45));
-    assert_eq!(*log.borrow(), ["LongPress 45,5", "LongPress 88,45"]);
+    assert_eq!(*log.borrow(), ["LongPress 45,5"]);
     log.borrow_mut().clear();
 
     // Swipes in from the edges still apply what they are bound to, also
@@ -303,5 +304,27 @@ fn a_finger_held_at_an_edge_is_a_long_press() {
     finger(&mut kernel, 3700, 0, PointerPhase::Up, (70, 45));
     tap(&mut kernel, 4000, 88, 45);
     assert_eq!(*log.borrow(), ["core.home", "core.back", "Tap 88,45"]);
+    assert!(nothing_held(&kernel));
+}
+
+/// A thumb resting at an edge is no second finger: a long press elsewhere
+/// still comes, and the thumb makes none of its own, also at the top.
+#[test]
+fn a_thumb_resting_at_an_edge_leaves_long_presses_elsewhere() {
+    let log = log();
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(GesturePlugin(log.clone()))
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    render(&mut kernel);
+    for (at, thumb) in [(0, (88, 45)), (2000, (45, 5))] {
+        finger(&mut kernel, at + 100, 1, PointerPhase::Down, thumb);
+        finger(&mut kernel, at + 200, 0, PointerPhase::Down, (45, 45));
+        kernel.tick(Instant(at + 700));
+        finger(&mut kernel, at + 800, 0, PointerPhase::Up, (45, 45));
+        finger(&mut kernel, at + 900, 1, PointerPhase::Up, thumb);
+    }
+    assert_eq!(*log.borrow(), ["LongPress 45,45", "LongPress 45,45"]);
     assert!(nothing_held(&kernel));
 }

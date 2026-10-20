@@ -54,7 +54,12 @@ impl Kernel {
             match event.phase {
                 PointerPhase::Up => {
                     self.input.edge_touch = None;
-                    if !self.input.recognizer.lift_edge(event.id) {
+                    let thresholds = self.thresholds();
+                    if !self
+                        .input
+                        .recognizer
+                        .lift_edge(event.id, self.now, &thresholds)
+                    {
                         self.edge_lifted(touch, event.point);
                     }
                 }
@@ -96,7 +101,11 @@ impl Kernel {
                 start: event.point,
                 tool: event.tool,
             });
-            self.input.recognizer.follow_edge(&event, self.now);
+            let edge = match side {
+                Direction::Up | Direction::Down => input::Edge::End,
+                Direction::Left | Direction::Right => input::Edge::Side,
+            };
+            self.input.recognizer.follow_edge(&event, self.now, edge);
             return;
         }
         let thresholds = self.thresholds();
