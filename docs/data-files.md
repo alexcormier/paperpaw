@@ -42,6 +42,7 @@ plugin converts books differently; a plugin must keep that mapping.
 | `.paperpaw/firmware-keys.txt` | SDK `firmware` | a trusted key per line (64 hexadecimal digits) | version 1 |
 | `.paperpaw/plugins/reader/state.ini` | reader | ini: the book read last | version 1 |
 | `.paperpaw/plugins/reader/books/<hash>/progress.ini` | reader | ini: the position | version 1 |
+| `.paperpaw/plugins/reader/status-lines.txt` | reader | the status line chosen last at the top, then at the bottom, a line each | version 1 |
 | `.paperpaw/plugins/reader/books/<hash>/settings.ini` | kernel (a book's own settings) | ini, as `paperpaw.ini` | version 1 |
 | `.paperpaw/plugins/stats/books.ini` | stats | ini: a section per book (title, authors, md5, pages, language, series, `last-open`, path; `finished`, when it was last read to the end, added later) | version 1 |
 | `.paperpaw/plugins/stats/pages.bin` | stats | 16 bytes per stay on a page | version 1 |
@@ -75,7 +76,8 @@ plugin converts books differently; a plugin must keep that mapping.
 | `.paperpaw/plugins/format-epub/<hash>/` | format-epub | `CACHE_VERSION` and the book's size and start; HTML, Markdown and FB2 their own |
 | `.paperpaw/plugins/format-xtc/<hash>/` | format-xtc | the book's size and start |
 | `.paperpaw/plugins/widgets/picture.pixels` | widgets | `picture.stamp`: the picture's path and size, the screen's size and colour |
-| `.paperpaw/plugins/reader/books/<hash>/index.bin` | reader | the layout's settings and `paperpaw_layout::VERSION`, in the folder's name |
+| `.paperpaw/plugins/reader/books/<hash>/pages-<hash>.bin` | reader | the layout's settings, `paperpaw_layout::VERSION`, the book's size and the plugins' stylesheets, in the file's name; a new one removes the others once four are kept |
+| `.paperpaw/plugins/reader/books/<hash>/headings.txt` | reader | the book's size on its first line: the headings found in a book without contents, found again when the size changes |
 | `.paperpaw/library/catalog.txt` | SDK `library` | the folders' contents |
 | `.paperpaw/plugins/stats/days.bin` | stats | the bytes of `pages.bin` it covers |
 | `.paperpaw/plugins/dictionary/<hash>/` | dictionary | the dictionary's `.ifo` |

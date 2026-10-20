@@ -6,6 +6,28 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Reader: a new text size (pinch, the slider, Larger and Smaller, a
+  book's own size) lays the open book out again at once; before, it
+  applied only when the book was opened again.
+- Reader: "Next status line" is in the More menu of the reader on
+  devices without a touch screen (by touch, a tap on the line switches
+  it).
+- Reader: skimming through the book starts without a focused button;
+  Up and Down move to the buttons below the bar, Select presses the one
+  moved to, and with none it stays where skimming went.
+- Reader: where the position in a book, a bookmark, a highlight or a
+  note cannot be saved (a full or failing card), a notice says so; for
+  the position once a book.
+- Reader: a page back where the pages are not counted yet goes about a
+  page back and reaches the page left, instead of to the last page
+  counted; a book whose saved place cannot be shown opens at its start.
+- Reader: search and the contents open a book as the page shows it, so
+  without the book's styles or with a stylesheet plugin a search no
+  longer converts the whole book again; a search hit's row shows the
+  word found on narrow screens.
+- Reader: a bookmark keeps words broken across lines whole, and Up and
+  Down move to the line above and below while a word is chosen.
+
 - Themes: a theme's defaults (a data plugin's `settings.ini`, or the
   Pebble theme switched on) win over the device's own: a large-print
   theme now enlarges the interface on the X4 too, whose own default is
