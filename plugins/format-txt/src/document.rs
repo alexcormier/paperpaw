@@ -1,6 +1,8 @@
 use alloc::borrow::Cow;
 use alloc::string::String;
 use alloc::vec::Vec;
+use core::cell::{Ref, RefCell};
+use core::fmt;
 
 use paperpaw_sdk::Storage;
 use paperpaw_sdk::document::{
@@ -21,6 +23,9 @@ const GRID: u32 = 2048;
 const MARGIN: u32 = 512;
 /// How far a split point may move forward to reach whitespace.
 const SPLIT_SEARCH: usize = 256;
+/// Bytes read beyond what a block needs, so the blocks after it are found
+/// in what was read: about two pages of the X4.
+const AHEAD: u32 = 4096;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Encoding {
@@ -49,6 +54,20 @@ struct Para {
     single_line: bool,
 }
 
+/// The bytes of the file read last, from `start` on.
+#[derive(Clone, Default)]
+struct Window {
+    start: u32,
+    bytes: Vec<u8>,
+}
+
+impl fmt::Debug for Window {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let end = self.start as usize + self.bytes.len();
+        write!(f, "Window({}..{end})", self.start)
+    }
+}
+
 /// An open plain text file.
 #[derive(Debug, Clone)]
 pub struct TxtDocument {
@@ -62,6 +81,8 @@ pub struct TxtDocument {
     /// paragraph (poems, lists). 0 disables the rule.
     wrap_width: usize,
     metadata: Metadata,
+    /// What was read around the last block, for the blocks that follow.
+    window: RefCell<Window>,
 }
 
 impl TxtDocument {
@@ -84,6 +105,7 @@ impl TxtDocument {
             breaks: Breaks::Lines,
             wrap_width: 0,
             metadata: Metadata::default(),
+            window: RefCell::default(),
         };
 
         // Project Gutenberg: metadata in the header, licence around the text.
@@ -219,6 +241,43 @@ impl TxtDocument {
         w0 + r as u32
     }
 
+    /// The bytes `from..to` of the file (less at its end), through the
+    /// window of the last call: what it holds of them is not read again,
+    /// so paging forward reads each part of the file about once.
+    fn window(
+        &self,
+        storage: &dyn Storage,
+        from: u32,
+        to: u32,
+    ) -> Result<Ref<'_, [u8]>, DocumentError> {
+        {
+            let mut window = self.window.borrow_mut();
+            let Window { start, bytes } = &mut *window;
+            let end = *start + bytes.len() as u32;
+            if from < *start || to > end {
+                // Keep what the window holds from `from` on, read the rest.
+                let kept = if from >= *start && from < end {
+                    (from - *start) as usize
+                } else {
+                    bytes.len()
+                };
+                bytes.drain(..kept);
+                *start = from;
+                let more = from + bytes.len() as u32;
+                let ahead = to.saturating_add(AHEAD).min(self.end);
+                if let Err(error) = read_onto(storage, &self.path, more, ahead, bytes) {
+                    bytes.clear();
+                    return Err(error);
+                }
+            }
+        }
+        let window = self.window.borrow();
+        let (lo, hi) = ((from - window.start) as usize, (to - window.start) as usize);
+        Ok(Ref::map(window, |w| {
+            &w.bytes[lo.min(w.bytes.len())..hi.min(w.bytes.len())]
+        }))
+    }
+
     /// Decodes file bytes starting at source offset `base` into normalized
     /// text: `\r` and stray BOMs are dropped, line breaks, tabs and control
     /// characters become spaces.
@@ -282,7 +341,7 @@ impl Document for TxtDocument {
         while o < self.end {
             let w0 = o.saturating_sub(LIMIT + MARGIN).max(self.start);
             let w1 = o.saturating_add(LIMIT + MARGIN).min(self.end);
-            let buf = read(storage, &self.path, w0, w1)?;
+            let buf = self.window(storage, w0, w1)?;
             let paras = self.paragraphs(&buf, w0);
 
             let Some(i) = paras.iter().rposition(|p| p.start <= o) else {
@@ -387,7 +446,12 @@ fn find_end_marker(
     while to > lowest {
         let from = to.saturating_sub(TAIL_CHUNK).max(lowest);
         // Overlap chunks so a marker on a chunk border is found.
-        let chunk = read(storage, path, from, (to + MARKER.len() as u32).min(size))?;
+        let chunk = read(
+            storage,
+            path,
+            from,
+            to.saturating_add(MARKER.len() as u32).min(size),
+        )?;
         if let Some(marker) = rfind(&chunk, MARKER) {
             // The line start may lie in the previous chunk.
             let line = line_start(&chunk, marker);
@@ -405,21 +469,36 @@ fn find_end_marker(
 
 /// Reads `from..to`; fails cleanly instead of aborting when memory is short.
 fn read(storage: &dyn Storage, path: &str, from: u32, to: u32) -> Result<Vec<u8>, DocumentError> {
-    let len = to.saturating_sub(from) as usize;
     let mut buf = Vec::new();
+    read_onto(storage, path, from, to, &mut buf)?;
+    Ok(buf)
+}
+
+/// Reads `from..to` onto the end of `buf` (less at the end of the file);
+/// `buf` holds more than it should after an error.
+fn read_onto(
+    storage: &dyn Storage,
+    path: &str,
+    from: u32,
+    to: u32,
+    buf: &mut Vec<u8>,
+) -> Result<(), DocumentError> {
+    let start = buf.len();
+    let len = to.saturating_sub(from) as usize;
     buf.try_reserve_exact(len)
         .map_err(|_| DocumentError::OutOfMemory)?;
-    buf.resize(len, 0);
-    let mut filled = 0;
+    buf.resize(start + len, 0);
+    let mut filled = start;
     while filled < buf.len() {
-        let n = storage.read_at(path, u64::from(from) + filled as u64, &mut buf[filled..])?;
+        let at = u64::from(from) + (filled - start) as u64;
+        let n = storage.read_at(path, at, &mut buf[filled..])?;
         if n == 0 {
             break;
         }
         filled += n;
     }
     buf.truncate(filled);
-    Ok(buf)
+    Ok(())
 }
 
 /// Whether `bytes` is valid UTF-8; a sequence cut off at the end counts as
@@ -545,7 +624,7 @@ mod tests {
     use super::*;
     use alloc::format;
     use alloc::string::ToString;
-    use paperpaw_sdk::MemoryStorage;
+    use paperpaw_sdk::{DirEntry, MemoryStorage, StorageError};
 
     fn open(content: impl Into<Vec<u8>>) -> (MemoryStorage, TxtDocument) {
         let storage = MemoryStorage::new().with("books/book.txt", content);
@@ -553,7 +632,7 @@ mod tests {
         (storage, document)
     }
 
-    fn blocks(storage: &MemoryStorage, document: &TxtDocument) -> Vec<Block> {
+    fn blocks(storage: &dyn Storage, document: &TxtDocument) -> Vec<Block> {
         let mut at = Locator::START;
         let mut blocks = Vec::new();
         while let Some(block) = document.block_at(storage, at).unwrap() {
@@ -633,6 +712,60 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(inside.text, "Four.");
+    }
+
+    /// A storage that counts the bytes read from it.
+    struct Counting {
+        inner: MemoryStorage,
+        bytes: core::cell::Cell<usize>,
+    }
+
+    impl Storage for Counting {
+        fn read_at(&self, path: &str, offset: u64, buf: &mut [u8]) -> Result<usize, StorageError> {
+            let n = self.inner.read_at(path, offset, buf)?;
+            self.bytes.set(self.bytes.get() + n);
+            Ok(n)
+        }
+
+        fn size(&self, path: &str) -> Result<u64, StorageError> {
+            self.inner.size(path)
+        }
+
+        fn write(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
+            self.inner.write(path, data)
+        }
+
+        fn append(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
+            self.inner.append(path, data)
+        }
+
+        fn list(&self, dir: &str, visit: &mut dyn FnMut(DirEntry<'_>)) -> Result<(), StorageError> {
+            self.inner.list(dir, visit)
+        }
+
+        fn remove(&self, path: &str) -> Result<(), StorageError> {
+            self.inner.remove(path)
+        }
+    }
+
+    #[test]
+    fn paging_forward_reads_the_file_about_once() {
+        let paragraph = "A paragraph of ordinary prose, long enough to wrap. ".repeat(6);
+        let text = format!("{paragraph}\n\n").repeat(800);
+        let storage = Counting {
+            inner: MemoryStorage::new().with("books/book.txt", text.clone()),
+            bytes: core::cell::Cell::new(0),
+        };
+        let document = TxtDocument::open(&storage, "books/book.txt").unwrap();
+        storage.bytes.set(0);
+        let blocks = blocks(&storage, &document);
+        assert_eq!(blocks.len(), 800);
+        let read = storage.bytes.get();
+        assert!(
+            read < text.len() * 3 / 2,
+            "{read} bytes read of {}",
+            text.len()
+        );
     }
 
     #[test]

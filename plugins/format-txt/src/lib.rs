@@ -7,7 +7,8 @@
 //!   title, author and language are read from the header.
 //!
 //! The file is never loaded completely; each request reads a few kilobytes
-//! around the position, so arbitrarily large files work on small devices.
+//! around the position (what the request before it read is used again),
+//! so arbitrarily large files work on small devices.
 
 #![no_std]
 
