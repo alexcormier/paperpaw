@@ -55,6 +55,16 @@ fn fonts() -> paperpaw_app::Fonts {
 /// The text shown right after a start with `not_installed`, and in safe
 /// mode if `safe_mode`.
 fn shown(not_installed: &[(&'static str, NotInstalledReason)], safe_mode: bool) -> String {
+    let safe_mode = safe_mode.then(|| SafeMode::new(SafeModeReason::KeyHeld));
+    shown_in("en", not_installed, safe_mode)
+}
+
+/// [`shown`] in `language`, in `safe_mode` if one.
+fn shown_in(
+    language: &str,
+    not_installed: &[(&'static str, NotInstalledReason)],
+    safe_mode: Option<SafeMode>,
+) -> String {
     let mut native = Native::new("code.ppn");
     native.not_installed = not_installed
         .iter()
@@ -63,11 +73,11 @@ fn shown(not_installed: &[(&'static str, NotInstalledReason)], safe_mode: bool) 
     let storage = MemoryStorage::new().with(".paperpaw/plugins/setup/done", "");
     let builder = Kernel::builder(DEVICE)
         .storage(storage)
-        .user_config("[core]\nlanguage = en\n")
+        .user_config(format!("[core]\nlanguage = {language}\n"))
         .code_plugins(native, Box::new(NoCode));
     let builder = match safe_mode {
-        true => builder.safe_mode(SafeMode::new(SafeModeReason::KeyHeld)),
-        false => builder,
+        Some(safe_mode) => builder.safe_mode(safe_mode),
+        None => builder,
     };
     let mut kernel = paperpaw_app::install(builder, fonts()).build().unwrap();
     let _ = kernel.start(Instant(0));
@@ -84,7 +94,7 @@ fn shown(not_installed: &[(&'static str, NotInstalledReason)], safe_mode: bool) 
 fn a_plugin_by_another_author_is_named() {
     let shown = shown(&[("clock", NotInstalledReason::OtherAuthor)], false);
     assert!(
-        shown.contains("clock was not installed: it is signed by another author"),
+        shown.contains("clock was not installed: signed by another author"),
         "{shown}"
     );
 }
@@ -113,4 +123,36 @@ fn safe_mode_says_its_own() {
 fn nothing_is_said_when_all_were_installed() {
     let shown = shown(&[], false);
     assert!(!shown.contains("installed"), "{shown}");
+}
+
+#[test]
+fn the_notices_fit_whole() {
+    // A notice has three lines: a long name still leaves the reason.
+    for language in ["en", "de"] {
+        for not_installed in [
+            &[("reading-clock", NotInstalledReason::OtherAuthor)][..],
+            &[("reading-clock", NotInstalledReason::Damaged)],
+            &[
+                ("reading-clock", NotInstalledReason::OtherAuthor),
+                ("weather", NotInstalledReason::Damaged),
+            ],
+        ] {
+            let shown = shown_in(language, not_installed, None);
+            assert!(fits(&shown), "{language}: {shown}");
+        }
+        // Safe mode's, naming the plugin.
+        let mut crashed = SafeMode::new(SafeModeReason::FailedStarts);
+        crashed.crashed = Some(String::from("reading-clock"));
+        let mut last = SafeMode::new(SafeModeReason::FailedStarts);
+        last.last_loaded = Some(String::from("reading-clock"));
+        for safe_mode in [crashed, last] {
+            let shown = shown_in(language, &[], Some(safe_mode));
+            assert!(fits(&shown), "{language}: {shown}");
+        }
+    }
+}
+
+/// Whether the notice `shown` names the plugin and is not cut off.
+fn fits(shown: &str) -> bool {
+    shown.replace("- ", "-").contains("reading-clock") && !shown.contains('…')
 }

@@ -780,3 +780,6 @@ mod tests {
         assert!(!is_old(5 * hour, 3 * hour));
     }
 }
+
+#[cfg(test)]
+mod roundtrip_tests;

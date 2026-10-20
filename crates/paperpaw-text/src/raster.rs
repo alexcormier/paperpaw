@@ -266,3 +266,6 @@ mod tests {
         assert_eq!(ceil(2.0), 2);
     }
 }
+
+#[cfg(test)]
+mod bounds_tests;

@@ -28,6 +28,11 @@ paperpaw-digest.workspace = true
 # Native code plugins' files and the table plugins are given (`native`).
 paperpaw-native.workspace = true
 
+[dev-dependencies]
+proptest.workspace = true
+# Scalable fonts in tests that draw text (the UI font of fonts-default).
+paperpaw-text = { workspace = true, features = ["outline"] }
+
 [features]
 default = []
 # Scalable OpenType/TrueType fonts (see paperpaw-text).

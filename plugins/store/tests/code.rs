@@ -262,7 +262,7 @@ fn refused(code: &[u8], why: &str) {
 fn code_that_cannot_be_trusted_is_not_installed() {
     refused(
         &ppn(BUILD, Some(&OTHER)),
-        "not signed by the author the plugin library names",
+        "not signed by the author the library names",
     );
     refused(&ppn(BUILD, None), "not signed by its author");
     refused(
