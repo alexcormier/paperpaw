@@ -310,7 +310,7 @@ impl StatusLine<'_> {
                 area,
                 values,
                 (x, end),
-                (size, percent),
+                (size, gap, percent),
                 self.color,
             );
         };
@@ -359,10 +359,10 @@ fn draw_values(
     area: Rect,
     values: &[StatusValue],
     (mut x, end): (f32, f32),
-    (size, with_percent): (f32, bool),
+    (size, gap, with_percent): (f32, f32, bool),
     color: Color,
 ) {
-    let gap = size;
+    // The gap the line was laid out with (narrower in a crowded line).
     let metrics = font.line_metrics(size);
     let baseline = i32::from(area.y)
         + ((f32::from(area.height) + metrics.ascent - metrics.descent) / 2.0) as i32;
