@@ -63,6 +63,19 @@ pub(crate) struct RawToc {
     pub fragment: Option<String>,
 }
 
+/// What is read of a package at most: the text of a metadata element and
+/// what is kept of it, authors, subjects, chapters and stylesheets. It
+/// bounds memory, and `package.ini` stays well below [`MAX_INI`], so a
+/// book's package is read once, not on every open.
+const MAX_CAPTURE: usize = 8 * 1024;
+const MAX_VALUE: usize = 512;
+const MAX_AUTHORS: usize = 16;
+const MAX_SUBJECTS: usize = 32;
+const MAX_SPINE: usize = 4096;
+const MAX_STYLESHEETS: usize = 64;
+/// Longest `package.ini` read.
+const MAX_INI: usize = 32 * 1024;
+
 /// Size of a `toc.dat` record header.
 const TOC_HEADER: usize = 9;
 /// Cache files are appended in chunks of about this size.
@@ -82,6 +95,31 @@ pub(crate) fn error(e: paperpaw_sdk::zip::ZipError) -> DocumentError {
 
 fn malformed(message: &'static str) -> DocumentError {
     DocumentError::Malformed(Cow::Borrowed(message))
+}
+
+/// The chapters files are, by name: the last looked up is kept, as entries
+/// of the contents mostly lead into the file of the one before.
+struct Sections<'a> {
+    storage: &'a dyn Storage,
+    archive: &'a ZipArchive,
+    spine: &'a [Chapter],
+    last: core::cell::RefCell<Option<(String, Option<u32>)>>,
+}
+
+impl Sections<'_> {
+    fn of(&self, file: &str) -> Option<u32> {
+        let mut last = self.last.borrow_mut();
+        if let Some((name, section)) = last.as_ref()
+            && name == file
+        {
+            return *section;
+        }
+        let record = self.archive.entry(self.storage, file).ok()??.record();
+        let section = self.spine.iter().position(|c| c.record == record);
+        let section = section.and_then(|s| u32::try_from(s).ok());
+        *last = Some((String::from(file), section));
+        section
+    }
 }
 
 /// Tokenizes an archive entry while it is inflated.
@@ -156,7 +194,6 @@ fn percent_decode(text: &str) -> String {
     String::from_utf8_lossy(&out).into_owned()
 }
 
-/// Collapses whitespace in a title.
 /// The most of a description kept, in bytes.
 const MAX_DESCRIPTION: usize = 2000;
 
@@ -190,6 +227,15 @@ fn plain_text(html: &str) -> String {
     plain
 }
 
+/// A value of the package: its whitespace collapsed, at most
+/// [`MAX_VALUE`] bytes.
+fn value(text: &str) -> String {
+    let mut value = clean(text);
+    value.truncate(truncate(&value, MAX_VALUE).len());
+    value
+}
+
+/// Collapses whitespace in a title.
 fn clean(text: &str) -> String {
     let mut out = String::new();
     for word in text.split_whitespace() {
@@ -208,7 +254,7 @@ fn read_u32(storage: &dyn Storage, path: &str, offset: u64) -> Option<u32> {
 
 /// The package from the cache, if it is complete and matches the book.
 pub(crate) fn load(storage: &dyn Storage, cache: &str, book: &str) -> Option<Package> {
-    let data = paperpaw_sdk::read_file(storage, &path(cache, "package.ini"), 16 * 1024).ok()?;
+    let data = paperpaw_sdk::read_file(storage, &path(cache, "package.ini"), MAX_INI).ok()?;
     let source = core::str::from_utf8(&data).ok()?;
     let mut metadata = Metadata::default();
     let (mut version, mut stamp, mut sections, mut toc_len) = (None, None, None, None);
@@ -571,6 +617,7 @@ fn read_metadata(
     // EPUB 3 series: `<meta property="belongs-to-collection" id="c">`, its
     // number in `<meta refines="#c" property="group-position">`.
     let mut collection_id: Option<String> = None;
+    let mut out_of_memory = false;
     tokenize(storage, archive, opf_path, &mut |token| match token {
         Token::Start {
             name,
@@ -604,12 +651,12 @@ fn read_metadata(
             }
             // Calibre's series.
             "meta" if attrs.get("name").as_deref() == Some("calibre:series") => {
-                if let Some(series) = attrs.get("content").map(|v| clean(&v)) {
+                if let Some(series) = attrs.get("content").map(|v| value(&v)) {
                     metadata.series.get_or_insert(series);
                 }
             }
             "meta" if attrs.get("name").as_deref() == Some("calibre:series_index") => {
-                if let Some(index) = attrs.get("content").map(|v| clean(&v)) {
+                if let Some(index) = attrs.get("content").map(|v| value(&v)) {
                     metadata.series_index.get_or_insert(index);
                 }
             }
@@ -630,16 +677,21 @@ fn read_metadata(
                     text.clear();
                 }
             }
-            "itemref" => {
+            "itemref" if spine_ids.len() < MAX_SPINE => {
                 if let Some(id) = attrs.get("idref") {
                     let position = spine_ids.len() as u32;
-                    spine_ids.push((fnv1a64(id.as_bytes()), position));
+                    match spine_ids.try_reserve(1) {
+                        Ok(()) => spine_ids.push((fnv1a64(id.as_bytes()), position)),
+                        Err(_) => out_of_memory = true,
+                    }
                 }
             }
             _ => {}
         },
-        Token::Text(t) if capture.is_some() => text.push_str(&decode(&t)),
-        Token::CData(t) if capture.is_some() => text.push_str(t),
+        Token::Text(t) if capture.is_some() && text.len() < MAX_CAPTURE => {
+            text.push_str(&decode(&t));
+        }
+        Token::CData(t) if capture.is_some() && text.len() < MAX_CAPTURE => text.push_str(t),
         Token::End { name } => {
             // Series are captured from `<meta>` elements.
             let element = |field: &'static str| -> &'static str {
@@ -651,17 +703,23 @@ fn read_metadata(
             if let Some(field) = capture
                 && local_name(name) == element(field)
             {
-                let value = clean(&text);
+                let value = value(&text);
                 match field {
                     "title" if metadata.title.is_none() && !value.is_empty() => {
                         metadata.title = Some(value);
                     }
-                    "creator" if !value.is_empty() => metadata.authors.push(value),
-                    "subject" if !value.is_empty() && !metadata.subjects.contains(&value) => {
+                    "creator" if !value.is_empty() && metadata.authors.len() < MAX_AUTHORS => {
+                        metadata.authors.push(value);
+                    }
+                    "subject"
+                        if !value.is_empty()
+                            && metadata.subjects.len() < MAX_SUBJECTS
+                            && !metadata.subjects.contains(&value) =>
+                    {
                         metadata.subjects.push(value);
                     }
                     "description" if metadata.description.is_none() => {
-                        let plain = plain_text(&value);
+                        let plain = plain_text(&text);
                         metadata.description = (!plain.is_empty()).then_some(plain);
                     }
                     "language" if metadata.language.is_none() && !value.is_empty() => {
@@ -681,6 +739,9 @@ fn read_metadata(
         }
         _ => {}
     })?;
+    if out_of_memory {
+        return Err(DocumentError::OutOfMemory);
+    }
     spine_ids.sort_unstable();
     Ok(Opf {
         metadata,
@@ -714,7 +775,11 @@ fn read_manifest(
     let (spine_ids, ncx_id, cover_id) = (&opf.spine_ids, opf.ncx_id, opf.cover_id);
     // Second pass: the manifest items the spine refers to, the navigation
     // document and the NCX. Nothing else of the manifest is kept.
-    let mut chapters: Vec<Option<Chapter>> = alloc::vec![None; spine_ids.len()];
+    let mut chapters: Vec<Option<Chapter>> = Vec::new();
+    chapters
+        .try_reserve_exact(spine_ids.len())
+        .map_err(|_| DocumentError::OutOfMemory)?;
+    chapters.resize(spine_ids.len(), None);
     let mut nav: Option<String> = None;
     let mut ncx: Option<String> = None;
     let mut ncx_by_type: Option<String> = None;
@@ -752,7 +817,7 @@ fn read_manifest(
             return;
         }
         let (path, _) = resolve(&opf_dir, &get("href"));
-        if is_css {
+        if is_css && stylesheets.len() < MAX_STYLESHEETS {
             stylesheets.push(path.clone());
         }
         for &(_, position) in positions {
@@ -806,13 +871,16 @@ fn write_toc(
     // Table of contents: EPUB 3 navigation document, else (or if it has no
     // entries) the EPUB 2 NCX.
     let mut toc = TocWriter::new(storage, cache)?;
+    let sections = Sections {
+        storage,
+        archive,
+        spine,
+        last: core::cell::RefCell::new(None),
+    };
     let add =
         |toc: &mut TocWriter<'_>, title: String, level: u8, file: &str, fragment: Option<&str>| {
-            let Ok(Some(entry)) = archive.entry(storage, file) else {
-                return;
-            };
-            if let Some(section) = spine.iter().position(|c| c.record == entry.record()) {
-                toc.push(level, section as u32, fragment, &title);
+            if let Some(section) = sections.of(file) {
+                toc.push(level, section, fragment, &title);
             }
         };
     let pages_path = path(cache, "pages.txt");
@@ -820,10 +888,10 @@ fn write_toc(
     if let Some(nav) = nav {
         let mut pages = String::new();
         let mut add_page = |label: String, file: &str, fragment: Option<&str>| {
-            let (Ok(Some(entry)), Some(fragment)) = (archive.entry(storage, file), fragment) else {
+            let Some(fragment) = fragment else {
                 return;
             };
-            if let Some(section) = spine.iter().position(|c| c.record == entry.record()) {
+            if let Some(section) = sections.of(file) {
                 let one = |s: &str| s.replace(['\t', '\n'], " ");
                 pages.push_str(&alloc::format!(
                     "{section}\t{}\t{}\n",
@@ -1016,7 +1084,9 @@ fn read_nav(
             }
             _ => {}
         },
-        Token::Text(t) if link.is_some() || page_link.is_some() => text.push_str(&decode(&t)),
+        Token::Text(t) if (link.is_some() || page_link.is_some()) && text.len() < MAX_CAPTURE => {
+            text.push_str(&decode(&t));
+        }
         Token::End { name } => match local_name(name) {
             "nav" => {
                 in_toc = false;
@@ -1081,7 +1151,7 @@ fn read_ncx(
             }
             _ => {}
         },
-        Token::Text(t) if in_label => text.push_str(&decode(&t)),
+        Token::Text(t) if in_label && text.len() < MAX_CAPTURE => text.push_str(&decode(&t)),
         Token::End { name } => match local_name(name) {
             "navMap" => in_map = false,
             "navPoint" => depth = depth.saturating_sub(1),

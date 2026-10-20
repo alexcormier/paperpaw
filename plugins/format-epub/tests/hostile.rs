@@ -615,3 +615,49 @@ fn markdown_is_converted_into_its_own_cache() {
         assert!(file.contains(&format!("/md-{key}/")), "{file}");
     }
 }
+
+/// An EPUB of package document `opf` and one chapter, `ch1.xhtml`.
+fn epub_with_opf(opf: &str, chapter: &str) -> Vec<u8> {
+    ZipBuilder::new()
+        .stored("mimetype", "application/epub+zip")
+        .deflated("META-INF/container.xml", CONTAINER)
+        .deflated("OEBPS/content.opf", opf)
+        .deflated("OEBPS/ch1.xhtml", chapter)
+        .build()
+}
+
+#[test]
+fn a_package_of_endless_metadata_is_read_once_in_bounded_memory() {
+    let mut opf = String::from(
+        "<?xml version=\"1.0\"?><package xmlns=\"http://www.idpf.org/2007/opf\" version=\"3.0\">\
+         <metadata xmlns:dc=\"http://purl.org/dc/elements/1.1/\"><dc:title>",
+    );
+    opf.push_str(&"Title ".repeat(50_000));
+    opf.push_str("</dc:title>");
+    for i in 0..20_000 {
+        opf.push_str(&format!(
+            "<dc:subject>Subject {i}</dc:subject><dc:creator>A{i}</dc:creator>"
+        ));
+    }
+    opf.push_str(
+        "</metadata><manifest><item id=\"c1\" href=\"ch1.xhtml\" \
+         media-type=\"application/xhtml+xml\"/></manifest><spine>",
+    );
+    for _ in 0..20_000 {
+        opf.push_str("<itemref idref=\"c1\"/>");
+    }
+    opf.push_str("</spine></package>");
+    let chapter = "<html><body><p>Text.</p></body></html>";
+    let card = Card::new("book.epub", epub_with_opf(&opf, chapter));
+    let (doc, heap) = peak(|| EpubDocument::open(&card, "book.epub").unwrap());
+    assert!(heap < 2 * PLAIN_PEAK, "{heap} bytes at once");
+    let metadata = doc.metadata();
+    assert!(metadata.title.as_ref().unwrap().len() <= 512);
+    assert!(metadata.subjects.len() <= 32 && metadata.authors.len() <= 16);
+    assert_eq!(doc.sections(), 4096);
+    // Opened again, from what was kept of it.
+    let writes = card.writes.get();
+    let again = EpubDocument::open(&card, "book.epub").unwrap();
+    assert_eq!(card.writes.get(), writes, "the package was read again");
+    assert_eq!(again.metadata(), metadata);
+}
