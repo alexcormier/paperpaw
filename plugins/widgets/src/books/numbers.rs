@@ -451,12 +451,26 @@ fn draw(
     }
     let labels: String = parts.iter().map(|(_, l)| *l).collect();
     let (_, (names_top, names_h)) = inks(&font, &style, &labels);
+    // The names in their columns, a little room from their neighbours;
+    // none where one would keep less than three letters (a row of "B…"
+    // says nothing), the numbers alone then.
+    let between = if laid.columns > 1 { gap / 2 } else { 0 };
+    let room = f32::from(column.saturating_sub(between));
+    let names: Vec<String> = shown
+        .iter()
+        .map(|(_, label)| paperpaw_sdk::ui::fit(&font, style.small, label, room))
+        .collect();
+    let named = shown
+        .iter()
+        .zip(&names)
+        .all(|((_, label), name)| name == label || name.chars().count() > 3);
+    let names_h = if named { names_h } else { 0 };
     let size = laid.size;
     // Each row: the digits' ink, half a gap, the names' ink; a gap
     // between rows and above the bar; all of it in the middle.
     let digits = font.ink(size, "0123456789").unwrap_or((-(size as i32), 0));
     let digits_h = (digits.1 - digits.0) as u16;
-    let row_h = digits_h + gap / 2 + names_h;
+    let row_h = digits_h + if named { gap / 2 + names_h } else { 0 };
     let rows = (laid.shown as u16).div_ceil(laid.columns.max(1));
     let bar_h = (style.line as u16 * 3).max(4);
     let total = row_h * rows + gap * (rows - 1) + if laid.bar { gap + bar_h } else { 0 };
@@ -473,15 +487,12 @@ fn draw(
         canvas.describe(Role::Text, &said, cell, false, None);
         let x = Align::Center.x(cell, font.measure(size, &number));
         font.draw(canvas, size, x, i32::from(y) - digits.0, &number, look.ink);
-        // The name in its column, a little room from its neighbours.
-        let between = if laid.columns > 1 { gap / 2 } else { 0 };
-        let room = f32::from(column.saturating_sub(between));
-        let label = paperpaw_sdk::ui::fit(&font, style.small, label, room);
-        let label_w = font.measure(style.small, &label);
-        if label_w <= f32::from(column) {
+        let label = &names[i];
+        let label_w = font.measure(style.small, label);
+        if named && label_w <= f32::from(column) {
             let x = Align::Center.x(cell, label_w);
             let baseline = i32::from(y + digits_h + gap / 2) - names_top;
-            font.draw(canvas, style.small, x, baseline, &label, look.faint);
+            font.draw(canvas, style.small, x, baseline, label, look.faint);
         }
     }
     if laid.bar {
