@@ -14,9 +14,12 @@
 //! - *Page*: the screen stays as it is.
 //!
 //! Without a cover or a picture the message shows. Where the device is
-//! off while it sleeps (the X4), this is also what shows as it starts. The screen closes when
-//! the device wakes. Only where PaperPaw shows the sleep screen itself
-//! (the X4, not Android): elsewhere its settings are hidden.
+//! off while it sleeps (the X4), this is also what shows as it starts.
+//! Asleep, the screen takes every button but *Sleep* and *Home*. It
+//! closes when the device wakes or, where a screen opened above it as the
+//! device woke (a lock), as soon as that one closes. Only where PaperPaw
+//! shows the sleep screen itself (the X4, not Android): elsewhere its
+//! settings are hidden.
 
 #![no_std]
 
@@ -28,7 +31,7 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use paperpaw_sdk::builtin::{events, groups, slots};
+use paperpaw_sdk::builtin::{actions, events, groups, slots};
 use paperpaw_sdk::document::ImageRef;
 use paperpaw_sdk::library;
 use paperpaw_sdk::logo::Logo;
@@ -263,6 +266,8 @@ struct SleepScreen {
     widgets: Vec<(Box<dyn Widget>, Rect)>,
     /// The logo above the message, when the message shows.
     logo: Option<Logo>,
+    /// Whether the device woke since the screen opened.
+    woke: bool,
 }
 
 impl SleepScreen {
@@ -288,6 +293,7 @@ impl SleepScreen {
             image,
             widgets,
             logo,
+            woke: false,
         }
     }
 }
@@ -340,6 +346,12 @@ impl Screen for SleepScreen {
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
+        // Shown again after waking, once what opened above it closed: it
+        // goes too, so that it never keeps an awake device to itself.
+        if self.woke {
+            cx.command(Command::Back);
+            return;
+        }
         if self.show != PAGE {
             cx.request_refresh(RefreshMode::Full);
         }
@@ -350,13 +362,26 @@ impl Screen for SleepScreen {
         self.show != PAGE && self.image.is_some() && self.widgets.is_empty()
     }
 
-    fn on_action(&mut self, _: &Id, _: &mut Cx<'_, '_>) -> Handled {
-        // Nothing to do while asleep.
-        Handled::Yes
+    fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
+        // Awake and still here (see `on_show`): gone at the next press.
+        if self.woke {
+            cx.command(Command::Back);
+            return Handled::Yes;
+        }
+        // Nothing to do while asleep but sleep again or go home.
+        if *action == actions::SLEEP || *action == actions::HOME {
+            Handled::No
+        } else {
+            Handled::Yes
+        }
     }
 
     fn on_event(&mut self, event: &Id, _: &Params, cx: &mut Cx<'_, '_>) {
         if *event == events::RESUME {
+            // Awake: gone, if on top. A screen that opened as the device
+            // woke (a lock) is above it now; this one goes when it shows
+            // again.
+            self.woke = true;
             cx.command(Command::Back);
             if self.show != PAGE {
                 cx.request_refresh(RefreshMode::Full);

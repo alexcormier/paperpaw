@@ -9,9 +9,16 @@
 //!   never as it is. Like those, it keeps the device from casual use, not
 //!   from someone who takes its files.
 //! - Locked, the lock screen takes every input: buttons, taps, swipes in
-//!   from the edges. A screen that would open above it (a rule, a timer)
-//!   closes it, and it opens again at once.
-//! - After five wrong tries, the next one waits half a minute.
+//!   from the edges. Only going to sleep, refreshing the screen and night
+//!   mode pass, so a locked device still sleeps. Closed while locked
+//!   (e.g. by a sleep screen closing as the device wakes), it opens again
+//!   at once.
+//! - After five wrong tries, the next one waits half a minute; the count
+//!   is kept on the card, so starting anew does not skip the wait.
+//! - The kind is changed on the lock's own page, which asks for the code
+//!   in use first: changed elsewhere (a plain list of choices, *Reset all
+//!   settings*), it goes back to the kind whose code is kept. With no code
+//!   kept any more, the lock screen lets the device be used.
 //! - *Lock now* (`lock.now`) locks at once, from any button, gesture,
 //!   menu or rule.
 
@@ -25,14 +32,15 @@ mod screen;
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::rc::Rc;
+use alloc::string::String;
 use alloc::vec::Vec;
 use core::cell::Cell;
 
 use paperpaw_sdk::builtin::{events, groups};
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::{
-    ActionSpec, Command, Env, Id, Manifest, Params, Plugin, RegisterError, Registrar, SDK_VERSION,
-    ScreenSpec, SettingSpec, Version,
+    ActionSpec, Command, Env, Id, Instant, Manifest, Params, Plugin, RegisterError, Registrar,
+    SDK_VERSION, ScreenSpec, SettingSpec, Version,
 };
 
 pub const PLUGIN: Id = Id::new_static("lock");
@@ -45,9 +53,46 @@ pub const KIND: Setting<Text> = Setting::new("lock.kind");
 pub const ON_WAKE: Setting<bool> = Setting::new("lock.on-wake");
 const SCREEN: Id = Id::new_static("lock.screen");
 
-/// Whether the device is locked: shared by the plugin's handlers and its
-/// screens.
-pub(crate) type Locked = Rc<Cell<bool>>;
+/// Whether the device is locked and how unlocking went so far: shared by
+/// the plugin's handlers and its screens, so that a lock screen made
+/// anew (turned, reopened) goes on where the last one was.
+#[derive(Debug, Default)]
+pub(crate) struct State {
+    pub(crate) locked: Cell<bool>,
+    /// Wrong tries in a row; [`screen::TRIES`] while a wait is due.
+    pub(crate) failures: Cell<u8>,
+    /// Until when the next try waits.
+    pub(crate) wait_until: Cell<Option<Instant>>,
+}
+
+pub(crate) type Shared = Rc<State>;
+
+/// The wrong tries in a row, kept across starts (a number).
+const TRIES_FILE: &str = "tries.txt";
+
+fn tries_path() -> String {
+    alloc::format!("{}/{TRIES_FILE}", Env::plugin_dir(PLUGIN.as_str()))
+}
+
+/// The wrong tries in a row as the card keeps them.
+pub(crate) fn read_tries(storage: &dyn paperpaw_sdk::Storage) -> u8 {
+    paperpaw_sdk::read_file(storage, &tries_path(), 16)
+        .ok()
+        .and_then(|n| String::from_utf8(n).ok()?.trim().parse::<u8>().ok())
+        .unwrap_or(0)
+}
+
+/// Keeps `tries` on the card (none: the file goes). Not kept, the count
+/// still holds until PaperPaw starts anew; nothing to tell.
+pub(crate) fn keep_tries(storage: &dyn paperpaw_sdk::Storage, tries: u8) {
+    if tries == 0 {
+        if storage.exists(&tries_path()) {
+            let _ = storage.remove(&tries_path());
+        }
+    } else {
+        let _ = storage.write(&tries_path(), alloc::format!("{tries}").as_bytes());
+    }
+}
 
 /// The kinds; the setting stores them after [`KIND_PREFIX`].
 pub(crate) const KINDS: [&str; 4] = ["off", "pin", "pattern", "password"];
@@ -61,11 +106,11 @@ const KIND_VALUES: [&str; KINDS.len()] = [
 ];
 
 /// Opens the lock screen, if a lock is set and it is not open yet.
-fn lock(env: &Env<'_>, locked: &Locked, out: &mut Vec<Command>) {
-    if locked.get() || code::active(env).is_none() {
+fn lock(env: &Env<'_>, state: &State, out: &mut Vec<Command>) {
+    if state.locked.get() || code::active(env).is_none() {
         return;
     }
-    locked.set(true);
+    state.locked.set(true);
     out.push(Command::OpenScreen(
         SCREEN,
         Params::new().with(screen::MODE, screen::UNLOCK),
@@ -112,8 +157,8 @@ impl Plugin for Lock {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        let locked: Locked = Rc::new(Cell::new(false));
-        let shared = locked.clone();
+        let state: Shared = Rc::new(State::default());
+        let shared = state.clone();
         r.add_screen(ScreenSpec {
             id: SCREEN,
             title: Cow::Borrowed("lock.setting.kind"),
@@ -122,20 +167,42 @@ impl Plugin for Lock {
             }),
         })?;
         r.add_settings(&SETTINGS)?;
-        let now = locked.clone();
+        let now = state.clone();
         r.add_action(ActionSpec::new(NOW, "lock.now").handler(
             move |env: &Env<'_>, out: &mut Vec<Command>| {
                 lock(env, &now, out);
             },
         ))?;
         r.add_icon(NOW, Cow::Borrowed("lock"))?;
-        let start = locked.clone();
+        let start = state.clone();
         r.on(events::STARTED, move |env, _, out| {
+            // A wait due when PaperPaw stopped is waited anew.
+            let tries = read_tries(env.storage);
+            start.failures.set(tries);
+            if tries >= screen::TRIES {
+                start
+                    .wait_until
+                    .set(Some(env.now.add_millis(screen::WAIT_MS)));
+            }
             lock(env, &start, out);
         })?;
         r.on(events::RESUME, move |env, _, out| {
             if env.settings.read(&ON_WAKE) {
-                lock(env, &locked, out);
+                lock(env, &state, out);
+            }
+        })?;
+        // The kind goes with the code kept: changed without it, back.
+        r.on(events::SETTING_CHANGED, |env, changed, out| {
+            if changed.id != *KIND.id() {
+                return;
+            }
+            let Some(kept) = code::kept_kind(env) else {
+                return;
+            };
+            let value = alloc::format!("{KIND_PREFIX}{kept}");
+            if env.settings.read(&KIND) != value {
+                out.push(Command::set(&KIND, value.into()));
+                out.push(Command::Notify(env.i18n.tr("lock.on-its-page").into()));
             }
         })?;
         // The first-run setup: a lock, off unless chosen.
@@ -163,6 +230,16 @@ mod tests {
         for (value, kind) in super::KIND_VALUES.iter().zip(super::KINDS) {
             assert_eq!(*value, alloc::format!("{}{kind}", super::KIND_PREFIX));
         }
+    }
+
+    /// What version 1 wrote stays readable (see `docs/data-files.md`).
+    #[test]
+    fn the_tries_of_version_1_are_read() {
+        let storage = paperpaw_sdk::MemoryStorage::new().with(
+            &super::tries_path(),
+            include_str!("../testdata/tries.txt.v1"),
+        );
+        assert_eq!(super::read_tries(&storage), 3);
     }
 
     #[test]

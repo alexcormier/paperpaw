@@ -6,6 +6,23 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Screen lock: a locked device goes to sleep again, by the power button
+  and by itself; refreshing the screen and night mode pass the lock
+  too, nothing else does. Unlocking after the device woke with the sleep
+  screen on no longer leaves the sleep screen above everything, taking
+  every button (only a restart helped): it closes once the lock does,
+  and asleep it lets *Sleep* and *Home* through. While a password is
+  typed on the keyboard, a swipe in from an edge or a button opens
+  nothing over it, so the quick panel no longer gets past a password
+  lock on touch screens. The wait after five wrong tries holds when the
+  screen is turned and when PaperPaw starts anew (the count is kept in
+  `.paperpaw/plugins/lock/tries.txt`). The kind of lock changed
+  elsewhere than on its own page (a plain list of choices, *Reset all
+  settings*) goes back to the kind whose code is kept; with its code
+  removed while locked, the lock lets the device be used instead of
+  asking for a code it cannot check. *Back* shows no "Delete" over a
+  password, and the help says that on the X4 on battery every wake is a
+  start.
 - Rules: a rule can apply when the battery reaches a level (80 %, 90 %,
   full or another), once each time it gets there and not again while
   the level wavers around it; with *Only if … While charging* it says
