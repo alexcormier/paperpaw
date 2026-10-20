@@ -928,19 +928,12 @@ mod tests {
     #[test]
     fn lists_of_every_kind_are_slices() {
         // Slices, not arrays of a fixed length: a kind more is no break.
-        use crate::builtin::{setting_sections, settings};
         let tones: &'static [Tone] = Tone::ALL;
         let lines: &'static [LineKind] = LineKind::ALL;
-        let names: [&'static [&str]; 9] = [
+        let names: [&'static [&str]; 3] = [
             crate::widgets::categories::ALL,
-            crate::widgets::SPACE_SIZES,
             crate::widgets::ALIGNMENTS,
-            settings::MONO_TEXT_LEVELS,
-            settings::ROTATIONS,
-            settings::TEXT_COLORS,
-            settings::PAPER_COLORS,
-            settings::CORNERS,
-            setting_sections::ORDER,
+            crate::builtin::setting_sections::ORDER,
         ];
         assert!(!tones.is_empty() && !lines.is_empty());
         assert!(names.iter().all(|list| !list.is_empty()));

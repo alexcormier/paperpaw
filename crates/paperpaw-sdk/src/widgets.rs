@@ -458,7 +458,7 @@ pub const FILL: &str = "core.fill";
 pub const SPACE_SIZE: crate::setting::Setting<crate::setting::Text> =
     crate::setting::Setting::new("core.space.size");
 /// The values of [`SPACE_SIZE`]: small, medium, large.
-pub const SPACE_SIZES: &[&str] = &["core.space.small", "core.space.medium", "core.space.large"];
+pub const SPACE_SIZES: [&str; 3] = ["core.space.small", "core.space.medium", "core.space.large"];
 
 /// Whether a list of widgets may hold `id` more than once.
 pub fn repeatable(id: &str) -> bool {

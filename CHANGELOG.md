@@ -317,10 +317,8 @@ change the plugin SDK.
 - SDK: `ListView::confirm` (the first press shows a hidden focus) and
   `ListView::set_len` (the focus kept in a shorter list).
   `Tone::ALL`, `LineKind::ALL`, `widgets::categories::ALL`,
-  `widgets::SPACE_SIZES`, `widgets::ALIGNMENTS` and the value lists of
-  the built-in settings (`settings::MONO_TEXT_LEVELS`, `ROTATIONS`,
-  `TEXT_COLORS`, `PAPER_COLORS`, `CORNERS`, `setting_sections::ORDER`)
-  are slices, so a value more breaks no plugin. `Slider::stepped` goes
+  `widgets::ALIGNMENTS` and `setting_sections::ORDER` are slices, so a
+  value more breaks no plugin. `Slider::stepped` goes
   to the next step a drag gives; `ui::next_value` steps from a value
   not among the options to the first (or last) option and stays within
   a number's range at its ends. Fields set past what the constructors

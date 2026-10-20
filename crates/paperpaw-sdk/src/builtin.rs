@@ -632,7 +632,7 @@ pub mod settings {
     /// covered a pixel at the edge of a letter is drawn, one of
     /// [`MONO_TEXT_LEVELS`] (half, three eighths, a quarter).
     pub const MONO_TEXT: Setting<Text> = Setting::new("core.mono-text");
-    pub const MONO_TEXT_LEVELS: &[&str] = &[
+    pub const MONO_TEXT_LEVELS: [&str; 3] = [
         "core.mono-text.light",
         "core.mono-text.normal",
         "core.mono-text.full",
@@ -675,7 +675,7 @@ pub mod settings {
     pub const SWAP_PAGE_BUTTONS: Setting<bool> = Setting::new("core.swap-page-buttons");
     /// The values of [`ROTATION`]: upright, on its side (landscape),
     /// upside down, on its other side.
-    pub const ROTATIONS: &[&str] = &[
+    pub const ROTATIONS: [&str; 4] = [
         "core.rotation.upright",
         "core.rotation.landscape",
         "core.rotation.upside-down",
@@ -698,7 +698,7 @@ pub mod settings {
     /// The value of [`PAPER_COLOR`] that takes [`PAPER_COLOR_OWN`].
     pub const OWN_PAPER: &str = "core.paper.own";
     /// The values of [`TEXT_COLOR`]: dark colours, then one's own.
-    pub const TEXT_COLORS: &[&str] = &[
+    pub const TEXT_COLORS: [&str; 9] = [
         "core.color.black",
         "core.color.dark-gray",
         "core.color.gray",
@@ -710,7 +710,7 @@ pub mod settings {
         OWN_TEXT,
     ];
     /// The values of [`PAPER_COLOR`]: light colours, then one's own.
-    pub const PAPER_COLORS: &[&str] = &[
+    pub const PAPER_COLORS: [&str; 9] = [
         "core.paper.white",
         "core.paper.cream",
         "core.paper.sepia",
@@ -777,7 +777,7 @@ pub mod settings {
     /// The values of [`UI_CORNERS`]: square, slightly rounded, round,
     /// soft (rounder still). With round and soft ones, small shapes
     /// (buttons, switches, the focus) are pills.
-    pub const CORNERS: &[&str] = &[
+    pub const CORNERS: [&str; 4] = [
         "core.corners.square",
         "core.corners.small",
         "core.corners.round",
@@ -1044,7 +1044,7 @@ mod tests {
 
     #[test]
     fn every_colour_but_ones_own_is_known() {
-        for value in TEXT_COLORS.iter().chain(PAPER_COLORS) {
+        for value in TEXT_COLORS.iter().chain(&PAPER_COLORS) {
             let own = *value == OWN_TEXT || *value == OWN_PAPER;
             assert_eq!(rgb(value).is_none(), own, "{value}");
         }
