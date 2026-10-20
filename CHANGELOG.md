@@ -6,6 +6,11 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Keyboard: it takes up to 2,000 characters, where long web addresses
+  and keys were cut at 200 without a word; text past the limit is cut
+  and the keyboard says so. The list of layouts finds the layouts the
+  fonts draw once, not at every frame, and says *On* and *Off* with
+  words of its own, also without the settings plugin.
 - Menu editor: a menu is no longer offered for one of its own submenus
   (the main menu inside the tools), a circle that hid both menus from
   the editor; menus caught in one all the same are listed, and *Reset

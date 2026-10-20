@@ -68,8 +68,9 @@ const PASTED: Event<Typed> = Event::new("keyboard.pasted");
 /// The text typed on another device, asked for by *Phone*.
 const REMOTE_TEXT: Event<Typed> = Event::new("keyboard.remote-text");
 
-/// Longest text the keyboard accepts, in characters.
-const MAX_CHARS: usize = 200;
+/// Longest text the keyboard accepts, in characters: room for long web
+/// addresses and keys; what goes past it is cut, and the keyboard says so.
+const MAX_CHARS: usize = 2000;
 /// What passes the keyboard while a password is typed.
 const PASSING: [Id; 3] = [
     actions::SLEEP,
@@ -465,6 +466,14 @@ impl KeyboardScreen {
     fn insert(&mut self, text: &str, cx: &mut Cx<'_, '_>) {
         let room = MAX_CHARS.saturating_sub(self.text.chars().count());
         self.text.extend(text.chars().take(room));
+        if text.chars().nth(room).is_some() {
+            let env = *cx.env();
+            let full = env.i18n.format(
+                "keyboard.full",
+                &[("count", paperpaw_sdk::Arg::Int(MAX_CHARS as i64))],
+            );
+            cx.command(Command::Notify(full));
+        }
         if self.shift {
             self.shift = false;
             self.redraw(cx, self.keys);
