@@ -238,20 +238,53 @@ pub fn trust(storage: &dyn Storage, key: &[u8; 32]) -> Result<(), StorageError> 
 }
 
 /// Compares versions such as `0.4.0` and `0.10.1` number by number; a
-/// pre-release such as `0.4.0-dev` comes before its release, as in
-/// SemVer.
+/// pre-release such as `0.4.0-dev` comes before its release, and
+/// pre-releases compare part by part as in SemVer (`rc.9` before
+/// `rc.10`, numbers before words).
 pub fn compare_versions(a: &str, b: &str) -> Ordering {
-    let parts = |v: &str| {
+    fn parts(v: &str) -> (Vec<u64>, Option<&str>) {
         let v = v.split('+').next().unwrap_or_default();
         let (numbers, pre) = v.split_once('-').map_or((v, None), |(n, p)| (n, Some(p)));
-        let numbers: Vec<u64> = numbers
+        let numbers = numbers
             .split('.')
             .map_while(|part| part.parse().ok())
             .collect();
-        // No pre-release is the release itself, after its pre-releases.
-        (numbers, pre.is_none(), pre.map(String::from))
-    };
-    parts(a).cmp(&parts(b))
+        (numbers, pre)
+    }
+    let ((a_numbers, a_pre), (b_numbers, b_pre)) = (parts(a), parts(b));
+    a_numbers
+        .cmp(&b_numbers)
+        .then_with(|| match (a_pre, b_pre) {
+            // No pre-release is the release itself, after its pre-releases.
+            (None, None) => Ordering::Equal,
+            (None, Some(_)) => Ordering::Greater,
+            (Some(_), None) => Ordering::Less,
+            (Some(a), Some(b)) => compare_pre_releases(a, b),
+        })
+}
+
+/// SemVer's order of pre-releases: part by part, numbers by their value
+/// and before words, words as text; more parts after equal ones last.
+fn compare_pre_releases(a: &str, b: &str) -> Ordering {
+    let (mut a, mut b) = (a.split('.'), b.split('.'));
+    loop {
+        match (a.next(), b.next()) {
+            (None, None) => return Ordering::Equal,
+            (None, Some(_)) => return Ordering::Less,
+            (Some(_), None) => return Ordering::Greater,
+            (Some(x), Some(y)) => {
+                let order = match (x.parse::<u64>(), y.parse::<u64>()) {
+                    (Ok(x), Ok(y)) => x.cmp(&y),
+                    (Ok(_), Err(_)) => Ordering::Less,
+                    (Err(_), Ok(_)) => Ordering::Greater,
+                    (Err(_), Err(_)) => x.cmp(y),
+                };
+                if order != Ordering::Equal {
+                    return order;
+                }
+            }
+        }
+    }
 }
 
 #[cfg(test)]

@@ -109,8 +109,10 @@ proptest! {
                 0 => prop_assert_eq!(map.insert(key, value), model.insert(key, value)),
                 1 => prop_assert_eq!(map.remove(&key), model.remove(&key)),
                 2 => {
-                    *map.get_or_insert_with(key, || value) += 1;
-                    *model.entry(key).or_insert(value) += 1;
+                    let v = map.get_or_insert_with(key, || value);
+                    *v = v.wrapping_add(1);
+                    let v = model.entry(key).or_insert(value);
+                    *v = v.wrapping_add(1);
                 }
                 _ => {
                     if let Some(v) = map.get_mut(&key) {
