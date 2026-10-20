@@ -1,0 +1,20 @@
+# Night mode from the menu, with buttons alone: on every device with the
+# X4's buttons.
+
+long:confirm
+expect screen menu.list
+expect stack 2
+expect focus "Home"
+right
+right
+right
+right
+expect focus "Night mode"
+expect off "Night mode"
+confirm
+expect setting core.night-mode = on
+expect on "Night mode"
+back
+expect screen home.dashboard
+expect stack 1
+expect no warnings
