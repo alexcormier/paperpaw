@@ -6,6 +6,18 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- File manager: a folder of any size is read a page at a time, as the
+  library reads its folders: a folder of thousands of files no longer
+  fills the X4's memory. Moving or renaming a folder tells only of the
+  books in it moving (not of every file), so their progress and notes
+  go along, and says so where a folder holds more books than are told
+  at once; settings naming the folder or one in it (the library folder,
+  the archive, the dictionaries) follow it. A name that differs in case
+  only is taken as it is (it got "(2)" on the memory card), through a
+  free name between, so nothing is lost on storages that ignore case;
+  names the memory card or Windows refuse (`* ? " < > |`, a dot at the
+  end) are refused. A file picked to be moved goes when its folder is
+  deleted.
 - Library: while a book or another full screen covers it, the library
   lets go of its covers and page and reads nothing when books arrive or
   a setting changes (a font size in the reader, say); it reads its
