@@ -6,6 +6,11 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Time zones: a rule of your own (`core.time-zone-rule`) may name the
+  days summer time starts and ends by the day of the year (`J60`, `59`)
+  as POSIX allows, not only by week and weekday; one that is not a rule
+  falls back to the zone chosen from the list instead of the system's
+  (UTC on the X4).
 - Library: searching a large library no longer runs the X4 out of
   memory. A search holds the first 200 books by title (it held up to
   2,000, unsorted until all were found); `catalog::search_after` pages
