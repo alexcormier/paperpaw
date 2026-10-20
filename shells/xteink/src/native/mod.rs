@@ -3,7 +3,8 @@
 //! start; [`Loader`] checks the file (`paperpaw_native`), puts its image
 //! where it runs, relocated, and makes its plugin.
 //!
-//! - **X4 Pro**: the image is read into PSRAM and runs from there, through
+//! - **X4 Pro and X4 Classic** (ESP32-S3): the image is read into PSRAM
+//!   and runs from there, through
 //!   the instruction bus's view of the same memory (`psram`).
 //! - **X4**: the image is written once into the free end of the app
 //!   partition the firmware runs from and mapped through free MMU entries,
@@ -18,7 +19,7 @@ pub mod bundle;
 #[cfg(feature = "x4")]
 mod flash;
 mod partition;
-#[cfg(feature = "x4-pro")]
+#[cfg(feature = "esp32s3")]
 mod psram;
 
 use alloc::boxed::Box;
@@ -37,7 +38,7 @@ use paperpaw_sdk::{Plugin, PluginProblem};
 /// The chip plugin files must be made for.
 #[cfg(feature = "x4")]
 const CHIP: Chip = Chip::Esp32C3;
-#[cfg(feature = "x4-pro")]
+#[cfg(feature = "esp32s3")]
 const CHIP: Chip = Chip::Esp32S3;
 
 /// A plugin's image, where it runs.
@@ -70,7 +71,7 @@ pub enum Room {
     /// Not looked for yet: no code plugin was loaded.
     Unknown,
     /// PSRAM (the X4 Pro).
-    #[cfg(feature = "x4-pro")]
+    #[cfg(feature = "esp32s3")]
     Psram,
     /// Flash from `start` to `end`, mapped at `base` (the X4).
     #[cfg(feature = "x4")]
@@ -98,7 +99,7 @@ pub fn describe(line: &mut dyn FnMut(&str)) {
     let room = critical_section::with(|cs| ROOM.borrow(cs).get());
     line(&match room {
         Room::Unknown => String::from("room unknown"),
-        #[cfg(feature = "x4-pro")]
+        #[cfg(feature = "esp32s3")]
         Room::Psram => String::from("room psram"),
         #[cfg(feature = "x4")]
         Room::Flash { start, end, base } => {
@@ -146,8 +147,8 @@ pub fn attribute(pc: u32, found: &mut dyn FnMut(&str, u32)) {
     });
 }
 
-/// Where images go: PSRAM on the X4 Pro, flash on the X4.
-#[cfg(feature = "x4-pro")]
+/// Where images go: PSRAM on the ESP32-S3 devices, flash on the X4.
+#[cfg(feature = "esp32s3")]
 pub type Place = psram::Psram;
 #[cfg(feature = "x4")]
 pub type Place = flash::Flash;

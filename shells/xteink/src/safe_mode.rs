@@ -2,7 +2,7 @@
 //! their first frame are counted in RTC memory, which a reset keeps (a
 //! panic, a watchdog); after [`FAILED_STARTS`] of them PaperPaw starts
 //! without code plugins, and so it does when the reader holds *Back* (the
-//! X4) or *Home* (the X4 Pro) at power-on. The kernel then switches off
+//! X4, the X4 Classic) or *Home* (the X4 Pro) at power-on. The kernel then switches off
 //! the plugin the last crash was in, or every code plugin when that is not
 //! known, and the plugin manager says so ([`paperpaw_sdk::native::SafeMode`]).
 //!
@@ -16,8 +16,9 @@ use paperpaw_sdk::native::{SafeMode, SafeModeReason};
 
 /// Failed starts with code plugins before one goes without them.
 pub const FAILED_STARTS: u8 = 2;
-/// The key held at power-on for a start without code plugins.
-#[cfg(feature = "x4")]
+/// The key held at power-on for a start without code plugins: *Back* on
+/// the devices with the X4's buttons, *Home* on the X4 Pro.
+#[cfg(not(feature = "x4-pro"))]
 pub const KEY: &str = paperpaw_platform::buttons::BACK;
 #[cfg(feature = "x4-pro")]
 pub const KEY: &str = paperpaw_platform::buttons::HOME;

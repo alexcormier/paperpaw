@@ -363,7 +363,7 @@ fn code_plugins(ota: Option<&ota::Ota>, flash: &ota::Flash) -> CodePlugins {
         );
         return CodePlugins::SafeMode(safe_mode);
     }
-    #[cfg(feature = "x4-pro")]
+    #[cfg(feature = "esp32s3")]
     let place = {
         let _ = flash;
         native::Place::default()
