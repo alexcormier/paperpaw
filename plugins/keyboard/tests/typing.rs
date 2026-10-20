@@ -472,10 +472,9 @@ fn variants_by_touch_and_by_buttons() {
 }
 
 /// A finger held near the screen's edges, where swipes in from the edge
-/// begin, makes no long press: `a` (left edge) and `.` (the bottom row,
-/// all of it within the bottom edge's strip) show no variants.
+/// begin, still makes a long press: `a` (left edge) and `.` (the bottom
+/// row, all of it within the bottom edge's strip) show their variants.
 #[test]
-#[ignore = "bug: a long press near a screen edge is lost, no variants for `a` or `.` on touch"]
 fn holding_a_letter_at_the_edge_shows_its_variants() {
     let mut typing = Typing::new(TOUCH);
     typing.open(&[]);

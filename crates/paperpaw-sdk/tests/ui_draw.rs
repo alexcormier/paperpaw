@@ -469,7 +469,6 @@ proptest! {
     /// area at any size from a line of text up, however long the text.
     /// (In less, a message shows its first line all the same.)
     #[test]
-    #[ignore = "bug: an empty screen 100 px wide draws its icon and paw past its area (ui::draw_empty, since the new look)"]
     fn texts_in_areas_draw_inside_them(
         x in 0u16..100,
         y in 0u16..400,
