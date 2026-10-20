@@ -190,20 +190,9 @@ mod tests {
     use paperpaw_sdk::document::{Align, OffsetMap};
 
     fn block(text: &str) -> Block {
-        Block {
-            kind: BlockKind::Paragraph,
-            continues: false,
-            start: 0,
-            end: text.len() as u32,
-            text: text.to_string(),
-            map: OffsetMap::IDENTITY,
-            runs: Vec::new(),
-            align: Align::default(),
-            indent: None,
-            space: None,
-            size: None,
-            image: None,
-        }
+        Block::new(BlockKind::Paragraph, 0, text.len() as u32, text.to_string())
+            .map(OffsetMap::IDENTITY)
+            .align(Align::default())
     }
 
     #[test]

@@ -86,14 +86,8 @@ impl Widget for Sample {
             document: &document,
             env,
         };
-        let cx = LayoutContext {
-            document: &filtered,
-            storage: env.storage,
-            width: t.width,
-            style: &t.style,
-            typesetter: &faces,
-            hyphenate: patterns.is_some().then_some(&hyphenate as Hyphenate<'_>),
-        };
+        let cx = LayoutContext::new(&filtered, env.storage, t.width, &t.style, &faces)
+            .hyphenate(patterns.is_some().then_some(&hyphenate as Hyphenate<'_>));
         let page = layout_page(&cx, Locator::new(0, 0), t.height).unwrap_or_default();
         self.lines = page.lines;
         self.typography = Some(t);
@@ -152,20 +146,16 @@ impl Document for SampleText {
         let end = self.text[offset..]
             .find('\n')
             .map_or(self.text.len(), |i| offset + i + 1);
-        Ok(Some(Block {
-            kind: BlockKind::Paragraph,
-            continues: false,
-            start: start as u32,
-            end: end as u32,
-            text: self.text[start..end].trim_end_matches('\n').to_string(),
-            map: OffsetMap::IDENTITY,
-            runs: Vec::new(),
-            align: Align::Auto,
-            indent: None,
-            space: None,
-            size: None,
-            image: None,
-        }))
+        Ok(Some(
+            Block::new(
+                BlockKind::Paragraph,
+                start as u32,
+                end as u32,
+                self.text[start..end].trim_end_matches('\n').to_string(),
+            )
+            .map(OffsetMap::IDENTITY)
+            .align(Align::Auto),
+        ))
     }
 }
 

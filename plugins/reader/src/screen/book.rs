@@ -459,14 +459,8 @@ impl Book {
             document: self.document.as_ref(),
             env,
         };
-        let cx = LayoutContext {
-            document: &filtered,
-            storage: env.storage,
-            width: t.width,
-            style: &t.style,
-            typesetter: &faces,
-            hyphenate: patterns.is_some().then_some(&hyphenate as Hyphenate<'_>),
-        };
+        let cx = LayoutContext::new(&filtered, env.storage, t.width, &t.style, &faces)
+            .hyphenate(patterns.is_some().then_some(&hyphenate as Hyphenate<'_>));
         Some(f(&cx))
     }
 

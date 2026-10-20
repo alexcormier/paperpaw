@@ -220,12 +220,10 @@ impl HtmlDocument {
         };
         let name = path.rsplit('/').next().unwrap_or(path);
         let name = name.rsplit_once('.').map_or(name, |(stem, _)| stem);
-        let metadata = Metadata {
-            title: found.title.or_else(|| Some(name.to_string())),
-            authors: Vec::new(),
-            language: found.language,
-            ..Metadata::default()
-        };
+        let metadata = Metadata::default()
+            .title(found.title.or_else(|| Some(name.to_string())))
+            .authors(Vec::new())
+            .language(found.language);
         Ok(Self {
             path: path.to_string(),
             paths,

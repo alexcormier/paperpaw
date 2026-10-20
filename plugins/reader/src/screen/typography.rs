@@ -312,12 +312,12 @@ impl Typography {
         let spaced = settings.read(&PARAGRAPH_SPACING);
         let justify = settings.read(&JUSTIFY);
         let ascent = metrics.ascent + (line_height - natural) / 2.0;
-        let style = Style {
-            paragraph_spacing: if spaced { line_height * 0.6 } else { 0.0 },
-            indent: if indent { size * 1.5 } else { 0.0 },
-            em: size,
+        let style = Style::new(
+            if spaced { line_height * 0.6 } else { 0.0 },
+            if indent { size * 1.5 } else { 0.0 },
+            size,
             justify,
-        };
+        );
 
         let display = env.device.display;
         let millimetres = |setting: &paperpaw_sdk::setting::Setting<i64>| match whole_pages {

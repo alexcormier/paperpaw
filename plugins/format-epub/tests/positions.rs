@@ -51,26 +51,14 @@ struct Layout {
     height: f32,
 }
 
-const STYLE: Style = Style {
-    paragraph_spacing: 4.0,
-    indent: 10.0,
-    em: 12.0,
-    justify: true,
-};
+const STYLE: Style = Style::new(4.0, 10.0, 12.0, true);
 
 fn context<'a>(
     doc: &'a dyn Document,
     storage: &'a MemoryStorage,
     layout: &'a Layout,
 ) -> LayoutContext<'a> {
-    LayoutContext {
-        document: doc,
-        storage,
-        width: layout.width,
-        style: &STYLE,
-        typesetter: &layout.mono,
-        hyphenate: None,
-    }
+    LayoutContext::new(doc, storage, layout.width, &STYLE, &layout.mono)
 }
 
 /// All pages of `doc` laid out as `layout` says.

@@ -37,20 +37,9 @@ fn decoded(start: u32, chars: &[(char, u32, u32)]) -> (Block, Vec<(usize, u32)>)
         text.push(c);
         source += span;
     }
-    let block = Block {
-        kind: BlockKind::Paragraph,
-        continues: false,
-        start,
-        end: source,
-        text,
-        map,
-        runs: Vec::new(),
-        align: Align::Auto,
-        indent: None,
-        space: None,
-        size: None,
-        image: None,
-    };
+    let block = Block::new(BlockKind::Paragraph, start, source, text)
+        .map(map)
+        .align(Align::Auto);
     (block, sources)
 }
 

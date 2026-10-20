@@ -123,12 +123,7 @@ struct Layout {
     height: f32,
 }
 
-const STYLE: Style = Style {
-    paragraph_spacing: 4.0,
-    indent: 10.0,
-    em: 12.0,
-    justify: false,
-};
+const STYLE: Style = Style::new(4.0, 10.0, 12.0, false);
 
 fn layout() -> impl Strategy<Value = Layout> {
     (
@@ -149,14 +144,7 @@ fn context<'a>(
     storage: &'a MemoryStorage,
     layout: &'a Layout,
 ) -> LayoutContext<'a> {
-    LayoutContext {
-        document: doc,
-        storage,
-        width: layout.width,
-        style: &STYLE,
-        typesetter: &layout.mono,
-        hyphenate: None,
-    }
+    LayoutContext::new(doc, storage, layout.width, &STYLE, &layout.mono)
 }
 
 fn paginate(doc: &TxtDocument, storage: &MemoryStorage, layout: &Layout) -> Vec<Page> {

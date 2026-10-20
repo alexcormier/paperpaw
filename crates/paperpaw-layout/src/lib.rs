@@ -63,6 +63,7 @@ pub trait Typesetter {
 
 /// Typographic settings for a page, in pixels.
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub struct Style {
     /// Extra space between paragraphs.
     pub paragraph_spacing: f32,
@@ -74,6 +75,18 @@ pub struct Style {
     /// The reader's choice wins over a book's justified text; centred and
     /// right-aligned blocks keep their alignment.
     pub justify: bool,
+}
+
+impl Style {
+    /// Made of what it needs; the rest as set with its methods.
+    pub const fn new(paragraph_spacing: f32, indent: f32, em: f32, justify: bool) -> Self {
+        Self {
+            paragraph_spacing,
+            indent,
+            em,
+            justify,
+        }
+    }
 }
 
 /// Text of a line set in one face: byte range of [`PageLine::text`].
@@ -117,6 +130,7 @@ pub struct PageImage {
 
 /// One laid-out page.
 #[derive(Debug, Clone, PartialEq, Default)]
+#[non_exhaustive]
 pub struct Page {
     /// Position of the first character on the page.
     pub start: Locator,
@@ -124,6 +138,18 @@ pub struct Page {
     pub end: Locator,
     pub lines: Vec<PageLine>,
     pub images: Vec<PageImage>,
+}
+
+impl Page {
+    /// Made of what it needs; the rest as set with its methods.
+    pub fn new(start: Locator, end: Locator, lines: Vec<PageLine>, images: Vec<PageImage>) -> Self {
+        Self {
+            start,
+            end,
+            lines,
+            images,
+        }
+    }
 }
 
 impl Page {
@@ -244,6 +270,7 @@ fn first_indent(block: &Block, style: &Style, align: Align) -> f32 {
 /// style, how text is measured, and how words are hyphenated, if they
 /// are.
 #[derive(Clone, Copy)]
+#[non_exhaustive]
 pub struct LayoutContext<'a> {
     pub document: &'a dyn Document,
     pub storage: &'a dyn Storage,
@@ -253,6 +280,31 @@ pub struct LayoutContext<'a> {
     pub typesetter: &'a dyn Typesetter,
     /// Words that do not fit at the end of a line are hyphenated with it.
     pub hyphenate: Option<Hyphenate<'a>>,
+}
+
+impl<'a> LayoutContext<'a> {
+    /// Made of what it needs; the rest as set with its methods.
+    pub fn new(
+        document: &'a dyn Document,
+        storage: &'a dyn Storage,
+        width: f32,
+        style: &'a Style,
+        typesetter: &'a dyn Typesetter,
+    ) -> Self {
+        Self {
+            document,
+            storage,
+            width,
+            style,
+            typesetter,
+            hyphenate: None,
+        }
+    }
+
+    pub fn hyphenate(mut self, hyphenate: impl Into<Option<Hyphenate<'a>>>) -> Self {
+        self.hyphenate = hyphenate.into();
+        self
+    }
 }
 
 impl core::fmt::Debug for LayoutContext<'_> {
@@ -555,32 +607,27 @@ mod tests {
                     style: TextStyle::BOLD,
                 })
                 .collect();
-            Ok(Some(Block {
-                kind: if line.starts_with('#') {
-                    BlockKind::Heading(1)
-                } else {
-                    BlockKind::Paragraph
-                },
-                continues: false,
-                start: start as u32,
-                end: end as u32,
-                text: String::from(line),
-                map: OffsetMap::IDENTITY,
-                runs,
-                align: if line.starts_with('>') {
-                    Align::Center
-                } else if line.starts_with('=') {
-                    Align::Justify
-                } else {
-                    Align::Auto
-                },
-                // "~" marks a block the book sets without indent, with a
-                // space of 2 em above and at 150 %.
-                indent: line.starts_with('~').then_some(0),
-                space: line.starts_with('~').then_some(200),
-                size: line.starts_with('~').then_some(150),
-                image: None,
-            }))
+            let kind = if line.starts_with('#') {
+                BlockKind::Heading(1)
+            } else {
+                BlockKind::Paragraph
+            };
+            let align = if line.starts_with('>') {
+                Align::Center
+            } else if line.starts_with('=') {
+                Align::Justify
+            } else {
+                Align::Auto
+            };
+            let spaced = line.starts_with('~');
+            Ok(Some(
+                Block::new(kind, start as u32, end as u32, String::from(line))
+                    .runs(runs)
+                    .align(align)
+                    .indent(spaced.then_some(0))
+                    .space(spaced.then_some(200))
+                    .size(spaced.then_some(150)),
+            ))
         }
     }
 
@@ -852,20 +899,9 @@ aa bb cc dd
     }
 
     fn block(text: &str, start: u32, end: u32) -> Block {
-        Block {
-            kind: BlockKind::Paragraph,
-            continues: false,
-            start,
-            end,
-            text: String::from(text),
-            map: OffsetMap::IDENTITY,
-            runs: Vec::new(),
-            align: Align::Auto,
-            indent: None,
-            space: None,
-            size: None,
-            image: None,
-        }
+        Block::new(BlockKind::Paragraph, start, end, String::from(text))
+            .map(OffsetMap::IDENTITY)
+            .align(Align::Auto)
     }
 
     /// Lines without height, as from a broken font.
@@ -913,12 +949,7 @@ aa bb cc dd
         // again.
         let mut map = OffsetMap::default();
         map.checkpoint(10, 0);
-        let doc = Blocks::new(move |_| {
-            Some(Block {
-                map: map.clone(),
-                ..block("aaaa bbbb cccc", 100, 200)
-            })
-        });
+        let doc = Blocks::new(move |_| Some(block("aaaa bbbb cccc", 100, 200).map(map.clone())));
         let page = layout_with(&doc, &Units, Locator::new(0, 100), 10.0);
         assert!(matches!(page, Err(DocumentError::Malformed(_))));
     }
@@ -926,15 +957,15 @@ aa bb cc dd
     #[test]
     fn pictures_without_size_are_left_out() {
         let doc = Blocks::new(|at: Locator| match at.offset {
-            0..10 => Some(Block {
-                kind: BlockKind::Image,
-                image: Some(ImageRef {
+            0..10 => {
+                let mut picture = block("", 0, 10).image(ImageRef {
                     path: String::from("a.gray"),
                     width: 0,
                     height: 0,
-                }),
-                ..block("", 0, 10)
-            }),
+                });
+                picture.kind = BlockKind::Image;
+                Some(picture)
+            }
             10..20 => Some(block("aa", 10, 20)),
             _ => None,
         });

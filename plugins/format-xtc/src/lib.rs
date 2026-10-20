@@ -447,20 +447,12 @@ impl Document for XtcDocument {
             Some(_) => (BlockKind::Image, String::new()),
             None => (BlockKind::Paragraph, format!("{}", at.section + 1)),
         };
-        Ok(Some(Block {
-            kind,
-            continues: false,
-            start: 0,
-            end: 1,
-            text,
-            map: OffsetMap::IDENTITY,
-            runs: Vec::new(),
-            align: Align::Center,
-            indent: None,
-            space: None,
-            size: None,
-            image,
-        }))
+        Ok(Some(
+            Block::new(kind, 0, 1, text)
+                .map(OffsetMap::IDENTITY)
+                .align(Align::Center)
+                .image(image),
+        ))
     }
 
     fn toc_len(&self, _: &dyn Storage) -> u32 {

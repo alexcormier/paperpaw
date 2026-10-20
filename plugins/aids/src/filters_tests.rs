@@ -14,20 +14,10 @@ use proptest::prelude::*;
 use super::*;
 
 fn block(text: &str, runs: Vec<Run>) -> Block {
-    Block {
-        kind: BlockKind::Paragraph,
-        continues: false,
-        start: 0,
-        end: text.len() as u32,
-        text: text.to_string(),
-        map: OffsetMap::IDENTITY,
-        runs,
-        align: Align::default(),
-        indent: None,
-        space: None,
-        size: None,
-        image: None,
-    }
+    Block::new(BlockKind::Paragraph, 0, text.len() as u32, text.to_string())
+        .map(OffsetMap::IDENTITY)
+        .runs(runs)
+        .align(Align::default())
 }
 
 /// The runs are on the text: inside it, on character boundaries, not

@@ -98,10 +98,8 @@ impl PdfDocument {
         })
         .ok_or(failed("PDF"))?;
         let name = path.rsplit('/').next().unwrap_or(path);
-        let metadata = Metadata {
-            title: Some(name.rsplit_once('.').map_or(name, |(s, _)| s).to_string()),
-            ..Metadata::default()
-        };
+        let metadata =
+            Metadata::default().title(name.rsplit_once('.').map_or(name, |(s, _)| s).to_string());
         let cache = format!(
             "{}/{:016x}",
             Env::plugin_dir(crate::plugin::PLUGIN.as_str()),
@@ -348,20 +346,12 @@ impl Document for PdfDocument {
             Some(_) => (BlockKind::Image, String::new()),
             None => (BlockKind::Paragraph, format!("{}", at.section + 1)),
         };
-        Ok(Some(Block {
-            kind,
-            continues: false,
-            start: 0,
-            end: 1,
-            text,
-            map: OffsetMap::IDENTITY,
-            runs: Vec::new(),
-            align: Align::Center,
-            indent: None,
-            space: None,
-            size: None,
-            image,
-        }))
+        Ok(Some(
+            Block::new(kind, 0, 1, text)
+                .map(OffsetMap::IDENTITY)
+                .align(Align::Center)
+                .image(image),
+        ))
     }
 
     fn cover(&self, storage: &dyn Storage) -> Result<Option<ImageRef>, DocumentError> {

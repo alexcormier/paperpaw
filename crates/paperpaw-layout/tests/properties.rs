@@ -75,20 +75,14 @@ impl Document for Book {
         for para in paras {
             let end = start + para.text.len() as u32 + 1;
             if at.offset < end {
-                return Ok(Some(Block {
-                    kind: para.kind,
-                    continues: false,
-                    start,
-                    end,
-                    text: para.text.clone(),
-                    map: OffsetMap::IDENTITY,
-                    runs: para.runs.clone(),
-                    align: para.align,
-                    indent: para.indent,
-                    space: None,
-                    size: para.size,
-                    image: None,
-                }));
+                return Ok(Some(
+                    Block::new(para.kind, start, end, para.text.clone())
+                        .map(OffsetMap::IDENTITY)
+                        .runs(para.runs.clone())
+                        .align(para.align)
+                        .indent(para.indent)
+                        .size(para.size),
+                ));
             }
             start = end;
         }
@@ -222,12 +216,7 @@ fn book() -> impl Strategy<Value = Book> {
 
 fn style() -> impl Strategy<Value = Style> {
     (0.0f32..6.0, 0.0f32..4.0, any::<bool>()).prop_map(|(paragraph_spacing, indent, justify)| {
-        Style {
-            paragraph_spacing,
-            indent,
-            em: 10.0,
-            justify,
-        }
+        Style::new(paragraph_spacing, indent, 10.0, justify)
     })
 }
 
@@ -238,14 +227,8 @@ fn context<'a>(
     hyphenate: bool,
     widths: &'a Widths,
 ) -> LayoutContext<'a> {
-    LayoutContext {
-        document: book,
-        storage: &NoStorage,
-        width,
-        style,
-        typesetter: widths,
-        hyphenate: hyphenate.then_some(&every_second as &dyn Fn(&str, &mut dyn FnMut(usize))),
-    }
+    LayoutContext::new(book, &NoStorage, width, style, widths)
+        .hyphenate(hyphenate.then_some(&every_second as &dyn Fn(&str, &mut dyn FnMut(usize))))
 }
 
 /// All pages from the start, as a reader turns them.
@@ -512,12 +495,7 @@ fn one_paragraph(text: &str, align: Align) -> Book {
     }
 }
 
-const PLAIN: Style = Style {
-    paragraph_spacing: 0.0,
-    indent: 0.0,
-    em: 10.0,
-    justify: false,
-};
+const PLAIN: Style = Style::new(0.0, 0.0, 10.0, false);
 
 fn shown(pages: &[Page]) -> Vec<Vec<&str>> {
     pages
@@ -531,10 +509,8 @@ fn shown(pages: &[Page]) -> Vec<Vec<&str>> {
 #[test]
 fn glyphs_wider_than_the_box_get_a_line_each() {
     let book = one_paragraph("一二 三", Align::Justify);
-    let style = Style {
-        justify: true,
-        ..PLAIN
-    };
+    let mut style = PLAIN;
+    style.justify = true;
     let cx = context(&book, 1.0, &style, true, &VARIED);
     let pages = paginate(&cx, 100.0, &book);
     assert_eq!(shown(&pages), [["一", "二", "三"]]);

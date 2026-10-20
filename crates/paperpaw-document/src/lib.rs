@@ -48,6 +48,7 @@ impl Locator {
 
 /// Bibliographic information.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Metadata {
     pub title: Option<String>,
     pub authors: Vec<String>,
@@ -62,6 +63,43 @@ pub struct Metadata {
     pub subjects: Vec<String>,
     /// What the book is about, as plain text (a blurb), if it says.
     pub description: Option<String>,
+}
+
+impl Metadata {
+    pub fn title(mut self, title: impl Into<Option<String>>) -> Self {
+        self.title = title.into();
+        self
+    }
+
+    pub fn authors(mut self, authors: Vec<String>) -> Self {
+        self.authors = authors;
+        self
+    }
+
+    pub fn language(mut self, language: impl Into<Option<String>>) -> Self {
+        self.language = language.into();
+        self
+    }
+
+    pub fn series(mut self, series: impl Into<Option<String>>) -> Self {
+        self.series = series.into();
+        self
+    }
+
+    pub fn series_index(mut self, series_index: impl Into<Option<String>>) -> Self {
+        self.series_index = series_index.into();
+        self
+    }
+
+    pub fn subjects(mut self, subjects: Vec<String>) -> Self {
+        self.subjects = subjects;
+        self
+    }
+
+    pub fn description(mut self, description: impl Into<Option<String>>) -> Self {
+        self.description = description.into();
+        self
+    }
 }
 
 /// The role of a block; layout engines style blocks by kind.
@@ -200,6 +238,7 @@ impl Align {
 /// `text` is normalized (decoded to UTF-8, whitespace collapsed); `map`
 /// converts between byte indices into `text` and source offsets.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Block {
     pub kind: BlockKind,
     /// The block continues the previous one (a very long paragraph split
@@ -226,6 +265,66 @@ pub struct Block {
     pub size: Option<u16>,
     /// The image of an [`BlockKind::Image`] block.
     pub image: Option<ImageRef>,
+}
+
+impl Block {
+    /// Made of what it needs; the rest as set with its methods.
+    pub fn new(kind: BlockKind, start: u32, end: u32, text: String) -> Self {
+        Self {
+            kind,
+            start,
+            end,
+            text,
+            continues: false,
+            map: OffsetMap::IDENTITY,
+            runs: Vec::new(),
+            align: Align::Auto,
+            indent: None,
+            space: None,
+            size: None,
+            image: None,
+        }
+    }
+
+    pub fn continues(mut self, continues: bool) -> Self {
+        self.continues = continues;
+        self
+    }
+
+    pub fn map(mut self, map: OffsetMap) -> Self {
+        self.map = map;
+        self
+    }
+
+    pub fn runs(mut self, runs: Vec<Run>) -> Self {
+        self.runs = runs;
+        self
+    }
+
+    pub fn align(mut self, align: Align) -> Self {
+        self.align = align;
+        self
+    }
+
+    pub fn indent(mut self, indent: impl Into<Option<i16>>) -> Self {
+        self.indent = indent.into();
+        self
+    }
+
+    pub fn space(mut self, space: impl Into<Option<u16>>) -> Self {
+        self.space = space.into();
+        self
+    }
+
+    pub fn size(mut self, size: impl Into<Option<u16>>) -> Self {
+        self.size = size.into();
+        self
+    }
+
+    pub fn image(mut self, image: impl Into<Option<ImageRef>>) -> Self {
+        self.image = image.into();
+        self
+    }
 }
 
 impl Block {

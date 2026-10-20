@@ -344,20 +344,12 @@ impl Document for CbzDocument {
                     .unwrap_or_default(),
             ),
         };
-        Ok(Some(Block {
-            kind,
-            continues: false,
-            start: 0,
-            end: 1,
-            text,
-            map: OffsetMap::IDENTITY,
-            runs: Vec::new(),
-            align: Align::Center,
-            indent: None,
-            space: None,
-            size: None,
-            image,
-        }))
+        Ok(Some(
+            Block::new(kind, 0, 1, text)
+                .map(OffsetMap::IDENTITY)
+                .align(Align::Center)
+                .image(image),
+        ))
     }
 
     fn cover(&self, storage: &dyn Storage) -> Result<Option<ImageRef>, DocumentError> {

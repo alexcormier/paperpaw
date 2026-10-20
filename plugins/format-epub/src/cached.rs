@@ -104,20 +104,15 @@ pub(crate) fn read_block(
         }
         text = alt;
     }
-    Ok(Block {
-        kind,
-        continues: convert::continues(header[2]),
-        start,
-        end,
-        text,
-        map: OffsetMap::IDENTITY,
-        runs,
-        align: Align::from_bits(header[3]),
-        indent: Some(i16::from_le_bytes([entry[4], entry[5]])).filter(|&i| i != convert::NO_INDENT),
-        space: Some(u16::from_le_bytes([entry[6], entry[7]])).filter(|&s| s != convert::NO_SPACE),
-        size: Some(u16::from_le_bytes([entry[8], entry[9]])).filter(|&s| s != 0),
-        image,
-    })
+    Ok(Block::new(kind, start, end, text)
+        .continues(convert::continues(header[2]))
+        .map(OffsetMap::IDENTITY)
+        .runs(runs)
+        .align(Align::from_bits(header[3]))
+        .indent(Some(i16::from_le_bytes([entry[4], entry[5]])).filter(|&i| i != convert::NO_INDENT))
+        .space(Some(u16::from_le_bytes([entry[6], entry[7]])).filter(|&s| s != convert::NO_SPACE))
+        .size(Some(u16::from_le_bytes([entry[8], entry[9]])).filter(|&s| s != 0))
+        .image(image))
 }
 
 /// The block of a converted chapter containing `offset`, or the first

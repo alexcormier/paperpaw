@@ -41,24 +41,21 @@ impl Document for Album {
             width,
             height,
         });
-        Ok(Some(Block {
-            kind: if image.is_some() {
-                BlockKind::Image
-            } else {
-                BlockKind::Paragraph
-            },
-            continues: false,
-            start: at.offset,
-            end: at.offset + 1,
-            text: String::from("x"),
-            map: OffsetMap::IDENTITY,
-            runs: Vec::new(),
-            align: Align::Auto,
-            indent: None,
-            space: None,
-            size: None,
-            image,
-        }))
+        Ok(Some(
+            Block::new(
+                if image.is_some() {
+                    BlockKind::Image
+                } else {
+                    BlockKind::Paragraph
+                },
+                at.offset,
+                at.offset + 1,
+                String::from("x"),
+            )
+            .map(OffsetMap::IDENTITY)
+            .align(Align::Auto)
+            .image(image),
+        ))
     }
 }
 
@@ -74,22 +71,10 @@ impl Typesetter for Units {
     }
 }
 
-const STYLE: Style = Style {
-    paragraph_spacing: 4.0,
-    indent: 0.0,
-    em: 10.0,
-    justify: false,
-};
+const STYLE: Style = Style::new(4.0, 0.0, 10.0, false);
 
 fn pages(album: &Album, width: f32, height: f32) -> Vec<Page> {
-    let cx = LayoutContext {
-        document: album,
-        storage: &NoStorage,
-        width,
-        style: &STYLE,
-        typesetter: &Units,
-        hyphenate: None,
-    };
+    let cx = LayoutContext::new(album, &NoStorage, width, &STYLE, &Units);
     let mut pages = Vec::new();
     let mut at = Locator::START;
     loop {

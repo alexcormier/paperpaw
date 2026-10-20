@@ -420,24 +420,21 @@ impl Document for TxtDocument {
             let (text, map) = self.decode(&buf[rel(start)..rel(text_end)], start);
             let heading =
                 self.breaks == Breaks::BlankLines && p.single_line && !long && is_heading(&text);
-            return Ok(Some(Block {
-                kind: if heading {
-                    BlockKind::Heading(2)
-                } else {
-                    BlockKind::Paragraph
-                },
-                continues,
-                start,
-                end,
-                text,
-                map,
-                runs: Vec::new(),
-                align: Align::Auto,
-                indent: None,
-                space: None,
-                size: None,
-                image: None,
-            }));
+            return Ok(Some(
+                Block::new(
+                    if heading {
+                        BlockKind::Heading(2)
+                    } else {
+                        BlockKind::Paragraph
+                    },
+                    start,
+                    end,
+                    text,
+                )
+                .continues(continues)
+                .map(map)
+                .align(Align::Auto),
+            ));
         }
         Ok(None)
     }

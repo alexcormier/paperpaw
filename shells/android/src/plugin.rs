@@ -8,8 +8,7 @@ use paperpaw_sdk::builtin::{events, groups, menus, params};
 use paperpaw_sdk::document::Document;
 use paperpaw_sdk::{
     ActionSpec, Canvas, Command, Cx, Env, FormatSpec, Handled, Id, Manifest, MenuEntry, MenuNeed,
-    Params, Plugin, Rect, RegisterError, Registrar, Screen, ScreenSpec, SettingSpec,
-    Version,
+    Params, Plugin, Rect, RegisterError, Registrar, Screen, ScreenSpec, SettingSpec, Version,
 };
 
 use crate::lights::Lights;

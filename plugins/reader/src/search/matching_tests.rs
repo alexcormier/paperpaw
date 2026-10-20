@@ -19,20 +19,14 @@ fn needle(text: &str) -> Vec<char> {
 
 fn block(text: &str) -> Block {
     use paperpaw_sdk::document::{Align, BlockKind, OffsetMap};
-    Block {
-        kind: BlockKind::Paragraph,
-        continues: false,
-        start: 0,
-        end: text.len() as u32,
-        text: String::from(text),
-        map: OffsetMap::IDENTITY,
-        runs: Vec::new(),
-        align: Align::Auto,
-        indent: None,
-        space: None,
-        size: None,
-        image: None,
-    }
+    Block::new(
+        BlockKind::Paragraph,
+        0,
+        text.len() as u32,
+        String::from(text),
+    )
+    .map(OffsetMap::IDENTITY)
+    .align(Align::Auto)
 }
 
 proptest! {
