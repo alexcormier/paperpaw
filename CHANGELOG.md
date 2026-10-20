@@ -6,6 +6,31 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Native code plugins as files (ADR 0024, PLANNING P5): a code plugin
+  can be a file in its folder on the card (`plugins/<id>/code.ppn`),
+  which the Xteink X4 and X4 Pro load at their start, without a new
+  firmware: the X4 Pro runs it from PSRAM, the X4 writes it once into
+  flash behind its firmware and runs it from there, for some hundred
+  bytes of RAM. Its code is that of a plugin built in, with one line
+  more (`paperpaw_sdk::plugin!`); `paperpaw-sign pack` makes the file
+  and signs it as its author. A file fits the PaperPaw built by the same
+  compiler from the same SDK (its fingerprint, shown under *About* and
+  sent with the update check). Plugins the web flasher writes behind the
+  firmware are installed at the first start. Safe mode: after two starts
+  that did not get to their first frame, or with *Back* (X4) or *Home*
+  (X4 Pro) held at power-on, PaperPaw starts without code plugins and
+  switches off the one that crashed; the plugin manager says why a code
+  plugin does not run. `samples/hello-native` is the sample plugin as a
+  file, with a CI job for a plugin's own repository.
+- SDK: `native` (the fingerprint, `plugin!`, `Env::native`,
+  `check_file`), `PluginInfo::kind` and `PluginInfo::problem`;
+  `Registrar::publish` publishes a service with its type's name, so
+  plugins built apart find it (`Registrar::add_service` is deprecated);
+  a float in an event's parameters is read without `core`'s large exact
+  parser (16 KB less in a native plugin that takes reading events).
+- Kernel: `KernelBuilder::code_plugins`, `safe_mode` and
+  `install_plugin` (plugins a shell put in folders, installed before
+  plugins load); `Kernel::describe` describes a notice showing.
 - Joplin (PLANNING C15, S1): a book's highlights and notes, once
   exported, become a note in Joplin, one per book, in a notebook named
   in the settings. Exporting again updates the note, also where it was

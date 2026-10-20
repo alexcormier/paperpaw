@@ -230,21 +230,38 @@ and the plugin manager says why.
 
 ## Open points
 
-- **Services by type.** `Services::get` finds a service by `TypeId`,
-  which depends on the crate's hash, which depends on where cargo got
-  the crate from: a plugin built against the SDK from crates.io and a
-  firmware built from the repository may not agree. To check now; the
-  versioned plugin API replaces it with ids and versions anyway.
+What the spike left open, as the implementation found it (2026-10-20):
+
+- **Services by type: did not hold.** The `TypeId` of an SDK type is the
+  same in two workspaces built alike, but any difference in cargo's
+  profile changes it (`debug = 2` against `"line-tables-only"`,
+  `panic = "abort"`), so a plugin built apart did not find a service by
+  it. Services are now published with their type's name
+  (`Registrar::publish`) and found by it where the `TypeId` differs; a
+  service whose type changes takes a new id. A test loads a plugin built
+  in a workspace of its own into a kernel and finds its service so
+  (`crates/paperpaw-core/tests/native_plugin.rs`).
+- **On the devices**: several plugins at once (packed one after the
+  other, a sector each, on the X4), a plugin that panics at every start
+  (two starts, then one without code plugins, the panic's calls named by
+  plugin and offset, that plugin switched off), and plugins from the web
+  flasher's bundle (installed at the first start, loaded at that start)
+  run on the X4 and the X4 Pro. A key held at power-on is not tried on a
+  device yet.
+- **No mutable statics**: `paperpaw-sign statics` lists the writable
+  symbols of the SDK's crates (built without LTO, whose archives hold
+  objects); none today. It and the test above wait for a CI job.
+- **Toolchains**: the sample pins the X4's compiler
+  (`samples/hello-native/rust-toolchain.toml`); the firmware's are to be
+  pinned by the release, which names them; the device shows them under
+  *About*.
 - **Android's `.so`.** Untried: `dlopen` of a library the app wrote
   into its own storage (apps for API level 29 and later may not run
   such files as programs, and loading them as libraries has to be
   checked on the Boox devices' Android versions); the library must be
-  built against the same SDK features and NDK target as the app; and
-  how the kernel's heap reaches it (one Rust allocator in the app,
-  handed over by the same `Api` table).
-- **On the devices**, still to try: safe mode, several plugins at once,
-  a plugin that panics.
-- The SDK crates must keep having no mutable statics (a check in CI): a
-  plugin has its own copy of the SDK code it uses.
-- The firmware's toolchains must be pinned per release (the X4 builds
-  with whatever `stable` is today).
+  built against the same SDK features and NDK target as the app. `plugin!`
+  builds a library the system loads already (the test above loads one),
+  its table set by the shell.
+- **Author signatures** are a trailer in the `.ppn` itself
+  (`paperpaw_native::signature`), so a file carries its signature
+  wherever it goes; the store remembers the author's key.
