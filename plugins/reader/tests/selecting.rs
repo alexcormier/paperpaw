@@ -103,7 +103,6 @@ fn a_long_press_selects_the_word_held() {
 /// bookmark in the corner, or what `tap.top` does), so its words cannot
 /// be selected by touch.
 #[test]
-#[ignore = "bug: a long press in the top edge strip is never recognized (the kernel's edge swipes take the finger)"]
 fn a_long_press_on_the_first_line_selects_its_word() {
     let mut reading = numbered(TOUCH);
     let words = reading.words();

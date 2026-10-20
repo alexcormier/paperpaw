@@ -1154,13 +1154,13 @@ fn select_in_the_skimming_bar_stays_where_it_went() {
 /// The entries of a menu as a plugin's action finds them.
 type Entries = Rc<RefCell<Vec<String>>>;
 
-/// A plugin whose action `menus.look` notes the reader's More menu.
+/// A plugin whose action `looker.look` notes the reader's More menu.
 struct MenuLook(Entries);
 
 impl Plugin for MenuLook {
     fn manifest(&self) -> Manifest {
         Manifest {
-            id: Id::new_static("menus"),
+            id: Id::new_static("looker"),
             name: "Menus".into(),
             description: "Looks into menus.".into(),
             version: Version::new(0, 1, 0),
@@ -1171,7 +1171,7 @@ impl Plugin for MenuLook {
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let entries = self.0.clone();
         r.add_action(
-            paperpaw_sdk::ActionSpec::new(Id::new_static("menus.look"), "look").handler(
+            paperpaw_sdk::ActionSpec::new(Id::new_static("looker.look"), "look").handler(
                 move |env: &paperpaw_sdk::Env<'_>, _: &mut Vec<paperpaw_sdk::Command>| {
                     *entries.borrow_mut() = env
                         .menus
@@ -1195,8 +1195,16 @@ fn status_lines_switch_from_the_menu_without_a_touch_screen() {
         .plugin(MenuLook(entries.clone()))
         .build()
         .unwrap();
-    kernel.start(Instant(0));
-    kernel.run_action(Instant(10), Id::new_static("menus.look"));
+    let effects = kernel.start(Instant(0));
+    let mut reading = Reading {
+        kernel,
+        storage: Shared::default(),
+        heard: Heard::default(),
+        now: 0,
+        book: BOOK,
+    };
+    reading.settle(effects);
+    reading.run(Id::new_static("looker.look"));
     let entries = entries.borrow();
     assert!(
         entries.iter().any(|e| e == "reader.next-status-line"),
