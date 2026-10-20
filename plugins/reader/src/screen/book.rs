@@ -497,6 +497,8 @@ impl Book {
         self.page = page;
         self.prepare_images(&env);
         self.update_chapter(&env);
+        // Found now, so the status lines read nothing while drawn.
+        self.chapter_first(&env);
         self.update_links(&env);
         if self.position_changed(&env) {
             cx.wake_at(env.now.add_millis(SAVE_EVERY_MS));
