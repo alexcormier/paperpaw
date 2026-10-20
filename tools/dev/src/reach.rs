@@ -23,9 +23,9 @@
 //!   button changes a small part of it, as a focus moving would: what is
 //!   on it cannot be followed (nor read aloud).
 //!
-//! On touch screens, for the screens that open without parameters,
-//! `reach.touch-label`: a tap by a part's text, as flows and recordings
-//! name parts (`tap-on:`), lands on another part.
+//! On touch screens, for the screens that open without parameters, a
+//! note (`reach.touch-label`) where a tap by a part's text, as flows and
+//! recordings name parts (`tap-on:`), lands on another part.
 //!
 //! Each finding comes with a picture of the screen.
 //!
@@ -978,7 +978,7 @@ pub fn taps(context: &Context, variant: &Variant, report: &mut Report) -> Result
                 let t = target.area;
                 x >= u32::from(t.x) && y >= u32::from(t.y) && x < t.right() && y < t.bottom()
             });
-            if !lands {
+            if !lands && !elsewhere.contains(&format!("\"{text}\"")) {
                 elsewhere.push(format!("\"{text}\""));
                 first.get_or_insert(target.area);
             }
@@ -986,7 +986,8 @@ pub fn taps(context: &Context, variant: &Variant, report: &mut Report) -> Result
         if elsewhere.is_empty() {
             continue;
         }
-        let mut finding = Finding::warning(
+        // Not wrong for who taps, but for flows and recordings.
+        let mut finding = Finding::info(
             "reach.touch-label",
             screen.clone(),
             format!(
