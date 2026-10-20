@@ -356,8 +356,8 @@ pub(crate) fn break_words(
 }
 
 /// `text` broken between words into lines `width` pixels wide at `size`,
-/// `most` at most, the last one shortened with "…" where there is more
-/// (as is a word wider than a line).
+/// `most` at most, the last one shortened with "…" where there is more;
+/// a word wider than a line ends the text there, shortened.
 pub(crate) fn wrap(
     font: &FontHandle<'_>,
     size: f32,
@@ -367,37 +367,40 @@ pub(crate) fn wrap(
 ) -> Vec<String> {
     let (mut lines, _) = break_words(font, size, text, width);
     let most = most.max(1);
+    // Up to the first line with a word wider than a line: it ends there.
+    if let Some(wide) = lines.iter().position(|l| font.measure(size, l) > width) {
+        let rest = lines[wide..].join(" ");
+        lines.truncate(wide);
+        lines.push(rest);
+    }
     if lines.len() > most {
         let rest = lines[most - 1..].join(" ");
         lines.truncate(most - 1);
         lines.push(rest);
-        if let Some(last) = lines.last_mut() {
-            *last = paperpaw_sdk::ui::fit(font, size, last, width);
-        }
     }
-    for line in &mut lines {
-        if font.measure(size, line) > width {
-            *line = paperpaw_sdk::ui::fit(font, size, line, width);
-        }
+    if let Some(last) = lines.last_mut()
+        && font.measure(size, last) > width
+    {
+        *last = paperpaw_sdk::ui::fit(font, size, last, width);
     }
     lines
 }
 
-/// `text` whole in `most` lines at most, `width` pixels wide, broken
-/// between words: at the largest size from `max` down to `min` at which
-/// it fits so, measured as drawn; `None` where it does not even at `min`
-/// (then it is better left out, or shortened, than broken in a word).
+/// `text` whole in `most` lines at most, `width` pixels wide and
+/// `height` pixels high, broken between words: at the largest size from
+/// `max` down to `min` at which it fits so, measured as drawn; `None`
+/// where it does not even at `min` (then it is better left out, or
+/// shortened, than broken in a word).
 fn wrap_whole(
     font: &FontHandle<'_>,
-    max: f32,
-    min: f32,
+    (max, min): (f32, f32),
     text: &str,
-    width: f32,
+    (width, height): (f32, f32),
     most: usize,
 ) -> Option<(f32, Vec<String>)> {
     let size = widgets::largest_size(max, min, |size| {
         let (lines, too_wide) = break_words(font, size, text, width);
-        !too_wide && lines.len() <= most.max(1)
+        !too_wide && lines.len() <= most.max(1) && line(font, size) * lines.len() as f32 <= height
     })?;
     Some((size, break_words(font, size, text, width).0))
 }

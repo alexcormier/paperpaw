@@ -289,36 +289,29 @@ fn lay_out(env: &Env<'_>, area: Rect, quote: &Quote) -> Option<Laid> {
         .then_some(quote.author.as_str());
     let width = f32::from(area.width);
     let height = f32::from(area.height);
-    // Who said it, where the name fits its line whole.
-    let author = author.filter(|name| {
-        style
-            .font(env)
-            .is_some_and(|ui| ui.measure(style.small, name) <= width)
-    });
-    let wished = Layout {
+    // Who said it, where a line of the quote has room above it (the
+    // name shortened where it is wider than the place).
+    let author_h = f32::from(widgets::line_height(env, style.small)) + style.gap as f32 * 0.75;
+    let least = style.small * 0.85;
+    let author = author.filter(|_| text::line_height(&font, least) + author_h <= height);
+    let mut wished = Layout {
         mark: widgets::shows(env, ID.as_str(), MARK),
-        author: author.map_or(0.0, |_| {
-            f32::from(widgets::line_height(env, style.small)) + style.gap as f32 * 0.75
-        }),
+        author: author.map_or(0.0, |_| author_h),
     };
-    // Where the quote does not fit whole with them, the large mark goes,
-    // then who said it.
-    let choices = [
-        wished,
-        Layout {
-            mark: false,
-            ..wished
-        },
-        Layout {
-            mark: false,
-            author: 0.0,
-        },
-    ];
+    if wished.height(&font, least, 1) > height {
+        wished.mark = false;
+    }
+    // Where the quote does not fit whole with it, the large mark goes;
+    // where not even so, the quote is shortened at its end.
+    let plain = Layout {
+        mark: false,
+        ..wished
+    };
+    let choices = [wished, plain];
     let whole = |layout: &Layout, size: f32| {
         let (lines, too_wide) = text::count_lines(&font, size, &shown, width);
         !too_wide && layout.height(&font, size, lines) <= height
     };
-    let least = style.small * 0.85;
     let (layout, size) = match widgets::size(env, ID.as_str()) {
         Size::Fit => choices
             .iter()
@@ -326,11 +319,11 @@ fn lay_out(env: &Env<'_>, area: Rect, quote: &Quote) -> Option<Laid> {
                 widgets::largest_size(style.title * 2.0, least, |size| whole(layout, size))
                     .map(|size| (*layout, size))
             })
-            .unwrap_or((choices[2], least)),
+            .unwrap_or((plain, least)),
         size => {
             let size = size.text(&style);
             let layout = choices.iter().find(|layout| whole(layout, size));
-            (*layout.unwrap_or(&choices[2]), size)
+            (*layout.unwrap_or(&plain), size)
         }
     };
     let author = author.filter(|_| layout.author > 0.0);

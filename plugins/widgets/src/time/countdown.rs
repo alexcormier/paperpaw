@@ -5,6 +5,7 @@
 
 use alloc::format;
 use alloc::string::String;
+use alloc::vec::Vec;
 
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::time;
@@ -293,57 +294,134 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         }
         return;
     }
-    // The number large, what it counts to below it: whole, in as few
-    // lines as it fits (three at most), from the body size down to the
-    // small one. Where they have no room together, the notes below go,
-    // then what it counts to; the number stays.
+    // The number large, what it counts to below it (whole in as few
+    // lines as fit, from the body size down to the small one, else on
+    // one line shortened at its end), the notes below where they fit
+    // whole; a gap between their ink.
     let width = f32::from(area.width);
     let height = f32::from(area.height);
+    let gap = style.gap as f32;
     let note_max = style.text.min(height / 5.0).max(style.small);
     let chosen = widgets::size(env, ID.as_str());
-    let big_size = |room: f32| -> Option<f32> {
-        let fits = |s: f32| font.measure(s, &shown.big) <= width && line(&font, s) <= room;
-        match chosen {
-            Size::Fit => widgets::largest_size(room, style.text, fits),
+    // The notes below whole on their line, or not at all; the label
+    // whole before the notes, shortened only where it has no room whole.
+    let with_notes = !notes.is_empty() && font.measure(style.small, &notes) <= width;
+    // The label whole at the largest size that has room (in fewer lines
+    // where two counts give it the same), then shortened on one.
+    let best_lines = (1..=3)
+        .filter_map(|most| {
+            super::wrap_whole(
+                &font,
+                (note_max, style.small),
+                &shown.note,
+                (width, height),
+                most,
+            )
+            .map(|(size, lines)| (size, lines.len()))
+        })
+        .fold(None::<(f32, usize)>, |best, (size, lines)| match best {
+            Some((s, _)) if s >= size => best,
+            _ => Some((size, lines)),
+        })
+        .map(|(_, lines)| lines);
+    let mut ways: Vec<(bool, Option<usize>)> = Vec::new();
+    for lines in [best_lines, Some(1), Some(2), Some(3), None] {
+        for extra in [true, false] {
+            if (!extra || with_notes) && (lines.is_some() || best_lines.is_none()) {
+                ways.push((extra, lines));
+            }
+        }
+    }
+    ways.push((false, None));
+    let ink_of =
+        |part: &super::Part<'_>| super::stack_height(&font, core::slice::from_ref(part), 0.0);
+    let laid = ways.into_iter().find_map(|(extra, lines)| {
+        let (note_size, note_lines) = match lines {
+            Some(most) => super::wrap_whole(
+                &font,
+                (note_max, style.small),
+                &shown.note,
+                (width, height),
+                most,
+            )?,
+            None => (
+                style.small,
+                alloc::vec![paperpaw_sdk::ui::fit(
+                    &font,
+                    style.small,
+                    &shown.note,
+                    width
+                )],
+            ),
+        };
+        let note_part = super::Part {
+            lines: note_lines.iter().map(String::as_str).collect(),
+            size: note_size,
+            color: look.ink,
+            font: None,
+        };
+        let mut below = ink_of(&note_part) + gap;
+        if extra {
+            let part = super::Part {
+                lines: alloc::vec![notes.as_str()],
+                size: style.small,
+                color: look.faint,
+                font: None,
+            };
+            below += ink_of(&part) + gap;
+        }
+        // The number's ink: its digits, as high as capitals.
+        let fits = |s: f32| {
+            font.measure(s, &shown.big) <= width && super::cap_height(&font, s) + below <= height
+        };
+        let size = match chosen {
+            Size::Fit => widgets::largest_size(height, style.text, fits),
             size => {
                 let size = size.text(&style) * 1.6;
                 widgets::largest_size(size, style.text.min(size), fits)
             }
-        }
-    };
-    let mut ways = alloc::vec::Vec::new();
-    for extra in [true, false] {
-        // The notes below whole on their line, or not at all.
-        if extra && (notes.is_empty() || font.measure(style.small, &notes) > width) {
-            continue;
-        }
-        for lines in 1..=3 {
-            ways.push((extra, Some(lines)));
-        }
-    }
-    ways.push((false, None));
-    let laid = ways.into_iter().find_map(|(extra, lines)| {
-        let extra_h = if extra { small } else { 0.0 };
-        let (note_size, note_lines) = match lines {
-            Some(most) => {
-                super::wrap_whole(&font, note_max, style.small, &shown.note, width, most)?
-            }
-            None => (style.small, alloc::vec::Vec::new()),
-        };
-        let note_h = line(&font, note_size) * note_lines.len() as f32;
-        let room = height - note_h - extra_h;
-        let size = big_size(room)?;
+        }?;
         Some((size, note_size, note_lines, extra))
     });
-    // Not even the number fits whole: shortened at the small size (a
-    // word such as "Tomorrow"), nothing where not even that has room.
-    let (size, note_size, note_lines, extra) =
-        laid.unwrap_or((style.small, style.small, alloc::vec::Vec::new(), false));
+    // Not even with the label shortened: the number alone, shortened at
+    // the small size where it is a word ("Tomorrow"), nothing where not
+    // even that has room.
+    let (size, note_size, note_lines, extra) = laid.unwrap_or_else(|| {
+        let alone =
+            |s: f32| font.measure(s, &shown.big) <= width && super::cap_height(&font, s) <= height;
+        let size = widgets::largest_size(height, style.small, alone).unwrap_or(style.small);
+        (size, style.small, Vec::new(), false)
+    });
+    // The digits' ink measured where capitals were assumed: smaller
+    // where it reaches further.
+    let mut size = size;
+    let stack = |size: f32| {
+        let number = super::Part {
+            lines: alloc::vec![shown.big.as_str()],
+            size,
+            color: look.ink,
+            font: None,
+        };
+        let note = super::Part {
+            lines: note_lines.iter().map(String::as_str).collect(),
+            size: note_size,
+            color: look.ink,
+            font: None,
+        };
+        let mut parts = alloc::vec![number];
+        if !note_lines.is_empty() {
+            parts.push(note);
+        }
+        super::stack_height(&font, &parts, gap) + if extra { small + gap } else { 0.0 }
+    };
+    while size > style.small && stack(size) > height {
+        size *= 0.92;
+    }
     let number = paperpaw_sdk::ui::fit(&font, size, &shown.big, width);
-    if font.measure(size, &number) > width || line(&font, size) > height {
+    if font.measure(size, &number) > width || super::cap_height(&font, size) > height {
         return;
     }
-    // Centred together by their ink, half a gap between the parts.
+    // Centred together by their ink, a gap between the parts.
     let mut parts = alloc::vec![super::Part {
         lines: alloc::vec![number.as_str()],
         size,
@@ -366,7 +444,6 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
             font: None,
         });
     }
-    let gap = style.gap as f32 / 2.0;
     super::draw_stack(canvas, &font, area, align, &parts, gap);
 }
 

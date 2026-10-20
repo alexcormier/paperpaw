@@ -195,10 +195,21 @@ struct BarParts {
     bar: f32,
 }
 
+/// How notes may be laid out: whole in up to two lines, whole in one,
+/// shortened at the end of one, or not at all.
+#[derive(Clone, Copy, PartialEq)]
+enum Notes {
+    Two,
+    One,
+    Cut,
+    None,
+}
+
 /// The year as `caption` above, the percent large, a bar (or a dot for
-/// each month of `months`) and the notes below; where they have no room
-/// together, a second line of notes, the caption, the notes and the
-/// percent are left out in turn, never drawn over each other.
+/// each month of `months`) and the notes below, half a gap between their
+/// ink; where they have no room together, a second line of notes, the
+/// percent, the caption and the notes are left out in turn (the notes
+/// shortened before they go), never drawn over each other.
 #[allow(clippy::too_many_arguments)]
 fn draw_bar(
     canvas: &mut Canvas<'_>,
@@ -211,14 +222,23 @@ fn draw_bar(
 ) {
     let (style, _) = ui(env);
     let align = widgets::align(env, ID.as_str());
-    let small = line(font, style.small);
     let gap = style.gap as f32 / 2.0;
     let area = look.area;
     let width = f32::from(area.width);
+    let height = f32::from(area.height);
     let items = notes(env, p);
     let text = percent_text(p);
     let percent = widgets::shows(env, ID.as_str(), "percent");
-    let caption_h = f32::from(widgets::caption_height(env));
+    let ink = |lines: Vec<&str>, size: f32| {
+        let part = super::Part {
+            lines,
+            size,
+            color: look.ink,
+            font: None,
+        };
+        super::stack_height(font, &[part], 0.0)
+    };
+    let caption_h = caption.map_or(0.0, |c| ink(alloc::vec![c], style.small));
     let bar_h = |height: f32| {
         if months.is_some() {
             (width / 12.0 * 0.7).min(height * 0.3)
@@ -233,46 +253,48 @@ fn draw_bar(
     };
     // Each way to show it, from all parts to the bar alone.
     let ways = [
-        (true, 2, true),
-        (true, 1, true),
-        (false, 2, true),
-        (false, 1, true),
-        (false, 0, true),
-        (false, 2, false),
-        (false, 1, false),
-        (false, 0, false),
+        (true, Notes::Two, true),
+        (true, Notes::One, true),
+        (true, Notes::Two, false),
+        (true, Notes::One, false),
+        (true, Notes::Cut, false),
+        (false, Notes::Two, false),
+        (false, Notes::One, false),
+        (false, Notes::Cut, false),
+        (false, Notes::None, true),
+        (false, Notes::None, false),
     ];
-    let lay = |(with_caption, lines, with_percent): (bool, usize, bool)| -> Option<BarParts> {
+    let lay = |(with_caption, kind, with_percent): (bool, Notes, bool)| -> Option<BarParts> {
         if with_caption && caption.is_none() || with_percent && !percent {
             return None;
         }
-        if lines > 0 && items.is_empty() {
+        if kind != Notes::None && items.is_empty() {
             return None;
         }
-        let height = f32::from(area.height) - if with_caption { caption_h } else { 0.0 };
-        let notes = if lines > 0 {
-            super::pack(font, style.small, &items, width, lines)
-        } else {
-            Vec::new()
+        let notes = match kind {
+            Notes::Two => super::pack(font, style.small, &items, width, 2),
+            Notes::One | Notes::Cut => super::pack(font, style.small, &items, width, 1),
+            Notes::None => Vec::new(),
         };
-        // Whole notes only: none shortened.
-        if notes.iter().any(|n| n.ends_with('…')) {
+        // Whole notes only, but where they may be shortened.
+        if kind != Notes::Cut && notes.iter().any(|n| n.ends_with('…')) {
             return None;
         }
         let note_h = if notes.is_empty() {
             0.0
         } else {
-            small * notes.len() as f32 + gap
+            ink(notes.iter().map(String::as_str).collect(), style.small) + gap
         };
+        let top_h = if with_caption { caption_h + gap } else { 0.0 };
         let bar = bar_h(height);
-        let room = height - note_h - bar;
+        let room = height - top_h - note_h - bar;
         if room < 0.0 {
             return None;
         }
         let size = if with_percent {
-            let most = ((room - gap) * 0.8).min(style.title * 2.2);
+            let most = (room - gap).min(style.title * 2.2);
             let size = widgets::largest_size(most, style.text, |s| {
-                font.measure(s, &text) <= width && line(font, s) + gap <= room
+                font.measure(s, &text) <= width && super::cap_height(font, s) + gap <= room
             })?;
             Some(size)
         } else {
@@ -288,26 +310,45 @@ fn draw_bar(
     let Some(parts) = ways.into_iter().find_map(lay) else {
         return;
     };
-    let big = parts.percent.map_or(0.0, |size| line(font, size) + gap);
+    let big = parts
+        .percent
+        .map_or(0.0, |size| ink(alloc::vec![text.as_str()], size) + gap);
     let note_h = if parts.notes.is_empty() {
         0.0
     } else {
-        small * parts.notes.len() as f32 + gap
+        ink(
+            parts.notes.iter().map(String::as_str).collect(),
+            style.small,
+        ) + gap
     };
+    let top_h = if parts.caption { caption_h + gap } else { 0.0 };
     let bar_h = parts.bar;
-    let caption_h = if parts.caption { caption_h } else { 0.0 };
-    // All of it together in the middle, the caption just above.
-    let total = caption_h + big + bar_h + note_h;
-    let mut y = f32::from(area.y) + (f32::from(area.height) - total).max(0.0) / 2.0;
+    // All of it together in the middle by its ink.
+    let total = top_h + big + bar_h + note_h;
+    let mut y = f32::from(area.y) + (height - total).max(0.0) / 2.0;
+    // Draws one part's ink from `y`, `h` high.
+    let draw = |canvas: &mut Canvas<'_>, y: f32, h: f32, part: super::Part<'_>| {
+        let band = Rect::new(area.x, y as u16, area.width, (h + 0.99) as u16);
+        super::draw_stack(canvas, font, band, align, &[part], 0.0);
+    };
     if let (true, Some(caption)) = (parts.caption, caption) {
-        let mut above = *look;
-        above.area = Rect::new(area.x, y as u16, area.width, caption_h as u16);
-        widgets::draw_caption(canvas, env, ID.as_str(), &above, caption);
-        y += caption_h;
+        let part = super::Part {
+            lines: alloc::vec![caption],
+            size: style.small,
+            color: look.faint,
+            font: None,
+        };
+        draw(canvas, y, caption_h, part);
+        y += top_h;
     }
     if let Some(size) = parts.percent {
-        let row = Rect::new(area.x, y as u16, area.width, (big - gap) as u16);
-        super::label(canvas, font, size, align, row, &text, look.ink);
+        let part = super::Part {
+            lines: alloc::vec![text.as_str()],
+            size,
+            color: look.ink,
+            font: None,
+        };
+        draw(canvas, y, big - gap, part);
         y += big;
     }
     match months {
@@ -324,10 +365,14 @@ fn draw_bar(
         }
     }
     y += bar_h + gap;
-    for note in &parts.notes {
-        let row = Rect::new(area.x, y as u16, area.width, small as u16);
-        super::label(canvas, font, style.small, align, row, note, look.faint);
-        y += small;
+    if !parts.notes.is_empty() {
+        let part = super::Part {
+            lines: parts.notes.iter().map(String::as_str).collect(),
+            size: style.small,
+            color: look.faint,
+            font: None,
+        };
+        draw(canvas, y, note_h - gap, part);
     }
 }
 
