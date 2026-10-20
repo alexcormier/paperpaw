@@ -28,6 +28,42 @@ change the plugin SDK.
 - Reader: a bookmark keeps words broken across lines whole, and Up and
   Down move to the line above and below while a word is chosen.
 
+- The library anew, as a calm list: the book being read first as a card
+  (one press or tap to go on reading), then every book with its cover,
+  its title on up to two lines, its author and how far it is read (a
+  bar and the percentage, a check once finished, New for a book added
+  in the last 30 days and never opened). What is shown is chosen above
+  the books, from one row on small screens (All books, Reading, Unread,
+  Finished, Next in your series, Shelves, Find a book) and from pills
+  on larger ones. Folders no longer come first: they are collections
+  on the shelves, with favourites, authors and series. A series lists
+  its books by number with the next one marked; Next in your series
+  lists the next book of every series begun. Find picks a book by a
+  letter of its title or its author's surname, without a keyboard.
+  Buttons work as in every list: left and right move a book, the page
+  buttons turn a page. A book's sheet (hold it, or the menu button)
+  shows it with its cover and progress: go on reading, its series,
+  finished or unread, favourite, information, archive. The library's
+  menu holds only the library's things.
+- Library: books as covers (Show books as: Covers) in a grid from
+  margin to margin, how far each is read on its cover, the books of a
+  series as one stack with their count.
+- Library: on the X4 and the X4 Pro more room: fewer rows a page, one
+  line of details under a title, the filters behind one row.
+- SDK: `library::Book::added` (the day the library first read a book),
+  `library::{today, is_new, is_new_on, NEW_DAYS}`. A change for
+  plugins: a `Book` written out field by field needs `added` too (or
+  `..Book::default()`).
+- Library: while a book is read, the library holds next to nothing (its
+  list of books is kept in a file and read back when it shows again);
+  coming back, the focus is on the book it was on and only what may
+  have changed is read again. A book moved (to the archive, by the file
+  manager) or deleted goes from the list at once and shows where it
+  went; one gone unannounced is not opened but said to be gone. The
+  archive's books are on the shelves, not among the others. Settings
+  changed while the library shows (how books show, the order, the size
+  of the interface) apply at once. On devices of little memory (the X4)
+  it lists 2000 books at most and says how many there are beyond.
 - Themes: a theme's defaults (a data plugin's `settings.ini`, or the
   Pebble theme switched on) win over the device's own: a large-print
   theme now enlarges the interface on the X4 too, whose own default is

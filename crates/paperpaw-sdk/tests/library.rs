@@ -51,7 +51,10 @@ fn any_book() -> impl Strategy<Value = Book> {
         ),
         proptest::collection::vec(detail(), 0..4),
         proptest::option::of((detail(), any::<u32>(), any::<u32>())),
-        proptest::option::of(0u8..=100),
+        (
+            proptest::option::of(0u8..=100),
+            proptest::option::of(any::<u32>()),
+        ),
         proptest::collection::btree_map("[a-z]{1,6}\\.[a-z-]{1,6}", detail(), 0..4),
     )
         .prop_map(
@@ -59,7 +62,7 @@ fn any_book() -> impl Strategy<Value = Book> {
                 (size, indexed, title, author, series, series_index),
                 tags,
                 cover,
-                progress,
+                (progress, added),
                 fields,
             )| {
                 Book {
@@ -76,6 +79,7 @@ fn any_book() -> impl Strategy<Value = Book> {
                         height,
                     }),
                     progress,
+                    added,
                     fields: fields.into_iter().collect(),
                 }
             },
