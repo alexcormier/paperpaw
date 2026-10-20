@@ -220,7 +220,6 @@ fn proportions_are_kept_when_fitting_a_box() {
 /// 8 MB, for a file of 17 bytes; on a phone a header can claim
 /// gigabytes).
 #[test]
-#[ignore = "bug: Thumbnail::kept allocates what the header claims before checking the file's size"]
 fn a_header_claiming_a_huge_picture_takes_no_memory_for_it() {
     let storage = MemoryStorage::new();
     let mut data = b"QIT2".to_vec();

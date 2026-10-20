@@ -166,6 +166,12 @@ impl Thumbnail {
         let height = u16::from_le_bytes([header[6], header[7]]);
         let depth = Depth::of_bits(header[8])?;
         let len = depth.row(width) * usize::from(height);
+        // A header claiming more than the file holds (cut short, or
+        // another program's) takes no memory for what is not there.
+        let size = storage.size(path).ok()?;
+        if size < (HEADER + len) as u64 {
+            return None;
+        }
         let mut pixels = Vec::new();
         pixels.try_reserve_exact(len).ok()?;
         pixels.resize(len, 0);
