@@ -105,6 +105,8 @@ pub(crate) struct Queue {
     /// The call is a tick: times and deadlines come due, and jobs may
     /// take a step (never while input waits). Moments come at any call.
     ticking: bool,
+    /// Notices of background work, as notes, not yet kept.
+    notes: Vec<(String, paperpaw_sdk::work::Note)>,
 }
 
 impl Queue {
@@ -298,6 +300,15 @@ impl Kernel {
         }
     }
 
+    /// Keeps what background work said, each plugin's last as its note.
+    pub(crate) fn keep_notes(&mut self) {
+        for (owner, note) in mem::take(&mut self.works.notes) {
+            if let Ok(owner) = Id::parse(&owner) {
+                self.shared.work_states.set_note(owner, note);
+            }
+        }
+    }
+
     /// Runs the work that is due, and a job's step where allowed.
     pub(crate) fn run_work(&mut self) {
         let env = self.shared.env(self.now);
@@ -329,11 +340,16 @@ impl Kernel {
                 self.works.entries.remove(index);
             }
         }
-        let mut notes = Vec::new();
+        let mut notes: Vec<(Id, paperpaw_sdk::work::Note)> = mem::take(&mut self.works.notes)
+            .into_iter()
+            .filter_map(|(owner, note)| Some((Id::parse(&owner).ok()?, note)))
+            .collect();
         if mem::take(&mut self.works.ticking) {
             let meter = &self.shared.meter;
+            let top = self.stack.last().map(|s| s.id.namespace());
             step_job(
                 &mut self.works,
+                top,
                 &env,
                 meter,
                 &mut self.output.commands,
@@ -402,6 +418,7 @@ impl Kernel {
 /// One step of the first job ready.
 fn step_job(
     works: &mut Queue,
+    top: Option<&str>,
     env: &Env<'_>,
     meter: &alloc::rc::Rc<crate::meter::Meter>,
     out: &mut Vec<Command>,
@@ -427,10 +444,19 @@ fn step_job(
         return;
     };
     let entry = &mut works.entries[index];
+    let from = out.len();
     let step = {
         let _running = meter.enter(&entry.owner);
         (spec.step)(env, &entry.work.params, out)
     };
+    // A job is background work: its notices become its plugin's note.
+    let mut said = Queue::default();
+    quiet(false, top, now, from, &entry.owner, out, &mut said);
+    for (owner, note) in said.notes {
+        if let Ok(owner) = Id::parse(&owner) {
+            notes.push((owner, note));
+        }
+    }
     let tell = |entry: &mut Entry, out: &mut Vec<Command>| {
         entry.told = Some(now);
         let params = Params::new().with(params::ID, String::from(entry.work.id.as_str()));
@@ -466,6 +492,37 @@ fn step_job(
             let owner = Id::parse(&entry.owner).unwrap_or_else(|_| entry.work.id.clone());
             tell(entry, out);
             notes.push((owner, paperpaw_sdk::work::Note { at: now, text }));
+        }
+    }
+}
+
+/// Background work says nothing over reading: the notices among `out`
+/// from `from` on, made by `owner` outside the reader's call and while
+/// another plugin's screen is on top (`top`), become its note (ADR 0025).
+/// On its own screen a plugin may say what it likes.
+pub(crate) fn quiet(
+    reader: bool,
+    top: Option<&str>,
+    now: Instant,
+    from: usize,
+    owner: &str,
+    out: &mut Vec<Command>,
+    works: &mut Queue,
+) {
+    if reader || top == Some(owner) {
+        return;
+    }
+    let mut index = from;
+    while index < out.len() {
+        if let Command::Notify(text) = &out[index] {
+            let note = paperpaw_sdk::work::Note {
+                at: now,
+                text: text.clone(),
+            };
+            works.notes.push((String::from(owner), note));
+            out.remove(index);
+        } else {
+            index += 1;
         }
     }
 }

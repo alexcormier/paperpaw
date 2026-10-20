@@ -459,6 +459,7 @@ impl KernelBuilder {
             subscriptions: Vec::new(),
             show_pending: false,
             notice: None,
+            reader: false,
             works: work::Queue::new(match self.device.memory {
                 paperpaw_platform::MemoryClass::Small => 8,
                 paperpaw_platform::MemoryClass::Large => 32,

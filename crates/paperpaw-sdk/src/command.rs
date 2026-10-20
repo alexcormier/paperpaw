@@ -386,8 +386,17 @@ pub enum Command {
     /// Shows a short message for a few seconds, e.g. "Sync done", by the
     /// screen bound to [`slots::NOTICE`](crate::builtin::slots::NOTICE),
     /// over whatever is open and without taking any input. A newer
-    /// message replaces it.
+    /// message replaces it. Only what the reader is doing shows one:
+    /// background work's (declared work, events, actions run by rules)
+    /// becomes the plugin's note instead (see [`work`](crate::work)).
     Notify(String),
+    /// Shows a message that must reach the reader also from background
+    /// work, as [`Notify`](Self::Notify) does: one they set up themself
+    /// (a rule's, "the battery is at 80 %: unplug"), or one about the
+    /// device itself (safe mode, plugins not installed at start, an
+    /// update installed). Never for results of syncs, progress or offers:
+    /// those belong on the plugin's own page.
+    Announce(String),
     /// Restarts PaperPaw, e.g. to apply switched plugins. The shell builds
     /// a new kernel; the reading position is already saved.
     Restart,

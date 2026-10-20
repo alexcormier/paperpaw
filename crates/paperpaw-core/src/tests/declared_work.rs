@@ -249,3 +249,99 @@ fn offline_holds_network_work_back() {
         Some(WorkState::Held(_))
     ));
 }
+
+/// Says something when its events come, or its action runs.
+struct Sayer;
+
+impl Plugin for Sayer {
+    fn manifest(&self) -> Manifest {
+        Manifest {
+            id: Id::new_static("sy"),
+            name: Cow::Borrowed("Sayer"),
+            description: Cow::Borrowed(""),
+            version: Version::new(1, 0, 0),
+            sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NOTHING,
+        }
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        // Notices need a screen to show them.
+        r.add_screen(ScreenSpec {
+            id: Id::new_static("sy.notice"),
+            title: Cow::Borrowed("notice"),
+            factory: Box::new(|_, _| Box::new(Blank)),
+        })?;
+        r.bind_slot(
+            slots::NOTICE,
+            Id::new_static("sy.notice"),
+            Priority(i16::MAX),
+        )?;
+        r.subscribe(
+            Id::new_static("sy.say"),
+            Box::new(|_, _, out| out.push(Command::Notify(String::from("synced")))),
+        )?;
+        r.subscribe(
+            Id::new_static("sy.remind"),
+            Box::new(|_, _, out| out.push(Command::Announce(String::from("unplug")))),
+        )?;
+        r.add_action(
+            ActionSpec::new(Id::new_static("sy.act"), "act")
+                .handler(|_, out| out.push(Command::Notify(String::from("done")))),
+        )
+    }
+}
+
+fn sayer() -> Kernel {
+    let log = log();
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(WorkPlugin { log })
+        .plugin(Sayer)
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    kernel.notice = None;
+    kernel
+}
+
+#[test]
+fn background_work_says_nothing_over_reading_but_keeps_a_note() {
+    let mut kernel = sayer();
+    // A timer's event: background work, the home screen (another
+    // plugin's) on top.
+    declare(
+        &mut kernel,
+        5,
+        Work::at(Id::new_static("sy.say"), Instant(10)),
+    );
+    kernel.tick(Instant(10));
+    assert!(kernel.notice.is_none(), "no notice over reading");
+    let note = kernel
+        .shared
+        .work_states
+        .note(&Id::new_static("sy"))
+        .unwrap();
+    assert_eq!((note.at, note.text.as_str()), (Instant(10), "synced"));
+}
+
+#[test]
+fn what_the_reader_runs_may_say_so_and_an_announcement_always_may() {
+    let mut kernel = sayer();
+    kernel.run_action(Instant(10), Id::new_static("sy.act"));
+    assert!(kernel.notice.is_some(), "the reader's own action");
+    kernel.notice = None;
+    declare(
+        &mut kernel,
+        15,
+        Work::at(Id::new_static("sy.remind"), Instant(20)),
+    );
+    kernel.tick(Instant(20));
+    assert!(kernel.notice.is_some(), "a message the reader set up");
+    assert!(
+        kernel
+            .shared
+            .work_states
+            .note(&Id::new_static("sy"))
+            .is_none()
+    );
+}

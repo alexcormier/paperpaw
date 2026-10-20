@@ -311,6 +311,11 @@ pub struct Kernel {
     show_pending: bool,
     /// Work plugins declared, timers among it (see [`work`]).
     works: work::Queue,
+    /// The call comes from the reader (input, what the shell opens or
+    /// runs for them, the answer to a request made so): what plugins say
+    /// shows. Otherwise it is background work, whose notices become
+    /// notes (see [`work`]).
+    reader: bool,
     /// The short message showing ([`Command::Notify`]) and until when.
     notice: Option<(Box<dyn Screen>, Instant)>,
     stack: Vec<ActiveScreen>,
@@ -445,6 +450,7 @@ impl Kernel {
     /// Handles an input event.
     pub fn handle(&mut self, now: Instant, event: InputEvent) -> Effects {
         let _running = self.shared.meter.enter(meter::CORE);
+        self.reader = true;
         if self.stale(now, &event) {
             return self.finish();
         }
@@ -863,6 +869,8 @@ impl Kernel {
     /// test.
     pub fn send_event(&mut self, now: Instant, event: Id, params: Params) -> Effects {
         let _running = self.shared.meter.enter(meter::CORE);
+        // Asked from outside (a remote control, a test): as the reader.
+        self.reader = true;
         self.now = now;
         self.output.commands.push(Command::Emit(event, params));
         self.run_commands();
@@ -879,6 +887,7 @@ impl Kernel {
     /// with", a remote control).
     pub fn open_slot(&mut self, now: Instant, slot: Id, params: Params) -> Effects {
         let _running = self.shared.meter.enter(meter::CORE);
+        self.reader = true;
         self.now = now;
         self.last_activity = now;
         self.output.commands.push(Command::OpenSlot(slot, params));
@@ -890,6 +899,7 @@ impl Kernel {
     /// asked by a shell's remote control or a test.
     pub fn open_screen(&mut self, now: Instant, screen: Id, params: Params) -> Effects {
         let _running = self.shared.meter.enter(meter::CORE);
+        self.reader = true;
         self.now = now;
         self.last_activity = now;
         self.output
@@ -903,6 +913,7 @@ impl Kernel {
     /// first), e.g. asked by a shell's remote control or a test.
     pub fn run_action(&mut self, now: Instant, action: Id) -> Effects {
         let _running = self.shared.meter.enter(meter::CORE);
+        self.reader = true;
         self.now = now;
         self.last_activity = now;
         self.dispatch(action);

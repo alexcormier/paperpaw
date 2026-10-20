@@ -2531,6 +2531,7 @@ pub fn paperpaw_sdk::Choices::from(alloc::vec::Vec<alloc::borrow::Cow<'static, s
 impl core::iter::traits::collect::FromIterator<alloc::borrow::Cow<'static, str>> for paperpaw_sdk::Choices
 pub fn paperpaw_sdk::Choices::from_iter<I: core::iter::traits::collect::IntoIterator<Item = alloc::borrow::Cow<'static, str>>>(I) -> Self
 #[non_exhaustive] pub enum paperpaw_sdk::Command
+pub paperpaw_sdk::Command::Announce(alloc::string::String)
 pub paperpaw_sdk::Command::Back
 pub paperpaw_sdk::Command::Bind
 pub paperpaw_sdk::Command::Bind::action: core::option::Option<paperpaw_sdk::Id>
@@ -3437,6 +3438,7 @@ pub fn paperpaw_sdk::Settings::groups(&self) -> impl core::iter::traits::iterato
 pub fn paperpaw_sdk::Settings::int(&self, &str) -> i64
 pub fn paperpaw_sdk::Settings::is_scoped(&self, &str) -> bool
 pub fn paperpaw_sdk::Settings::is_set(&self, &str) -> bool
+pub fn paperpaw_sdk::Settings::is_worn(&self, &str) -> bool
 pub fn paperpaw_sdk::Settings::new() -> Self
 pub fn paperpaw_sdk::Settings::placement_values(&self, &str) -> alloc::vec::Vec<paperpaw_sdk::Id>
 pub fn paperpaw_sdk::Settings::presets(&self) -> &paperpaw_sdk::presets::Presets
@@ -3457,6 +3459,7 @@ pub fn paperpaw_sdk::Settings::shrink_to_fit(&mut self)
 pub fn paperpaw_sdk::Settings::spec(&self, &str) -> core::option::Option<&paperpaw_sdk::SettingSpec>
 pub fn paperpaw_sdk::Settings::specs(&self) -> impl core::iter::traits::iterator::Iterator<Item = &paperpaw_sdk::SettingSpec>
 pub fn paperpaw_sdk::Settings::text(&self, &str) -> &str
+pub fn paperpaw_sdk::Settings::wear(&mut self, alloc::vec::Vec<(paperpaw_sdk::Id, paperpaw_sdk::SettingValue)>, alloc::vec::Vec<(paperpaw_sdk::Id, i64)>) -> alloc::vec::Vec<paperpaw_sdk::Id>
 pub fn paperpaw_sdk::Settings::with_placement<R>(&self, core::option::Option<&str>, impl core::ops::function::FnOnce() -> R) -> R
 pub struct paperpaw_sdk::SlotSpec
 pub paperpaw_sdk::SlotSpec::id: paperpaw_sdk::Id

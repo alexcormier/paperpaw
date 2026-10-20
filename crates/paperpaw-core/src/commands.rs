@@ -116,6 +116,10 @@ impl Kernel {
             self.shared.recall.clear();
         }
         self.timed();
+        // What background work said in this call, kept as notes.
+        self.keep_notes();
+        // The next call is the reader's only if it says so.
+        self.reader = false;
         effects
     }
 
@@ -157,7 +161,7 @@ impl Kernel {
                     self.close_above(self.stack.len() - 2);
                 }
             }
-            Command::Notify(text) => self.notify(text),
+            Command::Notify(text) | Command::Announce(text) => self.notify(text),
             Command::Emit(event, params) => self.emit(&event, &params),
             Command::RunAction(action) => self.dispatch(action),
             command @ (Command::Work(_) | Command::CancelWork(..)) => self.apply_work(command),
@@ -226,7 +230,19 @@ impl Kernel {
         let env = self.shared.env(self.now);
         for (_, plugin, handler) in self.subscriptions.iter().filter(|(id, ..)| id == event) {
             let _running = self.shared.meter.enter(plugin.as_str());
+            let from = self.output.commands.len();
             handler(&env, params, &mut self.output.commands);
+            // Background work says nothing over reading.
+            let top = self.stack.last().map(|s| s.id.namespace());
+            work::quiet(
+                self.reader,
+                top,
+                self.now,
+                from,
+                plugin.as_str(),
+                &mut self.output.commands,
+                &mut self.works,
+            );
         }
         for index in 0..self.stack.len() {
             self.with_screen(index, |screen, cx| {
@@ -359,9 +375,10 @@ impl Kernel {
                     .command(command, network, screens, &*self.shared.storage, out);
             }
             Command::Http(request) => {
+                let reader = self.reader;
                 self.io
                     .http
-                    .request(request, network, &*self.shared.storage, out)
+                    .request(request, network, reader, &*self.shared.storage, out)
             }
             _ => {}
         }

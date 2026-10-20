@@ -31,6 +31,18 @@ change the plugin SDK.
   Wi-Fi plugins use that. Requests, servers and sockets of a plugin
   whose manifest does not declare the network are refused, with
   `Reason::NotDeclared`.
+- Quiet reading (ADR 0025): background work says nothing over reading.
+  A notice from an event handler, an action run by a rule or a job,
+  outside the reader's own doing and over another plugin's screen,
+  becomes that plugin's note (`Env::work`, `WorkStates::note`), to show
+  on its own page. What the reader does, answers to their requests,
+  Wi-Fi while they wait for the network and a plugin's own screen still
+  say what they like. `Command::Announce` is for what must reach the
+  reader anyway: a rule's message they set up, and what happened to the
+  device (safe mode, plugins not installed, an update installed).
+- SDK: `Settings::wear` puts a power mode's values and limits over the
+  reader's own without writing anything; the reader's change wins until
+  the next mode.
 - SDK, HTTP: `HttpRequest` is made with `HttpRequest::get` or `new` and
   methods (`header`, `body`, `body_from`, `save_to`, `with`), no longer
   field by field (`#[non_exhaustive]`). A request may set a `timeout`

@@ -120,6 +120,8 @@ struct Awaiting {
     reply: Id,
     context: Params,
     save_to: Option<String>,
+    /// Made while the kernel handled the reader's input.
+    reader: bool,
 }
 
 /// Plugins' requests: those for the shell, and those it has not answered.
@@ -164,6 +166,7 @@ impl Http {
         &mut self,
         request: HttpRequest,
         network: bool,
+        reader: bool,
         storage: &dyn Storage,
         out: &mut Vec<Command>,
     ) {
@@ -233,6 +236,7 @@ impl Http {
             reply: request.reply,
             context: request.params,
             save_to: request.save_to,
+            reader,
         });
     }
 
@@ -283,6 +287,16 @@ impl Http {
         let mut params = answer.to_params();
         params.set(http_params::BODY, body);
         out.push(Command::Emit(awaiting.reply, params));
+    }
+
+    /// Whether a request made for the reader is not answered yet.
+    pub fn reader_waits(&self) -> bool {
+        self.awaiting.iter().any(|a| a.reader)
+    }
+
+    /// Whether request `id` was made for the reader.
+    pub fn of_reader(&self, id: u32) -> bool {
+        self.awaiting.iter().any(|a| a.id == id && a.reader)
     }
 
     /// The requests for the shell.
@@ -357,6 +371,7 @@ mod tests {
             http.request(
                 get("https://h.org/b", Some("book.epub")),
                 true,
+                false,
                 &storage,
                 &mut out,
             );
@@ -376,6 +391,7 @@ mod tests {
         http.request(
             get("https://h.org/b", Some("book.epub")),
             true,
+            false,
             &storage,
             &mut out,
         );
@@ -393,6 +409,7 @@ mod tests {
         http.request(
             get("http://h.org/1", Some("dl.tmp")),
             true,
+            false,
             &storage,
             &mut out,
         );
@@ -400,6 +417,7 @@ mod tests {
         http.request(
             get("http://h.org/2", Some("DL.tmp")),
             true,
+            false,
             &storage,
             &mut out,
         );
@@ -425,8 +443,20 @@ mod tests {
         );
         assert_eq!(read_file(&storage, "DL.tmp", 64).unwrap(), b"new");
         // Not yet passed to the shell: only the newer one goes.
-        http.request(get("http://h.org/3", Some("a")), true, &storage, &mut out);
-        http.request(get("http://h.org/4", Some("a")), true, &storage, &mut out);
+        http.request(
+            get("http://h.org/3", Some("a")),
+            true,
+            false,
+            &storage,
+            &mut out,
+        );
+        http.request(
+            get("http://h.org/4", Some("a")),
+            true,
+            false,
+            &storage,
+            &mut out,
+        );
         let calls = http.take();
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].url, "http://h.org/4");
@@ -437,7 +467,7 @@ mod tests {
         let storage = MemoryStorage::new();
         let mut out = Vec::new();
         let mut http = Http::default();
-        http.request(get("http://h.org/", None), true, &storage, &mut out);
+        http.request(get("http://h.org/", None), true, false, &storage, &mut out);
         http.take();
         http.answer(answer(200, b"caf\xc3\xa9 \xff"), &storage, &mut out);
         assert_eq!(replied(&out), (200, String::from("café \u{fffd}")));

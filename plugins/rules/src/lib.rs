@@ -113,7 +113,7 @@ impl State {
                         continue;
                     }
                     Effect::Message(text) => {
-                        out.push(Command::Notify(text.clone()));
+                        out.push(Command::Announce(text.clone()));
                         continue;
                     }
                     Effect::Switch(id, on) => (id, SettingValue::Bool(*on)),
