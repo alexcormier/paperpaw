@@ -173,41 +173,53 @@ fn caption_room(env: &Env<'_>, widget: &str) -> u16 {
     }
 }
 
-/// The caption's height in `height` pixels, if `widget` shows it and
-/// there is room for a line of text below it as well (else the content
-/// goes first).
-fn caption_in(env: &Env<'_>, widget: &str, height: u16) -> u16 {
+/// The caption `widget` shows above content in `area`: the first of
+/// `texts` (the full one, then shorter ones) that fits the width whole,
+/// where the widget shows its caption and there is room for a line of
+/// text below it as well. Else none: a caption is left out whole rather
+/// than cut, and the content goes first.
+fn caption<'t>(env: &Env<'_>, widget: &str, area: Rect, texts: &[&'t str]) -> Option<&'t str> {
     let cap = caption_room(env, widget);
-    let least = widgets::line_height(env, UiStyle::new(env).text);
-    if cap + least <= height { cap } else { 0 }
+    let style = UiStyle::new(env);
+    let least = widgets::line_height(env, style.text);
+    if cap == 0 || cap + least > area.height {
+        return None;
+    }
+    let font = style.font(env)?;
+    let width = f32::from(area.width);
+    texts
+        .iter()
+        .copied()
+        .find(|text| font.measure(style.small, text) <= width)
 }
 
-/// The room below `widget`'s caption in `area` (all of it where the
-/// caption has no room).
-fn below_caption(env: &Env<'_>, widget: &str, area: Rect) -> Rect {
-    let cap = caption_in(env, widget, area.height);
+/// The room below `caption` in `area` (all of it without one).
+fn below_caption(env: &Env<'_>, caption: Option<&str>, area: Rect) -> Rect {
+    let cap = if caption.is_some() {
+        widgets::caption_height(env).min(area.height)
+    } else {
+        0
+    };
     Rect::new(area.x, area.y + cap, area.width, area.height - cap)
 }
 
-/// Places content `height` high with `widget`'s caption `text` above
-/// it, the two together in the middle of `look`'s area, and draws the
-/// caption; where the content goes.
+/// Places content `height` high with `widget`'s `caption` (if any)
+/// above it, the two together in the middle of `look`'s area, and draws
+/// the caption; where the content goes. Where the two do not fit
+/// together, the caption is left out.
 fn captioned(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
     widget: &str,
     look: &Look,
-    text: &str,
+    caption: Option<&str>,
     height: u16,
 ) -> Rect {
-    let cap = caption_room(env, widget);
-    let cap = if cap + height <= look.area.height {
-        caption_in(env, widget, look.area.height)
-    } else {
-        0
-    };
+    let cap = widgets::caption_height(env);
+    let caption = caption.filter(|_| cap + height <= look.area.height);
+    let cap = if caption.is_some() { cap } else { 0 };
     let block = middle(look.area, cap + height);
-    if cap > 0 {
+    if let Some(text) = caption {
         let at = Look {
             area: block,
             ..*look
@@ -260,9 +272,11 @@ pub(crate) fn level(seconds: u32, goal: Option<u64>) -> u8 {
     }
 }
 
-/// The text size widget `widget`'s size setting gives; "as large as
-/// fits" fits `text` into `width` and `height` (up to three times a
-/// title's size).
+/// The text size widget `widget`'s size setting gives, smaller where
+/// `text` is wider than `width` (down to the body's size, below which it
+/// is shortened) or a line of it higher than `height` (down to the small
+/// size); "as large as fits" fits it into both, up to three times a
+/// title's size.
 fn text_size(
     env: &Env<'_>,
     font: &FontHandle<'_>,
@@ -272,29 +286,43 @@ fn text_size(
     height: u16,
 ) -> f32 {
     let style = UiStyle::new(env);
-    let size = widgets::size(env, widget);
-    if size != Size::Fit {
-        // Smaller where a line of it is higher than the room, or wider
-        // (down to the body's size; then it is shortened).
-        let line = font.line_metrics(style.title).line_height.max(1.0);
-        let by_height = style.title * f32::from(height) / line;
-        let wide = font.measure(style.title, text).max(1.0);
-        let by_width = style.title * f32::from(width) / wide;
-        let size = size.text(&style).min(by_width.max(style.text));
-        return size.min(by_height.max(style.small));
-    }
-    fit_size(font, &style, text, width, height)
+    let max = match widgets::size(env, widget) {
+        Size::Fit => style.title * 3.0,
+        size => size.text(&style),
+    };
+    sized(font, &style, text, (width, height), (max, style.text))
 }
 
-/// The largest size (a title's at least where there is room, three times
-/// it at most) at which `text` fits `width` and a line of it `height`.
+/// The largest size (three times a title's at most, the small size at
+/// least) at which `text` fits `width` and a line of it `height`.
 fn fit_size(font: &FontHandle<'_>, style: &UiStyle, text: &str, width: u16, height: u16) -> f32 {
-    let base = style.title;
-    let line = font.line_metrics(base).line_height.max(1.0);
-    let wide = font.measure(base, text).max(1.0);
-    let by_width = base * f32::from(width) / wide;
-    let by_height = base * f32::from(height) / line;
-    by_width.min(by_height).clamp(style.small, base * 3.0)
+    sized(
+        font,
+        style,
+        text,
+        (width, height),
+        (style.title * 3.0, style.small),
+    )
+}
+
+/// The largest size from `max` down to `least` at which `text` fits
+/// `width` and a line of it `height`, measured as drawn; where it is
+/// too wide even then, the largest whose line fits the height (down to
+/// the small size), at which it is shortened.
+fn sized(
+    font: &FontHandle<'_>,
+    style: &UiStyle,
+    text: &str,
+    (width, height): (u16, u16),
+    (max, least): (f32, f32),
+) -> f32 {
+    let wide = f32::from(width);
+    let tall = |size: f32| line(font, size) <= height;
+    widgets::largest_size(max, least.min(max), |size| {
+        tall(size) && font.measure(size, text) <= wide
+    })
+    .or_else(|| widgets::largest_size(max.min(least), style.small, tall))
+    .unwrap_or(style.small.min(max))
 }
 
 /// `text`, or where it is wider than `width` at `size`, the number it
@@ -308,6 +336,30 @@ fn number_if_narrow<'t>(font: &FontHandle<'_>, size: f32, text: &'t str, width: 
         .find(|(_, c)| !c.is_ascii_digit())
         .map_or(text.len(), |(at, _)| at);
     if digits == 0 { text } else { &text[..digits] }
+}
+
+/// Whether `wrapped` holds its whole text: no line shortened with "…".
+fn whole(wrapped: &widgets::Wrapped) -> bool {
+    !wrapped.lines().is_empty() && wrapped.lines().iter().all(|l| !l.ends_with('…'))
+}
+
+/// `text` small in lines `width` wide, as many as fit `height` (`most`
+/// at most), if it fits whole: a note is left out rather than cut.
+fn note_lines(
+    env: &Env<'_>,
+    text: &str,
+    width: u16,
+    height: u16,
+    most: u16,
+) -> Option<widgets::Wrapped> {
+    let style = UiStyle::new(env);
+    let small = widgets::line_height(env, style.small).max(1);
+    let height = height.min(small * most);
+    if text.is_empty() || height < small {
+        return None;
+    }
+    let lines = widgets::Wrapped::fitting(env, text, style.small, style.small, width, height);
+    whole(&lines).then_some(lines)
 }
 
 /// The height of a line of text `size` pixels large.

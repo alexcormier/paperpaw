@@ -8,7 +8,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use paperpaw_sdk::ui::{self, UiStyle};
-use paperpaw_sdk::widgets::{self, Align, Frame, Size, Widget, WidgetSpec, WidgetTarget};
+use paperpaw_sdk::widgets::{self, Align, Frame, Padding, Size, Widget, WidgetSpec, WidgetTarget};
 use paperpaw_sdk::{Arg, Canvas, Env, Id, Rect, RegisterError, Registrar, SettingSpec};
 
 use super::{caption_room, frame_height, goal, line, shade};
@@ -21,8 +21,9 @@ const NAME: &str = "stats.widget.today";
 
 /// Its settings, kept in the program: its look, its choices and
 /// switches for its parts.
-static SETTINGS: [SettingSpec; 7] = [
+static SETTINGS: [SettingSpec; 8] = [
     widgets::frame_spec("stats.widget.today.frame", TODAY, Frame::None),
+    widgets::padding_spec("stats.widget.today.padding", TODAY, Padding::Auto),
     widgets::size_spec("stats.widget.today.size", TODAY, Size::Medium, true),
     widgets::align_spec("stats.widget.today.align", TODAY, Align::Left),
     widgets::part_spec(
@@ -199,24 +200,36 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &widgets::Look, numbers: &
         return;
     };
     let id = NAME;
-    let area = super::below_caption(env, id, look.area);
+    let label = env.i18n.tr("stats.today");
+    let caption = super::caption(env, id, look.area, &[label]);
+    let area = super::below_caption(env, caption, look.area);
     let (first, second) = lines(env, numbers);
-    let mut band = bar_band(env);
-    let mut note = if widgets::shows(env, id, "note") {
-        line(&font, style.small)
-    } else {
-        0
-    };
     // Where they do not all fit, the note goes, then the bar.
     let least = line(&font, style.text);
-    if least + band + note > area.height {
-        note = 0;
+    let band = if least + bar_band(env) > area.height {
+        0
+    } else {
+        bar_band(env)
+    };
+    // The note on as many lines as it needs (two at most), where they
+    // fit whole; else none.
+    let mut note = if widgets::shows(env, id, "note") {
+        let room = area.height.saturating_sub(least + band);
+        super::note_lines(env, &second, area.width, room, 2)
+    } else {
+        None
+    };
+    let mut note_h = note.as_ref().map_or(0, |n| n.height(env));
+    let room = area.height.saturating_sub(band + note_h);
+    let mut size = super::text_size(env, &font, id, &first, area.width, room);
+    // The note goes where it makes the numbers smaller than the body's
+    // size.
+    let alone = super::text_size(env, &font, id, &first, area.width, area.height - band);
+    if size < style.text && alone > size {
+        note = None;
+        note_h = 0;
+        size = alone;
     }
-    if least + band > area.height {
-        band = 0;
-    }
-    let room = area.height.saturating_sub(band + note);
-    let size = super::text_size(env, &font, id, &first, area.width, room);
     let big = line(&font, size);
     // Too wide with the pages: the time alone.
     let width = f32::from(area.width);
@@ -225,15 +238,8 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &widgets::Look, numbers: &
     } else {
         first
     };
-    // A note too long for a line gets two, where there is room.
-    let note = if note > 0 && font.measure(style.small, &second) > width && room >= big + note {
-        note * 2
-    } else {
-        note
-    };
     // The lines together in the middle, the caption above them.
-    let caption = env.i18n.tr("stats.today");
-    let block = super::captioned(canvas, env, id, look, caption, big + band + note);
+    let block = super::captioned(canvas, env, id, look, caption, big + band + note_h);
     let align = widgets::align(env, id);
     let row = |y: u16, h: u16| Rect::new(area.x, y, area.width, h);
     let first = ui::fit(&font, size, &first, width);
@@ -254,8 +260,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &widgets::Look, numbers: &
         }
         y += band;
     }
-    if note > 0 {
-        let at = row(y, note);
-        widgets::draw_wrapped(canvas, env, at, align, style.small, &second, look.faint);
+    if let Some(note) = note {
+        note.draw(canvas, env, row(y, note_h), align, look.faint);
     }
 }
