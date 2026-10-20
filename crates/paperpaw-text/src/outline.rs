@@ -1,7 +1,6 @@
 //! Runtime rendering of OpenType/TrueType fonts via `skrifa`.
 
 use alloc::borrow::Cow;
-use alloc::vec::Vec;
 use core::fmt;
 
 use skrifa::instance::{Location, Size};
@@ -9,7 +8,7 @@ use skrifa::outline::{DrawSettings, OutlinePen};
 use skrifa::{FontRef, GlyphId, MetadataProvider};
 
 use crate::font::{FontError, LineMetrics};
-use crate::glyph::{Glyph, pack_coverage};
+use crate::glyph::{self, Glyph, pack_coverage};
 use crate::raster::{self, Path, Pt};
 
 /// A scalable font, optionally at a fixed position of its variation axes
@@ -86,6 +85,7 @@ impl OutlineFont {
         font.glyph_metrics(Size::new(size), &self.location)
             .advance_width(Self::glyph_id(&font, ch))
             .unwrap_or(0.0)
+            .max(0.0)
     }
 
     /// Rasterizes `ch`; missing characters render as U+FFFD or `.notdef`.
@@ -97,7 +97,8 @@ impl OutlineFont {
         let advance = font
             .glyph_metrics(Size::new(size), &self.location)
             .advance_width(id)
-            .unwrap_or(0.0);
+            .unwrap_or(0.0)
+            .max(0.0);
         let mut pen = Pen::default();
         if let Some(outline) = font.outline_glyphs().get(id) {
             let settings = DrawSettings::unhinted(Size::new(size), &self.location);
@@ -109,27 +110,38 @@ impl OutlineFont {
         let Some((x0, y0, x1, y1)) = pen.0.bounds() else {
             return Glyph::empty(advance);
         };
-        let (width, height) = ((x1 - x0).max(0) as usize, (y1 - y0).max(0) as usize);
-        let lines: Vec<(Pt, Pt)> = pen
-            .0
-            .lines
+        // Points far out (or an em of a few units) would ask for a bitmap
+        // of gigabytes: such a glyph renders as empty.
+        let reach = glyph::reach(size);
+        if [x0, y0, x1, y1]
             .iter()
-            .map(|(a, b)| {
-                let shift = |p: Pt| Pt {
-                    x: p.x - x0 as f32,
-                    y: p.y - y0 as f32,
-                };
-                (shift(*a), shift(*b))
-            })
-            .collect();
-        let coverage = raster::rasterize(&lines, width, height);
+            .any(|c| !(-reach..=reach).contains(c))
+        {
+            return Glyph::empty(advance);
+        }
+        let (width, height) = ((x1 - x0) as usize, (y1 - y0) as usize);
+        if !glyph::fits(width, height, size) {
+            return Glyph::empty(advance);
+        }
+        // Shifted in place rather than copied: outlines can be long.
+        let mut lines = pen.0.lines;
+        for p in lines.iter_mut().flat_map(|(a, b)| [a, b]) {
+            p.x -= x0 as f32;
+            p.y -= y0 as f32;
+        }
+        let Some(data) = raster::rasterize(&lines, width, height)
+            .and_then(|coverage| pack_coverage(&coverage, width, height))
+        else {
+            return Glyph::empty(advance);
+        };
+        // Within `reach`: offsets fit an `i16`, sides a `u16`.
         Glyph {
             left: x0 as i16,
             top: y0 as i16,
             width: width as u16,
             height: height as u16,
             advance,
-            data: pack_coverage(&coverage, width, height),
+            data,
         }
     }
 }

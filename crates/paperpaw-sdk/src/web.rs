@@ -8,6 +8,35 @@ use alloc::vec::Vec;
 
 use crate::document::is_external;
 
+/// What PaperPaw calls itself to servers, with its version: the
+/// `User-Agent` header's value, e.g. `PaperPaw/0.4.0 (e-reader)`.
+pub const USER_AGENT: &str = concat!("PaperPaw/", env!("CARGO_PKG_VERSION"), " (e-reader)");
+
+/// The `User-Agent` header ([`USER_AGENT`]), to push onto a request's
+/// headers.
+pub fn user_agent() -> (String, String) {
+    (String::from("User-Agent"), String::from(USER_AGENT))
+}
+
+/// A server's address as entered in a setting, as a base URL to put paths
+/// after: spaces around and `/` at the end left out, `https://` put first
+/// unless it names a scheme (`http://`, `webdavs://`); empty if nothing
+/// is entered.
+pub fn base_url(text: &str) -> String {
+    let text = text.trim().trim_end_matches('/');
+    let scheme = text.split_once("://").is_some_and(|(scheme, _)| {
+        scheme.starts_with(|c: char| c.is_ascii_alphabetic())
+            && scheme
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'))
+    });
+    if text.is_empty() || scheme {
+        text.to_string()
+    } else {
+        format!("https://{text}")
+    }
+}
+
 /// `href` made absolute with `base`, a page's address: as browsers
 /// resolve links (`/a`, `../b`, `?q`, `//host/c`).
 pub fn join_url(base: &str, href: &str) -> String {
@@ -213,6 +242,17 @@ pub fn base64(data: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn servers_as_base_urls() {
+        assert_eq!(base_url(" sync.example.org/ "), "https://sync.example.org");
+        assert_eq!(base_url("http://nas.local:8080//"), "http://nas.local:8080");
+        assert_eq!(base_url("webdavs://nas/dav/"), "webdavs://nas/dav");
+        assert_eq!(base_url("nas/x?to=http://y"), "https://nas/x?to=http://y");
+        assert_eq!(base_url("  "), "");
+        assert!(USER_AGENT.starts_with(concat!("PaperPaw/", env!("CARGO_PKG_VERSION"))));
+        assert_eq!(user_agent().0, "User-Agent");
+    }
 
     #[test]
     fn http_dates() {

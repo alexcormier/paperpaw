@@ -3,6 +3,12 @@
 //! and dropped. For a sink that wants colour, the chroma components are
 //! transformed too, stretched to luma's resolution and turned into RGB.
 //! Progressive JPEG goes on in [`progressive`](crate::progressive).
+//!
+//! Where the data ends before the last block (a marker comes), the
+//! blocks after it have only the DC they had last, as zeros would give
+//! them, without being decoded; and the blocks the scans go through are
+//! bounded by the bytes read ([`BLOCKS_PER_BYTE`]), so a small file
+//! cannot ask for long work.
 
 use alloc::vec::Vec;
 
@@ -81,22 +87,41 @@ pub(crate) struct Component {
     pub prediction: i32,
 }
 
+/// Blocks the scans of a JPEG may go through for each byte of it read.
+/// A real image takes a bit a block at least for its first scan, and
+/// goes through its blocks in a few scans: far less. A small damaged or
+/// crafted file that declares a large image, ends its data early or
+/// repeats its scans is stopped here.
+const BLOCKS_PER_BYTE: u64 = 256;
+
 /// Entropy-coded data: bits with byte stuffing and markers.
 pub(crate) struct Bits<'r, 'a> {
     pub reader: &'r mut Reader<'a>,
-    pub bits: u32,
-    pub count: u32,
+    bits: u32,
+    count: u32,
     /// A marker ended the data; zeros are read from here on.
     pub marker: Option<u8>,
+    /// How many of the last bits taken in are such zeros.
+    padding: u32,
 }
 
 impl<'r, 'a> Bits<'r, 'a> {
+    pub(crate) fn new(reader: &'r mut Reader<'a>) -> Self {
+        Self {
+            reader,
+            bits: 0,
+            count: 0,
+            marker: None,
+            padding: 0,
+        }
+    }
+
     /// Takes bytes until more than 24 bits are at hand (zeros after a
     /// marker).
     fn fill(&mut self) -> Result<(), ImageError> {
         while self.count <= 24 {
             let byte = match self.marker {
-                Some(_) => 0,
+                Some(_) => None,
                 None => {
                     let byte = self.reader.byte()?;
                     if byte == 0xff {
@@ -106,19 +131,40 @@ impl<'r, 'a> Bits<'r, 'a> {
                         }
                         if next != 0 {
                             self.marker = Some(next);
-                            0
+                            None
                         } else {
-                            0xff
+                            Some(0xff)
                         }
                     } else {
-                        byte
+                        Some(byte)
                     }
                 }
             };
-            self.bits = self.bits << 8 | u32::from(byte);
+            if byte.is_none() {
+                self.padding = self.padding.saturating_add(8);
+            }
+            self.bits = self.bits << 8 | u32::from(byte.unwrap_or(0));
             self.count += 8;
         }
         Ok(())
+    }
+
+    /// Whether the data ran out: zeros after a marker were taken as
+    /// bits (the bits not taken yet are the last ones taken in).
+    pub(crate) fn exhausted(&self) -> bool {
+        self.padding > self.count
+    }
+
+    /// Whether the data goes on: it ran out at a restart marker, and a
+    /// restart is coming (`restart_interval` is not 0).
+    pub(crate) fn resumes(&self, restart_interval: u32) -> bool {
+        restart_interval > 0 && matches!(self.marker, Some(0xd0..=0xd7))
+    }
+
+    /// Whether `blocks` gone through are no more than the data read so
+    /// far may ask for ([`BLOCKS_PER_BYTE`]).
+    pub(crate) fn affords(&self, blocks: u64) -> bool {
+        blocks <= self.reader.position().saturating_mul(BLOCKS_PER_BYTE)
     }
 
     /// The next `n` bits (at most 24), not taken.
@@ -185,6 +231,7 @@ impl<'r, 'a> Bits<'r, 'a> {
     /// After a restart interval: realign and expect an RST marker.
     pub(crate) fn restart(&mut self) -> Result<(), ImageError> {
         self.count = 0;
+        self.padding = 0;
         match self.marker.take() {
             Some(0xd0..=0xd7) => Ok(()),
             Some(_) => Err(ImageError::Invalid("missing restart marker")),
@@ -575,18 +622,22 @@ fn scan(
         Vec::new()
     };
     let mut block = [0u8; 64];
-    let mut bits = Bits {
-        reader,
-        bits: 0,
-        count: 0,
-        marker: None,
-    };
+    let mut bits = Bits::new(reader);
     let mut until_restart = restart_interval;
     let mut emitted = 0u32;
+    let blocks_per_mcu: u64 = components.iter().map(|c| (c.h * c.v) as u64).sum();
+    let mut blocks = 0u64;
+    // The data ended, or asked for more work than it may: the rest of
+    // the image is as data of zeros leaves it, each block at the level of
+    // its component's last DC.
+    let mut ended = false;
 
     for _ in 0..mcus_y {
+        if ended {
+            break;
+        }
         for mx in 0..mcus_x {
-            if restart_interval > 0 {
+            if restart_interval > 0 && !ended {
                 if until_restart == 0 {
                     bits.restart()?;
                     for c in components.iter_mut() {
@@ -596,6 +647,14 @@ fn scan(
                 }
                 until_restart -= 1;
             }
+            blocks += blocks_per_mcu;
+            let exhausted = bits.exhausted();
+            if exhausted && !bits.resumes(restart_interval) || !bits.affords(blocks) {
+                ended = true;
+            }
+            // Without data (up to the next restart, or for good), each
+            // block has only its DC, the last one.
+            let flat = ended || exhausted;
             for (index, component) in components.iter_mut().enumerate() {
                 let dc = dc_tables[component.dc]
                     .as_ref()
@@ -604,53 +663,63 @@ fn scan(
                     .as_ref()
                     .ok_or(ImageError::Invalid("table"))?;
                 let q = &quant[component.quant];
+                // Whether the component's blocks are wanted.
+                let shown = index == 0 || color;
                 for by in 0..component.v {
                     for bx in 0..component.h {
-                        let mut coef = [0i32; 64];
-                        let t = bits.decode(dc)?;
-                        if t > 16 {
-                            return Err(ImageError::Invalid("bad DC"));
-                        }
-                        let diff = Bits::extend(bits.receive(u32::from(t))?, u32::from(t));
-                        // Damaged data must not overflow.
-                        component.prediction = component.prediction.wrapping_add(diff);
-                        coef[0] = component.prediction.saturating_mul(i32::from(q[0]));
-                        // Whether a coefficient decoded counts at this size.
-                        let mut shaded = false;
-                        let mut k = 1;
-                        while k < 64 {
-                            let rs = bits.decode(ac)?;
-                            let (r, s) = (usize::from(rs >> 4), u32::from(rs & 15));
-                            if s == 0 {
-                                if r == 15 {
-                                    k += 16;
-                                    continue;
-                                }
-                                break;
+                        if flat {
+                            if !shown {
+                                continue;
                             }
-                            k += r;
-                            if k > 63 {
-                                return Err(ImageError::Invalid("bad AC"));
-                            }
-                            if index == 0 || color {
-                                let value = Bits::extend(bits.receive(s)?, s);
-                                let at = usize::from(ZIGZAG[k]);
-                                coef[at] = value.saturating_mul(i32::from(q[k]));
-                                shaded |= at % 8 < n && at / 8 < n;
-                            } else {
-                                bits.receive(s)?;
-                            }
-                            k += 1;
-                        }
-                        if index != 0 && !color {
-                            continue;
-                        }
-                        if shaded {
-                            idct_scaled(&coef, n, &mut block, n);
+                            let dc_value = component.prediction.saturating_mul(i32::from(q[0]));
+                            block[..n * n].fill(dc_level(dc_value));
                         } else {
-                            // One level: most blocks of a picture made
-                            // smaller.
-                            block[..n * n].fill(dc_level(coef[0]));
+                            let mut coef = [0i32; 64];
+                            let t = bits.decode(dc)?;
+                            if t > 16 {
+                                return Err(ImageError::Invalid("bad DC"));
+                            }
+                            let diff = Bits::extend(bits.receive(u32::from(t))?, u32::from(t));
+                            // Damaged data must not overflow.
+                            component.prediction = component.prediction.wrapping_add(diff);
+                            coef[0] = component.prediction.saturating_mul(i32::from(q[0]));
+                            // Whether a coefficient decoded counts at this size.
+                            let mut shaded = false;
+                            let mut k = 1;
+                            while k < 64 {
+                                let rs = bits.decode(ac)?;
+                                let (r, s) = (usize::from(rs >> 4), u32::from(rs & 15));
+                                if s == 0 {
+                                    if r == 15 {
+                                        k += 16;
+                                        continue;
+                                    }
+                                    break;
+                                }
+                                k += r;
+                                if k > 63 {
+                                    return Err(ImageError::Invalid("bad AC"));
+                                }
+                                if shown {
+                                    let value = Bits::extend(bits.receive(s)?, s);
+                                    let at = usize::from(ZIGZAG[k]);
+                                    coef[at] = value.saturating_mul(i32::from(q[k]));
+                                    shaded |= at % 8 < n && at / 8 < n;
+                                } else {
+                                    bits.receive(s)?;
+                                }
+                                k += 1;
+                            }
+                            if !shown {
+                                continue;
+                            }
+                            if shaded {
+                                idct_scaled(&coef, n, &mut block, n);
+                            } else {
+                                // One level: most blocks of a picture made
+                                // smaller.
+                                block[..n * n].fill(dc_level(coef[0]));
+                            }
                         }
                         // Place the block, stretched where the component
                         // has less resolution than the largest.
@@ -705,6 +774,26 @@ fn scan(
             }
             emitted += 1;
         }
+    }
+    if ended && emitted < height {
+        // Every row below is alike, each block at the same levels.
+        let level =
+            |c: &Component| dc_level(c.prediction.saturating_mul(i32::from(quant[c.quant][0])));
+        let alike = if color {
+            let pixel = ycbcr_to_rgb(
+                level(&components[0]),
+                level(&components[1]),
+                level(&components[2]),
+            );
+            for to in rgb.as_chunks_mut::<3>().0 {
+                to.copy_from_slice(&pixel);
+            }
+            &rgb[..]
+        } else {
+            rows[..row_width].fill(level(&components[0]));
+            &rows[..row_width]
+        };
+        scaler.rows_alike(alike, height - emitted, sink)?;
     }
     scaler.finish(sink)
 }

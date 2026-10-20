@@ -90,6 +90,9 @@ pub struct UiStyle {
     pub paw: bool,
     /// The grays the panel shows (2 for black and white alone).
     pub grays: u16,
+    /// The least size of what a finger sets or presses, about 7 mm, on
+    /// touch screens; 0 with buttons alone (see [`UiStyle::touch_row`]).
+    pub finger: u32,
 }
 
 /// How the focus of rows and items is drawn ([`draw_focus`]).
@@ -167,6 +170,7 @@ impl UiStyle {
             cards: s.text(settings::UI_GROUPS.as_str()) == settings::GROUPS_CARDS,
             paw: s.text(settings::UI_MOTIF.as_str()) == settings::MOTIF_PAW,
             grays: env.device.display.format.gray_levels().unwrap_or(256),
+            finger: if env.device.input.touch { m.mm(7) } else { 0 },
         }
     }
 
@@ -215,6 +219,13 @@ impl UiStyle {
         } else {
             self.faint(gray)
         }
+    }
+
+    /// A row of `height` made high enough on touch screens that the
+    /// buttons in it ([`button_height`]) are as large as a fingertip
+    /// ([`UiStyle::finger`]); as it is with buttons alone.
+    pub fn touch_row(&self, height: u32) -> u32 {
+        height.max(self.finger * 10 / 7)
     }
 
     /// The colour of gray text such as hints and notes: `gray`, or black

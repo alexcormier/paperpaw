@@ -925,6 +925,8 @@ struct Shared {
     catalog_device: Option<&'static str>,
     /// Passwords and keys (see [`paperpaw_sdk::secrets`]).
     secrets: paperpaw_sdk::secrets::Secrets,
+    /// Random bytes (see [`KernelBuilder::random`]).
+    random: paperpaw_sdk::random::Random,
     /// Shared with font packs read where they are (see `Fonts::load`).
     storage: alloc::rc::Rc<dyn Storage>,
     /// What the storage read during the call going on (see `recall`).
@@ -968,6 +970,7 @@ impl Shared {
             font_dirs: &self.font_dirs,
             catalog_device: self.catalog_device,
             secrets: &self.secrets,
+            random: self.random,
             storage: self.storage.as_ref(),
             keys: &self.keymap,
         })

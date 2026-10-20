@@ -4,7 +4,6 @@
 //! listed in little memory and time.
 
 use alloc::string::String;
-use alloc::vec;
 use alloc::vec::Vec;
 
 /// What a font file says about itself.
@@ -24,6 +23,9 @@ pub type ReadAt<'a> = &'a mut dyn FnMut(u64, &mut [u8]) -> usize;
 
 /// Largest `name` table read.
 const MAX_NAME_TABLE: u32 = 64 * 1024;
+/// Table records read at a time: the directory is not held whole, as its
+/// size is only what the header claims.
+const RECORDS: usize = 16;
 
 fn u16_at(data: &[u8], at: usize) -> Option<u16> {
     Some(u16::from_be_bytes([*data.get(at)?, *data.get(at + 1)?]))
@@ -39,8 +41,11 @@ fn u32_at(data: &[u8], at: usize) -> Option<u32> {
 }
 
 fn read(read_at: ReadAt<'_>, offset: u64, len: u32) -> Option<Vec<u8>> {
-    let mut buf = vec![0u8; len as usize];
-    (read_at(offset, &mut buf) == buf.len()).then_some(buf)
+    let len = len as usize;
+    let mut buf = Vec::new();
+    buf.try_reserve_exact(len).ok()?;
+    buf.resize(len, 0);
+    (read_at(offset, &mut buf) == len).then_some(buf)
 }
 
 /// The family and style of an OpenType/TrueType font (the first font of a
@@ -58,34 +63,42 @@ pub fn read_info(read_at: ReadAt<'_>) -> Option<FontInfo> {
         [0, 1, 0, 0] | b"OTTO" | b"true" => header,
         _ => return None,
     };
-    let tables = u16_at(&header, 4)?;
-    let directory = read(read_at, base + 12, u32::from(tables) * 16)?;
-    let table = |tag: &[u8; 4]| -> Option<(u64, u32)> {
-        (0..usize::from(tables)).find_map(|i| {
-            let record = &directory[i * 16..i * 16 + 16];
-            (&record[..4] == tag).then(|| {
-                (
-                    u64::from(u32_at(record, 8).unwrap_or(0)),
-                    u32_at(record, 12).unwrap_or(0),
-                )
-            })
-        })
-    };
+    // Where the `name`, `OS/2` and `head` tables are (their first records).
+    let tables = usize::from(u16_at(&header, 4)?);
+    let (mut name, mut os2, mut head) = (None, None, None);
+    let mut chunk = [0u8; RECORDS * 16];
+    let mut done = 0;
+    while done < tables {
+        let records = &mut chunk[..(tables - done).min(RECORDS) * 16];
+        if read_at(base + 12 + done as u64 * 16, records) != records.len() {
+            return None;
+        }
+        for record in records.as_chunks::<16>().0 {
+            let found = Some((u64::from(u32_at(record, 8)?), u32_at(record, 12)?));
+            match &record[..4] {
+                b"name" => name = name.or(found),
+                b"OS/2" => os2 = os2.or(found),
+                b"head" => head = head.or(found),
+                _ => {}
+            }
+        }
+        done += records.len() / 16;
+    }
 
-    let (offset, len) = table(b"name")?;
+    let (offset, len) = name?;
     let name = read(read_at, offset, len.min(MAX_NAME_TABLE))?;
     let family = family_name(&name)?;
 
     // Style: OS/2 (weight and selection flags), else the head table.
     let (mut bold, mut italic) = (false, false);
     let mut weight = 400;
-    if let Some((offset, len)) = table(b"OS/2").filter(|(_, len)| *len >= 64) {
+    if let Some((offset, len)) = os2.filter(|(_, len)| *len >= 64) {
         let os2 = read(read_at, offset, len.min(96))?;
         weight = u16_at(&os2, 4)?;
         let selection = u16_at(&os2, 62)?;
         italic = selection & 1 != 0;
         bold = selection & (1 << 5) != 0 || weight >= 600;
-    } else if let Some((offset, _)) = table(b"head") {
+    } else if let Some((offset, _)) = head {
         let head = read(read_at, offset, 54)?;
         let style = u16_at(&head, 44)?;
         bold = style & 1 != 0;

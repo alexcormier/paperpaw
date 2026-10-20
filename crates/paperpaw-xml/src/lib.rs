@@ -141,8 +141,8 @@ const RAW_TEXT: [&str; 2] = ["script", "style"];
 #[derive(Debug, Default)]
 pub struct Tokenizer {
     pending: Vec<u8>,
-    /// Skipping overlong markup up to its closing `>`.
-    skipping: bool,
+    /// Skipping overlong markup up to its end.
+    skip: Option<Skip>,
     /// HTML: `<script>` and `<style>` hold raw text.
     html: bool,
     /// Inside such an element: its name.
@@ -174,11 +174,11 @@ impl Tokenizer {
     /// incomplete token plus one piece.
     pub fn feed(&mut self, data: &[u8], emit: &mut dyn FnMut(Token<'_>)) {
         for mut piece in data.chunks(PIECE) {
-            if self.skipping {
-                match piece.iter().position(|&b| b == b'>') {
+            if let Some(skip) = &mut self.skip {
+                match skip.end_in(piece) {
                     Some(end) => {
-                        piece = &piece[end + 1..];
-                        self.skipping = false;
+                        piece = &piece[end..];
+                        self.skip = None;
                     }
                     None => continue,
                 }
@@ -188,8 +188,8 @@ impl Tokenizer {
             self.pending.drain(..consumed);
             // What is left is unfinished markup; text is emitted early.
             if self.pending.len() > MAX_MARKUP {
+                self.skip = Some(Skip::start(&self.pending));
                 self.pending.clear();
-                self.skipping = true;
             }
         }
     }
@@ -198,8 +198,65 @@ impl Tokenizer {
     pub fn finish(&mut self, emit: &mut dyn FnMut(Token<'_>)) {
         process(&self.pending, true, self.html, &mut self.raw, emit);
         self.pending.clear();
-        self.skipping = false;
+        self.skip = None;
         self.raw = None;
+    }
+}
+
+/// What ends overlong markup that is skipped: the same as when it is
+/// read (see `process`).
+#[derive(Debug, Clone, Copy)]
+enum Skip {
+    /// A tag ends at a `>` outside quoted values; the quote open, if any.
+    Tag(Option<u8>),
+    /// Other markup ends with `end`; `seen` are the two bytes before.
+    Until { end: &'static [u8], seen: [u8; 2] },
+}
+
+impl Skip {
+    /// Starts skipping `markup`, the start of markup that is unfinished.
+    fn start(markup: &[u8]) -> Skip {
+        let until = |end| Skip::Until { end, seen: [0; 2] };
+        let (mut skip, opening) = if markup.starts_with(b"<!--") {
+            (until(b"-->"), 4)
+        } else if markup.starts_with(b"<![CDATA[") {
+            (until(b"]]>"), 9)
+        } else if markup.starts_with(b"<?") {
+            (until(b"?>"), 2)
+        } else if markup.starts_with(b"<!") {
+            (until(b">"), 2)
+        } else {
+            (Skip::Tag(None), 1)
+        };
+        // Takes in the quotes and last bytes; the end is not there, or the
+        // markup would be finished.
+        let _ = skip.end_in(&markup[opening.min(markup.len())..]);
+        skip
+    }
+
+    /// Where the markup ends in `bytes` (the index after its end), if it
+    /// does there.
+    fn end_in(&mut self, bytes: &[u8]) -> Option<usize> {
+        for (i, &b) in bytes.iter().enumerate() {
+            match self {
+                Skip::Tag(quote) => match (*quote, b) {
+                    (None, b'"' | b'\'') => *quote = Some(b),
+                    (Some(q), b) if b == q => *quote = None,
+                    (None, b'>') => return Some(i + 1),
+                    _ => {}
+                },
+                Skip::Until { end, seen } => {
+                    if let Some((last, before)) = end.split_last()
+                        && b == *last
+                        && seen.ends_with(before)
+                    {
+                        return Some(i + 1);
+                    }
+                    *seen = [seen[1], b];
+                }
+            }
+        }
+        None
     }
 }
 
@@ -215,16 +272,19 @@ fn find_end_tag(haystack: &[u8], name: &str) -> Option<usize> {
         .position(|w| w.starts_with(b"</") && w[2..].eq_ignore_ascii_case(name.as_bytes()))
 }
 
-/// A cut in `run` that splits neither a UTF-8 sequence nor an entity.
+/// A cut in `run` that splits neither a UTF-8 sequence nor an entity; 0
+/// if there is none.
 fn safe_cut(run: &[u8]) -> usize {
-    let mut cut = run.len();
-    // Back to the start of a UTF-8 sequence.
-    while cut > 1 && run[cut - 1] & 0xc0 == 0x80 {
-        cut -= 1;
+    // Before the last UTF-8 sequence (at most 4 bytes), which may continue
+    // in the next chunk.
+    let mut start = run.len();
+    while start > 0 && run.len() - start < 3 && run[start - 1] & 0xc0 == 0x80 {
+        start -= 1;
     }
-    if run[cut - 1] >= 0xc0 {
-        cut -= 1;
-    }
+    let mut cut = match start.checked_sub(1) {
+        Some(lead) if run[lead] >= 0xc0 => lead,
+        _ => run.len(),
+    };
     // Before an entity that may continue in the next chunk.
     let tail = &run[cut.saturating_sub(12)..cut];
     if let Some(amp) = tail.iter().rposition(|&b| b == b'&')
@@ -232,7 +292,7 @@ fn safe_cut(run: &[u8]) -> usize {
     {
         cut = cut - tail.len() + amp;
     }
-    cut.max(1)
+    cut
 }
 
 fn text(bytes: &[u8]) -> Cow<'_, str> {
@@ -260,8 +320,12 @@ fn process(
                 }
                 None if last => rest.len(),
                 // Keep what could be the start of the end tag.
-                None => match rest.len().checked_sub(name.len() + 2) {
-                    Some(keep) if keep > 0 => safe_cut(&rest[..keep]),
+                None => match rest
+                    .len()
+                    .checked_sub(name.len() + 2)
+                    .map(|keep| safe_cut(&rest[..keep]))
+                {
+                    Some(cut) if cut > 0 => cut,
                     _ => return pos,
                 },
             };
@@ -309,6 +373,10 @@ fn process(
             complete(find(&rest[2..], b"?>"), 2 + 2)
         } else if rest.starts_with(b"<!") {
             complete(rest.iter().position(|&b| b == b'>'), 1)
+        } else if rest.get(1).is_some_and(|&b| b != b'/' && !starts_name(b)) {
+            // No tag follows (`a < b`, `<3`): the `<` is text.
+            emit(Token::Text(Cow::Borrowed("<")));
+            Some(1)
         } else {
             match tag_end(rest) {
                 Some(end) => {
@@ -335,6 +403,12 @@ fn process(
         }
     }
     pos
+}
+
+/// Whether a name may start with `byte`: a letter, `_`, `:` or a character
+/// beyond ASCII.
+fn starts_name(byte: u8) -> bool {
+    byte.is_ascii_alphabetic() || matches!(byte, b'_' | b':') || byte >= 0x80
 }
 
 /// Index of the `>` closing a tag, ignoring `>` inside quoted values.
@@ -556,6 +630,54 @@ mod tests {
             let (text, most) = text_of(&data, chunk);
             assert_eq!(text, expected, "chunk {chunk}");
             assert!(most <= 4096, "chunk {chunk}: buffer {most}");
+        }
+    }
+
+    #[test]
+    fn overlong_markup_is_skipped_to_its_own_end() {
+        let long = "x > y ".repeat(1000);
+        for markup in [
+            alloc::format!("<!-- {long} -->"),
+            alloc::format!("<img alt=\"{long}\" title='>'/>"),
+            alloc::format!("<?pi {long}?>"),
+            alloc::format!("<![CDATA[{long}]]>"),
+        ] {
+            let data = alloc::format!("<p>a</p>{markup}<p>b</p>");
+            for chunk in [1, 100, 5000] {
+                let (text, most) = text_of(&data, chunk);
+                assert_eq!(text, "ab", "{}, chunk {chunk}", &markup[..4]);
+                assert!(most <= 8192, "chunk {chunk}: buffer {most}");
+            }
+        }
+    }
+
+    #[test]
+    fn less_than_without_a_name_is_text() {
+        for chunk in [1, 3, 64] {
+            assert_eq!(
+                tokens("a < b <em>x</em> 1 <3 <= 2<", chunk),
+                ["'a < b '", "<em >", "'x'", "</em>", "' 1 <3 <= 2<'"],
+                "chunk {chunk}"
+            );
+        }
+    }
+
+    #[test]
+    fn raw_text_keeps_characters_whole() {
+        let page = "<script>äöü€ abc</script>";
+        for chunk in [1, 2, 3] {
+            let mut text = String::new();
+            let mut tokenizer = Tokenizer::html();
+            let mut emit = |token: Token<'_>| {
+                if let Token::Text(t) = token {
+                    text.push_str(&t);
+                }
+            };
+            for piece in page.as_bytes().chunks(chunk) {
+                tokenizer.feed(piece, &mut emit);
+            }
+            tokenizer.finish(&mut emit);
+            assert_eq!(text, "äöü€ abc", "chunk {chunk}");
         }
     }
 

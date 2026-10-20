@@ -4,9 +4,9 @@
 //! keyboard. Handy for passwords and keys, which are tedious to type on
 //! an e-reader.
 //!
-//! The address carries a key made anew each time; the page is served
-//! only while the screen is open, and the screen closes once the text
-//! has come.
+//! The address carries a key drawn anew each time, guarded as the
+//! transfer's (see `access`); the page is served only while the screen
+//! is open, and the screen closes once the text has come.
 
 use alloc::format;
 use alloc::string::{String, ToString};
@@ -17,11 +17,12 @@ use paperpaw_sdk::event::{Event, EventData};
 use paperpaw_sdk::replies::{ServerNotice, Typed};
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
-    Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, RefreshMode,
-    Screen, ServerResponse,
+    Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Instant, Params, Rect,
+    RefreshMode, Screen, ServerResponse,
 };
 
-use crate::{PORT, key, web};
+use crate::access::{self, Access, Guard};
+use crate::{PORT, no_random, web};
 
 const SERVER: Id = Id::new_static("transfer.phone-server");
 const SERVER_EVENT: Event<ServerNotice> = Event::new("transfer.phone-server-event");
@@ -44,7 +45,8 @@ pub(crate) struct PhoneScreen {
     /// The keyboard's parameters, sent back with the text.
     params: Params,
     state: State,
-    key: String,
+    /// The key in the address, drawn once the server runs.
+    guard: Option<Guard>,
     page: String,
     started: bool,
 }
@@ -57,7 +59,7 @@ impl PhoneScreen {
             style,
             params: params.clone(),
             state: State::Starting,
-            key: key(env),
+            guard: None,
             page: page(env, params),
             started: false,
         }
@@ -73,9 +75,18 @@ impl PhoneScreen {
         let env = *cx.env();
         match notice {
             ServerNotice::Started { address, .. } => {
-                let url = format!("http://{address}/?k={}", self.key);
-                let qr = QrCode::new(url.as_bytes());
-                self.state = State::Serving { url, qr };
+                self.state = match access::key(&env.random) {
+                    Some(key) => {
+                        let url = format!("http://{address}/?k={key}");
+                        self.guard = Some(Guard::new(key));
+                        let qr = QrCode::new(url.as_bytes());
+                        State::Serving { url, qr }
+                    }
+                    None => {
+                        cx.command(Command::StopServing(SERVER));
+                        State::Failed(no_random(&env))
+                    }
+                };
             }
             ServerNotice::Failed { reason, .. } => {
                 self.state = State::Failed(if reason == "no network" {
@@ -92,14 +103,18 @@ impl PhoneScreen {
                 body_file,
                 ..
             } => {
+                let Some(guard) = &mut self.guard else {
+                    return;
+                };
                 let request = Request {
                     method: &method,
                     target: &target,
                     body: body_file.and_then(|file| {
                         paperpaw_sdk::read_file(env.storage, &file, MAX_TEXT).ok()
                     }),
+                    at: env.now,
                 };
-                let (response, text) = answer(number, &self.key, &self.page, &request);
+                let (response, text) = answer(number, guard, &self.page, &request);
                 cx.command(Command::Respond(response));
                 // The text to the keyboard, and done.
                 if let Some(text) = text
@@ -129,12 +144,15 @@ pub(crate) struct Request<'a> {
     pub method: &'a str,
     pub target: &'a str,
     pub body: Option<alloc::vec::Vec<u8>>,
+    /// When it came.
+    pub at: Instant,
 }
 
-/// The answer to `request`, and the text sent, if that is what it did.
+/// The answer to `request`, if `guard` lets it in, and the text sent, if
+/// that is what it did.
 pub(crate) fn answer(
     number: u32,
-    key: &str,
+    guard: &mut Guard,
     page: &str,
     request: &Request<'_>,
 ) -> (ServerResponse, Option<String>) {
@@ -144,9 +162,16 @@ pub(crate) fn answer(
         .unwrap_or((request.target, ""));
     let response =
         |status, kind: &str, body: &[u8]| ServerResponse::new(number, status, kind, body.to_vec());
-    if web::param(query, "k").as_deref() != Some(key) {
-        let text = b"The key is missing or wrong: scan the code shown on the device.";
-        return (response(403, "text/plain; charset=utf-8", text), None);
+    match guard.check(web::param(query, "k").as_deref(), request.at) {
+        Access::Granted => {}
+        Access::Denied => {
+            let text = b"The key is missing or wrong: scan the code shown on the device.";
+            return (response(403, "text/plain; charset=utf-8", text), None);
+        }
+        Access::Locked => {
+            let text = b"Too many wrong keys: try again in a minute.";
+            return (response(429, "text/plain; charset=utf-8", text), None);
+        }
     }
     if request.method == "POST" && path == "/send" {
         let text = request
@@ -229,6 +254,12 @@ impl Screen for PhoneScreen {
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
         if !self.started {
             self.started = true;
+            if !cx.env().random.available() {
+                self.state = State::Failed(no_random(cx.env()));
+                cx.request_redraw();
+                cx.request_refresh(RefreshMode::Partial);
+                return;
+            }
             cx.command(Command::Serve {
                 server: SERVER,
                 port: PORT,

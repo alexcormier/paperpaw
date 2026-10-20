@@ -5,10 +5,14 @@
 //!
 //! Equally easy by touch and with buttons alone:
 //!
-//! - Touch: a finger that comes down on the track takes the knob along
-//!   ([`SliderDrag`]); the value follows it in the slider's steps, and
-//!   lifting the finger chooses it. A tap on the track chooses the value
-//!   there, a tap on `−` or `+` moves it one step.
+//! - Touch: the slider's band is as high as a fingertip needs
+//!   ([`UiStyle::finger`]) and as wide as the screen. A finger that comes
+//!   down anywhere on it and moves sideways moves the knob as far as it
+//!   moves itself ([`SliderDrag`]), so it never jumps where the finger
+//!   lands and the finger need not cover the knob; the value follows in
+//!   the slider's steps, and lifting the finger chooses it. A tap on the
+//!   track chooses the value there, a tap on `−` or `+` (or beside them)
+//!   moves it one step.
 //! - Buttons: on a focused slider, *confirm* starts moving it; left and
 //!   right (or up and down, or the page buttons) move it one step each
 //!   ([`key_step`]), *confirm* chooses the value, *back* goes back to the
@@ -28,7 +32,10 @@
 //! [`Slider::draw_row`] (what it shows in a [`SliderView`]), or only the
 //! track with [`Slider::draw_track`] where it places the buttons itself,
 //! and passes pointer samples to [`SliderDrag::on_pointer`] from
-//! [`Screen::on_pointer`](crate::Screen::on_pointer).
+//! [`Screen::on_pointer`](crate::Screen::on_pointer). While the knob
+//! moves, the slider alone is best drawn again with a quick refresh
+//! ([`RefreshMode::Fast`](crate::RefreshMode::Fast)), and the screen
+//! with a clean one when the finger is lifted.
 
 use crate::builtin::actions;
 use crate::id::Id;
@@ -174,11 +181,19 @@ impl Slider {
         self.clamp(self.min + steps * self.step)
     }
 
-    /// Draws the track in `track`: a thin line filled with `ink` up to
-    /// `value`, lighter after it, and the knob at the value (round where
-    /// the interface has round corners). For screens that place a
-    /// slider's buttons themselves, as panels do; [`Slider::draw_row`]
-    /// draws all of it.
+    /// Where the middle of the knob is on `track` at `value`, as drawn
+    /// ([`Slider::draw_track`]); [`Slider::value_at`] there is `value`.
+    pub fn knob_x(&self, track: Rect, value: i64) -> i32 {
+        let knob = knob_size(track);
+        let width = track.width.saturating_sub(knob);
+        let filled = ((f32::from(width) * self.share(value)) + 0.5) as u16;
+        i32::from(track.x + knob / 2 + filled)
+    }
+
+    /// Draws the track in `track`: a thick line in `ink` up to `value`, a
+    /// thin one after it, and a large knob at the value (round where the
+    /// interface has round corners). For screens that place a slider's
+    /// buttons themselves; [`Slider::draw_row`] draws all of it.
     pub fn draw_track(
         &self,
         canvas: &mut Canvas<'_>,
@@ -188,26 +203,26 @@ impl Slider {
         ink: Color,
     ) {
         let knob = knob_size(track);
-        let line = ((style.line * 2).max(2) as u16).min(knob / 2).max(1);
+        // Half of the filled part's thickness: an eighth of the knob, at
+        // least the interface's lines.
+        let line = (knob / 8).max(style.line.max(1) as u16);
         let mid = track.y + track.height / 2;
         let left = track.x + knob / 2;
         let width = track.width.saturating_sub(knob);
-        let filled = ((f32::from(width) * self.share(value)) + 0.5) as u16;
-        // After the value thinner and lighter: gray on white (dithered on
-        // panels of black and white alone), a thin line on the focus.
-        let rest = Rect::new(
-            left + filled,
-            mid.saturating_sub(line / 2),
-            width - filled,
-            line,
+        let filled = (self.knob_x(track, value) - i32::from(left)) as u16;
+        // After the value a thin line: in ink, not gray, so that it stays
+        // in the quick refreshes that show a knob moving, which leave out
+        // grays.
+        let thin = line.div_ceil(2);
+        canvas.fill(
+            Rect::new(
+                left + filled,
+                mid.saturating_sub(thin / 2),
+                width - filled,
+                thin,
+            ),
+            ink,
         );
-        if ink == Color::BLACK {
-            canvas.fill_tint(rest, Color::gray(170));
-        } else {
-            let thin = (line / 2).max(1);
-            let rest = Rect::new(rest.x, mid.saturating_sub(thin / 2), rest.width, thin);
-            canvas.fill(rest, Color::gray(200));
-        }
         canvas.fill(
             Rect::new(left, mid.saturating_sub(line), filled, line * 2),
             ink,
@@ -303,14 +318,17 @@ pub fn marked(spec: &SettingSpec) -> bool {
     matches!(spec.kind, SettingKind::Int { .. }) && spec.extra().slider
 }
 
-/// The size of the knob on `track`.
+/// The size of the knob on `track`: three quarters of its height, so
+/// that it shows beside the finger that moves it.
 fn knob_size(track: Rect) -> u16 {
-    (track.height / 2).max(4).min(track.width.max(1))
+    (track.height * 3 / 4).max(4).min(track.width.max(1))
 }
 
-/// The height of a slider's band: as the first line of a row.
+/// The height of a slider's band: as the first line of a row, and on
+/// touch screens as high as its `−` and `+` need to be a fingertip
+/// large ([`UiStyle::touch_row`]).
 pub fn band_height(style: &UiStyle) -> u16 {
-    style.title_band() as u16
+    style.touch_row(style.title_band()) as u16
 }
 
 /// The height of a row with a slider (see [`Slider::draw_row`]), with
@@ -387,17 +405,26 @@ pub struct SliderDrag {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Drag {
     pointer: u8,
+    /// Where the finger came down.
+    start: i32,
+    /// The value then.
+    from: i64,
+    /// The value now.
     value: i64,
+    /// It moved further than a tap would.
+    moved: bool,
 }
 
 /// What a pointer sample did to a slider.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SliderStep {
-    /// The knob was taken or moved to this value: show it, not kept yet.
+    /// The knob was moved to this value: show it, not kept yet.
     Moved(i64),
-    /// The finger moved within the same step: nothing to draw.
+    /// The finger came down, or moved within the same step: nothing to
+    /// draw.
     Same,
-    /// The finger was lifted here: keep this value.
+    /// The finger was lifted: keep this value (it may be the one before,
+    /// e.g. after a tap beside the slider).
     Chosen(i64),
     /// The finger was taken away (e.g. by the system): show the value
     /// kept again.
@@ -405,44 +432,80 @@ pub enum SliderStep {
 }
 
 impl SliderDrag {
-    /// The value the knob is dragged to, while it is.
+    /// The value the knob is dragged to, while a finger holds it.
     pub fn dragging(&self) -> Option<i64> {
         self.drag.map(|d| d.value)
     }
 
-    /// Follows a finger on `slider`, drawn on `track`: one that comes
-    /// down on `track` takes the knob along. `None` for samples it does
-    /// not take: the screen then handles them as it would.
+    /// Follows a finger on `slider`, set to `value` and drawn in `band`
+    /// (its `−`, track and `+` where [`parts`] puts them): one that comes
+    /// down anywhere in `band` is taken. Moved sideways, the knob moves
+    /// as far from `value` as the finger from where it came down, in the
+    /// slider's steps and within its range; a tap chooses the value on
+    /// the track where it lands, or a step down left of the track and up
+    /// right of it. `None` for samples it does not take: the screen then
+    /// handles them as it would.
     pub fn on_pointer(
         &mut self,
         event: &PointerEvent,
+        style: &UiStyle,
         slider: &Slider,
-        track: Rect,
+        band: Rect,
+        value: i64,
     ) -> Option<SliderStep> {
-        let at = |event: &PointerEvent| slider.value_at(track, event.point.x);
+        let track = parts(style, band).track;
+        // Further than this, a finger moves the knob: as far as a tap may
+        // wander (about 3 mm).
+        let slop = (style.finger * 3 / 7).max(style.gap).max(1) as i32;
+        let dragged = |drag: &Drag, x: i32| {
+            slider.value_at(track, slider.knob_x(track, drag.from) + x - drag.start)
+        };
         match (event.phase, self.drag) {
             (PointerPhase::Down, None) => {
-                if !track.contains(event.point) {
+                if !band.contains(event.point) {
                     return None;
                 }
-                let value = at(event);
+                let from = slider.clamp(value);
                 self.drag = Some(Drag {
                     pointer: event.id,
-                    value,
+                    start: event.point.x,
+                    from,
+                    value: from,
+                    moved: false,
                 });
-                Some(SliderStep::Moved(value))
+                Some(SliderStep::Same)
             }
             (PointerPhase::Move, Some(drag)) if drag.pointer == event.id => {
-                let value = at(event);
-                if value == drag.value {
+                if !drag.moved && (event.point.x - drag.start).abs() < slop {
                     return Some(SliderStep::Same);
                 }
-                self.drag = Some(Drag { value, ..drag });
-                Some(SliderStep::Moved(value))
+                let value = dragged(&drag, event.point.x);
+                self.drag = Some(Drag {
+                    value,
+                    moved: true,
+                    ..drag
+                });
+                Some(if value == drag.value {
+                    SliderStep::Same
+                } else {
+                    SliderStep::Moved(value)
+                })
             }
             (PointerPhase::Up, Some(drag)) if drag.pointer == event.id => {
                 self.drag = None;
-                Some(SliderStep::Chosen(at(event)))
+                let x = event.point.x;
+                let value = if drag.moved {
+                    dragged(&drag, x)
+                } else if !band.contains(event.point) {
+                    drag.from
+                } else if x < i32::from(track.x) {
+                    slider.stepped(drag.from, -1)
+                } else if x >= track.right() as i32 {
+                    slider.stepped(drag.from, 1)
+                } else {
+                    slider.value_at(track, x)
+                };
+                Some(SliderStep::Chosen(value))
             }
             (PointerPhase::Cancel, Some(drag)) if drag.pointer == event.id => {
                 self.drag = None;
@@ -481,6 +544,13 @@ mod tests {
         cards: false,
         paw: false,
         grays: 2,
+        finger: 0,
+    };
+
+    /// On a touch screen of 220 dpi: a fingertip 7 mm large.
+    const TOUCH: UiStyle = UiStyle {
+        finger: 61,
+        ..STYLE
     };
 
     fn pointer(phase: PointerPhase, x: i32, y: i32) -> PointerEvent {
@@ -495,14 +565,22 @@ mod tests {
 
     #[test]
     fn a_tap_sets_the_value_where_it_lands() {
-        // Knob 15 wide: the track runs from 107 to 192.
+        // Knob 22 wide: the track runs from 111 to 189.
         let slider = Slider::new(0, 255);
         let track = Rect::new(100, 0, 100, 30);
         assert_eq!(slider.value_at(track, 50), 0);
-        assert_eq!(slider.value_at(track, 107), 0);
-        assert_eq!(slider.value_at(track, 150), 129);
-        assert_eq!(slider.value_at(track, 192), 255);
+        assert_eq!(slider.value_at(track, 111), 0);
+        assert_eq!(slider.value_at(track, 150), 128);
+        assert_eq!(slider.value_at(track, 189), 255);
         assert_eq!(slider.value_at(track, 400), 255);
+        // Where the knob is drawn, the value is read back.
+        let fives = Slider::new(0, 100).step(5);
+        let wide = Rect::new(80, 0, 320, 60);
+        for value in (0..=100).step_by(5) {
+            assert_eq!(fives.value_at(wide, fives.knob_x(wide, value)), value);
+        }
+        assert_eq!(fives.knob_x(wide, 0), 80 + 22);
+        assert_eq!(fives.knob_x(wide, 100), 400 - 23);
     }
 
     #[test]
@@ -565,37 +643,92 @@ mod tests {
         assert_eq!(track.right() + 8, u32::from(plus.x));
         // A row with a note is higher by the note's lines.
         assert!(row_height(&STYLE, true) > row_height(&STYLE, false));
+        // By touch, − and + are a fingertip large, the band higher still.
+        let row = Rect::new(0, 100, 480, row_height(&TOUCH, false));
+        let band = super::band(&TOUCH, row);
+        assert_eq!(band.height, 87);
+        let SliderParts { minus, track, plus } = parts(&TOUCH, band);
+        assert_eq!((minus.height, plus.height, track.height), (60, 60, 60));
+        assert!(band.bottom() <= row.bottom());
+        assert!(row_height(&TOUCH, false) > row_height(&STYLE, false));
+    }
+
+    /// A slider from 0 to 100 in fives across a touch screen 480 wide:
+    /// its band at 100, 87 high; − from 12 to 72, the track from 80 to
+    /// 400 (the knob's middle from 102 to 377), + from 408 to 468.
+    fn across() -> (Slider, Rect) {
+        (Slider::new(0, 100).step(5), Rect::new(0, 100, 480, 87))
+    }
+
+    fn sample(drag: &mut SliderDrag, phase: PointerPhase, x: i32, y: i32) -> Option<SliderStep> {
+        let (slider, band) = across();
+        drag.on_pointer(&pointer(phase, x, y), &TOUCH, &slider, band, 50)
     }
 
     #[test]
-    fn a_finger_takes_the_knob_along() {
-        let slider = Slider::new(0, 10);
-        let track = Rect::new(100, 50, 220, 20);
+    fn a_finger_moves_the_knob_as_far_as_it_moves() {
+        use PointerPhase::{Down, Move, Up};
+        use SliderStep::{Chosen, Moved, Same};
         let mut drag = SliderDrag::default();
-        // Not on the track: left to the screen.
-        assert_eq!(
-            drag.on_pointer(&pointer(PointerPhase::Down, 50, 60), &slider, track),
-            None
-        );
-        let down = drag.on_pointer(&pointer(PointerPhase::Down, 110, 60), &slider, track);
-        assert_eq!(down, Some(SliderStep::Moved(0)));
+        // Not on the band: left to the screen.
+        assert_eq!(sample(&mut drag, Down, 300, 90), None);
+        // Down far from the knob (at 240): it stays where it is.
+        assert_eq!(sample(&mut drag, Down, 300, 140), Some(Same));
+        assert_eq!(drag.dragging(), Some(50));
+        // Less than a tap may wander: nothing yet.
+        assert_eq!(sample(&mut drag, Move, 320, 180), Some(Same));
+        // 28 to the right: the knob 28 further, two steps.
+        assert_eq!(sample(&mut drag, Move, 328, 180), Some(Moved(60)));
+        assert_eq!(sample(&mut drag, Move, 330, 120), Some(Same));
+        // Back near where it came down: the value it had, though closer
+        // than a tap may wander.
+        assert_eq!(sample(&mut drag, Move, 302, 120), Some(Moved(50)));
+        // Far past either end: no further than the range.
+        assert_eq!(sample(&mut drag, Move, 2000, 120), Some(Moved(100)));
+        assert_eq!(sample(&mut drag, Move, -900, 120), Some(Moved(0)));
         assert_eq!(drag.dragging(), Some(0));
-        // A little further, the same step; then the middle.
-        let near = drag.on_pointer(&pointer(PointerPhase::Move, 112, 90), &slider, track);
-        assert_eq!(near, Some(SliderStep::Same));
-        let middle = drag.on_pointer(&pointer(PointerPhase::Move, 210, 90), &slider, track);
-        assert_eq!(middle, Some(SliderStep::Moved(5)));
-        let up = drag.on_pointer(&pointer(PointerPhase::Up, 400, 90), &slider, track);
-        assert_eq!(up, Some(SliderStep::Chosen(10)));
+        // Lifted past the band, where the knob is now: chosen.
+        assert_eq!(sample(&mut drag, Up, -900, 400), Some(Chosen(0)));
         assert_eq!(drag.dragging(), None);
-        // Taken away: the value kept shows again.
-        drag.on_pointer(&pointer(PointerPhase::Down, 210, 60), &slider, track);
-        let gone = drag.on_pointer(&pointer(PointerPhase::Cancel, 0, 0), &slider, track);
-        assert_eq!(gone, Some(SliderStep::Cancelled));
-        assert_eq!(
-            drag.on_pointer(&pointer(PointerPhase::Up, 0, 0), &slider, track),
-            None
-        );
+        assert_eq!(sample(&mut drag, Move, 300, 140), None);
+    }
+
+    #[test]
+    fn a_tap_steps_or_sets_where_it_lands() {
+        use PointerPhase::{Cancel, Down, Up};
+        use SliderStep::{Cancelled, Chosen, Same};
+        let tap = |x: i32, up: (i32, i32)| {
+            let mut drag = SliderDrag::default();
+            assert_eq!(sample(&mut drag, Down, x, 140), Some(Same));
+            sample(&mut drag, Up, up.0, up.1)
+        };
+        // On −, or in the margin beside it: a step down; on + or beside
+        // it, a step up.
+        assert_eq!(tap(40, (42, 150)), Some(Chosen(45)));
+        assert_eq!(tap(4, (4, 140)), Some(Chosen(45)));
+        assert_eq!(tap(430, (430, 140)), Some(Chosen(55)));
+        assert_eq!(tap(476, (476, 140)), Some(Chosen(55)));
+        // On the track: the value there.
+        assert_eq!(tap(377, (377, 140)), Some(Chosen(100)));
+        assert_eq!(tap(102, (102, 140)), Some(Chosen(0)));
+        // Lifted off the band without moving sideways: as it was.
+        assert_eq!(tap(300, (300, 400)), Some(Chosen(50)));
+        // Taken away: the value kept shows again; a second finger meanwhile
+        // is not taken.
+        let mut drag = SliderDrag::default();
+        sample(&mut drag, Down, 300, 140);
+        let second = PointerEvent {
+            id: 1,
+            ..pointer(Down, 200, 140)
+        };
+        let (slider, band) = across();
+        assert_eq!(drag.on_pointer(&second, &TOUCH, &slider, band, 50), None);
+        assert_eq!(sample(&mut drag, Cancel, 0, 0), Some(Cancelled));
+        assert_eq!(sample(&mut drag, Up, 0, 0), None);
+        // A value outside the range starts from its end.
+        let mut drag = SliderDrag::default();
+        drag.on_pointer(&pointer(Down, 300, 140), &TOUCH, &slider, band, 120);
+        assert_eq!(drag.dragging(), Some(100));
     }
 
     #[test]
@@ -624,8 +757,9 @@ mod tests {
         assert_eq!(view.pixel(40, 20), Color::BLACK);
         assert_eq!(view.pixel(120, 11), Color::BLACK, "the knob");
         assert_eq!(view.pixel(120, 29), Color::BLACK, "the knob");
-        assert_ne!(view.pixel(180, 20), Color::BLACK, "light after it");
-        assert_ne!(view.pixel(180, 20), Color::WHITE, "but there");
+        assert_eq!(view.pixel(180, 20), Color::BLACK, "thin after it");
+        assert_eq!(view.pixel(180, 18), Color::WHITE, "thin after it");
+        assert_eq!(view.pixel(40, 18), Color::BLACK, "thick before it");
         assert_eq!(view.pixel(40, 5), Color::WHITE, "a thin line");
         // At the end, filled all the way; white on the focus bar.
         let full = draw(100, Color::WHITE, Color::BLACK);

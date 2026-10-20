@@ -148,6 +148,11 @@ const MAX_DEFINITION: usize = 64 * 1024;
 /// Most definitions returned for one word.
 const MAX_RESULTS: usize = 8;
 
+/// The bytes of definitions one [`Dictionary::lookup`] reads at most:
+/// little enough for the smallest devices. Where memory is plentiful,
+/// [`Dictionary::lookup_within`] can be given more.
+pub const LOOKUP_BUDGET: usize = 32 * 1024;
+
 impl Dictionary {
     /// Opens the dictionary described by `ifo` (a path ending in `.ifo`).
     /// Its block indexes are kept in `cache` (a folder).
@@ -199,10 +204,28 @@ impl Dictionary {
 
     /// The definitions of `word`: exact matches ignoring ASCII case, also
     /// through synonyms (e.g. inflected forms); if there are none, the
-    /// same for the word in lower case.
+    /// same for the word in lower case. At most [`LOOKUP_BUDGET`] bytes of
+    /// definitions are read.
     pub fn lookup(&self, storage: &dyn Storage, word: &str) -> Result<Vec<Definition>, Error> {
+        let mut budget = LOOKUP_BUDGET;
+        self.lookup_within(storage, word, &mut budget)
+    }
+
+    /// The definitions of `word`, as [`lookup`](Self::lookup) finds them,
+    /// within a `budget` of bytes that can be shared by several lookups
+    /// (e.g. one per dictionary): definitions are read while it lasts, the
+    /// last one possibly cut, and the budget is reduced by what they took.
+    /// The texts returned are together no longer than the budget was; the
+    /// lookup holds at most about twice that, and 47 KB more to inflate
+    /// a dictzip chunk.
+    pub fn lookup_within(
+        &self,
+        storage: &dyn Storage,
+        word: &str,
+        budget: &mut usize,
+    ) -> Result<Vec<Definition>, Error> {
         let word = word.trim();
-        if word.is_empty() {
+        if word.is_empty() || *budget == 0 {
             return Ok(Vec::new());
         }
         let mut found = self.find(storage, word)?;
@@ -212,10 +235,24 @@ impl Dictionary {
         }
         let mut definitions = Vec::new();
         for entry in found.into_iter().take(MAX_RESULTS) {
-            let size = (entry.size as usize).min(MAX_DEFINITION);
+            if *budget == 0 {
+                break;
+            }
+            let size = (entry.size as usize).min(MAX_DEFINITION).min(*budget);
             let data = self.dict.read(storage, entry.offset, size)?;
+            let mut text = text::decode(&data, self.info.types.as_deref());
+            // Invalid UTF-8 can make the text longer than the data.
+            if text.len() > size {
+                let mut end = size;
+                while !text.is_char_boundary(end) {
+                    end -= 1;
+                }
+                text.truncate(end);
+            }
+            *budget -= data.len().max(text.len());
+            definitions.try_reserve(1).map_err(|_| Error::OutOfMemory)?;
             definitions.push(Definition {
-                text: text::decode(&data, self.info.types.as_deref()),
+                text,
                 word: entry.word,
             });
         }
@@ -243,14 +280,12 @@ impl Dictionary {
 
 /// Reads a whole small file.
 pub(crate) fn read_small(storage: &dyn Storage, path: &str, max: usize) -> Result<Vec<u8>, Error> {
-    let size = storage.size(path)? as usize;
-    if size > max {
-        return Err(malformed("file too large"));
-    }
-    let mut data = Vec::new();
-    data.try_reserve_exact(size)
-        .map_err(|_| Error::OutOfMemory)?;
-    data.resize(size, 0);
+    let size = storage.size(path)?;
+    let size = match usize::try_from(size) {
+        Ok(size) if size <= max => size,
+        _ => return Err(malformed("file too large")),
+    };
+    let mut data = zeroed(size)?;
     let mut read = 0;
     while read < size {
         let n = storage.read_at(path, read as u64, &mut data[read..])?;
@@ -259,6 +294,15 @@ pub(crate) fn read_small(storage: &dyn Storage, path: &str, max: usize) -> Resul
         }
         read += n;
     }
+    Ok(data)
+}
+
+/// `len` zero bytes, or `OutOfMemory`.
+pub(crate) fn zeroed(len: usize) -> Result<Vec<u8>, Error> {
+    let mut data = Vec::new();
+    data.try_reserve_exact(len)
+        .map_err(|_| Error::OutOfMemory)?;
+    data.resize(len, 0);
     Ok(data)
 }
 

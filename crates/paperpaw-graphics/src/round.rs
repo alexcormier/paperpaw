@@ -29,10 +29,10 @@ pub fn corner_inset(radius: u32, row: u32, height: u32) -> u32 {
         return 0;
     }
     // The circle's half width at the middle of the row, in half pixels.
-    let r = 2 * radius;
-    let dy = r - 2 * from_edge - 1;
+    let r = 2 * u64::from(radius);
+    let dy = r - 2 * u64::from(from_edge) - 1;
     let dx = (r * r - dy * dy).isqrt();
-    (r - dx).div_ceil(2)
+    (r - dx).div_ceil(2) as u32
 }
 
 /// The sine and cosine of `degrees` (any, taken round the circle), times
@@ -51,11 +51,16 @@ pub fn sin_cos(degrees: i32) -> (i32, i32) {
 }
 
 /// The point `radius` pixels from `center` in the direction of `degrees`
-/// (clockwise from twelve o'clock), rounded to the nearest pixel.
+/// (clockwise from twelve o'clock), rounded to the nearest pixel (and to
+/// the edges of the plane of points, where it would lie past them).
 pub fn point_at(center: Point, radius: i32, degrees: i32) -> Point {
     let (sin, cos) = sin_cos(degrees);
     let scale = |v: i32| (i64::from(v) * i64::from(radius) * 2 / i64::from(UNIT) + 1).div_euclid(2);
-    Point::new(center.x + scale(sin) as i32, center.y - scale(cos) as i32)
+    let clamp = |v: i64| v.clamp(i32::MIN.into(), i32::MAX.into()) as i32;
+    Point::new(
+        clamp(i64::from(center.x) + scale(sin)),
+        clamp(i64::from(center.y) - scale(cos)),
+    )
 }
 
 /// Whether direction `b` lies less than half a turn clockwise after
@@ -83,7 +88,7 @@ impl Arc {
         };
         Self {
             from: direction(from),
-            to: direction(from + sweep.min(360) as i32),
+            to: direction(from.rem_euclid(360) + sweep.min(360) as i32),
             sweep: sweep.min(360),
         }
     }
@@ -141,9 +146,9 @@ impl Ring {
     /// How much of the pixel `x`, `y` pixels right of and below the
     /// centre (the corner between four pixels) the ring covers, 0 to 255:
     /// pixels on its edges sampled sixteen times.
-    pub(crate) fn coverage(&self, x: i32, y: i32) -> u8 {
-        let east = 8 * i64::from(x) + 4;
-        let north = -(8 * i64::from(y) + 4);
+    pub(crate) fn coverage(&self, x: i64, y: i64) -> u8 {
+        let east = 8 * x + 4;
+        let north = -(8 * y + 4);
         let distance = (east * east + north * north).isqrt();
         if distance - HALF_DIAGONAL > self.outer
             || (self.inner > 0 && distance + HALF_DIAGONAL <= self.inner)
@@ -196,6 +201,13 @@ mod tests {
         assert_eq!(point_at(c, 50, 90), Point::new(150, 100));
         assert_eq!(point_at(c, 50, 180), Point::new(100, 150));
         assert_eq!(point_at(c, 50, 270), Point::new(50, 100));
+        // Past the plane's edges: at them.
+        let far = Point::new(i32::MAX, i32::MIN);
+        assert_eq!(point_at(far, i32::MAX, 45), Point::new(i32::MAX, i32::MIN));
+        assert_eq!(point_at(far, i32::MIN, 45).x, i32::MAX - 1_518_485_687);
+        // Any angle, the largest too (127 degrees round the circle).
+        assert!(Arc::new(i32::MAX, 90).holds(2, -10));
+        assert!(!Arc::new(i32::MAX, 90).holds(-10, -1));
     }
 
     #[test]

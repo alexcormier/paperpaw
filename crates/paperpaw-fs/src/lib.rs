@@ -15,6 +15,8 @@ pub struct DirStorage {
     root: PathBuf,
     /// The file read last, kept open for sequential reads.
     open: RefCell<Option<(String, File)>>,
+    /// The file system takes names in any case for the same entry.
+    ignores_case: bool,
 }
 
 impl DirStorage {
@@ -27,6 +29,7 @@ impl DirStorage {
         let root = root.into();
         fs::create_dir_all(&root)?;
         Ok(Self {
+            ignores_case: ignores_case(&root),
             root,
             open: RefCell::new(None),
         })
@@ -39,9 +42,14 @@ impl DirStorage {
         if !is_valid_path(path) {
             return Err(StorageError::InvalidPath);
         }
-        Ok(path
-            .split('/')
-            .fold(self.root.clone(), |p, part| p.join(part)))
+        let mut full = self.root.clone();
+        for part in path.split('/') {
+            if !is_own_name(&full, part) {
+                return Err(StorageError::InvalidPath);
+            }
+            full.push(part);
+        }
+        Ok(full)
     }
 
     /// Closes the cached handle if it refers to `path` (before writes).
@@ -68,6 +76,73 @@ fn create_parent(path: &Path) -> Result<(), StorageError> {
     match path.parent() {
         Some(parent) => fs::create_dir_all(parent).map_err(error),
         None => Ok(()),
+    }
+}
+
+/// Whether `part` names what is in `dir` by its own name, not by another
+/// the system takes for it: FAT and NTFS keep a short name beside a long
+/// one (`PAPERP~1` beside `.paperpaw`), and Windows drops dots and spaces
+/// at the end of a name (`.paperpaw.` is `.paperpaw` there). Such a name
+/// reaches an entry by another spelling, e.g. PaperPaw's own data by a
+/// path that does not look hidden.
+fn is_own_name(dir: &Path, part: &str) -> bool {
+    if cfg!(windows) && part.ends_with(['.', ' ']) {
+        return false;
+    }
+    // Short names have a `~`: one is fine where nothing answers to it, or
+    // where the folder lists an entry by it.
+    !part.contains('~')
+        || fs::symlink_metadata(dir.join(part)).is_err()
+        || fs::read_dir(dir).is_ok_and(|entries| {
+            entries.flatten().any(|entry| {
+                entry
+                    .file_name()
+                    .to_str()
+                    .is_some_and(|name| name.eq_ignore_ascii_case(part))
+            })
+        })
+}
+
+/// Whether the file system at `root` takes a name in another case for the
+/// same entry (NTFS, APFS, FAT; not ext4): asked of the root or the
+/// nearest folder above it whose name has letters, in the other case.
+fn ignores_case(root: &Path) -> bool {
+    let probe = root.ancestors().find_map(|dir| {
+        let name = dir.file_name()?.to_str()?;
+        let other: String = name
+            .chars()
+            .map(|c| {
+                if c.is_lowercase() {
+                    c.to_ascii_uppercase()
+                } else {
+                    c.to_ascii_lowercase()
+                }
+            })
+            .collect();
+        (other != name).then(|| (dir, dir.with_file_name(other)))
+    });
+    match probe {
+        Some((dir, other)) => same_entry(dir, &other),
+        None => cfg!(any(windows, target_os = "macos")),
+    }
+}
+
+/// Whether paths `a` and `b` lead to the same entry.
+#[cfg(unix)]
+fn same_entry(a: &Path, b: &Path) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    match (fs::metadata(a), fs::metadata(b)) {
+        (Ok(a), Ok(b)) => a.dev() == b.dev() && a.ino() == b.ino(),
+        _ => false,
+    }
+}
+
+/// Whether paths `a` and `b` lead to the same entry.
+#[cfg(not(unix))]
+fn same_entry(a: &Path, b: &Path) -> bool {
+    match (fs::canonicalize(a), fs::canonicalize(b)) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => false,
     }
 }
 
@@ -184,6 +259,10 @@ impl Storage for DirStorage {
         }
     }
 
+    fn ignores_case(&self) -> bool {
+        self.ignores_case
+    }
+
     fn local_path(&self, path: &str, with: &mut dyn FnMut(&str)) {
         if let Some(real) = self.resolve(path).ok().as_deref().and_then(Path::to_str) {
             with(real);
@@ -213,6 +292,64 @@ mod tests {
         assert_eq!(storage.size("../outside"), Err(StorageError::InvalidPath));
         storage.remove("a/b.txt").unwrap();
         assert_eq!(storage.size("a/b.txt"), Err(StorageError::NotFound));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    /// Whether the storage ignores case is asked of the file system.
+    #[test]
+    fn knows_whether_case_counts() {
+        let root = std::env::temp_dir().join(format!("paperpaw-case-{}", std::process::id()));
+        let storage = DirStorage::new(&root).unwrap();
+        storage.write("Mixed.txt", b"x").unwrap();
+        let other = storage.resolve("mixed.txt").map(|p| p.exists());
+        assert_eq!(storage.ignores_case(), other == Ok(true));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    /// What is there is not reached by another spelling the system takes
+    /// for it (where it keeps short names, as Windows mostly does); names
+    /// with `~` of their own are.
+    #[test]
+    fn other_spellings_reach_nothing() {
+        let root = std::env::temp_dir().join(format!("paperpaw-spellings-{}", std::process::id()));
+        let storage = DirStorage::new(&root).unwrap();
+        storage.write(".paperpaw/secrets.txt", b"password").unwrap();
+        storage.write("Books/A long title.epub", b"a book").unwrap();
+        for (other, own) in [
+            ("PAPERP~1/secrets.txt", ".paperpaw/secrets.txt"),
+            ("paperp~1/secrets.txt", ".paperpaw/secrets.txt"),
+            ("Books/ALONGT~1.EPU", "Books/A long title.epub"),
+        ] {
+            let mut buf = [0u8; 8];
+            let read = storage.read_at(other, 0, &mut buf);
+            assert!(read.is_err(), "{other}: {read:?}");
+            // Made anew where the system keeps no short names, refused
+            // where it does: what is there stays as it was.
+            let _ = storage.write(other, b"stolen");
+            let _ = storage.append(other, b"stolen");
+            assert_ne!(storage.size(own), Ok(6 + 6), "{other}");
+            let n = storage.read_at(own, 0, &mut buf).unwrap();
+            assert_ne!(&buf[..n.min(6)], b"stolen", "{other}");
+        }
+        assert_eq!(storage.size(".paperpaw/secrets.txt"), Ok(8));
+        assert_eq!(storage.size("Books/A long title.epub"), Ok(6));
+        if cfg!(windows) {
+            for other in [
+                ".paperpaw./secrets.txt",
+                ".paperpaw /secrets.txt",
+                ".paperpaw/secrets.txt.",
+            ] {
+                assert_eq!(
+                    storage.size(other),
+                    Err(StorageError::InvalidPath),
+                    "{other}"
+                );
+            }
+        }
+        storage.write("Books/Vol~1.txt", b"one").unwrap();
+        assert_eq!(storage.size("Books/Vol~1.txt"), Ok(3));
+        storage.remove("Books/Vol~1.txt").unwrap();
+        assert_eq!(storage.size(".paperpaw/secrets.txt"), Ok(8));
         fs::remove_dir_all(root).unwrap();
     }
 }

@@ -19,11 +19,14 @@ crate-type = ["cdylib", "rlib"]
 paperpaw-digest.workspace = true
 paperpaw-app = { workspace = true, features = ["outline"] }
 paperpaw-core = { workspace = true, features = ["color", "outline"] }
+paperpaw-http.workspace = true
 paperpaw-serve.workspace = true
 paperpaw-fs.workspace = true
 paperpaw-graphics = { workspace = true, features = ["color"] }
 paperpaw-platform.workspace = true
 paperpaw-sdk.workspace = true
+# The system's random numbers, for keys (`KernelBuilder::random`).
+getrandom = "0.4"
 # Its setting's id, for the shared dictionaries folder.
 paperpaw-plugin-dictionary.workspace = true
 

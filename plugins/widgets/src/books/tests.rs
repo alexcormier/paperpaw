@@ -212,6 +212,7 @@ impl Harness {
             font_dirs: &[],
             catalog_device: None,
             secrets: &self.secrets,
+            random: paperpaw_sdk::random::Random::NONE,
             storage: &self.storage,
         })
     }
