@@ -6,6 +6,20 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Vocabulary: the list of words is never lost to a failed read or
+  write. It is written anew beside itself and put in its place only
+  once complete, so a full card or a read error partway keeps it as
+  it was, and after a power cut at the wrong moment the new list is
+  taken at the next start. Deleting removes the word chosen even where
+  the list changed meanwhile or holds a line cut off by a power cut;
+  the next word looked up after such a line starts a line of its own,
+  and the list shows words looked up elsewhere when it shows again.
+  Looking up the newest word again writes nothing. A word that cannot
+  be kept or deleted says so. The export for Anki tells Anki its
+  fields are separated by tabs and plain text, and quotes fields with
+  quotes in them. Without a clock the word of the day is drawn at
+  random (else the newest) instead of staying on the oldest word; with
+  one it changes at local midnight.
 - Rules: a rule can apply when the battery reaches a level (80 %, 90 %,
   full or another), once each time it gets there and not again while
   the level wavers around it; with *Only if … While charging* it says

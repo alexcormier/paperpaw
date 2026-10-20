@@ -38,7 +38,7 @@ use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
     MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen,
-    ScreenSpec, SettingExtra, SettingSpec, Version,
+    ScreenSpec, SettingExtra, SettingSpec, StorageError, Version,
 };
 
 use paperpaw_sdk::setting::Setting;
@@ -112,8 +112,13 @@ impl Plugin for Vocabulary {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_settings(&SETTINGS)?;
-        r.on(events::WORD_LOOKED_UP, |env, looked_up, _| {
-            record(env, looked_up);
+        // A list left half written by a power cut is put right first.
+        r.on(events::STARTED, |env, _, _| store::recover(env.storage))?;
+        r.on(events::WORD_LOOKED_UP, |env, looked_up, out| {
+            if record(env, looked_up).is_err() {
+                let message = env.i18n.tr("vocabulary.save-failed").to_string();
+                out.push(Command::Notify(message));
+            }
         })?;
         r.add_menu_entry(MenuEntry {
             menu: menus::READER_MORE,
@@ -152,14 +157,14 @@ impl Plugin for Vocabulary {
     }
 }
 
-/// Keeps a word looked up, if wanted.
-fn record(env: &Env<'_>, looked_up: &events::WordLookedUp) {
+/// Keeps a word looked up, if wanted; `Err` where it could not be.
+fn record(env: &Env<'_>, looked_up: &events::WordLookedUp) -> Result<(), StorageError> {
     if !env.settings.read(&COLLECT) {
-        return;
+        return Ok(());
     }
     let word = looked_up.word.trim();
     if word.is_empty() {
-        return;
+        return Ok(());
     }
     store::add(
         env.storage,
@@ -172,7 +177,7 @@ fn record(env: &Env<'_>, looked_up: &events::WordLookedUp) {
             title: looked_up.title.clone(),
             sentence: looked_up.text.clone(),
         },
-    );
+    )
 }
 
 /// The folder exports go to: `Notes` beside the library folder.
@@ -195,6 +200,9 @@ struct WordsScreen {
     count: usize,
     /// The words of the visible page: their row and number in the file.
     visible: Vec<(usize, usize, Word)>,
+    /// The changes to the words they were read after ([`store::changes`]):
+    /// words looked up meanwhile show when the list does again.
+    read_after: u32,
 }
 
 impl WordsScreen {
@@ -210,6 +218,7 @@ impl WordsScreen {
             header,
             count: 0,
             visible: Vec::new(),
+            read_after: 0,
         };
         screen.load(env);
         screen
@@ -217,6 +226,7 @@ impl WordsScreen {
 
     /// Counts the words and reads the visible page.
     fn load(&mut self, env: &Env<'_>) {
+        self.read_after = store::changes();
         self.count = store::count(env.storage);
         let len = self.len();
         if self.list.focus >= len {
@@ -363,6 +373,15 @@ impl Screen for WordsScreen {
             });
     }
 
+    /// Back from a book or a lookup: with the words looked up meanwhile.
+    fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
+        if store::changes() != self.read_after {
+            let env = *cx.env();
+            self.load(&env);
+            cx.request_redraw();
+        }
+    }
+
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         let len = self.len();
         let rows = self.list.rows() as isize;
@@ -435,7 +454,10 @@ impl Screen for WordsScreen {
                 )));
             }
             "delete" => {
-                store::remove(env.storage, n);
+                if store::remove(env.storage, &word).is_err() {
+                    let message = env.i18n.tr("vocabulary.delete-failed").to_string();
+                    cx.command(Command::Notify(message));
+                }
                 self.load(&env);
                 cx.request_redraw();
                 cx.request_refresh(RefreshMode::Partial);
