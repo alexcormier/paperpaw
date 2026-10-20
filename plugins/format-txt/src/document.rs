@@ -276,26 +276,20 @@ impl Document for TxtDocument {
             return Ok(None);
         }
         let mut o = at.offset.max(self.start);
-        // Each round skips whitespace between paragraphs; long runs of blank
-        // lines need several rounds.
-        for _ in 0..16 {
-            if o >= self.end {
-                return Ok(None);
-            }
+        // Each round skips whitespace between paragraphs, a window at most;
+        // long runs of blank lines (pages of a PDF) take several rounds.
+        // Every round moves `o` forward, so the loop ends.
+        while o < self.end {
             let w0 = o.saturating_sub(LIMIT + MARGIN).max(self.start);
             let w1 = o.saturating_add(LIMIT + MARGIN).min(self.end);
             let buf = read(storage, &self.path, w0, w1)?;
             let paras = self.paragraphs(&buf, w0);
 
             let Some(i) = paras.iter().rposition(|p| p.start <= o) else {
-                // Whitespace before the first paragraph of the window.
-                match paras.first() {
-                    Some(p) => {
-                        o = p.start;
-                        continue;
-                    }
-                    None => return Ok(None),
-                }
+                // Whitespace before the first paragraph of the window, or
+                // a window of whitespace only.
+                o = paras.first().map_or(w1, |p| p.start);
+                continue;
             };
             let p = paras[i];
             let next = paras
@@ -623,6 +617,22 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(between.text, "two");
+    }
+
+    #[test]
+    fn long_runs_of_blank_lines_do_not_end_the_book() {
+        // Text from a PDF: pages of blank lines, far more than one window.
+        let blank = " \r\n".repeat(64 * 1024);
+        let text = format!("One.\n\nTwo.\n\n{blank}Three.\n\n{blank}{blank}Four.\n");
+        let (storage, document) = open(text);
+        let blocks = blocks(&storage, &document);
+        assert_eq!(texts(&blocks), ["One.", "Two.", "Three.", "Four."]);
+        // A position in the blank lines leads to the next paragraph.
+        let inside = document
+            .block_at(&storage, Locator::new(0, blocks[2].start + 1000))
+            .unwrap()
+            .unwrap();
+        assert_eq!(inside.text, "Four.");
     }
 
     #[test]
