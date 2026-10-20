@@ -229,6 +229,27 @@ change the plugin SDK.
   once, and the X4 started again (found with the crash file's calls;
   the out-of-memory crashes seen in testing were this). Downloads of
   10 MB one after another now go through, at the peak 222 KB of the heap's 262 KB.
+- Code plugins in the store (ADR 0023, ADR 0024): listed where a build
+  fits the device and its firmware, installed with their code checked
+  whole and signed by their author. The store says once, before the
+  first, what code plugins are (full access to the device, safe mode if
+  one goes wrong); a plugin's page says it is one and which PaperPaw it
+  is made for, and offers *Restart now* once it is installed. The
+  author's key is remembered at the first install, and an update signed
+  by someone else is installed only when the reader says so after a
+  clear warning; code that is damaged, unsigned, built for another
+  firmware or not by the author the library names is not installed.
+  SDK: `install::Digest` (SHA-1 or SHA-256 for a package's files,
+  `PackageFile::digest` in place of `sha1`), `Received::Complete` and
+  `Installer::install` (a job complete waits until its owner installs
+  it, in place of `Received::Installed`), `Installer::folder`,
+  `native::author` (whether a signature's key is the plugin's author
+  known on the device, the first, or another), `native::known_author`
+  and `remember_author` (one file for every installer),
+  `PluginInfo::update`
+  (a code plugin updated while it runs: the new version at the next
+  start). Kernel: `Kernel::describe` also tells the notice shown over
+  the screens.
 - A plugin store on the device (*More plugins*, in the tools and in the
   plugin manager, PLANNING O6, ADR 0023): the data plugins of
   paperpaw.org's plugin library made for this device, PaperPaw version

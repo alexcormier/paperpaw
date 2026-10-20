@@ -95,6 +95,7 @@ impl Kernel {
             required_for: RequiredFor::default(),
             kind: paperpaw_sdk::PluginKind::BuiltIn,
             problem: None,
+            update: None,
         });
     }
 
@@ -445,19 +446,29 @@ impl Kernel {
     /// Loads the data plugin in `folder` while running (see
     /// [`Command::LoadPlugin`](paperpaw_sdk::Command::LoadPlugin)).
     pub(crate) fn load_plugin(&mut self, folder: &str) {
+        if self.register_folder(folder) {
+            self.plugins_changed();
+        }
+    }
+
+    /// Registers the data plugin in `folder` (switched off where the
+    /// configuration says so) and applies its defaults; `false`, with a
+    /// warning, if it could not be.
+    fn register_folder(&mut self, folder: &str) -> bool {
         let storage = self.shared.storage.clone();
         let plugin = match crate::data_plugin::load_folder(storage.as_ref(), folder) {
             Ok(plugin) => plugin,
-            Err(problem) => return self.warn_runtime(problem),
+            Err(problem) => {
+                self.warn_runtime(problem);
+                return false;
+            }
         };
         let manifest = plugin.manifest();
         let id = manifest.id.clone();
         if self.shared.plugins.get(id.as_str()).is_some() {
-            return self.warn(
-                WarningSource::Plugin(id),
-                None,
-                "a plugin with this id is already loaded".into(),
-            );
+            let problem = "a plugin with this id is already loaded".into();
+            self.warn(WarningSource::Plugin(id), None, problem);
+            return false;
         }
         let off = read_config(storage.as_ref())
             .is_some_and(|c| crate::config::plugin_switches(&c, false).contains(&id.to_string()));
@@ -475,7 +486,7 @@ impl Kernel {
             .data_folders
             .push((id, plugin.folder().to_string()));
         self.apply_defaults(&[]);
-        self.plugins_changed();
+        true
     }
 
     /// Removes a data plugin while running (see
@@ -488,7 +499,6 @@ impl Kernel {
             return self.warn_runtime(format!("{folder}: not removed ({error:?})"));
         }
         self.unload_plugin(id);
-        self.keep_offered_choices();
         self.plugins_changed();
     }
 
@@ -504,7 +514,8 @@ impl Kernel {
 
     /// Forgets the data plugin `id`: its folder, fonts and presets, and
     /// it in the list of plugins. What was chosen from it stays chosen
-    /// (see [`keep_offered_choices`](Self::keep_offered_choices)).
+    /// until [`plugins_changed`](Self::plugins_changed) finds it no longer
+    /// offered.
     fn unload_plugin(&mut self, id: &Id) {
         self.shared.data_folders.retain(|(p, _)| p != id);
         self.shared.fonts.remove_plugin(id.as_str());
@@ -525,7 +536,6 @@ impl Kernel {
                 self.shared.plugins.remove(id.as_str());
             }
         }
-        self.offer_choices();
     }
 
     /// A font chosen that is no longer offered gives way to the default.
@@ -555,14 +565,26 @@ impl Kernel {
         };
         // The new version in place: the old ones go, what was chosen from
         // them stays where the new one offers it too.
+        placed.clear(self.shared.storage.as_ref());
+        // A code plugin's code runs until the restart: the new version
+        // takes over then.
+        if let Some(info) = self.shared.plugins.get_mut(id.as_str())
+            && info.kind == paperpaw_sdk::PluginKind::Code
+            && info.state == PluginState::Running
+        {
+            info.update = Some(placed.version);
+            info.enabled = true;
+            self.shared.data_folders.retain(|(p, _)| p != id);
+            self.shared.data_folders.push((id.clone(), placed.target));
+            return self.plugins_changed();
+        }
         if self.shared.plugins.get(id.as_str()).is_some() {
             self.unload_plugin(id);
         }
-        placed.clear(self.shared.storage.as_ref());
-        self.load_plugin(&placed.target);
-        self.keep_offered_choices();
-        self.apply_reading_font();
-        self.apply_status_font();
+        // Changed even where the new one does not load: the old ones are
+        // gone.
+        self.register_folder(&placed.target);
+        self.plugins_changed();
     }
 
     /// Installs the plugins the shell put into folders before the start
@@ -595,9 +617,10 @@ impl Kernel {
                 format!("{folder}: not the plugin `{id}`; not installed"),
             );
         }
-        if let Err(problem) = data_plugin::load_folder_as(storage.as_ref(), folder, id.as_str()) {
-            return refuse(self, problem);
-        }
+        let version = match data_plugin::load_folder_as(storage.as_ref(), folder, id.as_str()) {
+            Ok(plugin) => plugin.manifest().version,
+            Err(problem) => return refuse(self, problem),
+        };
         // Every version of it there is: loaded, switched off, or refused at
         // start.
         let mut old: Vec<String> = self.data_folder(id).into_iter().collect();
@@ -634,13 +657,20 @@ impl Kernel {
             return refuse(self, format!("{target}: not installed ({error:?})"));
         }
         old.retain(|path| *path != target);
-        Some(Placed { target, old, aside })
+        Some(Placed {
+            target,
+            old,
+            aside,
+            version,
+        })
     }
 
     /// After a plugin was loaded or removed while running: the choices of
-    /// fonts and key map presets, menu labels, fonts and keys anew.
+    /// fonts and key map presets (a font chosen that is no longer offered
+    /// giving way), menu labels, fonts and keys anew.
     fn plugins_changed(&mut self) {
         self.offer_choices();
+        self.keep_offered_choices();
         self.set_menu_titles();
         self.apply_reading_font();
         self.apply_status_font();
@@ -685,6 +715,8 @@ struct Placed {
     old: Vec<String>,
     /// Where the version before stepped aside.
     aside: String,
+    /// Its version.
+    version: paperpaw_sdk::Version,
 }
 
 impl Placed {

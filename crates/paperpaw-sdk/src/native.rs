@@ -114,6 +114,64 @@ pub fn check_file(
     Ok((header, signature))
 }
 
+/// Where the keys of the authors of the code plugins installed are kept:
+/// one file for every installer (a store, the firmware's first start after
+/// the web flasher), so a key stays known whichever installs.
+const AUTHORS: &str = crate::data_path!("plugin-authors.txt");
+
+/// Whose a plugin's code is, by its author's key, as this device knows
+/// the plugin's author (trust on first use, ADR 0024).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Author {
+    /// The key remembered for the plugin.
+    Known,
+    /// No key is remembered for the plugin yet: its first install.
+    New,
+    /// Another key than the one remembered: an update of it is installed
+    /// only when the reader says so, after a clear warning.
+    Other,
+}
+
+/// Whether `key` (a [`Signature::key`]) is the author of `plugin` known on
+/// this device, the first one, or another.
+pub fn author(storage: &dyn Storage, plugin: &str, key: &[u8; 32]) -> Author {
+    match known_author(storage, plugin) {
+        Some(known) if known == *key => Author::Known,
+        Some(_) => Author::Other,
+        None => Author::New,
+    }
+}
+
+/// The key of the author of `plugin`'s code, as remembered at its first
+/// install ([`remember_author`]).
+pub fn known_author(storage: &dyn Storage, plugin: &str) -> Option<[u8; 32]> {
+    let text = crate::read_file(storage, AUTHORS, 64 * 1024).ok()?;
+    let text = core::str::from_utf8(&text).ok()?;
+    let hex = text
+        .lines()
+        .find_map(|line| line.strip_prefix(plugin)?.strip_prefix('\t'))?;
+    paperpaw_digest::hex::decode(hex.trim())?.try_into().ok()
+}
+
+/// Remembers `key` as the author of `plugin`'s code, in place of one
+/// known before: at its first install, and when the reader installed an
+/// update by another; `false` if it could not be kept.
+pub fn remember_author(storage: &dyn Storage, plugin: &str, key: &[u8; 32]) -> bool {
+    let kept = crate::read_file(storage, AUTHORS, 64 * 1024).unwrap_or_default();
+    let kept = core::str::from_utf8(&kept).unwrap_or_default();
+    let mut text: String = kept
+        .lines()
+        .filter(|line| line.split('\t').next() != Some(plugin))
+        .map(|line| alloc::format!("{line}\n"))
+        .collect();
+    text.push_str(&alloc::format!(
+        "{plugin}\t{}\n",
+        paperpaw_digest::hex::encode(key)
+    ));
+    let _ = storage.create_dir(crate::data::DIR);
+    storage.write(AUTHORS, text.as_bytes()).is_ok()
+}
+
 /// Fills `buf` from `path` at `at`.
 fn read_exact(
     storage: &dyn Storage,
@@ -414,6 +472,21 @@ mod tests {
     use alloc::string::ToString;
 
     use super::*;
+
+    #[test]
+    fn authors_are_known_by_plugin() {
+        let storage = crate::MemoryStorage::new();
+        assert_eq!(known_author(&storage, "clock"), None);
+        assert_eq!(author(&storage, "clock", &[1; 32]), Author::New);
+        assert!(remember_author(&storage, "clock", &[1; 32]));
+        assert!(remember_author(&storage, "clock-face", &[2; 32]));
+        assert_eq!(author(&storage, "clock", &[1; 32]), Author::Known);
+        assert_eq!(author(&storage, "clock", &[2; 32]), Author::Other);
+        // Another author installed anyway: the one from now on.
+        assert!(remember_author(&storage, "clock", &[3; 32]));
+        assert_eq!(known_author(&storage, "clock"), Some([3; 32]));
+        assert_eq!(known_author(&storage, "clock-face"), Some([2; 32]));
+    }
 
     #[test]
     fn fingerprints_as_text() {

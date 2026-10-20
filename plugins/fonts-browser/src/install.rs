@@ -7,7 +7,7 @@
 use alloc::vec::Vec;
 
 use paperpaw_sdk::event::Event;
-use paperpaw_sdk::install::{Installer, Package, PackageFile, Received};
+use paperpaw_sdk::install::{Digest, Installer, Package, PackageFile, Received};
 use paperpaw_sdk::replies::HttpReply;
 use paperpaw_sdk::{Arg, Command, Env};
 
@@ -32,7 +32,7 @@ pub(crate) fn start(env: &Env<'_>, font: &Font, out: &mut Vec<Command>) {
                 path: f.path.clone(),
                 url: f.url.clone(),
                 size: f.size,
-                sha1: f.sha1.clone(),
+                digest: Digest::Sha1(f.sha1.clone()),
             })
             .collect(),
     };
@@ -52,10 +52,13 @@ fn failed(env: &Env<'_>, name: &str) -> Command {
 /// not be downloaded.
 pub(crate) fn received(env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
     match INSTALLER.received(env, reply, out) {
-        Received::Installed(done) => out.push(Command::Notify(
-            env.i18n
-                .format("fonts-browser.ready", &[("name", Arg::Str(&done.name))]),
-        )),
+        Received::Complete(done) => {
+            INSTALLER.install(env, out);
+            out.push(Command::Notify(env.i18n.format(
+                "fonts-browser.ready",
+                &[("name", Arg::Str(&done.name))],
+            )));
+        }
         Received::Failed(job) => out.push(failed(env, &job.name)),
         Received::Next(_) | Received::Other => {}
     }

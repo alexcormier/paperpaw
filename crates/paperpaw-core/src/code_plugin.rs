@@ -497,4 +497,35 @@ mod tests {
             "{warnings:?}"
         );
     }
+
+    #[test]
+    fn a_code_plugin_updated_while_it_runs_takes_over_at_the_restart() {
+        let loader = loader();
+        let mut kernel = kernel(&loader, "", None);
+        assert_eq!(info(&kernel, "hello").state, PluginState::Running);
+        for (path, data) in [
+            (
+                "plugins/.hello.part/plugin.ini",
+                "[plugin]
+id = hello
+name = Hello
+version = 2.0.0
+",
+            ),
+            ("plugins/.hello.part/code.ppn", "PPNP"),
+        ] {
+            kernel.storage().write(path, data.as_bytes()).unwrap();
+        }
+        kernel.install_plugin(&Id::new_static("hello"), "plugins/.hello.part");
+        assert!(kernel.take_warnings().is_empty());
+        // The code before runs on, listed with the update it waits for.
+        let hello = info(&kernel, "hello");
+        assert_eq!((hello.state, hello.enabled), (PluginState::Running, true));
+        assert_eq!(hello.update, Some(Version::new(2, 0, 0)));
+        assert!(hello.restart_needed());
+        let storage = kernel.storage();
+        assert!(storage.exists("plugins/hello/plugin.ini"));
+        assert!(!storage.exists("plugins/.hello.part/code.ppn"));
+        assert!(!storage.exists("plugins/.hello.old/code.ppn"));
+    }
 }

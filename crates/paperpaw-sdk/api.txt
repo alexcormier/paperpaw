@@ -978,14 +978,23 @@ pub use paperpaw_sdk::image::<<paperpaw_image::*>>
 pub fn paperpaw_sdk::image::gray_from_file(&dyn paperpaw_platform::storage::Storage, &str, &str, paperpaw_image::Fit) -> core::option::Option<paperpaw_document::ImageRef>
 pub fn paperpaw_sdk::image::picture_from_file(&dyn paperpaw_platform::storage::Storage, &str, &str, paperpaw_image::Fit, bool) -> core::option::Option<paperpaw_document::ImageRef>
 pub mod paperpaw_sdk::install
+pub enum paperpaw_sdk::install::Digest
+pub paperpaw_sdk::install::Digest::Sha1(alloc::string::String)
+pub paperpaw_sdk::install::Digest::Sha256(alloc::string::String)
+impl paperpaw_sdk::install::Digest
+pub fn paperpaw_sdk::install::Digest::is_valid(&self) -> bool
+impl core::default::Default for paperpaw_sdk::install::Digest
+pub fn paperpaw_sdk::install::Digest::default() -> Self
 pub enum paperpaw_sdk::install::Received
+pub paperpaw_sdk::install::Received::Complete(paperpaw_sdk::install::Progress)
 pub paperpaw_sdk::install::Received::Failed(paperpaw_sdk::install::Progress)
-pub paperpaw_sdk::install::Received::Installed(paperpaw_sdk::install::Progress)
 pub paperpaw_sdk::install::Received::Next(paperpaw_sdk::install::Progress)
 pub paperpaw_sdk::install::Received::Other
 pub struct paperpaw_sdk::install::Installer
 impl paperpaw_sdk::install::Installer
 pub fn paperpaw_sdk::install::Installer::cancel(&self, &dyn paperpaw_platform::storage::Storage)
+pub fn paperpaw_sdk::install::Installer::folder(&self, &dyn paperpaw_platform::storage::Storage) -> core::option::Option<alloc::string::String>
+pub fn paperpaw_sdk::install::Installer::install(&self, &paperpaw_sdk::Env<'_>, &mut alloc::vec::Vec<paperpaw_sdk::Command>) -> core::option::Option<paperpaw_sdk::install::Progress>
 pub const fn paperpaw_sdk::install::Installer::new(paperpaw_sdk::Id, paperpaw_sdk::event::Event<paperpaw_sdk::replies::HttpReply>) -> Self
 pub fn paperpaw_sdk::install::Installer::progress(&self, &dyn paperpaw_platform::storage::Storage) -> core::option::Option<paperpaw_sdk::install::Progress>
 pub fn paperpaw_sdk::install::Installer::received(&self, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::replies::HttpReply, &mut alloc::vec::Vec<paperpaw_sdk::Command>) -> paperpaw_sdk::install::Received
@@ -1000,8 +1009,8 @@ impl paperpaw_sdk::install::Package
 pub fn paperpaw_sdk::install::Package::is_valid(&self) -> bool
 pub fn paperpaw_sdk::install::Package::size(&self) -> u64
 pub struct paperpaw_sdk::install::PackageFile
+pub paperpaw_sdk::install::PackageFile::digest: paperpaw_sdk::install::Digest
 pub paperpaw_sdk::install::PackageFile::path: alloc::string::String
-pub paperpaw_sdk::install::PackageFile::sha1: alloc::string::String
 pub paperpaw_sdk::install::PackageFile::size: u64
 pub paperpaw_sdk::install::PackageFile::url: alloc::string::String
 impl paperpaw_sdk::install::PackageFile
@@ -1136,6 +1145,10 @@ pub use paperpaw_sdk::native::Header
 pub use paperpaw_sdk::native::Problem
 pub use paperpaw_sdk::native::Signature
 pub use paperpaw_sdk::native::signature
+pub enum paperpaw_sdk::native::Author
+pub paperpaw_sdk::native::Author::Known
+pub paperpaw_sdk::native::Author::New
+pub paperpaw_sdk::native::Author::Other
 #[non_exhaustive] pub enum paperpaw_sdk::native::SafeModeReason
 pub paperpaw_sdk::native::SafeModeReason::FailedStarts
 pub paperpaw_sdk::native::SafeModeReason::KeyHeld
@@ -1162,7 +1175,10 @@ pub fn paperpaw_sdk::native::SafeMode::new(paperpaw_sdk::native::SafeModeReason)
 pub const paperpaw_sdk::native::CODE_FILES: [&str; 2]
 pub const paperpaw_sdk::native::FINGERPRINT: paperpaw_sdk::native::Fingerprint
 pub const paperpaw_sdk::native::TOOLCHAIN: &str
+pub fn paperpaw_sdk::native::author(&dyn paperpaw_platform::storage::Storage, &str, &[u8; 32]) -> paperpaw_sdk::native::Author
 pub fn paperpaw_sdk::native::check_file(&dyn paperpaw_platform::storage::Storage, &str) -> core::result::Result<(paperpaw_native::header::Header, core::option::Option<paperpaw_native::signature::Signature>), paperpaw_native::header::Problem>
+pub fn paperpaw_sdk::native::known_author(&dyn paperpaw_platform::storage::Storage, &str) -> core::option::Option<[u8; 32]>
+pub fn paperpaw_sdk::native::remember_author(&dyn paperpaw_platform::storage::Storage, &str, &[u8; 32]) -> bool
 pub unsafe fn paperpaw_sdk::native::take(*mut core::ffi::c_void) -> core::option::Option<alloc::boxed::Box<dyn paperpaw_sdk::Plugin>>
 pub mod paperpaw_sdk::presets
 #[non_exhaustive] pub struct paperpaw_sdk::presets::Preset
@@ -2919,6 +2935,7 @@ pub paperpaw_sdk::PluginInfo::manifest: paperpaw_sdk::Manifest
 pub paperpaw_sdk::PluginInfo::problem: core::option::Option<paperpaw_sdk::PluginProblem>
 pub paperpaw_sdk::PluginInfo::required_for: paperpaw_sdk::RequiredFor
 pub paperpaw_sdk::PluginInfo::state: paperpaw_sdk::PluginState
+pub paperpaw_sdk::PluginInfo::update: core::option::Option<paperpaw_sdk::Version>
 impl paperpaw_sdk::PluginInfo
 pub fn paperpaw_sdk::PluginInfo::can_switch_off(&self) -> bool
 pub fn paperpaw_sdk::PluginInfo::description<'a>(&'a self, &'a paperpaw_i18n::Translator) -> &'a str
