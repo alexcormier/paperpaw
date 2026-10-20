@@ -160,6 +160,19 @@ fn text(env: &Env<'_>, hour: u8, minute: u8) -> (Option<String>, String) {
     }
 }
 
+/// The time alone, without the lead ("Quarter past ten"): what it says
+/// where the whole sentence has no room.
+fn time_alone(env: &Env<'_>, hour: u8, minute: u8) -> String {
+    let next = chosen_name(env, ID.as_str(), "quarters") == "next";
+    let (_, rest) = sentence(env.i18n, hour, minute, next);
+    let rest = capitalised(&rest);
+    if widgets::shows(env, ID.as_str(), "capitals") {
+        upper(&rest)
+    } else {
+        rest
+    }
+}
+
 /// `text` with its first letter a capital.
 fn capitalised(text: &str) -> String {
     let mut chars = text.chars();
@@ -260,6 +273,18 @@ fn draw_text(
         area.width,
         area.height.saturating_sub(dots_band),
     );
+    // Where the sentence has no room whole even at the small size, the
+    // time alone: "It is" says the least.
+    let whole = |text: &str| {
+        words_in_lines(font, style.small, text, f32::from(room.width)).is_some_and(|lines| {
+            line(font, style.small) * lines.len() as f32 <= f32::from(room.height)
+        })
+    };
+    let rest = if whole(&rest) {
+        rest
+    } else {
+        time_alone(env, hour, minute)
+    };
     let size = match widgets::size(env, ID.as_str()) {
         Size::Fit => largest(font, &rest, room, style.small, f32::from(room.height)),
         size => largest(font, &rest, room, style.small, size.text(&style) * 1.2),

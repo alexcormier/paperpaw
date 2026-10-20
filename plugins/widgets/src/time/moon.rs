@@ -223,24 +223,29 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     let gap = style.gap as u16;
     // Beside the text where the place is wide, else above it.
     let wide = area.width >= area.height * 3 / 2;
-    let rows_in = |beside: bool| -> Vec<(String, f32, Color)> {
+    // The text's rows beside the moon, or below it in `share` of the
+    // height; and how many of the lines they show.
+    // Beside a moon `side` pixels across, or below it in `share` of the
+    // height.
+    let rows_in = |beside: bool, share: f32, side: u16| -> (Vec<(String, f32, Color)>, usize) {
         let Some(font) = &font else {
-            return Vec::new();
+            return (Vec::new(), 0);
         };
         let (width, room, most) = if beside {
             (
-                area.width.saturating_sub(area.height + gap),
+                area.width.saturating_sub(side + gap),
                 f32::from(area.height),
                 2,
             )
         } else {
-            (area.width, f32::from(area.height) * 0.45, 3)
+            (area.width, f32::from(area.height) * share, 3)
         };
         // Each line whole, broken between words: the first as large as
         // the body size down to the small one, the others small; those
         // that have no room left out from the last.
         let mut rows = Vec::new();
         let mut used = 0.0;
+        let mut shown = 0;
         for (n, text) in lines.iter().enumerate() {
             let (max, color) = if n == 0 {
                 (first, look.ink)
@@ -249,24 +254,44 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
             };
             // In as few lines as it fits.
             let fitted = (1..=most).find_map(|lines| {
-                let (size, broken) =
-                    super::wrap_whole(font, max, small, text, f32::from(width), lines)?;
-                let high = line(font, size) * broken.len() as f32;
-                (used + high <= room).then_some((size, broken, high))
+                let place = (f32::from(width), room - used);
+                super::wrap_whole(font, (max, small), text, place, lines)
             });
-            let Some((size, broken, high)) = fitted else {
+            let Some((size, broken)) = fitted else {
                 break;
             };
-            used += high;
+            used += line(font, size) * broken.len() as f32;
+            shown += 1;
             rows.extend(broken.into_iter().map(|l| (l, size, color)));
         }
-        rows
+        (rows, shown)
     };
+    // Beside it where the place is wide, the moon a little smaller where
+    // that gives a long word room.
     let mut beside = wide && !lines.is_empty();
-    let mut rows = rows_in(beside);
-    if beside && rows.is_empty() {
+    let mut side = area.height;
+    let mut rows = Vec::new();
+    if beside {
+        for part in [10, 9, 8, 7] {
+            side = area.height * part / 10;
+            rows = rows_in(true, 1.0, side).0;
+            if !rows.is_empty() {
+                break;
+            }
+        }
+    }
+    if !beside || rows.is_empty() {
         beside = false;
-        rows = rows_in(false);
+        // Below it: the moon the larger, but not at the cost of a line
+        // that has room where the moon is a little smaller.
+        let mut best = rows_in(false, 0.45, 0);
+        for share in [0.55, 0.65] {
+            let more = rows_in(false, share, 0);
+            if more.1 > best.1 {
+                best = more;
+            }
+        }
+        rows = best.0;
     }
     let heights: Vec<f32> = match &font {
         Some(font) => rows.iter().map(|(_, size, _)| line(font, *size)).collect(),
@@ -275,7 +300,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     let text_h: f32 = heights.iter().sum();
     let below_gap = if rows.is_empty() { 0 } else { gap / 2 };
     let side = if beside {
-        area.height
+        side
     } else {
         area.height
             .saturating_sub(text_h as u16 + below_gap)
@@ -318,7 +343,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         (align.x(area, f32::from(side)) as u16, area)
     };
     let top = if beside {
-        area.y
+        area.y + (area.height - side) / 2
     } else {
         area.y + area.height.saturating_sub(side + below_gap + text_h as u16) / 2
     };

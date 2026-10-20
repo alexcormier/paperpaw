@@ -210,8 +210,10 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
                 })
             };
             let short = super::weekday_short(env, t.weekday);
+            // The full name at the body size at least, as it heads the date;
+            // else the short name.
             let pick = |note_h: f32| {
-                weekday_fits(weekday, note_h, style.small)
+                weekday_fits(weekday, note_h, style.text)
                     .map(|s| (s, weekday))
                     .or_else(|| weekday_fits(short, note_h, style.small).map(|s| (s, short)))
             };
@@ -224,6 +226,16 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
                 Some(found) => found,
                 None => ((style.small, short), None),
             };
+            // The date a step smaller than the weekday, which heads it.
+            let date = date.map(|(note, h, date)| {
+                let most = (size * 0.84).max(style.small);
+                if note <= most {
+                    return (note, h, date);
+                }
+                let note = widgets::largest_size(most, style.small, |s| fits(s, &date))
+                    .unwrap_or(style.small);
+                (note, line(&font, note), date)
+            });
             // The two centred together by their ink, half a gap apart.
             let mut parts = alloc::vec![super::Part {
                 lines: alloc::vec![name],
