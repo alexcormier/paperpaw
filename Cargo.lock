@@ -1327,6 +1327,7 @@ name = "paperpaw-document"
 version = "0.4.0-dev"
 dependencies = [
  "paperpaw-platform",
+ "proptest",
 ]
 
 [[package]]
@@ -1387,6 +1388,9 @@ dependencies = [
 [[package]]
 name = "paperpaw-hyphen"
 version = "0.4.0-dev"
+dependencies = [
+ "proptest",
+]
 
 [[package]]
 name = "paperpaw-i18n"
@@ -1418,6 +1422,7 @@ version = "0.4.0-dev"
 dependencies = [
  "paperpaw-document",
  "paperpaw-text",
+ "proptest",
 ]
 
 [[package]]
@@ -1979,7 +1984,9 @@ name = "paperpaw-text"
 version = "0.4.0-dev"
 dependencies = [
  "paperpaw-graphics",
+ "paperpaw-hyphen",
  "paperpaw-platform",
+ "proptest",
  "skrifa",
 ]
 
