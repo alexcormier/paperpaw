@@ -7,9 +7,11 @@
 //! downloads it into `updates` ([`online`]).
 //!
 //! Updates signed by PaperPaw install at once; one's own builds, signed
-//! with one's own key, after the reader chose to trust that key. An
-//! update without some of the plugins built in now says which, and the
-//! reader chooses to update without them or to wait.
+//! with one's own key, once the reader accepted that key, shown by its
+//! fingerprint, at each install. An older version installs only when the
+//! reader chooses it, told it is older. An update without some of the
+//! plugins built in now says which, and the reader chooses to update
+//! without them or to wait.
 
 #![no_std]
 
@@ -95,7 +97,7 @@ fn started(env: &Env<'_>, firmware: &Firmware, out: &mut Vec<Command>) {
     }
     // A newer update on the card, not offered before.
     if let Ok(update) = found::find(storage, firmware)
-        && paperpaw_sdk::firmware::compare_versions(&update.info.version, &firmware.version).is_gt()
+        && update.is_newer(firmware)
         && read_pair(storage, OFFERED) != Some((update.path.clone(), update.info.version.clone()))
     {
         write_pair(storage, OFFERED, &update.path, &update.info.version);

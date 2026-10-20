@@ -200,9 +200,9 @@ impl Firmware {
     /// An update or a restart the kernel asked for.
     fn firmware(&mut self, command: FirmwareCommand) {
         match command {
-            FirmwareCommand::Install { path } => {
+            FirmwareCommand::Install { path, key, older } => {
                 let state = match &mut self.ota {
-                    Some(ota) => ota.begin(self.kernel.storage(), &path),
+                    Some(ota) => ota.begin(self.kernel.storage(), &path, key.as_ref(), older),
                     None => FirmwareState::Failed(InstallFailure::Write),
                 };
                 let effects = self.kernel.firmware_state(now(), state);

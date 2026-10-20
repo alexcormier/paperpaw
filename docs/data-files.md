@@ -39,7 +39,6 @@ plugin converts books differently; a plugin must keep that mapping.
 | `.paperpaw/library/books/<hash>.ini` | SDK `library` | ini: a book's details, cover, progress, fields of plugins (the details read again when their `version` is older) | version 1 |
 | `.paperpaw/library/opened.txt`, `favourites.txt` | SDK `library` | a path per line | version 1 |
 | `.paperpaw/annotations/<hash>.txt` | SDK `annotations` | a line per bookmark or highlight (tab separated; 8 fields before times were kept, 10 since) | version 1 |
-| `.paperpaw/firmware-keys.txt` | SDK `firmware` | a trusted key per line (64 hexadecimal digits) | version 1 |
 | `.paperpaw/plugins/reader/state.ini` | reader | ini: the book read last | version 1 |
 | `.paperpaw/plugins/reader/books/<hash>/progress.ini` | reader | ini: the position | version 1 |
 | `.paperpaw/plugins/reader/books/<hash>/settings.ini` | kernel (a book's own settings) | ini, as `paperpaw.ini` | version 1 |

@@ -8,7 +8,7 @@
 
 use std::rc::Rc;
 
-use paperpaw_core::{HttpCall, HttpResponse, Io, Kernel};
+use paperpaw_core::{FirmwareCommand, HttpCall, HttpResponse, Io, Kernel};
 use paperpaw_platform::Rotation;
 use paperpaw_plugin_update::{CHECK, OPEN, Update};
 use paperpaw_sdk::builtin::actions;
@@ -47,6 +47,11 @@ const RUNNING: &str = "paperpaw-plugin-stats 0.4.0\nchess-for-paperpaw 1.0.0\n";
 
 /// A signed update file of `version` with the plugin crates `plugins`.
 fn update_file(version: &str, plugins: &[(&str, &str)]) -> Vec<u8> {
+    update_signed(version, plugins, &SEED)
+}
+
+/// An update file of `version` with `plugins`, signed with `seed`'s key.
+fn update_signed(version: &str, plugins: &[(&str, &str)], seed: &[u8; 32]) -> Vec<u8> {
     let mut image = vec![0u8; 2000];
     image[0] = 0xE9;
     image[12..14].copy_from_slice(&CHIP.to_le_bytes());
@@ -57,9 +62,10 @@ fn update_file(version: &str, plugins: &[(&str, &str)]) -> Vec<u8> {
         plugins
             .iter()
             .map(|&(name, version)| PluginCrate { name, version }),
-    );
+    )
+    .unwrap();
     image[PLUGINS_AT..PLUGINS_AT + list.len()].copy_from_slice(&list);
-    let trailer = paperpaw_update::sign(&image, &SEED).unwrap();
+    let trailer = paperpaw_update::sign(&image, seed).unwrap();
     image.extend_from_slice(&trailer.to_bytes());
     image
 }
@@ -164,6 +170,21 @@ impl Device {
         self.kernel.http_response(Instant(self.now), response);
     }
 
+    /// The one install the kernel asks the shell for now.
+    fn install(&mut self) -> FirmwareCommand {
+        let mut commands: Vec<FirmwareCommand> = self
+            .kernel
+            .take_io()
+            .into_iter()
+            .filter_map(|io| match io {
+                Io::Firmware(command) => Some(command),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(commands.len(), 1, "{commands:?}");
+        commands.remove(0)
+    }
+
     /// What the screen shows, as one text.
     fn shown(&mut self) -> String {
         self.kernel.render(&mut |_, _| {});
@@ -226,6 +247,62 @@ fn an_update_with_every_plugin_says_nothing_of_them() {
     let shown = device.shown();
     assert!(!shown.contains("cannot come along"), "{shown}");
     assert!(shown.contains("Install"), "{shown}");
+}
+
+#[test]
+fn an_update_signed_by_another_key_installs_with_the_key_shown() {
+    let storage = Shared::default();
+    let all = [
+        ("chess-for-paperpaw", "1.0.0"),
+        ("paperpaw-plugin-stats", "0.5.0"),
+    ];
+    let own = [5; 32];
+    storage
+        .write("updates/own.bin", &update_signed("0.5.0", &all, &own))
+        .unwrap();
+    let mut device = Device::new(storage);
+    device.run(OPEN);
+    let shown = device.shown();
+    let key = paperpaw_update::public_key(&own);
+    let fingerprint = paperpaw_sdk::firmware::fingerprint(&key).replace(' ', "\u{a0}");
+    assert!(shown.contains("own build"), "{shown}");
+    assert!(shown.contains(&fingerprint), "{shown}");
+    assert!(shown.contains("Trust and install"), "{shown}");
+    device.run(actions::CONFIRM);
+    assert_eq!(
+        device.install(),
+        FirmwareCommand::Install {
+            path: "updates/own.bin".into(),
+            key: Some(key),
+            older: false,
+        }
+    );
+}
+
+#[test]
+fn an_older_update_says_so_and_installs_only_as_chosen() {
+    let storage = Shared::default();
+    let all = [
+        ("chess-for-paperpaw", "1.0.0"),
+        ("paperpaw-plugin-stats", "0.3.0"),
+    ];
+    storage
+        .write("updates/old.bin", &update_file("0.3.0", &all))
+        .unwrap();
+    let mut device = Device::new(storage);
+    device.run(OPEN);
+    let shown = device.shown();
+    assert!(shown.contains("PaperPaw 0.3.0, not newer"), "{shown}");
+    assert!(shown.contains("Install anyway"), "{shown}");
+    device.run(actions::CONFIRM);
+    assert_eq!(
+        device.install(),
+        FirmwareCommand::Install {
+            path: "updates/old.bin".into(),
+            key: None,
+            older: true,
+        }
+    );
 }
 
 #[test]

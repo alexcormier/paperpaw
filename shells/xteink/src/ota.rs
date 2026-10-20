@@ -13,7 +13,8 @@
 //! says so ([`Ota::undone`]) and takes its place back.
 //!
 //! Only update files signed with a key built in here (PaperPaw's) or one
-//! the reader trusts (`paperpaw_sdk::firmware`) are installed; the
+//! the reader accepted for the install, and newer ones unless the reader
+//! chose an older one, are installed (`paperpaw_sdk::firmware`); the
 //! signature is checked while the image is written, and the new firmware
 //! chosen only if it holds. Its first word is written only then: until
 //! it is, the partition holds no image the bootloader would start, even
@@ -32,9 +33,7 @@ use esp_bootloader_esp_idf::partitions::{
 };
 use log::{info, warn};
 use paperpaw_platform::Storage;
-use paperpaw_sdk::firmware::{
-    Check, Firmware, FirmwareState, InstallFailure, Plugins, Signer, Update, trusted_keys,
-};
+use paperpaw_sdk::firmware::{Check, Firmware, FirmwareState, InstallFailure, Plugins, Update};
 use paperpaw_x4::ota_data;
 
 // The plugin crates built in (`PLUGINS`), written by `build.rs`.
@@ -221,10 +220,18 @@ impl Ota {
         self.install.is_some()
     }
 
-    /// Starts installing the update file at `path`: what it holds is
-    /// checked first, the signature as it is written.
-    pub fn begin(&mut self, storage: &dyn Storage, path: &str) -> FirmwareState {
-        match self.prepare(storage, path) {
+    /// Starts installing the update file at `path`, with the `key` the
+    /// reader accepted and whether they chose an `older` one (see
+    /// `FirmwareCommand::Install`): what it holds is checked first, the
+    /// signature as it is written.
+    pub fn begin(
+        &mut self,
+        storage: &dyn Storage,
+        path: &str,
+        key: Option<&[u8; 32]>,
+        older: bool,
+    ) -> FirmwareState {
+        match self.prepare(storage, path, key, older) {
             Ok(install) => {
                 info!(
                     "OTA: installing {path} ({} bytes) at {:#x}",
@@ -241,13 +248,15 @@ impl Ota {
         }
     }
 
-    fn prepare(&mut self, storage: &dyn Storage, path: &str) -> Result<Install, InstallFailure> {
+    fn prepare(
+        &mut self,
+        storage: &dyn Storage,
+        path: &str,
+        key: Option<&[u8; 32]>,
+        older: bool,
+    ) -> Result<Install, InstallFailure> {
         let update = Update::read(storage, path)?;
-        let firmware = self.firmware();
-        update.fits(&firmware)?;
-        if update.signer(&firmware, &trusted_keys(storage)) == Signer::Unknown {
-            return Err(InstallFailure::Untrusted);
-        }
+        update.may_install(&self.firmware(), key, older)?;
         let check = Check::new(&update.trailer)?;
         let mut flash = self.flash.borrow_mut();
         let mut updater =

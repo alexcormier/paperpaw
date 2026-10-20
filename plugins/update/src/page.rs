@@ -2,9 +2,12 @@
 //! few words below it, and up to two buttons at the bottom (the first one
 //! always the way on). While installing, a bar shows how far it is.
 //!
-//! An update on the card comes first; without one, the page offers to
-//! search online, and shows an update the server named (see [`online`]).
-//! An update that leaves out plugins built in now says which.
+//! A newer update on the card comes first; without one, the page offers
+//! to search online, and shows an update the server named (see
+//! [`online`]), then an older one on the card, which it says is older.
+//! An update that leaves out plugins built in now says which; one not
+//! signed by PaperPaw shows its key, which the reader accepts at each
+//! install.
 //!
 //! Buttons: up and down (or left and right) move between the buttons,
 //! *Select* chooses, *Back* closes (not while installing). Touch: tap.
@@ -14,8 +17,7 @@ use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::{actions, events};
 use paperpaw_sdk::firmware::{
-    FirmwareCommand, FirmwareState, InstallFailure, Signer, Update, fingerprint, trust,
-    trusted_keys,
+    FirmwareCommand, FirmwareState, InstallFailure, Signer, Update, fingerprint,
 };
 use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::ui::{self, UiStyle};
@@ -41,10 +43,12 @@ enum View {
     Nothing,
     /// Files, but none for this device.
     Unfit(InstallFailure),
-    /// An update to install, and the plugin crates it leaves out.
+    /// An update to install, whether it is newer than the running
+    /// firmware, and the plugin crates it leaves out.
     Ready {
         update: Update,
         signer: Signer,
+        newer: bool,
         leaves: Vec<String>,
     },
     /// Asking the update server.
@@ -102,6 +106,7 @@ fn reason(failure: InstallFailure) -> &'static str {
         InstallFailure::OtherDevice => "update.reason.other-device",
         InstallFailure::TooLarge => "update.reason.too-large",
         InstallFailure::Untrusted => "update.reason.untrusted",
+        InstallFailure::NotNewer => "update.reason.not-newer",
         InstallFailure::Damaged => "update.reason.damaged",
         InstallFailure::Write => "update.reason.write",
     }
@@ -137,19 +142,23 @@ impl UpdatePage {
             FirmwareState::Idle | FirmwareState::Failed(_) => {}
         }
         let card = found::find(env.storage, firmware);
-        if let Ok(update) = card {
-            let signer = update.signer(firmware, &trusted_keys(env.storage));
+        let ready = |update: Update| {
             let leaves = update
                 .leaves_out(firmware)
                 .into_iter()
                 .map(String::from)
                 .collect();
-            return View::Ready {
+            View::Ready {
+                signer: update.signer(firmware),
+                newer: update.is_newer(firmware),
                 update,
-                signer,
                 leaves,
-            };
-        }
+            }
+        };
+        let card = match card {
+            Ok(update) if update.is_newer(firmware) => return ready(update),
+            card => card,
+        };
         if let Some(offer) = online::offer(env.storage, firmware) {
             let leaves = offer
                 .leaves_out(firmware)
@@ -159,7 +168,9 @@ impl UpdatePage {
             return View::Offer { offer, leaves };
         }
         match card {
-            Err(InstallFailure::Unreadable) | Ok(_) => View::Nothing,
+            // Older, or the same again: offered as such.
+            Ok(update) => ready(update),
+            Err(InstallFailure::Unreadable) => View::Nothing,
             Err(why) => View::Unfit(why),
         }
     }
@@ -249,6 +260,7 @@ impl UpdatePage {
                     ..
                 },
             ) => "update.trust-install",
+            (Button::Install, View::Ready { newer: false, .. }) => "update.install-older",
             (Button::Install, View::Ready { leaves, .. }) if !leaves.is_empty() => {
                 "update.install-without"
             }
@@ -279,22 +291,33 @@ impl UpdatePage {
             View::Ready {
                 update,
                 signer,
+                newer,
                 leaves,
             } => {
                 let version = Arg::Str(&update.info.version);
-                let (title, help) = if *signer == Signer::Unknown {
+                let current = &[("current", Arg::Str(current))];
+                let (title, mut help) = if *signer == Signer::Unknown {
                     // Its groups kept together on one line.
                     let key = fingerprint(&update.trailer.key).replace(' ', "\u{a0}");
                     (
                         with("update.unknown.title", &[("version", version)]),
                         with("update.unknown.help", &[("key", Arg::Str(&key))]),
                     )
-                } else {
+                } else if *newer {
                     (
                         with("update.ready.title", &[("version", version)]),
-                        with("update.ready.help", &[("current", Arg::Str(current))]),
+                        with("update.ready.help", current),
+                    )
+                } else {
+                    (
+                        with("update.older.title", &[("version", version)]),
+                        with("update.older.help", current),
                     )
                 };
+                if *signer == Signer::Unknown && !*newer {
+                    help.push(' ');
+                    help.push_str(&with("update.older.note", current));
+                }
                 (title, self.with_leaves(env, help, leaves))
             }
             View::Checking => (
@@ -418,15 +441,22 @@ impl UpdatePage {
                 self.redraw(cx, RefreshMode::Partial);
             }
             Button::Install => {
-                let View::Ready { update, signer, .. } = &self.view else {
+                let View::Ready {
+                    update,
+                    signer,
+                    newer,
+                    ..
+                } = &self.view
+                else {
                     return;
                 };
-                if *signer == Signer::Unknown {
-                    let _ = trust(env.storage, &update.trailer.key);
-                }
                 write_pair(env.storage, INSTALLING, &update.path, &update.info.version);
+                // What the reader saw and chose: the key shown, an older
+                // version said to be older.
                 cx.command(Command::Firmware(FirmwareCommand::Install {
                     path: update.path.clone(),
+                    key: (*signer == Signer::Unknown).then_some(update.trailer.key),
+                    older: !*newer,
                 }));
                 self.view = View::Installing {
                     done: 0,
