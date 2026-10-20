@@ -329,7 +329,7 @@ fn countdown_days_past_255_do_not_wrap() {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(256))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(256)))]
 
     /// Whatever is typed as the date, reading it never panics, and what is
     /// read is a real date.
@@ -544,7 +544,7 @@ fn place_names_are_the_first_city_and_bad_rules_are_no_place() {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(256))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(256)))]
 
     /// For every place offered and any time, the place's time is UTC plus
     /// its offset, and its day differs from here by at most one.
@@ -669,7 +669,7 @@ fn the_moon_far_from_the_epoch_and_before_1970_is_still_reckoned() {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(128))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(128)))]
 
     /// At any time the moon is round its lunation, younger than one, and
     /// its next full moon is at most a lunation away (or today).

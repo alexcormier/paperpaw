@@ -105,7 +105,7 @@ fn rows_show_values_with_units_and_secrets_as_dots() {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(128))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(128)))]
 
     /// One step of a number moves it by its step and never out of its
     /// range, from any value it holds.

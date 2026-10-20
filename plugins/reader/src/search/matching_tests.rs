@@ -3,6 +3,8 @@
 //! any case, and every place of it is found; a snippet never panics and
 //! holds its hit.
 
+extern crate std;
+
 use alloc::string::String;
 use alloc::vec::Vec;
 
@@ -34,7 +36,7 @@ fn block(text: &str) -> Block {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(256))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(256)))]
 
     #[test]
     fn hits_are_whole_characters_of_the_text_looked_for(

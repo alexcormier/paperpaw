@@ -12,7 +12,7 @@ use proptest::prelude::*;
 use super::{AUTO, LANGUAGES, MAX_CHARS, request, target, translation};
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(256))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(256)))]
 
     #[test]
     fn any_body_reads_without_panic(body in ".{0,300}") {

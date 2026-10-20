@@ -5,6 +5,8 @@
 //! tenths against plain arithmetic, dates against known days, and unit
 //! conversions at the limits of what can come in.
 
+extern crate std;
+
 use super::*;
 use alloc::vec;
 use proptest::prelude::*;
@@ -65,7 +67,7 @@ fn weather() -> impl Strategy<Value = Weather> {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(128))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(128)))]
 
     /// The kept file reads back what was written.
     #[test]

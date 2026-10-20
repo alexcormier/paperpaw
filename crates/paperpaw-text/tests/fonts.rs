@@ -249,7 +249,7 @@ fn real_fonts_cut_short_give_none_or_their_name() {
 
 proptest! {
     #![proptest_config(ProptestConfig {
-        cases: 256,
+        cases: std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(256),
         failure_persistence: None,
         ..ProptestConfig::default()
     })]
@@ -344,7 +344,7 @@ mod outline {
 
     proptest! {
         #![proptest_config(ProptestConfig {
-            cases: 64,
+            cases: std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(64),
             failure_persistence: None,
             ..ProptestConfig::default()
         })]

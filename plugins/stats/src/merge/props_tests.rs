@@ -4,6 +4,8 @@
 //! by their fingerprint, never by their title; a database from the other
 //! side that cannot be read leaves this device's statistics as they were.
 
+extern crate std;
+
 use alloc::collections::BTreeMap;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -146,7 +148,7 @@ fn no_working_files_left(storage: &MemoryStorage) -> bool {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(64))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(64)))]
 
     #[test]
     fn merging_either_way_gives_the_same(a in device(), b in device()) {

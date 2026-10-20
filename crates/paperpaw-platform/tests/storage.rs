@@ -456,7 +456,7 @@ fn segment() -> impl Strategy<Value = String> {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(256))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(256)))]
 
     #[test]
     fn paths_of_valid_segments_are_valid(segments in proptest::collection::vec(segment(), 1..6)) {

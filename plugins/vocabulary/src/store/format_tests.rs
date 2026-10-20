@@ -4,6 +4,8 @@
 //! readable, and hostile lines (missing fields, numbers that are none,
 //! overlong lines, bytes that are no UTF-8) are skipped without a panic.
 
+extern crate std;
+
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -82,7 +84,7 @@ fn listed_word() -> impl Strategy<Value = Word> {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(128))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(128)))]
 
     /// A line written is one line, read back as it was written (tabs and
     /// line breaks as spaces, the sentence at most 300 characters).

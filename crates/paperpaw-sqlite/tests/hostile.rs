@@ -342,7 +342,7 @@ fn mutations() -> impl Strategy<Value = Vec<(usize, u8)>> {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(256))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(256)))]
 
     /// Where bytes of the file are changed, it is read or refused,
     /// without a panic and in a bounded number of reads. (The page type

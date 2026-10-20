@@ -65,7 +65,7 @@ const MONTHS: [&str; 12] = [
 const DAYS: [&str; 7] = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(128))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(128)))]
 
     /// Lines read as they stream are the lines of the whole file: any
     /// bytes, any line ends, lines longer than the limit, pieces of

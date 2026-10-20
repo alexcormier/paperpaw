@@ -136,7 +136,7 @@ fn let_go(kernel: &mut Kernel, mut now: u64) -> u64 {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig { failure_persistence: None, ..ProptestConfig::with_cases(192) })]
+    #![proptest_config(ProptestConfig { failure_persistence: None, ..ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(192)) })]
 
     /// Any sequence leaves a screen, refreshes on the screen, and a
     /// working page-forward button once everything is let go.
@@ -178,7 +178,7 @@ fn wakes_ahead_after(steps: &[Step]) -> Result<(), TestCaseError> {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig { failure_persistence: None, ..ProptestConfig::with_cases(192) })]
+    #![proptest_config(ProptestConfig { failure_persistence: None, ..ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(192)) })]
 
     /// As [`wake_ups_asked_for_are_never_in_the_past`], with several
     /// fingers.
@@ -226,7 +226,7 @@ fn works_after(steps: &[Step], well_formed: bool) -> Result<(), TestCaseError> {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig { failure_persistence: None, ..ProptestConfig::with_cases(192) })]
+    #![proptest_config(ProptestConfig { failure_persistence: None, ..ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(192)) })]
 
     /// As [`any_input_sequence_leaves_a_working_kernel`], with presses
     /// repeated by the system and releases lost or doubled.

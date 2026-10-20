@@ -135,7 +135,7 @@ fn change() -> impl Strategy<Value = Change> {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig { failure_persistence: None, ..ProptestConfig::with_cases(128) })]
+    #![proptest_config(ProptestConfig { failure_persistence: None, ..ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(128)) })]
 
     /// Every setting changed is read back the same at the next start.
     #[test]

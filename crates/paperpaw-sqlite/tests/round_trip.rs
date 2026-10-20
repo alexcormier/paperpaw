@@ -67,7 +67,7 @@ fn rows(max: usize) -> impl Strategy<Value = Vec<(i64, Vec<Value>)>> {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(64))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(64)))]
 
     /// Whatever rows go in come out, in order and byte for byte.
     #[test]

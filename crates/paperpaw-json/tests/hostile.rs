@@ -525,7 +525,7 @@ fn read_file_reads_a_file_larger_than_its_chunks() {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(160))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(160)))]
 
     #[test]
     fn written_strings_read_back(s in "\\PC*|[\\x00-\\x7f]*") {

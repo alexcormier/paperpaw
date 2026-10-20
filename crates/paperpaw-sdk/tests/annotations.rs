@@ -77,7 +77,7 @@ fn any_annotation() -> impl Strategy<Value = Annotation> {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(128))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(128)))]
 
     /// Any annotations come back sorted by position, with their numbers
     /// exact and their texts as one line.

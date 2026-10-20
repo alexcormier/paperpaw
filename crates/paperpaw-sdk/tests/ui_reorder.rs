@@ -77,7 +77,7 @@ fn drag(
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(256))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(256)))]
 
     /// Dragged or moved with the buttons, an item lands at the same
     /// place, the others keeping their order: the same list either way.

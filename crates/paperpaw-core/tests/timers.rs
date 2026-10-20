@@ -201,7 +201,7 @@ enum Step {
 }
 
 proptest! {
-    #![proptest_config(Config { failure_persistence: None, ..Config::with_cases(192) })]
+    #![proptest_config(Config { failure_persistence: None, ..Config::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(192)) })]
 
     /// Each scheduled event comes once at most per time it was scheduled,
     /// never before its time, and is due no more once its time passed.

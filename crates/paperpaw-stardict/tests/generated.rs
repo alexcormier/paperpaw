@@ -77,7 +77,7 @@ fn spec() -> impl Strategy<Value = Spec> {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(64))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(64)))]
 
     #[test]
     fn every_word_put_in_is_found_with_its_definition(spec in spec()) {

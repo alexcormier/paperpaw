@@ -8,7 +8,7 @@ use proptest::prelude::*;
 use super::{summary_url, wiki};
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(256))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(256)))]
 
     #[test]
     fn any_word_stays_one_segment_on_a_wiki(language in ".{0,20}", word in ".{0,40}") {

@@ -65,7 +65,7 @@ fn some_settings() -> Settings {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(256))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(256)))]
 
     /// A value a kind accepts is written as configuration text and read
     /// back as itself; text a kind reads is a value it accepts.

@@ -166,7 +166,7 @@ fn check_stable(text: &str, lines: &[Line], width: f32, advance: fn(char) -> f32
 
 proptest! {
     #![proptest_config(ProptestConfig {
-        cases: 256,
+        cases: std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(256),
         failure_persistence: None,
         ..ProptestConfig::default()
     })]

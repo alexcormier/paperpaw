@@ -113,7 +113,7 @@ fn album(blocks: Vec<Option<(u32, u32)>>) -> Album {
 
 proptest! {
     #![proptest_config(ProptestConfig {
-        cases: 256,
+        cases: std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(256),
         failure_persistence: None,
         ..ProptestConfig::default()
     })]

@@ -61,7 +61,7 @@ fn inside(inner: Rect, outer: Rect) -> bool {
 // ---- step_focus and list_step -----------------------------------------
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(256))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(256)))]
 
     #[test]
     fn single_steps_wrap_and_larger_ones_stop_at_the_ends(
@@ -121,7 +121,7 @@ fn list_strategy() -> impl Strategy<Value = (ListView, usize)> {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(128))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(128)))]
 
     /// Each visible item is hit at its corners and middle, the items of
     /// a page never overlap and lie in the list's area, and points below
@@ -335,7 +335,7 @@ fn rows_pages(rows: &mut Rows) -> Vec<Vec<(usize, Rect)>> {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(192))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(192)))]
 
     /// Turned through, the pages show every row once (headings of
     /// sections going on again at the top), each within the area, rows
@@ -491,7 +491,7 @@ fn sections_strategy() -> impl Strategy<Value = (Vec<Section>, u16, u16, u16)> {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(192))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(192)))]
 
     /// Turned through, the pages hold every entry once and in order, each
     /// page within the area; a section going on over a page break shows

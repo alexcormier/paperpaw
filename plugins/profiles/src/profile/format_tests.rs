@@ -189,7 +189,7 @@ fn profiles_strategy() -> impl Strategy<Value = Vec<Profile>> {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(256))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(256)))]
 
     /// Saved and loaded, profiles are as they were.
     #[test]

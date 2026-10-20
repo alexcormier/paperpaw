@@ -3,6 +3,8 @@
 //! the page, up and down reach another line where there is one, and the
 //! boxes cover exactly the words picked, one per run on a line.
 
+extern crate std;
+
 use alloc::string::String;
 use alloc::vec::Vec;
 
@@ -48,7 +50,7 @@ fn moves() -> impl Strategy<Value = Id> {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(256))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(256)))]
 
     #[test]
     fn the_cursor_stays_on_the_page(

@@ -43,7 +43,7 @@ fn today_is_the_fourteenth_of_october() {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(128))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(128)))]
 
     /// A list written is read back the same on the same day: its items,
     /// their order, which are done.

@@ -22,7 +22,12 @@ use proptest::test_runner::Config;
 fn config(cases: u32) -> Config {
     Config {
         failure_persistence: None,
-        ..Config::with_cases(cases)
+        ..Config::with_cases(
+            std::env::var("PROPTEST_CASES")
+                .ok()
+                .and_then(|n| n.parse().ok())
+                .unwrap_or(cases),
+        )
     }
 }
 

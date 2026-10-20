@@ -307,7 +307,7 @@ fn op() -> impl Strategy<Value = Op> {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(32))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(32)))]
 
     #[test]
     fn storage_follows_the_model(ops in prop::collection::vec(op(), 1..30)) {

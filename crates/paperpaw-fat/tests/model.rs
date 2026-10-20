@@ -74,7 +74,7 @@ fn check(storage: &dyn Storage, model: &BTreeMap<&str, Vec<u8>>) -> Result<(), T
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(48))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(48)))]
 
     #[test]
     fn storage_follows_the_model(ops in prop::collection::vec(op(), 1..40)) {

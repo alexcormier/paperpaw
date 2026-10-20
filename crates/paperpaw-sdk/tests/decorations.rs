@@ -78,7 +78,7 @@ fn decoration_strategy() -> impl Strategy<Value = Decoration> {
 // ---- A role's look from its settings -----------------------------------
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(128))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(128)))]
 
     /// A role added with any default reads back as that default (the
     /// thickness as the settings keep it: 0 is the standard one).
@@ -169,7 +169,7 @@ fn a_role_set_by_hand_reads_what_is_set() {
 // ---- Combining ---------------------------------------------------------
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(256))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(256)))]
 
     /// No mark adds nothing, on either side; combining is the same
     /// whichever pairs are combined first; each aspect is the earliest
@@ -207,7 +207,7 @@ fn boxes_strategy() -> impl Strategy<Value = Vec<Rect>> {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(128))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(128)))]
 
     /// Lines, frames and strikes of the usual thicknesses (up to 0.8 mm)
     /// stay on the lines of their words: nothing below a box (on the line

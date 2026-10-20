@@ -418,7 +418,7 @@ fn broken_dictzip_data_is_an_error() {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(128))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(128)))]
 
     /// Bytes of the dictzip file changed: every lookup ends with a
     /// definition or an error, without a panic. (The chunk count stays:

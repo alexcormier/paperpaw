@@ -97,7 +97,7 @@ fn reading(path: &str, title: &str, progress: f32) -> Reading {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(128))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(128)))]
 
     /// Whatever a book's details hold (quotes, `=`, `#`, brackets, line
     /// breaks, spaces around, any Unicode), they come back as saved.

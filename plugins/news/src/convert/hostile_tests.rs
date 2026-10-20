@@ -88,7 +88,7 @@ fn fragment() -> impl Strategy<Value = String> {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(200))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(200)))]
 
     #[test]
     fn any_bytes_make_a_whole_page(data in prop::collection::vec(any::<u8>(), 0..4000)) {

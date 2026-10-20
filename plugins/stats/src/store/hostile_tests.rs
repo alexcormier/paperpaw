@@ -3,6 +3,8 @@
 //! of the longest; `days.bin` broken or stale; `books.ini` with odd
 //! sections; and round trips of both files over arbitrary values.
 
+extern crate std;
+
 use alloc::string::String;
 use alloc::vec::Vec;
 
@@ -329,7 +331,7 @@ fn any_stay() -> impl Strategy<Value = PageStat> {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(128))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(128)))]
 
     #[test]
     fn books_survive_books_ini(mut books_in in proptest::collection::vec(any_book(), 0..8)) {

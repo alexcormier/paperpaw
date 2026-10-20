@@ -657,7 +657,7 @@ fn text_from_a_phone_keeps_only_digits_for_numbers() {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(64))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(64)))]
 
     /// Whatever arrives from a phone, the answer is one line, trimmed and
     /// no longer than allowed.

@@ -83,7 +83,7 @@ fn every_icon_is_found_by_its_name() {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(256))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(256)))]
 
     /// Any name at all is looked up without a panic: an icon's own, or
     /// none.
@@ -181,7 +181,7 @@ fn caps_of(bits: u16) -> Capabilities {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(256))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(256)))]
 
     /// An entry that needs something is offered where the device has it
     /// (one for devices without touch: where there is none, or where the
@@ -285,7 +285,7 @@ fn entries_come_in_their_order_headings_among_them() {
 // ---- The logo -------------------------------------------------------------
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(48))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(48)))]
 
     /// The drawn logo fills the middle of its area as a square, as large
     /// as fits, and draws nowhere else; too small to show, it draws
@@ -340,7 +340,7 @@ fn look_harness(frame_value: &str, align: &str) -> Harness {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(64))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(64)))]
 
     /// Every frame draws inside the widget's area and leaves its content
     /// an area inside it; the caption and wrapped text keep to that.

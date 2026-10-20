@@ -15,7 +15,7 @@ fn version() -> impl Strategy<Value = Version> {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(256))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(256)))]
 
     /// A version written out is read back as itself.
     #[test]

@@ -45,7 +45,7 @@ fn the_ui_font_and_icons_are_there() {
 // ---- Shortening -------------------------------------------------------
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(256))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(256)))]
 
     /// A text shortened to a width fits it (with a pixel of slack), and
     /// is the text itself or its beginning and "…".
@@ -97,7 +97,7 @@ fn row_strategy() -> impl Strategy<Value = Rect> {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(64))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(64)))]
 
     /// Rows of every kind draw inside their rectangle, focused or not,
     /// whatever their texts (numbers as numbers are: a value far wider
@@ -267,7 +267,7 @@ fn across(area: Rect) -> impl Iterator<Item = Point> {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(64))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(64)))]
 
     /// On a touch screen, the back arrow and the page arrows are hit
     /// where they are: back at the left, the previous page left of the
@@ -398,7 +398,7 @@ fn the_pager_turns_by_halves_on_touch_screens_only() {
 // ---- Messages, notes, empty screens, hints ------------------------------
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(64))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(64)))]
 
     /// Messages, notes at the bottom and empty screens draw inside their
     /// area at any size from a line of text up, however long the text.

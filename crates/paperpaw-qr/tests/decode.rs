@@ -425,7 +425,7 @@ fn the_same_data_gives_the_same_code() {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(64))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(64)))]
 
     #[test]
     fn any_data_that_fits_decodes(data in proptest::collection::vec(any::<u8>(), 0..=213)) {

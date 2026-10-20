@@ -58,7 +58,7 @@ fn knob_x(slider: &Slider, track: Rect, value: i64) -> i32 {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(256))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(256)))]
 
     /// A finger anywhere, on the track or past its ends, chooses a value
     /// the slider offers; further right never less.

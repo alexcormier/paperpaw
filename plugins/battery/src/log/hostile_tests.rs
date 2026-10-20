@@ -284,7 +284,7 @@ fn reading_strategy() -> impl Strategy<Value = Reading> {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(256))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(256)))]
 
     /// Every reading written is read back as it was (pixels in
     /// thousands, as written).

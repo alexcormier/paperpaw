@@ -3,6 +3,8 @@
 //! is damaged or missing yields a choice without a panic (an unknown line
 //! falls back to the first of the rotation, see `current`).
 
+extern crate std;
+
 use alloc::string::{String, ToString};
 
 use paperpaw_sdk::{MemoryStorage, Storage};
@@ -53,7 +55,7 @@ fn a_file_too_large_is_no_choice() {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(128))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(128)))]
 
     #[test]
     fn a_choice_saved_is_read_back(top in "[a-z.\\-]{0,40}", bottom in "[a-z.\\-]{0,40}") {

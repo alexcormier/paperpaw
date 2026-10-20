@@ -89,7 +89,7 @@ fn format_strategy() -> impl Strategy<Value = PixelFormat> {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(64))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(64)))]
 
     /// Made to fit a box, a thumbnail is no larger than the box nor the
     /// picture, keeps the picture's proportions (to a pixel), and is
@@ -273,7 +273,7 @@ fn a_kept_file_cut_short_or_of_another_kind_reads_as_none() {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(48))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(48)))]
 
     /// A picture drawn from its file is scaled into its area, filling it
     /// and drawing nowhere else; in a canvas clipped to part of it, that

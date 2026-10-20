@@ -2,6 +2,8 @@
 //! a page beyond those it has, and for an index as the reader writes it,
 //! every position found on the page that holds it.
 
+extern crate std;
+
 use alloc::string::String;
 use alloc::vec::Vec;
 
@@ -23,7 +25,7 @@ fn written(starts: &[Locator], complete: bool) -> (MemoryStorage, PageIndex) {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(256))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(256)))]
 
     /// Any bytes: the pages are the whole entries (the last a sentinel if
     /// complete), and looking anything up stays among them.

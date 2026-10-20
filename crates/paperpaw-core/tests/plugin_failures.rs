@@ -401,7 +401,7 @@ fn plugin_file() -> impl Strategy<Value = Vec<u8>> {
 }
 
 proptest! {
-    #![proptest_config(Config { failure_persistence: None, ..Config::with_cases(96) })]
+    #![proptest_config(Config { failure_persistence: None, ..Config::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(96)) })]
 
     /// Any content in a data plugin's files starts a kernel with a screen.
     #[test]

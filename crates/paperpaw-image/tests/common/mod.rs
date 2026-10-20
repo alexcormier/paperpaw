@@ -166,11 +166,14 @@ impl Source for Failing<'_> {
     }
 }
 
-/// Property tests of `cases` cases; failures are turned into named
+/// Property tests of `cases` cases (or as many as `PROPTEST_CASES` says); failures are turned into named
 /// tests, not kept in files.
 pub fn config(cases: u32) -> proptest::test_runner::Config {
     proptest::test_runner::Config {
-        cases,
+        cases: std::env::var("PROPTEST_CASES")
+            .ok()
+            .and_then(|n| n.parse().ok())
+            .unwrap_or(cases),
         failure_persistence: None,
         ..proptest::test_runner::Config::default()
     }

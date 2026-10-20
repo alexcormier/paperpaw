@@ -3,6 +3,8 @@
 //! long lines, Unicode, files written with Windows line ends, and what a
 //! write cut short leaves behind.
 
+extern crate std;
+
 use super::*;
 use alloc::string::ToString;
 use paperpaw_sdk::MemoryStorage;
@@ -25,7 +27,7 @@ enum Op {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(128))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(128)))]
 
     /// The queue is what a list with no repeats, the newest at the end,
     /// would be after the same steps.

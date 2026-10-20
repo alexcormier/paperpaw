@@ -131,7 +131,7 @@ fn rows() -> impl Strategy<Value = Vec<(i64, Vec<Value>)>> {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(48))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(48)))]
 
     /// SQLite finds nothing wrong with what was written and reads the
     /// same rows; its indexes agree with the table.

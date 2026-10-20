@@ -723,7 +723,7 @@ fn a_damaged_kept_code_does_not_lock_for_good() {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(24))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(24)))]
 
     /// Any PIN of four to sixteen digits unlocks, and any other does not.
     #[test]

@@ -68,7 +68,7 @@ fn harness() -> Harness {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(256))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(256)))]
 
     /// However a list is written (spaces, empty parts), its ids come out
     /// trimmed, none empty, in their order.
@@ -94,7 +94,7 @@ fn list_strategy() -> impl Strategy<Value = String> {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(96))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(96)))]
 
     /// A status line draws inside its area, whatever its items show, at
     /// any size the user sets for status lines.

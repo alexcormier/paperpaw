@@ -516,7 +516,7 @@ fn an_unreadable_old_account_file_gives_no_key() {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(64))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(64)))]
 
     /// Whatever the server answers, nothing panics, and a position is
     /// offered exactly when another device is further than the margin.

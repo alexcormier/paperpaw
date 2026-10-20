@@ -309,7 +309,7 @@ fn mutated() -> impl Strategy<Value = Vec<u8>> {
 
 proptest! {
     #![proptest_config(ProptestConfig {
-        cases: 256,
+        cases: std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(256),
         failure_persistence: None,
         ..ProptestConfig::default()
     })]

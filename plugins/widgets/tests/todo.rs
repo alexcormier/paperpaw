@@ -273,7 +273,7 @@ fn apply(items: &mut Vec<Item>, op: &Op) {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(48))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(48)))]
 
     /// Any sequence of changes on the list's screen leaves the file as
     /// the list should be, and a screen opened anew reads it back.

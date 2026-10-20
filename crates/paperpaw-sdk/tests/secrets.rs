@@ -17,7 +17,7 @@ fn kept(changes: &[(String, String, String)]) -> Secrets {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(128))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(128)))]
 
     /// Any value (any Unicode, tabs, line breaks) comes back exactly, and
     /// none of it is readable in the file.

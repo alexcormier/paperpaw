@@ -36,7 +36,7 @@ fn json_piece() -> impl Strategy<Value = String> {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(200))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(200)))]
 
     #[test]
     fn any_bytes_give_at_most_thirty_articles_with_ids(data_bytes in prop::collection::vec(any::<u8>(), 0..2000)) {

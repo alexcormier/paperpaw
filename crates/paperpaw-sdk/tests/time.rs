@@ -58,7 +58,7 @@ fn days_in(year: i32, month: u8) -> u8 {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(256))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(256)))]
 
     /// Seconds become a date and back unchanged, for 300,000 years
     /// around 1970; every field is in its range and the weekday follows

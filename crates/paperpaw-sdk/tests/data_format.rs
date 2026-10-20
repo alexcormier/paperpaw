@@ -13,7 +13,7 @@ const FORMAT: Format = Format::new(3, &[|v1| format!("{v1}+2"), |v2| format!("{v
 const PLAIN: Format = Format::new(1, &[]);
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(256))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(256)))]
 
     /// The version of any text is found without panic, and is 1 unless
     /// the first line says another.

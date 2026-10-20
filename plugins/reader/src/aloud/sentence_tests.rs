@@ -2,6 +2,8 @@
 //! words ends after it and within the most words said at once, at the
 //! first word that ends a sentence; the text spoken is the words in order.
 
+extern crate std;
+
 use alloc::string::String;
 use alloc::vec::Vec;
 
@@ -14,7 +16,7 @@ fn words() -> impl Strategy<Value = Vec<String>> {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(256))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(256)))]
 
     #[test]
     fn a_sentence_ends_at_its_first_end(words in words(), from in 0usize..220) {

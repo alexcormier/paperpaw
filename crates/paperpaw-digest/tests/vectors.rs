@@ -310,7 +310,7 @@ fn partial_md5_does_not_depend_on_how_much_a_read_gives() {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(128))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(128)))]
 
     #[test]
     fn digests_do_not_depend_on_how_the_input_is_split(

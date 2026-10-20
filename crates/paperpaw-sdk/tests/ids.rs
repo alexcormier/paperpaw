@@ -25,7 +25,7 @@ fn is_id(text: &str) -> bool {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(512))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(512)))]
 
     /// Any text is an id exactly when it has the form of one.
     #[test]

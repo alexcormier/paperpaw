@@ -13,7 +13,7 @@ use paperpaw_stardict::to_plain_text;
 use proptest::prelude::*;
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(256))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(256)))]
 
     /// Whatever the markup, the text has no empty lines and its words
     /// are separated by single spaces.

@@ -310,7 +310,7 @@ fn a_query_with_broken_escapes_is_read_as_it_is() {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(256))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(256)))]
 
     /// What `files::plain_path` lets through has no way out: no `..`, no hidden part,
     /// no backslash, colon or control character, no empty part; and it

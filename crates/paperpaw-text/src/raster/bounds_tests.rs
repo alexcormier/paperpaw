@@ -4,6 +4,8 @@
 //! exactly its area and leaves pixels away from it empty; curves are
 //! flattened into a bounded number of segments.
 
+extern crate std;
+
 use alloc::vec::Vec;
 
 use proptest::prelude::*;
@@ -58,7 +60,7 @@ fn inside(width: usize, height: usize) -> impl Strategy<Value = Pt> {
 
 proptest! {
     #![proptest_config(ProptestConfig {
-        cases: 256,
+        cases: std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(256),
         failure_persistence: None,
         ..ProptestConfig::default()
     })]

@@ -15,7 +15,7 @@ use proptest::prelude::*;
 use super::{address, keep_page, kind, page_name, title};
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(256))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(256)))]
 
     #[test]
     fn anything_typed_is_an_address_or_a_search(input in ".{0,60}") {

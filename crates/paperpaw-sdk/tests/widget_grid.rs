@@ -190,7 +190,7 @@ fn corner(area: Rect) -> Point {
 // ---- Layouts as text ---------------------------------------------------
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(256))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(256)))]
 
     /// Any text at all is read without a panic; what is read is written
     /// and read again alike.
@@ -249,7 +249,7 @@ fn broken_places_keep_their_items_without_a_place() {
 // ---- Geometry and placing ---------------------------------------------
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(256))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(256)))]
 
     /// The cells of a grid lie in its area, apart by the gap, and the
     /// cell under each cell's middle is that cell.
@@ -430,7 +430,7 @@ fn fixed_layout() -> Vec<Item> {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(96))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(96)))]
 
     /// Any sequence of drags, sizes, moves and removals: the items shown
     /// never overlap or leave the grid, none is lost or doubled but those

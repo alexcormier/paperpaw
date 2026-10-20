@@ -451,7 +451,7 @@ fn positions_survive(
 
 proptest! {
     #![proptest_config(ProptestConfig {
-        cases: 96,
+        cases: std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(96),
         failure_persistence: None,
         ..ProptestConfig::default()
     })]

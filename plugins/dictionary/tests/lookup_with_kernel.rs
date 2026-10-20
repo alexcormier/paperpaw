@@ -446,7 +446,7 @@ fn taps_scroll_on_and_back_and_close_at_the_end() {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(48))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(48)))]
 
     /// Any word: the panel opens and shows, and closes.
     #[test]

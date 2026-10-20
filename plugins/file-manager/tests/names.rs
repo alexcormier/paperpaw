@@ -45,7 +45,7 @@ proptest! {
     #![proptest_config(ProptestConfig {
         // Failures become named tests, not files.
         failure_persistence: None,
-        ..ProptestConfig::with_cases(64)
+        ..ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(64))
     })]
 
     #[test]

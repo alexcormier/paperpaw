@@ -255,7 +255,7 @@ fn a_damaged_secrets_file_keeps_what_can_be_read() {
 }
 
 proptest! {
-    #![proptest_config(Config { failure_persistence: None, ..Config::with_cases(96) })]
+    #![proptest_config(Config { failure_persistence: None, ..Config::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(96)) })]
 
     /// Any value kept as a secret is read back the same.
     #[test]

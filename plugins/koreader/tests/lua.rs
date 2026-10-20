@@ -208,7 +208,7 @@ fn values() -> impl Strategy<Value = Value> {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(256))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(256)))]
 
     /// What is written is read back the same.
     #[test]

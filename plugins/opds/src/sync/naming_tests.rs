@@ -55,7 +55,7 @@ fn checked(name: &str, ext: &str) {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(256))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(256)))]
 
     #[test]
     fn any_title_gives_a_safe_name_in_the_folder(

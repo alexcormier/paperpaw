@@ -383,7 +383,7 @@ fn op() -> impl Strategy<Value = Op> {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(200))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(200)))]
 
     #[test]
     fn any_text_parses_without_panicking(source in "\\PC{0,200}|[\\[\\]=\"\\\\u{}#; \\na-z0-9\\r\\t]{0,200}") {

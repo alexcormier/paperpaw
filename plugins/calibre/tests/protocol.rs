@@ -234,7 +234,7 @@ fn broadcast_answers_of_others_are_ignored() {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(128))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(128)))]
 
     /// What is framed is read back the same, however the bytes come.
     #[test]

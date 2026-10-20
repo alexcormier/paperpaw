@@ -21,7 +21,7 @@ fn feeds_of_version_1_are_written_alike() {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(200))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(200)))]
 
     #[test]
     fn feeds_round_trip(list in prop::collection::vec(("https://[a-z./?=&]{1,20}", prop_oneof![".{0,30}", "[\t\n\r a-z]{0,8}"]), 0..8)) {

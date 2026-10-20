@@ -222,7 +222,7 @@ fn point() -> impl Strategy<Value = Point> {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(256))]
+    #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(256)))]
 
     #[test]
     fn a_union_covers_both(a in rect(), b in rect(), p in point()) {
