@@ -50,8 +50,13 @@ pub struct UiStyle {
     pub text: f32,
     /// Secondary text (status lines, hints).
     pub small: f32,
-    /// Header titles.
+    /// Titles (e.g. of dialogs and widgets).
     pub title: f32,
+    /// The titles of headers (core.ui-title), larger than [`title`] in
+    /// some themes.
+    ///
+    /// [`title`]: UiStyle::title
+    pub head: f32,
     /// Height of a list row.
     pub row: u32,
     /// Height of a header bar.
@@ -126,7 +131,8 @@ impl UiStyle {
         Self {
             text,
             small: m.pt(base * 0.75),
-            title: m.pt(base * s.int(settings::UI_TITLE.as_str()).clamp(100, 200) as f32 / 100.0),
+            title: m.pt(base * 1.15),
+            head: m.pt(base * s.int(settings::UI_TITLE.as_str()).clamp(100, 200) as f32 / 100.0),
             row: (line_height * rows) as u32,
             header: (line_height * (rows + 0.1)) as u32,
             margin: m.mm(s.int(settings::UI_MARGIN.as_str()).clamp(0, 15) as u32),
@@ -166,8 +172,14 @@ impl UiStyle {
 
     /// The radius of the corners of a shape `height` pixels high: half
     /// its height for pills, else the style's corners.
+    /// Taller shapes (a row with a note, a cover) keep the corners, so
+    /// the round ends never cut into what is in them.
     pub fn radius(&self, height: u32) -> u32 {
-        if self.pill { height / 2 } else { self.corner }
+        if self.pill && height <= self.row * 5 / 4 {
+            height / 2
+        } else {
+            self.corner
+        }
     }
 
     /// Whether the focus is drawn dark, so what is on it is drawn white.
@@ -558,14 +570,14 @@ pub fn draw_header(
     }
     let title = fit(
         &font,
-        style.title,
+        style.head,
         title,
         right - f32::from(area.x) - margin,
     );
     draw_label(
         &mut canvas,
         &font,
-        style.title,
+        style.head,
         f32::from(area.x) + margin,
         area,
         &title,
@@ -724,11 +736,11 @@ impl Header {
             draw_label(&mut canvas, &font, style.small, right, t, note, note_ink);
             right -= margin + pad;
         }
-        let title = fit(&font, style.title, title, right - f32::from(t.x));
+        let title = fit(&font, style.head, title, right - f32::from(t.x));
         draw_label(
             &mut canvas,
             &font,
-            style.title,
+            style.head,
             f32::from(t.x),
             t,
             &title,
@@ -1127,7 +1139,12 @@ pub fn focus_rect(style: &UiStyle, rect: Rect) -> Rect {
 /// way, so it looks the same everywhere.
 pub fn draw_focus(canvas: &mut Canvas<'_>, style: &UiStyle, rect: Rect) {
     let r = focus_rect(style, rect);
-    let radius = style.radius(u32::from(r.height));
+    // Items taller than wide (a cover) keep the corners.
+    let radius = if r.width < r.height {
+        style.corner
+    } else {
+        style.radius(u32::from(r.height))
+    };
     let ring = (style.line * 2).max(3);
     match style.focus {
         Focus::Fill => canvas.fill_round(r, radius, Color::BLACK),

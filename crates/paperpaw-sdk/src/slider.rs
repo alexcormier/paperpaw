@@ -465,6 +465,7 @@ mod tests {
         text: 20.0,
         small: 15.0,
         title: 23.0,
+        head: 23.0,
         row: 60,
         header: 64,
         margin: 12,
