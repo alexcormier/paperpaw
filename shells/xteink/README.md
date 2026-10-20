@@ -13,8 +13,11 @@ controller (SSD1677, UC8179 or UC8279) is found at start.
 
 ## Build
 
-The stable Rust toolchain of the repository builds it (the target
-`riscv32imc-unknown-none-elf` comes with `rust-toolchain.toml`):
+The Rust release pinned in this folder's `rust-toolchain.toml` builds
+it (rustup fetches it, with the target `riscv32imc-unknown-none-elf`):
+native code plugins run only on firmware built by the same compiler
+(ADR 0024), so each release names its toolchains; `versions.env` names
+the X4 Pro's.
 
 ```sh
 cd shells/xteink
@@ -86,10 +89,11 @@ python tools/x4-remote.py --push my-fonts .paperpaw/fonts --info
 ## The X4 Pro
 
 Its chip is an ESP32-S3 (Xtensa): install the `esp` toolchain with
-[espup](https://github.com/esp-rs/espup) (with the Xtensa GCC 14.2:
-`espup install --targets esp32s3 --crosstool-toolchain-version
-14.2.0_20241119`; newer ones reject esp-hal's linker scripts), load its
-environment (`export-esp.ps1` or `export-esp.sh`), then
+[espup](https://github.com/esp-rs/espup), in the versions of
+`versions.env` (`espup install --targets esp32s3 --toolchain-version
+1.97.0.0 --crosstool-toolchain-version 14.2.0_20241119`; newer GCCs
+reject esp-hal's linker scripts), load its environment (`export-esp.ps1`
+or `export-esp.sh`), then
 
 ```sh
 cargo +esp x4pro          # build

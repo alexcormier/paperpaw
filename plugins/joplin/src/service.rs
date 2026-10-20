@@ -100,7 +100,7 @@ impl Service {
         }
     }
 
-    /// The address of the sync locks at `base` (see [`locks`](crate::locks)).
+    /// The address of the sync locks at `base` (see the module `locks`).
     pub fn locks_url(self, base: &str) -> String {
         match self {
             Service::WebDav => format!("{base}/locks/"),

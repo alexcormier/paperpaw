@@ -41,10 +41,21 @@ const KEYS: &[[u8; 32]] = &[
         0x0c, 0x51,
     ],
 ];
-/// The chip id in the images for the X4 (ESP32-C3).
+/// The chip id in this device's images: the X4's ESP32-C3, the ESP32-S3
+/// of the X4 Pro and the X4 Classic.
+#[cfg(feature = "x4")]
 const CHIP: u16 = paperpaw_sdk::firmware::CHIP_ESP32_C3;
-/// Which firmware this is: updates must be the same.
-const PROJECT: &str = "paperpaw-xteink";
+#[cfg(feature = "esp32s3")]
+const CHIP: u16 = paperpaw_sdk::firmware::CHIP_ESP32_S3;
+/// Which firmware this is (the image says it, `main.rs`): updates must be
+/// the same. The X4 Pro and the X4 Classic share their chip, not their
+/// boards.
+#[cfg(feature = "x4")]
+pub const PROJECT: &str = "paperpaw-xteink";
+#[cfg(feature = "x4-pro")]
+pub const PROJECT: &str = "paperpaw-xteink-pro";
+#[cfg(feature = "x4-classic")]
+pub const PROJECT: &str = "paperpaw-xteink-classic";
 /// The flash's erase block: erased a block at a time, before it is
 /// written.
 const BLOCK: u32 = 64 * 1024;

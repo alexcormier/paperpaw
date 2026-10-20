@@ -105,7 +105,7 @@ use crate::firmware::{Firmware, State};
 // PaperPaw's version and which firmware this is, read from updates.
 esp_bootloader_esp_idf::esp_app_desc!(
     env!("PAPERPAW_VERSION"),
-    "paperpaw-xteink",
+    ota::PROJECT,
     esp_bootloader_esp_idf::BUILD_TIME,
     esp_bootloader_esp_idf::BUILD_DATE,
     esp_bootloader_esp_idf::ESP_IDF_COMPATIBLE_VERSION,

@@ -894,6 +894,7 @@ pub mod paperpaw_sdk::firmware
 pub use paperpaw_sdk::firmware::APP_HEAD_LEN
 pub use paperpaw_sdk::firmware::AppInfo
 pub use paperpaw_sdk::firmware::CHIP_ESP32_C3
+pub use paperpaw_sdk::firmware::CHIP_ESP32_S3
 pub use paperpaw_sdk::firmware::Check
 pub use paperpaw_sdk::firmware::PLUGINS_AT
 pub use paperpaw_sdk::firmware::PLUGINS_HEAD_LEN
