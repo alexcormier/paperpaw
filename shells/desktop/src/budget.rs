@@ -167,6 +167,20 @@ pub fn track<R>(f: impl FnOnce() -> R) -> R {
     f()
 }
 
+/// Runs `f` with allocation tracking off: for the emulator's own
+/// bookkeeping inside kernel calls (the trace's records), which the
+/// device does not have.
+pub fn untracked<R>(f: impl FnOnce() -> R) -> R {
+    struct Restore(bool);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            TRACKING.with(|t| t.set(self.0));
+        }
+    }
+    let _restore = Restore(TRACKING.with(|t| t.replace(false)));
+    f()
+}
+
 /// Whether the budget was given on the command line, over the profile's.
 static OVERRIDDEN: AtomicBool = AtomicBool::new(false);
 

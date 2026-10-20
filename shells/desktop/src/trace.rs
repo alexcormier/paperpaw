@@ -18,7 +18,15 @@ thread_local! {
     static RECORDING: Cell<bool> = const { Cell::new(false) };
     static FRAMES: RefCell<Vec<FrameRecord>> = const { RefCell::new(Vec::new()) };
     static COUNTS: RefCell<Counts> = RefCell::new(Counts::default());
+    /// The band being drawn while a frame is recorded, from 0.
+    static BAND: Cell<Option<usize>> = const { Cell::new(None) };
+    /// The calls of the frame being recorded.
+    static CALLS: RefCell<Vec<Call>> = const { RefCell::new(Vec::new()) };
 }
+
+/// Calls of one frame kept at most (a picture streamed row by row takes
+/// a few hundred).
+const MAX_CALLS: usize = 10_000;
 
 /// Calls by what was done, and bytes read.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -46,6 +54,22 @@ pub struct FrameRecord {
     /// The calls made since the frame before (opening a screen, handling
     /// a press).
     pub before: Counts,
+    /// The calls the drawing made, one by one (the first 10 000).
+    pub calls: Vec<Call>,
+}
+
+/// A storage call made while a frame was drawn.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Call {
+    /// The band it was made in, from 0.
+    pub band: usize,
+    /// What was done: `read`, `size`, `exists`, `list`, `write`, `append`,
+    /// `remove`, `rename`, `create_dir` or `remove_dir_all`.
+    pub op: &'static str,
+    /// The file or folder (for `rename`, the old name).
+    pub path: String,
+    /// Bytes read.
+    pub bytes: u64,
 }
 
 impl Counts {
@@ -106,6 +130,26 @@ fn count(f: impl FnOnce(&mut Counts)) {
     COUNTS.with(|counts| f(&mut counts.borrow_mut()));
 }
 
+/// Notes a call while a frame is recorded.
+fn note(op: &'static str, path: &str, bytes: u64) {
+    if let Some(band) = BAND.with(Cell::get) {
+        // The trace's own memory is not the kernel's.
+        crate::budget::untracked(|| {
+            CALLS.with(|calls| {
+                let mut calls = calls.borrow_mut();
+                if calls.len() < MAX_CALLS {
+                    calls.push(Call {
+                        band,
+                        op,
+                        path: path.to_string(),
+                        bytes,
+                    });
+                }
+            });
+        });
+    }
+}
+
 fn now() -> Counts {
     COUNTS.with(|counts| *counts.borrow())
 }
@@ -127,6 +171,10 @@ thread_local! {
 impl Frame {
     /// A frame begins; `None` while not tracing.
     pub fn start() -> Option<Frame> {
+        if RECORDING.with(Cell::get) {
+            BAND.with(|band| band.set(Some(0)));
+            CALLS.with(|calls| calls.borrow_mut().clear());
+        }
         on().then(|| Frame {
             started: Instant::now(),
             before: now(),
@@ -138,13 +186,18 @@ impl Frame {
     /// A band was drawn.
     pub fn band(&mut self) {
         let counts = now();
-        self.bands.push(counts.since(&self.band).calls());
+        let calls = counts.since(&self.band).calls();
+        crate::budget::untracked(|| self.bands.push(calls));
         self.band = counts;
+        if RECORDING.with(Cell::get) {
+            BAND.with(|band| band.set(Some(self.bands.len())));
+        }
     }
 
     /// The frame is drawn: its line, the screen shown being `screen`.
     pub fn done(self, screen: &str) {
         let took = self.started.elapsed();
+        BAND.with(|band| band.set(None));
         let counts = now();
         let drawing = counts.since(&self.before);
         let before = LAST.with(|last| self.before.since(&last.replace(counts)));
@@ -164,6 +217,7 @@ impl Frame {
                     bands: self.bands,
                     drawing,
                     before,
+                    calls: CALLS.with(|calls| std::mem::take(&mut *calls.borrow_mut())),
                 });
             });
         }
@@ -182,26 +236,31 @@ impl<S: Storage> Storage for Traced<S> {
             c.reads += 1;
             c.bytes += n;
         });
+        note("read", path, n);
         read
     }
 
     fn size(&self, path: &str) -> Result<u64, StorageError> {
         count(|c| c.sizes += 1);
+        note("size", path, 0);
         self.0.size(path)
     }
 
     fn exists(&self, path: &str) -> bool {
         count(|c| c.sizes += 1);
+        note("exists", path, 0);
         self.0.exists(path)
     }
 
     fn write(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
         count(|c| c.writes += 1);
+        note("write", path, 0);
         self.0.write(path, data)
     }
 
     fn append(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
         count(|c| c.writes += 1);
+        note("append", path, 0);
         self.0.append(path, data)
     }
 
@@ -211,26 +270,31 @@ impl<S: Storage> Storage for Traced<S> {
 
     fn list(&self, dir: &str, visit: &mut dyn FnMut(DirEntry<'_>)) -> Result<(), StorageError> {
         count(|c| c.lists += 1);
+        note("list", dir, 0);
         self.0.list(dir, visit)
     }
 
     fn remove(&self, path: &str) -> Result<(), StorageError> {
         count(|c| c.other += 1);
+        note("remove", path, 0);
         self.0.remove(path)
     }
 
     fn rename(&self, from: &str, to: &str) -> Result<(), StorageError> {
         count(|c| c.other += 1);
+        note("rename", from, 0);
         self.0.rename(from, to)
     }
 
     fn create_dir(&self, path: &str) -> Result<(), StorageError> {
         count(|c| c.other += 1);
+        note("create_dir", path, 0);
         self.0.create_dir(path)
     }
 
     fn remove_dir_all(&self, path: &str) -> Result<(), StorageError> {
         count(|c| c.other += 1);
+        note("remove_dir_all", path, 0);
         self.0.remove_dir_all(path)
     }
 
