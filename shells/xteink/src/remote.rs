@@ -28,13 +28,19 @@ const QUIET_MS: u64 = 5000;
 pub struct Remote {
     _usb: USB_DEVICE<'static>,
     line: Vec<u8>,
+    /// The line coming is longer than [`MAX_LINE`]: dropped whole.
+    too_long: bool,
 }
+
+/// A line longer than [`MAX_LINE`] came: not carried out cut.
+struct TooLong;
 
 impl Remote {
     pub fn new(usb: USB_DEVICE<'static>) -> Self {
         Self {
             _usb: usb,
             line: Vec::new(),
+            too_long: false,
         }
     }
 
@@ -49,13 +55,21 @@ impl Remote {
     }
 
     /// The next whole line that came, if one did.
-    fn next_line(&mut self) -> Option<Vec<u8>> {
+    fn next_line(&mut self) -> Option<Result<Vec<u8>, TooLong>> {
         while let Some(byte) = self.read_byte() {
             match byte {
+                b'\n' | b'\r' if self.too_long => {
+                    self.too_long = false;
+                    return Some(Err(TooLong));
+                }
                 b'\n' | b'\r' if self.line.is_empty() => {}
-                b'\n' | b'\r' => return Some(core::mem::take(&mut self.line)),
+                b'\n' | b'\r' => return Some(Ok(core::mem::take(&mut self.line))),
+                _ if self.too_long => {}
                 _ if self.line.len() < MAX_LINE => self.line.push(byte),
-                _ => {}
+                _ => {
+                    self.line.clear();
+                    self.too_long = true;
+                }
             }
         }
         None
@@ -63,7 +77,10 @@ impl Remote {
 
     /// The next command, once a whole line has come.
     pub fn poll(&mut self) -> Option<Command> {
-        let line = self.next_line()?;
+        let Ok(line) = self.next_line()? else {
+            error("line too long");
+            return None;
+        };
         let line = String::from_utf8_lossy(&line);
         let command = paperpaw_x4::remote::parse(&line);
         if command.is_none() {
@@ -335,7 +352,10 @@ impl Remote {
                 continue;
             };
             last = millis();
-            let Some(bytes) = line.strip_prefix(b"data ").and_then(hex_bytes) else {
+            let Some(bytes) = line
+                .ok()
+                .and_then(|line| line.strip_prefix(b"data ").and_then(hex_bytes))
+            else {
                 return println!("PP:ERR {path}: not data");
             };
             got += bytes.len();

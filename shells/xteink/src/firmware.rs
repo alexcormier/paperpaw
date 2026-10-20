@@ -820,7 +820,7 @@ impl Firmware {
                 );
                 info!("{button} pressed: {} ms", now().since(started));
                 self.apply(effects);
-                self.state.held = Some((button, Instant(now().0 + ms)));
+                self.state.held = Some((button, Instant(now().0.saturating_add(ms))));
             }
             // Only asking: answered by `remote`.
             _ => {}
