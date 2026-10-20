@@ -9,8 +9,8 @@
 //!   touch alike.
 //! - Settings › System › Power: the mode, Automatic's two levels and
 //!   *Normal while charging*.
-//! - A status item, *Power mode*: the mode's short name while it is not
-//!   Normal; nothing in Normal, so the lines stay calm.
+//! - A status item, *Power mode*: a leaf while saving, Wi-Fi crossed out
+//!   while offline; nothing in Normal, so the lines stay calm.
 
 #![no_std]
 
@@ -18,7 +18,6 @@ extern crate alloc;
 
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
-use alloc::string::String;
 use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::{events, menus};
@@ -183,12 +182,12 @@ impl Plugin for Power {
             id: STATUS,
             title: Cow::Borrowed("power.status.item"),
             value: Box::new(|env, _| {
-                let key = match env.power.level {
+                let icon = match env.power.level {
                     PowerLevel::Normal => return None,
-                    PowerLevel::Saving => "power.short.saving",
-                    PowerLevel::Offline => "power.short.offline",
+                    PowerLevel::Saving => "leaf",
+                    PowerLevel::Offline => "wifi-off",
                 };
-                Some(StatusValue::Text(String::from(env.i18n.tr(key))))
+                Some(StatusValue::Icon(Cow::Borrowed(icon)))
             }),
         })?;
         // Silently: the mode changes, only the status mark says so.

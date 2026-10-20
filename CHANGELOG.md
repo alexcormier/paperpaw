@@ -47,7 +47,8 @@ change the plugin SDK.
   in the quick panel (four segments) or under Settings, System, Power.
   Automatic goes by the battery: Saving below 20 %, Offline below 10 %,
   back 5 % above each, Normal while charging; it switches silently, and
-  the status lines name the mode while it is not Normal. Saving makes
+  the status lines show a leaf while saving and Wi-Fi crossed out while
+  offline, nothing in Normal. Saving makes
   declared work wait four times as long, sleeps after 5 minutes and
   keeps the front light at most at half; Offline keeps the radio off for
   background work. A mode's values lie over the reader's own and go
