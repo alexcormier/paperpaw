@@ -16,7 +16,7 @@
 
 use std::path::{Path, PathBuf};
 
-use paperpaw_sdk::install::{self, MAX_FILES, Package, PackageFile};
+use paperpaw_sdk::install::{self, Digest, MAX_FILES, Package, PackageFile};
 use paperpaw_sdk::{DATA_FORMATS, Id, Version};
 
 use crate::report::{Finding, Report};
@@ -725,9 +725,11 @@ fn package(plugin: &DataPlugin, folder: &Folder, add: &mut dyn FnMut(Finding)) {
                 file.path
             ),
             size: file.size,
-            sha1: std::fs::read(&file.full)
-                .map(|bytes| paperpaw_digest::sha1::hex(&bytes))
-                .unwrap_or_default(),
+            digest: Digest::Sha1(
+                std::fs::read(&file.full)
+                    .map(|bytes| paperpaw_digest::sha1::hex(&bytes))
+                    .unwrap_or_default(),
+            ),
         })
         .collect();
     let package = Package {

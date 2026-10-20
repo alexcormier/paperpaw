@@ -142,15 +142,17 @@ fn the_samples_load_and_a_release_is_compared() {
 }
 
 #[test]
-fn ppn_files_are_noted_and_releases_must_be_versions() {
+fn ppn_files_are_checked_and_releases_must_be_versions() {
     let dir = std::env::temp_dir().join(format!("paperpaw-dev-ppn-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let file = dir.join("hello-x4.ppn");
     std::fs::write(&file, b"PPNP").unwrap();
+    let place = file.display().to_string();
     let mut context = context("ppn", &[file]);
     context.release = Some("not-a-version".into());
     let report = run(&context);
-    assert!(has(&report, "package.ppn", "hello-x4.ppn", Level::Info));
+    // Cut short: the device refuses it.
+    assert!(has(&report, "package.ppn", &place, Level::Error));
     assert!(has(
         &report,
         "package.release",

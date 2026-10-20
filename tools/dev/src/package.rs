@@ -24,8 +24,8 @@
 //!
 //! Plugins with code named with `--plugin` are looked at for their SDK
 //! version against the release. `.ppn` files (native code plugins, ADR
-//! 0024) are only noted for now: their checks come with the
-//! `paperpaw-native` crate, which reads that format.
+//! 0024) are checked as the device checks them (see [`crate::ppn`]);
+//! `--release` takes a release's fingerprint for them.
 
 pub mod device;
 pub mod folder;
@@ -39,11 +39,13 @@ pub fn run(context: &Context, report: &mut Report) -> Result<(), String> {
     let release = match context.release.as_deref() {
         Some(text) => match Release::parse(text) {
             Some(release) => Some(release),
+            // For `.ppn` files (see `ppn`).
+            None if paperpaw_sdk::native::Fingerprint::parse(text).is_some() => None,
             None => {
                 report.add(Finding::error(
                     "package.release",
                     text,
-                    "`--release` takes a PaperPaw version such as 0.4.0.",
+                    "`--release` takes a PaperPaw version such as 0.4.0, or a release's                      fingerprint for .ppn files.",
                 ));
                 None
             }
@@ -66,17 +68,7 @@ pub fn run(context: &Context, report: &mut Report) -> Result<(), String> {
     if !code.is_empty() {
         device::code_plugins(context, &code, release.as_ref(), report)?;
     }
-    for ppn in &context.target.ppn {
-        let name = ppn
-            .file_name()
-            .map_or_else(|| ppn.display().to_string(), |n| n.to_string_lossy().into());
-        report.add(Finding::info(
-            "package.ppn",
-            name,
-            ".ppn checks come with paperpaw-native",
-        ));
-    }
-    Ok(())
+    crate::ppn::check(context, report)
 }
 
 /// A PaperPaw release asked for with `--release`.
