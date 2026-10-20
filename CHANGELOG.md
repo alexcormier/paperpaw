@@ -6,6 +6,10 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Wi-Fi: once work that waited for a network fails because none came
+  (away from every known network), nothing wants the radio any more,
+  so it may go off: before, it stayed wanted and the Wi-Fi plugin
+  looked for networks every few seconds until the device slept.
 - Dictionary: a damaged dictionary is no longer indexed again with
   every word looked up (each time reading its whole index): it is
   left out until its files change. The prepared indexes of

@@ -100,15 +100,14 @@ impl Kernel {
         match (waiting, self.io.network_waiting) {
             (true, None) => {
                 self.io.network_waiting = Some(self.now);
-                wifi.wanted = true;
                 self.output.commands.push(events::NETWORK_WANTED.emit(()));
             }
-            (false, Some(_)) => {
-                self.io.network_waiting = None;
-                wifi.wanted = false;
-            }
+            (false, Some(_)) => self.io.network_waiting = None,
             _ => {}
         }
+        // Also once waiting work failed (`fail_waiting_network`): nothing
+        // wants the radio then.
+        wifi.wanted = self.io.network_waiting.is_some();
         let busy = self.io.http.busy() || self.io.servers.busy() || self.io.sockets.any();
         wifi.busy = busy;
         if self.io.network_busy && !busy {

@@ -3100,6 +3100,10 @@ fn network_work_fails_when_no_network_comes() {
         log.borrow().as_slice(),
         ["core.network-wanted ", "net.reply 0", "core.network-idle "]
     );
+    assert!(
+        !kernel.shared.wifi.as_ref().unwrap().wanted,
+        "the radio may go off"
+    );
     assert!(kernel.take_requests().is_empty());
     assert_eq!(kernel.finish().wake_at(), None);
 }
