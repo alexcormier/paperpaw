@@ -14,5 +14,8 @@ keywords = ["md5", "sha1", "fnv", "no-std"]
 [dependencies]
 paperpaw-platform.workspace = true
 
+[dev-dependencies]
+proptest.workspace = true
+
 [lints]
 workspace = true

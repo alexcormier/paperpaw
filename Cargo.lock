@@ -1250,6 +1250,9 @@ dependencies = [
 [[package]]
 name = "paperpaw-config"
 version = "0.4.0-dev"
+dependencies = [
+ "proptest",
+]
 
 [[package]]
 name = "paperpaw-core"
@@ -1268,6 +1271,7 @@ name = "paperpaw-digest"
 version = "0.4.0-dev"
 dependencies = [
  "paperpaw-platform",
+ "proptest",
 ]
 
 [[package]]
@@ -1339,6 +1343,7 @@ name = "paperpaw-i18n"
 version = "0.4.0-dev"
 dependencies = [
  "paperpaw-config",
+ "proptest",
 ]
 
 [[package]]
@@ -1354,6 +1359,7 @@ name = "paperpaw-json"
 version = "0.4.0-dev"
 dependencies = [
  "paperpaw-platform",
+ "proptest",
 ]
 
 [[package]]
@@ -1816,6 +1822,9 @@ dependencies = [
 [[package]]
 name = "paperpaw-qr"
 version = "0.4.0-dev"
+dependencies = [
+ "proptest",
+]
 
 [[package]]
 name = "paperpaw-sample-hello"
@@ -1919,6 +1928,7 @@ dependencies = [
  "miniz_oxide 0.8.9",
  "paperpaw-platform",
  "paperpaw-zip",
+ "proptest",
 ]
 
 [[package]]
