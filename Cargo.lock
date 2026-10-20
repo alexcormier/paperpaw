@@ -1360,6 +1360,10 @@ dependencies = [
 name = "paperpaw-plugin-battery"
 version = "0.4.0-dev"
 dependencies = [
+ "paperpaw-core",
+ "paperpaw-i18n",
+ "paperpaw-platform",
+ "paperpaw-plugin-fonts-default",
  "paperpaw-sdk",
 ]
 

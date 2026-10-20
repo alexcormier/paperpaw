@@ -6,6 +6,12 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Battery use: its page turns pages (page buttons, up and down, the
+  arrows in the header) where the recent times awake do not fit, where
+  those below the bottom could not be seen. The log goes to the card
+  every ten minutes and at sleep instead of every minute, sparing the
+  card. A full log that cannot become the old one starts anew instead
+  of growing without end. "1 refresh" in the singular.
 - Setup: *Back* on the first page asks whether to skip the setup, going
   on first, where a stray press ended it for good; the *Skip setup*
   button still skips at once. Without the settings plugin a choice of
