@@ -271,6 +271,17 @@ fn parse_rect(text: &str) -> Option<Rect> {
 impl Screen for LogScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, _: &Env<'_>) {
         let area = self.region.unwrap_or(SCREEN);
+        // Overlays paint all of their region (see `Screen::draw`).
+        if self.region.is_some() {
+            canvas.fill_rect(
+                i32::from(area.x),
+                i32::from(area.y),
+                u32::from(area.width),
+                u32::from(area.height),
+                Color::gray(170),
+            );
+        }
+        // A mark in the corner, to tell the screens apart.
         canvas.fill_rect(
             i32::from(area.x),
             i32::from(area.y),

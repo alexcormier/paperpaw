@@ -2,18 +2,20 @@
 //! and closed in any order never empty the stack, never ask for a refresh
 //! outside the screen and never pass rows outside it, whole or in bands
 //! (ADR 0012); overlays of any size, the screen resized to odd sizes and
-//! full refreshes every so many partial ones.
+//! full refreshes every so many partial ones; frames drawn in bands the
+//! same as drawn whole.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 // Tests panic on purpose when something is wrong.
 
 mod common;
 
-use common::{BASE, DEVICE, DIMS, FULL, Harness, OVERLAY, REGION, SCREEN, tap, within};
+use common::{BASE, DEVICE, DIMS, FULL, Harness, OVERLAY, REGION, SCREEN, pointer, tap, within};
 use paperpaw_core::sdk::builtin::slots;
 use paperpaw_core::sdk::{Command, Params};
 use paperpaw_core::{Effects, Kernel};
-use paperpaw_platform::{Instant, Rect, RefreshMode};
+use paperpaw_graphics::Framebuffer;
+use paperpaw_platform::{Instant, PointerPhase, PointerTool, Rect, RefreshMode};
 use proptest::prelude::*;
 use proptest::test_runner::Config;
 
@@ -130,8 +132,9 @@ fn apply(harness: &Harness, kernel: &mut Kernel, now: u64, op: &Op) -> Effects {
         Op::Home => vec![open_slot(slots::HOME)],
         Op::Menu => vec![open_slot(slots::MENU)],
         Op::Tap(x, y) => {
-            tap(kernel, now, *x, *y);
-            return Effects::default();
+            let touch = |phase| pointer(0, phase, *x, *y, PointerTool::Finger);
+            kernel.handle(Instant(now), touch(PointerPhase::Down));
+            return kernel.handle(Instant(now + 60), touch(PointerPhase::Up));
         }
         Op::Redraw(mode) => vec![Command::Redraw(*mode)],
         Op::Notify => vec![Command::Notify(String::from("Saved"))],
@@ -190,6 +193,40 @@ proptest! {
         }
         draw(&mut kernel, align);
         prop_assert_eq!(kernel.screens().count(), 1);
+    }
+
+    /// Frames drawn in bands are the frames drawn whole (ADR 0012), as a
+    /// panel controller that keeps the frame shows them.
+    #[test]
+    fn banded_frames_match_whole_frames(
+        ops in prop::collection::vec(op(), 0..20),
+        bands in prop_oneof![Just((16, 8)), Just((7, 1)), Just((1, 1)), Just((40, 8))],
+    ) {
+        let (whole_harness, banded_harness) = (Harness::new(), Harness::new());
+        let mut whole = kernel(&whole_harness, None);
+        let mut banded = kernel(&banded_harness, Some(bands));
+        let panel = || Framebuffer::new(120, 160, DEVICE.display.format).unwrap();
+        let (mut whole_panel, mut banded_panel) = (panel(), panel());
+        let show = |kernel: &mut Kernel, panel: &mut Framebuffer| {
+            kernel.render(&mut |top, rows| panel.write_rows(top, rows));
+        };
+        // Both start from the same first frame.
+        whole.draw_again(Instant(500));
+        banded.draw_again(Instant(500));
+        show(&mut whole, &mut whole_panel);
+        show(&mut banded, &mut banded_panel);
+        for (i, op) in ops.iter().enumerate() {
+            let now = 1000 + i as u64 * 1000;
+            apply(&whole_harness, &mut whole, now, op);
+            apply(&banded_harness, &mut banded, now, op);
+            show(&mut whole, &mut whole_panel);
+            show(&mut banded, &mut banded_panel);
+            prop_assert!(
+                whole_panel.view().data == banded_panel.view().data,
+                "frames differ after {:?}",
+                &ops[..=i]
+            );
+        }
     }
 
     /// Every screen opened is closed once at most, and only screens
