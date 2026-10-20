@@ -11,6 +11,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use paperpaw_sdk::library;
+use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::ui::{self, Thumbnail, UiStyle};
 use paperpaw_sdk::{Arg, Canvas, Color, Env, Rect};
 
@@ -376,6 +377,12 @@ pub(crate) fn draw_book_row(
     tail: &str,
     next: bool,
 ) {
+    // A row, whose words are those drawn in it.
+    canvas.describe(Role::Row, "", rect, focused, None);
+    if sizes.compact {
+        draw_compact_row(canvas, env, style, sizes, rect, focused, book, note, next);
+        return;
+    }
     let Some(font) = style.font(env) else {
         return;
     };
@@ -389,10 +396,6 @@ pub(crate) fn draw_book_row(
     let x = place.x + cw + margin;
     let width = (rect.x + rect.width).saturating_sub(x + margin);
     let title = wrap_lines(env, style, style.text, &book.title, f32::from(width), 2);
-    if sizes.compact {
-        draw_compact_row(canvas, env, style, sizes, rect, focused, book, note, next);
-        return;
-    }
     let state = book.progress > 0 || book.new || next || !tail.is_empty();
     let block = title.len() as u16 * sizes.text_line
         + if note.is_empty() { 0 } else { sizes.small_line }
@@ -587,6 +590,7 @@ pub(crate) fn draw_card(
     focused: bool,
     book: &Loaded,
 ) {
+    canvas.describe(Role::Row, "", rect, focused, None);
     if sizes.compact {
         draw_compact_card(canvas, env, style, sizes, rect, focused, book);
         return;
@@ -684,13 +688,7 @@ pub(crate) fn draw_filter_row(
     let margin = style.margin as u16;
     let gap = style.gap as u16;
     let x = rect.x + margin;
-    canvas.describe(
-        paperpaw_sdk::semantics::Role::Button,
-        label,
-        rect,
-        focused,
-        None,
-    );
+    canvas.describe(Role::Button, label, rect, focused, None);
     let w = ui::draw_label(canvas, &font, style.text, f32::from(x), rect, label, ink);
     let icon_x = f32::from(x) + w + f32::from(gap / 3);
     ui::draw_icon(canvas, env, "chevron-down", style.small, icon_x, rect, ink);
@@ -783,13 +781,7 @@ pub(crate) fn draw_pills(
     for (n, (place, label)) in places.iter().zip(labels).enumerate() {
         let on = n == active;
         let radius = u32::from(place.height / 2);
-        canvas.describe(
-            paperpaw_sdk::semantics::Role::Button,
-            label,
-            *place,
-            false,
-            Some(on),
-        );
+        canvas.describe(Role::Button, label, *place, false, Some(on));
         let ink = if on {
             canvas.fill_round(*place, radius, Color::BLACK);
             Color::WHITE

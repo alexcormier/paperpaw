@@ -1,8 +1,5 @@
-//! Draft of a redesigned library (experiment): a calm list with covers and
-//! progress.
-//!
-//! Shown in place of today's library when [`crate::DRAFT`] is
-//! `files.draft.list`. The library is one list of all books (folders
+//! The library as a calm list with covers and how far each book is
+//! read. The library is one list of all books (those in folders
 //! included), opening with the book read last as a larger card, so going
 //! on reading is one confirm or one tap. Pills under the header filter
 //! the books by how far they are read (All, Reading, Unread, Finished);
@@ -33,7 +30,7 @@ mod find;
 mod index;
 mod rows;
 mod sheet;
-mod shelf;
+pub(crate) mod shelf;
 
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
@@ -41,29 +38,20 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use paperpaw_sdk::ask;
 use paperpaw_sdk::builtin::{actions, events, params, slots};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::library::{self, catalog::Walk};
-use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
-    Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, MenuEntry, Params, Rect,
-    RefreshMode, RegisterError, Registrar, Screen, ScreenSpec,
+    Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, RefreshMode,
+    RegisterError, Registrar, Screen, ScreenSpec,
 };
 
 use index::{Filter, Index, NEVER, has_catalog, read_line};
 use rows::{Loaded, Sizes};
 
-/// The library's menu in this draft.
-const MENU: Id = Id::new_static("files.list.menu");
 /// Finds a book by a letter ([`find`]).
-const FIND: Id = Id::new_static("files.list.find");
-/// Searches with the keyboard; the words come back as [`SEARCHED`].
-const SEARCH: Id = Id::new_static("files.list.search");
-const SEARCHED: Event<Typed> = Event::new("files.list.searched");
-/// The favourite books.
-const FAVOURITES: Id = Id::new_static("files.list.favourites");
+pub(crate) const FIND: Id = Id::new_static("files.list.find");
 /// A list of books: a series, a folder, the favourites, a letter, a
 /// search ([`shelf`]).
 const SHELF: Id = Id::new_static("files.list.shelf");
@@ -79,7 +67,7 @@ const STEP_MS: u64 = 20;
 /// Books whose progress is read in one step.
 const STEP_BOOKS: usize = 8;
 
-/// Registers what this draft adds (screens, actions, translations).
+/// Registers the list's screens and actions.
 pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     r.add_screen(ScreenSpec {
         id: SHELF,
@@ -111,51 +99,10 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
         ),
     )?;
     r.add_icon(FIND, Cow::Borrowed("letter-case"))?;
-    r.add_action(
-        paperpaw_sdk::ActionSpec::new(SEARCH, "files.list.search").handler(
-            |env: &Env<'_>, out: &mut Vec<Command>| {
-                let prompt = env.i18n.tr("files.search.prompt");
-                out.push(ask::text(prompt, &SEARCHED).command());
-            },
-        ),
-    )?;
-    r.add_icon(SEARCH, Cow::Borrowed("search"))?;
-    r.on(SEARCHED, |_, typed, out| {
-        let text = typed.text.trim();
-        if !text.is_empty() {
-            out.push(shelf::open(shelf::Kind::Search, text));
-        }
-    })?;
-    r.add_action(
-        paperpaw_sdk::ActionSpec::new(FAVOURITES, "files.favourites").handler(
-            |_: &Env<'_>, out: &mut Vec<Command>| {
-                out.push(shelf::open(shelf::Kind::Favourites, ""));
-            },
-        ),
-    )?;
-    r.add_icon(FAVOURITES, Cow::Borrowed("star"))?;
-    // Only what is about the library; the device's things are in its
-    // settings (and night mode on a long press of the menu button).
-    for (item, order) in [
-        (Id::from(crate::SORT), 10),
-        (FIND, 20),
-        (SEARCH, 21),
-        (FAVOURITES, 30),
-        (crate::BY_AUTHOR, 31),
-        (actions::SETTINGS, 90),
-    ] {
-        r.add_menu_entry(MenuEntry {
-            menu: MENU,
-            item,
-            order,
-        })?;
-    }
-    r.add_translations(Cow::Borrowed(include_str!("../i18n/draft-list.en.ini")))?;
-    r.add_translations(Cow::Borrowed(include_str!("../i18n/draft-list.de.ini")))?;
     Ok(())
 }
 
-/// The library screen of this draft.
+/// The library screen.
 pub(crate) fn screen(env: &Env<'_>, _params: &Params) -> Box<dyn Screen> {
     Box::new(ListScreen::new(env))
 }
@@ -164,7 +111,7 @@ pub(crate) fn screen(env: &Env<'_>, _params: &Params) -> Box<dyn Screen> {
 fn open_menu(cx: &mut Cx<'_, '_>) {
     cx.command(Command::OpenSlot(
         slots::MENU,
-        Params::new().with(params::MENU, MENU.as_str()),
+        Params::new().with(params::MENU, crate::MENU.as_str()),
     ));
 }
 
@@ -874,6 +821,7 @@ impl Screen for ListScreen {
                 // The new catalog: the index anew, the place kept.
                 self.walk = None;
                 self.walked = true;
+                crate::shelves::made(&env);
                 self.index = Index::build(env.storage);
                 let focus = self.focus;
                 self.refilter(&env);
@@ -902,7 +850,7 @@ impl Screen for ListScreen {
             cx.wake_at(env.now.add_millis(STEP_MS));
             return;
         }
-        if !self.walked {
+        if !self.walked && crate::shelves::is_outdated(&env) {
             // Books that came since the catalog was made.
             self.walk = Some(Walk::start(env.storage, &self.root));
             cx.wake_at(env.now.add_millis(STEP_MS));

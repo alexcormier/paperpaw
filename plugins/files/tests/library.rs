@@ -11,8 +11,6 @@ use std::rc::Rc;
 use paperpaw_core::Kernel;
 use paperpaw_platform::Rotation;
 use paperpaw_sdk::builtin::{events, params, slots};
-use paperpaw_sdk::event::EventData;
-use paperpaw_sdk::ui::choice::Picked;
 use paperpaw_sdk::{
     DeviceInfo, DirEntry, DisplayInfo, Id, InputCaps, Instant, MemoryClass, MemoryStorage, Params,
     PixelFormat, Storage, StorageError,
@@ -168,7 +166,7 @@ fn hidden_it_reads_nothing_until_it_shows() {
 }
 
 /// Coming back, the focus is on the book it was on, on its page, and
-/// marking a book finished keeps the focus on it.
+/// marking a book finished on its sheet keeps the focus on it.
 #[test]
 fn the_focus_stays_on_its_book() {
     let (mut kernel, _) = library(card(30), "[files]\nsort = files.sort.name\n");
@@ -190,16 +188,10 @@ fn the_focus_stays_on_its_book() {
         focused(&mut kernel)
     );
 
-    let picked = Picked {
-        path: "books/book 13.txt".into(),
-        option: "finished".into(),
-    };
-    let effects = kernel.send_event(
-        Instant(0),
-        Id::new_static("files.book-chosen"),
-        picked.to_params(),
-    );
-    settle(&mut kernel, effects);
+    // Its sheet: Open, then Mark as finished.
+    action(&mut kernel, "core.menu");
+    action(&mut kernel, "core.down");
+    action(&mut kernel, "core.confirm");
     let shown = focused(&mut kernel);
     assert!(
         shown.contains("book 13") && shown.contains("Finished"),

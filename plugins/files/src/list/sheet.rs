@@ -59,6 +59,7 @@ impl BookSheet {
             author: details.author.clone().unwrap_or_default(),
             series: details.series.clone().unwrap_or_default(),
             number: details.series_index.clone().unwrap_or_default(),
+            tags: String::new(),
             path: path.clone(),
         };
         let book = Loaded::load(env, line, opened, sizes.cover, false);

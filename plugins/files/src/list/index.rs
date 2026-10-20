@@ -106,11 +106,13 @@ pub(crate) struct Line {
     pub(crate) series: String,
     /// Its number in the series.
     pub(crate) number: String,
+    /// Its tags, separated by U+001F (as the catalog keeps them).
+    pub(crate) tags: String,
 }
 
 impl Line {
     /// The line `text` (tab separated: path, author, title, series,
-    /// number, tags), without its tags.
+    /// number, tags).
     pub(crate) fn parse(text: &str) -> Option<Line> {
         let mut fields = text.split('\t');
         let path = fields.next().filter(|p| !p.is_empty())?.to_owned();
@@ -121,6 +123,7 @@ impl Line {
             title: next(),
             series: next(),
             number: next(),
+            tags: next(),
         })
     }
 }

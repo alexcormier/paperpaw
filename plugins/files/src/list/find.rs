@@ -110,7 +110,7 @@ impl FindScreen {
 
     fn choose(&self, index: usize, cx: &mut Cx<'_, '_>) {
         if index == 0 {
-            cx.command(Command::RunAction(super::SEARCH));
+            cx.command(Command::RunAction(crate::SEARCH));
         } else if let Some(letter) = self.letters.get(index - 1) {
             let letter = String::from(*letter as char);
             cx.command(shelf::open(Kind::Letter, &letter));

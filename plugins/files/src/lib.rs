@@ -1,55 +1,44 @@
-//! The library: the books and folders of the library folder.
+//! The library: the books under the library folder, as a calm list.
 //!
-//! Each book shows its cover, title and author (read from the book the
-//! first time it is shown, then cached) and how far it has been read.
-//! Books are ordered by when they were last read, or by name; the library's
-//! menu switches the order. Folders come first and act as collections.
-//! Covers and details are read in the background for the visible rows
-//! only, and only one page of a folder is held in memory, so libraries of
-//! any size work on small devices.
+//! It opens with the book read last as a card, so going on reading is one
+//! confirm or one tap; below it every book with its cover, title, author
+//! and how far it is read. What is shown (all books, those being read,
+//! unread or finished ones, the shelves) is chosen above the books: from
+//! one row on small screens, from pills on larger ones. Series, folders
+//! (collections), favourites, authors and tags open as lists of their
+//! own; "Find" picks a book by a letter without a keyboard. See [`list`].
 //!
 //! The library folder is a setting; its editor (`files.choose-folder`)
 //! browses the device's folders, so no path has to be typed.
 //!
-//! Works with buttons only (up/down or left/right move the selection,
-//! page buttons scroll, confirm opens, back goes to the parent folder, the
-//! menu button opens the library's menu) and with touch (tap a row; tap the
-//! header for the menu). Bound to `core.library`, and to `core.home` only
-//! as a fallback when no home screen plugin is installed.
+//! Works with buttons alone and with touch alike. Bound to
+//! `core.library`, and to `core.home` only as a fallback when no home
+//! screen plugin is installed.
 
 #![no_std]
 
 extern crate alloc;
 
-// Drafts of a redesigned library, chosen by [`DRAFT`] (experiment).
-mod draft_list;
-mod draft_shelves;
-mod draft_wall;
 mod folders;
 mod info;
+mod list;
 mod shelves;
 
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
-use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use paperpaw_sdk::ask;
-use paperpaw_sdk::builtin::{
-    actions as core_actions, events, groups, params, settings as core_settings, slots,
-};
+use paperpaw_sdk::builtin::{actions as core_actions, events, groups, params, slots};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::files;
-use paperpaw_sdk::library::listing::{Entry, Listing, UNRANKED};
-use paperpaw_sdk::library::{self, Book};
 use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::setting::{Setting, Text};
-use paperpaw_sdk::ui::{self, Focus, ListChange, ListView, Thumbnail, UiStyle};
+use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
-    Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest, MenuEntry,
-    Params, Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen,
-    ScreenSpec, SettingSpec, Version,
+    Canvas, Color, Command, Cx, Env, Id, Manifest, MenuEntry, Params, Plugin, Priority, Rect,
+    RegisterError, Registrar, SDK_VERSION, ScreenSpec, SettingSpec, Version,
 };
 
 pub const PLUGIN: Id = Id::new_static("files");
@@ -58,9 +47,9 @@ pub const SCREEN: Id = Id::new_static("files.browser");
 pub const ROOT: Setting<Text> = paperpaw_sdk::library::FOLDER;
 /// The order of books: [`SORT_RECENT`] or [`SORT_NAME`].
 pub const SORT: Setting<Text> = Setting::new("files.sort");
-/// Recently read books first, then the others by name.
+/// Recently read books first, then the others by title.
 pub const SORT_RECENT: &str = "files.sort.recent";
-/// By file name.
+/// By title.
 pub const SORT_NAME: &str = "files.sort.name";
 /// The folder finished books are moved to (by the book's options).
 pub const ARCHIVE: Setting<Text> = Setting::new("files.archive");
@@ -69,13 +58,6 @@ pub const ARCHIVE: Setting<Text> = Setting::new("files.archive");
 pub const VIEW: Setting<Text> = Setting::new("files.view");
 pub const VIEW_LIST: &str = "files.view.list";
 pub const VIEW_COVERS: &str = "files.view.covers";
-/// Which draft of a redesigned library shows (experiment): today's
-/// ([`DRAFT_TODAY`]), a calm list, a cover wall or shelves.
-pub const DRAFT: Setting<Text> = Setting::new("files.draft");
-pub const DRAFT_TODAY: &str = "files.draft.today";
-pub const DRAFT_LIST: &str = "files.draft.list";
-pub const DRAFT_WALL: &str = "files.draft.wall";
-pub const DRAFT_SHELVES: &str = "files.draft.shelves";
 /// Chooses a folder for the setting named by the parameter `id`.
 pub const CHOOSE_FOLDER: Id = Id::new_static("files.choose-folder");
 /// The library's menu.
@@ -90,9 +72,6 @@ pub const FAVOURITES: Id = Id::new_static("files.favourites");
 pub const SEARCH: Id = Id::new_static("files.search");
 /// The keyboard's reply with the words.
 const SEARCH_ENTERED: Event<Typed> = Event::new("files.search-entered");
-/// What can be done with a book (held in the list).
-const CHOICE: Id = Id::new_static("files.choice");
-const CHOSEN: Event<paperpaw_sdk::ui::choice::Picked> = Event::new("files.book-chosen");
 /// Book information; parameter `path`.
 pub const INFO_SCREEN: Id = Id::new_static("files.info");
 /// The submenu with the views above ("Shelves").
@@ -107,7 +86,7 @@ pub struct Files;
 static FOLDER: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new().editor(CHOOSE_FOLDER);
 
 /// Where the books and the archive are, and how the library shows them.
-static SETTINGS: [SettingSpec; 5] = [
+static SETTINGS: [SettingSpec; 4] = [
     SettingSpec::fixed_text(
         ROOT.static_str(),
         "files.setting.root",
@@ -141,15 +120,6 @@ static SETTINGS: [SettingSpec; 5] = [
         groups::LIBRARY,
     )
     .described("files.setting.sort.help"),
-    SettingSpec::fixed_choice(
-        DRAFT.static_str(),
-        "files.setting.draft",
-        &[DRAFT_TODAY, DRAFT_LIST, DRAFT_WALL, DRAFT_SHELVES],
-        DRAFT_TODAY,
-        groups::LIBRARY,
-    )
-    .advanced()
-    .described("files.setting.draft.help"),
 ];
 
 impl Plugin for Files {
@@ -167,22 +137,13 @@ impl Plugin for Files {
         r.add_screen(ScreenSpec {
             id: SCREEN,
             title: Cow::Borrowed("files.title"),
-            factory: Box::new(|env, params| library_screen(env, params)),
+            factory: Box::new(|env, params| list::screen(env, params)),
         })?;
-        draft_list::register(r)?;
-        draft_wall::register(r)?;
-        draft_shelves::register(r)?;
+        list::register(r)?;
         r.add_screen(ScreenSpec {
             id: CHOOSE_FOLDER,
             title: Cow::Borrowed("files.choose.title"),
             factory: Box::new(|env, params| Box::new(folders::FolderChooser::new(env, params))),
-        })?;
-        r.add_screen(ScreenSpec {
-            id: CHOICE,
-            title: Cow::Borrowed("files.title"),
-            factory: Box::new(|env, params| {
-                Box::new(paperpaw_sdk::ui::choice::Choice::new(env, params))
-            }),
         })?;
         r.add_screen(ScreenSpec {
             id: INFO_SCREEN,
@@ -203,12 +164,6 @@ impl Plugin for Files {
                 "list-details",
             ),
             (BY_TAG, shelves::MODE_TAGS, "files.by-tag", "tag"),
-            (
-                FAVOURITES,
-                shelves::MODE_FAVOURITES,
-                "files.favourites",
-                "star",
-            ),
         ] {
             r.add_action(
                 paperpaw_sdk::ActionSpec::new(action.clone(), title).handler(
@@ -222,6 +177,14 @@ impl Plugin for Files {
             )?;
             r.add_icon(action, Cow::Borrowed(icon))?;
         }
+        r.add_action(
+            paperpaw_sdk::ActionSpec::new(FAVOURITES, "files.favourites").handler(
+                |_: &Env<'_>, out: &mut Vec<Command>| {
+                    out.push(list::shelf::open(list::shelf::Kind::Favourites, ""));
+                },
+            ),
+        )?;
+        r.add_icon(FAVOURITES, Cow::Borrowed("star"))?;
         r.bind_slot(slots::CHOOSE_FOLDER, CHOOSE_FOLDER, Priority::DEFAULT)?;
         r.bind_slot(slots::BOOK_INFO, INFO_SCREEN, Priority::DEFAULT)?;
         r.bind_slot(slots::HOME, SCREEN, Priority::FALLBACK)?;
@@ -257,12 +220,7 @@ impl Plugin for Files {
         r.on(SEARCH_ENTERED, |_, typed, out| {
             let text = typed.text.trim();
             if !text.is_empty() {
-                out.push(Command::OpenScreen(
-                    SHELF_SCREEN,
-                    Params::new()
-                        .with(params::MODE, shelves::MODE_SEARCH)
-                        .with(params::TEXT, text.to_string()),
-                ));
+                out.push(list::shelf::open(list::shelf::Kind::Search, text));
             }
         })?;
         // The shelves as a submenu: an action named like its menu.
@@ -289,15 +247,16 @@ impl Plugin for Files {
                 order,
             })?;
         }
+        // Only what is about the library: night mode and home are the
+        // device's (in the main menu and the quick panel).
         for (item, order) in [
             (Id::from(SORT), 10),
-            (VIEW.into(), 10),
-            (SEARCH, 11),
-            (SHELVES_MENU, 12),
-            (ROOT.into(), 20),
-            (core_settings::NIGHT_MODE.into(), 30),
-            (core_actions::SETTINGS, 40),
-            (core_actions::HOME, 50),
+            (VIEW.into(), 11),
+            (list::FIND, 20),
+            (SEARCH, 21),
+            (SHELVES_MENU, 30),
+            (ROOT.into(), 80),
+            (core_actions::SETTINGS, 90),
         ] {
             r.add_menu_entry(MenuEntry {
                 menu: MENU,
@@ -312,519 +271,6 @@ impl Plugin for Files {
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())
-    }
-}
-
-/// The library screen of the chosen draft ([`DRAFT`]).
-fn library_screen(env: &Env<'_>, params: &Params) -> Box<dyn Screen> {
-    match env.settings.read(&DRAFT) {
-        DRAFT_LIST => draft_list::screen(env, params),
-        DRAFT_WALL => draft_wall::screen(env, params),
-        DRAFT_SHELVES => draft_shelves::screen(env, params),
-        _ => Box::new(Browser::new(env, params)),
-    }
-}
-
-/// Delay between two books read in the background, so input stays quick.
-pub(crate) const STEP_DELAY_MS: u64 = 20;
-
-/// What the library has to do before it shows again.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-enum Stale {
-    /// Nothing: what it holds is as it is.
-    No,
-    /// Read the folder again: a book was read (its progress and place in
-    /// the order changed), or books came or went.
-    Reload,
-    /// Be made anew: a setting changed (the size of the UI, the order,
-    /// the library folder).
-    Remake,
-}
-
-#[derive(Debug)]
-pub(crate) struct Browser {
-    root: String,
-    dir: String,
-    /// Recently read files of this folder: `(name, rank)`.
-    recent: Vec<(String, u32)>,
-    /// Number of entries in the folder.
-    len: usize,
-    /// Index of the first entry of `page`.
-    first: usize,
-    /// The entries of the visible page, with their cached details.
-    page: Vec<(Entry, Option<Book>)>,
-    /// The covers of `page`, made small once (drawing a cover from its
-    /// file in every band of every frame took most of a page's time).
-    thumbs: Vec<Option<Thumbnail>>,
-    /// What is to be done before it shows again (see [`Stale`]).
-    stale: Stale,
-    /// Covered by a full screen (a book, say): it holds no page then, and
-    /// events only mark it [`stale`](Self::stale).
-    hidden: bool,
-    /// The entry the focus was on when it was hidden, to find it again.
-    anchor: Option<Entry>,
-    style: UiStyle,
-    header: ui::Header,
-    list: ListView,
-}
-
-impl Browser {
-    pub(crate) fn new(env: &Env<'_>, params: &Params) -> Self {
-        let mut browser = Self::made(env, params);
-        browser.show_at(env, None);
-        browser
-    }
-
-    /// The library for `params` as the settings say, not read yet.
-    pub(crate) fn made(env: &Env<'_>, params: &Params) -> Self {
-        let root = env
-            .settings
-            .text(ROOT.as_str())
-            .trim_matches('/')
-            .to_string();
-        let dir = params.get(params::PATH).unwrap_or(&root).to_string();
-        let style = UiStyle::new(env);
-        let display = env.device.display;
-        let header = ui::Header::new(env, &style, true);
-        let top = header.area.height + style.gap as u16;
-        let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
-        Self {
-            root,
-            dir,
-            recent: Vec::new(),
-            len: 0,
-            first: 0,
-            page: Vec::new(),
-            thumbs: Vec::new(),
-            stale: Stale::No,
-            hidden: false,
-            anchor: None,
-            list: list_view(env, &style, area),
-            style,
-            header,
-        }
-    }
-
-    /// The folder's entries, in the chosen order.
-    fn listing<'a>(&'a self, env: &'a Env<'_>, rank: &'a dyn Fn(&str) -> u32) -> Listing<'a> {
-        let by_recent = env.settings.read(&SORT) != SORT_NAME;
-        Listing {
-            storage: env.storage,
-            formats: env.formats,
-            dir: &self.dir,
-            folders_only: false,
-            rank: by_recent.then_some(rank),
-        }
-    }
-
-    /// The rank of a recently read file of this folder.
-    fn rank_of(recent: &[(String, u32)], name: &str) -> u32 {
-        recent
-            .iter()
-            .find(|(n, _)| n == name)
-            .map_or(UNRANKED, |(_, rank)| *rank)
-    }
-
-    /// The book at `path` as an entry of its folder, to find it there.
-    fn book_entry(path: &str) -> Entry {
-        Entry {
-            name: files::name(path).to_string(),
-            is_dir: false,
-            rank: UNRANKED,
-            size: 0,
-        }
-    }
-
-    /// The entry the focus is on, if its page is held.
-    fn focused(&self) -> Option<Entry> {
-        self.entry(self.list.focus).map(|(entry, _)| entry.clone())
-    }
-
-    /// Shows the current folder as it is now: at `anchor` (an entry of it,
-    /// or one that was), reading only the page that holds it; else from
-    /// the top. Where the entry went, the focus stays at its place.
-    fn show_at(&mut self, env: &Env<'_>, anchor: Option<Entry>) {
-        let prefix = if self.dir.is_empty() {
-            String::new()
-        } else {
-            format!("{}/", self.dir)
-        };
-        self.recent = library::opened_books(env.storage)
-            .into_iter()
-            .enumerate()
-            .filter_map(|(rank, path)| {
-                let name = path.strip_prefix(&prefix)?;
-                (!name.contains('/')).then(|| (name.to_string(), rank as u32))
-            })
-            .collect();
-        let rows = self.list.rows().max(1);
-        let recent = &self.recent;
-        let rank = |name: &str| Self::rank_of(recent, name);
-        let (len, first, focus, page) = {
-            let listing = self.listing(env, &rank);
-            let len = listing.count();
-            match anchor {
-                _ if len == 0 => (0, 0, 0, Vec::new()),
-                None => (len, 0, 0, listing.after(None, rows)),
-                Some(anchor) => {
-                    // Its place in the order now (a book just read moved).
-                    let ranked = listing.rank.is_some() && !anchor.is_dir;
-                    let anchor = Entry {
-                        rank: if ranked { rank(&anchor.name) } else { UNRANKED },
-                        ..anchor
-                    };
-                    let (first, page) = listing.page_of(&anchor, rows);
-                    match page.iter().position(|e| e.name == anchor.name) {
-                        Some(at) => (len, first, first + at, page),
-                        None => {
-                            let focus = listing.rank(&anchor).min(len - 1);
-                            if focus - focus % rows == first {
-                                (len, first, focus, page)
-                            } else {
-                                let page = listing.page(focus / rows, rows, len);
-                                (len, focus - focus % rows, focus, page)
-                            }
-                        }
-                    }
-                }
-            }
-        };
-        self.len = len;
-        self.list.focus = focus;
-        self.first = first;
-        self.stale = Stale::No;
-        self.set_page(env, page);
-    }
-
-    /// Makes it anew for the settings as they are now: in the folder shown
-    /// (the new library folder where that changed), at the same entry.
-    fn remake(&mut self, env: &Env<'_>) {
-        let root = env.settings.read(&ROOT).trim_matches('/');
-        let dir = if root == self.root {
-            self.dir.clone()
-        } else {
-            root.to_string()
-        };
-        let anchor = if dir == self.dir {
-            self.focused().or_else(|| self.anchor.take())
-        } else {
-            None
-        };
-        let hidden = self.hidden;
-        *self = Self::made(env, &Params::new().with(params::PATH, dir));
-        self.hidden = hidden;
-        self.show_at(env, anchor);
-    }
-
-    /// Does what [`Self::stale`] says is to be done before it shows.
-    fn freshen(&mut self, env: &Env<'_>) {
-        match self.stale {
-            Stale::No => {}
-            Stale::Reload => {
-                let anchor = self.focused().or_else(|| self.anchor.take());
-                self.show_at(env, anchor);
-            }
-            Stale::Remake => self.remake(env),
-        }
-        self.anchor = None;
-    }
-
-    /// Takes `entries` as the visible page, with their cached details.
-    fn set_page(&mut self, env: &Env<'_>, entries: Vec<Entry>) {
-        let page = entries
-            .into_iter()
-            .map(|entry| {
-                let book = (!entry.is_dir)
-                    .then(|| library::book_sized(env.storage, &self.path_of(&entry), entry.size))
-                    .flatten();
-                (entry, book)
-            })
-            .collect();
-        self.page = page;
-        self.thumbs = (0..self.page.len())
-            .map(|slot| self.thumb(env, slot))
-            .collect();
-    }
-
-    /// The cover of entry `slot` of the page made small, at the size it is
-    /// drawn, if it has one.
-    fn thumb(&self, env: &Env<'_>, slot: usize) -> Option<Thumbnail> {
-        let (entry, book) = self.page.get(slot)?;
-        let book = book.as_ref()?;
-        let rect = self.list.row_rect(0);
-        let place = if self.list.column_count() > 1 {
-            cell_cover(env, &self.style, rect)?
-        } else {
-            row_thumb(&self.style, rect)
-        };
-        let format = env.device.display.format;
-        let path = self.path_of(entry);
-        library::cover(env.storage, &path, book, place.width, place.height, format)
-    }
-
-    /// Loads the page the focus is on, if it is not loaded.
-    fn show_focus(&mut self, env: &Env<'_>) {
-        let rows = self.list.rows();
-        let first = self.list.page() * rows;
-        if first == self.first && !self.page.is_empty() || self.len == 0 {
-            return;
-        }
-        let recent = &self.recent;
-        let rank = |name: &str| Self::rank_of(recent, name);
-        let page = {
-            let listing = self.listing(env, &rank);
-            let last = self.page.last().map(|(e, _)| e);
-            let head = self.page.first().map(|(e, _)| e);
-            if first == self.first + rows {
-                listing.after(last, rows)
-            } else if first + rows == self.first {
-                listing.before(head, rows)
-            } else {
-                listing.page(self.list.page(), rows, self.len)
-            }
-        };
-        self.first = first;
-        self.set_page(env, page);
-    }
-
-    fn entry(&self, index: usize) -> Option<&(Entry, Option<Book>)> {
-        self.page.get(index.checked_sub(self.first)?)
-    }
-
-    fn path_of(&self, entry: &Entry) -> String {
-        if self.dir.is_empty() {
-            entry.name.clone()
-        } else {
-            format!("{}/{}", self.dir, entry.name)
-        }
-    }
-
-    /// Moves the focus by `delta` (`row` a row of the grid). The order at
-    /// the top is a stop between the last entry and the first, so that
-    /// buttons reach the menu as a tap on it does.
-    fn step(&mut self, delta: isize, row: isize, cx: &mut Cx<'_, '_>) {
-        let len = self.len;
-        let rows = self.list.rows();
-        let single = delta.abs() <= row.max(1);
-        let focus = self.list.focus;
-        let off_top = delta < 0 && (focus as isize) < -delta;
-        let off_end = delta > 0 && focus + 1 == len;
-        if self.header.note_focused {
-            // Back into the list: at its first entry, or its last.
-            self.header.note_focused = false;
-            self.list.active = true;
-            cx.request_redraw_area(self.header.area);
-            if single {
-                let to = if delta > 0 { 0 } else { len.saturating_sub(1) };
-                let page = self.list.page();
-                self.list.focus = to;
-                if self.list.page() == page {
-                    cx.request_redraw_area(self.list.row_rect(to % rows));
-                    cx.request_refresh(RefreshMode::Fast);
-                } else {
-                    self.moved(ListChange::Page, cx);
-                }
-                return;
-            }
-        } else if single && self.list.shown && len > 0 && (off_top || off_end) {
-            self.header.note_focused = true;
-            self.list.active = false;
-            cx.request_redraw_area(self.header.area);
-            cx.request_redraw_area(self.list.row_rect(focus % rows));
-            cx.request_refresh(RefreshMode::Fast);
-            return;
-        }
-        let change = self.list.move_focus(delta, len);
-        self.moved(change, cx);
-    }
-
-    fn moved(&mut self, change: ListChange, cx: &mut Cx<'_, '_>) {
-        if change == ListChange::Page {
-            let env = *cx.env();
-            self.show_focus(&env);
-            cx.wake_at(env.now);
-        }
-        // The focus changes nothing but its items: only they are drawn.
-        self.list.request(change, cx);
-    }
-
-    fn open(&mut self, index: usize, cx: &mut Cx<'_, '_>) {
-        let Some((entry, _)) = self.entry(index).cloned() else {
-            return;
-        };
-        let path = self.path_of(&entry);
-        if entry.is_dir {
-            self.dir = path;
-            let env = *cx.env();
-            self.show_at(&env, None);
-            cx.request_redraw();
-            cx.wake_at(env.now);
-        } else {
-            cx.command(Command::OpenSlot(
-                slots::READER,
-                Params::new().with(params::PATH, path),
-            ));
-        }
-    }
-
-    /// Goes to the parent folder; `false` at the library root.
-    fn up(&mut self, cx: &mut Cx<'_, '_>) -> bool {
-        if self.dir == self.root || self.dir.is_empty() {
-            return false;
-        }
-        let child = Entry::folder(self.dir.rsplit('/').next().unwrap_or_default());
-        self.dir = self
-            .dir
-            .rsplit_once('/')
-            .map_or(String::new(), |(parent, _)| parent.to_string());
-        let env = *cx.env();
-        self.show_at(&env, Some(child));
-        cx.request_redraw();
-        cx.wake_at(env.now);
-        true
-    }
-
-    /// Offers what can be done with book `index`; `false` for a folder.
-    fn offer(&mut self, index: usize, cx: &mut Cx<'_, '_>) -> bool {
-        let Some((entry, book)) = self.entry(index).cloned() else {
-            return false;
-        };
-        if entry.is_dir {
-            return false;
-        }
-        let env = *cx.env();
-        let path = self.path_of(&entry);
-        let favourite = library::favourites(env.storage).contains(&path);
-        let finished = book.as_ref().and_then(|b| b.progress) == Some(100);
-        let mut options = alloc::vec![
-            "open",
-            if favourite {
-                "unfavourite"
-            } else {
-                "favourite"
-            },
-            if finished { "unfinished" } else { "finished" },
-            "info",
-        ];
-        if can_archive(&env, &path) {
-            options.push("archive");
-        }
-        if !env.device.input.touch {
-            options.push("menu");
-        }
-        let title = book
-            .and_then(|b| b.title)
-            .unwrap_or_else(|| entry.name.clone());
-        cx.command(paperpaw_sdk::ui::choice::open(
-            CHOICE,
-            &CHOSEN,
-            &title,
-            &path,
-            "files.option.",
-            &options,
-        ));
-        true
-    }
-
-    /// Does what was chosen for the book at `path`.
-    fn chosen(&mut self, option: &str, path: &str, cx: &mut Cx<'_, '_>) {
-        let env = *cx.env();
-        match option {
-            "open" => cx.command(Command::OpenSlot(
-                slots::READER,
-                Params::new().with(params::PATH, path.to_string()),
-            )),
-            "favourite" | "unfavourite" => {
-                let favourite = option == "favourite";
-                library::set_favourite(env.storage, path, favourite);
-                let key = if favourite {
-                    "files.favourite-added"
-                } else {
-                    "files.favourite-removed"
-                };
-                cx.command(Command::Notify(env.i18n.tr(key).to_string()));
-            }
-            "finished" | "unfinished" => {
-                library::set_finished(env.storage, path, option == "finished");
-                self.show_at(&env, Some(Self::book_entry(path)));
-                cx.request_redraw();
-            }
-            "archive" => {
-                archive(&env, path, cx);
-                // Gone from here: the focus stays at its place.
-                self.show_at(&env, Some(Self::book_entry(path)));
-                cx.request_redraw();
-            }
-            "info" => cx.command(Command::OpenScreen(
-                INFO_SCREEN,
-                Params::new().with(params::PATH, path.to_string()),
-            )),
-            "menu" => Self::open_menu(cx),
-            _ => {}
-        }
-    }
-
-    fn open_menu(cx: &mut Cx<'_, '_>) {
-        cx.command(Command::OpenSlot(
-            slots::MENU,
-            Params::new().with(params::MENU, MENU.as_str()),
-        ));
-    }
-}
-
-/// An entry of the page as drawn: the file or folder, its details, its
-/// cover made small.
-pub(crate) struct Shown<'a> {
-    pub(crate) entry: &'a Entry,
-    pub(crate) book: Option<&'a Book>,
-    pub(crate) thumb: Option<&'a Thumbnail>,
-}
-
-/// Where a row of the list shows its cover.
-pub(crate) fn row_thumb(style: &UiStyle, rect: Rect) -> Rect {
-    let margin = style.margin as u16;
-    let thumb_h = rect.height.saturating_sub(style.gap as u16 * 2);
-    Rect::new(
-        rect.x + margin,
-        rect.y + (rect.height - thumb_h) / 2,
-        thumb_h * 2 / 3,
-        thumb_h,
-    )
-}
-
-/// Where a cell of the grid shows its cover, above its title's lines.
-pub(crate) fn cell_cover(env: &Env<'_>, style: &UiStyle, rect: Rect) -> Option<Rect> {
-    let gap = style.gap as u16;
-    let side = cell_side(style, rect.width);
-    let line = style.font(env)?.line_metrics(style.small).line_height as u16;
-    let width = rect.width.saturating_sub(2 * side);
-    Some(Rect::new(
-        rect.x + side,
-        rect.y + gap,
-        width,
-        rect.height.saturating_sub(2 * gap + 2 * line),
-    ))
-}
-
-/// How far the covers of the grid sit in from the sides of their cells
-/// `width` pixels wide: clear of the focus drawn around a cell
-/// ([`ui::focus_rect`]), a line apart from a frame.
-pub(crate) fn cell_side(style: &UiStyle, width: u16) -> u16 {
-    let focus = ui::focus_rect(style, Rect::new(0, 0, width, width)).x;
-    let frame = match style.focus {
-        Focus::Fill => 0,
-        Focus::Soft if style.grays > 2 => 0,
-        _ => (style.line * 2).max(3) as u16,
-    };
-    (style.gap as u16).max(focus + frame + style.line as u16)
-}
-
-/// The style the grid's focus is drawn with: around a cover and its
-/// title, a box with the style's corners, not a pill.
-pub(crate) fn grid_style(style: &UiStyle) -> UiStyle {
-    UiStyle {
-        pill: false,
-        ..*style
     }
 }
 
@@ -857,169 +303,6 @@ pub(crate) fn stem_and_format(name: &str) -> (&str, String) {
     };
     let (stem, extension) = unzipped.rsplit_once('.').unwrap_or((unzipped, ""));
     (stem, extension.to_uppercase())
-}
-
-/// Draws one row: a cover (or folder) on the left, then title, progress
-/// and a note (author and format).
-pub(crate) fn draw_row(
-    canvas: &mut Canvas<'_>,
-    env: &Env<'_>,
-    style: &UiStyle,
-    rect: Rect,
-    focused: bool,
-    shown: Shown<'_>,
-) {
-    let Shown {
-        entry,
-        book,
-        thumb: small,
-    } = shown;
-    let fg = style.focus_ink(focused);
-    let thumb = row_thumb(style, rect);
-    let text_x = thumb.x + thumb.width;
-    let text = Rect::new(
-        text_x,
-        rect.y,
-        rect.width.saturating_sub(text_x - rect.x),
-        rect.height,
-    );
-    if entry.is_dir {
-        draw_folder(canvas, style, thumb, fg);
-        let note = env.i18n.tr("files.folder");
-        ui::draw_noted_row(canvas, env, style, text, focused, &entry.name, "›", note);
-        return;
-    }
-    let (stem, format) = stem_and_format(&entry.name);
-    // Without a cover made small (none, or no memory for it), a stand-in:
-    // a cover read from its book in every band takes most of a page's time.
-    match small {
-        Some(small) => {
-            let x = thumb.x + thumb.width.saturating_sub(small.width()) / 2;
-            let y = thumb.y + thumb.height.saturating_sub(small.height()) / 2;
-            small.draw_round(canvas, x, y, picture_radius(style, thumb));
-        }
-        None => {
-            let title = &*shown_title(book, stem);
-            draw_placeholder(canvas, env, style, thumb, title, &format, fg);
-        }
-    }
-    let title = &*shown_title(book, stem);
-    let progress = match book.and_then(|b| b.progress) {
-        Some(100) => env.i18n.tr("files.finished").to_string(),
-        Some(p) if p > 0 => format!("{p} %"),
-        _ => String::new(),
-    };
-    let note = match book.and_then(|b| b.author.as_deref()) {
-        Some(author) => format!("{author} · {format}"),
-        None => format,
-    };
-    ui::draw_noted_row(canvas, env, style, text, focused, title, &progress, &note);
-}
-
-/// The library's list, or its grid of covers ([`VIEW`]): as many columns
-/// as covers about 3 cm wide fit, at least three.
-pub(crate) fn list_view(env: &Env<'_>, style: &UiStyle, area: Rect) -> ListView {
-    if env.settings.read(&VIEW) != VIEW_COVERS {
-        return ListView::new(area, style.noted_row()).focus_on_keys(env);
-    }
-    let margin = style.margin as u16;
-    let room = |inset: u16| area.width.saturating_sub(2 * inset);
-    let within = room(margin.saturating_sub(style.gap as u16));
-    let columns = (u32::from(within) / env.metrics.mm(30).max(1)).max(3);
-    // Covers line up with the margins, as text does: the cells reach
-    // as far past them as covers sit in, which depends a little on the
-    // cells' width.
-    let mut side = style.gap as u16;
-    for _ in 0..3 {
-        let inset = margin.saturating_sub(side);
-        side = cell_side(style, room(inset) / columns as u16);
-    }
-    let inset = margin.saturating_sub(side);
-    let area = Rect::new(area.x + inset, area.y, room(inset), area.height);
-    let cell = u32::from(area.width) / columns;
-    let cover = cell.saturating_sub(2 * u32::from(cell_side(style, cell as u16))) * 4 / 3;
-    let title = style.font(env).map_or(style.row / 2, |f| {
-        f.line_metrics(style.small).line_height as u32
-    });
-    let row = (cover + title * 2 + style.gap * 2).min(u32::from(area.height));
-    ListView::new(area, row).columns(columns).focus_on_keys(env)
-}
-
-/// One cover of the grid: the cover (or folder, or a stand-in) and the
-/// title below it, shortened to its width.
-pub(crate) fn draw_cell(
-    canvas: &mut Canvas<'_>,
-    env: &Env<'_>,
-    style: &UiStyle,
-    rect: Rect,
-    focused: bool,
-    shown: Shown<'_>,
-) {
-    let Shown {
-        entry,
-        book,
-        thumb: small,
-    } = shown;
-    let fg = style.focus_ink(focused);
-    let (Some(font), Some(cover)) = (style.font(env), cell_cover(env, style, rect)) else {
-        return;
-    };
-    let line = font.line_metrics(style.small).line_height as u16;
-    let width = cover.width;
-    let label_area = |n: u16| Rect::new(cover.x, cover.y + cover.height + n * line, width, line);
-    if entry.is_dir {
-        draw_folder(canvas, style, cover, fg);
-        let x = f32::from(cover.x);
-        ui::draw_label(
-            canvas,
-            &font,
-            style.small,
-            x,
-            label_area(0),
-            &entry.name,
-            fg,
-        );
-        return;
-    }
-    let (stem, format) = stem_and_format(&entry.name);
-    let title = &*shown_title(book, stem);
-    match small {
-        // On the line its title starts, at the bottom of its place.
-        Some(small) => {
-            let y = cover.y + cover.height.saturating_sub(small.height());
-            small.draw_round(canvas, cover.x, y, picture_radius(style, cover));
-        }
-        None => draw_placeholder(canvas, env, style, cover, title, &format, fg),
-    }
-    // The title, then how far it is read.
-    let x = f32::from(cover.x);
-    ui::draw_label(canvas, &font, style.small, x, label_area(0), title, fg);
-    let progress = match book.and_then(|b| b.progress) {
-        Some(100) => env.i18n.tr("files.finished").to_string(),
-        Some(p) if p > 0 => format!("{p} %"),
-        _ => book.and_then(|b| b.author.clone()).unwrap_or_default(),
-    };
-    let gray = style.focus_faint(focused, 80);
-    ui::draw_label(
-        canvas,
-        &font,
-        style.small,
-        x,
-        label_area(1),
-        &progress,
-        gray,
-    );
-}
-
-/// A simple folder outline with a tab.
-pub(crate) fn draw_folder(canvas: &mut Canvas<'_>, style: &UiStyle, area: Rect, color: Color) {
-    let line = style.line.max(2);
-    let (x, w) = (i32::from(area.x), u32::from(area.width));
-    let h = w * 3 / 4;
-    let y = i32::from(area.y) + (i32::from(area.height) - h as i32) / 2;
-    let tab = h / 5;
-    canvas.stroke_rect(x, y + tab as i32, w, h - tab, line, color);
-    canvas.fill_rect(x, y, w * 2 / 5, tab + line, color);
 }
 
 /// A book without a cover: an outline with the title's first letter,
@@ -1082,224 +365,6 @@ pub(crate) fn draw_placeholder(
     }
 }
 
-impl Screen for Browser {
-    fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
-        if self.hidden {
-            // Drawn below an overlay left open above: shown again, as in
-            // `on_show`, in the first band.
-            self.hidden = false;
-            self.stale = self.stale.max(Stale::Reload);
-            self.freshen(env);
-        }
-        let style = self.style;
-        let len = self.len;
-        let title = if self.dir == self.root {
-            env.i18n.tr("files.title").to_string()
-        } else {
-            self.dir.rsplit('/').next().unwrap_or_default().to_string()
-        };
-        // The order, which the menu changes (also by tapping the header).
-        let order = env.i18n.tr(env.settings.read(&SORT));
-        let note = format!("{order} ›");
-        self.header.draw(
-            canvas,
-            env,
-            &style,
-            &title,
-            Some(&note),
-            self.list.paging(len),
-        );
-
-        if self.len == 0 {
-            let text = env
-                .i18n
-                .format("files.empty", &[("dir", Arg::Str(&self.dir))]);
-            let title = env.i18n.tr("files.empty.title");
-            ui::draw_empty(canvas, env, &style, self.list.area, "books", title, &text);
-            return;
-        }
-        let (first, page, thumbs) = (self.first, &self.page, &self.thumbs);
-        let grid = self.list.column_count() > 1;
-        let focus_style = if grid { grid_style(&style) } else { style };
-        self.list
-            .draw(canvas, &focus_style, len, |canvas, index, rect, focused| {
-                let slot = index.checked_sub(first);
-                if let Some((entry, book)) = slot.and_then(|i| page.get(i)) {
-                    let thumb = slot.and_then(|i| thumbs.get(i)).and_then(Option::as_ref);
-                    let shown = Shown {
-                        entry,
-                        book: book.as_ref(),
-                        thumb,
-                    };
-                    if grid {
-                        draw_cell(canvas, env, &style, rect, focused, shown);
-                    } else {
-                        draw_row(canvas, env, &style, rect, focused, shown);
-                    }
-                }
-            });
-    }
-
-    fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
-        let env = *cx.env();
-        self.hidden = false;
-        if self.stale != Stale::No {
-            // Back from a book: its progress and place in the order
-            // changed; or what changed meanwhile.
-            self.freshen(&env);
-            cx.request_redraw();
-        }
-        cx.wake_at(env.now);
-    }
-
-    /// Covered by a full screen, a book say: the covers made small and the
-    /// page go (on the X4 a grid of covers takes some 40 KB), made again
-    /// from their small files when the library shows again.
-    fn on_hide(&mut self) {
-        self.anchor = self.focused().or_else(|| self.anchor.take());
-        self.page = Vec::new();
-        self.thumbs = Vec::new();
-        self.hidden = true;
-        self.stale = self.stale.max(Stale::Reload);
-    }
-
-    /// Reads the details of one visible book that has none yet.
-    fn on_timer(&mut self, cx: &mut Cx<'_, '_>) {
-        let env = *cx.env();
-        let rows = self.list.rows();
-        let pending = self
-            .page
-            .iter()
-            .position(|(entry, book)| !entry.is_dir && !book.as_ref().is_some_and(|b| b.indexed));
-        let Some(slot) = pending else {
-            return;
-        };
-        let path = self.path_of(&self.page[slot].0);
-        self.page[slot].1 = Some(library::index(&env, &path));
-        if let Some(thumb) = self.thumbs.get_mut(slot) {
-            *thumb = None;
-        }
-        let made = self.thumb(&env, slot);
-        if let Some(thumb) = self.thumbs.get_mut(slot) {
-            *thumb = made;
-        }
-        let index = self.first + slot;
-        if index / rows == self.list.page() {
-            cx.request_redraw_area(self.list.row_rect(index % rows));
-            cx.request_refresh(RefreshMode::Partial);
-        }
-        cx.wake_at(env.now.add_millis(STEP_DELAY_MS));
-    }
-
-    fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
-        let rows = self.list.rows() as isize;
-        let a = action;
-        // In a grid, up and down go a row of covers.
-        let row = self.list.column_count() as isize;
-        let delta = if *a == core_actions::UP {
-            Some(-row)
-        } else if *a == core_actions::DOWN {
-            Some(row)
-        } else if *a == core_actions::LEFT || *a == core_actions::PREVIOUS {
-            Some(-1)
-        } else if *a == core_actions::RIGHT || *a == core_actions::NEXT {
-            Some(1)
-        } else if *a == core_actions::NEXT_PAGE {
-            Some(rows)
-        } else if *a == core_actions::PREV_PAGE {
-            Some(-rows)
-        } else {
-            None
-        };
-        if let Some(delta) = delta {
-            self.step(delta, row, cx);
-        } else if *a == core_actions::CONFIRM && self.header.note_focused {
-            Self::open_menu(cx);
-        } else if *a == core_actions::CONFIRM {
-            self.open(self.list.focus, cx);
-        } else if *a == core_actions::MENU {
-            // Without touch, a book's options (holding it needs a finger);
-            // they lead on to the library's menu.
-            if cx.env().device.input.touch || !self.offer(self.list.focus, cx) {
-                Self::open_menu(cx);
-            }
-        } else if *a == core_actions::BACK {
-            return if self.up(cx) {
-                Handled::Yes
-            } else {
-                Handled::No
-            };
-        } else {
-            return Handled::No;
-        }
-        Handled::Yes
-    }
-
-    fn on_gesture(&mut self, gesture: Gesture, cx: &mut Cx<'_, '_>) -> Handled {
-        if gesture.kind == GestureKind::LongPress
-            && let Some(index) = self.list.hit(gesture.start, self.len)
-        {
-            self.list.focus = index;
-            return if self.offer(index, cx) {
-                Handled::Yes
-            } else {
-                Handled::No
-            };
-        }
-        if gesture.kind != GestureKind::Tap {
-            return Handled::No;
-        }
-        let paging = self.list.paging(self.len);
-        let tapped = self
-            .header
-            .tap(cx.env(), &self.style, gesture.start, paging);
-        if let Some(action) = tapped {
-            cx.command(Command::RunAction(action));
-            return Handled::Yes;
-        }
-        if self.header.area.contains(gesture.start) {
-            Self::open_menu(cx);
-            return Handled::Yes;
-        }
-        match self.list.hit(gesture.start, self.len) {
-            Some(index) => {
-                self.list.focus = index;
-                self.open(index, cx);
-                Handled::Yes
-            }
-            None => Handled::No,
-        }
-    }
-
-    fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
-        if let Some(picked) = CHOSEN.read(event, params) {
-            self.chosen(&picked.option, &picked.path, cx);
-            return;
-        }
-        // Books came or went, or the UI size, the order or the library
-        // folder may have changed (a new library folder is shown from its
-        // top). Hidden, it only remembers to show them when it shows again:
-        // a book received or a font size changed in the reader reads no
-        // folder and no cover under the book.
-        let stale = if *event == events::LIBRARY_CHANGED {
-            Stale::Reload
-        } else if *event == events::SETTING_CHANGED {
-            Stale::Remake
-        } else {
-            return;
-        };
-        self.stale = self.stale.max(stale);
-        if self.hidden {
-            return;
-        }
-        let env = *cx.env();
-        self.freshen(&env);
-        cx.request_redraw();
-        cx.request_refresh(RefreshMode::Partial);
-        cx.wake_at(env.now);
-    }
-}
-
 /// Whether the book at `path` may move to the archive: there is one, and
 /// the book is not in it.
 pub(crate) fn can_archive(env: &Env<'_>, path: &str) -> bool {
@@ -1330,14 +395,6 @@ pub(crate) fn archive(env: &Env<'_>, path: &str, cx: &mut Cx<'_, '_>) {
     }
 }
 
-/// A book's title, else its file's name made readable.
-pub(crate) fn shown_title<'a>(book: Option<&'a library::Book>, stem: &'a str) -> Cow<'a, str> {
-    match book.and_then(|b| b.title.as_deref()) {
-        Some(title) if !title.is_empty() => Cow::Borrowed(title),
-        _ => library::readable_name(stem),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use paperpaw_i18n::{Catalog, check};
@@ -1348,38 +405,5 @@ mod tests {
         let de = Catalog::parse(include_str!("../i18n/de.ini")).unwrap();
         let issues = check::compare(&en, &de);
         assert!(issues.is_empty(), "{issues:?}");
-        for (en, de) in [
-            (
-                include_str!("../i18n/draft-list.en.ini"),
-                include_str!("../i18n/draft-list.de.ini"),
-            ),
-            (
-                include_str!("../i18n/draft-wall.en.ini"),
-                include_str!("../i18n/draft-wall.de.ini"),
-            ),
-            (
-                include_str!("../i18n/draft-shelves.en.ini"),
-                include_str!("../i18n/draft-shelves.de.ini"),
-            ),
-        ] {
-            let en = Catalog::parse(en).unwrap();
-            let de = Catalog::parse(de).unwrap();
-            let issues = check::compare(&en, &de);
-            assert!(issues.is_empty(), "{issues:?}");
-        }
-    }
-
-    /// The list and the grid name zipped books alike, by what is inside.
-    #[test]
-    fn zipped_books_by_what_is_inside() {
-        use super::stem_and_format;
-        use alloc::string::String;
-        assert_eq!(stem_and_format("tale.fb2.zip"), ("tale", "FB2".into()));
-        assert_eq!(stem_and_format("tale.FB2.ZIP"), ("tale", "FB2".into()));
-        assert_eq!(stem_and_format("tale.zip"), ("tale", "ZIP".into()));
-        assert_eq!(stem_and_format("tale.epub"), ("tale", "EPUB".into()));
-        assert_eq!(stem_and_format("tale"), ("tale", String::new()));
-        // Names that end in a character of several bytes.
-        assert_eq!(stem_and_format("物語"), ("物語", String::new()));
     }
 }

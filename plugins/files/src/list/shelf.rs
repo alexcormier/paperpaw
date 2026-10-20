@@ -30,8 +30,11 @@ pub(crate) enum Kind {
     Series,
     Folder,
     Favourites,
-    /// The authors (today's list of them; not a list of books).
+    /// The authors (the list of them; not a list of books).
     Authors,
+    /// The books of an author, of a tag.
+    Author,
+    Tag,
     Letter,
     Search,
 }
@@ -43,6 +46,8 @@ impl Kind {
             Kind::Folder => "folder",
             Kind::Favourites => "favourites",
             Kind::Authors => "authors",
+            Kind::Author => "author",
+            Kind::Tag => "tag",
             Kind::Letter => "letter",
             Kind::Search => "search",
         }
@@ -53,6 +58,8 @@ impl Kind {
             Kind::Series,
             Kind::Folder,
             Kind::Favourites,
+            Kind::Author,
+            Kind::Tag,
             Kind::Letter,
             Kind::Search,
         ]
@@ -189,6 +196,7 @@ impl ShelfScreen {
                 .i18n
                 .format("files.list.letter", &[("letter", Arg::Str(&self.name))]),
             Kind::Folder => paperpaw_sdk::files::name(&self.name).to_string(),
+            Kind::Author if self.name.is_empty() => env.i18n.tr("files.unknown-author").to_string(),
             _ => self.name.clone(),
         }
     }
@@ -226,6 +234,8 @@ fn find(env: &Env<'_>, kind: Kind, name: &str) -> Vec<Entry> {
             Kind::Series => line.series == name,
             Kind::Folder => line.path.starts_with(&folder),
             Kind::Favourites => favourites.contains(&hash(&line.path)),
+            Kind::Author => line.author == name,
+            Kind::Tag => line.tags.split('\u{1f}').any(|t| t == name),
             Kind::Letter => {
                 let title = sort_key(&line.title)[0];
                 let title = if title.is_ascii_lowercase() {

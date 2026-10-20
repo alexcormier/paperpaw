@@ -13,7 +13,7 @@ use std::rc::Rc;
 
 use paperpaw_core::{Effects, Kernel};
 use paperpaw_platform::Rotation;
-use paperpaw_sdk::builtin::{actions, events, params};
+use paperpaw_sdk::builtin::{actions, events};
 use paperpaw_sdk::{
     DeviceInfo, DirEntry, DisplayInfo, Id, InputCaps, Instant, MemoryClass, MemoryStorage, Params,
     PixelFormat, Storage, StorageError,
@@ -114,19 +114,9 @@ fn the_catalog_is_made_once_and_after_changes() {
     run(&mut kernel, effects, 100);
     let by_author = paperpaw_plugin_files::BY_AUTHOR;
 
-    // The first steps of making the catalog, then a full screen on top.
+    // The library (the home screen here) made the catalog; by author
+    // shows it.
     let effects = kernel.run_action(Instant(0), by_author.clone());
-    run(&mut kernel, effects, 2);
-    assert!(
-        shown(&mut kernel).contains("Collecting"),
-        "{}",
-        shown(&mut kernel)
-    );
-    let info = Params::new().with(params::PATH, "books/book 01.txt");
-    let effects = kernel.open_screen(Instant(0), paperpaw_plugin_files::INFO_SCREEN, info);
-    run(&mut kernel, effects, 100);
-    // Back: it goes on to the end.
-    let effects = kernel.run_action(Instant(0), actions::BACK);
     run(&mut kernel, effects, 1000);
     let text = shown(&mut kernel);
     assert!(text.contains("40 books"), "{text}");
