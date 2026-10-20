@@ -138,8 +138,9 @@ impl Headlines {
     }
 }
 
-/// What the widget says without headlines in `area`: how to add feeds,
-/// or where that does not fit whole, that there are none yet.
+/// What the widget says without headlines in `area`: how to add feeds
+/// and fetch them, or where that does not fit whole, the shorter "Add
+/// feeds under News in the menu".
 fn empty(env: &Env<'_>, area: Rect) -> Wrapped {
     let style = UiStyle::new(env);
     let (width, height) = message_room(env, area);
@@ -148,7 +149,7 @@ fn empty(env: &Env<'_>, area: Rect) -> Wrapped {
     let inner = widgets::look::look(env, NAME, area).area.height;
     let long = env.i18n.tr("news.widget.empty");
     let wrapped = Wrapped::fitting(env, long, style.text, style.small, width, inner);
-    if whole(&wrapped) {
+    if wrapped.whole() {
         return wrapped;
     }
     let short = env.i18n.tr("news.widget.empty.short");
@@ -168,11 +169,6 @@ fn message_room(env: &Env<'_>, area: Rect) -> (u16, u16) {
 /// place from top to bottom (its lines in the middle of it).
 fn message_area(look: &Look, area: Rect) -> Rect {
     Rect::new(look.area.x, area.y, look.area.width, area.height)
-}
-
-/// Whether `wrapped` holds its whole text: no line shortened with "…".
-fn whole(wrapped: &Wrapped) -> bool {
-    wrapped.lines().iter().all(|l| !l.ends_with('…'))
 }
 
 impl Widget for Headlines {
