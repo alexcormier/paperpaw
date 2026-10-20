@@ -192,10 +192,20 @@ impl Book {
 
     /// What status items get to know about the book.
     pub(super) fn status_context(&self, env: &Env<'_>) -> Params {
-        let mut context = self
-            .reading(env)
+        let reading = self.reading(env);
+        let in_chapter = match (reading.page, reading.chapter_left) {
+            (Some(page), Some(left)) => self
+                .chapter_first(env)
+                .map(|first| (page.saturating_sub(first), left)),
+            _ => None,
+        };
+        let mut context = reading
             .to_params()
             .with(status_context::PAGE, self.position_label(env));
+        if let Some((page, left)) = in_chapter {
+            context.set(status::CHAPTER_PAGE_CONTEXT, format!("{page}"));
+            context.set(status::CHAPTER_PAGES_CONTEXT, format!("{}", page + left));
+        }
         if let Some((_, _, chapter)) = &self.chapter
             && !chapter.is_empty()
         {

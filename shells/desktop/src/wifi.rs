@@ -36,7 +36,7 @@ fn networks() -> Vec<WifiNetwork> {
 #[derive(Debug, Default)]
 pub struct Wifi {
     state: WifiState,
-    /// What is reported when, in order.
+    /// What is reported when, in the order of time.
     due: VecDeque<(Instant, WifiEvent)>,
 }
 
@@ -55,8 +55,7 @@ impl Wifi {
                 self.set(now, WifiState::Off);
             }
             WifiCommand::Scan if self.state.is_on() => {
-                self.due
-                    .push_back((after(SCAN_MS), WifiEvent::Scanned(networks())));
+                self.report(after(SCAN_MS), WifiEvent::Scanned(networks()));
             }
             WifiCommand::Scan => {}
             WifiCommand::Join { ssid, password } if self.state.is_on() => {
@@ -74,8 +73,7 @@ impl Wifi {
                 match failure {
                     Some(reason) => {
                         self.set(after(JOIN_MS), WifiState::On);
-                        self.due
-                            .push_back((after(JOIN_MS), WifiEvent::Failed { ssid, reason }));
+                        self.report(after(JOIN_MS), WifiEvent::Failed { ssid, reason });
                     }
                     None => self.set(
                         after(JOIN_MS),
@@ -86,13 +84,13 @@ impl Wifi {
                     ),
                 }
             }
-            WifiCommand::Join { ssid, .. } => self.due.push_back((
+            WifiCommand::Join { ssid, .. } => self.report(
                 now,
                 WifiEvent::Failed {
                     ssid,
                     reason: JoinFailure::Other,
                 },
-            )),
+            ),
             WifiCommand::Leave if self.state.is_on() => {
                 self.due.clear();
                 self.set(now, WifiState::On);
@@ -104,7 +102,14 @@ impl Wifi {
     /// Reports `state` at `at` (the state counts as it from then on).
     fn set(&mut self, at: Instant, state: WifiState) {
         self.state = state.clone();
-        self.due.push_back((at, WifiEvent::State(state)));
+        self.report(at, WifiEvent::State(state));
+    }
+
+    /// Reports `event` at `at`, after what is due before or then: a state
+    /// reported now does not wait for a scan still going on.
+    fn report(&mut self, at: Instant, event: WifiEvent) {
+        let place = self.due.partition_point(|(due, _)| *due <= at);
+        self.due.insert(place, (at, event));
     }
 
     /// When something is to be reported next.
@@ -165,5 +170,36 @@ mod tests {
         ));
         wifi.apply(WifiCommand::Off, Instant(5000));
         assert_eq!(run(&mut wifi, 5000), [WifiEvent::State(WifiState::Off)]);
+    }
+
+    #[test]
+    fn reports_come_in_the_order_of_time() {
+        let mut wifi = Wifi::default();
+        wifi.apply(WifiCommand::On, Instant(0));
+        run(&mut wifi, 1000);
+        // A scan takes 1.5 s; joining meanwhile says so at once.
+        wifi.apply(WifiCommand::Scan, Instant(1000));
+        wifi.apply(
+            WifiCommand::Join {
+                ssid: String::from("Cafe"),
+                password: String::new(),
+            },
+            Instant(1100),
+        );
+        assert_eq!(
+            run(&mut wifi, 1100),
+            [WifiEvent::State(WifiState::Joining {
+                ssid: String::from("Cafe")
+            })]
+        );
+        // Joined after 1 s, before the scan ends.
+        assert!(matches!(
+            run(&mut wifi, 2100).as_slice(),
+            [WifiEvent::State(WifiState::Online { .. })]
+        ));
+        assert!(matches!(
+            run(&mut wifi, 2500).as_slice(),
+            [WifiEvent::Scanned(_)]
+        ));
     }
 }

@@ -14,7 +14,10 @@
 //!    staying in the notebook it was moved to; edited in Joplin or put in
 //!    the trash, a new note is made beside it, so nothing written there is
 //!    lost. The new note is written to a file first, the body copied
-//!    piece by piece from the notes, and sent from there.
+//!    piece by piece from the notes, and sent from there. It is kept as
+//!    being sent before it goes: should the answer be lost, Joplin may
+//!    have it all the same, so the next sending looks for it and writes
+//!    it over rather than making it again.
 //!
 //! What fails stays waiting and goes with the next sending: the next
 //! export, the action [`SEND`](crate::SEND) (by hand or by a rule), or
@@ -28,7 +31,7 @@ use alloc::vec::Vec;
 use paperpaw_json::stream::{self, Event as Json};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::HttpReply;
-use paperpaw_sdk::{Arg, Command, Env, HttpRequest, Params};
+use paperpaw_sdk::{Arg, Command, Env, HttpRequest, Params, StorageError};
 
 use crate::item::{self, NOTE, NOTEBOOK};
 use crate::kept::{self, Sent};
@@ -116,8 +119,28 @@ fn now_ms(env: &Env<'_>) -> Option<i64> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Book {
     path: String,
-    /// Its note, as sent before or as being sent now.
+    /// Its note, as sent before.
     note: Option<Sent>,
+    /// Its note as sent last or now, while no answer came: Joplin may
+    /// have it, or still [`note`](Self::note).
+    sending: Option<Sent>,
+}
+
+impl Book {
+    /// The note looked for in Joplin: the one sent last.
+    fn last(&self) -> Option<&Sent> {
+        self.sending.as_ref().or(self.note.as_ref())
+    }
+
+    /// The note Joplin has under the id looked for, if its text (`md5`)
+    /// is one PaperPaw wrote there: none if it was edited in Joplin.
+    fn written(&self, md5: &str) -> Option<&Sent> {
+        let id = &self.last()?.id;
+        [&self.sending, &self.note]
+            .into_iter()
+            .flatten()
+            .find(|note| note.id == *id && note.text == md5)
+    }
 }
 
 /// A sending, and what is kept between them.
@@ -398,20 +421,23 @@ impl Run {
     fn next_book(&mut self, env: &Env<'_>, out: &mut Vec<Command>) {
         while !self.queue.is_empty() {
             let path = self.queue.remove(0);
-            if !env.storage.exists(&path) {
+            if let Err(StorageError::NotFound) = env.storage.size(&path) {
                 // Its notes were deleted since.
                 let _ = kept::remove_waiting(env.storage, &path);
+                let _ = kept::remove_sending(env.storage, &path);
                 continue;
             }
-            let note = kept::sent(env.storage, &path);
-            self.book = Some(Book {
+            let book = Book {
+                note: kept::sent(env.storage, &path),
+                sending: kept::sending(env.storage, &path),
                 path,
-                note: note.clone(),
-            });
-            let Some(note) = note else {
+            };
+            let found = book.last().map(|note| item::file_name(&note.id));
+            self.book = Some(book);
+            let Some(found) = found else {
                 return self.write_note(env, None, out);
             };
-            let mut request = self.request(env, &item::file_name(&note.id), "GET", &NOTE_FOUND);
+            let mut request = self.request(env, &found, "GET", &NOTE_FOUND);
             request.save_to = Some(kept::file(FOUND));
             return out.push(Command::Http(request));
         }
@@ -419,7 +445,7 @@ impl Run {
     }
 
     pub fn note_found(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
-        let Some(book) = self.book.as_ref().filter(|_| self.running) else {
+        let Some(book) = self.book.as_mut().filter(|_| self.running) else {
             return;
         };
         match reply.status {
@@ -431,14 +457,22 @@ impl Run {
                 // notebook changes them too, some edits do not).
                 let text = item::text_hash(env.storage, &found, props.text_end).ok();
                 let _ = env.storage.remove(&found);
-                let ours = book.note.as_ref().map(|n| &n.text) == text.as_ref();
-                if props.kind == NOTE && ours && !props.deleted {
-                    self.write_note(env, Some(props), out);
-                } else {
-                    if !props.deleted {
-                        self.apart += 1;
+                let written = text.and_then(|md5| book.written(&md5).cloned());
+                match written {
+                    Some(note) if props.kind == NOTE && !props.deleted => {
+                        // Joplin has it as sent, also if the answer was lost.
+                        if book.note.as_ref() != Some(&note) {
+                            let _ = kept::keep_sent(env.storage, &book.path, &note);
+                            book.note = Some(note);
+                        }
+                        self.write_note(env, Some(props), out);
                     }
-                    self.write_note(env, None, out);
+                    _ => {
+                        if !props.deleted {
+                            self.apart += 1;
+                        }
+                        self.write_note(env, None, out);
+                    }
                 }
             }
             // Deleted in Joplin: made anew.
@@ -458,7 +492,7 @@ impl Run {
         // Later than the note found, or Joplin keeps that one (also if
         // this device's clock is behind).
         let updated = item::time(found.as_ref().map_or(now, |p| now.max(p.updated + 1)));
-        let old = book.note.as_ref().map(|n| n.id.as_str());
+        let old = book.last().map(|n| n.id.as_str());
         let id = match (&found, old) {
             (Some(_), Some(old)) => old.to_string(),
             _ => item::new_id(&format!("paperpaw note {} {now}", book.path), old),
@@ -492,10 +526,15 @@ impl Run {
         let Ok(text) = note.write(env.storage, &book.path, &file) else {
             return self.book_failed(env, out);
         };
-        let mut request = self.put(env, &item::file_name(&id), &NOTE_SENT);
+        let sending = Sent { id, text };
+        // Kept before it goes, for when its answer is lost.
+        if kept::keep_sending(env.storage, &book.path, &sending).is_err() {
+            return self.book_failed(env, out);
+        }
+        let mut request = self.put(env, &item::file_name(&sending.id), &NOTE_SENT);
         request.body_from = Some(file);
         out.push(Command::Http(request));
-        book.note = Some(Sent { id, text });
+        book.sending = Some(sending);
         self.book = Some(book);
     }
 
@@ -511,8 +550,10 @@ impl Run {
             };
         }
         let _ = env.storage.remove(&kept::file(NOTE_FILE));
-        if let Some(note) = &book.note {
-            let _ = kept::keep_sent(env.storage, &book.path, note);
+        if let Some(note) = &book.sending
+            && kept::keep_sent(env.storage, &book.path, note).is_ok()
+        {
+            let _ = kept::remove_sending(env.storage, &book.path);
         }
         let _ = kept::remove_waiting(env.storage, &book.path);
         self.sent += 1;

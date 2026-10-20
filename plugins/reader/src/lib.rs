@@ -66,6 +66,7 @@ pub const SEARCH_SCREEN: Id = Id::new_static("reader.search-results");
 /// The keyboard's replies: what to search for, which page to go to.
 const SEARCH_ENTERED: Event<Typed> = Event::new("reader.search-entered");
 const PAGE_ENTERED: Event<Typed> = Event::new("reader.page-entered");
+const PERCENT_ENTERED: Event<Typed> = Event::new("reader.percent-entered");
 /// The keyboard's reply with a note on a highlight.
 const NOTE_ENTERED: Event<Typed> = Event::new("reader.note-entered");
 /// Font and layout, shown as a panel ([`actions::QUICK_SETTINGS`]), and
@@ -105,13 +106,20 @@ pub mod settings {
     pub const SMOOTH_TEXT: Setting<bool> = Setting::new("reader.smooth-text");
     /// Space between words in percent of the font's.
     pub const WORD_SPACING: Setting<i64> = Setting::new("reader.word-spacing");
-    /// Distance between baselines in percent of the font size.
+    /// Distance between baselines in percent of the font size, at least
+    /// the font's own; below 100 that much of the font's own.
     pub const LINE_SPACING: Setting<i64> = Setting::new("reader.line-spacing");
-    /// Page margins in millimetres.
+    /// Page margins in millimetres, at the sides (and at the top and
+    /// bottom while [`MARGIN_ENDS`] follows them).
     pub const MARGIN: Setting<i64> = Setting::new("reader.margin");
+    /// Margins at the top and bottom in millimetres; as [`MARGIN`] until
+    /// set.
+    pub const MARGIN_ENDS: Setting<i64> = Setting::new("reader.margin-ends");
     pub const JUSTIFY: Setting<bool> = Setting::new("reader.justify");
-    /// Indent first lines instead of spacing paragraphs apart.
+    /// Indent the first lines of paragraphs.
     pub const INDENT: Setting<bool> = Setting::new("reader.indent");
+    /// Space between paragraphs.
+    pub const PARAGRAPH_SPACING: Setting<bool> = Setting::new("reader.paragraph-spacing");
     /// Reopen the last book at start-up.
     pub const OPEN_LAST: Setting<bool> = Setting::new("reader.open-last");
     /// Notes shown over the page ([`FOOTNOTES_POPUP`]) or jumped to
@@ -125,6 +133,9 @@ pub mod settings {
     pub const PUBLISHER_STYLES: Setting<bool> = Setting::new("reader.publisher-styles");
     /// A tap on the top right corner sets or removes a bookmark.
     pub const CORNER_BOOKMARK: Setting<bool> = Setting::new("reader.corner-bookmark");
+    /// Holding a page button goes a chapter on or back; off, the page
+    /// buttons turn pages as they are pressed rather than let go.
+    pub const HOLD_CHAPTERS: Setting<bool> = Setting::new("reader.hold-chapters");
     /// How fast books are read aloud, in percent of the voice's speed.
     pub const ALOUD_SPEED: Setting<i64> = Setting::new("reader.aloud-speed");
     /// The sentence read aloud is underlined.
@@ -172,6 +183,8 @@ pub mod actions {
     pub const QUICK_SETTINGS: Id = Id::new_static("reader.quick-settings");
     /// Goes to a page number (asks for it on the keyboard).
     pub const GO_TO_PAGE: Id = Id::new_static("reader.go-to-page");
+    /// Goes to a percentage of the book (asks for it on the keyboard).
+    pub const GO_TO_PERCENT: Id = Id::new_static("reader.go-to-percent");
     /// Reads the book aloud from the page shown, turning the pages, until
     /// a tap or a button (where the device can speak).
     pub const READ_ALOUD: Id = Id::new_static("reader.read-aloud");
@@ -184,6 +197,11 @@ pub mod actions {
     pub const SKIM_BOOK: Id = Id::new_static("reader.skim-book");
     /// Turns the pages by themselves every few seconds, or stops it.
     pub const AUTO_TURN: Id = Id::new_static("reader.auto-turn");
+    /// Goes to the start of the next chapter.
+    pub const NEXT_CHAPTER: Id = Id::new_static("reader.next-chapter");
+    /// Goes to the start of this chapter, or of the one before where the
+    /// page is its first.
+    pub const PREV_CHAPTER: Id = Id::new_static("reader.prev-chapter");
     /// Shows the book's information (slot `core.book-info`).
     pub const BOOK_INFO: Id = Id::new_static("reader.book-info");
     /// A note on the selected text (highlighted with it).
@@ -230,6 +248,11 @@ mod extras {
         .unit("core.unit.mm")
         .section(PAGE)
         .slider();
+    pub(crate) static MARGIN_ENDS: SettingExtra = SettingExtra::new()
+        .unit("core.unit.mm")
+        .section(PAGE)
+        .slider()
+        .follows("reader.margin");
     pub(crate) static IN_PAGE: SettingExtra = SettingExtra::new().section(PAGE);
     pub(crate) static IN_BEHAVIOUR: SettingExtra = SettingExtra::new().section(BEHAVIOUR);
     pub(crate) static AUTO_TURN: SettingExtra = SettingExtra::new()
@@ -246,11 +269,11 @@ mod extras {
 
 /// The reading settings: the page and its type (each book may have its
 /// own), what the reader does, and reading aloud.
-static SETTINGS: [SettingSpec; 17] = [
+static SETTINGS: [SettingSpec; 20] = [
     SettingSpec::fixed_number(
         settings::LINE_SPACING.static_str(),
         "reader.setting.line-spacing",
-        100,
+        80,
         250,
         135,
         groups::READING,
@@ -299,6 +322,18 @@ static SETTINGS: [SettingSpec; 17] = [
     .with_extra(&extras::MARGIN)
     .scoped()
     .described("reader.setting.margin.help"),
+    SettingSpec::fixed_number(
+        settings::MARGIN_ENDS.static_str(),
+        "reader.setting.margin-ends",
+        0,
+        30,
+        4,
+        groups::READING,
+    )
+    .with_extra(&extras::MARGIN_ENDS)
+    .advanced()
+    .scoped()
+    .described("reader.setting.margin-ends.help"),
     SettingSpec::fixed_switch(
         settings::JUSTIFY.static_str(),
         "reader.setting.justify",
@@ -332,16 +367,25 @@ static SETTINGS: [SettingSpec; 17] = [
         true,
         groups::READING,
     )
-    .advanced()
     .scoped()
     .with_extra(&extras::IN_PAGE)
     .described("reader.setting.indent.help"),
+    SettingSpec::fixed_switch(
+        settings::PARAGRAPH_SPACING.static_str(),
+        "reader.setting.paragraph-spacing",
+        false,
+        groups::READING,
+    )
+    .scoped()
+    .with_extra(&extras::IN_PAGE)
+    .described("reader.setting.paragraph-spacing.help"),
     SettingSpec::fixed_switch(
         settings::OPEN_LAST.static_str(),
         "reader.setting.open-last",
         true,
         groups::READING,
     )
+    .advanced()
     .with_extra(&extras::IN_BEHAVIOUR)
     .described("reader.setting.open-last.help"),
     SettingSpec::fixed_choice(
@@ -351,6 +395,7 @@ static SETTINGS: [SettingSpec; 17] = [
         settings::FOOTNOTES_POPUP,
         groups::READING,
     )
+    .advanced()
     .with_extra(&extras::IN_BEHAVIOUR)
     .described("reader.setting.footnotes.help"),
     SettingSpec::fixed_switch(
@@ -359,7 +404,16 @@ static SETTINGS: [SettingSpec; 17] = [
         true,
         groups::CONTROLS,
     )
+    .advanced()
     .described("reader.setting.corner-bookmark.help"),
+    SettingSpec::fixed_switch(
+        settings::HOLD_CHAPTERS.static_str(),
+        "reader.setting.hold-chapters",
+        true,
+        groups::CONTROLS,
+    )
+    .advanced()
+    .described("reader.setting.hold-chapters.help"),
     SettingSpec::fixed_number(
         settings::AUTO_TURN_SECONDS.static_str(),
         "reader.setting.auto-turn-seconds",
@@ -368,6 +422,7 @@ static SETTINGS: [SettingSpec; 17] = [
         30,
         groups::READING,
     )
+    .advanced()
     .with_extra(&extras::AUTO_TURN)
     .described("reader.setting.auto-turn-seconds.help"),
     SettingSpec::fixed_number(
@@ -467,6 +522,7 @@ impl Plugin for Reader {
         for (id, title) in [
             (actions::SEARCH, "reader.search"),
             (actions::GO_TO_PAGE, "reader.go-to-page"),
+            (actions::GO_TO_PERCENT, "reader.go-to-percent"),
             (actions::READ_ALOUD, "reader.read-aloud"),
             (actions::SELECT, "reader.select"),
             (actions::LINKS, "reader.links"),
@@ -483,6 +539,8 @@ impl Plugin for Reader {
             (actions::BOOK_INFO, "reader.book-info"),
             (actions::AUTO_TURN, "reader.auto-turn"),
             (actions::SKIM_BOOK, "reader.skim"),
+            (actions::NEXT_CHAPTER, "reader.next-chapter"),
+            (actions::PREV_CHAPTER, "reader.prev-chapter"),
             (actions::EXTEND, "reader.select.extend"),
             (actions::CANCEL, "reader.select.cancel"),
             (actions::MORE, "reader.select.more"),
@@ -558,21 +616,39 @@ impl Plugin for Reader {
         )?;
         // A tap at the bottom of a page opens it. Swipes in from the sides
         // turn pages, as swipes do, rather than going back; two fingers
-        // apart or together make the text larger or smaller.
+        // apart or together make the text larger or smaller. Holding
+        // Select (which opens the menu) marks the page, as the corner does
+        // by touch.
         r.add_keymap(Cow::Borrowed(
             "[keymap.core.reader]\ntap.bottom = reader.quick-settings\n\
              edge.left = core.prev-page\nedge.right = core.next-page\n\
-             pinch.out = reader.font-larger\npinch.in = reader.font-smaller\n",
+             pinch.out = reader.font-larger\npinch.in = reader.font-smaller\n\
+             long.confirm = reader.toggle-bookmark\n",
         ))?;
+        // Holding a page button goes a chapter on or back, while the
+        // switch is on: off, the binding is gone, and a page turns as its
+        // button goes down rather than when it is let go.
+        r.add_keymap_when(
+            &settings::HOLD_CHAPTERS,
+            Cow::Borrowed(
+                "[keymap.core.reader]\nlong.page-forward = reader.next-chapter\n\
+                 long.page-back = reader.prev-chapter\n",
+            ),
+        )?;
         // A short menu; settings in it show their state and change in
         // place.
         let entries = [
+            // First, focused as the menu opens: with buttons, the font and
+            // layout are two presses away.
+            (MENU, actions::QUICK_SETTINGS, 5),
             (MENU, actions::TOC, 10),
             (MENU, actions::SEARCH, 20),
             (MENU, actions::READ_ALOUD, 30),
             (MENU, actions::ANNOTATIONS, 40),
-            (MENU, actions::QUICK_SETTINGS, 50),
             (MENU, core_settings::NIGHT_MODE.into(), 60),
+            // Beside the night mode, to be found; held Select and the
+            // corner are quicker.
+            (MENU, actions::TOGGLE_BOOKMARK, 65),
             (MENU, MORE_MENU, 70),
             // Last, so that one press back from the first entry reaches
             // it: home from a book without a further list.
@@ -586,8 +662,9 @@ impl Plugin for Reader {
             (LAYOUT_MENU, settings::JUSTIFY.into(), 40),
             (LAYOUT_MENU, settings::HYPHENATE.into(), 50),
             (LAYOUT_MENU, settings::PUBLISHER_STYLES.into(), 60),
-            (MORE_MENU, actions::TOGGLE_BOOKMARK, 10),
             (MORE_MENU, actions::SKIM_BOOK, 15),
+            (MORE_MENU, actions::GO_TO_PAGE, 16),
+            (MORE_MENU, actions::GO_TO_PERCENT, 17),
             (MORE_MENU, actions::AUTO_TURN, 17),
             (MORE_MENU, actions::SELECT, 20),
             (MORE_MENU, actions::LINKS, 25),
@@ -612,11 +689,13 @@ impl Plugin for Reader {
             r.set_menu_need(item, paperpaw_sdk::MenuNeed::NoTouch)?;
         }
         r.set_menu_need(settings::SMOOTH_TEXT, paperpaw_sdk::MenuNeed::BlackAndWhite)?;
+        r.set_menu_need(settings::CORNER_BOOKMARK, paperpaw_sdk::MenuNeed::Touch)?;
         for (item, icon) in [
             (actions::TOC, "list"),
             (actions::LINKS, "link"),
             (actions::SEARCH, "search"),
             (actions::GO_TO_PAGE, "hash"),
+            (actions::GO_TO_PERCENT, "arrow-bar-to-right"),
             (actions::ANNOTATIONS, "bookmarks"),
             (actions::QUICK_SETTINGS, "typography"),
             (actions::TOGGLE_BOOKMARK, "bookmark"),

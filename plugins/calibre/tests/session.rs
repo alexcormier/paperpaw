@@ -1,7 +1,10 @@
 //! A whole session with Calibre as its driver behaves: found by its
 //! answer to the broadcast, then initialisation, a book sent, the books
 //! listed, the book deleted, the end. Calibre's bytes come as the plugin
-//! asks for them, never more.
+//! asks for them, never more. And what a peer posing as Calibre cannot
+//! do: be connected to unasked, write anything but books, replace or
+//! delete the reader's own files, send messages larger than the device
+//! holds.
 
 // Tests panic on purpose when something is wrong.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
@@ -12,30 +15,36 @@ use paperpaw_core::{Io, Kernel, SocketCall, SocketEvent};
 use paperpaw_platform::{ButtonState, InputEvent, Rotation};
 use paperpaw_plugin_calibre::Calibre;
 use paperpaw_plugin_calibre::protocol::{self, frame, op};
+use paperpaw_plugin_format_epub::EpubFormat;
 use paperpaw_sdk::{
     DeviceInfo, DirEntry, DisplayInfo, InputCaps, Instant, MemoryClass, MemoryStorage, PixelFormat,
     Storage, StorageError,
 };
 
-const DEVICE: DeviceInfo = DeviceInfo {
-    id: "test",
-    name: "Test device",
-    display: DisplayInfo {
-        width: 300,
-        height: 400,
-        dpi: 100,
-        format: PixelFormat::Gray4,
-        rotation: Rotation::Deg0,
-        color: None,
-    },
-    input: InputCaps {
-        buttons: true,
-        touch: false,
-        pen: false,
-        keys: &[],
-    },
-    memory: MemoryClass::Large,
-};
+const DEVICE: DeviceInfo = device(MemoryClass::Large);
+
+/// The test device with `memory`.
+const fn device(memory: MemoryClass) -> DeviceInfo {
+    DeviceInfo {
+        id: "test",
+        name: "Test device",
+        display: DisplayInfo {
+            width: 300,
+            height: 400,
+            dpi: 100,
+            format: PixelFormat::Gray4,
+            rotation: Rotation::Deg0,
+            color: None,
+        },
+        input: InputCaps {
+            buttons: true,
+            touch: false,
+            pen: false,
+            keys: &[],
+        },
+        memory,
+    }
+}
 
 /// A storage the test looks into while the kernel has it.
 #[derive(Clone)]
@@ -79,6 +88,9 @@ struct Peer {
     got: Vec<u8>,
     waiting: Option<(u32, u32)>,
     closed: bool,
+    /// At most this many bytes a read, as a network may deliver them
+    /// (`None`: as many as asked for).
+    chunk: Option<usize>,
 }
 
 impl Peer {
@@ -97,7 +109,9 @@ impl Peer {
             match self.waiting {
                 Some((socket, max)) if !self.wire.is_empty() => {
                     self.waiting = None;
-                    let n = (max as usize).min(self.wire.len());
+                    let n = (max as usize)
+                        .min(self.wire.len())
+                        .min(self.chunk.unwrap_or(usize::MAX));
                     let data: Vec<u8> = self.wire.drain(..n).collect();
                     kernel.socket_event(Instant(5), SocketEvent::Data { socket, data });
                 }
@@ -138,11 +152,16 @@ fn press(kernel: &mut Kernel, name: &'static str) {
 }
 
 fn kernel(storage: &Shared, config: &str) -> Kernel {
-    let mut kernel = Kernel::builder(DEVICE)
+    kernel_on(DEVICE, storage, config)
+}
+
+fn kernel_on(device: DeviceInfo, storage: &Shared, config: &str) -> Kernel {
+    let mut kernel = Kernel::builder(device)
         .storage(storage.clone())
         .user_config(config)
         .network(true)
         .plugin(Calibre)
+        .plugin(EpubFormat)
         .build()
         .unwrap();
     kernel.start(Instant(0));
@@ -174,6 +193,9 @@ fn a_session_with_calibre() {
             data: b"calibre wireless device client (on pc);8080,9091".to_vec(),
         },
     );
+    // Found, and connected once the reader says so.
+    assert!(socket_calls(&mut kernel).is_empty());
+    press(&mut kernel, "confirm");
     let calls = socket_calls(&mut kernel);
     let [SocketCall::Connect { socket, host, port }] = calls.as_slice() else {
         panic!("{calls:?}");
@@ -251,6 +273,9 @@ fn a_session_with_calibre() {
         op::GET_BOOK_COUNT,
         r#"{"canStream": true, "willUseCachedMetadata": false}"#,
     );
+    // The count at once, the books' metadata in the next turn.
+    kernel.tick(Instant(10));
+    calibre.pump(&mut kernel);
     let answers = calibre.answers();
     assert_eq!(protocol::number(&answers[0].args, "count"), Some(1));
     assert_eq!(
@@ -341,6 +366,197 @@ fn paperpaws_own_data_is_out_of_reach() {
     assert_eq!(
         paperpaw_sdk::read_file(&storage, ".paperpaw/secrets.txt", 64).unwrap(),
         b"password"
+    );
+}
+
+/// The broadcast looking for Calibre.
+fn broadcast(kernel: &mut Kernel) -> u32 {
+    let calls = socket_calls(kernel);
+    calls
+        .iter()
+        .find_map(|call| match call {
+            SocketCall::Broadcast { broadcast, .. } => Some(*broadcast),
+            _ => None,
+        })
+        .expect("a broadcast")
+}
+
+/// Calibre answers `broadcast` from `from`; the kernel's socket calls
+/// then.
+fn answer(kernel: &mut Kernel, broadcast: u32, from: &str) -> Vec<SocketCall> {
+    kernel.socket_event(
+        Instant(2),
+        SocketEvent::Answer {
+            broadcast,
+            from: String::from(from),
+            data: b"calibre wireless device client (on pc);8080,9090".to_vec(),
+        },
+    );
+    socket_calls(kernel)
+}
+
+/// A kernel connected to Calibre at the address set, and Calibre.
+fn connected(device: DeviceInfo, storage: &Shared) -> (Kernel, Peer) {
+    let config = format!("{CONFIG}[calibre]\naddress = 10.0.0.2\n");
+    let mut kernel = kernel_on(device, storage, &config);
+    let calls = socket_calls(&mut kernel);
+    let [SocketCall::Connect { socket, .. }] = calls.as_slice() else {
+        panic!("{calls:?}");
+    };
+    kernel.socket_event(Instant(3), SocketEvent::Connected { socket: *socket });
+    let mut calibre = Peer::default();
+    calibre.pump(&mut kernel);
+    (kernel, calibre)
+}
+
+/// Calibre sends a book of `bytes` at `lpath`.
+fn send_book(calibre: &mut Peer, kernel: &mut Kernel, lpath: &str, bytes: &[u8]) {
+    let message = format!(
+        r#"{{"lpath": "{lpath}", "length": {}, "metadata": {{"lpath": "{lpath}", "title": "T"}}}}"#,
+        bytes.len()
+    );
+    calibre
+        .wire
+        .extend_from_slice(&frame(op::SEND_BOOK, &message));
+    calibre.wire.extend_from_slice(bytes);
+    calibre.pump(kernel);
+}
+
+#[test]
+fn only_a_computer_the_reader_chose_is_connected() {
+    let storage = Shared(Rc::new(MemoryStorage::new()));
+    let mut device = kernel(&storage, CONFIG);
+    // Found: not connected unasked.
+    let found = broadcast(&mut device);
+    assert!(answer(&mut device, found, "192.168.1.5").is_empty());
+    press(&mut device, "confirm");
+    let calls = socket_calls(&mut device);
+    assert!(
+        matches!(calls.as_slice(), [SocketCall::Connect { host, .. }] if host == "192.168.1.5"),
+        "{calls:?}"
+    );
+    drop(device);
+    // The next time, that computer is connected at once; another one
+    // answering first is not.
+    let mut device = kernel(&storage, CONFIG);
+    let found = broadcast(&mut device);
+    assert!(answer(&mut device, found, "192.168.1.66").is_empty());
+    let calls = answer(&mut device, found, "192.168.1.5");
+    assert!(
+        matches!(calls.as_slice(), [SocketCall::Connect { host, .. }] if host == "192.168.1.5"),
+        "{calls:?}"
+    );
+}
+
+#[test]
+fn calibre_touches_only_its_own_books() {
+    let storage = Shared(Rc::new(MemoryStorage::new()));
+    storage.write("Ann/Own.epub", b"own").unwrap();
+    storage.write("paperpaw.ini", b"[core]\n").unwrap();
+    let (mut kernel, mut calibre) = connected(DEVICE, &storage);
+    let read = |path: &str| paperpaw_sdk::read_file(&storage, path, 64).unwrap();
+    // The reader's own book is neither deleted nor replaced.
+    calibre.say(
+        &mut kernel,
+        op::DELETE_BOOK,
+        r#"{"lpaths": ["Ann/Own.epub"]}"#,
+    );
+    send_book(&mut calibre, &mut kernel, "Ann/Own.epub", b"new");
+    assert_eq!(read("Ann/Own.epub"), b"own");
+    // Nothing but books is written.
+    for lpath in ["paperpaw.ini", "plugins/evil/plugin.ini", "updates/x.bin"] {
+        send_book(&mut calibre, &mut kernel, lpath, b"bad");
+    }
+    assert_eq!(read("paperpaw.ini"), b"[core]\n");
+    assert!(!storage.exists("plugins/evil/plugin.ini") && !storage.exists("updates/x.bin"));
+    // A book Calibre sent is replaced and deleted as it asks.
+    send_book(&mut calibre, &mut kernel, "Bo/New.epub", b"one");
+    send_book(&mut calibre, &mut kernel, "Bo/New.epub", b"two");
+    assert_eq!(read("Bo/New.epub"), b"two");
+    calibre.answers();
+    calibre.say(
+        &mut kernel,
+        op::DELETE_BOOK,
+        r#"{"lpaths": ["Bo/New.epub"]}"#,
+    );
+    assert!(!storage.exists("Bo/New.epub"));
+    // In step all along.
+    calibre.say(&mut kernel, op::NOOP, "{}");
+    assert_eq!(calibre.answers().len(), 3, "DELETE_BOOK twice, NOOP");
+}
+
+#[test]
+fn the_book_list_goes_in_parts() {
+    let storage = Shared(Rc::new(MemoryStorage::new()));
+    // 300 books Calibre sent, each with a long description.
+    let description = "A long description. ".repeat(100);
+    for i in 0..300 {
+        let lpath = format!("Ann/Book {i}.epub");
+        storage.write(&lpath, b"x").unwrap();
+        let metadata =
+            format!(r#"{{"lpath": "{lpath}", "uuid": "u{i}", "comments": "{description}"}}"#);
+        let record = format!(
+            ".paperpaw/plugins/calibre/books/{}.json",
+            paperpaw_digest::md5::of(&lpath)
+        );
+        storage.write(&record, metadata.as_bytes()).unwrap();
+    }
+    let (mut kernel, mut calibre) = connected(DEVICE, &storage);
+    calibre.say(&mut kernel, op::GET_BOOK_COUNT, r#"{"canStream": true}"#);
+    // Not all at once (about 600 KB here), but a part at a time.
+    assert!(calibre.got.len() < 40 * 1024, "{}", calibre.got.len());
+    let mut answers = calibre.answers();
+    assert_eq!(protocol::number(&answers[0].args, "count"), Some(300));
+    for at in 10..1000 {
+        kernel.tick(Instant(at));
+        calibre.pump(&mut kernel);
+        assert!(calibre.got.len() < 40 * 1024, "{}", calibre.got.len());
+        answers.extend(calibre.answers());
+    }
+    assert_eq!(answers.len(), 301);
+    let mut uuids: Vec<String> = answers[1..]
+        .iter()
+        .map(|a| protocol::text(&a.args, "uuid").unwrap())
+        .collect();
+    uuids.sort();
+    uuids.dedup();
+    assert_eq!(uuids.len(), 300);
+    // Then the device reads on.
+    calibre.say(&mut kernel, op::NOOP, "{}");
+    assert_eq!(calibre.answers().len(), 1);
+}
+
+#[test]
+fn a_message_larger_than_the_device_holds_ends_the_connection() {
+    let storage = Shared(Rc::new(MemoryStorage::new()));
+    let (mut kernel, mut calibre) = connected(device(MemoryClass::Small), &storage);
+    calibre.wire.extend_from_slice(b"1000000[");
+    calibre.pump(&mut kernel);
+    assert!(calibre.closed);
+}
+
+#[test]
+#[ignore = "bug: H-8, the kernel reads socket text lossily per read, so a             character split between reads becomes two replacement             characters and Calibre's framing by bytes slips"]
+fn a_character_split_between_reads_keeps_messages_in_step() {
+    let storage = Shared(Rc::new(MemoryStorage::new()));
+    let (mut kernel, mut calibre) = connected(DEVICE, &storage);
+    // Three bytes a read: `ö` and `ß` come in two reads each.
+    calibre.chunk = Some(3);
+    let book = b"abc";
+    let message = format!(
+        r#"{{"lpath": "Ann/Größe.epub", "length": {}, "metadata": {{"title": "Größe"}}}}"#,
+        book.len()
+    );
+    calibre
+        .wire
+        .extend_from_slice(&frame(op::SEND_BOOK, &message));
+    calibre.wire.extend_from_slice(book);
+    calibre.say(&mut kernel, op::NOOP, "{}");
+    assert!(!calibre.closed);
+    assert_eq!(calibre.answers().len(), 1, "the NOOP after the book");
+    assert_eq!(
+        paperpaw_sdk::read_file(&storage, "Ann/Größe.epub", 64).unwrap(),
+        book
     );
 }
 

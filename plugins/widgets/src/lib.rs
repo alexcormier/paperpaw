@@ -13,12 +13,21 @@
 extern crate alloc;
 
 mod books;
+mod showings;
 mod time;
 mod words;
 
+#[cfg(test)]
+mod draw_tests;
+#[cfg(test)]
+mod harness;
+
 use alloc::borrow::Cow;
 
-use paperpaw_sdk::{Id, Manifest, Plugin, RegisterError, Registrar, SDK_VERSION, Version};
+use paperpaw_sdk::widgets;
+use paperpaw_sdk::{
+    Env, Id, Manifest, Plugin, Rect, RegisterError, Registrar, SDK_VERSION, Version,
+};
 
 pub const PLUGIN: Id = Id::new_static("widgets");
 
@@ -45,6 +54,19 @@ impl Plugin for Widgets {
         books::register(r)?;
         Ok(())
     }
+}
+
+/// The height widget `id`'s frame takes above and below its content.
+pub(crate) fn frame_height(env: &Env<'_>, id: &str) -> u16 {
+    let probe = Rect::new(0, 0, 100, 100);
+    100 - widgets::look::look(env, id, probe).area.height
+}
+
+/// Today as days since 1970 in the local time zone; 0 where the device
+/// does not know the date.
+pub(crate) fn today(env: &Env<'_>) -> i64 {
+    use paperpaw_sdk::time::{local_seconds, unix_seconds};
+    unix_seconds(env).map_or(0, |unix| local_seconds(env, unix).div_euclid(86_400))
 }
 
 #[cfg(test)]

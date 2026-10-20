@@ -90,8 +90,11 @@ fn fetch(kernel: &mut Kernel, at: u64) -> Vec<HttpCall> {
     requests(kernel)
 }
 
-/// The requests the kernel asks the shell to make.
+/// The requests the kernel asks the shell to make, once it has shown
+/// what the call drew (as a shell does: until then, the kernel may keep
+/// what it read, and would miss the test changing a file).
 fn requests(kernel: &mut Kernel) -> Vec<HttpCall> {
+    kernel.render(&mut |_, _| {});
     let io = kernel.take_io().into_iter();
     io.filter_map(|io| match io {
         Io::Http(call) => Some(call),
@@ -183,7 +186,7 @@ fn fetches_new_articles_and_archives_read_ones() {
     assert!(calls.is_empty());
     assert!(storage.0.get("Wallabag/Newer.epub").is_some());
 
-    // Archived elsewhere: its book goes too.
+    // Archived elsewhere: its book goes too, once Wallabag says so.
     let calls = fetch(&mut kernel, 30);
     let calls = answer(&mut kernel, &calls[0], 200, r#"{"access_token": "V"}"#);
     let calls = answer(
@@ -192,8 +195,136 @@ fn fetches_new_articles_and_archives_read_ones() {
         200,
         r#"{"_embedded": {"items": []}}"#,
     );
+    assert_eq!(calls[0].url, "https://wb.example/api/entries/9.json");
+    let calls = answer(
+        &mut kernel,
+        &calls[0],
+        200,
+        r#"{"id": 9, "is_archived": 1}"#,
+    );
     assert!(calls.is_empty());
     assert!(storage.0.get("Wallabag/Newer.epub").is_none());
+}
+
+/// A kernel with Wallabag set up and articles 7 and 9 fetched.
+fn fetched() -> (Kernel, Shared) {
+    let mut secrets = Secrets::default();
+    secrets.apply(SecretChange::keep("wallabag.password", "", "pw"));
+    secrets.apply(SecretChange::keep("wallabag.client-secret", "", "cs"));
+    let storage = Shared(Rc::new(
+        MemoryStorage::new().with(FILE, secrets.encode().into_bytes()),
+    ));
+    let mut kernel = Kernel::builder(DEVICE)
+        .storage(storage.clone())
+        .user_config(CONFIG)
+        .network(true)
+        .plugin(Wallabag)
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    let calls = fetch(&mut kernel, 1);
+    let calls = answer(&mut kernel, &calls[0], 200, r#"{"access_token": "T"}"#);
+    let calls = answer(&mut kernel, &calls[0], 200, LIST);
+    let calls = answer(&mut kernel, &calls[0], 200, "EPUB 7");
+    let calls = answer(&mut kernel, &calls[0], 200, "EPUB 9");
+    assert!(calls.is_empty());
+    (kernel, storage)
+}
+
+const BOOKS: [&str; 2] = ["Wallabag/Older.epub", "Wallabag/Newer.epub"];
+
+/// What the server answers instead of the list (a page of its own, an
+/// error, a list cut short) removes no book and asks for nothing more.
+#[test]
+fn an_answer_that_is_no_list_removes_nothing() {
+    let (mut kernel, storage) = fetched();
+    let answers = [
+        "<!DOCTYPE html><html><body><h1>Down for maintenance</h1></body></html>",
+        r#"{"error": "server_error", "error_description": "Try again later"}"#,
+        r#"{"page": 1, "pages": 1, "_embedded": {"items": [{"id": 9, "title": "Newer"}, {"id""#,
+    ];
+    for (n, body) in answers.into_iter().enumerate() {
+        let calls = fetch(&mut kernel, 10 + n as u64);
+        let calls = answer(&mut kernel, &calls[0], 200, r#"{"access_token": "U"}"#);
+        assert!(calls[0].url.contains("/api/entries.json?"));
+        let calls = answer(&mut kernel, &calls[0], 200, body);
+        assert!(calls.is_empty(), "{body}: {calls:?}");
+        for book in BOOKS {
+            assert!(storage.0.get(book).is_some(), "{book} after {body}");
+        }
+    }
+}
+
+/// Articles still unread but no longer among the newest stay; one goes
+/// only when Wallabag says it is archived or no longer there.
+#[test]
+fn unread_articles_beyond_the_newest_stay() {
+    let (mut kernel, storage) = fetched();
+    // Article 10 is new; 7 is no longer in the list.
+    let newest =
+        r#"{"_embedded": {"items": [{"id": 10, "title": "Newest"}, {"id": 9, "title": "Newer"}]}}"#;
+    let calls = fetch(&mut kernel, 10);
+    let calls = answer(&mut kernel, &calls[0], 200, r#"{"access_token": "U"}"#);
+    let calls = answer(&mut kernel, &calls[0], 200, newest);
+    assert_eq!(calls[0].method, "GET");
+    assert_eq!(calls[0].url, "https://wb.example/api/entries/7.json");
+    let calls = answer(
+        &mut kernel,
+        &calls[0],
+        200,
+        r#"{"id": 7, "title": "Older", "is_archived": 0, "content": "<p>Text</p>"}"#,
+    );
+    assert_eq!(
+        calls[0].url,
+        "https://wb.example/api/entries/10/export.epub"
+    );
+    let calls = answer(&mut kernel, &calls[0], 200, "EPUB 10");
+    assert!(calls.is_empty());
+    assert!(storage.0.get("Wallabag/Older.epub").is_some());
+    assert!(storage.0.get("Wallabag/Newest.epub").is_some());
+
+    // An answer that says nothing about it keeps it too.
+    for (n, (status, body)) in [(500, "Internal error"), (200, "<html>Login</html>")]
+        .into_iter()
+        .enumerate()
+    {
+        let calls = fetch(&mut kernel, 20 + n as u64);
+        let calls = answer(&mut kernel, &calls[0], 200, r#"{"access_token": "V"}"#);
+        let calls = answer(&mut kernel, &calls[0], 200, newest);
+        assert_eq!(calls[0].url, "https://wb.example/api/entries/7.json");
+        let calls = answer(&mut kernel, &calls[0], status, body);
+        assert!(calls.is_empty());
+        assert!(storage.0.get("Wallabag/Older.epub").is_some(), "{body}");
+    }
+
+    // Deleted in Wallabag: its book goes.
+    let calls = fetch(&mut kernel, 30);
+    let calls = answer(&mut kernel, &calls[0], 200, r#"{"access_token": "W"}"#);
+    let calls = answer(&mut kernel, &calls[0], 200, newest);
+    let calls = answer(
+        &mut kernel,
+        &calls[0],
+        404,
+        r#"{"code": 404, "message": "Not Found"}"#,
+    );
+    assert!(calls.is_empty());
+    assert!(storage.0.get("Wallabag/Older.epub").is_none());
+    assert!(storage.0.get("Wallabag/Newer.epub").is_some());
+}
+
+/// A list of fetched articles that cannot be read stops the fetch before
+/// anything is written over it.
+#[test]
+fn an_unreadable_list_stops_the_fetch() {
+    let (mut kernel, storage) = fetched();
+    let list = ".paperpaw/plugins/wallabag/articles.txt";
+    let mut broken = storage.0.get(list).unwrap();
+    broken.push(0xff);
+    storage.0.write(list, &broken).unwrap();
+    let calls = fetch(&mut kernel, 10);
+    let calls = answer(&mut kernel, &calls[0], 200, r#"{"access_token": "U"}"#);
+    assert!(calls.is_empty());
+    assert_eq!(storage.0.get(list).unwrap(), broken);
 }
 
 #[test]

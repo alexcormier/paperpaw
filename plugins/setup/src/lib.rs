@@ -6,8 +6,9 @@
 //!   language, the buttons, the text size, the time zone, Wi-Fi, the
 //!   keyboard, the screen lock, and any other plugin's. Those this device
 //!   does not need are left out (e.g. Wi-Fi where the system runs it).
-//! - Skipped as a whole on its first page, never shown again once done
-//!   or skipped; *Set up PaperPaw* in the settings opens it again.
+//! - Skipped as a whole on its first page (by *Back* after a question),
+//!   never shown again once done or skipped; *Set up PaperPaw* in the
+//!   settings opens it again.
 //! - The last page tells where books come from.
 //! - It is the screen of the slot [`slots::SETUP`], so another plugin can
 //!   replace it.
@@ -27,6 +28,7 @@ use alloc::format;
 use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::{events, menus, slots};
+use paperpaw_sdk::ui::choice::Choice;
 use paperpaw_sdk::{
     ActionSpec, Command, Env, Id, Manifest, MenuEntry, Params, Plugin, Priority, RegisterError,
     Registrar, SDK_VERSION, ScreenSpec, Version, library,
@@ -37,6 +39,8 @@ pub const PLUGIN: Id = Id::new_static("setup");
 pub const OPEN: Id = Id::new_static("setup.open");
 /// The guide.
 pub const SCREEN: Id = Id::new_static("setup.guide");
+/// Its questions.
+const CHOICE: Id = Id::new_static("setup.choice");
 
 /// The file whose being there says the setup was done or skipped.
 fn done_file() -> alloc::string::String {
@@ -71,6 +75,11 @@ impl Plugin for Setup {
             factory: Box::new(|env, _| Box::new(guide::Guide::new(env))),
         })?;
         r.bind_slot(slots::SETUP, SCREEN, Priority::DEFAULT)?;
+        r.add_screen(ScreenSpec {
+            id: CHOICE,
+            title: Cow::Borrowed("setup.title"),
+            factory: Box::new(|env, params| Box::new(Choice::new(env, params))),
+        })?;
         r.add_action(ActionSpec::new(OPEN, "setup.open").handler(
             |_: &Env<'_>, out: &mut Vec<Command>| {
                 out.push(Command::OpenSlot(slots::SETUP, Params::new()));

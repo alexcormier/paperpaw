@@ -23,6 +23,11 @@
 //!   text field lets one type the text on a phone instead: handy for
 //!   passwords and keys.
 //!
+//! - A password (mode `password`) shows as dots and is never sent along
+//!   with *Phone*. While one is typed, the keyboard keeps the edges and
+//!   every button to itself but *Sleep*, refresh and night mode: nothing
+//!   opens over it, e.g. over the screen lock's.
+//!
 //! Bind another screen to `core.keyboard` for a different keyboard
 //! altogether.
 
@@ -63,8 +68,15 @@ const PASTED: Event<Typed> = Event::new("keyboard.pasted");
 /// The text typed on another device, asked for by *Phone*.
 const REMOTE_TEXT: Event<Typed> = Event::new("keyboard.remote-text");
 
-/// Longest text the keyboard accepts, in characters.
-const MAX_CHARS: usize = 200;
+/// Longest text the keyboard accepts, in characters: room for long web
+/// addresses and keys; what goes past it is cut, and the keyboard says so.
+const MAX_CHARS: usize = 2000;
+/// What passes the keyboard while a password is typed.
+const PASSING: [Id; 3] = [
+    actions::SLEEP,
+    actions::REFRESH_SCREEN,
+    actions::TOGGLE_NIGHT_MODE,
+];
 
 /// The rows of the symbol layer (the last one also gets *Delete*).
 const SYMBOLS: [&str; 3] = ["1234567890", "@#&_-+()/%", "*\"':;!?"];
@@ -454,6 +466,14 @@ impl KeyboardScreen {
     fn insert(&mut self, text: &str, cx: &mut Cx<'_, '_>) {
         let room = MAX_CHARS.saturating_sub(self.text.chars().count());
         self.text.extend(text.chars().take(room));
+        if text.chars().nth(room).is_some() {
+            let env = *cx.env();
+            let full = env.i18n.format(
+                "keyboard.full",
+                &[("count", paperpaw_sdk::Arg::Int(MAX_CHARS as i64))],
+            );
+            cx.command(Command::Notify(full));
+        }
         if self.shift {
             self.shift = false;
             self.redraw(cx, self.keys);
@@ -909,9 +929,17 @@ impl Screen for KeyboardScreen {
         }
         if self.move_focus(action, cx) {
             Handled::Yes
+        } else if self.password && !PASSING.contains(action) {
+            // Typing a password, nothing else runs (see the top).
+            Handled::Yes
         } else {
             Handled::No
         }
+    }
+
+    /// Typing a password, no swipe in from an edge opens anything over it.
+    fn holds_edges(&self) -> bool {
+        self.password
     }
 
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {

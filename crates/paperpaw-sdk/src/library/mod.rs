@@ -238,9 +238,69 @@ fn clean(storage: &dyn Storage, data: &[BookData], keep: &dyn Fn(&str) -> bool) 
     removed
 }
 
+/// Removes what is kept in folders `data` for files no longer on the
+/// storage (e.g. books deleted on a computer); how many entries went.
+/// What is kept for any file there stays, of any format, also of formats
+/// whose plugin is switched off now, and by every spelling a plugin may
+/// use for it: the storage's own and, where the storage ignores case,
+/// with the library folder spelt as its setting has it ([`folder`],
+/// `library`). Where a folder cannot be listed, nothing is removed.
+pub fn clean_up_unused(
+    storage: &dyn Storage,
+    data: &[BookData],
+    library: &str,
+) -> Result<u32, StorageError> {
+    let keys = file_keys(storage, library)?;
+    let keep =
+        |key: &str| u64::from_str_radix(key, 16).is_ok_and(|k| keys.binary_search(&k).is_ok());
+    Ok(clean(storage, data, &keep))
+}
+
+/// The keys ([`key`]) of every file on the storage (not in hidden
+/// folders), by every spelling of [`clean_up_unused`], sorted.
+fn file_keys(storage: &dyn Storage, library: &str) -> Result<Vec<u64>, StorageError> {
+    let library = library.trim_matches('/');
+    let depth = library.split('/').count();
+    let mut keys: Vec<u64> = Vec::new();
+    let mut add = |key: u64| -> Result<(), StorageError> {
+        // A card full of files is not worth the device: told, not taken.
+        keys.try_reserve(1).map_err(|_| StorageError::TooLarge)?;
+        keys.push(key);
+        Ok(())
+    };
+    let mut folders = alloc::vec![String::new()];
+    while let Some(folder) = folders.pop() {
+        let mut files = Vec::new();
+        storage.list(&folder, &mut |entry| {
+            if !entry.name.starts_with('.') {
+                let path = crate::files::join(&folder, entry.name);
+                if entry.is_dir {
+                    folders.push(path);
+                } else {
+                    files.push(path);
+                }
+            }
+        })?;
+        for path in files {
+            add(fnv1a64(&path))?;
+            if !library.is_empty() && crate::files::is_within(storage, &path, library) {
+                let rest = path.splitn(depth + 1, '/').nth(depth).unwrap_or_default();
+                let spelt = crate::files::join(library, rest);
+                if spelt != path {
+                    add(fnv1a64(&spelt))?;
+                }
+            }
+        }
+    }
+    keys.sort_unstable();
+    keys.dedup();
+    Ok(keys)
+}
+
 /// The keys ([`key`]) of every book on the storage (every file a format
-/// plugin opens, in any folder but PaperPaw's own), sorted: what
-/// [`clean_up`] keeps.
+/// plugin opens, in any folder but PaperPaw's own), sorted. Folders that
+/// cannot be listed are left out, and books of formats switched off:
+/// to clean up, [`clean_up_unused`] keeps more.
 pub fn book_keys(storage: &dyn Storage, formats: &crate::Formats) -> Vec<u64> {
     let mut keys = Vec::new();
     books_in(storage, formats, "", &mut |path| keys.push(fnv1a64(path)));
@@ -327,10 +387,11 @@ fn favourites_file() -> String {
 }
 
 /// The lines of a list file of at most `max` paths; none where there is
-/// no such file, an error where it could not be read (so it is not
-/// written over).
+/// no such file, an error where it could not be read or a newer PaperPaw
+/// wrote it ([`data::Format`](crate::data::Format)), so it is not written
+/// over.
 fn read_list(storage: &dyn Storage, path: &str, max: usize) -> Result<Vec<String>, StorageError> {
-    let text = crate::files::load_text_for_update(storage, path, max * 512)?;
+    let text = crate::data::Format::FIRST.load(storage, path, max * 512)?;
     Ok(text
         .as_deref()
         .unwrap_or_default()
@@ -365,7 +426,9 @@ pub fn book(storage: &dyn Storage, path: &str) -> Option<Book> {
 /// ([`listing::Entry::size`]): the file is not looked up again (on a card,
 /// a search through its folder).
 pub fn book_sized(storage: &dyn Storage, path: &str, size: u64) -> Option<Book> {
-    let source = crate::files::read_text(storage, &book_file(path), MAX_DETAILS).ok()?;
+    let source = crate::data::Format::FIRST
+        .load(storage, &book_file(path), MAX_DETAILS)
+        .ok()??;
     let book = parse_details(&source);
     (book.size == size).then_some(book)
 }
@@ -376,7 +439,8 @@ pub fn book_sized(storage: &dyn Storage, path: &str, size: u64) -> Option<Book> 
 /// not written over.
 fn book_for_update(storage: &dyn Storage, path: &str) -> Result<Book, StorageError> {
     let size = storage.size(path).unwrap_or_default();
-    let known = crate::files::load_text_for_update(storage, &book_file(path), MAX_DETAILS)?
+    let known = crate::data::Format::FIRST
+        .load(storage, &book_file(path), MAX_DETAILS)?
         .map(|source| parse_details(&source))
         .filter(|book| book.size == size);
     Ok(known.unwrap_or_else(|| Book {
@@ -912,6 +976,81 @@ books/b.txt",
         assert!(!book.indexed);
     }
 
+    /// A memory storage that says it ignores case, as a memory card does
+    /// (its own names still count case: enough for paths spelt as listed).
+    struct Folding(MemoryStorage);
+
+    impl Storage for Folding {
+        fn read_at(&self, path: &str, at: u64, buf: &mut [u8]) -> Result<usize, StorageError> {
+            self.0.read_at(path, at, buf)
+        }
+        fn size(&self, path: &str) -> Result<u64, StorageError> {
+            self.0.size(path)
+        }
+        fn write(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
+            self.0.write(path, data)
+        }
+        fn append(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
+            self.0.append(path, data)
+        }
+        fn list(
+            &self,
+            dir: &str,
+            visit: &mut dyn FnMut(paperpaw_platform::DirEntry<'_>),
+        ) -> Result<(), StorageError> {
+            if dir == "broken" {
+                return Err(StorageError::Io);
+            }
+            self.0.list(dir, visit)
+        }
+        fn remove(&self, path: &str) -> Result<(), StorageError> {
+            self.0.remove(path)
+        }
+        fn remove_dir_all(&self, path: &str) -> Result<(), StorageError> {
+            self.0.remove_dir_all(path)
+        }
+        fn ignores_case(&self) -> bool {
+            true
+        }
+    }
+
+    #[test]
+    fn clean_up_keeps_what_any_spelling_or_format_needs() {
+        let data = [BookData {
+            folder: "cache".into(),
+            prefix: "".into(),
+        }];
+        let kept = |path: &str| format!("cache/{}.ini", key(path));
+        // The card names the folder `Books`; the library's setting says
+        // `books`, and the reader opened the book by it.
+        let storage = Folding(
+            MemoryStorage::new()
+                .with("Books/Sub/a.epub", "book")
+                .with("Books/notes.xyz", "a format switched off")
+                .with(&kept("books/Sub/a.epub"), "x")
+                .with(&kept("Books/Sub/a.epub"), "x")
+                .with(&kept("Books/notes.xyz"), "x")
+                .with(&kept("books/gone.epub"), "x"),
+        );
+        assert_eq!(clean_up_unused(&storage, &data, "books/"), Ok(1));
+        assert!(storage.exists(&kept("books/Sub/a.epub")));
+        assert!(storage.exists(&kept("Books/Sub/a.epub")));
+        assert!(storage.exists(&kept("Books/notes.xyz")));
+        assert!(!storage.exists(&kept("books/gone.epub")));
+        // A folder that cannot be listed: nothing goes.
+        let storage = Folding(
+            storage
+                .0
+                .with("broken/b.epub", "book")
+                .with(&kept("books/gone.epub"), "x"),
+        );
+        assert_eq!(
+            clean_up_unused(&storage, &data, "books"),
+            Err(StorageError::Io)
+        );
+        assert!(storage.exists(&kept("books/gone.epub")));
+    }
+
     #[test]
     fn unreadable_details_are_not_written_over() {
         let kept = MemoryStorage::new().with("books/a.txt", "hello");
@@ -964,6 +1103,25 @@ books/b.txt",
         assert_eq!(
             storage.get(&favourites_file()).as_deref(),
             Some(&b"b\xFCcher/a.epub"[..])
+        );
+        // Written by a newer PaperPaw (after going back to an older
+        // update): left as it is.
+        let newer = "# format 2\nbooks/a.epub";
+        let storage = MemoryStorage::new().with(&favourites_file(), newer);
+        set_favourite(&storage, "c.epub", true);
+        assert_eq!(
+            storage.get(&favourites_file()).as_deref(),
+            Some(newer.as_bytes())
+        );
+        let storage = MemoryStorage::new()
+            .with("books/a.txt", "hello")
+            .with(&book_file("books/a.txt"), "# format 2\n[book]\nsize = 5\n");
+        set_finished(&storage, "books/a.txt", true);
+        assert!(
+            storage
+                .get(&book_file("books/a.txt"))
+                .unwrap()
+                .starts_with(b"# format 2")
         );
         // A byte order mark first, as Notepad writes: read past.
         let storage = MemoryStorage::new().with(&favourites_file(), "\u{feff}a.epub\r\nb.epub");

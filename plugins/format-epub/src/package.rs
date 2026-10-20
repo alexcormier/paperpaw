@@ -15,8 +15,9 @@
 //! - `styles.txt`: the rules of all the book's stylesheets (see `css`).
 //! - `fonts.txt`: the embedded fonts: first `id<TAB>identifier`, then per
 //!   font `family<TAB>bold<TAB>italic<TAB>obfuscation<TAB>path`.
-//! - `package.ini`: cache version, book size, metadata and counts. Written
-//!   last, so its presence marks a complete package cache.
+//! - `package.ini`: cache version, the book's fingerprint (see
+//!   `crate::fingerprint`), metadata and counts. Written last, so its
+//!   presence marks a complete package cache.
 
 use alloc::borrow::Cow;
 use alloc::string::{String, ToString};
@@ -24,16 +25,16 @@ use alloc::vec::Vec;
 
 use paperpaw_digest::fnv1a64;
 use paperpaw_sdk::Storage;
-use paperpaw_sdk::config;
 use paperpaw_sdk::document::{DocumentError, Metadata};
 use paperpaw_sdk::xml::{Token, Tokenizer, decode, local_name};
 use paperpaw_sdk::zip::ZipArchive;
+use paperpaw_sdk::{config, web};
 
 use crate::css;
 use crate::obfuscation::Method;
 
 /// Bump when the cache format or the conversion changes.
-pub(crate) const CACHE_VERSION: u32 = 23;
+pub(crate) const CACHE_VERSION: u32 = 24;
 
 /// A chapter: where it is in the archive and its uncompressed size.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -62,6 +63,19 @@ pub(crate) struct RawToc {
     pub fragment: Option<String>,
 }
 
+/// What is read of a package at most: the text of a metadata element and
+/// what is kept of it, authors, subjects, chapters and stylesheets. It
+/// bounds memory, and `package.ini` stays well below [`MAX_INI`], so a
+/// book's package is read once, not on every open.
+const MAX_CAPTURE: usize = 8 * 1024;
+const MAX_VALUE: usize = 512;
+const MAX_AUTHORS: usize = 16;
+const MAX_SUBJECTS: usize = 32;
+const MAX_SPINE: usize = 4096;
+const MAX_STYLESHEETS: usize = 64;
+/// Longest `package.ini` read.
+const MAX_INI: usize = 32 * 1024;
+
 /// Size of a `toc.dat` record header.
 const TOC_HEADER: usize = 9;
 /// Cache files are appended in chunks of about this size.
@@ -81,6 +95,31 @@ pub(crate) fn error(e: paperpaw_sdk::zip::ZipError) -> DocumentError {
 
 fn malformed(message: &'static str) -> DocumentError {
     DocumentError::Malformed(Cow::Borrowed(message))
+}
+
+/// The chapters files are, by name: the last looked up is kept, as entries
+/// of the contents mostly lead into the file of the one before.
+struct Sections<'a> {
+    storage: &'a dyn Storage,
+    archive: &'a ZipArchive,
+    spine: &'a [Chapter],
+    last: core::cell::RefCell<Option<(String, Option<u32>)>>,
+}
+
+impl Sections<'_> {
+    fn of(&self, file: &str) -> Option<u32> {
+        let mut last = self.last.borrow_mut();
+        if let Some((name, section)) = last.as_ref()
+            && name == file
+        {
+            return *section;
+        }
+        let record = self.archive.entry(self.storage, file).ok()??.record();
+        let section = self.spine.iter().position(|c| c.record == record);
+        let section = section.and_then(|s| u32::try_from(s).ok());
+        *last = Some((String::from(file), section));
+        section
+    }
 }
 
 /// Tokenizes an archive entry while it is inflated.
@@ -114,13 +153,13 @@ fn dir_of(path: &str) -> &str {
 /// and a fragment.
 pub(crate) fn resolve(base: &str, href: &str) -> (String, Option<String>) {
     let (path, fragment) = match href.split_once('#') {
-        Some((p, f)) => (p, Some(percent_decode(f))),
+        Some((p, f)) => (p, Some(web::percent_decode(f))),
         None => (href, None),
     };
     let joined = if path.is_empty() {
         String::from(base.trim_end_matches('/'))
     } else {
-        alloc::format!("{base}{}", percent_decode(path))
+        alloc::format!("{base}{}", web::percent_decode(path))
     };
     let mut parts: Vec<&str> = Vec::new();
     for part in joined.split('/') {
@@ -135,27 +174,6 @@ pub(crate) fn resolve(base: &str, href: &str) -> (String, Option<String>) {
     (parts.join("/"), fragment)
 }
 
-fn percent_decode(text: &str) -> String {
-    let bytes = text.as_bytes();
-    let mut out = Vec::with_capacity(bytes.len());
-    let mut i = 0;
-    while i < bytes.len() {
-        if bytes[i] == b'%'
-            && let Some(byte) = text
-                .get(i + 1..i + 3)
-                .and_then(|h| u8::from_str_radix(h, 16).ok())
-        {
-            out.push(byte);
-            i += 3;
-            continue;
-        }
-        out.push(bytes[i]);
-        i += 1;
-    }
-    String::from_utf8_lossy(&out).into_owned()
-}
-
-/// Collapses whitespace in a title.
 /// The most of a description kept, in bytes.
 const MAX_DESCRIPTION: usize = 2000;
 
@@ -189,6 +207,15 @@ fn plain_text(html: &str) -> String {
     plain
 }
 
+/// A value of the package: its whitespace collapsed, at most
+/// [`MAX_VALUE`] bytes.
+fn value(text: &str) -> String {
+    let mut value = clean(text);
+    value.truncate(truncate(&value, MAX_VALUE).len());
+    value
+}
+
+/// Collapses whitespace in a title.
 fn clean(text: &str) -> String {
     let mut out = String::new();
     for word in text.split_whitespace() {
@@ -206,17 +233,17 @@ fn read_u32(storage: &dyn Storage, path: &str, offset: u64) -> Option<u32> {
 }
 
 /// The package from the cache, if it is complete and matches the book.
-pub(crate) fn load(storage: &dyn Storage, cache: &str, book_size: u64) -> Option<Package> {
-    let data = paperpaw_sdk::read_file(storage, &path(cache, "package.ini"), 16 * 1024).ok()?;
+pub(crate) fn load(storage: &dyn Storage, cache: &str, book: &str) -> Option<Package> {
+    let data = paperpaw_sdk::read_file(storage, &path(cache, "package.ini"), MAX_INI).ok()?;
     let source = core::str::from_utf8(&data).ok()?;
     let mut metadata = Metadata::default();
-    let (mut version, mut size, mut sections, mut toc_len) = (None, None, None, None);
+    let (mut version, mut stamp, mut sections, mut toc_len) = (None, None, None, None);
     let mut cover = None;
     for entry in config::parse(source) {
         let entry = entry.ok()?;
         match (entry.section, entry.key) {
             ("cache", "version") => version = entry.value.as_u32(),
-            ("cache", "size") => size = entry.value.raw().parse::<u64>().ok(),
+            ("cache", "source") => stamp = Some(entry.value.as_str().into_owned()),
             ("book", "title") => metadata.title = Some(entry.value.as_str().into_owned()),
             ("book", key) if key.starts_with("author.") => {
                 metadata.authors.push(entry.value.as_str().into_owned());
@@ -238,7 +265,7 @@ pub(crate) fn load(storage: &dyn Storage, cache: &str, book_size: u64) -> Option
             _ => {}
         }
     }
-    if version != Some(CACHE_VERSION) || size != Some(book_size) {
+    if version != Some(CACHE_VERSION) || stamp.as_deref() != Some(book) {
         return None;
     }
     let sections = sections? as usize;
@@ -361,26 +388,6 @@ pub(crate) fn styles(storage: &dyn Storage, cache: &str) -> css::Rules {
         .unwrap_or_default()
 }
 
-/// Removes the files that mark a complete cache, so it is rebuilt.
-pub(crate) fn invalidate(
-    storage: &dyn Storage,
-    cache: &str,
-    chapter_marker: impl Fn(u32) -> String,
-) {
-    let spine = path(cache, "spine.bin");
-    let Ok(size) = storage.size(&spine) else {
-        // A cache from before there was a spine file: no telling which of
-        // its files mark chapters, so all go.
-        let _ = storage.remove_dir_all(cache);
-        return;
-    };
-    let sections = size / 8;
-    for section in 0..sections as u32 {
-        let _ = storage.remove(&chapter_marker(section));
-    }
-    let _ = storage.remove(&path(cache, "package.ini"));
-}
-
 /// Reads table of contents entry `index` from the cache.
 pub(crate) fn toc_entry(storage: &dyn Storage, cache: &str, index: u32) -> Option<RawToc> {
     let data = path(cache, "toc.dat");
@@ -430,7 +437,7 @@ fn truncate(text: &str, max: usize) -> &str {
 }
 
 /// Writes table of contents records to the cache in small chunks.
-struct TocWriter<'a> {
+pub(crate) struct TocWriter<'a> {
     storage: &'a dyn Storage,
     data_path: String,
     index_path: String,
@@ -442,7 +449,7 @@ struct TocWriter<'a> {
 }
 
 impl<'a> TocWriter<'a> {
-    fn new(storage: &'a dyn Storage, cache: &str) -> Result<Self, DocumentError> {
+    pub(crate) fn new(storage: &'a dyn Storage, cache: &str) -> Result<Self, DocumentError> {
         let writer = Self {
             storage,
             data_path: path(cache, "toc.dat"),
@@ -458,7 +465,7 @@ impl<'a> TocWriter<'a> {
         Ok(writer)
     }
 
-    fn push(&mut self, level: u8, section: u32, fragment: Option<&str>, title: &str) {
+    pub(crate) fn push(&mut self, level: u8, section: u32, fragment: Option<&str>, title: &str) {
         // Longer ids cannot match an anchor; titles are shown on one line.
         let fragment = truncate(fragment.unwrap_or_default(), 255);
         let title = truncate(title, 1024);
@@ -493,7 +500,7 @@ impl<'a> TocWriter<'a> {
         }
     }
 
-    fn finish(mut self) -> Result<u32, DocumentError> {
+    pub(crate) fn finish(mut self) -> Result<u32, DocumentError> {
         self.flush();
         match self.failed {
             Some(e) => Err(e),
@@ -502,12 +509,13 @@ impl<'a> TocWriter<'a> {
     }
 }
 
-/// Reads the package from the archive and writes it to the cache.
+/// Reads the package from the archive and writes it to the cache, for
+/// the book of fingerprint `book`.
 pub(crate) fn build(
     storage: &dyn Storage,
     archive: &ZipArchive,
     cache: &str,
-    book_size: u64,
+    book: &str,
 ) -> Result<Package, DocumentError> {
     let opf_path = package_path(storage, archive)?;
     let opf = read_metadata(storage, archive, &opf_path)?;
@@ -530,9 +538,7 @@ pub(crate) fn build(
     write_styles(storage, archive, cache, &items.stylesheets, &identifier)?;
     let sections = items.spine.len();
     let cover = items.cover.as_deref();
-    write_ini(
-        storage, cache, &metadata, sections, toc_len, cover, book_size,
-    )?;
+    write_ini(storage, cache, &metadata, sections, toc_len, cover, book)?;
     Ok(Package {
         metadata,
         spine: items.spine,
@@ -591,6 +597,7 @@ fn read_metadata(
     // EPUB 3 series: `<meta property="belongs-to-collection" id="c">`, its
     // number in `<meta refines="#c" property="group-position">`.
     let mut collection_id: Option<String> = None;
+    let mut out_of_memory = false;
     tokenize(storage, archive, opf_path, &mut |token| match token {
         Token::Start {
             name,
@@ -624,12 +631,12 @@ fn read_metadata(
             }
             // Calibre's series.
             "meta" if attrs.get("name").as_deref() == Some("calibre:series") => {
-                if let Some(series) = attrs.get("content").map(|v| clean(&v)) {
+                if let Some(series) = attrs.get("content").map(|v| value(&v)) {
                     metadata.series.get_or_insert(series);
                 }
             }
             "meta" if attrs.get("name").as_deref() == Some("calibre:series_index") => {
-                if let Some(index) = attrs.get("content").map(|v| clean(&v)) {
+                if let Some(index) = attrs.get("content").map(|v| value(&v)) {
                     metadata.series_index.get_or_insert(index);
                 }
             }
@@ -650,16 +657,21 @@ fn read_metadata(
                     text.clear();
                 }
             }
-            "itemref" => {
+            "itemref" if spine_ids.len() < MAX_SPINE => {
                 if let Some(id) = attrs.get("idref") {
                     let position = spine_ids.len() as u32;
-                    spine_ids.push((fnv1a64(id.as_bytes()), position));
+                    match spine_ids.try_reserve(1) {
+                        Ok(()) => spine_ids.push((fnv1a64(id.as_bytes()), position)),
+                        Err(_) => out_of_memory = true,
+                    }
                 }
             }
             _ => {}
         },
-        Token::Text(t) if capture.is_some() => text.push_str(&decode(&t)),
-        Token::CData(t) if capture.is_some() => text.push_str(t),
+        Token::Text(t) if capture.is_some() && text.len() < MAX_CAPTURE => {
+            text.push_str(&decode(&t));
+        }
+        Token::CData(t) if capture.is_some() && text.len() < MAX_CAPTURE => text.push_str(t),
         Token::End { name } => {
             // Series are captured from `<meta>` elements.
             let element = |field: &'static str| -> &'static str {
@@ -671,17 +683,23 @@ fn read_metadata(
             if let Some(field) = capture
                 && local_name(name) == element(field)
             {
-                let value = clean(&text);
+                let value = value(&text);
                 match field {
                     "title" if metadata.title.is_none() && !value.is_empty() => {
                         metadata.title = Some(value);
                     }
-                    "creator" if !value.is_empty() => metadata.authors.push(value),
-                    "subject" if !value.is_empty() && !metadata.subjects.contains(&value) => {
+                    "creator" if !value.is_empty() && metadata.authors.len() < MAX_AUTHORS => {
+                        metadata.authors.push(value);
+                    }
+                    "subject"
+                        if !value.is_empty()
+                            && metadata.subjects.len() < MAX_SUBJECTS
+                            && !metadata.subjects.contains(&value) =>
+                    {
                         metadata.subjects.push(value);
                     }
                     "description" if metadata.description.is_none() => {
-                        let plain = plain_text(&value);
+                        let plain = plain_text(&text);
                         metadata.description = (!plain.is_empty()).then_some(plain);
                     }
                     "language" if metadata.language.is_none() && !value.is_empty() => {
@@ -701,6 +719,9 @@ fn read_metadata(
         }
         _ => {}
     })?;
+    if out_of_memory {
+        return Err(DocumentError::OutOfMemory);
+    }
     spine_ids.sort_unstable();
     Ok(Opf {
         metadata,
@@ -734,7 +755,11 @@ fn read_manifest(
     let (spine_ids, ncx_id, cover_id) = (&opf.spine_ids, opf.ncx_id, opf.cover_id);
     // Second pass: the manifest items the spine refers to, the navigation
     // document and the NCX. Nothing else of the manifest is kept.
-    let mut chapters: Vec<Option<Chapter>> = alloc::vec![None; spine_ids.len()];
+    let mut chapters: Vec<Option<Chapter>> = Vec::new();
+    chapters
+        .try_reserve_exact(spine_ids.len())
+        .map_err(|_| DocumentError::OutOfMemory)?;
+    chapters.resize(spine_ids.len(), None);
     let mut nav: Option<String> = None;
     let mut ncx: Option<String> = None;
     let mut ncx_by_type: Option<String> = None;
@@ -772,7 +797,7 @@ fn read_manifest(
             return;
         }
         let (path, _) = resolve(&opf_dir, &get("href"));
-        if is_css {
+        if is_css && stylesheets.len() < MAX_STYLESHEETS {
             stylesheets.push(path.clone());
         }
         for &(_, position) in positions {
@@ -826,13 +851,16 @@ fn write_toc(
     // Table of contents: EPUB 3 navigation document, else (or if it has no
     // entries) the EPUB 2 NCX.
     let mut toc = TocWriter::new(storage, cache)?;
+    let sections = Sections {
+        storage,
+        archive,
+        spine,
+        last: core::cell::RefCell::new(None),
+    };
     let add =
         |toc: &mut TocWriter<'_>, title: String, level: u8, file: &str, fragment: Option<&str>| {
-            let Ok(Some(entry)) = archive.entry(storage, file) else {
-                return;
-            };
-            if let Some(section) = spine.iter().position(|c| c.record == entry.record()) {
-                toc.push(level, section as u32, fragment, &title);
+            if let Some(section) = sections.of(file) {
+                toc.push(level, section, fragment, &title);
             }
         };
     let pages_path = path(cache, "pages.txt");
@@ -840,10 +868,10 @@ fn write_toc(
     if let Some(nav) = nav {
         let mut pages = String::new();
         let mut add_page = |label: String, file: &str, fragment: Option<&str>| {
-            let (Ok(Some(entry)), Some(fragment)) = (archive.entry(storage, file), fragment) else {
+            let Some(fragment) = fragment else {
                 return;
             };
-            if let Some(section) = spine.iter().position(|c| c.record == entry.record()) {
+            if let Some(section) = sections.of(file) {
                 let one = |s: &str| s.replace(['\t', '\n'], " ");
                 pages.push_str(&alloc::format!(
                     "{section}\t{}\t{}\n",
@@ -904,16 +932,8 @@ fn write_styles(
         };
         let mut pending: Vec<u8> = Vec::new();
         let _ = archive.stream(storage, &entry, &mut |chunk| {
-            // Chunks may end inside a UTF-8 sequence.
             pending.extend_from_slice(chunk);
-            let valid = match core::str::from_utf8(&pending) {
-                Ok(text) => text.len(),
-                Err(e) => e.valid_up_to(),
-            };
-            if let Ok(text) = core::str::from_utf8(&pending[..valid]) {
-                parser.feed(text, &mut rules);
-            }
-            pending.drain(..valid);
+            feed_utf8(&mut pending, &mut |text| parser.feed(text, &mut rules));
             true
         });
     }
@@ -921,6 +941,33 @@ fn write_styles(
     write_fonts(storage, archive, cache, &rules.faces, identifier)?;
     drop(rules);
     Ok(())
+}
+
+/// Feeds the text at the start of `pending` to `feed` and removes it: all
+/// but a sequence cut off at the end, kept for the next chunk. Bytes that
+/// are not UTF-8 (a Latin-1 `©` in a stylesheet's comment) are fed as
+/// U+FFFD, and the text after them goes on.
+fn feed_utf8(pending: &mut Vec<u8>, feed: &mut dyn FnMut(&str)) {
+    let mut start = 0;
+    while start < pending.len() {
+        let (valid, skip) = match core::str::from_utf8(&pending[start..]) {
+            Ok(text) => (text.len(), None),
+            Err(e) => (e.valid_up_to(), e.error_len()),
+        };
+        if let Ok(text) = core::str::from_utf8(&pending[start..start + valid]) {
+            feed(text);
+        }
+        start += valid;
+        match skip {
+            Some(bad) => {
+                feed("\u{fffd}");
+                start += bad;
+            }
+            // Whole, or cut off at the end.
+            None => break,
+        }
+    }
+    pending.drain(..start);
 }
 
 /// Writes what is known of the book, for opening it again quickly.
@@ -931,14 +978,14 @@ fn write_ini(
     sections: usize,
     toc_len: u32,
     cover: Option<&str>,
-    book_size: u64,
+    book: &str,
 ) -> Result<(), DocumentError> {
-    let mut ini = String::new();
-    let mut set = |section: &str, key: &str, value: &str| {
-        ini = config::set(&ini, section, key, value);
+    let mut entries: Vec<(&str, String, String)> = Vec::new();
+    let mut set = |section: &'static str, key: &str, value: &str| {
+        entries.push((section, String::from(key), String::from(value)));
     };
     set("cache", "version", &CACHE_VERSION.to_string());
-    set("cache", "size", &book_size.to_string());
+    set("cache", "source", book);
     if let Some(title) = &metadata.title {
         set("book", "title", title);
     }
@@ -965,6 +1012,7 @@ fn write_ini(
     if let Some(cover) = cover {
         set("book", "cover", cover);
     }
+    let ini = config::set_all("", entries);
     storage.write(&path(cache, "package.ini"), ini.as_bytes())?;
     Ok(())
 }
@@ -1009,7 +1057,7 @@ fn read_nav(
                 page_link = Some(resolve(&base, &href));
                 text.clear();
             }
-            "ol" if in_toc => ol_depth += 1,
+            "ol" if in_toc => ol_depth = ol_depth.saturating_add(1),
             "a" if in_toc && !self_closing => {
                 let href = attrs.get("href").unwrap_or_default();
                 link = Some(resolve(&base, &href));
@@ -1017,7 +1065,9 @@ fn read_nav(
             }
             _ => {}
         },
-        Token::Text(t) if link.is_some() || page_link.is_some() => text.push_str(&decode(&t)),
+        Token::Text(t) if (link.is_some() || page_link.is_some()) && text.len() < MAX_CAPTURE => {
+            text.push_str(&decode(&t));
+        }
         Token::End { name } => match local_name(name) {
             "nav" => {
                 in_toc = false;
@@ -1082,7 +1132,7 @@ fn read_ncx(
             }
             _ => {}
         },
-        Token::Text(t) if in_label => text.push_str(&decode(&t)),
+        Token::Text(t) if in_label && text.len() < MAX_CAPTURE => text.push_str(&decode(&t)),
         Token::End { name } => match local_name(name) {
             "navMap" => in_map = false,
             "navPoint" => depth = depth.saturating_sub(1),
@@ -1114,5 +1164,20 @@ mod tests {
             ("OEBPS/Text/ch 2.xhtml".into(), Some("sec-1".into()))
         );
         assert_eq!(resolve("", "./a.xhtml"), ("a.xhtml".into(), None));
+        // Only two hex digits are an escape, no sign.
+        assert_eq!(resolve("", "a%+1.xhtml"), ("a%+1.xhtml".into(), None));
+    }
+
+    #[test]
+    fn stylesheets_go_on_after_bytes_that_are_not_utf8() {
+        let mut out = String::new();
+        let mut pending = Vec::new();
+        // A Latin-1 copyright sign, and a dash cut between two chunks.
+        for piece in [&b"/* \xa9 2010 */ p { a: \xe2"[..], b"\x80\x94 }"] {
+            pending.extend_from_slice(piece);
+            feed_utf8(&mut pending, &mut |text| out.push_str(text));
+        }
+        assert_eq!(out, "/* \u{fffd} 2010 */ p { a: \u{2014} }");
+        assert!(pending.is_empty());
     }
 }

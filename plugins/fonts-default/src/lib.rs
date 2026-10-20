@@ -4,8 +4,10 @@
 //!   texts on screens, with bold, italic and bold italic faces.
 //! - **Source Sans 3** for the UI (`fonts-default.source-sans`), a
 //!   humanist sans serif: calm and clear, with a warmer, livelier hand
-//!   than a technical face. Shipped unchanged (its licence reserves the
-//!   name "Source" for the original).
+//!   than a technical face. Its font file is shipped unchanged (its
+//!   licence reserves the name "Source" for the original) and used at
+//!   weight 430 ([`UI_WEIGHT`]); the bitmap packs are drawn from it at
+//!   build time, at that weight and for Latin text only.
 //! - **PaperPaw Icons** (`fonts-default.icons`): the icons of the menus,
 //!   taken from Tabler Icons (MIT licence; see `tools/icons/subset.py`).
 //!
@@ -139,6 +141,7 @@ fn manifest() -> Manifest {
 }
 
 fn register(r: &mut Registrar, faces: Faces, icons: &'static [u8]) -> Result<(), RegisterError> {
+    r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
     r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
     for (id, role, data, weight) in faces {
         let font =
@@ -181,5 +184,18 @@ impl Plugin for DefaultFontPacks {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         register(r, packs::faces(), packs::ICONS)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use paperpaw_i18n::{Catalog, check};
+
+    #[test]
+    fn translations_are_complete() {
+        let en = Catalog::parse(include_str!("../i18n/en.ini")).unwrap();
+        let de = Catalog::parse(include_str!("../i18n/de.ini")).unwrap();
+        let issues = check::compare(&en, &de);
+        assert!(issues.is_empty(), "{issues:?}");
     }
 }

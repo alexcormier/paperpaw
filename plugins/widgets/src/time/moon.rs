@@ -18,7 +18,7 @@ use paperpaw_sdk::{Arg, Canvas, Color, Env, Id, Point, Rect, RegisterError, Regi
 
 use paperpaw_sdk::SettingSpec;
 
-use super::{chosen, dates, frame_height, line, ui};
+use super::{chosen_name, dates, frame_height, line, ui};
 
 const ID: Id = Id::new_static("widgets.moon");
 
@@ -210,6 +210,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     let look = widgets::draw_frame(canvas, env, ID.as_str(), area);
     let (style, font) = ui(env);
     let (Some(unix), Some(today)) = (time::unix_seconds(env), time::local_time(env)) else {
+        super::draw_no_time(canvas, env, &look);
         return;
     };
     let moon = moon(unix * 1000);
@@ -304,7 +305,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         return;
     }
     let (moon_x, text_room) = if beside {
-        let rest = area.width - side - gap;
+        let rest = area.width.saturating_sub(side + gap);
         match align {
             Align::Right => (
                 area.x + area.width - side,
@@ -341,8 +342,8 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         i32::from(moon_x) + i32::from(side / 2),
         i32::from(top) + i32::from(side / 2),
     );
-    let south = chosen(env, ID.as_str(), "hemisphere") == "south";
-    let light = chosen(env, ID.as_str(), "shadow") == "light";
+    let south = chosen_name(env, ID.as_str(), "hemisphere") == "south";
+    let light = chosen_name(env, ID.as_str(), "shadow") == "light";
     draw_moon(canvas, &look, center, radius, moon.degrees, south, light);
 
     let Some(font) = font else {

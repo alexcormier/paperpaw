@@ -41,6 +41,8 @@ use paperpaw_sdk::{
     SettingSpec,
 };
 
+use crate::frame_height;
+
 pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     r.add_translations(Cow::Borrowed(include_str!("../i18n/time.en.ini")))?;
     r.add_translations(Cow::Borrowed(include_str!("../i18n/time.de.ini")))?;
@@ -122,15 +124,9 @@ impl Widget for Settable {
     }
 }
 
-/// The height `widget`'s frame takes above and below its content.
-fn frame_height(env: &Env<'_>, widget: &str) -> u16 {
-    let probe = Rect::new(0, 0, 100, 100);
-    100 - widgets::look::look(env, widget, probe).area.height
-}
-
-/// The value of `widget`'s choice `key`, the part after the last dot
-/// (e.g. `circle` of `widgets.mark.circle`).
-fn chosen<'a>(env: &'a Env<'_>, widget: &str, key: &str) -> &'a str {
+/// The name of the value of `widget`'s choice `key`: the part after the
+/// last dot (e.g. `circle` of `widgets.mark.circle`).
+fn chosen_name<'a>(env: &'a Env<'_>, widget: &str, key: &str) -> &'a str {
     let value = env.settings.text(&format!("{widget}.{key}"));
     value.rsplit('.').next().unwrap_or(value)
 }
@@ -218,7 +214,7 @@ fn date_text(
         ("year", Arg::Int(i64::from(year))),
         ("weekday", Arg::Str(weekday)),
     ];
-    match chosen(env, widget, "date-format") {
+    match chosen_name(env, widget, "date-format") {
         "iso" => format!("{year:04}-{month:02}-{day:02}"),
         "numeric" => env.i18n.format(
             "widgets.date.numeric",
@@ -237,25 +233,7 @@ fn date_text(
 /// The time `t` as the reader wants to see it: `14:05` or `2:05 PM`
 /// (setting `core.clock-format`).
 fn clock_text(env: &Env<'_>, t: &LocalTime) -> String {
-    let (hour, minute) = (t.hour, t.minute);
-    if twelve_hours(env) {
-        let key = if hour < 12 {
-            "core.clock.am"
-        } else {
-            "core.clock.pm"
-        };
-        let time = format!("{}:{minute:02}", twelve(hour));
-        env.i18n.format(key, &[("time", Arg::Str(&time))])
-    } else {
-        format!("{hour:02}:{minute:02}")
-    }
-}
-
-/// Whether the reader wants the time in twelve hours.
-fn twelve_hours(env: &Env<'_>) -> bool {
-    env.settings
-        .read(&paperpaw_sdk::builtin::settings::CLOCK_FORMAT)
-        == time::CLOCK_12H
+    time::clock_of(env, t.hour, t.minute)
 }
 
 /// `hour` (0 to 23) on a twelve-hour clock: 1 to 12.
@@ -264,6 +242,13 @@ fn twelve(hour: u8) -> u8 {
         0 => 12,
         h => h,
     }
+}
+
+/// Draws in `look`'s area that the time is not known yet, in place of
+/// what a widget would show of it: on a device without a clock of its
+/// own, until Wi-Fi sets it.
+fn draw_no_time(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &widgets::Look) {
+    widgets::draw_message(canvas, env, look, env.i18n.tr("widgets.time.unknown"));
 }
 
 /// What a widget that shows the date shows: drawn again when the day
@@ -372,6 +357,21 @@ fn pack(
         }
     }
     lines
+}
+
+/// The size of each of `n` parts side by side in `room` pixels with
+/// `gap` between them: nothing where the gaps take all the room.
+fn share(room: u16, gap: u16, n: u16) -> u16 {
+    room.saturating_sub(gap.saturating_mul(n.saturating_sub(1))) / n.max(1)
+}
+
+/// How many of `n` parts fit side by side in `room` pixels with `gap`
+/// between them, each `least` pixels at least: all where they do, else
+/// as many as do, one at least.
+fn fitting(room: u16, gap: u16, least: u16, n: usize) -> usize {
+    let each = u32::from(least.max(1)) + u32::from(gap);
+    let fit = (u32::from(room) + u32::from(gap)) / each;
+    n.min(fit as usize).max(1)
 }
 
 /// The height of a line of text `size` pixels large, as a float.

@@ -53,7 +53,8 @@ impl InfoScreen {
 #[derive(Default)]
 struct Layout {
     /// The cover, where it goes and made small for it (`None` where no
-    /// memory was left: then it is read from its picture).
+    /// memory was left: then an outline stands in, as reading the picture
+    /// in every band would take long).
     cover: Option<(Rect, Option<Thumbnail>)>,
     /// Where the title and the author begin from the left.
     text_x: u16,
@@ -190,25 +191,19 @@ fn details(env: &Env<'_>, path: &str) -> (Details, String) {
     if let Some(progress) = cached.and_then(|b| b.progress) {
         rows.push(("files.info.progress", format!("{progress} %")));
     }
-    let format = name
-        .rsplit_once('.')
-        .map(|(_, ext)| ext.to_uppercase())
-        .unwrap_or_default();
     let size = storage.size(path).unwrap_or_default();
-    rows.push(("files.info.file", format!("{format} · {}", size_text(size))));
+    let file = file_row(name, size, env.i18n.tr("files.decimal"));
+    rows.push(("files.info.file", file));
     rows.push(("files.info.folder", files::parent(path).to_string()));
     details.rows = rows;
     (details, description)
 }
 
-/// "340 KB", "2.4 MB".
-fn size_text(bytes: u64) -> String {
-    if bytes < 1024 * 1024 {
-        format!("{} KB", bytes.div_ceil(1024))
-    } else {
-        let tenths = (bytes * 10 + 512 * 1024) / (1024 * 1024);
-        format!("{}.{} MB", tenths / 10, tenths % 10)
-    }
+/// The file's row: its format and size, `EPUB · 2,4 MB` (with the
+/// language's decimal mark).
+fn file_row(name: &str, size: u64, decimal: &str) -> String {
+    let (_, format) = crate::stem_and_format(name);
+    format!("{format} · {}", files::size(size, decimal))
 }
 
 impl Screen for InfoScreen {
@@ -237,9 +232,14 @@ impl Screen for InfoScreen {
             (Some((at, Some(small))), _) => {
                 small.draw_round(canvas, at.x, at.y, crate::picture_radius(&style, *at));
             }
-            (Some((at, None)), Some(image)) => {
-                let radius = crate::cover_radius(&style, *at);
-                crate::draw_cover_image(canvas, env, image, *at, radius, Some(Color::WHITE));
+            (Some((at, None)), _) => {
+                ui::stroke_round(
+                    canvas,
+                    &style,
+                    *at,
+                    ui::button_border(&style),
+                    style.faint(80),
+                );
             }
             _ => {}
         }
@@ -315,12 +315,12 @@ impl Screen for InfoScreen {
 
 #[cfg(test)]
 mod tests {
-    use super::size_text;
+    use super::file_row;
 
     #[test]
-    fn sizes_read_easily() {
-        assert_eq!(size_text(1000), "1 KB");
-        assert_eq!(size_text(340 * 1024), "340 KB");
-        assert_eq!(size_text(2_516_582), "2.4 MB");
+    fn sizes_read_easily_in_each_language() {
+        assert_eq!(file_row("a.epub", 340 * 1024, "."), "EPUB · 340 KB");
+        assert_eq!(file_row("a.epub", 2_516_582, ","), "EPUB · 2,4 MB");
+        assert_eq!(file_row("a.fb2.zip", 2_516_582, "."), "FB2 · 2.4 MB");
     }
 }

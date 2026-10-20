@@ -14,7 +14,9 @@ categories = ["no-std"]
 paperpaw-sdk.workspace = true
 
 [dev-dependencies]
+paperpaw-core.workspace = true
 paperpaw-i18n.workspace = true
+paperpaw-platform.workspace = true
 
 [lints]
 workspace = true

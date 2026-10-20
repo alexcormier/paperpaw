@@ -40,7 +40,8 @@ USB debugging*.
   *Settings → Library → Library folder*. Until access is allowed, the
   library is `Android/data/io.github.hthoene.paperpaw/files/books` with the
   sample books. `paperpaw.ini` and all caches stay in
-  `Android/data/io.github.hthoene.paperpaw/files`.
+  `Android/data/io.github.hthoene.paperpaw/files`; passwords and keys
+  in the app's private folder, which no other app reads.
 - **Plugins without code:** copy plugin folders into `PaperPaw/plugins` on
   the device's storage (created once access is allowed) and restart.
 - **Touch:** tap the left or right side to turn pages, the middle for the
@@ -51,14 +52,10 @@ USB debugging*.
   and cold light, its warmth, in the reader's menu and under
   *Settings → Display*. They follow the device, so changes made with the
   system's own controls show up too.
+- **Colour:** pictures and covers in colour on colour e-ink (Boox models
+  named *Color* or *C*) and on phones and tablets, in grays elsewhere.
 - **E-ink (Onyx Boox):** PaperPaw chooses the waveform for every frame:
   a flashing full refresh every few pages (*Settings → Display*) and on
   new screens, clean partial refreshes for page turns and fast ones for
   menus. Boox's own per-app refresh setting applies again when PaperPaw is
   in the background.
-
-## Limitations
-
-These are planned:
-
-- Rendering is grayscale, also on colour panels.
