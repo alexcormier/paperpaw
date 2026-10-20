@@ -6,6 +6,18 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Buttons: a button let go no longer stays held when its press came
+  twice around a new screen showing (pressed again, or its release
+  missed): the kernel took it for held, and a long press followed by
+  itself (going home), or the next release was lost. The same goes for
+  a finger put down again.
+- Touch: two fingers resting on the screen no longer keep the device
+  awake (the kernel asked over and over to be woken for a long press
+  two fingers never make), and the finger left after lifting one of two
+  makes no long press either. A long press works at the edges of the
+  screen too, where swipes in from the edge begin: on the first line of
+  a book (to select a word) and on the keys along the edges of the
+  keyboard. Swipes in from the edges work as before.
 - Screens: a time a screen asks for is its own: it comes to that screen
   also below a menu or another screen over part of it, and below a
   screen over all of it once it shows again, where before it came to
