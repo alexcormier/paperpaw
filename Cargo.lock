@@ -1251,6 +1251,7 @@ dependencies = [
  "paperpaw-graphics",
  "paperpaw-i18n",
  "paperpaw-platform",
+ "paperpaw-sample-hello",
  "paperpaw-sdk",
  "png",
 ]
