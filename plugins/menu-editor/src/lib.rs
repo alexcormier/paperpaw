@@ -26,7 +26,7 @@ use paperpaw_sdk::ui::{self, ListChange, ListView, Reorder, ReorderStep, UiStyle
 use paperpaw_sdk::{
     ActionSpec, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
     MenuEntry, Params, Plugin, PointerEvent, Rect, RefreshMode, RegisterError, Registrar,
-    SDK_VERSION, Screen, ScreenSpec, Version,
+    SDK_VERSION, Screen, ScreenSpec,
 };
 
 pub const PLUGIN: Id = Id::new_static("menu-editor");
@@ -59,7 +59,8 @@ impl Plugin for MenuEditor {
             id: PLUGIN,
             name: Cow::Borrowed("Menu editor"),
             description: Cow::Borrowed("Reorders, removes and adds the entries of every menu."),
-            version: Version::new(0, 1, 0),
+            // Released with PaperPaw, also as a file from the store.
+            version: paperpaw_sdk::package_version!(),
             sdk: SDK_VERSION,
         }
     }

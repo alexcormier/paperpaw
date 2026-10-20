@@ -43,7 +43,7 @@ use paperpaw_sdk::status::item_ids;
 use paperpaw_sdk::widgets;
 use paperpaw_sdk::{
     ActionSpec, Command, Env, HttpRequest, Id, Instant, Manifest, Params, Plugin, RegisterError,
-    Registrar, SDK_VERSION, ScreenSpec, SettingGroupSpec, SettingSpec, Version, time,
+    Registrar, SDK_VERSION, ScreenSpec, SettingGroupSpec, SettingSpec, time,
 };
 
 use data::{Temperature, Wind};
@@ -462,7 +462,8 @@ impl Plugin for Weather {
             description: Cow::Borrowed(
                 "The weather now and the next days as widgets, from Open-Meteo.",
             ),
-            version: Version::new(0, 1, 0),
+            // Released with PaperPaw, also as a file from the store.
+            version: paperpaw_sdk::package_version!(),
             sdk: SDK_VERSION,
         }
     }

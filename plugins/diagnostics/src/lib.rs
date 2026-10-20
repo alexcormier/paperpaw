@@ -28,7 +28,7 @@ use paperpaw_sdk::setting::Setting;
 use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Color, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest, Metrics,
     Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen, ScreenSpec,
-    SettingSpec, Version,
+    SettingSpec,
 };
 
 pub const PLUGIN: Id = Id::new_static("diagnostics");
@@ -60,7 +60,8 @@ impl Plugin for Diagnostics {
             description: Cow::Borrowed(
                 "A test screen for gray levels, buttons, touch and refresh modes.",
             ),
-            version: Version::new(0, 1, 0),
+            // Released with PaperPaw, also as a file from the store.
+            version: paperpaw_sdk::package_version!(),
             sdk: SDK_VERSION,
         }
     }

@@ -25,9 +25,7 @@ mod harness;
 use alloc::borrow::Cow;
 
 use paperpaw_sdk::widgets;
-use paperpaw_sdk::{
-    Env, Id, Manifest, Plugin, Rect, RegisterError, Registrar, SDK_VERSION, Version,
-};
+use paperpaw_sdk::{Env, Id, Manifest, Plugin, Rect, RegisterError, Registrar, SDK_VERSION};
 
 pub const PLUGIN: Id = Id::new_static("widgets");
 
@@ -43,7 +41,8 @@ impl Plugin for Widgets {
             description: Cow::Borrowed(
                 "Many more widgets for the home screen: clocks, a calendar, quotes, books, notes and more.",
             ),
-            version: Version::new(0, 1, 0),
+            // Released with PaperPaw, also as a file from the store.
+            version: paperpaw_sdk::package_version!(),
             sdk: SDK_VERSION,
         }
     }

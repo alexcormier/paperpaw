@@ -48,7 +48,7 @@ use paperpaw_sdk::replies::HttpReply;
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::{
     ActionSpec, Command, Env, Id, Manifest, MenuEntry, Params, Plugin, RegisterError, Registrar,
-    SDK_VERSION, ScreenSpec, SettingExtra, SettingSpec, Version,
+    SDK_VERSION, ScreenSpec, SettingExtra, SettingSpec,
 };
 
 pub use send::DEFAULT_NOTEBOOK;
@@ -121,7 +121,8 @@ impl Plugin for Joplin {
             id: PLUGIN,
             name: Cow::Borrowed("Joplin"),
             description: Cow::Borrowed("Keeps the highlights and notes of each book in Joplin."),
-            version: Version::new(0, 1, 0),
+            // Released with PaperPaw, also as a file from the store.
+            version: paperpaw_sdk::package_version!(),
             sdk: SDK_VERSION,
         }
     }

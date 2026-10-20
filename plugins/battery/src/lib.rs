@@ -23,7 +23,7 @@ use core::cell::RefCell;
 use paperpaw_sdk::builtin::{events, groups, menus};
 use paperpaw_sdk::{
     ActionSpec, Command, Env, Id, Manifest, MenuEntry, Params, Plugin, RegisterError, Registrar,
-    SDK_VERSION, ScreenSpec, SettingSpec, Version, time,
+    SDK_VERSION, ScreenSpec, SettingSpec, time,
 };
 
 use log::{Kind, Reading};
@@ -159,7 +159,8 @@ impl Plugin for Battery {
             description: Cow::Borrowed(
                 "Records the battery while the device is awake and shows how long it lasts.",
             ),
-            version: Version::new(0, 1, 0),
+            // Released with PaperPaw, also as a file from the store.
+            version: paperpaw_sdk::package_version!(),
             sdk: SDK_VERSION,
         }
     }

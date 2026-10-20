@@ -38,7 +38,7 @@ use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
     MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen,
-    ScreenSpec, SettingExtra, SettingSpec, StorageError, Version,
+    ScreenSpec, SettingExtra, SettingSpec, StorageError,
 };
 
 use paperpaw_sdk::setting::Setting;
@@ -106,7 +106,8 @@ impl Plugin for Vocabulary {
             description: Cow::Borrowed(
                 "Keeps the words you look up, with their sentences, to go over later.",
             ),
-            version: Version::new(0, 1, 0),
+            // Released with PaperPaw, also as a file from the store.
+            version: paperpaw_sdk::package_version!(),
             sdk: SDK_VERSION,
         }
     }

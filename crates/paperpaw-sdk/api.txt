@@ -2342,6 +2342,7 @@ pub mod paperpaw_sdk::zip
 pub use paperpaw_sdk::zip::<<paperpaw_zip::*>>
 pub macro paperpaw_sdk::data_path!
 pub macro paperpaw_sdk::event_data!
+pub macro paperpaw_sdk::package_version!
 pub macro paperpaw_sdk::plugin!
 pub macro paperpaw_sdk::role_settings!
 #[non_exhaustive] pub enum paperpaw_sdk::ActionHint

@@ -51,7 +51,7 @@ use paperpaw_sdk::secrets::SecretChange;
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::{
     ActionSpec, Arg, Command, Env, HttpRequest, Id, Instant, Manifest, MenuEntry, Params, Plugin,
-    RegisterError, Registrar, SDK_VERSION, ScreenSpec, SettingGroupSpec, SettingSpec, Version,
+    RegisterError, Registrar, SDK_VERSION, ScreenSpec, SettingGroupSpec, SettingSpec,
 };
 
 pub const PLUGIN: Id = Id::new_static("kosync");
@@ -584,7 +584,8 @@ impl Plugin for Kosync {
             description: Cow::Borrowed(
                 "Syncs the reading position with KOReader's sync server, also with KOReader.",
             ),
-            version: Version::new(0, 1, 0),
+            // Released with PaperPaw, also as a file from the store.
+            version: paperpaw_sdk::package_version!(),
             sdk: SDK_VERSION,
         }
     }

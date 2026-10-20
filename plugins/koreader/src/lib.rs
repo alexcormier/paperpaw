@@ -43,7 +43,7 @@ use paperpaw_sdk::document::{Document, Locator};
 use paperpaw_sdk::time::{self, LocalTime};
 use paperpaw_sdk::{
     Env, Id, Manifest, MemoryClass, Plugin, RegisterError, Registrar, SDK_VERSION, Storage,
-    StorageError, Version,
+    StorageError,
 };
 
 use lua::{Table, Value};
@@ -713,7 +713,8 @@ impl Plugin for KoReader {
             description: Cow::Borrowed(
                 "Shares bookmarks and highlights with KOReader for books read in both.",
             ),
-            version: Version::new(0, 1, 0),
+            // Released with PaperPaw, also as a file from the store.
+            version: paperpaw_sdk::package_version!(),
             sdk: SDK_VERSION,
         }
     }

@@ -34,7 +34,7 @@ use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
     MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen,
-    ScreenSpec, Version,
+    ScreenSpec,
 };
 
 use crate::profile::Profile;
@@ -73,7 +73,8 @@ impl Plugin for Profiles {
             description: Cow::Borrowed(
                 "Named sets of reading and display settings, switched with a tap.",
             ),
-            version: Version::new(0, 1, 0),
+            // Released with PaperPaw, also as a file from the store.
+            version: paperpaw_sdk::package_version!(),
             sdk: SDK_VERSION,
         }
     }

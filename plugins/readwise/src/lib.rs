@@ -37,7 +37,7 @@ use paperpaw_sdk::builtin::events;
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::secrets::SecretChange;
-use paperpaw_sdk::{Command, Id, Manifest, Plugin, RegisterError, Registrar, SDK_VERSION, Version};
+use paperpaw_sdk::{Command, Id, Manifest, Plugin, RegisterError, Registrar, SDK_VERSION};
 
 use send::{Run, Start};
 
@@ -212,7 +212,8 @@ impl Plugin for Readwise {
             id: PLUGIN,
             name: Cow::Borrowed("Readwise"),
             description: Cow::Borrowed("Sends the highlights of exported notes to Readwise."),
-            version: Version::new(0, 1, 0),
+            // Released with PaperPaw, also as a file from the store.
+            version: paperpaw_sdk::package_version!(),
             sdk: SDK_VERSION,
         }
     }

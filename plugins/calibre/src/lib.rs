@@ -40,7 +40,7 @@ use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Hint, Id,
     Manifest, MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION,
-    Screen, ScreenSpec, SettingSpec, SocketRead, Version,
+    Screen, ScreenSpec, SettingSpec, SocketRead,
 };
 
 use paperpaw_sdk::setting::{Setting, Text};
@@ -107,7 +107,8 @@ impl Plugin for Calibre {
             description: Cow::Borrowed(
                 "Receive books from Calibre over the network, as its wireless device.",
             ),
-            version: Version::new(0, 1, 0),
+            // Released with PaperPaw, also as a file from the store.
+            version: paperpaw_sdk::package_version!(),
             sdk: SDK_VERSION,
         }
     }

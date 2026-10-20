@@ -33,7 +33,7 @@ use paperpaw_sdk::web::encode;
 use paperpaw_sdk::{
     Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, HttpRequest, Id, Manifest,
     Params, Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen,
-    ScreenSpec, SettingSpec, Version,
+    ScreenSpec, SettingSpec,
 };
 
 pub const PLUGIN: Id = Id::new_static("translate");
@@ -191,7 +191,8 @@ impl Plugin for Translate {
             id: PLUGIN,
             name: Cow::Borrowed("Translation"),
             description: Cow::Borrowed("Translates selected text online, with DeepL."),
-            version: Version::new(0, 1, 0),
+            // Released with PaperPaw, also as a file from the store.
+            version: paperpaw_sdk::package_version!(),
             sdk: SDK_VERSION,
         }
     }

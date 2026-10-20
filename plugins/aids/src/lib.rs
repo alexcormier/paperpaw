@@ -21,9 +21,7 @@ use paperpaw_sdk::builtin::groups;
 use paperpaw_sdk::document::{Block, BlockKind, Run, TextStyle};
 use paperpaw_sdk::filters::TextFilterSpec;
 use paperpaw_sdk::setting::{Setting, Text};
-use paperpaw_sdk::{
-    Env, Id, Manifest, Plugin, RegisterError, Registrar, SDK_VERSION, SettingSpec, Version,
-};
+use paperpaw_sdk::{Env, Id, Manifest, Plugin, RegisterError, Registrar, SDK_VERSION, SettingSpec};
 
 pub const PLUGIN: Id = Id::new_static("aids");
 /// Setting: the first half of every word in bold.
@@ -151,7 +149,8 @@ impl Plugin for Aids {
             description: Cow::Borrowed(
                 "Bold word beginnings, replaced words: text as you want it.",
             ),
-            version: Version::new(0, 1, 0),
+            // Released with PaperPaw, also as a file from the store.
+            version: paperpaw_sdk::package_version!(),
             sdk: SDK_VERSION,
         }
     }

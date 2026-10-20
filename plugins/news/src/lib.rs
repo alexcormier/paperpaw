@@ -33,7 +33,7 @@ use paperpaw_sdk::web::{clean_name, host};
 use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, HttpRequest, Id,
     Manifest, MemoryClass, MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar,
-    SDK_VERSION, Screen, ScreenSpec, SettingSpec, Storage, StorageError, Version,
+    SDK_VERSION, Screen, ScreenSpec, SettingSpec, Storage, StorageError,
 };
 
 pub const PLUGIN: Id = Id::new_static("news");
@@ -391,7 +391,8 @@ impl Plugin for News {
             id: PLUGIN,
             name: Cow::Borrowed("News"),
             description: Cow::Borrowed("Fetches news feeds (RSS, Atom) as books to read."),
-            version: Version::new(0, 1, 0),
+            // Released with PaperPaw, also as a file from the store.
+            version: paperpaw_sdk::package_version!(),
             sdk: SDK_VERSION,
         }
     }

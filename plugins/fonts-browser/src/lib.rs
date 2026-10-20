@@ -26,7 +26,7 @@ use paperpaw_sdk::setting::Setting;
 use paperpaw_sdk::ui::choice::Choice;
 use paperpaw_sdk::{
     ActionSpec, Command, Env, Id, Manifest, MenuEntry, Params, Plugin, RegisterError, Registrar,
-    SDK_VERSION, ScreenSpec, SettingSpec, Version,
+    SDK_VERSION, ScreenSpec, SettingSpec,
 };
 
 pub const PLUGIN: Id = Id::new_static("fonts-browser");
@@ -60,7 +60,8 @@ impl Plugin for FontsBrowser {
             description: Cow::Borrowed(
                 "Shows fonts from the internet, each with a sample, and downloads them to read with.",
             ),
-            version: Version::new(0, 1, 0),
+            // Released with PaperPaw, also as a file from the store.
+            version: paperpaw_sdk::package_version!(),
             sdk: SDK_VERSION,
         }
     }
