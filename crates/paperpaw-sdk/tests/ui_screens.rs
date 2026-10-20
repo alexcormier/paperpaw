@@ -200,6 +200,60 @@ fn more_options_than_fit_stay_on_the_screen() {
     );
 }
 
+/// Thirty options on pages: by touch, the pager's right half turns to
+/// the next page and a tap picks option 29 on the last; by buttons the
+/// page buttons step a row (the X4's buttons beside the screen) and reach
+/// it too; a swipe on a touch screen (a page button, the focus hidden)
+/// turns a page.
+#[test]
+fn every_option_on_pages_is_reached_by_touch_and_by_buttons() {
+    let names: Vec<String> = (0..30).map(|n| format!("o{n}")).collect();
+    let options: Vec<&str> = names.iter().map(String::as_str).collect();
+    let rows_of = |h: &Harness, screen: &mut Choice| -> (Vec<Rect>, Option<Rect>) {
+        let (described, _) = describe(480, 800, |c| screen.draw(c, &h.env()));
+        let rows = described
+            .iter()
+            .filter(|d| d.role == paperpaw_sdk::semantics::Role::Row)
+            .map(|d| d.area)
+            .collect();
+        let pager = described
+            .iter()
+            .find(|d| d.label.contains(" / "))
+            .map(|d| d.area);
+        (rows, pager)
+    };
+    // By touch.
+    let h = Harness::new(Device::TOUCH);
+    let mut screen = Choice::new(&h.env(), &opened(&options));
+    let (rows, pager) = rows_of(&h, &mut screen);
+    let per_page = rows.len();
+    assert!(per_page < 30);
+    let pager = pager.expect("a pager below the options");
+    let pages = 30usize.div_ceil(per_page);
+    for _ in 1..pages {
+        run(&h, |cx| screen.on_gesture(tap(470, middle(pager).y), cx));
+    }
+    let (rows, _) = rows_of(&h, &mut screen);
+    let last = *rows.last().unwrap();
+    let (_, commands) = run(&h, |cx| screen.on_gesture(tap(100, middle(last).y), cx));
+    assert_eq!(picked(&commands).as_deref(), Some("o29"));
+    // A swipe turns a page while the focus is hidden.
+    let mut screen = Choice::new(&h.env(), &opened(&options));
+    run(&h, |cx| screen.on_action(&actions::NEXT_PAGE, cx));
+    let (rows, _) = rows_of(&h, &mut screen);
+    let (_, commands) = run(&h, |cx| screen.on_gesture(tap(100, middle(rows[0]).y), cx));
+    let first = format!("o{per_page}");
+    assert_eq!(picked(&commands).as_deref(), Some(first.as_str()));
+    // By buttons: the page buttons step a row, down to the last.
+    let h = Harness::new(Device::BUTTONS);
+    let mut screen = Choice::new(&h.env(), &opened(&options));
+    for _ in 0..29 {
+        run(&h, |cx| screen.on_action(&actions::NEXT_PAGE, cx));
+    }
+    let (_, commands) = run(&h, |cx| screen.on_action(&actions::CONFIRM, cx));
+    assert_eq!(picked(&commands).as_deref(), Some("o29"));
+}
+
 // ---- Choosing a status line's items -------------------------------------
 
 const STATUS: Setting<paperpaw_sdk::Text> = Setting::new("t.status");
@@ -363,6 +417,39 @@ fn shown_items_are_reordered_by_buttons_alone() {
     run(&h, |cx| screen.on_action(&actions::DOWN, cx));
     let (_, commands) = run(&h, |cx| screen.on_action(&actions::CONFIRM, cx));
     assert!(written(&commands).is_some());
+}
+
+/// Menu takes an item along only where there is another shown item to
+/// move it past; its hint says so only then. While it is taken, a frame
+/// in the focus's ink inside the focused row shows it, not hidden in the
+/// focus.
+#[test]
+fn an_item_is_taken_along_only_past_another_and_shows_it() {
+    let h = status_harness(Device::BUTTONS, "t.page");
+    let mut screen = items_screen(&h);
+    let env = h.env();
+    assert_eq!(
+        screen.hint(&actions::MENU, &env),
+        paperpaw_sdk::Hint::Default
+    );
+    let (handled, _) = run(&h, |cx| screen.on_action(&actions::MENU, cx));
+    assert_eq!(handled, Handled::No, "left to the kernel's menu");
+
+    let h = status_harness(Device::BUTTONS, "t.page, t.time");
+    let mut screen = items_screen(&h);
+    let env = h.env();
+    let style = UiStyle::new(&env);
+    run(&h, |cx| screen.on_action(&actions::MENU, cx));
+    let (described, frame) = describe(480, 800, |c| screen.draw(c, &env));
+    let row = described
+        .iter()
+        .find(|d| d.role == paperpaw_sdk::semantics::Role::Row && d.focused)
+        .map(|d| d.area)
+        .expect("the focused row");
+    // The frame's top, a little inside the row, in the focus's ink.
+    let y = row.y + (style.line * 3 + style.line) as u16;
+    let x = row.x + row.width / 2;
+    assert_eq!(frame.view().pixel(x, y), style.focus_ink(true));
 }
 
 /// On a touch screen the focus shows only once a button moved it: a

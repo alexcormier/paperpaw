@@ -153,9 +153,11 @@ impl ItemsScreen {
         self.keep(&env, &chosen, cx);
     }
 
-    /// Whether the focus is shown on a shown item (one that can be moved).
-    fn on_shown(&self, env: &Env<'_>) -> bool {
-        self.list.shown && self.list.focus < self.chosen(env).len()
+    /// Whether the buttons can take the focused item along: the focus
+    /// shows on a shown item, and another is shown to move it past.
+    fn can_move(&self, env: &Env<'_>) -> bool {
+        let shown = self.chosen(env).len();
+        self.list.shown && self.list.focus < shown && shown > 1
     }
 }
 
@@ -212,13 +214,20 @@ impl Screen for ItemsScreen {
             });
         self.reorder.draw(canvas, &style, &self.list);
         if self.moving {
-            // The item the buttons move, framed as one a finger drags.
+            // The item the buttons move: a frame inside its focus, in the
+            // focus's own ink (white on a dark bar, dark in a ring or on a
+            // light bar), so it looks taken up, not only focused.
             let slot = self.list.focus % self.list.rows();
-            canvas.stroke(
-                self.list.row_rect(slot),
-                style.line * 2,
-                crate::Color::BLACK,
+            let row = self.list.row_rect(slot);
+            let inset = (style.line * 3) as u16;
+            let frame = Rect::new(
+                row.x + inset,
+                row.y + inset,
+                row.width.saturating_sub(2 * inset),
+                row.height.saturating_sub(2 * inset),
             );
+            let r = style.radius(u32::from(frame.height));
+            canvas.stroke_round(frame, style.line * 2, r, style.focus_ink(true));
         }
     }
 
@@ -226,7 +235,7 @@ impl Screen for ItemsScreen {
         let done = || crate::Hint::Text(env.i18n.tr("core.grid.done").to_string());
         match action {
             a if self.moving && [actions::CONFIRM, actions::BACK].contains(a) => done(),
-            a if *a == actions::MENU && !self.moving && self.on_shown(env) => {
+            a if *a == actions::MENU && !self.moving && self.can_move(env) => {
                 crate::Hint::Text(env.i18n.tr("core.move").to_string())
             }
             _ => crate::Hint::Default,
@@ -271,7 +280,7 @@ impl Screen for ItemsScreen {
             }
             return Handled::Yes;
         }
-        if *a == actions::MENU && self.on_shown(&env) && self.chosen(&env).len() > 1 {
+        if *a == actions::MENU && self.can_move(&env) {
             self.moving = true;
             cx.request_redraw();
             cx.request_refresh(RefreshMode::Fast);

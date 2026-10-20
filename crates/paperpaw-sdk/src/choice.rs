@@ -272,9 +272,16 @@ impl Screen for Choice {
             }
             return Handled::Yes;
         }
-        // The page buttons step too, as the other direction buttons: on the
-        // X4 they are the ones beside the screen.
-        match ui::list_step(action, 1) {
+        // While the focus shows (buttons are used, always on the X4, whose
+        // buttons beside the screen are the page buttons) the page buttons
+        // step a row as the others do; a swipe on a touch screen, the
+        // focus hidden, turns a page.
+        let page = if self.list.shown {
+            1
+        } else {
+            self.list.rows() as isize
+        };
+        match ui::list_step(action, page) {
             Some(delta) => {
                 let change = self.list.move_focus(delta, self.options.len());
                 self.moved(change, cx);
