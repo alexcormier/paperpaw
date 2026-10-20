@@ -94,10 +94,18 @@ pub mod items {
     pub const ALOUD: Id = Id::new_static("reader.status.aloud");
     /// The page of the printed edition, where the book names it.
     pub const PRINTED_PAGE: Id = Id::new_static("reader.status.printed-page");
+    /// The page in the chapter: `5 / 25`, once the pages are counted.
+    pub const CHAPTER_PAGE: Id = Id::new_static("reader.status.chapter-page");
+    /// The pages after this one to the chapter's end.
+    pub const CHAPTER_LEFT: Id = Id::new_static("reader.status.chapter-left");
 }
 
 /// Context: the printed edition's page.
 pub(crate) const PRINTED_CONTEXT: &str = "reader.printed-page";
+
+/// Context: the page in the chapter (from 1) and the chapter's pages.
+pub(crate) const CHAPTER_PAGE_CONTEXT: &str = "reader.chapter-page";
+pub(crate) const CHAPTER_PAGES_CONTEXT: &str = "reader.chapter-pages";
 
 /// Context: the icon of what turns the pages by itself (reading aloud,
 /// turning automatically).
@@ -267,6 +275,30 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
         }),
     })?;
     r.add_status_item(StatusItemSpec {
+        id: items::CHAPTER_PAGE,
+        title: Cow::Borrowed("reader.status.item.chapter-page"),
+        value: Box::new(|env, cx| {
+            let (page, pages) = chapter_pages(cx)?;
+            Some(StatusValue::Text(env.i18n.format(
+                "reader.page",
+                &[("page", Arg::Int(page)), ("pages", Arg::Int(pages))],
+            )))
+        }),
+    })?;
+    r.add_status_item(StatusItemSpec {
+        id: items::CHAPTER_LEFT,
+        title: Cow::Borrowed("reader.status.item.chapter-left"),
+        value: Box::new(|env, cx| {
+            let (page, pages) = chapter_pages(cx)?;
+            let left = pages - page;
+            Some(StatusValue::Text(env.i18n.plural(
+                "reader.chapter-left",
+                left,
+                &[("count", Arg::Int(left))],
+            )))
+        }),
+    })?;
+    r.add_status_item(StatusItemSpec {
         id: items::PAGE,
         title: Cow::Borrowed("reader.status.item.page"),
         value: Box::new(move |_, cx| text(cx.get(context::PAGE))),
@@ -283,6 +315,15 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
         }),
     })?;
     Ok(())
+}
+
+/// The page in the chapter and the chapter's pages, from the context.
+fn chapter_pages(cx: &Params) -> Option<(i64, i64)> {
+    let number = |key| cx.get(key)?.parse::<i64>().ok();
+    Some((
+        number(CHAPTER_PAGE_CONTEXT)?,
+        number(CHAPTER_PAGES_CONTEXT)?,
+    ))
 }
 
 /// The item lists of a line's parts: `top` or bottom.

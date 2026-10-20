@@ -74,6 +74,8 @@ pub(super) struct Book {
     /// chapter starts, the index's pages then, and the page (found once
     /// a chapter, not every page turned).
     pub(super) chapter_end: core::cell::Cell<Option<(Locator, u32, u32)>>,
+    /// The same for the page the chapter begins on.
+    pub(super) chapter_first: core::cell::Cell<Option<(Locator, u32, u32)>>,
     /// The book's own fonts, if used.
     pub(super) embedded: Option<Embedded>,
     /// The links on the page.
@@ -192,6 +194,7 @@ impl Book {
             found: None,
             chapter: None,
             chapter_end: core::cell::Cell::new(None),
+            chapter_first: core::cell::Cell::new(None),
             embedded: None,
             links: Vec::new(),
             returns: Vec::new(),
@@ -280,6 +283,25 @@ impl Book {
         Some(last.saturating_sub(page))
     }
 
+    /// The page (from 0) the chapter begins on, where the chapter is
+    /// known and the pages are counted.
+    pub(super) fn chapter_first(&self, env: &Env<'_>) -> Option<u32> {
+        let index = self.index.as_ref().filter(|i| i.is_complete())?;
+        let (start, _, title) = self.chapter.as_ref()?;
+        if title.is_empty() {
+            return None;
+        }
+        if let Some((at, pages, first)) = self.chapter_first.get()
+            && at == *start
+            && pages == index.pages()
+        {
+            return Some(first);
+        }
+        let (first, _) = index.locate(env.storage, *start)?;
+        self.chapter_first.set(Some((*start, index.pages(), first)));
+        Some(first)
+    }
+
     pub(super) fn open_index(&self, env: &Env<'_>) -> PageIndex {
         PageIndex::open(
             env.storage,
@@ -304,6 +326,7 @@ impl Book {
         self.history.clear();
         self.index = Some(self.open_index(env));
         self.chapter_end.set(None);
+        self.chapter_first.set(None);
         self.indexing = None;
     }
 

@@ -463,3 +463,84 @@ fn with_two_buttons_holding_forward_still_opens_the_menu() {
         Some("reader.screen")
     );
 }
+
+/// What a status item hears of the chapter: the page in it and its pages.
+type InChapter = Rc<RefCell<Option<(String, String)>>>;
+
+/// A plugin with a status item that notes what it is told.
+struct Probe(InChapter);
+
+impl Plugin for Probe {
+    fn manifest(&self) -> Manifest {
+        Manifest {
+            id: Id::new_static("probe"),
+            name: "Probe".into(),
+            description: "Notes what status items are told.".into(),
+            version: Version::new(0, 1, 0),
+            sdk: SDK_VERSION,
+        }
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        let heard = self.0.clone();
+        r.add_status_item(paperpaw_sdk::StatusItemSpec {
+            id: Id::new_static("probe.chapter"),
+            title: "probe".into(),
+            value: Box::new(move |_, cx| {
+                let get = |key| cx.get(key).unwrap_or_default().to_string();
+                *heard.borrow_mut() =
+                    Some((get("reader.chapter-page"), get("reader.chapter-pages")));
+                None
+            }),
+        })
+    }
+}
+
+#[test]
+fn status_lines_know_the_page_in_the_chapter() {
+    let epub = include_bytes!("../../../samples/library/books/alice-in-wonderland.epub");
+    let storage = Shared::default();
+    storage.create_dir("books").unwrap();
+    storage.write(EPUB, epub).unwrap();
+    let in_chapter = InChapter::default();
+    let heard = Heard::default();
+    let mut kernel = Kernel::builder(DEVICE)
+        .setting_default_text("reader.status.bottom-left", "probe.chapter")
+        .storage(storage.clone())
+        .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
+        .plugin(paperpaw_plugin_format_epub::EpubFormat)
+        .plugin(Reader)
+        .plugin(Listener(heard.clone()))
+        .plugin(Probe(in_chapter.clone()))
+        .build()
+        .unwrap();
+    let effects = kernel.start(Instant(0));
+    let mut reading = Reading {
+        kernel,
+        storage,
+        heard,
+        now: 0,
+        book: EPUB,
+    };
+    reading.settle(effects);
+    reading.open();
+    let last = |reading: &Reading| reading.heard.borrow().last().unwrap().1.clone();
+    let mut turned = 0;
+    while last(&reading).pages.is_none() || !last(&reading).chapter.ends_with("Rabbit-Hole") {
+        reading.run(core_actions::NEXT_PAGE);
+        turned += 1;
+        assert!(turned < 400, "the pages are never counted");
+    }
+    // The chapter's first page, then its second.
+    for page in ["1", "2"] {
+        reading.kernel.render(&mut |_, _| {});
+        let (at, pages) = in_chapter.borrow().clone().expect("the line was drawn");
+        let left = last(&reading).chapter_left.unwrap();
+        assert_eq!(at, page);
+        assert_eq!(
+            pages.parse::<u32>().unwrap(),
+            at.parse::<u32>().unwrap() + left
+        );
+        reading.run(core_actions::NEXT_PAGE);
+    }
+}
