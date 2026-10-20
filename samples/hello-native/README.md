@@ -13,7 +13,10 @@ from:
 | `.cargo/config.toml` | how a plugin is linked, for both chips, and the aliases `x4` and `x4pro` |
 | `rust-toolchain.toml` | the compiler for the X4 (the X4 Pro's comes from espup) |
 | `plugin/plugin.ini` | the plugin's folder, to which `code.ppn` is added |
-| `.github/workflows/build.yml` | a CI job for a plugin's repository: both files, packed and signed |
+| `build.sh` | builds both files reproducibly, packs and signs them, zips the folder, into `dist/` |
+| `.github/workflows/build.yml` | a CI job for a plugin's repository: `build.sh` on every tag, its files as a release |
+| `catalogue.toml` | the plugin's entry in the plugin library, to fill in |
+| `.gitignore` | keeps `target/`, `dist/` and any `*.key` out of the repository |
 | `examples/second.rs` | a second plugin, to try several at once |
 | `examples/crash.rs` | a plugin that panics at every start, to try safe mode |
 
@@ -44,6 +47,21 @@ same SDK; *About* on the device names both. And only once installed: a
 file copied into a plugin's folder does not run until it is named as
 installed, as the store and the web flasher do, here over USB
 (`--trust-code`, which only a firmware built for development answers).
+
+## Publishing
+
+On Linux, with both toolchains and `paperpaw-sign` of the release:
+
+```sh
+. ~/export-esp.sh
+./build.sh --key ~/.paperpaw/author.key
+```
+
+`dist/` then holds the folder as a ZIP, a signed file for each device,
+their SHA-256 sums, and prints each file's fingerprint; the CI job does
+the same for a tag and writes the catalogue's `[[versions]]` beside
+them. [Publishing](../../docs/plugins.md#publishing) says what to
+submit, and how to check that the build is reproducible.
 
 ## Size
 

@@ -732,14 +732,16 @@ Services between plugins are found by their type's name too, so a plugin
 built apart finds those of the firmware's plugins (see [Services and
 points of your own](#services-and-points-of-your-own)).
 
-### Publishing
+### Publishing a code plugin
 
 The plugin library (paperpaw.org) lists a code plugin with its folder
 and a build per device (`x4`, `x4-pro`), each a signed `.ppn` with the
-fingerprint it was built for, and the author's key. The sample's CI job
+fingerprint it was built for, the author's key, and its source, which
+the library rebuilds. The sample's `build.sh` builds, packs and signs
+both files reproducibly, and its CI job
 (`samples/hello-native/.github/workflows/build.yml`, for a plugin's own
-repository) builds, packs and signs both files on every tag, with the
-author's key kept as a secret of the repository.
+repository) runs it on every tag, with the author's key kept as a
+secret of the repository. [Publishing](#publishing) says how.
 
 ## Plugins without code
 
@@ -850,6 +852,120 @@ So anyone can make a home screen layout and share it: it is offered
 with the home screen's own. [`samples/plugins`](../samples/plugins) has
 five: large print, three themes (airy, paw, calm ink) and a layout
 (reading nook).
+
+## Publishing
+
+The plugin library on paperpaw.org is what the website lists and every
+device's store (*More plugins*) installs from (ADR 0023). A plugin gets
+there in one of two ways, both checked by the same checker:
+
+- **The upload form** on paperpaw.org, the usual way: sign in with a
+  link sent by e-mail, upload the files, read the instant checks and the
+  preview of the plugin's page, and submit it to the moderation queue.
+- **A pull request** to the paperpaw.org repository that adds
+  `catalogue/<id>.toml`, with the files hosted elsewhere (`url` and
+  `sha256`).
+
+An update is a new version, the same way. Every version is in a public
+version log, and readers see on the website and on the device whether
+a plugin has code, who made it, its source, and for code plugins
+whether the library's rebuild matched its files: *Verified: matches its
+source* or *Not rebuilt*.
+
+The skill's
+[`publishing.md`](../.claude/skills/paperpaw-plugin-development/publishing.md)
+walks through every step, with the commands, every check's message and
+its fix, and a checklist; an AI assistant helping an author follows it.
+In brief:
+
+### What is submitted
+
+- **A data plugin**: its folder as a ZIP, `plugin.ini` at the top, its
+  `id` that of the catalogue and its `version` the one published. Only
+  `.ini`, `.css`, `.ttf`, `.otf`, `.ttc`, `.ppfp`, `.txt`, `.md` and
+  `.png` files, at most 64, their paths of letters, digits, `.`, `_`
+  and `-` (none starting with a dot), at most 100 bytes each; at most 20
+  MB zipped and 40 MB unpacked.
+- **A code plugin**: the same ZIP of its folder (without code, at most
+  63 files), a signed `.ppn` for each device it runs on (`x4`,
+  `x4-pro`), and its source, readable: a link to a fixed commit or tag,
+  or a source ZIP.
+
+### The author's key
+
+Code plugins are signed by their author with an Ed25519 key of their
+own, made once:
+
+```sh
+paperpaw-sign key ~/.paperpaw/author.key     # prints the public key, 64 hexadecimal digits
+```
+
+The public key is the catalogue's `author_key`. The file is the secret
+key: keep it outside every repository and back it up; never commit or
+share it. In CI it is a secret of the repository
+(`PAPERPAW_PLUGIN_KEY` in the sample's job). Devices remember the key at
+the first install and warn every reader when an update is signed by
+another, so it stays the same for every version; a lost or leaked key
+is replaced in the open, in the catalogue entry, and readers are warned
+once.
+
+### Reproducible builds
+
+The library rebuilds a code plugin's source with the toolchain its
+fingerprint names and compares the files. They match only when the build
+gives the same bytes on any computer:
+
+- the SDK of a PaperPaw release and that release's compilers, pinned
+  (`rust-toolchain.toml` for the X4, espup's version for the X4 Pro, as
+  the release's `shells/xteink/rust-toolchain.toml` and `versions.env`
+  name them);
+- `Cargo.lock` committed and the build `--locked`; dependencies by
+  version or by a fixed commit;
+- built on Linux, with the paths of the repository, Cargo's home and the
+  X4 Pro's `core` remapped (`--remap-path-prefix`, as the sample's
+  `build.sh` does; never `RUSTFLAGS`, which would replace the flags that
+  link the plugin);
+- nothing of the moment or the computer in the code: no time, date,
+  user or random value written by a build script;
+- built from the tagged commit, with no changes beside it.
+
+Building twice, in two folders with two Cargo homes, and comparing the
+files with `cmp` shows whether it holds.
+
+### The catalogue entry
+
+`catalogue/<id>.toml`, or the same fields in the form. A field the
+catalogue does not know is refused.
+
+```toml
+id = "my-theme"
+name = "My theme"
+summary = "Dark headers and square corners."     # one sentence, at most 160 characters
+kind = "data"                                    # or "code"
+author = "Jane Doe"
+licence = "Apache-2.0"                           # SPDX
+source = "https://github.com/jane/my-theme"
+group = "look"     # reading, formats, library, sync, home, look or system
+tags = ["theme"]   # up to five
+
+[i18n.de]
+name = "Mein Thema"
+summary = "Dunkle Kopfzeilen und eckige Ecken."
+
+[[versions]]
+version = "1.0.0"
+sdk = "0.5"
+date = "2026-10-20"
+url = "https://github.com/jane/my-theme/releases/download/v1.0.0/my-theme-1.0.0.zip"
+sha256 = "<the ZIP's SHA-256>"
+```
+
+A code plugin adds `author_key`, `crate` (its library crate), `devices`
+and, in each version, a `[[versions.builds]]` per device with `device`,
+`abi` (the file's fingerprint, which `paperpaw-sign plugin` prints),
+`url` and `sha256`; `samples/hello-native/catalogue.toml` is one to
+fill in, and the sample's CI job writes the versions' part for each
+tag.
 
 [`Plugin`]: ../crates/paperpaw-sdk/src/plugin.rs
 [`Registrar`]: ../crates/paperpaw-sdk/src/plugin.rs

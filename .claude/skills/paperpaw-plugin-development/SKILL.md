@@ -1,6 +1,6 @@
 ---
 name: paperpaw-plugin-development
-description: Helps write a plugin for PaperPaw as it is, without changing PaperPaw (a community plugin, usually in its own repository): code plugins in Rust against the released paperpaw-sdk and data plugins without code; trying them in the desktop emulator and on a real Xteink X4; measuring speed, heap and stack; keeping within the memory of small devices. Use when someone writes, ports, debugs, tests or profiles such a plugin. Not for work on PaperPaw itself (its kernel, SDK, firmware or its own plugins in plugins/), where extending the SDK is the rule: that follows CONTRIBUTING.md.
+description: Helps write a plugin for PaperPaw as it is, without changing PaperPaw (a community plugin, usually in its own repository): code plugins in Rust against the released paperpaw-sdk and data plugins without code; trying them in the desktop emulator and on a real Xteink X4; measuring speed, heap and stack; keeping within the memory of small devices; publishing it in the plugin store on paperpaw.org (the upload form or a catalogue pull request, signing code plugins, reproducible builds, updates). Use when someone writes, ports, debugs, tests, profiles or publishes such a plugin. Not for work on PaperPaw itself (its kernel, SDK, firmware or its own plugins in plugins/), where extending the SDK is the rule: that follows CONTRIBUTING.md.
 ---
 
 # Developing PaperPaw plugins
@@ -236,3 +236,15 @@ report the numbers; never claim a speed-up from reading code alone.
   memory, and how it looks in the emulator.
 - When the user must decide (what the plugin should do, anything hard
   to undo), lay out the options with a recommendation and ask.
+
+## 9. Publishing
+
+When the user wants the plugin in the store (on paperpaw.org and in
+every device's *More plugins*), follow
+[`publishing.md`](publishing.md) in this folder, step by step: what to
+submit, the author's signing key, reproducible builds of code plugins,
+the catalogue entry, the upload form or a pull request, updates, every
+check's message with its fix, and a final checklist. Its rules for the
+assistant come first: the secret key is never shown, copied or
+committed, nothing is uploaded, pushed or submitted without the user's
+yes, and no field or address is invented.
