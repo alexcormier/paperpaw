@@ -822,14 +822,8 @@ mod tests {
         };
         let storage = crate::MemoryStorage::new()
             .with("plugins/clock/code.ppn", header_of(5000, 16))
-            .with(
-                "plugins/clock/plugin.ini",
-                "[plugin]\n",
-            )
-            .with(
-                "plugins/theme/plugin.ini",
-                "[plugin]\n",
-            )
+            .with("plugins/clock/plugin.ini", "[plugin]\n")
+            .with("plugins/theme/plugin.ini", "[plugin]\n")
             .with("plugins/broken/code.ppn", "PPNP but short")
             // A download being put together: not installed.
             .with("plugins/.clock.part/code.ppn", header_of(5000, 16))
