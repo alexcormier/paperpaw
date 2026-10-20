@@ -1,6 +1,7 @@
 //! When the radio goes on and off, with the real kernel: a plugin's
 //! request wants the network, no network joined before is in reach, and
-//! the radio does not stay on for work that has already failed.
+//! the radio does not stay on for work that has already failed. And the
+//! plugin's translations.
 
 // Tests panic on purpose when something is wrong.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
@@ -165,6 +166,15 @@ impl Test {
             [WifiCommand::Scan]
         );
     }
+}
+
+#[test]
+fn translations_are_complete() {
+    use paperpaw_i18n::{Catalog, check};
+    let en = Catalog::parse(include_str!("../i18n/en.ini")).unwrap();
+    let de = Catalog::parse(include_str!("../i18n/de.ini")).unwrap();
+    let issues = check::compare(&en, &de);
+    assert!(issues.is_empty(), "{issues:?}");
 }
 
 #[test]
