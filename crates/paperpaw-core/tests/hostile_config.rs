@@ -348,7 +348,6 @@ fn a_stored_config_with_crlf_lines_is_read() {
 /// Editors on Windows (Notepad before 2019, and others) start UTF-8 files
 /// with a byte order mark.
 #[test]
-#[ignore = "bug: a byte order mark makes the first section header of paperpaw.ini unreadable"]
 fn a_stored_config_with_a_byte_order_mark_is_read() {
     let harness = Harness::new();
     let (kernel, warnings) = with_stored_config(
@@ -369,7 +368,6 @@ fn a_stored_config_that_is_not_utf8_starts_with_defaults() {
 }
 
 #[test]
-#[ignore = "bug: a paperpaw.ini that is not UTF-8 is ignored without a warning"]
 fn a_stored_config_that_is_not_utf8_is_reported() {
     let harness = Harness::new();
     let (_, warnings) = with_stored_config(&harness, b"# Gr\xFC\xDFe\n[core]\nui-size = 12\n");
@@ -380,7 +378,6 @@ fn a_stored_config_that_is_not_utf8_is_reported() {
 }
 
 #[test]
-#[ignore = "bug: saving a setting overwrites a paperpaw.ini that is not UTF-8, losing the rest"]
 fn saving_a_setting_keeps_the_rest_of_a_config_that_is_not_utf8() {
     let harness = Harness::new();
     let original = b"# Gr\xFC\xDFe\n[core]\nui-size = 12\n[keymap.global]\nbutton.up = core.menu\n";
@@ -413,7 +410,6 @@ fn a_stored_config_too_large_to_read_starts_with_defaults() {
 }
 
 #[test]
-#[ignore = "bug: a paperpaw.ini over 64 KiB is ignored without a warning"]
 fn a_stored_config_too_large_to_read_is_reported() {
     let harness = Harness::new();
     let (_, warnings) = with_stored_config(&harness, &oversized_config());
@@ -424,7 +420,6 @@ fn a_stored_config_too_large_to_read_is_reported() {
 }
 
 #[test]
-#[ignore = "bug: saving a setting overwrites a paperpaw.ini over 64 KiB, losing the rest"]
 fn saving_a_setting_keeps_the_rest_of_a_config_too_large_to_read() {
     let harness = Harness::new();
     let (mut kernel, _) = with_stored_config(&harness, &oversized_config());
