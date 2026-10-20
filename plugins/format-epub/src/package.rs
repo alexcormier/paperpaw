@@ -904,16 +904,8 @@ fn write_styles(
         };
         let mut pending: Vec<u8> = Vec::new();
         let _ = archive.stream(storage, &entry, &mut |chunk| {
-            // Chunks may end inside a UTF-8 sequence.
             pending.extend_from_slice(chunk);
-            let valid = match core::str::from_utf8(&pending) {
-                Ok(text) => text.len(),
-                Err(e) => e.valid_up_to(),
-            };
-            if let Ok(text) = core::str::from_utf8(&pending[..valid]) {
-                parser.feed(text, &mut rules);
-            }
-            pending.drain(..valid);
+            feed_utf8(&mut pending, &mut |text| parser.feed(text, &mut rules));
             true
         });
     }
@@ -921,6 +913,33 @@ fn write_styles(
     write_fonts(storage, archive, cache, &rules.faces, identifier)?;
     drop(rules);
     Ok(())
+}
+
+/// Feeds the text at the start of `pending` to `feed` and removes it: all
+/// but a sequence cut off at the end, kept for the next chunk. Bytes that
+/// are not UTF-8 (a Latin-1 `©` in a stylesheet's comment) are fed as
+/// U+FFFD, and the text after them goes on.
+fn feed_utf8(pending: &mut Vec<u8>, feed: &mut dyn FnMut(&str)) {
+    let mut start = 0;
+    while start < pending.len() {
+        let (valid, skip) = match core::str::from_utf8(&pending[start..]) {
+            Ok(text) => (text.len(), None),
+            Err(e) => (e.valid_up_to(), e.error_len()),
+        };
+        if let Ok(text) = core::str::from_utf8(&pending[start..start + valid]) {
+            feed(text);
+        }
+        start += valid;
+        match skip {
+            Some(bad) => {
+                feed("\u{fffd}");
+                start += bad;
+            }
+            // Whole, or cut off at the end.
+            None => break,
+        }
+    }
+    pending.drain(..start);
 }
 
 /// Writes what is known of the book, for opening it again quickly.
@@ -1114,5 +1133,18 @@ mod tests {
             ("OEBPS/Text/ch 2.xhtml".into(), Some("sec-1".into()))
         );
         assert_eq!(resolve("", "./a.xhtml"), ("a.xhtml".into(), None));
+    }
+
+    #[test]
+    fn stylesheets_go_on_after_bytes_that_are_not_utf8() {
+        let mut out = String::new();
+        let mut pending = Vec::new();
+        // A Latin-1 copyright sign, and a dash cut between two chunks.
+        for piece in [&b"/* \xa9 2010 */ p { a: \xe2"[..], b"\x80\x94 }"] {
+            pending.extend_from_slice(piece);
+            feed_utf8(&mut pending, &mut |text| out.push_str(text));
+        }
+        assert_eq!(out, "/* \u{fffd} 2010 */ p { a: \u{2014} }");
+        assert!(pending.is_empty());
     }
 }

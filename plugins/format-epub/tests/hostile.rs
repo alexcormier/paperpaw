@@ -10,7 +10,7 @@ use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::Cell;
 
 use paperpaw_plugin_format_epub::EpubDocument;
-use paperpaw_sdk::document::{Document, Locator};
+use paperpaw_sdk::document::{Align, Document, Locator};
 use paperpaw_sdk::zip::testing::ZipBuilder;
 use paperpaw_sdk::{DirEntry, MemoryStorage, Storage, StorageError};
 
@@ -172,20 +172,30 @@ const CONTAINER: &str = r#"<?xml version="1.0"?>
 <container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
 <rootfiles><rootfile full-path="OEBPS/content.opf"/></rootfiles></container>"#;
 
-/// An EPUB of one chapter, `ch1.xhtml`, with `extra` files beside it.
+/// An EPUB of one chapter, `ch1.xhtml`, with `extra` files beside it;
+/// those named `.css` are its stylesheets.
 fn epub_with(chapter: &str, extra: &[(&str, &[u8])]) -> Vec<u8> {
-    let opf = "<?xml version=\"1.0\"?><package xmlns=\"http://www.idpf.org/2007/opf\" \
-        version=\"3.0\"><metadata xmlns:dc=\"http://purl.org/dc/elements/1.1/\">\
-        <dc:title>Hostile</dc:title></metadata><manifest>\
-        <item id=\"c1\" href=\"ch1.xhtml\" media-type=\"application/xhtml+xml\"/>\
-        </manifest><spine><itemref idref=\"c1\"/></spine></package>";
+    let stylesheets: String = extra
+        .iter()
+        .filter_map(|(name, _)| name.strip_prefix("OEBPS/"))
+        .filter(|name| name.ends_with(".css"))
+        .enumerate()
+        .map(|(i, name)| format!("<item id=\"s{i}\" href=\"{name}\" media-type=\"text/css\"/>"))
+        .collect();
+    let opf = format!(
+        "<?xml version=\"1.0\"?><package xmlns=\"http://www.idpf.org/2007/opf\" \
+         version=\"3.0\"><metadata xmlns:dc=\"http://purl.org/dc/elements/1.1/\">\
+         <dc:title>Hostile</dc:title></metadata><manifest>\
+         <item id=\"c1\" href=\"ch1.xhtml\" media-type=\"application/xhtml+xml\"/>\
+         {stylesheets}</manifest><spine><itemref idref=\"c1\"/></spine></package>"
+    );
     let mut zip = ZipBuilder::new()
         .stored("mimetype", "application/epub+zip")
         .deflated("META-INF/container.xml", CONTAINER)
-        .deflated("OEBPS/content.opf", opf)
+        .deflated("OEBPS/content.opf", opf.as_str())
         .deflated("OEBPS/ch1.xhtml", chapter);
     for (name, data) in extra {
-        zip = zip.stored(name, data.to_vec());
+        zip = zip.deflated(name, data.to_vec());
     }
     zip.build()
 }
@@ -386,4 +396,31 @@ fn a_chapter_that_cannot_be_read_is_not_converted_again_and_again() {
     }
     assert_eq!(card.writes.get(), writes, "converted again");
     assert!(card.reads.get() - reads <= 10, "inflated again");
+}
+
+#[test]
+fn a_stylesheet_in_latin_1_keeps_its_rules() {
+    let css = b"/* \xa9 2010 Publisher */ .c { text-align: center }";
+    let chapter = "<html><body><p class=\"c\">Middle</p></body></html>";
+    let card = Card::new("book.epub", epub_with(chapter, &[("OEBPS/style.css", css)]));
+    let doc = EpubDocument::open(&card, "book.epub").unwrap();
+    let block = doc.block_at(&card, Locator::START).unwrap().unwrap();
+    assert_eq!(block.align, Align::Center);
+}
+
+#[test]
+fn a_stylesheet_of_a_bad_byte_and_much_space_takes_little_memory() {
+    let mut css = b".c { text-align: center } \xff".to_vec();
+    css.resize(css.len() + (1 << 20), b' ');
+    let chapter = "<html><body><p class=\"c\">Middle</p></body></html>";
+    let card = Card::new(
+        "book.epub",
+        epub_with(chapter, &[("OEBPS/style.css", &css)]),
+    );
+    let (block, peak) = peak(|| {
+        let doc = EpubDocument::open(&card, "book.epub").unwrap();
+        doc.block_at(&card, Locator::START).unwrap().unwrap()
+    });
+    assert!(peak < PLAIN_PEAK, "{peak} bytes at once");
+    assert_eq!(block.align, Align::Center);
 }
