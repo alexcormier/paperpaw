@@ -238,7 +238,7 @@ pub mod http_params {
     /// from a request's own parameters, which come back too).
     pub const FINAL_URL: &str = "final-url";
     /// Before a header's name in lower case, for the headers asked for
-    /// ([`HttpOptions::want_headers`]), e.g. `header:last-modified`.
+    /// ([`HttpOptions::want_headers`](crate::HttpOptions::want_headers)), e.g. `header:last-modified`.
     pub const HEADER: &str = "header:";
 }
 

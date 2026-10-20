@@ -1,0 +1,269 @@
+//! Paged, focusable lists ([`ListView`]) and moving a focus.
+
+#[allow(clippy::wildcard_imports)]
+use super::*;
+
+/// What changed after moving a list's focus.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ListChange {
+    None,
+    /// The focus moved within the visible page.
+    Focus,
+    /// The visible page changed.
+    Page,
+}
+
+impl ListChange {
+    /// Asks for what the change needs, as every list does: the screen
+    /// drawn again, refreshed fast for a focus that moved and a little
+    /// more thoroughly for a new page; nothing for no change.
+    pub fn request(self, cx: &mut crate::Cx<'_, '_>) {
+        let mode = match self {
+            ListChange::None => return,
+            ListChange::Focus => crate::RefreshMode::Fast,
+            ListChange::Page => crate::RefreshMode::Partial,
+        };
+        cx.request_redraw();
+        cx.request_refresh(mode);
+    }
+}
+
+/// How far a navigation action moves a focus: one back for up, left and
+/// previous, one on for down, right and next, `page` for the next page
+/// and back for the previous one; `None` for any other action. Screens
+/// with a [`ListView`] use [`ListView::navigate`].
+pub fn list_step(action: &crate::Id, page: isize) -> Option<isize> {
+    use actions::{DOWN, LEFT, NEXT, NEXT_PAGE, PREV_PAGE, PREVIOUS, RIGHT, UP};
+    match action {
+        a if [UP, LEFT, PREVIOUS].contains(a) => Some(-1),
+        a if [DOWN, RIGHT, NEXT].contains(a) => Some(1),
+        a if *a == NEXT_PAGE => Some(page),
+        a if *a == PREV_PAGE => Some(-page),
+        _ => None,
+    }
+}
+
+/// A paged, focusable list: the basic building block of menus, the
+/// library and settings. Works with buttons (focus) and touch (hit tests).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ListView {
+    /// Where the rows are drawn.
+    pub area: Rect,
+    pub row: u32,
+    pub focus: usize,
+    /// Whether the focused row is highlighted; off while the focus is on
+    /// another element of the screen.
+    pub active: bool,
+    /// Whether the focus shows at all: on touch screens only once a
+    /// button moved it (see [`ListView::focus_on_keys`]), as in menus.
+    pub shown: bool,
+    /// Items side by side in a row (a grid, e.g. of covers); 1 for a list.
+    columns: u32,
+    /// The item focused before the focus last moved.
+    before: usize,
+}
+
+impl ListView {
+    pub fn new(area: Rect, row: u32) -> Self {
+        Self {
+            area,
+            row: row.max(1),
+            focus: 0,
+            active: true,
+            shown: true,
+            columns: 1,
+            before: 0,
+        }
+    }
+
+    /// Asks for what `change` needs, for screens where the focus changes
+    /// nothing but its items: a focus moved within the page draws the item
+    /// it left and the one it came to again, nothing else (see
+    /// [`Rows::request`]); otherwise as [`ListChange::request`].
+    pub fn request(&self, change: ListChange, cx: &mut crate::Cx<'_, '_>) {
+        if change != ListChange::Focus {
+            return change.request(cx);
+        }
+        let rows = self.rows();
+        for index in [self.before, self.focus] {
+            cx.request_redraw_area(self.row_rect(index % rows));
+        }
+        cx.request_refresh(crate::RefreshMode::Fast);
+    }
+
+    /// A grid of `columns` items a row instead of a list (rows are then
+    /// `row` high and items as wide as a column).
+    pub fn columns(mut self, columns: u32) -> Self {
+        self.columns = columns.clamp(1, u32::from(u16::MAX));
+        self
+    }
+
+    /// The height of a row, at least 1 (`row` is a field anyone can set).
+    fn row_height(&self) -> u32 {
+        self.row.max(1)
+    }
+
+    /// The width of a column, at least 1.
+    fn column_width(&self) -> u16 {
+        (self.area.width / self.columns as u16).max(1)
+    }
+
+    /// Items side by side in a row.
+    pub fn column_count(&self) -> usize {
+        self.columns as usize
+    }
+
+    /// Items per page (rows times columns).
+    pub fn rows(&self) -> usize {
+        ((u32::from(self.area.height) / self.row_height()).max(1) * self.columns) as usize
+    }
+
+    /// The page containing the focus (0-based).
+    pub fn page(&self) -> usize {
+        self.focus / self.rows()
+    }
+
+    /// The page and the number of pages, e.g. for [`Header::draw`]; always
+    /// `Some` (a list of one page shows no page number there).
+    pub fn paging(&self, len: usize) -> Option<(usize, usize)> {
+        Some((self.page(), self.pages(len)))
+    }
+
+    pub fn pages(&self, len: usize) -> usize {
+        len.div_ceil(self.rows()).max(1)
+    }
+
+    /// On touch screens, hides the focus until a button moves it: taps
+    /// need no focus, and a black row nobody chose looks like a mistake.
+    pub fn focus_on_keys(mut self, env: &Env<'_>) -> Self {
+        self.shown = !env.device.input.touch;
+        self
+    }
+
+    /// The item a confirming button chooses, or `None` while the focus is
+    /// hidden (on touch screens before a button moved it): then this first
+    /// press shows the focus instead, so that a button never chooses a row
+    /// nobody saw (draw again, as for [`ListChange::Focus`]).
+    pub fn confirm(&mut self) -> Option<usize> {
+        if self.shown {
+            Some(self.focus)
+        } else {
+            self.shown = true;
+            self.before = self.focus;
+            None
+        }
+    }
+
+    /// Keeps the focus among `len` items after the list changed (the last
+    /// one if it was past the end); the page follows the focus.
+    pub fn set_len(&mut self, len: usize) {
+        let last = len.saturating_sub(1);
+        if self.focus > last {
+            self.before = self.focus;
+            self.focus = last;
+        }
+    }
+
+    /// Moves the focus by a navigation action among `len` items (see
+    /// [`list_step`]; a page is a page of the list); `None` if `action`
+    /// is another.
+    pub fn navigate(&mut self, action: &crate::Id, len: usize) -> Option<ListChange> {
+        let delta = list_step(action, self.rows() as isize)?;
+        Some(self.move_focus(delta, len))
+    }
+
+    /// Moves the focus by `delta` rows within `0..len`; one step past
+    /// either end goes round to the other (quicker with few buttons),
+    /// larger steps (pages) stop at the end.
+    pub fn move_focus(&mut self, delta: isize, len: usize) -> ListChange {
+        if len == 0 {
+            return ListChange::None;
+        }
+        if !self.shown && delta.abs() == 1 {
+            // The first press of a direction shows where the focus is.
+            // Turning pages (also by swiping or a tap on the arrows)
+            // does not: on touch screens it stays hidden.
+            self.shown = true;
+            self.before = self.focus;
+            return ListChange::Focus;
+        }
+        let focus = step_focus(self.focus, delta, len);
+        if focus == self.focus {
+            return ListChange::None;
+        }
+        let page = self.page();
+        self.before = self.focus;
+        self.focus = focus;
+        if self.page() == page {
+            ListChange::Focus
+        } else {
+            ListChange::Page
+        }
+    }
+
+    /// The rectangle of visible item `slot` (0 = top left of the page).
+    pub fn row_rect(&self, slot: usize) -> Rect {
+        let columns = self.columns as usize;
+        let width = self.column_width();
+        let row = self.row_height();
+        Rect::new(
+            self.area.x + (slot % columns) as u16 * width,
+            self.area.y + ((slot / columns) as u32 * row) as u16,
+            width,
+            row as u16,
+        )
+    }
+
+    /// The index of the item at `point`, if any.
+    pub fn hit(&self, point: Point, len: usize) -> Option<usize> {
+        if !self.area.contains(point) {
+            return None;
+        }
+        let line = ((point.y - i32::from(self.area.y)) as u32 / self.row_height()) as usize;
+        let width = u32::from(self.column_width());
+        let column = ((point.x - i32::from(self.area.x)) as u32 / width) as usize;
+        let slot = line * self.columns as usize + column.min(self.columns as usize - 1);
+        let index = self.page() * self.rows() + slot;
+        (slot < self.rows() && index < len).then_some(index)
+    }
+
+    /// Draws the visible rows: the focused row inverted, the others with a
+    /// separator. `draw_row(canvas, index, rect, focused)` draws a row's
+    /// content in black, or white when focused.
+    pub fn draw(
+        &self,
+        canvas: &mut Canvas<'_>,
+        style: &UiStyle,
+        len: usize,
+        mut draw_row: impl FnMut(&mut Canvas<'_>, usize, Rect, bool),
+    ) {
+        let first = self.page() * self.rows();
+        for (slot, index) in (first..len).take(self.rows()).enumerate() {
+            let rect = self.row_rect(slot);
+            let focused = self.active && self.shown && index == self.focus;
+            canvas.describe(Role::Row, "", rect, focused, None);
+            if focused {
+                draw_focus(canvas, style, rect);
+            } else if self.columns == 1 {
+                draw_separator(canvas, style, rect, 0);
+            }
+            draw_row(canvas, index, rect, focused);
+        }
+    }
+}
+
+/// The focus `delta` steps on from `focus` among `len` things: one step
+/// past either end goes round to the other (quicker with few buttons),
+/// larger steps (a page, a row of keys) stop at the end. For screens that
+/// move a focus of their own, as [`ListView`] does.
+pub fn step_focus(focus: usize, delta: isize, len: usize) -> usize {
+    let Some(last) = len.checked_sub(1) else {
+        return 0;
+    };
+    let (last, target) = (last as isize, focus as isize + delta);
+    match target {
+        t if delta.abs() == 1 && t < 0 => last as usize,
+        t if delta.abs() == 1 && t > last => 0,
+        t => t.clamp(0, last) as usize,
+    }
+}
