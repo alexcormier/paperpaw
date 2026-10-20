@@ -121,6 +121,13 @@ Three layers, each building on the one before:
 3. **Power modes** change only the limits of declared work and a few
    settings (deadlines longer, optional work off, the light capped), by
    hand, by battery level or by a rule.
+4. **Per plugin**, the reader may switch a plugin's network off, or let
+   it keep Normal's limits in Saving, explicitly and visibly; the
+   default follows the mode.
+
+Throughout, nothing is refused or held back silently: a plugin always
+learns what happened to its work or request, why, and when it may try
+again, and the kernel does not let it try in a tight loop.
 
 ### 1. Efficient by default
 
@@ -217,9 +224,7 @@ network and was not done is written down and is due at the next wake
 event, and the requests made while handling their answers, are not
 answered; the kernel knows them, so a plugin need not say when it is
 done. While a run needs the network, the radio stays on; once no run
-and no reader needs it, the radio goes off. A failed request is the
-plugin's to declare again (with a later *after*, the kernel offers a
-backoff: `Work::retry(attempt)`).
+and no reader needs it, the radio goes off.
 
 **What the reader asks for is not work.** A request made while the
 kernel handles the reader's input (a catalog opened, *Sync now*) goes
@@ -248,6 +253,67 @@ radio is on or the deadline allows, in Saving at the next connection.
 due, and the plugin switches on for either (in Offline, it asks first
 when a reader waits, see below). It no longer needs retry rounds for
 work that can wait: the kernel declares it due again.
+
+### Refused, held back, failed: always said, never in a loop
+
+Every request and every declared work ends in an answer the plugin can
+act on. `paperpaw_sdk::work` defines it once for both:
+
+```rust
+pub struct Refusal {
+    pub reason: Reason,
+    pub retry: Retry,
+}
+pub enum Reason {
+    Offline,       // the mode holds network work back
+    NetworkOff,    // the reader switched this plugin's network off
+    NotDeclared,   // the plugin's manifest does not say it uses the network
+    Saving,        // the mode defers it to a cheaper moment
+    NoNetwork,     // no known network, or joining failed
+    Sleeping,      // the device switched off before it was done
+    TooOften,      // the plugin asked again too soon (see below)
+}
+pub enum Retry {
+    After(Instant),    // not before then
+    At(Moments),       // at the next of these moments
+    WhenAllowed,       // when the mode or the reader allows it; told by an event
+    Never,             // not without the reader changing something
+}
+```
+
+- **A request** (`Command::Http`, `Connect`, `Serve`) that does not go
+  out is answered as today (`status 0`) and its reply carries the
+  refusal (`HttpReply::refused`). One that waits for a cheaper moment
+  is not answered until it goes out or its wait ends; then it is
+  answered with the refusal.
+- **Declared work** is never dropped: held back by the mode, it stays
+  in the queue and runs when allowed. Only when it can never run
+  (`NetworkOff`, `NotDeclared`) does the kernel take it out and emit
+  `core.work-refused` to the plugin, with its id and the refusal.
+  `Env::work(id)` tells a plugin where a work stands (`due`, `held`
+  with the reason, `running`), so its page can say "Waiting for the
+  next connection" or "Held: Offline mode" instead of guessing.
+- **When it is allowed again** (the mode changes, the reader switches
+  the network back on, a connection comes) the kernel emits
+  `core.work-allowed`; work in the queue simply runs.
+- **A request that went out and failed** (a server error, a time-out)
+  is the plugin's to retry, by declaring the work again with
+  `Work::retry(attempt)`: after 30 s, then doubling up to 6 h, with a
+  little randomness so devices do not all return at once.
+
+**No retry storms.** A plugin cannot make the kernel spend energy by
+insisting:
+
+- a request refused for a reason is refused again at once, without
+  any I/O, while that reason holds and before its `Retry`, with the
+  reason `TooOften`; such refusals are counted per plugin and shown in
+  the battery view and the log;
+- declaring work again replaces it (same id), so a loop cannot grow
+  the queue; a plugin has at most 8 works;
+- **only a deadline switches the radio on, and at most once in
+  `core.work.min-gap` (15 min) per plugin**; a plugin whose deadlines
+  come sooner shares the next connection instead. The reader's own
+  requests are not limited.
 
 ### 3. Power levels and modes
 
@@ -323,6 +389,40 @@ the device (*save as*, rename, remove) and the ways to reach them
 with it (`power.mode = core.offline`), so "Night" can mean "dim, warm
 and offline" with one tap.
 
+### Per plugin: its network, and an exemption from the mode
+
+Every plugin's row in the plugin manager, and its line in the
+battery view, offers two settings, made by the kernel for each plugin
+whose manifest says it uses the network:
+
+- **Network**: on (default) or off. Off, the kernel refuses the
+  plugin's requests, servers and sockets (`NetworkOff`, `Retry::Never`)
+  and its network work, and the plugin does what it can offline.
+- **In saving modes**: *follow the mode* (default), *as in Normal*
+  (its work keeps Normal's deadlines and optional work in Saving), or
+  *only when I ask* (no background network at all, in every mode).
+
+The exemption is part of the work model, not a way around it: an
+exempt plugin's work still waits for its moments and its deadlines,
+still shares connections, still has the minimum gap; only the limits of
+the mode are those of Normal. It applies to Saving and to the reader's
+own modes, not to Offline, which stays offline for everything. These
+are settings like any other, so a mode may hold them: a reader who
+wants only one plugin online makes a mode of their own (Saving, the
+other plugins *only when I ask*). Only the reader sets them; a plugin
+may explain why it would like an exemption and open its own page (the
+settings slot with its group), but not set it. The Power page lists the exempt plugins, and the battery view
+shows each plugin's cost (radio time, connections it caused, requests,
+refusals) beside the two settings, so an exemption is never invisible.
+
+The manifest says what a plugin uses (`Manifest::uses`, the
+declaration ADR 0024 shows before installing): a plugin that does not
+declare the network gets no network setting and its requests are
+refused (`NotDeclared`), so the declaration stays honest. For native
+plugins this is enforced on every path the SDK offers; as ADR 0024
+says, it is a promise checked by review, not a fence against code that
+goes around the SDK.
+
 ### The shells
 
 The kernel tells the shell the level and the shell's own values of the
@@ -374,7 +474,9 @@ so all of it can be tried without hardware.
 ### Where it lives
 
 - **SDK**: `work` (`Work`, `Moments`, `Command::Work`,
-  `Command::CancelWork`), `power` (`PowerLevel`, `Power`), `Env::power`,
+  `Command::CancelWork`, `Refusal`, `Reason`, `Retry`, `Env::work`,
+  `events::WORK_REFUSED`, `events::WORK_ALLOWED`), `HttpReply::refused`,
+  `Manifest::uses`, `power` (`PowerLevel`, `Power`), `Env::power`,
   `events::POWER_CHANGED`, the settings' mode layer and limits.
   `Command::Schedule` is removed in favour of `Work::at` (its callers
   are the rules, weather and wifi plugins). A minor SDK version
@@ -382,7 +484,8 @@ so all of it can be tried without hardware.
   the SDK's API file.
 - **Kernel**: the queue of work, the moments, runs and their requests,
   the levels' limits, the mode layer, holding sleep for running work,
-  writing down what was not done.
+  writing down what was not done, the per-plugin network and exemption
+  settings, refusals and the limits against retrying too often.
 - **A new `power` plugin**, replaceable like `wifi`: the built-in modes,
   Automatic, the settings page, the quick panel entry, the status item
   and the notices. Mechanism in the kernel and the shells, policy in a
@@ -435,6 +538,12 @@ with the battery plugin before and after each step:
   sleep screen; work not done is due at the next wake.
 - `Command::Schedule` goes; its callers move to `Work::at`. Plugins
   that build `HttpRequest` field by field are not affected.
+- A plugin always knows why its work did not run and when to try
+  again; a misbehaving plugin costs a refusal, not a connection, and
+  shows up in the battery view.
+- Readers can keep one plugin eager or silence one entirely, and see
+  what that costs; the default stays saving.
+- Manifests must declare the network, or their requests are refused.
 - Gains are claimed only after the battery plugin has measured them.
 
 ## Open questions, with a recommendation each
@@ -484,3 +593,26 @@ Marked *measure* where a measurement on the device should come first.
     *Measure*: modem sleep and light sleep with the radio on (what
     esp-radio allows), the panel's power off after fast refreshes, the
     front light through light sleep on the S3.
+13. **Switching a plugin's network off.** Recommended: on each plugin's
+    page and in the battery view, on by default; a plugin that does not
+    declare the network in its manifest gets none (`NotDeclared`), so
+    first-party and community plugins must declare it.
+14. **Exempting a plugin from the mode.** Recommended: three choices
+    (*follow the mode*, *as in Normal*, *only when I ask*), set only by
+    the reader, applying to Saving and the reader's own modes but not
+    to Offline; exempt plugins listed on the Power page and their cost
+    shown in the battery view. This does not harm the concept: the
+    exemption only restores Normal's limits inside the same work model
+    (moments, shared connections, the minimum gap), it is explicit,
+    per plugin and visible, and the default stays saving.
+15. **Refusals and retries.** Recommended: one `Refusal` (reason and
+    when to retry) for requests and work alike, held work kept in the
+    queue rather than refused, `TooOften` refused without I/O, a
+    backoff from 30 s to 6 h for failures, and at most one connection
+    forced by deadlines per plugin in 15 min. *Measure*: whether 15 min
+    is right once a connection's cost is known (question 10).
+16. **May a plugin ask to be exempted?** Recommended: it may explain
+    and open its own settings page, never set the exemption itself and
+    never ask by a dialog of its own at start; a reader who installs a
+    plugin for its frequent updates (e.g. a news ticker) finds the
+    choice on its page.
