@@ -258,3 +258,28 @@ fn items_and_lines_are_found_by_their_ids() {
     assert!(!items.draw_line("t.unknown", &mut frame.canvas(), &env, &status));
     assert_eq!(drawn_outside(&mut frame, status.area), None);
 }
+
+/// In a line too narrow for its items (a widget of one cell), what does
+/// not fit whole is left out rather than drawn past the area: the battery
+/// keeps its gauge without the percentage where only that fits.
+#[test]
+fn a_narrow_line_leaves_out_what_does_not_fit() {
+    let h = harness();
+    let env = h.env();
+    let font = paperpaw_sdk::ui::UiStyle::new(&env).font(&env).unwrap();
+    let context = Params::new().with("level", "80").with("page", "12 / 340");
+    for width in [20u16, 30, 45, 60, 90] {
+        let area = Rect::new(200, 100, width, 32);
+        let right = format!("{LEVEL}, {ICON}, {PAGE}");
+        let line = StatusLine {
+            area,
+            lists: ["", "", &right],
+            size: 20.0,
+            color: Color::BLACK,
+            percent: true,
+        };
+        let mut frame = frame(480, 800);
+        line.draw(&mut frame.canvas(), &env, &font, &context);
+        assert_eq!(drawn_outside(&mut frame, area), None, "{width} wide");
+    }
+}

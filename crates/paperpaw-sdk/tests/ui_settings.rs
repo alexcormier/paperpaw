@@ -177,6 +177,44 @@ fn a_choice_holding_a_value_it_does_not_offer_steps_to_one_it_does() {
     }
 }
 
+/// From a value not among the options, the first step on is the first
+/// option and the first step back the last (not the second and the
+/// first).
+#[test]
+fn from_a_value_not_offered_the_steps_begin_at_the_ends() {
+    let (mut h, [_, _, look, ..]) = harness(Device::TOUCH);
+    h.settings
+        .set("t.look", SettingValue::Text(Cow::Borrowed("t.look.gone")))
+        .unwrap();
+    let text = |v: Option<SettingValue>| match v {
+        Some(SettingValue::Text(t)) => t.to_string(),
+        other => panic!("{other:?}"),
+    };
+    assert_eq!(text(ui::next_value(&h.env(), &look, 1)), LOOKS[0]);
+    assert_eq!(text(ui::next_value(&h.env(), &look, -1)), LOOKS[2]);
+}
+
+/// A number at the end of the widest range, stepped by a large step:
+/// no overflow, and within the range.
+#[test]
+fn numbers_at_the_ends_of_their_range_do_not_overflow() {
+    let mut h = Harness::new(Device::TOUCH);
+    let wide = Setting::<i64>::new("t.wide");
+    let spec = SettingSpec::number(&wide, "t.wide", i64::MIN, i64::MAX, i64::MAX).step(i64::MAX);
+    h.settings.define(spec.clone()).unwrap();
+    assert_eq!(
+        ui::next_value(&h.env(), &spec, 3),
+        Some(SettingValue::Int(i64::MAX))
+    );
+    h.settings
+        .set("t.wide", SettingValue::Int(i64::MIN))
+        .unwrap();
+    assert_eq!(
+        ui::next_value(&h.env(), &spec, -3),
+        Some(SettingValue::Int(i64::MIN))
+    );
+}
+
 #[test]
 fn two_options_switch_at_once_and_more_open_a_list() {
     let (mut h, [size, on, look, pair, _, name]) = harness(Device::TOUCH);

@@ -280,7 +280,6 @@ proptest! {
 /// A word at the very left of the page: the background's padding is cut
 /// there, and it is to keep its padding on the right as anywhere else.
 #[test]
-#[ignore = "bug: draw_behind widens a background clipped at x 0 by the whole padding on the right"]
 fn a_background_at_the_left_edge_keeps_its_padding_on_the_right() {
     let h = Harness::new(Device::TOUCH);
     let env = h.env();

@@ -347,8 +347,16 @@ change the plugin SDK.
   where only the battery fits. A word's background at the left edge of
   the page keeps its padding on the right.
 - Sliders: the buttons come back from an end that is no whole step to
-  the steps a drag gives (from 12 in fives to 10, not 7), and a touch
-  whose end got lost no longer holds a slider or a row's grip.
+  the steps a drag gives (from 12 in fives to 10, not 7); a drag brought
+  back to where it began keeps the value, also where steps are finer
+  than pixels; a touch whose end got lost no longer holds a slider or a
+  row's grip.
+- A kept thumbnail whose header claims a picture larger than its file
+  takes no memory for it (a file of 17 bytes could ask for 8 MB). Empty
+  screens in narrow areas leave out the paw (or the icon) that would
+  not fit.
+- SDK: `Settings::define` and `define_fixed` refuse a setting past the
+  32,768th of its kind instead of mixing it up with another.
 - Headers translate their page number; on and off in setting rows are
   the kernel's words (`core.on`, `core.off`), also where the settings
   plugin is switched off.
