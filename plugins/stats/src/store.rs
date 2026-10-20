@@ -152,7 +152,7 @@ fn each_line(
 ) -> Result<(), StorageError> {
     let mut chunk = [0u8; 512];
     let mut line: Vec<u8> = Vec::new();
-    let mut emit = |line: &mut Vec<u8>| {
+    let mut emit = |line: &mut Vec<u8>| -> Result<(), StorageError> {
         let text = core::str::from_utf8(line).map_err(|_| StorageError::InvalidData)?;
         visit(text.strip_suffix('\r').unwrap_or(text))?;
         line.clear();
