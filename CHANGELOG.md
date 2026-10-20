@@ -6,6 +6,22 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- X4 and X4 Pro: a lean firmware. The 20 plugins the store offers as
+  files (statistics, widgets, Calibre, KOReader sync, weather, news,
+  rules and more) are no longer built in; the image shrinks from 6.59 to
+  5.43 MB, the room for plugin files grows, and the X4 starts with less
+  heap. Android builds them in, switched off until wanted (on where they
+  were used before). The diagnostics screen is in developer builds only.
+- Updates: the code plugins built for an update are fetched before it is
+  installed and installed by the updated firmware at its first start, so
+  they run at once and offline; a plugin that becomes a file is no longer
+  named as left out.
+- Plugin files ask the firmware for icons by name instead of carrying
+  all their names (some 125 KB less per file that draws icons), when
+  built with `--cfg paperpaw_plugin` as the sample is.
+- Files, widgets and vocabulary keep no writable statics, so they pack
+  as plugin files.
+
 - Plugins: a data plugin updated or removed while running takes its
   stylesheet for books and its key bindings with it; before, the old
   version's applied until a restart, beside the new one's.
