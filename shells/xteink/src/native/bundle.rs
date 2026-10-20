@@ -4,7 +4,8 @@
 //! each file checked by its SHA-256 as it is copied and a plugin's code by
 //! its author's signature, for the kernel to install before it loads
 //! plugins (`KernelBuilder::install_plugin`), so they run at this start.
-//! Once the kernel is built, the bundle's first sector is erased.
+//! Once they are all on the card, the bundle's first sector is erased
+//! (on the X4 its code plugins go there).
 //!
 //! A bundle for another image, or one that is damaged, is erased without
 //! installing anything; one that cannot be copied (no card, a card full)
@@ -30,23 +31,6 @@ use crate::ota::Flash;
 /// Read and copied a piece at a time.
 const PIECE: usize = 4096;
 
-/// The plugins of a bundle copied onto the card, for the kernel to
-/// install.
-pub struct Staged {
-    /// Each plugin's id and the folder it was copied into.
-    pub plugins: Vec<(Id, String)>,
-    /// Where the bundle lies in flash.
-    at: u32,
-}
-
-impl Staged {
-    /// The kernel has installed them: the bundle goes.
-    pub fn finish(self, flash: &Flash) {
-        erase(&mut flash.borrow_mut(), self.at);
-        info!("bundle: {} plugins installed", self.plugins.len());
-    }
-}
-
 /// The bundle's bytes, from flash.
 struct InFlash<'a> {
     flash: &'a mut FlashStorage<'static>,
@@ -60,8 +44,9 @@ impl Source for InFlash<'_> {
 }
 
 /// Copies the plugins of the bundle behind the image onto the card, if
-/// there is one (see the [module documentation](self)).
-pub fn stage(flash: &Flash, storage: &dyn Storage) -> Option<Staged> {
+/// there is one, and erases it (see the [module documentation](self)):
+/// each plugin's id and the folder it is in, for the kernel to install.
+pub fn stage(flash: &Flash, storage: &dyn Storage) -> Option<Vec<(Id, String)>> {
     let mut flash = flash.borrow_mut();
     let behind = behind_image(&mut flash).ok()?;
     let mut head = [0u8; 4];
@@ -110,15 +95,13 @@ pub fn stage(flash: &Flash, storage: &dyn Storage) -> Option<Staged> {
             plugins.push((id, folder));
         }
     }
+    erase(&mut flash, behind.start);
     info!(
         "bundle: {} plugins copied onto the card in {} ms",
         plugins.len(),
         (crate::micros() - started) / 1000
     );
-    Some(Staged {
-        plugins,
-        at: behind.start,
-    })
+    Some(plugins)
 }
 
 /// Copies `plugin`'s files into `folder`, each checked by its SHA-256.

@@ -246,13 +246,9 @@ fn main() -> ! {
         clock::set(now(), unix_ms);
     }
     // Plugins the web flasher wrote behind the image, onto the card first.
-    let staged = native::bundle::stage(&flash, storage.as_ref());
+    let installs = native::bundle::stage(&flash, storage.as_ref()).unwrap_or_default();
     let code = code_plugins(ota.as_ref(), &flash);
-    let installs = staged.as_ref().map_or(&[][..], |s| &s.plugins[..]);
-    let kernel = kernel(storage, ota.as_ref(), code, installs);
-    if let Some(staged) = staged {
-        staged.finish(&flash);
-    }
+    let kernel = kernel(storage, ota.as_ref(), code, &installs);
     // Light sleeps while idle on battery, the deep one at the end.
     power::init(LowPower::new(board.low_power));
     Firmware {
