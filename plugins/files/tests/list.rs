@@ -41,6 +41,7 @@ fn focused(app: &mut App) -> String {
 
 #[test]
 fn a_book_moved_elsewhere_is_listed_where_it_went() {
+    let _turn = turn();
     for device in DEVICES {
         let mut app = library(device, "[files]\nsort = files.sort.name\n", 3);
         assert_eq!(rows(&mut app), ["Book 01", "Book 02", "Book 03"]);
@@ -67,6 +68,7 @@ fn a_book_moved_elsewhere_is_listed_where_it_went() {
 
 #[test]
 fn an_archived_book_goes_from_the_list_at_once() {
+    let _turn = turn();
     let mut app = library(X4, "[files]\nsort = files.sort.name\n", 3);
     app.run(actions::DOWN);
     app.run(actions::MENU);
@@ -93,6 +95,7 @@ fn an_archived_book_goes_from_the_list_at_once() {
 
 #[test]
 fn showing_books_as_covers_applies_while_the_library_shows() {
+    let _turn = turn();
     let mut app = library(X4, "[files]\nsort = files.sort.name\n", 12);
     app.run(actions::DOWN);
     app.run(actions::DOWN);
@@ -110,6 +113,7 @@ fn showing_books_as_covers_applies_while_the_library_shows() {
 
 #[test]
 fn the_focus_stays_on_its_book_with_the_order_by_recent_reading() {
+    let _turn = turn();
     let mut app = library(X4, "", 8);
     for _ in 0..4 {
         app.run(actions::DOWN);
@@ -131,6 +135,7 @@ fn the_focus_stays_on_its_book_with_the_order_by_recent_reading() {
 
 #[test]
 fn while_a_book_covers_it_the_library_keeps_its_index_in_a_file() {
+    let _turn = turn();
     let mut app = library(X4, "", 5);
     // Settled: the index is kept, to be read again instead of made anew.
     assert!(app.storage.exists(".paperpaw/plugins/files/index.bin"));

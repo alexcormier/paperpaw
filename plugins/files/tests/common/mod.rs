@@ -567,3 +567,14 @@ pub fn center(area: paperpaw_sdk::Rect) -> Point {
         i32::from(area.y) + i32::from(area.height) / 2,
     )
 }
+
+/// The tests' turns with the library: when its catalog was made is kept
+/// for the whole program, as on a device, so tests that make or read it
+/// take turns rather than run beside each other.
+static TURN: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// Waits for this test's turn with the library.
+pub fn turn() -> std::sync::MutexGuard<'static, ()> {
+    TURN.lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}

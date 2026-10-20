@@ -14,8 +14,6 @@
 
 mod common;
 
-use std::sync::{Mutex, MutexGuard, PoisonError};
-
 use common::*;
 use paperpaw_sdk::builtin::events;
 
@@ -30,14 +28,6 @@ fn gutenberg(title: &str, author: Option<&str>) -> Vec<u8> {
          Some text of the book.\r\n\r\n*** END OF THE PROJECT GUTENBERG EBOOK ***\r\n"
     )
     .into_bytes()
-}
-
-/// The tests' turns with the catalog.
-static TURN: Mutex<()> = Mutex::new(());
-
-/// Waits for this test's turn with the catalog.
-fn turn() -> MutexGuard<'static, ()> {
-    TURN.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 /// The app on `storage`, its catalog to be made anew for that library.
