@@ -24,6 +24,12 @@ pub enum StorageError {
     Full,
     /// Any other I/O failure.
     Io,
+    /// The file is larger than the reader takes (e.g. a whole file read
+    /// into memory).
+    TooLarge,
+    /// The file is there but does not hold what was asked for, e.g. text
+    /// that is not UTF-8.
+    InvalidData,
 }
 
 impl fmt::Display for StorageError {
@@ -34,6 +40,8 @@ impl fmt::Display for StorageError {
             StorageError::Unsupported => "not supported",
             StorageError::Full => "storage full",
             StorageError::Io => "input/output error",
+            StorageError::TooLarge => "file too large",
+            StorageError::InvalidData => "invalid data",
         })
     }
 }
@@ -107,6 +115,13 @@ pub trait Storage {
     fn remove_dir_all(&self, path: &str) -> Result<(), StorageError> {
         let _ = path;
         Err(StorageError::Unsupported)
+    }
+
+    /// Whether names that differ only in case name the same entry, as on
+    /// FAT (memory cards), NTFS and APFS: `Books/A.epub` is
+    /// `books/a.epub` there. Storages that wrap another say what it says.
+    fn ignores_case(&self) -> bool {
+        false
     }
 
     /// Calls `with` with the file's path in the device's own file system,
@@ -258,6 +273,12 @@ impl<B: Storage, M: Storage> Storage for Mounted<B, M> {
     fn sync(&self) -> Result<(), StorageError> {
         let base = self.base.sync();
         self.mounted.sync().and(base)
+    }
+
+    /// Where either ignores case: a path is taken for another more often
+    /// then, never less.
+    fn ignores_case(&self) -> bool {
+        self.base.ignores_case() || self.mounted.ignores_case()
     }
 }
 

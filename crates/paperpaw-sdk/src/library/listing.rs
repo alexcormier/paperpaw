@@ -59,8 +59,11 @@ fn order(a: (bool, u32, &str), b: (bool, u32, &str)) -> Ordering {
 
 /// Folders other readers keep next to a book, e.g. KOReader's
 /// `Book.sdr` with its reading position: not part of the library.
+/// Compares bytes, as the last four bytes of a name may lie inside a
+/// character (e.g. a folder named in Chinese).
 fn is_sidecar(name: &str) -> bool {
-    name.len() > 4 && name[name.len() - 4..].eq_ignore_ascii_case(".sdr")
+    let name = name.as_bytes();
+    name.len() > 4 && name[name.len() - 4..].eq_ignore_ascii_case(b".sdr")
 }
 
 /// The visible entries of a directory: folders and files a format plugin
@@ -362,5 +365,35 @@ mod tests {
                 .map(String::as_str)
                 .collect::<Vec<_>>()
         );
+    }
+
+    #[test]
+    fn non_ascii_folder_names_are_listed() {
+        // Two and three Chinese characters: the last four bytes split one.
+        let storage = MemoryStorage::new()
+            .with("books/\u{4e66}\u{7c4d}/a.txt", "")
+            .with("books/\u{4e2d}\u{6587}\u{4e66}/b.txt", "")
+            .with("books/\u{65e5}\u{672c}.sdr/c.txt", "")
+            .with("books/\u{e9}t\u{e9}/d.txt", "");
+        let formats = formats();
+        let listing = Listing {
+            storage: &storage,
+            formats: &formats,
+            dir: "books",
+            folders_only: true,
+            rank: None,
+        };
+        let entries = listing.after(None, 9);
+        let mut found = names(&entries);
+        found.sort_unstable();
+        let mut expected = [
+            "\u{4e66}\u{7c4d}",
+            "\u{4e2d}\u{6587}\u{4e66}",
+            "\u{e9}t\u{e9}",
+        ];
+        expected.sort_unstable();
+        assert_eq!(found, expected);
+        assert!(is_sidecar("Book.SDR"));
+        assert!(!is_sidecar(".sdr"));
     }
 }

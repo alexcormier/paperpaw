@@ -6,7 +6,8 @@
 //!   and passes the body on in pieces (by `Content-Length`, chunked, or up
 //!   to the connection's end), so a large one never needs to fit in
 //!   memory;
-//! - [`redirect`] tells where a redirect leads;
+//! - [`redirect`] tells where a redirect leads, [`follow`] whether and
+//!   how a request goes there (what of it goes along);
 //! - [`server`]: a request's head read, an answer's head made, for a
 //!   shell that serves plugins.
 //!
@@ -45,9 +46,14 @@ pub struct Url<'a> {
 }
 
 impl<'a> Url<'a> {
-    /// Splits `http://host[:port]/path` or `https://…`; `None` for anything
-    /// else.
+    /// Splits `http://host[:port]/path` or `https://…` (an IPv6 host in
+    /// brackets, as in `http://[::1]:8080/`, without them in `host`);
+    /// `None` for anything else, and for an address with control
+    /// characters, which could end the request's line.
     pub fn parse(url: &'a str) -> Option<Self> {
+        if url.bytes().any(|b| b.is_ascii_control()) {
+            return None;
+        }
         let (https, rest) = if let Some(rest) = strip_prefix_ignore_case(url, "http://") {
             (false, rest)
         } else {
@@ -59,11 +65,36 @@ impl<'a> Url<'a> {
         let authority = authority.rsplit('@').next().unwrap_or(authority);
         let path = path.split('#').next().unwrap_or("");
         let path = if path.is_empty() { "/" } else { path };
-        let (host, port) = match authority.rsplit_once(':') {
-            Some((host, port)) if !host.ends_with(']') || port.is_empty() => {
-                (host, port.parse().ok()?)
+        let (host, port) = match authority.strip_prefix('[') {
+            Some(inner) => {
+                let (host, after) = inner.split_once(']')?;
+                let port = match after {
+                    "" => None,
+                    after => Some(after.strip_prefix(':')?),
+                };
+                let ipv6 = host.contains(':')
+                    && host
+                        .bytes()
+                        .all(|b| b.is_ascii_hexdigit() || b == b':' || b == b'.');
+                (ipv6.then_some(host)?, port)
             }
-            _ => (authority, if https { 443 } else { 80 }),
+            None => {
+                let (host, port) = match authority.split_once(':') {
+                    Some((host, port)) => (host, Some(port)),
+                    None => (authority, None),
+                };
+                let name = host
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'.' | b'_' | b'~'));
+                (name.then_some(host)?, port)
+            }
+        };
+        let port = match port {
+            None | Some("") => default_port(https),
+            Some(port) if port.bytes().all(|b| b.is_ascii_digit()) => {
+                port.parse().ok().filter(|&port| port != 0)?
+            }
+            Some(_) => return None,
         };
         (!host.is_empty()).then_some(Self {
             https,
@@ -73,16 +104,35 @@ impl<'a> Url<'a> {
         })
     }
 
-    /// The `Host` header's value: the host, with the port if not the
-    /// scheme's own.
+    /// The `Host` header's value: the host (an IPv6 one in brackets), with
+    /// the port if not the scheme's own.
     pub fn host_header(&self) -> String {
-        let default = if self.https { 443 } else { 80 };
-        if self.port == default {
-            self.host.to_string()
+        let host = if self.host.contains(':') {
+            format!("[{}]", self.host)
         } else {
-            format!("{}:{}", self.host, self.port)
+            self.host.to_string()
+        };
+        if self.port == default_port(self.https) {
+            host
+        } else {
+            format!("{host}:{}", self.port)
         }
     }
+
+    fn scheme(&self) -> &'static str {
+        if self.https { "https" } else { "http" }
+    }
+
+    /// Whether `other` is the same server: scheme, host and port.
+    fn same_origin(&self, other: &Url<'_>) -> bool {
+        self.https == other.https
+            && self.port == other.port
+            && self.host.eq_ignore_ascii_case(other.host)
+    }
+}
+
+fn default_port(https: bool) -> u16 {
+    if https { 443 } else { 80 }
 }
 
 fn strip_prefix_ignore_case<'a>(text: &'a str, prefix: &str) -> Option<&'a str> {
@@ -93,22 +143,30 @@ fn strip_prefix_ignore_case<'a>(text: &'a str, prefix: &str) -> Option<&'a str> 
 
 /// The bytes of a request's head (the body, if any, goes after them).
 /// `headers` may override `User-Agent`; `Host`, `Connection` and
-/// `Content-Length` are set here.
+/// `Content-Length` are set here, and headers that are not well formed
+/// are left out. Spaces and other bytes a request line cannot carry are
+/// percent-encoded in the path.
 pub fn request(
     method: &str,
     url: &Url<'_>,
     headers: &[(String, String)],
     body_len: Option<usize>,
 ) -> Vec<u8> {
-    let mut head = format!(
-        "{method} {} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n",
-        url.path,
+    let mut head = format!("{method} ");
+    for &byte in url.path.as_bytes() {
+        if byte <= b' ' || byte >= 0x7F || matches!(byte, b'"' | b'<' | b'>' | b'`' | b'{' | b'}') {
+            head.push_str(&format!("%{byte:02X}"));
+        } else {
+            head.push(char::from(byte));
+        }
+    }
+    head.push_str(&format!(
+        " HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n",
         url.host_header()
-    );
+    ));
     let ours = ["host", "connection", "content-length"];
     for (name, value) in headers {
-        if ours.iter().any(|o| name.eq_ignore_ascii_case(o)) || has_break(name) || has_break(value)
-        {
+        if ours.iter().any(|o| name.eq_ignore_ascii_case(o)) || !is_header(name, value) {
             continue;
         }
         head.push_str(&format!("{name}: {value}\r\n"));
@@ -126,35 +184,191 @@ pub fn request(
     head.into_bytes()
 }
 
-fn has_break(text: &str) -> bool {
-    text.contains(['\r', '\n'])
+/// Whether `name: value` is a header as HTTP has them: a name of token
+/// characters, a value without control characters (but tabs), so that
+/// neither can end the header or start another.
+pub(crate) fn is_header(name: &str, value: &str) -> bool {
+    let token = |b: u8| b.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&b);
+    !name.is_empty()
+        && name.bytes().all(token)
+        && value.bytes().all(|b| b == b'\t' || !b.is_ascii_control())
 }
 
 /// Where a redirect from `base` to `location` leads (absolute, or relative
-/// to `base`).
+/// to `base` as RFC 3986 resolves it); `None` where that is no `http` or
+/// `https` address (another scheme, control characters).
 pub fn redirect(base: &str, location: &str) -> Option<String> {
     let location = location.trim();
-    if Url::parse(location).is_some() {
-        return Some(location.to_string());
-    }
+    let location = location.split('#').next().unwrap_or("");
     let url = Url::parse(base)?;
-    let origin = format!(
-        "{}://{}",
-        if url.https { "https" } else { "http" },
-        url.host_header()
-    );
-    if let Some(rest) = location.strip_prefix("//") {
-        return Some(format!(
-            "{}://{rest}",
-            if url.https { "https" } else { "http" }
-        ));
+    let resolved = if has_scheme(location) {
+        String::from(location)
+    } else if let Some(rest) = location.strip_prefix("//") {
+        format!("{}://{rest}", url.scheme())
+    } else {
+        let (path, query) = match location.split_once('?') {
+            Some((path, query)) => (path, Some(query)),
+            None => (location, None),
+        };
+        let (base_path, base_query) = match url.path.split_once('?') {
+            Some((path, query)) => (path, Some(query)),
+            None => (url.path, None),
+        };
+        let (path, query) = if path.is_empty() {
+            (String::from(base_path), query.or(base_query))
+        } else if path.starts_with('/') {
+            (without_dots(path), query)
+        } else {
+            let dir = &base_path[..base_path.rfind('/').map_or(0, |at| at + 1)];
+            (without_dots(&format!("{dir}{path}")), query)
+        };
+        let query = query.map_or_else(String::new, |query| format!("?{query}"));
+        format!("{}://{}{path}{query}", url.scheme(), url.host_header())
+    };
+    Url::parse(&resolved)?;
+    Some(resolved)
+}
+
+/// Whether `reference` starts with a scheme (`name:`), as an absolute
+/// address does.
+fn has_scheme(reference: &str) -> bool {
+    let end = reference.find(['/', '?', '#']).unwrap_or(reference.len());
+    reference[..end].split_once(':').is_some_and(|(scheme, _)| {
+        scheme.starts_with(|c: char| c.is_ascii_alphabetic())
+            && scheme
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'+' | b'-' | b'.'))
+    })
+}
+
+/// `path` with its `.` and `..` segments resolved (RFC 3986, 5.2.4).
+fn without_dots(path: &str) -> String {
+    let mut kept: Vec<&str> = Vec::new();
+    for segment in path.split('/').skip(1) {
+        match segment {
+            "." => {}
+            ".." => {
+                kept.pop();
+            }
+            segment => kept.push(segment),
+        }
     }
-    if location.starts_with('/') {
-        return Some(format!("{origin}{location}"));
+    let mut out = String::new();
+    for segment in &kept {
+        out.push('/');
+        out.push_str(segment);
     }
-    let path = url.path.split('?').next().unwrap_or("/");
-    let dir = &path[..path.rfind('/').map_or(0, |at| at + 1)];
-    Some(format!("{origin}{dir}{location}"))
+    if out.is_empty() || path.ends_with("/.") || path.ends_with("/..") {
+        out.push('/');
+    }
+    out
+}
+
+/// Where a redirect leads, and how the request changes on the way there
+/// (see [`follow`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Redirect {
+    /// The address it leads to.
+    pub url: String,
+    /// The request goes on as a `GET` without its body: after a 303, or
+    /// a 301 or 302 of a `POST`.
+    pub to_get: bool,
+    /// It leads to another server: another scheme, host or port (from
+    /// `http` to `https` on the same host and the schemes' own ports is
+    /// the same server, now over TLS). Only the headers
+    /// [`Redirect::keep`] keeps go along.
+    pub elsewhere: bool,
+}
+
+impl Redirect {
+    /// Keeps of `headers` those that may go where the redirect leads: all
+    /// to the same server; elsewhere only those that never carry
+    /// credentials (`Accept`, `Range`, `User-Agent`, …), so that neither
+    /// `Authorization`, cookies nor a service's own key headers reach
+    /// another host.
+    pub fn keep(&self, headers: &mut Vec<(String, String)>) {
+        if self.elsewhere {
+            headers.retain(|(name, _)| {
+                HARMLESS_HEADERS
+                    .iter()
+                    .any(|harmless| name.eq_ignore_ascii_case(harmless))
+            });
+        }
+    }
+}
+
+/// The headers that go along to another server on a redirect.
+const HARMLESS_HEADERS: [&str; 12] = [
+    "accept",
+    "accept-charset",
+    "accept-language",
+    "cache-control",
+    "content-type",
+    "depth",
+    "if-match",
+    "if-modified-since",
+    "if-none-match",
+    "if-unmodified-since",
+    "range",
+    "user-agent",
+];
+
+/// Why a redirect is not followed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Refusal {
+    /// Its `Location` is no `http` or `https` address.
+    NotAnAddress,
+    /// It leads from `https` to plain `http`.
+    Insecure,
+    /// It would take the request's body to another server.
+    BodyElsewhere,
+}
+
+impl Refusal {
+    /// Why, in a few words (for the plugin that asked).
+    pub fn reason(self) -> &'static str {
+        match self {
+            Refusal::NotAnAddress => "redirected to no address",
+            Refusal::Insecure => "redirected from https to http",
+            Refusal::BodyElsewhere => "redirected to another server with the request's body",
+        }
+    }
+}
+
+/// How a request to `from` with `method` (and a body, if `body`) follows
+/// a redirect with `status` to `location`, the same in every shell: never
+/// from `https` to `http`, never with credentials or a body to another
+/// server.
+pub fn follow(
+    from: &str,
+    status: u16,
+    location: &str,
+    method: &str,
+    body: bool,
+) -> Result<Redirect, Refusal> {
+    let url = redirect(from, location).ok_or(Refusal::NotAnAddress)?;
+    let (Some(old), Some(new)) = (Url::parse(from), Url::parse(&url)) else {
+        return Err(Refusal::NotAnAddress);
+    };
+    if old.https && !new.https {
+        return Err(Refusal::Insecure);
+    }
+    let upgrade = !old.https
+        && new.https
+        && old.port == 80
+        && new.port == 443
+        && old.host.eq_ignore_ascii_case(new.host);
+    let elsewhere = !old.same_origin(&new) && !upgrade;
+    let to_get = !method.eq_ignore_ascii_case("HEAD")
+        && (status == 303 || (matches!(status, 301 | 302) && method.eq_ignore_ascii_case("POST")));
+    if elsewhere && body && !to_get {
+        return Err(Refusal::BodyElsewhere);
+    }
+    Ok(Redirect {
+        url,
+        to_get,
+        elsewhere,
+    })
 }
 
 /// What the head of a response said.
@@ -458,12 +672,152 @@ mod tests {
     }
 
     #[test]
+    fn ipv6_hosts() {
+        let url = Url::parse("http://[::1]:8080/a").unwrap();
+        assert_eq!((url.host, url.port, url.path), ("::1", 8080, "/a"));
+        assert_eq!(url.host_header(), "[::1]:8080");
+        let url = Url::parse("https://[fe80::1]").unwrap();
+        assert_eq!((url.host, url.port), ("fe80::1", 443));
+        assert_eq!(url.host_header(), "[fe80::1]");
+        assert_eq!(Url::parse("http://h.org:/x").unwrap().port, 80);
+        for bad in [
+            "http://[::1/",
+            "http://[::1]x/",
+            "http://[h.org]/",
+            "http://a:b:c/",
+            "http://h.org:+80/",
+            "http://h.org:0/",
+            "http://h.org:99999/",
+        ] {
+            assert_eq!(Url::parse(bad), None, "{bad}");
+        }
+    }
+
+    #[test]
+    fn addresses_that_could_break_the_request() {
+        for bad in [
+            "http://h.org/a\r\nX-Injected: 1",
+            "http://h.org/a\nb",
+            "http://h.org/\0",
+            "http://h .org/",
+            "http://h.org\t/",
+            "http://ev<il/",
+        ] {
+            assert_eq!(Url::parse(bad), None, "{bad:?}");
+        }
+        // Spaces and other bytes a request line cannot carry are encoded.
+        let url = Url::parse("http://h.org/a b/\"ü\"?q={x}").unwrap();
+        let head = String::from_utf8(request("GET", &url, &[], None)).unwrap();
+        assert!(
+            head.starts_with("GET /a%20b/%22%C3%BC%22?q=%7Bx%7D HTTP/1.1\r\n"),
+            "{head}"
+        );
+        let headers = [
+            (String::from("X Bad"), String::from("1")),
+            (String::from("X-Bad:"), String::from("1")),
+            (String::from("X-Nul"), String::from("a\0b")),
+            (String::from("X-Tab"), String::from("a\tb")),
+        ];
+        let head = String::from_utf8(request("GET", &url, &headers, None)).unwrap();
+        assert!(head.contains("\r\nX-Tab: a\tb\r\n"));
+        assert!(!head.contains("X Bad") && !head.contains("X-Bad") && !head.contains("X-Nul"));
+    }
+
+    #[test]
     fn redirects() {
         let base = "http://h.org/a/b?x";
         assert_eq!(redirect(base, "https://o.org/").unwrap(), "https://o.org/");
         assert_eq!(redirect(base, "/c").unwrap(), "http://h.org/c");
         assert_eq!(redirect(base, "c?y").unwrap(), "http://h.org/a/c?y");
         assert_eq!(redirect(base, "//o.org/d").unwrap(), "http://o.org/d");
+        assert_eq!(redirect(base, "?y").unwrap(), "http://h.org/a/b?y");
+        assert_eq!(redirect(base, "#top").unwrap(), "http://h.org/a/b?x");
+        assert_eq!(redirect(base, "../c/./d").unwrap(), "http://h.org/c/d");
+        assert_eq!(redirect(base, "/x/../../y").unwrap(), "http://h.org/y");
+        assert_eq!(redirect(base, "..").unwrap(), "http://h.org/");
+        assert_eq!(
+            redirect("http://[::1]:8080/a", "b").unwrap(),
+            "http://[::1]:8080/b"
+        );
+        // Other schemes, and line breaks that would start another header.
+        assert_eq!(redirect(base, "ftp://o.org/"), None);
+        assert_eq!(redirect(base, "javascript:alert(1)"), None);
+        assert_eq!(redirect(base, "/c\nX-Injected: 1"), None);
+        assert_eq!(redirect(base, "https://o.org/\rx"), None);
+    }
+
+    fn headers(names: &[&str]) -> Vec<(String, String)> {
+        names
+            .iter()
+            .map(|name| (String::from(*name), String::from("v")))
+            .collect()
+    }
+
+    fn names(headers: &[(String, String)]) -> Vec<&str> {
+        headers.iter().map(|(name, _)| name.as_str()).collect()
+    }
+
+    #[test]
+    fn redirects_keep_credentials_on_the_same_server_only() {
+        let sent = headers(&["Authorization", "x-auth-key", "Cookie", "Accept", "Range"]);
+        // The same server: everything goes along.
+        let same = follow("https://h.org/a", 302, "/b", "GET", false).unwrap();
+        assert_eq!(
+            (same.url.as_str(), same.to_get, same.elsewhere),
+            ("https://h.org/b", false, false)
+        );
+        let mut kept = sent.clone();
+        same.keep(&mut kept);
+        assert_eq!(kept, sent);
+        // Another host, port or scheme: only harmless headers.
+        for (from, to) in [
+            ("https://h.org/a", "https://evil.org/"),
+            ("https://h.org/a", "https://h.org:8443/"),
+            ("http://h.org/a", "http://evil.org/"),
+            ("http://h.org:8080/a", "https://h.org/"),
+            ("http://h.org/a", "https://h.org:8443/"),
+        ] {
+            let redirect = follow(from, 302, to, "GET", false).unwrap();
+            assert!(redirect.elsewhere, "{from} -> {to}");
+            let mut kept = sent.clone();
+            redirect.keep(&mut kept);
+            assert_eq!(names(&kept), ["Accept", "Range"], "{from} -> {to}");
+        }
+        // Up to TLS on the same host: the same server.
+        let upgrade = follow("http://H.org/a", 301, "https://h.org/a", "GET", false).unwrap();
+        assert!(!upgrade.elsewhere);
+    }
+
+    #[test]
+    fn redirects_never_lead_down_to_plain_http() {
+        for to in ["http://h.org/", "HTTP://evil.org/x"] {
+            let followed = follow("https://h.org/a", 302, to, "GET", false);
+            assert_eq!(followed, Err(Refusal::Insecure), "{to}");
+        }
+        // A scheme-relative one stays on TLS.
+        let same_scheme = follow("https://h.org/a", 302, "//o.org/x", "GET", false).unwrap();
+        assert_eq!(same_scheme.url, "https://o.org/x");
+        assert_eq!(
+            follow("https://h.org/", 302, "ftp://h.org/", "GET", false),
+            Err(Refusal::NotAnAddress)
+        );
+    }
+
+    #[test]
+    fn redirects_change_the_method_or_keep_the_body_home() {
+        let post = |status, to| follow("https://h.org/a", status, to, "POST", true);
+        for status in [301, 302, 303] {
+            let redirect = post(status, "https://o.org/").unwrap();
+            assert!(redirect.to_get && redirect.elsewhere, "{status}");
+        }
+        for status in [307, 308] {
+            assert!(!post(status, "/b").unwrap().to_get);
+            assert_eq!(post(status, "https://o.org/"), Err(Refusal::BodyElsewhere));
+        }
+        let head = follow("https://h.org/", 303, "/b", "HEAD", false).unwrap();
+        assert!(!head.to_get);
+        let put = follow("https://h.org/", 302, "https://o.org/", "PUT", true);
+        assert_eq!(put, Err(Refusal::BodyElsewhere));
     }
 
     #[test]

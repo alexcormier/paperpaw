@@ -276,31 +276,51 @@ impl Parser<'_> {
             return None;
         }
         let mut out = String::new();
+        // A high surrogate waiting for its low half; without one it
+        // stands for U+FFFD.
+        let mut high: Option<u32> = None;
         loop {
-            match self.0.next()? {
-                '"' => return Some(out),
-                '\\' => match self.0.next()? {
-                    'n' => out.push('\n'),
-                    't' => out.push('\t'),
-                    'r' => out.push('\r'),
-                    'b' => out.push('\u{8}'),
-                    'f' => out.push('\u{c}'),
-                    'u' => {
-                        let mut code = self.hex4()?;
-                        // A surrogate pair.
-                        if (0xd800..0xdc00).contains(&code) {
-                            if self.0.next()? != '\\' || self.0.next()? != 'u' {
-                                return None;
-                            }
-                            let low = self.hex4()?;
-                            code = 0x10000 + ((code - 0xd800) << 10) + low.wrapping_sub(0xdc00);
-                        }
-                        out.push(char::from_u32(code).unwrap_or('\u{fffd}'));
+            let c = match self.0.next()? {
+                '"' => {
+                    if high.is_some() {
+                        out.push('\u{fffd}');
                     }
-                    c => out.push(c),
+                    return Some(out);
+                }
+                '\\' => match self.0.next()? {
+                    'n' => '\n',
+                    't' => '\t',
+                    'r' => '\r',
+                    'b' => '\u{8}',
+                    'f' => '\u{c}',
+                    'u' => {
+                        let unit = self.hex4()?;
+                        let waiting = high.take();
+                        if let Some(high) = waiting
+                            && (0xdc00..0xe000).contains(&unit)
+                        {
+                            let code = 0x10000 + ((high - 0xd800) << 10) + (unit - 0xdc00);
+                            out.push(char::from_u32(code).unwrap_or('\u{fffd}'));
+                            continue;
+                        }
+                        if waiting.is_some() {
+                            out.push('\u{fffd}');
+                        }
+                        if (0xd800..0xdc00).contains(&unit) {
+                            high = Some(unit);
+                        } else {
+                            out.push(char::from_u32(unit).unwrap_or('\u{fffd}'));
+                        }
+                        continue;
+                    }
+                    c => c,
                 },
-                c => out.push(c),
+                c => c,
+            };
+            if high.take().is_some() {
+                out.push('\u{fffd}');
             }
+            out.push(c);
         }
     }
 
@@ -352,6 +372,33 @@ mod tests {
         assert_eq!(raw_member(o, "missing"), None);
         assert_eq!(raw_member("[1]", "x"), None);
         assert!(string_array("{}").is_empty());
+    }
+
+    #[test]
+    fn surrogates_pair_only_with_low_halves() {
+        assert_eq!(unquote(r#""\ud83d\ude00""#).as_deref(), Some("\u{1f600}"));
+        assert_eq!(unquote(r#""\ud800\u0041""#).as_deref(), Some("\u{fffd}A"));
+        assert_eq!(unquote(r#""\ud800A""#).as_deref(), Some("\u{fffd}A"));
+        assert_eq!(unquote(r#""\ud800""#).as_deref(), Some("\u{fffd}"));
+        assert_eq!(unquote(r#""\ud800\n""#).as_deref(), Some("\u{fffd}\n"));
+        assert_eq!(
+            unquote(r#""\ud800\ud83d\ude00""#).as_deref(),
+            Some("\u{fffd}\u{1f600}")
+        );
+        assert_eq!(unquote(r#""\udc00x""#).as_deref(), Some("\u{fffd}x"));
+        assert_eq!(unquote(r#""\u12""#), None);
+    }
+
+    #[test]
+    fn deep_nesting_without_recursion() {
+        let depth = 1_000_000;
+        let deep = alloc::format!("{}{}", "[".repeat(depth), "]".repeat(depth));
+        let o = alloc::format!(r#"{{"deep": {deep}, "after": "y"}}"#);
+        assert_eq!(text(&object(&o), "after"), Some("y"));
+        assert_eq!(raw_member(&o, "after"), Some(r#""y""#));
+        assert!(string_array(&deep).is_empty());
+        let open = "[".repeat(depth);
+        assert!(object(&alloc::format!(r#"{{"deep": {open}"#)).is_empty());
     }
 
     #[test]

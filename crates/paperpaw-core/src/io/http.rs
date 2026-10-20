@@ -9,7 +9,7 @@ use alloc::vec::Vec;
 
 use paperpaw_platform::{Storage, StorageError};
 use paperpaw_sdk::event::EventData;
-use paperpaw_sdk::{Command, HttpReply, HttpRequest, Id, Params};
+use paperpaw_sdk::{Command, HttpReply, HttpRequest, Id, Params, http_params};
 
 /// Longest response body passed on to plugins.
 pub const MAX_RESPONSE: usize = 1 << 20;
@@ -30,12 +30,19 @@ pub struct HttpCall {
     /// database to upload): the shell reads it, in parts where it can, so
     /// it never needs to fit in memory.
     pub body_from: Option<String>,
-    /// The longest response body wanted; shells cut longer ones.
+    /// The longest response body wanted: shells cut longer ones at
+    /// exactly this many bytes, and fail one for a file
+    /// ([`save_to`](Self::save_to)) instead, so that no file is saved cut
+    /// short as if whole.
     pub max_response: usize,
     /// The file in storage the body is for, if it is one (e.g. a
     /// download). A shell may write it there itself as it comes, for one
     /// too large for memory, and say so with [`HttpResponse::saved`];
-    /// otherwise the kernel writes the body it gets.
+    /// otherwise the kernel writes the body it gets. Only a successful
+    /// answer's (2xx) body is the file: an error's is its reason, and the
+    /// file stays as it was. A later call saving to the same file (in
+    /// any case) replaces this one: a shell that writes the file itself
+    /// drops this one's transfer then; its answer is passed over.
     pub save_to: Option<String>,
 }
 
@@ -110,7 +117,9 @@ pub(crate) struct Http {
 
 impl Http {
     /// Queues a plugin's request for the shell, or fails it at once
-    /// (without a network, or a file to send that is not there).
+    /// (without a network, or a file to send that is not there). One
+    /// that saves to a file another request still saves to replaces that
+    /// one, which fails at once.
     pub fn request(
         &mut self,
         request: HttpRequest,
@@ -131,6 +140,21 @@ impl Http {
         {
             let failed = HttpReply::failed(format!("{e}"), request.params);
             return reply(request.reply, failed, out);
+        }
+        // Two answers in one file (and in one partial file of the shell)
+        // would mix: the newer request replaces the older one, whose
+        // answer is passed over when it comes (shells drop its transfer).
+        if let Some(path) = &request.save_to
+            && let Some(at) = self.awaiting.iter().position(|a| {
+                a.save_to
+                    .as_deref()
+                    .is_some_and(|other| other.eq_ignore_ascii_case(path))
+            })
+        {
+            let older = self.awaiting.remove(at);
+            self.calls.retain(|call| call.id != older.id);
+            let failed = HttpReply::failed("replaced by a newer request", older.context);
+            reply(older.reply, failed, out);
         }
         let body = match request.body_from {
             Some(_) => None,
@@ -161,8 +185,9 @@ impl Http {
         });
     }
 
-    /// Turns a request's answer into the plugin's event; a body for a
-    /// file is written there.
+    /// Turns a request's answer into the plugin's event; a successful
+    /// body for a file is written there. The body moves on without a copy
+    /// (it may be most of the memory left).
     pub fn answer(
         &mut self,
         response: HttpResponse,
@@ -174,26 +199,37 @@ impl Http {
         };
         let awaiting = self.awaiting.remove(at);
         let mut status = response.status;
+        let mut body = response.body;
         let body = match awaiting.save_to {
-            // Answers that are files: written where asked (a failure has
-            // its reason as the body).
-            Some(path) if response.status != 0 => {
-                if !response.saved && storage.write(&path, &response.body).is_err() {
+            // Answers that are files: written where asked.
+            Some(path) if (200..300).contains(&status) => {
+                if response.saved {
+                    String::new()
+                } else if let Err(e) = storage.write(&path, &body) {
                     status = 0;
+                    format!("{e}")
+                } else {
+                    String::new()
                 }
-                String::new()
             }
-            _ => String::from_utf8_lossy(&response.body).into_owned(),
+            // A failure's reason, or an error's body (not the file).
+            Some(_) => {
+                body.truncate(MAX_RESPONSE);
+                text(body)
+            }
+            None => text(body),
         };
         let answer = HttpReply {
             status,
-            body,
+            body: String::new(),
             etag: response.etag,
             content_type: response.content_type,
             final_url: response.url,
             context: awaiting.context,
         };
-        reply(awaiting.reply, answer, out);
+        let mut params = answer.to_params();
+        params.set(http_params::BODY, body);
+        out.push(Command::Emit(awaiting.reply, params));
     }
 
     /// The requests for the shell.
@@ -221,4 +257,136 @@ impl Http {
 
 fn reply(event: Id, answer: HttpReply, out: &mut Vec<Command>) {
     out.push(Command::Emit(event, answer.to_params()));
+}
+
+/// `bytes` as text, in place where they are UTF-8.
+fn text(bytes: Vec<u8>) -> String {
+    String::from_utf8(bytes).unwrap_or_else(|e| String::from_utf8_lossy(e.as_bytes()).into_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use paperpaw_sdk::{MemoryStorage, read_file};
+
+    const REPLY: Id = Id::new_static("test.reply");
+
+    fn get(url: &str, save_to: Option<&str>) -> HttpRequest {
+        let mut request = HttpRequest::new("GET", url, REPLY);
+        request.save_to = save_to.map(String::from);
+        request
+    }
+
+    /// The reply's status and body.
+    fn replied(out: &[Command]) -> (u16, String) {
+        let Some(Command::Emit(_, params)) = out.last() else {
+            panic!("no reply");
+        };
+        let reply = HttpReply::from_params(params).unwrap();
+        (reply.status, reply.body)
+    }
+
+    fn answer(status: u16, body: &[u8]) -> HttpResponse {
+        HttpResponse {
+            id: 1,
+            status,
+            body: body.to_vec(),
+            ..HttpResponse::default()
+        }
+    }
+
+    #[test]
+    fn errors_never_overwrite_the_file() {
+        let storage = MemoryStorage::new().with("book.epub", "old");
+        let mut out = Vec::new();
+        for (status, body) in [(404, &b"not here"[..]), (304, b""), (500, b"oops")] {
+            let mut http = Http::default();
+            http.request(
+                get("https://h.org/b", Some("book.epub")),
+                true,
+                &storage,
+                &mut out,
+            );
+            http.take();
+            http.answer(answer(status, body), &storage, &mut out);
+            assert_eq!(
+                replied(&out),
+                (status, String::from_utf8_lossy(body).into())
+            );
+            assert_eq!(
+                read_file(&storage, "book.epub", 64).unwrap(),
+                b"old",
+                "{status}"
+            );
+        }
+        let mut http = Http::default();
+        http.request(
+            get("https://h.org/b", Some("book.epub")),
+            true,
+            &storage,
+            &mut out,
+        );
+        http.take();
+        http.answer(answer(200, b"new"), &storage, &mut out);
+        assert_eq!(replied(&out), (200, String::new()));
+        assert_eq!(read_file(&storage, "book.epub", 64).unwrap(), b"new");
+    }
+
+    #[test]
+    fn a_newer_request_for_a_file_replaces_the_older() {
+        let storage = MemoryStorage::new();
+        let mut out = Vec::new();
+        let mut http = Http::default();
+        http.request(
+            get("http://h.org/1", Some("dl.tmp")),
+            true,
+            &storage,
+            &mut out,
+        );
+        assert_eq!(http.take().len(), 1);
+        http.request(
+            get("http://h.org/2", Some("DL.tmp")),
+            true,
+            &storage,
+            &mut out,
+        );
+        assert_eq!(
+            replied(&out),
+            (0, String::from("replaced by a newer request"))
+        );
+        let calls = http.take();
+        assert_eq!(calls.len(), 1);
+        // The older one's answer comes late: passed over, the file not
+        // written.
+        out.clear();
+        http.answer(answer(200, b"old"), &storage, &mut out);
+        assert!(out.is_empty());
+        assert!(!storage.exists("dl.tmp"));
+        http.answer(
+            HttpResponse {
+                id: calls[0].id,
+                ..answer(200, b"new")
+            },
+            &storage,
+            &mut out,
+        );
+        assert_eq!(read_file(&storage, "DL.tmp", 64).unwrap(), b"new");
+        // Not yet passed to the shell: only the newer one goes.
+        http.request(get("http://h.org/3", Some("a")), true, &storage, &mut out);
+        http.request(get("http://h.org/4", Some("a")), true, &storage, &mut out);
+        let calls = http.take();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].url, "http://h.org/4");
+    }
+
+    #[test]
+    fn bodies_pass_as_text() {
+        let storage = MemoryStorage::new();
+        let mut out = Vec::new();
+        let mut http = Http::default();
+        http.request(get("http://h.org/", None), true, &storage, &mut out);
+        http.take();
+        http.answer(answer(200, b"caf\xc3\xa9 \xff"), &storage, &mut out);
+        assert_eq!(replied(&out), (200, String::from("café \u{fffd}")));
+    }
 }

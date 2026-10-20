@@ -77,11 +77,39 @@ impl Glyph {
     }
 }
 
-/// Packs 8-bit coverage into the 4-bit glyph format.
+/// Largest glyph bitmap in pixels (2048 x 2048); rasterizing one takes
+/// four bytes a pixel.
+pub(crate) const MAX_PIXELS: usize = 1 << 22;
+
+/// How far a glyph at `size` pixels may reach from the pen position, in
+/// pixels: four ems, at least 16 pixels, at most what a glyph's offsets
+/// hold. Outlines reaching further (a broken or hostile font) render as
+/// empty, so packs made with the same rasterizer hold no larger glyphs.
+pub(crate) fn reach(size: f32) -> i32 {
+    (size * 4.0).clamp(16.0, f32::from(i16::MAX / 2)) as i32
+}
+
+/// Whether a bitmap of `width` x `height` pixels is one a glyph at `size`
+/// pixels may have (see [`reach`] and [`MAX_PIXELS`]).
+pub(crate) fn fits(width: usize, height: usize, size: f32) -> bool {
+    let side = 2 * reach(size) as usize;
+    width <= side && height <= side && width * height <= MAX_PIXELS
+}
+
+/// `len` zeroed items; `None` if memory is short.
+pub(crate) fn zeroed<T: Clone + Default>(len: usize) -> Option<Vec<T>> {
+    let mut items = Vec::new();
+    items.try_reserve_exact(len).ok()?;
+    items.resize(len, T::default());
+    Some(items)
+}
+
+/// Packs 8-bit coverage into the 4-bit glyph format; `None` if memory is
+/// short.
 #[cfg_attr(not(feature = "outline"), allow(dead_code))]
-pub(crate) fn pack_coverage(coverage: &[u8], width: usize, height: usize) -> Vec<u8> {
+pub(crate) fn pack_coverage(coverage: &[u8], width: usize, height: usize) -> Option<Vec<u8>> {
     let stride = width.div_ceil(2);
-    let mut data = alloc::vec![0u8; stride * height];
+    let mut data = zeroed(stride.checked_mul(height)?)?;
     for y in 0..height {
         for x in 0..width {
             let nibble = ((u16::from(coverage[y * width + x]) + 8) / 17) as u8;
@@ -89,7 +117,7 @@ pub(crate) fn pack_coverage(coverage: &[u8], width: usize, height: usize) -> Vec
             data[y * stride + x / 2] |= nibble << shift;
         }
     }
-    data
+    Some(data)
 }
 
 #[cfg(test)]
@@ -105,11 +133,19 @@ mod tests {
             width: 5,
             height: 1,
             advance: 5.0,
-            data: pack_coverage(&coverage, 5, 1),
+            data: pack_coverage(&coverage, 5, 1).unwrap(),
         };
         let r = glyph.as_ref();
         let read: Vec<u8> = (0..5).map(|x| r.coverage(x, 0)).collect();
         assert_eq!(read, coverage);
         assert_eq!(r.coverage(9, 9), 0);
+    }
+
+    #[test]
+    fn glyphs_fit_within_four_ems() {
+        assert!(fits(80, 80, 10.0) && !fits(81, 1, 10.0));
+        assert!(fits(32, 32, 1.0) && !fits(1, 33, 1.0));
+        assert!(!fits(4096, 4096, 1000.0));
+        assert!(!fits(1, 1, f32::NAN));
     }
 }
