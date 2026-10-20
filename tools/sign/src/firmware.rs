@@ -129,7 +129,7 @@ mod tests {
 
     #[test]
     fn a_key_is_made_once_for_its_owner() {
-        let dir = std::env::temp_dir().join(format!("paperpaw-sign-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("paperpaw-sign-key-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let file = dir.join("secret.key");
         let file = file.to_str().unwrap();
