@@ -1,74 +1,9 @@
-//! Days and weeks of the (proleptic Gregorian) calendar, in whole
-//! numbers.
+//! A month laid out in weeks ([`MonthGrid`]); the calendar's arithmetic
+//! is the SDK's (`paperpaw_sdk::time`), named here for the time widgets.
 
-use paperpaw_sdk::time::LocalTime;
-
-pub(crate) fn is_leap(year: i32) -> bool {
-    year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)
-}
-
-pub(crate) fn days_in_month(year: i32, month: u8) -> u8 {
-    match month {
-        2 if is_leap(year) => 29,
-        2 => 28,
-        4 | 6 | 9 | 11 => 30,
-        _ => 31,
-    }
-}
-
-pub(crate) fn days_in_year(year: i32) -> u16 {
-    if is_leap(year) { 366 } else { 365 }
-}
-
-/// Days since 1970-01-01 of a date.
-pub(crate) fn days_from_civil(year: i32, month: u8, day: u8) -> i64 {
-    let y = i64::from(year) - i64::from(month <= 2);
-    let era = y.div_euclid(400);
-    let yoe = y - era * 400;
-    let m = i64::from(month);
-    let doy = (153 * (if m > 2 { m - 3 } else { m + 9 }) + 2) / 5 + i64::from(day) - 1;
-    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-    era * 146_097 + doe - 719_468
-}
-
-/// The date `days` after 1970-01-01: year, month, day.
-pub(crate) fn civil_from_days(days: i64) -> (i32, u8, u8) {
-    let t = LocalTime::from_seconds(days * 86_400);
-    (t.year, t.month, t.day)
-}
-
-/// The weekday of a date: 0 (Sunday) to 6 (Saturday).
-pub(crate) fn weekday(year: i32, month: u8, day: u8) -> u8 {
-    (days_from_civil(year, month, day) + 4).rem_euclid(7) as u8
-}
-
-/// The day of the year: 1 to 366.
-pub(crate) fn day_of_year(year: i32, month: u8, day: u8) -> u16 {
-    (days_from_civil(year, month, day) - days_from_civil(year, 1, 1) + 1) as u16
-}
-
-/// The number of the week of a date as ISO 8601 counts (weeks from
-/// Monday, the first holding the year's first Thursday): 1 to 53.
-pub(crate) fn iso_week(year: i32, month: u8, day: u8) -> u8 {
-    let monday_based = |y, m, d| (i64::from(weekday(y, m, d)) + 6) % 7 + 1;
-    let weeks_in = |y: i32| {
-        let first = weekday(y, 1, 1);
-        if first == 4 || (first == 3 && is_leap(y)) {
-            53
-        } else {
-            52
-        }
-    };
-    let doy = i64::from(day_of_year(year, month, day));
-    let week = (doy - monday_based(year, month, day) + 10) / 7;
-    if week < 1 {
-        weeks_in(year - 1)
-    } else if week > i64::from(weeks_in(year)) {
-        1
-    } else {
-        week as u8
-    }
-}
+pub(crate) use paperpaw_sdk::time::{
+    civil_from_days, day_of_year, days_from_civil, days_in_month, days_in_year, iso_week, weekday,
+};
 
 /// A month laid out in weeks: on which day of the first week it starts
 /// (0: the week's first day), how many days it has, and over how many
@@ -130,33 +65,6 @@ impl MonthGrid {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn weekdays_and_days_of_the_year() {
-        // Wednesday, 14 October 2026.
-        assert_eq!(weekday(2026, 10, 14), 3);
-        assert_eq!(day_of_year(2026, 10, 14), 287);
-        assert_eq!(day_of_year(2024, 12, 31), 366);
-        assert_eq!(days_in_year(2024), 366);
-        assert_eq!(days_in_year(2100), 365);
-        assert_eq!(days_in_year(2000), 366);
-        assert_eq!(days_in_month(2028, 2), 29);
-        assert_eq!(days_in_month(2026, 2), 28);
-        let days = days_from_civil(2026, 10, 14);
-        assert_eq!(civil_from_days(days), (2026, 10, 14));
-    }
-
-    #[test]
-    fn iso_weeks() {
-        assert_eq!(iso_week(2026, 10, 14), 42);
-        // 1 January 2027 is a Friday: still week 53 of 2026.
-        assert_eq!(iso_week(2027, 1, 1), 53);
-        assert_eq!(iso_week(2027, 1, 4), 1);
-        // 29 December 2025 (a Monday) is in week 1 of 2026.
-        assert_eq!(iso_week(2025, 12, 29), 1);
-        assert_eq!(iso_week(2024, 12, 30), 1);
-        assert_eq!(iso_week(2021, 1, 3), 53);
-    }
 
     #[test]
     fn months_laid_out_in_weeks() {

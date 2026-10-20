@@ -5,6 +5,7 @@
 //! A device installs updates signed with PaperPaw's key, and those signed
 //! with a key its reader chose to trust (their own builds).
 
+use std::io::Write;
 use std::process::ExitCode;
 
 use paperpaw_update::{AppInfo, Check, PLUGINS_AT, Plugins, TRAILER_LEN, Trailer};
@@ -64,17 +65,28 @@ fn run(args: Vec<String>) -> Result<(), String> {
 }
 
 fn key(file: &str) -> Result<(), String> {
-    if std::path::Path::new(file).exists() {
-        return Err(format!("{file} exists: a key is never overwritten"));
-    }
+    let mut out = new_key_file(file).map_err(|e| match e.kind() {
+        std::io::ErrorKind::AlreadyExists => format!("{file} exists: a key is never overwritten"),
+        _ => format!("{file}: {e}"),
+    })?;
     let pair = ed25519_compact::KeyPair::generate();
     let seed: [u8; 32] = *pair.sk.seed();
-    std::fs::write(file, format!("{}\n", paperpaw_update::key_hex(&seed)))
-        .map_err(|e| format!("{file}: {e}"))?;
+    writeln!(out, "{}", paperpaw_update::key_hex(&seed)).map_err(|e| format!("{file}: {e}"))?;
     let public = paperpaw_update::public_key(&seed);
     println!("public key:  {}", paperpaw_update::key_hex(&public));
     println!("fingerprint: {}", paperpaw_update::fingerprint(&public));
     Ok(())
+}
+
+/// A new file for a secret key: never one that is there (checked and made
+/// at once), and readable by its owner alone (on Windows, as the folder
+/// it is in lets).
+fn new_key_file(file: &str) -> std::io::Result<std::fs::File> {
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+    options.open(file)
 }
 
 /// The secret key from `key_file`, else from PAPERPAW_SIGNING_KEY.
@@ -176,4 +188,31 @@ fn plugins(image: &str) -> Result<(), String> {
     }
     print!("{}", list.text());
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_key_is_made_once_for_its_owner() {
+        let dir = std::env::temp_dir().join(format!("paperpaw-sign-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("secret.key");
+        let file = file.to_str().unwrap();
+        let _ = std::fs::remove_file(file);
+        key(file).unwrap();
+        let first = std::fs::read_to_string(file).unwrap();
+        assert!(secret_key(Some(file)).is_ok());
+        // A second key never replaces the first.
+        assert!(key(file).unwrap_err().contains("never overwritten"));
+        assert_eq!(std::fs::read_to_string(file).unwrap(), first);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(file).unwrap().permissions().mode();
+            assert_eq!(mode & 0o777, 0o600);
+        }
+        std::fs::remove_dir_all(dir).unwrap();
+    }
 }

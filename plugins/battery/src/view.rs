@@ -1,14 +1,15 @@
 //! The view: the battery now, this time awake, the use on battery so far
 //! (an hour awake, 100 pages, the hours left at that pace) and the recent
-//! times awake.
+//! times awake, page by page where they do not fit.
 
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
+use paperpaw_sdk::builtin::actions;
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
-    Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Rect, Screen,
+    Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Rect, RefreshMode, Screen,
 };
 
 use crate::log::{self, Kind, Reading, Session, Sessions};
@@ -24,9 +25,27 @@ pub(crate) struct BatteryView {
     style: UiStyle,
     header: ui::Header,
     lines: Vec<Line>,
+    /// The first line of each page, and the page shown.
+    pages: Vec<usize>,
+    page: usize,
     /// Where the log is, said at the bottom.
     footer: String,
 }
+
+/// Turn forward: the page buttons, and down or on where nothing else
+/// moves.
+const FORWARD: [Id; 4] = [
+    actions::NEXT_PAGE,
+    actions::DOWN,
+    actions::NEXT,
+    actions::RIGHT,
+];
+const BACKWARD: [Id; 4] = [
+    actions::PREV_PAGE,
+    actions::UP,
+    actions::PREVIOUS,
+    actions::LEFT,
+];
 
 /// `ms` as hours and minutes.
 fn duration(env: &Env<'_>, ms: u64) -> String {
@@ -196,14 +215,15 @@ impl BatteryView {
         if !shown.is_empty() {
             lines.push(Line::Heading(tr("battery.by-screen")));
             for p in shown.into_iter().take(PLUGINS_SHOWN) {
-                let refreshes = p.refreshes.iter().sum::<u32>();
+                let refreshes = i64::from(p.refreshes.iter().sum::<u32>());
                 lines.push(Line::Value(
                     plugin_name(env, p.plugin.as_str()),
-                    env.i18n.format(
+                    env.i18n.plural(
                         "battery.shown-refreshes",
+                        refreshes,
                         &[
                             ("time", Arg::Str(&duration(env, p.shown_ms))),
-                            ("count", Arg::Int(i64::from(refreshes))),
+                            ("count", Arg::Int(refreshes)),
                         ],
                     ),
                 ));
@@ -242,19 +262,75 @@ impl BatteryView {
         } else {
             String::new()
         };
-        Self {
+        let mut view = Self {
             style,
             header,
             lines,
+            pages: Vec::new(),
+            page: 0,
             footer,
+        };
+        view.pages = view.paginate(env);
+        view
+    }
+
+    /// The height of `line`.
+    fn height(&self, env: &Env<'_>, line: &Line) -> u16 {
+        match line {
+            Line::Heading(_) => ui::heading_height(env, &self.style),
+            Line::Value(..) | Line::Message(_) => self.style.row as u16,
         }
+    }
+
+    /// The room for lines: below the header, above the footer.
+    fn room(&self, env: &Env<'_>) -> (u16, u16) {
+        let top = self.header.area.y + self.header.area.height;
+        let bottom = env
+            .device
+            .display
+            .height
+            .saturating_sub(self.style.row as u16);
+        (top, bottom)
+    }
+
+    /// The first line of each page; a heading last on a page goes to the
+    /// next with what it heads.
+    fn paginate(&self, env: &Env<'_>) -> Vec<usize> {
+        let (top, bottom) = self.room(env);
+        let mut pages = Vec::from([0]);
+        let mut y = top;
+        for (i, line) in self.lines.iter().enumerate() {
+            let height = self.height(env, line);
+            let start = pages.last().copied().unwrap_or(0);
+            if y + height > bottom && i > start {
+                let heading_last = i > start + 1 && matches!(self.lines[i - 1], Line::Heading(_));
+                let first = if heading_last { i - 1 } else { i };
+                pages.push(first);
+                y = top;
+                if heading_last {
+                    y += self.height(env, &self.lines[first]);
+                }
+            }
+            y += height;
+        }
+        pages
+    }
+
+    /// The page and the number of pages, where there are several.
+    fn paging(&self) -> Option<(usize, usize)> {
+        (self.pages.len() > 1).then_some((self.page, self.pages.len()))
     }
 }
 
 impl Screen for BatteryView {
     fn hint(&self, action: &Id, _: &Env<'_>) -> paperpaw_sdk::Hint {
-        // Only back does anything here.
-        paperpaw_sdk::Hint::only_back(action)
+        // Back, and the page buttons where there are pages.
+        let turns = *action == actions::NEXT_PAGE || *action == actions::PREV_PAGE;
+        if turns && self.pages.len() > 1 {
+            paperpaw_sdk::Hint::Default
+        } else {
+            paperpaw_sdk::Hint::only_back(action)
+        }
     }
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
@@ -265,18 +341,19 @@ impl Screen for BatteryView {
             &style,
             env.i18n.tr("battery.title"),
             None,
-            None,
+            self.paging(),
         );
         let display = env.device.display;
         let footer_height = style.row as u16;
-        let bottom = display.height.saturating_sub(footer_height);
-        let mut y = self.header.area.y + self.header.area.height;
-        let heading = ui::heading_height(env, &style);
-        for line in &self.lines {
-            let height = match line {
-                Line::Heading(_) => heading,
-                Line::Value(..) | Line::Message(_) => style.row as u16,
-            };
+        let (mut y, bottom) = self.room(env);
+        let first = self.pages.get(self.page).copied().unwrap_or(0);
+        let last = self
+            .pages
+            .get(self.page + 1)
+            .copied()
+            .unwrap_or(self.lines.len());
+        for line in &self.lines[first..last] {
+            let height = self.height(env, line);
             if y + height > bottom {
                 break;
             }
@@ -316,15 +393,31 @@ impl Screen for BatteryView {
         }
     }
 
-    fn on_action(&mut self, _: &Id, _: &mut Cx<'_, '_>) -> Handled {
-        Handled::No
+    fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
+        let page = if FORWARD.contains(action) {
+            (self.page + 1).min(self.pages.len().saturating_sub(1))
+        } else if BACKWARD.contains(action) {
+            self.page.saturating_sub(1)
+        } else {
+            return Handled::No;
+        };
+        if page != self.page {
+            self.page = page;
+            cx.request_redraw();
+            cx.request_refresh(RefreshMode::Partial);
+        }
+        Handled::Yes
     }
 
     fn on_gesture(&mut self, gesture: Gesture, cx: &mut Cx<'_, '_>) -> Handled {
         if gesture.kind != GestureKind::Tap {
             return Handled::No;
         }
-        match self.header.tap(cx.env(), &self.style, gesture.start, None) {
+        let paging = self.paging();
+        match self
+            .header
+            .tap(cx.env(), &self.style, gesture.start, paging)
+        {
             Some(action) => {
                 cx.command(Command::RunAction(action));
                 Handled::Yes

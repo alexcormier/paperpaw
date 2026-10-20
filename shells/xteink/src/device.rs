@@ -40,10 +40,15 @@ static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_switch(
 )
 .described("x4.light-sleep.help")];
 
-/// The X4 Pro's front light, set with sliders.
+/// The X4 Pro's front light, set with sliders: how bright in single
+/// percents, so that `−` and `+` set the dim end finely (see `light`), its
+/// colour in fives.
 #[cfg(feature = "x4-pro")]
 static LIGHT_SETTINGS: [SettingSpec; 2] = {
     use paperpaw_sdk::SettingExtra;
+    static BRIGHTNESS: SettingExtra = SettingExtra::new()
+        .unit("core.unit.percent")
+        .slider();
     static PERCENT: SettingExtra = SettingExtra::new()
         .unit("core.unit.percent")
         .step(5)
@@ -57,7 +62,7 @@ static LIGHT_SETTINGS: [SettingSpec; 2] = {
             0,
             groups::DISPLAY,
         )
-        .with_extra(&PERCENT)
+        .with_extra(&BRIGHTNESS)
         .described("x4.frontlight.help"),
         SettingSpec::fixed_number(
             WARMTH.static_str(),

@@ -52,6 +52,9 @@ pub enum MenuNeed {
     /// devices it is left out of the menus plugins define; users can still
     /// list it.
     NoTouch,
+    /// A device with a touch screen, e.g. for what a tap or a swipe does:
+    /// hidden elsewhere, also where the user listed it.
+    Touch,
     /// A device with buttons in a row below the screen, whose row of
     /// hints shows what they do
     /// ([`settings::BUTTON_HINTS`](crate::builtin::settings::BUTTON_HINTS)),
@@ -159,6 +162,7 @@ impl Menus {
             Some(MenuNeed::Firmware) => caps.firmware,
             Some(MenuNeed::BlackAndWhite) => caps.black_and_white,
             Some(MenuNeed::NoTouch) => listed || !caps.touch,
+            Some(MenuNeed::Touch) => caps.touch,
             None => true,
         }
     }
@@ -334,6 +338,15 @@ mod tests {
             ..Default::default()
         });
         assert_eq!(titles(&menus).last(), Some(&"Second"));
+        // One for touch screens shows only on them.
+        menus.set_need(Id::new_static("a.second"), MenuNeed::Touch);
+        assert_eq!(titles(&menus).last(), Some(&"Second"));
+        menus.set_capabilities(crate::Capabilities::default());
+        assert_eq!(titles(&menus).last(), Some(&"Links"));
+        menus.set_capabilities(crate::Capabilities {
+            touch: true,
+            ..Default::default()
+        });
         // Listed by the user, it shows; one that needs speech does not.
         menus.set_need(Id::new_static("a.second"), MenuNeed::Speech);
         menus.customize(

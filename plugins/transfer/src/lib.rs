@@ -283,7 +283,7 @@ pub(crate) fn draw_address(
     let small = font.line_metrics(style.small).line_height as u16;
     // Below the code: the address, the hint (up to five lines) and
     // what happened last.
-    let width = f32::from(area.width - 2 * margin);
+    let width = f32::from(area.width.saturating_sub(2 * margin));
     // The address whole, to be typed: on two lines (the host, then the
     // rest) if it is too long for one.
     let shown = url.strip_prefix("http://").unwrap_or(url);
@@ -298,15 +298,11 @@ pub(crate) fn draw_address(
         + small * (hint_lines.len().min(HINT_LINES) as u16 + 1)
         + style.gap as u16 * 3;
     let room = area.height.saturating_sub(text_height + style.gap as u16);
-    let side = room.min(area.width - 2 * margin);
+    let side = room.min(area.width.saturating_sub(2 * margin));
     let mut y = area.y;
-    if let Some(qr) = qr {
-        // Four modules of white around the code, as scanners expect.
-        let modules = qr.size() as u16 + 8;
-        let scale = (side / modules).max(1);
-        let size = scale * modules;
-        let x0 = (area.width - size) / 2 + 4 * scale;
-        let y0 = area.y + (side - size) / 2 + 4 * scale;
+    if let Some(qr) = qr
+        && let Some((x0, y0, scale)) = code_place(area, side, qr.size() as u16)
+    {
         for my in 0..qr.size() {
             for mx in 0..qr.size() {
                 if qr.dark(mx, my) {
@@ -323,7 +319,8 @@ pub(crate) fn draw_address(
         y += side;
     }
     y += style.gap as u16;
-    let row = |y: u16, height: u16| Rect::new(margin, y, area.width - 2 * margin, height);
+    let row =
+        |y: u16, height: u16| Rect::new(margin, y, area.width.saturating_sub(2 * margin), height);
     let centered = |text: &str, size: f32| {
         let text = ui::fit(&font, size, text, width);
         let x = f32::from(margin) + (width - font.measure(size, &text)) / 2.0;
@@ -369,6 +366,23 @@ pub(crate) fn draw_address(
             Color::BLACK,
         );
     }
+}
+
+/// Where a QR code of `modules` modules a side goes in a square of
+/// `side` at the top of `area`, centred: the top left corner of its first
+/// module and the size of a module. `None` where not even a pixel per
+/// module fits (large fonts, a short screen in landscape).
+fn code_place(area: Rect, side: u16, modules: u16) -> Option<(u16, u16, u16)> {
+    // Four modules of white around the code, as scanners expect.
+    let modules = modules.checked_add(8)?;
+    let scale = side / modules;
+    if scale == 0 || side > area.width {
+        return None;
+    }
+    let size = scale * modules;
+    let x0 = (area.width - size) / 2 + 4 * scale;
+    let y0 = area.y + (side - size) / 2 + 4 * scale;
+    Some((x0, y0, scale))
 }
 
 impl Screen for TransferScreen {

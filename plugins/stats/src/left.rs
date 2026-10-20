@@ -4,7 +4,8 @@
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::rc::Rc;
-use core::cell::Cell;
+use alloc::string::String;
+use core::cell::RefCell;
 
 use paperpaw_sdk::builtin::{events, params};
 use paperpaw_sdk::status::{StatusItemSpec, StatusValue, context};
@@ -56,28 +57,59 @@ fn pages_left(context: &Params, chapter: bool) -> Option<f32> {
     Some(((end - at) / 1000.0 * pages).max(0.0))
 }
 
+/// The reading speed, worked out when a book is opened and now and then
+/// while reading: never as status lines are drawn.
+#[derive(Debug, Default)]
+struct Speed {
+    /// Seconds a page, once worked out (`Some(None)`: too little read).
+    known: Option<Option<f32>>,
+    /// The book it was worked out for.
+    book: String,
+    /// Pages turned since.
+    turns: u32,
+}
+
+impl Speed {
+    /// Whether the speed is to be worked out anew as the book at `path`
+    /// is shown: not when the same book shows again (the reader says so
+    /// after every menu).
+    fn opened(&mut self, path: &str) -> bool {
+        if self.known.is_some() && self.book == path {
+            return false;
+        }
+        self.book = String::from(path);
+        self.turns = 0;
+        true
+    }
+
+    /// Whether the speed is to be worked out anew after a page was turned:
+    /// every [`RECOUNT`] pages, every [`MIN_PAGES`] while there is none.
+    fn turned(&mut self) -> bool {
+        self.turns = self.turns.wrapping_add(1);
+        let every = match self.known {
+            Some(Some(_)) => RECOUNT,
+            _ => MIN_PAGES,
+        };
+        self.turns.is_multiple_of(every)
+    }
+}
+
 pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
-    // The speed is worked out once a book is opened (and on the first
-    // use), not for every page.
-    let speed_known: Rc<Cell<Option<Option<f32>>>> = Rc::new(Cell::new(None));
-    let known = speed_known.clone();
-    r.subscribe(
-        events::BOOK_OPENED,
-        Box::new(move |_, _, _| known.set(None)),
-    )?;
-    // While there is none yet, and now and then while reading, it is
-    // worked out again.
-    let known = speed_known.clone();
-    let turns = Rc::new(Cell::new(0u32));
-    r.subscribe(
-        events::PAGE_TURNED,
-        Box::new(move |_, _, _| {
-            turns.set(turns.get().wrapping_add(1));
-            if known.get() == Some(None) || turns.get().is_multiple_of(RECOUNT) {
-                known.set(None);
-            }
-        }),
-    )?;
+    let shared: Rc<RefCell<Speed>> = Rc::default();
+    let s = shared.clone();
+    r.on(events::BOOK_OPENED, move |env, reading, _| {
+        let mut s = s.borrow_mut();
+        if s.opened(&reading.path) {
+            s.known = Some(speed(env));
+        }
+    })?;
+    let s = shared.clone();
+    r.on(events::PAGE_TURNED, move |env, _, _| {
+        let mut s = s.borrow_mut();
+        if s.turned() {
+            s.known = Some(speed(env));
+        }
+    })?;
     for (id, title, key, chapter) in [
         (
             CHAPTER,
@@ -87,19 +119,12 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
         ),
         (BOOK, "stats.status.left-book", "stats.left.book", false),
     ] {
-        let known = speed_known.clone();
+        let s = shared.clone();
         r.add_status_item(StatusItemSpec {
             id,
             title: Cow::Borrowed(title),
             value: Box::new(move |env, context| {
-                let speed = match known.get() {
-                    Some(speed) => speed,
-                    None => {
-                        let speed = speed(env);
-                        known.set(Some(speed));
-                        speed
-                    }
-                }?;
+                let speed = s.borrow().known.flatten()?;
                 let seconds = (pages_left(context, chapter)? * speed) as u64;
                 let time = fmt::duration(env, seconds.max(60));
                 Some(StatusValue::Text(
@@ -132,5 +157,22 @@ mod tests {
             pages_left(&Params::new().with(params::PROGRESS, "5"), false),
             None
         );
+    }
+
+    #[test]
+    fn the_speed_is_worked_out_per_book_not_per_showing() {
+        let mut speed = Speed::default();
+        assert!(speed.opened("books/a.epub"));
+        speed.known = Some(Some(30.0));
+        // The same book after a menu: the speed stays.
+        assert!(!speed.opened("books/a.epub"));
+        assert!(speed.opened("books/b.epub"));
+        speed.known = Some(Some(30.0));
+        let recounts = (0..RECOUNT * 2).filter(|_| speed.turned()).count();
+        assert_eq!(recounts, 2);
+        // Without a speed yet, more often, but not at every page.
+        speed.known = Some(None);
+        let recounts = (0..MIN_PAGES * 2).filter(|_| speed.turned()).count();
+        assert_eq!(recounts, 2);
     }
 }

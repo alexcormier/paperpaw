@@ -48,10 +48,37 @@ fn card() -> MemoryStorage {
 /// `config` (lines of the `[vocabulary]` section): what it describes,
 /// and how many pixels are black.
 fn home(storage: MemoryStorage, page: &str, config: &str) -> (String, usize) {
+    home_on(storage, page, config, Device::Clock)
+}
+
+/// What the device has besides the card.
+#[derive(Clone, Copy, PartialEq)]
+enum Device {
+    /// The time.
+    Clock,
+    /// No clock, nor a source of random numbers.
+    Nothing,
+    /// No clock, but random numbers (always the same ones).
+    Random,
+}
+
+/// Random numbers that always draw 1.
+fn one(buf: &mut [u8]) -> bool {
+    buf.fill(0);
+    buf[0] = 1;
+    true
+}
+
+/// [`home`] on a device with `device`.
+fn home_on(storage: MemoryStorage, page: &str, config: &str, device: Device) -> (String, usize) {
     let user = format!(
         "[core]\nlanguage = en\n[home]\ngesture-tips = false\npage-1 = \"{page}\"\n[vocabulary]\n{config}\n"
     );
-    let mut kernel = Kernel::builder(DEVICE)
+    let mut builder = Kernel::builder(DEVICE);
+    if device == Device::Random {
+        builder = builder.random(one);
+    }
+    let mut kernel = builder
         .storage(storage)
         .user_config(user)
         .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
@@ -60,7 +87,7 @@ fn home(storage: MemoryStorage, page: &str, config: &str) -> (String, usize) {
         .build()
         .unwrap();
     let status = SystemStatus {
-        clock: Some(WallClock {
+        clock: (device == Device::Clock).then_some(WallClock {
             at: Instant(0),
             unix_millis: 1_791_967_260_000,
             utc_offset_minutes: Some(120),
@@ -119,6 +146,29 @@ fn the_word_of_the_day_shows_its_sentence() {
     assert!(shown.contains("Newest word"), "{shown}");
     assert!(shown.contains("curious\n"), "{shown}");
     assert!(shown.contains("from Alice"), "{shown}");
+}
+
+/// Without a clock the word of the day is not stuck on the oldest word:
+/// one drawn at random, else the newest.
+#[test]
+fn without_a_clock_the_word_of_the_day_still_changes() {
+    let page = "vocabulary.widget.word 0/0 4x2";
+    let (shown, _) = home_on(card(), page, "", Device::Nothing);
+    assert!(
+        shown.contains(
+            "curious
+"
+        ),
+        "{shown}"
+    );
+    let (shown, _) = home_on(card(), page, "", Device::Random);
+    assert!(
+        shown.contains(
+            "Ungeziefer
+"
+        ),
+        "{shown}"
+    );
 }
 
 #[test]

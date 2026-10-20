@@ -8,6 +8,11 @@
 //!   it or remove it. *Save as new profile* asks for a name.
 //! - *Next profile* applies the profile after the one applied last: bind
 //!   it to a button or use it in a rule.
+//! - Names are unique (whatever their case): a name in use is refused,
+//!   so that every profile can be told apart and *Next profile* goes
+//!   round them all.
+//! - Where the profiles cannot be read, the list says so and saves
+//!   nothing over them.
 
 #![no_std]
 
@@ -91,7 +96,7 @@ impl Plugin for Profiles {
         ))?;
         r.add_action(ActionSpec::new(NEXT, "profiles.next").handler(
             |env: &Env<'_>, out: &mut Vec<Command>| {
-                let profiles = profile::load(env.storage);
+                let profiles = profile::load(env.storage).unwrap_or_default();
                 let last = profile::last(env.storage);
                 let at = profiles.iter().position(|p| p.name == last);
                 let next = at.map_or(0, |at| (at + 1) % profiles.len().max(1));
@@ -127,6 +132,9 @@ struct ListScreen {
     /// The line at the bottom.
     status: Rect,
     profiles: Vec<Profile>,
+    /// Whether the profiles could be read: if not, nothing is saved over
+    /// them.
+    readable: bool,
     /// Whether the settings are as each profile has them, found when the
     /// profiles or the settings change.
     in_use: Vec<bool>,
@@ -146,10 +154,12 @@ impl ListScreen {
             display.width,
             display.height.saturating_sub(top + line),
         );
+        let loaded = profile::load(env.storage);
         let mut screen = Self {
             list: ListView::new(area, style.noted_row()).focus_on_keys(env),
             status,
-            profiles: profile::load(env.storage),
+            readable: loaded.is_some(),
+            profiles: loaded.unwrap_or_default(),
             in_use: Vec::new(),
             style,
             header,
@@ -230,8 +240,42 @@ impl ListScreen {
         }
     }
 
-    fn save(&self, env: &Env<'_>) {
-        profile::save(env.storage, &self.profiles);
+    /// Keeps the profiles; not kept, the list goes back to what the card
+    /// has and a notice says why.
+    fn save(&mut self, cx: &mut Cx<'_, '_>) -> bool {
+        let env = *cx.env();
+        if self.readable && profile::save(env.storage, &self.profiles) {
+            return true;
+        }
+        let key = if self.readable {
+            "profiles.not-saved"
+        } else {
+            "profiles.unreadable"
+        };
+        cx.command(Command::Notify(env.i18n.tr(key).to_string()));
+        let loaded = profile::load(env.storage);
+        self.readable = loaded.is_some();
+        self.profiles = loaded.unwrap_or_default();
+        self.list.focus = self.list.focus.min(self.profiles.len());
+        false
+    }
+
+    /// Whether a profile but the `but`-th is called `name`; if so, says
+    /// so.
+    fn taken(&self, name: &str, but: Option<usize>, cx: &mut Cx<'_, '_>) -> bool {
+        let taken = self
+            .profiles
+            .iter()
+            .enumerate()
+            .any(|(i, p)| Some(i) != but && profile::same_name(&p.name, name));
+        if taken {
+            let env = *cx.env();
+            cx.command(Command::Notify(
+                env.i18n
+                    .format("profiles.taken", &[("name", Arg::Str(name))]),
+            ));
+        }
+        taken
     }
 }
 
@@ -360,24 +404,33 @@ impl Screen for ListScreen {
             let Some(name) = clean(&typed.text) else {
                 return;
             };
-            self.profiles.retain(|p| p.name != name);
+            if self.taken(&name, None, cx) {
+                return;
+            }
             self.profiles.push(Profile {
                 values: profile::capture(&env),
                 name: name.clone(),
             });
-            profile::set_last(env.storage, &name);
-            self.save(&env);
-            self.list.focus = self.profiles.len() - 1;
-            cx.command(Command::Notify(
-                env.i18n
-                    .format("profiles.saved", &[("name", Arg::Str(&name))]),
-            ));
+            if self.save(cx) {
+                profile::set_last(env.storage, &name);
+                self.list.focus = self.profiles.len() - 1;
+                cx.command(Command::Notify(
+                    env.i18n
+                        .format("profiles.saved", &[("name", Arg::Str(&name))]),
+                ));
+            }
             self.redraw(cx);
         } else if let Some(typed) = RENAMED.read(event, params) {
             let at = index(typed.context.get(params::PATH).unwrap_or_default());
             if let (Some(i), Some(name)) = (at, clean(&typed.text)) {
-                self.profiles[i].name = name;
-                self.save(&env);
+                if self.taken(&name, Some(i), cx) {
+                    return;
+                }
+                let old = core::mem::replace(&mut self.profiles[i].name, name.clone());
+                // The profile applied last keeps being it, by its new name.
+                if self.save(cx) && profile::last(env.storage) == old {
+                    profile::set_last(env.storage, &name);
+                }
                 self.redraw(cx);
             }
         } else if let Some(picked) = CHOSEN.read(event, params)
@@ -386,12 +439,13 @@ impl Screen for ListScreen {
             match picked.option.as_str() {
                 "update" => {
                     self.profiles[i].values = profile::capture(&env);
-                    self.save(&env);
                     let name = self.profiles[i].name.clone();
-                    cx.command(Command::Notify(
-                        env.i18n
-                            .format("profiles.saved", &[("name", Arg::Str(&name))]),
-                    ));
+                    if self.save(cx) {
+                        cx.command(Command::Notify(
+                            env.i18n
+                                .format("profiles.saved", &[("name", Arg::Str(&name))]),
+                        ));
+                    }
                     self.redraw(cx);
                 }
                 "rename" => {
@@ -400,7 +454,7 @@ impl Screen for ListScreen {
                 }
                 "remove" => {
                     self.profiles.remove(i);
-                    self.save(&env);
+                    self.save(cx);
                     self.list.focus = self.list.focus.min(self.rows().len() - 1);
                     self.redraw(cx);
                 }

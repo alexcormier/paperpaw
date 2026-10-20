@@ -10,7 +10,13 @@
 //! `paperpaw_sdk::secrets`). Shipped switched off: switch it on in the
 //! plugins.
 //!
-//! It reads the Markdown the reader writes (see [`parse`]), so it works
+//! What cannot be sent (no connection, Readwise down) waits and is sent
+//! later: with the next export, and when Wi-Fi comes back where PaperPaw
+//! manages it. The notes are read a line at a time and the request
+//! written to a file and sent from there, so notes of any length are
+//! sent on small devices too.
+//!
+//! It reads the Markdown the reader writes (see [`Parser`]), so it works
 //! with any reader that writes the same and emits
 //! `core.notes-exported`.
 
@@ -18,32 +24,33 @@
 
 extern crate alloc;
 
+mod send;
+
 use alloc::borrow::Cow;
 use alloc::format;
-use alloc::string::{String, ToString};
-use alloc::vec::Vec;
+use alloc::rc::Rc;
+use alloc::string::String;
+use core::cell::RefCell;
 
 use paperpaw_json as json;
-use paperpaw_sdk::builtin::{events, params};
+use paperpaw_sdk::builtin::events;
 use paperpaw_sdk::event::Event;
-use paperpaw_sdk::replies::{HttpReply, Typed};
+use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::secrets::SecretChange;
-use paperpaw_sdk::{
-    Arg, Command, Env, HttpRequest, Id, Manifest, Params, Plugin, RegisterError, Registrar,
-    SDK_VERSION, Version,
-};
+use paperpaw_sdk::{Command, Id, Manifest, Plugin, RegisterError, Registrar, SDK_VERSION, Version};
+
+use send::{Run, Start};
 
 pub const PLUGIN: Id = Id::new_static("readwise");
 /// The access token, among the passwords and keys.
 pub const SECRET: &str = "readwise.token";
-/// The token, entered on the keyboard; parameter `path` goes along.
+/// The token, entered on the keyboard.
 const TOKEN_ENTERED: Event<Typed> = Event::new("readwise.token-entered");
-/// Readwise's answer; parameter `count`, the highlights sent.
-const SENT: Event<HttpReply> = Event::new("readwise.sent");
-const COUNT: &str = "count";
-/// Longest notes file read.
-const MAX_FILE: usize = 256 * 1024;
-const URL: &str = "https://readwise.io/api/v2/highlights/";
+/// Longest text and note of a highlight, title and author sent, in bytes
+/// (Readwise takes no more characters).
+const MAX_TEXT: usize = 8191;
+const MAX_TITLE: usize = 511;
+const MAX_AUTHOR: usize = 1024;
 
 /// A highlight as the Markdown has it.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -54,162 +61,145 @@ pub struct Highlight {
     pub note: String,
 }
 
-/// A book's notes as the Markdown has them.
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
-pub struct Notes {
-    pub title: String,
-    pub author: String,
-    pub highlights: Vec<Highlight>,
+/// Where a [`Parser`] is in the notes.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+enum Part {
+    /// The title and author, before the first heading of a part.
+    #[default]
+    Head,
+    /// The highlights, under the first heading.
+    Highlights,
+    /// Later parts (bookmarks), left out.
+    Rest,
 }
 
-/// Reads the Markdown the reader writes: `# Title`, the author on the
-/// next line, then under the first `##` heading each highlight as a
-/// quote (`> text`) ending in its place (`> 12 %`), followed by the note
-/// on it, if any; later headings (bookmarks) are left out.
-pub fn parse(text: &str) -> Notes {
-    let mut notes = Notes::default();
-    let mut lines = text.lines().peekable();
-    // The title and author, before the first heading of a part.
-    while let Some(line) = lines.peek().copied() {
-        if line.starts_with("## ") {
-            break;
-        }
-        lines.next();
-        if let Some(title) = line.strip_prefix("# ") {
-            notes.title = title.trim().to_string();
-        } else if !line.trim().is_empty() && notes.author.is_empty() && !notes.title.is_empty() {
-            notes.author = line.trim().to_string();
+/// Reads the Markdown the reader writes, a line at a time: `# Title`, the
+/// author on the next line, then under the first `##` heading each
+/// highlight as a quote (`> text`) ending in its place (`> 12 %`),
+/// followed by the note on it, if any; later headings (bookmarks) are
+/// left out. Only the highlight being read is held, cut to what Readwise
+/// takes.
+#[derive(Debug, Default)]
+pub struct Parser {
+    part: Part,
+    title: String,
+    author: String,
+    current: Option<Highlight>,
+    quoting: bool,
+}
+
+impl Parser {
+    pub fn title(&self) -> &str {
+        &self.title
+    }
+
+    pub fn author(&self) -> &str {
+        &self.author
+    }
+
+    /// Reads the next line (without its line break): the highlight it
+    /// ends, if any.
+    pub fn line(&mut self, line: &str) -> Option<Highlight> {
+        match self.part {
+            Part::Head => {
+                if line.starts_with("## ") {
+                    self.part = Part::Highlights;
+                } else if let Some(title) = line.strip_prefix("# ") {
+                    self.title.clear();
+                    push_bounded(&mut self.title, title.trim(), MAX_TITLE);
+                } else if !line.trim().is_empty()
+                    && self.author.is_empty()
+                    && !self.title.is_empty()
+                {
+                    push_bounded(&mut self.author, line.trim(), MAX_AUTHOR);
+                }
+                None
+            }
+            Part::Highlights if line.starts_with("## ") => {
+                let last = self.finish();
+                self.part = Part::Rest;
+                last
+            }
+            Part::Highlights => self.highlight_line(line),
+            Part::Rest => None,
         }
     }
-    // The highlights, under the first heading.
-    lines.next();
-    let mut current: Option<Highlight> = None;
-    let mut quoting = false;
-    for line in lines {
-        if line.starts_with("## ") {
-            break;
-        }
+
+    fn highlight_line(&mut self, line: &str) -> Option<Highlight> {
         if let Some(quote) = line.strip_prefix('>') {
             let quote = quote.trim();
-            if !quoting {
-                notes.highlights.extend(current.take());
-                current = Some(Highlight::default());
-                quoting = true;
-            }
-            let Some(h) = current.as_mut() else { continue };
+            // A quote after other lines starts the next highlight.
+            let ended = if self.quoting {
+                None
+            } else {
+                self.quoting = true;
+                self.current.replace(Highlight::default())
+            };
+            let h = self.current.get_or_insert_with(Highlight::default);
             if let Some(percent) = quote.strip_suffix('%').and_then(|p| p.trim().parse().ok()) {
                 h.percent = percent;
             } else if !quote.is_empty() {
-                if !h.text.is_empty() {
-                    h.text.push('\n');
-                }
-                h.text.push_str(quote);
+                push_line(&mut h.text, quote);
             }
-            continue;
+            return ended.filter(|h| !h.text.is_empty());
         }
-        quoting = false;
-        if let Some(h) = current.as_mut()
+        self.quoting = false;
+        if let Some(h) = self.current.as_mut()
             && !line.trim().is_empty()
         {
-            if !h.note.is_empty() {
-                h.note.push('\n');
-            }
-            h.note.push_str(line.trim());
+            push_line(&mut h.note, line.trim());
         }
+        None
     }
-    notes.highlights.extend(current);
-    notes.highlights.retain(|h| !h.text.is_empty());
-    notes
-}
 
-/// The request sending `notes` with `token`.
-pub fn request(notes: &Notes, token: &str) -> HttpRequest {
-    let mut body = String::from("{\"highlights\":[");
-    for (n, h) in notes.highlights.iter().enumerate() {
-        if n > 0 {
-            body.push(',');
-        }
-        body.push_str(&format!(
+    /// The end of the notes: the highlight read last, if any.
+    pub fn finish(&mut self) -> Option<Highlight> {
+        self.quoting = false;
+        self.current.take().filter(|h| !h.text.is_empty())
+    }
+
+    /// The highlight `h` of these notes as Readwise takes it, in JSON.
+    pub fn json(&self, h: &Highlight) -> String {
+        let mut json = format!(
             "{{\"text\":{},\"title\":{},\"source_type\":\"paperpaw\",\"category\":\"books\",\
              \"location\":{},\"location_type\":\"order\"",
             json::string(&h.text),
-            json::string(&notes.title),
+            json::string(&self.title),
             h.percent
-        ));
-        if !notes.author.is_empty() {
-            body.push_str(&format!(",\"author\":{}", json::string(&notes.author)));
+        );
+        if !self.author.is_empty() {
+            json.push_str(&format!(",\"author\":{}", json::string(&self.author)));
         }
         if !h.note.is_empty() {
-            body.push_str(&format!(",\"note\":{}", json::string(&h.note)));
+            json.push_str(&format!(",\"note\":{}", json::string(&h.note)));
         }
-        body.push('}');
+        json.push('}');
+        json
     }
-    body.push_str("]}");
-    let mut request = HttpRequest::new("POST", URL, SENT);
-    request
-        .headers
-        .push((String::from("Authorization"), format!("Token {token}")));
-    request.headers.push((
-        String::from("Content-Type"),
-        String::from("application/json"),
-    ));
-    request.body = Some(body);
-    request.params = Params::new().with(COUNT, notes.highlights.len().to_string());
-    request
 }
 
-fn notify(env: &Env<'_>, key: &str, out: &mut Vec<Command>) {
-    out.push(Command::Notify(env.i18n.tr(key).to_string()));
+/// Adds `text` to `field` on a line of its own, as much as fits in
+/// [`MAX_TEXT`] bytes.
+fn push_line(field: &mut String, text: &str) {
+    let before = field.len();
+    if before > 0 {
+        field.push('\n');
+    }
+    push_bounded(field, text, MAX_TEXT);
+    // Nothing of it fit.
+    if before > 0 && field.len() == before + 1 {
+        field.truncate(before);
+    }
 }
 
-/// Sends the highlights in the notes file at `path`, or asks for the
-/// token first.
-fn send(env: &Env<'_>, path: &str, out: &mut Vec<Command>) {
-    if !env.caps.network {
-        return notify(env, "readwise.no-network", out);
+/// Adds `text` to `field`, as much as fits in `max` bytes, whole
+/// characters only.
+fn push_bounded(field: &mut String, text: &str, max: usize) {
+    let mut end = text.len().min(max.saturating_sub(field.len()));
+    while !text.is_char_boundary(end) {
+        end -= 1;
     }
-    let Some(token) = env.secrets.get(SECRET) else {
-        notify(env, "readwise.needs-token", out);
-        out.push(
-            paperpaw_sdk::ask::text(env.i18n.tr("readwise.token"), &TOKEN_ENTERED)
-                .password()
-                .with(params::PATH, path.to_string())
-                .command(),
-        );
-        return;
-    };
-    let Ok(data) = paperpaw_sdk::read_file(env.storage, path, MAX_FILE) else {
-        return notify(env, "readwise.failed", out);
-    };
-    let notes = parse(&String::from_utf8_lossy(&data));
-    if notes.highlights.is_empty() {
-        return notify(env, "readwise.nothing", out);
-    }
-    out.push(Command::Http(request(&notes, token)));
-}
-
-/// Readwise answered.
-fn sent(env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
-    match reply.status {
-        200..=299 => {
-            let count: i64 = reply
-                .context
-                .get(COUNT)
-                .and_then(|c| c.parse().ok())
-                .unwrap_or(0);
-            let text = env
-                .i18n
-                .plural("readwise.sent", count, &[("count", Arg::Int(count))]);
-            out.push(Command::Notify(text));
-        }
-        401 | 403 => {
-            // Asked for anew with the next export.
-            out.push(Command::SetSecret(SecretChange::remove(SECRET)));
-            notify(env, "readwise.bad-token", out);
-        }
-        0 => notify(env, "readwise.unreachable", out),
-        _ => notify(env, "readwise.failed", out),
-    }
+    field.push_str(&text[..end]);
 }
 
 /// The Readwise plugin.
@@ -228,11 +218,22 @@ impl Plugin for Readwise {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        let run: Rc<RefCell<Run>> = Rc::default();
         // Any reader's notes, once exported as Markdown.
-        r.on(events::NOTES_EXPORTED, |env, exported, out| {
-            send(env, &exported.path, out);
+        let state = run.clone();
+        r.on(events::NOTES_EXPORTED, move |env, exported, out| {
+            if send::add_waiting(env.storage, &exported.path).is_ok() {
+                state.borrow_mut().start(env, Start::Export, None, out);
+            }
         })?;
-        r.on(TOKEN_ENTERED, |env, typed, out| {
+        let state = run.clone();
+        r.on(events::WIFI_CHANGED, move |env, _, out| {
+            if env.wifi.is_some_and(|w| w.state.is_online()) {
+                state.borrow_mut().start(env, Start::Retry, None, out);
+            }
+        })?;
+        let state = run.clone();
+        r.on(TOKEN_ENTERED, move |env, typed, out| {
             let token = typed.text.trim();
             if token.is_empty() {
                 return;
@@ -243,18 +244,14 @@ impl Plugin for Readwise {
                 token,
             )));
             // Not kept yet while this runs: sent with it directly.
-            let Some(path) = typed.context.get(params::PATH) else {
-                return;
-            };
-            let Ok(data) = paperpaw_sdk::read_file(env.storage, path, MAX_FILE) else {
-                return;
-            };
-            let notes = parse(&String::from_utf8_lossy(&data));
-            if !notes.highlights.is_empty() && env.caps.network {
-                out.push(Command::Http(request(&notes, token)));
-            }
+            state
+                .borrow_mut()
+                .start(env, Start::Export, Some(token), out);
         })?;
-        r.on(SENT, sent)?;
+        let state = run.clone();
+        r.on(send::SENT, move |env, reply, out| {
+            state.borrow_mut().answered(env, reply, out);
+        })?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())
@@ -264,6 +261,7 @@ impl Plugin for Readwise {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::vec::Vec;
     use paperpaw_i18n::{Catalog, check};
 
     const NOTES: &str = "# Alice's Adventures\n\nLewis Carroll\n\n## Highlights\n\n\
@@ -271,13 +269,21 @@ mod tests {
         > Who are you?\n>\n> 40 %\n\nThe caterpillar asks.\nTwice.\n\n\
         ## Bookmarks\n\n- 50 %: Down the rabbit hole\n";
 
+    /// The parser after `text`, and the highlights it gave.
+    fn parse(text: &str) -> (Parser, Vec<Highlight>) {
+        let mut parser = Parser::default();
+        let mut highlights: Vec<Highlight> = text.lines().filter_map(|l| parser.line(l)).collect();
+        highlights.extend(parser.finish());
+        (parser, highlights)
+    }
+
     #[test]
     fn reads_the_readers_markdown() {
-        let notes = parse(NOTES);
-        assert_eq!(notes.title, "Alice's Adventures");
-        assert_eq!(notes.author, "Lewis Carroll");
+        let (notes, highlights) = parse(NOTES);
+        assert_eq!(notes.title(), "Alice's Adventures");
+        assert_eq!(notes.author(), "Lewis Carroll");
         assert_eq!(
-            notes.highlights,
+            highlights,
             [
                 Highlight {
                     text: String::from("Curiouser and curiouser!"),
@@ -291,27 +297,39 @@ mod tests {
                 },
             ]
         );
+        // The last highlight, with no heading after it.
+        let (_, highlights) = parse(&NOTES[..NOTES.find("## Bookmarks").unwrap()]);
+        assert_eq!(highlights.len(), 2);
         // Without an author or highlights.
-        let notes = parse("# Title\n\n## Bookmarks\n\n- 5 %: x\n");
-        assert_eq!((notes.title.as_str(), notes.author.as_str()), ("Title", ""));
-        assert!(notes.highlights.is_empty());
+        let (notes, highlights) = parse("# Title\n\n## Bookmarks\n\n- 5 %: x\n");
+        assert_eq!((notes.title(), notes.author()), ("Title", ""));
+        assert!(highlights.is_empty());
     }
 
     #[test]
-    fn sends_json_with_the_token() {
-        let request = request(&parse(NOTES), "t0k");
-        assert_eq!(request.method, "POST");
-        assert!(
-            request
-                .headers
-                .contains(&(String::from("Authorization"), String::from("Token t0k")))
-        );
-        let body = request.body.unwrap();
-        assert!(body.starts_with("{\"highlights\":[{\"text\":\"Curiouser and curiouser!\""));
-        assert!(body.contains("\"author\":\"Lewis Carroll\""));
-        assert!(body.contains("\"note\":\"The caterpillar asks.\\nTwice.\""));
-        assert!(body.contains("\"location\":40,\"location_type\":\"order\""));
-        assert_eq!(request.params.get(COUNT), Some("2"));
+    fn writes_json_for_readwise() {
+        let (notes, highlights) = parse(NOTES);
+        let json = notes.json(&highlights[1]);
+        assert!(json.starts_with("{\"text\":\"Who are you?\",\"title\":\"Alice's Adventures\""));
+        assert!(json.contains("\"author\":\"Lewis Carroll\""));
+        assert!(json.contains("\"note\":\"The caterpillar asks.\\nTwice.\""));
+        assert!(json.contains("\"location\":40,\"location_type\":\"order\""));
+        assert!(!notes.json(&highlights[0]).contains("\"note\""));
+    }
+
+    #[test]
+    fn long_highlights_are_cut_to_what_readwise_takes() {
+        let long = "\u{e4}".repeat(MAX_TEXT);
+        let text = format!("# T\n\n## Highlights\n\n> {long}\n> more\n>\n> 5 %\n\n{long}\n");
+        let (_, highlights) = parse(&text);
+        let h = &highlights[0];
+        assert_eq!(h.text.len(), MAX_TEXT - 1);
+        assert!(h.text.chars().all(|c| c == '\u{e4}'));
+        assert_eq!(h.note.len(), MAX_TEXT - 1);
+        assert_eq!(h.percent, 5);
+        let (notes, _) = parse(&format!("# {}\n\n{}\n", "t".repeat(4096), "a".repeat(4096)));
+        assert_eq!(notes.title().len(), MAX_TITLE);
+        assert_eq!(notes.author().len(), MAX_AUTHOR);
     }
 
     #[test]

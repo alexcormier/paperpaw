@@ -58,8 +58,10 @@ impl Field {
         }
     }
 
-    fn help(self) -> &'static str {
+    /// What its row says below its name, for `catalog`.
+    fn help(self, catalog: &Catalog) -> &'static str {
         match self {
+            Field::Password if in_clear(&catalog.url) => "opds.field.password.http",
             Field::Name => "opds.field.name.help",
             Field::Address => "opds.field.address.help",
             Field::User => "opds.field.user.help",
@@ -73,6 +75,13 @@ impl Field {
     fn of(name: &str) -> Option<Field> {
         FIELDS.into_iter().find(|f| f.key() == name)
     }
+}
+
+/// Whether what is sent to `url` goes unencrypted (`http`), so anyone on
+/// the way can read a password with it.
+fn in_clear(url: &str) -> bool {
+    url.get(..7)
+        .is_some_and(|scheme| scheme.eq_ignore_ascii_case("http://"))
 }
 
 pub(crate) struct EditScreen {
@@ -94,7 +103,10 @@ impl EditScreen {
             .get(ID)
             .and_then(|i| i.parse().ok())
             .unwrap_or(usize::MAX);
-        let catalog = catalogs::load(env).get(index).cloned().unwrap_or_default();
+        let catalog = catalogs::load(env)
+            .ok()
+            .and_then(|all| all.get(index).cloned())
+            .unwrap_or_default();
         Self {
             list: ListView::new(area, style.noted_row()).focus_on_keys(env),
             style,
@@ -104,8 +116,14 @@ impl EditScreen {
         }
     }
 
+    /// Keeps the catalog as it is now in the list, unless the list
+    /// cannot be read: then it is left as it is, and the change is not
+    /// kept.
     fn save(&self, env: &Env<'_>, cx: &mut Cx<'_, '_>) {
-        let mut all = catalogs::load(env);
+        let Ok(mut all) = catalogs::load(env) else {
+            let message = env.i18n.tr("opds.unreadable").to_string();
+            return cx.command(Command::Notify(message));
+        };
         if let Some(slot) = all.get_mut(self.index) {
             *slot = self.catalog.clone();
             let mut out = Vec::new();
@@ -189,6 +207,7 @@ impl Screen for EditScreen {
         );
         let values: Vec<String> = FIELDS.iter().map(|&f| self.value(env, f)).collect();
         let (on, webdav) = (self.catalog.sync, self.catalog.webdav);
+        let catalog = &self.catalog;
         self.list.draw(
             canvas,
             &style,
@@ -196,7 +215,7 @@ impl Screen for EditScreen {
             |canvas, index, rect, focused| {
                 let field = FIELDS[index];
                 let title = env.i18n.tr(field.key());
-                let note = env.i18n.tr(field.help());
+                let note = env.i18n.tr(field.help(catalog));
                 if field == Field::Sync || field == Field::WebDav {
                     let on = if field == Field::Sync { on } else { webdav };
                     ui::draw_switch_row(canvas, env, &style, rect, focused, title, note, on);
