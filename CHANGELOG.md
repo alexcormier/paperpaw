@@ -6,6 +6,9 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Key bindings: a button bound on the keys page (also to Nothing) does
+  what was chosen there at once, also where the emulator's own
+  configuration binds it.
 - Reader: a new text size (pinch, the slider, Larger and Smaller, a
   book's own size) lays the open book out again at once; before, it
   applied only when the book was opened again.

@@ -358,7 +358,6 @@ fn as_standard_removes_the_binding_again() {
 /// written, but the button still does what the configuration said until
 /// the next start.
 #[test]
-#[ignore = "bug: a binding made on the keys page does not replace one of the same input from the shell's configuration (the kernel keeps the user configuration's key map beside it)"]
 fn nothing_switches_an_input_off() {
     let mut device = Device::with_config(BUTTONS, "[keymap.global]\nbutton.left = counter.count\n");
     device.button("left", false);
