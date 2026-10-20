@@ -80,8 +80,6 @@ impl KernelBuilder {
         self
     }
 
-    /// A monotonic clock in microseconds, for measuring the time each
-    /// plugin's code takes ([`paperpaw_sdk::usage::PluginUsage`]).
     /// Shows a mark at once when an input opens or closes a screen that
     /// took long the last time (or was not opened yet), before the work:
     /// the pressed button's hint inverted, or a sign in the corner. For
@@ -93,6 +91,8 @@ impl KernelBuilder {
         self
     }
 
+    /// A monotonic clock in microseconds, for measuring the time each
+    /// plugin's code takes ([`paperpaw_sdk::usage::PluginUsage`]).
     pub fn clock(mut self, clock: fn() -> u64) -> Self {
         self.clock = Some(clock);
         self
@@ -202,10 +202,6 @@ impl KernelBuilder {
         self
     }
 
-    /// The shell shows black and white in the colours of the settings
-    /// [`settings::TEXT_COLOR`](paperpaw_sdk::builtin::settings::TEXT_COLOR)
-    /// and [`settings::PAPER_COLOR`](paperpaw_sdk::builtin::settings::PAPER_COLOR)
-    /// (see [`Kernel::colors`]); without, they are not offered.
     /// The buttons that lie in a row below the screen, left to right, each
     /// under an equal share of its width (e.g. the X4's four): a row of
     /// hints above them shows what they do
@@ -215,6 +211,10 @@ impl KernelBuilder {
         self
     }
 
+    /// The shell shows black and white in the colours of the settings
+    /// [`settings::TEXT_COLOR`](paperpaw_sdk::builtin::settings::TEXT_COLOR)
+    /// and [`settings::PAPER_COLOR`](paperpaw_sdk::builtin::settings::PAPER_COLOR)
+    /// (see [`Kernel::colors`]); without, they are not offered.
     pub fn colors(mut self, available: bool) -> Self {
         self.caps.colors = available;
         self

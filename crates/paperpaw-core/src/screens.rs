@@ -5,12 +5,12 @@
 use super::*;
 
 impl Kernel {
+    /// Opens screen `id` with `params` on top, for `slot` if it was bound
+    /// to one.
     pub(crate) fn open(&mut self, id: Id, slot: Option<Id>, params: &Params) {
         let Some(spec) = self.registry.screens.get(&id) else {
             return self.warn_runtime(format!("unknown screen `{id}`"));
         };
-        // Made as the full screen it opens over, which an overlay shares;
-        // a full screen that wants the other size is made again for it.
         // Made once, at the size it asked for: above the row of hints, or
         // all of the screen.
         let hinted = self.registry.hints_of(&id) == Hints::Shown;
@@ -145,7 +145,6 @@ impl Kernel {
         self.stack.get(index)?.screen.region(&env)
     }
 
-    /// The area a screen occupies.
     /// What opening or closing screen `index` changes: its region, or
     /// all of the screen where it washes out what lies below it
     /// ([`Screen::dims_below`](paperpaw_sdk::Screen::dims_below)).
@@ -157,6 +156,7 @@ impl Kernel {
         }
     }
 
+    /// The area screen `index` occupies.
     pub(crate) fn region_of(&self, index: usize) -> Rect {
         self.overlay(index).unwrap_or_else(|| self.content())
     }

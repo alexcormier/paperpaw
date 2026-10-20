@@ -731,13 +731,13 @@ impl Kernel {
         &self.shared.device
     }
 
-    /// The device's storage, e.g. for a shell that copies files onto it.
     /// The panel took `millis` for a refresh: shells that know say so
     /// ([`Usage::panel_ms`](paperpaw_sdk::usage::Usage::panel_ms)).
     pub fn panel_busy(&mut self, millis: u64) {
         self.shared.usage.panel_ms = self.shared.usage.panel_ms.saturating_add(millis);
     }
 
+    /// The device's storage, e.g. for a shell that copies files onto it.
     pub fn storage(&self) -> &dyn Storage {
         self.shared.storage.as_ref()
     }
@@ -925,12 +925,6 @@ impl Kernel {
         self.output.commands.push(events::RESUME.emit(()));
         self.finish()
     }
-
-    // ---- Registration -------------------------------------------------
-
-    // ---- Input --------------------------------------------------------
-
-    // ---- Commands and drawing ----------------------------------------
 
     fn warn(&mut self, source: WarningSource, line: Option<u32>, message: String) {
         self.warnings.push(Warning {
