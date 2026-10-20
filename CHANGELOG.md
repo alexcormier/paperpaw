@@ -32,6 +32,16 @@ change the plugin SDK.
   ends inside it (it comes with the next read), so non-ASCII text, e.g.
   Calibre's metadata, no longer turns into replacement characters at
   random and no longer upsets a protocol that counts bytes.
+- Plugins' servers on the emulator and Android (Wi-Fi transfer, the
+  phone keyboard) no longer let anyone in the network tie them up: a
+  request's head is read by the same parser as on the X4 (up to 8 KiB,
+  within 30 seconds in all; 431 or 400 otherwise, also for a
+  `Content-Length` that is no number), a server serves 8 connections at
+  a time and answers more with 503, an answer that comes before an
+  upload is whole (507, no room) ends it at once, and stopping a server
+  ends its connections and frees its port without polling. Request
+  bodies a crash left in `.paperpaw/tmp` are removed when the next one
+  comes.
 
 - Rules: a rule can apply when the battery reaches a level (80 %, 90 %,
   full or another), once each time it gets there and not again while
