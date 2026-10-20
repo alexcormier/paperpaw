@@ -23,10 +23,10 @@ use alloc::vec::Vec;
 use core::sync::atomic::{AtomicU32, Ordering};
 
 use paperpaw_sdk::ui::UiStyle;
-
-use crate::{frame_height, today};
 use paperpaw_sdk::widgets;
 use paperpaw_sdk::{Canvas, Command, Env, Id, RegisterError, Registrar, Storage};
+
+use crate::{frame_height, today};
 
 pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     r.add_translations(Cow::Borrowed(include_str!("../i18n/words.en.ini")))?;
@@ -130,46 +130,6 @@ impl Turns {
     }
 }
 
-/// Calls `line` with each line of the file at `path` (no longer than
-/// `MAX_LINE` bytes, longer ones cut there), read a little at a time, so
-/// that a long file never is in memory at once; `line` returns `false` to
-/// stop.
-fn each_line(storage: &dyn Storage, path: &str, line: &mut dyn FnMut(&str) -> bool) {
-    const MAX_LINE: usize = 1024;
-    // Enough for thousands of lines; beyond, nothing is read.
-    const MAX_FILE: u64 = 512 * 1024;
-    let mut chunk = [0u8; 256];
-    let mut current: Vec<u8> = Vec::new();
-    let mut offset = 0u64;
-    let mut done = false;
-    let mut flush = |current: &mut Vec<u8>, done: &mut bool| {
-        if !*done {
-            let text = String::from_utf8_lossy(current);
-            *done = !line(text.trim_end_matches('\r'));
-        }
-        current.clear();
-    };
-    while !done && offset < MAX_FILE {
-        let Ok(n) = storage.read_at(path, offset, &mut chunk) else {
-            return;
-        };
-        if n == 0 {
-            break;
-        }
-        offset += n as u64;
-        for &byte in &chunk[..n] {
-            if byte == b'\n' {
-                flush(&mut current, &mut done);
-            } else if current.len() < MAX_LINE {
-                current.push(byte);
-            }
-        }
-    }
-    if !current.is_empty() {
-        flush(&mut current, &mut done);
-    }
-}
-
 /// Draws `text` in the middle of `look`'s area, e.g. how to add what
 /// a widget would show: in the body size where it fits, else small.
 fn draw_empty(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &widgets::Look, text: &str) {
@@ -236,32 +196,5 @@ mod tests {
         assert_eq!(Turns::load(&storage, &path).on(101, false), 2);
         Turns::turn(&storage, &path, 101, true);
         assert_eq!(Turns::load(&storage, &path), Turns { day: 101, turns: 1 });
-    }
-
-    #[test]
-    fn lines_are_read_a_little_at_a_time() {
-        let long = "x".repeat(2000);
-        let text = format!("first\r\n\nsecond line\n{long}\nlast");
-        let storage = MemoryStorage::new().with("f.txt", text.as_str());
-        let mut lines: Vec<String> = Vec::new();
-        each_line(&storage, "f.txt", &mut |line| {
-            lines.push(String::from(line));
-            true
-        });
-        assert_eq!(lines.len(), 5);
-        assert_eq!(lines[0], "first");
-        assert_eq!(lines[1], "");
-        assert_eq!(lines[2], "second line");
-        assert_eq!(lines[3].len(), 1024);
-        assert_eq!(lines[4], "last");
-        // Stopped at the second.
-        let mut count = 0;
-        each_line(&storage, "f.txt", &mut |_| {
-            count += 1;
-            count < 2
-        });
-        assert_eq!(count, 2);
-        // No file: no lines.
-        each_line(&storage, "none.txt", &mut |_| panic!("no lines"));
     }
 }

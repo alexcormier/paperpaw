@@ -10,15 +10,17 @@ use alloc::boxed::Box;
 use alloc::rc::Rc;
 use alloc::string::String;
 use alloc::vec::Vec;
+use core::ops::ControlFlow;
 
 use paperpaw_sdk::event::Event;
+use paperpaw_sdk::files::for_each_line;
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::ui::UiStyle;
 use paperpaw_sdk::widgets::{self, Align, Frame, Size, Widget, WidgetSpec, WidgetTarget};
 use paperpaw_sdk::{Canvas, Env, Id, Rect, RegisterError, Registrar, SettingSpec};
 
 use super::text::{self, FACES};
-use super::{Turns, changed, changes, data, each_line, frame_height, of_the_day, today};
+use super::{Turns, changed, changes, data, frame_height, of_the_day, today};
 use crate::showings::Showings;
 
 pub(super) const ID: Id = Id::new_static("widgets.quote");
@@ -183,9 +185,10 @@ fn quote_at(
     let from_shipped = shipped.map_or(0, |s| quotes_in(s).count());
     let mut from_own = 0;
     if let Some(own) = own {
-        each_line(storage, own, &mut |line| {
+        // No file of one's own: none of one's own.
+        let _ = for_each_line(storage, own, &mut |line| {
             from_own += usize::from(parse(line).is_some());
-            true
+            ControlFlow::Continue(())
         });
     }
     let total = from_shipped + from_own;
@@ -202,16 +205,16 @@ fn quote_at(
     }
     let mut found = None;
     let mut index = from_shipped;
-    each_line(storage, own?, &mut |line| {
+    let _ = for_each_line(storage, own?, &mut |line| {
         let Some(parsed) = parse(line) else {
-            return true;
+            return ControlFlow::Continue(());
         };
         if index == at {
             found = Some(quote(parsed));
-            return false;
+            return ControlFlow::Break(());
         }
         index += 1;
-        true
+        ControlFlow::Continue(())
     });
     found
 }
