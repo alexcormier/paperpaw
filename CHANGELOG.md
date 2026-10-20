@@ -6,6 +6,25 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Data that cannot be read is no longer written over: annotations, the
+  books opened last, the favourites and a book's details were taken for
+  empty when their file could not be read (a failing card, a file too
+  large, text saved in another encoding), and the next change wrote a
+  file with only that change. Now nothing is written then. A book's
+  details keep their values to a kilobyte and 32 tags, so they are
+  always read back (larger ones were written but never read, and the
+  book was read anew in every list). A UTF-8 byte order mark, as
+  Windows Notepad writes, is read past. SDK:
+  `files::load_for_update`, `files::load_text_for_update`,
+  `files::read_text`, `files::without_bom`,
+  `annotations::load_for_update`; `annotations::add`,
+  `annotations::save` and `library::save` say whether they kept what
+  they were given; `annotations::moved` (unused) is gone;
+  `StorageError::TooLarge` (what `read_file` says of a file over its
+  limit, before `Unsupported`) and `StorageError::InvalidData`;
+  `data::Format::load` tells a missing file from an unreadable one.
+  Annotations are read line by line, and where they are only drawn,
+  without their texts.
 - Library: a folder whose name ends inside a character, such as one
   named with two or three Chinese characters, no longer stops the
   library (the X4 restarted whenever the folder's parent or a catalog

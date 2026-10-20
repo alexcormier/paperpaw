@@ -167,11 +167,71 @@ pub fn delete(storage: &dyn Storage, path: &str) -> Result<(), StorageError> {
     }
 }
 
+/// The byte order mark some editors (e.g. Windows Notepad) put at the
+/// start of UTF-8 text.
+const BOM: &[u8] = b"\xEF\xBB\xBF";
+
+/// `data` without a UTF-8 byte order mark at its start.
+pub fn without_bom(data: &[u8]) -> &[u8] {
+    data.strip_prefix(BOM).unwrap_or(data)
+}
+
+/// The text file at `path` (at most `cap` bytes), without a byte order
+/// mark: [`StorageError::NotFound`] where there is none,
+/// [`StorageError::TooLarge`] over `cap`, [`StorageError::InvalidData`]
+/// where it is not UTF-8, any other error where it could not be read.
+pub fn read_text(storage: &dyn Storage, path: &str, cap: usize) -> Result<String, StorageError> {
+    text_of(crate::read_file(storage, path, cap)?)
+}
+
+fn text_of(mut data: Vec<u8>) -> Result<String, StorageError> {
+    if data.starts_with(BOM) {
+        data.drain(..BOM.len());
+    }
+    String::from_utf8(data).map_err(|_| StorageError::InvalidData)
+}
+
+/// What the file at `path` (at most `cap` bytes) holds before it is
+/// changed and written back, without a UTF-8 byte order mark: `None`
+/// where there is no such file (start from nothing), an error where there
+/// is one that could not be read (too large, a failing card). Write the
+/// file only after `Ok`: one written from an empty start after a failed
+/// read loses what it held.
+pub fn load_for_update(
+    storage: &dyn Storage,
+    path: &str,
+    cap: usize,
+) -> Result<Option<Vec<u8>>, StorageError> {
+    match crate::read_file(storage, path, cap) {
+        Ok(mut data) => {
+            if data.starts_with(BOM) {
+                data.drain(..BOM.len());
+            }
+            Ok(Some(data))
+        }
+        Err(StorageError::NotFound) => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+
+/// [`load_for_update`] for a text file:
+/// [`StorageError::InvalidData`] where it is not UTF-8 (e.g. saved in
+/// another encoding), so it is not written over.
+pub fn load_text_for_update(
+    storage: &dyn Storage,
+    path: &str,
+    cap: usize,
+) -> Result<Option<String>, StorageError> {
+    load_for_update(storage, path, cap)?
+        .map(text_of)
+        .transpose()
+}
+
 /// Reads the text file at `path` line by line as it streams from the
 /// storage, so lists of any length are read in little memory: `visit`
 /// gets each line without its line break (`\n` or `\r\n`, invalid UTF-8
-/// replaced) and says whether to go on. Lines are cut at [`MAX_LINE`]
-/// bytes.
+/// replaced, a byte order mark at the start left out) and says whether
+/// to go on. Lines are cut at [`MAX_LINE`] bytes.
 pub fn for_each_line(
     storage: &dyn Storage,
     path: &str,
@@ -180,11 +240,14 @@ pub fn for_each_line(
     let mut chunk = [0u8; 512];
     let mut line: Vec<u8> = Vec::new();
     let mut at = 0u64;
+    let mut first = true;
     let mut emit = |line: &mut Vec<u8>| {
         if line.last() == Some(&b'\r') {
             line.pop();
         }
-        let flow = visit(&String::from_utf8_lossy(line));
+        let text = if first { without_bom(line) } else { &line[..] };
+        first = false;
+        let flow = visit(&String::from_utf8_lossy(text));
         line.clear();
         flow
     };
@@ -234,6 +297,7 @@ pub fn size(bytes: u64, decimal: &str) -> String {
 mod tests {
     use super::*;
     use crate::MemoryStorage;
+    use crate::memory_storage::Unreadable;
 
     fn storage() -> MemoryStorage {
         MemoryStorage::new()
@@ -318,9 +382,39 @@ mod tests {
     }
 
     #[test]
+    fn files_to_update_tell_missing_from_unreadable() {
+        let s = MemoryStorage::new()
+            .with("a.ini", b"\xEF\xBB\xBFkey = \xC3\xA4".to_vec())
+            .with("ansi.ini", b"key = \xE4".to_vec());
+        assert_eq!(load_for_update(&s, "none.ini", 64), Ok(None));
+        assert_eq!(
+            load_for_update(&s, "a.ini", 64),
+            Ok(Some(b"key = \xC3\xA4".to_vec()))
+        );
+        assert_eq!(
+            load_text_for_update(&s, "a.ini", 64),
+            Ok(Some(String::from("key = \u{e4}")))
+        );
+        assert_eq!(read_text(&s, "a.ini", 64).as_deref(), Ok("key = \u{e4}"));
+        assert_eq!(load_for_update(&s, "a.ini", 4), Err(StorageError::TooLarge));
+        assert_eq!(
+            load_text_for_update(&s, "ansi.ini", 64),
+            Err(StorageError::InvalidData)
+        );
+        assert_eq!(read_text(&s, "none.ini", 64), Err(StorageError::NotFound));
+        assert_eq!(
+            load_for_update(&Unreadable(s), "a.ini", 64),
+            Err(StorageError::Io)
+        );
+        assert_eq!(without_bom(b"\xEF\xBB\xBFx"), b"x");
+        assert_eq!(without_bom(b"x"), b"x");
+    }
+
+    #[test]
     fn reads_lines_as_they_stream() {
         let long = "x".repeat(MAX_LINE + 600);
-        let text = format!("one\r\n\ntwo {long}\nthree");
+        // A byte order mark first, as Notepad writes.
+        let text = format!("\u{feff}one\r\n\ntwo {long}\nthree");
         let s = MemoryStorage::new().with("list.txt", text.into_bytes());
         let mut lines = Vec::new();
         for_each_line(&s, "list.txt", &mut |line| {

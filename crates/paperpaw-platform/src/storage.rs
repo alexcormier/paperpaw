@@ -24,6 +24,12 @@ pub enum StorageError {
     Full,
     /// Any other I/O failure.
     Io,
+    /// The file is larger than the reader takes (e.g. a whole file read
+    /// into memory).
+    TooLarge,
+    /// The file is there but does not hold what was asked for, e.g. text
+    /// that is not UTF-8.
+    InvalidData,
 }
 
 impl fmt::Display for StorageError {
@@ -34,6 +40,8 @@ impl fmt::Display for StorageError {
             StorageError::Unsupported => "not supported",
             StorageError::Full => "storage full",
             StorageError::Io => "input/output error",
+            StorageError::TooLarge => "file too large",
+            StorageError::InvalidData => "invalid data",
         })
     }
 }
