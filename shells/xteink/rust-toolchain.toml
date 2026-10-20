@@ -1,0 +1,8 @@
+# The X4's Rust, pinned: native code plugins run only on firmware built
+# by the same compiler (ADR 0024), so a release names it. The X4 Pro and
+# the X4 Classic build with espup's `esp` toolchain (`cargo +esp`), whose
+# version `versions.env` names. Both are raised by hand, for a release.
+[toolchain]
+channel = "1.99.0"
+components = ["rustfmt", "clippy"]
+targets = ["riscv32imc-unknown-none-elf"]
