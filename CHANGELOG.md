@@ -6,6 +6,26 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Reading (PLANNING T1 to T6), after a comparison with CrossPoint,
+  CrossInk and KOReader: holding a page button goes a chapter on or
+  back, and *Next chapter* and *Previous chapter* can be put on any
+  button or gesture; the X4's front buttons Left and Right turn pages
+  in a book, as they did nothing there; *Swap the page buttons* under
+  Controls turns them the other way round with one switch; *Bookmark*
+  sits in the reader's bar, three presses with buttons instead of five;
+  two status items show the page in the chapter (5 / 25) and the pages
+  left in it. Going a chapter on now goes to the first that begins on a
+  later page, and skimming goes chapter by chapter also through parts.
+  Fixed: a page back after a jump (contents, skimming, a chapter) went
+  to the page read before the jump.
+- Settings: rarely changed reading settings (reopening the last book,
+  footnotes, the seconds between pages turned by themselves, the status
+  lines' distance from the edge, replaced words, the dictionary folder,
+  keeping words looked up, the language to translate into, the corner
+  bookmark) are at the advanced level; those about taps and swipes show
+  only on touch screens; the full refresh every so many pages is basic.
+- SDK: `MenuNeed::Touch` for menu entries and settings that need a
+  touch screen; `settings::SWAP_PAGE_BUTTONS`.
 - Rules: a rule can apply when the battery reaches a level (80 %, 90 %,
   full or another), once each time it gets there and not again while
   the level wavers around it; with *Only if … While charging* it says
