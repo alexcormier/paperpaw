@@ -95,6 +95,7 @@ impl Kernel {
             required_for: RequiredFor::default(),
             kind: paperpaw_sdk::PluginKind::BuiltIn,
             problem: None,
+            update: None,
         });
     }
 
@@ -572,9 +573,10 @@ impl Kernel {
                 format!("{folder}: not the plugin `{id}`; not installed"),
             );
         }
-        if let Err(problem) = data_plugin::load_folder_as(storage.as_ref(), folder, id.as_str()) {
-            return refuse(self, problem);
-        }
+        let version = match data_plugin::load_folder_as(storage.as_ref(), folder, id.as_str()) {
+            Ok(plugin) => plugin.manifest().version,
+            Err(problem) => return refuse(self, problem),
+        };
         // Every version of it there is: loaded, switched off, or refused at
         // start.
         let mut old: Vec<String> = self.data_folder(id).into_iter().collect();
@@ -612,13 +614,25 @@ impl Kernel {
         }
         // The new version in place: the old ones go, what was chosen from
         // them stays where the new one offers it too.
-        if self.shared.plugins.get(id.as_str()).is_some() {
-            self.unload_plugin(id);
-        }
         for path in old.iter().filter(|path| **path != target) {
             let _ = storage.remove_dir_all(path);
         }
         let _ = storage.remove_dir_all(&aside);
+        // A code plugin's code runs until the restart: the new version
+        // takes over then.
+        if let Some(info) = self.shared.plugins.get_mut(id.as_str())
+            && info.kind == paperpaw_sdk::PluginKind::Code
+            && info.state == PluginState::Running
+        {
+            info.update = Some(version);
+            info.enabled = true;
+            self.shared.data_folders.retain(|(p, _)| p != id);
+            self.shared.data_folders.push((id.clone(), target));
+            return self.plugins_changed();
+        }
+        if self.shared.plugins.get(id.as_str()).is_some() {
+            self.unload_plugin(id);
+        }
         // Changed even where the new one does not load: the old ones are
         // gone.
         self.register_folder(&target);

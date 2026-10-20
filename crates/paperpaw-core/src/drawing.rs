@@ -298,7 +298,7 @@ impl Kernel {
     }
 
     /// What the screens shown are, part by part (rows, buttons, headings
-    /// with their text), as their drawing tells (see
+    /// with their text, a notice over them), as their drawing tells (see
     /// [`paperpaw_sdk::semantics`]): for reading the screen aloud,
     /// automation and tests. Draws them once, aside.
     pub fn describe(&mut self) -> Vec<paperpaw_sdk::semantics::Part> {
@@ -336,6 +336,11 @@ impl Kernel {
                     &self.hint.held,
                     None,
                 );
+            }
+            // A message over everything, last.
+            if let Some((notice, _)) = &mut self.notice {
+                let area = notice.region(&env).unwrap_or(bounds);
+                notice.draw(&mut canvas.clipped(area), &env);
             }
         }
         paperpaw_sdk::semantics::parts(described)

@@ -122,6 +122,10 @@ pub struct PluginInfo {
     pub kind: PluginKind,
     /// Why it does not run, where its code is the reason.
     pub problem: Option<PluginProblem>,
+    /// A newer version installed while its code runs
+    /// ([`Command::InstallPlugin`](crate::Command::InstallPlugin)): it
+    /// takes over at the next start.
+    pub update: Option<crate::Version>,
 }
 
 impl PluginInfo {
@@ -146,6 +150,9 @@ impl PluginInfo {
 
     /// Whether a restart is needed to apply the user's choice.
     pub fn restart_needed(&self) -> bool {
+        if self.update.is_some() {
+            return true;
+        }
         match self.state {
             PluginState::Running => !self.enabled,
             PluginState::Off => self.enabled,
@@ -240,6 +247,7 @@ mod tests {
             required_for: RequiredFor::default(),
             kind: PluginKind::BuiltIn,
             problem: None,
+            update: None,
         }
     }
 

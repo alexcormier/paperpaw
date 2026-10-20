@@ -243,6 +243,11 @@ fn details(env: &Env<'_>, info: &PluginInfo) -> String {
             "plugin-manager.needed-for",
             &[("what", Arg::Str(&what.join(", ")))],
         ))
+    } else if let Some(update) = info.update {
+        Some(i18n.format(
+            "plugin-manager.updates-after-restart",
+            &[("version", Arg::Str(&update.to_string()))],
+        ))
     } else if info.restart_needed() {
         Some(
             i18n.tr(if info.enabled {
