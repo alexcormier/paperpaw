@@ -243,6 +243,8 @@ pub struct App {
     pub kernel: Kernel,
     pub storage: Shared,
     pub now: u64,
+    /// The screen as last drawn: whether each pixel is black, row by row.
+    ink: Vec<bool>,
 }
 
 impl App {
@@ -260,10 +262,12 @@ impl App {
             .build()
             .unwrap();
         let effects = kernel.start(Instant(now));
+        let display = device.display;
         let mut app = Self {
             kernel,
             storage,
             now,
+            ink: vec![false; usize::from(display.width) * usize::from(display.height)],
         };
         app.settle(effects);
         app
@@ -455,9 +459,40 @@ impl App {
         self.tap(Point::new(x, i32::from(header.y + header.height / 2)));
     }
 
+    /// Draws what changed, kept in [`App::dark`].
+    pub fn render(&mut self) {
+        let width = usize::from(self.kernel.device().display.width);
+        let ink = &mut self.ink;
+        self.kernel.render(&mut |y, view| {
+            for row in 0..view.height {
+                for x in 0..view.width {
+                    let at = usize::from(y + row) * width + usize::from(x);
+                    if let Some(pixel) = ink.get_mut(at) {
+                        *pixel = view.pixel(x, row) == paperpaw_platform::Color::BLACK;
+                    }
+                }
+            }
+        });
+    }
+
+    /// Whether the pixel at `x`, `y` shows black, as drawn now.
+    pub fn dark(&mut self, x: i32, y: i32) -> bool {
+        self.render();
+        let display = self.kernel.device().display;
+        let (Ok(x), Ok(y)) = (usize::try_from(x), usize::try_from(y)) else {
+            return false;
+        };
+        x < usize::from(display.width)
+            && self
+                .ink
+                .get(y * usize::from(display.width) + x)
+                .copied()
+                .unwrap_or(false)
+    }
+
     /// The parts the screens shown describe, as drawn now.
     pub fn parts(&mut self) -> Vec<Part> {
-        self.kernel.render(&mut |_, _| {});
+        self.render();
         self.kernel.describe()
     }
 
