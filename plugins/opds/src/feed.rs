@@ -658,3 +658,6 @@ mod tests {
         assert_eq!(feed.entries[3].feed.as_deref(), Some("https://a.org/3"));
     }
 }
+
+#[cfg(test)]
+mod hostile_tests;

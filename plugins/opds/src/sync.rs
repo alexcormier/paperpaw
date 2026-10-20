@@ -399,3 +399,6 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+mod naming_tests;
