@@ -231,6 +231,7 @@ impl Harness {
             native: None,
             power: paperpaw_sdk::power::Power::normal(),
             work: paperpaw_sdk::work::WorkStates::none(),
+            reader: true,
             clipboard: false,
             slots: &[],
             screens: &[],

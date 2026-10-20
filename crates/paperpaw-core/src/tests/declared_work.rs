@@ -84,6 +84,18 @@ impl Plugin for WorkPlugin {
                 log.borrow_mut().push(alloc::format!("changed {id}"));
             }),
         )?;
+        // Says whose doing it is handling, run as an action.
+        let log = self.log.clone();
+        r.add_action(
+            ActionSpec::new(Id::new_static("wk.who"), "who").handler(move |env, _| {
+                log.borrow_mut()
+                    .push(alloc::format!("reader {}", env.reader));
+            }),
+        )?;
+        r.subscribe(
+            Id::new_static("wk.fire"),
+            Box::new(|_, _, out| out.push(Command::RunAction(Id::new_static("wk.who")))),
+        )?;
         // Work that fetches: its request goes out as it runs.
         r.subscribe(
             Id::new_static("wk.fetch"),
@@ -689,14 +701,29 @@ fn offline_lets_out_only_what_the_reader_went_online_for() {
     kernel.finish();
     assert_eq!(*log.borrow(), ["answered offline"]);
     // The reader, without going online: refused too.
-    kernel.reader = true;
+    kernel.shared.reader = true;
     kernel.apply(request());
     kernel.finish();
     assert_eq!(log.borrow()[1], "answered offline");
     // Gone online on the screen in front: it goes out.
-    kernel.reader = true;
+    kernel.shared.reader = true;
     kernel.apply(Command::GoOnline);
     kernel.apply(request());
     kernel.finish();
     assert!(kernel.io.http.busy(), "{:?}", log.borrow());
+}
+
+#[test]
+fn plugins_know_whether_the_reader_is_waiting() {
+    let log = log();
+    let mut kernel = kernel(&log, false);
+    kernel.run_action(Instant(5), Id::new_static("wk.who"));
+    // The same action run by background work (a timer, as a rule's).
+    declare(
+        &mut kernel,
+        6,
+        Work::at(Id::new_static("wk.fire"), Instant(10)),
+    );
+    kernel.tick(Instant(10));
+    assert_eq!(*log.borrow(), ["reader true", "reader false"]);
 }

@@ -2038,6 +2038,8 @@ pub paperpaw_sdk::usage::PluginUsage::pixels: u64
 pub paperpaw_sdk::usage::PluginUsage::plugin: paperpaw_sdk::Id
 pub paperpaw_sdk::usage::PluginUsage::read: u64
 pub paperpaw_sdk::usage::PluginUsage::refreshes: [u32; 3]
+pub paperpaw_sdk::usage::PluginUsage::refused: u32
+pub paperpaw_sdk::usage::PluginUsage::requests: u32
 pub paperpaw_sdk::usage::PluginUsage::shown_ms: u64
 pub paperpaw_sdk::usage::PluginUsage::written: u64
 impl core::default::Default for paperpaw_sdk::usage::PluginUsage
@@ -2484,6 +2486,7 @@ pub fn paperpaw_sdk::work::Work::network(impl core::convert::Into<paperpaw_sdk::
 pub fn paperpaw_sdk::work::Work::new(impl core::convert::Into<paperpaw_sdk::Id>) -> Self
 pub fn paperpaw_sdk::work::Work::optional(self) -> Self
 pub fn paperpaw_sdk::work::Work::retry(self, u32, u8) -> Self
+pub fn paperpaw_sdk::work::Work::when_cheap(impl core::convert::Into<paperpaw_sdk::Id>, core::time::Duration) -> Self
 pub fn paperpaw_sdk::work::Work::with(self, paperpaw_sdk::Params) -> Self
 pub fn paperpaw_sdk::work::Work::within(self, core::time::Duration) -> Self
 pub struct paperpaw_sdk::work::WorkRefused
@@ -2917,6 +2920,7 @@ pub paperpaw_sdk::Env::now: paperpaw_platform::input::Instant
 pub paperpaw_sdk::Env::plugins: &'a paperpaw_sdk::Plugins
 pub paperpaw_sdk::Env::power: &'a paperpaw_sdk::power::Power
 pub paperpaw_sdk::Env::random: paperpaw_sdk::random::Random
+pub paperpaw_sdk::Env::reader: bool
 pub paperpaw_sdk::Env::screens: &'a [(paperpaw_sdk::Id, alloc::borrow::Cow<'static, str>)]
 pub paperpaw_sdk::Env::secrets: &'a paperpaw_sdk::secrets::Secrets
 pub paperpaw_sdk::Env::services: &'a paperpaw_sdk::services::Services

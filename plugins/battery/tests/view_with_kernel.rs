@@ -283,3 +283,68 @@ fn a_hostile_log_shows_a_view_without_panicking() {
     let rows = device.view();
     assert!(has(&rows, "0 % · 0.00 V"), "{rows:?}");
 }
+
+/// Makes a request each time its action runs.
+struct Fetcher;
+
+impl paperpaw_sdk::Plugin for Fetcher {
+    fn manifest(&self) -> paperpaw_sdk::Manifest {
+        paperpaw_sdk::Manifest {
+            id: Id::new_static("net"),
+            name: "Fetcher".into(),
+            description: "".into(),
+            version: paperpaw_sdk::Version::new(1, 0, 0),
+            sdk: paperpaw_sdk::SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NETWORK,
+        }
+    }
+
+    fn register(&self, r: &mut paperpaw_sdk::Registrar) -> Result<(), paperpaw_sdk::RegisterError> {
+        r.add_action(
+            paperpaw_sdk::ActionSpec::new(Id::new_static("net.go"), "go").handler(|_, out| {
+                out.push(paperpaw_sdk::Command::Http(paperpaw_sdk::HttpRequest::get(
+                    "https://example.org/",
+                    Id::new_static("net.answered"),
+                )));
+            }),
+        )
+    }
+}
+
+#[test]
+fn the_view_shows_what_each_plugin_did_with_the_network() {
+    let kernel = Kernel::builder(X4)
+        .storage(MemoryStorage::new())
+        .user_config("[core]\nlanguage = en\n")
+        .network(true)
+        .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
+        .plugin(Battery)
+        .plugin(Fetcher)
+        .build()
+        .unwrap();
+    let mut device = Device { kernel, now: 0 };
+    let effects = device.kernel.start(Instant(0));
+    device.settle(effects);
+    for _ in 0..2 {
+        device.now += 100;
+        let effects = device
+            .kernel
+            .run_action(Instant(device.now), Id::new_static("net.go"));
+        device.settle(effects);
+    }
+    // The reader switches its network off: the next request is held back.
+    device.now += 100;
+    device
+        .kernel
+        .set_setting(Instant(device.now), "core.network.net", "off")
+        .unwrap();
+    device.now += 100;
+    let effects = device
+        .kernel
+        .run_action(Instant(device.now), Id::new_static("net.go"));
+    device.settle(effects);
+    let rows = device.view();
+    assert!(has(&rows, "Network this time awake"), "{rows:?}");
+    assert!(has(&rows, "2 requests"), "{rows:?}");
+    assert!(has(&rows, "1 held back · network off"), "{rows:?}");
+}

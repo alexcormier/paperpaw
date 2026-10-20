@@ -1014,6 +1014,7 @@ mod tests {
                 native: None,
                 power: crate::power::Power::normal(),
                 work: crate::work::WorkStates::none(),
+                reader: true,
                 clipboard: false,
                 slots: &[],
                 screens: &[],

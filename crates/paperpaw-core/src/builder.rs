@@ -404,6 +404,7 @@ impl KernelBuilder {
                 native: None,
                 power: paperpaw_sdk::power::Power::default(),
                 work_states: paperpaw_sdk::work::WorkStates::default(),
+                reader: false,
                 clipboard: String::new(),
                 system_clipboard: false,
                 slots: Vec::new(),
@@ -463,7 +464,6 @@ impl KernelBuilder {
             subscriptions: Vec::new(),
             show_pending: false,
             notice: None,
-            reader: false,
             works: work::Queue::new(match self.device.memory {
                 paperpaw_platform::MemoryClass::Small => 8,
                 paperpaw_platform::MemoryClass::Large => 32,

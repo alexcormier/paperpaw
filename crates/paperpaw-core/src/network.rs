@@ -38,7 +38,7 @@ impl Kernel {
         let _running = self.shared.meter.enter(meter::CORE);
         self.now = now;
         // While the reader waits for the network, what Wi-Fi says is theirs.
-        self.reader = self.io.http.reader_waits();
+        self.shared.reader = self.io.http.reader_waits();
         let Some(wifi) = &mut self.shared.wifi else {
             return self.finish();
         };
@@ -150,7 +150,7 @@ impl Kernel {
         let _running = self.shared.meter.enter(meter::CORE);
         self.now = now;
         // Servers and sockets are the reader's connection.
-        self.reader = true;
+        self.shared.reader = true;
         let storage = &*self.shared.storage;
         self.io
             .sockets
@@ -163,7 +163,7 @@ impl Kernel {
         let _running = self.shared.meter.enter(meter::CORE);
         self.now = now;
         // Servers and sockets are the reader's connection.
-        self.reader = true;
+        self.shared.reader = true;
         let storage = &*self.shared.storage;
         self.io
             .servers
@@ -176,7 +176,7 @@ impl Kernel {
         let _running = self.shared.meter.enter(meter::CORE);
         self.now = now;
         // The answer to the reader's request is the reader's.
-        self.reader = self.io.http.of_reader(response.id);
+        self.shared.reader = self.io.http.of_reader(response.id);
         let storage = &*self.shared.storage;
         self.io
             .http

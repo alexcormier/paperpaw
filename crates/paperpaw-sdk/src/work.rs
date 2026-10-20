@@ -245,6 +245,17 @@ impl Work {
         }
     }
 
+    /// Network work no reader waits for, e.g. an action a rule ran: at
+    /// the next moment the radio is on anyway, on waking or charging, at
+    /// the latest `within` from now (longer while saving), held in
+    /// Offline. For the reader's own doing, act at once instead
+    /// ([`Env::reader`](crate::Env)).
+    pub fn when_cheap(id: impl Into<Id>, within: Duration) -> Self {
+        Self::network(id)
+            .within(within)
+            .at_moments(Moments::WAKE | Moments::ONLINE | Moments::CHARGING)
+    }
+
     /// A timer: the event at `at`, exactly, whatever screen is open.
     pub fn at(id: impl Into<Id>, at: Instant) -> Self {
         Self {

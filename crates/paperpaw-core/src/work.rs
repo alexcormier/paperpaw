@@ -703,13 +703,13 @@ impl Kernel {
         }
         // Background work, whatever call brought it due.
         let ran = !due.is_empty() || stepped;
-        if ran || !self.output.commands.is_empty() {
-            let reader = mem::replace(&mut self.reader, false);
+        if ran {
+            let reader = mem::replace(&mut self.shared.reader, false);
             for (id, params) in due {
                 self.emit(&id, &params);
             }
             self.run_commands();
-            self.reader = reader;
+            self.shared.reader = reader;
         }
         ran || !self.works.moments.is_empty()
     }
@@ -744,15 +744,17 @@ impl Kernel {
             Refusal::new(Reason::NotDeclared, Retry::Never)
         } else if self.works.network_off(&owner) {
             Refusal::new(Reason::NetworkOff, Retry::Never)
-        } else if offline && !(self.reader && self.went_online()) {
+        } else if offline && !(self.shared.reader && self.went_online()) {
             // Offline: only what the reader went online for goes out.
             Refusal::new(Reason::Offline, Retry::WhenAllowed)
-        } else if manual && !self.reader {
+        } else if manual && !self.shared.reader {
             // Only when the reader asks, for this plugin.
             Refusal::new(Reason::Saving, Retry::WhenAllowed)
         } else {
+            self.shared.meter.network(&owner, false);
             return Some(command);
         };
+        self.shared.meter.network(&owner, true);
         let reason = String::from(refusal.reason.as_str());
         let (event, params) = match command {
             Command::Http(request) => {
