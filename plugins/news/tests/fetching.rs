@@ -1,6 +1,7 @@
 //! Fetching feeds with the real kernel, the servers' answers canned: each
-//! feed becomes a book in `News` named after its title, failures are
-//! counted and the rest fetched, `feeds.txt` and the headlines stay one
+//! feed becomes a book in `News` named after its title and marked with
+//! its address, failures (and answers that are no feed) are counted and
+//! the rest fetched, `feeds.txt` and the headlines stay one
 //! line a feed whatever the titles hold, addresses are checked when
 //! added, removing a feed removes its book, and hostile feeds (scripts,
 //! `javascript:` links, entity bombs, deep nesting, traversal in titles)
@@ -245,11 +246,42 @@ impl Harness {
         self.notices.borrow().last().cloned().unwrap_or_default()
     }
 
-    fn page(&self, name: &str) -> String {
+    /// The names of the books in `News`, without the marks of their
+    /// feeds' addresses (each has one).
+    fn books(&self) -> Vec<String> {
         self.storage
-            .text(&format!("News/{name}.html"))
-            .unwrap_or_else(|| panic!("no News/{name}.html in {:?}", self.storage.names("News")))
+            .names("News")
+            .iter()
+            .map(|file| {
+                let name = without_mark(file);
+                assert!(name.is_some(), "{file} has no mark");
+                name.unwrap_or_default().to_string()
+            })
+            .collect()
     }
+
+    /// The book of the feed named `name`: `News/<name> (<mark>).html`.
+    fn book(&self, name: &str) -> String {
+        let names = self.storage.names("News");
+        let found: Vec<&String> = names
+            .iter()
+            .filter(|file| without_mark(file) == Some(name))
+            .collect();
+        assert_eq!(found.len(), 1, "{name} in {names:?}");
+        format!("News/{}", found[0])
+    }
+
+    fn page(&self, name: &str) -> String {
+        self.storage.text(&self.book(name)).unwrap()
+    }
+}
+
+/// A book's file name without `.html` and the mark of its feed's address,
+/// six hex digits (`Daily Paper (3fa9c2).html` is "Daily Paper"); `None`
+/// without a mark.
+fn without_mark(file: &str) -> Option<&str> {
+    let (name, mark) = file.strip_suffix(").html")?.rsplit_once(" (")?;
+    (mark.len() == 6 && mark.bytes().all(|b| b.is_ascii_hexdigit())).then_some(name)
 }
 
 fn rss(title: &str, items: &[(&str, &str)]) -> String {
@@ -295,11 +327,9 @@ fn every_feed_becomes_a_book_named_after_its_title() {
     h.answer(&second, 200, &atom("Atom title", &["Storm", "Moon"]));
     assert!(h.requests().is_empty());
     assert_eq!(h.told(), "2 feeds fetched.");
-    // The first named after its feed's title, the second keeps its name.
-    assert_eq!(
-        h.storage.names("News"),
-        ["Daily Paper.html", "My name.html"]
-    );
+    // The first named after its feed's title, the second keeps its name;
+    // each marked with its address.
+    assert_eq!(h.books(), ["Daily Paper", "My name"]);
     assert!(h.page("Daily Paper").contains("<h2>Budget agreed</h2>"));
     assert!(h.page("My name").contains("<h2>Moon</h2>"));
     assert_eq!(
@@ -308,9 +338,10 @@ fn every_feed_becomes_a_book_named_after_its_title() {
     );
     // The headlines of the feed fetched last come first.
     let headlines = h.storage.text(HEADLINES).unwrap();
+    let (mine, daily) = (h.book("My name"), h.book("Daily Paper"));
     assert_eq!(
         headlines,
-        "Storm\tNews/My name.html\nMoon\tNews/My name.html\nBudget agreed\tNews/Daily Paper.html"
+        format!("Storm\t{mine}\nMoon\t{mine}\nBudget agreed\t{daily}")
     );
     // What was loading is not left behind.
     assert_eq!(
@@ -331,7 +362,7 @@ fn failures_are_counted_and_the_rest_fetched() {
     let c = h.request();
     h.answer(&c, 200, &rss("C", &[("One", "x")]));
     assert!(h.requests().is_empty());
-    assert_eq!(h.storage.names("News"), ["C.html"]);
+    assert_eq!(h.books(), ["C"]);
     assert_eq!(h.told(), "1 fetched, 2 could not be fetched.");
 }
 
@@ -348,7 +379,6 @@ fn a_failed_fetch_keeps_the_book_of_the_last_one() {
 }
 
 #[test]
-#[ignore = "bug: an answer that is no feed (e.g. a Wi-Fi login page) replaces the news with an empty book"]
 fn an_answer_that_is_no_feed_keeps_the_book_of_the_last_one() {
     let mut h = Harness::new("https://a.example/1\tA\n");
     h.run(FETCH);
@@ -367,7 +397,6 @@ fn an_answer_that_is_no_feed_keeps_the_book_of_the_last_one() {
 }
 
 #[test]
-#[ignore = "bug: feeds whose titles shorten to the same name share one book, the last fetched replaces the other"]
 fn feeds_with_the_same_short_title_keep_books_of_their_own() {
     let mut h = Harness::new("https://spiegel.example/a\t\nhttps://spiegel.example/b\t\n");
     h.run(FETCH);

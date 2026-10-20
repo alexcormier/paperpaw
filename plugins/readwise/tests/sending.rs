@@ -244,8 +244,8 @@ fn every_answer_is_told() {
     for (status, said) in [
         (200, "2 highlights sent"),
         (0, "cannot be reached"),
-        (500, "could not be sent"),
-        (429, "could not be sent"),
+        (500, "Not all highlights could be sent"),
+        (429, "Not all highlights could be sent"),
     ] {
         let mut h = Harness::with_token("t");
         let calls = h.export(NOTES);
@@ -255,25 +255,35 @@ fn every_answer_is_told() {
     }
 }
 
+/// Notes that are gone or hold no highlight send nothing and wait no
+/// more; notes of any length are read a line at a time and sent from a
+/// file, a highlight longer than Readwise takes cut.
 #[test]
-fn notes_that_are_missing_or_empty_send_nothing() {
+fn notes_missing_or_empty_send_nothing_and_long_ones_are_sent() {
     let mut secrets = Secrets::default();
     secrets.apply(SecretChange::keep(SECRET, "", "t"));
     let storage = MemoryStorage::new()
         .with(FILE, secrets.encode().into_bytes())
         .with("Notes/empty.md", "# Empty\n\n## Bookmarks\n\n- 5 %: x\n")
         .with("Notes/binary.md", vec![0xff_u8, 0xfe, 0, 1, 2])
-        .with("Notes/huge.md", "> x\n".repeat(100_000));
+        .with(
+            "Notes/huge.md",
+            format!("# Long\n\n## Highlights\n\n{}", "> x\n".repeat(100_000)),
+        );
     let mut h = Harness::new(storage, true);
-    assert!(h.export("Notes/missing.md").is_empty());
-    assert!(h.told().contains("could not be sent"), "{}", h.told());
-    for path in ["Notes/empty.md", "Notes/binary.md"] {
+    for path in ["Notes/missing.md", "Notes/empty.md", "Notes/binary.md"] {
         assert!(h.export(path).is_empty(), "{path}");
         assert!(h.told().contains("no highlights"), "{path}: {}", h.told());
     }
-    // Larger than notes are: not read at all.
-    assert!(h.export("Notes/huge.md").is_empty());
-    assert!(h.told().contains("could not be sent"), "{}", h.told());
+    let calls = h.export("Notes/huge.md");
+    assert_eq!(calls.len(), 1, "{calls:?}");
+    assert!(calls[0].body.is_none());
+    let file = calls[0].body_from.as_deref().expect("sent from a file");
+    let size = h.kernel.storage().size(file).unwrap();
+    // 8191 bytes of text at most, each line break escaped in two.
+    assert!(size < 2 * 8191 + 1000, "{size}");
+    h.answer(&calls[0], 200);
+    assert_eq!(h.told(), "1 highlight sent to Readwise.");
 }
 
 #[test]

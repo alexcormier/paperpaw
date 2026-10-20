@@ -85,7 +85,6 @@ fn deep_nesting_in_the_list_is_no_harm() {
 }
 
 #[test]
-#[ignore = "bug: deeply nested lists take time quadratic in their depth (paperpaw_json::stream copies the path at every level)"]
 fn very_deep_nesting_is_read_quickly() {
     // 100 KB from a hostile server: on the X4 this must not take long.
     let storage = nested(50_000);

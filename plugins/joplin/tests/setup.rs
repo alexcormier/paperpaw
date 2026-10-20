@@ -485,7 +485,6 @@ fn hostile_info_files_leave_the_notes_waiting() {
 }
 
 #[test]
-#[ignore = "bug: JSON nested deeply takes time quadratic in its depth to read (paperpaw-json stream clones the path at each level)"]
 fn a_deeply_nested_info_file_is_read_quickly() {
     // 100 KB: a server, or anyone between, can answer with this.
     let deep = format!("{}{}", "[".repeat(50_000), "]".repeat(50_000));

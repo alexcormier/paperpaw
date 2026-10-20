@@ -1,7 +1,8 @@
 //! The list of catalogs and a catalog's details with the real kernel:
 //! adding one by its address, editing its fields as the keyboard answers,
 //! switching sync and WebDAV, removing one; `catalogs.txt` written and
-//! read back, odd lines in it skipped, and passwords kept with the other
+//! read back, odd lines in it skipped, a list that is no text left as it
+//! is, and passwords kept with the other
 //! secrets, never in the list.
 
 // Tests panic on purpose when something is wrong.
@@ -235,18 +236,33 @@ fn odd_lines_in_the_list_are_skipped() {
     text.extend_from_slice(b"No address\t\tuser\n");
     text.extend_from_slice(b"Only a name\n");
     text.extend_from_slice(b"\n\t\t\t\t\t\t\n");
-    text.extend_from_slice(b"Bad \xff\xfe bytes\thttps://bad.example/\n");
+    text.extend_from_slice("Bücher \u{1f4da}\thttps://unicode.example/\n".as_bytes());
     text.extend_from_slice(b"Extra\thttps://extra.example/\tu\t\tf\tsync\twebdav\tmore\tfields\n");
     let mut h = Harness::new(Shared::with(&[(CATALOGS, &text)]));
     h.run(OPEN);
     let shown = h.said();
     assert!(shown.contains("Good one"), "{shown}");
-    assert!(shown.contains("Bad"), "{shown}");
+    assert!(shown.contains("Bücher"), "{shown}");
     assert!(shown.contains("Extra"), "{shown}");
     assert!(!shown.contains("No address"), "{shown}");
     assert!(!shown.contains("Only a name"), "{shown}");
     // A marked catalog shows *Sync catalogs* first.
     assert!(shown.starts_with("Catalogs Sync catalogs"), "{shown}");
+}
+
+/// A list that is no UTF-8 text (saved in another encoding, or damaged)
+/// is not read, says so, and is never saved over: its catalogs would be
+/// lost.
+#[test]
+fn a_list_that_cannot_be_read_says_so_and_is_kept() {
+    let text = b"Good one\thttps://good.example/opds\nBad \xff\xfe bytes\thttps://bad.example/\n";
+    let mut h = Harness::new(Shared::with(&[(CATALOGS, text)]));
+    h.run(OPEN);
+    let shown = h.said();
+    assert!(shown.contains("could not be read"), "{shown}");
+    assert!(!shown.contains("Good one"), "{shown}");
+    h.send("opds.address", typed("https://new.example/opds"));
+    assert_eq!(h.storage.0.get(CATALOGS).unwrap(), text);
 }
 
 #[test]

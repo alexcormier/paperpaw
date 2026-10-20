@@ -228,16 +228,17 @@ fn the_statistics_opened_while_reading_include_the_page_being_read() {
     let shown = app.shown();
     assert!(shown.contains("This book\n"), "{shown}");
     assert!(shown.contains("Today\n2 min\n1 page\n"), "{shown}");
-    // And reading goes on from there.
+    // And reading goes on from there: the statistics opened a tenth of a
+    // second after 250 s, so the next stay lasts 29.9 s, counted in whole
+    // seconds as the device's clock measures it.
     app.turned(280, 2, 100);
     let stays: Vec<u16> = common::stays(&app.storage).iter().map(|s| s.3).collect();
-    assert_eq!(stays, [120, 30]);
+    assert_eq!(stays, [120, 29]);
 }
 
-/// `books.ini` larger than the plugin reads (1 MiB) reads as no books;
-/// a book opened then writes the file anew with that book alone.
+/// `books.ini` of over 1 MiB is read line by line like any other: a book
+/// opened then is added to all the others, none lost.
 #[test]
-#[ignore = "bug: a books.ini over 1 MiB is read as empty and rewritten with one book"]
 fn many_books_are_kept_when_another_is_opened() {
     let mut text = String::new();
     for id in 1..=4000 {

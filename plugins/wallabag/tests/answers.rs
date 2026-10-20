@@ -547,7 +547,6 @@ fn articles_read_to_the_end_are_noted_and_archived_even_after_a_failure() {
 }
 
 #[test]
-#[ignore = "bug: an unread article fetched before is deleted once newer ones push it out of the thirty listed"]
 fn unread_articles_beyond_the_thirty_listed_keep_their_books() {
     let mut h = Harness::new();
     let first: Vec<(String, String)> = (1..=30)

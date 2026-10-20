@@ -69,6 +69,16 @@ fn titles(app: &App) -> Vec<String> {
         .collect()
 }
 
+/// The files kept of the last uploads (`statistics.sqlite3.<key>.sync`,
+/// one for the folder and user set).
+fn last_uploads(app: &App) -> Vec<String> {
+    app.storage
+        .files()
+        .into_iter()
+        .filter(|f| f.starts_with("statistics.sqlite3.") && f.ends_with(".sync"))
+        .collect()
+}
+
 fn header<'a>(call: &'a HttpCall, name: &str) -> Option<&'a str> {
     call.headers
         .iter()
@@ -142,12 +152,14 @@ fn the_first_sync_uploads_what_is_here() {
     app.press("confirm");
     assert!(app.requests().is_empty());
 
-    // Nothing there yet: what is here goes up, without a condition.
+    // Nothing there yet: what is here goes up, unless a file came there
+    // meanwhile.
     let requests = app.answer(get, 404, b"Not Found", None);
     assert_eq!(requests.len(), 1);
     let put = &requests[0];
     assert_eq!((put.method.as_str(), put.url.as_str()), ("PUT", REMOTE));
     assert_eq!(header(put, "If-Match"), None);
+    assert_eq!(header(put, "If-None-Match"), Some("*"));
     assert_eq!(
         header(put, "Content-Type"),
         Some("application/octet-stream")
@@ -159,13 +171,13 @@ fn the_first_sync_uploads_what_is_here() {
     assert!(app.answer(put, 201, b"", None).is_empty());
     assert!(app.shown().contains("Synced: 2 books."), "{}", app.shown());
     // The statistics here are what they were; what went up is kept to
-    // compare with next time.
+    // compare with next time, for this folder and user.
     assert_eq!(common::stays(&app.storage), before);
     assert_eq!(titles(&app), ["Anna Karenina", "Effi Briest"]);
+    let kept = last_uploads(&app);
+    assert_eq!(kept.len(), 1, "{kept:?}");
     assert_eq!(
-        app.storage
-            .get(&format!("{DIR}/statistics.sqlite3.sync"))
-            .as_deref(),
+        app.storage.get(&format!("{DIR}/{}", kept[0])).as_deref(),
         Some(body.as_slice())
     );
 }
@@ -178,18 +190,15 @@ fn a_sync_leaves_no_working_files_of_the_merge() {
     let put = app.answer(&get[0], 200, &remote, Some("\"v1\""));
     app.answer(&put[0], 201, b"", None);
     let files = app.storage.files();
-    assert_eq!(
-        files,
-        ["books.ini", "pages.bin", "statistics.sqlite3.sync"],
-        "{files:?}"
-    );
+    assert_eq!(files.len(), 3, "{files:?}");
+    assert_eq!(files[..2], ["books.ini", "pages.bin"], "{files:?}");
+    assert_eq!(last_uploads(&app).len(), 1, "{files:?}");
 }
 
 /// The kernel writes a download's answer to the file asked for, also an
 /// error page; with nothing there yet (404) or a refused download, that
-/// page is left in the plugin's folder.
+/// page is not left in the plugin's folder.
 #[test]
-#[ignore = "bug: the error page of a download that failed or found nothing stays as incoming.sqlite3"]
 fn a_download_that_finds_nothing_leaves_no_file() {
     let mut app = app(device(&[(1, "Anna Karenina")], 6, 10));
     let get = app.sync_now();
@@ -273,11 +282,7 @@ fn a_wrong_password_says_so_and_changes_nothing() {
         assert!(app.shown().contains("User name or password is wrong"));
         assert_eq!(common::stays(&app.storage), stays);
         assert_eq!(titles(&app), ["Anna Karenina"]);
-        assert!(
-            !app.storage
-                .0
-                .exists(&format!("{DIR}/statistics.sqlite3.sync"))
-        );
+        assert!(last_uploads(&app).is_empty());
     }
 }
 
@@ -352,11 +357,10 @@ fn a_file_there_that_is_no_database_leaves_the_statistics_here() {
 }
 
 /// KOReader, finding a file there it cannot read, stops the sync rather
-/// than replace the file; here it is taken as if there were none, and
-/// what this device has replaces it, so the other devices' statistics in
-/// it are gone for the next device that syncs.
+/// than replace the file; so does this device, saying why, or the other
+/// devices' statistics in it would be gone for the next device that
+/// syncs.
 #[test]
-#[ignore = "bug: a file in the folder that is no database is replaced by this device's statistics"]
 fn a_file_there_that_is_no_database_is_not_replaced() {
     let mut b = app(device(&[(5, "Faust")], 12, 5));
     let get = b.sync_now();
@@ -367,7 +371,7 @@ fn a_file_there_that_is_no_database_is_not_replaced() {
         Some("\"v1\""),
     );
     assert!(put.is_empty(), "uploaded over a file it could not read");
-    assert!(b.shown().contains("Could not merge"), "{}", b.shown());
+    assert!(b.shown().contains("cannot be read"), "{}", b.shown());
 }
 
 #[test]
@@ -393,7 +397,6 @@ fn an_old_file_without_a_password_just_goes() {
     for text in [
         &b""[..],
         b"[webdav]\nurl = https://x\n",
-        b"[webdav]\npassword = \"  \"\n",
         b"\xff\xfe password = x",
     ] {
         let storage = MemoryStorage::new().with(&format!("{DIR}/webdav.ini"), text.to_vec());
@@ -401,6 +404,14 @@ fn an_old_file_without_a_password_just_goes() {
         assert_eq!(app.kernel.secrets().get(SECRET), None, "{text:?}");
         assert!(!app.storage.0.exists(&format!("{DIR}/webdav.ini")));
     }
+    // Passwords are kept as typed, also one of spaces.
+    let storage = MemoryStorage::new().with(
+        &format!("{DIR}/webdav.ini"),
+        "[webdav]\npassword = \"  \"\n",
+    );
+    let app = App::new(X4, storage, Some(NOW), "", false);
+    assert_eq!(app.kernel.secrets().get(SECRET), Some("  "));
+    assert!(!app.storage.0.exists(&format!("{DIR}/webdav.ini")));
 }
 
 #[test]
@@ -431,7 +442,8 @@ fn the_folder_user_and_password_are_entered_on_the_page() {
         "https://cloud.example.org/dav/KOReader"
     );
     assert_eq!(settings.text("stats.webdav-user"), "anna");
-    assert_eq!(app.kernel.secrets().get(SECRET), Some("secret"));
+    // Passwords are kept as typed: spaces may be part of them.
+    assert_eq!(app.kernel.secrets().get(SECRET), Some(" secret "));
     let shown = app.shown();
     assert!(
         shown.contains("Folder (WebDAV), cloud.example.org/dav/KOReader"),
@@ -443,7 +455,7 @@ fn the_folder_user_and_password_are_entered_on_the_page() {
     let effects = app.kernel.send_event(
         Instant(app.now),
         Id::new_static("stats.password-entered"),
-        typed("   "),
+        typed(""),
     );
     app.settle(effects);
     assert_eq!(app.kernel.secrets().get(SECRET), None);
