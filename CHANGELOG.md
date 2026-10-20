@@ -198,6 +198,9 @@ change the plugin SDK.
   placement): automatically, widgets without a frame line up with the
   page's margins as before, and framed ones keep a gap inside their
   frame.
+- Home screen tools: an icon and its name are placed by their ink as
+  one group, half a gap apart, so that on the X4s the name no longer
+  sits as near the tool below as its own icon.
 - SDK, widgets: a spacing setting for widgets (`widgets::Padding`,
   `padding_spec`, `padding_setting`, `padding`; automatic, none, small,
   normal, large), which `look` and `draw_frame` keep. Text that fits

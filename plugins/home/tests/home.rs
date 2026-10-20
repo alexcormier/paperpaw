@@ -300,3 +300,90 @@ fn widgets_are_made_anew_only_when_what_makes_them_changes() {
     home.shown();
     assert_eq!(MADE.load(Ordering::SeqCst), made + 2);
 }
+
+impl Home {
+    /// The gray of each pixel of the screen, drawn anew.
+    fn pixels(&mut self) -> (u16, Vec<u8>) {
+        let display = self.kernel.device().display;
+        let (width, height) = (display.width, display.height);
+        let mut gray = vec![255u8; usize::from(width) * usize::from(height)];
+        self.kernel.render(&mut |top, view| {
+            for y in 0..view.height {
+                for x in 0..view.width.min(width) {
+                    let row = usize::from(top + y);
+                    if row < usize::from(height) {
+                        gray[row * usize::from(width) + usize::from(x)] = view.pixel(x, y).luma();
+                    }
+                }
+            }
+        });
+        (width, gray)
+    }
+}
+
+/// The rows from `top` to `bottom` with ink between `left` and `right`.
+fn inked_rows(
+    width: u16,
+    gray: &[u8],
+    (left, right): (u16, u16),
+    top: u16,
+    bottom: u16,
+) -> Vec<u16> {
+    (top..bottom)
+        .filter(|y| {
+            (left..right).any(|x| gray[usize::from(*y) * usize::from(width) + usize::from(x)] < 128)
+        })
+        .collect()
+}
+
+/// A tool's name sits clearly nearer its own icon than the tool below
+/// it, on a short screen of buttons alone and on a tall touch screen,
+/// in cells as flat as the X4's and as tall as a large screen's.
+#[test]
+fn a_tools_name_belongs_to_its_own_icon() {
+    for (touch, rows) in [(false, 0), (true, 0), (true, 8), (false, 12)] {
+        let mut home = Home::new(
+            touch,
+            &format!(
+                "page-1 = tool:core.settings 0/0 1x1, tool:core.settings 0/1 1x1\n\
+                 rows = {rows}\nstatus-bar = false\n"
+            ),
+        );
+        let (width, gray) = home.pixels();
+        let shown = home.shown();
+        let names: Vec<Rect> = shown
+            .iter()
+            .filter(|(l, _)| l == "Settings")
+            .map(|(_, r)| *r)
+            .collect();
+        assert_eq!(names.len(), 2, "{shown:?}");
+        let column = (names[0].x, names[0].x + names[0].width);
+        // The first tool's icon: the ink above its name (whose round
+        // letters reach a pixel or two above its capitals).
+        let above = inked_rows(width, &gray, column, 0, names[0].y.saturating_sub(2));
+        let icon_bottom = *above.last().unwrap();
+        // Its name's ink, and the second tool's icon below it.
+        let name = inked_rows(
+            width,
+            &gray,
+            column,
+            names[0].y,
+            names[0].y + names[0].height,
+        );
+        let name_top = name[0];
+        let below = inked_rows(
+            width,
+            &gray,
+            column,
+            names[0].y + names[0].height,
+            names[1].y,
+        );
+        let (name_bottom, next_icon) = (*name.last().unwrap(), below[0]);
+        let inside = name_top - icon_bottom;
+        let between = next_icon - name_bottom;
+        assert!(
+            inside * 2 <= between,
+            "rows {rows}, touch {touch}: name {inside} px below its icon, {between} px above the next"
+        );
+    }
+}
