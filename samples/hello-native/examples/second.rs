@@ -31,7 +31,9 @@ impl Plugin for Second {
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_action(
             ActionSpec::new(Id::new_static("second.hello"), "second.hello").handler(|_, out| {
-                out.push(Command::Notify(String::from("Hello from the second plugin")));
+                out.push(Command::Notify(String::from(
+                    "Hello from the second plugin",
+                )));
             }),
         )?;
         r.publish(Id::new_static("second.version"), Version::new(0, 1, 0))
