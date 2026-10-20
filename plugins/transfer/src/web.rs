@@ -113,26 +113,12 @@ pub fn answer(
                 Ok(_) => return text(404, "not found"),
                 Err(e) => return refused(e),
             };
-            match files::list(storage, &dir, false) {
-                Ok(entries) => {
-                    let mut json = String::from("[");
-                    for (i, entry) in entries.iter().enumerate() {
-                        if i > 0 {
-                            json.push(',');
-                        }
-                        json.push_str(&format!(
-                            "{{\"name\":{},\"dir\":{},\"size\":{}}}",
-                            json_string(&entry.name),
-                            entry.is_dir,
-                            entry.size
-                        ));
-                    }
-                    json.push(']');
-                    (
-                        ServerResponse::new(number, 200, "application/json", json.into_bytes()),
-                        None,
-                    )
-                }
+            let from = param(query, "from").and_then(|from| from.parse().ok());
+            match listing(storage, &dir, from.unwrap_or(0)) {
+                Ok(json) => (
+                    ServerResponse::new(number, 200, "application/json", json.into_bytes()),
+                    None,
+                ),
                 Err(e) => failed(e),
             }
         }
@@ -199,6 +185,52 @@ pub fn answer(
         }
         _ => text(404, "not found"),
     }
+}
+
+/// Bytes of a folder's listing in one answer, about: a folder with more
+/// entries is listed in parts, so even a folder of thousands of books
+/// takes little memory.
+pub const LIST_PART: usize = 8 * 1024;
+
+/// The entries of folder `dir` (hidden ones left out) from the `from`th
+/// on, as JSON: `{"entries":[{"name":…,"dir":…,"size":…},…]}` with
+/// `"next":n` where more follow from the `n`th. In the storage's order;
+/// the page sorts them.
+fn listing(storage: &dyn Storage, dir: &str, from: usize) -> Result<String, StorageError> {
+    let mut json = String::from("{\"entries\":[");
+    let mut index = 0;
+    let mut taken = 0;
+    let mut next = None;
+    storage.list(dir, &mut |entry| {
+        if entry.name.starts_with('.') {
+            return;
+        }
+        let at = index;
+        index += 1;
+        if at < from || next.is_some() {
+            return;
+        }
+        if json.len() >= LIST_PART {
+            next = Some(at);
+            return;
+        }
+        if taken > 0 {
+            json.push(',');
+        }
+        taken += 1;
+        json.push_str(&format!(
+            "{{\"name\":{},\"dir\":{},\"size\":{}}}",
+            json_string(entry.name),
+            entry.is_dir,
+            entry.size
+        ));
+    })?;
+    json.push(']');
+    if let Some(next) = next {
+        json.push_str(&format!(",\"next\":{next}"));
+    }
+    json.push('}');
+    Ok(json)
 }
 
 /// Where a request's path leads.

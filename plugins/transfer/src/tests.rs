@@ -160,12 +160,12 @@ fn files_are_listed_and_fetched() {
     assert_eq!(status, 200);
     assert_eq!(
         String::from_utf8(body).unwrap(),
-        r#"[{"name":"Books","dir":true,"size":0}]"#
+        r#"{"entries":[{"name":"Books","dir":true,"size":0}]}"#
     );
     let (_, body, ..) = ask(&storage, "GET", "/api/list?k=abc&path=Books", None);
     assert_eq!(
         String::from_utf8(body).unwrap(),
-        r#"[{"name":"a b.epub","dir":false,"size":4}]"#
+        r#"{"entries":[{"name":"a b.epub","dir":false,"size":4}]}"#
     );
     let (status, _, from, done) = ask(
         &storage,
@@ -192,6 +192,55 @@ fn files_are_listed_and_fetched() {
     );
     let file = "/api/list?k=abc&path=Books/a%20b.epub";
     assert_eq!(ask(&storage, "GET", file, None).0, 404);
+}
+
+#[test]
+fn big_folders_are_listed_in_parts() {
+    // 1,000 books with long names: about 130 KB as one answer.
+    let storage = MemoryStorage::new();
+    for i in 0..1000 {
+        let name = format!("Books/{i:04} {}.epub", "A rather long title".repeat(5));
+        storage.write(&name, b"x").unwrap();
+    }
+    storage.write("Books/.hidden", b"x").unwrap();
+    let mut names = Vec::new();
+    let mut from = None;
+    let mut parts = 0;
+    loop {
+        let target = match from {
+            Some(from) => format!("/api/list?k=abc&path=Books&from={from}"),
+            None => String::from("/api/list?k=abc&path=Books"),
+        };
+        let (status, body, ..) = ask(&storage, "GET", &target, None);
+        assert_eq!(status, 200);
+        assert!(body.len() <= web::LIST_PART + 256, "{}", body.len());
+        let body = String::from_utf8(body).unwrap();
+        names.extend(
+            body.split("\"name\":\"")
+                .skip(1)
+                .map(|rest| rest.split('"').next().unwrap().to_string()),
+        );
+        parts += 1;
+        from = body
+            .rsplit_once(",\"next\":")
+            .map(|(_, next)| next.trim_end_matches('}').parse::<usize>().unwrap());
+        if from.is_none() {
+            break;
+        }
+    }
+    assert!(parts > 10, "{parts}");
+    assert_eq!(names.len(), 1000);
+    names.sort();
+    names.dedup();
+    assert_eq!(names.len(), 1000, "an entry listed twice");
+    // Past the end: nothing more.
+    let (_, body, ..) = ask(
+        &storage,
+        "GET",
+        "/api/list?k=abc&path=Books&from=5000",
+        None,
+    );
+    assert_eq!(body, br#"{"entries":[]}"#);
 }
 
 #[test]

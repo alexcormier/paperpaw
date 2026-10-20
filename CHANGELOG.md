@@ -6,6 +6,9 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Wi-Fi transfer: a folder is listed to the browser in parts of about
+  8 KB, which the page puts together and sorts, so a folder of thousands
+  of books no longer has to fit in the X4's memory at once.
 - Wi-Fi transfer: where there is too little room for the QR code
   (large fonts, a short screen turned), the address is shown without it;
   the code's place was computed below zero. Typing on a phone: a text
