@@ -534,3 +534,83 @@ fn screens_say_what_they_show() {
         "{text}"
     );
 }
+
+/// The ink of headers is in their middle: their title, notes, arrows and
+/// page numbers together leave as much room above them as below (a pixel
+/// apart at most), not as their lines of text would, with more room
+/// above the letters. On the X4, the X4 Pro and the Boox, on screens with
+/// a back arrow, page arrows, a note and an empty list.
+#[test]
+fn headers_are_centred_by_their_ink() {
+    let screens = [
+        "run:core.library,wait:300",
+        "run:core.settings,wait:300",
+        "run:core.library,wait:300,run:files.favourites,wait:300",
+        "run:core.library,wait:300,run:files.by-tag,wait:300",
+    ];
+    let mut failures = Vec::new();
+    for profile in ["xteink-x4", "xteink-x4-pro", "boox-go-7"] {
+        for (n, script) in screens.iter().enumerate() {
+            let case = Case {
+                name: "header",
+                profile,
+                book: None,
+                sets: &[],
+                script: "",
+                colour: 0,
+            };
+            let library = library(&case);
+            let shot = library.join("shot.png");
+            let output = Command::new(env!("CARGO_BIN_EXE_paperpaw-emu"))
+                .args(["--profile", profile, "--headless", "--library"])
+                .arg(&library)
+                .args(["--screenshot"])
+                .arg(&shot)
+                .args(["--set", "reader.open-last=false"])
+                .args(["--set", "home.gesture-tips=false"])
+                .args(["--script", &format!("{script},describe")])
+                .output()
+                .unwrap();
+            let text = String::from_utf8_lossy(&output.stdout).into_owned();
+            let (width, _, gray) = grays(&shot);
+            let _ = fs::remove_dir_all(&library);
+            // `Heading "…" at x,y wxh`
+            let at = text
+                .lines()
+                .find(|l| l.starts_with("Heading "))
+                .and_then(|l| l.rsplit_once(" at "))
+                .map(|(_, at)| at.to_string())
+                .unwrap_or_else(|| panic!("{profile} {script}: no header in {text}"));
+            let numbers: Vec<u32> = at
+                .split([',', 'x', ' '])
+                .map(|n| n.trim().parse().unwrap())
+                .collect();
+            let [x, y, w, h] = numbers[..] else {
+                panic!("{at}");
+            };
+            // Each row's dark pixels; a row dark across the header is its
+            // line below, the header's end.
+            let dark = |row: u32| {
+                (x..x + w)
+                    .filter(|col| gray[(row * width + col) as usize] < 128)
+                    .count() as u32
+            };
+            let end = (y..y + h)
+                .find(|row| dark(*row) >= w * 9 / 10)
+                .unwrap_or(y + h);
+            let inked: Vec<u32> = (y..end).filter(|row| dark(*row) > 0).collect();
+            let (Some(first), Some(last)) = (inked.first(), inked.last()) else {
+                failures.push(format!("{profile} screen {n}: no ink in the header"));
+                continue;
+            };
+            let above = first - y;
+            let below = end - last - 1;
+            if above.abs_diff(below) > 1 {
+                failures.push(format!(
+                    "{profile} screen {n} ({script}): {above} px above the ink, {below} below"
+                ));
+            }
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}

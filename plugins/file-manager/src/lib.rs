@@ -30,7 +30,7 @@ use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::ui::choice::{self, Choice};
 use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::{
-    ActionSpec, Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
+    ActionSpec, Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
     MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen,
     ScreenSpec, SettingSpec, SettingValue, Storage, StorageError, Version,
 };
@@ -624,7 +624,7 @@ impl Screen for Browser {
                 };
                 // Folders with a folder before their name, files with a
                 // page: told apart at a glance.
-                let ink = if focused { Color::WHITE } else { Color::BLACK };
+                let ink = style.focus_ink(focused);
                 let icon = if entry.is_dir { "folder" } else { "file" };
                 let rest = ui::draw_row_icon(canvas, env, &style, rect, room, Some(icon), ink);
                 ui::draw_value_row(canvas, env, &style, rest, focused, &entry.name, &value);

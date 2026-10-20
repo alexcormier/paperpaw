@@ -8,7 +8,6 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use paperpaw_digest::fnv1a64;
 use paperpaw_sdk::document::{Block, Document, DocumentError, Link, Locator, Metadata, TocEntry};
 use paperpaw_sdk::{Env, Storage};
 
@@ -27,15 +26,13 @@ pub struct MarkdownDocument {
 
 impl MarkdownDocument {
     pub fn open(storage: &dyn Storage, path: &str, styles: bool) -> Result<Self, DocumentError> {
-        let size = storage.size(path)?;
-        let head = crate::head(storage, path)?;
         let dir = format!(
-            "{}/md-{:016x}",
+            "{}/md-{}",
             Env::plugin_dir(PLUGIN.as_str()),
-            fnv1a64(path.as_bytes())
+            paperpaw_sdk::library::key(path)
         );
         let html_path = format!("{dir}/book.html");
-        let stamp = format!("{MD_VERSION} {size} {:016x}\n", fnv1a64(&head));
+        let stamp = format!("{MD_VERSION} {}\n", crate::fingerprint(storage, path)?);
         let stamp_path = format!("{dir}/source");
         if paperpaw_sdk::read_file(storage, &stamp_path, 128).ok()
             != Some(stamp.clone().into_bytes())
@@ -45,7 +42,9 @@ impl MarkdownDocument {
             convert(storage, path, &html_path)?;
             storage.write(&stamp_path, stamp.as_bytes())?;
         }
-        let html = HtmlDocument::open_with_pictures(storage, &html_path, styles)?;
+        // Converted in the Markdown file's cache, so it goes with it.
+        let html =
+            HtmlDocument::open_with_pictures(storage, &html_path, styles, format!("{dir}/html"))?;
         let mut metadata = html.metadata().clone();
         if metadata.title.as_deref().is_none_or(|t| t == "book") {
             let name = path.rsplit('/').next().unwrap_or(path);
@@ -61,35 +60,41 @@ use paperpaw_sdk::xml::escape;
 /// `` `code` ``, `[text](url)`, `![alt](src)` (a picture on the storage:
 /// `src` beside the file, or from its root with `/`; elsewhere, as on the
 /// web, its alternative text). `pictures` leads from the HTML to the
-/// Markdown file's folder (see [`pictures_path`]).
+/// Markdown file's folder (see [`pictures_path`]). Each character is
+/// looked at a few times at most, however the line is made.
 fn inline(text: &str, pictures: &str, out: &mut String) {
-    let chars: Vec<char> = text.chars().collect();
-    let mut i = 0;
+    inline_in(text, pictures, false, out);
+}
+
+/// As [`inline`]; in a link's label (`label`) no other link is read, so a
+/// label is read once more at most.
+fn inline_in(text: &str, pictures: &str, label: bool, out: &mut String) {
     let (mut bold, mut italic) = (false, false);
-    let rest = |i: usize| -> String { chars[i..].iter().collect() };
-    while i < chars.len() {
-        let c = chars[i];
-        let next = chars.get(i + 1).copied();
+    // Where the next `](` and the `)` after one are, from where each was
+    // looked for: brackets before them all find them there.
+    let mut closes = Next::default();
+    let mut parens = Next::default();
+    let mut i = 0;
+    while let Some(c) = text[i..].chars().next() {
+        let next = text[i + c.len_utf8()..].chars().next();
+        let before = text[..i].chars().next_back();
         match c {
             '\\' if next.is_some_and(|n| n.is_ascii_punctuation()) => {
-                escape(&next.unwrap_or_default().to_string(), out);
+                escape(&text[i + 1..i + 2], out);
                 i += 2;
             }
-            '`' => {
-                let end = chars[i + 1..].iter().position(|&c| c == '`');
-                match end {
-                    Some(end) => {
-                        out.push_str("<code>");
-                        escape(&chars[i + 1..i + 1 + end].iter().collect::<String>(), out);
-                        out.push_str("</code>");
-                        i += end + 2;
-                    }
-                    None => {
-                        out.push('`');
-                        i += 1;
-                    }
+            '`' => match text[i + 1..].find('`') {
+                Some(end) => {
+                    out.push_str("<code>");
+                    escape(&text[i + 1..i + 1 + end], out);
+                    out.push_str("</code>");
+                    i += end + 2;
                 }
-            }
+                None => {
+                    out.push('`');
+                    i += 1;
+                }
+            },
             '*' | '_' if next == Some(c) => {
                 out.push_str(if bold { "</b>" } else { "<b>" });
                 bold = !bold;
@@ -98,32 +103,28 @@ fn inline(text: &str, pictures: &str, out: &mut String) {
             '*' | '_'
                 if italic
                     || next.is_some_and(|n| !n.is_whitespace())
-                        && (c == '*' || i == 0 || !chars[i - 1].is_alphanumeric()) =>
+                        && (c == '*' || before.is_none_or(|b| !b.is_alphanumeric())) =>
             {
                 out.push_str(if italic { "</i>" } else { "<i>" });
                 italic = !italic;
                 i += 1;
             }
-            '!' | '[' => {
+            '!' | '[' if !(label && c == '[') => {
                 let image = c == '!';
                 let open = if image { i + 1 } else { i };
-                let link = (chars.get(open) == Some(&'['))
+                let link = text[open..]
+                    .starts_with('[')
                     .then(|| {
-                        let rest = rest(open + 1);
-                        let close = rest.find("](")?;
-                        let end = rest[close + 2..].find(')')?;
-                        Some((
-                            rest[..close].to_string(),
-                            rest[close + 2..close + 2 + end].to_string(),
-                            open + 1 + rest[..close + 2 + end + 1].chars().count(),
-                        ))
+                        let close = closes.find(text, "](", open + 1)?;
+                        let end = parens.find(text, ")", close + 2)?;
+                        Some((&text[open + 1..close], &text[close + 2..end], end + 1))
                     })
                     .flatten();
                 match link {
-                    Some((label, src, end)) if image => {
+                    Some((alt, src, end)) if image => {
                         let src = src.split_whitespace().next().unwrap_or_default();
                         if src.contains("://") || src.is_empty() {
-                            escape(&label, out);
+                            escape(alt, out);
                         } else {
                             out.push_str("<img src=\"");
                             match src.strip_prefix('/') {
@@ -139,29 +140,29 @@ fn inline(text: &str, pictures: &str, out: &mut String) {
                                 }
                             }
                             out.push_str("\" alt=\"");
-                            escape(&label, out);
+                            escape(alt, out);
                             out.push_str("\"/>");
                         }
                         i = end;
                     }
-                    Some((label, url, end)) => {
+                    Some((words, url, end)) => {
                         let url = url.split_whitespace().next().unwrap_or_default();
                         out.push_str("<a href=\"");
                         escape(url, out);
                         out.push_str("\">");
-                        inline(&label, pictures, out);
+                        inline_in(words, pictures, true, out);
                         out.push_str("</a>");
                         i = end;
                     }
                     None => {
-                        escape(&c.to_string(), out);
+                        escape(&text[i..i + 1], out);
                         i += 1;
                     }
                 }
             }
             c => {
-                escape(&c.to_string(), out);
-                i += 1;
+                escape(&text[i..i + c.len_utf8()], out);
+                i += c.len_utf8();
             }
         }
     }
@@ -170,6 +171,32 @@ fn inline(text: &str, pictures: &str, out: &mut String) {
     }
     if bold {
         out.push_str("</b>");
+    }
+}
+
+/// Where `what` is next in a text, at or after where it was asked for:
+/// found once for all asks before it.
+#[derive(Default)]
+struct Next {
+    /// Where it was looked for from, and where it was found.
+    from: usize,
+    found: Option<Option<usize>>,
+}
+
+impl Next {
+    fn find(&mut self, text: &str, what: &str, from: usize) -> Option<usize> {
+        match self.found {
+            Some(Some(at)) if at >= from && self.from <= from => return Some(at),
+            Some(None) if self.from <= from => return None,
+            _ => {}
+        }
+        let found = text
+            .get(from..)
+            .and_then(|rest| rest.find(what))
+            .map(|at| from + at);
+        self.from = from;
+        self.found = Some(found);
+        found
     }
 }
 
@@ -310,6 +337,10 @@ fn line(raw: &str, state: &mut State, out: &mut String) {
     inline(text, &state.pictures, out);
 }
 
+/// Longer lines are read as lines of this length, cut where a character
+/// ends: a file without line breaks is read a piece at a time too.
+const MAX_LINE: usize = 8 * 1024;
+
 /// Writes the HTML for the Markdown file at `path` to `to`, a few lines
 /// at a time.
 fn convert(storage: &dyn Storage, path: &str, to: &str) -> Result<(), DocumentError> {
@@ -320,6 +351,8 @@ fn convert(storage: &dyn Storage, path: &str, to: &str) -> Result<(), DocumentEr
     };
     let mut out = String::new();
     let mut pending: Vec<u8> = Vec::new();
+    // How much of `pending` is known to hold no line break.
+    let mut searched = 0;
     let mut chunk = [0u8; 1024];
     let mut at = 0u64;
     let flush = |out: &mut String| -> Result<(), DocumentError> {
@@ -331,10 +364,28 @@ fn convert(storage: &dyn Storage, path: &str, to: &str) -> Result<(), DocumentEr
         let n = storage.read_at(path, at, &mut chunk)?;
         at += n as u64;
         pending.extend_from_slice(&chunk[..n]);
-        while let Some(end) = pending.iter().position(|&b| b == b'\n') {
-            let text: Vec<u8> = pending.drain(..=end).collect();
-            let text = String::from_utf8_lossy(&text);
-            line(text.trim_end_matches(['\n', '\r']), &mut state, &mut out);
+        loop {
+            let (end, next) = match pending[searched..].iter().position(|&b| b == b'\n') {
+                Some(end) => (searched + end, searched + end + 1),
+                None if pending.len() > MAX_LINE => {
+                    let mut cut = MAX_LINE;
+                    while cut > 1 && pending[cut] & 0xc0 == 0x80 {
+                        cut -= 1;
+                    }
+                    (cut, cut)
+                }
+                None => {
+                    searched = pending.len();
+                    break;
+                }
+            };
+            let text = String::from_utf8_lossy(&pending[..end]);
+            line(text.trim_end_matches('\r'), &mut state, &mut out);
+            pending.drain(..next);
+            searched = 0;
+            if out.len() > 2048 {
+                flush(&mut out)?;
+            }
         }
         if n == 0 {
             if !pending.is_empty() {
@@ -342,9 +393,6 @@ fn convert(storage: &dyn Storage, path: &str, to: &str) -> Result<(), DocumentEr
                 line(&text, &mut state, &mut out);
             }
             break;
-        }
-        if out.len() > 2048 {
-            flush(&mut out)?;
         }
     }
     if state.code {

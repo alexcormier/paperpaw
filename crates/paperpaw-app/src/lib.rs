@@ -7,6 +7,12 @@
 
 #![no_std]
 
+extern crate alloc;
+
+mod pebble;
+
+pub use pebble::Pebble;
+
 use paperpaw_core::KernelBuilder;
 
 /// How the default fonts are shipped.
@@ -70,6 +76,7 @@ pub fn install(builder: KernelBuilder, fonts: Fonts) -> KernelBuilder {
         .plugin_off(paperpaw_plugin_readwise::Readwise)
         .plugin_off(paperpaw_plugin_joplin::Joplin)
         .plugin_off(paperpaw_plugin_wallabag::Wallabag)
+        .plugin_off(Pebble)
         .plugin(paperpaw_plugin_keyboard::Keyboard)
         .plugin(paperpaw_plugin_settings::SettingsPlugin)
         .plugin(paperpaw_plugin_plugin_manager::PluginManager)

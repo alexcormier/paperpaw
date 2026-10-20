@@ -20,6 +20,21 @@ const SINES: [i16; 91] = [
     9877, 9903, 9925, 9945, 9962, 9976, 9986, 9994, 9998, 10_000,
 ];
 
+/// How far row `row` of a shape `height` rows high with corners of
+/// `radius` starts in from its sides (at most half its height and width,
+/// as the caller makes sure).
+pub fn corner_inset(radius: u32, row: u32, height: u32) -> u32 {
+    let from_edge = row.min(height - 1 - row);
+    if from_edge >= radius {
+        return 0;
+    }
+    // The circle's half width at the middle of the row, in half pixels.
+    let r = 2 * u64::from(radius);
+    let dy = r - 2 * u64::from(from_edge) - 1;
+    let dx = (r * r - dy * dy).isqrt();
+    (r - dx).div_ceil(2) as u32
+}
+
 /// The sine and cosine of `degrees` (any, taken round the circle), times
 /// [`UNIT`].
 pub fn sin_cos(degrees: i32) -> (i32, i32) {

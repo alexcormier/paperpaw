@@ -284,10 +284,10 @@ impl Kernel {
             let mut canvas = canvas.clipped(mark);
             paperpaw_sdk::ui::fill_round(&mut canvas, &style, mark, Color::BLACK);
             let size = f32::from(mark.height) * 0.6;
+            let sign = paperpaw_sdk::ui::PAW_ICON;
             let x = f32::from(mark.x)
-                + (f32::from(mark.width) - paperpaw_sdk::ui::icon_width(&env, BUSY_ICON, size))
-                    / 2.0;
-            paperpaw_sdk::ui::draw_icon(&mut canvas, &env, BUSY_ICON, size, x, mark, Color::WHITE);
+                + (f32::from(mark.width) - paperpaw_sdk::ui::icon_width(&env, sign, size)) / 2.0;
+            paperpaw_sdk::ui::draw_icon(&mut canvas, &env, sign, size, x, mark, Color::WHITE);
         }
         // A message over everything.
         if let Some((notice, _)) = &mut self.notice

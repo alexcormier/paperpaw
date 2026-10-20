@@ -11,6 +11,7 @@ authors.workspace = true
 categories = ["no-std", "text-processing"]
 
 [dependencies]
+paperpaw-digest.workspace = true
 paperpaw-sdk.workspace = true
 
 [dev-dependencies]

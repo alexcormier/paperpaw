@@ -160,7 +160,12 @@ Some rules every screen should follow:
   it in more, as slowly as a full refresh.
 - **Use the SDK's UI parts** (`paperpaw_sdk::ui`): headers, rows, lists,
   switches, numbers with − and +, messages, icons. They follow the user's
-  appearance settings and line up with the rest of PaperPaw.
+  appearance settings and line up with the rest of PaperPaw. What a
+  screen draws itself takes its look from `UiStyle`: the focus with
+  `ui::draw_focus`, what is on a focused row in `style.focus_ink(focused)`
+  (white on the dark bar, black on a frame or a light bar), small shapes
+  with `style.radius(height)` (pills where corners are round), boxes and
+  cards with `style.corner`, lines between rows with `ui::draw_separator`.
 
 Screens say what they show, for reading the interface aloud,
 automation and tests: the `ui` helpers (list rows, buttons, switches,
@@ -787,6 +792,27 @@ the About page and the logo widget): a picture in the folder, named in
 logo = plugins/my-brand/logo.png
 ```
 
+A theme is a `settings.ini` with new defaults for the appearance
+settings (*Settings > Customise > Appearance*, most of them with
+advanced settings): the header (`core.header.plain`, `.light`, `.dark`),
+the corners (`core.corners.square`, `.small`, `.round`, `.soft`; round
+and soft ones make buttons and switches pills), the highlight
+(`core.focus.fill`, `.ring`, `.soft`), the lines between rows
+(`core.separators.inset`, `.line`, `.none`), lists on cards
+(`core.groups.cards`), the size of headers' titles, the margins, rows
+and lines:
+
+```ini
+[core]
+ui-focus = core.focus.ring
+ui-separators = core.separators.none
+ui-title = 140
+ui-row = 180
+```
+
+Pebble, a theme with lists on cards for touch screens, comes with
+PaperPaw, switched off in the plugin manager.
+
 The fonts browser (`plugins/fonts-browser`) downloads fonts as such
 plugins from paperpaw.org: font files for devices with scalable fonts
 and the memory for them, packs for the others. The store
@@ -822,7 +848,8 @@ home.rows = 6
 
 So anyone can make a home screen layout and share it: it is offered
 with the home screen's own. [`samples/plugins`](../samples/plugins) has
-three: large print, an airy theme and a layout (reading nook).
+five: large print, three themes (airy, paw, calm ink) and a layout
+(reading nook).
 
 [`Plugin`]: ../crates/paperpaw-sdk/src/plugin.rs
 [`Registrar`]: ../crates/paperpaw-sdk/src/plugin.rs

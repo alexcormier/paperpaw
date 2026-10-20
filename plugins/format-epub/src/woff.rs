@@ -34,8 +34,11 @@ pub(crate) fn to_font(woff: &[u8], max: usize) -> Option<Vec<u8>> {
     }
     // The font's own directory: version, number of tables and the binary
     // search fields, then a record per table.
+    // What the font may take, as the WOFF says it is: no table grows it
+    // past that room, but for the padding after the last.
+    let room = total.max(12 + tables * 16);
     let mut font = Vec::new();
-    font.try_reserve_exact(total.max(12 + tables * 16)).ok()?;
+    font.try_reserve_exact(room + 3).ok()?;
     let power = 1usize << (usize::BITS - 1 - tables.leading_zeros());
     let search = power * 16;
     font.extend_from_slice(&flavor.to_be_bytes());
@@ -54,7 +57,7 @@ pub(crate) fn to_font(woff: &[u8], max: usize) -> Option<Vec<u8>> {
         let checksum = u32_at(woff, entry + 16)?;
         let stored = woff.get(offset..offset.checked_add(compressed)?)?;
         let at = font.len();
-        if at + length > max.max(total) {
+        if at.checked_add(length)? > room {
             return None;
         }
         if compressed < length {
@@ -109,6 +112,16 @@ mod tests {
         let font = to_font(WOFF, 1 << 20).expect("decodes");
         assert_eq!(&font[..4], &TTF[..4]);
         assert_eq!(tables(&font), tables(TTF));
+    }
+
+    /// A font larger than its header says is refused, not grown past
+    /// what was reserved for it.
+    #[test]
+    fn fonts_larger_than_they_say_are_refused() {
+        let total = u32_at(WOFF, 16).unwrap();
+        let mut woff = WOFF.to_vec();
+        woff[16..20].copy_from_slice(&(total / 2).to_be_bytes());
+        assert_eq!(to_font(&woff, 1 << 20), None);
     }
 
     #[test]

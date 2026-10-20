@@ -4,7 +4,7 @@ use alloc::vec::Vec;
 use paperpaw_platform::{Color, Point, Rect};
 
 use crate::framebuffer::Framebuffer;
-use crate::round;
+use crate::round::{self, corner_inset};
 
 /// A drawing surface clipped to a region of a [`Framebuffer`].
 ///
@@ -53,20 +53,6 @@ pub enum Role {
 /// Rings are drawn at most this many pixels across their radius, far
 /// past any screen, so that their arithmetic stays in range.
 const MAX_RADIUS: u32 = 1 << 24;
-
-/// How far row `row` of a shape `height` rows high with corners of
-/// `radius` (at most half a side) starts in from its sides.
-fn corner_inset(radius: u32, row: u32, height: u32) -> u32 {
-    let from_edge = row.min(height - 1 - row);
-    if from_edge >= radius {
-        return 0;
-    }
-    // The circle's half width at the middle of the row, in half pixels.
-    let r = 2 * u64::from(radius);
-    let dy = r - 2 * u64::from(from_edge) - 1;
-    let dx = (r * r - dy * dy).isqrt();
-    (r - dx).div_ceil(2) as u32
-}
 
 impl<'a> Canvas<'a> {
     pub(crate) fn new(framebuffer: &'a mut Framebuffer, clip: Rect) -> Self {
@@ -228,6 +214,20 @@ impl<'a> Canvas<'a> {
     pub fn fill_round(&mut self, area: Rect, radius: u32, color: Color) {
         let (x, y, width, height) = signed(area);
         self.fill_round_rect(x, y, width, height, radius, color);
+    }
+
+    /// Rounds the corners of what is drawn in `area` by `radius` pixels,
+    /// e.g. a picture: what lies outside the arcs is filled with `color`,
+    /// the paper behind it. Only the corners' rows are touched.
+    pub fn fill_corners(&mut self, area: Rect, radius: u32, color: Color) {
+        let (x, y, width, height) = signed(area);
+        let r = radius.min(width / 2).min(height / 2);
+        for row in (0..r).chain(height - r..height) {
+            let inset = corner_inset(r, row, height);
+            let y = y + row as i32;
+            self.fill_rect(x, y, inset, 1, color);
+            self.fill_rect(x + (width - inset) as i32, y, inset, 1, color);
+        }
     }
 
     /// Draws the outline of `area` with its corners rounded by `radius`
@@ -689,6 +689,30 @@ mod tests {
         assert_eq!(gray(10, 0), 0);
         assert_eq!(gray(0, 6), 0);
         assert_eq!(gray(10, 6), 0);
+    }
+
+    #[test]
+    fn corners_filled_are_what_round_shapes_leave() {
+        let mut round = Framebuffer::new(20, 12, PixelFormat::Gray8).unwrap();
+        round
+            .canvas()
+            .fill_round_rect(2, 1, 16, 10, 4, Color::BLACK);
+        let mut cornered = Framebuffer::new(20, 12, PixelFormat::Gray8).unwrap();
+        cornered.canvas().fill_rect(2, 1, 16, 10, Color::BLACK);
+        cornered
+            .canvas()
+            .fill_corners(Rect::new(2, 1, 16, 10), 4, Color::WHITE);
+        for y in 0..12 {
+            for x in 0..20 {
+                assert_eq!(round.view().pixel(x, y), cornered.view().pixel(x, y));
+            }
+        }
+        // No radius: nothing.
+        cornered
+            .canvas()
+            .fill_corners(Rect::new(2, 1, 16, 10), 0, Color::WHITE);
+        assert_eq!(cornered.view().pixel(2, 6), Color::BLACK);
+        assert_eq!(cornered.view().pixel(10, 1), Color::BLACK);
     }
 
     #[test]

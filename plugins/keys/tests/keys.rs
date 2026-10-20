@@ -196,7 +196,7 @@ fn screens_of_the_same_name_are_each_a_place() {
     let labels = test.labels();
     let alike = labels
         .iter()
-        .filter(|l| l.starts_with("Buttons and gestures (keys."))
+        .filter(|l| l.starts_with("Buttons and gestures ("))
         .count();
     assert_eq!(alike, 3, "{labels:?}");
 }

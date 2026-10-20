@@ -1,5 +1,5 @@
 screen files.browser
 Heading "Library"
 Button "Recently read ›"
-Row "Alice's Adventures in …, A, Lewis Carroll · TXT, TXT" (focused)
+Row "Alice's Adventures…, A, Lewis Carroll · TXT, TXT" (focused)
 Row "Die Verwandlung, D, Franz Kafka · TXT, TXT"

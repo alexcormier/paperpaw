@@ -22,6 +22,10 @@ const MAX_FONT: u64 = 16 * 1024 * 1024;
 
 /// Marks a chapter whose converted length is not known yet.
 const UNKNOWN: u32 = u32::MAX;
+/// Marks a chapter that could not be converted since the book was opened:
+/// it is not tried again on every look at it, only when the book is
+/// opened again.
+const FAILED: u32 = u32::MAX - 1;
 
 /// An open EPUB. The package is read once into the cache; chapters are
 /// converted on first use and read from the cache afterwards. In memory:
@@ -52,8 +56,10 @@ pub struct EpubDocument {
     /// One's own stylesheets for this book (see [`user_css`]), applied
     /// after the book's.
     user_css: String,
-    /// The printed pages of one section, resolved: offset and label.
+    /// The printed pages of one section, resolved.
     pages: core::cell::RefCell<Option<SectionPages>>,
+    /// Where an anchor was found last.
+    anchors: cached::AnchorHint,
     /// The chapter read last, known: its paths, text length and number of
     /// blocks, and the block found last in it. A page is laid out a block
     /// at a time, the next one mostly right after the last.
@@ -70,20 +76,21 @@ struct Known {
     last: Option<u32>,
 }
 
-/// A section and its printed pages: offset and label.
-type SectionPages = (u32, Vec<(u32, String)>);
+/// The printed pages of a section: where each begins and where its line
+/// is in `pages.txt`, for its label; the line of the last page before the
+/// section.
+#[derive(Debug)]
+struct SectionPages {
+    section: u32,
+    before: Option<u64>,
+    here: Vec<(u32, u64)>,
+}
+
+/// Printed pages resolved in a section at most.
+const MAX_SECTION_PAGES: usize = 2048;
 
 fn paths(cache: &str, section: u32) -> CachePaths {
-    CachePaths {
-        dir: String::from(cache),
-        text: alloc::format!("{cache}/{section}.txt"),
-        index: alloc::format!("{cache}/{section}.idx"),
-        anchors: alloc::format!("{cache}/{section}.anc"),
-        links: alloc::format!("{cache}/{section}.lnk"),
-        positions: alloc::format!("{cache}/{section}.pos"),
-        xpointers: alloc::format!("{cache}/{section}.xpt"),
-        end: alloc::format!("{cache}/{section}.end"),
-    }
+    CachePaths::new(cache, &alloc::format!("{section}"))
 }
 
 /// What an XPointer points at: the section, the element path below
@@ -152,36 +159,6 @@ fn parse_xpointer(xpointer: &str) -> Option<XPointer> {
     })
 }
 
-/// The lines of the file at `path` in order, read a piece at a time,
-/// until `each` returns `false`.
-fn each_line(storage: &dyn Storage, path: &str, mut each: impl FnMut(&str) -> bool) {
-    let mut chunk = [0u8; 512];
-    let mut line: Vec<u8> = Vec::new();
-    let mut at = 0u64;
-    loop {
-        let Ok(n) = storage.read_at(path, at, &mut chunk) else {
-            return;
-        };
-        if n == 0 {
-            break;
-        }
-        at += n as u64;
-        for &byte in &chunk[..n] {
-            if byte == b'\n' {
-                if !each(&String::from_utf8_lossy(&line)) {
-                    return;
-                }
-                line.clear();
-            } else {
-                line.push(byte);
-            }
-        }
-    }
-    if !line.is_empty() {
-        each(&String::from_utf8_lossy(&line));
-    }
-}
-
 /// A line of `<n>.xpt`: offset, text node, character.
 fn origin(line: &str) -> Option<(u32, &str, u32)> {
     let mut fields = line.split('\t');
@@ -191,13 +168,23 @@ fn origin(line: &str) -> Option<(u32, &str, u32)> {
     Some((offset, node, char))
 }
 
-/// Where chapters converted without the book's styles are kept.
+/// A line of `<n>.pos`: offset, element path.
+fn position(line: &str) -> Option<(u32, &str)> {
+    let (offset, path) = line.split_once('\t')?;
+    Some((offset.parse().ok()?, path))
+}
+
+/// The most of a block's text read to count its characters, more than a
+/// block holds: a position further from where its text node is listed
+/// is past the chapter.
+const MAX_SPAN: u32 = 16 * 1024;
+
 /// The cache of a book.
 fn book_cache(path: &str) -> String {
     alloc::format!(
-        "{}/{:016x}",
+        "{}/{}",
         Env::plugin_dir(PLUGIN.as_str()),
-        fnv1a64(path)
+        paperpaw_sdk::library::key(path)
     )
 }
 
@@ -226,6 +213,21 @@ fn chapters_cache(
     (chapters, user_css)
 }
 
+/// Removes the folders of chapters converted with stylesheets of one's
+/// own in `cache`, but `keep`.
+fn remove_other_css(storage: &dyn Storage, cache: &str, keep: &str) {
+    let mut gone = Vec::new();
+    let _ = storage.list(cache, &mut |entry| {
+        if entry.is_dir && entry.name.starts_with("css-") {
+            gone.push(alloc::format!("{cache}/{}", entry.name));
+        }
+    });
+    for dir in gone.iter().filter(|dir| *dir != keep) {
+        let _ = storage.remove_dir_all(dir);
+    }
+}
+
+/// Where chapters converted without the book's styles are kept.
 fn plain_cache(cache: &str) -> String {
     alloc::format!("{cache}/plain")
 }
@@ -298,20 +300,23 @@ impl EpubDocument {
     ) -> Result<Self, DocumentError> {
         let archive = ZipArchive::open(storage, path).map_err(package::error)?;
         let cache = book_cache(path);
-        let size = storage.size(path)?;
-        let package = match package::load(storage, &cache, size) {
+        let book = crate::fingerprint(storage, path)?;
+        let package = match package::load(storage, &cache, &book) {
             Some(package) => package,
             None => {
-                // Another book, file version or cache format: start over.
-                let plain = plain_cache(&cache);
-                package::invalidate(storage, &cache, |section| {
-                    let _ = storage.remove(&paths(&plain, section).end);
-                    paths(&cache, section).end
-                });
-                package::build(storage, &archive, &cache, size)?
+                // Another book, file version or cache format: start over,
+                // also with its pictures and its chapters converted with
+                // stylesheets or without.
+                let _ = storage.remove_dir_all(&cache);
+                package::build(storage, &archive, &cache, &book)?
             }
         };
         let (chapters, user_css) = chapters_cache(storage, path, &cache, styles, plugin_css);
+        if chapters.contains("/css-") && !storage.exists(&paths(&chapters, 0).end) {
+            // Stylesheets of one's own changed: the chapters converted
+            // with those before go.
+            remove_other_css(storage, &cache, &chapters);
+        }
         let mut metadata = package.metadata;
         if metadata.title.is_none() {
             let name = path.rsplit('/').next().unwrap_or(path);
@@ -332,6 +337,7 @@ impl EpubDocument {
             cover_fit,
             user_css,
             pages: core::cell::RefCell::new(None),
+            anchors: cached::AnchorHint::default(),
             known: core::cell::RefCell::new(None),
         })
     }
@@ -340,25 +346,9 @@ impl EpubDocument {
         paths(&self.chapters, section)
     }
 
-    /// The element path of each block of a chapter (converted if needed),
-    /// by offset.
-    fn positions(&self, storage: &dyn Storage, section: u32) -> Option<Vec<(u32, String)>> {
-        let (paths, ..) = self.chapter(storage, section).ok()?;
-        let data = paperpaw_sdk::read_file(storage, &paths.positions, 1 << 20).ok()?;
-        let text = String::from_utf8_lossy(&data);
-        Some(
-            text.lines()
-                .filter_map(|line| {
-                    let (offset, path) = line.split_once('\t')?;
-                    Some((offset.parse().ok()?, String::from(path)))
-                })
-                .collect(),
-        )
-    }
-
     fn length(&self, section: u32) -> Option<u32> {
         let length = self.lengths.get(section as usize)?.get();
-        (length != UNKNOWN).then_some(length)
+        (length != UNKNOWN && length != FAILED).then_some(length)
     }
 
     /// Converts a chapter if needed; returns its paths, text length and
@@ -368,13 +358,25 @@ impl EpubDocument {
         storage: &dyn Storage,
         section: u32,
     ) -> Result<(CachePaths, u32, u32), DocumentError> {
+        let (Some(chapter), Some(slot)) = (
+            self.spine.get(section as usize),
+            self.lengths.get(section as usize),
+        ) else {
+            return Err(DocumentError::Malformed(Cow::Borrowed("no such chapter")));
+        };
         let paths = self.paths(section);
-        let length = match cached::u32_at(storage, &paths.end, 0) {
-            Ok(length) => length,
-            Err(_) => {
+        let length = match cached::converted_length(storage, &paths) {
+            Some(length) => length,
+            None if slot.get() == FAILED => {
+                return Err(DocumentError::Malformed(Cow::Borrowed(
+                    "chapter cannot be read",
+                )));
+            }
+            None => {
+                self.anchors.reset();
                 let entry = self
                     .archive
-                    .entry_by_record(storage, self.spine[section as usize].record)
+                    .entry_by_record(storage, chapter.record)
                     .map_err(package::error)?;
                 let mut rules = if self.styles {
                     package::styles(storage, &self.cache)
@@ -389,7 +391,7 @@ impl EpubDocument {
                     archive: &self.archive,
                     entry: &entry,
                 };
-                convert::convert(
+                let converted = convert::convert(
                     storage,
                     &source,
                     &paths,
@@ -397,12 +399,11 @@ impl EpubDocument {
                     self.styles,
                     self.color,
                     self.image_fit,
-                )?
+                );
+                converted.inspect_err(|_| slot.set(FAILED))?
             }
         };
-        if let Some(slot) = self.lengths.get(section as usize) {
-            slot.set(length);
-        }
+        slot.set(length);
         let blocks = (storage.size(&paths.index)? / u64::from(INDEX)) as u32;
         Ok((paths, length, blocks))
     }
@@ -410,7 +411,7 @@ impl EpubDocument {
     /// The offset of anchor `id` in a chapter.
     fn anchor(&self, storage: &dyn Storage, section: u32, id: &str) -> Option<u32> {
         let (paths, ..) = self.chapter(storage, section).ok()?;
-        cached::anchor(storage, &paths, id)
+        cached::anchor(storage, &paths, section, id, &self.anchors)
     }
 }
 
@@ -440,41 +441,39 @@ pub(crate) fn user_css(storage: &dyn Storage, path: &str, plugins: &str) -> Stri
 }
 
 impl EpubDocument {
-    /// The printed pages listed for `section`, with their offsets; the
-    /// label of the last page before it.
-    fn section_pages(
-        &self,
-        storage: &dyn Storage,
-        section: u32,
-    ) -> (Option<String>, Vec<(u32, String)>) {
-        let Ok(data) = paperpaw_sdk::read_file(
-            storage,
-            &alloc::format!("{}/pages.txt", self.cache),
-            1 << 20,
-        ) else {
-            return (None, Vec::new());
+    /// The printed pages listed for `section`. The list is read a line at
+    /// a time, the labels when they are shown.
+    fn section_pages(&self, storage: &dyn Storage, section: u32) -> SectionPages {
+        let mut pages = SectionPages {
+            section,
+            before: None,
+            here: Vec::new(),
         };
-        let text = String::from_utf8_lossy(&data);
-        let mut before = None;
-        let mut here = Vec::new();
-        for line in text.lines() {
-            let mut f = line.splitn(3, '\t');
-            let (Some(s), Some(fragment), Some(label)) = (f.next(), f.next(), f.next()) else {
-                continue;
-            };
-            let Ok(s) = s.parse::<u32>() else {
-                continue;
+        let mut at = 0;
+        cached::lines_from(storage, &self.pages_path(), 0, |line, next| {
+            let line_at = core::mem::replace(&mut at, next);
+            let mut fields = line.splitn(3, '\t');
+            let (Some(Ok(s)), Some(fragment)) =
+                (fields.next().map(str::parse::<u32>), fields.next())
+            else {
+                return true;
             };
             if s < section {
-                before = Some(String::from(label));
+                pages.before = Some(line_at);
             } else if s == section
+                && pages.here.len() < MAX_SECTION_PAGES
                 && let Some(offset) = self.anchor(storage, section, fragment)
             {
-                here.push((offset, String::from(label)));
+                pages.here.push((offset, line_at));
             }
-        }
-        here.sort_by_key(|(offset, _)| *offset);
-        (before, here)
+            true
+        });
+        pages.here.sort_by_key(|(offset, _)| *offset);
+        pages
+    }
+
+    fn pages_path(&self) -> String {
+        alloc::format!("{}/pages.txt", self.cache)
     }
 }
 
@@ -484,20 +483,28 @@ impl Document for EpubDocument {
     }
 
     fn page_label(&self, storage: &dyn Storage, at: Locator) -> Option<String> {
+        if at.section >= self.sections() {
+            return None;
+        }
         // One section's pages are resolved once.
         let mut pages = self.pages.borrow_mut();
-        if pages.as_ref().is_none_or(|(s, _)| *s != at.section) {
-            let (before, mut here) = self.section_pages(storage, at.section);
-            if let Some(before) = before {
-                here.insert(0, (0, before));
-            }
-            *pages = Some((at.section, here));
+        if pages.as_ref().is_none_or(|p| p.section != at.section) {
+            *pages = Some(self.section_pages(storage, at.section));
         }
-        let (_, here) = pages.as_ref()?;
-        here.iter()
+        let pages = pages.as_ref()?;
+        let line = pages
+            .here
+            .iter()
             .take_while(|(offset, _)| *offset <= at.offset)
             .last()
-            .map(|(_, label)| label.clone())
+            .map(|(_, line)| *line)
+            .or(pages.before)?;
+        let mut label = None;
+        cached::lines_from(storage, &self.pages_path(), line, |line, _| {
+            label = line.splitn(3, '\t').nth(2).map(String::from);
+            false
+        });
+        label
     }
 
     fn prepare_image(&self, storage: &dyn Storage, image: &ImageRef) -> Option<ImageRef> {
@@ -506,6 +513,9 @@ impl Document for EpubDocument {
         }
         let base = image.path.rsplit_once('.')?.0;
         let (dir, _) = base.rsplit_once('/')?;
+        if crate::pictures::failed(storage, base) {
+            return None;
+        }
         let (_, source) = crate::pictures::noted(storage, base)?;
         let file = crate::pictures::file(base, self.color);
         convert::decode_image(
@@ -517,6 +527,7 @@ impl Document for EpubDocument {
             self.image_fit,
             self.color,
         )
+        .inspect_err(|e| crate::pictures::note_failure(storage, base, e))
         .ok()?;
         crate::pictures::open(storage, base, self.color)
     }
@@ -527,6 +538,9 @@ impl Document for EpubDocument {
         };
         // Named by its size: decoded anew for a screen that shows it larger.
         let base = alloc::format!("{}/cover-{}", self.cache, self.cover_fit.long);
+        if crate::pictures::failed(storage, &base) {
+            return Ok(None);
+        }
         if !crate::pictures::has(storage, &base, self.color) {
             convert::decode_image(
                 storage,
@@ -536,7 +550,8 @@ impl Document for EpubDocument {
                 &self.cache,
                 self.cover_fit,
                 self.color,
-            )?;
+            )
+            .inspect_err(|e| crate::pictures::note_failure(storage, &base, e))?;
         }
         Ok(crate::pictures::open(storage, &base, self.color))
     }
@@ -551,19 +566,28 @@ impl Document for EpubDocument {
     }
 
     /// Down to the character in its text node, as KOReader counts them,
-    /// where it is in text; else the element of its block.
+    /// where it is in text; else the element of its block. The lists of
+    /// places are read a line at a time, never whole.
     fn xpointer(&self, storage: &dyn Storage, at: Locator) -> Option<String> {
-        let positions = self.positions(storage, at.section)?;
-        let (block, path) = positions
-            .iter()
-            .take_while(|(offset, _)| *offset <= at.offset)
-            .last()
-            .map_or((0, ""), |(offset, path)| (*offset, path.as_str()));
+        let (paths, ..) = self.chapter(storage, at.section).ok()?;
+        // The block: the last listed at or before `at`.
+        let (mut block, mut path) = (0, String::new());
+        cached::lines(storage, &paths.positions, |line| {
+            let Some((offset, element)) = position(line) else {
+                return true;
+            };
+            if offset > at.offset {
+                return false;
+            }
+            block = offset;
+            path.clear();
+            path.push_str(element);
+            true
+        });
         let fragment = alloc::format!("/body/DocFragment[{}]/body", at.section + 1);
         // The text node the block's text at `at` comes from.
-        let paths = self.paths(at.section);
         let mut found: Option<(u32, String, u32)> = None;
-        each_line(storage, &paths.xpointers, |line| {
+        cached::lines(storage, &paths.xpointers, |line| {
             let Some((offset, node, char)) = origin(line) else {
                 return true;
             };
@@ -573,7 +597,9 @@ impl Document for EpubDocument {
             found = Some((offset, String::from(node), char));
             true
         });
-        if let Some((offset, node, char)) = found.filter(|(offset, ..)| *offset >= block) {
+        if let Some((offset, node, char)) =
+            found.filter(|(offset, ..)| *offset >= block && at.offset - *offset <= MAX_SPAN)
+        {
             let mut text = alloc::vec![0u8; (at.offset - offset) as usize];
             let n = storage
                 .read_at(&paths.text, u64::from(offset), &mut text)
@@ -591,15 +617,11 @@ impl Document for EpubDocument {
     fn locate_xpointer(&self, storage: &dyn Storage, xpointer: &str) -> Option<Locator> {
         let pointer = parse_xpointer(xpointer)?;
         let section = pointer.section;
-        if section >= self.sections() {
-            return None;
-        }
-        let positions = self.positions(storage, section)?;
+        let (paths, ..) = self.chapter(storage, section).ok()?;
         // Exactly, where it points into text PaperPaw shows.
         if let Some((node, char)) = pointer.node() {
-            let paths = self.paths(section);
             let mut found: Option<(u32, u32)> = None;
-            each_line(storage, &paths.xpointers, |line| {
+            cached::lines(storage, &paths.xpointers, |line| {
                 if let Some((offset, at, from)) = origin(line)
                     && at == node
                     && from <= char
@@ -609,7 +631,7 @@ impl Document for EpubDocument {
                 true
             });
             if let Some((offset, chars)) = found {
-                let mut text = alloc::vec![0u8; (chars as usize * 4).min(16 * 1024)];
+                let mut text = alloc::vec![0u8; (chars as usize * 4).min(MAX_SPAN as usize)];
                 let n = storage
                     .read_at(&paths.text, u64::from(offset), &mut text)
                     .ok()?;
@@ -622,18 +644,22 @@ impl Document for EpubDocument {
         let inside = |path: &str, of: &str| {
             of.is_empty() || path == of || path.strip_prefix(of).is_some_and(|r| r.starts_with('/'))
         };
-        // The element's first block, else the block it is part of.
-        let offset = positions
-            .iter()
-            .find(|(_, path)| inside(path, &target))
-            .or_else(|| {
-                positions
-                    .iter()
-                    .rev()
-                    .find(|(_, path)| inside(&target, path))
-            })
-            .map_or(0, |(offset, _)| *offset);
-        Some(Locator::new(section, offset))
+        // The element's first block, else the last block it is part of.
+        let (mut first, mut within) = (None, None);
+        cached::lines(storage, &paths.positions, |line| {
+            let Some((offset, path)) = position(line) else {
+                return true;
+            };
+            if inside(path, &target) {
+                first = Some(offset);
+                return false;
+            }
+            if inside(&target, path) {
+                within = Some(offset);
+            }
+            true
+        });
+        Some(Locator::new(section, first.or(within).unwrap_or(0)))
     }
 
     fn fonts(&self, storage: &dyn Storage) -> Vec<EmbeddedFont> {

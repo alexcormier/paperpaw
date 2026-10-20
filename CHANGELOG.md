@@ -6,6 +6,78 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- A new look, rounder and friendlier: soft corners, pills for buttons,
+  switches, chips and the highlight, plain headers (the title on the
+  page, a little larger, no bar or line), faint lines between rows from
+  where their text starts, margins of 4 mm. Rows with
+  a note keep smaller corners, so the highlight never comes near their
+  text; the home screen's grid, its frames and the focus are round too.
+  A paw: beside the icon of empty screens (empty shelves of the library
+  now show an icon and a title too), as the busy mark, and on the X4 in
+  the hint of the button whose press is being worked on.
+- Appearance settings: the text size and contrast for everyone; with
+  advanced settings the header (plain, light, dark), corners (square,
+  slightly rounded, round, soft; round and soft make pills), the
+  highlight (dark bar, frame, light bar), lines between rows (faint,
+  lines, none), lists on cards, the size of headers' titles, margins,
+  rows and lines. Pebble, a theme for touch screens with lists on
+  rounded cards and a light highlight, comes switched off in the plugin
+  manager; `samples/plugins` has two more themes, Paw and Calm ink. The
+  classic look is the Airy sample's light headers and small corners.
+- Library: with round or soft corners, covers have rounded corners too,
+  at most as round as a book's. The grid of covers keeps its covers
+  clear of a framed focus, its focus a box; titles on a light focus
+  stay black.
+- Headers: their title, note, page number and arrows are centred by
+  their ink, no longer by their lines of text, which set them up to
+  nine pixels off the middle; the gray arrow at the first or last page
+  shows as gray on panels of black and white too.
+- Status lines: where their items would not fit whole (wide margins,
+  large text), the gaps between them narrow first, so the quick panel's
+  date is no longer shortened.
+- Setup: its margins are the menus' and a gap, no longer twice the
+  menus', so wide margins leave its choices room.
+- SDK: `UiStyle::{pill, focus, separators, plain_header, cards, grays,
+  head}`, `UiStyle::radius`, `focus_ink`, `focus_paper`, `focus_faint`,
+  `dark_focus`, `ui::draw_separator`, `ui::Focus`, `ui::Separators`,
+  `ui::PAW_ICON`, `Thumbnail::draw_round`; settings `core.ui-focus`,
+  `core.ui-separators`, `core.ui-groups`, `core.ui-title`,
+  `core.header.plain`, `core.corners.soft`; graphics:
+  `Canvas::fill_corners`, `round::corner_inset`. Plugins draw what is on
+  a focused row in `focus_ink` rather than white, so every highlight
+  works.
+- Books: no book can crash the X4 or exhaust its memory any more. A
+  picture's long alternative text in CJK script crashed the EPUB
+  converter, and with the last book reopened at start, possibly at
+  every start. Converting a chapter now takes bounded memory however
+  its markup is made (deeply nested or unclosed elements, many text
+  nodes, pictures, names, links), and what it writes is bounded by its
+  size; a chapter that cannot be converted is not tried again until the
+  book is opened again. What is read of an EPUB's package, a
+  FictionBook's description and a comic's page list is bounded too;
+  KOReader positions, anchors and printed page numbers are found a line
+  at a time and in few reads; a cut or damaged cache is converted again.
+- Books: a book replaced by another of its name, even of the same size,
+  is read anew, without the pictures and chapters of the old one;
+  chapters converted with stylesheets one no longer has go.
+- EPUB: stylesheets in Latin-1 keep their rules; quoted strings and
+  comments in stylesheets no longer end a rule. Pictures that cannot be
+  decoded are shown as their alternative text and not decoded again on
+  every page.
+- FictionBook: the contents are kept on the card and lead to their
+  titles also after self-closing sections; named styles (`<style>`)
+  keep their words; a missing or broken cover is not looked for again
+  each time the library shows the book.
+- Comic books: the first pages are kept (5,000 at most), where pages at
+  the end were kept before, and the page list is made once.
+- Markdown: files of very long lines or many brackets open quickly in
+  little memory.
+- Plain text books read UTF-16 files and keep stray Latin-1 letters in
+  otherwise UTF-8 text, pages of blank lines no longer end a book
+  early, and paging reads far less from the card.
+- XTC books with damaged or oversized pages fail cleanly instead of
+  crashing the X4 or filling the card, gray pages open much faster, and
+  long chapter lists take little memory.
 - Native code plugins as files (ADR 0024, PLANNING P5): a code plugin
   can be a file in its folder on the card (`plugins/<id>/code.ppn`),
   which the Xteink X4 and X4 Pro load at their start, without a new
