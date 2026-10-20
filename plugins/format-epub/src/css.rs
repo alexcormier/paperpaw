@@ -801,3 +801,6 @@ mod tests {
         assert_eq!(copy.props("p", "").family, Some(1));
     }
 }
+
+#[cfg(test)]
+mod hostile_tests;
