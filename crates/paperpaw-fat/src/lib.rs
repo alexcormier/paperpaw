@@ -152,6 +152,29 @@ fn short_name_is<IO: ReadWriteSeek + 'static>(entry: &FatEntry<IO>, name: &str) 
     same_name(short, name)
 }
 
+/// Most entries a folder holds (FAT's limit). Read on past them, a
+/// folder whose clusters run in a loop (a damaged card) would never end.
+/// Not where the loop holds removed entries only: rust-fatfs reads past
+/// those itself, giving none.
+const ENTRIES: usize = 65_536;
+
+/// `items`, failing past [`ENTRIES`].
+fn bounded<T>(
+    items: impl Iterator<Item = Result<T, StorageError>>,
+) -> impl Iterator<Item = Result<T, StorageError>> {
+    items.enumerate().map(|(i, item)| match i {
+        ..ENTRIES => item,
+        _ => Err(StorageError::Io),
+    })
+}
+
+/// The entries of `dir`, failing past [`ENTRIES`].
+fn entries<IO: ReadWriteSeek + 'static>(
+    dir: &FatDir<IO>,
+) -> impl Iterator<Item = Result<FatEntry<IO>, StorageError>> {
+    bounded(dir.iter().map(|entry| entry.map_err(error)))
+}
+
 /// What a name stands for in a folder.
 struct Lookup<IO: ReadWriteSeek + 'static> {
     /// The entry it names: by its long name, or by its short name where
@@ -175,8 +198,8 @@ fn lookup<IO: ReadWriteSeek + 'static>(
         entry: None,
         others: false,
     };
-    for entry in dir.iter() {
-        let entry = entry.map_err(error)?;
+    for entry in entries(dir) {
+        let entry = entry?;
         let by_short = short_name_is(&entry, name);
         let (named, other) = match long_name_is(&entry, name) {
             Some(by_long) => (by_long, by_short),
@@ -487,8 +510,8 @@ impl<IO: ReadWriteSeek + 'static> Storage for FatStorage<IO> {
         }
         // The sizes in the folders, as appended.
         self.sync()?;
-        for entry in self.dir(dir)?.iter() {
-            let entry = entry.map_err(error)?;
+        for entry in entries(&self.dir(dir)?) {
+            let entry = entry?;
             let name = entry.file_name();
             if name == "." || name == ".." {
                 continue;
@@ -568,8 +591,8 @@ impl<IO: ReadWriteSeek + 'static> Storage for FatStorage<IO> {
             Err(e) => return Err(e),
         };
         let mut names: alloc::vec::Vec<(String, bool)> = alloc::vec::Vec::new();
-        for entry in dir.iter() {
-            let entry = entry.map_err(error)?;
+        for entry in entries(&dir) {
+            let entry = entry?;
             let name = entry.file_name();
             if name != "." && name != ".." {
                 names.push((name, entry.is_dir()));
@@ -1151,11 +1174,10 @@ mod tests {
         assert_eq!(s.size("books/a LONG title.epub"), Ok(6));
     }
 
-    /// A card with `files` written, then their long names taken away, as
-    /// systems write names that fit in 8.3.
-    fn short_names_only(files: &[(&str, &[u8])]) -> FatStorage<Disk> {
+    /// A card of 4 MB formatted with `options`, `files` written on it.
+    fn card_with_files(options: FormatVolumeOptions, files: &[(&str, &[u8])]) -> Vec<u8> {
         let mut formatted = StdIoWrapper::from(Cursor::new(vec![0u8; 4 << 20]));
-        fatfs::format_volume(&mut formatted, FormatVolumeOptions::new()).unwrap();
+        fatfs::format_volume(&mut formatted, options).unwrap();
         let card = Cut(alloc::rc::Rc::new(RefCell::new(
             formatted.into_inner().into_inner(),
         )));
@@ -1166,7 +1188,19 @@ mod tests {
             s.write(path, data).unwrap();
         }
         s.sync().unwrap();
-        let mut bytes = card.0.borrow().clone();
+        card.0.borrow().clone()
+    }
+
+    /// The storage on the card `bytes`.
+    fn mounted(bytes: Vec<u8>) -> FatStorage<Disk> {
+        let fs = FileSystem::new(StdIoWrapper::from(Cursor::new(bytes)), FsOptions::new()).unwrap();
+        FatStorage::new(Box::leak(Box::new(fs)))
+    }
+
+    /// A card with `files` written, then their long names taken away, as
+    /// systems write names that fit in 8.3.
+    fn short_names_only(files: &[(&str, &[u8])]) -> FatStorage<Disk> {
+        let mut bytes = card_with_files(FormatVolumeOptions::new(), files);
         // Every long name entry (attributes 0x0F, type 0, no cluster)
         // marked removed.
         for entry in bytes.as_chunks_mut::<32>().0 {
@@ -1174,8 +1208,53 @@ mod tests {
                 entry[0] = 0xE5;
             }
         }
-        let fs = FileSystem::new(StdIoWrapper::from(Cursor::new(bytes)), FsOptions::new()).unwrap();
-        FatStorage::new(Box::leak(Box::new(fs)))
+        mounted(bytes)
+    }
+
+    #[test]
+    fn folders_end_after_the_most_entries_fat_holds() {
+        // Endless, as the entries of a folder whose clusters run in a loop.
+        let endless = core::iter::repeat_with(|| Ok(()));
+        assert_eq!(bounded(endless).position(|r| r.is_err()), Some(ENTRIES));
+        let few = [Ok(1), Ok(2)].into_iter();
+        assert_eq!(bounded(few).collect::<Vec<_>>(), [Ok(1), Ok(2)]);
+    }
+
+    /// A damaged card, a folder's clusters in a loop: reading the folder
+    /// fails instead of going on for ever.
+    #[test]
+    fn folders_in_a_loop_end() {
+        // Clusters of one block: 16 entries. `.`, `..` and seven files
+        // of two entries each (a long name and a short one) fill the
+        // first; the eighth file takes another.
+        let files: Vec<(String, &[u8])> = (0..8)
+            .map(|n| (alloc::format!("Loop/f{n}.txt"), &b"x"[..]))
+            .collect();
+        let files: Vec<(&str, &[u8])> = files.iter().map(|(p, d)| (p.as_str(), *d)).collect();
+        let options = FormatVolumeOptions::new()
+            .fat_type(fatfs::FatType::Fat16)
+            .bytes_per_cluster(BLOCK as u32);
+        let mut bytes = card_with_files(options, &files);
+        // The folder's first cluster, from its short entry in the root.
+        let entry = bytes
+            .as_chunks::<32>()
+            .0
+            .iter()
+            .find(|e| &e[..11] == b"LOOP       " && e[11] & 0x10 != 0)
+            .unwrap();
+        let cluster = usize::from(u16::from_le_bytes([entry[26], entry[27]]));
+        // Its next cluster in both FATs: itself.
+        let reserved = usize::from(u16::from_le_bytes([bytes[14], bytes[15]]));
+        let per_fat = usize::from(u16::from_le_bytes([bytes[22], bytes[23]]));
+        for fat in 0..usize::from(bytes[16]) {
+            let at = (reserved + fat * per_fat) * BLOCK + cluster * 2;
+            bytes[at..at + 2].copy_from_slice(&(cluster as u16).to_le_bytes());
+        }
+        let s = mounted(bytes);
+        assert_eq!(s.size("Loop/missing.txt"), Err(StorageError::Io));
+        assert_eq!(s.list("Loop", &mut |_| {}), Err(StorageError::Io));
+        assert_eq!(s.write("Loop/new.txt", b"new"), Err(StorageError::Io));
+        assert_eq!(s.remove_dir_all("Loop"), Err(StorageError::Io));
     }
 
     /// An entry with a short name alone is found by it.
