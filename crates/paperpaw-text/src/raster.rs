@@ -173,8 +173,20 @@ fn accumulate_line(acc: &mut [f32], width: usize, height: usize, p0: Pt, p1: Pt)
             } else {
                 let a1 = s * (1.5 - x0f);
                 add(row + x0i + 1, d * (a1 - a0));
-                for xi in x0i + 2..x1i - 1 {
+                // Columns before or past the buffer all land on its first
+                // or last cell: add them at once, so that a segment far
+                // outside the box costs no more than one across it.
+                let (from, to) = (x0i + 2, x1i - 1);
+                let inside = (-row).clamp(from, to);
+                let past = (max_index - row + 1).clamp(inside, to);
+                if inside > from {
+                    add(0, (inside - from) as f32 * d * s);
+                }
+                for xi in inside..past {
                     add(row + xi, d * s);
+                }
+                if to > past {
+                    add(max_index, (to - past) as f32 * d * s);
                 }
                 let a2 = a1 + (x1i - x0i - 3) as f32 * s;
                 add(row + x1i - 1, d * (1.0 - a2 - am));
@@ -185,16 +197,25 @@ fn accumulate_line(acc: &mut [f32], width: usize, height: usize, p0: Pt, p1: Pt)
     }
 }
 
-// Float helpers that `core` does not provide without `std`.
+// Float helpers that `core` does not provide without `std`. Values
+// beyond `i32` saturate (the cast does, and so does the step after it).
 
 pub(crate) fn floor(x: f32) -> i32 {
     let i = x as i32;
-    if (i as f32) > x { i - 1 } else { i }
+    if (i as f32) > x {
+        i.saturating_sub(1)
+    } else {
+        i
+    }
 }
 
 pub(crate) fn ceil(x: f32) -> i32 {
     let i = x as i32;
-    if (i as f32) < x { i + 1 } else { i }
+    if (i as f32) < x {
+        i.saturating_add(1)
+    } else {
+        i
+    }
 }
 
 pub(crate) fn abs(x: f32) -> f32 {

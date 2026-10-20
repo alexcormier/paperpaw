@@ -24,15 +24,17 @@ enum Ev {
 fn events_of(data: &[u8], chunk: usize) -> Vec<Ev> {
     let mut parser = Parser::default();
     let mut out = Vec::new();
-    for piece in data.chunks(chunk.max(1)) {
-        parser.feed(piece, &mut |event| {
-            out.push(match event {
-                Event::Open(path) => Ev::Open(path.to_vec()),
-                Event::Close(path) => Ev::Close(path.to_vec()),
-                Event::Value(path, text) => Ev::Value(path.to_vec(), text.to_string()),
-            });
+    let mut emit = |event: Event<'_>| {
+        out.push(match event {
+            Event::Open(path) => Ev::Open(path.to_vec()),
+            Event::Close(path) => Ev::Close(path.to_vec()),
+            Event::Value(path, text) => Ev::Value(path.to_vec(), text.to_string()),
         });
+    };
+    for piece in data.chunks(chunk.max(1)) {
+        parser.feed(piece, &mut emit);
     }
+    parser.finish(&mut emit);
     out
 }
 
@@ -474,8 +476,8 @@ fn stream_nesting_past_the_limit_is_skipped_whole() {
     assert_eq!(events.last(), Some(&Ev::Close(Vec::new())));
 }
 
+/// Only the end of the input ends a plain value there: `finish` reports it.
 #[test]
-#[ignore = "bug: a plain value at the very end of the input is never reported, the parser has no way to finish"]
 fn a_plain_value_at_the_end_of_the_input_is_reported() {
     assert_eq!(
         events_of(b"42", usize::MAX),

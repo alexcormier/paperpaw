@@ -84,7 +84,6 @@ fn readings_with_odd_parts_are_read_as_far_as_they_go() {
 /// that fits a `u64` but not a thousand times over panics in debug
 /// builds (and wraps in release ones).
 #[test]
-#[ignore = "bug: huge kilopixels in a log line overflow when read (panic in debug builds)"]
 fn huge_kilopixels_do_not_overflow() {
     let text = "sample,10,4000,90,0,0,0,0,18446744073709551615,0,0,0,";
     let _ = parse(text);
@@ -93,7 +92,6 @@ fn huge_kilopixels_do_not_overflow() {
 /// The totals add the times awake without a check: two long ones of a
 /// hostile log overflow.
 #[test]
-#[ignore = "bug: totals of times awake overflow on a hostile log (panic in debug builds)"]
 fn totals_of_huge_times_awake_do_not_overflow() {
     let mut log = String::new();
     for _ in 0..2 {
@@ -209,7 +207,6 @@ fn a_battery_that_gained_or_has_no_percent_does_not_count() {
 /// One byte that is not UTF-8 in the log loses only its own line, not
 /// the lines read with it.
 #[test]
-#[ignore = "bug: one invalid UTF-8 byte in the battery log drops every line read in the same 2 KiB piece"]
 fn a_damaged_line_loses_only_itself() {
     let mut log = String::from(HEADER);
     session(&mut log, 30, 3, 10);

@@ -329,6 +329,7 @@ impl Harness {
             caps: self.caps(),
             wifi: None,
             firmware: None,
+            native: None,
             clipboard: false,
             slots: &[],
             screens: &[],
@@ -1277,8 +1278,9 @@ fn the_greeting_stays_in_a_low_row() {
     .assert_all();
 }
 
+/// A picture folder of thousands of words: its lines are counted
+/// without overflow (`lines * line height` used to overflow `u16`).
 #[test]
-#[ignore = "bug: a picture folder of thousands of words panics (words.rs: lines * line height overflows u16)"]
 fn a_long_folder_name_does_not_panic() {
     let folder = "word ".repeat(2000);
     let settings = [("widgets.picture.folder", folder.as_str())];

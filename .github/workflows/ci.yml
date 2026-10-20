@@ -117,7 +117,11 @@ jobs:
           device: ${{ matrix.device }}
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: shells/xteink
+          # The firmware, the sample code plugin and paperpaw-sign.
+          workspaces: |
+            shells/xteink
+            samples/hello-native
+            .
           key: ${{ matrix.device }}
       - name: Lint and build
         working-directory: shells/xteink
@@ -127,6 +131,53 @@ jobs:
           cargo +"$FIRMWARE_TOOLCHAIN" clippy $FIRMWARE_CARGO --features "$DEVICE,remote" -- -D warnings
           cargo +"$FIRMWARE_TOOLCHAIN" clippy $FIRMWARE_CARGO --features "$DEVICE" -- -D warnings
           cargo +"$FIRMWARE_TOOLCHAIN" build $FIRMWARE_CARGO --features "$DEVICE"
+      - name: The sample code plugin fits the firmware
+        uses: ./.github/actions/native-sample
+
+  native:
+    name: Native plugins
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: riscv32imc-unknown-none-elf
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            .
+            crates/paperpaw-core/tests/native-plugin
+      - name: A plugin from another workspace, in a kernel
+        run: |
+          cargo build --release --manifest-path crates/paperpaw-core/tests/native-plugin/Cargo.toml
+          cargo test -p paperpaw-core --test native_plugin -- --ignored
+      - name: The SDK keeps no mutable statics
+        # A plugin file has no writable data, and a plugin has its own
+        # copy of the SDK code it uses. Without LTO, each crate's objects
+        # are seen apart.
+        env:
+          CARGO_PROFILE_RELEASE_LTO: "false"
+        run: |
+          cargo build --release --target riscv32imc-unknown-none-elf -p paperpaw-sdk --target-dir target/statics
+          cargo run --release -p paperpaw-sign -- statics \
+            target/statics/riscv32imc-unknown-none-elf/release/deps/*.rlib
+      - name: The sample and its CI template name the firmware's compilers
+        run: |
+          x4="$(sed -n 's/^channel = "\(.*\)"/\1/p' shells/xteink/rust-toolchain.toml)"
+          . shells/xteink/versions.env
+          template=samples/hello-native/.github/workflows/build.yml
+          status=0
+          for found in \
+            "samples/hello-native/rust-toolchain.toml:channel = \"$x4\"" \
+            "$template:RUST_X4: \"$x4\"" \
+            "$template:RUST_X4_PRO: \"$ESP_RUST_VERSION\"" \
+            "$template:--crosstool-toolchain-version $ESP_GCC_VERSION"; do
+            if ! grep -qF -- "${found#*:}" "${found%%:*}"; then
+              echo "::error file=${found%%:*}::should say ${found#*:}, as shells/xteink does"
+              status=1
+            fi
+          done
+          exit $status
 
   architecture:
     name: Architecture rules

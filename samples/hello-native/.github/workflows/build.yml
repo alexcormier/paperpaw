@@ -1,13 +1,17 @@
 # A CI job for a native PaperPaw plugin's own repository (copy this
 # folder's files to start one): on every tag it builds the plugin for the
-# Xteink X4 and the X4 Pro, packs both files and signs them with the
-# author's key, and attaches them to the tag's release for the plugin
-# library. Nothing here runs in PaperPaw's own repository.
+# Xteink X4 and the X4 Pro with ./build.sh, packs both files and signs
+# them with the author's key, and attaches them, the plugin's folder as
+# ZIPs, their SHA-256 sums and a catalogue snippet to the tag's release
+# for the plugin library. The library rebuilds the files in the paths of
+# GitHub's runners, so files built here can be verified against their
+# source. Nothing here runs in PaperPaw's own repository.
 #
-# The author's key: `paperpaw-sign key author.key` once, then its contents
-# as the repository's secret PAPERPAW_PLUGIN_KEY. Keep the file safe:
-# devices remember the key at the first install and warn when an update is
-# signed by another.
+# The author's key: `paperpaw-sign key author.key` once, outside the
+# repository, then its contents as the repository's secret
+# PAPERPAW_PLUGIN_KEY. Keep the file safe and never commit it: devices
+# remember the key at the first install and warn when an update is signed
+# by another.
 name: Build
 
 on:
@@ -22,10 +26,13 @@ env:
   CARGO_TERM_COLOR: always
   # The PaperPaw release the plugin is built for, and its compilers: a
   # file runs only on firmware built by the same ones (the device's
-  # *About* names them).
+  # *About* names them; PaperPaw's shells/xteink/rust-toolchain.toml and
+  # versions.env of that release pin them). RUST_X4 is also this
+  # repository's rust-toolchain.toml.
   PAPERPAW: "0.5.0"
   RUST_X4: "1.99.0"
   RUST_X4_PRO: "1.97.0.0"
+  ESP_GCC: "14.2.0_20241119"
   # The plugin's binary crate, as in Cargo.toml.
   PLUGIN: hello
 
@@ -38,41 +45,70 @@ jobs:
       - name: Compilers
         run: |
           rustup toolchain install "$RUST_X4" --profile minimal --target riscv32imc-unknown-none-elf
-          curl -sSfL https://github.com/esp-rs/espup/releases/latest/download/espup-x86_64-unknown-linux-gnu -o espup
-          chmod +x espup
-          ./espup install --targets esp32s3 --toolchain-version "$RUST_X4_PRO" \
-            --crosstool-toolchain-version 14.2.0_20241119
+          curl -sSfL https://github.com/esp-rs/espup/releases/latest/download/espup-x86_64-unknown-linux-gnu -o "$RUNNER_TEMP/espup"
+          chmod +x "$RUNNER_TEMP/espup"
+          "$RUNNER_TEMP/espup" install --targets esp32s3 --toolchain-version "$RUST_X4_PRO" \
+            --crosstool-toolchain-version "$ESP_GCC"
       - name: paperpaw-sign, of the release
         run: cargo "+$RUST_X4" install --locked --git https://github.com/hthoene/paperpaw --tag "v$PAPERPAW" paperpaw-sign
-      - name: Build
+      - name: The tag is the plugin's version
+        if: startsWith(github.ref, 'refs/tags/')
         run: |
-          cargo "+$RUST_X4" build --release --target riscv32imc-unknown-none-elf
-          . "$HOME/export-esp.sh"
-          cargo +esp build --release --target xtensa-esp32s3-none-elf -Zbuild-std=core,alloc
-      - name: Pack and sign
+          version=$(sed -n 's/^version *= *//p' plugin/plugin.ini | tr -d '\r' | head -n 1)
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "the tag is $GITHUB_REF_NAME, plugin/plugin.ini says version $version" >&2
+            exit 1
+          fi
+      - name: Build, pack and sign
         env:
           PAPERPAW_PLUGIN_KEY: ${{ secrets.PAPERPAW_PLUGIN_KEY }}
         run: |
-          mkdir -p dist
-          key="$RUNNER_TEMP/author.key"
+          . "$HOME/export-esp.sh"
           if [ -n "$PAPERPAW_PLUGIN_KEY" ]; then
-            printf '%s\n' "$PAPERPAW_PLUGIN_KEY" > "$key"
-            sign=(--key "$key")
+            key="$RUNNER_TEMP/author.key"
+            (umask 077 && printf '%s\n' "$PAPERPAW_PLUGIN_KEY" > "$key")
+            ./build.sh --key "$key"
+            rm -f "$key"
           else
             # A pull request from a fork has no secrets: unsigned files.
-            sign=()
+            ./build.sh
           fi
-          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
-            version="${GITHUB_REF_NAME#v}"
-          else
-            version=dev
-          fi
-          paperpaw-sign pack "target/riscv32imc-unknown-none-elf/release/$PLUGIN" \
-            "dist/$PLUGIN-$version-x4.ppn" "${sign[@]}"
-          paperpaw-sign pack "target/xtensa-esp32s3-none-elf/release/$PLUGIN" \
-            "dist/$PLUGIN-$version-x4-pro.ppn" "${sign[@]}"
-          rm -f "$key"
-          (cd dist && sha256sum ./*.ppn > SHA256SUMS)
+          for ppn in dist/*.ppn; do
+            if [ -n "$PAPERPAW_PLUGIN_KEY" ]; then paperpaw-sign check-plugin "$ppn"; else paperpaw-sign plugin "$ppn"; fi
+          done
+      - name: Catalogue snippet
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          # The [[versions]] of the plugin's catalogue entry for this
+          # release, the files as the release below serves them.
+          id=$(sed -n 's/^id *= *//p' plugin/plugin.ini | tr -d '\r' | head -n 1)
+          version="${GITHUB_REF_NAME#v}"
+          base="https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME"
+          sum() { sed -n "s/^\([0-9a-f]\{64\}\)  $1\$/\1/p" dist/SHA256SUMS; }
+          abi() { paperpaw-sign plugin "dist/$1" | sed -n 's/^fingerprint: *//p'; }
+          {
+            echo "[[versions]]"
+            echo "version = \"$version\""
+            echo "sdk = \"${PAPERPAW%.*}\""
+            echo "date = \"$(date -u +%Y-%m-%d)\""
+            echo "url = \"$base/$id-$version.zip\""
+            echo "sha256 = \"$(sum "$id-$version.zip")\""
+            echo
+            echo "[versions.source]"
+            echo "repository = \"https://github.com/$GITHUB_REPOSITORY\""
+            echo "revision = \"$GITHUB_REF_NAME\""
+            echo "bin = \"$PLUGIN\""
+            for device in x4 x4-pro; do
+              file="$id-$version-$device.ppn"
+              echo
+              echo "[[versions.builds]]"
+              echo "device = \"$device\""
+              echo "abi = \"$(abi "$file")\""
+              echo "url = \"$base/$file\""
+              echo "sha256 = \"$(sum "$file")\""
+            done
+          } > dist/catalogue-versions.toml
+          cat dist/catalogue-versions.toml
       - uses: actions/upload-artifact@v4
         with:
           name: plugin

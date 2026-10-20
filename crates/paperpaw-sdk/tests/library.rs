@@ -670,7 +670,6 @@ fn a_damaged_line_does_not_lose_the_other_favourites() {
 /// left out, so a path first in the list that starts with U+FEFF (a
 /// valid file name) loses it and no longer names its book.
 #[test]
-#[ignore = "bug: a first favourite or opened path starting with U+FEFF loses it, taken for a byte order mark"]
 fn a_first_favourite_starting_with_a_bom_is_kept() {
     let storage = MemoryStorage::new();
     library::set_favourite(&storage, "\u{feff}a.epub", true);
@@ -681,7 +680,6 @@ fn a_first_favourite_starting_with_a_bom_is_kept() {
 /// multiple of the rows) is the folder's first page instead: going up
 /// from a folder shown at the top of a later page shows the first page.
 #[test]
-#[ignore = "bug: Listing::page_of gives the first page for an entry that starts its page"]
 fn the_page_of_an_entry_first_on_its_page_holds_it() {
     let mut storage = MemoryStorage::new();
     for i in 0..9 {

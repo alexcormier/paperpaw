@@ -348,7 +348,6 @@ global_storage!(GlobalA, "a");
 global_storage!(GlobalB, "b");
 
 #[test]
-#[ignore = "bug: Mounted::rename tells the storages apart by address, and two zero-sized storages share one"]
 fn renames_across_the_mount_point_are_refused_for_stateless_storages_too() {
     let storage = Mounted::new(GlobalA, "books", GlobalB);
     let result = storage.rename("settings.ini", "books/settings.ini");

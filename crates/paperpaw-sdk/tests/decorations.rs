@@ -280,7 +280,6 @@ proptest! {
 /// A word at the very left of the page: the background's padding is cut
 /// there, and it is to keep its padding on the right as anywhere else.
 #[test]
-#[ignore = "bug: draw_behind widens a background clipped at x 0 by the whole padding on the right"]
 fn a_background_at_the_left_edge_keeps_its_padding_on_the_right() {
     let h = Harness::new(Device::TOUCH);
     let env = h.env();
@@ -360,6 +359,30 @@ fn marking(id: &'static str, role: &'static str) -> DecoratorSpec {
         });
         out
     })
+}
+
+/// The decorators' signature is FNV-1a over each one's id, whether it is
+/// on and, if so, its own signature, in their order: worked out piece by
+/// piece, it is what `fnv1a64` gives for those bytes in one piece.
+#[test]
+fn the_signature_is_fnv1a_over_ids_switches_and_signatures() {
+    let mut h = Harness::new(Device::TOUCH);
+    h.define_bool("t.off", false);
+    let off = paperpaw_sdk::Setting::<bool>::new("t.off");
+    let mut list = Decorators::new();
+    list.add(marking("t.a", "t.a").order(1).signature(|_| 7));
+    list.add(marking("t.b", "t.b").order(2).switch(&off).signature(|_| 9));
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(b"t.a");
+    bytes.push(1);
+    bytes.extend_from_slice(&7u64.to_le_bytes());
+    bytes.extend_from_slice(b"t.b");
+    bytes.push(0);
+    assert_eq!(list.signature(&h.env()), paperpaw_digest::fnv1a64(&bytes));
+    assert_eq!(
+        Decorators::new().signature(&h.env()),
+        paperpaw_digest::fnv1a64([])
+    );
 }
 
 #[test]

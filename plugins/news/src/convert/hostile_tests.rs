@@ -165,7 +165,6 @@ fn titles_and_dates_are_cut_at_a_character_boundary() {
 }
 
 #[test]
-#[ignore = "bug: the feed's own title is not cut at MAX_FIELD bytes like the articles' titles"]
 fn a_long_channel_title_is_cut_like_other_titles() {
     let feed = format!(
         "<rss><channel><title><![CDATA[{}]]></title><item><title>{}</title><description>x</description></item></channel></rss>",

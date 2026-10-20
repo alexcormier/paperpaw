@@ -168,7 +168,6 @@ fn update_versions_as_firmware_names_them() {
 /// `rc.10`); compared as text, `rc.10` comes first, so an update to
 /// `1.0.0-rc.10` would not be offered over `1.0.0-rc.9`.
 #[test]
-#[ignore = "bug: compare_versions compares numbered pre-releases as text (rc.10 before rc.9)"]
 fn numbered_prereleases_compare_by_number() {
     assert_eq!(
         compare_versions("1.0.0-rc.9", "1.0.0-rc.10"),

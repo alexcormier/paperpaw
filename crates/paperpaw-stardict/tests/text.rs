@@ -137,7 +137,6 @@ fn typed_fields_with_a_type_sequence() {
 /// brackets around it, is longer than its data, and must still come
 /// whole.
 #[test]
-#[ignore = "bug: lib.rs cuts a definition's text to the size of its data, so the brackets and bullets decoding adds can cut off its end"]
 fn a_definition_whose_text_is_longer_than_its_data_comes_whole() {
     let mut spec = Spec::new(&[("b", "/bi:/\0")]);
     spec.types = Some("th".to_string());

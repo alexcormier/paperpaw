@@ -35,6 +35,13 @@ use paperpaw_platform::Storage;
 use paperpaw_sdk::native::{FINGERPRINT, TOOLCHAIN};
 use paperpaw_sdk::{Plugin, PluginProblem};
 
+/// The fingerprint plugin files must have, under a name of its own in the
+/// firmware's ELF file: the release takes it from there (`paperpaw-sign
+/// fingerprint`), so it is the one compared here, however it is made.
+#[used]
+#[unsafe(export_name = "PAPERPAW_NATIVE_FINGERPRINT")]
+static EXPORTED_FINGERPRINT: [u8; 8] = FINGERPRINT.0.to_le_bytes();
+
 /// The chip plugin files must be made for.
 #[cfg(feature = "x4")]
 const CHIP: Chip = Chip::Esp32C3;

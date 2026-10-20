@@ -370,7 +370,7 @@ pub fn cover(
         book.size, image.path, image.width, image.height
     ));
     let file = cover_file(path);
-    if let Some(thumb) = crate::ui::Thumbnail::kept(storage, &file, stamp) {
+    if let Some(thumb) = crate::ui::Thumbnail::kept(storage, &file, stamp, (w, h)) {
         return Some(thumb);
     }
     let thumb = crate::ui::Thumbnail::new(storage, image, w, h, format)?;
@@ -412,7 +412,13 @@ fn update_list(
     if let Ok(mut list) = read_list(storage, path, max) {
         change(&mut list);
         list.truncate(max);
-        let _ = storage.write(path, list.join("\n").as_bytes());
+        let mut text = list.join("\n");
+        // Read without a byte order mark: a first path that begins with
+        // one (U+FEFF) keeps it behind a mark of the file's own.
+        if text.starts_with('\u{feff}') {
+            text.insert(0, '\u{feff}');
+        }
+        let _ = storage.write(path, text.as_bytes());
     }
 }
 

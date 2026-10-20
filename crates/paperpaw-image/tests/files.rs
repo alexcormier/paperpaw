@@ -219,11 +219,10 @@ fn reads_in_small_pieces_are_put_together() {
 }
 
 #[test]
-#[ignore = "bug: decoded image files do not open on storage that reads fewer bytes than asked"]
 fn files_open_on_storage_that_reads_in_pieces() {
-    // `Storage::read_at` "reads up to `buf.len()` bytes"; GrayFile::open
-    // and ColorFile::open take a shorter read of their 12-byte header
-    // for a file that is not theirs, where the rows' reads go on.
+    // `Storage::read_at` "reads up to `buf.len()` bytes": GrayFile::open
+    // and ColorFile::open read on for their 12-byte header, as the rows'
+    // reads do, and do not take a shorter read for a file not theirs.
     let storage = Files {
         step: 5,
         ..Files::default()

@@ -263,7 +263,6 @@ fn a_schema_too_large_for_the_first_page_is_refused() {
 /// The temporary pages of a refused schema are removed, as they are
 /// when the storage fails.
 #[test]
-#[ignore = "bug: Writer::finish returns SchemaTooLarge without removing <path>.part"]
 fn a_refused_schema_leaves_no_part_file() {
     let storage = Memory::default();
     let mut writer = Writer::new(&storage, "db");
@@ -326,7 +325,6 @@ fn columns_come_from_odd_create_statements() {
 /// SQLite keeps a table's statement as it was written, comments and
 /// default texts included.
 #[test]
-#[ignore = "bug: columns() splits at commas inside comments and quoted texts"]
 fn commas_in_comments_and_texts_make_no_columns() {
     let sql =
         "CREATE TABLE t (\n  a TEXT, -- the title, as shown\n  b TEXT DEFAULT 'x, y',\n  c\n)";

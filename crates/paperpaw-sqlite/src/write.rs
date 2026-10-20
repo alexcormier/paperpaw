@@ -316,10 +316,17 @@ impl<'s> Writer<'s> {
     /// Writes the file: page 1 with the header and the `schema`, then the
     /// pages built. `user_version` is the application's schema version.
     pub fn finish(mut self, schema: &[SchemaEntry], user_version: u32) -> Result<(), Error> {
-        if let Some(e) = self.failed.take() {
-            let _ = self.storage.remove(&self.part);
-            return Err(e);
-        }
+        let result = match self.failed.take() {
+            Some(e) => Err(e),
+            None => self.write_file(schema, user_version),
+        };
+        // The temporary pages go, whether the file was written or not.
+        let _ = self.storage.remove(&self.part);
+        result
+    }
+
+    /// Writes page 1 and copies the pages built after it.
+    fn write_file(&mut self, schema: &[SchemaEntry], user_version: u32) -> Result<(), Error> {
         let mut cells = Vec::new();
         for (i, entry) in schema.iter().enumerate() {
             let sql = if entry.sql.is_empty() {
@@ -377,7 +384,6 @@ impl<'s> Writer<'s> {
             self.storage.append(&self.path, &chunk[..n])?;
             at += n as u64;
         }
-        let _ = self.storage.remove(&self.part);
         Ok(())
     }
 }

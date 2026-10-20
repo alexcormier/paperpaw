@@ -136,9 +136,6 @@ proptest! {
     #[test]
     fn rules_survive_the_cache(css in stylesheet()) {
         let rules = whole(&css);
-        // Family names with line breaks do not (see
-        // `family_names_with_line_breaks_survive_the_cache`).
-        prop_assume!(!rules.families.iter().any(|f| f.contains('\n')));
         let copy = Rules::decode(&rules.encode());
         prop_assert_eq!(&copy.rules, &rules.rules);
         prop_assert_eq!(&copy.families, &rules.families);
@@ -146,13 +143,18 @@ proptest! {
 }
 
 /// The shrunk case of `rules_survive_the_cache`: an unterminated string
-/// in `font-family` takes the line break after it into the family's
-/// name, and the cache (a line per family) splits it.
+/// in `font-family` took the line break after it into the family's name,
+/// and the cache (a line per family) split it. A line break now ends a
+/// string, and white space in a name is one space.
 #[test]
-#[ignore = "bug: a font family name with a line break is split in the stylesheet cache"]
 fn family_names_with_line_breaks_survive_the_cache() {
     let rules = whole("{font-family: \"A B\"\n*/}");
-    assert_eq!(rules.families, ["a b\"\n*/"]);
+    assert!(!rules.families.iter().any(|f| f.contains('\n')));
+    let copy = Rules::decode(&rules.encode());
+    assert_eq!(copy.families, rules.families);
+    // An escaped line break stays in the string, not in the name.
+    let rules = whole(".x { font-family: \"A\\\nB\" }");
+    assert!(!rules.families.iter().any(|f| f.contains('\n')));
     let copy = Rules::decode(&rules.encode());
     assert_eq!(copy.families, rules.families);
     // What follows the break is read back as a line of its own, here a
@@ -163,7 +165,6 @@ fn family_names_with_line_breaks_survive_the_cache() {
 }
 
 #[test]
-#[ignore = "bug: small capitals are not written to the stylesheet cache"]
 fn small_capitals_survive_the_cache() {
     let rules = whole(".sc { font-variant: small-caps }");
     assert_eq!(rules.rules[0].1.small_caps, Some(true));

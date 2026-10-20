@@ -295,8 +295,8 @@ impl TxtDocument {
     }
 
     /// Decodes file bytes starting at source offset `base` into normalized
-    /// text: `\r` and stray BOMs are dropped, line breaks, tabs and control
-    /// characters become spaces.
+    /// text: `\r` before `\n` and stray BOMs are dropped, line breaks, tabs
+    /// and control characters become spaces.
     fn decode(&self, bytes: &[u8], base: u32) -> (String, OffsetMap) {
         let mut text = String::with_capacity(bytes.len());
         let mut map = OffsetMap::default();
@@ -308,6 +308,9 @@ impl TxtDocument {
             };
             let next = base + (i + len) as u32;
             match ch {
+                // A line end of its own (old Macs) is a space, before `\n`
+                // it is dropped.
+                '\r' if bytes.get(i + 1) != Some(&b'\n') => text.push(' '),
                 '\r' | '\u{feff}' => map.checkpoint(text.len(), next),
                 c if c.is_control() => {
                     text.push(' ');
@@ -379,11 +382,14 @@ impl Document for TxtDocument {
 
             let long = p.partial || p.text_end - p.start > LIMIT;
             let (start, text_end, end, continues) = if long {
+                // Only grid points inside the paragraph split it, so its
+                // first piece starts where it does from any position.
+                let inside = |k: u32| p.partial || k.saturating_mul(GRID) > p.start;
                 let k = o / GRID;
                 let (k, mut piece_start) = match self.split_point(&buf, w0, k) {
-                    point if point <= o => (k, point),
-                    _ if k > 0 => (k - 1, self.split_point(&buf, w0, k - 1)),
-                    _ => (0, p.start),
+                    point if inside(k) && point <= o => (k, point),
+                    _ if k > 0 && inside(k - 1) => (k - 1, self.split_point(&buf, w0, k - 1)),
+                    _ => (p.start / GRID, p.start),
                 };
                 if !p.partial && piece_start <= p.start {
                     piece_start = p.start;

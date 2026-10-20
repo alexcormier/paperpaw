@@ -21,6 +21,9 @@ use proptest::prelude::*;
 
 use support::{drawn_outside, frame};
 
+/// The box thumbnails are asked for here: a screen's size.
+const BOX: (u16, u16) = (480, 800);
+
 /// The system's allocator, noting the largest block each thread asked
 /// for (to see what reading a broken file takes).
 struct Noting;
@@ -132,14 +135,14 @@ proptest! {
         let image = picture(&storage, source.0, source.1, false);
         let made = Thumbnail::new(&storage, &image, 40, 40, format).unwrap();
         prop_assert!(made.keep(&storage, "t.thumb", stamp));
-        let read = Thumbnail::kept(&storage, "t.thumb", stamp).unwrap();
+        let read = Thumbnail::kept(&storage, "t.thumb", stamp, BOX).unwrap();
         prop_assert_eq!((read.width(), read.height(), read.bytes()), (made.width(), made.height(), made.bytes()));
         let mut a = frame(60, 60);
         made.draw(&mut a.canvas(), 5, 5);
         let mut b = frame(60, 60);
         read.draw(&mut b.canvas(), 5, 5);
         prop_assert!(a.view().pixel(10, 10) == b.view().pixel(10, 10));
-        prop_assert!(Thumbnail::kept(&storage, "t.thumb", stamp.wrapping_add(1)).is_none());
+        prop_assert!(Thumbnail::kept(&storage, "t.thumb", stamp.wrapping_add(1), BOX).is_none());
     }
 
     /// Any bytes at all where a thumbnail was kept: read as none or as a
@@ -154,7 +157,7 @@ proptest! {
         let storage = MemoryStorage::new();
         // Random bytes, and bytes in the format with random sizes.
         storage.write("random.thumb", &header).unwrap();
-        prop_assert!(Thumbnail::kept(&storage, "random.thumb", 0).is_none() || header.len() >= 17);
+        prop_assert!(Thumbnail::kept(&storage, "random.thumb", 0, BOX).is_none() || header.len() >= 17);
         let mut data = b"QIT2".to_vec();
         data.extend_from_slice(&dims.0.to_le_bytes());
         data.extend_from_slice(&dims.1.to_le_bytes());
@@ -162,7 +165,7 @@ proptest! {
         data.extend_from_slice(&7u64.to_le_bytes());
         data.extend_from_slice(&rest);
         storage.write("sized.thumb", &data).unwrap();
-        if let Some(thumb) = Thumbnail::kept(&storage, "sized.thumb", 7) {
+        if let Some(thumb) = Thumbnail::kept(&storage, "sized.thumb", 7, BOX) {
             prop_assert_eq!((thumb.width(), thumb.height()), dims);
             prop_assert!(thumb.bytes() <= rest.len());
             let mut frame = frame(80, 80);
@@ -220,7 +223,6 @@ fn proportions_are_kept_when_fitting_a_box() {
 /// 8 MB, for a file of 17 bytes; on a phone a header can claim
 /// gigabytes).
 #[test]
-#[ignore = "bug: Thumbnail::kept allocates what the header claims before checking the file's size"]
 fn a_header_claiming_a_huge_picture_takes_no_memory_for_it() {
     let storage = MemoryStorage::new();
     let mut data = b"QIT2".to_vec();
@@ -229,7 +231,7 @@ fn a_header_claiming_a_huge_picture_takes_no_memory_for_it() {
     data.push(4);
     data.extend_from_slice(&1u64.to_le_bytes());
     storage.write("big.thumb", &data).unwrap();
-    let (thumb, largest) = largest_block(|| Thumbnail::kept(&storage, "big.thumb", 1));
+    let (thumb, largest) = largest_block(|| Thumbnail::kept(&storage, "big.thumb", 1, BOX));
     assert!(thumb.is_none());
     assert!(
         largest < 64 * 1024,
@@ -246,22 +248,22 @@ fn a_kept_file_cut_short_or_of_another_kind_reads_as_none() {
     let whole = paperpaw_sdk::read_file(&storage, "a.thumb", 1 << 20).unwrap();
     // Cut short by a byte: none.
     storage.write("a.thumb", &whole[..whole.len() - 1]).unwrap();
-    assert!(Thumbnail::kept(&storage, "a.thumb", 9).is_none());
+    assert!(Thumbnail::kept(&storage, "a.thumb", 9, BOX).is_none());
     // Bits a pixel no thumbnail has.
     let mut other = whole.clone();
     other[8] = 8;
     storage.write("a.thumb", &other).unwrap();
-    assert!(Thumbnail::kept(&storage, "a.thumb", 9).is_none());
+    assert!(Thumbnail::kept(&storage, "a.thumb", 9, BOX).is_none());
     // An older format.
     let mut old = whole.clone();
     old[3] = b'1';
     storage.write("a.thumb", &old).unwrap();
-    assert!(Thumbnail::kept(&storage, "a.thumb", 9).is_none());
+    assert!(Thumbnail::kept(&storage, "a.thumb", 9, BOX).is_none());
     // More than it needs: read as it was kept.
     let mut longer = whole.clone();
     longer.extend_from_slice(b"more");
     storage.write("a.thumb", &longer).unwrap();
-    let read = Thumbnail::kept(&storage, "a.thumb", 9).unwrap();
+    let read = Thumbnail::kept(&storage, "a.thumb", 9, BOX).unwrap();
     assert_eq!(read.bytes(), made.bytes());
     // A picture that is gone: no thumbnail.
     let gone = ImageRef {

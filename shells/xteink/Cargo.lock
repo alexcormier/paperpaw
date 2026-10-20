@@ -1436,7 +1436,7 @@ checksum = "da7c62ceae207dd37ea5b845da6a0696c799f85e97da1ab5b7910be3c1c80223"
 [[package]]
 name = "fatfs"
 version = "0.4.0"
-source = "git+https://github.com/rafalh/rust-fatfs?rev=2aefc2a027ce94ed0671752814dac203f0450e11#2aefc2a027ce94ed0671752814dac203f0450e11"
+source = "git+https://github.com/rafalh/rust-fatfs?rev=38b3a7950bf0e765e34286d1dfe76c519ee347e2#38b3a7950bf0e765e34286d1dfe76c519ee347e2"
 dependencies = [
  "bitflags 2.13.2",
  "log",
@@ -2258,6 +2258,7 @@ dependencies = [
 name = "paperpaw-plugin-format-txt"
 version = "0.4.0-dev"
 dependencies = [
+ "paperpaw-digest",
  "paperpaw-sdk",
 ]
 

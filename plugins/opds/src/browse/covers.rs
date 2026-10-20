@@ -110,6 +110,12 @@ impl BrowseScreen {
                 )
             })
             .flatten();
+        // The answer for a feed shown before (its entry at the same place
+        // in this one): kept for later, but not this entry's cover.
+        if self.feed.entries[i].thumbnail.as_deref() != Some(url.as_str()) {
+            self.next_cover(cx);
+            return;
+        }
         match image.and_then(|image| self.small_cover(&env, &image)) {
             Some(small) => {
                 self.covers[i] = Some(small);

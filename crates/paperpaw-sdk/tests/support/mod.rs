@@ -8,6 +8,7 @@
 use std::cell::RefCell;
 
 use paperpaw_graphics::{Described, Framebuffer};
+use paperpaw_i18n::Catalog;
 use paperpaw_sdk::builtin::{fonts, settings as core_settings};
 use paperpaw_sdk::{
     Actions, Capabilities, Color, DeviceInfo, DisplayInfo, Env, EnvParts, Font, FontSpec, Fonts,
@@ -21,6 +22,18 @@ const UI_FONT: &[u8] = include_bytes!("../../../../plugins/fonts-default/fonts/S
 /// The icons PaperPaw ships.
 const ICON_FONT: &[u8] =
     include_bytes!("../../../../plugins/fonts-default/fonts/PaperPawIcons.ttf");
+
+/// The kernel's words that the SDK's own parts show.
+const KERNEL_WORDS: &str = "[meta]
+language = en
+name = English
+plural = one-other
+
+     [messages]
+core.on = On
+core.off = Off
+core.page-of = {page} / {pages}
+";
 
 /// A device: its size, and whether it has a touch screen.
 #[derive(Debug, Clone, Copy)]
@@ -124,6 +137,10 @@ impl Harness {
             secrets: Default::default(),
             storage: MemoryStorage::new(),
         };
+        // The kernel's words that the SDK's own parts show, as its English
+        // catalog has them (crates/paperpaw-core/i18n/en.ini).
+        h.i18n
+            .add(Catalog::parse(KERNEL_WORDS).expect("the kernel's words"));
         // The look of the UI, as the kernel defines it by default.
         for (id, value) in [
             (core_settings::UI_SIZE.as_str(), 12),
@@ -211,6 +228,7 @@ impl Harness {
             caps: Capabilities::default(),
             wifi: None,
             firmware: None,
+            native: None,
             clipboard: false,
             slots: &[],
             screens: &[],

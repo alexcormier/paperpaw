@@ -73,11 +73,9 @@ fn percent(env: &Env<'_>, value: f32) -> String {
 /// The voltage, e.g. `4.01 V`.
 fn volts(env: &Env<'_>, millivolts: u16) -> String {
     let point = env.i18n.tr("battery.decimal-point");
-    format!(
-        "{}{point}{:02} V",
-        millivolts / 1000,
-        (millivolts % 1000 + 5) / 10
-    )
+    // Rounded to hundredths first, so that 3999 mV is 4.00 V.
+    let hundredths = (u32::from(millivolts) + 5) / 10;
+    format!("{}{point}{:02} V", hundredths / 100, hundredths % 100)
 }
 
 /// Plugins listed in each section.

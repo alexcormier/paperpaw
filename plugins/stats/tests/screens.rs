@@ -354,12 +354,14 @@ fn a_book_shows_its_numbers() {
             ("23 of 300", "Pages read"),
             // A minute a page: a minute a page left.
             ("60 s per page", "Pace"),
-            ("4 h 37 min", "Time left (estimated)"),
+            // Cut to the tile's width on the X4.
+            ("4 h 37 min", "Time left (estim"),
             ("1 day", "Reading days"),
             ("10/14/2026", "First read"),
         ] {
+            // The label whole, or its start where cut to its tile.
             assert!(
-                shown.contains(&format!("{value}\n{label}\n")),
+                shown.contains(&format!("{value}\n{label}")),
                 "{label}: {shown}"
             );
         }
