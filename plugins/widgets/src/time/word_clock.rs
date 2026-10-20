@@ -639,3 +639,6 @@ mod tests {
         assert_eq!(upper("fünf vor zwölf"), "FÜNF VOR ZWÖLF");
     }
 }
+
+#[cfg(test)]
+mod minutes_tests;

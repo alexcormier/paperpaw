@@ -1,0 +1,13 @@
+# format 2
+[profile.1]
+name = Night reading
+core.night-mode = on
+reader.font-size = 12
+
+[profile.2]
+name = "  Large [print] = big "
+reader.font-size = 18
+
+[profile.3]
+name = Quote " and \ back
+reader.line-spacing = ""

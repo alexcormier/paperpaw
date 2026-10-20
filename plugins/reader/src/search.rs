@@ -341,3 +341,6 @@ mod tests {
         assert!(find(text, &[]).is_empty());
     }
 }
+
+#[cfg(test)]
+mod matching_tests;

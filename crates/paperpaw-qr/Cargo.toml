@@ -13,5 +13,8 @@ keywords = ["qr", "qrcode", "no-std"]
 
 [dependencies]
 
+[dev-dependencies]
+proptest.workspace = true
+
 [lints]
 workspace = true

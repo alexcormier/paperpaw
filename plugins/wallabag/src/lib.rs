@@ -969,3 +969,6 @@ mod tests {
         assert_eq!(super::finished(&storage).unwrap(), ["123"]);
     }
 }
+
+#[cfg(test)]
+mod list_tests;

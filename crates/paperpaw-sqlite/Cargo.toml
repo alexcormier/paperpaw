@@ -14,5 +14,11 @@ keywords = ["sqlite", "no-std"]
 [dependencies]
 paperpaw-platform.workspace = true
 
+[dev-dependencies]
+proptest.workspace = true
+# Real SQLite, to check that written files are valid and that files it
+# writes are read (public domain, built from source; tests only).
+rusqlite = { version = "0.37", features = ["bundled"] }
+
 [lints]
 workspace = true
