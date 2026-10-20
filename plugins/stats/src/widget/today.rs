@@ -201,21 +201,32 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &widgets::Look, numbers: &
     };
     let id = NAME;
     let label = env.i18n.tr("stats.today");
-    let caption = super::caption(env, id, look.area, &[label]);
-    let area = super::below_caption(env, caption, look.area);
+    let mut caption = super::caption(env, id, look.area, &[label]);
+    let mut area = super::below_caption(env, caption, look.area);
     let (first, second) = lines(env, numbers);
     // Where they do not all fit, the note goes, then the bar.
     let least = line(&font, style.text);
+    // The caption goes before the note: where the note is whole only
+    // without it.
+    let whole = |area: Rect| {
+        let room = area.height.saturating_sub(least + bar_band(env));
+        super::note_lines(env, &second, area.width, room, 3).is_some_and(|n| n.whole())
+    };
+    if caption.is_some() && widgets::shows(env, id, "note") && !whole(area) && whole(look.area) {
+        caption = None;
+        area = look.area;
+    }
     let band = if least + bar_band(env) > area.height {
         0
     } else {
         bar_band(env)
     };
-    // The note on as many lines as it needs (two at most), where they
-    // fit whole; else none.
+    // The note on as many lines as it needs (three at most, as narrow
+    // places break "This week: 4 min" into), shortened where they do
+    // not hold it.
     let mut note = if widgets::shows(env, id, "note") {
         let room = area.height.saturating_sub(least + band);
-        super::note_lines(env, &second, area.width, room, 2)
+        super::note_lines(env, &second, area.width, room, 3)
     } else {
         None
     };

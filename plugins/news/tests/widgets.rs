@@ -172,11 +172,13 @@ fn a_low_cell_keeps_its_headline_inside() {
     }
 }
 
-/// Without feeds, a cell too small for how to add them says there is no
-/// news yet, rather than a sentence cut short.
+/// Without feeds, a cell too small for the whole sentence still says
+/// where feeds are added, rather than the sentence cut short.
 #[test]
-fn a_small_cell_says_there_is_no_news() {
+fn a_small_cell_says_where_feeds_are_added() {
     let (shown, _) = home(MemoryStorage::new(), "news.widget.headlines 0/0 2x1", "");
-    assert!(shown.contains("No news yet"), "{shown}");
-    assert!(!shown.contains("Add news feeds"), "{shown}");
+    assert!(
+        shown.contains("Add feeds under News in the menu"),
+        "{shown}"
+    );
 }

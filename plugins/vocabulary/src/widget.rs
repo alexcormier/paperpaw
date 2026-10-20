@@ -251,7 +251,7 @@ fn empty(env: &Env<'_>, widget: &str, area: Rect) -> Wrapped {
     // fit whole.
     let long = env.i18n.tr("vocabulary.widget.empty");
     let wrapped = Wrapped::fitting(env, long, style.text, style.small, width, inner.height);
-    if wrapped.lines().iter().all(|l| !l.ends_with('…')) {
+    if wrapped.whole() {
         return wrapped;
     }
     let short = env.i18n.tr("vocabulary.widget.empty.short");

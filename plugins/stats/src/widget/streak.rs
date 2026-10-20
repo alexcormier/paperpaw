@@ -245,10 +245,16 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown) {
     };
     let id = NAME;
     let title = env.i18n.tr("stats.widget.streak.caption");
-    let caption = super::caption(env, id, look.area, &[title]);
-    let area = super::below_caption(env, caption, look.area);
-    let small = line(&font, style.small);
     let (first, second) = texts(env, shown.streaks);
+    let mut caption = super::caption(env, id, look.area, &[title]);
+    let mut area = super::below_caption(env, caption, look.area);
+    // The caption goes before the note below the streak.
+    let note = |area: Rect| lay_texts(env, area, (&first, &second)).second.is_some();
+    if caption.is_some() && !note(area) && note(look.area) {
+        caption = None;
+        area = look.area;
+    }
+    let small = line(&font, style.small);
     let gap = style.gap as u16 / 2;
     let weekdays = widgets::shows(env, id, "weekdays");
     let align = widgets::align(env, id);
@@ -258,7 +264,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown) {
     };
     let least = line(&font, headline) + small;
     let roomy = u32::from(area.width) * 3 / 5 >= env.metrics.mm(3) * shown.marks.len() as u32;
-    if area.width >= area.height * 3 && roomy && least <= area.height {
+    if area.width >= area.height * 3 && roomy {
         // Wide and low: the marks beside the text, if there is room, the
         // two placed together as the alignment says.
         let side = area.width * 2 / 5;
@@ -293,8 +299,6 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown) {
         let h = marks_height(env, small, area.width, weekdays);
         (h > 0 && h + least <= area.height).then_some((h, weekdays))
     };
-    let mut caption = caption;
-    let mut area = area;
     let in_area = |area: Rect| fits(area, weekdays).or_else(|| fits(area, false));
     if caption.is_some() && in_area(area).is_none() && in_area(look.area).is_some() {
         caption = None;

@@ -175,16 +175,6 @@ fn short_key(waiting: Waiting) -> &'static str {
     }
 }
 
-/// Whether `wrapped` shows all of `text`: nothing left out or shortened.
-fn whole(text: &str, wrapped: &Wrapped) -> bool {
-    let shown = wrapped
-        .lines()
-        .iter()
-        .flat_map(|l| l.chars())
-        .filter(|c| !c.is_whitespace());
-    shown.eq(text.chars().filter(|c| !c.is_whitespace()))
-}
-
 /// Draws what `widget` says while it has no weather: why, under a faint
 /// symbol where there is room. Where the sentence does not fit whole,
 /// the symbol goes, then the sentence gives way to its short form.
@@ -228,7 +218,7 @@ pub(crate) fn draw_waiting(
         .iter()
         .filter(|(_, height, _)| *height > 0)
         .map(|(text, height, symbol)| (lay(text, *height), *symbol))
-        .find(|(words, _)| whole_of(&long, short, words))
+        .find(|(words, _)| words.whole())
         .unwrap_or_else(|| (lay(short, tall), false));
     let align = widgets::align(env, widget);
     let words_h = words.height(env);
@@ -266,9 +256,4 @@ pub(crate) fn draw_waiting(
     );
     let rest = Rect::new(area.x, y + ink_h + gap, area.width, words_h);
     words.draw(canvas, env, rest, align, look.ink);
-}
-
-/// Whether `words` shows `long` or `short` whole.
-fn whole_of(long: &str, short: &str, words: &Wrapped) -> bool {
-    whole(long, words) || whole(short, words)
 }
