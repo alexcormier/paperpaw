@@ -46,6 +46,16 @@ change the plugin SDK.
   `Canvas::fill_corners`, `round::corner_inset`. Plugins draw what is on
   a focused row in `focus_ink` rather than white, so every highlight
   works.
+- SDK, widgets: a spacing setting for widgets (`widgets::Padding`,
+  `padding_spec`, `padding_setting`, `padding`; automatic, none, small,
+  normal, large), which `look` and `draw_frame` keep. Text that fits
+  its place: `fit_line` and `draw_line` (one line, smaller down to a
+  least size, then shortened, centred by its ink), `largest_size`
+  (measured as drawn, so fonts of a few sizes fit too),
+  `ink_baseline`, `Wrapped::fitting`, `Wrapped::{size, lines}`.
+  `Wrapped`, `draw_wrapped` and `draw_message` break text between
+  words only, never inside one, and make it smaller, down to the small
+  size, before they cut it.
 - Books: no book can crash the X4 or exhaust its memory any more. A
   picture's long alternative text in CJK script crashed the EPUB
   converter, and with the last book reopened at start, possibly at

@@ -2032,6 +2032,16 @@ pub paperpaw_sdk::widgets::look::Frame::None
 impl paperpaw_sdk::widgets::look::Frame
 pub fn paperpaw_sdk::widgets::look::Frame::of(&str) -> Self
 pub const fn paperpaw_sdk::widgets::look::Frame::value(self) -> &'static str
+pub enum paperpaw_sdk::widgets::look::Padding
+pub paperpaw_sdk::widgets::look::Padding::Auto
+pub paperpaw_sdk::widgets::look::Padding::Large
+pub paperpaw_sdk::widgets::look::Padding::None
+pub paperpaw_sdk::widgets::look::Padding::Normal
+pub paperpaw_sdk::widgets::look::Padding::Small
+impl paperpaw_sdk::widgets::look::Padding
+pub fn paperpaw_sdk::widgets::look::Padding::of(&str) -> Self
+pub fn paperpaw_sdk::widgets::look::Padding::pixels(self, &paperpaw_sdk::ui::UiStyle, paperpaw_sdk::widgets::look::Frame) -> u16
+pub const fn paperpaw_sdk::widgets::look::Padding::value(self) -> &'static str
 pub enum paperpaw_sdk::widgets::look::Size
 pub paperpaw_sdk::widgets::look::Size::Fit
 pub paperpaw_sdk::widgets::look::Size::Large
@@ -2050,21 +2060,32 @@ pub paperpaw_sdk::widgets::look::Look::paper: paperpaw_platform::pixel::Color
 pub struct paperpaw_sdk::widgets::look::Wrapped
 impl paperpaw_sdk::widgets::look::Wrapped
 pub fn paperpaw_sdk::widgets::look::Wrapped::draw(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, paperpaw_platform::geometry::Rect, paperpaw_sdk::widgets::Align, paperpaw_platform::pixel::Color) -> u16
+pub fn paperpaw_sdk::widgets::look::Wrapped::fitting(&paperpaw_sdk::Env<'_>, &str, f32, f32, u16, u16) -> Self
 pub fn paperpaw_sdk::widgets::look::Wrapped::height(&self, &paperpaw_sdk::Env<'_>) -> u16
+pub fn paperpaw_sdk::widgets::look::Wrapped::lines(&self) -> &[alloc::string::String]
 pub fn paperpaw_sdk::widgets::look::Wrapped::new(&paperpaw_sdk::Env<'_>, &str, f32, u16, u16) -> Self
+pub fn paperpaw_sdk::widgets::look::Wrapped::size(&self) -> f32
 pub const paperpaw_sdk::widgets::look::FRAMES: [&str; 4]
+pub const paperpaw_sdk::widgets::look::PADDINGS: [&str; 5]
 pub const paperpaw_sdk::widgets::look::SIZES: [&str; 4]
 pub fn paperpaw_sdk::widgets::look::caption_height(&paperpaw_sdk::Env<'_>) -> u16
 pub fn paperpaw_sdk::widgets::look::choice(&paperpaw_sdk::Id, &str, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, &'static [&'static str], &'static str) -> paperpaw_sdk::SettingSpec
 pub fn paperpaw_sdk::widgets::look::draw_caption(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &str, &paperpaw_sdk::widgets::look::Look, &str) -> paperpaw_platform::geometry::Rect
 pub fn paperpaw_sdk::widgets::look::draw_frame(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &str, paperpaw_platform::geometry::Rect) -> paperpaw_sdk::widgets::look::Look
+pub fn paperpaw_sdk::widgets::look::draw_line(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, paperpaw_platform::geometry::Rect, paperpaw_sdk::widgets::Align, f32, f32, &str, paperpaw_platform::pixel::Color) -> f32
 pub fn paperpaw_sdk::widgets::look::draw_message(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::widgets::look::Look, &str)
 pub fn paperpaw_sdk::widgets::look::draw_wrapped(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, paperpaw_platform::geometry::Rect, paperpaw_sdk::widgets::Align, f32, &str, paperpaw_platform::pixel::Color) -> u16
+pub fn paperpaw_sdk::widgets::look::fit_line(&paperpaw_sdk::FontHandle<'_>, f32, f32, &str, f32) -> (f32, alloc::string::String)
 pub fn paperpaw_sdk::widgets::look::frame(&paperpaw_sdk::Env<'_>, &str) -> paperpaw_sdk::widgets::look::Frame
 pub fn paperpaw_sdk::widgets::look::frame_setting(&paperpaw_sdk::Id, paperpaw_sdk::widgets::look::Frame) -> paperpaw_sdk::SettingSpec
 pub const fn paperpaw_sdk::widgets::look::frame_spec(&'static str, paperpaw_sdk::Id, paperpaw_sdk::widgets::look::Frame) -> paperpaw_sdk::SettingSpec
+pub fn paperpaw_sdk::widgets::look::ink_baseline(&paperpaw_sdk::FontHandle<'_>, f32, &str, paperpaw_platform::geometry::Rect) -> i32
+pub fn paperpaw_sdk::widgets::look::largest_size(f32, f32, impl core::ops::function::FnMut(f32) -> bool) -> core::option::Option<f32>
 pub fn paperpaw_sdk::widgets::look::line_height(&paperpaw_sdk::Env<'_>, f32) -> u16
 pub fn paperpaw_sdk::widgets::look::look(&paperpaw_sdk::Env<'_>, &str, paperpaw_platform::geometry::Rect) -> paperpaw_sdk::widgets::look::Look
+pub fn paperpaw_sdk::widgets::look::padding(&paperpaw_sdk::Env<'_>, &str) -> paperpaw_sdk::widgets::look::Padding
+pub fn paperpaw_sdk::widgets::look::padding_setting(&paperpaw_sdk::Id, paperpaw_sdk::widgets::look::Padding) -> paperpaw_sdk::SettingSpec
+pub const fn paperpaw_sdk::widgets::look::padding_spec(&'static str, paperpaw_sdk::Id, paperpaw_sdk::widgets::look::Padding) -> paperpaw_sdk::SettingSpec
 pub fn paperpaw_sdk::widgets::look::part_setting(&paperpaw_sdk::Id, &str, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, bool) -> paperpaw_sdk::SettingSpec
 pub const fn paperpaw_sdk::widgets::look::part_spec(&'static str, paperpaw_sdk::Id, &'static str, bool) -> paperpaw_sdk::SettingSpec
 pub fn paperpaw_sdk::widgets::look::setting_id(&paperpaw_sdk::Id, &str) -> paperpaw_sdk::Id
@@ -2088,6 +2109,16 @@ pub paperpaw_sdk::widgets::Frame::None
 impl paperpaw_sdk::widgets::look::Frame
 pub fn paperpaw_sdk::widgets::look::Frame::of(&str) -> Self
 pub const fn paperpaw_sdk::widgets::look::Frame::value(self) -> &'static str
+pub enum paperpaw_sdk::widgets::Padding
+pub paperpaw_sdk::widgets::Padding::Auto
+pub paperpaw_sdk::widgets::Padding::Large
+pub paperpaw_sdk::widgets::Padding::None
+pub paperpaw_sdk::widgets::Padding::Normal
+pub paperpaw_sdk::widgets::Padding::Small
+impl paperpaw_sdk::widgets::look::Padding
+pub fn paperpaw_sdk::widgets::look::Padding::of(&str) -> Self
+pub fn paperpaw_sdk::widgets::look::Padding::pixels(self, &paperpaw_sdk::ui::UiStyle, paperpaw_sdk::widgets::look::Frame) -> u16
+pub const fn paperpaw_sdk::widgets::look::Padding::value(self) -> &'static str
 pub enum paperpaw_sdk::widgets::Size
 pub paperpaw_sdk::widgets::Size::Fit
 pub paperpaw_sdk::widgets::Size::Large
@@ -2142,8 +2173,11 @@ pub fn paperpaw_sdk::widgets::Widgets::title(&self, &str) -> core::option::Optio
 pub struct paperpaw_sdk::widgets::Wrapped
 impl paperpaw_sdk::widgets::look::Wrapped
 pub fn paperpaw_sdk::widgets::look::Wrapped::draw(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, paperpaw_platform::geometry::Rect, paperpaw_sdk::widgets::Align, paperpaw_platform::pixel::Color) -> u16
+pub fn paperpaw_sdk::widgets::look::Wrapped::fitting(&paperpaw_sdk::Env<'_>, &str, f32, f32, u16, u16) -> Self
 pub fn paperpaw_sdk::widgets::look::Wrapped::height(&self, &paperpaw_sdk::Env<'_>) -> u16
+pub fn paperpaw_sdk::widgets::look::Wrapped::lines(&self) -> &[alloc::string::String]
 pub fn paperpaw_sdk::widgets::look::Wrapped::new(&paperpaw_sdk::Env<'_>, &str, f32, u16, u16) -> Self
+pub fn paperpaw_sdk::widgets::look::Wrapped::size(&self) -> f32
 pub const paperpaw_sdk::widgets::ALIGNMENTS: [&str; 3]
 pub const paperpaw_sdk::widgets::FILL: &str
 pub const paperpaw_sdk::widgets::SPACE: &str
@@ -2166,14 +2200,21 @@ pub fn paperpaw_sdk::widgets::changed(&paperpaw_sdk::Id) -> paperpaw_sdk::Comman
 pub fn paperpaw_sdk::widgets::choice(&paperpaw_sdk::Id, &str, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, &'static [&'static str], &'static str) -> paperpaw_sdk::SettingSpec
 pub fn paperpaw_sdk::widgets::draw_caption(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &str, &paperpaw_sdk::widgets::look::Look, &str) -> paperpaw_platform::geometry::Rect
 pub fn paperpaw_sdk::widgets::draw_frame(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &str, paperpaw_platform::geometry::Rect) -> paperpaw_sdk::widgets::look::Look
+pub fn paperpaw_sdk::widgets::draw_line(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, paperpaw_platform::geometry::Rect, paperpaw_sdk::widgets::Align, f32, f32, &str, paperpaw_platform::pixel::Color) -> f32
 pub fn paperpaw_sdk::widgets::draw_message(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::widgets::look::Look, &str)
 pub fn paperpaw_sdk::widgets::draw_wrapped(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, paperpaw_platform::geometry::Rect, paperpaw_sdk::widgets::Align, f32, &str, paperpaw_platform::pixel::Color) -> u16
 pub fn paperpaw_sdk::widgets::fill_height(u32, u32, usize) -> u16
+pub fn paperpaw_sdk::widgets::fit_line(&paperpaw_sdk::FontHandle<'_>, f32, f32, &str, f32) -> (f32, alloc::string::String)
 pub fn paperpaw_sdk::widgets::frame(&paperpaw_sdk::Env<'_>, &str) -> paperpaw_sdk::widgets::look::Frame
 pub fn paperpaw_sdk::widgets::frame_setting(&paperpaw_sdk::Id, paperpaw_sdk::widgets::look::Frame) -> paperpaw_sdk::SettingSpec
 pub const fn paperpaw_sdk::widgets::frame_spec(&'static str, paperpaw_sdk::Id, paperpaw_sdk::widgets::look::Frame) -> paperpaw_sdk::SettingSpec
 pub fn paperpaw_sdk::widgets::has_settings(&paperpaw_sdk::Env<'_>, &str) -> bool
+pub fn paperpaw_sdk::widgets::ink_baseline(&paperpaw_sdk::FontHandle<'_>, f32, &str, paperpaw_platform::geometry::Rect) -> i32
+pub fn paperpaw_sdk::widgets::largest_size(f32, f32, impl core::ops::function::FnMut(f32) -> bool) -> core::option::Option<f32>
 pub fn paperpaw_sdk::widgets::line_height(&paperpaw_sdk::Env<'_>, f32) -> u16
+pub fn paperpaw_sdk::widgets::padding(&paperpaw_sdk::Env<'_>, &str) -> paperpaw_sdk::widgets::look::Padding
+pub fn paperpaw_sdk::widgets::padding_setting(&paperpaw_sdk::Id, paperpaw_sdk::widgets::look::Padding) -> paperpaw_sdk::SettingSpec
+pub const fn paperpaw_sdk::widgets::padding_spec(&'static str, paperpaw_sdk::Id, paperpaw_sdk::widgets::look::Padding) -> paperpaw_sdk::SettingSpec
 pub fn paperpaw_sdk::widgets::part_setting(&paperpaw_sdk::Id, &str, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, bool) -> paperpaw_sdk::SettingSpec
 pub const fn paperpaw_sdk::widgets::part_spec(&'static str, paperpaw_sdk::Id, &'static str, bool) -> paperpaw_sdk::SettingSpec
 pub fn paperpaw_sdk::widgets::repeatable(&str) -> bool
