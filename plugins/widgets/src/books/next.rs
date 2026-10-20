@@ -3,7 +3,7 @@
 //! one by chance (another each day); with its cover and title.
 //!
 //! Which books are new the library does not say: this widget keeps the
-//! books it saw (their hashes, `seen.bin`) and the ones that came since
+//! books it saw (`seen.bits`, see [`Seen`]) and the ones that came since
 //! (`newest.txt`, a few) in its folder, from the catalog when it changed.
 
 use alloc::boxed::Box;
@@ -38,8 +38,10 @@ const PICKS: [&str; 3] = [
 ];
 /// Unread books chosen by chance looked at, at most, to find one unread.
 const CANDIDATES: usize = 6;
-/// Books whose hashes are kept as seen, at most.
-const MAX_SEEN: usize = 4096;
+/// The bytes of the books seen ([`Seen`]).
+const SEEN_BYTES: usize = 8 * 1024;
+/// The places in [`Seen`] a book sets.
+const SEEN_PLACES: u64 = 5;
 /// New books remembered, at most.
 const MAX_NEWEST: usize = 16;
 
@@ -151,18 +153,66 @@ fn in_series(env: &Env<'_>, book: &Book) -> Option<String> {
     if book.series.is_empty() {
         return None;
     }
-    let mut members = members(env, &book.series);
-    for member in &mut members {
-        member.read = !unread(env.storage, &member.path);
-    }
-    next_in_series(&members, &book.path).map(|m| m.path.clone())
+    let begun = |path: &str| !unread(env.storage, path);
+    let members = members(env, &book.series, Some(&book.number), &begun);
+    next_in_series(&members.books, &book.path).map(|m| m.path.clone())
 }
 
 fn seen_file() -> String {
     format!(
+        "{}/seen.bits",
+        paperpaw_sdk::Env::plugin_dir(PLUGIN.as_str())
+    )
+}
+
+/// Where the books seen were kept before, as a list of their hashes.
+fn old_seen_file() -> String {
+    format!(
         "{}/seen.bin",
         paperpaw_sdk::Env::plugin_dir(PLUGIN.as_str())
     )
+}
+
+/// The books seen, by the hashes of their paths, in a set of
+/// [`SEEN_BYTES`] whatever the size of the library (a Bloom filter): a
+/// book not seen counts as seen now and then (about one in a thousand
+/// with 4,000 books, one in twenty with 10,000), a book seen never counts
+/// as new.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Seen {
+    bits: Vec<u8>,
+}
+
+impl Seen {
+    /// None seen.
+    pub(crate) fn new() -> Self {
+        Self {
+            bits: alloc::vec![0; SEEN_BYTES],
+        }
+    }
+
+    /// As kept; `None` where none are kept (the first time).
+    fn read(storage: &dyn Storage) -> Option<Self> {
+        let bits = paperpaw_sdk::read_file(storage, &seen_file(), SEEN_BYTES).ok()?;
+        (bits.len() == SEEN_BYTES).then_some(Self { bits })
+    }
+
+    /// The places the book `hash` sets.
+    fn places(hash: u64) -> impl Iterator<Item = usize> {
+        let bits = (SEEN_BYTES * 8) as u64;
+        let step = mix(hash) | 1;
+        (0..SEEN_PLACES).map(move |i| (hash.wrapping_add(i.wrapping_mul(step)) % bits) as usize)
+    }
+
+    pub(crate) fn add(&mut self, hash: u64) {
+        for place in Self::places(hash) {
+            self.bits[place / 8] |= 1 << (place % 8);
+        }
+    }
+
+    pub(crate) fn has(&self, hash: u64) -> bool {
+        Self::places(hash).all(|place| self.bits[place / 8] & (1 << (place % 8)) != 0)
+    }
 }
 
 fn newest_file() -> String {
@@ -172,22 +222,10 @@ fn newest_file() -> String {
     )
 }
 
-/// The books new since they were last looked at, newest first: added to
-/// those kept, `seen` the hashes of the books seen before (sorted, `None`
-/// the first time: then none counts as new).
-pub(crate) fn new_books(
-    seen: Option<&[u64]>,
-    books: &[(u64, String)],
-    newest: Vec<String>,
-) -> Vec<String> {
-    let Some(seen) = seen else {
-        return newest;
-    };
-    let mut list: Vec<String> = books
-        .iter()
-        .filter(|(hash, _)| seen.binary_search(hash).is_err())
-        .map(|(_, path)| path.clone())
-        .collect();
+/// The books new since they were last looked at, `unseen`, before those
+/// kept, `newest`: as many as are remembered.
+pub(crate) fn new_books(unseen: Vec<String>, newest: Vec<String>) -> Vec<String> {
+    let mut list = unseen;
     for path in newest {
         if !list.contains(&path) {
             list.push(path);
@@ -201,15 +239,7 @@ pub(crate) fn new_books(
 /// returns the newest, newest first.
 fn newest(env: &Env<'_>) -> Vec<String> {
     let storage = env.storage;
-    let seen: Option<Vec<u64>> = paperpaw_sdk::read_file(storage, &seen_file(), MAX_SEEN * 8)
-        .ok()
-        .map(|data| {
-            data.as_chunks::<8>()
-                .0
-                .iter()
-                .map(|b| u64::from_le_bytes(*b))
-                .collect()
-        });
+    let seen = Seen::read(storage);
     let kept: Vec<String> = paperpaw_sdk::read_file(storage, &newest_file(), MAX_NEWEST * 512)
         .map(|data| {
             String::from_utf8_lossy(&data)
@@ -219,30 +249,24 @@ fn newest(env: &Env<'_>) -> Vec<String> {
                 .collect()
         })
         .unwrap_or_default();
-    // The books now: their hashes, and the paths of those not seen.
-    let mut hashes = Vec::new();
+    // The books now, and those not seen (the first time, none is new).
+    let mut now = Seen::new();
     let mut unseen = Vec::new();
     each_book(env, &mut |record| {
-        if hashes.len() >= MAX_SEEN {
-            return;
-        }
         let hash = path_hash(&record.path);
-        hashes.push(hash);
-        if let Some(seen) = &seen
-            && seen.binary_search(&hash).is_err()
-            && unseen.len() < MAX_NEWEST
-        {
-            unseen.push((hash, record.path));
+        now.add(hash);
+        if seen.as_ref().is_some_and(|seen| !seen.has(hash)) && unseen.len() < MAX_NEWEST {
+            unseen.push(record.path);
         }
     });
-    hashes.sort_unstable();
-    let list = new_books(seen.as_deref(), &unseen, kept.clone());
-    // Written only when something changed.
-    if seen.as_deref() != Some(hashes.as_slice()) {
+    let list = new_books(unseen, kept.clone());
+    // Written only when something changed (a cache: not written, the
+    // same books are found new again).
+    if seen.as_ref() != Some(&now) {
         let dir = paperpaw_sdk::Env::plugin_dir(PLUGIN.as_str());
         let _ = storage.create_dir(&dir);
-        let bytes: Vec<u8> = hashes.iter().flat_map(|h| h.to_le_bytes()).collect();
-        let _ = storage.write(&seen_file(), &bytes);
+        let _ = storage.write(&seen_file(), &now.bits);
+        let _ = storage.remove(&old_seen_file());
         if list != kept {
             let _ = storage.write(&newest_file(), list.join("\n").as_bytes());
         }

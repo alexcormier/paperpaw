@@ -65,7 +65,7 @@ fn addable(env: &Env<'_>, page: usize) -> Vec<(String, What, String)> {
     let all = pages::pages(env);
     let shown = all
         .get(page)
-        .map(|items| pages::expand(env, items))
+        .map(|p| pages::expand(env, &p.items))
         .unwrap_or_default();
     let on_page = |what: &What| shown.iter().any(|i| i.what == *what);
     env.widgets
@@ -101,12 +101,12 @@ fn addable(env: &Env<'_>, page: usize) -> Vec<(String, What, String)> {
 /// A placement of widget `id` (`id@n`) that no page holds and that has
 /// no values set: each widget added gets one, so that its settings are
 /// its own.
-fn placement(env: &Env<'_>, pages: &[Vec<grid::Item>], id: &str) -> String {
+fn placement(env: &Env<'_>, pages: &[pages::Page], id: &str) -> String {
     let base = Id::parse(id).unwrap_or(Id::new_static("home"));
     let used = |placed: &str| {
         pages
             .iter()
-            .flatten()
+            .flat_map(|p| &p.items)
             .any(|i| matches!(&i.what, What::Widget(w) if w == placed))
             || !env.settings.placement_values(placed).is_empty()
     };
@@ -321,18 +321,18 @@ impl AddScreen {
                     What::Widget(id) => What::Widget(placement(&env, &all, id)),
                     other => other.clone(),
                 };
-                let Some(items) = all.get_mut(self.page) else {
+                let Some(page) = all.get(self.page) else {
                     return;
                 };
                 let (_, geometry, _) = crate::frame(&env, None);
                 // The page as shown, every item with its place, and the new one.
-                let shown = pages::expand(&env, items);
+                let shown = pages::expand(&env, &page.items);
                 let Some(added) = grid::add(&env, &geometry, &shown, what) else {
                     let message = env.i18n.tr("home.grid.no-room").to_string();
                     cx.command(Command::Notify(message));
                     return;
                 };
-                *items = added;
+                cx.command(pages::store(page.slot, &added));
             }
             Some(Row::Layouts) => {
                 // Over the home screen, so that what is chosen shows there.
@@ -340,23 +340,32 @@ impl AddScreen {
                 cx.command(Command::OpenScreen(crate::layouts::SCREEN, Params::new()));
                 return;
             }
-            Some(Row::AddPage) => all.push(Vec::new()),
+            Some(Row::AddPage) => {
+                // After the others, kept as a space until it is filled.
+                all.push(pages::Page {
+                    slot: all.len(),
+                    items: Vec::new(),
+                });
+                for command in pages::store_all(&all) {
+                    cx.command(command);
+                }
+            }
             Some(Row::RemovePage) => {
                 if self.page < all.len() && all.len() > 1 {
                     // What its widgets' placements set goes with them.
-                    for item in all.remove(self.page) {
+                    for item in all.remove(self.page).items {
                         if let What::Widget(id) = item.what {
                             for value in env.settings.placement_values(&id) {
                                 cx.command(Command::ResetSetting(value));
                             }
                         }
                     }
+                    for command in pages::store_all(&all) {
+                        cx.command(command);
+                    }
                 }
             }
             None => return,
-        }
-        for command in pages::store(&all) {
-            cx.command(command);
         }
         cx.command(Command::Back);
         // Back past the kinds too, to the page.

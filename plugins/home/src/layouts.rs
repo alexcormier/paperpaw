@@ -28,6 +28,7 @@ use paperpaw_sdk::builtin::{actions, events};
 use paperpaw_sdk::presets::{self, Preset};
 use paperpaw_sdk::setup::{SetupPage, SetupStepSpec};
 use paperpaw_sdk::ui::{self, UiStyle};
+use paperpaw_sdk::widgets;
 use paperpaw_sdk::widgets::grid::{self, What};
 use paperpaw_sdk::{
     ActionSpec, Canvas, Color, Command, Env, Gesture, GestureKind, Id, Params, Point, Rect,
@@ -139,11 +140,36 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
         help: Cow::Borrowed("home.setup.layout.help"),
         order: 65,
         page: SetupPage::Screen(SCREEN),
-        applies: Some(Box::new(|env: &Env<'_>| {
-            env.settings.presets().of_kind(KIND).nth(1).is_some()
-        })),
+        applies: Some(Box::new(|env: &Env<'_>| offered(env).nth(1).is_some())),
     })?;
     Ok(())
+}
+
+/// The layouts offered: those whose widgets and tools are all there (a
+/// layout that places a plugin's widgets is left out while the plugin is
+/// not installed or switched off).
+fn offered<'a>(env: &'a Env<'_>) -> impl Iterator<Item = &'a Preset> + 'a {
+    env.settings
+        .presets()
+        .of_kind(KIND)
+        .filter(move |preset| complete(env, preset))
+}
+
+/// Whether every widget and tool `preset` places on its pages is there.
+fn complete(env: &Env<'_>, preset: &Preset) -> bool {
+    (0..MAX_PAGES)
+        .filter_map(|page| preset.value(pages::setting(page).as_str()))
+        .flat_map(grid::parse)
+        .all(|item| match &item.what {
+            What::Widget(id) => {
+                id == pages::TOOLS
+                    || id == widgets::SPACE
+                    || id == widgets::FILL
+                    || env.widgets.has(id)
+            }
+            What::Tool(action) => env.actions.contains(action.as_str()),
+            _ => true,
+        })
 }
 
 /// The placements of widgets in a page's layout (`home.recent@1`).
@@ -210,7 +236,7 @@ pub(crate) struct Chooser {
 
 impl Chooser {
     pub(crate) fn new(env: &Env<'_>) -> Self {
-        let layouts: Vec<&Preset> = env.settings.presets().of_kind(KIND).collect();
+        let layouts: Vec<&Preset> = offered(env).collect();
         let kept = layouts
             .iter()
             .position(|p| presets::applied(env.settings, &changes(env, p)));
@@ -282,14 +308,11 @@ impl Chooser {
         to.map(|to| self.at = to).is_some()
     }
 
-    /// The sheet's height on this screen: a row for the name, by touch
-    /// one for the button, and a line for what it is where that fits.
+    /// The sheet's height on this screen: a row for the name, a line for
+    /// what it is where that fits, and by touch a row for the button.
     pub(crate) fn height(&self, env: &Env<'_>) -> u16 {
         let style = UiStyle::new(env);
         let gap = style.gap as u16;
-        if !env.device.input.touch {
-            return style.row as u16 + gap;
-        }
         let help = if self.described {
             style
                 .font(env)
@@ -298,6 +321,9 @@ impl Chooser {
         } else {
             0
         };
+        if !env.device.input.touch {
+            return style.row as u16 + help + gap;
+        }
         gap + style.row as u16 * 2 + help + gap
     }
 
