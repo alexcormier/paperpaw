@@ -180,14 +180,27 @@ impl Sockets {
     }
 
     /// The network went (or is another one now): every socket fails, every
-    /// broadcast is done.
-    pub fn lost(&mut self, kernel: &mut Kernel, now: Instant) -> Vec<Effects> {
+    /// broadcast is done. What they hold is let go on `net` if they were
+    /// opened on it (else it went with an earlier one).
+    pub fn lost(
+        &mut self,
+        net: Option<&mut Net>,
+        kernel: &mut Kernel,
+        now: Instant,
+    ) -> Vec<Effects> {
+        let mut net = net.filter(|net| net.generation() == self.generation);
         let mut effects = Vec::new();
         for socket in core::mem::take(&mut self.sockets) {
+            if let Some(net) = net.as_deref_mut() {
+                socket.release(net);
+            }
             let event = failed(socket.number, "the network went away");
             effects.push(kernel.socket_event(now, event));
         }
         for broadcast in core::mem::take(&mut self.broadcasts) {
+            if let Some(net) = net.as_deref_mut() {
+                net.release_udp(broadcast.udp);
+            }
             let event = SocketEvent::Done {
                 broadcast: broadcast.number,
             };
@@ -202,7 +215,7 @@ impl Sockets {
             return Vec::new();
         }
         if net.generation() != self.generation {
-            return self.lost(kernel, now);
+            return self.lost(None, kernel, now);
         }
         let mut events = Vec::new();
         self.sockets.retain_mut(|socket| {

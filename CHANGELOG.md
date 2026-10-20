@@ -837,6 +837,13 @@ change the plugin SDK.
   `heap` says the most the heap held since start, the log says the heap
   after every frame, and failed requests are logged with their host
   (`wifi:status`, `wifi:scan`, `http:get:` as script steps).
+- X4: losing the network's address (as on every joining again) lets go
+  of what was open on it: plugins' servers no longer keep listening and
+  holding their memory (some 12 KB a connection), nor requests theirs
+  (some 17 KB), and name lookups no longer pile up (after four, every
+  lookup said "no such host" until the radio went off). Requests made
+  while a network is being joined wait for its address, as they were
+  meant to, instead of failing at once.
 - The X4's remote control over USB (test builds) does much more, for
   developing on the device: the card (`ls`, `stat`, `md5`, `rm` also of
   folders, `mkdir`, `mv`, `sync`; `tools/x4-remote.py` pushes and pulls
