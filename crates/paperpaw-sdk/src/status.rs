@@ -300,9 +300,11 @@ impl StatusLine<'_> {
             .min(right_x - gap - center_w)
             .max(x0 + left_room);
         let left_end = if center.is_empty() { right_x } else { center_x } - gap;
+        // Nothing past the line's area, whatever its items.
+        let mut canvas = canvas.clipped(area);
         let mut draw = |values: &[StatusValue], x: f32, end: f32| {
             draw_values(
-                canvas,
+                &mut canvas,
                 env,
                 font,
                 area,
@@ -379,6 +381,16 @@ fn draw_values(
     };
     for (i, value) in values.iter().enumerate() {
         if x >= end {
+            break;
+        }
+        // What is not text is drawn whole or not at all: a gauge without
+        // its percentage where only the gauge fits, else nothing more. A
+        // pixel of slack for rounding, as for texts.
+        let fits = |width: f32| x + width <= end + 1.0;
+        let with_percent = with_percent && fits(widths[i]);
+        if !matches!(value, StatusValue::Text(_))
+            && !fits(value_width(env, font, size, value, with_percent))
+        {
             break;
         }
         match value {
@@ -472,7 +484,8 @@ fn draw_battery(
         color,
     );
     if charging {
-        // A plus right of the battery, in the gap before the percentage.
+        // A plus in the middle of the battery, white on its fill when it
+        // is more than half full.
         let s = (height / 2).max(3);
         let cx = x + width / 2;
         let cy = y + height / 2;
