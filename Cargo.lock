@@ -1950,6 +1950,7 @@ dependencies = [
  "paperpaw-fs",
  "paperpaw-platform",
  "paperpaw-sdk",
+ "proptest",
 ]
 
 [[package]]
