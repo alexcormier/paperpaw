@@ -2,7 +2,7 @@
 
 use std::time::{Duration, Instant as StdInstant};
 
-use paperpaw_core::{Effects, Io, Kernel, KernelBuilder, KernelError, SpeechCall};
+use paperpaw_core::{Effects, Io, Kernel, KernelBuilder, KernelError, SpeechCall, Warning};
 use paperpaw_graphics::Framebuffer;
 use paperpaw_platform::{
     Battery, ButtonState, DeviceInfo, InputEvent, Instant, Rotation, SystemStatus, WallClock,
@@ -56,7 +56,13 @@ pub struct Device {
     /// The texts being spoken (emulated), in order: number and when each
     /// ends.
     speech: std::collections::VecDeque<(u32, Instant)>,
+    /// The kernel's warnings since start (the last [`KEPT_WARNINGS`]),
+    /// besides printed: for tools that check there are none.
+    pub warnings: Vec<Warning>,
 }
+
+/// How many of the kernel's warnings [`Device::warnings`] keeps.
+const KEPT_WARNINGS: usize = 1000;
 
 /// Either real time (interactive) or simulated time (headless, tests).
 #[derive(Debug)]
@@ -113,6 +119,7 @@ impl Device {
             sockets: paperpaw_serve::Sockets::new(|| {}),
             wifi: crate::wifi::Wifi::default(),
             speech: std::collections::VecDeque::new(),
+            warnings: Vec::new(),
             asleep: false,
             rotation,
             clock: if simulated_time {
@@ -335,6 +342,11 @@ impl Device {
         self.profile.buttons.contains(&name)
     }
 
+    /// Whether the device sleeps: only the power button wakes it.
+    pub fn asleep(&self) -> bool {
+        self.asleep
+    }
+
     fn execute(&mut self, effects: Effects) {
         if effects.restart() {
             return self.restart();
@@ -506,11 +518,17 @@ impl Device {
     }
 
     fn report_warnings(&mut self) {
-        budget::track(|| {
-            for warning in self.kernel.take_warnings() {
-                eprintln!("warning: {warning}");
+        let kernel = &mut self.kernel;
+        let warnings = budget::track(|| kernel.take_warnings());
+        for warning in warnings {
+            eprintln!("warning: {warning}");
+            if self.warnings.len() == KEPT_WARNINGS {
+                self.warnings.remove(0);
             }
-        });
+            // Copied outside the kernel's budget, which the kernel's own
+            // copy leaves as it is dropped.
+            self.warnings.push(warning.clone());
+        }
     }
 }
 
