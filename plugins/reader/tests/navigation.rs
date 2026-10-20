@@ -213,6 +213,16 @@ fn a_search_hit_shows_the_word_found() {
     assert!(shown.contains("Zebra"), "{shown}");
 }
 
+/// A match wider than its row shows from its start, not its middle.
+#[test]
+fn a_search_hit_wider_than_its_row_shows_its_start() {
+    let mut reading = zebra();
+    reading.press(reader::SEARCH);
+    reading.type_text("p250 word250x1 word250x2 word250x3 word250x4 zebra word250x6 word250x7");
+    let shown = reading.described();
+    assert!(shown.contains("…p250 word250x1"), "{shown}");
+}
+
 #[test]
 fn a_search_without_hits_says_so_and_stays() {
     let mut reading = zebra();

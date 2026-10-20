@@ -35,9 +35,8 @@ struct Hit {
     start: Locator,
     end: Locator,
     percent: u8,
+    /// The text around the match as its row shows it (see [`with_hit`]).
     snippet: String,
-    /// Where the match is in the snippet, in characters.
-    at: (usize, usize),
 }
 
 pub(crate) struct SearchScreen {
@@ -98,6 +97,10 @@ impl SearchScreen {
             return false;
         };
         let first_new = self.hits.len();
+        let font = self.style.font(env);
+        // The row's title: the list's width less the margins and the gap
+        // kept before a value.
+        let width = f32::from(self.list.area.width) - 4.0 * self.style.margin as f32;
         // The text as the page shows it (see `paperpaw_sdk::filters`).
         let filtered = crate::screen::Filtered {
             document: document.as_ref(),
@@ -116,8 +119,17 @@ impl SearchScreen {
                             start: start_at,
                             end: Locator::new(at.section, block.source_offset(end)),
                             percent: (document.progress(start_at) * 100.0) as u8,
-                            snippet: snippet(&block, start, end),
-                            at: snippet_at(&block.text, start, end),
+                            snippet: {
+                                let shown = snippet(&block, start, end);
+                                let at = snippet_at(&block.text, start, end);
+                                match &font {
+                                    Some(font) => {
+                                        with_hit(font, self.style.text, &shown, at, width)
+                                            .into_owned()
+                                    }
+                                    None => shown,
+                                }
+                            },
                         });
                     }
                     if self.more {
@@ -280,6 +292,8 @@ fn with_hit<'s>(
     if from == 0 || snippet[..from].chars().all(|c| c == '…') {
         return Cow::Borrowed(snippet);
     }
+    // A match wider than the row: from its start, cut at the end.
+    from = from.min(start);
     // From the start of a word, before the match.
     if let Some(space) = snippet.get(from..start).and_then(|s| s.find(' ')) {
         from += space;
@@ -319,14 +333,7 @@ impl Screen for SearchScreen {
                     "reader.percent",
                     &[("percent", Arg::Int(i64::from(hit.percent)))],
                 );
-                // The row's title, less the gap kept before a value.
-                let width = f32::from(rect.width) - 4.0 * style.margin as f32;
-                let snippet = style
-                    .font(env)
-                    .map_or(Cow::Borrowed(hit.snippet.as_str()), |font| {
-                        with_hit(&font, style.text, &hit.snippet, hit.at, width)
-                    });
-                ui::draw_noted_row(canvas, env, &style, rect, focused, &snippet, "", &note);
+                ui::draw_noted_row(canvas, env, &style, rect, focused, &hit.snippet, "", &note);
             });
     }
 
