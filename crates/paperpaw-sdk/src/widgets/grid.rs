@@ -61,7 +61,7 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use crate::ui::{self, UiStyle};
+use crate::ui::UiStyle;
 use crate::{Canvas, Color, Env, Id, Point, Rect};
 
 pub use view::{GridResponse, GridView};
@@ -428,7 +428,20 @@ pub fn draw_tool(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, action: &Id
             .i18n
             .get(&format!("{title}.short"))
             .unwrap_or(env.i18n.tr(title));
-        ui::fit(&font, style.small, name, f32::from(area.width) - 4.0)
+        // A little smaller where it does not fit whole, then on two
+        // lines where the tool is high enough, then shortened.
+        let width = area.width.saturating_sub(4);
+        let least = style.small * 0.85;
+        let (size, line) = crate::widgets::fit_line(&font, style.small, least, name, width.into());
+        let two = 2 * crate::widgets::line_height(env, least);
+        if line != name && area.height >= two * 2 {
+            let wrapped =
+                crate::widgets::Wrapped::fitting(env, name, style.small, least, width, two);
+            if wrapped.whole() {
+                return (wrapped.size(), wrapped.lines().to_vec(), String::from(name));
+            }
+        }
+        (size, alloc::vec![line], String::from(name))
     });
     let inner = (style.gap / 2) as i32;
     // The name's capitals above its baseline, its descenders below
@@ -443,8 +456,12 @@ pub fn draw_tool(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, action: &Id
         ),
         None => (0, 0),
     };
+    // A second line a line lower.
+    let more = name.as_ref().map_or(0, |(size, lines, _)| {
+        lines.len().saturating_sub(1) as i32 * i32::from(crate::widgets::line_height(env, *size))
+    });
     let text_room = if name.is_some() {
-        inner + cap + descent
+        inner + cap + descent + more
     } else {
         0
     };
@@ -473,20 +490,34 @@ pub fn draw_tool(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, action: &Id
         let x = f32::from(area.x) + (f32::from(area.width) - w) / 2.0;
         icon_font.draw(canvas, size, x, y - top, ch, Color::BLACK);
     }
-    let Some(name) = name else {
+    let Some((size, lines, name)) = name else {
         return;
     };
     let baseline = y + (bottom - top) + inner + cap;
-    let width = font.measure(style.small, &name);
-    let x = f32::from(area.x) + (f32::from(area.width) - width) / 2.0;
+    let step = i32::from(crate::widgets::line_height(env, size));
+    let widest = lines
+        .iter()
+        .map(|line| font.measure(size, line))
+        .fold(0.0, f32::max);
     let at = Rect::new(
-        x.max(0.0) as u16,
+        (f32::from(area.x) + (f32::from(area.width) - widest) / 2.0).max(0.0) as u16,
         (baseline - cap).max(0) as u16,
-        width as u16,
-        (cap + descent) as u16,
+        widest as u16,
+        (cap + descent + more) as u16,
     );
     canvas.describe(crate::semantics::Role::Text, &name, at, false, None);
-    font.draw(canvas, style.small, x, baseline, &name, Color::BLACK);
+    for (n, line) in lines.iter().enumerate() {
+        let width = font.measure(size, line);
+        let x = f32::from(area.x) + (f32::from(area.width) - width) / 2.0;
+        font.draw(
+            canvas,
+            size,
+            x,
+            baseline + n as i32 * step,
+            line,
+            Color::BLACK,
+        );
+    }
 }
 
 #[cfg(test)]

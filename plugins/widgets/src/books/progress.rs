@@ -43,14 +43,16 @@ static SETTINGS: [SettingSpec; 10] = [
         &STYLES,
         STYLES[0],
         ID,
-    ),
+    )
+    .described("widgets.progress.style.help"),
     SettingSpec::fixed_choice(
         "widgets.progress.thickness",
         "widgets.books.setting.thickness",
         &THICKNESSES,
         THICKNESSES[1],
         ID,
-    ),
+    )
+    .described("widgets.progress.thickness.help"),
     widgets::part_spec(
         "widgets.progress.cover",
         ID,

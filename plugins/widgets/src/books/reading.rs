@@ -140,7 +140,8 @@ impl Position {
 }
 
 /// Records the position from the reading events, kept in memory while
-/// reading and written when the book is closed or the device sleeps.
+/// reading and written when the book is closed or the device sleeps or
+/// restarts.
 #[derive(Debug, Default)]
 pub(crate) struct Recorder {
     position: Option<Position>,
@@ -244,10 +245,12 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
         recorder.last = None;
         recorder.save(env.storage);
     })?;
-    let saving = recorder.clone();
-    r.on(events::SUSPEND, move |env, _, _| {
-        saving.borrow_mut().save(env.storage);
-    })?;
+    for event in [events::SUSPEND, events::STOPPING] {
+        let saving = recorder.clone();
+        r.on(event, move |env, _, _| {
+            saving.borrow_mut().save(env.storage);
+        })?;
+    }
 
     add_settings(r, &ID, "widgets.reading", &SETTINGS)?;
     r.add_widget(

@@ -37,14 +37,16 @@ static SETTINGS: [SettingSpec; 9] = [
         &LOOKS,
         LOOKS[0],
         ID,
-    ),
+    )
+    .described("widgets.tile-clock.tiles.help"),
     SettingSpec::fixed_choice(
         "widgets.tile-clock.group",
         "widgets.setting.tile-group",
         &GROUPS,
         GROUPS[0],
         ID,
-    ),
+    )
+    .described("widgets.tile-clock.group.help"),
     widgets::part_spec(
         "widgets.tile-clock.hinge",
         ID,

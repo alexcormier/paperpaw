@@ -551,6 +551,10 @@ pub mod events {
     pub const SUSPEND: Event<()> = Event::new("core.suspend");
     /// Back from [`SUSPEND`].
     pub const RESUME: Event<()> = Event::new("core.resume");
+    /// PaperPaw stops (the device restarts, or an app closes for good):
+    /// save what is pending, as at [`SUSPEND`]; the device may lose its
+    /// power right after. No [`RESUME`] follows, and it is no sleep.
+    pub const STOPPING: Event<()> = Event::new("core.stopping");
     /// The battery or the time zone changed; status lines redraw.
     pub const STATUS_CHANGED: Event<()> = Event::new("core.status-changed");
     /// The battery was measured again ([`Env::status`](crate::Env::status)),

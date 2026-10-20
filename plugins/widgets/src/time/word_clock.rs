@@ -61,7 +61,8 @@ static SETTINGS: [SettingSpec; 9] = [
         &STYLES,
         STYLES[0],
         ID,
-    ),
+    )
+    .described("widgets.word-clock.style.help"),
     widgets::size_spec("widgets.word-clock.size", ID, Size::Fit, true),
     SettingSpec::fixed_choice(
         "widgets.word-clock.lead",
@@ -69,14 +70,16 @@ static SETTINGS: [SettingSpec; 9] = [
         &LEADS,
         LEADS[1],
         ID,
-    ),
+    )
+    .described("widgets.word-clock.lead.help"),
     SettingSpec::fixed_choice(
         "widgets.word-clock.quarters",
         "widgets.setting.quarters",
         &QUARTERS,
         QUARTERS[0],
         ID,
-    ),
+    )
+    .described("widgets.word-clock.quarters.help"),
     widgets::part_spec(
         "widgets.word-clock.capitals",
         ID,

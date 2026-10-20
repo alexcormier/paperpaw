@@ -267,6 +267,7 @@ pub const paperpaw_sdk::builtin::events::RESUME: paperpaw_sdk::event::Event<()>
 pub const paperpaw_sdk::builtin::events::SETTING_CHANGED: paperpaw_sdk::event::Event<paperpaw_sdk::builtin::events::SettingChanged>
 pub const paperpaw_sdk::builtin::events::STARTED: paperpaw_sdk::event::Event<()>
 pub const paperpaw_sdk::builtin::events::STATUS_CHANGED: paperpaw_sdk::event::Event<()>
+pub const paperpaw_sdk::builtin::events::STOPPING: paperpaw_sdk::event::Event<()>
 pub const paperpaw_sdk::builtin::events::SUSPEND: paperpaw_sdk::event::Event<()>
 pub const paperpaw_sdk::builtin::events::TEXT_CHOSEN: paperpaw_sdk::event::Event<paperpaw_sdk::builtin::events::TextChosen>
 pub const paperpaw_sdk::builtin::events::WIDGET_CHANGED: paperpaw_sdk::event::Event<paperpaw_sdk::builtin::events::WidgetChanged>

@@ -46,21 +46,24 @@ static SETTINGS: [SettingSpec; 13] = [
         &WEEK_STARTS,
         WEEK_STARTS[0],
         ID,
-    ),
+    )
+    .described("widgets.calendar.week-start.help"),
     SettingSpec::fixed_choice(
         "widgets.calendar.mark",
         "widgets.setting.today-mark",
         &MARKS,
         MARKS[0],
         ID,
-    ),
+    )
+    .described("widgets.calendar.mark.help"),
     SettingSpec::fixed_choice(
         "widgets.calendar.initials",
         "widgets.setting.initials",
         &INITIALS,
         INITIALS[0],
         ID,
-    ),
+    )
+    .described("widgets.calendar.initials.help"),
     widgets::part_spec(
         "widgets.calendar.heading",
         ID,

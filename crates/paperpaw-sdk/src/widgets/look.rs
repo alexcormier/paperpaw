@@ -247,6 +247,7 @@ pub fn frame_setting(widget: &Id, default: Frame) -> SettingSpec {
         FRAMES,
         default.value(),
     )
+    .described("core.setting.frame.help")
 }
 
 /// [`frame_setting`] kept in the program ([`SettingSpec::fixed`]), for a
@@ -254,6 +255,7 @@ pub fn frame_setting(widget: &Id, default: Frame) -> SettingSpec {
 /// `<widget>.frame`.
 pub const fn frame_spec(id: &'static str, widget: Id, default: Frame) -> SettingSpec {
     SettingSpec::fixed_choice(id, "core.setting.frame", FRAMES, default.value(), widget)
+        .described("core.setting.frame.help")
 }
 
 /// The setting of how far `widget`'s content keeps from its frame,
@@ -293,6 +295,7 @@ pub fn padding(env: &Env<'_>, widget: &str) -> Padding {
 /// must be `<widget>.size`.
 pub const fn size_spec(id: &'static str, widget: Id, default: Size, fit: bool) -> SettingSpec {
     SettingSpec::fixed_choice(id, "core.setting.size", sizes(fit), default.value(), widget)
+        .described("core.setting.size.help")
 }
 
 /// [`part_setting`] kept in the program ([`SettingSpec::fixed`]): `id`
@@ -303,7 +306,7 @@ pub const fn part_spec(
     title: &'static str,
     default: bool,
 ) -> SettingSpec {
-    SettingSpec::fixed_switch(id, title, default, widget)
+    SettingSpec::fixed_switch(id, title, default, widget).described("core.setting.part.help")
 }
 
 /// What `widget` is drawn in, by its [`frame_setting`]; none without one.
@@ -322,6 +325,7 @@ pub fn size_setting(widget: &Id, default: Size, fit: bool) -> SettingSpec {
         sizes(fit),
         default.value(),
     )
+    .described("core.setting.size.help")
 }
 
 /// How large `widget`'s text is, by its [`size_setting`]; medium without
@@ -345,6 +349,7 @@ pub fn part_setting(
         SettingValue::Bool(default),
     )
     .group(widget.clone())
+    .described("core.setting.part.help")
 }
 
 /// Whether `widget` shows `part` ([`part_setting`]).

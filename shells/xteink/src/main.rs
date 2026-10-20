@@ -249,12 +249,8 @@ fn main() -> ! {
     esp_alloc::heap_allocator!(#[esp_hal::ram(reclaimed)] size: RECLAIMED_SIZE);
     esp_println::logger::init_logger_from_env();
     power::note_start();
-    let panicked = crash::take_last();
     let (place, naps, reason) = power::last_run();
     info!("PaperPaw starting (reset: {reason:?}, last at {place}, naps {naps})");
-    if let Some(message) = &panicked {
-        warn!("the last run panicked: {message}");
-    }
     // Before anything that could fail or hang, the board too: an update
     // on trial that failed is undone here (a restart into the firmware
     // before it). One handle on the flash, for updates and native
@@ -265,6 +261,12 @@ fn main() -> ! {
         esp_bootloader_esp_idf::partitions::FlashStorage::new(flash),
     ));
     let ota = ota::Ota::start(flash.clone());
+    // Taken only now: an update undone above restarts into the firmware
+    // before it, which keeps the message of the update's panic.
+    let panicked = crash::take_last();
+    if let Some(message) = &panicked {
+        warn!("the last run panicked: {message}");
+    }
     let board = Board::take(p);
 
     let storage = card::mount(board.card);

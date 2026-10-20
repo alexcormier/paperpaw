@@ -268,7 +268,7 @@ fn an_update_signed_by_another_key_installs_with_the_key_shown() {
     let fingerprint = paperpaw_sdk::firmware::fingerprint(&key).replace(' ', "\u{a0}");
     assert!(shown.contains("own build"), "{shown}");
     assert!(shown.contains(&fingerprint), "{shown}");
-    assert!(shown.contains("Trust and install"), "{shown}");
+    assert!(shown.contains("Install with this key"), "{shown}");
     device.run(actions::CONFIRM);
     assert_eq!(
         device.install(),
@@ -307,6 +307,30 @@ fn an_older_update_says_so_and_installs_only_as_chosen() {
             older: true,
         }
     );
+}
+
+#[test]
+fn an_own_build_not_newer_says_all_of_it() {
+    // The same version again, under another key: its key and that it is
+    // not newer, said whole above two buttons.
+    let storage = Shared::default();
+    let all = [
+        ("chess-for-paperpaw", "1.0.0"),
+        ("paperpaw-plugin-stats", "0.4.0"),
+    ];
+    storage
+        .write("updates/own.bin", &update_signed("0.4.0", &all, &[5; 32]))
+        .unwrap();
+    let mut device = Device::new(storage);
+    device.run(OPEN);
+    device.shown();
+    let parts = device.kernel.describe();
+    let buttons: Vec<_> = parts.iter().filter(|p| p.role == Role::Button).collect();
+    assert_eq!(buttons.len(), 2, "{buttons:?}");
+    // Its last line drawn ends it: nothing cut.
+    let last = parts.iter().rfind(|p| p.role == Role::Text).unwrap();
+    assert!(last.label.ends_with("PaperPaw 0.4.0."), "{parts:?}");
+    assert!(!last.label.starts_with("This update"), "{parts:?}");
 }
 
 #[test]

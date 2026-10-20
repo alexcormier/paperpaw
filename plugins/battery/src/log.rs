@@ -2,7 +2,7 @@
 //! and spreadsheets alike. A time awake starts with a `start` line (at
 //! start-up or waking), has a `sample` line each time the battery is
 //! measured (about once a minute) and ends with an `end` line (going to
-//! sleep). Besides the battery, each line has what the device did since
+//! sleep or restarting). Besides the battery, each line has what the device did since
 //! PaperPaw started ([`Usage`]) and the pages turned, so the battery's use
 //! can be put down to what used it.
 //!

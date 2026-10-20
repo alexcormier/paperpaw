@@ -15,6 +15,7 @@ use paperpaw_platform::{
     PointerEvent, PointerPhase, PointerTool, Rotation,
 };
 use paperpaw_sdk::builtin::{actions, params};
+use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::setting::Setting;
 use paperpaw_sdk::widgets::{Widget, WidgetSpec};
 use paperpaw_sdk::{
@@ -160,6 +161,30 @@ impl Home {
             .collect()
     }
 
+    /// The texts the screen shows, each with its place (not the buttons
+    /// round them).
+    fn texts(&mut self) -> Vec<(String, Rect)> {
+        self.kernel.render(&mut |_, _| {});
+        self.kernel
+            .describe()
+            .into_iter()
+            .filter(|p| p.role == Role::Text)
+            .map(|p| (p.label, p.area))
+            .collect()
+    }
+
+    /// The buttons the screen shows by what they say, the focused one
+    /// marked.
+    fn buttons(&mut self) -> Vec<(String, bool)> {
+        self.kernel.render(&mut |_, _| {});
+        self.kernel
+            .describe()
+            .into_iter()
+            .filter(|p| p.role == Role::Button)
+            .map(|p| (p.label, p.focused))
+            .collect()
+    }
+
     /// A tap on the part of the screen that says `label`.
     fn tap_on(&mut self, label: &str) {
         let area = self
@@ -213,7 +238,8 @@ fn without_margins_the_grid_stays_on_the_screen() {
     );
     let shown = home.shown();
     on_screen(&home, &shown);
-    let tools: Vec<_> = shown.iter().filter(|(l, _)| l == "Settings").collect();
+    let texts = home.texts();
+    let tools: Vec<_> = texts.iter().filter(|(l, _)| l == "Settings").collect();
     assert_eq!(tools.len(), 2, "{shown:?}");
     // In the first column and the last of four.
     let (left, right) = (tools[0].1, tools[1].1);
@@ -345,7 +371,7 @@ fn a_tools_name_belongs_to_its_own_icon() {
             ),
         );
         let (width, gray) = home.pixels();
-        let shown = home.shown();
+        let shown = home.texts();
         let names: Vec<Rect> = shown
             .iter()
             .filter(|(l, _)| l == "Settings")
@@ -381,4 +407,28 @@ fn a_tools_name_belongs_to_its_own_icon() {
             "rows {rows}, touch {touch}: name {inside} px below its icon, {between} px above the next"
         );
     }
+}
+
+/// With buttons alone, the focus goes from tool to tool on the home
+/// screen, and the tool it is on is told by its name: what a screen
+/// reader says, and what tools follow.
+#[test]
+fn the_focus_on_the_home_screen_is_told() {
+    let mut home = Home::new(
+        false,
+        "page-1 = tool:core.settings 0/0 1x1, tool:core.library 1/0 1x1
+",
+    );
+    let focused = |home: &mut Home| {
+        home.buttons()
+            .into_iter()
+            .find(|(_, focused)| *focused)
+            .map(|(name, _)| name)
+    };
+    // The page seen as it is first; the first press shows the focus.
+    assert_eq!(focused(&mut home), None);
+    home.run(actions::NEXT);
+    assert_eq!(focused(&mut home).as_deref(), Some("Settings"));
+    home.run(actions::NEXT);
+    assert_eq!(focused(&mut home).as_deref(), Some("Library"));
 }

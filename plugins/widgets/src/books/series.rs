@@ -55,7 +55,8 @@ static SETTINGS: [SettingSpec; 12] = [
         12,
         6,
         ID,
-    ),
+    )
+    .described("widgets.setting.count.help"),
     SettingSpec::fixed_choice(
         "widgets.series.start",
         "widgets.books.setting.series-start",

@@ -84,10 +84,14 @@ fn choose(app: &mut App, option: &str) {
     panic!("no option {option}:\n{}", app.described());
 }
 
-/// The title of the choice shown: the text right before its options.
+/// The title of the choice shown: the text right before its options
+/// (the last rows told, the home screen's widgets told before them).
 fn choice_title(app: &mut App) -> Option<String> {
     let parts = app.parts();
-    let first_row = parts.iter().position(|p| p.role == Role::Row)?;
+    let mut first_row = parts.iter().rposition(|p| p.role == Role::Row)?;
+    while first_row > 0 && parts[first_row - 1].role == Role::Row {
+        first_row -= 1;
+    }
     parts[..first_row].last().map(|p| p.label.clone())
 }
 

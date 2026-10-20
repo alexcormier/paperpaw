@@ -32,7 +32,8 @@ static SETTINGS: [SettingSpec; 6] = [
         &FACES,
         FACES[0],
         ID,
-    ),
+    )
+    .described("widgets.setting.face-font.help"),
     widgets::size_spec("widgets.logo.size", ID, Size::Medium, true),
     widgets::align_spec("widgets.logo.align", ID, Align::Center),
     widgets::frame_spec("widgets.logo.frame", ID, Frame::None),

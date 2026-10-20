@@ -302,8 +302,12 @@ fn android_main(app: AndroidApp) {
                     WindowManagerFlags::KEEP_SCREEN_ON,
                 );
             }
-            // The old kernel goes first: its files are closed and its
-            // memory is free before the new one starts.
+            // The old kernel goes first: plugins save what is pending, its
+            // files are closed and its memory is free before the new one
+            // starts.
+            if let Some(running) = running.as_mut() {
+                running.kernel.stop(now());
+            }
             drop(running.take());
             running = start_kernel(&app, window, lights, now());
             if let Some(running) = &running {

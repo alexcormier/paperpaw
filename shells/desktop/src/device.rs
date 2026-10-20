@@ -490,6 +490,9 @@ impl Device {
             Ok(storage) => storage,
             Err(e) => return eprintln!("restart: {}: {e}", self.root.display()),
         };
+        // Plugins save what is pending, as on the device before it restarts.
+        let now = self.now();
+        budget::track(|| self.kernel.stop(now));
         // As after a reboot, what the old kernel asked for is gone: its
         // requests' answers would otherwise reach the new kernel's (they
         // count from 1 again).

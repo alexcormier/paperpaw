@@ -267,8 +267,16 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown) {
     if area.width >= area.height * 3 && roomy {
         // Wide and low: the marks beside the text, if there is room, the
         // two placed together as the alignment says.
-        let side = area.width * 2 / 5;
-        let rest = area.width - side;
+        // The text two fifths (more where the streak needs it), the marks
+        // the rest; the gap between them taken from the marks where the
+        // two would not fit together otherwise.
+        let space = style.gap as u16;
+        let needs = font.measure(headline, &first) as u16 + 1;
+        let least_marks = (env.metrics.mm(3) * shown.marks.len() as u32) as u16;
+        let side = needs
+            .max(area.width * 2 / 5)
+            .min(area.width.saturating_sub(least_marks + space));
+        let rest = area.width.saturating_sub(side);
         let fits = |weekdays| {
             let h = marks_height(env, small, rest, weekdays);
             (h > 0 && h - gap <= area.height).then_some((h - gap, weekdays))
@@ -277,10 +285,14 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown) {
             let area = super::captioned(canvas, env, id, look, caption, area.height);
             let side_area = Rect::new(area.x, area.y, side, area.height);
             let laid = lay_texts(env, side_area, (&first, &second));
-            let (column, d) = mark_size(env, rest, shown.marks.len());
+            let (mut column, mut d) = mark_size(env, rest, shown.marks.len());
+            let spans = |column: u32, d: u32| column * shown.marks.len() as u32 - (column - d);
+            if u32::from(laid.width) + u32::from(space) + spans(column, d) > u32::from(area.width) {
+                (column, d) = mark_size(env, rest.saturating_sub(space), shown.marks.len());
+            }
             let inset = (column - d) / 2;
             let span = column * shown.marks.len() as u32 - 2 * inset;
-            let space = style.gap;
+            let space = u32::from(space);
             let group = u32::from(laid.width) + space + span;
             let left = align.x(area, group as f32) as u16;
             let text = Rect::new(left, area.y, laid.width, area.height);
@@ -359,16 +371,25 @@ fn lay_texts(env: &Env<'_>, area: Rect, (first, second): (&str, &str)) -> Texts 
     let size = if note { with_note } else { alone };
     let shown = super::number_if_narrow(&font, size, first, area.width);
     let shown = ui::fit(&font, size, shown, width);
-    // The longest streak left out where the note is too long.
-    let second = note.then(|| {
-        let in_a_row = env.i18n.tr("stats.in-a-row");
-        let text = if font.measure(style.small, second) > width && second.starts_with(in_a_row) {
-            in_a_row
-        } else {
-            second
-        };
-        ui::fit(&font, style.small, text, width)
-    });
+    // The longest streak left out where the note is too long; how to
+    // begin one in short.
+    let second = note
+        .then(|| {
+            let in_a_row = env.i18n.tr("stats.in-a-row");
+            let start = env.i18n.tr("stats.widget.streak.start");
+            let wide = font.measure(style.small, second) > width;
+            if wide && second.starts_with(in_a_row) {
+                in_a_row
+            } else if wide && second == start {
+                env.i18n.tr("stats.widget.streak.start-short")
+            } else {
+                second
+            }
+        })
+        // Left out where not even that fits whole: a note shortened says
+        // little.
+        .filter(|text| font.measure(style.small, text) <= width)
+        .map(String::from);
     let wide = font.measure(size, &shown).max(
         second
             .as_ref()

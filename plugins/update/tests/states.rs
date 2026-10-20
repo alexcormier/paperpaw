@@ -425,7 +425,7 @@ fn an_own_build_installs_only_with_its_key_accepted() {
     d.run(OPEN);
     let shown = d.shown();
     assert!(shown.contains("PaperPaw 0.5.0, own build"), "{shown}");
-    assert!(shown.contains("Trust and install"), "{shown}");
+    assert!(shown.contains("Install with this key"), "{shown}");
     // "Not now": nothing installed.
     d.run(actions::DOWN);
     assert_eq!(d.focused().as_deref(), Some("Not now"));
@@ -450,7 +450,7 @@ fn an_own_build_installs_only_with_its_key_accepted() {
     d.run(OPEN);
     let shown = d.shown();
     assert!(shown.contains("own build"), "{shown}");
-    assert!(shown.contains("Trust and install"), "{shown}");
+    assert!(shown.contains("Install with this key"), "{shown}");
 }
 
 #[test]

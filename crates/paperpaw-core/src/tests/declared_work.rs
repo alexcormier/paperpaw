@@ -157,6 +157,18 @@ fn work_runs_at_its_moment() {
 }
 
 #[test]
+fn a_restart_is_no_moment_of_sleep() {
+    let log = log();
+    let mut kernel = kernel(&log, false);
+    let push = Work::new(Id::new_static("wk.push")).at_moments(Moments::SLEEP);
+    declare(&mut kernel, 10, push);
+    kernel.stop(Instant(20));
+    assert!(log.borrow().is_empty(), "no sleep yet");
+    kernel.suspend(Instant(30));
+    assert_eq!(*log.borrow(), ["wk.push sleep"]);
+}
+
+#[test]
 fn a_deadline_runs_work_that_no_moment_did() {
     let log = log();
     let mut kernel = kernel(&log, false);

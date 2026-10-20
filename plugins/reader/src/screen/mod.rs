@@ -67,7 +67,7 @@ const STEP_DELAY_MS: u64 = 2;
 const STEP_DELAY_SMALL_MS: u64 = 500;
 
 /// The position is written at most this often while pages turn; always
-/// when the book is closed or the device sleeps. A card is slow to write
+/// when the book is closed or the device sleeps or restarts. A card is slow to write
 /// to, and turning pages quickly should not wait for it.
 const SAVE_EVERY_MS: u64 = 5000;
 
@@ -795,8 +795,9 @@ impl ReaderScreen {
         let Ok(book) = &mut self.book else {
             return;
         };
-        // Asleep the device may lose its power: the position first.
-        if *event == events::SUSPEND {
+        // Asleep or restarting the device may lose its power: the position
+        // first.
+        if *event == events::SUSPEND || *event == events::STOPPING {
             book.save_due(cx, true);
         }
         let this_book = params.get(params::PATH) == Some(book.path.as_str());

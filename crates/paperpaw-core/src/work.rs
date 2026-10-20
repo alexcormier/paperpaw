@@ -160,7 +160,8 @@ pub(crate) struct Queue {
     /// Plugins refused for a full queue, told `WORK_ALLOWED` once there is
     /// room again.
     full: Vec<String>,
-    /// The device goes to sleep: the worn mode is written down.
+    /// The device goes to sleep or PaperPaw stops: the worn mode is
+    /// written down.
     keep: bool,
     /// Plugins that declared work under another's name, to warn of.
     foreign: Vec<String>,
@@ -278,6 +279,11 @@ impl Queue {
             _ => Moments::NONE,
         };
         self.moments = self.moments | moment;
+        // Stopping is no moment, no work runs for it; but the worn mode is
+        // written down as at sleep.
+        if *event == events::STOPPING {
+            self.keep = true;
+        }
         for entry in &mut self.entries {
             if entry.job.as_ref() == Some(&Job::For(event.clone())) {
                 entry.job = Some(Job::Ready);

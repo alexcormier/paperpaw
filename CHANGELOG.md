@@ -6,6 +6,17 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Restarting no longer counts as going to sleep: after plugins were
+  switched or an update installed, rules for "on sleep", sync on sleep,
+  work waiting for sleep and the sleep counters no longer take the
+  restart for a sleep, and the battery log ends the time awake there.
+  The reading position, the reading statistics and what the reading
+  widget shows are still saved before the restart, now also in the
+  emulator and on Android.
+- SDK: `events::STOPPING` (`core.stopping`): PaperPaw stops (the device
+  restarts, or an app closes for good); plugins save what is pending, as
+  at `SUSPEND`, but no `RESUME` follows and it is no sleep. Shells call
+  `Kernel::stop` for it.
 - The update's progress bar fills inside its rounded track at every
   value; its fill stuck out past the track's rounded ends. SDK:
   `ui::draw_progress`, a progress bar for any plugin.
@@ -501,6 +512,16 @@ change the plugin SDK.
   placement): automatically, widgets without a frame line up with the
   page's margins as before, and framed ones keep a gap inside their
   frame.
+- Home screen and widgets, as `paperpaw-dev` found them: with buttons
+  alone, the tool the focus is on is told by its name (screen readers
+  and checks follow it); a tool's name too long for its tile is made a
+  little smaller, then put on two lines where the tile is high enough;
+  every setting of a widget explains itself (frame, size, alignment and
+  the parts shown in the SDK, the rest in the widgets); the streak keeps
+  its marks inside a wide row; shortened texts in small cells give way
+  to shorter forms (the countdown's "days", the year's "Day 287", a
+  quote's author by the last name), titles grow smaller before they are
+  shortened, and covers without a picture show whole words only.
 - Home screen tools: an icon and its name are placed by their ink as
   one group, half a gap apart, so that on the X4s the name no longer
   sits as near the tool below as its own icon.
@@ -1450,10 +1471,13 @@ change the plugin SDK.
   `Signer::Trusted` are gone (none was released).
 - X4 updates: an update that fails early in its start is undone too. It
   goes on trial before the board is set up, and is taken as good after
-  half a minute or when it goes to sleep or restarts (it was at its
-  first frame, so one that crashed opening the last book stayed). The
-  start is watched from its first moment; a power cut while an update is
-  chosen no longer starts it without a trial.
+  half a minute of running in all (it was at its first frame, so one
+  that crashed opening the last book stayed); going to sleep or
+  restarting before keeps it on trial at the next start, so one that
+  crashes after a wake is undone as well. The start is watched from its
+  first moment; a power cut while an update is chosen no longer starts
+  it without a trial, and the image running is marked as good also when
+  an update was chosen meanwhile (that one was marked instead).
 - X4: what was written is on the card before every restart, also one a
   plugin asks for (a plugin switched just before was lost), and at most
   2 s after work, however often work comes.
