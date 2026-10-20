@@ -167,13 +167,13 @@ pub const PROFILES: &[Profile] = &[
         catalog_device: Some("x4-pro"),
         sleep: true,
         button_row: &[],
-        // As the X4 Pro's shell has it: percent in fives, cool and warm
-        // LEDs.
+        // As the X4 Pro's shell has it: brightness in single percents,
+        // cool and warm LEDs mixed in fives.
         light: Some(Light {
             max: 100,
-            step: 5,
+            step: 1,
             percent: true,
-            warmth: true,
+            warmth: Some(5),
         }),
         summary: "ESP32-S3 (unverified), 4.3\" 800x480, touch + buttons, 256 KiB heap budget",
     },
@@ -215,7 +215,7 @@ pub const PROFILES: &[Profile] = &[
             max: 255,
             step: 1,
             percent: false,
-            warmth: true,
+            warmth: Some(1),
         }),
         summary: "Android, 7\" Carta 1300 1264x1680, touch + page buttons",
     },

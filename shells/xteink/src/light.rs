@@ -1,9 +1,11 @@
 //! The X4 Pro's front light: cool LEDs on GPIO 8 and warm ones on GPIO 9,
-//! each dimmed by PWM (the LEDC unit: 10 kHz, 10 bits). The settings
-//! `x4.frontlight` (how bright) and `x4.warmth` (how much of it warm,
-//! see `device`) are shown; the eye sees brightness about as the square
-//! of the duty, so the levels follow a curve, and the lowest step is
-//! still very dim.
+//! each dimmed by PWM (the LEDC unit: 10 kHz, 12 bits, the most its
+//! 80 MHz clock allows at that rate). The settings `x4.frontlight` (how
+//! bright, in percent) and `x4.warmth` (how much of it warm, see
+//! `device`) are shown. The eye sees light about as its cube root, and
+//! is most sensitive where it is dim, so the percentages follow the
+//! lightness the eye sees (CIE L*): each step looks about as large as the
+//! next, the lowest ones too, and 1 % is still very dim.
 
 use alloc::boxed::Box;
 
@@ -14,8 +16,21 @@ use esp_hal::ledc::{LSGlobalClkSource, Ledc, LowSpeed};
 use esp_hal::peripherals::{GPIO8, GPIO9, LEDC};
 use esp_hal::time::Rate;
 
-/// The PWM's resolution: duty from 0 to 1023.
-const MAX_DUTY: u32 = 1023;
+/// The PWM's resolution: duty from 0 to 4095.
+const MAX_DUTY: u32 = 4095;
+
+/// The duty for each percent (see [`duty`]).
+const DUTIES: [u16; 101] = duties();
+
+// Every percent brighter than the one before, the last full.
+const _: () = {
+    let mut level = 1;
+    while level <= 100 {
+        assert!(DUTIES[level] > DUTIES[level - 1]);
+        level += 1;
+    }
+    assert!(DUTIES[0] == 0 && DUTIES[100] as u32 == MAX_DUTY);
+};
 
 pub struct Light {
     cool: channel::Channel<'static, LowSpeed>,
@@ -32,7 +47,7 @@ impl Light {
         let ledc: &'static Ledc<'static> = Box::leak(Box::new(ledc));
         let mut pwm = ledc.timer::<LowSpeed>(timer::Number::Timer0);
         pwm.configure(timer::config::Config {
-            duty: timer::config::Duty::Duty10Bit,
+            duty: timer::config::Duty::Duty12Bit,
             clock_source: timer::LSClockSource::APBClk,
             frequency: Rate::from_khz(10),
         })
@@ -77,12 +92,30 @@ impl Light {
     }
 }
 
-/// The duty for `level` percent: the square, so low levels stay fine; at
-/// least 1 when on.
+/// The duty for `level` percent (at most 100).
 fn duty(level: u8) -> u32 {
-    if level == 0 {
-        return 0;
+    u32::from(DUTIES[usize::from(level.min(100))])
+}
+
+/// The duty for each percent `L` taken as the lightness the eye sees
+/// (CIE L*): the share of the light `((L + 16) / 116)^3`, and `L / 903.3`
+/// below 8, where the curve is straight; rounded, and at least 1 when
+/// on.
+const fn duties() -> [u16; 101] {
+    let max = MAX_DUTY as u64;
+    let mut duties = [0u16; 101];
+    let mut level = 1;
+    while level <= 100 {
+        let l = level as u64;
+        let duty = if l <= 8 {
+            (l * max * 10_000 + 9_033_000 / 2) / 9_033_000
+        } else {
+            let base = l + 16;
+            let cube = 116 * 116 * 116;
+            (base * base * base * max + cube / 2) / cube
+        };
+        duties[level] = if duty == 0 { 1 } else { duty as u16 };
+        level += 1;
     }
-    let level = u32::from(level);
-    (MAX_DUTY * level * level / 10_000).max(1)
+    duties
 }
