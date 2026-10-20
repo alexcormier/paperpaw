@@ -175,7 +175,6 @@ fn names_differing_in_case_are_one_file() {
 /// A file kept open under one spelling, replaced under another: reading
 /// the first spelling sees the new content.
 #[test]
-#[ignore = "bug: lib.rs keeps open files by exact path; a write under another case leaves a stale handle"]
 fn a_file_replaced_under_another_case_is_read_anew() {
     let card = Card::new(1 << 20);
     let s = card.storage;
@@ -333,7 +332,6 @@ fn many_files_in_one_folder() {
 
 /// A folder moved into itself would cut it off from the card.
 #[test]
-#[ignore = "bug: lib.rs rename moves a folder into its own subfolder; it and all in it are lost"]
 fn a_folder_is_not_moved_into_itself() {
     let card = Card::new(1 << 20);
     let s = card.storage;

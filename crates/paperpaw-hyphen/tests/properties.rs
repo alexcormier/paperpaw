@@ -178,11 +178,9 @@ proptest! {
 }
 
 /// Exceptions are words with `-` where they may break; one with a `-` at
-/// its start or end names a break outside the word: at the start it is
-/// reported at offset 0, at the end the word's letter offsets are
-/// indexed past their end and hyphenating panics.
+/// its start or end names a break outside the word, which must give no
+/// break at offset 0 nor one past the word's last letter (once a panic).
 #[test]
-#[ignore = "bug: an exception with a hyphen at its end panics, one at its start breaks at 0"]
 fn exceptions_never_break_outside_the_word() {
     let table = compile("", "table- -chair", 1, 1);
     let patterns = Patterns::new(&table).unwrap();
@@ -204,10 +202,9 @@ fn exceptions_keep_the_minimums() {
 
 /// A capital letter in a pattern whose lower case is two characters (İ:
 /// i and a combining dot) gives a key of more characters than the pattern
-/// has points for, and the entries after it are read from the wrong
-/// bytes.
+/// has; the pattern needs a point for each, or the entries after it are
+/// read from the wrong bytes.
 #[test]
-#[ignore = "bug: compile miscounts points for letters whose lower case is two characters"]
 fn letters_lowercased_to_two_characters_do_not_break_the_table() {
     // "İ1" becomes "i̇" with one point short; "z" is stored after it.
     let patterns = ["1b", "İ1", "c1d", "1z"];

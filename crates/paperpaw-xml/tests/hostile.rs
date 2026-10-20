@@ -119,7 +119,11 @@ fn unclosed_markup_at_the_end_is_text() {
 
 #[test]
 fn stray_closing_and_empty_tags_are_harmless() {
-    assert_eq!(tokens("</p>a<>b< >c</>"), [end("p"), text("abc"), end("")]);
+    // A `<` without a name after it is text, not a tag.
+    assert_eq!(
+        tokens("</p>a<>b< >c</>"),
+        [end("p"), text("a<>b< >c"), end("")]
+    );
 }
 
 #[test]
@@ -315,7 +319,6 @@ fn every_chunk_size_gives_the_same_tokens_in_html() {
 }
 
 #[test]
-#[ignore = "bug: HTML raw text (script, style) can be cut inside a UTF-8 sequence, so a split character turns into two replacement characters"]
 fn html_raw_text_keeps_multibyte_characters_in_any_chunking() {
     let page = "<style>p::after { content: \"äöü→\" }</style>";
     let whole = run(page.as_bytes(), usize::MAX, true);
@@ -326,7 +329,6 @@ fn html_raw_text_keeps_multibyte_characters_in_any_chunking() {
 }
 
 #[test]
-#[ignore = "bug: a comment or CDATA section longer than the markup limit is skipped only up to its first '>', the rest comes out as text and tags"]
 fn an_overlong_comment_is_skipped_whole() {
     let commented = format!(
         "<p>a</p><!-- {} --><p>b</p>",

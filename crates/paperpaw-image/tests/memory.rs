@@ -209,7 +209,6 @@ fn large_gif_screens_take_what_a_row_needs() {
 }
 
 #[test]
-#[ignore = "bug: an interlaced GIF picture takes a buffer of its whole claimed size, however small the screen"]
 fn interlaced_gif_pictures_take_what_the_screen_shows() {
     // A picture of 65535 × 65535 on a screen of 16 × 16, a few bytes of
     // file: gif.rs gathers the interlaced picture in a buffer of

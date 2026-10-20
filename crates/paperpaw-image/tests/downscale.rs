@@ -138,22 +138,28 @@ proptest! {
     }
 }
 
+/// Sums are 32 bits and column counts 16: a pixel may cover as much as
+/// they hold, and comes out right.
 #[test]
-#[ignore = "bug: the downscaler's sums overflow when a pixel covers more than 16.8 million"]
-fn a_pixel_may_cover_a_large_picture() {
-    // Sums are u32: 5000 × 5000 white pixels made one add up to 6.4e9.
-    // A panic in debug builds, a wrong gray in release; reachable from
-    // the decoders with a fit of a few pixels for a large PNG or GIF.
-    let image = scale(5000, 5000, (1, 1), 1, |_, _, _| 255);
+fn a_pixel_may_cover_as_much_as_its_sums_hold() {
+    // 4104 × 4104 × 255 is just below 2^32.
+    let image = scale(4104, 4104, (1, 1), 1, |_, _, _| 255);
+    assert_eq!(image.pixels, [255]);
+    let image = scale(65_535, 1, (1, 1), 1, |_, _, _| 255);
     assert_eq!(image.pixels, [255]);
 }
 
+/// A pixel covering more than its sums or counts hold is refused at the
+/// start, never a wrong gray or an overflow (5000 × 5000 white pixels
+/// added up to 6.4e9; 140000 columns stopped the count at 65535). Large
+/// pictures reach this from the decoders with a fit of a few pixels.
 #[test]
-#[ignore = "bug: the downscaler's column counts saturate at 65535, so means of wider rows come out wrong"]
-fn a_pixel_may_cover_more_than_65535_columns() {
-    // 140000 white pixels to one: the count stops at 65535, the sum does
-    // not; 140000 * 255 / 65535 = 544, stored as a byte: 32, nearly
-    // black for white.
-    let image = scale(140_000, 1, (1, 1), 1, |_, _, _| 255);
-    assert_eq!(image.pixels, [255]);
+fn a_pixel_covering_more_than_its_sums_hold_is_refused() {
+    for (width, height) in [(5000, 5000), (4105, 4105), (140_000, 1), (65_536, 1)] {
+        assert_eq!(
+            Downscaler::new(width, height, (1, 1), 1).err(),
+            Some(ImageError::Unsupported("image this large made this small")),
+            "{width} x {height}"
+        );
+    }
 }

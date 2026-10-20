@@ -48,12 +48,15 @@ fn hosts_must_not_be_empty() {
 #[test]
 fn ports_must_be_numbers_that_fit() {
     assert_eq!(url("http://h:65535/").port, 65535);
-    assert_eq!(url("http://h:0/").port, 0);
+    // An empty port is the scheme's own (RFC 3986).
+    assert_eq!(url("http://h:/").port, 80);
+    assert_eq!(url("https://h:/").port, 443);
     for bad in [
         "http://h:65536/",
         "http://h:-1/",
+        "http://h:+1/",
         "http://h:8o/",
-        "http://h:/",
+        "http://h:0/",
     ] {
         assert_eq!(Url::parse(bad), None, "{bad:?}");
     }
@@ -84,18 +87,19 @@ fn fragments_are_never_sent() {
     assert_eq!(url("http://h/a?q=1#x").path, "/a?q=1");
 }
 
+/// The host comes without its brackets; the `Host` header puts them back.
 #[test]
-#[ignore = "bug: the IPv6 guard in Url::parse is inverted, so [::1]:8080 keeps the port in the host"]
 fn ipv6_literals_with_a_port() {
     let parsed = url("http://[::1]:8080/x");
-    assert_eq!((parsed.host, parsed.port), ("[::1]", 8080));
+    assert_eq!((parsed.host, parsed.port), ("::1", 8080));
+    assert_eq!(parsed.host_header(), "[::1]:8080");
 }
 
 #[test]
-#[ignore = "bug: the IPv6 guard in Url::parse is inverted, so [::1] without a port is refused"]
 fn ipv6_literals_without_a_port() {
     let parsed = url("http://[fe80::1]/x");
-    assert_eq!((parsed.host, parsed.port), ("[fe80::1]", 80));
+    assert_eq!((parsed.host, parsed.port), ("fe80::1", 80));
+    assert_eq!(parsed.host_header(), "[fe80::1]");
 }
 
 #[test]
@@ -140,7 +144,6 @@ fn header_names_and_values_with_line_breaks_are_left_out() {
 }
 
 #[test]
-#[ignore = "bug: request() puts the address's path and host into the head unchecked, so line breaks in a URL inject headers"]
 fn line_breaks_in_an_address_inject_no_headers() {
     for address in [
         "http://h/a\r\nX-Injected: 1\r\n",
@@ -185,7 +188,7 @@ fn redirects_from_unusable_bases_are_none() {
 }
 
 #[test]
-#[ignore = "bug: a base like http://h.org?x has the path ?x, so a relative Location is glued onto the host"]
+#[ignore = "bug: a base like http://h.org?x has an empty path, which redirect() does not merge as `/`, so a relative Location is lost (http://h.org/)"]
 fn relative_locations_from_a_base_without_a_path() {
     assert_eq!(
         redirect("http://h.org?page=1", "login").unwrap(),
@@ -194,7 +197,6 @@ fn relative_locations_from_a_base_without_a_path() {
 }
 
 #[test]
-#[ignore = "bug: a query-only Location replaces the last path segment instead of only the query"]
 fn query_only_locations_keep_the_path() {
     // RFC 3986, 5.4.1: "?y" against http://a/b/c/d;p?q is http://a/b/c/d;p?y
     assert_eq!(

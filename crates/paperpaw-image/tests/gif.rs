@@ -363,10 +363,9 @@ fn rows_finished_inside_one_code_stop_at_the_first_refusal() {
 }
 
 #[test]
-#[ignore = "bug: an interlaced GIF picture of no width panics (index out of bounds)"]
 fn interlaced_picture_of_no_width_is_an_error_not_a_panic() {
-    // Found by `properties::damaged_images_never_panic`. The gathered
-    // rows take `w * h` = 0 bytes, and the first index is stored at
+    // Found by `properties::damaged_images_never_panic`: the gathered
+    // rows took `w * h` = 0 bytes, and the first index was stored at
     // `gathered[r * w + x]` = `gathered[0]`.
     let mut gif = Gif::new(1, 4, 2, 0);
     gif.interlaced = true;
@@ -379,15 +378,22 @@ fn interlaced_picture_of_no_width_is_an_error_not_a_panic() {
 }
 
 #[test]
-fn pictures_of_no_width_or_height_in_order_do_not_panic() {
-    // Not interlaced: nothing gathered, the screen white.
-    for (w, h) in [(0, 4), (4, 0), (0, 0)] {
-        let mut gif = Gif::new(2, 2, 2, 0);
-        let lzw = gif.lzw();
-        gif.frame_width = w;
-        gif.frame_height = h;
-        let image = decoded(&gif.with_data(&lzw), Fit::side(10), false);
-        assert_eq!(image.pixels, [255; 4]);
+fn pictures_of_no_width_or_height_are_refused() {
+    // In order or interlaced: an empty picture is a damaged file.
+    for interlaced in [false, true] {
+        for (w, h) in [(0, 4), (4, 0), (0, 0)] {
+            let mut gif = Gif::new(2, 2, 2, 0);
+            gif.interlaced = interlaced;
+            let lzw = gif.lzw();
+            gif.frame_width = w;
+            gif.frame_height = h;
+            let (result, _) = gif_result(&gif.with_data(&lzw), Fit::side(10), false);
+            assert_eq!(
+                result,
+                Err(ImageError::Invalid("GIF picture size")),
+                "{w}x{h}, interlaced {interlaced}"
+            );
+        }
     }
 }
 

@@ -8,7 +8,7 @@
 // Tests panic on purpose when something is wrong.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use paperpaw_json::stream::{Event, MAX_STRING, Parser, read_file};
+use paperpaw_json::stream::{Event, MAX_DEPTH, MAX_STRING, Parser, read_file};
 use paperpaw_json::{Value, number, object, raw_member, string, string_array, text, unquote};
 use paperpaw_platform::{DirEntry, Storage, StorageError};
 use proptest::prelude::*;
@@ -209,12 +209,11 @@ fn surrogate_pairs_and_lone_low_surrogates() {
     );
     assert_eq!(unquote(r#""\udc00x""#).as_deref(), Some("\u{fffd}x"));
     assert_eq!(unquote(r#""\u00e4\u20AC""#).as_deref(), Some("ä€"));
-    // A high surrogate must be followed by an escape.
-    assert_eq!(unquote(r#""\ud83dx""#), None);
+    // A high surrogate without its low half stands for U+FFFD.
+    assert_eq!(unquote(r#""\ud83dx""#).as_deref(), Some("\u{fffd}x"));
 }
 
 #[test]
-#[ignore = "bug: a high surrogate followed by an escape that is no low surrogate overflows (panics in debug builds, a wrong character in release)"]
 fn a_high_surrogate_before_another_escape_does_not_panic() {
     for literal in [
         r#""\ud800\u0041""#,
@@ -388,7 +387,11 @@ fn stream_escapes_and_surrogate_pairs() {
             _ => None,
         })
         .collect();
-    assert_eq!(values, ["📖", "a\nb\t\"\\/", "ä", "\u{fffd}", "\u{fffd}"]);
+    // A broken `\u` escape stands for U+FFFD; the bytes after it are text.
+    assert_eq!(
+        values,
+        ["📖", "a\nb\t\"\\/", "ä", "\u{fffd}", "\u{fffd}ZZZZ"]
+    );
 }
 
 #[test]
@@ -437,14 +440,37 @@ fn stream_stray_closers_and_garbage_do_not_panic() {
 }
 
 #[test]
-fn stream_deep_nesting_opens_and_closes_every_level() {
-    let depth = 2000;
+fn stream_nesting_opens_and_closes_every_level_up_to_the_limit() {
+    let depth = MAX_DEPTH;
     let doc = format!("{}1{}", "[".repeat(depth), "]".repeat(depth));
-    let events = events_of(doc.as_bytes(), 512);
+    let events = events_of(doc.as_bytes(), 7);
     let opens = events.iter().filter(|e| matches!(e, Ev::Open(_))).count();
     let closes = events.iter().filter(|e| matches!(e, Ev::Close(_))).count();
     assert_eq!((opens, closes), (depth, depth));
     assert!(events.contains(&Ev::Value(vec!["[]".to_string(); depth], "1".into())));
+    assert_eq!(events.last(), Some(&Ev::Close(Vec::new())));
+}
+
+#[test]
+fn stream_nesting_past_the_limit_is_skipped_whole() {
+    let depth = 2000;
+    let doc = format!(
+        "{{\"deep\": {}1{}, \"after\": 2}}",
+        "[".repeat(depth),
+        "]".repeat(depth)
+    );
+    let events = events_of(doc.as_bytes(), 512);
+    let opens = events.iter().filter(|e| matches!(e, Ev::Open(_))).count();
+    let closes = events.iter().filter(|e| matches!(e, Ev::Close(_))).count();
+    // The object and the arrays up to the limit open and close; deeper
+    // arrays and the value inside them give no events.
+    assert_eq!((opens, closes), (MAX_DEPTH, MAX_DEPTH));
+    assert!(
+        !events
+            .iter()
+            .any(|e| matches!(e, Ev::Value(_, v) if v == "1"))
+    );
+    assert!(events.contains(&Ev::Value(path(&["after"]), "2".into())));
     assert_eq!(events.last(), Some(&Ev::Close(Vec::new())));
 }
 
@@ -458,7 +484,6 @@ fn a_plain_value_at_the_end_of_the_input_is_reported() {
 }
 
 #[test]
-#[ignore = "bug: a lone high surrogate is dropped and pairs with a low surrogate in a later string"]
 fn a_lone_high_surrogate_stays_in_its_own_string() {
     let values: Vec<Ev> = events_of(br#"["a\ud800", "\udc00b"]"#, usize::MAX);
     assert_eq!(
@@ -471,7 +496,6 @@ fn a_lone_high_surrogate_stays_in_its_own_string() {
 }
 
 #[test]
-#[ignore = "bug: a \\u escape with a byte outside ASCII never completes, so the rest of the input is swallowed into a growing buffer"]
 fn a_broken_unicode_escape_spoils_only_its_string() {
     let doc = "[\"\\uabcä\", \"next\", 7, \"last\"]".as_bytes();
     let values: Vec<String> = events_of(doc, usize::MAX)
@@ -485,7 +509,6 @@ fn a_broken_unicode_escape_spoils_only_its_string() {
 }
 
 #[test]
-#[ignore = "bug: plain values (numbers, literals, unquoted garbage) are not cut at MAX_STRING, an unquoted run grows the buffer without bound"]
 fn plain_values_are_cut_at_the_limit_like_strings() {
     let doc = format!("[{}]", "9".repeat(1 << 20));
     let values: Vec<String> = events_of(doc.as_bytes(), 4096)

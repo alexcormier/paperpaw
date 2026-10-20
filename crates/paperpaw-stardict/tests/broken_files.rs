@@ -175,9 +175,9 @@ fn huge_64_bit_offsets_in_a_plain_file_find_an_empty_definition() {
     );
 }
 
-/// The same in a dictzip file: offset and size added up overflow.
+/// The same in a dictzip file, where offset and size added up would
+/// overflow.
 #[test]
-#[ignore = "bug: dict.rs adds offset and size without overflow check (panics in debug builds)"]
 fn huge_64_bit_offsets_in_a_dictzip_file_find_an_empty_definition() {
     let mut spec = Spec::new(&WORDS);
     spec.offset_bits = 64;
@@ -382,18 +382,18 @@ fn broken_dictzip_headers_are_refused() {
     assert!(malformed(good[..header + 4].to_vec()));
 }
 
-/// A chunk table without chunks: nothing to read.
+/// A chunk table without chunks has nothing to read: the dictionary is
+/// refused as it opens (once a panic on `chunks[1]` at the first lookup).
 #[test]
-#[ignore = "bug: dict.rs reads chunk 0 of a dictzip table without chunks: chunks[1] out of bounds"]
-fn a_dictzip_without_chunks_finds_empty_definitions() {
+fn a_dictzip_without_chunks_is_refused() {
     let mut data = dz();
     // The chunk count, after version and chunk length.
     data[12 + 7 + 4 + 4..12 + 7 + 4 + 6].copy_from_slice(&0u16.to_le_bytes());
-    let (storage, dictionary) = open_dz(data);
-    let result = dictionary.unwrap().lookup(&storage, "alpha");
+    let (_, dictionary) = open_dz(data);
     assert!(
-        matches!(&result, Ok(d) if d[0].text.is_empty()) || result.is_err(),
-        "{result:?}"
+        matches!(dictionary, Err(Error::Malformed(_))),
+        "{:?}",
+        dictionary.err()
     );
 }
 

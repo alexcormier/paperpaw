@@ -11,7 +11,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Mutex;
 
-use paperpaw_platform::storage::is_valid_path;
+use paperpaw_platform::storage::{is_reserved_name, is_valid_path};
 use paperpaw_platform::{DirEntry, Mounted, NoStorage, Storage, StorageError};
 use proptest::prelude::*;
 
@@ -434,9 +434,27 @@ fn paths_that_escape_or_are_not_relative_are_invalid() {
 }
 
 #[test]
-fn names_with_dots_and_unusual_characters_are_valid() {
-    for ok in [
+fn names_that_fat_or_windows_read_as_another_are_invalid() {
+    // A dot or space at the end is dropped, device names reach a device,
+    // control characters have no place in a name.
+    for bad in [
         "...",
+        "a.",
+        "books/a /b",
+        "con",
+        "books/NUL.txt",
+        "com1.epub",
+        "a\tb",
+        "a\u{7f}",
+    ] {
+        assert!(!is_valid_path(bad), "{bad:?}");
+    }
+}
+
+#[test]
+fn names_with_dots_inside_and_unusual_characters_are_valid() {
+    for ok in [
+        "...a",
         ".a",
         "a..b",
         "..a",
@@ -450,9 +468,12 @@ fn names_with_dots_and_unusual_characters_are_valid() {
     }
 }
 
-/// A valid path segment: no `/`, `\`, `:` or NUL, not `.` or `..`.
+/// A valid path segment: no `/`, `\`, `:` or control character, no dot
+/// or space at the end, not a Windows device name.
 fn segment() -> impl Strategy<Value = String> {
-    "[^/\\\\:\u{0}]{1,8}".prop_filter("not . or ..", |s| s != "." && s != "..")
+    "[^/\\\\:\\p{Cc}]{1,8}".prop_filter("no dot or space at the end, no device", |s| {
+        !s.ends_with(['.', ' ']) && !is_reserved_name(s)
+    })
 }
 
 proptest! {

@@ -15,6 +15,7 @@ use std::time::{Duration, Instant};
 
 use paperpaw_core::{ServedFile, ServerCall, ServerEvent};
 use paperpaw_http::Parser;
+use paperpaw_http::server::MAX_REQUEST_HEAD;
 use paperpaw_serve::Servers;
 
 /// The next event, waiting up to five seconds.
@@ -297,7 +298,21 @@ fn a_client_leaving_mid_body_closes_the_request() {
         panic!("no request");
     };
     assert!(body);
-    assert_eq!(wait(&servers), ServerEvent::Closed { request });
+    // What came with the head is passed on, never as the last part; then
+    // the request is closed.
+    let mut received = Vec::new();
+    loop {
+        match wait(&servers) {
+            ServerEvent::Body {
+                request: of,
+                data,
+                last: false,
+            } if of == request => received.extend(data),
+            ServerEvent::Closed { request: of } if of == request => break,
+            other => panic!("unexpected {other:?}"),
+        }
+    }
+    assert!(b"only a little".starts_with(&received), "{received:?}");
     assert!(client.join().unwrap().is_empty(), "no answer");
     // An answer coming late goes nowhere.
     respond(&mut servers, request, 200, b"late");
@@ -323,13 +338,20 @@ fn answers_to_unknown_requests_are_ignored() {
 }
 
 #[test]
-fn request_lines_without_a_target_are_dropped() {
+fn request_lines_without_a_target_are_refused_without_the_kernel() {
     let mut servers = Servers::new(|| {});
     let port = start(&mut servers);
-    for bad in [&b"GET\r\n\r\n"[..], b"\r\n\r\n", b""] {
+    for bad in [&b"GET\r\n\r\n"[..], b"\r\n\r\n"] {
         let answer = client(port, bad.to_vec()).join().unwrap();
-        assert!(answer.is_empty(), "{:?}", String::from_utf8_lossy(bad));
+        assert_eq!(
+            read_answer(&answer).0,
+            400,
+            "{:?}",
+            String::from_utf8_lossy(bad)
+        );
     }
+    // Nothing at all is no request: the connection is dropped.
+    assert!(client(port, Vec::new()).join().unwrap().is_empty());
     quiet(&servers, 100);
 }
 
@@ -345,27 +367,18 @@ fn heads_cut_before_their_end_are_dropped() {
 }
 
 #[test]
-fn bare_line_feeds_end_lines_too() {
+fn heads_with_bare_line_feeds_never_reach_the_kernel() {
+    // The head is read by `paperpaw_http`'s parser, as on every shell,
+    // which takes only CR LF line ends: this head never ends.
     let mut servers = Servers::new(|| {});
     let port = start(&mut servers);
     let client = client(port, b"PUT /lf HTTP/1.1\nContent-Length: 2\n\nok".to_vec());
-    let ServerEvent::Request { request, .. } = wait(&servers) else {
-        panic!("no request");
-    };
-    assert_eq!(
-        wait(&servers),
-        ServerEvent::Body {
-            request,
-            data: b"ok".to_vec(),
-            last: true
-        }
-    );
-    respond(&mut servers, request, 204, b"");
-    assert_eq!(read_answer(&client.join().unwrap()).0, 204);
+    assert!(client.join().unwrap().is_empty());
+    quiet(&servers, 100);
 }
 
 #[test]
-fn heads_beyond_64_kib_never_reach_the_kernel() {
+fn heads_beyond_the_limit_never_reach_the_kernel() {
     let mut servers = Servers::new(|| {});
     let port = start(&mut servers);
     let mut request = b"GET / HTTP/1.1\r\n".to_vec();
@@ -373,14 +386,19 @@ fn heads_beyond_64_kib_never_reach_the_kernel() {
         request.extend_from_slice(format!("X-Header-{i}: some value here\r\n").as_bytes());
     }
     request.extend_from_slice(b"\r\n");
-    assert!(request.len() > 64 * 1024);
+    assert!(request.len() > MAX_REQUEST_HEAD);
     let answer = client(port, request).join().unwrap();
-    assert!(answer.is_empty());
+    // Answered 431; the server closes with the rest of the head unread,
+    // so a reset may take the answer away from the client.
+    assert!(
+        answer.is_empty() || answer.starts_with(b"HTTP/1.1 431 "),
+        "{:?}",
+        String::from_utf8_lossy(&answer)
+    );
     quiet(&servers, 100);
 }
 
 #[test]
-#[ignore = "bug: the request line is read without a limit; only header lines count towards the 64 KiB"]
 fn request_lines_count_towards_the_head_limit() {
     let mut servers = Servers::new(|| {});
     let port = start(&mut servers);
@@ -398,7 +416,6 @@ fn request_lines_count_towards_the_head_limit() {
 }
 
 #[test]
-#[ignore = "bug: a Content-Length that is no number counts as 0, so the request goes on as one without a body (the X4 answers 400)"]
 fn content_lengths_that_are_no_numbers_are_refused() {
     let mut servers = Servers::new(|| {});
     let port = start(&mut servers);
@@ -513,8 +530,6 @@ fn a_file_gone_while_sending_ends_the_answer_early() {
             size: 1_000_000,
         }),
     });
-    servers.apply(ServerCall::Stop { server: 1 });
-    assert!(servers.any(), "the file is still being sent");
     // The first part is there, then the file is gone.
     let mut reads = 0;
     servers.pump(|_, _, buffer| {
@@ -525,11 +540,45 @@ fn a_file_gone_while_sending_ends_the_answer_early() {
         buffer.fill(b'x');
         Some(buffer.len())
     });
-    assert!(!servers.any(), "nothing left to send");
+    assert_eq!(reads, 2);
+    // Nothing is read for it any more.
+    servers.pump(|_, _, _| panic!("the file is still being sent"));
     let (status, _, body, whole) = read_answer(&client.join().unwrap());
     assert_eq!(status, 200);
     assert!(!whole, "the client sees the answer cut");
     assert!(body.len() < 1_000_000 && body.iter().all(|&b| b == b'x'));
+    servers.apply(ServerCall::Stop { server: 1 });
+    assert!(!servers.any(), "nothing left to send");
+}
+
+#[test]
+fn stopping_a_server_ends_the_files_it_sends() {
+    let mut servers = Servers::new(|| {});
+    let port = start(&mut servers);
+    let client = client(port, b"GET /f HTTP/1.1\r\n\r\n".to_vec());
+    let ServerEvent::Request { request, .. } = wait(&servers) else {
+        panic!("no request");
+    };
+    servers.apply(ServerCall::Respond {
+        request,
+        status: 200,
+        content_type: String::from("application/octet-stream"),
+        headers: Vec::new(),
+        body: Vec::new(),
+        file: Some(ServedFile {
+            path: String::from("f"),
+            size: 1_000_000,
+        }),
+    });
+    servers.apply(ServerCall::Stop { server: 1 });
+    assert!(!servers.any(), "nothing left to send");
+    servers.pump(|_, _, _| panic!("a file is read for a stopped server"));
+    // The connection ends with the server: at most a head, never the
+    // whole answer.
+    let answer = client.join().unwrap();
+    if answer.windows(4).any(|w| w == b"\r\n\r\n") {
+        assert!(!read_answer(&answer).3, "the client sees the answer cut");
+    }
 }
 
 #[test]

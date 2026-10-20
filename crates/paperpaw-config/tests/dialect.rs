@@ -351,7 +351,6 @@ fn values_that_need_quotes_get_them() {
 }
 
 #[test]
-#[ignore = "bug: set() for the top-level section (\"\") writes a `[]` header, which the parser rejects"]
 fn set_writes_top_level_keys_readably() {
     let changed = set("", "", "k", "v");
     assert_eq!(entries(&changed), [e("", "k", "v")]);

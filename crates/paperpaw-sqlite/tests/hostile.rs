@@ -52,7 +52,15 @@ fn with_root(page: Vec<u8>) -> Vec<u8> {
     let mut out = file[..PAGE].to_vec();
     out.extend_from_slice(&page);
     out.extend_from_slice(&file[PAGE..2 * PAGE]);
-    out
+    counted(out)
+}
+
+/// `file` with the header's page count set to the pages it holds: the
+/// reader takes no page past the count.
+fn counted(mut file: Vec<u8>) -> Vec<u8> {
+    let pages = (file.len() / PAGE) as u32;
+    file[28..32].copy_from_slice(&pages.to_be_bytes());
+    file
 }
 
 /// Opens `file` and reads its schema and every row of `t`.
@@ -93,12 +101,13 @@ fn page_sizes_that_are_not_powers_of_two_are_corrupt() {
         file[16..18].copy_from_slice(&size.to_be_bytes());
         assert_eq!(open(file), Err(Error::Corrupt("page size")), "{size}");
     }
-    // 1 stands for 65536: valid, but this file is too short for it.
+    // 1 stands for 65536: valid, but this file is too short for it, so
+    // it holds no page at all.
     let mut file = leaf_db();
     file[16..18].copy_from_slice(&1u16.to_be_bytes());
     let storage = Memory::with("db", file);
     let db = Database::open(&storage, "db").unwrap();
-    assert_eq!(db.schema(), Err(Error::Corrupt("short page")));
+    assert_eq!(db.schema(), Err(Error::Corrupt("page number")));
 }
 
 #[test]
@@ -164,7 +173,6 @@ fn cell_offsets_outside_the_page_are_corrupt() {
 /// An interior cell whose offset leaves less than the four bytes of its
 /// child's page number in the page.
 #[test]
-#[ignore = "bug: read.rs indexes page[cell..cell + 4] of an interior cell without a bounds check"]
 fn an_interior_cell_at_the_end_of_its_page_is_an_error_not_a_panic() {
     let mut page = interior(&[3], 3);
     page[12..14].copy_from_slice(&(PAGE as u16 - 2).to_be_bytes());
@@ -177,31 +185,42 @@ fn child_pages_that_do_not_exist_are_corrupt() {
     // A valid tree first: the interior page and its leaf.
     let storage = Memory::with("db", with_root(interior(&[], 3)));
     assert_eq!(read_all(&storage).unwrap().len(), 3);
-    let storage = Memory::with("db", with_root(interior(&[3], 0)));
-    assert_eq!(read_all(&storage), Err(Error::Corrupt("page 0")));
-    let storage = Memory::with("db", with_root(interior(&[3], 999)));
-    assert_eq!(read_all(&storage), Err(Error::Corrupt("short page")));
+    for missing in [0, 4, 999, u32::MAX] {
+        let storage = Memory::with("db", with_root(interior(&[3], missing)));
+        assert_eq!(
+            read_all(&storage),
+            Err(Error::Corrupt("page number")),
+            "{missing}"
+        );
+    }
     let storage = Memory::with("db", with_root(interior(&[u32::MAX], 3)));
-    assert_eq!(read_all(&storage), Err(Error::Corrupt("short page")));
+    assert_eq!(read_all(&storage), Err(Error::Corrupt("page number")));
+    // A page past the header's page count is not taken, though the file
+    // holds it.
+    let mut file = with_root(interior(&[], 3));
+    file[28..32].copy_from_slice(&2u32.to_be_bytes());
+    let storage = Memory::with("db", file);
+    assert_eq!(read_all(&storage), Err(Error::Corrupt("page number")));
 }
 
-/// A page that is its own right-most child: the depth limit ends it.
+/// A page that is its own right-most child: a scan reads each page once,
+/// so the second visit ends it.
 #[test]
 fn a_page_that_points_to_itself_is_corrupt() {
     let storage = Memory::with("db", with_root(interior(&[], 2)));
     storage.budget.set(Some(1000));
-    assert_eq!(read_all(&storage), Err(Error::Corrupt("too deep")));
+    assert_eq!(read_all(&storage), Err(Error::Corrupt("page used twice")));
     assert!(storage.reads.get() < 50, "{} reads", storage.reads.get());
 }
 
-/// A page whose several children are all itself: the first path that
-/// goes too deep ends the whole scan, so the pages read do not multiply
+/// A page whose several children are all itself: the first page that
+/// comes again ends the whole scan, so the pages read do not multiply
 /// level by level.
 #[test]
 fn a_page_that_is_its_own_child_many_times_is_corrupt_soon() {
     let storage = Memory::with("db", with_root(interior(&[3, 2, 2], 2)));
     storage.budget.set(Some(10_000));
-    assert_eq!(read_all(&storage), Err(Error::Corrupt("too deep")));
+    assert_eq!(read_all(&storage), Err(Error::Corrupt("page used twice")));
     assert!(storage.reads.get() < 100, "{} reads", storage.reads.get());
 }
 
@@ -265,34 +284,47 @@ fn overflowing(size: u64, next: u32) -> Vec<u8> {
     let mut out = file[..PAGE].to_vec();
     out.extend_from_slice(&leaf);
     out.extend_from_slice(&overflow);
-    out
+    counted(out)
 }
+
+/// A payload size that needs two overflow pages but is no longer than
+/// the three pages of [`overflowing`]'s file.
+const TWO_OVERFLOW_PAGES: u64 = 9_000;
 
 #[test]
 fn broken_overflow_chains_are_corrupt() {
     // The chain ends before the payload does.
-    let storage = Memory::with("db", overflowing(20_000, 0));
+    let storage = Memory::with("db", overflowing(TWO_OVERFLOW_PAGES, 0));
     assert_eq!(read_all(&storage), Err(Error::Corrupt("overflow chain")));
     // It goes on to a page that is not there.
-    let storage = Memory::with("db", overflowing(20_000, 77));
-    assert_eq!(read_all(&storage), Err(Error::Corrupt("short page")));
+    let storage = Memory::with("db", overflowing(TWO_OVERFLOW_PAGES, 77));
+    assert_eq!(read_all(&storage), Err(Error::Corrupt("page number")));
+    // A payload longer than the whole file is refused before any of it is
+    // read.
+    let storage = Memory::with("db", overflowing(20_000, 0));
+    assert_eq!(read_all(&storage), Err(Error::Corrupt("payload size")));
 }
 
 /// An overflow page that is its own next page, under a payload said to
-/// be a terabyte: the chain must end once it comes back to a page, not
-/// after a million pages (and gigabytes of memory).
+/// be a terabyte or one that fits in the file: the chain must end once it
+/// comes back to a page, not after a million pages (and gigabytes of
+/// memory).
 #[test]
-#[ignore = "bug: read.rs follows a looping overflow chain up to 1,000,000 pages, sized by the cell's claim, not the file"]
 fn a_looping_overflow_chain_is_corrupt_soon() {
-    let storage = Memory::with("db", overflowing(1 << 40, 3));
-    storage.budget.set(Some(10_000));
-    let result = read_all(&storage);
-    assert!(matches!(result, Err(Error::Corrupt(_))), "{result:?}");
+    for size in [1 << 40, TWO_OVERFLOW_PAGES] {
+        let storage = Memory::with("db", overflowing(size, 3));
+        storage.budget.set(Some(10_000));
+        let result = read_all(&storage);
+        assert!(
+            matches!(result, Err(Error::Corrupt(_))),
+            "{size}: {result:?}"
+        );
+        assert!(storage.reads.get() < 50, "{} reads", storage.reads.get());
+    }
 }
 
 /// A record whose header claims to be as large as a u64 can be.
 #[test]
-#[ignore = "bug: record.rs adds header size and value size without overflow check (panics in debug builds)"]
 fn a_record_header_of_huge_size_is_malformed_not_a_panic() {
     let mut record = vec![0xff; 9];
     // A one-byte integer, then its byte.
@@ -346,7 +378,7 @@ proptest! {
 
     /// Where bytes of the file are changed, it is read or refused,
     /// without a panic and in a bounded number of reads. (The page type
-    /// bytes stay, so no interior page comes up: see the bugs above.)
+    /// bytes stay, so no interior page comes up.)
     #[test]
     fn changed_bytes_never_panic(changes in mutations()) {
         let mut file = small_db();

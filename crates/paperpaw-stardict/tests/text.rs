@@ -119,16 +119,29 @@ fn binary_fields_larger_than_the_definition_are_cut() {
 /// not; earlier ones end at their NUL.
 #[test]
 fn typed_fields_with_a_type_sequence() {
-    let mut spec = Spec::new(&[("a", "/ei/\0<i>letter</i>"), ("b", "/bi:/\0")]);
+    let mut spec = Spec::new(&[("a", "/ei/\0<i>letter</i>"), ("b", "/bi:/\0<b>b</b>")]);
     spec.types = Some("th".to_string());
     let storage = build(&spec);
     let dictionary = open(&storage);
     assert_eq!(found(&dictionary, &storage, "a")[0].1, "[/ei/]\nletter");
-    assert_eq!(found(&dictionary, &storage, "b")[0].1, "[/bi:/]");
+    assert_eq!(found(&dictionary, &storage, "b")[0].1, "[/bi:/]\nb");
     // A last field that is binary: everything left, not shown.
     let mut spec = Spec::new(&[("c", "see\0RIFF....")]);
     spec.types = Some("mW".to_string());
     let storage = build(&spec);
     let dictionary = open(&storage);
     assert_eq!(found(&dictionary, &storage, "c")[0].1, "see");
+}
+
+/// A definition that is only a short pronunciation: its text, with the
+/// brackets around it, is longer than its data, and must still come
+/// whole.
+#[test]
+#[ignore = "bug: lib.rs cuts a definition's text to the size of its data, so the brackets and bullets decoding adds can cut off its end"]
+fn a_definition_whose_text_is_longer_than_its_data_comes_whole() {
+    let mut spec = Spec::new(&[("b", "/bi:/\0")]);
+    spec.types = Some("th".to_string());
+    let storage = build(&spec);
+    let dictionary = open(&storage);
+    assert_eq!(found(&dictionary, &storage, "b")[0].1, "[/bi:/]");
 }

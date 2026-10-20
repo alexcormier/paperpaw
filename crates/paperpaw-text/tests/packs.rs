@@ -236,12 +236,11 @@ fn stored_packs_refuse_unsorted_invalid_or_uneven_characters() {
     assert!(open(&uneven).is_err());
 }
 
-/// A damaged header claiming 65535 strikes in a pack of 211 bytes makes
-/// `StoredPack::open` allocate a 2 MiB strike table before it reads
-/// anything: on the X4 (about 380 KB of RAM) a broken pack on the card
-/// stops the device instead of being refused.
+/// A damaged header claiming 65535 strikes in a pack of 211 bytes must
+/// not make `StoredPack::open` allocate a 2 MiB strike table before it
+/// reads anything: on the X4 (about 380 KB of RAM) a broken pack on the
+/// card would stop the device instead of being refused.
 #[test]
-#[ignore = "bug: StoredPack::open allocates by the header's strike count before checking it"]
 fn opening_a_stored_pack_allocates_no_more_than_it_needs() {
     let mut data = PACK.to_vec();
     put_u16(&mut data, STRIKES, 0xffff);
@@ -254,10 +253,9 @@ fn opening_a_stored_pack_allocates_no_more_than_it_needs() {
     );
 }
 
-/// A damaged glyph record claiming a 4096 by 4096 glyph makes `render`
-/// allocate 8 MiB before reading it (65535 by 65535: 2 GiB).
+/// A damaged glyph record claiming a 4096 by 4096 glyph must not make
+/// `render` allocate 8 MiB before reading it (65535 by 65535: 2 GiB).
 #[test]
-#[ignore = "bug: StoredPack::render allocates the size a glyph record claims, unchecked"]
 fn rendering_a_damaged_stored_glyph_allocates_no_more_than_it_needs() {
     let mut data = PACK.to_vec();
     let record = u32_at(&data, TABLE) + 20;

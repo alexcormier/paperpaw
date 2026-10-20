@@ -213,7 +213,6 @@ fn panics(op: Op) -> bool {
 }
 
 #[test]
-#[ignore = "bug: stroke_rect overflows near the i32 extremes"]
 fn outlines_at_the_extremes_do_not_panic() {
     // `x + width as i32 - t as i32` and `y + height as i32 - ...`
     // overflow: a panic in debug builds.
@@ -229,7 +228,6 @@ fn outlines_at_the_extremes_do_not_panic() {
 }
 
 #[test]
-#[ignore = "bug: rounded rectangles overflow near the i32 extremes"]
 fn rounded_rectangles_at_the_extremes_do_not_panic() {
     // `y + row as i32` and `x + inset as i32` overflow.
     assert!(!panics(Op::FillRound(
@@ -252,7 +250,6 @@ fn rounded_rectangles_at_the_extremes_do_not_panic() {
 }
 
 #[test]
-#[ignore = "bug: draw_line overflows for lines longer than 46340 pixels and at the i32 extremes"]
 fn long_lines_do_not_panic() {
     // `dx * step` is an i32: past 46340 pixels it overflows (a panic in
     // debug builds, a line in the wrong place in release); so does
@@ -272,7 +269,6 @@ fn long_lines_do_not_panic() {
 }
 
 #[test]
-#[ignore = "bug: draw_mask overflows for a mask from near i32::MIN that reaches the screen"]
 fn masks_from_the_far_left_do_not_panic() {
     // The clip is reckoned in i64, but the place within the mask handed
     // to the coverage, `i32::from(px) - x`, is an i32: from x = i32::MIN
@@ -289,7 +285,6 @@ fn masks_from_the_far_left_do_not_panic() {
 }
 
 #[test]
-#[ignore = "bug: rings, circles and hands overflow at the extremes of their angles and radii"]
 fn round_shapes_at_the_extremes_do_not_panic() {
     // `from + sweep as i32` (round::Arc::new), `2 * radius` and
     // `center.x - r` (fill_ring), `degrees + 180` (draw_hand) overflow.

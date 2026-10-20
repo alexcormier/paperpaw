@@ -132,12 +132,26 @@ fn paths_that_leave_the_root_are_refused() {
 
 /// The empty path is the root, for listing it; a file cannot be there.
 #[test]
-#[ignore = "bug: lib.rs resolve() lets \"\" stand for the root, so write(\"\") writes `<root>.paperpaw-tmp` beside the root"]
 fn writing_the_empty_path_touches_nothing_outside() {
     let place = Place::new();
     assert!(place.storage.write("", b"x").is_err());
     assert!(place.storage.append("", b"x").is_err());
     place.untouched();
+}
+
+/// A file beside the root named like the root's temporary is outside the
+/// storage: writing the empty path must not open it.
+#[test]
+#[ignore = "bug: lib.rs resolve() lets \"\" stand for the root, so write(\"\") truncates and then removes `<root>.paperpaw-tmp` beside the root"]
+fn writing_the_empty_path_keeps_a_file_beside_the_root() {
+    let place = Place::new();
+    let beside = place.base.join("root.paperpaw-tmp");
+    std::fs::write(&beside, b"not the storage's").unwrap();
+    assert!(place.storage.write("", b"x").is_err());
+    assert_eq!(
+        std::fs::read(&beside).ok().as_deref(),
+        Some(&b"not the storage's"[..])
+    );
 }
 
 /// Removing "everything below the empty path" would remove the root.
@@ -154,7 +168,6 @@ fn removing_the_empty_path_keeps_the_root() {
 /// Windows drops dots and spaces at the end of a name, so `...` is the
 /// folder it is in: a name of dots must never stand for its parent.
 #[test]
-#[ignore = "bug (Windows): is_valid_path accepts `...`; DirStorage::remove_dir_all(\"books/...\") removes `books`"]
 fn names_of_dots_do_not_stand_for_their_folder() {
     let place = Place::new();
     let s = &place.storage;

@@ -281,17 +281,14 @@ fn zip64_entry_sizes_are_refused_by_read_and_end_in_an_error_when_streamed() {
         assert_eq!(archive.read(&storage, &e, 1 << 20), Err(ZipError::TooLarge));
     }
     // Streamed, stored data runs into the end of the file, never past it;
-    // deflated data ends where its stream says.
-    let big = entry(&storage, &archive, "big");
-    assert!(matches!(
-        streamed(&storage, &archive, &big),
-        Err(ZipError::Invalid(_))
-    ));
-    let packed = entry(&storage, &archive, "packed");
-    assert_eq!(
-        streamed(&storage, &archive, &packed).unwrap(),
-        b"0123456789"
-    );
+    // deflated data ends where its stream says, shorter than the size.
+    for name in ["big", "packed"] {
+        let e = entry(&storage, &archive, name);
+        assert!(
+            matches!(streamed(&storage, &archive, &e), Err(ZipError::Invalid(_))),
+            "{name}"
+        );
+    }
 }
 
 #[test]
@@ -519,16 +516,18 @@ fn more_trailing_data_than_a_comment_can_hold_is_invalid() {
 }
 
 #[test]
-fn crc_is_not_checked_damaged_stored_bytes_come_back_as_they_are() {
-    // Documented: the builder leaves the CRC unchecked, and so does the
-    // reader. A changed byte of stored data is not detected.
+fn damaged_stored_bytes_fail_their_checksum() {
+    // A changed byte of stored data is found by the CRC at the end.
     let (mut data, layout) = write(&[Raw::stored("a.txt", b"original")], b"");
     let at = layout.local[0] + 30 + 5;
     data[at] = b'O';
     let (storage, archive) = open(data);
     let archive = archive.unwrap();
     let e = entry(&storage, &archive, "a.txt");
-    assert_eq!(archive.read(&storage, &e, 100).unwrap(), b"Original");
+    assert_eq!(
+        archive.read(&storage, &e, 100),
+        Err(ZipError::Invalid("checksum mismatch"))
+    );
 }
 
 #[test]
@@ -587,11 +586,20 @@ fn a_zip_bomb_is_cut_off_at_the_limit_with_bounded_chunks() {
     let (storage, archive) = open(data);
     let archive = archive.unwrap();
 
+    // The bomb is cut off at the size it claims, before the limit.
     let bomb = entry(&storage, &archive, "bomb");
     assert_eq!(
         archive.read(&storage, &bomb, 1 << 20),
-        Err(ZipError::TooLarge)
+        Err(ZipError::Invalid("entry longer than its size"))
     );
+    let mut seen = 0usize;
+    let streamed_bomb = archive.stream(&storage, &bomb, &mut |chunk| {
+        assert!(chunk.len() <= WINDOW);
+        seen += chunk.len();
+        true
+    });
+    assert!(matches!(streamed_bomb, Err(ZipError::Invalid(_))));
+    assert!(seen <= 100, "{seen}");
     let honest = entry(&storage, &archive, "honest");
     assert_eq!(
         archive.read(&storage, &honest, 1 << 20),

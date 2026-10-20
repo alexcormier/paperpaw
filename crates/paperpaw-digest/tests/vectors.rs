@@ -301,7 +301,6 @@ fn partial_md5_of_an_unreadable_file_is_none() {
 }
 
 #[test]
-#[ignore = "bug: partial() takes one read per sample, so a storage that reads less than asked (as Storage::read_at allows) gives another fingerprint"]
 fn partial_md5_does_not_depend_on_how_much_a_read_gives() {
     let data = book(100_000);
     let mut file = File::new(data.clone());

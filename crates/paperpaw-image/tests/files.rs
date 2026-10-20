@@ -155,7 +155,6 @@ fn files_that_are_not_what_they_claim_are_refused() {
 }
 
 #[test]
-#[ignore = "bug: ColorFile::open overflows on a header of the largest sizes"]
 fn colour_files_claiming_the_largest_size_are_refused() {
     // The size it checks, 12 + width * height * 3 in u64, overflows for
     // u32::MAX × u32::MAX: a panic in debug builds, for a damaged file

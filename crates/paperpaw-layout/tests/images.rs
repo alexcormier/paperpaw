@@ -159,7 +159,6 @@ fn a_picture_below_text_that_does_not_fit_goes_to_the_next_page() {
 /// must not put positions that are not numbers on the page, nor push
 /// what follows off it.
 #[test]
-#[ignore = "bug: a picture of size 0 by 0 is scaled by infinity: NaN positions"]
 fn pictures_of_size_zero_are_harmless() {
     for size in [(0, 0), (0, 50), (50, 0)] {
         let album = album(vec![Some(size), None]);
