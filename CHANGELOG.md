@@ -6,6 +6,15 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Library: covers have rounded corners as the interface's corners are
+  (none where they are square), at most as round as a book's, and so do
+  the boxes of books without a cover, which were round as pills with
+  soft corners. The grid of covers keeps its covers clear of a framed
+  focus, its focus a box; titles on a light focus stay black. Empty
+  shelves (Favourites, Tags, Series, a search) show an icon with their
+  message. With the paw motif, empty screens show a small paw beside
+  their icon and the busy mark is a paw. SDK: `Thumbnail::draw_round`;
+  graphics: `Canvas::fill_corners`, `round::corner_inset`.
 - Rules: a rule can apply when the battery reaches a level (80 %, 90 %,
   full or another), once each time it gets there and not again while
   the level wavers around it; with *Only if … While charging* it says
