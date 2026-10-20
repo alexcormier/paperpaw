@@ -503,7 +503,7 @@ impl Kernel {
             Err(error) => {
                 self.config_unreadable = true;
                 let message = format!(
-                    "{CONFIG_FILE} cannot be read ({error}): started with the defaults,                      the file is left as it is"
+                    "{CONFIG_FILE} cannot be read ({error}): started with the defaults, the file left as it is"
                 );
                 self.warn(WarningSource::UserConfig, None, message);
                 None

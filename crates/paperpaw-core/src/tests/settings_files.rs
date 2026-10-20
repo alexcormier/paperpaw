@@ -92,6 +92,10 @@ fn a_config_that_cannot_be_read_is_said_and_left_as_it_is() {
                 .any(|w| w.source == WarningSource::UserConfig && w.message.contains(CONFIG_FILE)),
             "{case}: {warnings:?}"
         );
+        assert!(
+            !warnings.iter().any(|w| w.message.contains("  ")),
+            "{warnings:?}"
+        );
         kernel.start(Instant(0));
         assert!(kernel.notice.is_some(), "{case}: the user is told");
         kernel
