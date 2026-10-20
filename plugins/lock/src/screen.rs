@@ -693,6 +693,11 @@ impl Screen for LockScreen {
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
+        // Unlocked while something was above it (its keyboard): it goes.
+        if self.step == Step::Unlock && !self.state.locked.get() {
+            cx.command(Command::Back);
+            return;
+        }
         if self.released(cx) {
             return;
         }

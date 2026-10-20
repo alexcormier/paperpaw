@@ -501,3 +501,19 @@ fn a_lock_whose_code_is_gone_lets_the_device_be_used() {
     test.press("confirm");
     assert!(!test.open(&LOCK), "nothing to ask for");
 }
+
+#[test]
+fn a_password_lock_whose_code_is_gone_closes_with_its_keyboard() {
+    let mut test = Test::new(BOOX);
+    test.set_up_password("secret words");
+    test.lock_now();
+    assert_eq!(test.top(), Some(&KEYBOARD));
+    test.kernel
+        .set_secret(paperpaw_sdk::secrets::SecretChange::remove("lock.code"));
+    // Any event: the lock finds its code gone while its keyboard is up.
+    let at = test.at();
+    test.kernel
+        .send_event(at, Id::new_static("test.anything"), Params::new());
+    assert!(!test.open(&LOCK), "nothing to ask for");
+    assert!(!test.open(&KEYBOARD));
+}
