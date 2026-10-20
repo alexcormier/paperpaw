@@ -1009,6 +1009,7 @@ mod tests {
                 caps: crate::Capabilities::default(),
                 wifi: None,
                 firmware: None,
+                native: None,
                 clipboard: false,
                 slots: &[],
                 screens: &[],
