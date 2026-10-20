@@ -6,6 +6,8 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Data plugins: translations named in capitals (`DE.INI`, as a memory
+  card or an old computer may name them) are read too.
 - Clean up storage: what is kept for a book still on the memory card
   stays, also where no plugin opens its format now (switched off) and
   whatever the case of its folder's name (`Books` or `books`); where a

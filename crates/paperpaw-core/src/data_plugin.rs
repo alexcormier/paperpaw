@@ -289,7 +289,8 @@ fn load(storage: &dyn Storage, path: &str, folder: &str) -> Result<DataPlugin, S
     let catalogs = format!("{path}/i18n");
     let mut files: Vec<String> = Vec::new();
     let _ = storage.list(&catalogs, &mut |entry| {
-        if !entry.is_dir && entry.name.ends_with(".ini") {
+        // `DE.INI` too: a file copied from a memory card may have it so.
+        if !entry.is_dir && paperpaw_sdk::files::has_extension(entry.name, "ini") {
             files.push(entry.name.to_string());
         }
     });
@@ -339,17 +340,16 @@ fn list_fonts(
     mut folders: Option<&mut Vec<String>>,
 ) {
     let _ = storage.list(dir, &mut |entry| {
-        let name = entry.name.to_ascii_lowercase();
         let path = format!("{dir}/{}", entry.name);
         if entry.is_dir {
             if let Some(folders) = folders.as_deref_mut()
-                && !name.starts_with('.')
+                && !entry.name.starts_with('.')
             {
                 folders.push(path);
             }
-        } else if [".ttf", ".otf", ".ttc"]
+        } else if ["ttf", "otf", "ttc"]
             .iter()
-            .any(|ext| name.ends_with(ext))
+            .any(|ext| paperpaw_sdk::files::has_extension(entry.name, ext))
         {
             files.push(path);
         }
@@ -514,6 +514,7 @@ mod tests {
             .with("plugins/large/settings.ini", "[core]\nui-size = 14\n")
             .with("plugins/large/styles.css", "p { line-height: 1.6 }")
             .with("plugins/large/i18n/de.ini", "[meta]\nlanguage = de\n")
+            .with("plugins/large/i18n/FR.INI", "[meta]\nlanguage = fr\n")
             .with("plugins/broken/readme.txt", "")
             .with("plugins/bad-id/plugin.ini", "[plugin]\nid = a.b\n");
         let mut warnings = Vec::new();
@@ -523,7 +524,7 @@ mod tests {
         assert_eq!(large.manifest.id.as_str(), "large");
         assert_eq!(large.manifest.name, "Large print");
         assert_eq!(large.manifest.version, Version::new(1, 2, 0));
-        assert_eq!(large.translations.borrow().len(), 1);
+        assert_eq!(large.translations.borrow().len(), 2, "any case");
         assert!(large.settings.borrow().is_some());
         assert!(large.keymap.borrow().is_none());
         assert_eq!(
