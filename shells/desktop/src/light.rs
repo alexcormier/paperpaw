@@ -26,8 +26,8 @@ pub struct Light {
     pub step: i64,
     /// Levels in percent, as the X4 Pro has them.
     pub percent: bool,
-    /// Its warmth can be set too.
-    pub warmth: bool,
+    /// The step of its warmth, where that can be set too.
+    pub warmth: Option<i64>,
 }
 
 /// The plugin that registers a profile's light.
@@ -70,11 +70,11 @@ impl Plugin for Emulated {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let light = self.0;
-        let number = |setting: &Setting<i64>, title: &'static str, default: i64| {
+        let number = |setting: &Setting<i64>, title: &'static str, default: i64, step: i64| {
             let spec = SettingSpec::number(setting, title, 0, light.max, default)
                 .group(groups::DISPLAY)
                 .description(format!("{title}.help"))
-                .step(light.step)
+                .step(step)
                 .slider();
             if light.percent {
                 spec.unit("core.unit.percent")
@@ -82,10 +82,11 @@ impl Plugin for Emulated {
                 spec
             }
         };
-        r.add_setting(number(&FRONTLIGHT, "emulator.frontlight", 0))?;
+        r.add_setting(number(&FRONTLIGHT, "emulator.frontlight", 0, light.step))?;
         let mut items = vec![FRONTLIGHT];
-        if light.warmth {
-            r.add_setting(number(&WARMTH, "emulator.warmth", light.max * 3 / 10))?;
+        if let Some(step) = light.warmth {
+            let default = light.max * 3 / 10;
+            r.add_setting(number(&WARMTH, "emulator.warmth", default, step))?;
             items.push(WARMTH);
         }
         // First in the reader's panel, in the quick panel, and with the

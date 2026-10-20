@@ -81,6 +81,15 @@ change the plugin SDK.
   only layouts whose widgets and tools are there. Widgets are made once
   as the screen shows and anew only for changes of the home screen, the
   look or their own settings; other changes have them read anew.
+- X4 Pro: the front light is set in single percents and dims evenly to
+  the eye. Its percentages follow the lightness the eye sees (CIE L*)
+  rather than the square of the light, on a PWM of 12 bits instead of
+  10, so each step looks about as large as the next, also at the dim
+  end where the eye is most sensitive: from 1 % to 10 % the light now
+  has ten levels where it had two (5 % and 10 %, the second five times
+  as bright as the first); 1 % is dimmer than the least light before,
+  100 % as bright. `−` and `+` change it a
+  percent, a slider moves it further; its colour stays in fives.
 - Quick panel and reader's panel: on touch screens their sliders (the
   front light and its colour, the text size, spacing and margins) are as
   on the settings pages, across the screen with their title and value
@@ -99,7 +108,8 @@ change the plugin SDK.
   three and one), so the X4 Pro's quick panel fits on one page; the
   quick panel may cover up to 95 % of the screen, as phones' quick
   settings do. With the buttons, a slider is chosen and then moved as on
-  the settings pages. With buttons alone (the X4) the panels are as
+  the settings pages. A focused row that opens a list (*Font*) is drawn
+  as other rows are, its name no longer cut at the left. With buttons alone (the X4) the panels are as
   before. The home screen no longer builds its widgets anew while a
   value is shown above it, which read the card on every step. On Boox
   devices the light follows a slider while it moves. The emulator has
