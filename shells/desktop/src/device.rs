@@ -318,7 +318,17 @@ impl Device {
                 let screen = self.kernel.active_screen().map(ToString::to_string);
                 frame.done(screen.as_deref().unwrap_or_default());
             }
-            self.panel.refresh(self.controller.view(), region, mode);
+            let colors = self.profile.colors.then(|| self.kernel.colors());
+            self.panel
+                .refresh(self.controller.view(), region, mode, colors);
+            // Slow work ahead: its mark shows first, as on the X4 (whose
+            // panel refreshes it while the kernel works on), then what the
+            // work brought.
+            if effects.proceed() {
+                let now = self.now();
+                let effects = budget::track(|| self.kernel.proceed(now));
+                return self.execute(effects);
+            }
         }
         self.wake_at = effects.wake_at();
         if effects.sleep() && !self.asleep {
@@ -487,6 +497,8 @@ fn build_kernel(
             .clock(micros)
             .random(random)
             .glyph_cache(profile.glyph_cache)
+            .busy_mark(profile.busy_mark)
+            .colors(profile.colors)
             .network(true)
             .wifi(profile.wifi)
             .speech(profile.speech)

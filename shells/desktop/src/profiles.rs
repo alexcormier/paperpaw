@@ -2,8 +2,10 @@
 //!
 //! A profile describes everything the emulator needs to behave like a
 //! device: screen, pixel format, input hardware, buttons and the heap the
-//! kernel may use. Values marked "unverified" are best guesses until checked
-//! on real hardware.
+//! kernel may use. The Xteink profiles build the kernel as the firmware
+//! does (`shells/xteink/src/main.rs`), the Boox Go 7 as the Android shell
+//! does (`shells/android/src/app.rs`); a change there belongs here too.
+//! The emulator keeps the kernel's own clipboard on every profile.
 
 use paperpaw_platform::{
     ColorPanel, DeviceInfo, DisplayInfo, InputCaps, MemoryClass, PixelFormat, Rotation, buttons,
@@ -17,6 +19,35 @@ const X4_ROW: [&str; 4] = [
     buttons::RIGHT,
 ];
 
+/// Every button of the X4 and the X4 Classic.
+const X4_BUTTONS: [&str; 7] = [
+    buttons::PAGE_BACK,
+    buttons::PAGE_FORWARD,
+    buttons::LEFT,
+    buttons::RIGHT,
+    buttons::CONFIRM,
+    buttons::BACK,
+    buttons::POWER,
+];
+
+/// The firmware's setting defaults (the X4, X4 Pro and X4 Classic).
+const X4_SETTINGS: [(&str, &str); 4] = [
+    // A 4.3" screen: smaller text, so menus and pages hold enough.
+    ("core.ui-size", "9"),
+    ("core.font-size", "9"),
+    // A full refresh takes 3.5 s on its panel: screens change fast.
+    ("core.flash-screens", "false"),
+    // On USB the radio stays on in a network joined before.
+    ("wifi.while-charging", "true"),
+];
+
+/// The firmware's memory for glyphs of font packs on the card.
+const X4_GLYPH_CACHE: usize = 12 * KIB;
+
+/// The heap of the ESP32-S3 devices: 8 MB of PSRAM and 256 KiB of the
+/// chip's own, with about a fifth more here (pointers of 8 bytes, not 4).
+const S3_HEAP: usize = 10 * 1024 * KIB;
+
 /// An emulated device.
 #[derive(Debug, Clone, Copy)]
 pub struct Profile {
@@ -27,6 +58,12 @@ pub struct Profile {
     pub heap_budget: Option<usize>,
     /// Memory for runtime-rasterized glyphs.
     pub glyph_cache: usize,
+    /// A mark shows at once while slow work goes on (see
+    /// `KernelBuilder::busy_mark`), where the panel refreshes on its own.
+    pub busy_mark: bool,
+    /// Black and white are shown in the colours of the settings (see
+    /// `KernelBuilder::colors`).
+    pub colors: bool,
     /// Use bitmap font packs read in place, like small devices without
     /// runtime font rendering; otherwise scalable fonts.
     pub font_packs: bool,
@@ -84,32 +121,21 @@ pub const PROFILES: &[Profile] = &[
             },
             memory: MemoryClass::Small,
         },
-        buttons: &[
-            buttons::PAGE_BACK,
-            buttons::PAGE_FORWARD,
-            buttons::LEFT,
-            buttons::RIGHT,
-            buttons::CONFIRM,
-            buttons::BACK,
-            buttons::POWER,
-        ],
+        buttons: &X4_BUTTONS,
         // The firmware's heap: 192 KiB, and 64 KiB in the memory the boot
         // loader used (two regions: no block larger than 192 KiB). The
         // same things take about a fifth more here (pointers of 8 bytes,
         // not 4), so the emulator runs out a little before the X4 would.
         heap_budget: Some(256 * KIB),
-        glyph_cache: 0,
+        glyph_cache: X4_GLYPH_CACHE,
+        busy_mark: true,
+        colors: false,
         font_packs: true,
-        // 96 of 800 rows: 11.3 KiB instead of 94 KiB, nine bands a frame.
+        // 192 of 800 rows: 11.3 KiB instead of 47 KiB, five bands a frame.
         // The controller takes 8 rows (turned) in a byte.
         frame_rows: Some(192),
         row_align: 8,
-        // A 4.3" screen: smaller text, so menus and pages hold enough.
-        settings: &[
-            ("core.ui-size", "9"),
-            ("core.font-size", "9"),
-            ("core.flash-screens", "false"),
-        ],
+        settings: &X4_SETTINGS,
         speech: false,
         wifi: true,
         catalog_device: Some("x4"),
@@ -122,11 +148,10 @@ pub const PROFILES: &[Profile] = &[
             id: "xteink-x4-pro",
             name: "Xteink X4 Pro",
             display: DisplayInfo {
-                // Unverified: 4.3" at 219 ppi suggests the X4's 800x480 panel.
                 width: 480,
                 height: 800,
-                dpi: 219,
-                format: PixelFormat::Gray2,
+                dpi: 217,
+                format: PixelFormat::Mono1,
                 rotation: Rotation::Deg90,
                 color: None,
             },
@@ -136,7 +161,7 @@ pub const PROFILES: &[Profile] = &[
                 pen: false,
                 keys: &[],
             },
-            memory: MemoryClass::Small,
+            memory: MemoryClass::Large,
         },
         // Previous/next, a touch home key and power (reset is hardware).
         buttons: &[
@@ -145,25 +170,58 @@ pub const PROFILES: &[Profile] = &[
             buttons::HOME,
             buttons::POWER,
         ],
-        // Unverified: ESP32-S3 (512 KB SRAM) assumed without PSRAM.
-        heap_budget: Some(256 * KIB),
-        glyph_cache: 0,
+        heap_budget: Some(S3_HEAP),
+        glyph_cache: X4_GLYPH_CACHE,
+        busy_mark: true,
+        colors: false,
         font_packs: true,
         // The controller takes 8 rows (turned) in a byte.
-        frame_rows: Some(96),
+        frame_rows: Some(192),
         row_align: 8,
-        // A 4.3" screen: smaller text, so menus and pages hold enough.
-        settings: &[
-            ("core.ui-size", "9"),
-            ("core.font-size", "9"),
-            ("core.flash-screens", "false"),
-        ],
+        settings: &X4_SETTINGS,
         speech: false,
         wifi: true,
         catalog_device: Some("x4-pro"),
         sleep: true,
         button_row: &[],
-        summary: "ESP32-S3 (unverified), 4.3\" 800x480, touch + buttons, 256 KiB heap budget",
+        summary: "ESP32-S3 with 8 MB PSRAM, 4.3\" 800x480, touch + buttons, 10 MiB heap budget",
+    },
+    Profile {
+        device: DeviceInfo {
+            id: "xteink-x4-classic",
+            name: "Xteink X4 Classic",
+            display: DisplayInfo {
+                width: 480,
+                height: 800,
+                dpi: 217,
+                format: PixelFormat::Mono1,
+                rotation: Rotation::Deg90,
+                color: None,
+            },
+            input: InputCaps {
+                buttons: true,
+                touch: false,
+                pen: false,
+                keys: &[],
+            },
+            memory: MemoryClass::Large,
+        },
+        // The X4's buttons, the X4 Pro's screen and memory.
+        buttons: &X4_BUTTONS,
+        heap_budget: Some(S3_HEAP),
+        glyph_cache: X4_GLYPH_CACHE,
+        busy_mark: true,
+        colors: false,
+        font_packs: true,
+        frame_rows: Some(192),
+        row_align: 8,
+        settings: &X4_SETTINGS,
+        speech: false,
+        wifi: true,
+        catalog_device: Some("x4-classic"),
+        sleep: true,
+        button_row: &X4_ROW,
+        summary: "ESP32-S3 with 8 MB PSRAM, 4.3\" 800x480, buttons only, 10 MiB heap budget",
     },
     Profile {
         device: DeviceInfo {
@@ -172,8 +230,9 @@ pub const PROFILES: &[Profile] = &[
             display: DisplayInfo {
                 width: 1264,
                 height: 1680,
+                // As the Android shell draws on gray e-ink.
                 dpi: 300,
-                format: PixelFormat::Gray4,
+                format: PixelFormat::Gray8,
                 rotation: Rotation::Deg0,
                 color: None,
             },
@@ -185,9 +244,12 @@ pub const PROFILES: &[Profile] = &[
             },
             memory: MemoryClass::Large,
         },
-        buttons: &[buttons::PAGE_BACK, buttons::PAGE_FORWARD, buttons::POWER],
+        // The page buttons and Android's back; the system keeps power.
+        buttons: &[buttons::PAGE_BACK, buttons::PAGE_FORWARD, buttons::BACK],
         heap_budget: None,
         glyph_cache: 256 * KIB,
+        busy_mark: false,
+        colors: true,
         font_packs: false,
         frame_rows: None,
         row_align: 1,
@@ -225,6 +287,8 @@ pub const PROFILES: &[Profile] = &[
         buttons: &[buttons::PAGE_BACK, buttons::PAGE_FORWARD, buttons::POWER],
         heap_budget: None,
         glyph_cache: 256 * KIB,
+        busy_mark: false,
+        colors: false,
         font_packs: false,
         frame_rows: None,
         row_align: 1,
@@ -259,6 +323,8 @@ pub const PROFILES: &[Profile] = &[
         buttons: &[buttons::POWER],
         heap_budget: None,
         glyph_cache: 256 * KIB,
+        busy_mark: false,
+        colors: false,
         font_packs: false,
         frame_rows: None,
         row_align: 1,
@@ -293,6 +359,8 @@ pub const PROFILES: &[Profile] = &[
         buttons: &[buttons::POWER],
         heap_budget: None,
         glyph_cache: 256 * KIB,
+        busy_mark: false,
+        colors: false,
         font_packs: false,
         frame_rows: None,
         row_align: 1,
@@ -327,6 +395,8 @@ pub const PROFILES: &[Profile] = &[
         buttons: &[buttons::PAGE_BACK, buttons::PAGE_FORWARD, buttons::POWER],
         heap_budget: None,
         glyph_cache: 64 * KIB,
+        busy_mark: false,
+        colors: false,
         font_packs: false,
         frame_rows: None,
         row_align: 1,

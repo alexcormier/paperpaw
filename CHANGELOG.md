@@ -6,6 +6,13 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Emulator profiles match the devices: the X4 Pro draws in black and
+  white at 217 dpi with the 8 MB of PSRAM it has (a 10 MiB heap budget);
+  a new `xteink-x4-classic` profile; the Xteink profiles show the busy
+  mark, keep 12 KiB for glyphs and keep Wi-Fi on while charging, as the
+  firmware does; the Boox Go 7 draws in 256 grays, has Android's back
+  button and shows the text and paper colours of the settings, as the
+  Android app does.
 - Emulator: closing the window lets plugins save and send what is
   pending, as the device does before it sleeps. An emulated device
   asleep no longer keeps a processor core busy. A restart forgets the
