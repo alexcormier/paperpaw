@@ -120,6 +120,42 @@ fn a_finger_down_again_before_the_frame_does_not_stick() {
     assert!(nothing_held(&kernel));
 }
 
+/// With the page buttons swapped while reading, a page button pressed
+/// again from before the frame showed still ends with its release: the
+/// press held is the swapped one's, and later presses turn pages.
+#[test]
+fn a_swapped_page_button_pressed_again_keeps_its_release() {
+    let log = log();
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(TestPlugin::new("a", &log))
+        .user_config(
+            "[slots]
+core.reader = a.screen
+[core]
+swap-page-buttons = on
+",
+        )
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    kernel.open_slot(
+        Instant(10),
+        slots::READER,
+        paperpaw_sdk::Params::new().with("book", "a.txt"),
+    );
+    render(&mut kernel);
+    log.borrow_mut().clear();
+    button(&mut kernel, 900, "page-forward", ButtonState::Pressed);
+    kernel.shown(Instant(1000));
+    button(&mut kernel, 950, "page-forward", ButtonState::Pressed);
+    button(&mut kernel, 1100, "page-forward", ButtonState::Released);
+    assert!(nothing_held(&kernel));
+    button(&mut kernel, 2000, "page-forward", ButtonState::Pressed);
+    button(&mut kernel, 2050, "page-forward", ButtonState::Released);
+    assert_eq!(*log.borrow(), ["a:core.prev-page", "a:core.prev-page"]);
+    assert!(kernel.input.swapped.is_empty());
+}
+
 /// A small generator of pseudo random numbers, the same every run.
 struct Dice(u32);
 

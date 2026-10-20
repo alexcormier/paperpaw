@@ -301,6 +301,18 @@ impl Kernel {
         }
     }
 
+    /// The name the recognizer knows button `name` by while it is held:
+    /// the other page button's where it was pressed swapped (see
+    /// `Kernel::page_buttons_swapped`).
+    fn held_as(&self, name: &'static str) -> &'static str {
+        use paperpaw_platform::buttons::{PAGE_BACK, PAGE_FORWARD};
+        match name {
+            PAGE_FORWARD if self.input.swapped.contains(&name) => PAGE_BACK,
+            PAGE_BACK if self.input.swapped.contains(&name) => PAGE_FORWARD,
+            _ => name,
+        }
+    }
+
     /// Whether `event` belongs to a press dropped (see [`Kernel::shown`]).
     /// A button or a finger is down once at a time: its release ends the
     /// press of it held, the one taken or the one dropped, and a press
@@ -310,7 +322,7 @@ impl Kernel {
             || self.input.shown_at[0].is_some_and(|before| now < before);
         match event {
             InputEvent::Button { name, state } => {
-                let held = self.input.recognizer.holds(name);
+                let held = self.input.recognizer.holds(self.held_as(name));
                 let dropped = self.input.dropped_buttons.iter().position(|b| b == name);
                 let pressed = *state == ButtonState::Pressed;
                 if let Some(at) = dropped
