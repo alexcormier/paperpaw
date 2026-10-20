@@ -558,12 +558,13 @@ impl GridView {
         Some((index, corner))
     }
 
-    /// Ends moving or sizing with the buttons.
     /// Whether the buttons are moving or sizing an item.
     fn buttons_mode(&self) -> bool {
         self.edit.as_ref().is_some_and(|e| e.mode != Mode::Choose)
     }
 
+    /// Ends moving or sizing with the buttons: the items as they are now,
+    /// to keep.
     fn end_mode(&mut self, cx: &mut Cx<'_, '_>) -> GridResponse {
         if let Some(edit) = &mut self.edit {
             edit.mode = Mode::Choose;
@@ -769,11 +770,9 @@ impl GridView {
             return GridResponse::Ignored;
         }
         match event.phase {
-            // A finger while the buttons move or size an item: that ends
-            // first, and what it did is kept, so a tap on the screen's own
-            // button (e.g. to stop editing) loses nothing. The tap then
-            // does what it does.
-            PointerPhase::Down if self.buttons_mode() => self.end_mode(cx),
+            // A finger while the buttons move or size an item is not
+            // taken (the kernel then makes it a tap, see `on_gesture`).
+            PointerPhase::Down if self.buttons_mode() => GridResponse::Ignored,
             PointerPhase::Down => {
                 let Some((index, resize)) = self.item_at(event.point) else {
                     return GridResponse::Ignored;
@@ -847,7 +846,10 @@ impl GridView {
     /// A tap runs the target there; a long press begins editing.
     pub fn on_gesture(&mut self, gesture: Gesture, cx: &mut Cx<'_, '_>) -> GridResponse {
         match gesture.kind {
-            // Where no pointer samples came first (see `on_pointer`).
+            // A tap while the buttons move or size an item ends that and
+            // keeps what they did, so that a tap on the screen's own button
+            // (e.g. to stop editing, which reads the layout again) loses
+            // nothing; the next tap does what it does.
             GestureKind::Tap if self.buttons_mode() => self.end_mode(cx),
             GestureKind::Tap => match self
                 .targets
@@ -1435,20 +1437,21 @@ mod tests {
         pick(&mut grid, &env, 1, "move");
         act(&mut grid, &env, &actions::DOWN);
         assert_eq!(cells(&grid, 1), Cells::new(1, 1, 1, 1));
-        // The finger coming down ends moving: the place is kept.
-        let items = changed(pointer(&mut grid, &env, PointerPhase::Down, 50, 330).0);
+        // As the kernel goes: the finger coming down is not taken (a
+        // taken one would never become a tap) ...
+        let (down, _) = pointer(&mut grid, &env, PointerPhase::Down, 50, 330);
+        assert_eq!(down.handled(), Handled::No);
+        // ... so it is a tap when lifted: that ends moving, the place kept.
+        let items = changed(gesture(&mut grid, &env, GestureKind::Tap, 50, 330));
         assert_eq!(items[1], at(tool("t.b"), 1, 1, 1, 1));
+        assert!(grid.editing());
+        // The next tap does what it does.
+        pointer(&mut grid, &env, PointerPhase::Down, 50, 330);
         pointer(&mut grid, &env, PointerPhase::Up, 50, 330);
-        // Then the tap does what it does.
         assert_eq!(
             gesture(&mut grid, &env, GestureKind::Tap, 50, 330),
             GridResponse::Button(7)
         );
-        // Without pointer samples first, the tap alone ends it.
-        pick(&mut grid, &env, 1, "move");
-        act(&mut grid, &env, &actions::UP);
-        let items = changed(gesture(&mut grid, &env, GestureKind::Tap, 50, 330));
-        assert_eq!(items[1], at(tool("t.b"), 1, 0, 1, 1));
     }
 
     #[test]
