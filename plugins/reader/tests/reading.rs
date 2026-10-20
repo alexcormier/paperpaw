@@ -272,6 +272,9 @@ fn a_larger_font_keeps_the_place() {
         reading.run(core_actions::NEXT_PAGE);
     }
     let before = reading.kept();
+    reading.run(core_actions::NEXT_PAGE);
+    let next = reading.kept();
+    reading.run(core_actions::PREV_PAGE);
     reading.run(actions::FONT_LARGER);
     let after = reading.kept();
     // The page starts where a line starts, at the place read or just
@@ -280,6 +283,31 @@ fn a_larger_font_keeps_the_place() {
     assert!(
         after.1 <= before.1 && after.1 + 400 > before.1,
         "{after:?} for {before:?}"
+    );
+    // Laid out anew: larger letters, less on a page.
+    reading.run(core_actions::NEXT_PAGE);
+    let larger = reading.kept();
+    assert!(
+        larger.1 - after.1 < next.1 - before.1,
+        "{after:?} to {larger:?}, before {before:?} to {next:?}"
+    );
+}
+
+#[test]
+fn the_size_slider_lays_the_book_out_anew() {
+    let mut reading = Reading::new(Shared::default());
+    reading.open();
+    reading.run(core_actions::NEXT_PAGE);
+    let start = reading.kept();
+    reading.run(core_actions::NEXT_PAGE);
+    let page = reading.kept().1 - start.1;
+    reading.run(core_actions::PREV_PAGE);
+    set(&mut reading, settings::FONT_SIZE.static_str(), "8");
+    let small = reading.kept();
+    reading.run(core_actions::NEXT_PAGE);
+    assert!(
+        reading.kept().1 - small.1 > page,
+        "more on a page in small letters"
     );
 }
 

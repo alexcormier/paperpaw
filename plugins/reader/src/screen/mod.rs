@@ -855,7 +855,10 @@ impl Screen for ReaderScreen {
         // Which setting changed, if one did.
         let changed = events::SETTING_CHANGED.read(event, params).map(|c| c.id);
         let id = changed.as_ref().map_or("", Id::as_str);
-        let font_changed = id == paperpaw_sdk::builtin::settings::READING_FONT.as_str();
+        // The kernel's settings the page's type depends on: the font and
+        // its size (the reader's own all begin with `reader.`).
+        let font_changed = id == paperpaw_sdk::builtin::settings::READING_FONT.as_str()
+            || id == FONT_SIZE.as_str();
         // How marks look, or what decorators mark (a switch, their data):
         // the page drawn again as it is laid out.
         if changed.is_some()
