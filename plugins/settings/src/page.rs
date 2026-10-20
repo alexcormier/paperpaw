@@ -676,6 +676,7 @@ impl Screen for GroupPage {
                 cx.request_redraw();
                 cx.request_refresh(RefreshMode::Partial);
             }
+            _ => {}
         }
         Handled::Yes
     }

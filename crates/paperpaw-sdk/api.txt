@@ -29,7 +29,7 @@ pub use paperpaw_sdk::Translator
 pub use paperpaw_sdk::WallClock
 pub use paperpaw_sdk::round
 pub mod paperpaw_sdk::annotations
-pub enum paperpaw_sdk::annotations::Kind
+#[non_exhaustive] pub enum paperpaw_sdk::annotations::Kind
 pub paperpaw_sdk::annotations::Kind::Bookmark
 pub paperpaw_sdk::annotations::Kind::Highlight
 pub struct paperpaw_sdk::annotations::Annotation
@@ -576,7 +576,7 @@ pub fn paperpaw_sdk::contribution::Registrar::set_screen_hints(&mut self, paperp
 pub fn paperpaw_sdk::contribution::Registrar::set_setting_default(&mut self, paperpaw_sdk::Id, alloc::borrow::Cow<'static, str>) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::subscribe(&mut self, impl core::convert::Into<paperpaw_sdk::Id>, paperpaw_sdk::event::EventHandler) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub mod paperpaw_sdk::data
-pub enum paperpaw_sdk::data::Error
+#[non_exhaustive] pub enum paperpaw_sdk::data::Error
 pub paperpaw_sdk::data::Error::Newer(u32)
 pub paperpaw_sdk::data::Error::Storage(paperpaw_platform::storage::StorageError)
 pub paperpaw_sdk::data::Error::Unreadable
@@ -958,14 +958,14 @@ pub paperpaw_sdk::firmware::FirmwareCommand::Install::key: core::option::Option<
 pub paperpaw_sdk::firmware::FirmwareCommand::Install::older: bool
 pub paperpaw_sdk::firmware::FirmwareCommand::Install::path: alloc::string::String
 pub paperpaw_sdk::firmware::FirmwareCommand::Restart
-pub enum paperpaw_sdk::firmware::FirmwareState
+#[non_exhaustive] pub enum paperpaw_sdk::firmware::FirmwareState
 pub paperpaw_sdk::firmware::FirmwareState::Failed(paperpaw_sdk::firmware::InstallFailure)
 pub paperpaw_sdk::firmware::FirmwareState::Idle
 pub paperpaw_sdk::firmware::FirmwareState::Installed
 pub paperpaw_sdk::firmware::FirmwareState::Installing
 pub paperpaw_sdk::firmware::FirmwareState::Installing::done: u64
 pub paperpaw_sdk::firmware::FirmwareState::Installing::total: u64
-pub enum paperpaw_sdk::firmware::InstallFailure
+#[non_exhaustive] pub enum paperpaw_sdk::firmware::InstallFailure
 pub paperpaw_sdk::firmware::InstallFailure::Damaged
 pub paperpaw_sdk::firmware::InstallFailure::NewerFormat
 pub paperpaw_sdk::firmware::InstallFailure::NotAnUpdate
@@ -977,7 +977,7 @@ pub paperpaw_sdk::firmware::InstallFailure::Untrusted
 pub paperpaw_sdk::firmware::InstallFailure::Write
 impl core::convert::From<paperpaw_update::Problem> for paperpaw_sdk::firmware::InstallFailure
 pub fn paperpaw_sdk::firmware::InstallFailure::from(paperpaw_update::Problem) -> Self
-pub enum paperpaw_sdk::firmware::Signer
+#[non_exhaustive] pub enum paperpaw_sdk::firmware::Signer
 pub paperpaw_sdk::firmware::Signer::PaperPaw
 pub paperpaw_sdk::firmware::Signer::Unknown
 pub struct paperpaw_sdk::firmware::Firmware
@@ -1027,7 +1027,7 @@ impl paperpaw_sdk::install::Digest
 pub fn paperpaw_sdk::install::Digest::is_valid(&self) -> bool
 impl core::default::Default for paperpaw_sdk::install::Digest
 pub fn paperpaw_sdk::install::Digest::default() -> Self
-pub enum paperpaw_sdk::install::Received
+#[non_exhaustive] pub enum paperpaw_sdk::install::Received
 pub paperpaw_sdk::install::Received::Complete(paperpaw_sdk::install::Progress)
 pub paperpaw_sdk::install::Received::Failed(paperpaw_sdk::install::Progress)
 pub paperpaw_sdk::install::Received::Next(paperpaw_sdk::install::Progress)
@@ -1181,7 +1181,7 @@ pub fn paperpaw_sdk::library::set_finished(&dyn paperpaw_platform::storage::Stor
 pub fn paperpaw_sdk::library::take_over_old(&dyn paperpaw_platform::storage::Storage)
 pub fn paperpaw_sdk::library::today(&paperpaw_sdk::Env<'_>) -> core::option::Option<u32>
 pub mod paperpaw_sdk::logo
-pub enum paperpaw_sdk::logo::Logo
+#[non_exhaustive] pub enum paperpaw_sdk::logo::Logo
 pub paperpaw_sdk::logo::Logo::Drawn
 pub paperpaw_sdk::logo::Logo::Picture(paperpaw_document::ImageRef)
 impl paperpaw_sdk::logo::Logo
@@ -1198,7 +1198,7 @@ pub use paperpaw_sdk::native::Header
 pub use paperpaw_sdk::native::Problem
 pub use paperpaw_sdk::native::Signature
 pub use paperpaw_sdk::native::signature
-pub enum paperpaw_sdk::native::Author
+#[non_exhaustive] pub enum paperpaw_sdk::native::Author
 pub paperpaw_sdk::native::Author::Known
 pub paperpaw_sdk::native::Author::New
 pub paperpaw_sdk::native::Author::Other
@@ -1344,7 +1344,7 @@ pub fn paperpaw_sdk::random::Random::token(&self, usize) -> core::option::Option
 impl core::fmt::Debug for paperpaw_sdk::random::Random
 pub fn paperpaw_sdk::random::Random::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub mod paperpaw_sdk::replies
-pub enum paperpaw_sdk::replies::ServerNotice
+#[non_exhaustive] pub enum paperpaw_sdk::replies::ServerNotice
 pub paperpaw_sdk::replies::ServerNotice::Failed
 pub paperpaw_sdk::replies::ServerNotice::Failed::reason: alloc::string::String
 pub paperpaw_sdk::replies::ServerNotice::Failed::server: paperpaw_sdk::Id
@@ -1364,7 +1364,7 @@ pub fn paperpaw_sdk::replies::ServerNotice::server(&self) -> &paperpaw_sdk::Id
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::replies::ServerNotice
 pub fn paperpaw_sdk::replies::ServerNotice::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::replies::ServerNotice::to_params(&self) -> paperpaw_sdk::Params
-pub enum paperpaw_sdk::replies::SocketNotice
+#[non_exhaustive] pub enum paperpaw_sdk::replies::SocketNotice
 pub paperpaw_sdk::replies::SocketNotice::Answer
 pub paperpaw_sdk::replies::SocketNotice::Answer::from: alloc::string::String
 pub paperpaw_sdk::replies::SocketNotice::Answer::socket: paperpaw_sdk::Id
@@ -1541,7 +1541,7 @@ pub type paperpaw_sdk::setting::Text::Value<'a> = &'a str
 pub fn paperpaw_sdk::setting::Text::read(core::option::Option<&paperpaw_sdk::SettingValue>) -> &str
 pub fn paperpaw_sdk::setting::Text::write(alloc::borrow::Cow<'static, str>) -> paperpaw_sdk::SettingValue
 pub mod paperpaw_sdk::setup
-pub enum paperpaw_sdk::setup::SetupPage
+#[non_exhaustive] pub enum paperpaw_sdk::setup::SetupPage
 pub paperpaw_sdk::setup::SetupPage::Screen(paperpaw_sdk::Id)
 pub paperpaw_sdk::setup::SetupPage::Setting(paperpaw_sdk::Id)
 pub struct paperpaw_sdk::setup::SetupStepSpec
@@ -1580,7 +1580,7 @@ pub mod paperpaw_sdk::status::context
 pub const paperpaw_sdk::status::context::CHAPTER: &str
 pub const paperpaw_sdk::status::context::CHAPTERS: &str
 pub const paperpaw_sdk::status::context::PAGE: &str
-pub enum paperpaw_sdk::status::StatusValue
+#[non_exhaustive] pub enum paperpaw_sdk::status::StatusValue
 pub paperpaw_sdk::status::StatusValue::Bar
 pub paperpaw_sdk::status::StatusValue::Bar::permille: u16
 pub paperpaw_sdk::status::StatusValue::Icon(alloc::borrow::Cow<'static, str>)
@@ -1728,7 +1728,7 @@ pub fn paperpaw_sdk::ui::items::ItemsScreen::on_timer(&mut self, &mut paperpaw_s
 pub fn paperpaw_sdk::ui::items::ItemsScreen::region(&self, &paperpaw_sdk::Env<'_>) -> core::option::Option<paperpaw_platform::geometry::Rect>
 pub const paperpaw_sdk::ui::items::LINES: &str
 pub mod paperpaw_sdk::ui::reorder
-pub enum paperpaw_sdk::ui::reorder::ReorderStep
+#[non_exhaustive] pub enum paperpaw_sdk::ui::reorder::ReorderStep
 pub paperpaw_sdk::ui::reorder::ReorderStep::Changed
 pub paperpaw_sdk::ui::reorder::ReorderStep::Dropped
 pub paperpaw_sdk::ui::reorder::ReorderStep::Dropped::from: usize
@@ -1770,11 +1770,11 @@ pub fn paperpaw_sdk::ui::sections::Sections::step(&mut self, bool) -> paperpaw_s
 pub fn paperpaw_sdk::ui::sections::Sections::turn(&mut self, bool) -> paperpaw_sdk::ui::ListChange
 pub fn paperpaw_sdk::ui::sections::Sections::visible(&self) -> alloc::vec::Vec<(paperpaw_sdk::ui::sections::Item, paperpaw_platform::geometry::Rect)>
 pub mod paperpaw_sdk::ui::slider
-pub enum paperpaw_sdk::ui::slider::SliderFocus
+#[non_exhaustive] pub enum paperpaw_sdk::ui::slider::SliderFocus
 pub paperpaw_sdk::ui::slider::SliderFocus::Editing
 pub paperpaw_sdk::ui::slider::SliderFocus::Focused
 pub paperpaw_sdk::ui::slider::SliderFocus::None
-pub enum paperpaw_sdk::ui::slider::SliderStep
+#[non_exhaustive] pub enum paperpaw_sdk::ui::slider::SliderStep
 pub paperpaw_sdk::ui::slider::SliderStep::Cancelled
 pub paperpaw_sdk::ui::slider::SliderStep::Chosen(i64)
 pub paperpaw_sdk::ui::slider::SliderStep::Moved(i64)
@@ -1822,31 +1822,31 @@ pub fn paperpaw_sdk::ui::slider::marked(&paperpaw_sdk::SettingSpec) -> bool
 pub fn paperpaw_sdk::ui::slider::parts(&paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect) -> paperpaw_sdk::ui::slider::SliderParts
 pub fn paperpaw_sdk::ui::slider::row_height(&paperpaw_sdk::ui::UiStyle, bool) -> u16
 pub fn paperpaw_sdk::ui::slider::shows(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::SettingSpec) -> bool
-pub enum paperpaw_sdk::ui::Focus
+#[non_exhaustive] pub enum paperpaw_sdk::ui::Focus
 pub paperpaw_sdk::ui::Focus::Fill
 pub paperpaw_sdk::ui::Focus::Ring
 pub paperpaw_sdk::ui::Focus::Soft
-pub enum paperpaw_sdk::ui::ListChange
+#[non_exhaustive] pub enum paperpaw_sdk::ui::ListChange
 pub paperpaw_sdk::ui::ListChange::Focus
 pub paperpaw_sdk::ui::ListChange::None
 pub paperpaw_sdk::ui::ListChange::Page
 impl paperpaw_sdk::ui::ListChange
 pub fn paperpaw_sdk::ui::ListChange::request(self, &mut paperpaw_sdk::Cx<'_, '_>)
-pub enum paperpaw_sdk::ui::ReorderStep
+#[non_exhaustive] pub enum paperpaw_sdk::ui::ReorderStep
 pub paperpaw_sdk::ui::ReorderStep::Changed
 pub paperpaw_sdk::ui::ReorderStep::Dropped
 pub paperpaw_sdk::ui::ReorderStep::Dropped::from: usize
 pub paperpaw_sdk::ui::ReorderStep::Dropped::to: usize
 pub paperpaw_sdk::ui::ReorderStep::Same
-pub enum paperpaw_sdk::ui::Separators
+#[non_exhaustive] pub enum paperpaw_sdk::ui::Separators
 pub paperpaw_sdk::ui::Separators::Inset
 pub paperpaw_sdk::ui::Separators::Line
 pub paperpaw_sdk::ui::Separators::None
-pub enum paperpaw_sdk::ui::SliderFocus
+#[non_exhaustive] pub enum paperpaw_sdk::ui::SliderFocus
 pub paperpaw_sdk::ui::SliderFocus::Editing
 pub paperpaw_sdk::ui::SliderFocus::Focused
 pub paperpaw_sdk::ui::SliderFocus::None
-pub enum paperpaw_sdk::ui::SliderStep
+#[non_exhaustive] pub enum paperpaw_sdk::ui::SliderStep
 pub paperpaw_sdk::ui::SliderStep::Cancelled
 pub paperpaw_sdk::ui::SliderStep::Chosen(i64)
 pub paperpaw_sdk::ui::SliderStep::Moved(i64)
@@ -2194,7 +2194,7 @@ pub fn paperpaw_sdk::widgets::grid::parse(&str) -> alloc::vec::Vec<paperpaw_sdk:
 pub fn paperpaw_sdk::widgets::grid::place(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::widgets::grid::Geometry, &[paperpaw_sdk::widgets::grid::Item]) -> alloc::vec::Vec<(paperpaw_sdk::widgets::grid::Item, paperpaw_sdk::widgets::grid::Cells)>
 pub fn paperpaw_sdk::widgets::grid::write(&[paperpaw_sdk::widgets::grid::Item]) -> alloc::string::String
 pub mod paperpaw_sdk::widgets::look
-pub enum paperpaw_sdk::widgets::look::Frame
+#[non_exhaustive] pub enum paperpaw_sdk::widgets::look::Frame
 pub paperpaw_sdk::widgets::look::Frame::Card
 pub paperpaw_sdk::widgets::look::Frame::Dark
 pub paperpaw_sdk::widgets::look::Frame::Line
@@ -2212,7 +2212,7 @@ impl paperpaw_sdk::widgets::look::Padding
 pub fn paperpaw_sdk::widgets::look::Padding::of(&str) -> Self
 pub fn paperpaw_sdk::widgets::look::Padding::pixels(self, &paperpaw_sdk::ui::UiStyle, paperpaw_sdk::widgets::look::Frame) -> u16
 pub const fn paperpaw_sdk::widgets::look::Padding::value(self) -> &'static str
-pub enum paperpaw_sdk::widgets::look::Size
+#[non_exhaustive] pub enum paperpaw_sdk::widgets::look::Size
 pub paperpaw_sdk::widgets::look::Size::Fit
 pub paperpaw_sdk::widgets::look::Size::Large
 pub paperpaw_sdk::widgets::look::Size::Medium
@@ -2264,7 +2264,7 @@ pub fn paperpaw_sdk::widgets::look::shows(&paperpaw_sdk::Env<'_>, &str, &str) ->
 pub fn paperpaw_sdk::widgets::look::size(&paperpaw_sdk::Env<'_>, &str) -> paperpaw_sdk::widgets::look::Size
 pub fn paperpaw_sdk::widgets::look::size_setting(&paperpaw_sdk::Id, paperpaw_sdk::widgets::look::Size, bool) -> paperpaw_sdk::SettingSpec
 pub const fn paperpaw_sdk::widgets::look::size_spec(&'static str, paperpaw_sdk::Id, paperpaw_sdk::widgets::look::Size, bool) -> paperpaw_sdk::SettingSpec
-pub enum paperpaw_sdk::widgets::Align
+#[non_exhaustive] pub enum paperpaw_sdk::widgets::Align
 pub paperpaw_sdk::widgets::Align::Center
 pub paperpaw_sdk::widgets::Align::Left
 pub paperpaw_sdk::widgets::Align::Right
@@ -2272,7 +2272,7 @@ impl paperpaw_sdk::widgets::Align
 pub fn paperpaw_sdk::widgets::Align::of(&str) -> Self
 pub const fn paperpaw_sdk::widgets::Align::value(self) -> &'static str
 pub fn paperpaw_sdk::widgets::Align::x(self, paperpaw_platform::geometry::Rect, f32) -> f32
-pub enum paperpaw_sdk::widgets::Frame
+#[non_exhaustive] pub enum paperpaw_sdk::widgets::Frame
 pub paperpaw_sdk::widgets::Frame::Card
 pub paperpaw_sdk::widgets::Frame::Dark
 pub paperpaw_sdk::widgets::Frame::Line
@@ -2290,7 +2290,7 @@ impl paperpaw_sdk::widgets::look::Padding
 pub fn paperpaw_sdk::widgets::look::Padding::of(&str) -> Self
 pub fn paperpaw_sdk::widgets::look::Padding::pixels(self, &paperpaw_sdk::ui::UiStyle, paperpaw_sdk::widgets::look::Frame) -> u16
 pub const fn paperpaw_sdk::widgets::look::Padding::value(self) -> &'static str
-pub enum paperpaw_sdk::widgets::Size
+#[non_exhaustive] pub enum paperpaw_sdk::widgets::Size
 pub paperpaw_sdk::widgets::Size::Fit
 pub paperpaw_sdk::widgets::Size::Large
 pub paperpaw_sdk::widgets::Size::Medium
@@ -2398,7 +2398,7 @@ pub fn paperpaw_sdk::widgets::size_setting(&paperpaw_sdk::Id, paperpaw_sdk::widg
 pub const fn paperpaw_sdk::widgets::size_spec(&'static str, paperpaw_sdk::Id, paperpaw_sdk::widgets::look::Size, bool) -> paperpaw_sdk::SettingSpec
 pub type paperpaw_sdk::widgets::WidgetFactory = alloc::boxed::Box<dyn core::ops::function::Fn(&paperpaw_sdk::Env<'_>) -> alloc::boxed::Box<dyn paperpaw_sdk::widgets::Widget>>
 pub mod paperpaw_sdk::wifi
-pub enum paperpaw_sdk::wifi::JoinFailure
+#[non_exhaustive] pub enum paperpaw_sdk::wifi::JoinFailure
 pub paperpaw_sdk::wifi::JoinFailure::NotFound
 pub paperpaw_sdk::wifi::JoinFailure::Other
 pub paperpaw_sdk::wifi::JoinFailure::Password
@@ -2420,7 +2420,7 @@ pub paperpaw_sdk::wifi::WifiCommand::On
 pub paperpaw_sdk::wifi::WifiCommand::Scan
 impl core::fmt::Debug for paperpaw_sdk::wifi::WifiCommand
 pub fn paperpaw_sdk::wifi::WifiCommand::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub enum paperpaw_sdk::wifi::WifiState
+#[non_exhaustive] pub enum paperpaw_sdk::wifi::WifiState
 pub paperpaw_sdk::wifi::WifiState::Joining
 pub paperpaw_sdk::wifi::WifiState::Joining::ssid: alloc::string::String
 pub paperpaw_sdk::wifi::WifiState::Off
@@ -2611,7 +2611,7 @@ pub paperpaw_sdk::ActionHint::Hidden
 pub paperpaw_sdk::ActionHint::Icon(&'static str)
 pub paperpaw_sdk::ActionHint::Label(alloc::borrow::Cow<'static, str>)
 pub paperpaw_sdk::ActionHint::Title
-pub enum paperpaw_sdk::Choices
+#[non_exhaustive] pub enum paperpaw_sdk::Choices
 pub paperpaw_sdk::Choices::Fixed(&'static [&'static str])
 pub paperpaw_sdk::Choices::Owned(alloc::vec::Vec<alloc::borrow::Cow<'static, str>>)
 impl paperpaw_sdk::Choices
@@ -2785,21 +2785,21 @@ pub paperpaw_sdk::GestureKind::Pinch
 pub paperpaw_sdk::GestureKind::Pinch::out: bool
 pub paperpaw_sdk::GestureKind::Swipe(paperpaw_sdk::Direction)
 pub paperpaw_sdk::GestureKind::Tap
-pub enum paperpaw_sdk::Handled
+#[non_exhaustive] pub enum paperpaw_sdk::Handled
 pub paperpaw_sdk::Handled::No
 pub paperpaw_sdk::Handled::Yes
-pub enum paperpaw_sdk::Hint
+#[non_exhaustive] pub enum paperpaw_sdk::Hint
 pub paperpaw_sdk::Hint::Default
 pub paperpaw_sdk::Hint::Hidden
 pub paperpaw_sdk::Hint::Icon(&'static str)
 pub paperpaw_sdk::Hint::Text(alloc::string::String)
 impl paperpaw_sdk::Hint
 pub fn paperpaw_sdk::Hint::only_back(&paperpaw_sdk::Id) -> paperpaw_sdk::Hint
-pub enum paperpaw_sdk::Hints
+#[non_exhaustive] pub enum paperpaw_sdk::Hints
 pub paperpaw_sdk::Hints::Hidden
 pub paperpaw_sdk::Hints::OnPress
 pub paperpaw_sdk::Hints::Shown
-pub enum paperpaw_sdk::Level
+#[non_exhaustive] pub enum paperpaw_sdk::Level
 pub paperpaw_sdk::Level::Advanced
 pub paperpaw_sdk::Level::Basic
 #[non_exhaustive] pub enum paperpaw_sdk::MenuNeed
@@ -2813,7 +2813,7 @@ pub paperpaw_sdk::MenuNeed::Sleep
 pub paperpaw_sdk::MenuNeed::Speech
 pub paperpaw_sdk::MenuNeed::Touch
 pub paperpaw_sdk::MenuNeed::Wifi
-pub enum paperpaw_sdk::PluginKind
+#[non_exhaustive] pub enum paperpaw_sdk::PluginKind
 pub paperpaw_sdk::PluginKind::BuiltIn
 pub paperpaw_sdk::PluginKind::Code
 pub paperpaw_sdk::PluginKind::Data
@@ -2827,7 +2827,7 @@ pub paperpaw_sdk::PluginProblem::NotInstalled
 pub paperpaw_sdk::PluginProblem::OtherBuild
 pub paperpaw_sdk::PluginProblem::SafeMode
 pub paperpaw_sdk::PluginProblem::Unsupported
-pub enum paperpaw_sdk::PluginState
+#[non_exhaustive] pub enum paperpaw_sdk::PluginState
 pub paperpaw_sdk::PluginState::Failed
 pub paperpaw_sdk::PluginState::Off
 pub paperpaw_sdk::PluginState::Running
@@ -2844,7 +2844,7 @@ pub paperpaw_sdk::RegisterError::Parse::message: alloc::borrow::Cow<'static, str
 impl core::error::Error for paperpaw_sdk::RegisterError
 impl core::fmt::Display for paperpaw_sdk::RegisterError
 pub fn paperpaw_sdk::RegisterError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub enum paperpaw_sdk::ServerNotice
+#[non_exhaustive] pub enum paperpaw_sdk::ServerNotice
 pub paperpaw_sdk::ServerNotice::Failed
 pub paperpaw_sdk::ServerNotice::Failed::reason: alloc::string::String
 pub paperpaw_sdk::ServerNotice::Failed::server: paperpaw_sdk::Id
@@ -2883,13 +2883,13 @@ pub paperpaw_sdk::SettingKind::Text
 impl paperpaw_sdk::SettingKind
 pub fn paperpaw_sdk::SettingKind::accepts(&self, &paperpaw_sdk::SettingValue) -> bool
 pub fn paperpaw_sdk::SettingKind::parse(&self, &str) -> core::option::Option<paperpaw_sdk::SettingValue>
-pub enum paperpaw_sdk::SettingValue
+#[non_exhaustive] pub enum paperpaw_sdk::SettingValue
 pub paperpaw_sdk::SettingValue::Bool(bool)
 pub paperpaw_sdk::SettingValue::Int(i64)
 pub paperpaw_sdk::SettingValue::Text(alloc::borrow::Cow<'static, str>)
 impl paperpaw_sdk::SettingValue
 pub fn paperpaw_sdk::SettingValue::to_config_text(&self) -> alloc::string::String
-pub enum paperpaw_sdk::SocketNotice
+#[non_exhaustive] pub enum paperpaw_sdk::SocketNotice
 pub paperpaw_sdk::SocketNotice::Answer
 pub paperpaw_sdk::SocketNotice::Answer::from: alloc::string::String
 pub paperpaw_sdk::SocketNotice::Answer::socket: paperpaw_sdk::Id
@@ -2922,7 +2922,7 @@ pub paperpaw_sdk::SocketRead::File::len: u64
 pub paperpaw_sdk::SocketRead::File::path: alloc::string::String
 pub paperpaw_sdk::SocketRead::Text
 pub paperpaw_sdk::SocketRead::Text::max: u32
-pub enum paperpaw_sdk::StatusValue
+#[non_exhaustive] pub enum paperpaw_sdk::StatusValue
 pub paperpaw_sdk::StatusValue::Bar
 pub paperpaw_sdk::StatusValue::Bar::permille: u16
 pub paperpaw_sdk::StatusValue::Icon(alloc::borrow::Cow<'static, str>)

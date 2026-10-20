@@ -71,6 +71,7 @@ pub struct Format {
 
 /// Why a file is not read or not written.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Error {
     /// Written by a newer PaperPaw (format version this): left as it is.
     Newer(u32),

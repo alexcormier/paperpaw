@@ -935,6 +935,7 @@ impl Screen for PanelScreen {
                 self.dragged = None;
                 done(&env, cx, id, None);
             }
+            _ => {}
         }
         Handled::Yes
     }

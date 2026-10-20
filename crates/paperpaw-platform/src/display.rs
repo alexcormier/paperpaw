@@ -18,6 +18,7 @@ pub enum Rotation {
 ///
 /// Shells map these to the closest waveform their panel supports.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[non_exhaustive]
 pub enum RefreshMode {
     /// Fast, low quality (A2/DU-like): menus, highlights, pen strokes.
     Fast,

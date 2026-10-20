@@ -436,6 +436,7 @@ fn value_text(value: Option<&SettingValue>) -> String {
         Some(SettingValue::Int(n)) => n.to_string(),
         Some(SettingValue::Text(t)) => format!("`{t}`"),
         None => String::from("no value"),
+        Some(_) => String::from("a value"),
     }
 }
 

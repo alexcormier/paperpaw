@@ -227,6 +227,7 @@ pub struct Progress {
 
 /// What became of an answer handed to [`Installer::received`].
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Received {
     /// None of the downloads of this installer's job, e.g. one of a job
     /// stopped before.

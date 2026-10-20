@@ -38,6 +38,7 @@ impl fmt::Debug for ScreenSpec {
 /// devices that have such a row (see
 /// [`Registrar::set_screen_hints`](crate::Registrar::set_screen_hints)).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
 pub enum Hints {
     /// Always, below it: the screen has the part above the row. Also for
     /// menus over a screen without it.
@@ -54,6 +55,7 @@ pub enum Hints {
 /// How the row of hints below the screen labels a button under it (see
 /// [`Screen::hint`]).
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Hint {
     /// What the action is usually called.
     Default,
@@ -79,6 +81,7 @@ impl Hint {
 
 /// Whether an event was consumed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Handled {
     Yes,
     No,

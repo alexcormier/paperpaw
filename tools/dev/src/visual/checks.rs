@@ -50,6 +50,7 @@ fn role_name(role: Role) -> &'static str {
         Role::Switch => "switch",
         Role::Slider => "slider",
         Role::Text => "text",
+        _ => "part",
     }
 }
 

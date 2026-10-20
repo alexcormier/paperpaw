@@ -33,6 +33,7 @@ struct Drag {
 
 /// What a pointer sample did.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ReorderStep {
     /// A row was taken, or the place it would land changed: draw again.
     Changed,

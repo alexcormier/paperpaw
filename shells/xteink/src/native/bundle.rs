@@ -234,7 +234,8 @@ fn check(storage: &dyn Storage, plugin: &str, folder: &str) -> Result<Checked, N
             author: Some(signature.key),
             sha256,
         }),
-        Author::Other => Err(NotInstalledReason::OtherAuthor),
+        // Another author, and verdicts to come: not trusted.
+        _ => Err(NotInstalledReason::OtherAuthor),
     }
 }
 

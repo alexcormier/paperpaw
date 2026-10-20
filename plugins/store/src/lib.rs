@@ -176,6 +176,7 @@ fn received(env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
             (false, job.name)
         }
         Received::Next(_) | Received::Other => return,
+        _ => return,
     };
     // A quiet queue (the first-run setup's) says it all once, at its end:
     // its notices wait, what installs goes on.

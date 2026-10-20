@@ -619,7 +619,8 @@ impl Firmware {
             // Every pixel driven with a warm panel's waveform (1.6 s), as
             // the stock firmware cleans the panel every few pages.
             RefreshMode::Full => Refresh::Half,
-            RefreshMode::Partial | RefreshMode::Fast => Refresh::Fast,
+            // Partial and fast, and modes to come.
+            _ => Refresh::Fast,
         };
         let planes = if refresh == Refresh::Fast {
             Planes::NEW

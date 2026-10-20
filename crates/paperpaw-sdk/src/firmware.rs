@@ -59,6 +59,7 @@ pub enum FirmwareCommand {
 
 /// Where an install is.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[non_exhaustive]
 pub enum FirmwareState {
     #[default]
     Idle,
@@ -72,6 +73,7 @@ pub enum FirmwareState {
 
 /// Why an update cannot be installed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum InstallFailure {
     /// The file could not be read.
     Unreadable,
@@ -131,6 +133,7 @@ pub struct Firmware {
 
 /// Who signed an update.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Signer {
     /// PaperPaw ([`Firmware::keys`]).
     PaperPaw,

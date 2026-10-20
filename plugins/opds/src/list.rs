@@ -221,6 +221,7 @@ impl ListScreen {
                 cx.request_redraw_area(self.list.area());
                 cx.request_refresh(RefreshMode::Fast);
             }
+            _ => {}
         }
     }
 }

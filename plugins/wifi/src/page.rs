@@ -53,6 +53,7 @@ fn state_text(env: &Env<'_>, state: &WifiState, scanning: bool) -> String {
             "wifi.state.online",
             &[("ssid", Arg::Str(ssid)), ("address", Arg::Str(address))],
         ),
+        _ => env.i18n.tr("wifi.state.on").to_string(),
     }
 }
 

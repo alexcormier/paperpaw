@@ -329,6 +329,7 @@ fn status_width(
                 }
                 StatusValue::Level { .. } => size * 1.3,
                 StatusValue::Bar { .. } => size * 4.0,
+                _ => 0.0,
             };
         }
     }

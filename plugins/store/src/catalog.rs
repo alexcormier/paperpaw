@@ -100,6 +100,7 @@ pub(crate) fn may_install(plugins: &Plugins, id: &str, code: bool) -> bool {
         PluginKind::BuiltIn => false,
         PluginKind::Data => !code,
         PluginKind::Code => code,
+        _ => false,
     })
 }
 

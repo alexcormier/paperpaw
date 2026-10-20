@@ -71,8 +71,9 @@ impl Usage {
     pub fn refreshed(&mut self, mode: RefreshMode, area: Rect) {
         let index = match mode {
             RefreshMode::Fast => 0,
-            RefreshMode::Partial => 1,
             RefreshMode::Full => 2,
+            // Partial, and modes to come between fast and full.
+            _ => 1,
         };
         self.refreshes[index] = self.refreshes[index].saturating_add(1);
         self.pixels = self

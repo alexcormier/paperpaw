@@ -11,6 +11,7 @@ use crate::setting::{Setting, Text};
 
 /// A setting's value.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum SettingValue {
     Bool(bool),
     Int(i64),
@@ -40,6 +41,7 @@ pub enum SettingKind {
 /// its name: a list in the program ([`Choices::Fixed`], costing no
 /// memory) or one made at run time.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Choices {
     Fixed(&'static [&'static str]),
     Owned(Vec<Cow<'static, str>>),
@@ -617,6 +619,7 @@ impl SettingSpec {
 
 /// How often a setting is needed.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
+#[non_exhaustive]
 pub enum Level {
     /// What most readers change (font size, language, …).
     #[default]

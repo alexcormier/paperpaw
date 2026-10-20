@@ -331,7 +331,8 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
                     Rect::new(left + side + gap, area.y, rest, area.height),
                 )
             }
-            Align::Left => (
+            // Left, and alignments to come.
+            _ => (
                 area.x,
                 Rect::new(area.x + side + gap, area.y, rest, area.height),
             ),

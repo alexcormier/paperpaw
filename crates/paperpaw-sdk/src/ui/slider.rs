@@ -59,6 +59,7 @@ pub struct Slider {
 
 /// How a slider shows the focus (see [`Slider::draw_row`]).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum SliderFocus {
     /// Not focused: black on white.
     #[default]
@@ -456,6 +457,7 @@ struct Drag {
 
 /// What a pointer sample did to a slider.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum SliderStep {
     /// The knob was moved to this value: show it, not kept yet.
     Moved(i64),

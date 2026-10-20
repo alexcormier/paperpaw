@@ -87,6 +87,7 @@ impl fmt::Debug for StatusLineSpec {
 
 /// What a status item shows.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum StatusValue {
     Text(String),
     /// A gauge with a percentage, drawn as a battery.

@@ -480,6 +480,7 @@ pub const ALIGNMENTS: &[&str] = &["core.align.left", "core.align.center", "core.
 
 /// Where a widget's text sits in its place.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Align {
     Left,
     Center,

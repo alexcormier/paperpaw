@@ -145,8 +145,9 @@ impl Meter {
         let p = &mut table[index];
         let at = match mode {
             RefreshMode::Fast => 0,
-            RefreshMode::Partial => 1,
             RefreshMode::Full => 2,
+            // Partial, and modes to come between fast and full.
+            _ => 1,
         };
         p.refreshes[at] = p.refreshes[at].saturating_add(1);
         p.pixels = p

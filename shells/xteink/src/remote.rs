@@ -504,6 +504,7 @@ pub fn wifi_state(state: &WifiState) {
         WifiState::On => println!("PP:WIFI on"),
         WifiState::Joining { ssid } => println!("PP:WIFI joining {ssid}"),
         WifiState::Online { ssid, address } => println!("PP:WIFI online {ssid} {address}"),
+        _ => println!("PP:WIFI other"),
     }
 }
 

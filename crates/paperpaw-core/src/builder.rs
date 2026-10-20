@@ -367,8 +367,9 @@ impl KernelBuilder {
         // plentiful).
         let inner = self.storage.take().unwrap_or_else(|| Box::new(NoStorage));
         let budget = match self.device.memory {
-            paperpaw_platform::MemoryClass::Small => 16 * 1024,
             paperpaw_platform::MemoryClass::Large => 256 * 1024,
+            // Small, and any class to come: the frugal side.
+            _ => 16 * 1024,
         };
         let recall = alloc::rc::Rc::new(recall::Recall::new(budget, inner.ignores_case()));
         let storage: alloc::rc::Rc<dyn Storage> = alloc::rc::Rc::new(meter::Metered {
@@ -475,8 +476,8 @@ impl KernelBuilder {
             show_pending: false,
             notice: None,
             works: work::Queue::new(match self.device.memory {
-                paperpaw_platform::MemoryClass::Small => 8,
                 paperpaw_platform::MemoryClass::Large => 32,
+                _ => 8,
             }),
             stack: Vec::new(),
             output: Output::default(),

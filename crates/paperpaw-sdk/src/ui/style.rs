@@ -57,6 +57,7 @@ pub struct UiStyle {
 
 /// How the focus of rows and items is drawn ([`draw_focus`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Focus {
     /// A black bar, what is on it white.
     Fill,
@@ -69,6 +70,7 @@ pub enum Focus {
 
 /// The lines between rows ([`draw_separator`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Separators {
     /// Light lines within the margins.
     Line,

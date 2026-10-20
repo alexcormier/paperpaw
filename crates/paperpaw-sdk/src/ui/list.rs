@@ -5,6 +5,7 @@ use super::*;
 
 /// What changed after moving a list's focus.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ListChange {
     None,
     /// The focus moved within the visible page.

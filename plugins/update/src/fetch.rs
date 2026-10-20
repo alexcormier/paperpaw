@@ -415,6 +415,7 @@ pub(crate) fn received(env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>)
             failed(storage, &progress.name);
             done_with(storage, &version, &progress.plugin);
         }
+        _ => return,
     }
     next(env, &version, out);
 }
@@ -438,6 +439,7 @@ fn place(env: &Env<'_>, plugin: &str) -> bool {
             author_named(env, plugin, &signature.key)
                 && native::remember_author(storage, plugin, &signature.key)
         }
+        _ => false,
     };
     if !author_ok || !native::remember_fetched(storage, plugin, &header.sha256) {
         return false;

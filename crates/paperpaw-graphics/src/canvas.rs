@@ -40,6 +40,7 @@ pub struct Described {
 
 /// What a described part is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Role {
     /// A title over what follows (a header, a section's heading).
     Heading,

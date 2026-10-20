@@ -54,6 +54,7 @@ pub const FRAMES: &[&str] = &[
 
 /// What a widget is drawn in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Frame {
     /// Nothing: the widget on the page itself.
     None,
@@ -100,6 +101,7 @@ const fn sizes(fit: bool) -> &'static [&'static str] {
 
 /// How large a widget's text is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Size {
     Small,
     Medium,

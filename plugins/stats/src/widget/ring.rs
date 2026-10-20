@@ -162,6 +162,7 @@ fn largest(env: &Env<'_>, style: &UiStyle, font: &paperpaw_sdk::FontHandle<'_>) 
         Size::Small => title * 3,
         Size::Medium | Size::Fit => title * 9 / 2,
         Size::Large => title * 6,
+        _ => title * 9 / 2,
     }
 }
 

@@ -102,6 +102,7 @@ impl Policy {
                 alloc::vec![WifiCommand::Scan]
             }
             WifiState::Joining { .. } | WifiState::Online { .. } => Vec::new(),
+            _ => Vec::new(),
         }
     }
 
@@ -156,6 +157,7 @@ impl Policy {
                 Vec::new()
             }
             WifiState::Joining { .. } => Vec::new(),
+            _ => Vec::new(),
         }
     }
 

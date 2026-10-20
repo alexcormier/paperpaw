@@ -43,6 +43,7 @@ pub struct DeviceInfo {
 /// with [`MemoryClass::Small`]; on large devices plugins may use more to
 /// be faster or show more (caches, covers in lists), never to work at all.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum MemoryClass {
     /// A microcontroller with a few hundred kilobytes (the Xteink X4).
     Small,

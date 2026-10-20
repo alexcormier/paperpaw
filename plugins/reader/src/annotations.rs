@@ -205,6 +205,7 @@ impl Screen for AnnotationsScreen {
                             &[("text", paperpaw_sdk::Arg::Str(&a.text))],
                         ),
                     ),
+                    _ => ("reader.highlight", a.text.clone()),
                 };
                 let what = if a.note.is_empty() {
                     env.i18n.tr(kind)

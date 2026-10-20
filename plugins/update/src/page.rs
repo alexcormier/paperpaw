@@ -111,6 +111,7 @@ fn reason(failure: InstallFailure) -> &'static str {
         InstallFailure::NotNewer => "update.reason.not-newer",
         InstallFailure::Damaged => "update.reason.damaged",
         InstallFailure::Write => "update.reason.write",
+        _ => "update.reason.other",
     }
 }
 
@@ -142,6 +143,7 @@ impl UpdatePage {
             }
             FirmwareState::Installed => return View::Installed,
             FirmwareState::Idle | FirmwareState::Failed(_) => {}
+            _ => {}
         }
         // Downloaded, its code plugins still coming.
         if let Some(version) = crate::fetch::fetching(env.storage) {
@@ -786,6 +788,7 @@ impl Screen for UpdatePage {
             }
             FirmwareState::Failed(why) => (View::Failed(*why), RefreshMode::Partial),
             FirmwareState::Idle => return,
+            _ => return,
         };
         if view != self.view {
             self.view = view;

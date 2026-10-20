@@ -68,6 +68,7 @@ impl LogoWidget {
                 Thumbnail::new(env.storage, image, w, h, env.device.display.format)
             }
             Logo::Drawn => None,
+            _ => None,
         };
         self.placed = Some((area, logo, small));
     }

@@ -63,6 +63,7 @@ impl RequiredFor {
 
 /// Whether a plugin runs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum PluginState {
     /// Loaded and running.
     Running,
@@ -74,6 +75,7 @@ pub enum PluginState {
 
 /// What a plugin is made of.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum PluginKind {
     /// Built into PaperPaw.
     #[default]

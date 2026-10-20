@@ -61,5 +61,6 @@ pub(crate) fn received(env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>)
         }
         Received::Failed(job) => out.push(failed(env, &job.name)),
         Received::Next(_) | Received::Other => {}
+        _ => {}
     }
 }

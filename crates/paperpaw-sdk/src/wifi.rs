@@ -72,6 +72,7 @@ impl core::fmt::Debug for WifiCommand {
 
 /// Where the radio is.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[non_exhaustive]
 pub enum WifiState {
     #[default]
     Off,
@@ -131,6 +132,7 @@ impl WifiNetwork {
 /// [`params::REASON`](crate::builtin::params::REASON) of
 /// [`events::WIFI_FAILED`](crate::builtin::events::WIFI_FAILED)).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum JoinFailure {
     /// Not in reach.
     NotFound,

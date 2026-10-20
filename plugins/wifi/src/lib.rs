@@ -134,6 +134,7 @@ fn failure_text(env: &Env<'_>, ssid: &str, reason: JoinFailure) -> String {
         JoinFailure::NotFound => "wifi.failed.not-found",
         JoinFailure::Timeout => "wifi.failed.timeout",
         JoinFailure::Other => "wifi.failed.other",
+        _ => "wifi.failed.other",
     };
     env.i18n.format(key, &[("ssid", Arg::Str(ssid))])
 }

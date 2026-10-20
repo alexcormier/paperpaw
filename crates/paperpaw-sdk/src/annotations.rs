@@ -30,6 +30,7 @@ const MAX_NOTE: usize = 3 * 1024;
 const MAX_FILE: u64 = 1 << 20;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Kind {
     Bookmark,
     Highlight,

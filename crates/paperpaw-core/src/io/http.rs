@@ -152,8 +152,9 @@ impl Http {
     /// Keeps bodies to what the device's memory allows by default.
     pub fn for_memory(memory: paperpaw_platform::MemoryClass) -> Self {
         let max_response = match memory {
-            paperpaw_platform::MemoryClass::Small => MAX_RESPONSE_SMALL,
             paperpaw_platform::MemoryClass::Large => MAX_RESPONSE,
+            // Small, and any class to come: the frugal side.
+            _ => MAX_RESPONSE_SMALL,
         };
         Self {
             max_response,

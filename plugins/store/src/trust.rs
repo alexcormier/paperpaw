@@ -162,6 +162,7 @@ pub(crate) fn verdict(env: &Env<'_>, plugin: &str, folder: &str) -> Verdict {
             Verdict::Install { code: Some(code) }
         }
         Author::New => Verdict::Refused(Refusal::NotTheAuthor),
+        _ => Verdict::Refused(Refusal::NotTheAuthor),
     }
 }
 

@@ -17,6 +17,7 @@ use crate::{Env, Id};
 
 /// What a step asks for.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum SetupPage {
     /// A setting, chosen on the guide's page (or in its editor).
     Setting(Id),

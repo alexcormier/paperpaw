@@ -165,6 +165,7 @@ impl EventData for HttpReply {
 
 /// What happened to a plugin's server ([`Command::Serve`](crate::Command::Serve)).
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ServerNotice {
     /// It serves at `address`, e.g. `192.168.1.20:8080`.
     Started {
@@ -264,6 +265,7 @@ impl EventData for ServerNotice {
 /// What happened to a plugin's socket ([`Command::Connect`](crate::Command::Connect))
 /// or broadcast ([`Command::Broadcast`](crate::Command::Broadcast)).
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum SocketNotice {
     Connected {
         socket: Id,

@@ -71,8 +71,9 @@ impl Epd {
         }
         let code = match mode {
             RefreshMode::Full => FULL,
-            RefreshMode::Partial => PARTIAL,
             RefreshMode::Fast => FAST,
+            // Partial, and modes to come between fast and full.
+            _ => PARTIAL,
         };
         if self.call(self.set_mode, &[JValue::Int(code).as_jni()]) {
             self.current = Some(mode);

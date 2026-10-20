@@ -167,6 +167,7 @@ const AUTHORS: &str = crate::data_path!("plugin-authors.txt");
 /// Whose a plugin's code is, by its author's key, as this device knows
 /// the plugin's author (trust on first use, ADR 0024).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Author {
     /// The key remembered for the plugin.
     Known,

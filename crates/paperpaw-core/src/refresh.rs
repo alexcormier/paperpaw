@@ -34,7 +34,8 @@ impl RefreshPolicy {
         match mode {
             RefreshMode::Full => self.partials = 0,
             RefreshMode::Partial => self.partials = self.partials.saturating_add(1),
-            RefreshMode::Fast => {}
+            // Fast, and modes to come that leave ghosting as they find it.
+            _ => {}
         }
     }
 }

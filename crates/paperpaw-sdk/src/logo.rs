@@ -18,6 +18,7 @@ pub const LOGO: Setting<Text> = Setting::new("core.logo");
 
 /// The logo as it is drawn: the drawn one or a picture, read once.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Logo {
     /// PaperPaw's own, drawn.
     Drawn,

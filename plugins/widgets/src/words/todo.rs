@@ -487,6 +487,7 @@ fn text_size(env: &Env<'_>) -> f32 {
         Size::Small => style.small,
         Size::Medium | Size::Fit => style.text,
         Size::Large => style.title,
+        _ => style.text,
     }
 }
 

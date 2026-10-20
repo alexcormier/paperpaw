@@ -141,6 +141,7 @@ fn key_of(mark: &Mark) -> Key {
     match mark.kind {
         Kind::Bookmark => (Kind::Bookmark, mark.start, mark.start),
         Kind::Highlight => (Kind::Highlight, mark.start, mark.end),
+        _ => (mark.kind, mark.start, mark.end),
     }
 }
 
@@ -437,6 +438,7 @@ fn annotation_of(x: &Exchange<'_>, item: &Table, (kind, start, end): Key) -> Ann
             text.truncate(text.char_indices().nth(120).map_or(text.len(), |(i, _)| i));
             text
         }
+        _ => String::new(),
     };
     Annotation {
         mark: Mark {
@@ -492,6 +494,7 @@ fn item_of(x: &Exchange<'_>, a: &Annotation) -> Option<Value> {
                 ("text", lua::string(&text)),
             ])
         }
+        _ => return None,
     })
 }
 

@@ -206,6 +206,7 @@ fn temperature_size(env: &Env<'_>, style: &UiStyle) -> Option<f32> {
         Size::Medium => Some(style.title),
         Size::Large => Some(style.title * 1.4),
         Size::Fit => None,
+        _ => None,
     }
 }
 
