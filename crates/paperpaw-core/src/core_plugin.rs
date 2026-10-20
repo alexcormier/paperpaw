@@ -569,9 +569,11 @@ fn register_general_settings(r: &mut Registrar) -> Result<(), RegisterError> {
     Ok(())
 }
 
-/// How the interface looks: its size, header, corners, contrast and
-/// room.
-static LOOK: [SettingSpec; 8] = [
+/// How the interface looks: its size and contrast for everyone; with
+/// advanced settings its header, corners, highlight, lines, groups,
+/// titles and room. The defaults are PaperPaw's look (soft corners,
+/// pills, plain headers, faint lines); themes (data plugins) set others.
+static LOOK: [SettingSpec; 12] = [
     SettingSpec::fixed_number(
         settings::UI_SIZE.static_str(),
         "core.setting.ui-size",
@@ -583,22 +585,6 @@ static LOOK: [SettingSpec; 8] = [
     .with_extra(&PT_SLIDER)
     .described("core.setting.ui-size.help"),
     SettingSpec::fixed_choice(
-        settings::UI_HEADER.static_str(),
-        "core.setting.ui-header",
-        &[settings::HEADER_DARK, settings::HEADER_LIGHT],
-        settings::HEADER_LIGHT,
-        groups::LOOK,
-    )
-    .described("core.setting.ui-header.help"),
-    SettingSpec::fixed_choice(
-        settings::UI_CORNERS.static_str(),
-        "core.setting.ui-corners",
-        &settings::CORNERS,
-        settings::CORNERS[1],
-        groups::LOOK,
-    )
-    .described("core.setting.ui-corners.help"),
-    SettingSpec::fixed_choice(
         settings::UI_CONTRAST.static_str(),
         "core.setting.ui-contrast",
         &[settings::CONTRAST_NORMAL, settings::CONTRAST_STRONG],
@@ -606,15 +592,84 @@ static LOOK: [SettingSpec; 8] = [
         groups::LOOK,
     )
     .described("core.setting.ui-contrast.help"),
+    SettingSpec::fixed_choice(
+        settings::UI_HEADER.static_str(),
+        "core.setting.ui-header",
+        &[
+            settings::HEADER_PLAIN,
+            settings::HEADER_LIGHT,
+            settings::HEADER_DARK,
+        ],
+        settings::HEADER_PLAIN,
+        groups::LOOK,
+    )
+    .for_advanced()
+    .described("core.setting.ui-header.help"),
+    SettingSpec::fixed_choice(
+        settings::UI_CORNERS.static_str(),
+        "core.setting.ui-corners",
+        &settings::CORNERS,
+        settings::CORNERS[3],
+        groups::LOOK,
+    )
+    .for_advanced()
+    .described("core.setting.ui-corners.help"),
+    SettingSpec::fixed_choice(
+        settings::UI_FOCUS.static_str(),
+        "core.setting.ui-focus",
+        &[
+            settings::FOCUS_FILL,
+            settings::FOCUS_RING,
+            settings::FOCUS_SOFT,
+        ],
+        settings::FOCUS_FILL,
+        groups::LOOK,
+    )
+    .for_advanced()
+    .described("core.setting.ui-focus.help"),
+    SettingSpec::fixed_choice(
+        settings::UI_SEPARATORS.static_str(),
+        "core.setting.ui-separators",
+        &[
+            settings::SEPARATORS_INSET,
+            settings::SEPARATORS_LINE,
+            settings::SEPARATORS_NONE,
+        ],
+        settings::SEPARATORS_INSET,
+        groups::LOOK,
+    )
+    .for_advanced()
+    .described("core.setting.ui-separators.help"),
+    SettingSpec::fixed_choice(
+        settings::UI_GROUPS.static_str(),
+        "core.setting.ui-groups",
+        &[settings::GROUPS_PLAIN, settings::GROUPS_CARDS],
+        settings::GROUPS_PLAIN,
+        groups::LOOK,
+    )
+    .for_advanced()
+    .described("core.setting.ui-groups.help"),
+    SettingSpec::fixed_number(
+        settings::UI_TITLE.static_str(),
+        "core.setting.ui-title",
+        100,
+        200,
+        130,
+        groups::LOOK,
+    )
+    .with_extra(&PERCENT_10_SLIDER)
+    .for_advanced()
+    .described("core.setting.ui-title.help"),
     SettingSpec::fixed_number(
         settings::UI_MARGIN.static_str(),
         "core.setting.ui-margin",
         0,
         15,
-        3,
+        4,
         groups::LOOK,
     )
     .with_extra(&MM_SLIDER)
+    .for_advanced()
     .described("core.setting.ui-margin.help"),
     SettingSpec::fixed_number(
         settings::UI_ROW.static_str(),
@@ -625,6 +680,7 @@ static LOOK: [SettingSpec; 8] = [
         groups::LOOK,
     )
     .with_extra(&PERCENT_10_SLIDER)
+    .for_advanced()
     .described("core.setting.ui-row.help"),
     SettingSpec::fixed_number(
         settings::UI_LINES.static_str(),
@@ -635,6 +691,7 @@ static LOOK: [SettingSpec; 8] = [
         groups::LOOK,
     )
     .with_extra(&TENTH_MM)
+    .for_advanced()
     .described("core.setting.ui-lines.help"),
     // A picture in place of PaperPaw's logo: for data plugins, which set
     // it in their settings.ini, and those who type a path.

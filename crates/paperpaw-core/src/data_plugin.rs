@@ -68,12 +68,19 @@ pub(crate) struct DataPlugin {
     /// A family's faces: their key in `[family]` and file, the family.
     faces: RefCell<Vec<(&'static str, String)>>,
     family: Option<String>,
+    /// Its folder holds native code (see `code_plugin`).
+    code: bool,
 }
 
 impl DataPlugin {
     /// Its folder on the storage.
     pub(crate) fn folder(&self) -> &str {
         &self.folder
+    }
+
+    /// Whether its folder holds native code: it is a code plugin.
+    pub(crate) fn has_code(&self) -> bool {
+        self.code
     }
 }
 
@@ -316,6 +323,9 @@ fn load(storage: &dyn Storage, path: &str, folder: &str) -> Result<DataPlugin, S
         extensions: RefCell::new(extensions(&source, path)),
         faces: RefCell::new(faces),
         family,
+        code: paperpaw_sdk::native::CODE_FILES
+            .iter()
+            .any(|file| storage.size(&format!("{path}/{file}")).is_ok()),
     })
 }
 
@@ -381,6 +391,7 @@ pub(crate) fn font_folder(storage: &dyn Storage, dirs: &[String]) -> Option<Data
         extensions: RefCell::new(Vec::new()),
         faces: RefCell::new(Vec::new()),
         family: None,
+        code: false,
     })
 }
 

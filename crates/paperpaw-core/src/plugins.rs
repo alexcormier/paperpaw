@@ -112,6 +112,9 @@ impl Kernel {
             state,
             enabled,
             required_for: RequiredFor::default(),
+            kind: paperpaw_sdk::PluginKind::BuiltIn,
+            problem: None,
+            update: None,
         });
     }
 
@@ -311,7 +314,7 @@ impl Kernel {
         self.shared.stylesheets.append(&mut staging.stylesheets);
         self.shared.book_data.append(&mut staging.book_data);
         for (id, service) in staging.services.drain(..) {
-            self.shared.services.add(id, service);
+            self.shared.services.insert(id, service);
         }
         for (point, contribution) in staging.contributions.drain(..) {
             self.shared
@@ -469,34 +472,49 @@ impl Kernel {
     /// Loads the data plugin in `folder` while running (see
     /// [`Command::LoadPlugin`](paperpaw_sdk::Command::LoadPlugin)).
     pub(crate) fn load_plugin(&mut self, folder: &str) {
+        if self.register_folder(folder) {
+            self.plugins_changed();
+        }
+    }
+
+    /// Registers the data plugin in `folder` (switched off where the
+    /// configuration says so) and applies its defaults; `false`, with a
+    /// warning, if it could not be.
+    fn register_folder(&mut self, folder: &str) -> bool {
         let storage = self.shared.storage.clone();
         let plugin = match crate::data_plugin::load_folder(storage.as_ref(), folder) {
             Ok(plugin) => plugin,
-            Err(problem) => return self.warn_runtime(problem),
+            Err(problem) => {
+                self.warn_runtime(problem);
+                return false;
+            }
         };
         let manifest = plugin.manifest();
         let id = manifest.id.clone();
         if self.shared.plugins.get(id.as_str()).is_some() {
-            return self.warn(
-                WarningSource::Plugin(id),
-                None,
-                "a plugin with this id is already loaded".into(),
-            );
+            let problem = "a plugin with this id is already loaded".into();
+            self.warn(WarningSource::Plugin(id), None, problem);
+            return false;
         }
         let off = read_config(storage.as_ref())
             .ok()
             .flatten()
             .is_some_and(|c| crate::config::plugin_switches(&c, false).contains(&id.to_string()));
-        if off {
+        if plugin.has_code() {
+            self.add_code_plugin_later(&plugin, off);
+        } else if off {
             self.register_off(&plugin, manifest);
         } else {
             self.register_plugin(&plugin, manifest);
+            if let Some(info) = self.shared.plugins.get_mut(id.as_str()) {
+                info.kind = paperpaw_sdk::PluginKind::Data;
+            }
         }
         self.shared
             .data_folders
             .push((id, plugin.folder().to_string()));
         self.apply_defaults(&[]);
-        self.plugins_changed();
+        true
     }
 
     /// Removes a data plugin while running (see
@@ -509,7 +527,6 @@ impl Kernel {
             return self.warn_runtime(format!("{folder}: not removed ({error:?})"));
         }
         self.unload_plugin(id);
-        self.keep_offered_choices();
         self.plugins_changed();
     }
 
@@ -525,7 +542,8 @@ impl Kernel {
 
     /// Forgets the data plugin `id`: its folder, fonts and presets, and
     /// it in the list of plugins. What was chosen from it stays chosen
-    /// (see [`keep_offered_choices`](Self::keep_offered_choices)).
+    /// until [`plugins_changed`](Self::plugins_changed) finds it no longer
+    /// offered.
     fn unload_plugin(&mut self, id: &Id) {
         self.shared.data_folders.retain(|(p, _)| p != id);
         self.shared.fonts.remove_plugin(id.as_str());
@@ -533,8 +551,19 @@ impl Kernel {
             .settings
             .presets_mut()
             .remove_plugin(id.as_str());
-        self.shared.plugins.remove(id.as_str());
-        self.offer_choices();
+        // A code plugin's code runs until the restart: it stays listed as
+        // stopping then.
+        match self.shared.plugins.get_mut(id.as_str()) {
+            Some(info)
+                if info.kind == paperpaw_sdk::PluginKind::Code
+                    && info.state == PluginState::Running =>
+            {
+                info.enabled = false;
+            }
+            _ => {
+                self.shared.plugins.remove(id.as_str());
+            }
+        }
     }
 
     /// A font chosen that is no longer offered gives way to the default.
@@ -558,11 +587,55 @@ impl Kernel {
     /// the folder takes the place of every version of it on the storage,
     /// loaded or not, and is loaded at once.
     pub(crate) fn install_plugin(&mut self, id: &Id, folder: &str) {
+        let dirs = self.shared.plugin_dirs.clone();
+        let Some(placed) = self.place_plugin(id, folder, &dirs) else {
+            return;
+        };
+        // The new version in place: the old ones go, what was chosen from
+        // them stays where the new one offers it too.
+        placed.clear(self.shared.storage.as_ref());
+        // A code plugin's code runs until the restart: the new version
+        // takes over then.
+        if let Some(info) = self.shared.plugins.get_mut(id.as_str())
+            && info.kind == paperpaw_sdk::PluginKind::Code
+            && info.state == PluginState::Running
+        {
+            info.update = Some(placed.version);
+            info.enabled = true;
+            self.shared.data_folders.retain(|(p, _)| p != id);
+            self.shared.data_folders.push((id.clone(), placed.target));
+            return self.plugins_changed();
+        }
+        if self.shared.plugins.get(id.as_str()).is_some() {
+            self.unload_plugin(id);
+        }
+        // Changed even where the new one does not load: the old ones are
+        // gone.
+        self.register_folder(&placed.target);
+        self.plugins_changed();
+    }
+
+    /// Installs the plugins the shell put into folders before the start
+    /// (see [`KernelBuilder::install_plugin`](crate::KernelBuilder::install_plugin)),
+    /// before the plugins in `dirs` are found.
+    pub(crate) fn install_staged(&mut self, staged: Vec<(Id, String)>, dirs: &[String]) {
+        for (id, folder) in staged {
+            if let Some(placed) = self.place_plugin(&id, &folder, dirs) {
+                placed.clear(self.shared.storage.as_ref());
+            }
+        }
+    }
+
+    /// Puts the plugin `id` in `folder` in the place of every version of
+    /// it in `dirs` (and loaded); `None` when it is refused, said and its
+    /// folder removed.
+    fn place_plugin(&mut self, id: &Id, folder: &str, dirs: &[String]) -> Option<Placed> {
         let storage = self.shared.storage.clone();
         let folder = folder.trim_end_matches('/');
         let refuse = |kernel: &mut Kernel, problem: String| {
             let _ = storage.remove_dir_all(folder);
             kernel.warn(WarningSource::Plugin(id.clone()), None, problem);
+            None
         };
         // What it says it is, before anything changes.
         let found = data_plugin::folder_plugin_id(storage.as_ref(), folder, id.as_str());
@@ -572,13 +645,14 @@ impl Kernel {
                 format!("{folder}: not the plugin `{id}`; not installed"),
             );
         }
-        if let Err(problem) = data_plugin::load_folder_as(storage.as_ref(), folder, id.as_str()) {
-            return refuse(self, problem);
-        }
+        let version = match data_plugin::load_folder_as(storage.as_ref(), folder, id.as_str()) {
+            Ok(plugin) => plugin.manifest().version,
+            Err(problem) => return refuse(self, problem),
+        };
         // Every version of it there is: loaded, switched off, or refused at
         // start.
         let mut old: Vec<String> = self.data_folder(id).into_iter().collect();
-        for dir in &self.shared.plugin_dirs {
+        for dir in dirs {
             for path in data_plugin::folders_of(storage.as_ref(), dir, id.as_str()) {
                 if !old.contains(&path) {
                     old.push(path);
@@ -610,19 +684,13 @@ impl Kernel {
             }
             return refuse(self, format!("{target}: not installed ({error:?})"));
         }
-        // The new version in place: the old ones go, what was chosen from
-        // them stays where the new one offers it too.
-        if self.shared.plugins.get(id.as_str()).is_some() {
-            self.unload_plugin(id);
-        }
-        for path in old.iter().filter(|path| **path != target) {
-            let _ = storage.remove_dir_all(path);
-        }
-        let _ = storage.remove_dir_all(&aside);
-        self.load_plugin(&target);
-        self.keep_offered_choices();
-        self.apply_reading_font();
-        self.apply_status_font();
+        old.retain(|path| *path != target);
+        Some(Placed {
+            target,
+            old,
+            aside,
+            version,
+        })
     }
 
     /// Puts back the versions of plugins set aside by an install that did
@@ -658,9 +726,11 @@ impl Kernel {
     }
 
     /// After a plugin was loaded or removed while running: the choices of
-    /// fonts and key map presets, menu labels, fonts and keys anew.
+    /// fonts and key map presets (a font chosen that is no longer offered
+    /// giving way), menu labels, fonts and keys anew.
     fn plugins_changed(&mut self) {
         self.offer_choices();
+        self.keep_offered_choices();
         self.set_menu_titles();
         self.apply_reading_font();
         self.apply_status_font();
@@ -697,5 +767,27 @@ impl Kernel {
         shared.refresh_filters.shrink_to_fit();
         shared.stylesheets.shrink_to_fit();
         shared.translator.shrink_to_fit();
+    }
+}
+
+/// A plugin put in its place, and what is left of the versions before.
+struct Placed {
+    /// Its folder.
+    target: String,
+    /// The folders of other versions of it.
+    old: Vec<String>,
+    /// Where the version before stepped aside.
+    aside: String,
+    /// Its version.
+    version: paperpaw_sdk::Version,
+}
+
+impl Placed {
+    /// Removes the versions before.
+    fn clear(&self, storage: &dyn Storage) {
+        for path in &self.old {
+            let _ = storage.remove_dir_all(path);
+        }
+        let _ = storage.remove_dir_all(&self.aside);
     }
 }

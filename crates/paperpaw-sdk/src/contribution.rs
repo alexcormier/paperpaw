@@ -127,9 +127,16 @@ pub enum Contribution {
     Preset(Box<Preset>),
     /// Presets kept in the program.
     FixedPresets(&'static [Preset]),
+    /// A service found by its type's `TypeId` alone (see
+    /// `Registrar::add_service`).
     Service {
         id: Id,
         service: Box<dyn Any>,
+    },
+    /// A service with the name of its type (see [`Registrar::publish`]).
+    Published {
+        id: Id,
+        service: crate::services::Service,
     },
     /// Text for a point another plugin defined (see
     /// [`services`](crate::services)).
@@ -179,7 +186,7 @@ impl Contribution {
             Contribution::Widget(_) => "widget",
             Contribution::SetupStep(_) => "setup-step",
             Contribution::Preset(_) | Contribution::FixedPresets(_) => "preset",
-            Contribution::Service { .. } => "service",
+            Contribution::Service { .. } | Contribution::Published { .. } => "service",
             Contribution::ToPoint { .. } => "to-point",
             Contribution::Translations(_) => "translations",
         }
@@ -213,7 +220,7 @@ impl Contribution {
             Contribution::Widget(w) => &w.id,
             Contribution::SetupStep(s) => &s.id,
             Contribution::Preset(p) => &p.id,
-            Contribution::Service { id, .. } => id,
+            Contribution::Service { id, .. } | Contribution::Published { id, .. } => id,
             _ => return None,
         })
     }
@@ -644,10 +651,24 @@ impl Registrar {
         self.add(Contribution::StatusLine(line))
     }
 
-    /// Publishes a service for other plugins as `id` (see
-    /// [`services`](crate::services)).
+    /// Publishes a service for other plugins as `id`, found by its type
+    /// alone: not by native code plugins built apart from it.
+    #[deprecated(
+        since = "0.4.0",
+        note = "use `Registrar::publish`, whose services every plugin finds"
+    )]
     pub fn add_service(&mut self, id: Id, service: Box<dyn Any>) -> Result<(), RegisterError> {
         self.add(Contribution::Service { id, service })
+    }
+
+    /// Publishes `service` for other plugins as `id`, usually a trait
+    /// object such as `Box<dyn Weather>` (see
+    /// [`services`](crate::services)).
+    pub fn publish<T: Any>(&mut self, id: Id, service: T) -> Result<(), RegisterError> {
+        self.add(Contribution::Published {
+            id,
+            service: crate::services::Service::new(service),
+        })
     }
 
     /// Adds `contribution` to `point`, a point another plugin defined

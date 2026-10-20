@@ -373,8 +373,9 @@ impl GridView {
                     shown.area.width + 2 * pad,
                     shown.area.height + 2 * pad,
                 );
-                canvas.stroke(around, line, Color::BLACK);
-                canvas.fill(handle(shown.area, &self.style), Color::BLACK);
+                let corner = self.style.corner;
+                canvas.stroke_round(around, line, corner + u32::from(pad), Color::BLACK);
+                canvas.fill_round(handle(shown.area, &self.style), corner, Color::BLACK);
             }
         }
         if let Some(Edit {
@@ -387,13 +388,17 @@ impl GridView {
             } else {
                 self.style.line
             };
-            canvas.stroke(self.geometry.rect(drag.to), width, Color::BLACK);
+            let to = self.geometry.rect(drag.to);
+            canvas.stroke_round(to, width, self.style.corner, Color::BLACK);
         }
         if self.focus_shown
             && let Some((area, _)) = self.targets.get(self.focus)
         {
-            let frame = area.grow((self.style.line * 2) as u16);
-            canvas.stroke(frame, self.style.line * 3, Color::BLACK);
+            // Round as the style's corners, a little rounder outside.
+            let out = self.style.line * 2;
+            let frame = area.grow(out as u16);
+            let radius = self.style.corner + out;
+            canvas.stroke_round(frame, self.style.line * 3, radius, Color::BLACK);
         }
     }
 
@@ -402,7 +407,8 @@ impl GridView {
         let g = self.geometry;
         for row in 0..g.rows {
             for col in 0..g.columns {
-                canvas.stroke(g.rect(Cells::new(col, row, 1, 1)), 1, Color::gray(200));
+                let cell = g.rect(Cells::new(col, row, 1, 1));
+                canvas.stroke_round(cell, 1, self.style.corner, Color::gray(200));
             }
         }
     }

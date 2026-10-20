@@ -46,9 +46,7 @@ static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_switch(
 #[cfg(feature = "x4-pro")]
 static LIGHT_SETTINGS: [SettingSpec; 2] = {
     use paperpaw_sdk::SettingExtra;
-    static BRIGHTNESS: SettingExtra = SettingExtra::new()
-        .unit("core.unit.percent")
-        .slider();
+    static BRIGHTNESS: SettingExtra = SettingExtra::new().unit("core.unit.percent").slider();
     static PERCENT: SettingExtra = SettingExtra::new()
         .unit("core.unit.percent")
         .step(5)

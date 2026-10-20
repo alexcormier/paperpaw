@@ -50,8 +50,13 @@ pub struct UiStyle {
     pub text: f32,
     /// Secondary text (status lines, hints).
     pub small: f32,
-    /// Header titles.
+    /// Titles (e.g. of dialogs and widgets).
     pub title: f32,
+    /// The titles of headers (core.ui-title), larger than [`title`] in
+    /// some themes.
+    ///
+    /// [`title`]: UiStyle::title
+    pub head: f32,
     /// Height of a list row.
     pub row: u32,
     /// Height of a header bar.
@@ -68,9 +73,48 @@ pub struct UiStyle {
     pub corner: u32,
     /// Gray text is drawn black (see [`UiStyle::faint`]).
     pub strong: bool,
+    /// Buttons, switches, the focus and other small shapes as pills,
+    /// their ends round (see [`UiStyle::radius`]), with round or soft
+    /// corners; else with [`corner`].
+    ///
+    /// [`corner`]: UiStyle::corner
+    pub pill: bool,
+    /// How the focus of rows and items is drawn.
+    pub focus: Focus,
+    /// The lines between rows, below light headers and above notes.
+    pub separators: Separators,
+    /// Headers without a bar or a line: the title on the page itself.
+    pub plain_header: bool,
+    /// The entries of a list's sections on rounded cards.
+    pub cards: bool,
+    /// The grays the panel shows (2 for black and white alone).
+    pub grays: u16,
     /// The least size of what a finger sets or presses, about 7 mm, on
     /// touch screens; 0 with buttons alone (see [`UiStyle::touch_row`]).
     pub finger: u32,
+}
+
+/// How the focus of rows and items is drawn ([`draw_focus`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Focus {
+    /// A black bar, what is on it white.
+    Fill,
+    /// A thick round frame, what is in it black.
+    Ring,
+    /// A light gray bar, what is on it black; a frame on panels of black
+    /// and white alone.
+    Soft,
+}
+
+/// The lines between rows ([`draw_separator`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Separators {
+    /// Light lines within the margins.
+    Line,
+    /// Fainter lines, from where the text starts.
+    Inset,
+    /// None: room alone parts the rows.
+    None,
 }
 
 impl UiStyle {
@@ -88,6 +132,7 @@ impl UiStyle {
             text,
             small: m.pt(base * 0.75),
             title: m.pt(base * 1.15),
+            head: m.pt(base * s.int(settings::UI_TITLE.as_str()).clamp(100, 200) as f32 / 100.0),
             row: (line_height * rows) as u32,
             header: (line_height * (rows + 0.1)) as u32,
             margin: m.mm(s.int(settings::UI_MARGIN.as_str()).clamp(0, 15) as u32),
@@ -95,17 +140,82 @@ impl UiStyle {
             line: m
                 .tenth_mm(s.int(settings::UI_LINES.as_str()).clamp(1, 10) as u32)
                 .max(1),
-            dark_header: s.text(settings::UI_HEADER.as_str()) != settings::HEADER_LIGHT,
+            dark_header: s.text(settings::UI_HEADER.as_str()) == settings::HEADER_DARK,
             corner: match settings::CORNERS
                 .iter()
                 .position(|c| *c == s.text(settings::UI_CORNERS.as_str()))
             {
                 Some(1) => m.tenth_mm(8),
                 Some(2) => m.mm(2),
+                Some(3) => m.tenth_mm(35),
                 _ => 0,
             },
             strong: s.text(settings::UI_CONTRAST.as_str()) == settings::CONTRAST_STRONG,
+            pill: settings::CORNERS[2..].contains(&s.text(settings::UI_CORNERS.as_str())),
+            focus: match s.text(settings::UI_FOCUS.as_str()) {
+                settings::FOCUS_RING => Focus::Ring,
+                settings::FOCUS_SOFT => Focus::Soft,
+                _ => Focus::Fill,
+            },
+            separators: match s.text(settings::UI_SEPARATORS.as_str()) {
+                settings::SEPARATORS_INSET => Separators::Inset,
+                settings::SEPARATORS_NONE => Separators::None,
+                _ => Separators::Line,
+            },
+            plain_header: s.text(settings::UI_HEADER.as_str()) == settings::HEADER_PLAIN,
+            cards: s.text(settings::UI_GROUPS.as_str()) == settings::GROUPS_CARDS,
+            grays: env.device.display.format.gray_levels().unwrap_or(256),
             finger: if env.device.input.touch { m.mm(7) } else { 0 },
+        }
+    }
+
+    /// The radius of the corners of a shape `height` pixels high: half
+    /// its height for pills, else the style's corners.
+    /// Taller shapes (a row with a note) keep the corners, at most half a
+    /// margin round: the room between their edge and their text, so the
+    /// curve never comes near what is in them.
+    pub fn radius(&self, height: u32) -> u32 {
+        if self.pill && height <= self.row * 5 / 4 {
+            height / 2
+        } else if height > self.row * 5 / 4 {
+            self.corner.min(self.margin / 2)
+        } else {
+            self.corner
+        }
+    }
+
+    /// Whether the focus is drawn dark, so what is on it is drawn white.
+    pub fn dark_focus(&self) -> bool {
+        self.focus == Focus::Fill
+    }
+
+    /// The ink of what is drawn on a row or item, `focused` or not:
+    /// white on a dark focus, else black.
+    pub fn focus_ink(&self, focused: bool) -> Color {
+        if focused && self.dark_focus() {
+            Color::WHITE
+        } else {
+            Color::BLACK
+        }
+    }
+
+    /// The paper of a row or item, `focused` or not: what its content may
+    /// be cleared to (black on a dark focus).
+    pub fn focus_paper(&self, focused: bool) -> Color {
+        if focused && self.dark_focus() {
+            Color::BLACK
+        } else {
+            Color::WHITE
+        }
+    }
+
+    /// The colour of gray text (notes) on a row or item, `focused` or not
+    /// (light on a dark focus).
+    pub fn focus_faint(&self, focused: bool, gray: u8) -> Color {
+        if focused && self.dark_focus() {
+            Color::gray(215)
+        } else {
+            self.faint(gray)
         }
     }
 
@@ -137,22 +247,32 @@ impl UiStyle {
     }
 
     /// Draws a header's background in `area`: dark, or light with a thin
-    /// line below.
+    /// line below (as the separators are; none for plain headers).
     fn header_background(&self, canvas: &mut Canvas<'_>, area: Rect) {
         let (paper, ink) = self.header_colors();
         canvas.fill(area, paper);
-        if !self.dark_header {
-            let line = self.line.max(1) as u16;
-            canvas.fill(
-                Rect::new(
-                    area.x,
-                    (area.y + area.height).saturating_sub(line),
-                    area.width,
-                    line,
-                ),
-                ink,
-            );
+        if self.dark_header || self.plain_header {
+            return;
         }
+        let line = self.line.max(1) as u16;
+        let y = (area.y + area.height).saturating_sub(line);
+        match self.separators {
+            Separators::Line => canvas.fill(Rect::new(area.x, y, area.width, line), ink),
+            Separators::Inset => {
+                let margin = self.margin as u16;
+                let width = area.width.saturating_sub(2 * margin);
+                canvas.fill_tint(Rect::new(area.x + margin, y, width, line), Color::gray(150));
+            }
+            Separators::None => {}
+        }
+    }
+
+    /// The part of a header's `area` its title and signs are centred in:
+    /// all of it, but the line below a light header.
+    fn header_band(&self, area: Rect) -> Rect {
+        let lined = !self.dark_header && !self.plain_header && self.separators != Separators::None;
+        let line = if lined { self.line.max(1) as u16 } else { 0 };
+        Rect::new(area.x, area.y, area.width, area.height.saturating_sub(line))
     }
 
     /// The UI font.
@@ -269,11 +389,12 @@ pub fn draw_switch(canvas: &mut Canvas<'_>, style: &UiStyle, row: Rect, on: bool
         (Color::BLACK, Color::WHITE)
     };
     let border = button_border(style);
+    let radius = style.radius(u32::from(r.height));
     if on {
-        canvas.fill(r, ink);
+        canvas.fill_round(r, radius, ink);
     } else {
-        canvas.fill(r, paper);
-        canvas.stroke(r, border, ink);
+        canvas.fill_round(r, radius, paper);
+        canvas.stroke_round(r, border, radius, ink);
     }
     let pad = (border as u16 * 2).max(3);
     let knob = r.height.saturating_sub(2 * pad);
@@ -282,10 +403,13 @@ pub fn draw_switch(canvas: &mut Canvas<'_>, style: &UiStyle, row: Rect, on: bool
     } else {
         r.x + pad
     };
-    canvas.fill(
-        Rect::new(x, r.y + pad, knob, knob),
-        if on { paper } else { ink },
-    );
+    let knob_rect = Rect::new(x, r.y + pad, knob, knob);
+    let knob_radius = if style.pill {
+        u32::from(knob) / 2
+    } else {
+        radius.saturating_sub(u32::from(pad))
+    };
+    canvas.fill_round(knob_rect, knob_radius, if on { paper } else { ink });
 }
 
 /// Icons in lists are this much larger than the text beside them.
@@ -352,7 +476,7 @@ pub fn draw_switch_row(
     if !note.is_empty() {
         draw_note(canvas, env, style, rect, focused, note);
     }
-    draw_switch(canvas, style, band, on, focused);
+    draw_switch(canvas, style, band, on, focused && style.dark_focus());
 }
 
 /// Whether icons can be drawn (an icon font is there).
@@ -416,6 +540,43 @@ fn draw_text(
     font.draw(canvas, size, x, baseline, text, color)
 }
 
+/// The baseline that centres the ink of `text` at `size` in `band`,
+/// rather than its line, which leaves more room above the letters than
+/// below them: what headers use, so their words sit in the middle as
+/// their signs do.
+fn ink_baseline(font: &FontHandle<'_>, band: Rect, size: f32, text: &str) -> i32 {
+    let (top, bottom) = font.ink(size, text).unwrap_or_else(|| {
+        // No ink at all: as a line would be.
+        let metrics = font.line_metrics(size);
+        (-(metrics.ascent as i32), -(metrics.descent as i32))
+    });
+    let room = i32::from(band.height) - (bottom - top);
+    // Rounded down: an odd pixel goes below, where the eye expects it.
+    i32::from(band.y) + room.div_euclid(2) - top
+}
+
+/// [`draw_label`] on `baseline` rather than centred in `area`.
+#[allow(clippy::too_many_arguments)]
+fn draw_label_on(
+    canvas: &mut Canvas<'_>,
+    font: &FontHandle<'_>,
+    size: f32,
+    x: f32,
+    area: Rect,
+    baseline: i32,
+    text: &str,
+    color: Color,
+) -> f32 {
+    let room = f32::from(area.x) + f32::from(area.width) - x;
+    let at = Rect::new(x.max(0.0) as u16, area.y, room.max(0.0) as u16, area.height);
+    canvas.describe(Role::Text, text, at, false, None);
+    if room > 0.0 && font.measure(size, text) > room + 1.0 {
+        let text = fit(font, size, text, room);
+        return font.draw(canvas, size, x, baseline, &text, color);
+    }
+    font.draw(canvas, size, x, baseline, text, color)
+}
+
 /// A title and a value side by side in `width` pixels: both as they are
 /// if they fit, else shortened with "…". The title says what the row is,
 /// so it keeps up to 60 % of the width; the value gets the rest. Returns
@@ -457,22 +618,34 @@ pub fn draw_header(
     let mut right = f32::from(area.x) + f32::from(area.width) - margin;
     let note = note.map(|n| fit(&font, style.small, n, f32::from(area.width) / 2.0));
     if let Some(note) = note.as_deref() {
-        right -= font.measure(style.small, note);
-        draw_label(&mut canvas, &font, style.small, right, area, note, ink);
-        right -= margin;
+        right -= font.measure(style.small, note) + margin;
     }
-    let title = fit(
-        &font,
-        style.title,
-        title,
-        right - f32::from(area.x) - margin,
+    let title = fit(&font, style.head, title, right - f32::from(area.x) - margin);
+    let band = style.header_band(area);
+    if let Some(note) = note.as_deref() {
+        let (x, baseline) = (right + margin, ink_baseline(&font, band, style.small, note));
+        draw_label_on(
+            &mut canvas,
+            &font,
+            style.small,
+            x,
+            area,
+            baseline,
+            note,
+            ink,
+        );
+    }
+    let (x, baseline) = (
+        f32::from(area.x) + margin,
+        ink_baseline(&font, band, style.head, &title),
     );
-    draw_label(
+    draw_label_on(
         &mut canvas,
         &font,
-        style.title,
-        f32::from(area.x) + margin,
+        style.head,
+        x,
         area,
+        baseline,
         &title,
         ink,
     );
@@ -577,68 +750,66 @@ impl Header {
         let Some(font) = style.font(env) else {
             return;
         };
+        // Everything centred in the band by its ink: the arrows by their
+        // drawing, each text by its letters.
+        let band = style.header_band(self.area);
+        let middle = |area: Rect| Rect::new(area.x, band.y, area.width, band.height);
         let arrow = |canvas: &mut Canvas<'_>, area: Rect, left: bool, color: Color| {
-            let (x, y) = center(area);
+            let (x, y) = center(middle(area));
             draw_chevron(canvas, style, x, y, left, color);
         };
-        if let Some(back) = parts.back {
-            arrow(canvas, back, true, ink);
-        }
-        if let (Some((prev, label, next)), Some(page)) = (parts.pager, page) {
-            if self.arrows {
-                // At the first or last page, the arrow is gray.
-                let color = |end: bool| if end { Color::gray(110) } else { ink };
-                arrow(canvas, prev, true, color(page.0 == 0));
-                arrow(canvas, next, false, color(page.0 + 1 >= page.1));
-            }
-            let text = Self::page_label(page);
-            draw_label(
-                canvas,
-                &font,
-                style.small,
-                f32::from(label.x),
-                label,
-                &text,
-                ink,
-            );
-        }
         let t = parts.title;
         let margin = style.margin as f32;
         let mut right = f32::from(t.x) + f32::from(t.width) - margin;
-        let mut canvas = canvas.clipped(t);
         let note = note.map(|n| fit(&font, style.small, n, f32::from(t.width) / 2.0));
-        if let Some(note) = note.as_deref() {
+        let pad = style.gap as f32 / 2.0;
+        let note_x = note.as_deref().map(|note| {
+            right -= font.measure(style.small, note);
+            let x = right;
+            right -= margin + pad;
+            x
+        });
+        let title = fit(&font, style.head, title, right - f32::from(t.x));
+        let label = page.filter(|_| parts.pager.is_some()).map(Self::page_label);
+        let baseline = |size: f32, text: &str| ink_baseline(&font, band, size, text);
+        if let Some(back) = parts.back {
+            arrow(canvas, back, true, ink);
+        }
+        if let (Some((prev, at, next)), Some(page), Some(text)) = (parts.pager, page, &label) {
+            if self.arrows {
+                // At the first or last page, the arrow is gray.
+                let color = |end: bool| if end { Color::gray(150) } else { ink };
+                arrow(canvas, prev, true, color(page.0 == 0));
+                arrow(canvas, next, false, color(page.0 + 1 >= page.1));
+            }
+            let x = f32::from(at.x);
+            let y = baseline(style.small, text);
+            draw_label_on(canvas, &font, style.small, x, at, y, text, ink);
+        }
+        let mut canvas = canvas.clipped(t);
+        if let (Some(note), Some(x)) = (note.as_deref(), note_x) {
             let width = font.measure(style.small, note);
-            right -= width;
             // Focused: white on black, a little room around it.
-            let pad = style.gap as f32 / 2.0;
             let high = font.line_metrics(style.small).line_height as u16 + style.gap as u16;
             let around = Rect::new(
-                (right - pad) as u16,
-                t.y + t.height.saturating_sub(high) / 2,
+                (x - pad) as u16,
+                band.y + band.height.saturating_sub(high) / 2,
                 (width + 2.0 * pad) as u16,
                 high,
             );
             canvas.describe(Role::Button, note, around, self.note_focused, None);
             let note_ink = if self.note_focused {
-                fill_round(&mut canvas, style, around, ink);
+                canvas.fill_round(around, style.radius(u32::from(around.height)), ink);
                 style.header_colors().0
             } else {
                 ink
             };
-            draw_label(&mut canvas, &font, style.small, right, t, note, note_ink);
-            right -= margin + pad;
+            let y = baseline(style.small, note);
+            draw_label_on(&mut canvas, &font, style.small, x, t, y, note, note_ink);
         }
-        let title = fit(&font, style.title, title, right - f32::from(t.x));
-        draw_label(
-            &mut canvas,
-            &font,
-            style.title,
-            f32::from(t.x),
-            t,
-            &title,
-            ink,
-        );
+        let x = f32::from(t.x);
+        let y = baseline(style.head, &title);
+        draw_label_on(&mut canvas, &font, style.head, x, t, y, &title, ink);
     }
 
     /// The action a tap at `point` stands for: back, or the previous or
@@ -710,13 +881,15 @@ impl Pager {
     ) {
         let a = self.area;
         canvas.fill(a, Color::WHITE);
-        canvas.fill_rect(
-            i32::from(a.x) + style.margin as i32,
-            i32::from(a.y),
-            u32::from(a.width).saturating_sub(style.margin * 2),
-            style.line.max(1),
-            Color::gray(150),
-        );
+        if style.separators != Separators::None {
+            canvas.fill_rect(
+                i32::from(a.x) + style.margin as i32,
+                i32::from(a.y),
+                u32::from(a.width).saturating_sub(style.margin * 2),
+                style.line.max(1),
+                Color::gray(150),
+            );
+        }
         let Some(font) = style.font(env) else {
             return;
         };
@@ -787,7 +960,11 @@ pub fn draw_chevron(
         } else {
             tip - thickness as i32 + 1
         };
-        canvas.fill_rect(start, y + dy, thickness, 1, color);
+        // A tint, so a light (unavailable) arrow shows as gray on panels
+        // of black and white alone too.
+        if let (Ok(x), Ok(y)) = (u16::try_from(start), u16::try_from(y + dy)) {
+            canvas.fill_tint(Rect::new(x, y, thickness as u16, 1), color);
+        }
     }
 }
 
@@ -843,10 +1020,12 @@ pub fn draw_note_line(
 ) {
     let margin = style.margin as u16;
     let width = area.width.saturating_sub(2 * margin);
-    canvas.fill_tint(
-        Rect::new(area.x + margin, area.y, width, style.line as u16),
-        Color::gray(190),
-    );
+    if style.separators != Separators::None {
+        canvas.fill_tint(
+            Rect::new(area.x + margin, area.y, width, style.line as u16),
+            Color::gray(190),
+        );
+    }
     let Some(font) = style.font(env) else {
         return;
     };
@@ -923,6 +1102,10 @@ pub fn button_hints_height(env: &Env<'_>) -> u16 {
 /// the button does something too ([`draw_button_hints`]).
 pub const HOLD_ICON: &str = "hand-click";
 
+/// PaperPaw's paw: on empty screens ([`draw_empty`]) and as the busy
+/// mark, also in the hint of a button whose press is being worked on.
+pub const PAW_ICON: &str = "paw";
+
 pub fn draw_button_hints(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
@@ -934,13 +1117,25 @@ pub fn draw_button_hints(
     let style = UiStyle::new(env);
     canvas.fill(area, Color::WHITE);
     let line = style.line.min(u32::from(area.height));
-    canvas.fill_rect(
-        i32::from(area.x),
-        i32::from(area.y),
-        u32::from(area.width),
-        line,
-        Color::BLACK,
-    );
+    match style.separators {
+        Separators::Line => canvas.fill_rect(
+            i32::from(area.x),
+            i32::from(area.y),
+            u32::from(area.width),
+            line,
+            Color::BLACK,
+        ),
+        Separators::Inset => canvas.fill_tint(
+            Rect::new(
+                area.x + style.margin as u16,
+                area.y,
+                area.width.saturating_sub(2 * style.margin as u16),
+                line as u16,
+            ),
+            Color::gray(150),
+        ),
+        Separators::None => {}
+    }
     let Some(font) = style.font(env) else {
         return;
     };
@@ -959,21 +1154,26 @@ pub fn draw_button_hints(
         let mut room = (right - left).saturating_sub(2 * style.gap) as f32;
         let middle = left as f32 + (right - left) as f32 / 2.0;
         let ink = if pressed == Some(i as usize) {
-            canvas.fill(cell, Color::BLACK);
+            let pressed = cell.inset(style.gap as u16 / 2, style.gap as u16 / 4);
+            let radius = style.radius(u32::from(pressed.height));
+            canvas.fill_round(pressed, radius, Color::BLACK);
             Color::WHITE
         } else {
             Color::BLACK
         };
         // Holding the button does something too: a small hand beside its
-        // label, the two together in the middle.
-        let hold = held.get(i as usize).copied().unwrap_or(false)
+        // label, the two together in the middle; while its press is being
+        // worked on, the paw in its place.
+        let busy = pressed == Some(i as usize);
+        let hold = (busy || held.get(i as usize).copied().unwrap_or(false))
             && matches!(hint, Hint::Text(_) | Hint::Icon(_));
+        let sign = if busy { PAW_ICON } else { HOLD_ICON };
         // Smaller than the label, close to it, the cell's margins halved:
         // the label keeps its room (German words are long).
         let mark_size = style.small * 0.8;
         let mark = if hold {
             room += style.gap as f32;
-            icon_width(env, HOLD_ICON, mark_size) + style.gap as f32 / 4.0
+            icon_width(env, sign, mark_size) + style.gap as f32 / 4.0
         } else {
             0.0
         };
@@ -995,7 +1195,7 @@ pub fn draw_button_hints(
         };
         if hold {
             let x = end + style.gap as f32 / 4.0;
-            draw_icon(canvas, env, HOLD_ICON, mark_size, x, cell, ink);
+            draw_icon(canvas, env, sign, mark_size, x, cell, ink);
         }
     }
 }
@@ -1013,7 +1213,58 @@ pub fn focus_rect(style: &UiStyle, rect: Rect) -> Rect {
 /// black, for content drawn white on it. Every list draws its focus this
 /// way, so it looks the same everywhere.
 pub fn draw_focus(canvas: &mut Canvas<'_>, style: &UiStyle, rect: Rect) {
-    fill_round(canvas, style, focus_rect(style, rect), Color::BLACK);
+    let r = focus_rect(style, rect);
+    // Items taller than wide (a cover) keep the corners.
+    let radius = if r.width < r.height {
+        style.corner
+    } else {
+        style.radius(u32::from(r.height))
+    };
+    let ring = (style.line * 2).max(3);
+    match style.focus {
+        Focus::Fill => canvas.fill_round(r, radius, Color::BLACK),
+        Focus::Ring => canvas.stroke_round(r, ring, radius, Color::BLACK),
+        Focus::Soft if style.grays > 2 => {
+            // As light as the panel shows with black text reading well.
+            let gray = if style.grays >= 16 { 215 } else { 170 };
+            canvas.fill_round(r, radius, Color::gray(gray));
+        }
+        Focus::Soft => canvas.stroke_round(r, ring, radius, Color::BLACK),
+    }
+}
+
+/// Draws the line below the row in `rect` as the style's separators
+/// are: `indent` is where the row's text starts after the margin (e.g.
+/// right of an icon), where faint lines start.
+pub fn draw_separator(canvas: &mut Canvas<'_>, style: &UiStyle, rect: Rect, indent: u16) {
+    let margin = style.margin as u16;
+    let line = style.line as u16;
+    let y = rect.y + rect.height - line;
+    match style.separators {
+        Separators::Line => canvas.fill_tint(
+            Rect::new(
+                rect.x + margin,
+                y,
+                rect.width.saturating_sub(2 * margin),
+                line,
+            ),
+            Color::gray(190),
+        ),
+        Separators::Inset => {
+            let start = margin + indent;
+            let thin = (line / 2).max(1);
+            canvas.fill_tint(
+                Rect::new(
+                    rect.x + start,
+                    y,
+                    rect.width.saturating_sub(start + margin),
+                    thin,
+                ),
+                Color::gray(210),
+            );
+        }
+        Separators::None => {}
+    }
 }
 
 /// An empty screen or list, saying what would be here and how it gets
@@ -1075,6 +1326,17 @@ pub fn draw_empty(
             at,
             style.faint(120),
         );
+        // A small paw beside the icon, as if it had just walked past;
+        // the icon stays in the middle.
+        let size = icon_size * 0.4;
+        let below = Rect::new(
+            area.x,
+            (y + icon_size - size) as u16,
+            area.width,
+            size as u16,
+        );
+        let x = centre(w) + w + gap / 2.0;
+        draw_icon(canvas, env, PAW_ICON, size, x, below, style.faint(120));
         y += icon_room;
     }
     if !title.is_empty() {
@@ -1355,13 +1617,7 @@ impl ListView {
             if focused {
                 draw_focus(canvas, style, rect);
             } else if self.columns == 1 {
-                let separator = Rect::new(
-                    rect.x + style.margin as u16,
-                    rect.y + rect.height - style.line as u16,
-                    rect.width.saturating_sub(2 * style.margin as u16),
-                    style.line as u16,
-                );
-                canvas.fill_tint(separator, Color::gray(170));
+                draw_separator(canvas, style, rect, 0);
             }
             draw_row(canvas, index, rect, focused);
         }
@@ -1437,11 +1693,7 @@ fn draw_note_below(
     canvas.describe(Role::Text, note, at, false, None);
     let margin = style.margin as f32;
     let width = f32::from(rect.width) - 2.0 * margin;
-    let color = if focused {
-        Color::gray(215)
-    } else {
-        style.faint(80)
-    };
+    let color = style.focus_faint(focused, 80);
     let line = style.small * NOTE_LINE_HEIGHT;
     let ascent = font.line_metrics(style.small).ascent;
     let top = f32::from(below);
@@ -1479,7 +1731,7 @@ pub fn draw_value_row(
     let Some(font) = style.font(env) else {
         return;
     };
-    let color = if focused { Color::WHITE } else { Color::BLACK };
+    let color = style.focus_ink(focused);
     let margin = style.margin as f32;
     let width = f32::from(rect.width) - 2.0 * margin;
     let (title, value, value_width) =
@@ -1613,7 +1865,7 @@ fn button_frame(
         (Color::WHITE, Color::BLACK)
     };
     let border = button_border(style);
-    let r = style.corner;
+    let r = style.radius(u32::from(rect.height.min(rect.width)));
     let (x, y, w, h) = (
         i32::from(rect.x),
         i32::from(rect.y),
@@ -1751,17 +2003,10 @@ pub fn draw_stepper(
     // From the row's own start, e.g. right of an icon.
     let left = f32::from(rect.x) + margin;
     let title = fit(&font, style.text, title, f32::from(minus.x) - left - margin);
-    draw_label(canvas, &font, style.text, left, rect, &title, Color::WHITE);
+    let ink = style.focus_ink(true);
+    draw_label(canvas, &font, style.text, left, rect, &title, ink);
     let value_x = centred(&font, style.text, value, minus, plus);
-    draw_label(
-        canvas,
-        &font,
-        style.text,
-        value_x,
-        rect,
-        value,
-        Color::WHITE,
-    );
+    draw_label(canvas, &font, style.text, value_x, rect, value, ink);
     draw_focused_steps(canvas, style, &font, rect, (minus, plus), editing);
 }
 
@@ -1783,12 +2028,15 @@ fn draw_focused_steps(
             u32::from(button.width),
             u32::from(button.height),
         );
+        let ink = style.focus_ink(true);
+        let paper = style.focus_paper(true);
+        let r = style.radius(h);
         let glyph_color = if editing {
-            canvas.fill_rect(x, y, w, h, Color::WHITE);
-            Color::BLACK
+            canvas.fill_round_rect(x, y, w, h, r, ink);
+            paper
         } else {
-            canvas.stroke_rect(x, y, w, h, button_border(style), Color::WHITE);
-            Color::WHITE
+            canvas.stroke_round_rect(x, y, w, h, button_border(style), r, ink);
+            ink
         };
         let glyph_width = font.measure(style.text, glyph);
         let glyph_x = f32::from(button.x) + (f32::from(button.width) - glyph_width) / 2.0;

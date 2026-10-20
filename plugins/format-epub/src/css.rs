@@ -416,6 +416,8 @@ pub(crate) struct FontFace {
 
 /// Rules read beyond this are dropped (memory bound on small devices).
 const MAX_RULES: usize = 512;
+/// Embedded fonts kept at most, so their list stays readable.
+const MAX_FACES: usize = 64;
 
 impl Rules {
     /// What the rules set for an element, by specificity, then order.
@@ -448,9 +450,13 @@ impl Rules {
         Props::parse_with(declarations, &mut self.families)
     }
 
-    /// Adds an `@font-face` rule of a stylesheet in folder `base`. Only
-    /// OpenType and TrueType files are used (not WOFF).
+    /// Adds an `@font-face` rule of a stylesheet in folder `base`: its
+    /// OpenType, TrueType or WOFF file (see [`font_url`]); [`MAX_FACES`]
+    /// at most.
     fn add_face(&mut self, declarations: &str, base: &str) {
+        if self.faces.len() >= MAX_FACES {
+            return;
+        }
         let mut name = String::new();
         let mut src = None;
         let (mut bold, mut italic) = (false, false);
@@ -563,6 +569,9 @@ pub(crate) struct Parser {
     skip_depth: u32,
     /// Inside an `@font-face` block.
     in_face: bool,
+    /// Inside a quoted string, and its quote: braces, semicolons and
+    /// comments in it are text.
+    quote: Option<char>,
     previous: char,
     /// Folder of the stylesheet, for font URLs.
     base: String,
@@ -590,9 +599,37 @@ impl Parser {
                 }
                 continue;
             }
+            if let Some(quote) = self.quote {
+                if c == quote && previous != '\\' {
+                    self.quote = None;
+                }
+                if self.skip_depth == 0 && self.buffer.len() < MAX_PART {
+                    self.buffer.push(c);
+                }
+                // An escaped backslash escapes nothing after it.
+                if previous == '\\' && c == '\\' {
+                    self.previous = ' ';
+                }
+                continue;
+            }
             if previous == '/' && c == '*' {
                 self.buffer.pop();
                 self.in_comment = true;
+                // Its star does not end it (`/*/`).
+                self.previous = ' ';
+                continue;
+            }
+            if matches!(c, '"' | '\'') {
+                self.quote = Some(c);
+            }
+            // White space alone does not fill what is kept of a part.
+            if c.is_whitespace() {
+                if self.buffer.ends_with(' ') || self.buffer.trim_start().is_empty() {
+                    continue;
+                }
+                if self.skip_depth == 0 && self.buffer.len() < MAX_PART {
+                    self.buffer.push(' ');
+                }
                 continue;
             }
             if self.skip_depth > 0 {
@@ -678,6 +715,34 @@ mod tests {
             parser.feed(core::str::from_utf8(piece).unwrap(), &mut rules);
         }
         rules
+    }
+
+    #[test]
+    fn strings_comments_and_space_do_not_end_rules() {
+        let r = rules(
+            ".a { content: \"} ;\"; text-align: center } /*/ .b { text-align: right } */ \
+             .c { font-family: 'x}y'; font-weight: bold }",
+        );
+        assert_eq!(r.props("p", "a").align, Some(Align::Center));
+        assert_eq!(r.props("p", "b").align, None);
+        assert_eq!(r.props("p", "c").bold, Some(true));
+        // A rule after much white space is read whole.
+        let mut css = String::from(".d { text-align: left }");
+        css.push_str(&" ".repeat(10_000));
+        css.push_str(".e { text-align: right }");
+        let r = rules(&css);
+        assert_eq!(r.props("p", "e").align, Some(Align::End));
+    }
+
+    #[test]
+    fn embedded_fonts_are_bounded() {
+        let mut css = String::new();
+        for i in 0..1000 {
+            css.push_str(&alloc::format!(
+                "@font-face {{ font-family: F; src: url(f{i}.ttf) }}"
+            ));
+        }
+        assert_eq!(rules(&css).faces.len(), MAX_FACES);
     }
 
     #[test]

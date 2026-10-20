@@ -688,11 +688,7 @@ impl Screen for TodoScreen {
         let items = &self.items;
         self.list
             .draw(canvas, &style, len, |canvas, row, rect, focused| {
-                let (ink, paper) = if focused {
-                    (Color::WHITE, Color::BLACK)
-                } else {
-                    (Color::BLACK, Color::WHITE)
-                };
+                let (ink, paper) = (style.focus_ink(focused), style.focus_paper(focused));
                 let margin = style.margin as u16;
                 let inner = Rect::new(
                     rect.x + margin,
@@ -703,7 +699,7 @@ impl Screen for TodoScreen {
                 let look = Look {
                     area: inner,
                     ink,
-                    faint: if focused {
+                    faint: if focused && style.dark_focus() {
                         Color::gray(200)
                     } else {
                         style.faint(90)

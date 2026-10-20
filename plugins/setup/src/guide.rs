@@ -234,7 +234,9 @@ impl Guide {
         let style = &self.style;
         let display = env.device.display;
         let (w, h) = (display.width, display.height);
-        let margin = style.margin as u16 * 2;
+        // A little more room than menus have, but not twice theirs, which
+        // left wide margins too little width.
+        let margin = (style.margin + style.gap) as u16;
         let gap = style.gap as u16;
         let width = w.saturating_sub(2 * margin);
         // The text flows: the question, its explanation right below, the
@@ -289,8 +291,11 @@ impl Guide {
                 let segments = self.two(env).map(|_| {
                     let inset = style.margin as u16 / 2;
                     let half = (card.width - 3 * inset) / 2;
-                    let top = card.y + inset;
-                    let height = card.height.saturating_sub(2 * inset);
+                    // Wide margins and a short card leave the buttons
+                    // their height.
+                    let above = inset.min(gap).min(card.height / 6);
+                    let top = card.y + above;
+                    let height = card.height.saturating_sub(2 * above);
                     (
                         Rect::new(card.x + inset, top, half, height),
                         Rect::new(card.x + 2 * inset + half, top, half, height),

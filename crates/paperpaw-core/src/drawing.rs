@@ -359,10 +359,10 @@ impl Kernel {
             let mut canvas = canvas.clipped(mark);
             paperpaw_sdk::ui::fill_round(&mut canvas, &style, mark, Color::BLACK);
             let size = f32::from(mark.height) * 0.6;
+            let sign = paperpaw_sdk::ui::PAW_ICON;
             let x = f32::from(mark.x)
-                + (f32::from(mark.width) - paperpaw_sdk::ui::icon_width(&env, BUSY_ICON, size))
-                    / 2.0;
-            paperpaw_sdk::ui::draw_icon(&mut canvas, &env, BUSY_ICON, size, x, mark, Color::WHITE);
+                + (f32::from(mark.width) - paperpaw_sdk::ui::icon_width(&env, sign, size)) / 2.0;
+            paperpaw_sdk::ui::draw_icon(&mut canvas, &env, sign, size, x, mark, Color::WHITE);
         }
         // A message over everything.
         if let Some((notice, _)) = &mut self.notice
@@ -373,7 +373,7 @@ impl Kernel {
     }
 
     /// What the screens shown are, part by part (rows, buttons, headings
-    /// with their text), as their drawing tells (see
+    /// with their text, a notice over them), as their drawing tells (see
     /// [`paperpaw_sdk::semantics`]): for reading the screen aloud,
     /// automation and tests. Draws them once, aside.
     pub fn describe(&mut self) -> Vec<paperpaw_sdk::semantics::Part> {
@@ -411,6 +411,11 @@ impl Kernel {
                     &self.hint.held,
                     None,
                 );
+            }
+            // A message over everything, last.
+            if let Some((notice, _)) = &mut self.notice {
+                let area = notice.region(&env).unwrap_or(bounds);
+                notice.draw(&mut canvas.clipped(area), &env);
             }
         }
         paperpaw_sdk::semantics::parts(described)

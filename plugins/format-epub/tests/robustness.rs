@@ -232,3 +232,77 @@ fn unmodified_books_still_read() {
         assert!(exercise(book.to_vec()) > 20);
     }
 }
+
+/// Reads any document as a reader would, within bounds.
+fn read_document(doc: &dyn Document, storage: &MemoryStorage) {
+    for section in 0..doc.sections().min(4) {
+        let mut at = Locator::new(section, 0);
+        for _ in 0..5000 {
+            match doc.block_at(storage, at) {
+                Ok(Some(block)) => {
+                    assert!(block.end > at.offset, "no progress at {at:?}");
+                    at = Locator::new(section, block.end);
+                }
+                _ => break,
+            }
+        }
+    }
+    for i in 0..doc.toc_len(storage).min(50) {
+        let _ = doc.toc_entry(storage, i);
+        let _ = doc.toc_target(storage, i);
+    }
+    let _ = doc.cover(storage);
+}
+
+const FB2: &str = r##"<?xml version="1.0" encoding="utf-8"?>
+<FictionBook xmlns:l="http://www.w3.org/1999/xlink"><description><title-info>
+<author><first-name>Ann</first-name><last-name>Example</last-name></author>
+<book-title>Damaged</book-title><coverpage><image l:href="#c"/></coverpage>
+</title-info></description><body><title><p>Damaged</p></title>
+<section><title><p>One</p></title><p>Some <emphasis>text</emphasis><a l:href="#n1">1</a>.</p>
+<section><title><p>Inner</p></title><p>More <style name="x">styled</style> text.</p></section>
+</section><section><title><p>Two</p></title><poem><stanza><v>A line</v></stanza></poem></section>
+</body><body name="notes"><section id="n1"><p>A note.</p></section></body>
+<binary id="c" content-type="image/png">iVBORw0KGgo=</binary></FictionBook>"##;
+
+const HTML: &str = "<!DOCTYPE html><html lang=\"en\"><head><title>Page</title>\
+    <style>.x { text-align: center }</style></head><body><nav>Menu</nav><main>\
+    <h1>Title</h1><p class=\"x\">A <a href=\"#n\">link</a><p>Open<ul><li>One<li>Two</ul>\
+    <table><tr><td>A<td>B</table><p id=\"n\">Note</main></body></html>";
+
+const MARKDOWN: &str = "# Title\n\nSome *text* and **more** with `code`.\n\n\
+    - one\n- [a link](https://example.org)\n\n> quoted\n\n```\ncode\n```\n\n\
+    ![picture](p.png)\n\n1. first\n2. second\n";
+
+#[test]
+fn damaged_fictionbooks_web_pages_and_markdown_fail_cleanly() {
+    use paperpaw_plugin_format_epub::{Fb2Document, HtmlDocument, MarkdownDocument};
+    let iterations: u64 = std::env::var("PAPERPAW_FUZZ_ITERATIONS")
+        .ok()
+        .and_then(|n| n.parse().ok())
+        .unwrap_or(60);
+    for seed in 1..=iterations {
+        let mut rng = Rng(seed.wrapping_mul(0x9e37_79b9_7f4a_7c15) | 1);
+        let (fb2, html, markdown) = (
+            mutate_text(FB2, &mut rng),
+            mutate_text(HTML, &mut rng),
+            mutate_text(MARKDOWN, &mut rng),
+        );
+        let result = std::panic::catch_unwind(|| {
+            let storage = MemoryStorage::new()
+                .with("b/book.fb2", fb2)
+                .with("b/page.html", html)
+                .with("b/notes.md", markdown);
+            if let Ok(doc) = Fb2Document::open(&storage, "b/book.fb2", true) {
+                read_document(&doc, &storage);
+            }
+            if let Ok(doc) = HtmlDocument::open(&storage, "b/page.html", true) {
+                read_document(&doc, &storage);
+            }
+            if let Ok(doc) = MarkdownDocument::open(&storage, "b/notes.md", true) {
+                read_document(&doc, &storage);
+            }
+        });
+        assert!(result.is_ok(), "seed {seed} panicked");
+    }
+}

@@ -11,11 +11,12 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use paperpaw_sdk::builtin::groups;
+use paperpaw_sdk::builtin::{groups, settings};
+use paperpaw_sdk::ui::UiStyle;
 use paperpaw_sdk::widgets;
 use paperpaw_sdk::{
-    Command, Env, Id, RegisterError, Registrar, SettingExtra, SettingKind, SettingSpec,
-    SettingValue,
+    Canvas, Color, Command, Env, Id, RegisterError, Registrar, SettingExtra, SettingKind,
+    SettingSpec, SettingValue,
 };
 
 use crate::{ACTIONS, SCREEN};
@@ -38,6 +39,28 @@ pub(crate) const STATUS_BAR: Setting<bool> = Setting::new("home.status-bar");
 pub(crate) const FOOTER_PENCIL: Setting<bool> = Setting::new("home.footer.pencil");
 pub(crate) const FOOTER_DOTS: Setting<bool> = Setting::new("home.footer.dots");
 pub(crate) const FOOTER_ITEMS: Setting<Text> = Setting::new("home.footer.items");
+
+/// Draws the dot of a page (or a layout) `size` pixels wide at `x`, `y`,
+/// filled for the current one: round where small shapes are pills or
+/// corners round, else square.
+pub(crate) fn draw_dot(
+    canvas: &mut Canvas<'_>,
+    env: &Env<'_>,
+    style: &UiStyle,
+    (x, y): (i32, i32),
+    size: u32,
+    filled: bool,
+) {
+    let corners = env.settings.text(settings::UI_CORNERS.as_str());
+    let round = style.pill || settings::CORNERS[2..].contains(&corners);
+    let radius = if round { size / 2 } else { 0 };
+    if filled {
+        canvas.fill_round_rect(x, y, size, size, radius, Color::BLACK);
+    } else {
+        let line = style.line.max(1);
+        canvas.stroke_round_rect(x, y, size, size, line, radius, Color::BLACK);
+    }
+}
 
 /// The built-in widgets (see `blocks`).
 pub(crate) const STATUS: &str = "home.status";

@@ -4,6 +4,7 @@ use alloc::vec::Vec;
 
 use paperpaw_document::ImageRef;
 use paperpaw_graphics::Canvas;
+use paperpaw_graphics::round::corner_inset;
 use paperpaw_image::{ColorFile, Downscaler, GrayFile, ImageError, ImageFile, ImageSink, luma};
 use paperpaw_platform::{PixelFormat, Storage};
 
@@ -213,10 +214,17 @@ impl Thumbnail {
     /// canvas clip only. A picture made small: it does not count as a
     /// large one that leaves ghosts ([`Canvas::small_pictures`]).
     pub fn draw(&self, canvas: &mut Canvas<'_>, x: u16, y: u16) {
-        canvas.small_pictures(|canvas| self.draw_rows(canvas, x, y));
+        self.draw_round(canvas, x, y, 0);
     }
 
-    fn draw_rows(&self, canvas: &mut Canvas<'_>, x: u16, y: u16) {
+    /// Draws it as [`Thumbnail::draw`] does, its corners rounded by
+    /// `radius` pixels (e.g. a cover, as a book's): the pixels outside the
+    /// arcs are left out, what is behind them stays.
+    pub fn draw_round(&self, canvas: &mut Canvas<'_>, x: u16, y: u16, radius: u32) {
+        canvas.small_pictures(|canvas| self.draw_rows(canvas, x, y, radius));
+    }
+
+    fn draw_rows(&self, canvas: &mut Canvas<'_>, x: u16, y: u16, radius: u32) {
         let clip = canvas.clip();
         let top = u32::from(y);
         let first = top.max(u32::from(clip.y));
@@ -226,10 +234,23 @@ impl Thumbnail {
         }
         let width = usize::from(self.width);
         let stride = self.depth.row(self.width);
+        let (w, h) = (u32::from(self.width), u32::from(self.height));
+        let r = radius.min(w / 2).min(h / 2);
+        // The first and the last pixel of row `n` drawn.
+        let span = |n: u32| {
+            let inset = if r == 0 {
+                0
+            } else {
+                corner_inset(r, n, h) as usize
+            };
+            (inset, width - inset)
+        };
         if self.depth == Depth::Rgb {
             for row_y in first..last {
                 let at = (row_y - top) as usize * stride;
-                canvas.draw_rgb_row(i32::from(x), row_y as i32, &self.pixels[at..at + stride]);
+                let (from, to) = span(row_y - top);
+                let rgb = &self.pixels[at + from * 3..at + to * 3];
+                canvas.draw_rgb_row(i32::from(x) + from as i32, row_y as i32, rgb);
             }
             return;
         }
@@ -253,7 +274,8 @@ impl Thumbnail {
                     }
                 };
             }
-            canvas.draw_gray_row(i32::from(x), row_y as i32, &row);
+            let (from, to) = span(row_y - top);
+            canvas.draw_gray_row(i32::from(x) + from as i32, row_y as i32, &row[from..to]);
         }
     }
 }
@@ -446,6 +468,31 @@ mod tests {
         let view = frame.view();
         assert_eq!(view.pixel(2, 1), Color::BLACK);
         assert_eq!(view.pixel(22, 10), Color::WHITE);
+    }
+
+    #[test]
+    fn rounded_corners_leave_what_is_behind() {
+        let storage = MemoryStorage::new();
+        let image = picture(&storage);
+        // Black on the left half, white on the right.
+        let thumb = Thumbnail::new(&storage, &image, 40, 20, PixelFormat::Mono1).unwrap();
+        let mut frame = Framebuffer::new(50, 30, PixelFormat::Mono1).unwrap();
+        let mut canvas = frame.canvas();
+        // Behind it: white on the left, black on the right.
+        canvas.clear(Color::WHITE);
+        canvas.fill(Rect::new(25, 0, 25, 30), Color::BLACK);
+        thumb.draw_round(&mut canvas, 5, 5, 4);
+        let view = frame.view();
+        // In the corners, what is behind.
+        assert_eq!(view.pixel(5, 5), Color::WHITE);
+        assert_eq!(view.pixel(5, 24), Color::WHITE);
+        assert_eq!(view.pixel(44, 5), Color::BLACK);
+        assert_eq!(view.pixel(44, 24), Color::BLACK);
+        // Along the edges and within, the picture.
+        assert_eq!(view.pixel(5, 14), Color::BLACK);
+        assert_eq!(view.pixel(9, 5), Color::BLACK);
+        assert_eq!(view.pixel(44, 14), Color::WHITE);
+        assert_eq!(view.pixel(40, 5), Color::WHITE);
     }
 
     #[test]

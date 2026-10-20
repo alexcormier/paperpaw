@@ -229,7 +229,9 @@ impl Screen for InfoScreen {
 
         // The cover beside title and author.
         match (&layout.cover, &d.cover) {
-            (Some((at, Some(small))), _) => small.draw(canvas, at.x, at.y),
+            (Some((at, Some(small))), _) => {
+                small.draw_round(canvas, at.x, at.y, crate::picture_radius(&style, *at));
+            }
             (Some((at, None)), _) => {
                 ui::stroke_round(
                     canvas,
