@@ -5,7 +5,6 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use paperpaw_sdk::document::is_external;
 use paperpaw_sdk::web::{encode, file_name};
 use paperpaw_sdk::xml::{Token, Tokenizer, decode, local_name};
 use paperpaw_sdk::{Storage, StorageError};
@@ -27,15 +26,21 @@ pub(crate) enum Kind {
     Other,
 }
 
-/// The address to load for what was typed: an address as it is (with
-/// `https://` if it has none), else a search for the words.
+/// The address to load for what was typed: a web address as it is,
+/// another (a name with a dot or a port, as `example.org:8080`) with
+/// `https://`, else a search for the words.
 pub(crate) fn address(input: &str) -> String {
     let text = input.trim();
-    if is_external(text) {
+    let scheme = text.get(..8).unwrap_or(text).to_ascii_lowercase();
+    if scheme.starts_with("http://") || scheme.starts_with("https://") {
         return text.to_string();
     }
+    let host = text.split(['/', '?', '#']).next().unwrap_or_default();
+    let port = host.rsplit_once(':').is_some_and(|(name, port)| {
+        !name.is_empty() && !port.is_empty() && port.bytes().all(|b| b.is_ascii_digit())
+    });
     let looks_like_address = !text.contains(char::is_whitespace)
-        && text.contains('.')
+        && (text.contains('.') || port)
         && !text.starts_with('.')
         && !text.ends_with('.');
     if looks_like_address {
@@ -171,6 +176,14 @@ mod tests {
         assert_eq!(
             address("localhost"),
             "https://html.duckduckgo.com/html/?q=localhost"
+        );
+        // With a port: an address, not a scheme.
+        assert_eq!(address("example.org:8080/x"), "https://example.org:8080/x");
+        assert_eq!(address("localhost:8080"), "https://localhost:8080");
+        assert_eq!(address("HTTPS://A.org"), "HTTPS://A.org");
+        assert_eq!(
+            address("note: 8080"),
+            "https://html.duckduckgo.com/html/?q=note%3A+8080"
         );
     }
 

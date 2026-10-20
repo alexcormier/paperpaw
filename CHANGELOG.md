@@ -6,6 +6,10 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Browser: an address typed with a port (`example.org:8080`,
+  `localhost:8080`) is loaded over `https://`; it was taken for an
+  address of another kind and failed. In the tools it now comes before
+  Calibre instead of sharing its place.
 - Security: Calibre is connected to only on a computer the reader chose.
   One found in the network is shown with its name and address and
   trusted once the reader connects to it (kept in
