@@ -573,7 +573,7 @@ fn register_general_settings(r: &mut Registrar) -> Result<(), RegisterError> {
 /// advanced settings its header, corners, highlight, lines, groups,
 /// titles and room. The defaults are PaperPaw's look (soft corners,
 /// pills, plain headers, faint lines); themes (data plugins) set others.
-static LOOK: [SettingSpec; 12] = [
+static LOOK: [SettingSpec; 13] = [
     SettingSpec::fixed_number(
         settings::UI_SIZE.static_str(),
         "core.setting.ui-size",
@@ -703,6 +703,16 @@ static LOOK: [SettingSpec; 12] = [
     )
     .for_advanced()
     .described("core.setting.logo.help"),
+    // The interface's grays by what they are for: for themes, which set
+    // it in their settings.ini.
+    SettingSpec::fixed_text(
+        settings::UI_PALETTE.static_str(),
+        "core.setting.ui-palette",
+        "",
+        groups::LOOK,
+    )
+    .for_advanced()
+    .described("core.setting.ui-palette.help"),
 ];
 
 fn register_look_settings(r: &mut Registrar) -> Result<(), RegisterError> {

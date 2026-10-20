@@ -219,7 +219,7 @@ impl Header {
         if let (Some((_, at, _)), Some(page), Some(text)) = (parts.pager, page, &label) {
             if self.arrows {
                 // At the first or last page, the arrow is gray.
-                let color = |end: bool| if end { Color::gray(150) } else { ink };
+                let color = |end: bool| if end { style.ink(Ink::Disabled) } else { ink };
                 arrow(canvas, prev_x, true, color(page.0 == 0));
                 arrow(canvas, next_x, false, color(page.0 + 1 >= page.1));
             }
@@ -345,7 +345,7 @@ impl Pager {
                 i32::from(a.y),
                 u32::from(a.width).saturating_sub(style.margin * 2),
                 style.line.max(1),
-                Color::gray(150),
+                style.ink(Ink::Rule),
             );
         }
         let Some(font) = style.font(env) else {
@@ -357,7 +357,13 @@ impl Pager {
         if self.arrows {
             let side = i32::from(a.width) / 4;
             let (_, y) = center(a);
-            let dim = |end: bool| if end { Color::gray(170) } else { Color::BLACK };
+            let dim = |end: bool| {
+                if end {
+                    style.ink(Ink::Disabled)
+                } else {
+                    Color::BLACK
+                }
+            };
             let x = i32::from(a.x);
             draw_chevron(canvas, style, x + side, y, true, dim(page.0 == 0));
             draw_chevron(

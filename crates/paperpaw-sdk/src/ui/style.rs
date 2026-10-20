@@ -58,6 +58,156 @@ pub struct UiStyle {
     pub finger: u32,
     /// The look a plugin gave the parts (see [`look`](super::look)).
     pub look: super::look::Look,
+    /// The grays of the interface (see [`UiStyle::ink`]).
+    pub palette: Palette,
+}
+
+/// What a colour is for ([`UiStyle::ink`]): the grays of the interface,
+/// each set by the palette (setting `core.ui-palette`), so a theme
+/// changes them all at once and plugins draw in the same grays.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum Ink {
+    /// Text and what is drawn in its colour.
+    Text,
+    /// What the interface is drawn on.
+    Paper,
+    /// Notes below the titles of rows, what an empty screen explains.
+    Note,
+    /// Headings of sections, a widget's lesser text.
+    Muted,
+    /// The least of text, e.g. what an empty screen says.
+    Faint,
+    /// What cannot be used now, e.g. an arrow at the last page.
+    Disabled,
+    /// The line below a light header or above the row of button hints.
+    Rule,
+    /// The lines between rows.
+    Line,
+    /// The fainter lines between rows that start at the text.
+    LineFaint,
+    /// Gray text on a dark focus.
+    OnFocusMuted,
+    /// Lesser text on a dark card.
+    OnDarkMuted,
+    /// Cards, e.g. the frames of widgets.
+    Card,
+    /// Cards on panels of black and white alone, drawn as a pattern.
+    CardPattern,
+    /// The cards a list's sections are on.
+    Section,
+}
+
+impl Ink {
+    /// Every role, in the order of [`Palette`]'s values.
+    pub const ALL: [Ink; 14] = [
+        Ink::Text,
+        Ink::Paper,
+        Ink::Note,
+        Ink::Muted,
+        Ink::Faint,
+        Ink::Disabled,
+        Ink::Rule,
+        Ink::Line,
+        Ink::LineFaint,
+        Ink::OnFocusMuted,
+        Ink::OnDarkMuted,
+        Ink::Card,
+        Ink::CardPattern,
+        Ink::Section,
+    ];
+
+    /// Its name in the palette, e.g. `muted`.
+    pub const fn name(self) -> &'static str {
+        match self {
+            Ink::Text => "text",
+            Ink::Paper => "paper",
+            Ink::Note => "note",
+            Ink::Muted => "muted",
+            Ink::Faint => "faint",
+            Ink::Disabled => "disabled",
+            Ink::Rule => "rule",
+            Ink::Line => "line",
+            Ink::LineFaint => "line-faint",
+            Ink::OnFocusMuted => "on-focus-muted",
+            Ink::OnDarkMuted => "on-dark-muted",
+            Ink::Card => "card",
+            Ink::CardPattern => "card-pattern",
+            Ink::Section => "section",
+        }
+    }
+
+    /// Text, which strong contrast draws black.
+    const fn is_text(self) -> bool {
+        matches!(self, Ink::Note | Ink::Muted | Ink::Faint)
+    }
+}
+
+/// The gray of each [`Ink`] (0 black, 255 white), read from the setting
+/// `core.ui-palette`: names and values separated by spaces, e.g.
+/// `muted=60 line=170`; what it leaves out has its default.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Palette([u8; 14]);
+
+impl Palette {
+    /// The interface's own grays.
+    pub const DEFAULT: Palette = Palette([
+        0, 255, 60, 90, 120, 150, 150, 190, 210, 215, 200, 225, 240, 238,
+    ]);
+
+    /// The default with what `text` sets; names it does not know and bad
+    /// values are left out.
+    pub fn parse(text: &str) -> Palette {
+        let mut palette = Palette::DEFAULT;
+        for pair in text.split_whitespace() {
+            let Some((name, value)) = pair.split_once('=') else {
+                continue;
+            };
+            let (Some(at), Ok(value)) = (
+                Ink::ALL.iter().position(|ink| ink.name() == name),
+                value.parse::<u8>(),
+            ) else {
+                continue;
+            };
+            palette.0[at] = value;
+        }
+        palette
+    }
+
+    /// The gray of `ink`.
+    pub fn gray(&self, ink: Ink) -> u8 {
+        let at = Ink::ALL.iter().position(|i| *i == ink).unwrap_or(0);
+        self.0[at]
+    }
+}
+
+impl Default for Palette {
+    fn default() -> Self {
+        Self::DEFAULT
+    }
+}
+
+/// What a text is (see [`UiStyle::size`]): its size follows from the
+/// style's, so text of one kind is as large on every screen.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum TextRole {
+    /// Smaller than small, e.g. under an icon.
+    Caption,
+    /// Hints, notes, status lines.
+    Small,
+    /// Most text.
+    Body,
+    /// Titles of dialogs and widgets.
+    Title,
+    /// The titles of headers.
+    Head,
+    /// Large, e.g. a widget's main line.
+    Headline,
+    /// Larger, e.g. a clock.
+    Display,
+    /// Large numbers standing alone, e.g. a page count.
+    Numeral,
 }
 
 /// How the focus of rows and items is drawn ([`draw_focus`]).
@@ -110,6 +260,7 @@ impl UiStyle {
         grays: 2,
         finger: 0,
         look: super::look::Look::none(),
+        palette: Palette::DEFAULT,
     };
 
     pub fn new(env: &Env<'_>) -> Self {
@@ -161,6 +312,7 @@ impl UiStyle {
             grays: env.device.display.format.gray_levels().unwrap_or(256),
             finger: if env.device.input.touch { m.mm(7) } else { 0 },
             look: env.look,
+            palette: Palette::parse(s.text(settings::UI_PALETTE.as_str())),
         }
     }
 
@@ -208,7 +360,7 @@ impl UiStyle {
     /// (light on a dark focus).
     pub fn focus_faint(&self, focused: bool, gray: u8) -> Color {
         if focused && self.dark_focus() {
-            Color::gray(215)
+            self.ink(Ink::OnFocusMuted)
         } else {
             self.faint(gray)
         }
@@ -219,6 +371,30 @@ impl UiStyle {
     /// ([`UiStyle::finger`]); as it is with buttons alone.
     pub fn touch_row(&self, height: u32) -> u32 {
         height.max(self.finger * 10 / 7)
+    }
+
+    /// The colour of `ink` in the palette; gray text (notes, headings,
+    /// what cannot be used) black for strong contrast.
+    pub fn ink(&self, ink: Ink) -> Color {
+        if self.strong && ink.is_text() {
+            Color::BLACK
+        } else {
+            Color::gray(self.palette.gray(ink))
+        }
+    }
+
+    /// The size of text of `role`.
+    pub fn size(&self, role: TextRole) -> f32 {
+        match role {
+            TextRole::Caption => self.small * 0.8,
+            TextRole::Small => self.small,
+            TextRole::Body => self.text,
+            TextRole::Title => self.title,
+            TextRole::Head => self.head,
+            TextRole::Headline => self.title * 1.6,
+            TextRole::Display => self.title * 2.0,
+            TextRole::Numeral => self.title * 3.0,
+        }
     }
 
     /// The colour of gray text such as hints and notes: `gray`, or black
@@ -256,7 +432,10 @@ impl UiStyle {
             Separators::Inset => {
                 let margin = self.margin as u16;
                 let width = area.width.saturating_sub(2 * margin);
-                canvas.fill_tint(Rect::new(area.x + margin, y, width, line), Color::gray(150));
+                canvas.fill_tint(
+                    Rect::new(area.x + margin, y, width, line),
+                    self.ink(Ink::Rule),
+                );
             }
             Separators::None => {}
         }
@@ -352,7 +531,7 @@ pub fn draw_separator(canvas: &mut Canvas<'_>, style: &UiStyle, rect: Rect, inde
                 rect.width.saturating_sub(2 * margin),
                 line,
             ),
-            Color::gray(190),
+            style.ink(Ink::Line),
         ),
         Separators::Inset => {
             let start = margin + indent;
@@ -364,7 +543,7 @@ pub fn draw_separator(canvas: &mut Canvas<'_>, style: &UiStyle, rect: Rect, inde
                     rect.width.saturating_sub(start + margin),
                     thin,
                 ),
-                Color::gray(210),
+                style.ink(Ink::LineFaint),
             );
         }
         Separators::None => {}

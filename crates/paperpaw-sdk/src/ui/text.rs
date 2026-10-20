@@ -98,7 +98,7 @@ pub fn draw_heading(
         x,
         text_area,
         text,
-        style.faint(90),
+        style.ink(Ink::Muted),
     );
 }
 
@@ -400,7 +400,7 @@ pub fn draw_note_line(
     if style.separators != Separators::None {
         canvas.fill_tint(
             Rect::new(area.x + margin, area.y, width, style.line as u16),
-            Color::gray(190),
+            style.ink(Ink::Line),
         );
     }
     let Some(font) = style.font(env) else {
@@ -435,7 +435,7 @@ pub fn draw_note_line(
             f32::from(row.x),
             row,
             &shown,
-            style.faint(60),
+            style.ink(Ink::Note),
         );
         y += line;
     }
@@ -520,7 +520,7 @@ pub fn draw_empty(
             icon_size,
             centre(w),
             at,
-            style.faint(120),
+            style.ink(Ink::Faint),
         );
         // A small paw beside the icon, as if it had just walked past;
         // the icon stays in the middle.
@@ -535,7 +535,7 @@ pub fn draw_empty(
         // Only where it fits beside the icon (not in a narrow area).
         let right = f32::from(area.x) + f32::from(area.width);
         if x + icon_width(env, PAW_ICON, size) <= right {
-            draw_icon(canvas, env, PAW_ICON, size, x, below, style.faint(120));
+            draw_icon(canvas, env, PAW_ICON, size, x, below, style.ink(Ink::Faint));
         }
         y += icon_room;
     }
@@ -583,7 +583,7 @@ pub fn draw_empty(
             x,
             (y + ascent) as i32,
             &shown,
-            style.faint(70),
+            style.ink(Ink::Note),
         );
         y += line;
     }

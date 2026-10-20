@@ -793,3 +793,38 @@ fn a_look_paints_the_parts_and_keeps_what_they_say() {
     assert_eq!(said_after, said_before);
     assert!(said_after.contains(&(Role::Switch, Some(true))));
 }
+
+/// A theme's grays: the palette names them by what they are for, and
+/// the parts draw in them.
+#[test]
+fn the_palette_sets_the_grays_the_parts_draw_in() {
+    use paperpaw_sdk::Color;
+    use paperpaw_sdk::ui::{Ink, Palette, TextRole};
+    let palette = Palette::parse("muted=60 line=100 bad nope=3 faint=x note=300");
+    assert_eq!(palette.gray(Ink::Muted), 60);
+    assert_eq!(palette.gray(Ink::Line), 100);
+    // What it does not set, or sets wrongly, keeps its default.
+    for ink in [Ink::Faint, Ink::Note, Ink::Rule, Ink::Text, Ink::Paper] {
+        assert_eq!(palette.gray(ink), Palette::DEFAULT.gray(ink), "{ink:?}");
+    }
+    assert_eq!(Palette::parse(""), Palette::DEFAULT);
+
+    let h = Harness::new(Device::TOUCH);
+    let env = h.env();
+    let mut style = UiStyle::new(&env);
+    style.separators = ui::Separators::Line;
+    style.palette = palette;
+    let row = Rect::new(0, 0, 480, 80);
+    let mut lined = frame(480, 100);
+    ui::draw_separator(&mut lined.canvas(), &style, row, 0);
+    let y = row.height - style.line as u16;
+    assert_eq!(lined.view().pixel(240, y), Color::gray(100));
+    assert_eq!(style.ink(Ink::Muted), Color::gray(60));
+    // Strong contrast draws gray text black, not the lines.
+    style.strong = true;
+    assert_eq!(style.ink(Ink::Muted), Color::BLACK);
+    assert_eq!(style.ink(Ink::Line), Color::gray(100));
+    // Text of one kind is as large everywhere.
+    assert_eq!(style.size(TextRole::Body), style.text);
+    assert_eq!(style.size(TextRole::Headline), style.title * 1.6);
+}

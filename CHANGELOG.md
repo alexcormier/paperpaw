@@ -6,6 +6,13 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: the interface's grays have roles (`ui::Ink`: text, notes,
+  muted, faint, disabled, rules, lines, cards, …), `UiStyle::ink` gives
+  each, from the palette a theme sets in `core.ui-palette` (e.g.
+  `muted=60 line=170`; `ui::Palette`). `UiStyle::size(TextRole)` gives
+  the sizes of text by kind (caption to numeral). The SDK's parts draw
+  in them; two grays became one each (an empty screen's explanation is
+  drawn as notes, the pager's last arrow as what cannot be used).
 - SDK: a plugin gives the parts of every screen a look of its own:
   `Registrar::set_ui_look(&'static Painters, Priority)` with painters
   for switches, the focus, separators, buttons, headers, the row of

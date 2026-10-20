@@ -397,11 +397,11 @@ pub fn look(env: &Env<'_>, widget: &str, area: Rect) -> Look {
             if style.strong {
                 Color::WHITE
             } else {
-                Color::gray(200)
+                style.ink(ui::Ink::OnDarkMuted)
             },
             Color::BLACK,
         ),
-        _ => (Color::BLACK, style.faint(90), Color::WHITE),
+        _ => (Color::BLACK, style.ink(ui::Ink::Muted), Color::WHITE),
     };
     Look {
         area: inner,
@@ -429,11 +429,11 @@ pub fn draw_frame(canvas: &mut Canvas<'_>, env: &Env<'_>, widget: &str, area: Re
         Frame::Card if style.grays <= 2 => {
             // A light gray would be a heavy pattern on black and white:
             // the sparsest there is, in a thin line as cards in lists.
-            canvas.fill_round_shaded(area, style.corner, Color::gray(240));
+            canvas.fill_round_shaded(area, style.corner, style.ink(ui::Ink::CardPattern));
             let line = (style.line / 2).max(1);
             canvas.stroke_round(area, line, style.corner, Color::BLACK);
         }
-        Frame::Card => canvas.fill_round_shaded(area, style.corner, Color::gray(225)),
+        Frame::Card => canvas.fill_round_shaded(area, style.corner, style.ink(ui::Ink::Card)),
         Frame::Dark => ui::fill_round(canvas, &style, area, Color::BLACK),
     }
     look
@@ -818,6 +818,7 @@ mod tests {
             grays: 2,
             finger: 0,
             look: crate::ui::look::Look::none(),
+            palette: crate::ui::Palette::DEFAULT,
         };
         // Without a frame, automatic is none: lined up with the margins;
         // inside one, normal, as frames always had it.

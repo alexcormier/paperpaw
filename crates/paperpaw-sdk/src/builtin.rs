@@ -868,6 +868,9 @@ pub mod settings {
     pub const UI_CONTRAST: Setting<Text> = Setting::new("core.ui-contrast");
     pub const CONTRAST_NORMAL: &str = "core.contrast.normal";
     pub const CONTRAST_STRONG: &str = "core.contrast.strong";
+    /// The grays of the interface by what they are for, e.g. `muted=60
+    /// line=170` (see [`ui::Palette`](crate::ui::Palette)): for themes.
+    pub const UI_PALETTE: Setting<Text> = Setting::new("core.ui-palette");
     /// How long short messages show, in seconds.
     pub const NOTICE_SECONDS: Setting<i64> = Setting::new("core.notice-seconds");
     /// Milliseconds a button or finger must be held for a long press.
