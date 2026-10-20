@@ -72,6 +72,40 @@ pub enum PluginState {
     Failed,
 }
 
+/// What a plugin is made of.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum PluginKind {
+    /// Built into PaperPaw.
+    #[default]
+    BuiltIn,
+    /// A folder of data files on the storage (a theme, a translation …).
+    Data,
+    /// A folder on the storage with native code ([`native`](crate::native)).
+    Code,
+}
+
+/// Why a code plugin does not run, for plugin managers to say.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum PluginProblem {
+    /// Its code was built for another version of PaperPaw or another
+    /// device: it waits for a build for this one.
+    OtherBuild,
+    /// Its code's file is damaged, or not one this PaperPaw reads.
+    Damaged,
+    /// Its code does not fit its folder (another plugin's id).
+    Mismatch,
+    /// There is no room left for its code (the X4's flash).
+    NoRoom,
+    /// This PaperPaw loads no code plugins.
+    Unsupported,
+    /// This start went without code plugins
+    /// ([`SafeMode`](crate::native::SafeMode)).
+    SafeMode,
+    /// Safe mode switched it off: PaperPaw did not start with it.
+    Crashed,
+}
+
 /// A plugin and its state.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PluginInfo {
@@ -85,6 +119,9 @@ pub struct PluginInfo {
     /// plugin off would leave them empty, so it stays on until another
     /// plugin can take over.
     pub required_for: RequiredFor,
+    pub kind: PluginKind,
+    /// Why it does not run, where its code is the reason.
+    pub problem: Option<PluginProblem>,
 }
 
 impl PluginInfo {
@@ -201,6 +238,8 @@ mod tests {
             state,
             enabled,
             required_for: RequiredFor::default(),
+            kind: PluginKind::BuiltIn,
+            problem: None,
         }
     }
 

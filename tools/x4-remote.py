@@ -15,7 +15,7 @@ Usage:
   python tools/x4-remote.py --pull .paperpaw/plugins/stats stats/   (a folder off it)
   python tools/x4-remote.py --ls books   --cat paperpaw.ini   --rm updates/old.bin
   python tools/x4-remote.py --mkdir books/new   --mv books/a.epub books/b.epub
-  python tools/x4-remote.py --info     (version, plugins, the screens open, the time)
+  python tools/x4-remote.py --info     (version, plugins, native code, the screens open, the time)
   python tools/x4-remote.py --crashes  (the crash file, its calls named from the
       firmware's symbols: the build that crashed must be the one built here)
   python tools/x4-remote.py --profile --script "page-forward,wait:2000"
@@ -64,7 +64,9 @@ STEPS, separated by commas:
 
   What runs, and changes:
   version            the firmware's version and the plugin crates built in
-  plugins            every plugin, on or off, with its version
+  plugins            every plugin, on or off, with its version (and whether it
+                     has native code, and why that does not run)
+  native             where native code plugins lie, or why there is no room
   actions:reader.    the actions (those beginning so; all without)
   settings:reader.   the settings and their values
   usage              what each plugin took since start: time, calls,
@@ -518,6 +520,9 @@ def run(x4, step):
         case ["plugins"]:
             for answer in x4.ask("plugins", "END")[:-1]:
                 print(answer.split(" ", 1)[1])
+        case ["native"]:
+            for answer in x4.ask("native", "END")[:-1]:
+                print(answer.split(" ", 1)[1])
         case ["actions", *_]:
             for answer in x4.ask(f"actions {rest}".strip(), "END")[:-1]:
                 print(answer.split(" ", 1)[1])
@@ -619,7 +624,7 @@ def main():
     parser.add_argument("--rm", action="append", default=[], metavar="PATH")
     parser.add_argument("--mkdir", action="append", default=[], metavar="PATH")
     parser.add_argument("--mv", nargs=2, action="append", default=[], metavar=("FROM", "TO"))
-    parser.add_argument("--info", action="store_true", help="version, plugins, screens, time")
+    parser.add_argument("--info", action="store_true", help="version, plugins, native code, screens, time")
     parser.add_argument("--crashes", action="store_true", help="the crash file, its calls named")
     parser.add_argument(
         "--wifi-connect", metavar="NAME", help="join a network (asks for its password, not shown)"
@@ -636,7 +641,7 @@ def main():
             print(line)
         return
     if args.info:
-        for step in ["version", "plugins", "screens", "time"]:
+        for step in ["version", "plugins", "native", "screens", "time"]:
             run(x4, step)
     if args.crashes:
         text = x4.read(".paperpaw/crashes.txt").decode("utf-8", "replace")

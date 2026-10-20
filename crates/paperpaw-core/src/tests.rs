@@ -54,7 +54,7 @@ impl Kernel {
     }
 }
 
-const DEVICE: DeviceInfo = DeviceInfo {
+pub(crate) const DEVICE: DeviceInfo = DeviceInfo {
     id: "test",
     name: "Test device",
     display: DisplayInfo {
@@ -2645,9 +2645,9 @@ impl Plugin for ServicePlugin {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         if self.id == "provider" {
-            r.add_service(Id::new_static("provider.greeting"), Box::new("hello"))?;
+            r.publish(Id::new_static("provider.greeting"), "hello")?;
             // Not in its namespace: refused.
-            let stolen = r.add_service(Id::new_static("core.greeting"), Box::new(1u8));
+            let stolen = r.publish(Id::new_static("core.greeting"), 1u8);
             assert!(matches!(stolen, Err(RegisterError::Namespace { .. })));
             return r.contribute(Id::new_static("provider.shapes"), Cow::Borrowed("circle"));
         }

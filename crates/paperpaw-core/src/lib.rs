@@ -38,6 +38,7 @@
 extern crate alloc;
 
 mod builder;
+mod code_plugin;
 mod commands;
 mod config;
 mod core_plugin;
@@ -77,6 +78,7 @@ use paperpaw_sdk::builtin::{
     settings as core_settings, slots,
 };
 use paperpaw_sdk::event::EventData;
+use paperpaw_sdk::native::{Native, SafeMode};
 use paperpaw_sdk::setting::{Setting, SettingType};
 use paperpaw_sdk::{
     Actions, Capabilities, Command, Contribution, Cx, Direction, Env, EnvParts, EventHandler,
@@ -86,6 +88,7 @@ use paperpaw_sdk::{
 };
 
 pub use crate::builder::KernelBuilder;
+pub use crate::code_plugin::CodeLoader;
 use crate::config::{mono_coverage, plugin_switches, read_config};
 use crate::core_plugin::{CORE, CorePlugin};
 use crate::input::{Recognized, Recognizer, Thresholds};
@@ -903,6 +906,9 @@ struct Shared {
     /// Firmware updates, where PaperPaw is the firmware (see
     /// [`KernelBuilder::firmware`]).
     firmware: Option<Firmware>,
+    /// How code plugins are loaded, where they are (see
+    /// [`KernelBuilder::code_plugins`]).
+    native: Option<paperpaw_sdk::native::Native>,
     /// Text copied here.
     clipboard: String,
     /// The system's clipboard has text (see
@@ -960,6 +966,7 @@ impl Shared {
             caps: self.caps,
             wifi: self.wifi.as_ref(),
             firmware: self.firmware.as_ref(),
+            native: self.native.as_ref(),
             clipboard: self.system_clipboard || !self.clipboard.is_empty(),
             slots: &self.slots,
             screens: &self.screens,

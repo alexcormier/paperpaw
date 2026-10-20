@@ -465,6 +465,9 @@ pub paperpaw_sdk::contribution::Contribution::MenuNeed::item: paperpaw_sdk::Id
 pub paperpaw_sdk::contribution::Contribution::MenuNeed::need: paperpaw_sdk::MenuNeed
 pub paperpaw_sdk::contribution::Contribution::MenuSection(paperpaw_sdk::MenuSection)
 pub paperpaw_sdk::contribution::Contribution::Preset(alloc::boxed::Box<paperpaw_sdk::presets::Preset>)
+pub paperpaw_sdk::contribution::Contribution::Published
+pub paperpaw_sdk::contribution::Contribution::Published::id: paperpaw_sdk::Id
+pub paperpaw_sdk::contribution::Contribution::Published::service: paperpaw_sdk::services::Service
 pub paperpaw_sdk::contribution::Contribution::RefreshFilter(paperpaw_sdk::filters::RefreshFilterSpec)
 pub paperpaw_sdk::contribution::Contribution::Screen(paperpaw_sdk::ScreenSpec)
 pub paperpaw_sdk::contribution::Contribution::ScreenHints
@@ -543,6 +546,7 @@ pub fn paperpaw_sdk::contribution::Registrar::into_contributions(self) -> alloc:
 pub fn paperpaw_sdk::contribution::Registrar::new(paperpaw_sdk::Id) -> Self
 pub fn paperpaw_sdk::contribution::Registrar::on<P: paperpaw_sdk::event::EventData>(&mut self, paperpaw_sdk::event::Event<P>, impl core::ops::function::Fn(&paperpaw_sdk::Env<'_>, &P, &mut alloc::vec::Vec<paperpaw_sdk::Command>) + 'static) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::plugin(&self) -> &paperpaw_sdk::Id
+pub fn paperpaw_sdk::contribution::Registrar::publish<T: core::any::Any>(&mut self, paperpaw_sdk::Id, T) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::set_menu_need(&mut self, impl core::convert::Into<paperpaw_sdk::Id>, paperpaw_sdk::MenuNeed) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::set_screen_hints(&mut self, paperpaw_sdk::Id, paperpaw_sdk::Hints) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::set_setting_default(&mut self, paperpaw_sdk::Id, alloc::borrow::Cow<'static, str>) -> core::result::Result<(), paperpaw_sdk::RegisterError>
@@ -1121,6 +1125,42 @@ pub fn paperpaw_sdk::logo::Logo::fit(&self, u16, u16) -> (u16, u16)
 pub fn paperpaw_sdk::logo::Logo::read(&paperpaw_sdk::Env<'_>, u16, u16) -> paperpaw_sdk::logo::Logo
 pub const paperpaw_sdk::logo::LOGO: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
 pub fn paperpaw_sdk::logo::draw(&mut paperpaw_graphics::canvas::Canvas<'_>, paperpaw_platform::geometry::Rect, paperpaw_platform::pixel::Color)
+pub mod paperpaw_sdk::native
+pub use paperpaw_sdk::native::BadSignature
+pub use paperpaw_sdk::native::Chip
+pub use paperpaw_sdk::native::HEADER_LEN
+pub use paperpaw_sdk::native::Header
+pub use paperpaw_sdk::native::Problem
+pub use paperpaw_sdk::native::Signature
+pub use paperpaw_sdk::native::signature
+#[non_exhaustive] pub enum paperpaw_sdk::native::SafeModeReason
+pub paperpaw_sdk::native::SafeModeReason::FailedStarts
+pub paperpaw_sdk::native::SafeModeReason::KeyHeld
+pub struct paperpaw_sdk::native::Fingerprint(pub u64)
+impl paperpaw_sdk::native::Fingerprint
+pub fn paperpaw_sdk::native::Fingerprint::parse(&str) -> core::option::Option<paperpaw_sdk::native::Fingerprint>
+impl core::fmt::Display for paperpaw_sdk::native::Fingerprint
+pub fn paperpaw_sdk::native::Fingerprint::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub struct paperpaw_sdk::native::Native
+pub paperpaw_sdk::native::Native::file: alloc::borrow::Cow<'static, str>
+pub paperpaw_sdk::native::Native::fingerprint: paperpaw_sdk::native::Fingerprint
+pub paperpaw_sdk::native::Native::safe_mode: core::option::Option<paperpaw_sdk::native::SafeMode>
+pub paperpaw_sdk::native::Native::toolchain: alloc::borrow::Cow<'static, str>
+impl paperpaw_sdk::native::Native
+pub fn paperpaw_sdk::native::Native::new(impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
+pub fn paperpaw_sdk::native::Native::path(&self, &str) -> alloc::string::String
+#[non_exhaustive] pub struct paperpaw_sdk::native::SafeMode
+pub paperpaw_sdk::native::SafeMode::crashed: core::option::Option<alloc::string::String>
+pub paperpaw_sdk::native::SafeMode::last_loaded: core::option::Option<alloc::string::String>
+pub paperpaw_sdk::native::SafeMode::reason: paperpaw_sdk::native::SafeModeReason
+pub paperpaw_sdk::native::SafeMode::switched_off: alloc::vec::Vec<paperpaw_sdk::Id>
+impl paperpaw_sdk::native::SafeMode
+pub fn paperpaw_sdk::native::SafeMode::new(paperpaw_sdk::native::SafeModeReason) -> Self
+pub const paperpaw_sdk::native::CODE_FILES: [&str; 2]
+pub const paperpaw_sdk::native::FINGERPRINT: paperpaw_sdk::native::Fingerprint
+pub const paperpaw_sdk::native::TOOLCHAIN: &str
+pub fn paperpaw_sdk::native::check_file(&dyn paperpaw_platform::storage::Storage, &str) -> core::result::Result<(paperpaw_native::header::Header, core::option::Option<paperpaw_native::signature::Signature>), paperpaw_native::header::Problem>
+pub unsafe fn paperpaw_sdk::native::take(*mut core::ffi::c_void) -> core::option::Option<alloc::boxed::Box<dyn paperpaw_sdk::Plugin>>
 pub mod paperpaw_sdk::presets
 #[non_exhaustive] pub struct paperpaw_sdk::presets::Preset
 pub paperpaw_sdk::presets::Preset::description: alloc::borrow::Cow<'static, str>
@@ -1266,6 +1306,12 @@ pub const paperpaw_sdk::server_params::STARTED: &str
 pub const paperpaw_sdk::server_params::STOPPED: &str
 pub const paperpaw_sdk::server_params::TARGET: &str
 pub mod paperpaw_sdk::services
+pub struct paperpaw_sdk::services::Service
+impl paperpaw_sdk::services::Service
+pub fn paperpaw_sdk::services::Service::any(alloc::boxed::Box<dyn core::any::Any>) -> Self
+pub fn paperpaw_sdk::services::Service::new<T: core::any::Any>(T) -> Self
+impl core::fmt::Debug for paperpaw_sdk::services::Service
+pub fn paperpaw_sdk::services::Service::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct paperpaw_sdk::services::Services
 impl paperpaw_sdk::services::Services
 pub fn paperpaw_sdk::services::Services::add(&mut self, paperpaw_sdk::Id, alloc::boxed::Box<dyn core::any::Any>)
@@ -1273,6 +1319,7 @@ pub fn paperpaw_sdk::services::Services::contribute(&mut self, paperpaw_sdk::Id,
 pub fn paperpaw_sdk::services::Services::contributions<'a>(&'a self, &'a str) -> impl core::iter::traits::iterator::Iterator<Item = (&'a paperpaw_sdk::Id, &'a str)>
 pub fn paperpaw_sdk::services::Services::get<T: core::any::Any>(&self, &str) -> core::option::Option<&T>
 pub fn paperpaw_sdk::services::Services::has(&self, &str) -> bool
+pub fn paperpaw_sdk::services::Services::insert(&mut self, paperpaw_sdk::Id, paperpaw_sdk::services::Service)
 pub fn paperpaw_sdk::services::Services::new() -> Self
 pub fn paperpaw_sdk::services::Services::shrink_to_fit(&mut self)
 impl core::fmt::Debug for paperpaw_sdk::services::Services
@@ -2153,6 +2200,7 @@ pub mod paperpaw_sdk::zip
 pub use paperpaw_sdk::zip::<<paperpaw_zip::*>>
 pub macro paperpaw_sdk::data_path!
 pub macro paperpaw_sdk::event_data!
+pub macro paperpaw_sdk::plugin!
 pub macro paperpaw_sdk::role_settings!
 #[non_exhaustive] pub enum paperpaw_sdk::ActionHint
 pub paperpaw_sdk::ActionHint::Hidden
@@ -2272,6 +2320,9 @@ pub paperpaw_sdk::Contribution::MenuNeed::item: paperpaw_sdk::Id
 pub paperpaw_sdk::Contribution::MenuNeed::need: paperpaw_sdk::MenuNeed
 pub paperpaw_sdk::Contribution::MenuSection(paperpaw_sdk::MenuSection)
 pub paperpaw_sdk::Contribution::Preset(alloc::boxed::Box<paperpaw_sdk::presets::Preset>)
+pub paperpaw_sdk::Contribution::Published
+pub paperpaw_sdk::Contribution::Published::id: paperpaw_sdk::Id
+pub paperpaw_sdk::Contribution::Published::service: paperpaw_sdk::services::Service
 pub paperpaw_sdk::Contribution::RefreshFilter(paperpaw_sdk::filters::RefreshFilterSpec)
 pub paperpaw_sdk::Contribution::Screen(paperpaw_sdk::ScreenSpec)
 pub paperpaw_sdk::Contribution::ScreenHints
@@ -2348,6 +2399,18 @@ pub paperpaw_sdk::MenuNeed::Rotation
 pub paperpaw_sdk::MenuNeed::Sleep
 pub paperpaw_sdk::MenuNeed::Speech
 pub paperpaw_sdk::MenuNeed::Wifi
+pub enum paperpaw_sdk::PluginKind
+pub paperpaw_sdk::PluginKind::BuiltIn
+pub paperpaw_sdk::PluginKind::Code
+pub paperpaw_sdk::PluginKind::Data
+#[non_exhaustive] pub enum paperpaw_sdk::PluginProblem
+pub paperpaw_sdk::PluginProblem::Crashed
+pub paperpaw_sdk::PluginProblem::Damaged
+pub paperpaw_sdk::PluginProblem::Mismatch
+pub paperpaw_sdk::PluginProblem::NoRoom
+pub paperpaw_sdk::PluginProblem::OtherBuild
+pub paperpaw_sdk::PluginProblem::SafeMode
+pub paperpaw_sdk::PluginProblem::Unsupported
 pub enum paperpaw_sdk::PluginState
 pub paperpaw_sdk::PluginState::Failed
 pub paperpaw_sdk::PluginState::Off
@@ -2517,6 +2580,7 @@ pub paperpaw_sdk::Env::i18n: &'a paperpaw_i18n::Translator
 pub paperpaw_sdk::Env::keys: &'a dyn paperpaw_sdk::keys::KeyBindings
 pub paperpaw_sdk::Env::menus: &'a paperpaw_sdk::Menus
 pub paperpaw_sdk::Env::metrics: paperpaw_sdk::Metrics
+pub paperpaw_sdk::Env::native: core::option::Option<&'a paperpaw_sdk::native::Native>
 pub paperpaw_sdk::Env::now: paperpaw_platform::input::Instant
 pub paperpaw_sdk::Env::plugins: &'a paperpaw_sdk::Plugins
 pub paperpaw_sdk::Env::screens: &'a [(paperpaw_sdk::Id, alloc::borrow::Cow<'static, str>)]
@@ -2832,7 +2896,9 @@ pub fn paperpaw_sdk::Params::from_params(&paperpaw_sdk::Params) -> core::option:
 pub fn paperpaw_sdk::Params::to_params(&self) -> paperpaw_sdk::Params
 pub struct paperpaw_sdk::PluginInfo
 pub paperpaw_sdk::PluginInfo::enabled: bool
+pub paperpaw_sdk::PluginInfo::kind: paperpaw_sdk::PluginKind
 pub paperpaw_sdk::PluginInfo::manifest: paperpaw_sdk::Manifest
+pub paperpaw_sdk::PluginInfo::problem: core::option::Option<paperpaw_sdk::PluginProblem>
 pub paperpaw_sdk::PluginInfo::required_for: paperpaw_sdk::RequiredFor
 pub paperpaw_sdk::PluginInfo::state: paperpaw_sdk::PluginState
 impl paperpaw_sdk::PluginInfo
@@ -2900,6 +2966,7 @@ pub fn paperpaw_sdk::contribution::Registrar::into_contributions(self) -> alloc:
 pub fn paperpaw_sdk::contribution::Registrar::new(paperpaw_sdk::Id) -> Self
 pub fn paperpaw_sdk::contribution::Registrar::on<P: paperpaw_sdk::event::EventData>(&mut self, paperpaw_sdk::event::Event<P>, impl core::ops::function::Fn(&paperpaw_sdk::Env<'_>, &P, &mut alloc::vec::Vec<paperpaw_sdk::Command>) + 'static) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::plugin(&self) -> &paperpaw_sdk::Id
+pub fn paperpaw_sdk::contribution::Registrar::publish<T: core::any::Any>(&mut self, paperpaw_sdk::Id, T) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::set_menu_need(&mut self, impl core::convert::Into<paperpaw_sdk::Id>, paperpaw_sdk::MenuNeed) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::set_screen_hints(&mut self, paperpaw_sdk::Id, paperpaw_sdk::Hints) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::set_setting_default(&mut self, paperpaw_sdk::Id, alloc::borrow::Cow<'static, str>) -> core::result::Result<(), paperpaw_sdk::RegisterError>

@@ -113,6 +113,9 @@ pub struct Env<'a> {
     /// Firmware updates, where PaperPaw is the device's firmware (see
     /// [`firmware`](crate::firmware)); `None` where it is an app.
     pub firmware: Option<&'a crate::firmware::Firmware>,
+    /// How native code plugins are loaded here, e.g. which builds fit
+    /// (see [`native`](crate::native)); `None` where PaperPaw loads none.
+    pub native: Option<&'a crate::native::Native>,
     /// Whether there is text on the clipboard, copied here
     /// ([`Command::SetClipboard`](crate::Command::SetClipboard)) or, where
     /// the system has a clipboard, in another app; read it with
@@ -199,6 +202,9 @@ pub struct EnvParts<'a> {
     /// Firmware updates, where PaperPaw is the device's firmware (see
     /// [`firmware`](crate::firmware)); `None` where it is an app.
     pub firmware: Option<&'a crate::firmware::Firmware>,
+    /// How native code plugins are loaded here, e.g. which builds fit
+    /// (see [`native`](crate::native)); `None` where PaperPaw loads none.
+    pub native: Option<&'a crate::native::Native>,
     /// Whether there is text on the clipboard, copied here
     /// ([`Command::SetClipboard`](crate::Command::SetClipboard)) or, where
     /// the system has a clipboard, in another app; read it with
@@ -254,6 +260,7 @@ impl<'a> From<EnvParts<'a>> for Env<'a> {
             caps: p.caps,
             wifi: p.wifi,
             firmware: p.firmware,
+            native: p.native,
             clipboard: p.clipboard,
             slots: p.slots,
             screens: p.screens,
