@@ -268,6 +268,7 @@ mod tests {
                 description: Cow::Borrowed("Native code."),
                 version: Version::new(1, 0, 0),
                 sdk: SDK_VERSION,
+                uses: paperpaw_sdk::Uses::NOTHING,
             }
         }
 

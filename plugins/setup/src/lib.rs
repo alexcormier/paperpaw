@@ -65,6 +65,7 @@ impl Plugin for Setup {
             description: Cow::Borrowed("A short guide through the settings that matter."),
             version: Version::new(0, 1, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NOTHING,
         }
     }
 

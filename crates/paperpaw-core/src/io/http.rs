@@ -226,6 +226,7 @@ impl Http {
             content_type: response.content_type,
             final_url: response.url,
             context: awaiting.context,
+            refused: None,
         };
         let mut params = answer.to_params();
         params.set(http_params::BODY, body);

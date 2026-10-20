@@ -285,6 +285,7 @@ mod tests {
             content_type: None,
             final_url: None,
             context: Params::new(),
+            refused: None,
         };
         let name = || String::from("Berlin");
         let (places, search) =

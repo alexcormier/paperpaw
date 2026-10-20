@@ -59,6 +59,7 @@ pub mod numbers;
 mod params;
 mod plugin;
 mod plugins;
+pub mod power;
 pub mod presets;
 pub mod random;
 pub mod replies;
@@ -78,6 +79,7 @@ pub mod web;
 pub mod widgets;
 pub mod wifi;
 pub mod words;
+pub mod work;
 
 pub use action::{ActionHandler, ActionHint, ActionSpec, Actions};
 pub use command::{
@@ -97,7 +99,7 @@ pub use id::{Id, InvalidId};
 pub use memory_storage::{MemoryStorage, read_file};
 pub use menus::{MenuEntry, MenuItem, MenuNeed, MenuSection, Menus};
 pub use params::Params;
-pub use plugin::{Manifest, Plugin, Priority, RegisterError, SlotSpec};
+pub use plugin::{Manifest, Plugin, Priority, RegisterError, SlotSpec, Uses};
 pub use plugins::{PluginInfo, PluginKind, PluginProblem, PluginState, Plugins, RequiredFor};
 pub use replies::{Chosen, HttpReply, ServerNotice, SocketNotice, Typed};
 pub use screen::{Cx, Handled, Hint, Hints, Output, Screen, ScreenFactory, ScreenSpec};

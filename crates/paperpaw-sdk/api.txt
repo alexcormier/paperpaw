@@ -230,6 +230,7 @@ pub const paperpaw_sdk::builtin::events::NETWORK_WANTED: paperpaw_sdk::event::Ev
 pub const paperpaw_sdk::builtin::events::NOTES_EXPORTED: paperpaw_sdk::event::Event<paperpaw_sdk::builtin::events::NotesExported>
 pub const paperpaw_sdk::builtin::events::PAGE_TURNED: paperpaw_sdk::event::Event<paperpaw_sdk::builtin::events::Reading>
 pub const paperpaw_sdk::builtin::events::PLUGINS_CHANGED: paperpaw_sdk::event::Event<()>
+pub const paperpaw_sdk::builtin::events::POWER_CHANGED: paperpaw_sdk::event::Event<()>
 pub const paperpaw_sdk::builtin::events::PREVIEW_CHANGED: paperpaw_sdk::event::Event<()>
 pub const paperpaw_sdk::builtin::events::RESUME: paperpaw_sdk::event::Event<()>
 pub const paperpaw_sdk::builtin::events::SETTING_CHANGED: paperpaw_sdk::event::Event<paperpaw_sdk::builtin::events::SettingChanged>
@@ -242,6 +243,8 @@ pub const paperpaw_sdk::builtin::events::WIFI_CHANGED: paperpaw_sdk::event::Even
 pub const paperpaw_sdk::builtin::events::WIFI_FAILED: paperpaw_sdk::event::Event<paperpaw_sdk::builtin::events::WifiFailed>
 pub const paperpaw_sdk::builtin::events::WIFI_SCANNED: paperpaw_sdk::event::Event<()>
 pub const paperpaw_sdk::builtin::events::WORD_LOOKED_UP: paperpaw_sdk::event::Event<paperpaw_sdk::builtin::events::WordLookedUp>
+pub const paperpaw_sdk::builtin::events::WORK_ALLOWED: paperpaw_sdk::event::Event<()>
+pub const paperpaw_sdk::builtin::events::WORK_REFUSED: paperpaw_sdk::event::Event<paperpaw_sdk::work::WorkRefused>
 pub mod paperpaw_sdk::builtin::fonts
 pub const paperpaw_sdk::builtin::fonts::ICONS: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::fonts::READING: paperpaw_sdk::Id
@@ -789,6 +792,9 @@ pub fn paperpaw_sdk::replies::Typed::to_params(&self) -> paperpaw_sdk::Params
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::ui::choice::Picked
 pub fn paperpaw_sdk::ui::choice::Picked::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::ui::choice::Picked::to_params(&self) -> paperpaw_sdk::Params
+impl paperpaw_sdk::event::EventData for paperpaw_sdk::work::WorkRefused
+pub fn paperpaw_sdk::work::WorkRefused::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
+pub fn paperpaw_sdk::work::WorkRefused::to_params(&self) -> paperpaw_sdk::Params
 pub trait paperpaw_sdk::event::ParamValue: core::marker::Sized
 pub fn paperpaw_sdk::event::ParamValue::from_param(&str) -> core::option::Option<Self>
 pub fn paperpaw_sdk::event::ParamValue::missing() -> core::option::Option<Self>
@@ -1232,6 +1238,31 @@ pub mod paperpaw_sdk::numbers
 pub const paperpaw_sdk::numbers::DECIMAL_MARK: &str
 pub fn paperpaw_sdk::numbers::decimal_mark<'e>(&paperpaw_sdk::Env<'e>) -> &'e str
 pub fn paperpaw_sdk::numbers::fixed(i64, u32, &str) -> alloc::string::String
+pub mod paperpaw_sdk::power
+pub enum paperpaw_sdk::power::PowerLevel
+pub paperpaw_sdk::power::PowerLevel::Normal
+pub paperpaw_sdk::power::PowerLevel::Offline
+pub paperpaw_sdk::power::PowerLevel::Saving
+impl paperpaw_sdk::power::PowerLevel
+pub const fn paperpaw_sdk::power::PowerLevel::as_str(self) -> &'static str
+pub fn paperpaw_sdk::power::PowerLevel::parse(&str) -> core::option::Option<Self>
+#[non_exhaustive] pub struct paperpaw_sdk::power::Power
+pub paperpaw_sdk::power::Power::automatic: bool
+pub paperpaw_sdk::power::Power::level: paperpaw_sdk::power::PowerLevel
+pub paperpaw_sdk::power::Power::mode: paperpaw_sdk::Id
+pub paperpaw_sdk::power::Power::stretch: u32
+impl paperpaw_sdk::power::Power
+pub fn paperpaw_sdk::power::Power::every(&self, u64) -> core::option::Option<u64>
+pub fn paperpaw_sdk::power::Power::new(paperpaw_sdk::power::PowerLevel, paperpaw_sdk::Id, bool, u32) -> Self
+pub fn paperpaw_sdk::power::Power::online(&self) -> bool
+impl core::default::Default for paperpaw_sdk::power::Power
+pub fn paperpaw_sdk::power::Power::default() -> Self
+pub const paperpaw_sdk::power::AUTOMATIC: &str
+pub const paperpaw_sdk::power::LEVEL: paperpaw_sdk::Id
+pub const paperpaw_sdk::power::MODE_KIND: paperpaw_sdk::Id
+pub const paperpaw_sdk::power::NORMAL: paperpaw_sdk::Id
+pub const paperpaw_sdk::power::OFFLINE: paperpaw_sdk::Id
+pub const paperpaw_sdk::power::SAVING: paperpaw_sdk::Id
 pub mod paperpaw_sdk::presets
 #[non_exhaustive] pub struct paperpaw_sdk::presets::Preset
 pub paperpaw_sdk::presets::Preset::description: alloc::borrow::Cow<'static, str>
@@ -1327,10 +1358,12 @@ pub paperpaw_sdk::replies::HttpReply::content_type: core::option::Option<alloc::
 pub paperpaw_sdk::replies::HttpReply::context: paperpaw_sdk::Params
 pub paperpaw_sdk::replies::HttpReply::etag: core::option::Option<alloc::string::String>
 pub paperpaw_sdk::replies::HttpReply::final_url: core::option::Option<alloc::string::String>
+pub paperpaw_sdk::replies::HttpReply::refused: core::option::Option<paperpaw_sdk::work::Refusal>
 pub paperpaw_sdk::replies::HttpReply::status: u16
 impl paperpaw_sdk::replies::HttpReply
 pub fn paperpaw_sdk::replies::HttpReply::failed(impl core::convert::Into<alloc::string::String>, paperpaw_sdk::Params) -> Self
 pub fn paperpaw_sdk::replies::HttpReply::ok(&self) -> bool
+pub fn paperpaw_sdk::replies::HttpReply::refused(paperpaw_sdk::work::Refusal, paperpaw_sdk::Params) -> Self
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::replies::HttpReply
 pub fn paperpaw_sdk::replies::HttpReply::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::replies::HttpReply::to_params(&self) -> paperpaw_sdk::Params
@@ -2324,6 +2357,107 @@ pub fn paperpaw_sdk::words::WordSet::new<S: core::convert::AsRef<str>>(impl core
 impl<S: core::convert::AsRef<str>> core::iter::traits::collect::FromIterator<S> for paperpaw_sdk::words::WordSet
 pub fn paperpaw_sdk::words::WordSet::from_iter<I: core::iter::traits::collect::IntoIterator<Item = S>>(I) -> Self
 pub fn paperpaw_sdk::words::fold(&str) -> alloc::string::String
+pub mod paperpaw_sdk::work
+pub mod paperpaw_sdk::work::params
+pub const paperpaw_sdk::work::params::REFUSED: &str
+pub const paperpaw_sdk::work::params::RETRY: &str
+pub const paperpaw_sdk::work::params::WHY: &str
+pub const paperpaw_sdk::work::params::WORK: &str
+pub enum paperpaw_sdk::work::Importance
+pub paperpaw_sdk::work::Importance::Expected
+pub paperpaw_sdk::work::Importance::Optional
+#[non_exhaustive] pub enum paperpaw_sdk::work::Reason
+pub paperpaw_sdk::work::Reason::NetworkOff
+pub paperpaw_sdk::work::Reason::NoNetwork
+pub paperpaw_sdk::work::Reason::NotDeclared
+pub paperpaw_sdk::work::Reason::Offline
+pub paperpaw_sdk::work::Reason::Saving
+pub paperpaw_sdk::work::Reason::Sleeping
+pub paperpaw_sdk::work::Reason::TooOften
+impl paperpaw_sdk::work::Reason
+pub fn paperpaw_sdk::work::Reason::as_str(self) -> &'static str
+pub fn paperpaw_sdk::work::Reason::parse(&str) -> core::option::Option<paperpaw_sdk::work::Reason>
+pub enum paperpaw_sdk::work::Retry
+pub paperpaw_sdk::work::Retry::After(paperpaw_platform::input::Instant)
+pub paperpaw_sdk::work::Retry::At(paperpaw_sdk::work::Moments)
+pub paperpaw_sdk::work::Retry::Never
+pub paperpaw_sdk::work::Retry::WhenAllowed
+pub enum paperpaw_sdk::work::Why
+pub paperpaw_sdk::work::Why::Deadline
+pub paperpaw_sdk::work::Why::Moment(paperpaw_sdk::work::Moments)
+pub paperpaw_sdk::work::Why::Time
+impl paperpaw_sdk::work::Why
+pub fn paperpaw_sdk::work::Why::read(&paperpaw_sdk::Params) -> core::option::Option<paperpaw_sdk::work::Why>
+pub fn paperpaw_sdk::work::Why::write(self, &mut paperpaw_sdk::Params)
+pub enum paperpaw_sdk::work::WorkState
+pub paperpaw_sdk::work::WorkState::Held(paperpaw_sdk::work::Refusal)
+pub paperpaw_sdk::work::WorkState::Running
+pub paperpaw_sdk::work::WorkState::Waiting
+pub paperpaw_sdk::work::WorkState::Waiting::due: core::option::Option<paperpaw_platform::input::Instant>
+pub struct paperpaw_sdk::work::Moments(_)
+impl paperpaw_sdk::work::Moments
+pub const paperpaw_sdk::work::Moments::ALL: paperpaw_sdk::work::Moments
+pub const paperpaw_sdk::work::Moments::BOOK_CLOSED: paperpaw_sdk::work::Moments
+pub const paperpaw_sdk::work::Moments::BOOK_OPENED: paperpaw_sdk::work::Moments
+pub const paperpaw_sdk::work::Moments::CHARGING: paperpaw_sdk::work::Moments
+pub const paperpaw_sdk::work::Moments::IDLE: paperpaw_sdk::work::Moments
+pub const paperpaw_sdk::work::Moments::NONE: paperpaw_sdk::work::Moments
+pub const paperpaw_sdk::work::Moments::ONLINE: paperpaw_sdk::work::Moments
+pub const paperpaw_sdk::work::Moments::SLEEP: paperpaw_sdk::work::Moments
+pub const paperpaw_sdk::work::Moments::WAKE: paperpaw_sdk::work::Moments
+pub const fn paperpaw_sdk::work::Moments::bits(self) -> u8
+pub const fn paperpaw_sdk::work::Moments::contains(self, paperpaw_sdk::work::Moments) -> bool
+pub const fn paperpaw_sdk::work::Moments::from_bits(u8) -> paperpaw_sdk::work::Moments
+pub const fn paperpaw_sdk::work::Moments::intersects(self, paperpaw_sdk::work::Moments) -> bool
+pub const fn paperpaw_sdk::work::Moments::is_empty(self) -> bool
+pub fn paperpaw_sdk::work::Moments::names(self) -> alloc::string::String
+pub fn paperpaw_sdk::work::Moments::parse(&str) -> paperpaw_sdk::work::Moments
+impl core::ops::bit::BitOr for paperpaw_sdk::work::Moments
+pub type paperpaw_sdk::work::Moments::Output = paperpaw_sdk::work::Moments
+pub fn paperpaw_sdk::work::Moments::bitor(self, paperpaw_sdk::work::Moments) -> paperpaw_sdk::work::Moments
+pub struct paperpaw_sdk::work::Note
+pub paperpaw_sdk::work::Note::at: paperpaw_platform::input::Instant
+pub paperpaw_sdk::work::Note::text: alloc::string::String
+pub struct paperpaw_sdk::work::Refusal
+pub paperpaw_sdk::work::Refusal::reason: paperpaw_sdk::work::Reason
+pub paperpaw_sdk::work::Refusal::retry: paperpaw_sdk::work::Retry
+impl paperpaw_sdk::work::Refusal
+pub const fn paperpaw_sdk::work::Refusal::new(paperpaw_sdk::work::Reason, paperpaw_sdk::work::Retry) -> Self
+pub fn paperpaw_sdk::work::Refusal::read(&paperpaw_sdk::Params) -> core::option::Option<paperpaw_sdk::work::Refusal>
+pub fn paperpaw_sdk::work::Refusal::write(&self, &mut paperpaw_sdk::Params)
+#[non_exhaustive] pub struct paperpaw_sdk::work::Work
+pub paperpaw_sdk::work::Work::after: core::option::Option<core::time::Duration>
+pub paperpaw_sdk::work::Work::at: core::option::Option<paperpaw_platform::input::Instant>
+pub paperpaw_sdk::work::Work::charging: bool
+pub paperpaw_sdk::work::Work::every: core::option::Option<core::time::Duration>
+pub paperpaw_sdk::work::Work::id: paperpaw_sdk::Id
+pub paperpaw_sdk::work::Work::importance: paperpaw_sdk::work::Importance
+pub paperpaw_sdk::work::Work::moments: paperpaw_sdk::work::Moments
+pub paperpaw_sdk::work::Work::network: bool
+pub paperpaw_sdk::work::Work::params: paperpaw_sdk::Params
+pub paperpaw_sdk::work::Work::within: core::option::Option<core::time::Duration>
+impl paperpaw_sdk::work::Work
+pub fn paperpaw_sdk::work::Work::after(self, core::time::Duration) -> Self
+pub fn paperpaw_sdk::work::Work::at(impl core::convert::Into<paperpaw_sdk::Id>, paperpaw_platform::input::Instant) -> Self
+pub fn paperpaw_sdk::work::Work::at_moments(self, paperpaw_sdk::work::Moments) -> Self
+pub fn paperpaw_sdk::work::Work::charging(self) -> Self
+pub fn paperpaw_sdk::work::Work::every(self, core::time::Duration) -> Self
+pub fn paperpaw_sdk::work::Work::expected(self) -> Self
+pub fn paperpaw_sdk::work::Work::network(impl core::convert::Into<paperpaw_sdk::Id>) -> Self
+pub fn paperpaw_sdk::work::Work::new(impl core::convert::Into<paperpaw_sdk::Id>) -> Self
+pub fn paperpaw_sdk::work::Work::optional(self) -> Self
+pub fn paperpaw_sdk::work::Work::retry(self, u32, u8) -> Self
+pub fn paperpaw_sdk::work::Work::with(self, paperpaw_sdk::Params) -> Self
+pub fn paperpaw_sdk::work::Work::within(self, core::time::Duration) -> Self
+pub struct paperpaw_sdk::work::WorkRefused
+pub paperpaw_sdk::work::WorkRefused::refusal: paperpaw_sdk::work::Refusal
+pub paperpaw_sdk::work::WorkRefused::work: paperpaw_sdk::Id
+impl paperpaw_sdk::event::EventData for paperpaw_sdk::work::WorkRefused
+pub fn paperpaw_sdk::work::WorkRefused::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
+pub fn paperpaw_sdk::work::WorkRefused::to_params(&self) -> paperpaw_sdk::Params
+pub const paperpaw_sdk::work::RETRY_FIRST: core::time::Duration
+pub const paperpaw_sdk::work::RETRY_MOST: core::time::Duration
+pub fn paperpaw_sdk::work::backoff(u32, u8) -> core::time::Duration
 pub mod paperpaw_sdk::xml
 pub use paperpaw_sdk::xml::<<paperpaw_xml::*>>
 pub mod paperpaw_sdk::zip
@@ -2365,6 +2499,7 @@ pub paperpaw_sdk::Command::Broadcast::events: paperpaw_sdk::Id
 pub paperpaw_sdk::Command::Broadcast::id: paperpaw_sdk::Id
 pub paperpaw_sdk::Command::Broadcast::ports: alloc::vec::Vec<u16>
 pub paperpaw_sdk::Command::Broadcast::wait_ms: u32
+pub paperpaw_sdk::Command::CancelWork(paperpaw_sdk::Id)
 pub paperpaw_sdk::Command::Connect
 pub paperpaw_sdk::Command::Connect::events: paperpaw_sdk::Id
 pub paperpaw_sdk::Command::Connect::host: alloc::string::String
@@ -2373,6 +2508,7 @@ pub paperpaw_sdk::Command::Connect::socket: paperpaw_sdk::Id
 pub paperpaw_sdk::Command::Disconnect(paperpaw_sdk::Id)
 pub paperpaw_sdk::Command::Emit(paperpaw_sdk::Id, paperpaw_sdk::Params)
 pub paperpaw_sdk::Command::Firmware(paperpaw_sdk::firmware::FirmwareCommand)
+pub paperpaw_sdk::Command::GoOnline
 pub paperpaw_sdk::Command::Http(paperpaw_sdk::HttpRequest)
 pub paperpaw_sdk::Command::InstallPlugin(paperpaw_sdk::Id, alloc::string::String)
 pub paperpaw_sdk::Command::LoadPlugin(alloc::string::String)
@@ -2412,6 +2548,7 @@ pub paperpaw_sdk::Command::Speak(paperpaw_sdk::Speech)
 pub paperpaw_sdk::Command::StopServing(paperpaw_sdk::Id)
 pub paperpaw_sdk::Command::StopSpeaking
 pub paperpaw_sdk::Command::Wifi(paperpaw_sdk::wifi::WifiCommand)
+pub paperpaw_sdk::Command::Work(paperpaw_sdk::work::Work)
 impl paperpaw_sdk::Command
 pub fn paperpaw_sdk::Command::open_slot(paperpaw_sdk::Id) -> paperpaw_sdk::Command
 pub fn paperpaw_sdk::Command::set<T: paperpaw_sdk::setting::SettingType>(&paperpaw_sdk::setting::Setting<T>, <T as paperpaw_sdk::setting::SettingType>::Input) -> paperpaw_sdk::Command
@@ -2864,10 +3001,12 @@ pub paperpaw_sdk::HttpReply::content_type: core::option::Option<alloc::string::S
 pub paperpaw_sdk::HttpReply::context: paperpaw_sdk::Params
 pub paperpaw_sdk::HttpReply::etag: core::option::Option<alloc::string::String>
 pub paperpaw_sdk::HttpReply::final_url: core::option::Option<alloc::string::String>
+pub paperpaw_sdk::HttpReply::refused: core::option::Option<paperpaw_sdk::work::Refusal>
 pub paperpaw_sdk::HttpReply::status: u16
 impl paperpaw_sdk::replies::HttpReply
 pub fn paperpaw_sdk::replies::HttpReply::failed(impl core::convert::Into<alloc::string::String>, paperpaw_sdk::Params) -> Self
 pub fn paperpaw_sdk::replies::HttpReply::ok(&self) -> bool
+pub fn paperpaw_sdk::replies::HttpReply::refused(paperpaw_sdk::work::Refusal, paperpaw_sdk::Params) -> Self
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::replies::HttpReply
 pub fn paperpaw_sdk::replies::HttpReply::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::replies::HttpReply::to_params(&self) -> paperpaw_sdk::Params
@@ -2940,6 +3079,7 @@ pub paperpaw_sdk::Manifest::description: alloc::borrow::Cow<'static, str>
 pub paperpaw_sdk::Manifest::id: paperpaw_sdk::Id
 pub paperpaw_sdk::Manifest::name: alloc::borrow::Cow<'static, str>
 pub paperpaw_sdk::Manifest::sdk: paperpaw_sdk::Version
+pub paperpaw_sdk::Manifest::uses: paperpaw_sdk::Uses
 pub paperpaw_sdk::Manifest::version: paperpaw_sdk::Version
 pub struct paperpaw_sdk::MemoryStorage
 impl paperpaw_sdk::MemoryStorage
@@ -3302,6 +3442,16 @@ pub paperpaw_sdk::Typed::text: alloc::string::String
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::replies::Typed
 pub fn paperpaw_sdk::replies::Typed::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::replies::Typed::to_params(&self) -> paperpaw_sdk::Params
+pub struct paperpaw_sdk::Uses(_)
+impl paperpaw_sdk::Uses
+pub const paperpaw_sdk::Uses::NETWORK: paperpaw_sdk::Uses
+pub const paperpaw_sdk::Uses::NOTHING: paperpaw_sdk::Uses
+pub const fn paperpaw_sdk::Uses::bits(self) -> u8
+pub const fn paperpaw_sdk::Uses::contains(self, paperpaw_sdk::Uses) -> bool
+pub const fn paperpaw_sdk::Uses::from_bits(u8) -> paperpaw_sdk::Uses
+impl core::ops::bit::BitOr for paperpaw_sdk::Uses
+pub type paperpaw_sdk::Uses::Output = paperpaw_sdk::Uses
+pub fn paperpaw_sdk::Uses::bitor(self, paperpaw_sdk::Uses) -> paperpaw_sdk::Uses
 pub struct paperpaw_sdk::Version
 pub paperpaw_sdk::Version::major: u16
 pub paperpaw_sdk::Version::minor: u16
@@ -3383,6 +3533,9 @@ pub fn paperpaw_sdk::replies::Typed::to_params(&self) -> paperpaw_sdk::Params
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::ui::choice::Picked
 pub fn paperpaw_sdk::ui::choice::Picked::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::ui::choice::Picked::to_params(&self) -> paperpaw_sdk::Params
+impl paperpaw_sdk::event::EventData for paperpaw_sdk::work::WorkRefused
+pub fn paperpaw_sdk::work::WorkRefused::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
+pub fn paperpaw_sdk::work::WorkRefused::to_params(&self) -> paperpaw_sdk::Params
 pub trait paperpaw_sdk::Plugin
 pub fn paperpaw_sdk::Plugin::manifest(&self) -> paperpaw_sdk::Manifest
 pub fn paperpaw_sdk::Plugin::register(&self, &mut paperpaw_sdk::contribution::Registrar) -> core::result::Result<(), paperpaw_sdk::RegisterError>

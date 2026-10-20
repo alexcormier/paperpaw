@@ -6,6 +6,16 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK, power saving (ADR 0025), first part: a plugin's manifest says
+  what it uses (`Manifest::uses`, `Uses::NETWORK`); plugins that reach
+  the network must declare it, as the kernel will refuse requests that
+  are not declared. Declared work (`work`: `Work`, `Moments`,
+  `Command::Work`, `Command::CancelWork`), power levels and modes
+  (`power`: `PowerLevel`, `Power`), `Command::GoOnline`, and one answer
+  for what did not run (`Refusal` with a `Reason` and when to `Retry`,
+  `HttpReply::refused`, `events::WORK_REFUSED`, `WORK_ALLOWED`,
+  `POWER_CHANGED`). The kernel runs declared work in a following step;
+  until then these commands do nothing.
 - A new look, rounder and friendlier: soft corners, pills for buttons,
   switches, chips and the highlight, plain headers (the title on the
   page, a little larger, no bar or line), faint lines between rows from

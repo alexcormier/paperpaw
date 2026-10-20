@@ -112,6 +112,7 @@ impl Plugin for TestPlugin {
             description: Cow::Borrowed(""),
             version: Version::new(1, 0, 0),
             sdk: self.sdk,
+            uses: paperpaw_sdk::Uses::NOTHING,
         }
     }
 
@@ -292,6 +293,7 @@ impl Plugin for Opener {
             description: Cow::Borrowed(""),
             version: Version::new(1, 0, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NOTHING,
         }
     }
 
@@ -644,6 +646,7 @@ impl Plugin for EdgeHolderPlugin {
             description: Cow::Borrowed(""),
             version: Version::new(1, 0, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NOTHING,
         }
     }
 
@@ -777,6 +780,7 @@ impl Plugin for FontPlugin {
             description: Cow::Borrowed(""),
             version: Version::new(1, 0, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NOTHING,
         }
     }
 
@@ -888,6 +892,7 @@ impl Plugin for LifecyclePlugin {
             description: Cow::Borrowed(""),
             version: Version::new(1, 0, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NOTHING,
         }
     }
 
@@ -1054,6 +1059,7 @@ impl Plugin for OverlayPlugin {
             description: Cow::Borrowed(""),
             version: Version::new(1, 0, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NOTHING,
         }
     }
 
@@ -1130,6 +1136,7 @@ impl Plugin for NoticePlugin {
             description: Cow::Borrowed(""),
             version: Version::new(1, 0, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NOTHING,
         }
     }
 
@@ -1391,6 +1398,7 @@ impl Plugin for GrayPlugin {
             description: Cow::Borrowed(""),
             version: Version::new(1, 0, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NOTHING,
         }
     }
 
@@ -2672,6 +2680,7 @@ impl Plugin for ServicePlugin {
             description: Cow::Borrowed(""),
             version: Version::new(1, 0, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NOTHING,
         }
     }
 
@@ -2734,6 +2743,7 @@ impl Plugin for FilterPlugin {
             description: Cow::Borrowed(""),
             version: Version::new(1, 0, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NOTHING,
         }
     }
 
@@ -2818,6 +2828,7 @@ impl Plugin for SizedPlugin {
             description: Cow::Borrowed(""),
             version: Version::new(1, 0, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NOTHING,
         }
     }
 
@@ -2939,6 +2950,7 @@ impl Plugin for PicturePlugin {
             description: Cow::Borrowed(""),
             version: Version::new(1, 0, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NOTHING,
         }
     }
 
@@ -2994,6 +3006,7 @@ impl Plugin for NetPlugin {
             description: Cow::Borrowed(""),
             version: Version::new(1, 0, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NOTHING,
         }
     }
 

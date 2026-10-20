@@ -305,6 +305,15 @@ pub enum Command {
     /// so their screens say so instead of waiting. The plugin that runs
     /// Wi-Fi sends it.
     NoNetwork,
+    /// Declares work for the kernel to run at the cheapest moment (see
+    /// [`work`](crate::work)): the same id replaces what was declared.
+    Work(crate::work::Work),
+    /// Takes back the work declared with this id, if it has not run.
+    CancelWork(Id),
+    /// The reader chose *Go online* where the mode is Offline (see
+    /// [`power`](crate::power)): the network for the screen sending it
+    /// until it closes; work held back runs on the same connection.
+    GoOnline,
     /// Installs a firmware update or restarts, where PaperPaw is the
     /// device's firmware ([`Env::firmware`](crate::Env)); see
     /// [`firmware`](crate::firmware). Ignored elsewhere.

@@ -304,6 +304,7 @@ impl Harness {
             content_type: Some("application/json".to_string()),
             final_url: None,
             context: request.params.clone(),
+            refused: None,
         };
         self.dispatch(&request.reply, &reply.to_params())
     }

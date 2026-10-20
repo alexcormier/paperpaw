@@ -214,6 +214,7 @@ impl Plugin for Readwise {
             description: Cow::Borrowed("Sends the highlights of exported notes to Readwise."),
             version: Version::new(0, 1, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NETWORK,
         }
     }
 

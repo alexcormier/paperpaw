@@ -140,6 +140,7 @@ impl Plugin for Files {
             description: Cow::Borrowed("Lists the books and folders on the device and opens them."),
             version: Version::new(0, 1, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NOTHING,
         }
     }
 

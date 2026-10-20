@@ -34,6 +34,7 @@ impl Plugin for CorePlugin {
             description: Cow::Borrowed("Runs screens, input, settings and plugins."),
             version: SDK_VERSION,
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NOTHING,
         }
     }
 

@@ -379,6 +379,7 @@ pub(crate) fn font_folder(storage: &dyn Storage, dirs: &[String]) -> Option<Data
             description: Cow::Borrowed("The fonts in the fonts folder, to read with."),
             version: Version::new(0, 1, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NOTHING,
         },
         // Folders the shell names; not removed by PaperPaw.
         folder: String::new(),
@@ -507,6 +508,7 @@ fn parse_manifest(source: &str, folder: &str) -> Result<Manifest, String> {
         description: Cow::Owned(description.unwrap_or_default()),
         version,
         sdk: SDK_VERSION,
+        uses: paperpaw_sdk::Uses::NOTHING,
     })
 }
 

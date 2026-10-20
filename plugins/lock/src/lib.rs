@@ -153,6 +153,7 @@ impl Plugin for Lock {
             description: Cow::Borrowed("A PIN, a pattern or a password when the device wakes up."),
             version: Version::new(0, 1, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NOTHING,
         }
     }
 

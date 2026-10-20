@@ -94,6 +94,7 @@ impl Plugin for Listener {
             description: "Hears the reading events.".into(),
             version: Version::new(0, 1, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NOTHING,
         }
     }
 
@@ -478,6 +479,7 @@ impl Plugin for Probe {
             description: "Notes what status items are told.".into(),
             version: Version::new(0, 1, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NOTHING,
         }
     }
 
