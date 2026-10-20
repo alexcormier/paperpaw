@@ -2,7 +2,7 @@
 
 use alloc::boxed::Box;
 use alloc::format;
-use alloc::string::ToString;
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::fmt;
 
@@ -130,6 +130,10 @@ pub struct GridView {
     buttons: Vec<(Rect, u16)>,
     /// Where taps and the buttons' focus go, in order.
     targets: Vec<(Rect, Target)>,
+    /// What each target is called, as told to screen readers while it
+    /// has the focus: its item's name; empty for the screen's own
+    /// buttons, which tell theirs.
+    names: Vec<String>,
     /// The target with the focus, shown once buttons are used.
     focus: usize,
     focus_shown: bool,
@@ -152,6 +156,7 @@ impl GridView {
             unplaced: Vec::new(),
             buttons: Vec::new(),
             targets: Vec::new(),
+            names: Vec::new(),
             focus: 0,
             focus_shown: !env.device.input.touch,
             edit: None,
@@ -214,27 +219,33 @@ impl GridView {
     /// The targets of the items and the buttons as they are now.
     fn target(&mut self, env: &Env<'_>) {
         self.targets.clear();
+        self.names.clear();
         let editing = self.edit.is_some();
         for (index, shown) in self.items.iter().enumerate() {
+            let before = self.targets.len();
             if editing {
                 self.targets.push((shown.area, Target::Item(index)));
-                continue;
-            }
-            match (&shown.item.what, &shown.widget) {
-                (What::Widget(_), Some(widget)) => {
-                    for target in widget.targets(env, shown.area) {
-                        self.targets
-                            .push((target.area, Target::Run(target.command)));
+            } else {
+                match (&shown.item.what, &shown.widget) {
+                    (What::Widget(_), Some(widget)) => {
+                        for target in widget.targets(env, shown.area) {
+                            self.targets
+                                .push((target.area, Target::Run(target.command)));
+                        }
                     }
+                    (What::Widget(_), None) => {}
+                    (What::Tool(action), _) => self
+                        .targets
+                        .push((shown.area, Target::Run(Command::RunAction(action.clone())))),
                 }
-                (What::Widget(_), None) => {}
-                (What::Tool(action), _) => self
-                    .targets
-                    .push((shown.area, Target::Run(Command::RunAction(action.clone())))),
             }
+            let name = shown.item.what.title(env);
+            let added = self.targets.len() - before;
+            self.names.extend(core::iter::repeat_n(name, added));
         }
         for (area, button) in &self.buttons {
             self.targets.push((*area, Target::Button(*button)));
+            self.names.push(String::new());
         }
         self.focus = self.focus.min(self.targets.len().saturating_sub(1));
     }
@@ -396,6 +407,15 @@ impl GridView {
             };
             let to = self.geometry.rect(drag.to);
             canvas.stroke_round(to, width, self.style.corner, Color::BLACK);
+        }
+        // The place with the focus told by its item's name, as a
+        // button: what a screen reader says, and tools follow, as the
+        // buttons move the focus.
+        if self.focus_shown
+            && let Some((area, _)) = self.targets.get(self.focus)
+        {
+            let name = self.names.get(self.focus).map_or("", String::as_str);
+            canvas.describe(crate::semantics::Role::Button, name, *area, true, None);
         }
         if self.focus_shown
             && let Some((area, _)) = self.targets.get(self.focus)

@@ -40,7 +40,8 @@ static SETTINGS: [SettingSpec; 8] = [
         &LINES,
         LINES[1],
         ID,
-    ),
+    )
+    .described("widgets.greeting.line.help"),
     widgets::part_spec(
         "widgets.greeting.icon",
         ID,
@@ -53,7 +54,8 @@ static SETTINGS: [SettingSpec; 8] = [
         &FACES,
         FACES[0],
         ID,
-    ),
+    )
+    .described("widgets.setting.face-font.help"),
     widgets::size_spec("widgets.greeting.size", ID, Size::Fit, true),
     widgets::align_spec("widgets.greeting.align", ID, Align::Center),
     widgets::frame_spec("widgets.greeting.frame", ID, Frame::None),

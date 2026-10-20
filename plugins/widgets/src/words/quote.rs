@@ -108,7 +108,8 @@ static SETTINGS: [SettingSpec; 11] = [
         &FACES,
         FACES[2],
         ID,
-    ),
+    )
+    .described("widgets.setting.face-font.help"),
     widgets::size_spec("widgets.quote.size", ID, Size::Fit, true),
     widgets::align_spec("widgets.quote.align", ID, Align::Center),
     widgets::frame_spec("widgets.quote.frame", ID, Frame::None),
@@ -440,9 +441,15 @@ impl Widget for QuoteWidget {
             top += (style.gap as f32 * 0.75) as u16;
             let small = widgets::line_height(env, style.small);
             let row = Rect::new(area.x, top, area.width, small);
-            let name = paperpaw_sdk::ui::fit(&ui, style.small, author, width);
-            let x = align.x(area, ui.measure(style.small, &name));
-            paperpaw_sdk::ui::draw_label(canvas, &ui, style.small, x, row, &name, look.faint);
+            // The whole name where it fits, else the last name alone
+            // ("Bacon"), smaller where need be, then shortened.
+            let whole = ui.measure(style.small, author) <= width;
+            let last = author.rsplit(' ').next().unwrap_or(author);
+            let shown = if whole { author.as_str() } else { last };
+            let (size, name) =
+                widgets::fit_line(&ui, style.small, style.small * 0.85, shown, width);
+            let x = align.x(area, ui.measure(size, &name));
+            paperpaw_sdk::ui::draw_label(canvas, &ui, size, x, row, &name, look.faint);
         }
     }
 

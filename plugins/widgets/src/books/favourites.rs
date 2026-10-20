@@ -34,7 +34,8 @@ static SETTINGS: [SettingSpec; 10] = [
         &LAYOUTS,
         LAYOUTS[0],
         ID,
-    ),
+    )
+    .described("widgets.favourites.layout.help"),
     SettingSpec::fixed_number(
         "widgets.favourites.count",
         "widgets.books.setting.count",
@@ -42,7 +43,8 @@ static SETTINGS: [SettingSpec; 10] = [
         24,
         8,
         ID,
-    ),
+    )
+    .described("widgets.setting.count.help"),
     widgets::part_spec(
         "widgets.favourites.caption",
         ID,

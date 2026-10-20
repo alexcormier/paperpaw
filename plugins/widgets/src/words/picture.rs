@@ -85,7 +85,8 @@ static SETTINGS: [SettingSpec; 6] = [
         &FITS,
         FITS[0],
         ID,
-    ),
+    )
+    .described("widgets.picture.fit.help"),
     widgets::part_spec(
         "widgets.picture.caption",
         ID,

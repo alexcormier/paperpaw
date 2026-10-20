@@ -84,21 +84,24 @@ static SETTINGS: [SettingSpec; 8] = [
         12,
         5,
         ID,
-    ),
+    )
+    .described("widgets.todo.count.help"),
     SettingSpec::fixed_choice(
         "widgets.todo.done",
         "widgets.todo.setting.done",
         &DONE,
         DONE[0],
         ID,
-    ),
+    )
+    .described("widgets.todo.done.help"),
     SettingSpec::fixed_choice(
         "widgets.todo.box",
         "widgets.todo.setting.box",
         &BOXES,
         BOXES[0],
         ID,
-    ),
+    )
+    .described("widgets.todo.box.help"),
     widgets::part_spec(
         "widgets.todo.caption",
         ID,

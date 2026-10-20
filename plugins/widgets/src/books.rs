@@ -404,7 +404,8 @@ impl<'t> Lines<'t> {
             if fits(line.size, &line.text) {
                 continue;
             }
-            let least = line.size.min(style.text);
+            // Smaller, down to the small size, before it is shortened.
+            let least = line.size.min(style.small);
             let text = &line.text;
             if let Some(size) = widgets::largest_size(line.size, least, |s| fits(s, text)) {
                 line.size = size;
@@ -420,7 +421,7 @@ impl<'t> Lines<'t> {
                 let line = &self.lines[i];
                 (line.size, line.text.clone(), line.color)
             };
-            let least = size.min(style.text);
+            let least = size.min(style.small);
             // In lines broken between words, where they fit with the main
             // lines and the notes (the caption gives way to them).
             let others: u16 = self
@@ -772,9 +773,8 @@ pub(crate) fn title_lines(
 }
 
 /// `title` in at most `most` lines `width` pixels wide at `size` on a
-/// cover without a picture: broken between words, a word too long for a
-/// line shortened with "…" on a line of its own, the last line ending
-/// in "…" where there is more and room for it.
+/// cover without a picture: broken between words, whole words only (the
+/// title is below the cover too), as many as fit.
 fn cover_lines(
     font: &FontHandle<'_>,
     size: f32,
@@ -784,27 +784,20 @@ fn cover_lines(
 ) -> Vec<String> {
     let mut lines: Vec<String> = Vec::new();
     let fits = |text: &str| font.measure(size, text) <= width;
-    let mut cut = false;
     for word in title.split_whitespace() {
-        if let Some(last) = lines.last_mut().filter(|l| !l.ends_with('…')) {
+        if let Some(last) = lines.last_mut() {
             let joined = format!("{last} {word}");
             if fits(&joined) {
                 *last = joined;
                 continue;
             }
         }
-        if lines.len() == most {
-            cut = true;
+        if lines.len() == most || !fits(word) {
+            // No room left, or a word wider than the cover: whole words
+            // only on a cover (the title is below it).
             break;
         }
-        lines.push(ui::fit(font, size, word, width));
-    }
-    if let Some(last) = lines.last_mut().filter(|l| cut && !l.ends_with('…')) {
-        // A "…" where it fits beside the last word, never in its stead.
-        let more = format!("{last} …");
-        if fits(&more) {
-            *last = more;
-        }
+        lines.push(String::from(word));
     }
     lines
 }

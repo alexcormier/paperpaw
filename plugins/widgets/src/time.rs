@@ -226,6 +226,7 @@ const fn date_format_spec(id: &'static str, widget: Id, default: &'static str) -
         default,
         widget,
     )
+    .described("widgets.setting.date-format.help")
 }
 
 /// `year`-`month`-`day` written as `widget`'s date format says

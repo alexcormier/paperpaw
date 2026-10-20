@@ -534,6 +534,7 @@ pub fn align_setting(widget: &Id, default: Align) -> SettingSpec {
         SettingValue::Text(Cow::Borrowed(default.value())),
     )
     .group(widget.clone())
+    .described("core.setting.align.help")
 }
 
 /// [`align_setting`] kept in the program
@@ -547,6 +548,7 @@ pub const fn align_spec(id: &'static str, widget: Id, default: Align) -> Setting
         default.value(),
         widget,
     )
+    .described("core.setting.align.help")
 }
 
 /// Whether widget `id` has settings of its own (a settings group with its
