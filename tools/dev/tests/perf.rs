@@ -85,6 +85,7 @@ impl Plugin for Probe {
             description: Cow::Borrowed("Screens that break the X4's budgets."),
             version: SDK_VERSION,
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NOTHING,
         }
     }
 
