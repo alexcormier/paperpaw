@@ -6,9 +6,9 @@ use super::*;
 
 /// The book as the layout sees it: every block through the text
 /// filters of plugins (see `paperpaw_sdk::filters`).
-pub(super) struct Filtered<'d, 'e> {
-    pub(super) document: &'d dyn Document,
-    pub(super) env: &'d Env<'e>,
+pub(crate) struct Filtered<'d, 'e> {
+    pub(crate) document: &'d dyn Document,
+    pub(crate) env: &'d Env<'e>,
 }
 
 impl Document for Filtered<'_, '_> {
@@ -715,8 +715,13 @@ impl Book {
     pub(super) fn note_text(&self, env: &Env<'_>, href: &str) -> Option<String> {
         let mut at = self.document.link_target(env.storage, href)?;
         let mut text = String::new();
+        // As the page shows it.
+        let filtered = Filtered {
+            document: self.document.as_ref(),
+            env,
+        };
         for _ in 0..4 {
-            let Ok(Some(block)) = self.document.block_at(env.storage, at) else {
+            let Ok(Some(block)) = filtered.block_at(env.storage, at) else {
                 break;
             };
             if matches!(block.kind, paperpaw_sdk::document::BlockKind::Heading(_))
@@ -926,8 +931,9 @@ impl Book {
 }
 
 /// How the reader opens books: with the publisher's styles as set, and
-/// the plugins' stylesheets.
-pub(super) fn open_options(env: &Env<'_>) -> paperpaw_sdk::OpenOptions {
+/// the plugins' stylesheets. Its search and contents open them so too,
+/// or they would convert the book again (and find other places).
+pub(crate) fn open_options(env: &Env<'_>) -> paperpaw_sdk::OpenOptions {
     let styles = env
         .settings
         .bool(crate::settings::PUBLISHER_STYLES.as_str());

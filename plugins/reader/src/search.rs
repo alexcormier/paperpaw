@@ -64,7 +64,8 @@ impl SearchScreen {
             .trim()
             .to_string();
         let needle: Vec<char> = query.chars().map(lower).collect();
-        let document = env.formats.open(env.storage, &path).ok();
+        let options = crate::screen::open_options(env);
+        let document = env.formats.open_with(env.storage, &path, &options).ok();
         let style = UiStyle::new(env);
         let display = env.device.display;
         let header = ui::Header::new(env, &style, true);
@@ -93,8 +94,13 @@ impl SearchScreen {
             return false;
         };
         let first_new = self.hits.len();
+        // The text as the page shows it (see `paperpaw_sdk::filters`).
+        let filtered = crate::screen::Filtered {
+            document: document.as_ref(),
+            env,
+        };
         for _ in 0..BLOCKS_PER_STEP {
-            match document.block_at(env.storage, at) {
+            match filtered.block_at(env.storage, at) {
                 Ok(Some(block)) => {
                     for (start, end) in find(&block.text, &self.needle) {
                         if self.hits.len() == MAX_HITS {

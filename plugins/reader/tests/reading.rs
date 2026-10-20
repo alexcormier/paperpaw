@@ -943,3 +943,45 @@ fn text_chosen_is_let_go_when_the_page_turns_by_itself() {
     let marks = paperpaw_sdk::annotations::marks(&reading.storage, BOOK);
     assert_eq!(marks.iter().filter(|m| m.kind == Kind::Bookmark).count(), 1);
 }
+
+#[test]
+fn search_and_contents_read_the_book_as_the_page_shows_it() {
+    let epub = include_bytes!("../../../samples/library/books/alice-in-wonderland.epub");
+    let storage = Shared::default();
+    let mut reading = Reading::with_book(storage.clone(), EPUB, epub);
+    // Without the book's own styles: its chapters converted into a cache
+    // of their own.
+    set(&mut reading, "reader.publisher-styles", "off");
+    reading.open();
+    reading.run(actions::TOC);
+    reading.run(core_actions::BACK);
+    reading.now += 10;
+    let params = Params::new()
+        .with(params::PATH, EPUB)
+        .with(params::TEXT, "Rabbit");
+    let effects = reading.kernel.send_event(
+        Instant(reading.now),
+        Id::new_static("reader.search-entered"),
+        params,
+    );
+    reading.settle(effects);
+    assert_eq!(
+        reading.kernel.active_screen().map(Id::as_str),
+        Some("reader.search-results")
+    );
+    // No chapter converted with the styles as well.
+    let cache = format!(
+        ".paperpaw/plugins/format-epub/{}",
+        paperpaw_sdk::library::key(EPUB)
+    );
+    let mut styled = Vec::new();
+    storage
+        .list(&cache, &mut |entry| {
+            let chapter = entry.name.strip_suffix(".txt");
+            if chapter.is_some_and(|c| c.bytes().all(|b| b.is_ascii_digit())) {
+                styled.push(entry.name.to_string());
+            }
+        })
+        .unwrap();
+    assert!(styled.is_empty(), "{styled:?}");
+}

@@ -43,7 +43,7 @@ use crate::status;
 use crate::{PLUGIN, state_path};
 
 use self::book::*;
-pub(crate) use self::book::{book_dir, remember_last};
+pub(crate) use self::book::{Filtered, book_dir, open_options, remember_last};
 use self::hands_free::*;
 use self::linking::*;
 pub(crate) use self::sample::Sample;
