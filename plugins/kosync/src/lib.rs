@@ -134,6 +134,9 @@ struct State {
     current: Option<Position>,
     /// The position last sent.
     sent: Option<Position>,
+    /// The XPointer the reader said a place is (book, place, XPointer),
+    /// as it does when a book is closed: no need to open the book.
+    xpointer: Option<(String, Locator, String)>,
     last_push: Option<Instant>,
     /// The book last fetched for, and when.
     last_pull: Option<(String, Instant)>,
@@ -331,12 +334,30 @@ impl State {
         let Some(digest) = self.digest(env, &position.path) else {
             return;
         };
-        let document = env.formats.open(env.storage, &position.path).ok();
-        let xpointer = document
+        let said = self
+            .xpointer
             .as_ref()
-            .and_then(|d| d.xpointer(env.storage, position.at))
-            .unwrap_or_default();
-        let progress = document.map_or(position.progress, |d| f64::from(d.progress(position.at)));
+            .filter(|(path, at, _)| *path == position.path && *at == position.at)
+            .map(|(.., xpointer)| xpointer.clone());
+        let (xpointer, progress) = match said {
+            Some(xpointer) => (xpointer, position.progress),
+            None => {
+                // Opened as the reader opens it, so its places fit (and it
+                // is not converted a second time).
+                let options = paperpaw_sdk::reading::open_options(env);
+                let document = env
+                    .formats
+                    .open_with(env.storage, &position.path, &options)
+                    .ok();
+                let xpointer = document
+                    .as_ref()
+                    .and_then(|d| d.xpointer(env.storage, position.at))
+                    .unwrap_or_default();
+                let progress =
+                    document.map_or(position.progress, |d| f64::from(d.progress(position.at)));
+                (xpointer, progress)
+            }
+        };
         let body = format!(
             "{{\"document\":{},\"progress\":{},\"percentage\":{:.4},\"device\":{},\"device_id\":{}}}",
             json::string(&digest),
@@ -710,16 +731,18 @@ impl Plugin for Kosync {
             }
         })?;
         let s = state.clone();
-        r.subscribe(
-            events::BOOK_CLOSED,
-            Box::new(move |env, _, out| {
-                let mut state = s.borrow_mut();
-                state.load(env);
-                if state.may_send(env) {
-                    state.push(env, out, false);
-                }
-            }),
-        )?;
+        r.on(events::BOOK_CLOSED, move |env, reading, out| {
+            let mut state = s.borrow_mut();
+            state.load(env);
+            // Where it was left, as an XPointer too where the reader says it.
+            state.current = Some(position(reading));
+            if let Some(xpointer) = reading.xpointer.clone() {
+                state.xpointer = Some((reading.path.clone(), reading.at(), xpointer));
+            }
+            if state.may_send(env) {
+                state.push(env, out, false);
+            }
+        })?;
         let s = state.clone();
         r.on(PUSH_DUE, move |env, (), out| {
             let mut state = s.borrow_mut();

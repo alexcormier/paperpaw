@@ -43,13 +43,14 @@ use crate::status;
 use crate::{PLUGIN, state_path};
 
 use self::book::*;
-pub(crate) use self::book::{Filtered, book_dir, open_options, remember_last};
+pub(crate) use self::book::{Filtered, book_dir, remember_last};
 use self::hands_free::*;
 use self::linking::*;
 pub(crate) use self::sample::Sample;
 use self::typography::*;
 pub(crate) use self::words::WordBox;
 use self::words::*;
+pub(crate) use paperpaw_sdk::reading::open_options;
 
 /// The kernel's settings of the type of book pages: a change lays the
 /// book out anew (the font and the book's own styles open it again).
@@ -355,11 +356,17 @@ impl Screen for ReaderScreen {
         let env = *cx.env();
         if let Ok(book) = &mut self.book {
             book.save_due(cx, true);
+            // With its XPointer, for a sync (found when the place was
+            // kept, else now).
+            if book.xpointer.is_none() {
+                book.xpointer = book.document.xpointer(env.storage, book.page.start);
+            }
         }
         if let Ok(book) = &self.book
             && !book.web()
         {
-            cx.command(events::BOOK_CLOSED.emit(book.reading(&env)));
+            let reading = book.reading(&env).xpointer(book.xpointer.clone());
+            cx.command(events::BOOK_CLOSED.emit(reading));
         }
     }
 
@@ -1102,7 +1109,10 @@ mod tests {
     #[test]
     fn positions_of_version_1_are_read() {
         assert_eq!(
-            super::book::kept_in(include_str!("../../testdata/progress.ini.v1")).map(|k| k.at),
+            paperpaw_sdk::positions::Position::parse(include_str!(
+                "../../testdata/progress.ini.v1"
+            ))
+            .map(|p| p.at),
             Some(paperpaw_sdk::document::Locator::new(7, 1234))
         );
     }
@@ -1132,23 +1142,6 @@ mod tests {
         let ticks = chapter_ticks(&flat);
         assert_eq!(ticks.len(), 120);
         assert_eq!(ticks.last(), Some(&952));
-    }
-
-    /// A position kept with its conversion and XPointer; without them (as
-    /// version 1 wrote it) the place alone.
-    #[test]
-    fn positions_keep_their_conversion_and_xpointer() {
-        let text = "[progress]\nsection = 2\noffset = 40\nconversion = 00000000000000ff\n\
-                    xpointer = \"/body/DocFragment[3]/body/p[2]/text()[1].5\"\n";
-        let kept = super::book::kept_in(text).unwrap();
-        assert_eq!(kept.at, paperpaw_sdk::document::Locator::new(2, 40));
-        assert_eq!(kept.conversion, Some(255));
-        assert_eq!(
-            kept.xpointer.as_deref(),
-            Some("/body/DocFragment[3]/body/p[2]/text()[1].5")
-        );
-        let old = super::book::kept_in("[progress]\nsection = 2\noffset = 40\n").unwrap();
-        assert_eq!((old.conversion, old.xpointer), (None, None));
     }
 
     #[test]

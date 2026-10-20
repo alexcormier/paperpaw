@@ -244,11 +244,8 @@ impl Reading {
 
     /// The position written to the storage so far, as [`Reading::kept`].
     fn written(&self) -> (u32, u32) {
-        let dir = format!(
-            ".paperpaw/plugins/reader/books/{:016x}",
-            paperpaw_sdk::digest::fnv1a64(self.book)
-        );
-        let Some(data) = self.storage.0.get(&format!("{dir}/progress.ini")) else {
+        let file = paperpaw_sdk::positions::file(self.book);
+        let Some(data) = self.storage.0.get(&file) else {
             return (0, 0);
         };
         let text = String::from_utf8(data).unwrap();
@@ -902,14 +899,10 @@ fn a_position_that_cannot_be_laid_out_opens_the_book_at_its_start() {
     reading.run(core_actions::NEXT_PAGE);
     let second = reading.kept();
     reading.run(core_actions::BACK);
-    let dir = format!(
-        ".paperpaw/plugins/reader/books/{:016x}",
-        paperpaw_sdk::digest::fnv1a64(EPUB)
-    );
     storage
         .write(
-            &format!("{dir}/progress.ini"),
-            b"[progress]\nsection = 2\noffset = 100\n",
+            &paperpaw_sdk::positions::file(EPUB),
+            b"[position]\nsection = 2\noffset = 100\n",
         )
         .unwrap();
     // Its third part cannot be read (a damaged card, say).
@@ -1309,7 +1302,7 @@ fn with_notices(storage: Shared) -> (Reading, Notices) {
 #[test]
 fn a_place_that_cannot_be_kept_is_said_once() {
     let storage = Shared::default();
-    *storage.3.borrow_mut() = Some("progress.ini".into());
+    *storage.3.borrow_mut() = Some(".paperpaw/positions".into());
     let (mut reading, notices) = with_notices(storage);
     for _ in 0..3 {
         reading.run(core_actions::NEXT_PAGE);
@@ -1362,13 +1355,9 @@ fn a_page_back_after_returning_from_a_jump_is_the_page_before() {
 /// The book opened again at `at`, with a short page index (see
 /// [`reopened_with_a_short_index`]).
 fn reopened_at(storage: &Shared, at: (u32, u32)) -> Reading {
-    let dir = format!(
-        ".paperpaw/plugins/reader/books/{:016x}",
-        paperpaw_sdk::digest::fnv1a64(BOOK)
-    );
-    let progress = format!("[progress]\nsection = {}\noffset = {}\n", at.0, at.1);
+    let position = format!("[position]\nsection = {}\noffset = {}\n", at.0, at.1);
     storage
-        .write(&format!("{dir}/progress.ini"), progress.as_bytes())
+        .write(&paperpaw_sdk::positions::file(BOOK), position.as_bytes())
         .unwrap();
     reopened_with_a_short_index(storage)
 }
@@ -1479,4 +1468,54 @@ fn any_plugin_reads_the_words_of_the_page() {
             "{word:?}"
         );
     }
+}
+
+#[test]
+fn a_place_kept_by_the_reader_before_is_read() {
+    let storage = Shared::default();
+    let mut first = Reading::new(storage.clone());
+    first.open();
+    for _ in 0..3 {
+        first.run(core_actions::NEXT_PAGE);
+    }
+    let left = first.kept();
+    // Kept where the reader kept it before positions were shared.
+    storage
+        .remove(&paperpaw_sdk::positions::file(BOOK))
+        .unwrap();
+    let dir = format!(
+        ".paperpaw/plugins/reader/books/{:016x}",
+        paperpaw_sdk::digest::fnv1a64(BOOK)
+    );
+    let old = format!("[progress]\nsection = {}\noffset = {}\n", left.0, left.1);
+    storage
+        .write(&format!("{dir}/progress.ini"), old.as_bytes())
+        .unwrap();
+    let mut again = Reading::new(storage);
+    again.open();
+    reading_runs_nothing(&mut again);
+    assert_eq!(again.kept(), left);
+}
+
+/// Lets a moment pass without input.
+fn reading_runs_nothing(reading: &mut Reading) {
+    reading.now += 10;
+    let effects = reading.kernel.tick(Instant(reading.now));
+    reading.settle(effects);
+}
+
+#[test]
+fn a_book_closed_says_where_as_an_xpointer() {
+    let epub = include_bytes!("../../../samples/library/books/alice-in-wonderland.epub");
+    let mut reading = Reading::with_book(Shared::default(), EPUB, epub);
+    reading.open();
+    for _ in 0..5 {
+        reading.run(core_actions::NEXT_PAGE);
+    }
+    reading.run(core_actions::BACK);
+    let heard = reading.heard.borrow();
+    let (name, closed) = heard.last().unwrap();
+    assert_eq!(*name, "closed");
+    let xpointer = closed.xpointer.clone().unwrap_or_default();
+    assert!(xpointer.starts_with("/body/DocFragment["), "{xpointer:?}");
 }

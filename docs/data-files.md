@@ -40,7 +40,8 @@ plugin converts books differently; a plugin must keep that mapping.
 | `.paperpaw/library/opened.txt`, `favourites.txt` | SDK `library` | a path per line | version 1 |
 | `.paperpaw/annotations/<hash>.txt` | SDK `annotations` | a line per bookmark or highlight (tab separated; 8 fields before times were kept, 10 since) | version 1 |
 | `.paperpaw/plugins/reader/state.ini` | reader | ini: the book read last | version 1 |
-| `.paperpaw/plugins/reader/books/<hash>/progress.ini` | reader | ini: the position (`conversion`, the book's conversion it is in, and `xpointer`, written when the book is closed, added later) | version 1 |
+| `.paperpaw/positions/<hash>.txt` | SDK `positions` | ini: where a book was left (`[position]` section, offset, percent, `conversion`, `xpointer` when it was closed, `updated`) | version 1 |
+| `.paperpaw/plugins/reader/books/<hash>/progress.ini` | reader | ini: the position before positions were shared; read while a book has none | version 1 |
 | `.paperpaw/plugins/reader/status-lines.txt` | reader | the status line chosen last at the top, then at the bottom, a line each | version 1 |
 | `.paperpaw/plugins/reader/books/<hash>/settings.ini` | kernel (a book's own settings) | ini, as `paperpaw.ini` | version 1 |
 | `.paperpaw/plugins/stats/books.ini` | stats | ini: a section per book (title, authors, md5, pages, language, series, `last-open`, path; `finished`, when it was last read to the end, added later) | version 1 |

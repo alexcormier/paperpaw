@@ -189,6 +189,7 @@ pub paperpaw_sdk::builtin::events::Reading::path: alloc::string::String
 pub paperpaw_sdk::builtin::events::Reading::progress: f32
 pub paperpaw_sdk::builtin::events::Reading::section: u32
 pub paperpaw_sdk::builtin::events::Reading::title: alloc::string::String
+pub paperpaw_sdk::builtin::events::Reading::xpointer: core::option::Option<alloc::string::String>
 impl paperpaw_sdk::builtin::events::Reading
 pub fn paperpaw_sdk::builtin::events::Reading::at(&self) -> paperpaw_document::Locator
 impl paperpaw_sdk::builtin::events::Reading
@@ -196,6 +197,7 @@ pub fn paperpaw_sdk::builtin::events::Reading::chapter_left(self, impl core::con
 pub fn paperpaw_sdk::builtin::events::Reading::new(alloc::string::String, alloc::string::String, f32, u32, u32, alloc::string::String) -> Self
 pub fn paperpaw_sdk::builtin::events::Reading::page(self, impl core::convert::Into<core::option::Option<u32>>) -> Self
 pub fn paperpaw_sdk::builtin::events::Reading::pages(self, impl core::convert::Into<core::option::Option<u32>>) -> Self
+pub fn paperpaw_sdk::builtin::events::Reading::xpointer(self, impl core::convert::Into<core::option::Option<alloc::string::String>>) -> Self
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::Reading
 pub fn paperpaw_sdk::builtin::events::Reading::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::builtin::events::Reading::to_params(&self) -> paperpaw_sdk::Params
@@ -1449,6 +1451,24 @@ pub fn paperpaw_sdk::pattern::Pattern::is_match(&self, &str) -> bool
 pub fn paperpaw_sdk::pattern::Pattern::new(&str) -> core::result::Result<paperpaw_sdk::pattern::Pattern, paperpaw_sdk::pattern::PatternError>
 pub const paperpaw_sdk::pattern::MAX_PATTERN: usize
 pub const paperpaw_sdk::pattern::MAX_REPEAT: u32
+pub mod paperpaw_sdk::positions
+#[non_exhaustive] pub struct paperpaw_sdk::positions::Position
+pub paperpaw_sdk::positions::Position::at: paperpaw_document::Locator
+pub paperpaw_sdk::positions::Position::conversion: core::option::Option<u64>
+pub paperpaw_sdk::positions::Position::percent: f32
+pub paperpaw_sdk::positions::Position::updated: i64
+pub paperpaw_sdk::positions::Position::xpointer: core::option::Option<alloc::string::String>
+impl paperpaw_sdk::positions::Position
+pub fn paperpaw_sdk::positions::Position::conversion(self, u64) -> Self
+pub fn paperpaw_sdk::positions::Position::new(paperpaw_document::Locator, f32) -> Self
+pub fn paperpaw_sdk::positions::Position::parse(&str) -> core::option::Option<paperpaw_sdk::positions::Position>
+pub fn paperpaw_sdk::positions::Position::text(&self) -> alloc::string::String
+pub fn paperpaw_sdk::positions::Position::updated(self, i64) -> Self
+pub fn paperpaw_sdk::positions::Position::xpointer(self, impl core::convert::Into<core::option::Option<alloc::string::String>>) -> Self
+pub const paperpaw_sdk::positions::DIR: &str
+pub fn paperpaw_sdk::positions::file(&str) -> alloc::string::String
+pub fn paperpaw_sdk::positions::load(&dyn paperpaw_platform::storage::Storage, &str) -> core::option::Option<paperpaw_sdk::positions::Position>
+pub fn paperpaw_sdk::positions::save(&dyn paperpaw_platform::storage::Storage, &str, &paperpaw_sdk::positions::Position) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub mod paperpaw_sdk::power
 pub enum paperpaw_sdk::power::PowerLevel
 pub paperpaw_sdk::power::PowerLevel::Normal
@@ -1540,6 +1560,8 @@ pub paperpaw_sdk::reading::Word::text: alloc::string::String
 impl paperpaw_sdk::reading::Word
 pub fn paperpaw_sdk::reading::Word::new(impl core::convert::Into<alloc::string::String>, paperpaw_document::Locator, paperpaw_document::Locator) -> Self
 pub fn paperpaw_sdk::reading::ask_page_words(&paperpaw_sdk::event::Event<paperpaw_sdk::reading::PageWords>) -> paperpaw_sdk::Command
+pub fn paperpaw_sdk::reading::conversion(&paperpaw_sdk::Env<'_>) -> u64
+pub fn paperpaw_sdk::reading::open_options(&paperpaw_sdk::Env<'_>) -> paperpaw_sdk::OpenOptions
 pub mod paperpaw_sdk::replies
 #[non_exhaustive] pub enum paperpaw_sdk::replies::ServerNotice
 pub paperpaw_sdk::replies::ServerNotice::Failed

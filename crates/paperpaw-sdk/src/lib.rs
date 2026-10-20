@@ -60,6 +60,7 @@ mod params;
 pub mod pattern;
 mod plugin;
 mod plugins;
+pub mod positions;
 pub mod power;
 pub mod presets;
 pub mod random;

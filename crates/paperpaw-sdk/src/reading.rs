@@ -143,6 +143,38 @@ impl EventData for PageWords {
     }
 }
 
+/// How books are opened for reading: with their own styles as
+/// [`settings::PUBLISHER_STYLES`](crate::builtin::settings::PUBLISHER_STYLES)
+/// says, and the plugins' stylesheets. A plugin that opens the book a
+/// reader shows (to search it, for its contents, to find an XPointer)
+/// opens it so too, or its places need not fit the reader's, and a book
+/// may be converted a second time.
+pub fn open_options(env: &crate::Env<'_>) -> crate::OpenOptions {
+    let styles = env
+        .settings
+        .read(&crate::builtin::settings::PUBLISHER_STYLES);
+    env.formats
+        .options()
+        .publisher_styles(styles)
+        .css(env.stylesheets.join("\n"))
+}
+
+/// Which conversion of a book [`open_options`] make: places
+/// ([`Locator`]s) are those of one conversion (an EPUB's with its own
+/// styles holds style runs the one without them lacks, so its text is at
+/// other places). Kept with a position (see
+/// [`positions`](crate::positions)) to tell when it needs finding by its
+/// XPointer.
+pub fn conversion(env: &crate::Env<'_>) -> u64 {
+    let styles = env
+        .settings
+        .read(&crate::builtin::settings::PUBLISHER_STYLES);
+    env.stylesheets.iter().fold(
+        paperpaw_digest::fnv1a64([u8::from(styles)]),
+        |hash, sheet| hash.rotate_left(5) ^ paperpaw_digest::fnv1a64(sheet.as_bytes()),
+    )
+}
+
 /// Asks the reader for the words of the page it shows: it answers with
 /// `reply` (nothing comes where no book is open).
 pub fn ask_page_words(reply: &Event<PageWords>) -> Command {

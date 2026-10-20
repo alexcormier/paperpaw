@@ -328,6 +328,7 @@ fn register_library(r: &mut Registrar) -> Result<(), RegisterError> {
     })?;
     // The notes of books are the kernel's.
     r.add_book_data(paperpaw_sdk::data_path!("annotations"), "")?;
+    r.add_book_data(paperpaw_sdk::positions::DIR, "")?;
     r.add_book_data(alloc::format!("{}/books", library::DIR), "")?;
     r.add_book_data(alloc::format!("{}/covers", library::DIR), "")?;
     // In the device's part of the settings, before *About*.

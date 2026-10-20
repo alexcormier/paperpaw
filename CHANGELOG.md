@@ -6,6 +6,17 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: `positions`, where each book was left, shared like its
+  annotations (`.paperpaw/positions`, moved and removed with the book):
+  readers keep it, plugins read it without opening the book. The reader
+  keeps its place there (a place kept before is read).
+- SDK: `reading::open_options` and `reading::conversion`: a plugin
+  opens a book as the reader does, so its places fit. KOReader's notes
+  exchange and the progress sync did not, and with the book's own
+  styles off or a stylesheet plugin on they converted the book a second
+  time and could meet other places.
+- SDK: the reading event of a book closed carries its place as an
+  XPointer (`Reading::xpointer`); the progress sync sends it as it is.
 - SDK: the type of book pages is standard, registered by the kernel as
   the font size is: `settings::FONT_WEIGHT`, `WORD_SPACING`,
   `LINE_SPACING`, `MARGIN`, `MARGIN_ENDS`, `JUSTIFY`, `HYPHENATE`,

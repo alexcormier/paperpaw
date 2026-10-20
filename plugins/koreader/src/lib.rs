@@ -640,7 +640,10 @@ fn exchange_book(env: &Env<'_>, book: &str) -> bool {
     let Ok(Some(theirs)) = read_theirs(env.storage, book, limit) else {
         return false;
     };
-    let Ok(doc) = env.formats.open(env.storage, book) else {
+    // As the reader opens it: the places of marks are those of its
+    // conversion of the book.
+    let options = paperpaw_sdk::reading::open_options(env);
+    let Ok(doc) = env.formats.open_with(env.storage, book, &options) else {
         return false;
     };
     let local = |unix| time::local_seconds(env, unix);

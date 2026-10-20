@@ -283,6 +283,12 @@ pub mod events {
             /// page), once the reader counted the pages and where the
             /// chapter is known.
             pub chapter_left: u32,
+            /// The page's start as an XPointer (see
+            /// [`Document::xpointer`](crate::document::Document::xpointer)),
+            /// where the reader found it: with [`BOOK_CLOSED`], for a
+            /// sync that sends it on (finding it takes a while on small
+            /// devices, so not with every page).
+            pub xpointer: String,
         }
     }
 
@@ -1088,9 +1094,11 @@ mod tests {
             pages: Some(300),
             chapter: "Down the Rabbit-Hole".into(),
             chapter_left: Some(7),
+            xpointer: Some("/body/DocFragment[4]/body/p[2]".into()),
         };
         let params = reading.to_params();
         assert_eq!(params.get("chapter_left"), Some("7"));
+        assert_eq!(params.get("xpointer"), Some("/body/DocFragment[4]/body/p[2]"));
         assert_eq!(Reading::from_params(&params).unwrap(), reading);
         assert_eq!(reading.at(), Locator::new(3, 120));
         // A book without a table of contents, its pages not counted.
