@@ -784,7 +784,13 @@ mod tests {
     fn code_fetched_for_an_update_has_a_folder_not_loaded() {
         assert_eq!(fetched_folder("stats"), "plugins/.stats.next");
         assert_eq!(fetched_plugin(".stats.next"), Some("stats"));
-        for other in ["stats", ".stats.part", ".stats.old", "..next", ".Stats.next"] {
+        for other in [
+            "stats",
+            ".stats.part",
+            ".stats.old",
+            "..next",
+            ".Stats.next",
+        ] {
             assert_eq!(fetched_plugin(other), None, "{other}");
         }
         let storage = crate::MemoryStorage::new();

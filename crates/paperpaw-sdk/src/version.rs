@@ -36,7 +36,9 @@ impl Version {
         let mut value: u16 = 0;
         let mut i = 0;
         while i < bytes.len() && bytes[i].is_ascii_digit() {
-            value = value.saturating_mul(10).saturating_add((bytes[i] - b'0') as u16);
+            value = value
+                .saturating_mul(10)
+                .saturating_add((bytes[i] - b'0') as u16);
             i += 1;
         }
         value
