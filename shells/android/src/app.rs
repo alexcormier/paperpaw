@@ -462,6 +462,13 @@ fn start_kernel(
     } else {
         Vec::new()
     };
+    // The plugins the store offers as files are built in here (an app
+    // from Play may load no code from files), switched off until the
+    // reader wants one; one used before, its data kept, stays on.
+    let used: Vec<&str> = paperpaw_app::STORE_PLUGINS
+        .into_iter()
+        .filter(|id| storage.exists(&paperpaw_sdk::Env::plugin_dir(id)))
+        .collect();
     let mut builder = Kernel::builder(device)
         .clock(micros)
         .random(random)
@@ -493,8 +500,12 @@ fn start_kernel(
     if let Some(language) = app.config().language() {
         builder = builder.setting_default(&settings::LANGUAGE, language.into());
     }
-    let builder =
-        paperpaw_app::install(builder, paperpaw_app::Fonts::Outline).plugin(AndroidPlugin {
+    let builder = paperpaw_app::install_with(
+        builder,
+        paperpaw_app::Fonts::Outline,
+        paperpaw_app::StorePlugins::Off(&|id| used.contains(&id)),
+    )
+    .plugin(AndroidPlugin {
             app: app.clone(),
             shared_storage,
             screen: (

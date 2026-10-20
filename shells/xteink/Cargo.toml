@@ -55,7 +55,11 @@ esp32s3 = [
 # files in and out, presses, the screen, profiling, the heap's peak (the
 # allocator counts it). Not in released firmware: it costs flash and
 # memory, and anyone with a cable could use it.
-remote = ["esp-alloc/internal-heap-stats"]
+remote = [
+    "esp-alloc/internal-heap-stats",
+    # The diagnostics screen, for bringing up devices.
+    "paperpaw-app/diagnostics",
+]
 
 [dependencies]
 paperpaw-app = { path = "../../crates/paperpaw-app", default-features = false, features = ["packs"] }
@@ -70,8 +74,7 @@ paperpaw-http = { path = "../../crates/paperpaw-http" }
 paperpaw-digest = { path = "../../crates/paperpaw-digest" }
 # Native code plugins' files (`src/native`).
 paperpaw-native = { path = "../../crates/paperpaw-native" }
-# Their settings' ids, for the X4's defaults.
-paperpaw-plugin-reader = { path = "../../plugins/reader" }
+# Its settings' ids, for the X4's defaults.
 paperpaw-plugin-wifi = { path = "../../plugins/wifi" }
 esp-hal = { version = "1.2", features = ["unstable"] }
 esp-alloc = "0.11"

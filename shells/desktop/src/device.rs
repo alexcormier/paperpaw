@@ -509,7 +509,10 @@ fn build_kernel(
         if !profile.font_packs {
             builder = builder.font_dir("fonts");
         }
-        let mut builder = paperpaw_app::install(builder, fonts);
+        // As on the devices: the plugins the store offers as files are
+        // off until switched on (the emulator loads no plugin files).
+        let mut builder =
+            paperpaw_app::install_with(builder, fonts, paperpaw_app::StorePlugins::Off(&|_| false));
         #[cfg(feature = "hello")]
         {
             builder = builder.plugin(paperpaw_sample_hello::Hello);
