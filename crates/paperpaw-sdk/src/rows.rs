@@ -322,6 +322,7 @@ pub(super) fn card_style() -> UiStyle {
         cards: true,
         paw: false,
         grays: 2,
+        finger: 0,
     }
 }
 
