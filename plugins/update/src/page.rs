@@ -264,7 +264,7 @@ impl UpdatePage {
                     signer: Signer::Unknown,
                     ..
                 },
-            ) => "update.trust-install",
+            ) => "update.install-with-key",
             (
                 Button::Install,
                 View::Ready {

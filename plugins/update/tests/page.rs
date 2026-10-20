@@ -268,7 +268,7 @@ fn an_update_signed_by_another_key_installs_with_the_key_shown() {
     let fingerprint = paperpaw_sdk::firmware::fingerprint(&key).replace(' ', "\u{a0}");
     assert!(shown.contains("own build"), "{shown}");
     assert!(shown.contains(&fingerprint), "{shown}");
-    assert!(shown.contains("Trust and install"), "{shown}");
+    assert!(shown.contains("Install with this key"), "{shown}");
     device.run(actions::CONFIRM);
     assert_eq!(
         device.install(),
