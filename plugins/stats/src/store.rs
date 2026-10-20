@@ -11,13 +11,20 @@
 //!   duration (u16, seconds) and the book's pages then (u32), like KOReader's
 //!   `page_stat_data`.
 //! - `days.bin`: reading time per local day for quick views, derived from
-//!   `pages.bin`: how many bytes of the log it covers (u64), then 12 bytes
-//!   per day, in order: the day (i32, days since 1970), seconds (u32) and
-//!   stays (u32). Brought up to date when a view needs it, so reading only
-//!   ever appends 16 bytes per page.
+//!   `pages.bin`: a header of 36 bytes (`day2`; how many bytes of the log
+//!   it covers, u64; the time zone the days are local to, two i32; the
+//!   log's first stay, to tell a replaced log), then 12 bytes per day, in
+//!   order: the day (i32, days since 1970), seconds (u32) and stays (u32).
+//!   Brought up to date when a view needs it, so reading only ever appends
+//!   16 bytes per page; summed anew when anything in the header no longer
+//!   holds.
 //!
 //! Nothing is held in memory but what a view shows: the log is read in
 //! small chunks, from the end for recent days.
+//!
+//! What cannot be read is never written over: changes to the books go
+//! through [`update_books`], which leaves `books.ini` as it is when it
+//! cannot be read whole.
 
 use alloc::format;
 use alloc::string::String;
@@ -130,20 +137,81 @@ pub(crate) fn sizes(storage: &dyn Storage) -> (u64, u64) {
     (size("pages.bin"), size("books.ini"))
 }
 
-/// The books, by id.
-pub(crate) fn books(storage: &dyn Storage) -> Vec<Book> {
-    let Ok(data) = paperpaw_sdk::read_file(storage, &path("books.ini"), 1 << 20) else {
-        return Vec::new();
+/// The longest line `books.ini` may have: a longer one is taken for a
+/// damaged file.
+const LINE: usize = 16 * 1024;
+
+/// Calls `visit` with each line of the file at `path` (without its line
+/// break) as it streams from the storage; a missing file has none. Invalid
+/// UTF-8 and overlong lines are errors ([`StorageError::InvalidData`]),
+/// not left out, so that nothing unread is written back.
+fn each_line(
+    storage: &dyn Storage,
+    path: &str,
+    mut visit: impl FnMut(&str) -> Result<(), StorageError>,
+) -> Result<(), StorageError> {
+    let mut chunk = [0u8; 512];
+    let mut line: Vec<u8> = Vec::new();
+    let mut emit = |line: &mut Vec<u8>| {
+        let text = core::str::from_utf8(line).map_err(|_| StorageError::InvalidData)?;
+        visit(text.strip_suffix('\r').unwrap_or(text))?;
+        line.clear();
+        Ok(())
     };
-    let text = core::str::from_utf8(&data).unwrap_or_default();
+    let mut at = 0u64;
+    loop {
+        let n = match storage.read_at(path, at, &mut chunk) {
+            Ok(n) => n,
+            Err(StorageError::NotFound) if at == 0 => 0,
+            Err(e) => return Err(e),
+        };
+        if n == 0 {
+            break;
+        }
+        at += n as u64;
+        for piece in chunk[..n].split_inclusive(|b| *b == b'\n') {
+            let (text, ends) = match piece.split_last() {
+                Some((b'\n', text)) => (text, true),
+                _ => (piece, false),
+            };
+            if line.len() + text.len() > LINE {
+                return Err(StorageError::InvalidData);
+            }
+            line.extend_from_slice(text);
+            if ends {
+                emit(&mut line)?;
+            }
+        }
+    }
+    if !line.is_empty() {
+        emit(&mut line)?;
+    }
+    Ok(())
+}
+
+/// The books, by id; none while there is no `books.ini`. An error where
+/// it cannot be read whole (a read error, invalid UTF-8, a line that is
+/// no entry): then it must not be saved over.
+pub(crate) fn load_books(storage: &dyn Storage) -> Result<Vec<Book>, StorageError> {
     let mut books: Vec<Book> = Vec::new();
-    for entry in paperpaw_sdk::config::parse(text).filter_map(Result::ok) {
-        let Some(id) = entry
-            .section
-            .strip_prefix("book.")
-            .and_then(|id| id.parse::<u16>().ok())
-        else {
-            continue;
+    // The book of the section being read, if it is one.
+    let mut section: Option<u16> = None;
+    each_line(storage, &path("books.ini"), |line| {
+        if let Some(header) = line.trim().strip_prefix('[') {
+            let name = header.strip_suffix(']').ok_or(StorageError::InvalidData)?;
+            section = name
+                .trim()
+                .strip_prefix("book.")
+                .and_then(|id| id.parse::<u16>().ok());
+            return Ok(());
+        }
+        // Nothing for an empty line or a comment.
+        let Some(entry) = paperpaw_sdk::config::parse(line).next() else {
+            return Ok(());
+        };
+        let entry = entry.map_err(|_| StorageError::InvalidData)?;
+        let Some(id) = section else {
+            return Ok(());
         };
         if books.last().is_none_or(|b| b.id != id) {
             books.push(Book {
@@ -165,13 +233,37 @@ pub(crate) fn books(storage: &dyn Storage) -> Vec<Book> {
             "finished" => book.finished = value.parse().unwrap_or(0),
             _ => {}
         }
-    }
+        Ok(())
+    })?;
     books.sort_by_key(|b| b.id);
     books.dedup_by_key(|b| b.id);
-    books
+    Ok(books)
 }
 
-pub(crate) fn save_books(storage: &dyn Storage, books: &[Book]) {
+/// The books, by id, to show them: none where `books.ini` cannot be read.
+/// Never to be saved back: changes go through [`update_books`].
+pub(crate) fn books(storage: &dyn Storage) -> Vec<Book> {
+    load_books(storage).unwrap_or_default()
+}
+
+/// Changes the books: `change` gets all of them and says whether it
+/// changed any, which are then saved. Whether it did; an error, with
+/// nothing written, where `books.ini` cannot be read or written.
+pub(crate) fn update_books(
+    storage: &dyn Storage,
+    change: impl FnOnce(&mut Vec<Book>) -> bool,
+) -> Result<bool, StorageError> {
+    let mut books = load_books(storage)?;
+    if !change(&mut books) {
+        return Ok(false);
+    }
+    save_books(storage, &books)?;
+    Ok(true)
+}
+
+/// Writes `books.ini` with `books`, which replace all there were: read
+/// them with [`load_books`] (or use [`update_books`]).
+pub(crate) fn save_books(storage: &dyn Storage, books: &[Book]) -> Result<(), StorageError> {
     let mut text = String::new();
     for b in books {
         text.push_str(&format!(
@@ -188,26 +280,45 @@ pub(crate) fn save_books(storage: &dyn Storage, books: &[Book]) {
             b.finished,
         ));
     }
-    let _ = storage.write(&path("books.ini"), text.as_bytes());
+    storage.write(&path("books.ini"), text.as_bytes())
+}
+
+/// An id for a new book: above those of `books` and of every stay in the
+/// log, so that a new book never takes over the stays of one whose entry
+/// was lost. [`StorageError::Full`] when there is none left.
+pub(crate) fn new_id(storage: &dyn Storage, books: &[Book]) -> Result<u16, StorageError> {
+    let mut last = books.iter().map(|b| b.id).max().unwrap_or(0);
+    scan(storage, |s| last = last.max(s.book))?;
+    last.checked_add(1).ok_or(StorageError::Full)
 }
 
 /// Records a stay on a page.
-pub(crate) fn append(storage: &dyn Storage, stat: PageStat) {
-    let _ = storage.append(&path("pages.bin"), &stat.encode());
+pub(crate) fn append(storage: &dyn Storage, stat: PageStat) -> Result<(), StorageError> {
+    storage.append(&path("pages.bin"), &stat.encode())
 }
 
 /// Replaces the log with the stays in `file` (records of book, page,
 /// start, duration and pages as big-endian u32, in time order), e.g.
 /// after merging with another device's; the day totals are summed anew.
+/// After an error the log is as it was.
 pub(crate) fn replace_log(storage: &dyn Storage, file: &str) -> Result<(), StorageError> {
     let new = path("pages.new");
-    storage.write(&new, &[])?;
+    let result = write_log(storage, file, &new);
+    if result.is_err() {
+        let _ = storage.remove(&new);
+    }
+    result
+}
+
+fn write_log(storage: &dyn Storage, file: &str, new: &str) -> Result<(), StorageError> {
+    storage.write(new, &[])?;
     let mut chunk = [0u8; 20 * 64];
+    let mut out = Vec::with_capacity(64 * RECORD);
     let mut at = 0u64;
     loop {
         let n = storage.read_at(file, at, &mut chunk)?;
         let whole = n - n % 20;
-        let mut out = Vec::with_capacity(whole / 20 * RECORD);
+        out.clear();
         for r in chunk[..whole].as_chunks::<20>().0 {
             let v = |i: usize| u32::from_be_bytes([r[i], r[i + 1], r[i + 2], r[i + 3]]);
             let stat = PageStat {
@@ -219,32 +330,111 @@ pub(crate) fn replace_log(storage: &dyn Storage, file: &str) -> Result<(), Stora
             };
             out.extend_from_slice(&stat.encode());
         }
-        storage.append(&new, &out)?;
+        storage.append(new, &out)?;
         if whole == 0 || n < chunk.len() {
             break;
         }
         at += whole as u64;
     }
-    // Swapped in at once (by a rename where the storage can), then the
-    // day totals go.
-    if storage.rename(&new, &path("pages.bin")).is_err() {
-        let data =
-            paperpaw_sdk::read_file(storage, &new, 256 << 20).map_err(|_| StorageError::Io)?;
-        storage.write(&path("pages.bin"), &data)?;
-        let _ = storage.remove(&new);
+    // The day totals go first: whatever happens next, they are never
+    // taken for those of the new log.
+    match storage.remove(&path("days.bin")) {
+        Ok(()) | Err(StorageError::NotFound) => {}
+        Err(e) => return Err(e),
     }
-    let _ = storage.remove(&path("days.bin"));
-    Ok(())
+    // Swapped in at once, by a rename where the storage can.
+    paperpaw_sdk::files::move_to(storage, new, &path("pages.bin"))
+}
+
+/// Bytes before the days in `days.bin`.
+const HEADER: usize = 36;
+const MAGIC: &[u8; 4] = b"day2";
+
+/// What the day totals were summed from: when any of it changed, they
+/// are summed anew.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Summed {
+    /// Bytes of the log.
+    covered: u64,
+    /// The time zone ([`zone`]).
+    zone: [i32; 2],
+    /// The log's first stay (zeros while it has none).
+    first: [u8; RECORD],
+}
+
+impl Summed {
+    fn encode(&self) -> [u8; HEADER] {
+        let mut out = [0u8; HEADER];
+        out[0..4].copy_from_slice(MAGIC);
+        out[4..12].copy_from_slice(&self.covered.to_le_bytes());
+        out[12..16].copy_from_slice(&self.zone[0].to_le_bytes());
+        out[16..20].copy_from_slice(&self.zone[1].to_le_bytes());
+        out[20..36].copy_from_slice(&self.first);
+        out
+    }
+
+    fn decode(b: &[u8; HEADER]) -> Option<Self> {
+        if &b[0..4] != MAGIC {
+            return None;
+        }
+        let at = |i: usize| [b[i], b[i + 1], b[i + 2], b[i + 3]];
+        let mut covered = [0u8; 8];
+        covered.copy_from_slice(&b[4..12]);
+        let mut first = [0u8; RECORD];
+        first.copy_from_slice(&b[20..36]);
+        Some(Self {
+            covered: u64::from_le_bytes(covered),
+            zone: [i32::from_le_bytes(at(12)), i32::from_le_bytes(at(16))],
+            first,
+        })
+    }
+}
+
+/// The time zone as `day_of` applies it, as numbers that change with it:
+/// on which side of midnight UTC of 15 January and of 15 July 2024
+/// (winter and summer time) a local day begins, and in which quarter
+/// hour.
+fn zone(day_of: &impl Fn(u32) -> i32) -> [i32; 2] {
+    const QUARTER: u32 = 900;
+    const QUARTERS: u32 = 96;
+    [1_705_276_800u32, 1_721_001_600].map(|midnight| {
+        let first = day_of(midnight);
+        // Another day begins within a day: the first quarter hour in it.
+        let (mut same, mut other) = (0, QUARTERS);
+        while same + 1 < other {
+            let mid = (same + other) / 2;
+            if day_of(midnight + mid * QUARTER) == first {
+                same = mid;
+            } else {
+                other = mid;
+            }
+        }
+        let side = first.wrapping_sub((midnight / 86_400) as i32);
+        side.wrapping_mul(QUARTERS as i32)
+            .wrapping_add(other as i32)
+    })
 }
 
 /// Every day with reading, in order, local days as `day_of` makes them
 /// from Unix seconds; brings `days.bin` up to date with the log first.
 pub(crate) fn days(storage: &dyn Storage, day_of: impl Fn(u32) -> i32) -> Vec<Day> {
     let file = path("days.bin");
+    let log = path("pages.bin");
+    let size = storage.size(&log).unwrap_or(0);
+    let mut first = [0u8; RECORD];
+    if storage.read_at(&log, 0, &mut first).ok() != Some(RECORD) {
+        first = [0; RECORD];
+    }
+    let zone = zone(&day_of);
+    // Derived from the log: what cannot be read is summed anew.
     let data = paperpaw_sdk::read_file(storage, &file, 1 << 20).unwrap_or_default();
-    let (mut covered, mut days) = match data.split_first_chunk::<8>() {
-        Some((head, rest)) => (
-            u64::from_le_bytes(*head),
+    let summed = data
+        .split_first_chunk::<HEADER>()
+        .and_then(|(head, rest)| Some((Summed::decode(head)?, rest)))
+        .filter(|(s, _)| s.zone == zone && s.first == first && s.covered <= size);
+    let (covered, mut days) = match summed {
+        Some((s, rest)) => (
+            s.covered,
             rest.as_chunks::<DAY>()
                 .0
                 .iter()
@@ -253,13 +443,6 @@ pub(crate) fn days(storage: &dyn Storage, day_of: impl Fn(u32) -> i32) -> Vec<Da
         ),
         None => (0, Vec::new()),
     };
-    let log = path("pages.bin");
-    let size = storage.size(&log).unwrap_or(0);
-    if covered > size {
-        // The log was replaced (e.g. merged with another device's).
-        covered = 0;
-        days.clear();
-    }
     if covered + RECORD as u64 > size {
         return days;
     }
@@ -290,45 +473,59 @@ pub(crate) fn days(storage: &dyn Storage, day_of: impl Fn(u32) -> i32) -> Vec<Da
             break;
         }
     }
-    let mut out = Vec::with_capacity(8 + days.len() * DAY);
-    out.extend_from_slice(&at.to_le_bytes());
+    let summed = Summed {
+        covered: at,
+        zone,
+        first,
+    };
+    let mut out = Vec::with_capacity(HEADER + days.len() * DAY);
+    out.extend_from_slice(&summed.encode());
     for d in &days {
         out.extend_from_slice(&d.encode());
     }
+    // Only a shortcut: if it cannot be kept, the days are summed anew.
     let _ = storage.write(&file, &out);
     days
 }
 
-/// Calls `visit` for every stay, oldest first.
-pub(crate) fn scan(storage: &dyn Storage, mut visit: impl FnMut(&PageStat)) {
+/// Calls `visit` for every stay, oldest first. A read error ends the
+/// stays and is returned: then those visited are not all there are.
+pub(crate) fn scan(
+    storage: &dyn Storage,
+    mut visit: impl FnMut(&PageStat),
+) -> Result<(), StorageError> {
     let file = path("pages.bin");
     let mut chunk = [0u8; RECORD * 64];
     let mut at = 0u64;
     loop {
-        let Ok(n) = storage.read_at(&file, at, &mut chunk) else {
-            return;
+        let n = match storage.read_at(&file, at, &mut chunk) {
+            Ok(n) => n,
+            // No log yet.
+            Err(StorageError::NotFound) if at == 0 => 0,
+            Err(e) => return Err(e),
         };
         let whole = n - n % RECORD;
         for record in chunk[..whole].as_chunks::<RECORD>().0 {
             visit(&PageStat::decode(record));
         }
         if n < chunk.len() || whole == 0 {
-            return;
+            return Ok(());
         }
         at += whole as u64;
     }
 }
 
 /// Calls `visit` for the stays that started at `since` (Unix seconds) or
-/// later, newest first; reads only the end of the log, as stays are
-/// recorded in order.
+/// later, newest first; reads only the end of the log. Stays are logged
+/// as they end (a merged log is in order of their starts, which is no
+/// later), so all stays before one that ended before `since` started
+/// before it too.
 pub(crate) fn scan_recent(storage: &dyn Storage, since: u32, mut visit: impl FnMut(&PageStat)) {
     let file = path("pages.bin");
     let size = storage.size(&file).unwrap_or(0);
     let mut end = size - size % RECORD as u64;
     let mut chunk = [0u8; RECORD * 64];
-    // Stays a little older may come later (a page read before a pause).
-    let margin = 3600;
+    let margin = CLOCK_LEEWAY;
     while end > 0 {
         let start = end.saturating_sub(chunk.len() as u64);
         let len = (end - start) as usize;
@@ -338,9 +535,10 @@ pub(crate) fn scan_recent(storage: &dyn Storage, since: u32, mut visit: impl FnM
         let mut older = false;
         for record in chunk[..len].as_chunks::<RECORD>().0.iter().rev() {
             let stat = PageStat::decode(record);
+            let ended = u64::from(stat.start) + u64::from(stat.duration);
             if stat.start >= since {
                 visit(&stat);
-            } else if stat.start + margin < since {
+            } else if ended + margin < u64::from(since) {
                 older = true;
             }
         }
@@ -351,9 +549,66 @@ pub(crate) fn scan_recent(storage: &dyn Storage, since: u32, mut visit: impl FnM
     }
 }
 
+/// Leeway for a clock set a little back between stays, which puts the
+/// log a little out of order.
+const CLOCK_LEEWAY: u64 = 3600;
+
+/// Calls `visit` for the stays that started from `from` up to before `to`
+/// (Unix seconds), in the order of the log; reads only about that part of
+/// it. As stays are logged as they end (see [`scan_recent`]), the first
+/// that may have started in time is found by halving, and the reading
+/// ends at one that started so late that no later stay can have started
+/// before `to`, however long it lasted.
+pub(crate) fn scan_range(
+    storage: &dyn Storage,
+    from: u32,
+    to: u32,
+    mut visit: impl FnMut(&PageStat),
+) {
+    let file = path("pages.bin");
+    let count = storage.size(&file).unwrap_or(0) / RECORD as u64;
+    let ended = |s: &PageStat| u64::from(s.start) + u64::from(s.duration);
+    let (mut low, mut high) = (0, count);
+    while low < high {
+        let mid = low + (high - low) / 2;
+        let mut record = [0u8; RECORD];
+        if storage
+            .read_at(&file, mid * RECORD as u64, &mut record)
+            .ok()
+            != Some(RECORD)
+        {
+            return;
+        }
+        if ended(&PageStat::decode(&record)) + CLOCK_LEEWAY < u64::from(from) {
+            low = mid + 1;
+        } else {
+            high = mid;
+        }
+    }
+    let last_start = u64::from(to) + u64::from(u16::MAX) + CLOCK_LEEWAY;
+    let mut chunk = [0u8; RECORD * 64];
+    let mut at = low * RECORD as u64;
+    while let Ok(n) = storage.read_at(&file, at, &mut chunk) {
+        let whole = n - n % RECORD;
+        for record in chunk[..whole].as_chunks::<RECORD>().0 {
+            let stat = PageStat::decode(record);
+            if (from..to).contains(&stat.start) {
+                visit(&stat);
+            } else if u64::from(stat.start) >= last_start {
+                return;
+            }
+        }
+        if n < chunk.len() || whole == 0 {
+            return;
+        }
+        at += whole as u64;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::testing::Faulty;
     use paperpaw_sdk::MemoryStorage;
 
     /// The files as version 1 wrote them stay readable (see
@@ -366,7 +621,7 @@ mod tests {
                 &path("pages.bin"),
                 include_bytes!("../testdata/pages.bin.v1").to_vec(),
             );
-        let books = books(&storage);
+        let books = load_books(&storage).unwrap();
         assert_eq!(books.len(), 2);
         assert_eq!(books[0].title, "Anna Karenina");
         assert_eq!(books[0].authors, "Leo Tolstoy\nRosamund Bartlett");
@@ -375,7 +630,7 @@ mod tests {
         assert_eq!(books[0].path, "books/Anna Karenina.epub");
         assert_eq!(books[1].title, "Short \"stories\"");
         let mut stays = Vec::new();
-        scan(&storage, |s| stays.push(*s));
+        scan(&storage, |s| stays.push(*s)).unwrap();
         assert_eq!(
             stays,
             [
@@ -429,8 +684,71 @@ mod tests {
                 ..Book::default()
             },
         ];
-        save_books(&storage, &books_in);
-        assert_eq!(books(&storage), books_in);
+        save_books(&storage, &books_in).unwrap();
+        assert_eq!(load_books(&storage).unwrap(), books_in);
+        // Read in pieces: a long list of books.
+        let many: Vec<Book> = (1..=300)
+            .map(|id| Book {
+                id,
+                title: format!("Book {id} with a title of some length"),
+                ..Book::default()
+            })
+            .collect();
+        save_books(&storage, &many).unwrap();
+        assert_eq!(load_books(&storage).unwrap(), many);
+    }
+
+    /// A `books.ini` that cannot be read whole is an error, and changes
+    /// leave it as it is; only a missing one is empty.
+    #[test]
+    fn unreadable_books_are_never_saved_over() {
+        let one = "[book.1]\ntitle = Eins\nmd5 = aaa\n\n[book.2]\ntitle = Zwei\n";
+        let add = |books: &mut Vec<Book>| {
+            books.push(Book {
+                id: 3,
+                ..Book::default()
+            });
+            true
+        };
+        let cases: [(&str, &[u8]); 3] = [
+            // Saved as Latin-1 on a computer.
+            ("ANSI", b"[book.1]\ntitle = M\xfcller\n"),
+            ("not an entry", b"[book.1]\ntitle = Eins\nsomething odd\n"),
+            ("cut header", b"[book.1\ntitle = Eins\n"),
+        ];
+        for (what, data) in cases {
+            let storage = MemoryStorage::new().with(&path("books.ini"), data.to_vec());
+            assert!(load_books(&storage).is_err(), "{what}");
+            assert!(update_books(&storage, add).is_err(), "{what}");
+            assert_eq!(storage.get(&path("books.ini")).unwrap(), data, "{what}");
+        }
+        // A read error halfway.
+        let storage = Faulty::new(MemoryStorage::new().with(&path("books.ini"), one));
+        storage.break_at(&path("books.ini"), 20);
+        assert_eq!(load_books(&storage), Err(StorageError::Io));
+        assert_eq!(update_books(&storage, add), Err(StorageError::Io));
+        assert_eq!(
+            storage.inner.get(&path("books.ini")).unwrap(),
+            one.as_bytes()
+        );
+        assert!(books(&storage).is_empty());
+        // None yet.
+        let storage = MemoryStorage::new();
+        assert_eq!(update_books(&storage, add), Ok(true));
+        assert_eq!(load_books(&storage).unwrap().len(), 1);
+    }
+
+    /// A card that is full: the error comes back, nothing is lost quietly.
+    #[test]
+    fn write_errors_are_returned() {
+        let storage = Faulty::new(MemoryStorage::new());
+        storage.fill_after(0);
+        assert_eq!(
+            append(&storage, stat(1, 1, 100, 10)),
+            Err(StorageError::Full)
+        );
+        assert_eq!(save_books(&storage, &[]), Err(StorageError::Full));
+        assert_eq!(update_books(&storage, |_| true), Err(StorageError::Full));
     }
 
     #[test]
@@ -438,9 +756,9 @@ mod tests {
         let storage = MemoryStorage::new();
         // A day of 100 seconds, for short numbers.
         let day_of = |unix: u32| (unix / 100) as i32;
-        append(&storage, stat(1, 1, 1000, 30));
-        append(&storage, stat(1, 2, 1030, 40));
-        append(&storage, stat(2, 7, 1100, 20));
+        append(&storage, stat(1, 1, 1000, 30)).unwrap();
+        append(&storage, stat(1, 2, 1030, 40)).unwrap();
+        append(&storage, stat(2, 7, 1100, 20)).unwrap();
         assert_eq!(
             days(&storage, day_of),
             [
@@ -457,8 +775,8 @@ mod tests {
             ]
         );
         // Later stays are added to what was summed, also earlier days.
-        append(&storage, stat(1, 3, 950, 10));
-        append(&storage, stat(1, 4, 1150, 5));
+        append(&storage, stat(1, 3, 950, 10)).unwrap();
+        append(&storage, stat(1, 4, 1150, 5)).unwrap();
         assert_eq!(
             days(&storage, day_of),
             [
@@ -480,7 +798,9 @@ mod tests {
             ]
         );
         // A replaced, shorter log is summed anew.
-        let _ = storage.write(&path("pages.bin"), &stat(3, 1, 1200, 9).encode());
+        storage
+            .write(&path("pages.bin"), &stat(3, 1, 1200, 9).encode())
+            .unwrap();
         assert_eq!(
             days(&storage, day_of),
             [Day {
@@ -490,32 +810,183 @@ mod tests {
             }]
         );
         let mut all = Vec::new();
-        scan(&storage, |s| all.push(*s));
+        scan(&storage, |s| all.push(*s)).unwrap();
         assert_eq!(all, [stat(3, 1, 1200, 9)]);
+    }
+
+    /// The totals are summed anew in another time zone, and for a log
+    /// replaced by one as long or longer (e.g. when the device lost power
+    /// right after a merge swapped it in).
+    #[test]
+    fn day_totals_follow_the_zone_and_the_log() {
+        let storage = MemoryStorage::new();
+        let at = |hours: u32| 1_760_000_000 - 1_760_000_000 % 86_400 + hours * 3600;
+        let in_zone =
+            |offset: i64| move |unix: u32| (i64::from(unix) + offset).div_euclid(86_400) as i32;
+        append(&storage, stat(1, 1, at(23), 60)).unwrap();
+        let utc = days(&storage, in_zone(0));
+        assert_eq!(utc.len(), 1);
+        // Two hours ahead, 23:00 UTC is the next day.
+        let berlin = days(&storage, in_zone(7200));
+        assert_eq!(berlin[0].day, utc[0].day + 1);
+        assert_eq!(days(&storage, in_zone(0)), utc);
+        // Another log of the same length: its own days.
+        storage
+            .write(&path("pages.bin"), &stat(2, 1, at(5), 30).encode())
+            .unwrap();
+        assert_eq!(
+            days(&storage, in_zone(0)),
+            [Day {
+                day: utc[0].day,
+                seconds: 30,
+                stays: 1
+            }]
+        );
+        // The totals of earlier versions are summed anew.
+        let mut old = 16u64.to_le_bytes().to_vec();
+        old.extend_from_slice(
+            &Day {
+                day: 1,
+                seconds: 999,
+                stays: 1,
+            }
+            .encode(),
+        );
+        storage.write(&path("days.bin"), &old).unwrap();
+        assert_eq!(days(&storage, in_zone(0))[0].seconds, 30);
+    }
+
+    /// A merged log replaces this one; the day totals go with it.
+    #[test]
+    fn the_log_is_replaced() {
+        let storage = MemoryStorage::new();
+        append(&storage, stat(1, 1, 100, 10)).unwrap();
+        let day_of = |unix: u32| (unix / 100) as i32;
+        assert_eq!(days(&storage, day_of).len(), 1);
+        let merged: Vec<u8> = [[2u32, 3, 150, 70_000, 200], [1, 1, 300, 20, 300]]
+            .iter()
+            .flat_map(|r| r.iter().flat_map(|v| v.to_be_bytes()))
+            .collect();
+        storage.write("merged", &merged).unwrap();
+        replace_log(&storage, "merged").unwrap();
+        let mut all = Vec::new();
+        scan(&storage, |s| all.push(*s)).unwrap();
+        assert_eq!(
+            all,
+            [
+                PageStat {
+                    book: 2,
+                    page: 3,
+                    start: 150,
+                    duration: u16::MAX,
+                    pages: 200
+                },
+                stat(1, 1, 300, 20)
+            ]
+        );
+        assert!(!storage.exists(&path("pages.new")));
+        assert_eq!(days(&storage, day_of).len(), 2);
+        // A card that fills up halfway: the log stays as it was.
+        let storage = Faulty::new(MemoryStorage::new().with("merged", merged));
+        append(&storage, stat(1, 1, 100, 10)).unwrap();
+        storage.fill_after(1);
+        assert_eq!(replace_log(&storage, "merged"), Err(StorageError::Full));
+        let mut all = Vec::new();
+        scan(&storage, |s| all.push(*s)).unwrap();
+        assert_eq!(all, [stat(1, 1, 100, 10)]);
+        assert!(!storage.exists(&path("pages.new")));
+    }
+
+    #[test]
+    fn a_read_error_in_the_log_is_returned() {
+        let storage = Faulty::new(MemoryStorage::new());
+        for i in 0..100 {
+            append(&storage, stat(1, i + 1, 1000 + i * 10, 9)).unwrap();
+        }
+        storage.break_at(&path("pages.bin"), 16 * 70);
+        let mut count = 0;
+        assert_eq!(scan(&storage, |_| count += 1), Err(StorageError::Io));
+        assert_eq!(count, 64);
+        // No log yet: no stays.
+        assert_eq!(scan(&MemoryStorage::new(), |_| count += 1), Ok(()));
     }
 
     #[test]
     fn recent_stays_come_from_the_end() {
         let storage = MemoryStorage::new();
         for (i, start) in [100u32, 130, 90_000].into_iter().enumerate() {
-            append(&storage, stat(1, i as u32 + 1, start, 10));
+            append(&storage, stat(1, i as u32 + 1, start, 10)).unwrap();
         }
         let mut recent = Vec::new();
         scan_recent(&storage, 120, |s| recent.push(s.start));
         assert_eq!(recent, [90_000, 130]);
     }
 
+    /// A stay that began long before but ended after one that began
+    /// recently (e.g. KOReader's, of hours on one page) does not end the
+    /// search early.
+    #[test]
+    fn recent_stays_come_after_a_long_one() {
+        let storage = MemoryStorage::new();
+        append(&storage, stat(1, 1, 10_000, 10)).unwrap();
+        for page in 2..70 {
+            append(&storage, stat(1, page, 1000, 9_500)).unwrap();
+        }
+        let mut recent = Vec::new();
+        scan_recent(&storage, 10_000, |s| recent.push(s.page));
+        assert_eq!(recent, [1]);
+    }
+
+    /// The stays of a time range, from a log of many days in the order
+    /// the stays ended.
+    #[test]
+    fn stays_of_a_range() {
+        let storage = MemoryStorage::new();
+        let mut stays = Vec::new();
+        let mut expected = Vec::new();
+        for day in 0..30u32 {
+            for minute in 0..20u32 {
+                let start = 1_000_000 + day * 86_400 + minute * 60;
+                stays.push(stat(1, minute + 1, start, 50));
+                if day == 12 {
+                    expected.push(start);
+                }
+            }
+        }
+        // A stay of 18 hours that began the day before ends on day 12.
+        let long = 1_000_000 + 11 * 86_400 + 20 * 3600;
+        stays.push(stat(2, 1, long, u16::MAX));
+        // One that began on day 12 and ended on day 13.
+        let late = 1_000_000 + 12 * 86_400 + 86_000;
+        stays.push(stat(2, 2, late, 600));
+        expected.push(late);
+        stays.sort_by_key(|s| s.start + u32::from(s.duration));
+        for s in stays {
+            append(&storage, s).unwrap();
+        }
+        let (from, to) = (1_000_000 + 12 * 86_400, 1_000_000 + 13 * 86_400);
+        let mut found = Vec::new();
+        scan_range(&storage, from, to, |s| found.push(s.start));
+        found.sort_unstable();
+        expected.sort_unstable();
+        assert_eq!(found, expected);
+        // Nothing before the log, all of it around it.
+        let mut none = 0;
+        scan_range(&storage, 0, 1000, |_| none += 1);
+        assert_eq!(none, 0);
+        let mut all = 0;
+        scan_range(&storage, 0, u32::MAX, |_| all += 1);
+        assert_eq!(all, 30 * 20 + 2);
+    }
+
     #[test]
     fn long_logs_are_read_in_chunks() {
         let storage = MemoryStorage::new();
         for i in 0..200u32 {
-            let _ = storage.append(
-                &path("pages.bin"),
-                &stat(1, i + 1, 1000 + i * 10, 9).encode(),
-            );
+            append(&storage, stat(1, i + 1, 1000 + i * 10, 9)).unwrap();
         }
         let mut count = 0;
-        scan(&storage, |_| count += 1);
+        scan(&storage, |_| count += 1).unwrap();
         assert_eq!(count, 200);
         let mut recent = 0;
         scan_recent(&storage, 1000 + 150 * 10, |_| recent += 1);

@@ -1,6 +1,7 @@
 //! The account screen: the server, user name and password, then *Sign in*
 //! or *Create account*; *Sign out* once signed in. A line below tells what
-//! happened. Another server signs out: accounts belong to their server.
+//! happened. Another server signs out: accounts belong to their server
+//! (set elsewhere, the plugin signs out as well).
 //!
 //! The password never leaves this screen: only its MD5 is sent and kept,
 //! as KOReader does.
@@ -196,10 +197,10 @@ impl AccountScreen {
     }
 
     fn sign_out(&mut self, cx: &mut Cx<'_, '_>) {
-        cx.command(save_key(None));
         self.signed_in.clear();
-        cx.command(Command::set(&USER, Cow::Borrowed("")));
-        cx.command(ACCOUNT_CHANGED.emit(()));
+        for command in crate::sign_out() {
+            cx.command(command);
+        }
     }
 
     /// The server's answer to signing in or creating the account.

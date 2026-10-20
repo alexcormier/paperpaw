@@ -1284,6 +1284,83 @@ change the plugin SDK.
   after a fast one. Covers in a list stay below that.
 - X4: on USB power, sleep shows the sleep screen and keeps the USB
   connection, so a computer can still read the log and wake it.
+- OPDS: a catalog's user name and password go only to the catalog's own
+  server (the same scheme, host and port); covers, books and further
+  lists elsewhere no longer receive them, and the password field warns
+  when the address begins with `http://`. Feeds made to fill the memory
+  (endless links, authors or entries) are cut to what is shown. Books
+  synced before are recognised however many there are, so deleted books
+  no longer come back; a record of them that cannot be read leaves the
+  catalog alone for that sync. Two books downloaded one right after the
+  other are both saved intact, and a stopped sync leaves no partly
+  downloaded book behind. A list of catalogs that cannot be read (a card
+  error, a file saved in another encoding) is no longer saved over:
+  changes are refused with a message, so catalogs and their passwords
+  stay.
+- Progress sync (kosync): *Sync progress* fetches the position on the
+  server before it sends its own, so a further position from another
+  device, such as KOReader, is no longer overwritten. Nothing is sent
+  for a book while its progress is being fetched or while *Go there?* is
+  open; it is sent once no other device is further, or after you choose
+  to stay. An answer that cannot be read no longer counts as "no
+  progress". Changing the server, however it is changed, signs out, so
+  the account's key never goes to another server; the server setting
+  opens the account screen.
+- Joplin: when the connection drops just after a note was written,
+  sending again finds the note Joplin already has and updates it instead
+  of making it a second time. Lock files named in upper case are seen.
+- Readwise: highlights are read and sent a piece at a time from a file,
+  so notes of any length go, also on the X4; very long highlights are cut
+  to what Readwise takes. What cannot be sent (no connection, Readwise
+  down) waits and goes with the next export or when Wi-Fi comes back.
+- Wallabag: an answer that is not the article list (a maintenance page,
+  an error, a list cut short) no longer deletes the articles on the
+  device. An unread article that is no longer among the 30 newest stays;
+  a book goes only when Wallabag says its article is archived or
+  deleted. If the list of fetched articles cannot be read, a fetch stops
+  and changes nothing. The user name and client ID settings have help
+  texts.
+- News: feeds of the same name get a book each, and removing one no
+  longer deletes the other's (books from earlier versions are found and
+  replaced at the next fetch). Removing a feed during a fetch, or two
+  fetches at once, no longer puts one feed's articles into another's
+  book. An answer that is no feed, such as a Wi-Fi sign-in page, keeps
+  the last book instead of emptying it. A list of feeds that cannot be
+  read is not overwritten.
+- KOReader: a KOReader file that cannot be read, is not there yet (while
+  Syncthing is still copying a book's `.sdr` folder) or is in an older
+  form no longer deletes the bookmarks and highlights on the device, and
+  annotations PaperPaw cannot read are no longer removed in KOReader:
+  the exchange waits, changing nothing on either side. On the X4, books
+  whose KOReader file is over 32 KiB are not exchanged, so opening them
+  cannot run out of memory. While the clock is not set, new annotations
+  are no longer sent dated 1970; they go once the time is known, and a
+  note changed on one side only always reaches the other. When the card
+  is too full to keep what came from KOReader, the exchange stops instead
+  of later removing those annotations in KOReader.
+- Statistics sync: a file in the WebDAV folder that cannot be read (a
+  login page, a file cut short) no longer replaces the statistics there
+  or here; the sync stops and says so. Changing the folder or the user no
+  longer deletes statistics on this device, and statistics lost here
+  come back from the folder instead of being deleted there too. The
+  first upload to an empty folder no longer overwrites a file that
+  appeared meanwhile, and passwords with spaces at either end work.
+  Syncing large KOReader libraries takes much less memory and leaves no
+  working files behind after an error; KOReader books without a
+  fingerprint stay separate books.
+- Reading statistics: a list of books that cannot be read is no longer
+  overwritten when a new book is opened. Closing a book ends the reading
+  of its last page, and time on the home screen no longer counts as
+  reading. On an X4 without a set clock, pages read are kept and
+  recorded as soon as the time is known, and the statistics say they
+  need it instead of showing January 1970. Pages of long books are no
+  longer merged before the reader has counted them; the time per day is
+  worked out anew after a change of time zone; the *Time left* items no
+  longer read the statistics while the page is drawn. Setting a daily
+  goal adds the *Read today* widget only the first time, so one you
+  removed stays away. When the card is full, reading is kept, written
+  once there is room, and a notice says so. Every widget setting has a
+  help text.
 
 ## [0.3.0] - 2026-10-16
 
