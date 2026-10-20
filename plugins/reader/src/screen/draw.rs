@@ -223,17 +223,18 @@ impl Book {
         context
     }
 
-    /// Where the top-level chapters begin, as thousandths of the book.
+    /// Where the chapters begin, as thousandths of the book (see
+    /// [`chapter_ticks`]).
     pub(super) fn chapter_marks(&self, env: &Env<'_>) -> String {
         let (document, storage) = (&self.document, env.storage);
-        let mut marks: Vec<u32> = Vec::new();
-        for index in 0..document.toc_len(storage).min(500) {
-            if let Some(entry) = document.toc_entry(storage, index).filter(|e| e.level == 0) {
-                marks.push((document.progress(entry.at) * 1000.0) as u32);
-            }
-        }
-        marks.dedup();
-        let marks: Vec<String> = marks.iter().map(ToString::to_string).collect();
+        let entries: Vec<(u8, u32)> = (0..document.toc_len(storage).min(500))
+            .filter_map(|index| document.toc_entry(storage, index))
+            .map(|entry| (entry.level, (document.progress(entry.at) * 1000.0) as u32))
+            .collect();
+        let marks: Vec<String> = chapter_ticks(&entries)
+            .iter()
+            .map(ToString::to_string)
+            .collect();
         marks.join(",")
     }
 
@@ -303,4 +304,26 @@ pub(super) fn draw_image(
         &image.image,
         Rect::new(left as u16, top as u16, w as u16, h as u16),
     );
+}
+
+/// Ticks at most on a bar across the book: more crowd it into a line.
+const MAX_TICKS: usize = 60;
+
+/// The places of the contents' `entries` (level, thousandths) that get a
+/// tick: the chapters, also those in parts, down to the deepest level
+/// whose entries and those above still leave the ticks apart.
+pub(super) fn chapter_ticks(entries: &[(u8, u32)]) -> Vec<u32> {
+    let deepest = entries.iter().map(|&(level, _)| level).max().unwrap_or(0);
+    let shown = (0..=deepest)
+        .rev()
+        .find(|&depth| entries.iter().filter(|&&(level, _)| level <= depth).count() <= MAX_TICKS)
+        .unwrap_or(0);
+    let mut ticks: Vec<u32> = entries
+        .iter()
+        .filter(|&&(level, _)| level <= shown)
+        .map(|&(_, at)| at)
+        .collect();
+    ticks.dedup();
+    ticks.truncate(MAX_TICKS);
+    ticks
 }

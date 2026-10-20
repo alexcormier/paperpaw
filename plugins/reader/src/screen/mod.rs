@@ -1018,6 +1018,28 @@ mod tests {
     }
 
     #[test]
+    fn chapters_in_parts_get_ticks_while_they_leave_room() {
+        use super::draw::chapter_ticks;
+        // Two parts of three chapters each.
+        let book = [
+            (0, 0),
+            (1, 10),
+            (1, 200),
+            (1, 400),
+            (0, 500),
+            (1, 510),
+            (1, 700),
+        ];
+        assert_eq!(chapter_ticks(&book), [0, 10, 200, 400, 500, 510, 700]);
+        // Too many chapters for the bar: the parts only.
+        let mut many = alloc::vec![(0, 0), (0, 500)];
+        many.extend((1..200).map(|i| (1, i * 5)));
+        many.sort_by_key(|&(_, at)| at);
+        assert_eq!(chapter_ticks(&many), [0, 500]);
+        assert!(chapter_ticks(&[]).is_empty());
+    }
+
+    #[test]
     fn small_caps_split_lower_case() {
         let parts: Vec<(&str, bool)> =
             super::typography::small_caps_parts("Mr. Gregor Samsa").collect();
