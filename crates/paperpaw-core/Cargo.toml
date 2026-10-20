@@ -27,6 +27,7 @@ paperpaw-sdk.workspace = true
 
 [dev-dependencies]
 paperpaw-text.workspace = true
+proptest.workspace = true
 
 [lints]
 workspace = true

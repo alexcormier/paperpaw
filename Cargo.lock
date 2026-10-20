@@ -1264,6 +1264,7 @@ dependencies = [
  "paperpaw-platform",
  "paperpaw-sdk",
  "paperpaw-text",
+ "proptest",
 ]
 
 [[package]]
