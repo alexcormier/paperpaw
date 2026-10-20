@@ -102,12 +102,7 @@ pub(crate) type SharedSync = Rc<RefCell<Sync>>;
 /// The folder as a base URL: `https://` unless another scheme is given,
 /// no `/` at the end.
 pub(crate) fn folder(text: &str) -> String {
-    let text = text.trim().trim_end_matches('/');
-    if text.is_empty() || text.contains("://") {
-        text.to_string()
-    } else {
-        format!("https://{text}")
-    }
+    paperpaw_sdk::web::base_url(text)
 }
 
 fn password<'a>(env: &Env<'a>) -> &'a str {

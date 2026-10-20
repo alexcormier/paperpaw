@@ -446,13 +446,11 @@ pub(crate) fn server(env: &Env<'_>) -> String {
 /// A server address as entered, as a base URL: `https://` unless another
 /// scheme is given, no `/` at the end, KOReader's server if empty.
 pub(crate) fn normalize_server(text: &str) -> String {
-    let server = text.trim().trim_end_matches('/');
+    let server = paperpaw_sdk::web::base_url(text);
     if server.is_empty() {
         DEFAULT_SERVER.to_string()
-    } else if server.contains("://") {
-        server.to_string()
     } else {
-        format!("https://{server}")
+        server
     }
 }
 

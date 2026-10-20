@@ -72,11 +72,8 @@ fn data(name: &str) -> String {
 /// none yet, an error when it cannot be read (then it must not be
 /// written either, or what it holds would be lost).
 fn load_for_update(storage: &dyn Storage, name: &str, cap: usize) -> Result<String, StorageError> {
-    match paperpaw_sdk::read_file(storage, &data(name), cap) {
-        Ok(bytes) => String::from_utf8(bytes).map_err(|_| StorageError::Unsupported),
-        Err(StorageError::NotFound) => Ok(String::new()),
-        Err(e) => Err(e),
-    }
+    paperpaw_sdk::files::load_text_for_update(storage, &data(name), cap)
+        .map(Option::unwrap_or_default)
 }
 
 /// A short mark of a feed's address, six hex digits (24 bits of its
@@ -212,10 +209,7 @@ fn save(storage: &dyn Storage, feeds: &[Feed]) {
 /// after it too.
 fn request(feed: &Feed, index: usize, all: bool, (done, failed): (usize, usize)) -> Command {
     let mut request = HttpRequest::new("GET", &feed.url, FETCHED);
-    request.headers.push((
-        String::from("User-Agent"),
-        String::from("PaperPaw/0.1 (e-reader)"),
-    ));
+    request.headers.push(paperpaw_sdk::web::user_agent());
     request.save_to = Some(download(&feed.url));
     let mut params = Params::new()
         .with(URL, feed.url.clone())

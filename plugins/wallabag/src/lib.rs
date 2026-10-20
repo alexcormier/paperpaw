@@ -92,11 +92,8 @@ fn data(name: &str) -> String {
 /// none yet, an error when it cannot be read (then it must not be
 /// written either, or what it holds would be lost).
 fn load_for_update(storage: &dyn Storage, name: &str, cap: usize) -> Result<String, StorageError> {
-    match paperpaw_sdk::read_file(storage, &data(name), cap) {
-        Ok(bytes) => String::from_utf8(bytes).map_err(|_| StorageError::Unsupported),
-        Err(StorageError::NotFound) => Ok(String::new()),
-        Err(e) => Err(e),
-    }
+    paperpaw_sdk::files::load_text_for_update(storage, &data(name), cap)
+        .map(Option::unwrap_or_default)
 }
 
 /// The folder of the articles: `Wallabag` in the library.
@@ -112,16 +109,7 @@ fn folder(env: &Env<'_>) -> String {
 /// The server as a base URL: `https://` unless another scheme is given,
 /// no `/` at the end.
 fn server(env: &Env<'_>) -> String {
-    let text = env
-        .settings
-        .text(SERVER.as_str())
-        .trim()
-        .trim_end_matches('/');
-    if text.is_empty() || text.contains("://") {
-        text.to_string()
-    } else {
-        format!("https://{text}")
-    }
+    paperpaw_sdk::web::base_url(env.settings.text(SERVER.as_str()))
 }
 
 /// An article fetched: its id in Wallabag and its book.
@@ -226,10 +214,7 @@ impl Fetch {
             String::from("Authorization"),
             format!("Bearer {}", self.token),
         ));
-        request.headers.push((
-            String::from("User-Agent"),
-            String::from("PaperPaw/0.1 (e-reader)"),
-        ));
+        request.headers.push(paperpaw_sdk::web::user_agent());
         request
     }
 

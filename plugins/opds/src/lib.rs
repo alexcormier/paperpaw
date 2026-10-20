@@ -64,7 +64,6 @@ const OPTION_LABELS: &str = "opds.option.";
 const URL: &str = params::URL;
 const ID: &str = params::ID;
 
-const USER_AGENT: &str = "PaperPaw/0.1 (e-reader)";
 /// Setting: covers in the lists of catalogs (on devices with the memory).
 const COVERS: Setting<bool> = Setting::new("opds.covers");
 
@@ -84,9 +83,7 @@ fn request(
         save_to: Some(save_to),
         ..HttpRequest::new("GET", url, reply)
     };
-    request
-        .headers
-        .push((String::from("User-Agent"), String::from(USER_AGENT)));
+    request.headers.push(paperpaw_sdk::web::user_agent());
     if let Some(auth) = catalog.authorization()
         && same_origin(url, &catalog.url)
     {

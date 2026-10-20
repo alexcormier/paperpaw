@@ -60,11 +60,10 @@ impl BrowseScreen {
         let dir = self.catalog.sync_folder(&env);
         let name = reply.context.get(NAME).unwrap_or("download").to_string();
         let _ = env.storage.create_dir(&dir);
-        let target = files::free_path(env.storage, &dir, &name);
-        if files::move_to(env.storage, file, &target).is_err() {
+        let Ok(target) = files::put_in_free_place(env.storage, file, &dir, &name) else {
             let message = env.i18n.tr("opds.cannot-save").to_string();
             return self.say(message, cx);
-        }
+        };
         cx.command(paperpaw_sdk::library::changed());
         // What the catalog says of it, for books that say nothing.
         let first = |authors: &str| authors.split(" & ").next().map(String::from);

@@ -10,7 +10,7 @@ use alloc::vec::Vec;
 
 use paperpaw_sdk::secrets::SecretChange;
 use paperpaw_sdk::web::{clean_name, host};
-use paperpaw_sdk::{Arg, Command, Env, Storage, StorageError};
+use paperpaw_sdk::{Arg, Command, Env, Storage, files};
 
 use crate::PLUGIN;
 
@@ -99,13 +99,8 @@ pub(crate) fn load(env: &Env<'_>) -> Result<Vec<Catalog>, Unreadable> {
 
 /// The list as the file has it; `None` if there is none yet.
 fn read(storage: &dyn Storage) -> Result<Option<Vec<Catalog>>, Unreadable> {
-    let data = match paperpaw_sdk::read_file(storage, &path(), MAX_FILE) {
-        Ok(data) => data,
-        Err(StorageError::NotFound) => return Ok(None),
-        Err(_) => return Err(Unreadable),
-    };
-    let text = core::str::from_utf8(&data).map_err(|_| Unreadable)?;
-    Ok(Some(parse(text)))
+    let text = files::load_text_for_update(storage, &path(), MAX_FILE).map_err(|_| Unreadable)?;
+    Ok(text.as_deref().map(parse))
 }
 
 /// The passwords kept with the other passwords and keys, for catalogs

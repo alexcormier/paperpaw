@@ -143,7 +143,7 @@ const LINE: usize = 16 * 1024;
 
 /// Calls `visit` with each line of the file at `path` (without its line
 /// break) as it streams from the storage; a missing file has none. Invalid
-/// UTF-8 and overlong lines are errors ([`StorageError::Unsupported`]),
+/// UTF-8 and overlong lines are errors ([`StorageError::InvalidData`]),
 /// not left out, so that nothing unread is written back.
 fn each_line(
     storage: &dyn Storage,
@@ -153,7 +153,7 @@ fn each_line(
     let mut chunk = [0u8; 512];
     let mut line: Vec<u8> = Vec::new();
     let mut emit = |line: &mut Vec<u8>| {
-        let text = core::str::from_utf8(line).map_err(|_| StorageError::Unsupported)?;
+        let text = core::str::from_utf8(line).map_err(|_| StorageError::InvalidData)?;
         visit(text.strip_suffix('\r').unwrap_or(text))?;
         line.clear();
         Ok(())
@@ -175,7 +175,7 @@ fn each_line(
                 _ => (piece, false),
             };
             if line.len() + text.len() > LINE {
-                return Err(StorageError::Unsupported);
+                return Err(StorageError::InvalidData);
             }
             line.extend_from_slice(text);
             if ends {
@@ -198,7 +198,7 @@ pub(crate) fn load_books(storage: &dyn Storage) -> Result<Vec<Book>, StorageErro
     let mut section: Option<u16> = None;
     each_line(storage, &path("books.ini"), |line| {
         if let Some(header) = line.trim().strip_prefix('[') {
-            let name = header.strip_suffix(']').ok_or(StorageError::Unsupported)?;
+            let name = header.strip_suffix(']').ok_or(StorageError::InvalidData)?;
             section = name
                 .trim()
                 .strip_prefix("book.")
@@ -209,7 +209,7 @@ pub(crate) fn load_books(storage: &dyn Storage) -> Result<Vec<Book>, StorageErro
         let Some(entry) = paperpaw_sdk::config::parse(line).next() else {
             return Ok(());
         };
-        let entry = entry.map_err(|_| StorageError::Unsupported)?;
+        let entry = entry.map_err(|_| StorageError::InvalidData)?;
         let Some(id) = section else {
             return Ok(());
         };

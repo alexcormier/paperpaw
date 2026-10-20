@@ -364,8 +364,7 @@ impl Sync {
         let file = temp::file(reply).filter(|_| (200..300).contains(&reply.status));
         let stored = file.is_some_and(|file| {
             let _ = env.storage.create_dir(&run.folder);
-            let target = files::free_path(env.storage, &run.folder, &item.name);
-            files::move_to(env.storage, file, &target).is_ok()
+            files::put_in_free_place(env.storage, file, &run.folder, &item.name).is_ok()
         });
         let report = self.report.get_or_insert_with(Report::default);
         if stored {

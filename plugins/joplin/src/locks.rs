@@ -25,7 +25,7 @@ use alloc::string::String;
 use paperpaw_json::stream::{self, Event as Json};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::HttpReply;
-use paperpaw_sdk::{HttpRequest, Storage};
+use paperpaw_sdk::{HttpRequest, Storage, files};
 use paperpaw_xml::{Token, Tokenizer, local_name};
 
 use crate::service::{self, Auth, Service};
@@ -131,7 +131,8 @@ fn webdav_upgrading(storage: &dyn Storage, path: &str, held: &dyn Fn(Option<i64>
             "response" => {
                 let file = href.trim().trim_end_matches('/');
                 let file = file.rsplit('/').next().unwrap_or_default();
-                let exclusive = file.starts_with(&alloc::format!("{EXCLUSIVE}_")) && is_json(file);
+                let exclusive = file.starts_with(&alloc::format!("{EXCLUSIVE}_"))
+                    && files::has_extension(file, "json");
                 let renewed = paperpaw_sdk::web::http_date(&modified).map(|s| s * 1000);
                 found |= exclusive && held(renewed);
             }
@@ -160,16 +161,6 @@ fn push_bounded(field: &mut String, text: &str) {
         end -= 1;
     }
     field.push_str(&text[..end]);
-}
-
-/// Whether the file `name` ends in `.json`, in any case (as FAT and
-/// Windows servers may give it).
-fn is_json(name: &str) -> bool {
-    const EXTENSION: &str = ".json";
-    name.len()
-        .checked_sub(EXTENSION.len())
-        .and_then(|at| name.get(at..))
-        .is_some_and(|end| end.eq_ignore_ascii_case(EXTENSION))
 }
 
 #[cfg(test)]
