@@ -33,7 +33,7 @@ use paperpaw_sdk::web::{clean_name, host};
 use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, HttpRequest, Id,
     Manifest, MemoryClass, MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar,
-    SDK_VERSION, Screen, ScreenSpec, SettingSpec, Storage, Version,
+    SDK_VERSION, Screen, ScreenSpec, SettingSpec, Storage, StorageError, Version,
 };
 
 pub const PLUGIN: Id = Id::new_static("news");
@@ -52,10 +52,12 @@ const FETCHED: Event<HttpReply> = Event::new("news.fetched");
 const ADDED: Event<Typed> = Event::new("news.added");
 const OPTION_LABELS: &str = "news.option.";
 const FOLDER: &str = "News";
-/// Parameters of a fetch: the feed being fetched, the last to fetch,
-/// and how many were fetched and failed so far.
+/// Parameters of a fetch: the feed being fetched and where it was in the
+/// list, whether the feeds after it follow, and how many were fetched
+/// and failed so far.
+const URL: &str = "url";
 const INDEX: &str = "index";
-const LAST: &str = "last";
+const ALL: &str = "all";
 const DONE: &str = "done";
 const FAILED: &str = "failed";
 /// Text kept of an article: little on small devices.
@@ -64,6 +66,47 @@ const MAX_TEXT: usize = 64 * 1024;
 
 fn data(name: &str) -> String {
     format!("{}/{name}", Env::plugin_dir(PLUGIN.as_str()))
+}
+
+/// The text of this plugin's file `name`, to change: empty when there is
+/// none yet, an error when it cannot be read (then it must not be
+/// written either, or what it holds would be lost).
+fn load_for_update(storage: &dyn Storage, name: &str, cap: usize) -> Result<String, StorageError> {
+    match paperpaw_sdk::read_file(storage, &data(name), cap) {
+        Ok(bytes) => String::from_utf8(bytes).map_err(|_| StorageError::Unsupported),
+        Err(StorageError::NotFound) => Ok(String::new()),
+        Err(e) => Err(e),
+    }
+}
+
+/// A short mark of a feed's address, six hex digits (24 bits of its
+/// FNV-1a hash): feeds of the same name keep books of their own.
+fn mark(url: &str) -> String {
+    let hash = url.bytes().fold(0x811c_9dc5_u32, |hash, b| {
+        (hash ^ u32::from(b)).wrapping_mul(0x0100_0193)
+    });
+    format!("{:06x}", hash & 0x00ff_ffff)
+}
+
+/// A book's name without the mark of its feed's address
+/// (`Tagesschau (3fa9c2)` is "Tagesschau").
+pub(crate) fn without_mark(name: &str) -> &str {
+    match name.rsplit_once(" (") {
+        Some((name, rest))
+            if rest.len() == 7
+                && rest.ends_with(')')
+                && rest[..6].bytes().all(|b| b.is_ascii_hexdigit()) =>
+        {
+            name
+        }
+        _ => name,
+    }
+}
+
+/// Where a feed's answer is kept until it is read: a file of its own, as
+/// two fetches may be under way at once.
+fn download(url: &str) -> String {
+    data(&format!("feed-{}.tmp", mark(url)))
 }
 
 /// A feed: its address and its name (the feed's own title once fetched).
@@ -82,10 +125,41 @@ impl Feed {
         }
     }
 
-    /// The book it becomes.
-    fn book(&self, env: &Env<'_>) -> String {
-        let name = clean_name(&self.shown(), 60).unwrap_or_else(|| String::from("News"));
-        format!("{}/{name}.html", folder(env))
+    fn file_name(&self) -> String {
+        clean_name(&self.shown(), 60).unwrap_or_else(|| String::from("News"))
+    }
+
+    /// The book it becomes in `folder`: its name and the mark of its
+    /// address (`News/Tagesschau (3fa9c2).html`).
+    fn book(&self, folder: &str) -> String {
+        format!("{folder}/{} ({}).html", self.file_name(), mark(&self.url))
+    }
+
+    /// Where version 1 kept its book: by its name alone, which feeds of
+    /// the same name shared.
+    fn old_book(&self, folder: &str) -> String {
+        format!("{folder}/{}.html", self.file_name())
+    }
+
+    /// Its book, if it has one: as kept now, or as version 1 kept it.
+    fn found_book(&self, storage: &dyn Storage, folder: &str) -> Option<String> {
+        [self.book(folder), self.old_book(folder)]
+            .into_iter()
+            .find(|book| storage.exists(book))
+    }
+}
+
+/// Removes the book version 1 kept for `feed`, once no other feed of
+/// `feeds` still reads it (a feed of the same name not fetched since).
+fn retire_old_book(storage: &dyn Storage, folder: &str, feeds: &[Feed], feed: &Feed) {
+    let old = feed.old_book(folder);
+    let needed = feeds.iter().any(|other| {
+        other.url != feed.url
+            && other.old_book(folder) == old
+            && !storage.exists(&other.book(folder))
+    });
+    if !needed {
+        let _ = storage.remove(&old);
     }
 }
 
@@ -111,11 +185,10 @@ fn folder(env: &Env<'_>) -> String {
     }
 }
 
-fn load(storage: &dyn Storage) -> Vec<Feed> {
-    let Ok(data) = paperpaw_sdk::read_file(storage, &data("feeds.txt"), 64 * 1024) else {
-        return Vec::new();
-    };
-    String::from_utf8_lossy(&data)
+/// The feeds; an error when their list cannot be read.
+fn load(storage: &dyn Storage) -> Result<Vec<Feed>, StorageError> {
+    let text = load_for_update(storage, "feeds.txt", 64 * 1024)?;
+    Ok(text
         .lines()
         .filter_map(|line| {
             let (url, name) = line.split_once('\t').unwrap_or((line, ""));
@@ -124,7 +197,7 @@ fn load(storage: &dyn Storage) -> Vec<Feed> {
                 name: name.trim().to_string(),
             })
         })
-        .collect()
+        .collect())
 }
 
 fn save(storage: &dyn Storage, feeds: &[Feed]) {
@@ -135,82 +208,81 @@ fn save(storage: &dyn Storage, feeds: &[Feed]) {
     let _ = storage.write(&data("feeds.txt"), text.as_bytes());
 }
 
-/// Asks for feed `index` (of `last`, the last one to fetch).
-fn request(feed: &Feed, index: usize, last: usize, (done, failed): (usize, usize)) -> Command {
+/// Asks for `feed`, at `index` in the list, and with `all` for the feeds
+/// after it too.
+fn request(feed: &Feed, index: usize, all: bool, (done, failed): (usize, usize)) -> Command {
     let mut request = HttpRequest::new("GET", &feed.url, FETCHED);
     request.headers.push((
         String::from("User-Agent"),
         String::from("PaperPaw/0.1 (e-reader)"),
     ));
-    request.save_to = Some(data("feed.tmp"));
-    request.params = Params::new()
+    request.save_to = Some(download(&feed.url));
+    let mut params = Params::new()
+        .with(URL, feed.url.clone())
         .with(INDEX, format!("{index}"))
-        .with(LAST, format!("{last}"))
         .with(DONE, format!("{done}"))
         .with(FAILED, format!("{failed}"));
+    if all {
+        params = params.with(ALL, "1");
+    }
+    request.params = params;
     Command::Http(request)
 }
 
-/// Starts fetching feeds `from..=last`.
-fn fetch(env: &Env<'_>, from: usize, last: usize, out: &mut Vec<Command>) {
-    let feeds = load(env.storage);
+/// Starts fetching the feed at `from`, and with `all` those after it.
+fn fetch(env: &Env<'_>, from: usize, all: bool, out: &mut Vec<Command>) {
     if !env.caps.network {
         out.push(Command::Notify(env.i18n.tr("news.no-network").to_string()));
         return;
     }
+    let Ok(feeds) = load(env.storage) else {
+        out.push(Command::Notify(env.i18n.tr("news.unreadable").to_string()));
+        return;
+    };
     match feeds.get(from) {
-        Some(feed) if from <= last => {
+        Some(feed) => {
             out.push(Command::Notify(env.i18n.tr("news.fetching").to_string()));
-            out.push(request(feed, from, last.min(feeds.len() - 1), (0, 0)));
+            out.push(request(feed, from, all, (0, 0)));
         }
-        _ => out.push(Command::Notify(env.i18n.tr("news.none").to_string())),
+        None => out.push(Command::Notify(env.i18n.tr("news.none").to_string())),
     }
 }
 
-/// A feed answered: made into its book, then the next one.
+/// A feed answered: made into its book, then the next one. Feeds are
+/// found by their address, as the list may change during a fetch.
 fn fetched(env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
     let number = |key| reply.context.get(key).and_then(|n| n.parse::<usize>().ok());
-    let (Some(index), Some(last)) = (number(INDEX), number(LAST)) else {
+    let (Some(url), Some(index)) = (reply.context.get(URL), number(INDEX)) else {
         return;
     };
     let mut done = number(DONE).unwrap_or(0);
     let mut failed = number(FAILED).unwrap_or(0);
-    let mut feeds = load(env.storage);
-    let ok = reply.ok();
-    let made = feeds.get(index).filter(|_| ok).and_then(|feed| {
-        let max_text = if env.device.memory == MemoryClass::Small {
-            MAX_TEXT_SMALL
-        } else {
-            MAX_TEXT
-        };
-        let articles = env.settings.read(&ARTICLES).clamp(1, 200) as usize;
-        let _ = env.storage.create_dir(&folder(env));
-        let tmp = data("page.tmp");
-        let converted =
-            convert::convert(env.storage, &data("feed.tmp"), &tmp, articles, max_text).ok()?;
-        let mut feed = feed.clone();
-        if feed.name.is_empty() && !converted.title.is_empty() {
-            feed.name = short_title(&converted.title);
-        }
-        env.storage.rename(&tmp, &feed.book(env)).ok()?;
-        keep_headlines(env, &feed.book(env), &converted.headlines);
-        Some(feed)
-    });
-    match made {
-        Some(feed) => {
-            done += 1;
-            if feeds[index] != feed {
-                feeds[index] = feed;
-                save(env.storage, &feeds);
+    let Ok(mut feeds) = load(env.storage) else {
+        let _ = env.storage.remove(&download(url));
+        out.push(Command::Notify(env.i18n.tr("news.unreadable").to_string()));
+        return;
+    };
+    // A feed removed meanwhile is left out.
+    let at = feeds.iter().position(|f| f.url == url);
+    if let Some(at) = at {
+        match make_book(env, reply, &feeds, at) {
+            Some(feed) => {
+                done += 1;
+                if feeds[at] != feed {
+                    feeds[at] = feed;
+                    save(env.storage, &feeds);
+                }
             }
+            None => failed += 1,
         }
-        None => failed += 1,
     }
-    let _ = env.storage.remove(&data("feed.tmp"));
-    if index < last
-        && let Some(next) = feeds.get(index + 1)
+    let _ = env.storage.remove(&download(url));
+    // The next one: after this feed, or in its place if it was removed.
+    let next = at.map_or(index, |at| at + 1);
+    if reply.context.get(ALL).is_some()
+        && let Some(feed) = feeds.get(next)
     {
-        out.push(request(next, index + 1, last, (done, failed)));
+        out.push(request(feed, next, true, (done, failed)));
         return;
     }
     let message = if failed == 0 {
@@ -223,6 +295,44 @@ fn fetched(env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
         )
     };
     out.push(Command::Notify(message));
+}
+
+/// Makes the answer for `feeds[at]` its book: the feed, with the name it
+/// may have brought; `None` when that failed or the answer held no
+/// article, as a Wi-Fi's sign-in page does: then the book there is stays.
+fn make_book(env: &Env<'_>, reply: &HttpReply, feeds: &[Feed], at: usize) -> Option<Feed> {
+    if !reply.ok() {
+        return None;
+    }
+    let max_text = if env.device.memory == MemoryClass::Small {
+        MAX_TEXT_SMALL
+    } else {
+        MAX_TEXT
+    };
+    let articles = env.settings.read(&ARTICLES).clamp(1, 200) as usize;
+    let folder = folder(env);
+    let _ = env.storage.create_dir(&folder);
+    let mut feed = feeds[at].clone();
+    let page = data("page.tmp");
+    let converted = convert::convert(env.storage, &download(&feed.url), &page, articles, max_text);
+    let converted = match converted {
+        Ok(converted) if converted.articles > 0 => converted,
+        _ => {
+            let _ = env.storage.remove(&page);
+            return None;
+        }
+    };
+    if feed.name.is_empty() && !converted.title.is_empty() {
+        feed.name = short_title(&converted.title);
+    }
+    let book = feed.book(&folder);
+    if env.storage.rename(&page, &book).is_err() {
+        let _ = env.storage.remove(&page);
+        return None;
+    }
+    keep_headlines(env, &book, &converted.headlines);
+    retire_old_book(env.storage, &folder, feeds, &feed);
+    Some(feed)
 }
 
 /// Where the newest headlines are kept: `title<TAB>book` lines, the
@@ -311,7 +421,7 @@ impl Plugin for News {
         ))?;
         r.add_action(ActionSpec::new(FETCH, "news.fetch").handler(
             |env: &Env<'_>, out: &mut Vec<Command>| {
-                fetch(env, 0, usize::MAX, out);
+                fetch(env, 0, true, out);
             },
         ))?;
         r.on(FETCHED, fetched)?;
@@ -336,6 +446,9 @@ struct FeedsScreen {
     header: ui::Header,
     list: ListView,
     feeds: Vec<Feed>,
+    /// Whether the list of feeds could be read: if not, it is not
+    /// changed either.
+    readable: bool,
 }
 
 impl FeedsScreen {
@@ -345,11 +458,13 @@ impl FeedsScreen {
         let header = ui::Header::new(env, &style, true);
         let top = header.area.height + style.gap as u16;
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
+        let feeds = load(env.storage);
         Self {
             list: ListView::new(area, style.noted_row()).focus_on_keys(env),
             style,
             header,
-            feeds: load(env.storage),
+            readable: feeds.is_ok(),
+            feeds: feeds.unwrap_or_default(),
         }
     }
 
@@ -382,21 +497,20 @@ impl FeedsScreen {
             return;
         }
         if row == 0 {
-            fetch_into(&env, 0, usize::MAX, cx);
+            fetch_into(&env, 0, true, cx);
             return;
         }
         let index = row - 1;
         let Some(feed) = self.feeds.get(index) else {
             return;
         };
-        let book = feed.book(&env);
-        if env.storage.exists(&book) {
+        if let Some(book) = feed.found_book(env.storage, &folder(&env)) {
             cx.command(Command::OpenSlot(
                 slots::READER,
                 Params::new().with(params::PATH, book),
             ));
         } else {
-            fetch_into(&env, index, index, cx);
+            fetch_into(&env, index, false, cx);
         }
     }
 
@@ -416,9 +530,9 @@ impl FeedsScreen {
 }
 
 /// The commands of a fetch, given to `cx`.
-fn fetch_into(env: &Env<'_>, from: usize, last: usize, cx: &mut Cx<'_, '_>) {
+fn fetch_into(env: &Env<'_>, from: usize, all: bool, cx: &mut Cx<'_, '_>) {
     let mut out = Vec::new();
-    fetch(env, from, last, &mut out);
+    fetch(env, from, all, &mut out);
     for command in out {
         cx.command(command);
     }
@@ -525,15 +639,22 @@ impl Screen for FeedsScreen {
                 cx.command(Command::Notify(env.i18n.tr("news.bad-address").to_string()));
                 return;
             }
-            if !self.feeds.iter().any(|f| f.url == url) {
-                self.feeds.push(Feed {
-                    url,
-                    name: String::new(),
-                });
-                save(env.storage, &self.feeds);
+            if !self.readable {
+                cx.command(Command::Notify(env.i18n.tr("news.unreadable").to_string()));
+                return;
             }
-            let index = self.feeds.len() - 1;
-            fetch_into(&env, index, index, cx);
+            let index = match self.feeds.iter().position(|f| f.url == url) {
+                Some(index) => index,
+                None => {
+                    self.feeds.push(Feed {
+                        url,
+                        name: String::new(),
+                    });
+                    save(env.storage, &self.feeds);
+                    self.feeds.len() - 1
+                }
+            };
+            fetch_into(&env, index, false, cx);
             self.redraw(cx);
         } else if let Some(picked) = CHOSEN.read(event, params) {
             let Ok(index) = picked.path.parse::<usize>() else {
@@ -541,12 +662,18 @@ impl Screen for FeedsScreen {
             };
             match picked.option.as_str() {
                 "open" => self.open(index + 1, cx),
-                "fetch" => fetch_into(&env, index, index, cx),
+                "fetch" => fetch_into(&env, index, false, cx),
+                "remove" if !self.readable => {
+                    cx.command(Command::Notify(env.i18n.tr("news.unreadable").to_string()));
+                }
                 "remove" if index < self.feeds.len() => {
                     let feed = self.feeds.remove(index);
                     save(env.storage, &self.feeds);
-                    // Its book goes too.
-                    let _ = env.storage.remove(&feed.book(&env));
+                    // Its book goes too, and the one version 1 kept unless
+                    // another feed of its name still reads it.
+                    let folder = folder(&env);
+                    let _ = env.storage.remove(&feed.book(&folder));
+                    retire_old_book(env.storage, &folder, &self.feeds, &feed);
                     self.list.focus = self.list.focus.min(self.len() - 1);
                     self.redraw(cx);
                 }
@@ -554,7 +681,10 @@ impl Screen for FeedsScreen {
             }
         } else if *event == FETCHED {
             // Names may have come with the feeds.
-            self.feeds = load(env.storage);
+            if let Ok(feeds) = load(env.storage) {
+                self.feeds = feeds;
+                self.readable = true;
+            }
             self.redraw(cx);
         }
     }
@@ -599,7 +729,7 @@ mod tests {
             },
         ];
         save(&storage, &feeds);
-        let loaded = load(&storage);
+        let loaded = load(&storage).unwrap();
         assert_eq!(loaded[0].name, "Example news");
         assert_eq!(loaded[1].shown(), "other.org");
     }
@@ -611,10 +741,82 @@ mod tests {
             &super::data("feeds.txt"),
             include_str!("../testdata/feeds.txt.v1"),
         );
-        let feeds = super::load(&storage);
+        let feeds = super::load(&storage).unwrap();
         assert_eq!(feeds.len(), 2);
         assert_eq!(feeds[0].url, "https://www.tagesschau.de/xml/rss2/");
         assert_eq!(feeds[0].name, "Tagesschau");
         assert_eq!(feeds[1].name, "");
+    }
+
+    fn feed(url: &str, name: &str) -> Feed {
+        Feed {
+            url: String::from(url),
+            name: String::from(name),
+        }
+    }
+
+    /// Feeds of the same name keep books of their own, and their pages
+    /// show the name alone.
+    #[test]
+    fn feeds_of_one_name_have_books_of_their_own() {
+        let a = feed("https://a.example/rss", "Daily");
+        let b = feed("https://b.example/rss", "Daily");
+        assert_ne!(a.book("News"), b.book("News"));
+        assert_eq!(a.book("News"), a.book("News"));
+        let book = a.book("News");
+        assert!(book.starts_with("News/Daily ("), "{book}");
+        let stem = book.trim_end_matches(".html").rsplit('/').next().unwrap();
+        assert_eq!(without_mark(stem), "Daily");
+        assert_eq!(without_mark("Daily"), "Daily");
+        assert_eq!(without_mark("Daily (2026)"), "Daily (2026)");
+        // Answers under way at once are kept apart.
+        assert_ne!(download(&a.url), download(&b.url));
+    }
+
+    /// A book kept as version 1 named it is still found, and goes once
+    /// no feed reads it any more.
+    #[test]
+    fn books_of_version_1_are_kept_until_replaced() {
+        let a = feed("https://a.example/rss", "Daily");
+        let b = feed("https://b.example/rss", "Daily");
+        let c = feed("https://c.example/rss", "Weekly");
+        let storage = MemoryStorage::new()
+            .with("News/Daily.html", "old")
+            .with("News/Weekly.html", "old");
+        assert_eq!(
+            a.found_book(&storage, "News").as_deref(),
+            Some("News/Daily.html")
+        );
+        let feeds = [a.clone(), b.clone(), c.clone()];
+        // A fetched: B still reads the old book.
+        storage.write(&a.book("News"), b"a").unwrap();
+        retire_old_book(&storage, "News", &feeds, &a);
+        assert!(storage.exists("News/Daily.html"));
+        assert_eq!(
+            b.found_book(&storage, "News").as_deref(),
+            Some("News/Daily.html")
+        );
+        // B fetched too: the old book goes.
+        storage.write(&b.book("News"), b"b").unwrap();
+        retire_old_book(&storage, "News", &feeds, &b);
+        assert!(!storage.exists("News/Daily.html"));
+        assert_eq!(a.found_book(&storage, "News"), Some(a.book("News")));
+        // C removed: its old book goes, the others' stay.
+        retire_old_book(&storage, "News", &feeds[..2], &c);
+        assert!(!storage.exists("News/Weekly.html"));
+        assert!(storage.exists(&a.book("News")) && storage.exists(&b.book("News")));
+        assert_eq!(c.found_book(&storage, "News"), None);
+    }
+
+    /// A list of feeds that cannot be read is not taken for an empty one,
+    /// which adding a feed would write over.
+    #[test]
+    fn an_unreadable_list_is_not_empty() {
+        let broken = MemoryStorage::new().with(
+            &super::data("feeds.txt"),
+            b"https://a.example/rss\tA\n\xff\n".as_slice(),
+        );
+        assert!(load(&broken).is_err());
+        assert_eq!(load(&MemoryStorage::new()), Ok(Vec::new()));
     }
 }
