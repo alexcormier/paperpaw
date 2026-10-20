@@ -24,7 +24,10 @@
 //!     fn on_gesture(&mut self, gesture: Gesture, cx: &mut Cx<'_, '_>) -> Handled {
 //!         self.host.on_gesture(gesture, cx)
 //!     }
-//!     // on_action, on_event, on_timer, on_hide, on_close alike
+//!     fn on_close(&mut self, cx: &mut Cx<'_, '_>) {
+//!         self.host.close(cx);
+//!     }
+//!     // on_action, on_event, on_timer and on_hide passed on alike
 //! }
 //! ```
 
@@ -92,12 +95,13 @@ impl ScreenHost {
 
     /// Holds screen `id` with `params` in `area` (of the host's
     /// coordinates) in place of the one held before, which is closed:
-    /// the same screen with the same params is only moved. Whether it
-    /// could be made.
+    /// the same screen with the same params and size is only moved (of
+    /// another size, it is made anew for it). Whether it could be made.
     pub fn show(&mut self, cx: &mut Cx<'_, '_>, id: Id, params: Params, area: Rect) -> bool {
         if let Some(hosted) = &mut self.hosted
             && hosted.id == id
             && hosted.params == params
+            && (hosted.area.width, hosted.area.height) == (area.width, area.height)
         {
             hosted.area = area;
             cx.request_redraw();

@@ -4057,8 +4057,6 @@ pub fn paperpaw_sdk::ui::items::ItemsScreen::outside(&self) -> paperpaw_sdk::Out
 pub fn paperpaw_sdk::ui::items::ItemsScreen::passes_through(&self) -> bool
 pub fn paperpaw_sdk::ui::items::ItemsScreen::region(&self, &paperpaw_sdk::Env<'_>) -> core::option::Option<paperpaw_platform::geometry::Rect>
 pub fn paperpaw_sdk::ui::items::ItemsScreen::takes_double_taps(&self) -> bool
-pub trait paperpaw_sdk::ScreenMaker
-pub fn paperpaw_sdk::ScreenMaker::make(&self, &paperpaw_sdk::Id, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::Params) -> core::option::Option<alloc::boxed::Box<dyn paperpaw_sdk::Screen>>
 pub fn paperpaw_sdk::cover_fit(paperpaw_image::Fit) -> paperpaw_image::Fit
 pub fn paperpaw_sdk::read_file(&dyn paperpaw_platform::storage::Storage, &str, usize) -> core::result::Result<alloc::vec::Vec<u8>, paperpaw_platform::storage::StorageError>
 pub type paperpaw_sdk::ActionHandler = alloc::boxed::Box<dyn core::ops::function::Fn(&paperpaw_sdk::Env<'_>, &mut alloc::vec::Vec<paperpaw_sdk::Command>)>

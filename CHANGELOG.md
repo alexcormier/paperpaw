@@ -49,7 +49,15 @@ change the plugin SDK.
   its corner (`Env::within`, `Env::device_within` make the environment
   for a part). `Canvas::offset` moves what a canvas draws, for a screen
   drawn into part of the screen. `MenuNeed::met` says whether a device
-  has what a need asks for.
+  has what a need asks for. Bars live as screens do (`on_show`,
+  `on_timer`, `on_close`, made anew for another size); an overlay shares
+  the bars of the full screen below it, a screen that guards the device
+  has none. Breaking: what a screen asks to redraw
+  (`Cx::request_redraw_area`, `Output::redraw_area`) and an overlay's
+  `Screen::region` are now from the corner of the screen's own part of
+  the screen (`Env::content`), not of the panel; without bars that is the
+  same. `EnvParts` has no `screen_maker`: the kernel sets it with
+  `Env::with_screen_maker` (feature `kernel`, as `ScreenMaker`).
 - SDK: the screen stack, readable and steerable (gap A2).
   `Env::stack` lists the open screens (`StackEntry`: screen, slot,
   overlay, key) and `Env::top` the one shown; plugins subscribed to

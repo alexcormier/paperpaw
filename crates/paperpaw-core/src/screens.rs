@@ -4,6 +4,9 @@
 #[allow(unused_imports)]
 use super::*;
 
+/// How many tasks not shown are kept ([`Command::SwitchTask`]).
+const TASKS_KEPT: usize = 8;
+
 impl Kernel {
     /// Opens screen `id` with `params` on top, for `slot` if it was bound
     /// to one.
@@ -18,7 +21,7 @@ impl Kernel {
         // Made once, at the size it asked for: above the row of hints, or
         // all of the screen, less the bars shown over it.
         let mut hinted = self.shared.registry.hints_of(&id) == Hints::Shown;
-        let mut area = self.layout(hinted, &entry, None);
+        let mut area = self.layout(hinted, Some(&entry), None);
         set_area(&mut self.shared.device, &mut self.shared.content, area);
         let running = self.shared.meter.enter(id.namespace());
         let mut screen = (spec.factory)(&self.shared.env(self.now), params);
@@ -28,7 +31,15 @@ impl Kernel {
             && (own == Hints::Shown) != hinted
         {
             hinted = !hinted;
-            area = self.layout(hinted, &entry, None);
+            area = self.layout(hinted, Some(&entry), None);
+            set_area(&mut self.shared.device, &mut self.shared.content, area);
+            screen = (spec.factory)(&self.shared.env(self.now), params);
+        }
+        // An overlay shares its full screen's part, a guard has no bars:
+        // made again for that part.
+        let place = self.area_on_top(screen.as_ref(), hinted, &entry, area);
+        if place != area {
+            area = place;
             set_area(&mut self.shared.device, &mut self.shared.content, area);
             screen = (spec.factory)(&self.shared.env(self.now), params);
         }
@@ -129,7 +140,7 @@ impl Kernel {
             .settings
             .int(core_settings::NOTICE_SECONDS.as_str())
             .clamp(1, 60) as u32;
-        let region = screen.region(&env).unwrap_or(self.content());
+        let region = notice_area(screen.as_ref(), &env);
         self.end_notice();
         self.notice = Some((screen, self.now.add_millis(u64::from(seconds) * 1000)));
         self.invalidate(region);
@@ -162,7 +173,7 @@ impl Kernel {
             return;
         };
         let env = self.shared.env(self.now);
-        let region = screen.region(&env).unwrap_or(self.content());
+        let region = notice_area(screen.as_ref(), &env);
         self.invalidate(region);
         self.output.request_refresh(RefreshMode::Fast);
     }
@@ -305,8 +316,20 @@ impl Kernel {
     /// past a screen that guards the device.
     pub(crate) fn switch_task(&mut self, id: Id) {
         let current = self.task.clone().unwrap_or(slots::HOME);
-        if id == current || self.held_by_guard() {
+        // Not while a screen guards the device, whoever asks (also the
+        // guard, or a screen it opened).
+        if id == current || self.guard().is_some() {
             return;
+        }
+        // Not to what cannot be shown: nothing is closed for it.
+        let known = self
+            .tasks
+            .iter()
+            .any(|(task, screens)| *task == id && !screens.is_empty())
+            || self.shared.registry.resolve_slot(id.as_str()).is_some()
+            || self.shared.registry.screens.contains_key(&id);
+        if !known {
+            return self.warn_runtime(format!("no task `{id}` to switch to"));
         }
         let kept = self
             .stack
@@ -320,6 +343,10 @@ impl Kernel {
             })
             .collect();
         self.tasks.retain(|(task, _)| *task != current);
+        // A few tasks are kept, the one shown longest ago let go first.
+        if self.tasks.len() >= TASKS_KEPT {
+            self.tasks.remove(0);
+        }
         self.tasks.push((current, kept));
         self.close_from(0);
         self.stop_for_closed_screens();
@@ -417,31 +444,11 @@ impl Kernel {
     /// Makes every open screen anew for the size it has now, e.g. after
     /// the screen was resized or the row of hints changed.
     pub(crate) fn remake_screens(&mut self) {
-        let now = self.now;
+        // The bars are made anew for the new size too.
+        self.close_chromes();
         for i in 0..self.stack.len() {
-            if !self.shared.registry.screens.contains_key(&self.stack[i].id) {
-                continue;
-            }
-            // The old one goes: told as when it closes, so it keeps what
-            // it would lose (a reading position, text typed). What it asks
-            // for then is not done: the screen stays open, made anew.
-            let asked = self.output.commands.len();
-            self.with_screen(i, |screen, cx| {
-                screen.on_close(cx);
-                Handled::Yes
-            });
-            self.output.commands.truncate(asked);
-            let entry = self.shared.stack[i].clone();
-            let area = self.layout(self.stack[i].hinted, &entry, None);
-            self.apply_area(area);
-            let env = self.shared.env(now);
-            let active = &mut self.stack[i];
-            active.area = area;
-            let Some(spec) = self.shared.registry.screens.get(&active.id) else {
-                continue;
-            };
-            let _running = self.shared.meter.enter(active.id.namespace());
-            active.screen = (spec.factory)(&env, &active.params);
+            let area = self.area_of(i);
+            self.remake_screen(i, area);
         }
         self.sync_stack();
         // Made anew, those below the screen shown are hidden again.
@@ -457,6 +464,36 @@ impl Kernel {
         self.frame.rendered = None;
         let bounds = self.framebuffer.bounds();
         self.screen_changed(bounds, false);
+    }
+
+    /// Makes screen `index` anew for `area`. The old one goes: told as
+    /// when it closes, so it keeps what it would lose (a reading
+    /// position, text typed). What it asks for then is not done: the
+    /// screen stays open, made anew.
+    pub(crate) fn remake_screen(&mut self, index: usize, area: Rect) {
+        if !self
+            .shared
+            .registry
+            .screens
+            .contains_key(&self.stack[index].id)
+        {
+            return;
+        }
+        let asked = self.output.commands.len();
+        self.with_screen(index, |screen, cx| {
+            screen.on_close(cx);
+            Handled::Yes
+        });
+        self.output.commands.truncate(asked);
+        self.apply_area(area);
+        let env = self.shared.env(self.now);
+        let active = &mut self.stack[index];
+        active.area = area;
+        let Some(spec) = self.shared.registry.screens.get(&active.id) else {
+            return;
+        };
+        let _running = self.shared.meter.enter(active.id.namespace());
+        active.screen = (spec.factory)(&env, &active.params);
     }
 
     /// Runs `f` with the screen at `index` and a context for it.
@@ -551,6 +588,14 @@ impl Kernel {
         self.io.sockets.close_for_closed_screens(screens, out);
         self.io.speech.stop_for_closed_screens(screens);
     }
+}
+
+/// Where the notice `screen` shows on the screen: in the part of the
+/// screen on top (`env`'s), from its corner.
+pub(crate) fn notice_area(screen: &dyn Screen, env: &Env<'_>) -> Rect {
+    let content = env.content;
+    let all = Rect::new(0, 0, content.width, content.height);
+    chrome::on_screen(screen.region(env).unwrap_or(all), content)
 }
 
 /// Screens are made for, and handled in, `area` now (see

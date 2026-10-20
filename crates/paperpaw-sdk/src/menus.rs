@@ -216,17 +216,9 @@ impl Menus {
     fn offered(&self, item: &str, listed: bool) -> bool {
         let caps = &self.caps;
         match self.needs.get(item) {
-            Some(MenuNeed::Speech) => caps.speech,
-            Some(MenuNeed::Sleep) => caps.sleep,
-            Some(MenuNeed::Rotation) => caps.rotation,
-            Some(MenuNeed::Colors) => caps.colors,
-            Some(MenuNeed::ButtonRow) => caps.button_row,
-            Some(MenuNeed::Wifi) => caps.wifi,
-            Some(MenuNeed::Firmware) => caps.firmware,
-            Some(MenuNeed::BlackAndWhite) => caps.black_and_white,
+            // Put into a menu by the user, it shows also on touch screens.
             Some(MenuNeed::NoTouch) => listed || !caps.touch,
-            Some(MenuNeed::Touch) => caps.touch,
-            Some(MenuNeed::Frontlight) => caps.frontlight,
+            Some(need) => need.met(*caps),
             None => true,
         }
     }

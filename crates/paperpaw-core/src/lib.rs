@@ -770,6 +770,7 @@ impl Kernel {
             self.route_key_pending();
         }
         self.tick_recognizers();
+        self.tick_chromes();
         if let Some(top) = self.stack.last_mut()
             && top.timer.is_some_and(|at| at <= now)
         {
@@ -1150,6 +1151,10 @@ struct Shared {
 
 impl Shared {
     fn env(&self, now: Instant) -> Env<'_> {
+        self.env_parts(now).with_screen_maker(&self.registry)
+    }
+
+    fn env_parts(&self, now: Instant) -> Env<'_> {
         Env::from(EnvParts {
             device: &self.device,
             now,
@@ -1181,7 +1186,6 @@ impl Shared {
             work: &self.work_states,
             reader: self.reader,
             clipboard: self.system_clipboard || !self.clipboard.is_empty(),
-            screen_maker: Some(&self.registry),
             last_input: self.last_input,
             inputs: &self.inputs,
             content: self.content,

@@ -89,14 +89,16 @@ impl<'a> Canvas<'a> {
         Point::new(self.origin.0, self.origin.1)
     }
 
-    /// `area` moved from this canvas's coordinates to the screen's (cut
-    /// to what a `Rect` holds).
+    /// `area` moved from this canvas's coordinates to the screen's, cut
+    /// to what a `Rect` holds: a part moved past the screen's top or left
+    /// edge is cut off, not moved back onto it.
     fn to_screen(&self, area: Rect) -> Rect {
-        let (x, y) = (
-            (i32::from(area.x) + self.origin.0).clamp(0, i32::from(u16::MAX)),
-            (i32::from(area.y) + self.origin.1).clamp(0, i32::from(u16::MAX)),
-        );
-        Rect::new(x as u16, y as u16, area.width, area.height)
+        let fit = |v: i64| v.clamp(0, i64::from(u16::MAX)) as u16;
+        let (ox, oy) = (i64::from(self.origin.0), i64::from(self.origin.1));
+        let (left, top) = (i64::from(area.x) + ox, i64::from(area.y) + oy);
+        let (right, bottom) = (left + i64::from(area.width), top + i64::from(area.height));
+        let (x, y) = (fit(left), fit(top));
+        Rect::new(x, y, fit(right) - x, fit(bottom) - y)
     }
 
     /// The clip region in this canvas's coordinates, wide.
@@ -842,6 +844,25 @@ mod tests {
             .canvas()
             .stroke_round_rect(0, 0, 6, 6, 1, 0, Color::BLACK);
         assert_eq!(square.view().pixel(0, 0).r, 0);
+    }
+
+    /// With a negative offset, what lies past the screen's top or left
+    /// edge is cut off: clipping and describing stay where they are drawn.
+    #[test]
+    fn negative_offsets_cut_what_lies_outside() {
+        let mut fb = Framebuffer::new(10, 10, PixelFormat::Gray8).unwrap();
+        {
+            let mut canvas = fb.canvas().offset(-4, -4);
+            let mut inner = canvas.clipped(Rect::new(2, 2, 4, 4));
+            inner.clear(Color::BLACK);
+        }
+        assert_eq!(fb.take_dirty(), Some(Rect::new(0, 0, 2, 2)));
+        let mut described = Vec::new();
+        {
+            let mut canvas = fb.canvas().describing(&mut described).offset(-4, -6);
+            canvas.describe(Role::Row, "row", Rect::new(1, 1, 5, 9), false, None);
+        }
+        assert_eq!(described[0].area, Rect::new(0, 0, 2, 4));
     }
 
     #[test]

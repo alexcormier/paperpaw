@@ -145,7 +145,6 @@ impl Harness {
             clipboard: false,
             last_input: Default::default(),
             inputs: &[],
-            screen_maker: None,
             content: paperpaw_platform::Rect::default(),
             stack: &[],
             slots: &[],

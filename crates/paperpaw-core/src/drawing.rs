@@ -310,7 +310,6 @@ impl Kernel {
             .map(|(s, own)| own.is_some() && s.screen.dims_below())
             .collect();
         let base = regions.iter().rposition(Option::is_none).unwrap_or(0);
-        let bounds = self.content();
         let row = self.hint_row();
         let mut canvas = self.framebuffer.canvas();
         let mut canvas = canvas.clipped(region);
@@ -385,9 +384,10 @@ impl Kernel {
         }
         // A message over everything.
         if let Some((notice, _)) = &mut self.notice
-            && let Some(area) = notice.region(&env).unwrap_or(bounds).intersection(&region)
+            && let Some(area) = screens::notice_area(notice.as_ref(), &env).intersection(&region)
         {
-            notice.draw(&mut canvas.clipped(area), &env);
+            let corner = (i32::from(env.content.x), i32::from(env.content.y));
+            notice.draw(&mut canvas.clipped(area).offset(corner.0, corner.1), &env);
         }
     }
 
@@ -447,8 +447,9 @@ impl Kernel {
             }
             // A message over everything, last.
             if let Some((notice, _)) = &mut self.notice {
-                let area = notice.region(&env).unwrap_or(bounds);
-                notice.draw(&mut canvas.clipped(area), &env);
+                let area = screens::notice_area(notice.as_ref(), &env);
+                let corner = (i32::from(env.content.x), i32::from(env.content.y));
+                notice.draw(&mut canvas.clipped(area).offset(corner.0, corner.1), &env);
             }
         }
         described

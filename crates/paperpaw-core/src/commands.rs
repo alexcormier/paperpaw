@@ -106,8 +106,15 @@ impl Kernel {
             .screenshot
             .is_some()
             .then(|| self.now.add_millis(300));
-        // Only the screen on top runs: a covered one's time waits.
-        let timer = self.stack.last().and_then(|top| top.timer);
+        // Only the screen on top runs: a covered one's time waits. Bars
+        // shown run too.
+        let timer = [
+            self.stack.last().and_then(|top| top.timer),
+            self.chromes_due(),
+        ]
+        .into_iter()
+        .flatten()
+        .min();
         effects.wake_at = [
             self.hint.until,
             input,
@@ -309,6 +316,10 @@ impl Kernel {
                 &mut self.output.commands,
                 &mut self.works,
             );
+        }
+        // A setting may change which bars show and their size.
+        if *event == events::SETTING_CHANGED {
+            self.sync_chromes();
         }
         self.chromes_hear(event, params);
         // Screens learn that they show from `on_show`.

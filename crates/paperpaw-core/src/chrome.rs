@@ -11,6 +11,8 @@ use paperpaw_sdk::{Gesture, StackEntry};
 pub(crate) struct Chrome {
     pub(crate) spec: ChromeSpec,
     pub(crate) screen: Option<Box<dyn Screen>>,
+    /// When it asked for [`Screen::on_timer`].
+    pub(crate) timer: Option<Instant>,
 }
 
 impl fmt::Debug for Chrome {
@@ -56,16 +58,21 @@ impl Kernel {
             .iter()
             .position(|c| c.spec.priority < spec.priority)
             .unwrap_or(self.chromes.len());
-        self.chromes.insert(at, Chrome { spec, screen: None });
+        let chrome = Chrome {
+            spec,
+            screen: None,
+            timer: None,
+        };
+        self.chromes.insert(at, chrome);
     }
 
-    /// The part of the screen a screen of `entry` gets (above the row of
-    /// hints where `hinted`), what the bars shown over it leave; their
-    /// strips into `strips`, if given.
+    /// The part of the screen a full screen of `entry` gets (above the
+    /// row of hints where `hinted`), what the bars shown over it leave
+    /// (none without an entry); their strips into `strips`, if given.
     pub(crate) fn layout(
         &self,
         hinted: bool,
-        entry: &StackEntry,
+        entry: Option<&StackEntry>,
         mut strips: Option<&mut Vec<(usize, Rect)>>,
     ) -> Rect {
         let panel = self.framebuffer.bounds();
@@ -75,6 +82,9 @@ impl Kernel {
             0
         };
         let mut area = Rect::new(0, 0, panel.width, panel.height - row);
+        let Some(entry) = entry.filter(|_| !self.chromes.is_empty()) else {
+            return area;
+        };
         let env = self.shared.env(self.now);
         for (index, chrome) in self.chromes.iter().enumerate() {
             if !(chrome.spec.shown)(&env, entry) {
@@ -114,24 +124,97 @@ impl Kernel {
         area
     }
 
+    /// The part of the screen screen `index` has (above the row of hints
+    /// where it shows it): what the bars shown over the full screen at or
+    /// below it leave, so that an overlay shares its full screen's bars;
+    /// no bars for a screen that guards the device and those above it.
+    pub(crate) fn area_of(&self, index: usize) -> Rect {
+        let base = (0..=index)
+            .rev()
+            .find(|&i| self.overlay(i).is_none())
+            .unwrap_or(0);
+        let guarded = self.guard().is_some_and(|guard| index >= guard);
+        let entry = self.shared.stack.get(base).filter(|_| !guarded);
+        let hinted = self.stack.get(index).is_some_and(|active| active.hinted);
+        self.layout(hinted, entry, None)
+    }
+
+    /// The part of the screen `screen`, just made in `area` for `entry`,
+    /// gets on top: an overlay its full screen's, a screen that guards the
+    /// device (or one above such a screen) no bars; else `area`.
+    pub(crate) fn area_on_top(
+        &self,
+        screen: &dyn Screen,
+        hinted: bool,
+        entry: &StackEntry,
+        area: Rect,
+    ) -> Rect {
+        let below_guard = self.guard().is_some() && !self.from_guard;
+        if self.chromes.is_empty() || below_guard {
+            return area;
+        }
+        let env = self.shared.env(self.now);
+        let device = env.device_within(area);
+        let overlay = screen.region(&env.within(&device, area)).is_some();
+        let below = self
+            .stack
+            .len()
+            .checked_sub(1)
+            .map(|top| self.shown_base().min(top));
+        let entry = if screen.guards() || self.guard().is_some() {
+            None
+        } else if overlay && let Some(base) = below {
+            self.shared.stack.get(base)
+        } else {
+            Some(entry)
+        };
+        self.layout(hinted, entry, None)
+    }
+
     /// The bars that show now (those shown over the full screen shown;
-    /// none while a screen guards the device): made where they come,
-    /// let go where they go, drawn again.
+    /// none while a screen guards the device): made where they come and
+    /// shown ([`Screen::on_show`]), closed where they go
+    /// ([`Screen::on_close`]), made anew where their size changed; the
+    /// screens shown laid out again where what the bars leave changed.
+    /// Only strips that are new or moved are drawn again: a bar whose
+    /// look follows the screen shown asks for it, hearing
+    /// [`events::SCREEN_SHOWN`].
     pub(crate) fn sync_chromes(&mut self) {
+        if self.chromes.is_empty() {
+            return;
+        }
         let mut strips: Vec<(usize, Rect)> = Vec::new();
         let base = self.shown_base();
-        if !self.chromes.is_empty()
-            && self.guard().is_none()
+        if self.guard().is_none()
             && let (Some(active), Some(entry)) = (self.stack.get(base), self.shared.stack.get(base))
         {
-            self.layout(active.hinted, entry, Some(&mut strips));
+            self.layout(active.hinted, Some(entry), Some(&mut strips));
         }
-        for (index, chrome) in self.chromes.iter_mut().enumerate() {
-            if !strips.iter().any(|(i, _)| *i == index) {
-                chrome.screen = None;
+        // Gone, or made for another size: closed.
+        let mut changed: Vec<Rect> = Vec::new();
+        for k in 0..self.chrome_strips.len() {
+            let (index, old) = self.chrome_strips[k];
+            let now = strips.iter().find(|(i, _)| *i == index).map(|(_, s)| *s);
+            if now == Some(old) {
+                continue;
+            }
+            changed.push(old);
+            let resized = now.is_none_or(|s| (s.width, s.height) != (old.width, old.height));
+            if resized && self.chromes[index].screen.is_some() {
+                self.with_chrome(index, |screen, cx| {
+                    screen.on_close(cx);
+                    Handled::Yes
+                });
+                self.chromes[index].screen = None;
+                self.chromes[index].timer = None;
             }
         }
-        for &(index, strip) in &strips {
+        let old = mem::replace(&mut self.chrome_strips, strips);
+        for k in 0..self.chrome_strips.len() {
+            let (index, strip) = self.chrome_strips[k];
+            if !old.contains(&(index, strip)) {
+                changed.push(strip);
+            }
             if self.chromes[index].screen.is_some() {
                 continue;
             }
@@ -139,14 +222,79 @@ impl Kernel {
             let device = base.device_within(strip);
             let env = base.within(&device, strip);
             let chrome = &mut self.chromes[index];
-            let _running = self.shared.meter.enter(chrome.spec.id.namespace());
+            let running = self.shared.meter.enter(chrome.spec.id.namespace());
             chrome.screen = Some((chrome.spec.factory)(&env, &Params::new()));
+            drop(running);
+            changed.push(strip);
+            self.with_chrome(index, |screen, cx| {
+                screen.on_show(cx);
+                Handled::Yes
+            });
         }
-        // Drawn again, as what they show follows the screen shown.
-        let old = mem::replace(&mut self.chrome_strips, strips);
-        for (_, strip) in old.into_iter().chain(self.chrome_strips.clone()) {
+        // Bars not shown are let go.
+        for (index, chrome) in self.chromes.iter_mut().enumerate() {
+            if chrome.screen.is_some() && !self.chrome_strips.iter().any(|(i, _)| *i == index) {
+                chrome.screen = None;
+                chrome.timer = None;
+            }
+        }
+        for strip in changed {
             self.invalidate(strip);
         }
+        self.lay_out_shown();
+    }
+
+    /// Makes the screens shown anew where the part of the screen they
+    /// have changed (a bar came, went or changed its size).
+    fn lay_out_shown(&mut self) {
+        let mut remade = false;
+        for index in self.shown_base()..self.stack.len() {
+            let area = self.area_of(index);
+            if area != self.stack[index].area {
+                let old = self.stack[index].area;
+                self.remake_screen(index, area);
+                self.invalidate(old.union(&area));
+                remade = true;
+            }
+        }
+        if remade {
+            self.sync_content();
+            self.output.request_refresh(RefreshMode::Partial);
+        }
+    }
+
+    /// Closes every bar shown (before they are made anew for another size
+    /// of the screen).
+    pub(crate) fn close_chromes(&mut self) {
+        for k in 0..self.chrome_strips.len() {
+            let index = self.chrome_strips[k].0;
+            self.with_chrome(index, |screen, cx| {
+                screen.on_close(cx);
+                Handled::Yes
+            });
+            self.chromes[index].screen = None;
+            self.chromes[index].timer = None;
+        }
+        self.chrome_strips.clear();
+    }
+
+    /// Bars whose time came ([`Screen::on_timer`]).
+    pub(crate) fn tick_chromes(&mut self) {
+        for k in 0..self.chrome_strips.len() {
+            let index = self.chrome_strips[k].0;
+            if self.chromes[index].timer.is_some_and(|at| at <= self.now) {
+                self.chromes[index].timer = None;
+                self.with_chrome(index, |screen, cx| {
+                    screen.on_timer(cx);
+                    Handled::Yes
+                });
+            }
+        }
+    }
+
+    /// When the next bar wants its timer.
+    pub(crate) fn chromes_due(&self) -> Option<Instant> {
+        self.chromes.iter().filter_map(|chrome| chrome.timer).min()
     }
 
     /// The bar whose strip holds `point`, and its strip.
@@ -185,8 +333,11 @@ impl Kernel {
         let handled = f(screen.as_mut(), &mut cx);
         drop(running);
         // What it asks to draw again is in its strip; a time it asks for
-        // is not kept (bars draw what they show when shown).
-        self.output.wake_at = None;
+        // is its own.
+        if let Some(at) = self.output.wake_at.take() {
+            let timer = &mut self.chromes[index].timer;
+            *timer = Some(timer.map_or(at, |t| t.min(at)));
+        }
         if mem::replace(&mut self.output.redraw, redraw) {
             self.invalidate(strip);
         }
@@ -198,7 +349,10 @@ impl Kernel {
 
     /// Every bar shown hears `event` (see [`Screen::on_event`]).
     pub(crate) fn chromes_hear(&mut self, event: &Id, params: &Params) {
-        for (index, _) in self.chrome_strips.clone() {
+        for k in 0..self.chrome_strips.len() {
+            let Some(&(index, _)) = self.chrome_strips.get(k) else {
+                break;
+            };
             self.with_chrome(index, |screen, cx| {
                 screen.on_event(event, params, cx);
                 Handled::Yes

@@ -142,9 +142,9 @@ pub struct Env<'a> {
     /// to bind like any other.
     pub inputs: &'a [crate::keys::InputSpec],
     /// Makes the screens plugins added, for [`Env::make_screen`]: the
-    /// kernel's.
-    #[doc(hidden)]
-    pub screen_maker: Option<&'a dyn crate::ScreenMaker>,
+    /// kernel's ([`Env::with_screen_maker`]).
+    #[cfg(any(test, feature = "kernel"))]
+    screen_maker: Option<&'a dyn crate::ScreenMaker>,
     /// The part of the screen what is handled now is made for and drawn
     /// into, with its place on the screen: all of it but bars and the row
     /// of hints for a screen, a bar's strip for a bar. A screen draws and
@@ -264,10 +264,6 @@ pub struct EnvParts<'a> {
     /// The inputs plugins added ([`keys::InputSpec`](crate::keys::InputSpec)),
     /// to bind like any other.
     pub inputs: &'a [crate::keys::InputSpec],
-    /// Makes the screens plugins added, for [`Env::make_screen`]: the
-    /// kernel's.
-    #[doc(hidden)]
-    pub screen_maker: Option<&'a dyn crate::ScreenMaker>,
     /// The part of the screen what is handled now is made for and drawn
     /// into, with its place on the screen: all of it but bars and the row
     /// of hints for a screen, a bar's strip for a bar. A screen draws and
@@ -338,7 +334,8 @@ impl<'a> From<EnvParts<'a>> for Env<'a> {
             clipboard: p.clipboard,
             last_input: p.last_input,
             inputs: p.inputs,
-            screen_maker: p.screen_maker,
+            #[cfg(any(test, feature = "kernel"))]
+            screen_maker: None,
             content: p.content,
             stack: p.stack,
             slots: p.slots,
@@ -387,6 +384,15 @@ impl<'a> Env<'a> {
         env.content = area;
         env
     }
+
+    /// This environment with `maker` making the screens
+    /// [`Env::make_screen`] asks for: the kernel's.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+    pub fn with_screen_maker(mut self, maker: &'a dyn crate::ScreenMaker) -> Self {
+        self.screen_maker = Some(maker);
+        self
+    }
 }
 
 impl Env<'_> {
@@ -400,7 +406,13 @@ impl Env<'_> {
         id: &crate::Id,
         params: &crate::Params,
     ) -> Option<alloc::boxed::Box<dyn crate::Screen>> {
-        self.screen_maker?.make(id, self, params)
+        #[cfg(any(test, feature = "kernel"))]
+        return self.screen_maker?.make(id, self, params);
+        #[cfg(not(any(test, feature = "kernel")))]
+        {
+            let _ = (id, params);
+            None
+        }
     }
 
     /// The screen shown on top, if any.

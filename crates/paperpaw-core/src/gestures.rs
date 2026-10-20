@@ -246,7 +246,12 @@ impl Kernel {
         {
             return None;
         }
-        let display = self.framebuffer.bounds();
+        // Inside the part of the screen the screen on top has: not on a
+        // bar or the row of hints.
+        let display = self.stack.last().map_or(self.content(), |top| top.area);
+        if !display.contains(point) {
+            return None;
+        }
         // Wide at the top and the bottom: on Android the outermost strip is
         // the system's (its notifications, its home), a swipe begun just
         // inside it is ours. Narrow at the sides, where pages are tapped.
@@ -259,14 +264,15 @@ impl Kernel {
             mm(&core_settings::EDGE_ENDS),
             mm(&core_settings::EDGE_SIDES),
         );
-        let (w, h) = (i32::from(display.width), i32::from(display.height));
-        let side = if point.y < across {
+        let (left, top) = (i32::from(display.x), i32::from(display.y));
+        let (right, bottom) = (display.right() as i32, display.bottom() as i32);
+        let side = if point.y < top + across {
             Direction::Up
-        } else if point.y >= h - across {
+        } else if point.y >= bottom - across {
             Direction::Down
-        } else if point.x < along {
+        } else if point.x < left + along {
             Direction::Left
-        } else if point.x >= w - along {
+        } else if point.x >= right - along {
             Direction::Right
         } else {
             return None;

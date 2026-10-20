@@ -19,6 +19,8 @@ pub type ScreenFactory = Box<dyn Fn(&Env<'_>, &Params) -> Box<dyn Screen>>;
 
 /// Makes the screens plugins added: what [`Env::make_screen`] asks (the
 /// kernel's, for screens that host others).
+#[cfg(any(test, feature = "kernel"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
 pub trait ScreenMaker {
     /// Screen `id` made with `params` for `env`, `None` where no plugin
     /// added it.
@@ -199,8 +201,10 @@ pub trait Screen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>);
 
     /// `None` for a full screen; `Some(region)` makes the screen an
-    /// overlay (menu, dialog, popup) drawn above the screens below it.
-    /// Tapping outside an overlay closes it.
+    /// overlay (menu, dialog, popup) drawn above the screens below it,
+    /// `region` from the corner of the part of the screen it has
+    /// ([`Env::content`], that of the full screen below it). Tapping
+    /// outside an overlay closes it.
     fn region(&self, env: &Env<'_>) -> Option<Rect> {
         let _ = env;
         None
@@ -368,7 +372,8 @@ pub struct Output {
     pub refresh: Option<RefreshMode>,
     /// Whether the whole screen should be redrawn.
     pub redraw: bool,
-    /// Part of the screen to redraw, in screen coordinates.
+    /// Part of the screen to redraw, from the corner of the part of the
+    /// screen the screen has ([`Env::content`]).
     pub redraw_area: Option<Rect>,
     /// When the screen wants [`Screen::on_timer`] to be called (see
     /// [`Cx::wake_at`]).
@@ -458,8 +463,9 @@ impl<'a, 'e> Cx<'a, 'e> {
         self.output.redraw = true;
     }
 
-    /// Requests a redraw of `area` (screen coordinates) only, e.g. a status
-    /// line or a focused item: [`Screen::draw`] runs clipped to it.
+    /// Requests a redraw of `area` only, from the corner of the part of
+    /// the screen the screen has ([`Env::content`]), as it draws; e.g. a
+    /// status line or a focused item: [`Screen::draw`] runs clipped to it.
     pub fn request_redraw_area(&mut self, area: Rect) {
         self.output.redraw_area = Some(self.output.redraw_area.map_or(area, |a| a.union(&area)));
     }

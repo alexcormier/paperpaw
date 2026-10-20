@@ -52,6 +52,9 @@ mod fonts;
 mod formats;
 mod gesture;
 pub mod host;
+#[cfg(any(test, feature = "kernel"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+pub use screen::ScreenMaker;
 mod hyphenation;
 pub mod icons;
 mod id;
@@ -111,7 +114,7 @@ pub use plugins::{PluginInfo, PluginKind, PluginProblem, PluginState, Plugins, R
 pub use replies::{Chosen, HttpReply, ServerNotice, SocketNotice, Typed};
 pub use screen::{
     CloseCause, Cx, Handled, Hint, Hints, Output, Outside, Screen, ScreenFactory, ScreenKey,
-    ScreenMaker, ScreenSpec, StackEntry,
+    ScreenSpec, StackEntry,
 };
 pub use setting::{Setting, Text};
 pub use settings::{
