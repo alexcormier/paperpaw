@@ -121,9 +121,9 @@ fn record(env: &Env<'_>, state: &mut State, kind: Kind) {
             log::PLUGINS_HEADER,
             &log::plugin_lines(now.ms, &env.plugin_usage()),
         );
-        // On the card every ten minutes and at sleep: an empty battery
-        // ends it all without warning, and a write to the card each
-        // minute wears it for little.
+        // On the card every ten minutes and at sleep or a restart: an
+        // empty battery ends it all without warning, and a write to the
+        // card each minute wears it for little.
         let _ = env.storage.sync();
     }
     state.awake = kind != Kind::End;
@@ -169,11 +169,13 @@ impl Plugin for Battery {
         let state: Shared = Rc::new(RefCell::new(State::default()));
         r.add_settings(&SETTINGS)?;
 
-        // Recording: a time awake from start-up or waking to sleep.
+        // Recording: a time awake from start-up or waking to sleep or a
+        // restart.
         for (event, kind) in [
             (events::STARTED, Kind::Start),
             (events::RESUME, Kind::Start),
             (events::SUSPEND, Kind::End),
+            (events::STOPPING, Kind::End),
         ] {
             let s = state.clone();
             r.subscribe(

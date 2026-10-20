@@ -241,7 +241,8 @@ the plugin is built; screens get every event too and read one with
 turned, a book moved, books came into the library or left it, its
 bookmarks or highlights changed, a word looked up, a place in the open
 book to show, text chosen, notes exported, the device suspends or
-resumes. Plugins define their own the same way (in their namespace),
+resumes, PaperPaw stops (a restart: save as at suspending, but it is no
+sleep). Plugins define their own the same way (in their namespace),
 and `EVENT.schedule(data, at)` emits one at a time (work at a time,
 below). Underneath, what events carry travels as named
 strings (`Params`): events known only at run time are heard by id with

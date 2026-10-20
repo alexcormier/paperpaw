@@ -1,6 +1,6 @@
 //! Reading a book with the real kernel, the text and EPUB formats and the
 //! default fonts: pages turn both ways, the position is
-//! kept and the book continues there, a larger font keeps the place,
+//! kept (also over a restart) and the book continues there, a larger font keeps the place,
 //! bookmarks are kept, and plugins hear of it all, the chapter too.
 
 // Tests panic on purpose when something is wrong.
@@ -240,6 +240,11 @@ impl Reading {
         self.now += 10;
         let effects = self.kernel.suspend(Instant(self.now));
         self.settle(effects);
+        self.written()
+    }
+
+    /// The position written to the storage so far, as [`Reading::kept`].
+    fn written(&self) -> (u32, u32) {
         let dir = format!(
             ".paperpaw/plugins/reader/books/{:016x}",
             paperpaw_digest::fnv1a64(self.book)
@@ -296,6 +301,31 @@ fn continues_where_it_was_left() {
     let left = reading.kept();
     assert!(left.1 > 0);
     // Another start of the device, the same card.
+    let mut again = Reading::new(storage);
+    again.open();
+    assert_eq!(again.kept(), left);
+}
+
+#[test]
+fn a_restart_keeps_the_place() {
+    let storage = Shared::default();
+    let mut reading = Reading::new(storage.clone());
+    reading.open();
+    reading.run(core_actions::NEXT_PAGE);
+    let written = reading.written();
+    // A page on at once: not written yet, the card is spared.
+    reading.now += 10;
+    let effects = reading
+        .kernel
+        .run_action(Instant(reading.now), core_actions::NEXT_PAGE);
+    reading.settle(effects);
+    assert_eq!(reading.written(), written);
+    reading.now += 10;
+    let effects = reading.kernel.stop(Instant(reading.now));
+    reading.settle(effects);
+    let left = reading.written();
+    assert!(left > written, "{left:?} after {written:?}");
+    // The device starts again, the same card.
     let mut again = Reading::new(storage);
     again.open();
     assert_eq!(again.kept(), left);
