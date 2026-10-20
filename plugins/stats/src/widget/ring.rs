@@ -17,7 +17,9 @@ use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::{params, slots};
 use paperpaw_sdk::ui::{self, UiStyle};
-use paperpaw_sdk::widgets::{self, Align, Frame, Look, Size, Widget, WidgetSpec, WidgetTarget};
+use paperpaw_sdk::widgets::{
+    self, Align, Frame, Look, Padding, Size, Widget, WidgetSpec, WidgetTarget,
+};
 use paperpaw_sdk::{
     Arg, Canvas, Command, Env, Id, Params, Rect, RegisterError, Registrar, SettingSpec,
 };
@@ -35,8 +37,9 @@ const LINES: [&str; 3] = ["stats.line.thin", "stats.line.medium", "stats.line.th
 
 /// Its settings, kept in the program: its look, its choices and
 /// switches for its parts.
-static SETTINGS: [SettingSpec; 8] = [
+static SETTINGS: [SettingSpec; 9] = [
     widgets::frame_spec("stats.widget.goal.frame", RING, Frame::None),
+    widgets::padding_spec("stats.widget.goal.padding", RING, Padding::Auto),
     widgets::size_spec("stats.widget.goal.size", RING, Size::Fit, true),
     widgets::align_spec("stats.widget.goal.align", RING, Align::Center),
     SettingSpec::fixed_choice(
@@ -191,6 +194,27 @@ fn note(env: &Env<'_>, numbers: Numbers) -> Option<String> {
     })
 }
 
+/// The least diameter of a ring with the minutes inside it: smaller, the
+/// widget shows the time as text.
+fn least_ring(font: &paperpaw_sdk::FontHandle<'_>, style: &UiStyle) -> u16 {
+    line(font, style.text) * 3 / 2
+}
+
+/// "4 min", or with a goal "4 of 30 min".
+fn time_text(env: &Env<'_>, numbers: Numbers) -> String {
+    let time = fmt::duration(env, numbers.today);
+    match goal(env) {
+        Some(goal) => env.i18n.format(
+            "stats.widget.goal.of",
+            &[
+                ("time", Arg::Str(&time)),
+                ("goal", Arg::Str(&fmt::duration(env, goal))),
+            ],
+        ),
+        None => time,
+    }
+}
+
 fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, numbers: Numbers) {
     let style = UiStyle::new(env);
     let Some(font) = style.font(env) else {
@@ -198,13 +222,9 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, numbers: Numbers) {
     };
     let id = NAME;
     let title = env.i18n.tr("stats.widget.goal.caption");
-    let area = super::below_caption(env, id, look.area);
+    let caption = super::caption(env, id, look.area, &[title]);
+    let area = super::below_caption(env, caption, look.area);
     let note = note(env, numbers);
-    let note_h = if note.is_some() {
-        note_height(env, &font, &style)
-    } else {
-        0
-    };
     let limit = if widgets::size(env, id) == Size::Fit {
         u16::MAX
     } else {
@@ -213,75 +233,117 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, numbers: Numbers) {
     let align = widgets::align(env, id);
     let progress = goal(env).map(|goal| (numbers.today * 1000 / goal.max(1)).min(1000) as u32);
     let small = line(&font, style.small);
-    if area.width >= area.height.saturating_mul(2) && area.height >= small * 2 {
-        // Wide: the ring on the left, the time and the note beside it.
-        let area = super::captioned(canvas, env, id, look, title, area.height);
+    let least = least_ring(&font, &style);
+    if area.width >= area.height.saturating_mul(2) && area.height >= least {
+        // Wide: the ring, the time and the note beside it, placed
+        // together as the alignment says.
+        let area = super::captioned(canvas, env, id, look, caption, area.height);
         let d = area.height.min(area.width * 2 / 5).min(limit);
-        let ring = middle(Rect::new(area.x, area.y, d, area.height), d);
-        draw_ring(canvas, env, look, ring, progress, numbers.today, false);
         let gap = style.gap as u16;
-        let text = Rect::new(
-            area.x + d + gap,
-            area.y,
-            area.width.saturating_sub(d + gap),
-            area.height,
-        );
-        let time = fmt::duration(env, numbers.today);
-        let first = match goal(env) {
-            Some(goal) => env.i18n.format(
-                "stats.widget.goal.of",
-                &[
-                    ("time", Arg::Str(&time)),
-                    ("goal", Arg::Str(&fmt::duration(env, goal))),
-                ],
-            ),
-            None => time,
-        };
-        let size = fit_size(&font, &style, &first, text.width, text.height / 2).min(style.title);
+        let room = area.width.saturating_sub(d + gap);
+        let first = time_text(env, numbers);
+        let size = super::fit_size(&font, &style, &first, room, area.height / 2).min(style.title);
         let big = line(&font, size);
+        let first = ui::fit(&font, size, &first, f32::from(room));
+        // The note where it fits whole below the time.
+        let note = note.filter(|n| {
+            big + small <= area.height && font.measure(style.small, n) <= f32::from(room)
+        });
+        let wide = note
+            .as_ref()
+            .map_or(0.0, |n| font.measure(style.small, n))
+            .max(font.measure(size, &first));
+        let group = d + gap + ((wide + 0.99) as u16).min(room);
+        let left = align.x(area, f32::from(group)) as u16;
+        let ring = middle(Rect::new(left, area.y, d, area.height), d);
+        draw_ring(canvas, env, look, ring, progress, numbers.today, false);
+        let text = Rect::new(left + d + gap, area.y, room, area.height);
+        let note_h = if note.is_some() { small } else { 0 };
         let block = middle(text, big + note_h);
-        let first = ui::fit(&font, size, &first, f32::from(text.width));
         let row = Rect::new(text.x, block.y, text.width, big);
-        ui::draw_label(
-            canvas,
-            &font,
-            size,
-            f32::from(text.x),
-            row,
-            &first,
-            look.ink,
-        );
+        let x = f32::from(text.x);
+        ui::draw_label(canvas, &font, size, x, row, &first, look.ink);
         if let Some(note) = note {
-            let note = ui::fit(&font, style.small, &note, f32::from(text.width));
             let row = Rect::new(text.x, block.y + big, text.width, small);
-            let x = f32::from(text.x);
             ui::draw_label(canvas, &font, style.small, x, row, &note, look.faint);
         }
         return;
     }
     // The ring with the note below, together in the middle; where the
-    // note would leave the ring small, the ring alone.
+    // note would leave the ring small, the ring alone. The note on two
+    // lines where it needs them and they fit whole, else left out.
+    let gap = style.gap as u16 / 2;
     let ring_in = |note_h: u16| {
         area.width
             .min(area.height.saturating_sub(note_h))
             .min(limit)
     };
-    let (note, note_h) = if note_h > 0 && progress.is_some() && ring_in(note_h) < area.width * 2 / 5
-    {
-        (None, 0)
-    } else {
-        (note, note_h)
-    };
+    let lines = note.and_then(|n| super::note_lines(env, &n, area.width, area.height, 2));
+    let with_note = lines.as_ref().map(|l| l.height(env) + gap).filter(|&h| {
+        let small_ring = progress.is_some() && ring_in(h) < area.width * 2 / 5;
+        !small_ring && ring_in(h) >= least
+    });
+    let note_h = with_note.unwrap_or(0);
     let d = ring_in(note_h);
-    let block = super::captioned(canvas, env, id, look, title, d + note_h);
+    if d < least {
+        // No room for a ring: the time as text, the note below it.
+        draw_time(canvas, env, (look, caption), area, numbers, lines);
+        return;
+    }
+    let note = lines.filter(|_| note_h > 0);
+    let block = super::captioned(canvas, env, id, look, caption, d + note_h);
     let x = align.x(area, f32::from(d)) as u16;
     let ring = Rect::new(x, block.y, d, d);
     draw_ring(canvas, env, look, ring, progress, numbers.today, true);
+    if let Some(lines) = note {
+        let row = Rect::new(area.x, block.y + d + gap, area.width, note_h - gap);
+        lines.draw(canvas, env, row, align, look.faint);
+    }
+}
+
+/// The time read as text where there is no room for a ring, as large as
+/// fits, with the note below it where that fits too.
+fn draw_time(
+    canvas: &mut Canvas<'_>,
+    env: &Env<'_>,
+    (look, caption): (&Look, Option<&str>),
+    area: Rect,
+    numbers: Numbers,
+    note: Option<widgets::Wrapped>,
+) {
+    let style = UiStyle::new(env);
+    let Some(font) = style.font(env) else {
+        return;
+    };
+    let id = NAME;
+    let first = time_text(env, numbers);
+    let note_h = note.as_ref().map_or(0, |n| n.height(env));
+    let fits = |note_h: u16| {
+        let room = area.height.saturating_sub(note_h);
+        let size = super::text_size(env, &font, id, &first, area.width, room);
+        (size, line(&font, size))
+    };
+    let (mut size, mut big) = fits(note_h);
+    let mut note = note;
+    // The note goes where it leaves no room or makes the time smaller
+    // than the body's size.
+    let alone = fits(0);
+    if big + note_h > area.height || (size < style.text && alone.0 > size) {
+        note = None;
+        (size, big) = alone;
+    }
+    let note_h = note.as_ref().map_or(0, |n| n.height(env));
+    let align = widgets::align(env, id);
+    let block = super::captioned(canvas, env, id, look, caption, big + note_h);
+    let width = f32::from(area.width);
+    let shown = super::number_if_narrow(&font, size, &first, area.width);
+    let shown = ui::fit(&font, size, shown, width);
+    let x = align.x(area, font.measure(size, &shown));
+    let row = Rect::new(area.x, block.y, area.width, big);
+    ui::draw_label(canvas, &font, size, x, row, &shown, look.ink);
     if let Some(note) = note {
-        let note = ui::fit(&font, style.small, &note, f32::from(area.width));
-        let row = Rect::new(area.x, block.y + d + note_h - small, area.width, small);
-        let x = align.x(area, font.measure(style.small, &note));
-        ui::draw_label(canvas, &font, style.small, x, row, &note, look.faint);
+        let row = Rect::new(area.x, block.y + big, area.width, note_h);
+        note.draw(canvas, env, row, align, look.faint);
     }
 }
 
