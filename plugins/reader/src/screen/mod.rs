@@ -61,6 +61,11 @@ const PAGES_PER_STEP_SMALL: usize = 1;
 /// Pause between background steps.
 const STEP_DELAY_MS: u64 = 2;
 
+/// On small devices a rest as long as a step: the CPU rests (and the X4
+/// sleeps lightly) half the time while pages are counted, instead of
+/// running flat out for minutes.
+const STEP_DELAY_SMALL_MS: u64 = 500;
+
 /// The position is written at most this often while pages turn; always
 /// when the book is closed or the device sleeps. A card is slow to write
 /// to, and turning pages quickly should not wait for it.
@@ -396,7 +401,11 @@ impl Screen for ReaderScreen {
         };
         book.save_due(&env, false);
         if book.index_step(&env) {
-            cx.wake_at(env.now.add_millis(STEP_DELAY_MS));
+            let delay = match env.device.memory {
+                paperpaw_sdk::MemoryClass::Small => STEP_DELAY_SMALL_MS,
+                _ => STEP_DELAY_MS,
+            };
+            cx.wake_at(env.now.add_millis(delay));
         }
         self.auto_turn_due(cx);
         self.let_go_of_other_pages(cx);

@@ -1057,3 +1057,40 @@ fn a_page_drawn_in_bands_asks_the_status_line_once() {
         asked.get()
     );
 }
+
+#[test]
+fn small_devices_count_pages_with_rests_between() {
+    let storage = Shared::default();
+    storage.create_dir("books").unwrap();
+    let text = include_str!("../../../samples/library/books/alice-in-wonderland.txt");
+    storage.write(BOOK, text.as_bytes()).unwrap();
+    // The X4: about half a second to lay out a page.
+    let small = DeviceInfo {
+        memory: MemoryClass::Small,
+        ..DEVICE
+    };
+    let mut kernel = Kernel::builder(small)
+        .storage(storage.clone())
+        .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
+        .plugin(paperpaw_plugin_format_txt::TxtFormat)
+        .plugin(Reader)
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    let params = Params::new().with(params::PATH, BOOK);
+    let mut effects = kernel.open_slot(Instant(10), slots::READER, params);
+    // Two seconds of counting.
+    let mut now = 10;
+    while let Some(at) = effects.wake_at().filter(|at| at.0 <= 2010) {
+        now = now.max(at.0);
+        effects = kernel.tick(Instant(now));
+    }
+    let index = indexes(&storage, BOOK).pop().expect("an index");
+    let dir = format!(
+        ".paperpaw/plugins/reader/books/{:016x}",
+        paperpaw_digest::fnv1a64(BOOK)
+    );
+    let pages = storage.size(&format!("{dir}/{index}")).unwrap() / 8;
+    // A page and a rest as long, not a page every two milliseconds.
+    assert!((1..=8).contains(&pages), "{pages} pages counted");
+}
