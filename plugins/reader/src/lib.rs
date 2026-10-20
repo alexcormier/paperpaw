@@ -66,6 +66,7 @@ pub const SEARCH_SCREEN: Id = Id::new_static("reader.search-results");
 /// The keyboard's replies: what to search for, which page to go to.
 const SEARCH_ENTERED: Event<Typed> = Event::new("reader.search-entered");
 const PAGE_ENTERED: Event<Typed> = Event::new("reader.page-entered");
+const PERCENT_ENTERED: Event<Typed> = Event::new("reader.percent-entered");
 /// The keyboard's reply with a note on a highlight.
 const NOTE_ENTERED: Event<Typed> = Event::new("reader.note-entered");
 /// Font and layout, shown as a panel ([`actions::QUICK_SETTINGS`]), and
@@ -182,6 +183,8 @@ pub mod actions {
     pub const QUICK_SETTINGS: Id = Id::new_static("reader.quick-settings");
     /// Goes to a page number (asks for it on the keyboard).
     pub const GO_TO_PAGE: Id = Id::new_static("reader.go-to-page");
+    /// Goes to a percentage of the book (asks for it on the keyboard).
+    pub const GO_TO_PERCENT: Id = Id::new_static("reader.go-to-percent");
     /// Reads the book aloud from the page shown, turning the pages, until
     /// a tap or a button (where the device can speak).
     pub const READ_ALOUD: Id = Id::new_static("reader.read-aloud");
@@ -519,6 +522,7 @@ impl Plugin for Reader {
         for (id, title) in [
             (actions::SEARCH, "reader.search"),
             (actions::GO_TO_PAGE, "reader.go-to-page"),
+            (actions::GO_TO_PERCENT, "reader.go-to-percent"),
             (actions::READ_ALOUD, "reader.read-aloud"),
             (actions::SELECT, "reader.select"),
             (actions::LINKS, "reader.links"),
@@ -659,6 +663,8 @@ impl Plugin for Reader {
             (LAYOUT_MENU, settings::HYPHENATE.into(), 50),
             (LAYOUT_MENU, settings::PUBLISHER_STYLES.into(), 60),
             (MORE_MENU, actions::SKIM_BOOK, 15),
+            (MORE_MENU, actions::GO_TO_PAGE, 16),
+            (MORE_MENU, actions::GO_TO_PERCENT, 17),
             (MORE_MENU, actions::AUTO_TURN, 17),
             (MORE_MENU, actions::SELECT, 20),
             (MORE_MENU, actions::LINKS, 25),
@@ -689,6 +695,7 @@ impl Plugin for Reader {
             (actions::LINKS, "link"),
             (actions::SEARCH, "search"),
             (actions::GO_TO_PAGE, "hash"),
+            (actions::GO_TO_PERCENT, "arrow-bar-to-right"),
             (actions::ANNOTATIONS, "bookmarks"),
             (actions::QUICK_SETTINGS, "typography"),
             (actions::TOGGLE_BOOKMARK, "bookmark"),

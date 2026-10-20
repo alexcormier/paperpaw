@@ -689,3 +689,32 @@ fn a_book_may_be_turned_on_its_own() {
     reading.open();
     assert_eq!(reading.kernel.rotation(), Rotation::Deg90);
 }
+
+#[test]
+fn a_percentage_is_gone_to_and_back_returns() {
+    let mut reading = Reading::new(Shared::default());
+    reading.open();
+    reading.run(core_actions::NEXT_PAGE);
+    let before = reading.kept();
+    let answer = |reading: &mut Reading, percent: &str| {
+        reading.now += 10;
+        let params = Params::new()
+            .with(params::PATH, BOOK)
+            .with(params::TEXT, percent);
+        let effects = reading.kernel.send_event(
+            Instant(reading.now),
+            Id::new_static("reader.percent-entered"),
+            params,
+        );
+        reading.settle(effects);
+        reading.heard.borrow().last().unwrap().1.progress
+    };
+    let half = answer(&mut reading, "50");
+    assert!((45.0..=55.0).contains(&half), "{half}");
+    let end = answer(&mut reading, "100");
+    assert!(end > 95.0, "{end}");
+    // Back to where the jumps began.
+    reading.run(core_actions::BACK);
+    reading.run(core_actions::BACK);
+    assert_eq!(reading.kept(), before);
+}

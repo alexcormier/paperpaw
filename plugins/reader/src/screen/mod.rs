@@ -238,6 +238,12 @@ impl ReaderScreen {
         let question = if *action == crate::actions::SEARCH {
             ask::text(env.i18n.tr("reader.search.prompt"), &crate::SEARCH_ENTERED)
                 .initial(self.last_search.clone())
+        } else if *action == crate::actions::GO_TO_PERCENT {
+            ask::text(
+                env.i18n.tr("reader.go-to-percent.prompt"),
+                &crate::PERCENT_ENTERED,
+            )
+            .number()
         } else {
             let (pages, complete) = book
                 .index
@@ -524,7 +530,10 @@ impl Screen for ReaderScreen {
             self.next_status_line(top, cx);
             return Handled::Yes;
         }
-        if *action == crate::actions::SEARCH || *action == crate::actions::GO_TO_PAGE {
+        if *action == crate::actions::SEARCH
+            || *action == crate::actions::GO_TO_PAGE
+            || *action == crate::actions::GO_TO_PERCENT
+        {
             self.ask(action, cx);
             return Handled::Yes;
         }
@@ -821,6 +830,25 @@ impl Screen for ReaderScreen {
                     self.selection = None;
                     book.jump(cx, start);
                 }
+            }
+            return;
+        }
+        if let Some(typed) = crate::PERCENT_ENTERED.read(event, params)
+            && this_book
+        {
+            let env = *cx.env();
+            // 100 % is the last page.
+            let permille = typed
+                .text
+                .trim()
+                .parse::<u32>()
+                .ok()
+                .map(|p| (p * 10).min(999));
+            if let Some(target) =
+                permille.and_then(|p| book.skim_target(&env, &format!("permille:{p}")))
+            {
+                self.selection = None;
+                book.jump(cx, target);
             }
             return;
         }

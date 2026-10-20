@@ -98,6 +98,8 @@ pub mod items {
     pub const CHAPTER_PAGE: Id = Id::new_static("reader.status.chapter-page");
     /// The pages after this one to the chapter's end.
     pub const CHAPTER_LEFT: Id = Id::new_static("reader.status.chapter-left");
+    /// How far into the chapter the page is, as a short bar.
+    pub const CHAPTER_BAR: Id = Id::new_static("reader.status.chapter-bar");
 }
 
 /// Context: the printed edition's page.
@@ -284,6 +286,15 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
                 "reader.page",
                 &[("page", Arg::Int(page)), ("pages", Arg::Int(pages))],
             )))
+        }),
+    })?;
+    r.add_status_item(StatusItemSpec {
+        id: items::CHAPTER_BAR,
+        title: Cow::Borrowed("reader.status.item.chapter-bar"),
+        value: Box::new(|_, cx| {
+            let (page, pages) = chapter_pages(cx)?;
+            let permille = (page * 1000 / pages.max(1)).clamp(0, 1000) as u16;
+            Some(StatusValue::Bar { permille })
         }),
     })?;
     r.add_status_item(StatusItemSpec {

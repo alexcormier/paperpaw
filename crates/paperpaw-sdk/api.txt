@@ -1387,6 +1387,8 @@ pub const paperpaw_sdk::status::context::CHAPTER: &str
 pub const paperpaw_sdk::status::context::CHAPTERS: &str
 pub const paperpaw_sdk::status::context::PAGE: &str
 pub enum paperpaw_sdk::status::StatusValue
+pub paperpaw_sdk::status::StatusValue::Bar
+pub paperpaw_sdk::status::StatusValue::Bar::permille: u16
 pub paperpaw_sdk::status::StatusValue::Icon(alloc::borrow::Cow<'static, str>)
 pub paperpaw_sdk::status::StatusValue::Level
 pub paperpaw_sdk::status::StatusValue::Level::charging: bool
@@ -2469,6 +2471,8 @@ pub paperpaw_sdk::SocketRead::File::path: alloc::string::String
 pub paperpaw_sdk::SocketRead::Text
 pub paperpaw_sdk::SocketRead::Text::max: u32
 pub enum paperpaw_sdk::StatusValue
+pub paperpaw_sdk::StatusValue::Bar
+pub paperpaw_sdk::StatusValue::Bar::permille: u16
 pub paperpaw_sdk::StatusValue::Icon(alloc::borrow::Cow<'static, str>)
 pub paperpaw_sdk::StatusValue::Level
 pub paperpaw_sdk::StatusValue::Level::charging: bool
