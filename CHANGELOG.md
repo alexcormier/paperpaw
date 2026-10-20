@@ -6,6 +6,11 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Clean up storage: what is kept for a book still on the memory card
+  stays, also where no plugin opens its format now (switched off) and
+  whatever the case of its folder's name (`Books` or `books`); where a
+  folder cannot be read, nothing is removed and the device says so.
+  Before, notes, positions and covers of such books were deleted.
 - Plugins: a plugin being updated when the power went is no longer
   lost: the version set aside for the install is put back at the next
   start.

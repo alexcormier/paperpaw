@@ -205,16 +205,17 @@ fn register_device_actions(r: &mut Registrar) -> Result<(), RegisterError> {
             actions::CLEAN_UP,
             "core.action.clean-up",
             Box::new(|env: &Env<'_>, out: &mut Vec<Command>| {
-                // What is kept for books no longer on the storage.
-                let books = library::book_keys(env.storage, env.formats);
-                let keep = |key: &str| {
-                    u64::from_str_radix(key, 16).is_ok_and(|k| books.binary_search(&k).is_ok())
+                // What is kept for files no longer on the storage: of any
+                // format, by any spelling; nothing where a folder could not
+                // be read.
+                let library = library::folder(env);
+                let text = match library::clean_up_unused(env.storage, env.book_data, library) {
+                    Ok(removed) => env.i18n.format(
+                        "core.cleaned-up",
+                        &[("count", paperpaw_sdk::Arg::Int(i64::from(removed)))],
+                    ),
+                    Err(_) => String::from(env.i18n.tr("core.clean-up-failed")),
                 };
-                let removed = library::clean_up(env.storage, env.book_data, &keep);
-                let text = env.i18n.format(
-                    "core.cleaned-up",
-                    &[("count", paperpaw_sdk::Arg::Int(i64::from(removed)))],
-                );
                 out.push(Command::Notify(text));
             }),
         ),
