@@ -860,6 +860,42 @@ change the plugin SDK.
   a plugin's server for good: a request's body and its answer must move
   16 KB every 30 s (as a request's head must come whole in 30 s), while
   a large upload or download that moves takes as long as it needs.
+- X4 updates: an update whose signature does not hold can never start.
+  A second install before restarting wrote into the partition the first
+  update had chosen, so a file under PaperPaw's key with a wrong
+  signature started at the next restart. An update installed and not
+  started yet is now given up before another is written, and an image's
+  first word, without which the bootloader starts nothing, is written
+  only once its signature held.
+- X4 updates: firmware signed with another key than PaperPaw's (one's
+  own builds) installs only when the reader accepts that key, shown by
+  its fingerprint, at each install; nothing on the card trusts a key any
+  more, so `.paperpaw/firmware-keys.txt` is no longer read and can go.
+  An older firmware, or the same again, installs only when the reader
+  chooses it ("Install anyway"), and a newer update online comes before
+  an older file on the card. SDK: `FirmwareCommand::Install` has `key`
+  and `older`, `Update::may_install` is the shell's check,
+  `Update::is_newer`, `InstallFailure::NotNewer`; `Update::signer`
+  takes no list of keys; `TRUSTED_KEYS`, `trust`, `trusted_keys` and
+  `Signer::Trusted` are gone (none was released).
+- X4 updates: an update that fails early in its start is undone too. It
+  goes on trial before the board is set up, and is taken as good after
+  half a minute or when it goes to sleep or restarts (it was at its
+  first frame, so one that crashed opening the last book stayed). The
+  start is watched from its first moment; a power cut while an update is
+  chosen no longer starts it without a trial.
+- X4: what was written is on the card before every restart, also one a
+  plugin asks for (a plugin switched just before was lost), and at most
+  2 s after work, however often work comes.
+- X4: put to sleep on USB power and then unplugged, it sleeps as on
+  battery, where it stayed awake and drained the battery.
+- X4: a display whose busy line sticks ends in an error after 10 s,
+  where the watchdog started the X4 again and again; a long panic
+  message is kept for `crashes.txt`, no longer lost when a character was
+  cut in two; the remote control over USB (test builds) refuses lines
+  too long rather than carry them out cut.
+- `paperpaw-update`: `Plugins::record` gives `None` for a list longer
+  than readers take, and the firmware's build stops there.
 - The X4's remote control over USB (test builds) does much more, for
   developing on the device: the card (`ls`, `stat`, `md5`, `rm` also of
   folders, `mkdir`, `mv`, `sync`; `tools/x4-remote.py` pushes and pulls
