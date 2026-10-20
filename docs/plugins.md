@@ -479,6 +479,101 @@ Slots are how a plugin replaces another: bind your screen to
 (`core.main`), its tools (`core.tools`) and the settings' pages
 (`core.settings-pages`).
 
+```rust
+// A home screen of one's own: preferred over the shipped one.
+r.add_screen(ScreenSpec::new(SHELF, "shelf.title", Box::new(|env, _| Box::new(Shelf::new(env)))))?;
+r.bind_slot(slots::HOME, SHELF, Priority::PREFERRED)?;
+```
+
+### What a slot's screen does
+
+A screen bound to a standard slot takes the parameters the others open
+it with and answers as they expect, so that every plugin works with it:
+
+| Slot | Opened with | The screen |
+|---|---|---|
+| `core.home` | nothing; at the start and by `actions::HOME` | is the bottom of the stack: opened again, the screens above it close. It leads to the menu and the library by touch and by buttons alone. |
+| `core.library` | nothing; by `actions::LIBRARY` | opens a book with `Command::OpenSlot(slots::READER, ..)` and `params::PATH`. For a book it offers the menu `menus::BOOK`: when an entry is chosen it emits `events::BOOK_CHOSEN` with the book, then runs the entry's action. |
+| `core.settings` | nothing: the groups; `params::ID`: the settings of that group; `params::FOCUS`: the page of that setting, focused on it | changes settings with `Command::SetSetting`, and a setting with an editor (`SettingExtra::editor`, a screen or a slot) by opening that (`Editor::open`). |
+| `core.menu` | `params::MENU`, the menu; `params::HIDE`, entries to leave out this time | shows `env.menus.items(menu)`; for an entry chosen it closes (`Command::Back`) and runs its action (`Command::RunAction`); a setting listed there it changes, or opens its editor. |
+| `core.choose-folder`, `core.choose-value` | `params::ID`, the setting | writes the folder, or the value, chosen to the setting. Name the slot as the editor (`SettingExtra::editor_slot`) to have it edited there by whichever plugin fills it. |
+| `core.keyboard` | `params::TITLE`, `TEXT` (to start from), `MODE` (`text`, `number`, `password`), `REPLY`, `LIVE` | on confirming, closes and emits the event named by `reply` as a `Typed` with all of its parameters; with `live`, on each change too, with `Typed::typing` set; *Back* closes without an answer. `ask::text` asks this way. |
+
+The documentation of `builtin::slots` says the same for every slot.
+
+### Which one wins
+
+- **Slots.** The screen the user chose in `[slots]`; else the binding
+  with the highest `Priority` (`FALLBACK`, `DEFAULT`, `PREFERRED`, or
+  any number); between equal priorities, the one registered later,
+  that is of the plugin loaded later.
+- **Key bindings.** A later source overrides an earlier one for the
+  same button or gesture: the plugins' `add_keymap`, in the order the
+  plugins load; then their `add_keymap_when` while its switch is on, so
+  these override the plugins' plain bindings; then the device's, the
+  preset the user chose, and the user's own `[keymap.*]`. A plugin's
+  binding never overrides the device's, the preset's or the user's.
+- **Menus.** Entries in their `order`, equal orders in the order they
+  were added; a menu the user redefined in their order, with entries
+  contributed since after their neighbour.
+
+### Examples
+
+A format: files with these extensions open as a `Document`.
+
+```rust
+r.add_format(FormatSpec::new(
+    Id::new_static("notes.format"),
+    "notes.format",
+    vec![Cow::Borrowed("note")],
+    Box::new(|storage, path, _options| Notes::open(storage, path)),
+))?;
+```
+
+A status item: what a status line shows, `None` to hide it.
+
+```rust
+r.add_status_item(StatusItemSpec::new(
+    Id::new_static("notes.count"),
+    "notes.count",
+    Box::new(|env, _| Some(StatusValue::Text(count(env).to_string()))),
+))?;
+```
+
+An input filter: it sees every button and finger first.
+
+```rust
+r.add_input_filter(InputFilterSpec::new(
+    Id::new_static("lock.filter"),
+    "lock.filter",
+    Box::new(|env, _input| if locked(env) { InputVerdict::Take } else { InputVerdict::Pass }),
+))?;
+```
+
+A request and its answer: the reply event brings the `HttpReply`.
+
+```rust
+const FETCHED: Event<HttpReply> = Event::new("news.fetched");
+// In an action or a screen:
+out.push(Command::Http(HttpRequest::get("https://example.org/feed", &FETCHED)));
+// When registering:
+r.on(FETCHED, |_env, reply, out| {
+    if reply.status == 200 {
+        out.push(Command::Notify(headline(&reply.body)));
+    }
+})?;
+```
+
+A timer: the work's event comes at that time, here each hour.
+
+```rust
+const TICK: Event<()> = Event::new("weather.tick");
+out.push(Command::Work(
+    Work::at(&TICK, env.now.add_millis(60 * 60 * 1000)).every(Duration::from_secs(3600)),
+));
+r.on(TICK, |_env, _, out| out.push(Command::Http(HttpRequest::get(FORECAST, &FETCHED))))?;
+```
+
 ### What every reader offers
 
 A plugin that works with books never names the reader plugin: it uses
