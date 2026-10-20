@@ -321,6 +321,27 @@ pub enum Command {
     OpenScreen(Id, Params),
     /// Closes the current screen (no-op on the root screen).
     Back,
+    /// Closes the open screen `.0` wherever it is in the stack, leaving
+    /// the screens above it (see [`Cx::close`](crate::Cx::close)); none
+    /// where it is the only one.
+    Close(crate::ScreenKey),
+    /// Opens screen `.0` with `.1` in place of the one on top, in one
+    /// step: the screen below it is not shown between (the next step of
+    /// a guide).
+    Replace(Id, Params),
+    /// Closes the screens above the topmost open screen `.0`, or the
+    /// screen of slot `.0`: back to it in one step. Nothing where none is
+    /// open.
+    BackTo(Id),
+    /// Opens screen `.1` for slot `.0` with `.2` as [`Command::OpenSlot`]
+    /// opens the slot's own: shown again where the slot is open with it
+    /// and these params, else in place of what the slot shows (one
+    /// launcher of several, chosen once).
+    OpenInSlot(Id, Id, Params),
+    /// Binds slot `.0` to screen `.1` for the user, or back to what the
+    /// plugins bind it to (`None`): at once and kept in `paperpaw.ini`
+    /// (`[slots]`), e.g. "use this as the home screen?".
+    BindSlot(Id, Option<Id>),
     /// Shows the row of hints for a few seconds on a screen that has it
     /// only on a press ([`Hints::OnPress`](crate::Hints)).
     ShowHints,

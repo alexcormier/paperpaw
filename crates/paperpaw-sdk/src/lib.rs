@@ -107,7 +107,10 @@ pub use params::Params;
 pub use plugin::{Manifest, Plugin, Priority, RegisterError, SlotSpec, Uses};
 pub use plugins::{PluginInfo, PluginKind, PluginProblem, PluginState, Plugins, RequiredFor};
 pub use replies::{Chosen, HttpReply, ServerNotice, SocketNotice, Typed};
-pub use screen::{Cx, Handled, Hint, Hints, Output, Screen, ScreenFactory, ScreenSpec};
+pub use screen::{
+    CloseCause, Cx, Handled, Hint, Hints, Output, Outside, Screen, ScreenFactory, ScreenKey,
+    ScreenSpec, StackEntry,
+};
 pub use setting::{Setting, Text};
 pub use settings::{
     Choices, Level, SettingError, SettingExtra, SettingGroupSpec, SettingKind, SettingSpec,

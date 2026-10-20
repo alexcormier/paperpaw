@@ -6,6 +6,20 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: the screen stack, readable and steerable (gap A2).
+  `Env::stack` lists the open screens (`StackEntry`: screen, slot,
+  overlay, key) and `Env::top` the one shown; plugins subscribed to
+  `events::SCREEN_SHOWN` hear which comes on top. A screen's `Cx` knows
+  it (`Cx::screen_id`, `Cx::slot`, `Cx::key`) and closes it wherever it
+  is (`Cx::close`, `Command::Close`). New commands: `Command::Replace`
+  (in place of the screen on top, in one step), `Command::BackTo` (back
+  to a screen or a slot's), `Command::OpenInSlot` (a chosen screen for a
+  slot) and `Command::BindSlot` (a slot bound for the user, kept in
+  `paperpaw.ini`). Screens may keep themselves open when about to close
+  (`Screen::on_close_request` with `CloseCause`), say what a tap outside
+  them does (`Screen::outside`: close, ignore, pass through), let input
+  they do not take pass to the screen below (`Screen::passes_through`)
+  and say their own row of hints (`Screen::hints`).
 - Restarting no longer counts as going to sleep: after plugins were
   switched or an update installed, rules for "on sleep", sync on sleep,
   work waiting for sleep and the sleep counters no longer take the

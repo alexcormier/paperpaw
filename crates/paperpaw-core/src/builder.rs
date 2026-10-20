@@ -418,6 +418,7 @@ impl KernelBuilder {
                 reader: false,
                 clipboard: String::new(),
                 system_clipboard: false,
+                stack: Vec::new(),
                 slots: Vec::new(),
                 screens: Vec::new(),
                 font_dirs: Vec::new(),

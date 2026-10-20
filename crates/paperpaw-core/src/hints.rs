@@ -12,7 +12,7 @@ use paperpaw_sdk::builtin::settings as core_settings;
 use paperpaw_sdk::{ActionHint, Hint, Hints, Id};
 
 use crate::keymap::InputKey;
-use crate::{HINTS_MS, Kernel};
+use crate::{ActiveScreen, HINTS_MS, Kernel};
 
 /// What the row is, and what it shows.
 #[derive(Debug)]
@@ -66,7 +66,16 @@ impl Kernel {
             .iter()
             .rev()
             .find(|s| s.screen.region(&env).is_none())
-            .map_or(Hints::Shown, |s| self.registry.hints_of(&s.id))
+            .map_or(Hints::Shown, |s| self.hints_of(s))
+    }
+
+    /// When open screen `active` shows the row: as it says, else as its
+    /// plugin said for it.
+    pub(crate) fn hints_of(&self, active: &ActiveScreen) -> Hints {
+        active
+            .screen
+            .hints()
+            .unwrap_or_else(|| self.registry.hints_of(&active.id))
     }
 
     /// Shows the row for a while over a screen that has it on a press.
