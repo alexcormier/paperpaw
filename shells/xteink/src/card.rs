@@ -51,9 +51,8 @@ impl<BUS: SpiBus, CS: OutputPin, D: DelayNs> Blocks for Card<'_, BUS, CS, D> {
     }
 
     fn read_blocks(&mut self, index: u32, data: &mut [u8]) -> Result<(), DiskError> {
-        // Work on the card is life: long work (a folder removed or copied,
-        // a large file written) must not look hung to the watchdogs.
-        crate::power::feed();
+        // Long work on the card must not look hung to the watchdogs.
+        crate::power::working();
         let blocks = data.as_chunks_mut::<BLOCK>().0;
         #[cfg(feature = "remote")]
         crate::traced::blocks(index, blocks.len() as u32, 0);
@@ -61,7 +60,7 @@ impl<BUS: SpiBus, CS: OutputPin, D: DelayNs> Blocks for Card<'_, BUS, CS, D> {
     }
 
     fn write_blocks(&mut self, index: u32, data: &[u8]) -> Result<(), DiskError> {
-        crate::power::feed();
+        crate::power::working();
         let blocks = data.as_chunks::<BLOCK>().0;
         #[cfg(feature = "remote")]
         crate::traced::blocks(index, 0, blocks.len() as u32);

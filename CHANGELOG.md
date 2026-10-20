@@ -822,7 +822,15 @@ change the plugin SDK.
 - X4: removing or copying a large folder (e.g. one with many books, or
   their caches) no longer starts the device again half way: work on the
   card keeps the watchdogs from taking it for hung (it took 20 s before
-  they did, removing the books' caches over a minute).
+  they did, removing the books' caches over a minute). It does so for at
+  most 15 minutes in one step of the firmware's loop: work on the card
+  that never ends (e.g. on a damaged FAT) still starts the X4 again
+  rather than keep it on until its battery is empty.
+- X4 Pro and X4 Classic: the fuel gauge is read and the clock chip set
+  by the firmware's loop, no longer in the interrupt that reads the
+  buttons, where each I²C reading held off every other interrupt (the
+  radio's too) for a millisecond or two. On every X4 the battery is read
+  when its status is due (once a minute), no longer every second.
 - X4: more memory left while the radio is on (on USB power it stays on
   by default, and a book opening then came close to the heap's end): the
   radio keeps 5 receive buffers instead of 10 and takes at most 16 more

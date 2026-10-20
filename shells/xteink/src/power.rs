@@ -5,9 +5,10 @@
 //! sleep cuts the link to the computer (its log, remote control).
 //!
 //! Two watchdogs start the X4 again if the firmware stops coming by: the
-//! RTC's, which counts on in light sleep too, and a timer group's.
+//! RTC's, which counts on in light sleep too, and a timer group's. Long
+//! work on the card keeps them fed for a while (see [`working`]).
 
-use core::cell::RefCell;
+use core::cell::{Cell, RefCell};
 use core::sync::atomic::{AtomicBool, Ordering};
 
 use critical_section::Mutex;
@@ -192,17 +193,46 @@ pub fn watch(
         Duration::from_secs(timer_s),
     );
     wdt.enable();
-    critical_section::with(|cs| WATCHDOGS.replace(cs, Some((rtc, wdt))));
+    critical_section::with(|cs| {
+        CAME_BY.borrow(cs).set(Instant::now());
+        WATCHDOGS.replace(cs, Some((rtc, wdt)));
+    });
 }
 
-/// Tells the watchdogs the firmware is alive.
+/// How long work in one step of the main loop may keep the watchdogs fed
+/// (see [`working`]): removing a large folder takes minutes (the books'
+/// caches over one; x4-remote waits 15 for it). A loop that never ends
+/// (e.g. on a FAT chain that leads back into itself) is caught after it.
+const WORK_S: u64 = 15 * 60;
+
+/// When the main loop last came by (see [`feed`]).
+static CAME_BY: Mutex<Cell<Instant>> = Mutex::new(Cell::new(Instant::EPOCH));
+
+/// Tells the watchdogs the firmware is alive: the main loop came by.
 pub fn feed() {
     critical_section::with(|cs| {
-        if let Some((rtc, wdt)) = WATCHDOGS.borrow_ref_mut(cs).as_mut() {
-            rtc.rwdt.feed();
-            wdt.feed();
+        CAME_BY.borrow(cs).set(Instant::now());
+        feed_watchdogs(cs);
+    });
+}
+
+/// Tells the watchdogs long work goes on (a block of the card read or
+/// written), for at most [`WORK_S`] after the main loop last came by:
+/// legitimate work (a folder removed or copied, a large file written)
+/// does not look hung, a loop that never ends still does.
+pub fn working() {
+    critical_section::with(|cs| {
+        if CAME_BY.borrow(cs).get().elapsed() < Duration::from_secs(WORK_S) {
+            feed_watchdogs(cs);
         }
     });
+}
+
+fn feed_watchdogs(cs: critical_section::CriticalSection<'_>) {
+    if let Some((rtc, wdt)) = WATCHDOGS.borrow_ref_mut(cs).as_mut() {
+        rtc.rwdt.feed();
+        wdt.feed();
+    }
 }
 
 #[cfg(feature = "remote")]
