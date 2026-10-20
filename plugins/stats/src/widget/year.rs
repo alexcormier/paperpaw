@@ -15,7 +15,9 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use paperpaw_sdk::ui::{self, UiStyle};
-use paperpaw_sdk::widgets::{self, Align, Frame, Look, Size, Widget, WidgetSpec, WidgetTarget};
+use paperpaw_sdk::widgets::{
+    self, Align, Frame, Look, Padding, Size, Widget, WidgetSpec, WidgetTarget, Wrapped,
+};
 use paperpaw_sdk::{
     Arg, Canvas, Command, Env, Id, Params, Point, Rect, RegisterError, Registrar, SettingSpec,
 };
@@ -46,8 +48,9 @@ const MOST_DOTS: u32 = 60;
 
 /// Its settings, kept in the program: its look, its choices and
 /// switches for its parts.
-static SETTINGS: [SettingSpec; 8] = [
+static SETTINGS: [SettingSpec; 9] = [
     widgets::frame_spec("stats.widget.year.frame", YEAR, Frame::None),
+    widgets::padding_spec("stats.widget.year.padding", YEAR, Padding::Auto),
     widgets::size_spec("stats.widget.year.size", YEAR, Size::Medium, true),
     widgets::align_spec("stats.widget.year.align", YEAR, Align::Left),
     SettingSpec::fixed_choice(
@@ -265,13 +268,15 @@ fn headline(env: &Env<'_>, shown: &Shown) -> String {
     }
 }
 
-/// The notes below: how the year goes, the book finished last.
-fn notes(env: &Env<'_>, shown: &Shown) -> Vec<String> {
+/// The notes below: how the year goes, the book finished last; each
+/// with whether it may be shortened where it is too long (a book's
+/// title), else it is left out.
+fn notes(env: &Env<'_>, shown: &Shown) -> Vec<(String, bool)> {
     let id = NAME;
     let mut notes = Vec::new();
     if let Some(goal) = books_goal(env).filter(|_| widgets::shows(env, id, "plan")) {
         let ahead = plan(shown.done, goal, shown.ordinal, shown.length);
-        notes.push(if shown.done >= goal {
+        let note = if shown.done >= goal {
             env.i18n.tr("stats.widget.year.reached").to_string()
         } else if ahead > 0 {
             env.i18n
@@ -281,17 +286,18 @@ fn notes(env: &Env<'_>, shown: &Shown) -> Vec<String> {
                 .plural("stats.widget.year.behind", i64::from(-ahead), &[])
         } else {
             env.i18n.tr("stats.widget.year.on-plan").to_string()
-        });
+        };
+        notes.push((note, false));
     }
     if let Some(title) = shown
         .last
         .as_ref()
         .filter(|_| widgets::shows(env, id, "last"))
     {
-        notes.push(
-            env.i18n
-                .format("stats.widget.year.last", &[("title", Arg::Str(title))]),
-        );
+        let note = env
+            .i18n
+            .format("stats.widget.year.last", &[("title", Arg::Str(title))]);
+        notes.push((note, true));
     }
     notes
 }
@@ -306,17 +312,40 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown) {
         "stats.widget.year.caption",
         &[("year", Arg::Int(i64::from(shown.year)))],
     );
-    let area = super::below_caption(env, id, look.area);
+    // "Books in 2026", or where that is too long the year alone.
+    let year = alloc::format!("{}", shown.year);
+    let mut caption = super::caption(env, id, look.area, &[&title, &year]);
+    let mut area = super::below_caption(env, caption, look.area);
     let goal = books_goal(env);
     let progress = goal.map(|g| shown.done.min(g) * 1000 / g.max(1));
     let style_set = chosen(env, id, "style");
     let small = line(&font, style.small);
-    let mut notes = notes(env, shown);
     let align = widgets::align(env, id);
     if style_set == STYLES[1] && goal.is_some() {
-        draw_ring(canvas, env, (look, &title), area, shown, progress, &notes);
+        // Beside or below the ring, the notes that fit a line whole (the
+        // last book's title may be shortened).
+        let width = f32::from(area.width);
+        let notes: Vec<String> = notes(env, shown)
+            .into_iter()
+            .filter(|(note, cut)| *cut || font.measure(style.small, note) <= width)
+            .map(|(note, _)| note)
+            .collect();
+        draw_ring(canvas, env, (look, caption), area, shown, progress, &notes);
         return;
     }
+    // The notes on two lines where they need them (shortened where even
+    // two do not hold them), the last book's title on one.
+    let mut notes: Vec<Wrapped> = notes(env, shown)
+        .into_iter()
+        .filter_map(|(note, cut)| {
+            if cut {
+                Some(Wrapped::new(env, &note, style.small, area.width, small))
+            } else {
+                super::note_lines(env, &note, area.width, small * 2, 2)
+            }
+        })
+        .collect();
+    let height_of = |notes: &[Wrapped]| notes.iter().map(|n| n.height(env)).sum::<u16>();
     let headline = headline(env, shown);
     // Notes as fit below the rest, the plan first.
     let dots = style_set == STYLES[2];
@@ -326,10 +355,26 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown) {
         None => 0,
     };
     let least = line(&font, style.text);
-    while !notes.is_empty() && notes.len() as u16 * small + band + least > area.height {
-        notes.pop();
+    // As many notes as fit `height` with the rest.
+    let kept = |height: u16| {
+        let mut kept = 0;
+        let mut used = band + least;
+        for note in &notes {
+            used += note.height(env);
+            if used > height {
+                break;
+            }
+            kept += 1;
+        }
+        kept
+    };
+    // The caption goes before a note.
+    if caption.is_some() && kept(look.area.height) > kept(area.height) {
+        caption = None;
+        area = look.area;
     }
-    let notes_h = notes.len() as u16 * small;
+    notes.truncate(kept(area.height));
+    let notes_h = height_of(&notes);
     let room = area.height.saturating_sub(band + notes_h);
     let size = super::text_size(env, &font, id, &headline, area.width, room);
     let big = line(&font, size);
@@ -339,7 +384,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown) {
     } else {
         band
     };
-    let block = super::captioned(canvas, env, id, look, &title, big + band + notes_h);
+    let block = super::captioned(canvas, env, id, look, caption, big + band + notes_h);
     let row = |y: u16, h: u16| Rect::new(area.x, y, area.width, h);
     // Too wide: "3 / 12", or the number alone.
     let short = goal.map(|g| alloc::format!("{} / {g}", shown.done));
@@ -377,18 +422,9 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown) {
         y += band;
     }
     for note in &notes {
-        let note = ui::fit(&font, style.small, note, f32::from(area.width));
-        let x = align.x(area, font.measure(style.small, &note));
-        ui::draw_label(
-            canvas,
-            &font,
-            style.small,
-            x,
-            row(y, small),
-            &note,
-            look.faint,
-        );
-        y += small;
+        let h = note.height(env);
+        note.draw(canvas, env, row(y, h), align, look.faint);
+        y += h;
     }
 }
 
@@ -397,7 +433,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown) {
 fn draw_ring(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
-    (look, title): (&Look, &str),
+    (look, caption): (&Look, Option<&str>),
     area: Rect,
     shown: &Shown,
     progress: Option<u32>,
@@ -416,9 +452,22 @@ fn draw_ring(
     } else {
         area.width.min(area.height.saturating_sub(notes_h))
     };
-    let block = super::captioned(canvas, env, NAME, look, title, d + notes_h);
-    let x = if wide {
-        area.x
+    let block = super::captioned(canvas, env, NAME, look, caption, d + notes_h);
+    let gap = style.gap as u16;
+    // Wide: the ring and the notes beside it placed together, as the
+    // alignment says.
+    let beside = if wide {
+        let room = f32::from(area.width.saturating_sub(d + gap));
+        let widest = notes
+            .iter()
+            .map(|n| font.measure(style.small, n).min(room))
+            .fold(0.0, f32::max);
+        widest as u16
+    } else {
+        0
+    };
+    let x = if wide && beside > 0 {
+        align.x(area, f32::from(d + gap + beside)) as u16
     } else {
         align.x(area, f32::from(d)) as u16
     };
@@ -453,11 +502,10 @@ fn draw_ring(
     }
     // The notes.
     let (text, top) = if wide {
-        let gap = style.gap as u16;
         let text = Rect::new(
-            area.x + d + gap,
+            x + d + gap,
             area.y,
-            area.width.saturating_sub(d + gap),
+            (area.x + area.width).saturating_sub(x + d + gap),
             area.height,
         );
         let top = middle(text, notes.len() as u16 * small).y;

@@ -9,7 +9,7 @@ use alloc::string::{String, ToString};
 use paperpaw_sdk::logo::{LOGO, Logo};
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::ui::{self, Thumbnail, UiStyle};
-use paperpaw_sdk::widgets::{self, Align, Frame, Size, Widget, WidgetSpec};
+use paperpaw_sdk::widgets::{self, Align, Frame, Padding, Size, Widget, WidgetSpec};
 use paperpaw_sdk::{Canvas, Env, Id, Rect, RegisterError, Registrar, SettingSpec};
 
 use super::frame_height;
@@ -24,7 +24,7 @@ const PAPERPAW: &str = "PaperPaw";
 const FACE: Setting<Text> = Setting::new("widgets.logo.face");
 
 /// The logo's settings, kept in the program.
-static SETTINGS: [SettingSpec; 5] = [
+static SETTINGS: [SettingSpec; 6] = [
     widgets::part_spec("widgets.logo.name", ID, "widgets.logo.setting.name", false),
     SettingSpec::fixed_choice(
         "widgets.logo.face",
@@ -33,9 +33,10 @@ static SETTINGS: [SettingSpec; 5] = [
         FACES[0],
         ID,
     ),
-    widgets::size_spec("widgets.logo.size", ID, Size::Medium, false),
+    widgets::size_spec("widgets.logo.size", ID, Size::Medium, true),
     widgets::align_spec("widgets.logo.align", ID, Align::Center),
     widgets::frame_spec("widgets.logo.frame", ID, Frame::None),
+    widgets::padding_spec("widgets.logo.padding", ID, Padding::Auto),
 ];
 
 pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
@@ -115,15 +116,24 @@ fn side(env: &Env<'_>, area: Rect) -> u16 {
 }
 
 /// The size of the name, and of the logo: as high as a line and a half
-/// of it.
+/// of it; as large as its place allows where the size is "fit".
 fn sizes(env: &Env<'_>) -> (f32, u16) {
-    let size = widgets::size(env, ID.as_str()).text(&UiStyle::new(env));
-    let side = widgets::line_height(env, size) * 3 / 2;
+    let chosen = widgets::size(env, ID.as_str());
+    let size = chosen.text(&UiStyle::new(env));
+    let side = match chosen {
+        Size::Fit => u16::MAX,
+        _ => widgets::line_height(env, size) * 3 / 2,
+    };
     (size, side)
 }
 
-fn height(env: &Env<'_>, _: u16) -> u16 {
-    sizes(env).1 + frame_height(env, ID.as_str())
+fn height(env: &Env<'_>, width: u16) -> u16 {
+    let side = match widgets::size(env, ID.as_str()) {
+        // As high as wide, a third of the screen at most.
+        Size::Fit => width.min(env.device.display.height / 3),
+        _ => sizes(env).1,
+    };
+    side + frame_height(env, ID.as_str())
 }
 
 /// Draws the logo `placed` (read where the widget was placed, a picture

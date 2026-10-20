@@ -9,7 +9,7 @@ use paperpaw_sdk::ui::UiStyle;
 use paperpaw_sdk::widgets::{Align, Look, line_height};
 use paperpaw_sdk::{Canvas, Env, Point, Rect};
 
-use super::{Book, Covers, cover_size, draw_cover, draw_line};
+use super::{Book, Covers, cover_size, draw_cover, draw_line, least_cover_width};
 
 /// A book on the shelf, as shown.
 #[derive(Debug, Clone, PartialEq)]
@@ -30,16 +30,12 @@ pub(crate) struct Place {
     pub label: Rect,
 }
 
-/// The least width of a cover, so that one is still told from another.
-fn least_width(env: &Env<'_>) -> u16 {
-    env.metrics.mm(5).max(24) as u16
-}
-
 /// The places of up to `count` covers in `area`, in a row (`grid`
-/// false) or in rows: as large as the area allows them, each cell with
-/// `label` pixels below its cover, the cells together in the middle (or
-/// at the side `align` says). Fewer places than books where they would
-/// be too small.
+/// false) or in rows: as large as the area allows them, a gap between
+/// them, each with `label` pixels below its cover, together in the
+/// middle (or at the side `align` says). Fewer places than books where
+/// they would be too small; where even one cover would be, the labels
+/// alone in a row (the covers' places empty).
 pub(crate) fn places(
     env: &Env<'_>,
     area: Rect,
@@ -54,17 +50,13 @@ pub(crate) fn places(
     let gap = UiStyle::new(env).gap as u16;
     let (w, h) = (u32::from(area.width), u32::from(area.height));
     let size = |columns: u32, rows: u32| -> u32 {
-        let by_width = (w / columns).saturating_sub(u32::from(gap));
-        let cell_h = (h / rows).saturating_sub(u32::from(label));
-        let cell_h = if rows > 1 {
-            cell_h.saturating_sub(u32::from(gap) / 2)
-        } else {
-            cell_h
-        };
+        let by_width = w.saturating_sub(u32::from(gap) * (columns - 1)) / columns;
+        let rows_h = h.saturating_sub(u32::from(gap / 2) * (rows - 1));
+        let cell_h = (rows_h / rows).saturating_sub(u32::from(label));
         by_width.min(cell_h * 2 / 3)
     };
     let n = count as u32;
-    let least = u32::from(least_width(env));
+    let least = u32::from(least_cover_width(env));
     // The columns and rows that make the covers largest, all of them
     // shown where they are not too small.
     let mut best = (1, 1, 0);
@@ -78,36 +70,104 @@ pub(crate) fn places(
     let (mut columns, mut rows, mut width) = best;
     if width < least {
         // Fewer, each as small as allowed.
-        columns = (w / (least + u32::from(gap))).clamp(1, n);
+        let step = least + u32::from(gap);
+        columns = ((w + u32::from(gap)) / step).clamp(1, n);
         rows = if grid {
-            (h / (least * 3 / 2 + u32::from(label) + u32::from(gap) / 2)).clamp(1, n)
+            let row = least * 3 / 2 + u32::from(label) + u32::from(gap / 2);
+            ((h + u32::from(gap / 2)) / row).clamp(1, n)
         } else {
             1
         };
         width = size(columns, rows);
     }
+    if width < least && label > 0 {
+        // No cover would be told from another: the labels alone.
+        let cell = least as u16 + gap;
+        let shown = (area.width / cell).clamp(1, count as u16);
+        let left = super::place_x(area, cell * shown, align);
+        let top = area.y + (area.height - label) / 2;
+        return (0..shown)
+            .map(|i| {
+                let x = left + i * cell;
+                Place {
+                    cover: Rect::new(x + cell / 2, top, 0, 0),
+                    label: Rect::new(x, top, cell, label),
+                }
+            })
+            .collect();
+    }
     let shown = (columns * rows).min(n) as usize;
     let cover_w = width as u16;
     let cover_h = (width * 3 / 2) as u16;
-    let column = (w / columns) as u16;
+    let step = cover_w + gap;
     let used_columns = (shown as u32).min(columns) as u16;
-    let row_w = column * used_columns;
+    let row_w = step * used_columns - gap;
     let left = super::place_x(area, row_w, align);
-    let row_h = cover_h + label + if rows > 1 { gap / 2 } else { 0 };
+    let row_h = cover_h + label;
     let used_rows = (shown as u32).div_ceil(columns) as u16;
-    let block = (row_h * used_rows).min(area.height);
+    let block = (row_h * used_rows + gap / 2 * (used_rows - 1)).min(area.height);
     let top = area.y + (area.height - block) / 2;
+    let right = area.x + area.width;
     (0..shown)
         .map(|i| {
             let (col, row) = ((i as u32 % columns) as u16, (i as u32 / columns) as u16);
-            let x = left + col * column;
-            let y = top + row * row_h;
+            let x = left + col * step;
+            let y = top + row * (row_h + gap / 2);
+            // The label as wide as the cover and half the gap each side.
+            let label_x = x.saturating_sub(gap / 2).max(area.x);
+            let label_w = (x + cover_w + gap / 2).min(right) - label_x;
             Place {
-                cover: Rect::new(x + (column - cover_w) / 2, y, cover_w, cover_h),
-                label: Rect::new(x, y + cover_h, column, label),
+                cover: Rect::new(x, y, cover_w, cover_h),
+                label: Rect::new(label_x, y + cover_h, label_w, label),
             }
         })
         .collect()
+}
+
+/// Each row of `places` packed by the widths its books' covers really
+/// take (a cover of another shape is narrower than its place), a gap
+/// between them, the row in `area` as `align` says: covers of any shape
+/// stand evenly. Each label stays under its cover.
+pub(crate) fn pack(
+    env: &Env<'_>,
+    places: &mut [Place],
+    books: &[Shelved],
+    area: Rect,
+    align: Align,
+) {
+    let gap = UiStyle::new(env).gap as u16;
+    let right = area.x + area.width;
+    let count = places.len().min(books.len());
+    let mut start = 0;
+    while start < count {
+        let y = places[start].cover.y;
+        let end = start
+            + places[start..count]
+                .iter()
+                .take_while(|p| p.cover.y == y)
+                .count();
+        let row = &mut places[start..end];
+        if row.iter().any(|p| p.cover.width == 0) {
+            // Labels alone: as placed.
+            start = end;
+            continue;
+        }
+        let widths: Vec<u16> = row
+            .iter()
+            .zip(&books[start..end])
+            .map(|(p, b)| cover_size(&b.book, p.cover.width, p.cover.height).0)
+            .collect();
+        let total = widths.iter().sum::<u16>() + gap * (widths.len() as u16 - 1);
+        let mut x = super::place_x(area, total.min(area.width), align);
+        for (place, w) in row.iter_mut().zip(widths) {
+            place.cover = Rect::new(x, place.cover.y, w, place.cover.height);
+            let label_x = x.saturating_sub(gap / 2).max(area.x);
+            let label_w = (x + w + gap / 2).min(right).saturating_sub(label_x);
+            place.label = Rect::new(label_x, place.label.y, label_w, place.label.height);
+            x += w + gap;
+        }
+        start = end;
+    }
 }
 
 /// Draws the caption `text` of widget `id` just above the covers in
@@ -139,6 +199,13 @@ pub(crate) fn label_height(env: &Env<'_>) -> u16 {
     line_height(env, style.small) + style.gap as u16 / 4
 }
 
+/// The height of the line below the cover of the book being read, where
+/// it has no label, and of the room above it.
+pub(crate) fn mark_height(env: &Env<'_>) -> u16 {
+    let style = UiStyle::new(env);
+    (style.line as u16 * 3).max(3) + (style.gap as u16 / 4).max(1)
+}
+
 /// Where `book`'s cover goes in `place`: at its bottom (covers of other
 /// shapes stand on the same line), in the middle from side to side.
 fn cover_at(place: &Place, book: &Book) -> Rect {
@@ -159,6 +226,7 @@ pub(crate) fn covers(env: &Env<'_>, places: &[Place], books: &[Shelved]) -> Cove
         places
             .iter()
             .zip(books)
+            .filter(|(place, _)| place.cover.width > 0)
             .map(|(place, shelved)| (&shelved.book, cover_at(place, &shelved.book))),
     )
 }
@@ -179,7 +247,7 @@ pub(crate) fn draw(
     for (place, shelved) in places.iter().zip(books) {
         let at = cover_at(place, &shelved.book);
         draw_cover(canvas, env, look, at, &shelved.book, covers);
-        if shelved.read {
+        if shelved.read && at.width > 1 {
             draw_read_mark(canvas, env, look, at);
         }
         let label = place.label;

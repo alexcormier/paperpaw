@@ -74,6 +74,12 @@ fn card(minutes: &[(i64, u32)]) -> MemoryStorage {
 /// `config` (lines of the `[stats]` section): what it describes, and
 /// how many pixels are black.
 fn home(storage: MemoryStorage, page: &str, config: &str) -> (String, usize) {
+    let (text, rows) = screen(storage, page, config);
+    (text, rows.iter().sum())
+}
+
+/// [`home`], with the black pixels of each row of the screen.
+fn screen(storage: MemoryStorage, page: &str, config: &str) -> (String, Vec<usize>) {
     let user = format!(
         "[core]\nlanguage = en\n[home]\ngesture-tips = false\npage-1 = \"{page}\"\n[stats]\n{config}\n"
     );
@@ -106,11 +112,14 @@ fn home(storage: MemoryStorage, page: &str, config: &str) -> (String, usize) {
             _ => break,
         }
     }
-    let mut black = 0;
-    kernel.render(&mut |_, view| {
+    let mut rows = vec![0; usize::from(DEVICE.display.height)];
+    kernel.render(&mut |top, view| {
         for y in 0..view.height {
-            for x in 0..view.width {
-                black += usize::from(view.pixel(x, y).luma() < 128);
+            let black = (0..view.width)
+                .filter(|&x| view.pixel(x, y).luma() < 128)
+                .count();
+            if let Some(row) = rows.get_mut(usize::from(top + y)) {
+                *row += black;
             }
         }
     });
@@ -119,7 +128,12 @@ fn home(storage: MemoryStorage, page: &str, config: &str) -> (String, usize) {
         text.push_str(&part.label);
         text.push('\n');
     }
-    (text, black)
+    (text, rows)
+}
+
+/// Black pixels in the rows from `from` to `to` of a screen's `rows`.
+fn ink(rows: &[usize], from: usize, to: usize) -> usize {
+    rows[from..to].iter().sum()
 }
 
 /// A week of reading: 23 minutes today, 41 yesterday, then 18, 65, 12,
@@ -255,4 +269,33 @@ fn the_streak_counts_days_in_a_row() {
     );
     assert!(shown.contains("2 days"), "{shown}");
     assert!(shown.contains("longest 2"), "{shown}");
+}
+
+/// In the low cells of the top row, nothing is drawn below them (their
+/// notes are left out rather than drawn past their place).
+#[test]
+fn low_cells_keep_their_content_inside() {
+    let widgets = [
+        "stats.widget.today",
+        "stats.widget.week",
+        "stats.widget.goal",
+        "stats.widget.calendar",
+        "stats.widget.year",
+        "stats.widget.streak",
+    ];
+    // Below the top row of cells (it ends above 140 on the X4).
+    let (_, empty) = screen(week(), "", "");
+    let below = ink(&empty, 140, 600);
+    for widget in widgets {
+        for size in ["1x1", "2x1", "3x1", "4x1"] {
+            let page = format!("{widget} 0/0 {size}");
+            let (_, rows) = screen(week(), &page, "goal = stats.goal.30");
+            assert!(ink(&rows, 52, 140) > 0, "{widget} {size} draws nothing");
+            assert_eq!(
+                ink(&rows, 140, 600),
+                below,
+                "{widget} {size} draws below its cell"
+            );
+        }
+    }
 }

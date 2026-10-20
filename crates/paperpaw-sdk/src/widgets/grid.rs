@@ -407,42 +407,85 @@ pub fn add(env: &Env<'_>, geometry: &Geometry, items: &[Item], what: What) -> Op
 }
 
 /// Draws a tool: its action's icon, and below it the action's name (its
-/// translation `<title>.short` where there is one) if `label`.
+/// translation `<title>.short` where there is one) if `label`. Icon and
+/// name are placed by their ink, as one group in the middle of `area`,
+/// half a gap apart: the name sits clearly nearer its own icon than the
+/// tool below it, which the room the cells leave keeps apart.
 pub fn draw_tool(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, action: &Id, label: bool) {
     let style = UiStyle::new(env);
     let Some(font) = style.font(env) else {
         return;
     };
-    let line = |size: f32| font.line_metrics(size).line_height as u16;
-    let label_h = line(style.small);
-    let gap = style.gap as u16 / 2;
-    let text_room = if label { label_h + gap } else { 0 };
-    let size = (style.title * 1.6).min(f32::from(area.height.saturating_sub(text_room)) * 0.8);
-    let icon_h = line(size).min(area.height);
-    let top = area.y + area.height.saturating_sub(icon_h + text_room) / 2;
-    let icon_row = Rect::new(area.x, top, area.width, icon_h);
-    if let Some(icon) = env.menus.icon(action.as_str()) {
-        let w = ui::icon_width(env, icon, size);
+    let icon = env.menus.icon(action.as_str()).and_then(|name| {
+        let font = env.fonts.bound(crate::builtin::fonts::ICONS.as_str())?;
+        let ch = crate::icons::char(name)?;
+        font.has_char(ch).then_some((font, ch))
+    });
+    let name = label.then(|| {
+        let title = env.menus.title(action.as_str()).unwrap_or_default();
+        let name = env
+            .i18n
+            .get(&format!("{title}.short"))
+            .unwrap_or(env.i18n.tr(title));
+        ui::fit(&font, style.small, name, f32::from(area.width) - 4.0)
+    });
+    let inner = (style.gap / 2) as i32;
+    // The name's capitals above its baseline, its descenders below
+    // (by the ink of letters that reach as far, so that names side by
+    // side line up).
+    let (cap, descent) = match &name {
+        Some(_) => (
+            font.ink(style.small, "H")
+                .map_or((style.small * 0.7) as i32, |(top, _)| -top),
+            font.ink(style.small, "g")
+                .map_or((style.small * 0.25) as i32, |(_, bottom)| bottom),
+        ),
+        None => (0, 0),
+    };
+    let text_room = if name.is_some() {
+        inner + cap + descent
+    } else {
+        0
+    };
+    let room = (i32::from(area.height) - text_room).max(1) as f32;
+    // Every icon in the same frame, the ink of a circle (which fills the
+    // icons' grid), so that the names of tools side by side line up.
+    let frame = |size: f32| {
+        let (font, ch) = icon.as_ref()?;
+        let circle = crate::icons::char("circle")
+            .filter(|c| font.has_char(*c))
+            .unwrap_or(*ch);
+        font.ink(size, circle.encode_utf8(&mut [0u8; 4]))
+    };
+    let largest = (style.title * 1.6).min(room);
+    let size = crate::widgets::largest_size(largest, largest * 0.5, |s| {
+        frame(s).is_none_or(|(top, bottom)| (bottom - top) as f32 <= room)
+    })
+    .unwrap_or(largest * 0.5);
+    let (top, bottom) = frame(size).unwrap_or((-(size as i32), 0));
+    let group = (bottom - top) + text_room;
+    let y = i32::from(area.y) + (i32::from(area.height) - group).div_euclid(2);
+    if let Some((icon_font, ch)) = &icon {
+        let mut text = [0u8; 4];
+        let ch = ch.encode_utf8(&mut text);
+        let w = icon_font.measure(size, ch);
         let x = f32::from(area.x) + (f32::from(area.width) - w) / 2.0;
-        ui::draw_icon(canvas, env, icon, size, x, icon_row, Color::BLACK);
+        icon_font.draw(canvas, size, x, y - top, ch, Color::BLACK);
     }
-    if !label {
+    let Some(name) = name else {
         return;
-    }
-    let title = env.menus.title(action.as_str()).unwrap_or_default();
-    let name = env
-        .i18n
-        .get(&format!("{title}.short"))
-        .unwrap_or(env.i18n.tr(title));
-    let name = ui::fit(&font, style.small, name, f32::from(area.width) - 4.0);
-    let x = f32::from(area.x) + (f32::from(area.width) - font.measure(style.small, &name)) / 2.0;
-    let row = Rect::new(
-        area.x,
-        icon_row.y + icon_row.height + gap,
-        area.width,
-        label_h,
+    };
+    let baseline = y + (bottom - top) + inner + cap;
+    let width = font.measure(style.small, &name);
+    let x = f32::from(area.x) + (f32::from(area.width) - width) / 2.0;
+    let at = Rect::new(
+        x.max(0.0) as u16,
+        (baseline - cap).max(0) as u16,
+        width as u16,
+        (cap + descent) as u16,
     );
-    ui::draw_label(canvas, &font, style.small, x, row, &name, Color::BLACK);
+    canvas.describe(crate::semantics::Role::Text, &name, at, false, None);
+    font.draw(canvas, style.small, x, baseline, &name, Color::BLACK);
 }
 
 #[cfg(test)]

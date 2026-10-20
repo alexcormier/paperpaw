@@ -18,7 +18,7 @@ use paperpaw_sdk::event::Event;
 use paperpaw_sdk::image::{ColorFile, Fit, GrayFile, ImageFile};
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::ui::{self, UiStyle};
-use paperpaw_sdk::widgets::{self, Align, Frame, Widget, WidgetSpec, WidgetTarget};
+use paperpaw_sdk::widgets::{self, Align, Frame, Padding, Widget, WidgetSpec, WidgetTarget};
 use paperpaw_sdk::{Arg, Canvas, Env, Id, Rect, RegisterError, Registrar, SettingSpec, Storage};
 
 use super::quote::CHANGES;
@@ -70,7 +70,7 @@ static FOLDER_SETTING: [SettingSpec; 1] = [SettingSpec::fixed_text(
 .with_extra(&CHOSEN_FOLDER)
 .described("widgets.picture.setting.folder.help")];
 
-static SETTINGS: [SettingSpec; 5] = [
+static SETTINGS: [SettingSpec; 6] = [
     SettingSpec::fixed_choice(
         "widgets.picture.change",
         "widgets.setting.change",
@@ -94,6 +94,7 @@ static SETTINGS: [SettingSpec; 5] = [
     ),
     widgets::align_spec("widgets.picture.align", ID, Align::Center),
     widgets::frame_spec("widgets.picture.frame", ID, Frame::None),
+    widgets::padding_spec("widgets.picture.padding", ID, Padding::Auto),
 ];
 
 pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {

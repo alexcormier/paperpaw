@@ -13,7 +13,7 @@ use alloc::vec::Vec;
 
 use paperpaw_sdk::round::{UNIT, sin_cos};
 use paperpaw_sdk::time::{self, LocalTime};
-use paperpaw_sdk::widgets::{self, Align, Drawn, Frame};
+use paperpaw_sdk::widgets::{self, Align, Drawn, Frame, Padding};
 use paperpaw_sdk::{Arg, Canvas, Color, Env, Id, Point, Rect, RegisterError, Registrar};
 
 use paperpaw_sdk::SettingSpec;
@@ -35,9 +35,10 @@ const LUNATION: i64 = 2_551_442_877;
 const EPOCH: i64 = 947_168_373_824;
 
 /// Its settings, kept in the program.
-static SETTINGS: [SettingSpec; 8] = [
+static SETTINGS: [SettingSpec; 9] = [
     widgets::align_spec("widgets.moon.align", ID, Align::Left),
     widgets::frame_spec("widgets.moon.frame", ID, Frame::None),
+    widgets::padding_spec("widgets.moon.padding", ID, Padding::Auto),
     widgets::part_spec("widgets.moon.name", ID, "widgets.setting.phase-name", true),
     widgets::part_spec(
         "widgets.moon.full",
@@ -219,85 +220,90 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     let align = widgets::align(env, ID.as_str());
     let first = style.text;
     let small = style.small;
-    let gap = style.gap as u16 * 2;
+    let gap = style.gap as u16;
     // Beside the text where the place is wide, else above it.
-    let beside = !lines.is_empty() && area.width >= area.height * 3 / 2;
-    // The lines as they fit: broken in two where they are wider.
-    let width = if beside {
-        area.width.saturating_sub(area.height + gap)
-    } else {
-        area.width
-    };
-    // Where even single words have no room beside it, the moon alone.
-    let words_fit = font.as_ref().is_some_and(|font| {
-        lines.iter().flat_map(|l| l.split_whitespace()).all(|word| {
-            let size = super::fit_size(font, small, word, f32::from(width));
-            font.measure(size, word) <= f32::from(width)
-        })
-    });
-    let (lines, beside) = if words_fit {
-        (lines, beside)
-    } else {
-        (Vec::new(), false)
-    };
-    let build = |count: usize, most: usize, scale: f32| -> Vec<(String, f32, Color)> {
+    let wide = area.width >= area.height * 3 / 2;
+    // The text's rows beside the moon, or below it in `share` of the
+    // height; and how many of the lines they show.
+    // Beside a moon `side` pixels across, or below it in `share` of the
+    // height.
+    let rows_in = |beside: bool, share: f32, side: u16| -> (Vec<(String, f32, Color)>, usize) {
         let Some(font) = &font else {
-            return Vec::new();
+            return (Vec::new(), 0);
         };
-        lines
-            .iter()
-            .take(count)
-            .enumerate()
-            .flat_map(|(n, text)| {
-                let (size, color) = if n == 0 {
-                    (first, look.ink)
-                } else {
-                    (small, look.faint)
-                };
-                let size = size * scale;
-                let size = super::fit_words(font, size, text, f32::from(width));
-                super::wrap(font, size, text, f32::from(width), most)
-                    .into_iter()
-                    .map(move |l| (l, size, color))
-            })
-            .collect()
+        let (width, room, most) = if beside {
+            (
+                area.width.saturating_sub(side + gap),
+                f32::from(area.height),
+                2,
+            )
+        } else {
+            (area.width, f32::from(area.height) * share, 3)
+        };
+        // Each line whole, broken between words: the first as large as
+        // the body size down to the small one, the others small; those
+        // that have no room left out from the last.
+        let mut rows = Vec::new();
+        let mut used = 0.0;
+        let mut shown = 0;
+        for (n, text) in lines.iter().enumerate() {
+            let (max, color) = if n == 0 {
+                (first, look.ink)
+            } else {
+                (small, look.faint)
+            };
+            // In as few lines as it fits.
+            let fitted = (1..=most).find_map(|lines| {
+                let place = (f32::from(width), room - used);
+                super::wrap_whole(font, (max, small), text, place, lines)
+            });
+            let Some((size, broken)) = fitted else {
+                break;
+            };
+            used += line(font, size) * broken.len() as f32;
+            shown += 1;
+            rows.extend(broken.into_iter().map(|l| (l, size, color)));
+        }
+        (rows, shown)
     };
-    let height_of = |rows: &[(String, f32, Color)]| -> f32 {
-        font.as_ref().map_or(0.0, |font| {
-            rows.iter().map(|(_, size, _)| line(font, *size)).sum()
-        })
-    };
-    // Where they are too many for the place: a little smaller, then the
-    // last ones left out, then the first one alone, shortened.
-    let room = if beside {
-        f32::from(area.height)
-    } else {
-        f32::from(area.height) * 0.6
-    };
+    // Beside it where the place is wide, the moon a little smaller where
+    // that gives a long word room.
+    let mut beside = wide && !lines.is_empty();
+    let mut side = area.height;
     let mut rows = Vec::new();
-    for count in (1..=lines.len()).rev() {
-        rows = build(count, 2, 1.0);
-        let high = height_of(&rows);
-        if high > room {
-            rows = build(count, 2, (room / high).max(0.75));
+    if beside {
+        for part in [10, 9, 8, 7] {
+            side = area.height * part / 10;
+            rows = rows_in(true, 1.0, side).0;
+            if !rows.is_empty() {
+                break;
+            }
         }
-        if height_of(&rows) <= room {
-            break;
+    }
+    if !beside || rows.is_empty() {
+        beside = false;
+        // Below it: the moon the larger, but not at the cost of a line
+        // that has room where the moon is a little smaller.
+        let mut best = rows_in(false, 0.45, 0);
+        for share in [0.55, 0.65] {
+            let more = rows_in(false, share, 0);
+            if more.1 > best.1 {
+                best = more;
+            }
         }
-        if count == 1 {
-            rows = build(1, 1, 1.0);
-        }
+        rows = best.0;
     }
     let heights: Vec<f32> = match &font {
         Some(font) => rows.iter().map(|(_, size, _)| line(font, *size)).collect(),
         None => Vec::new(),
     };
     let text_h: f32 = heights.iter().sum();
+    let below_gap = if rows.is_empty() { 0 } else { gap / 2 };
     let side = if beside {
-        area.height
+        side
     } else {
         area.height
-            .saturating_sub(text_h as u16 + if lines.is_empty() { 0 } else { gap / 2 })
+            .saturating_sub(text_h as u16 + below_gap)
             .min(area.width)
     };
     let radius = u32::from(side / 2).saturating_sub(1);
@@ -330,13 +336,16 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
                 Rect::new(area.x + side + gap, area.y, rest, area.height),
             ),
         }
+    } else if rows.is_empty() {
+        // The moon alone: in the middle, as a sign.
+        (Align::Center.x(area, f32::from(side)) as u16, area)
     } else {
         (align.x(area, f32::from(side)) as u16, area)
     };
     let top = if beside {
-        area.y
+        area.y + (area.height - side) / 2
     } else {
-        area.y + area.height.saturating_sub(side + gap / 2 + text_h as u16) / 2
+        area.y + area.height.saturating_sub(side + below_gap + text_h as u16) / 2
     };
     let center = Point::new(
         i32::from(moon_x) + i32::from(side / 2),
@@ -354,7 +363,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     } else {
         Rect::new(
             text_room.x,
-            top + side + gap / 2,
+            top + side + below_gap,
             text_room.width,
             text_h as u16,
         )

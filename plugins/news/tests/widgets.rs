@@ -55,6 +55,12 @@ fn card() -> MemoryStorage {
 /// `config` (lines of the `[news]` section): what it describes, and how
 /// many pixels are black.
 fn home(storage: MemoryStorage, page: &str, config: &str) -> (String, usize) {
+    let (text, rows) = screen(storage, page, config);
+    (text, rows.iter().sum())
+}
+
+/// [`home`], with the black pixels of each row of the screen.
+fn screen(storage: MemoryStorage, page: &str, config: &str) -> (String, Vec<usize>) {
     let user = format!(
         "[core]\nlanguage = en\n[home]\ngesture-tips = false\npage-1 = \"{page}\"\n[news]\n{config}\n"
     );
@@ -77,11 +83,14 @@ fn home(storage: MemoryStorage, page: &str, config: &str) -> (String, usize) {
             _ => break,
         }
     }
-    let mut black = 0;
-    kernel.render(&mut |_, view| {
+    let mut rows = vec![0; usize::from(DEVICE.display.height)];
+    kernel.render(&mut |top, view| {
         for y in 0..view.height {
-            for x in 0..view.width {
-                black += usize::from(view.pixel(x, y).luma() < 128);
+            let black = (0..view.width)
+                .filter(|&x| view.pixel(x, y).luma() < 128)
+                .count();
+            if let Some(row) = rows.get_mut(usize::from(top + y)) {
+                *row += black;
             }
         }
     });
@@ -90,7 +99,12 @@ fn home(storage: MemoryStorage, page: &str, config: &str) -> (String, usize) {
         text.push_str(&part.label);
         text.push('\n');
     }
-    (text, black)
+    (text, rows)
+}
+
+/// Black pixels in the rows from `from` to `to` of a screen's `rows`.
+fn ink(rows: &[usize], from: usize, to: usize) -> usize {
+    rows[from..to].iter().sum()
 }
 
 #[test]
@@ -142,4 +156,29 @@ fn it_draws_in_every_frame() {
             }
         }
     }
+}
+
+/// A headline in a low cell stays inside it: the caption is left out
+/// rather than the headline drawn below the cell.
+#[test]
+fn a_low_cell_keeps_its_headline_inside() {
+    let (_, empty) = screen(card(), "", "");
+    let below = ink(&empty, 140, 600);
+    for size in ["1x1", "2x1", "4x1"] {
+        let page = format!("news.widget.headlines 0/0 {size}");
+        let (shown, rows) = screen(card(), &page, "");
+        assert!(shown.contains("Bu"), "{size}: {shown}");
+        assert_eq!(ink(&rows, 140, 600), below, "{size} draws below its cell");
+    }
+}
+
+/// Without feeds, a cell too small for the whole sentence still says
+/// where feeds are added, rather than the sentence cut short.
+#[test]
+fn a_small_cell_says_where_feeds_are_added() {
+    let (shown, _) = home(MemoryStorage::new(), "news.widget.headlines 0/0 2x1", "");
+    assert!(
+        shown.contains("Add feeds under News in the menu"),
+        "{shown}"
+    );
 }

@@ -369,6 +369,38 @@ fn scene(symbol: Symbol, day: bool, style: Style, thickness: i32) -> Scene {
     b.scene
 }
 
+/// The box the ink of `symbol` (by day or night) takes in the square it
+/// is drawn in, in thousandths of the square's side: left, top, right,
+/// bottom. Taken from its shapes (what a cloud hides of the sun is not
+/// taken off), for placing a symbol by its ink rather than its square.
+pub(crate) fn ink_box(symbol: Symbol, day: bool) -> (i32, i32, i32, i32) {
+    let scene = scene(symbol, day, Style::Solid, 60);
+    let mut ink = (UNITS, UNITS, 0, 0);
+    for shape in scene.layers.iter().flat_map(|l| l.shapes.iter()) {
+        let (left, top, right, bottom) = match *shape {
+            Shape::Disc { x, y, r } => (x - r, y - r, x + r, y + r),
+            Shape::Line { ax, ay, bx, by, w } => (
+                ax.min(bx) - w,
+                ay.min(by) - w,
+                ax.max(bx) + w,
+                ay.max(by) + w,
+            ),
+        };
+        ink = (
+            ink.0.min(left),
+            ink.1.min(top),
+            ink.2.max(right),
+            ink.3.max(bottom),
+        );
+    }
+    let clamp = |v: i32| v.clamp(0, UNITS);
+    let (left, top, right, bottom) = (clamp(ink.0), clamp(ink.1), clamp(ink.2), clamp(ink.3));
+    if right <= left || bottom <= top {
+        return (0, 0, UNITS, UNITS);
+    }
+    (left, top, right, bottom)
+}
+
 /// How wide the symbol's lines are, in units, for a symbol `size` pixels
 /// large: about a sixteenth of it, never thinner than two pixels.
 fn thickness(size: u32) -> i32 {

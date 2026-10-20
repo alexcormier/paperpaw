@@ -7,7 +7,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use paperpaw_sdk::time;
-use paperpaw_sdk::widgets::{self, Align, Drawn, Frame, Size};
+use paperpaw_sdk::widgets::{self, Align, Drawn, Frame, Padding, Size};
 use paperpaw_sdk::{Arg, Canvas, Env, Id, Rect, RegisterError, Registrar};
 
 use paperpaw_sdk::SettingSpec;
@@ -25,9 +25,10 @@ const STYLES: [&str; 3] = [
 ];
 
 /// Its settings, kept in the program.
-static SETTINGS: [SettingSpec; 7] = [
+static SETTINGS: [SettingSpec; 8] = [
     widgets::align_spec("widgets.day.align", ID, Align::Left),
     widgets::frame_spec("widgets.day.frame", ID, Frame::None),
+    widgets::padding_spec("widgets.day.padding", ID, Padding::Auto),
     SettingSpec::fixed_choice(
         "widgets.day.style",
         "widgets.setting.style",
@@ -158,26 +159,100 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         }
         "sheet" => draw_sheet(canvas, env, &font, &look, &t, with_year, week.as_deref()),
         _ => {
-            // "Wednesday" large, the date below it.
-            let date = super::date_text(env, ID.as_str(), t.year, t.month, t.day, with_year);
-            let date = match &week {
+            // "Wednesday" large, the date below it: each whole on its
+            // line, the weekday's short name where the name has no room,
+            // the date without its year, then with the month's short
+            // name, then left out.
+            let mut dates = alloc::vec![super::date_text(
+                env,
+                ID.as_str(),
+                t.year,
+                t.month,
+                t.day,
+                with_year
+            )];
+            if with_year {
+                dates.push(super::date_text(
+                    env,
+                    ID.as_str(),
+                    t.year,
+                    t.month,
+                    t.day,
+                    false,
+                ));
+            }
+            dates.push(env.i18n.format(
+                "widgets.date.short",
+                &[
+                    ("day", Arg::Int(i64::from(t.day))),
+                    ("month", Arg::Str(super::month_short(env, t.month))),
+                ],
+            ));
+            let dates = dates.into_iter().map(|date| match &week {
                 Some(week) => format!("{date} · {week}"),
                 None => date,
-            };
-            let note = style
-                .title
+            });
+            let most = style
+                .text
                 .min(f32::from(area.height) / 3.5)
                 .max(style.small);
-            let note = super::fit_size(&font, note, &date, width).max(style.small);
-            let note_h = line(&font, note);
-            let room = (f32::from(area.height) - note_h).max(0.0);
-            let size = super::fit_size(&font, big_size(env, Some(room * 0.8)), weekday, width);
-            let big = line(&font, size).min(room);
-            let top = f32::from(area.y) + (f32::from(area.height) - big - note_h).max(0.0) / 2.0;
-            let row = Rect::new(area.x, top as u16, area.width, big as u16);
-            super::label(canvas, &font, size, align, row, weekday, look.ink);
-            let row = Rect::new(area.x, (top + big) as u16, area.width, note_h as u16);
-            super::label(canvas, &font, note, align, row, &date, look.faint);
+            let fits = |size: f32, text: &str| font.measure(size, text) <= width;
+            let date = dates.into_iter().find_map(|date| {
+                widgets::largest_size(most, style.small, |s| fits(s, &date)).map(|s| (s, date))
+            });
+            let height = f32::from(area.height);
+            // The weekday as large as set or as fits, a line at least
+            // above the date; without the date where both have no room.
+            let weekday_fits = |text: &str, note_h: f32, least: f32| {
+                let max = big_size(env, Some((height - note_h) * 0.8)).max(least);
+                widgets::largest_size(max, least, |s| {
+                    fits(s, text) && line(&font, s) <= height - note_h
+                })
+            };
+            let short = super::weekday_short(env, t.weekday);
+            // The full name at the body size at least, as it heads the date;
+            // else the short name.
+            let pick = |note_h: f32| {
+                weekday_fits(weekday, note_h, style.text)
+                    .map(|s| (s, weekday))
+                    .or_else(|| weekday_fits(short, note_h, style.small).map(|s| (s, short)))
+            };
+            let with_date = date.and_then(|(note, date)| {
+                let note_h = line(&font, note);
+                pick(note_h).map(|big| (big, Some((note, note_h, date))))
+            });
+            let ((size, name), date) = match with_date.or_else(|| pick(0.0).map(|big| (big, None)))
+            {
+                Some(found) => found,
+                None => ((style.small, short), None),
+            };
+            // The date a step smaller than the weekday, which heads it.
+            let date = date.map(|(note, h, date)| {
+                let most = (size * 0.84).max(style.small);
+                if note <= most {
+                    return (note, h, date);
+                }
+                let note = widgets::largest_size(most, style.small, |s| fits(s, &date))
+                    .unwrap_or(style.small);
+                (note, line(&font, note), date)
+            });
+            // The two centred together by their ink, half a gap apart.
+            let mut parts = alloc::vec![super::Part {
+                lines: alloc::vec![name],
+                size,
+                color: look.ink,
+                font: None,
+            }];
+            if let Some((note, _, date)) = &date {
+                parts.push(super::Part {
+                    lines: alloc::vec![date.as_str()],
+                    size: *note,
+                    color: look.faint,
+                    font: None,
+                });
+            }
+            let gap = style.gap as f32 / 2.0;
+            super::draw_stack(canvas, &font, area, align, &parts, gap);
         }
     }
 }
@@ -206,13 +281,27 @@ fn draw_sheet(
     let left = align.x(area, width);
     let sheet = Rect::new(left as u16, area.y, width as u16, area.height);
     let radius = style.corner.max((width * 0.06) as u32);
-    let month = super::month_name(env, t.month);
-    let month = if with_year {
-        format!("{month} {}", t.year)
-    } else {
-        String::from(month)
+    // The month (with the year where set) on the band where it fits, else
+    // in short, else shortened: never wider than the sheet.
+    let room = width * 0.85;
+    let band_max = (height * 0.11).max(style.small);
+    let full = super::month_name(env, t.month);
+    let short = super::month_short(env, t.month);
+    let mut names = Vec::new();
+    if with_year {
+        names.push(format!("{full} {}", t.year));
+    }
+    names.push(String::from(full));
+    names.push(String::from(short));
+    let fits = |text: &String| {
+        widgets::largest_size(band_max, style.small, |s| font.measure(s, text) <= room).is_some()
     };
-    let band_size = super::fit_size(font, (height * 0.11).max(style.small), &month, width * 0.85);
+    let month = names
+        .iter()
+        .find(|text| fits(text))
+        .cloned()
+        .unwrap_or_else(|| paperpaw_sdk::ui::fit(font, style.small, short, room));
+    let band_size = super::fit_size(font, band_max, &month, room);
     let band_h = (line(font, band_size) * 1.25).min(height * 0.3);
     // The band in ink, the sheet's paper inside a line round it.
     let thick = style.line * 2;

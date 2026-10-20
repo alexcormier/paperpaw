@@ -4,9 +4,10 @@
 
 use alloc::format;
 use alloc::string::String;
+use alloc::vec::Vec;
 
 use paperpaw_sdk::time;
-use paperpaw_sdk::widgets::{self, Align, Drawn, Frame};
+use paperpaw_sdk::widgets::{self, Align, Drawn, Frame, Padding};
 use paperpaw_sdk::{Canvas, Color, Env, FontHandle, Id, Point, Rect, RegisterError, Registrar};
 
 use paperpaw_sdk::SettingSpec;
@@ -35,9 +36,10 @@ const MARKS: [&str; 4] = [
 const INITIALS: [&str; 2] = ["widgets.initials.one", "widgets.initials.two"];
 
 /// Its settings, kept in the program.
-static SETTINGS: [SettingSpec; 12] = [
+static SETTINGS: [SettingSpec; 13] = [
     widgets::align_spec("widgets.calendar.align", ID, Align::Center),
     widgets::frame_spec("widgets.calendar.frame", ID, Frame::None),
+    widgets::padding_spec("widgets.calendar.padding", ID, Padding::Auto),
     SettingSpec::fixed_choice(
         "widgets.calendar.week-start",
         "widgets.setting.week-start",
@@ -141,13 +143,50 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     let area = look.area;
     let month = MonthGrid::new(today.year, today.month, week_start(env, ID.as_str()));
     // Two months: side by side where the place is wide, else one below
-    // the other; this one alone where two have no room.
+    // the other; this one alone where two have no room for a whole
+    // month each.
     let gap = style.gap as u16 * 2;
     let wide = area.width > area.height * 5 / 4;
-    let least = (super::line(&font, style.small) * 4.0) as u16;
-    let room = if wide { area.width } else { area.height };
-    if !widgets::shows(env, ID.as_str(), "next") || super::fitting(room, gap, least, 2) < 2 {
-        draw_month(
+    let two = widgets::shows(env, ID.as_str(), "next").then(|| {
+        if wide {
+            let w = super::share(area.width, gap, 2);
+            (
+                Rect::new(area.x, area.y, w, area.height),
+                Rect::new(area.x + w + gap, area.y, w, area.height),
+            )
+        } else {
+            let h = super::share(area.height, gap, 2);
+            (
+                Rect::new(area.x, area.y, area.width, h),
+                Rect::new(area.x, area.y + h + gap, area.width, h),
+            )
+        }
+    });
+    let weeks = month.weeks.max(month.next().weeks);
+    match two {
+        Some((first, second)) if grid(env, &font, first, weeks, true).is_some() => {
+            draw_month(
+                canvas,
+                env,
+                &font,
+                &look,
+                first,
+                &month,
+                Some(today.day),
+                weeks,
+            );
+            draw_month(
+                canvas,
+                env,
+                &font,
+                &look,
+                second,
+                &month.next(),
+                None,
+                weeks,
+            );
+        }
+        _ => draw_month(
             canvas,
             env,
             &font,
@@ -156,47 +195,75 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
             &month,
             Some(today.day),
             month.weeks,
-        );
-        return;
+        ),
     }
-    let (first, second) = if wide {
-        let w = super::share(area.width, gap, 2);
-        (
-            Rect::new(area.x, area.y, w, area.height),
-            Rect::new(area.x + w + gap, area.y, w, area.height),
-        )
-    } else {
-        let h = super::share(area.height, gap, 2);
-        (
-            Rect::new(area.x, area.y, area.width, h),
-            Rect::new(area.x, area.y + h + gap, area.width, h),
-        )
+}
+
+/// How a month's grid is laid out in a place: which parts show, the
+/// cells' size and the numbers' size (one the font draws in a cell).
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Grid {
+    heading: bool,
+    initials: bool,
+    weeks: bool,
+    cell_w: f32,
+    cell_h: f32,
+    size: f32,
+}
+
+/// The grid of `rows` weeks in `area`, its parts as wished; where the
+/// numbers have no room, the week numbers, the heading, the initials left
+/// out in turn (the initials only with `all`). `None` where the numbers
+/// do not fit even so: the font draws none that small.
+fn grid(env: &Env<'_>, font: &FontHandle<'_>, area: Rect, rows: u8, all: bool) -> Option<Grid> {
+    let (style, _) = ui(env);
+    let widget = ID;
+    let id = widget.as_str();
+    let mut grid = Grid {
+        heading: widgets::shows(env, id, "heading"),
+        initials: widgets::shows(env, id, "weekdays"),
+        weeks: widgets::shows(env, id, "weeks"),
+        cell_w: 0.0,
+        cell_h: 0.0,
+        size: 0.0,
     };
-    let weeks = month.weeks.max(month.next().weeks);
-    draw_month(
-        canvas,
-        env,
-        &font,
-        &look,
-        first,
-        &month,
-        Some(today.day),
-        weeks,
-    );
-    draw_month(
-        canvas,
-        env,
-        &font,
-        &look,
-        second,
-        &month.next(),
-        None,
-        weeks,
-    );
+    loop {
+        let columns = 7 + u16::from(grid.weeks);
+        let lines = u16::from(rows) + u16::from(grid.initials);
+        // The heading as high as a row would be, a little more.
+        let lines = f32::from(lines) + if grid.heading { 1.3 } else { 0.0 };
+        grid.cell_h = f32::from(area.height) / lines;
+        grid.cell_w = f32::from(area.width) / f32::from(columns);
+        // Two digits with room round them in each cell, as drawn, and no
+        // smaller than four fifths of the small size (else a week is
+        // easier to read than a month).
+        let (w, h) = (grid.cell_w, grid.cell_h);
+        let most = (h * 0.5).min(w * 0.42);
+        let size = widgets::largest_size(most, style.small * 0.8, |size| {
+            font.measure(size, "00") <= w * 0.8 && super::cap_height(font, size) <= h * 0.72
+        });
+        // The heading's line in its row.
+        let heading_fits = size.is_some_and(|size| {
+            let heading = (size * 1.15).min(style.title * 1.6);
+            super::line(font, heading) * 0.8 <= h * 1.3
+        });
+        match size {
+            Some(size) if !grid.heading || heading_fits => {
+                grid.size = size;
+                return Some(grid);
+            }
+            _ if grid.weeks => grid.weeks = false,
+            _ if grid.heading => grid.heading = false,
+            _ if grid.initials && all => grid.initials = false,
+            _ => return None,
+        }
+    }
 }
 
 /// Draws `month` into `area`, `today` marked, with room for
 /// `weeks_shown` weeks (so that two months shown side by side line up).
+/// Where the whole month has no room, the week of today alone; where that
+/// has none either, today's number large under the month's name.
 #[allow(clippy::too_many_arguments)]
 fn draw_month(
     canvas: &mut Canvas<'_>,
@@ -208,40 +275,44 @@ fn draw_month(
     today: Option<u8>,
     weeks_shown: u8,
 ) {
+    let label = format!("{} {}", super::month_name(env, month.month), month.year);
+    canvas.describe(
+        paperpaw_sdk::semantics::Role::Text,
+        &label,
+        area,
+        false,
+        None,
+    );
+    let whole = grid(env, font, area, weeks_shown, true);
+    let (grid, rows) = match (whole, today) {
+        (Some(grid), _) => (grid, 0..month.weeks),
+        (None, Some(day)) => match grid(env, font, area, 1, false) {
+            Some(grid) => {
+                let week = month.week_of(day);
+                (grid, week..week + 1)
+            }
+            None => {
+                draw_today(canvas, env, font, look, area, month, day);
+                return;
+            }
+        },
+        (None, None) => return,
+    };
     let (style, _) = ui(env);
     let widget = ID;
     let id = widget.as_str();
-    let mut heading = widgets::shows(env, id, "heading");
-    let mut initials = widgets::shows(env, id, "weekdays");
-    let mut weeks = widgets::shows(env, id, "weeks");
-    // Cells and the numbers' size; where the numbers have no room (the
-    // font has no size that small), the week numbers, the heading, the
-    // initials left out in turn.
-    let (cell_w, cell_h, size) = loop {
-        let columns = 7 + u16::from(weeks);
-        let rows = u16::from(weeks_shown) + u16::from(initials);
-        // The heading as high as a row would be, a little more.
-        let rows_f = f32::from(rows) + if heading { 1.3 } else { 0.0 };
-        let cell_h = f32::from(area.height) / rows_f;
-        let cell_w = f32::from(area.width) / f32::from(columns);
-        // Two digits with room round them in each cell.
-        let size = (cell_h * 0.5).min(cell_w * 0.42).max(style.small * 0.7);
-        let size = super::fit_size(font, size, "00", cell_w * 0.56);
-        let wide = font.measure(size, "00") > cell_w * 0.8;
-        let high = super::cap_height(font, size) > cell_h * 0.72;
-        if wide && weeks {
-            weeks = false;
-        } else if high && heading {
-            heading = false;
-        } else if high && initials {
-            initials = false;
-        } else {
-            break (cell_w, cell_h, size);
-        }
-    };
+    let Grid {
+        heading,
+        initials,
+        weeks,
+        cell_w,
+        cell_h,
+        size,
+    } = grid;
     let small = size * 0.82;
     // The size the font draws at (the nearest it has).
     let drawn = super::cap_height(font, size) / 0.74;
+    // The cells fill the place from top to bottom.
     let mut top = f32::from(area.y);
     let left = f32::from(area.x) + if weeks { cell_w } else { 0.0 };
 
@@ -280,8 +351,8 @@ fn draw_month(
     let weekends = widgets::shows(env, id, "weekends");
     let mark = chosen_name(env, id, "mark");
     let first = super::dates::days_from_civil(month.year, month.month, 1);
-    for week in 0..month.weeks {
-        let y = top + cell_h * (f32::from(week) + 0.5);
+    for (row, week) in rows.enumerate() {
+        let y = top + cell_h * (row as f32 + 0.5);
         if weeks {
             let number = format!("{}", month.week_number(week));
             let x = f32::from(area.x) + cell_w / 2.0;
@@ -301,20 +372,72 @@ fn draw_month(
                 color = look.faint;
             }
             if inside && today == Some((day + 1) as u8) {
-                color = draw_mark(canvas, look, mark, x, y, cell_w, cell_h, drawn);
+                let wide = font.measure(size, &text);
+                let cell = (cell_w, cell_h);
+                color = draw_mark(canvas, look, mark, x, y, cell, drawn, wide);
             }
             let shown = if inside { size } else { small };
             super::draw_centred(canvas, font, shown, x, y, &text, color);
         }
     }
-    let label = format!("{} {}", super::month_name(env, month.month), month.year);
-    canvas.describe(
-        paperpaw_sdk::semantics::Role::Text,
-        &label,
-        area,
-        false,
-        None,
-    );
+}
+
+/// Today alone, where not even a week has room: the month's name (or
+/// its short name) small above the day's number as large as fits, the
+/// two in the middle; the name left out where both have no room.
+#[allow(clippy::too_many_arguments)]
+fn draw_today(
+    canvas: &mut Canvas<'_>,
+    env: &Env<'_>,
+    font: &FontHandle<'_>,
+    look: &widgets::Look,
+    area: Rect,
+    month: &MonthGrid,
+    day: u8,
+) {
+    let (style, _) = ui(env);
+    let width = f32::from(area.width);
+    let long = super::month_name(env, month.month);
+    let short = super::month_short(env, month.month);
+    let name = [long, short]
+        .into_iter()
+        .find(|name| font.measure(style.small, name) <= width);
+    let name_h = super::line(font, style.small);
+    let number = format!("{day}");
+    let room = |name: bool| f32::from(area.height) - if name { name_h } else { 0.0 };
+    let fits = |size: f32, name: bool| {
+        font.measure(size, &number) <= width && super::line(font, size) <= room(name)
+    };
+    let most = f32::from(area.height).min(style.title * 3.0);
+    // With the name where the number keeps the body size at least.
+    let with_name = name.and_then(|_| widgets::largest_size(most, style.text, |s| fits(s, true)));
+    let (size, name) = match with_name {
+        Some(size) => (size, name),
+        None => match widgets::largest_size(most, style.small, |s| fits(s, false)) {
+            Some(size) => (size, None),
+            // Not even the number has room: nothing rather than a part.
+            None => return,
+        },
+    };
+    // The two centred together by their ink, half a gap apart.
+    let mut parts = Vec::new();
+    if let Some(name) = name {
+        parts.push(super::Part {
+            lines: alloc::vec![name],
+            size: style.small,
+            color: look.faint,
+            font: None,
+        });
+    }
+    parts.push(super::Part {
+        lines: alloc::vec![number.as_str()],
+        size,
+        color: look.ink,
+        font: None,
+    });
+    let align = widgets::align(env, ID.as_str());
+    let gap = style.gap as f32 / 2.0;
+    super::draw_stack(canvas, font, area, align, &parts, gap);
 }
 
 /// Draws today's mark round the number at `x`, `y` and returns the
@@ -326,9 +449,9 @@ fn draw_mark(
     mark: &str,
     x: f32,
     y: f32,
-    cell_w: f32,
-    cell_h: f32,
+    (cell_w, cell_h): (f32, f32),
     size: f32,
+    wide: f32,
 ) -> Color {
     // Round the number, but never into the next row or column.
     let radius = (cell_w.min(cell_h) * 0.46)
@@ -336,6 +459,10 @@ fn draw_mark(
         .max(size * 0.78)
         .min(cell_w.min(cell_h) * 0.5);
     let center = Point::new(x as i32, y as i32);
+    // The number's ink with a little room round it.
+    let pad = (size * 0.12).max(1.0);
+    let cap = size * 0.74;
+    let cramped = wide / 2.0 + pad > radius || cap / 2.0 + pad > radius;
     match mark {
         "square" => {
             let r = radius as u16;
@@ -359,6 +486,20 @@ fn draw_mark(
             );
             canvas.fill_round(at, u32::from(thick / 2), look.ink);
             look.ink
+        }
+        // Where a disc would touch the number, a box round it: as wide
+        // as the number and a little room, never into the next column.
+        _ if cramped => {
+            let w = (wide + 2.0 * pad).min(cell_w - 2.0);
+            let h = (cap + 2.0 * pad).min(cell_h - 2.0);
+            let at = Rect::new(
+                (x - w / 2.0) as u16,
+                (y - h / 2.0) as u16,
+                w as u16,
+                h as u16,
+            );
+            canvas.fill_round(at, (h * 0.2) as u32, look.ink);
+            look.paper
         }
         _ => {
             canvas.fill_circle(center, radius as u32, look.ink);

@@ -15,9 +15,10 @@ use paperpaw_sdk::builtin::events::{self, Goto};
 use paperpaw_sdk::document::Locator;
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::library;
+use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::ui::UiStyle;
 use paperpaw_sdk::widgets::{
-    self, Align, Frame, Look, Size, Widget, WidgetSpec, WidgetTarget, Wrapped,
+    self, Align, Frame, Look, Padding, Size, Widget, WidgetSpec, WidgetTarget, Wrapped,
 };
 use paperpaw_sdk::{Arg, Canvas, Env, Id, Rect, RegisterError, Registrar, Storage};
 
@@ -45,9 +46,10 @@ const MAX_BOOKS: usize = 200;
 const MAX_FILE: u64 = 128 * 1024;
 
 /// Its settings, kept in the program.
-static SETTINGS: [SettingSpec; 10] = [
+static SETTINGS: [SettingSpec; 11] = [
     widgets::align_spec("widgets.highlight.align", ID, Align::Center),
     widgets::frame_spec("widgets.highlight.frame", ID, Frame::None),
+    widgets::padding_spec("widgets.highlight.padding", ID, Padding::Auto),
     widgets::size_spec("widgets.highlight.size", ID, Size::Fit, true),
     SettingSpec::fixed_choice(
         "widgets.highlight.source",
@@ -337,26 +339,6 @@ impl Widget for HighlightWidget {
     }
 }
 
-/// The largest text size from `largest` down to the small one at which
-/// `text` takes no more than `height` pixels at `width`; `None` if it
-/// does not fit even small.
-fn fitting_size(env: &Env<'_>, text: &str, width: u16, height: u16, largest: f32) -> Option<f32> {
-    let style = UiStyle::new(env);
-    let font = style.font(env)?;
-    let fits = |size: f32| {
-        let lines = font.wrap(size, text, f32::from(width)).len() as u16;
-        lines * widgets::line_height(env, size) <= height
-    };
-    let mut size = largest;
-    while size > style.small {
-        if fits(size) {
-            return Some(size);
-        }
-        size *= 0.92;
-    }
-    fits(style.small).then_some(style.small)
-}
-
 /// A highlight laid out in a widget's area, drawn as it is in every band.
 #[derive(Debug, Clone, PartialEq)]
 struct Laid {
@@ -366,7 +348,10 @@ struct Laid {
     /// line: half a line high.
     marks: bool,
     mark_h: u16,
-    text: Wrapped,
+    /// The text, as said, and in its lines at its size.
+    text: String,
+    lines: Vec<String>,
+    size: f32,
     text_h: u16,
     /// The note below the text, if shown.
     note: bool,
@@ -375,11 +360,10 @@ struct Laid {
 }
 
 /// `quote` laid out in widget area `area`, below the caption: where the
-/// text does not fit, the mark goes first, then the note, then the book;
-/// what is left is shortened.
+/// text does not fit whole, the mark goes first, then the note, then the
+/// book; what is left is shortened, broken between words only.
 fn lay_out(env: &Env<'_>, area: Rect, quote: &Quote) -> Option<Laid> {
     let style = UiStyle::new(env);
-    let font = style.font(env)?;
     let id = WIDGET;
     let gap = style.gap as u16;
     let look = widgets::look::look(env, id, area);
@@ -400,8 +384,11 @@ fn lay_out(env: &Env<'_>, area: Rect, quote: &Quote) -> Option<Laid> {
     let mut with_source = !source.is_empty();
     let mut marks = widgets::shows(env, id, "marks");
     let mark_size = style.title * 2.0;
-    let wanted = widgets::size(env, id);
-    let (size, text, mark_h, below) = loop {
+    let (max, min) = match widgets::size(env, id) {
+        Size::Fit => (style.title * 1.6, style.small),
+        other => (other.text(&style), other.text(&style)),
+    };
+    let (text, lines, size, mark_h, below) = loop {
         let below = u16::from(with_source) * small + u16::from(note) * small;
         let below = if below > 0 { below + gap / 2 } else { 0 };
         let mark_h = if marks {
@@ -418,31 +405,26 @@ fn lay_out(env: &Env<'_>, area: Rect, quote: &Quote) -> Option<Laid> {
             )
         };
         let room = area.height.saturating_sub(below + mark_h);
-        let size = match wanted {
-            Size::Fit => fitting_size(env, &text, area.width, room, style.title * 1.6),
-            other => {
-                let size = other.text(&style);
-                let lines = font.wrap(size, &text, f32::from(area.width)).len() as u16;
-                (lines * widgets::line_height(env, size) <= room).then_some(size)
-            }
-        };
-        match size {
-            Some(size) => break (size, text, mark_h, below),
-            None if marks => marks = false,
-            None if note => note = false,
-            None if with_source => with_source = false,
-            None => {
-                let size = match wanted {
-                    Size::Fit => style.small,
-                    other => other.text(&style),
-                };
-                break (size, text, mark_h, below);
-            }
+        let wrapped = Wrapped::fitting(env, &text, max, min, area.width, room);
+        if wrapped.whole() {
+            let lines = wrapped.lines().to_vec();
+            break (text, lines, wrapped.size(), mark_h, below);
+        }
+        if marks {
+            marks = false;
+        } else if note {
+            note = false;
+        } else if with_source {
+            with_source = false;
+        } else {
+            // As much as fits, ending in "…" (a word too long shortened,
+            // the rest left out).
+            let wrapped = Wrapped::new(env, &text, min, area.width, room);
+            break (text, wrapped.lines().to_vec(), min, mark_h, below);
         }
     };
     let room = area.height.saturating_sub(below + mark_h);
-    let lines = font.wrap(size, &text, f32::from(area.width)).len() as u16;
-    let text_h = (lines * widgets::line_height(env, size)).min(room);
+    let text_h = (lines.len() as u16 * widgets::line_height(env, size)).min(room);
     let total = (mark_h + text_h + below).min(area.height);
     let block = Rect::new(
         area.x,
@@ -454,7 +436,9 @@ fn lay_out(env: &Env<'_>, area: Rect, quote: &Quote) -> Option<Laid> {
         block,
         marks,
         mark_h,
-        text: Wrapped::new(env, &text, size, block.width, text_h),
+        text,
+        lines,
+        size,
         text_h,
         note,
         source: with_source.then_some(source),
@@ -487,8 +471,20 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, quote: &Quote, laid
         let baseline = i32::from(area.y) + metrics.ascent as i32 - (laid.mark_h / 4) as i32;
         font.draw(canvas, mark_size, x, baseline, mark, look.faint);
     }
+    // The text's lines, told as one text.
     let text_area = Rect::new(area.x, area.y + laid.mark_h, area.width, laid.text_h);
-    laid.text.draw(canvas, env, text_area, align, look.ink);
+    canvas.describe(Role::Text, &laid.text, text_area, false, None);
+    let line = widgets::line_height(env, laid.size);
+    let metrics = font.line_metrics(laid.size);
+    for (n, shown) in laid.lines.iter().enumerate() {
+        let y = text_area.y + line * n as u16;
+        if y + line > text_area.y + text_area.height {
+            break;
+        }
+        let baseline = f32::from(y) + (f32::from(line) + metrics.ascent - metrics.descent) / 2.0;
+        let x = align.x(text_area, font.measure(laid.size, shown));
+        font.draw(canvas, laid.size, x, baseline as i32, shown, look.ink);
+    }
     let mut y = area.y + laid.mark_h + laid.text_h + gap / 2;
     if laid.note {
         let row = Rect::new(area.x, y, area.width, small);
