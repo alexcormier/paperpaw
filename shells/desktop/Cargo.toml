@@ -21,6 +21,8 @@ paperpaw-fs.workspace = true
 paperpaw-serve.workspace = true
 paperpaw-graphics = { workspace = true, features = ["color"] }
 paperpaw-platform.workspace = true
+# The computer's random numbers, for keys (`KernelBuilder::random`).
+getrandom = "0.4"
 # The computer's time zone for the emulated clock.
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 png = "0.17"
