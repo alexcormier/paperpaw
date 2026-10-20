@@ -522,3 +522,6 @@ mod tests {
         assert_eq!(recent, 50);
     }
 }
+
+#[cfg(test)]
+mod hostile_tests;

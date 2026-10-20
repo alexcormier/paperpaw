@@ -1700,6 +1700,7 @@ dependencies = [
  "paperpaw-plugin-home",
  "paperpaw-sdk",
  "paperpaw-sqlite",
+ "proptest",
 ]
 
 [[package]]
