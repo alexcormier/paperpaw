@@ -896,6 +896,9 @@ change the plugin SDK.
   too long rather than carry them out cut.
 - `paperpaw-update`: `Plugins::record` gives `None` for a list longer
   than readers take, and the firmware's build stops there.
+- Updates: numbered pre-releases compare by number, as in SemVer
+  (`0.5.0-rc.10` after `0.5.0-rc.9`, where it counted as older and was
+  not offered; `firmware::compare_versions`).
 - The X4's remote control over USB (test builds) does much more, for
   developing on the device: the card (`ls`, `stat`, `md5`, `rm` also of
   folders, `mkdir`, `mv`, `sync`; `tools/x4-remote.py` pushes and pulls
