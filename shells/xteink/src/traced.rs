@@ -211,4 +211,8 @@ impl Storage for Traced {
     fn sync(&self) -> Result<(), StorageError> {
         note(|| "sync".into(), || self.0.sync())
     }
+
+    fn ignores_case(&self) -> bool {
+        self.0.ignores_case()
+    }
 }

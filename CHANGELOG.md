@@ -6,6 +6,105 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Plugins: a data plugin updated or removed while running takes its
+  stylesheet for books and its key bindings with it; before, the old
+  version's applied until a restart, beside the new one's.
+- Plugins: an update from the store that would not load (a translation
+  with a mistake, say) is refused before anything changes, so the
+  version before stays; before, it was removed and the new one marked
+  failed. A plugin offered under the name of one built in (such as
+  the default fonts or Wi-Fi) is refused, and installing a plugin from
+  the folder it is installed in no longer deletes it.
+- Plugins: data plugins are read one at a time at start, each let go
+  once registered, instead of all of them first; one switched off keeps
+  only its name and description in memory. A language pack beside a
+  few other data plugins no longer fills the X4's memory at every start.
+- Passwords and keys: the file that holds them is read again before
+  each change is saved. Where it cannot be read, it is left as it is and
+  the device says so; once it can be read again (corrected on a
+  computer), what it holds is used again and kept along with what was
+  entered since. Before, one failed read at start kept every later
+  password from being saved, without a word.
+- Languages: the kernel's translations name the language's decimal mark
+  (`.` in English, `,` in German), which every plugin can use for the
+  numbers it shows.
+- SDK: a time a screen asks for with `Cx::wake_at` is that screen's:
+  it comes while the screen is on top, waits while another covers it
+  (a menu, a keyboard, a quick panel) and is kept when the screen is
+  made anew for another size; before, it came to whatever screen was on
+  top and was forgotten whenever a screen opened or closed.
+  `Screen::on_close` is also called on the old screen when a screen is
+  made anew; the commands it gives then are not run.
+- Data plugins: translations named in capitals (`DE.INI`, as a memory
+  card or an old computer may name them) are read too.
+- Clean up storage: what is kept for a book still on the memory card
+  stays, also where no plugin opens its format now (switched off) and
+  whatever the case of its folder's name (`Books` or `books`); where a
+  folder cannot be read, nothing is removed and the device says so.
+  Before, notes, positions and covers of such books were deleted.
+- Plugins: a plugin being updated when the power went is no longer
+  lost: the version set aside for the install is put back at the next
+  start.
+- Plugins: a plugin (also a data plugin folder) named `plugins`,
+  `fonts`, `menus` or `slots` is refused with a warning: its settings in
+  `paperpaw.ini` would have been read as that section's entries and
+  dropped.
+- Speech: with "Say what has the focus" on, moving the focus quickly
+  says each row in place of the one before, where only the first was
+  said until it was done.
+- Screen: a menu or other screen opened again for something else (in
+  its place) no longer leaves pieces of the one before on the screen.
+  Turning the screen on the X4 makes the screens anew once, not twice,
+  and turning it half way round brings the row of button hints back
+  when it is upright again. Where memory is short when the screen is
+  turned or a picture is shown in grays, the frame is drawn in smaller
+  bands rather than not at all until a restart.
+- Buttons: a button let go no longer stays held when its press came
+  twice around a new screen showing (pressed again, or its release
+  missed): the kernel took it for held, and a long press followed by
+  itself (going home), or the next release was lost. The same goes for
+  a finger put down again.
+- Touch: two fingers resting on the screen no longer keep the device
+  awake (the kernel asked over and over to be woken for a long press
+  two fingers never make), and the finger left after lifting one of two
+  makes no long press either. A long press works at the edges of the
+  screen too, where swipes in from the edge begin: on the first line of
+  a book (to select a word) and on the keys along the edges of the
+  keyboard. Swipes in from the edges work as before.
+- Screens: a time a screen asks for is its own: it comes to that screen
+  once it is on top again, where before it came to whatever screen was
+  on top (a menu over the reader got the reader's) and was forgotten
+  whenever a screen opened or closed (the library's shelves stopped
+  being made). A screen covered by a menu, a keyboard or the quick panel
+  waits meanwhile: pages no longer turn by themselves and the clock no
+  longer refreshes below them. A screen made anew (the screen turned)
+  first keeps what it would lose, as when it closes: the reader its
+  position, which went back a few pages.
+- Settings: a `paperpaw.ini` that is there but cannot be read (saved in
+  another encoding than UTF-8, larger than 64 KiB, or a read of the
+  memory card failed) is no longer written over: PaperPaw starts with
+  the defaults, says so, and leaves the file as it is, where before the
+  next change of a setting, a key binding or a menu wrote a new file
+  with only that change and every other setting was lost. The same goes
+  for a book's own settings ("Only this book") and for the file of
+  passwords and keys. A `paperpaw.ini` saved as "UTF-8 with BOM" is read
+  whole (its first section was lost). Saving a book's own settings keeps
+  what else its file holds, such as the settings of a plugin switched
+  off.
+- Settings: "Only this book" holds while the book is open, also after
+  the screen was turned or the row of button hints changed in a menu
+  over the book; before, the next change went to every book.
+- Key bindings: binding a button in PaperPaw no longer drops the
+  emulator's own bindings from its user configuration.
+- Storage: whether names in another case are the same file (as on the
+  memory card) reaches plugins through the kernel's own layers; it read
+  "no" everywhere before. Where they are other files (a Linux disk), the
+  kernel no longer takes `A.txt` for `a.txt` in what it remembers of a
+  call's reads.
+- Wi-Fi: once work that waited for a network fails because none came
+  (away from every known network), nothing wants the radio any more,
+  so it may go off: before, it stayed wanted and the Wi-Fi plugin
+  looked for networks every few seconds until the device slept.
 - A new look, rounder and friendlier: soft corners, pills for buttons,
   switches, chips and the highlight, plain headers (the title on the
   page, a little larger, no bar or line), faint lines between rows from

@@ -772,7 +772,7 @@ struct FontPlugin;
 impl Plugin for FontPlugin {
     fn manifest(&self) -> Manifest {
         Manifest {
-            id: Id::new_static("fonts"),
+            id: Id::new_static("type"),
             name: Cow::Borrowed("Fonts"),
             description: Cow::Borrowed(""),
             version: Version::new(1, 0, 0),
@@ -781,7 +781,7 @@ impl Plugin for FontPlugin {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        for name in ["fonts.serif", "fonts.sans"] {
+        for name in ["type.serif", "type.sans"] {
             let mut pack = paperpaw_text::PackBuilder::new();
             let metrics = paperpaw_text::LineMetrics {
                 ascent: 8.0,
@@ -798,7 +798,7 @@ impl Plugin for FontPlugin {
         }
         r.bind_font(
             paperpaw_sdk::builtin::fonts::UI,
-            Id::new_static("fonts.sans"),
+            Id::new_static("type.sans"),
             Priority::DEFAULT,
         )?;
         Ok(())
@@ -811,19 +811,19 @@ fn font_roles_follow_proposals_and_user_config() {
     let fonts = kernel.fonts();
     assert_eq!(
         fonts.role("core.font-ui").unwrap().id().as_str(),
-        "fonts.sans"
+        "type.sans"
     );
     // No proposal for reading: the first registered font is used.
     assert_eq!(
         fonts.role("core.font-reading").unwrap().id().as_str(),
-        "fonts.serif"
+        "type.serif"
     );
 
     let mut kernel = Kernel::builder(DEVICE)
         .plugin(FontPlugin)
         .user_config(
             "[fonts]
-core.font-ui = fonts.serif
+core.font-ui = type.serif
 core.font-reading = nope.font
 ",
         )
@@ -831,7 +831,7 @@ core.font-reading = nope.font
         .unwrap();
     assert_eq!(
         kernel.fonts().role("core.font-ui").unwrap().id().as_str(),
-        "fonts.serif"
+        "type.serif"
     );
     let warnings = kernel.take_warnings();
     assert_eq!(warnings.len(), 1);
@@ -2458,8 +2458,12 @@ fn turned_screens_are_made_anew_for_the_new_size() {
     // The same screens, in the same order.
     let reopened: Vec<Id> = kernel.stack.iter().map(|s| s.id.clone()).collect();
     assert_eq!(reopened, open);
-    // The same size again: nothing to do.
-    assert!(kernel.resize(Instant(300), 120, 60).refresh().is_none());
+    // The same size again (turned half way round): drawn whole.
+    let effects = kernel.resize(Instant(300), 120, 60);
+    assert_eq!(
+        effects.refresh().map(|(_, mode)| mode),
+        Some(RefreshMode::Full)
+    );
 }
 
 #[test]
@@ -3112,6 +3116,10 @@ fn network_work_fails_when_no_network_comes() {
         log.borrow().as_slice(),
         ["core.network-wanted ", "net.reply 0", "core.network-idle "]
     );
+    assert!(
+        !kernel.shared.wifi.as_ref().unwrap().wanted,
+        "the radio may go off"
+    );
     assert!(kernel.take_requests().is_empty());
     assert_eq!(kernel.finish().wake_at(), None);
 }
@@ -3258,3 +3266,12 @@ fn overlays_leave_the_rows_they_do_not_cover() {
     assert_eq!(uncovered(part, Rect::new(0, 500, 480, 100)), Some(part));
     assert_eq!(uncovered(part, Rect::new(40, 200, 400, 600)), Some(part));
 }
+
+mod clean_up;
+mod frames;
+mod input;
+mod kernel_calls;
+mod plugins_loaded;
+mod screen_life;
+mod settings_files;
+mod storage;

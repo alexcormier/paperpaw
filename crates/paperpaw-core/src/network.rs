@@ -26,6 +26,9 @@ pub(crate) struct IoState {
     pub(crate) network_waiting: Option<Instant>,
     /// Something used the network at the end of the last call.
     pub(crate) network_busy: bool,
+    /// What is spoken is the kernel's own word of the focus
+    /// (`Kernel::speak_focus`), which the next replaces.
+    pub(crate) focus_spoken: bool,
 }
 
 impl Kernel {
@@ -100,15 +103,14 @@ impl Kernel {
         match (waiting, self.io.network_waiting) {
             (true, None) => {
                 self.io.network_waiting = Some(self.now);
-                wifi.wanted = true;
                 self.output.commands.push(events::NETWORK_WANTED.emit(()));
             }
-            (false, Some(_)) => {
-                self.io.network_waiting = None;
-                wifi.wanted = false;
-            }
+            (false, Some(_)) => self.io.network_waiting = None,
             _ => {}
         }
+        // Also once waiting work failed (`fail_waiting_network`): nothing
+        // wants the radio then.
+        wifi.wanted = self.io.network_waiting.is_some();
         let busy = self.io.http.busy() || self.io.servers.busy() || self.io.sockets.any();
         wifi.busy = busy;
         if self.io.network_busy && !busy {
@@ -154,6 +156,7 @@ impl Kernel {
 
     /// What happened with a server: started, failed, a request.
     pub fn server_event(&mut self, now: Instant, event: ServerEvent) -> Effects {
+        let _running = self.shared.meter.enter(meter::CORE);
         self.now = now;
         let storage = &*self.shared.storage;
         self.io
@@ -237,6 +240,7 @@ impl Kernel {
     /// Text `id` of a [`SpeechCall::Say`] was spoken (`spoken`), or could
     /// not be.
     pub fn speech_done(&mut self, now: Instant, id: u32, spoken: bool) -> Effects {
+        let _running = self.shared.meter.enter(meter::CORE);
         self.now = now;
         self.io.speech.done(id, spoken, &mut self.output.commands);
         self.finish()
@@ -251,6 +255,7 @@ impl Kernel {
     /// ([`Io::ReadClipboard`]); `None` if it could not be read (the text
     /// copied here is used).
     pub fn clipboard_text(&mut self, now: Instant, text: Option<String>) -> Effects {
+        let _running = self.shared.meter.enter(meter::CORE);
         self.now = now;
         if let Some(text) = text {
             self.shared.clipboard = clipped(&text);
