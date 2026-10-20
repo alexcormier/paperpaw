@@ -19,6 +19,9 @@ use crate::{
 
 /// Translation keys of an item's options: this, then the option.
 const OPTIONS: &str = "core.grid.";
+/// Placements of a widget tried at most for one of its own: more than a
+/// grid has cells, on many pages.
+const PLACEMENTS: u32 = 256;
 
 /// What a [`GridView`] did with an input, for its screen.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -476,10 +479,10 @@ impl GridView {
     }
 
     /// A placement of widget `id` (`id@n`) no item here and no values set
-    /// so far use.
+    /// so far use; `id` itself where the first [`PLACEMENTS`] all are.
     fn place(&self, env: &Env<'_>, id: &str) -> alloc::string::String {
         let base = Id::parse(id).unwrap_or_else(|_| Id::new_static("core"));
-        (1..)
+        (1..=PLACEMENTS)
             .map(|n| base.placement(n))
             .find(|placed| {
                 let used = self
@@ -878,7 +881,7 @@ mod tests {
     use crate::{
         Actions, DeviceInfo, DisplayInfo, EnvParts, Fonts, Formats, Hyphenation, InputCaps,
         Instant, MemoryClass, MemoryStorage, Menus, Metrics, Output, PixelFormat, Plugins,
-        PointerTool, Settings, SystemStatus, Translator,
+        PointerTool, Setting, SettingSpec, SettingValue, Settings, SystemStatus, Translator,
     };
 
     const CHOSEN: Event<Picked> = Event::new("test.chosen");
@@ -1415,5 +1418,32 @@ mod tests {
         // Options of an item not there are not taken.
         assert_eq!(pick(&mut grid, &env, 5, "remove"), GridResponse::Handled);
         assert_eq!(grid.items().len(), 2);
+    }
+
+    #[test]
+    fn placements_are_tried_a_bounded_number_of_times() {
+        let face = Setting::<bool>::new("test.w.face");
+        let kit = |values: u32| {
+            let mut kit = Kit::new(false);
+            kit.settings
+                .define(SettingSpec::switch(&face, "face", false))
+                .unwrap();
+            for n in 1..=values {
+                let id = format!("test.w@{n}.face");
+                kit.settings.set(&id, SettingValue::Bool(true)).unwrap();
+            }
+            kit
+        };
+        // The first placement neither an item nor a value uses.
+        let few = kit(1);
+        let env = few.env();
+        let widget = What::Widget("test.w@2".into());
+        let grid = laid_out(&env, &[at(widget, 0, 0, 1, 1)], &[]);
+        assert_eq!(grid.place(&env, "test.w"), "test.w@3");
+        // Every placement tried is used: the widget's own id.
+        let many = kit(PLACEMENTS);
+        let env = many.env();
+        let grid = laid_out(&env, &[], &[]);
+        assert_eq!(grid.place(&env, "test.w"), "test.w");
     }
 }
