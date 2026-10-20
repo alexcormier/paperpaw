@@ -6,6 +6,18 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Memory card: a file renamed to another case of its name (`book.epub`
+  to `Book.epub`) is no longer removed, and a folder is no longer moved
+  into itself by another case of its name. A file open under one
+  spelling of its path and written anew or removed under another is no
+  longer read from, or written back over, clusters given to other
+  files. Changes reach the card in the order they were made, each one
+  when it is done (appends still when written back): cut off by an
+  empty battery, the card holds a file's old content or its new one,
+  whole, but for short moments the FAT library leaves open (a file
+  removed has its clusters freed before its name is gone; a file moved
+  to another folder is at neither place for a moment). A damaged folder
+  whose clusters run in a loop is no longer read for ever.
 - Going back to an older update no longer lets it write over the
   library's files a newer PaperPaw wrote: annotations, the books opened
   last, the favourites and a book's details are read through
