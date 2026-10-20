@@ -15,8 +15,9 @@
 //! - `styles.txt`: the rules of all the book's stylesheets (see `css`).
 //! - `fonts.txt`: the embedded fonts: first `id<TAB>identifier`, then per
 //!   font `family<TAB>bold<TAB>italic<TAB>obfuscation<TAB>path`.
-//! - `package.ini`: cache version, book size, metadata and counts. Written
-//!   last, so its presence marks a complete package cache.
+//! - `package.ini`: cache version, the book's fingerprint (see
+//!   `crate::fingerprint`), metadata and counts. Written last, so its
+//!   presence marks a complete package cache.
 
 use alloc::borrow::Cow;
 use alloc::string::{String, ToString};
@@ -206,17 +207,17 @@ fn read_u32(storage: &dyn Storage, path: &str, offset: u64) -> Option<u32> {
 }
 
 /// The package from the cache, if it is complete and matches the book.
-pub(crate) fn load(storage: &dyn Storage, cache: &str, book_size: u64) -> Option<Package> {
+pub(crate) fn load(storage: &dyn Storage, cache: &str, book: &str) -> Option<Package> {
     let data = paperpaw_sdk::read_file(storage, &path(cache, "package.ini"), 16 * 1024).ok()?;
     let source = core::str::from_utf8(&data).ok()?;
     let mut metadata = Metadata::default();
-    let (mut version, mut size, mut sections, mut toc_len) = (None, None, None, None);
+    let (mut version, mut stamp, mut sections, mut toc_len) = (None, None, None, None);
     let mut cover = None;
     for entry in config::parse(source) {
         let entry = entry.ok()?;
         match (entry.section, entry.key) {
             ("cache", "version") => version = entry.value.as_u32(),
-            ("cache", "size") => size = entry.value.raw().parse::<u64>().ok(),
+            ("cache", "source") => stamp = Some(entry.value.as_str().into_owned()),
             ("book", "title") => metadata.title = Some(entry.value.as_str().into_owned()),
             ("book", key) if key.starts_with("author.") => {
                 metadata.authors.push(entry.value.as_str().into_owned());
@@ -238,7 +239,7 @@ pub(crate) fn load(storage: &dyn Storage, cache: &str, book_size: u64) -> Option
             _ => {}
         }
     }
-    if version != Some(CACHE_VERSION) || size != Some(book_size) {
+    if version != Some(CACHE_VERSION) || stamp.as_deref() != Some(book) {
         return None;
     }
     let sections = sections? as usize;
@@ -359,26 +360,6 @@ pub(crate) fn styles(storage: &dyn Storage, cache: &str) -> css::Rules {
         .and_then(|data| String::from_utf8(data).ok())
         .map(|text| css::Rules::decode(&text))
         .unwrap_or_default()
-}
-
-/// Removes the files that mark a complete cache, so it is rebuilt.
-pub(crate) fn invalidate(
-    storage: &dyn Storage,
-    cache: &str,
-    chapter_marker: impl Fn(u32) -> String,
-) {
-    let spine = path(cache, "spine.bin");
-    let Ok(size) = storage.size(&spine) else {
-        // A cache from before there was a spine file: no telling which of
-        // its files mark chapters, so all go.
-        let _ = storage.remove_dir_all(cache);
-        return;
-    };
-    let sections = size / 8;
-    for section in 0..sections as u32 {
-        let _ = storage.remove(&chapter_marker(section));
-    }
-    let _ = storage.remove(&path(cache, "package.ini"));
 }
 
 /// Reads table of contents entry `index` from the cache.
@@ -502,12 +483,13 @@ impl<'a> TocWriter<'a> {
     }
 }
 
-/// Reads the package from the archive and writes it to the cache.
+/// Reads the package from the archive and writes it to the cache, for
+/// the book of fingerprint `book`.
 pub(crate) fn build(
     storage: &dyn Storage,
     archive: &ZipArchive,
     cache: &str,
-    book_size: u64,
+    book: &str,
 ) -> Result<Package, DocumentError> {
     let opf_path = package_path(storage, archive)?;
     let opf = read_metadata(storage, archive, &opf_path)?;
@@ -530,9 +512,7 @@ pub(crate) fn build(
     write_styles(storage, archive, cache, &items.stylesheets, &identifier)?;
     let sections = items.spine.len();
     let cover = items.cover.as_deref();
-    write_ini(
-        storage, cache, &metadata, sections, toc_len, cover, book_size,
-    )?;
+    write_ini(storage, cache, &metadata, sections, toc_len, cover, book)?;
     Ok(Package {
         metadata,
         spine: items.spine,
@@ -950,14 +930,14 @@ fn write_ini(
     sections: usize,
     toc_len: u32,
     cover: Option<&str>,
-    book_size: u64,
+    book: &str,
 ) -> Result<(), DocumentError> {
     let mut ini = String::new();
     let mut set = |section: &str, key: &str, value: &str| {
         ini = config::set(&ini, section, key, value);
     };
     set("cache", "version", &CACHE_VERSION.to_string());
-    set("cache", "size", &book_size.to_string());
+    set("cache", "source", book);
     if let Some(title) = &metadata.title {
         set("book", "title", title);
     }

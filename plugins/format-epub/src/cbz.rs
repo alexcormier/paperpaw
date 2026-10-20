@@ -12,7 +12,6 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::cmp::Ordering;
 
-use paperpaw_digest::fnv1a64;
 use paperpaw_sdk::document::{
     Align, Block, BlockKind, Document, DocumentError, ImageRef, Locator, Metadata, OffsetMap,
 };
@@ -116,12 +115,12 @@ impl CbzDocument {
         }
         pages.sort_by(|a, b| natural(a, b));
         let cache = format!(
-            "{}/cbz-{:016x}",
+            "{}/cbz-{}",
             Env::plugin_dir(PLUGIN.as_str()),
-            fnv1a64(path.as_bytes())
+            paperpaw_sdk::library::key(path)
         );
         // Pictures decoded from another file of the same name go.
-        let stamp = format!("{} {}\n", storage.size(path)?, pages.len());
+        let stamp = format!("{} {}\n", crate::fingerprint(storage, path)?, pages.len());
         let stamp_path = format!("{cache}/source");
         if paperpaw_sdk::read_file(storage, &stamp_path, 64).ok()
             != Some(stamp.clone().into_bytes())

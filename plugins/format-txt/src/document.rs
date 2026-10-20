@@ -499,7 +499,17 @@ fn utf8_copy(
 ) -> Result<String, DocumentError> {
     let base = format!("{}/{}", Env::plugin_dir(PLUGIN.as_str()), key(path));
     let (copy, stamp_path) = (format!("{base}.txt"), format!("{base}.source"));
-    let stamp = format!("{size}\n");
+    // Its size and a hash of its first and last 4 KiB tell the file from
+    // another of its name (storages tell no time a file was changed).
+    let mut ends = read(storage, path, 0, size.min(UTF16_PIECE))?;
+    ends.extend_from_slice(&read(
+        storage,
+        path,
+        size.saturating_sub(UTF16_PIECE),
+        size,
+    )?);
+    let stamp = format!("{size} {:016x}\n", paperpaw_digest::fnv1a64(&ends));
+    drop(ends);
     if read_file(storage, &stamp_path, 64).ok().as_deref() == Some(stamp.as_bytes())
         && storage.exists(&copy)
     {
@@ -961,6 +971,21 @@ mod tests {
         assert_eq!(&file[offset as usize..offset as usize + 3], b"na\xef");
         assert_eq!(decode_utf8(&[0xff, b'a']), ('ÿ', 1));
         assert_eq!(decode_utf8(&[0xc3]), ('Ã', 1));
+    }
+
+    #[test]
+    fn a_replaced_utf_16_file_of_the_same_size_is_copied_anew() {
+        let utf16 = |text: &str| -> Vec<u8> {
+            core::iter::once(0xfeff)
+                .chain(text.encode_utf16())
+                .flat_map(u16::to_le_bytes)
+                .collect()
+        };
+        let (storage, document) = open(utf16("Alpha."));
+        assert_eq!(texts(&blocks(&storage, &document)), ["Alpha."]);
+        storage.write("books/book.txt", &utf16("Bravo.")).unwrap();
+        let document = TxtDocument::open(&storage, "books/book.txt").unwrap();
+        assert_eq!(texts(&blocks(&storage, &document)), ["Bravo."]);
     }
 
     #[test]

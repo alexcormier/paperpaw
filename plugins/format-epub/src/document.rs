@@ -179,13 +179,12 @@ fn position(line: &str) -> Option<(u32, &str)> {
 /// is past the chapter.
 const MAX_SPAN: u32 = 16 * 1024;
 
-/// Where chapters converted without the book's styles are kept.
 /// The cache of a book.
 fn book_cache(path: &str) -> String {
     alloc::format!(
-        "{}/{:016x}",
+        "{}/{}",
         Env::plugin_dir(PLUGIN.as_str()),
-        fnv1a64(path)
+        paperpaw_sdk::library::key(path)
     )
 }
 
@@ -214,6 +213,21 @@ fn chapters_cache(
     (chapters, user_css)
 }
 
+/// Removes the folders of chapters converted with stylesheets of one's
+/// own in `cache`, but `keep`.
+fn remove_other_css(storage: &dyn Storage, cache: &str, keep: &str) {
+    let mut gone = Vec::new();
+    let _ = storage.list(cache, &mut |entry| {
+        if entry.is_dir && entry.name.starts_with("css-") {
+            gone.push(alloc::format!("{cache}/{}", entry.name));
+        }
+    });
+    for dir in gone.iter().filter(|dir| *dir != keep) {
+        let _ = storage.remove_dir_all(dir);
+    }
+}
+
+/// Where chapters converted without the book's styles are kept.
 fn plain_cache(cache: &str) -> String {
     alloc::format!("{cache}/plain")
 }
@@ -286,20 +300,23 @@ impl EpubDocument {
     ) -> Result<Self, DocumentError> {
         let archive = ZipArchive::open(storage, path).map_err(package::error)?;
         let cache = book_cache(path);
-        let size = storage.size(path)?;
-        let package = match package::load(storage, &cache, size) {
+        let book = crate::fingerprint(storage, path)?;
+        let package = match package::load(storage, &cache, &book) {
             Some(package) => package,
             None => {
-                // Another book, file version or cache format: start over.
-                let plain = plain_cache(&cache);
-                package::invalidate(storage, &cache, |section| {
-                    let _ = storage.remove(&paths(&plain, section).end);
-                    paths(&cache, section).end
-                });
-                package::build(storage, &archive, &cache, size)?
+                // Another book, file version or cache format: start over,
+                // also with its pictures and its chapters converted with
+                // stylesheets or without.
+                let _ = storage.remove_dir_all(&cache);
+                package::build(storage, &archive, &cache, &book)?
             }
         };
         let (chapters, user_css) = chapters_cache(storage, path, &cache, styles, plugin_css);
+        if chapters.contains("/css-") && !storage.exists(&paths(&chapters, 0).end) {
+            // Stylesheets of one's own changed: the chapters converted
+            // with those before go.
+            remove_other_css(storage, &cache, &chapters);
+        }
         let mut metadata = package.metadata;
         if metadata.title.is_none() {
             let name = path.rsplit('/').next().unwrap_or(path);

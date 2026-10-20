@@ -89,6 +89,21 @@ fn text(field: &[u8]) -> String {
     String::from_utf8_lossy(&field[..end]).trim().to_string()
 }
 
+/// Bytes at each end of a file that tell it from another of its size.
+const ENDS: u64 = 4096;
+
+/// What tells the file at `path` (`size` bytes) from another of its name:
+/// its size and a hash of its first and last 4 KiB (storages tell no time
+/// a file was changed).
+fn fingerprint(storage: &dyn Storage, path: &str, size: u64) -> Result<String, DocumentError> {
+    let ends = size.min(ENDS);
+    let mut bytes = zeroed(2 * ends as usize)?;
+    let (head, tail) = bytes.split_at_mut(ends as usize);
+    read_exact(storage, path, 0, head)?;
+    read_exact(storage, path, size - ends, tail)?;
+    Ok(format!("{size} {:016x}", fnv1a64(&bytes)))
+}
+
 /// `len` zero bytes; an error instead of an abort when memory is short.
 fn zeroed(len: usize) -> Result<Vec<u8>, DocumentError> {
     let mut buf = Vec::new();
@@ -244,7 +259,7 @@ impl XtcDocument {
             fnv1a64(path.as_bytes())
         );
         // Pages decoded from another file of the same name go.
-        let stamp = format!("{size} {pages}\n");
+        let stamp = format!("{} {pages}\n", fingerprint(storage, path, size)?);
         let stamp_path = format!("{cache}/source");
         if paperpaw_sdk::read_file(storage, &stamp_path, 64).ok()
             != Some(stamp.clone().into_bytes())
@@ -739,6 +754,22 @@ mod tests {
         storage.take();
         doc.block_at(&storage, Locator::new(0, 0)).unwrap().unwrap();
         assert!(storage.take().0 > 0);
+    }
+
+    #[test]
+    fn a_replaced_book_of_the_same_size_is_decoded_anew() {
+        let storage = MemoryStorage::new().with("b/t.xtc", book(&[page(XTG, 8, 1, &[0x00])]));
+        let pixel = |storage: &MemoryStorage| {
+            let doc = XtcDocument::open(storage, "b/t.xtc").unwrap();
+            let block = doc.block_at(storage, Locator::new(0, 0)).unwrap().unwrap();
+            rows(storage, &block.image.unwrap())[0][0]
+        };
+        assert_eq!(pixel(&storage), 0);
+        // Black, then white: the same size.
+        storage
+            .write("b/t.xtc", &book(&[page(XTG, 8, 1, &[0xff])]))
+            .unwrap();
+        assert_eq!(pixel(&storage), 255);
     }
 
     #[test]

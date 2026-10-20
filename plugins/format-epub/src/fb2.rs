@@ -24,7 +24,6 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::cell::Cell;
 
-use paperpaw_digest::fnv1a64;
 use paperpaw_sdk::document::{
     Block, Document, DocumentError, ImageRef, Link, Locator, Metadata, TocEntry,
 };
@@ -402,26 +401,26 @@ impl Fb2Document {
         let (styles, color) = (options.publisher_styles, options.color);
         let (image_fit, cover_fit) = (options.image_fit, options.cover_fit);
         let size = storage.size(path)?;
-        let head = crate::head(storage, path)?;
+        let book = crate::fingerprint(storage, path)?;
         let mut cache = format!(
-            "{}/fb2-{:016x}",
+            "{}/fb2-{}",
             Env::plugin_dir(PLUGIN.as_str()),
-            fnv1a64(path.as_bytes())
+            paperpaw_sdk::library::key(path)
         );
         if !styles {
             cache.push_str("/plain");
         }
         let paths = CachePaths::new(&cache, "0");
-        // Read again when the file or the way it is read changed.
-        let stamp = format!(
-            "{}.{FB2_VERSION} {size} {:016x}\n",
-            crate::package::CACHE_VERSION,
-            fnv1a64(&head)
-        );
+        // Read again when the file or the way it is read changed, and then
+        // nothing made of it before stays (its pictures).
+        let stamp = format!("{}.{FB2_VERSION} {book}\n", crate::package::CACHE_VERSION);
         let stamp_path = format!("{cache}/source");
         let info_path = format!("{cache}/book.txt");
         let fresh = paperpaw_sdk::read_file(storage, &stamp_path, 256).ok()
             == Some(stamp.clone().into_bytes());
+        if !fresh {
+            let _ = storage.remove_dir_all(&cache);
+        }
         // A zipped book is read from its unpacked copy.
         let zipped = path.to_ascii_lowercase().ends_with(".zip");
         let file = if zipped {

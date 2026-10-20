@@ -8,7 +8,6 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::cell::Cell;
 
-use paperpaw_digest::fnv1a64;
 use paperpaw_sdk::document::{Block, Document, DocumentError, Link, Locator, Metadata};
 use paperpaw_sdk::xml::{Token, Tokenizer, decode, local_name};
 use paperpaw_sdk::{Env, Storage};
@@ -198,12 +197,12 @@ impl HtmlDocument {
         }
         let paths = CachePaths::new(&cache, "0");
         // Read and converted again when the file or the cache format
-        // changed; what a look at the page finds is kept meanwhile.
-        let head = crate::head(storage, path)?;
+        // changed, and then nothing made of it before stays; what a look
+        // at the page finds is kept meanwhile.
         let stamp = format!(
-            "{}.{HTML_VERSION} {size} {:016x}\n",
+            "{}.{HTML_VERSION} {}\n",
             crate::package::CACHE_VERSION,
-            fnv1a64(&head)
+            crate::fingerprint(storage, path)?
         );
         let stamp_path = format!("{cache}/source");
         let page_path = format!("{cache}/page.txt");
@@ -212,7 +211,7 @@ impl HtmlDocument {
         let found = match fresh.then(|| load_scan(storage, &page_path)).flatten() {
             Some(found) => found,
             None => {
-                let _ = storage.remove(&paths.end);
+                let _ = storage.remove_dir_all(&cache);
                 let found = scan(storage, path)?;
                 storage.write(&page_path, save_scan(&found).as_bytes())?;
                 storage.write(&stamp_path, stamp.as_bytes())?;

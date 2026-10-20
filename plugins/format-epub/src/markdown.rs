@@ -8,7 +8,6 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use paperpaw_digest::fnv1a64;
 use paperpaw_sdk::document::{Block, Document, DocumentError, Link, Locator, Metadata, TocEntry};
 use paperpaw_sdk::{Env, Storage};
 
@@ -27,15 +26,13 @@ pub struct MarkdownDocument {
 
 impl MarkdownDocument {
     pub fn open(storage: &dyn Storage, path: &str, styles: bool) -> Result<Self, DocumentError> {
-        let size = storage.size(path)?;
-        let head = crate::head(storage, path)?;
         let dir = format!(
-            "{}/md-{:016x}",
+            "{}/md-{}",
             Env::plugin_dir(PLUGIN.as_str()),
-            fnv1a64(path.as_bytes())
+            paperpaw_sdk::library::key(path)
         );
         let html_path = format!("{dir}/book.html");
-        let stamp = format!("{MD_VERSION} {size} {:016x}\n", fnv1a64(&head));
+        let stamp = format!("{MD_VERSION} {}\n", crate::fingerprint(storage, path)?);
         let stamp_path = format!("{dir}/source");
         if paperpaw_sdk::read_file(storage, &stamp_path, 128).ok()
             != Some(stamp.clone().into_bytes())
