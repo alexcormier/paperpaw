@@ -127,6 +127,14 @@ jobs:
       - name: The store's first-party plugins
         env:
           FINGERPRINT: ${{ steps.native.outputs.fingerprint }}
+        run: |
+          tools/plugin-files/build.sh "$DEVICE" dist/plugins --fingerprint "$FINGERPRINT"
+          # The signing tool, built before the key comes near the disk.
+          cargo build -q --release -p paperpaw-sign
+      # Apart from every build: the key is on the disk only while the
+      # files are signed (audit O-17).
+      - name: Sign the store's first-party plugins
+        env:
           PAPERPAW_PLUGIN_KEY: ${{ secrets.PAPERPAW_PLUGIN_KEY }}
         run: |
           if [[ -z "$PAPERPAW_PLUGIN_KEY" ]]; then
@@ -134,9 +142,9 @@ jobs:
             exit 1
           fi
           key="$RUNNER_TEMP/plugin.key"
+          trap 'rm -f "$key"' EXIT
           (umask 077 && printf '%s\n' "$PAPERPAW_PLUGIN_KEY" > "$key")
-          tools/plugin-files/build.sh "$DEVICE" dist/plugins --key "$key" --fingerprint "$FINGERPRINT"
-          rm -f "$key"
+          tools/plugin-files/sign.sh dist/plugins target/release/paperpaw-sign --key "$key"
       - name: Sign the update and the flash image with the firmware's key
         env:
           PAPERPAW_SIGNING_KEY: ${{ secrets.PAPERPAW_SIGNING_KEY }}

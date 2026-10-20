@@ -285,6 +285,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "paperpaw-qr"
+version = "0.4.0-dev"
+
+[[package]]
 name = "paperpaw-sdk"
 version = "0.4.0-dev"
 dependencies = [
@@ -298,6 +302,7 @@ dependencies = [
  "paperpaw-layout",
  "paperpaw-native",
  "paperpaw-platform",
+ "paperpaw-qr",
  "paperpaw-text",
  "paperpaw-update",
  "paperpaw-xml",

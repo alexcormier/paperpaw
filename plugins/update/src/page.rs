@@ -169,8 +169,9 @@ impl UpdatePage {
                 }
             }
             (_, Some(offer)) => {
+                let wanted = crate::fetch::wanted(env, &offer.builds);
                 let leaves = offer
-                    .leaves_out(env.storage, firmware)
+                    .leaves_out(env.storage, firmware, &wanted)
                     .into_iter()
                     .map(String::from)
                     .collect();

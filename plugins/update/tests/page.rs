@@ -713,7 +713,11 @@ fn what_is_left_for_an_update_installed_meanwhile_is_let_go() {
     // Installed from elsewhere (the card) before the fetch was done.
     let device = with_code(storage, "0.5.0");
     assert!(!device.storage.exists(".paperpaw/plugins/update/fetch.txt"));
-    assert!(!device.storage.exists(".paperpaw/plugins/update/fetch-current.txt"));
+    assert!(
+        !device
+            .storage
+            .exists(".paperpaw/plugins/update/fetch-current.txt")
+    );
 }
 
 #[test]
@@ -757,4 +761,24 @@ fn plugins_that_become_files_are_fetched_before_the_update() {
     let shown = device.shown();
     assert!(shown.contains("Install"), "{shown}");
     assert!(!shown.contains("cannot come along"), "{shown}");
+}
+
+#[test]
+fn a_plugin_without_room_for_its_code_is_not_fetched() {
+    let storage = Shared::default();
+    // The room this device has for code plugins, too small for it.
+    let room = paperpaw_sdk::native::CodeRoom::new(64, 0, 1);
+    assert!(paperpaw_sdk::native::keep_code_room(&storage, Some(&room)));
+    let mut device = with_code(storage, "0.4.0");
+    fetch_begun(&mut device);
+    let io = device.kernel.take_io();
+    assert!(io.iter().all(|io| !matches!(io, Io::Http(_))), "{io:?}");
+    // Ready, and said as left out: it comes from the store, room made.
+    let shown = device.shown().replace(" | ", " ");
+    assert!(shown.contains("Update without them"), "{shown}");
+    assert!(
+        shown.contains("cannot come along: paperpaw-plugin-stats"),
+        "{shown}"
+    );
+    assert!(!device.storage.exists("plugins/.stats.next/plugin.ini"));
 }

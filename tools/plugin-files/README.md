@@ -17,6 +17,7 @@ folders and their entries for the plugin library:
 |---|---|
 | `plugins.txt` | the plugins, with their group in the plugin library |
 | `build.sh <device> <out> [--key <file>] [--fingerprint <hex>]` | builds, packs and checks the files for one reader: `<id>-<version>-<device>.ppn` |
+| `sign.sh <dir> <paperpaw-sign> --key <file>` | signs the files apart from building them, so the key is on the disk only while it signs |
 | `catalogue.py <dist> <version> <base-url>` | each plugin's folder as a ZIP (its `plugin.ini`), its entry `catalogue/<id>.toml` for the plugin library, `SHA256SUMS` |
 
 A plugin added to `plugins.txt` gets a binary here (`src/bin/<id>.rs`),
@@ -25,3 +26,8 @@ of `crates/paperpaw-app`. Its manifest says the crate's version
 (`paperpaw_sdk::package_version!()`), so each release is a new version
 of it, and it keeps no writable statics (`paperpaw-sign pack` refuses a
 file with any).
+
+`Cargo.lock` is committed: the release builds with `--locked`, and the
+plugin library rebuilds each file from it. When a plugin's dependencies
+change, it is brought up to date here with `cargo update -w --offline`
+(CI fails until it is).

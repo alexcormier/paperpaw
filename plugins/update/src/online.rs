@@ -121,16 +121,18 @@ impl Offer {
     }
 
     /// The plugin crates the running firmware has that this update lacks
-    /// and that do not come back as files (see [`fetch`]).
+    /// and that do not come back as files: among the builds `wanted`
+    /// (those this device takes, `fetch::wanted`), or fetched already.
     pub(crate) fn leaves_out<'a>(
         &'a self,
         storage: &dyn Storage,
         firmware: &'a Firmware,
+        wanted: &[Build],
     ) -> Vec<&'a str> {
         firmware
             .plugins
             .missing_from(&self.plugins)
-            .filter(|c| !fetch::comes_back(storage, &self.builds, c))
+            .filter(|c| !fetch::comes_back(storage, wanted, c))
             .collect()
     }
 
@@ -443,7 +445,7 @@ mod tests {
         assert_eq!(offer.size, 6_194_784);
         let storage = paperpaw_sdk::MemoryStorage::new();
         assert_eq!(
-            offer.leaves_out(&storage, &firmware),
+            offer.leaves_out(&storage, &firmware, &offer.builds),
             ["paperpaw-plugin-chess"]
         );
         assert_eq!(
@@ -475,7 +477,7 @@ mod tests {
         )
         .unwrap();
         let storage = paperpaw_sdk::MemoryStorage::new();
-        assert!(all.leaves_out(&storage, &firmware).is_empty());
+        assert!(all.leaves_out(&storage, &firmware, &[]).is_empty());
     }
 
     #[test]

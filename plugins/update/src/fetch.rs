@@ -195,11 +195,54 @@ pub(crate) fn plugin_of(crate_name: &str) -> &str {
 }
 
 /// Whether the plugin of `crate_name`, which an update leaves out, comes
-/// back as a file: named among `builds`, or fetched already.
-pub(crate) fn comes_back(storage: &dyn Storage, builds: &[Build], crate_name: &str) -> bool {
+/// back as a file: among the builds this device takes (`wanted`, see
+/// [`wanted`]), or fetched already and checked.
+pub(crate) fn comes_back(storage: &dyn Storage, wanted: &[Build], crate_name: &str) -> bool {
     let id = plugin_of(crate_name);
-    builds.iter().any(|b| b.package.plugin == id)
-        || storage.exists(&format!("{}/plugin.ini", native::fetched_folder(id)))
+    wanted.iter().any(|b| b.package.plugin == id)
+        || (native::fetched_code(storage, id).is_some()
+            && storage.exists(&format!("{}/plugin.ini", native::fetched_folder(id))))
+}
+
+/// Of `builds`, those that fit the room for code beside the code plugins
+/// that stay (where the room is known: an X4 has little), in order; and
+/// the names of those that do not. A build's file is taken as its size,
+/// at most what it needs.
+fn fitting(env: &Env<'_>, builds: Vec<Build>) -> (Vec<Build>, Vec<String>) {
+    let (Some(native_build), Some(room)) = (env.native, native::code_room(env.storage)) else {
+        return (builds, Vec::new());
+    };
+    let storage = env.storage;
+    let (mut taken, mut count) = native::installed_code_need(storage, &room, &native_build.file);
+    // Code plugins these builds replace make room for them.
+    for build in &builds {
+        let path = native_build.path(&paperpaw_sdk::files::join(
+            paperpaw_sdk::builtin::PLUGIN_DIR,
+            &build.package.plugin,
+        ));
+        if let Some(header) = native::read_header(storage, &path) {
+            taken = taken.saturating_sub(room.needs(u64::from(header.image_len), header.align));
+            count = count.saturating_sub(1);
+        }
+    }
+    let (mut fit, mut left_out) = (Vec::new(), Vec::new());
+    for build in builds {
+        let size = build
+            .package
+            .files
+            .iter()
+            .find(|f| f.path == native_build.file)
+            .map_or(0, |f| f.size);
+        let need = room.needs(size, 0);
+        if room.fits(taken, count, need) {
+            taken = taken.saturating_add(need);
+            count += 1;
+            fit.push(build);
+        } else {
+            left_out.push(build.package.name);
+        }
+    }
+    (fit, left_out)
 }
 
 /// Which of `builds` this device takes: where it loads code plugins, those
@@ -243,7 +286,11 @@ pub(crate) fn start(
     let storage = env.storage;
     let _ = storage.create_dir(&paperpaw_sdk::Env::plugin_dir(PLUGIN.as_str()));
     let _ = storage.remove(&file(FAILED));
-    keep(storage, version, builds);
+    let (builds, no_room) = fitting(env, builds.to_vec());
+    for name in no_room {
+        failed(storage, &name);
+    }
+    keep(storage, version, &builds);
     next(env, version, out);
     true
 }
@@ -453,13 +500,22 @@ mod tests {
     #[test]
     fn plugins_left_out_come_back_as_files() {
         let builds = parse(ANSWER);
-        let storage = paperpaw_sdk::MemoryStorage::new().with(
-            "plugins/.widgets.next/plugin.ini",
-            "[plugin]\nname = Widgets\n",
-        );
+        let storage = paperpaw_sdk::MemoryStorage::new()
+            .with(
+                "plugins/.widgets.next/plugin.ini",
+                "[plugin]\nname = Widgets\n",
+            )
+            .with(
+                "plugins/.weather.next/plugin.ini",
+                "[plugin]\nname = Weather\n",
+            );
+        // Fetched and checked: its code named as fetched; weather's not.
+        assert!(native::remember_fetched(&storage, "widgets", &[1; 32]));
         assert!(comes_back(&storage, &builds, "paperpaw-plugin-stats"));
         assert!(comes_back(&storage, &builds, "paperpaw-plugin-widgets"));
         assert!(!comes_back(&storage, &builds, "paperpaw-plugin-weather"));
+        // Not among those this device takes (switched off, say).
+        assert!(!comes_back(&storage, &[], "paperpaw-plugin-stats"));
         assert!(!comes_back(&storage, &builds, "chess-for-paperpaw"));
     }
 }
