@@ -109,6 +109,11 @@ impl Keys {
 
     /// The X4 Classic has no touch screen.
     pub fn touch(&mut self, _: &mut dyn FnMut(Touch)) {}
+
+    /// The X4 Classic has no home key (its Back is a button).
+    pub fn home_down(&self) -> bool {
+        false
+    }
 }
 
 /// The X4 Classic's parts, each once.

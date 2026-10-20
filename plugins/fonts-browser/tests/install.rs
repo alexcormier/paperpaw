@@ -1,7 +1,8 @@
 //! The fonts browser with the real kernel: the catalog is fetched and
 //! shown, a font is downloaded file by file, checked, loaded at once and
 //! chosen for reading, then removed; a damaged download is not
-//! installed.
+//! installed, nor one cut off by a restart; the catalog is fetched once
+//! each time the list is opened.
 
 // Tests panic on purpose when something is wrong.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
@@ -137,20 +138,25 @@ struct Browsing {
     now: u64,
 }
 
+/// PaperPaw started with the fonts browser on `storage`.
+fn started(storage: &Shared) -> Kernel {
+    let mut kernel = Kernel::builder(DEVICE)
+        .storage(storage.clone())
+        .network(true)
+        .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
+        .plugin(FontsBrowser)
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    kernel
+}
+
 impl Browsing {
     /// The list opened and its catalog answered.
     fn new(catalog: &str) -> Self {
         let storage = Shared::default();
-        let mut kernel = Kernel::builder(DEVICE)
-            .storage(storage.clone())
-            .network(true)
-            .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
-            .plugin(FontsBrowser)
-            .build()
-            .unwrap();
-        kernel.start(Instant(0));
         let mut browsing = Self {
-            kernel,
+            kernel: started(&storage),
             storage,
             now: 0,
         };
@@ -343,9 +349,11 @@ fn updating_the_font_one_reads_with_keeps_it() {
     };
     assert_eq!(reading(&browsing), "Round");
 
-    // A newer version in the catalog, fetched back on the list: its page
-    // offers *Update*, after *Read with*, *Status lines*.
+    // A newer version in the catalog, fetched when the list is opened
+    // again: its page offers *Update*, after *Read with*, *Status lines*.
     browsing.run(actions::BACK);
+    browsing.run(actions::BACK);
+    browsing.run(OPEN);
     let call = browsing.request(CATALOG);
     browsing.answer(&call, 200, catalog_of(&pack, &sha1, "1.1.0").as_bytes());
     browsing.run(actions::CONFIRM);
@@ -357,4 +365,60 @@ fn updating_the_font_one_reads_with_keeps_it() {
     assert_eq!(round.manifest.version.minor, 1);
     assert_eq!(reading(&browsing), "Round");
     assert!(browsing.storage.exists("plugins/font-round/plugin.ini"));
+}
+
+#[test]
+fn coming_back_to_the_list_fetches_nothing() {
+    let pack = pack();
+    let sha1 = paperpaw_digest::sha1::hex(&pack);
+    let mut browsing = Browsing::new(&catalog(&pack, &sha1));
+    // The font's page and back: the catalog fetched on opening serves.
+    browsing.run(actions::CONFIRM);
+    browsing.run(actions::BACK);
+    let calls = browsing.requests();
+    assert!(calls.iter().all(|c| c.url != CATALOG), "{calls:?}");
+    let shown = browsing.shown();
+    assert!(shown.contains("Round"), "{shown}");
+}
+
+#[test]
+fn a_font_page_has_its_font_from_the_list() {
+    let pack = pack();
+    let sha1 = paperpaw_digest::sha1::hex(&pack);
+    let mut browsing = Browsing::new(&catalog(&pack, &sha1));
+    // The catalog kept is not read again for the font's page.
+    browsing
+        .storage
+        .remove(".paperpaw/plugins/fonts-browser/catalog.json")
+        .unwrap();
+    browsing.run(actions::CONFIRM);
+    let shown = browsing.shown();
+    assert!(shown.contains("Download"), "{shown}");
+    browsing.run(actions::CONFIRM);
+    browsing.answer_files("1.0.0", &pack);
+    assert!(browsing.kernel.plugins().get("font-round").is_some());
+}
+
+#[test]
+fn a_download_cut_off_by_a_restart_is_dropped() {
+    let pack = pack();
+    let sha1 = paperpaw_digest::sha1::hex(&pack);
+    let mut browsing = Browsing::new(&catalog(&pack, &sha1));
+    // *Download*, its first file never answered.
+    browsing.run(actions::CONFIRM);
+    browsing.run(actions::CONFIRM);
+    let job = ".paperpaw/plugins/fonts-browser/install.txt";
+    assert!(browsing.storage.exists(job));
+
+    // A restart: the download is not shown as going on forever.
+    let mut kernel = started(&browsing.storage);
+    assert!(!browsing.storage.exists(job));
+    assert!(!browsing.storage.exists("plugins/.font-round.part"));
+    kernel.run_action(Instant(100), OPEN);
+    kernel.render(&mut |_, _| {});
+    let shown: Vec<String> = kernel.describe().into_iter().map(|p| p.label).collect();
+    assert!(
+        shown.iter().all(|label| !label.contains("0 / 2")),
+        "{shown:?}"
+    );
 }

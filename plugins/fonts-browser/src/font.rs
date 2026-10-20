@@ -6,7 +6,7 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use paperpaw_sdk::builtin::{actions, events, params, settings};
+use paperpaw_sdk::builtin::{actions, events, settings};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::install::Progress;
 use paperpaw_sdk::ui::choice::{self, Picked};
@@ -16,10 +16,14 @@ use paperpaw_sdk::{
     RefreshMode, Screen, SettingValue, files,
 };
 
-use crate::catalog::{self, Font};
+use crate::catalog::Font;
 use crate::install::{self, DOWNLOADED, INSTALLER};
 use crate::samples::{self, SAMPLE, Samples};
 use crate::{CHOICE, list};
+
+/// Parameter of a font's page: the font ([`Font::to_param`]), as the
+/// list has it.
+pub(crate) const FONT: &str = "font";
 
 /// The answer to *Remove?*.
 const REMOVE: Event<Picked> = Event::new("fonts-browser.remove");
@@ -78,8 +82,7 @@ impl FontScreen {
             display.width,
             status.y.saturating_sub(rows_top),
         );
-        let id = params.get(params::ID).unwrap_or_default();
-        let font = catalog::kept(env).into_iter().find(|f| f.id == id);
+        let font = params.get(FONT).and_then(Font::from_param);
         Self {
             list: ListView::new(area, style.row).focus_on_keys(env),
             sample,
@@ -118,12 +121,9 @@ impl FontScreen {
     }
 
     fn want_sample(&mut self, cx: &mut Cx<'_, '_>) {
-        let Some(font) = self.font.clone() else {
-            return;
-        };
         let env = *cx.env();
         let mut out = Vec::new();
-        if self.samples.want(&env, &[&font], &mut out) {
+        if self.samples.want(&env, self.font.as_slice(), &mut out) {
             self.redraw(cx);
         }
         for command in out {
@@ -202,7 +202,7 @@ impl FontScreen {
         match row {
             Row::Download => (
                 env.i18n.tr("fonts-browser.download").to_string(),
-                files::size(font.size(env), decimal),
+                files::size(font.size(), decimal),
             ),
             Row::Stop => {
                 let job = job.cloned().unwrap_or_default();
@@ -368,9 +368,7 @@ impl Screen for FontScreen {
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
         if let Some(reply) = SAMPLE.read(event, params) {
             let env = *cx.env();
-            if let Some(font) = self.font.clone() {
-                self.samples.received(&env, &reply, &[&font]);
-            }
+            self.samples.received(&env, &reply, self.font.as_slice());
             self.want_sample(cx);
         } else if let Some(picked) = REMOVE.read(event, params) {
             if picked.option == "remove"

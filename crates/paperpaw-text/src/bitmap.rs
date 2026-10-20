@@ -118,7 +118,7 @@ impl BitmapFont {
         let wanted = (size * 4.0) as i32;
         (0..usize::from(self.strikes))
             .filter_map(|i| Some((i, i32::from(u16_at(&self.data, HEADER + i * STRIKE)?))))
-            .min_by_key(|&(_, quarters)| (quarters - wanted).abs())
+            .min_by_key(|&(_, quarters)| quarters.abs_diff(wanted))
             .map(|(i, _)| i)
     }
 
@@ -413,3 +413,6 @@ mod tests {
         assert!(BitmapFont::new(data).unwrap().has_char('b'));
     }
 }
+
+#[cfg(test)]
+mod format_tests;

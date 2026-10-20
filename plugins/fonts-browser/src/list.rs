@@ -1,13 +1,14 @@
 //! The fonts of the catalog, each name set in its own font, with what it
 //! is and whether it is here; choosing one shows it larger, to download
 //! it or read with it. The catalog kept from the last visit shows at
-//! once, while a fresh one is fetched.
+//! once, while a fresh one is fetched: once each time the list is
+//! opened, not when coming back to it from a font's page.
 
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use paperpaw_sdk::builtin::{actions, events, params, settings};
+use paperpaw_sdk::builtin::{actions, events, settings};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::install::Progress;
 use paperpaw_sdk::replies::HttpReply;
@@ -18,6 +19,7 @@ use paperpaw_sdk::{
 };
 
 use crate::catalog::{self, Font};
+use crate::font::FONT;
 use crate::install::{DOWNLOADED, INSTALLER};
 use crate::samples::{self, SAMPLE, Samples};
 use crate::{CATALOG, FONT_SCREEN};
@@ -47,6 +49,8 @@ pub(crate) struct ListScreen {
     fonts: Vec<Font>,
     samples: Samples,
     trouble: Trouble,
+    /// Whether the catalog was asked for since the list was opened.
+    asked: bool,
     /// The download going on, kept here: drawing reads nothing from the
     /// storage.
     job: Option<Progress>,
@@ -72,6 +76,7 @@ impl ListScreen {
             fonts: catalog::kept(env),
             samples: Samples::new(&style),
             trouble: Trouble::None,
+            asked: false,
             job: INSTALLER.progress(env.storage),
             style,
             header,
@@ -94,6 +99,7 @@ impl ListScreen {
         let mut request = HttpRequest::new("GET", url.trim(), LOADED);
         request.save_to = Some(fetched_path());
         cx.command(Command::Http(request));
+        self.asked = true;
         if self.fonts.is_empty() {
             self.trouble = Trouble::Loading;
             self.redraw(cx);
@@ -134,19 +140,18 @@ impl ListScreen {
         self.redraw(cx);
     }
 
-    /// The fonts on the page shown.
-    fn shown(&self) -> Vec<&Font> {
-        let rows = self.list.rows();
-        let first = self.list.page() * rows;
-        self.fonts.iter().skip(first).take(rows).collect()
+    /// The fonts of `fonts` on the page `list` shows.
+    fn shown<'a>(list: &ListView, fonts: &'a [Font]) -> &'a [Font] {
+        let rows = list.rows();
+        let shown = fonts.get(list.page() * rows..).unwrap_or_default();
+        shown.get(..rows).unwrap_or(shown)
     }
 
     fn want_samples(&mut self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
         let mut out = Vec::new();
-        let shown: Vec<Font> = self.shown().into_iter().cloned().collect();
-        let refs: Vec<&Font> = shown.iter().collect();
-        if self.samples.want(&env, &refs, &mut out) {
+        let shown = Self::shown(&self.list, &self.fonts);
+        if self.samples.want(&env, shown, &mut out) {
             self.redraw(cx);
         }
         for command in out {
@@ -158,7 +163,7 @@ impl ListScreen {
         match (self.trouble, self.fonts.get(index)) {
             (_, Some(font)) => cx.command(Command::OpenScreen(
                 FONT_SCREEN,
-                Params::new().with(params::ID, font.id.clone()),
+                Params::new().with(FONT, font.to_param()),
             )),
             (Trouble::Failed | Trouble::Offline, None) => self.fetch(cx),
             _ => {}
@@ -184,7 +189,7 @@ impl ListScreen {
         } else if font.installed(env).is_some() {
             "fonts-browser.state.installed"
         } else {
-            return files::size(font.size(env), env.i18n.tr("fonts-browser.decimal"));
+            return files::size(font.size(), env.i18n.tr("fonts-browser.decimal"));
         };
         env.i18n.tr(key).to_string()
     }
@@ -277,8 +282,16 @@ impl Screen for ListScreen {
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
         self.job = INSTALLER.progress(cx.env().storage);
-        self.fetch(cx);
+        if !self.asked {
+            self.fetch(cx);
+        }
         self.want_samples(cx);
+    }
+
+    fn on_hide(&mut self) {
+        // The font's page above has the memory; the samples are read
+        // again on coming back.
+        self.samples.clear();
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
@@ -323,9 +336,8 @@ impl Screen for ListScreen {
             self.loaded(&reply, cx);
         } else if let Some(reply) = SAMPLE.read(event, params) {
             let env = *cx.env();
-            let shown: Vec<Font> = self.shown().into_iter().cloned().collect();
-            let refs: Vec<&Font> = shown.iter().collect();
-            self.samples.received(&env, &reply, &refs);
+            let shown = Self::shown(&self.list, &self.fonts);
+            self.samples.received(&env, &reply, shown);
             self.want_samples(cx);
         } else if DOWNLOADED.read(event, params).is_some()
             || *event == events::PLUGINS_CHANGED

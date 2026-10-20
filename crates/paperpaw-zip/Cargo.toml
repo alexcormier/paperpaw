@@ -23,6 +23,7 @@ miniz_oxide = { version = "0.8", default-features = false, features = ["with-all
 [dev-dependencies]
 # The integration tests build archives with ZipBuilder.
 paperpaw-zip = { path = ".", features = ["testing"] }
+proptest.workspace = true
 
 [lints]
 workspace = true

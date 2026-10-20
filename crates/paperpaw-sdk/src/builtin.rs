@@ -873,7 +873,6 @@ pub const CONFIG_FILE: &str = "paperpaw.ini";
 /// unless the shell names others.
 pub const PLUGIN_DIR: &str = "plugins";
 
-/// Font roles.
 /// Groups of the generated settings screen; plugins can add their own.
 pub mod groups {
     use crate::Id;
@@ -951,6 +950,7 @@ pub mod sections {
     pub const SYSTEM: Id = Id::new_static("core.section.system");
 }
 
+/// Font roles.
 pub mod fonts {
     use crate::Id;
 

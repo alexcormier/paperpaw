@@ -13,5 +13,8 @@ keywords = ["http", "client", "server", "no-std", "embedded"]
 
 [dependencies]
 
+[dev-dependencies]
+proptest.workspace = true
+
 [lints]
 workspace = true

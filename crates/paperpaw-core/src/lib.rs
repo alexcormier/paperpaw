@@ -38,6 +38,7 @@
 extern crate alloc;
 
 mod builder;
+mod code_plugin;
 mod commands;
 mod config;
 mod core_plugin;
@@ -70,13 +71,14 @@ use paperpaw_graphics::{Framebuffer, GraphicsError};
 use paperpaw_i18n::Translator;
 use paperpaw_platform::{
     ButtonState, Color, DeviceInfo, FrameView, InputEvent, Instant, NoStorage, Point, PointerEvent,
-    PointerPhase, Rect, RefreshMode, Storage, SystemStatus,
+    PointerPhase, Rect, RefreshMode, Storage, StorageError, SystemStatus,
 };
 use paperpaw_sdk::builtin::{
     CONFIG_FILE, GLOBAL_KEYMAP_LAYER, events, keymap_presets, params as builtin_params,
     settings as core_settings, slots,
 };
 use paperpaw_sdk::event::EventData;
+use paperpaw_sdk::native::{Native, SafeMode};
 use paperpaw_sdk::setting::{Setting, SettingType};
 use paperpaw_sdk::{
     Actions, Capabilities, Command, Contribution, Cx, Direction, Env, EnvParts, EventHandler,
@@ -86,6 +88,7 @@ use paperpaw_sdk::{
 };
 
 pub use crate::builder::KernelBuilder;
+pub use crate::code_plugin::{CodeFile, CodeLoader};
 use crate::config::{mono_coverage, plugin_switches, read_config};
 use crate::core_plugin::{CORE, CorePlugin};
 use crate::input::{Recognized, Recognizer, Thresholds};
@@ -96,7 +99,7 @@ pub use crate::io::{
 use crate::keymap::{InputKey, Keymap, Origin, Zone};
 use crate::refresh::RefreshPolicy;
 use crate::registry::{Registry, Staging};
-use crate::screens::{screen_key, uncovered};
+use crate::screens::uncovered;
 use paperpaw_sdk::Registrar;
 use paperpaw_sdk::filters::InputVerdict;
 pub use paperpaw_sdk::firmware::{Firmware, FirmwareCommand, FirmwareState, InstallFailure};
@@ -119,6 +122,8 @@ const HINTS_MS: u64 = 4000;
 const SLOW_MS: u32 = 400;
 /// What was timed is remembered for this many things at most.
 const TIMED: usize = 24;
+/// Largest file of passwords and keys read.
+const MAX_SECRETS: usize = 64 * 1024;
 /// Default memory for glyphs rasterized at runtime.
 const DEFAULT_GLYPH_CACHE: usize = 32 * 1024;
 
@@ -135,6 +140,11 @@ pub enum Effect {
     /// Sleep once the frame is shown (the sleep screen): call
     /// [`Kernel::suspend`], and [`Kernel::resume`] on waking.
     Sleep,
+    /// The frame is best shown in grays (see [`Effects::grays`]).
+    Grays,
+    /// Call [`Kernel::proceed`] while the panel shows the busy mark (see
+    /// [`Effects::proceed`]).
+    Proceed,
 }
 
 /// The effects of one kernel call. Refreshes are already coalesced: there
@@ -203,6 +213,8 @@ impl Effects {
             .chain(self.wake_at.map(Effect::WakeAt))
             .chain(self.restart.then_some(Effect::Restart))
             .chain(self.sleep.then_some(Effect::Sleep))
+            .chain(self.grays.then_some(Effect::Grays))
+            .chain(self.proceed.then_some(Effect::Proceed))
     }
 }
 
@@ -260,6 +272,10 @@ impl core::error::Error for KernelError {}
 /// A screen on the navigation stack.
 struct ActiveScreen {
     id: Id,
+    /// Tells this opening of the screen from every other, also once it was
+    /// made anew (see `Kernel::remake_screens`): e.g. the owner of a
+    /// settings scope.
+    serial: u32,
     /// The slot it was opened for, if any.
     slot: Option<Id>,
     /// Made for the part above the row of hints (when the row shows), as
@@ -268,6 +284,9 @@ struct ActiveScreen {
     /// What it was opened with, e.g. the book.
     params: Params,
     screen: Box<dyn Screen>,
+    /// When it wants [`Screen::on_timer`] ([`Cx::wake_at`]); below another
+    /// screen, once it is on top again.
+    timer: Option<Instant>,
 }
 
 /// A finger that came down at an edge (see [`Kernel::edge_lifted`]).
@@ -285,8 +304,6 @@ pub struct Kernel {
     framebuffer: Framebuffer,
     registry: Registry,
     subscriptions: Vec<(Id, Id, EventHandler)>,
-    /// When the active screen wants `on_timer`.
-    screen_timer: Option<Instant>,
     /// The screen on top changed: it is told ([`Screen::on_show`]) once
     /// the commands of the call are done, so that one shown for a moment
     /// (e.g. below a menu that closes to open another screen) is not.
@@ -313,11 +330,19 @@ pub struct Kernel {
     last_activity: Instant,
     /// Since when the screen on top has been counted as shown.
     shown_since: Instant,
-    /// The active settings scope: its file and the screen that set it.
-    scope: Option<(String, Option<usize>)>,
+    /// The active settings scope: a book's own settings.
+    scope: Option<config::Scope>,
     /// The screen that asked for the values shown without being kept
-    /// ([`Command::PreviewSettings`]), if any.
-    preview_owner: Option<usize>,
+    /// ([`Command::PreviewSettings`]), if any (its `serial`).
+    preview_owner: Option<u32>,
+    /// The `serial` of the screen opened next.
+    next_serial: u32,
+    /// `paperpaw.ini` is there but could not be read at start: the user
+    /// is told once the first screen shows.
+    config_unreadable: bool,
+    /// The file of passwords and keys is there but could not be read at
+    /// start: it is not written over.
+    secrets_unreadable: bool,
     /// A screen was opened or closed since the last call ended; then the
     /// frame drawn for it is not shown yet (see [`Kernel::shown`]).
     screens_changed: bool,
@@ -329,6 +354,8 @@ pub struct Kernel {
     io: network::IoState,
     frame: drawing::FrameState,
     keys: plugins::KeySources,
+    /// The plugin of each of `Shared::stylesheets`, to drop them with it.
+    stylesheet_owners: Vec<Id>,
     timing: drawing::Timing,
 }
 
@@ -407,6 +434,10 @@ impl Kernel {
         self.last_activity = now;
         self.output.commands.push(Command::open_slot(slots::HOME));
         self.output.commands.push(events::STARTED.emit(()));
+        if mem::take(&mut self.config_unreadable) {
+            let text = self.config_notice();
+            self.output.commands.push(Command::Notify(text));
+        }
         self.finish()
     }
 
@@ -563,15 +594,16 @@ impl Kernel {
     }
 
     /// Says what has the focus now, if it changed and the user asked for
-    /// it ([`core_settings::SPEAK_FOCUS`]); not while something is read
-    /// aloud.
+    /// it ([`core_settings::SPEAK_FOCUS`]): in place of what it said of
+    /// the focus before, if that is still spoken; not while a plugin
+    /// reads aloud.
     fn speak_focus(&mut self) {
         if !self.shared.caps.speech
             || !self
                 .shared
                 .settings
                 .bool(core_settings::SPEAK_FOCUS.as_str())
-            || self.io.speech.speaking()
+            || (self.io.speech.speaking() && !self.io.focus_spoken)
         {
             return;
         }
@@ -605,6 +637,7 @@ impl Kernel {
             self.io
                 .speech
                 .speak(speech, available, screens, &mut self.output.commands);
+            self.io.focus_spoken = true;
         }
         self.io.speech.focus = said;
     }
@@ -620,9 +653,15 @@ impl Kernel {
         let old = self.shared.status;
         self.shared.status = status;
         let offset = |s: &SystemStatus| s.clock.map(|c| c.utc_offset_minutes);
-        // A new wall clock reading alone changes nothing visible.
+        // A new wall clock reading alone changes nothing visible. Compared
+        // wide: readings that make no sense must not overflow.
         let jumped = match (old.clock, status.clock) {
-            (Some(a), Some(b)) => (a.unix_millis_at(now) - b.unix_millis_at(now)).abs() > 30_000,
+            (Some(a), Some(b)) => {
+                let base = |c: &paperpaw_platform::WallClock| {
+                    i128::from(c.unix_millis) - i128::from(c.at.millis())
+                };
+                (base(&a) - base(&b)).abs() > 30_000
+            }
             (a, b) => a.is_some() != b.is_some(),
         };
         // What status lines show: not the voltage, which moves a little at
@@ -668,8 +707,10 @@ impl Kernel {
         for recognized in self.input.recognizer.tick(now, &thresholds) {
             self.recognized(recognized);
         }
-        if self.screen_timer.is_some_and(|at| at <= now) {
-            self.screen_timer = None;
+        if let Some(top) = self.stack.last_mut()
+            && top.timer.is_some_and(|at| at <= now)
+        {
+            top.timer = None;
             self.with_top(|screen, cx| {
                 screen.on_timer(cx);
                 Handled::Yes
@@ -695,13 +736,13 @@ impl Kernel {
         &self.shared.device
     }
 
-    /// The device's storage, e.g. for a shell that copies files onto it.
     /// The panel took `millis` for a refresh: shells that know say so
     /// ([`Usage::panel_ms`](paperpaw_sdk::usage::Usage::panel_ms)).
     pub fn panel_busy(&mut self, millis: u64) {
         self.shared.usage.panel_ms = self.shared.usage.panel_ms.saturating_add(millis);
     }
 
+    /// The device's storage, e.g. for a shell that copies files onto it.
     pub fn storage(&self) -> &dyn Storage {
         self.shared.storage.as_ref()
     }
@@ -718,9 +759,39 @@ impl Kernel {
 
     /// Keeps or removes a password or key, as [`Command::SetSecret`] of a
     /// plugin does (e.g. a network's password a shell was given).
+    ///
+    /// The file is read again first: where it is there but cannot be
+    /// read, it is left as it is (written, the others in it would be
+    /// lost), the change applies until the end, and the user is told; one
+    /// readable again takes the place of what could not be read at start.
     pub fn set_secret(&mut self, change: paperpaw_sdk::secrets::SecretChange) {
-        use paperpaw_sdk::secrets;
+        use paperpaw_sdk::secrets::{self, Secrets};
+        let storage = self.shared.storage.clone();
+        let read =
+            paperpaw_sdk::files::load_for_update(storage.as_ref(), secrets::FILE, MAX_SECRETS);
+        if let Ok(data) = &read
+            && self.secrets_unreadable
+        {
+            // Damaged text keeps what can be read: values are in hex.
+            let text = String::from_utf8_lossy(data.as_deref().unwrap_or_default());
+            self.shared.secrets = Secrets::decode(&text);
+            self.secrets_unreadable = false;
+        }
         self.shared.secrets.apply(change);
+        if let Err(error) = read {
+            self.secrets_unreadable = true;
+            let file = secrets::FILE;
+            self.warn_runtime(format!(
+                "{file} cannot be read ({error}): not saved, left as it is"
+            ));
+            let file = paperpaw_sdk::Arg::Str(file);
+            let text = self
+                .shared
+                .translator
+                .format("core.secrets-unreadable", &[("file", file)]);
+            self.output.commands.push(Command::Notify(text));
+            return;
+        }
         let text = self.shared.secrets.encode();
         let storage = self.shared.storage.as_ref();
         let _ = storage.create_dir(paperpaw_sdk::data::DIR);
@@ -885,12 +956,6 @@ impl Kernel {
         self.finish()
     }
 
-    // ---- Registration -------------------------------------------------
-
-    // ---- Input --------------------------------------------------------
-
-    // ---- Commands and drawing ----------------------------------------
-
     fn warn(&mut self, source: WarningSource, line: Option<u32>, message: String) {
         self.warnings.push(Warning {
             source,
@@ -941,6 +1006,9 @@ struct Shared {
     /// Firmware updates, where PaperPaw is the firmware (see
     /// [`KernelBuilder::firmware`]).
     firmware: Option<Firmware>,
+    /// How code plugins are loaded, where they are (see
+    /// [`KernelBuilder::code_plugins`]).
+    native: Option<paperpaw_sdk::native::Native>,
     /// Text copied here.
     clipboard: String,
     /// The system's clipboard has text (see
@@ -1000,6 +1068,7 @@ impl Shared {
             caps: self.caps,
             wifi: self.wifi.as_ref(),
             firmware: self.firmware.as_ref(),
+            native: self.native.as_ref(),
             clipboard: self.system_clipboard || !self.clipboard.is_empty(),
             slots: &self.slots,
             screens: &self.screens,

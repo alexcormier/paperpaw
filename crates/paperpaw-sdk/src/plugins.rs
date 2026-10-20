@@ -72,6 +72,45 @@ pub enum PluginState {
     Failed,
 }
 
+/// What a plugin is made of.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum PluginKind {
+    /// Built into PaperPaw.
+    #[default]
+    BuiltIn,
+    /// A folder of data files on the storage (a theme, a translation …).
+    Data,
+    /// A folder on the storage with native code ([`native`](crate::native)).
+    Code,
+}
+
+/// Why a code plugin does not run, for plugin managers to say.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum PluginProblem {
+    /// Its code was built for another version of PaperPaw or another
+    /// device: it waits for a build for this one.
+    OtherBuild,
+    /// Its code's file is damaged, or not one this PaperPaw reads.
+    Damaged,
+    /// Its code does not fit its folder (another plugin's id).
+    Mismatch,
+    /// There is no room left for its code (the X4's flash).
+    NoRoom,
+    /// This PaperPaw loads no code plugins.
+    Unsupported,
+    /// This start went without code plugins
+    /// ([`SafeMode`](crate::native::SafeMode)).
+    SafeMode,
+    /// Safe mode switched it off: PaperPaw did not start with it.
+    Crashed,
+    /// Its code was never installed (by a store, or from the web
+    /// flasher): a file copied into its folder is not run.
+    NotInstalled,
+    /// Its code is not the file installed: changed since.
+    Changed,
+}
+
 /// A plugin and its state.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PluginInfo {
@@ -85,6 +124,13 @@ pub struct PluginInfo {
     /// plugin off would leave them empty, so it stays on until another
     /// plugin can take over.
     pub required_for: RequiredFor,
+    pub kind: PluginKind,
+    /// Why it does not run, where its code is the reason.
+    pub problem: Option<PluginProblem>,
+    /// A newer version installed while its code runs
+    /// ([`Command::InstallPlugin`](crate::Command::InstallPlugin)): it
+    /// takes over at the next start.
+    pub update: Option<crate::Version>,
 }
 
 impl PluginInfo {
@@ -109,6 +155,9 @@ impl PluginInfo {
 
     /// Whether a restart is needed to apply the user's choice.
     pub fn restart_needed(&self) -> bool {
+        if self.update.is_some() {
+            return true;
+        }
         match self.state {
             PluginState::Running => !self.enabled,
             PluginState::Off => self.enabled,
@@ -201,6 +250,9 @@ mod tests {
             state,
             enabled,
             required_for: RequiredFor::default(),
+            kind: PluginKind::BuiltIn,
+            problem: None,
+            update: None,
         }
     }
 

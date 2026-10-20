@@ -188,6 +188,10 @@ impl<S: Storage> Storage for Traced<S> {
         self.0.remove_dir_all(path)
     }
 
+    fn ignores_case(&self) -> bool {
+        self.0.ignores_case()
+    }
+
     fn local_path(&self, path: &str, with: &mut dyn FnMut(&str)) {
         self.0.local_path(path, with);
     }

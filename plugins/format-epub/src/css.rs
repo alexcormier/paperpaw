@@ -191,7 +191,12 @@ impl Props {
                 out.push_str(&alloc::format!(" {key}{value}"));
             }
         }
-        for (key, value) in [('b', self.bold), ('i', self.italic), ('h', self.hidden)] {
+        for (key, value) in [
+            ('b', self.bold),
+            ('i', self.italic),
+            ('c', self.small_caps),
+            ('h', self.hidden),
+        ] {
             if let Some(value) = value {
                 out.push(' ');
                 out.push(key);
@@ -212,6 +217,7 @@ impl Props {
                 'a' => props.align = value.to_digit(10).map(|d| Align::from_bits(d as u8)),
                 'b' => props.bold = Some(flag),
                 'i' => props.italic = Some(flag),
+                'c' => props.small_caps = Some(flag),
                 'h' => props.hidden = Some(flag),
                 'f' => props.family = item[1..].parse().ok(),
                 't' => props.indent = item[1..].parse().ok(),
@@ -331,11 +337,16 @@ fn family_number(value: &str, families: &mut Vec<String>) -> u8 {
     }
 }
 
-/// A family name as compared: without quotes, in lower case.
+/// A family name as compared: without quotes, in lower case, white space
+/// and control characters one space each (so the cache, a line per family,
+/// keeps it whole).
 fn family_name(text: &str) -> String {
     text.trim()
         .trim_matches(|c| c == '"' || c == '\'')
-        .trim()
+        .split(|c: char| c.is_whitespace() || c.is_control())
+        .filter(|word| !word.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
         .to_ascii_lowercase()
 }
 
@@ -598,6 +609,11 @@ impl Parser {
                     self.previous = ' ';
                 }
                 continue;
+            }
+            // A line break not escaped ends a string left open, as in CSS,
+            // so the rules after it are read as rules.
+            if self.quote.is_some() && matches!(c, '\n' | '\r' | '\x0c') && previous != '\\' {
+                self.quote = None;
             }
             if let Some(quote) = self.quote {
                 if c == quote && previous != '\\' {
@@ -866,3 +882,6 @@ mod tests {
         assert_eq!(copy.props("p", "").family, Some(1));
     }
 }
+
+#[cfg(test)]
+mod hostile_tests;

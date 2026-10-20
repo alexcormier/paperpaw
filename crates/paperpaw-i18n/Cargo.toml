@@ -14,5 +14,8 @@ keywords = ["i18n", "translation", "no-std"]
 [dependencies]
 paperpaw-config.workspace = true
 
+[dev-dependencies]
+proptest.workspace = true
+
 [lints]
 workspace = true

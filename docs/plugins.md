@@ -13,8 +13,9 @@ There are two kinds:
   are; see [Plugins without code](#plugins-without-code).
 - **Code plugins**: Rust crates against the SDK (`paperpaw-sdk`). They
   bring screens, actions, settings, formats, widgets, services, anything.
-  Today they are compiled into a build of PaperPaw; plugins loaded at run
-  time (WebAssembly, with the same API) are planned.
+  They are compiled into a build of PaperPaw, or built into a file that
+  the Xteink X4 and X4 Pro load at their start, without a new firmware
+  (see [Plugins as files](#plugins-as-files)).
 
 This guide walks through a code plugin, then lists what plugins can
 contribute. Working with an AI assistant: the skill in
@@ -328,7 +329,7 @@ cargo run -p paperpaw-emulator -- --profile xteink-x4 --headless --script "confi
 | Status items and lines | `add_status_item`, `add_status_line` | What status lines show |
 | Widgets | `add_widget` | Blocks for the home screen and the sleep screen |
 | Setup steps | `add_setup_step` | A page of the first-run setup: a setting to choose or a screen of the plugin's, where the device needs it |
-| Services | `add_service` | Anything one plugin offers others, found with `env.services.get` |
+| Services | `publish` | Anything one plugin offers others, found with `env.services.get` |
 | Contributions | `contribute` | Additions to a point another plugin defined |
 | Translations | `add_translations` | Catalogs for any language |
 | Book data | `add_book_data` | Where the plugin keeps something for each book (named by `library::key`): moved and removed with the book, cleaned up when it is gone |
@@ -370,13 +371,18 @@ there and do without it when not:
 
 ```rust
 // The publishing plugin.
-r.add_service(WEATHER, Box::new(Box::new(Forecast::new()) as Box<dyn Weather>))?;
+r.publish(WEATHER, Box::new(Forecast::new()) as Box<dyn Weather>)?;
 
 // Any other plugin, wherever it has an `Env`.
 if let Some(weather) = env.services.get::<Box<dyn Weather>>(WEATHER.as_str()) {
     let today = weather.today();
 }
 ```
+
+A service is found by its type's name too, so native code plugins built
+apart from the firmware find it (see *Plugins as files* below). When
+the type of a service changes, give it a new id (`weather.forecast-2`):
+its name alone would not tell.
 
 A point is an id a plugin names, with what a contribution there is in
 its documentation (for example one line per entry); others add to it
@@ -605,6 +611,138 @@ A plugin that should run there:
 The emulator's X4 profile enforces the budget, and `--heap-report` shows
 where memory goes.
 
+## Plugins as files
+
+A code plugin can also be a file, `code.ppn`, in a plugin's folder on
+the card, which the X4 and the X4 Pro load at their start (ADR 0024):
+from the plugin store or from the web flasher with the firmware. Only
+code installed runs: an installer names the file by its digest
+(`native::remember_code`, kept in `.paperpaw` where neither the Wi-Fi
+transfer nor plugins' folders reach), and a file put into a plugin's
+folder otherwise is not run (the plugin manager says why); an author
+trying their own build names it over USB
+(`tools/x4-remote.py --trust-code <id>`). Its code is the same as that of a plugin built in, and it runs
+as part of PaperPaw, at full speed and without a sandbox: it can do
+whatever PaperPaw can, also past the SDK. The X4 Pro runs it from its
+PSRAM; the X4 writes it once into flash behind its firmware (about 1.8
+MB for all its plugins together) and runs it from there, for some
+hundred bytes of RAM.
+
+[`samples/hello-native`](../samples/hello-native) is the sample plugin
+above as a file, in a workspace of its own as a plugin's own repository
+is, with a CI job to start from.
+
+### The crate
+
+The plugin stays a library crate, tried in the emulator and tested as
+any other. A second crate, a `#![no_std]`, `#![no_main]` binary, makes
+the file with one line:
+
+```rust
+#![no_std]
+#![no_main]
+
+paperpaw_sdk::plugin!(my_plugin::MyPlugin::default());
+```
+
+`plugin!` gives the file its entry, its heap (the kernel's: what the
+plugin boxes, the kernel may drop) and its panic handler. The crate's
+`.cargo/config.toml` links it as a plugin: copy the sample's, which
+links with `paperpaw-plugin.x` (the SDK brings it), keeps the
+relocations, and on the X4 builds with the medium code model and frame
+pointers. Build it for both chips:
+
+```sh
+cargo x4                  # riscv32imc-unknown-none-elf, the X4
+cargo +esp x4pro          # xtensa-esp32s3-none-elf, the X4 Pro (espup's toolchain)
+```
+
+### Which build fits
+
+Until PaperPaw 1.0 a plugin file runs only on the PaperPaw it was built
+for: the same compiler for the same chip from the same SDK with the same
+features. Its fingerprint says so, and a device loads only files with
+its own; *About* shows the device's fingerprint and the compiler to
+build with. Build against the SDK of the release (`paperpaw-sdk = "0.5"`)
+with the toolchain that release names, and build again for every
+release; the store and the update check show which plugins wait for a
+build. From 1.0 on, plugins will be built against a versioned interface
+and keep working across minor releases.
+
+### Packing and signing
+
+`paperpaw-sign` (in this repository, `tools/sign`) makes the file from
+the linked plugin and signs it as its author:
+
+```sh
+paperpaw-sign key author.key                      # once; keep it safe, never publish it
+paperpaw-sign pack target/riscv32imc-unknown-none-elf/release/my-plugin my-plugin-x4.ppn --key author.key
+paperpaw-sign plugin my-plugin-x4.ppn             # what it holds, and who signed it
+```
+
+`pack` refuses what cannot run from where the file lands: writable data
+(a `static` that changes; keep state on the heap, as in `Rc`s handed to
+closures), symbols it cannot find, and code that reaches an address
+fixed in the firmware or ROM directly. The signature goes into the file
+itself, so it travels with it; a device remembers the author's key at
+the first install and warns when an update is signed by another.
+
+### Trying it on a device
+
+A code plugin is a folder like a data plugin's, with its code beside its
+`plugin.ini`:
+
+```text
+plugins/my-plugin/
+  plugin.ini     [plugin] id, name, description, version
+  code.ppn       its code, for this device and this firmware
+  i18n/*.ini     translations, settings.ini, … as for data plugins
+```
+
+Copy the folder onto the card (over USB: `python tools/x4-remote.py
+--push my-plugin plugins/my-plugin`) and restart. The plugin manager
+lists it as one with code, and says why one does not run (built for
+another PaperPaw, damaged, no room). Over USB, `native` (and `--info`)
+says where each plugin lies and what loading it took.
+
+A panic's calls inside a plugin are kept with its name and the offset
+into its file, e.g. `4261a402 (my-plugin+0x452)`: its function lies at
+`0x42000000 + offset - 80` in the plugin's ELF. A plugin that crashes
+before PaperPaw shows its first frame is switched off: after two such
+starts PaperPaw starts without plugins with code and says so (holding
+*Back* on the X4, *Home* on the X4 Pro, while switching it on does the
+same). The plugins it switched off are switched on again in the plugin
+manager, one at a time.
+
+### Keeping it small
+
+On the X4 every plugin's file takes room in flash. A plugin carries its
+own copy of the SDK code it uses, which is most of a small plugin: of
+the sample's 63 KB on the X4, its own code is some 9 KB.
+
+- Build with `opt-level = "s"` (as PaperPaw) or `"z"` (some 5 % smaller
+  on the X4, a little slower), `lto = "fat"`, `codegen-units = 1`,
+  `panic = "abort"`, as the sample does.
+- Leave out what pulls in large parts of `core`: parsing floats from
+  text (`str::parse::<f32>()`, 16 KB of tables), `{:?}` of strings.
+- Keep translations and other text in the folder's files rather than in
+  the code, where they are needed once.
+
+Services between plugins are found by their type's name too, so a plugin
+built apart finds those of the firmware's plugins (see [Services and
+points of your own](#services-and-points-of-your-own)).
+
+### Publishing a code plugin
+
+The plugin library (paperpaw.org) lists a code plugin with its folder
+and a build per reader (`x4`, `x4-pro`, `x4-classic`), each a signed
+`.ppn` with the fingerprint it was built for, the author's key, and its
+source, which the library rebuilds to compare. The sample's `build.sh`
+builds, packs and signs both files, and its CI job
+(`samples/hello-native/.github/workflows/build.yml`, for a plugin's own
+repository) runs it on every tag, with the author's key kept as a
+secret of the repository. [Publishing](#publishing) says how.
+
 ## Plugins without code
 
 A data plugin is a folder:
@@ -714,6 +852,126 @@ So anyone can make a home screen layout and share it: it is offered
 with the home screen's own. [`samples/plugins`](../samples/plugins) has
 five: large print, three themes (airy, paw, calm ink) and a layout
 (reading nook).
+
+## Publishing
+
+The plugin library on paperpaw.org is what the website lists and every
+reader's store (*More plugins*) installs from (ADR 0023). A plugin gets
+there in one of two ways, both through the same checks:
+
+- **The upload form** at <https://paperpaw.org/submit>, the main way:
+  sign in with a link sent by e-mail, upload the plugin's folder as a
+  ZIP (and a code plugin's builds), read the checks, complete the entry,
+  look at the preview, and send it to the moderators.
+- **A pull request** to the paperpaw.org repository that adds
+  `catalogue/<id>.toml`, for developers.
+
+An update is a new version with a higher number, the same way. The
+site's guide for authors, <https://paperpaw.org/authors>, has every
+field, check and limit; the skill's
+[`publishing.md`](../.claude/skills/paperpaw-plugin-development/publishing.md)
+walks an AI assistant helping an author through every step. In brief:
+
+### What is uploaded
+
+The plugin's folder as a ZIP, `plugin.ini` at its top (or inside one
+folder at its top), its `id` and `version` the ones published. Outside
+`store/` only `.ini`, `.css`, `.ttf`, `.otf`, `.ttc`, `.ppfp`, `.txt`,
+`.md` and `.png` files, at most 64 (63 for a code plugin), their paths
+of letters, digits, `.`, `_` and `-`, none starting with a dot, at most
+100 bytes; at most 20 MB zipped, 40 MB unpacked.
+
+A folder `store/` in it is for the store only, and is taken out of what
+readers install: `store/store.ini` gives the summary, description,
+group, tags, licence, source, SDK and translations, and names the
+screenshots beside it.
+
+```ini
+[store]
+summary = A large clock on the home screen, with the date below it.
+group = home
+tags = clock, widget
+licence = MIT
+source = https://codeberg.org/your-name/clock
+sdk = 0.5
+
+[source]
+repository = https://codeberg.org/your-name/clock
+revision = v1.0.0
+
+[screenshots]
+home.png = The home screen with the clock widget, on an Xteink X4.
+```
+
+It is PaperPaw's INI: a comment is a line of its own, never after a
+value.
+
+A code plugin adds one signed `.ppn` per reader (the form's fields
+`build-x4`, `build-x4-pro`, `build-x4-classic`) and the exact source of
+those builds: `[source]` names a public repository on `github.com`,
+`codeberg.org` or `gitlab.com` and the tag or commit built (with `path`
+and `bin` when the crate is not at the top or the binary not named as
+its package), or the source goes up as a ZIP (`source-zip`).
+
+### The author's key
+
+Code plugins are signed by their author with an Ed25519 key of their
+own, made once:
+
+```sh
+paperpaw-sign key ~/.paperpaw/author.key     # prints the public key, 64 hexadecimal digits
+```
+
+The file is the secret key: keep it outside every repository, keep a
+copy apart, never commit or share it. In CI it is a secret of the
+repository (`PAPERPAW_PLUGIN_KEY` in the sample's job); the site's page
+<https://paperpaw.org/authors/sign> also signs in the browser, the key
+never leaving the computer. The store reads the public key from the
+builds: all of them are signed by one key, and every update by the same
+one. Readers remember it at the first install and are warned when an
+update is signed by another; a lost key is changed only in the open,
+through the site's contact address.
+
+### Builds that match their source
+
+The site keeps each code plugin's source, shows it file by file, and
+rebuilds each build in a container with the toolchain its fingerprint
+names, with the sample's aliases (`cargo x4`, `cargo +esp x4pro`,
+`--locked`). It compares the result byte for byte with the build
+without its signature, and the plugin's page says *Verified: matches its
+source*, *Not rebuilt* or *Rebuilt, but does not match its source*. The
+rebuild runs in the paths of GitHub's runners, and paths end up in a
+build, so:
+
+- build with the sample's CI job
+  (`samples/hello-native/.github/workflows/build.yml`) from a pushed
+  tag;
+- commit `Cargo.lock`;
+- keep the release's compilers pinned (`rust-toolchain.toml`, the job's
+  `RUST_X4`, `RUST_X4_PRO`, `ESP_GCC`) and its SDK
+  (`paperpaw-sdk = "0.5"`);
+- never set `RUSTFLAGS`, which would replace the flags that link the
+  plugin;
+- put nothing of the moment or the computer into the code (a build
+  script writing the time, a user name, a random value);
+- name dependencies by version or a fixed commit, never a branch.
+
+The sample's `build.sh`, which the job runs, builds both readers, packs
+and signs the files, and zips the folder, with and without `store/`; the
+job attaches them to the tag's release with their SHA-256 and the
+catalogue's `[[versions]]` for them.
+
+### By pull request
+
+`catalogue/<id>.toml` holds what `store.ini` would, and `author`,
+`kind` and the versions; the folder lies at `catalogue/packages/<id>/`
+(without `store/`) or elsewhere as a ZIP (`url`, `sha256`). A code
+plugin adds `author_key`, `devices` (every reader with a build), and in
+each version `[versions.source]` and a `[[versions.builds]]` per reader
+with its `device`, its fingerprint as `abi` (which `paperpaw-sign
+plugin` prints), and its file. `samples/hello-native/catalogue.toml` is
+one to fill in; `paperpaw-website check` in a clone of the paperpaw.org
+repository runs the site's checks on it.
 
 [`Plugin`]: ../crates/paperpaw-sdk/src/plugin.rs
 [`Registrar`]: ../crates/paperpaw-sdk/src/plugin.rs

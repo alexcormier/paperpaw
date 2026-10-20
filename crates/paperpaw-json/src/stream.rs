@@ -96,6 +96,15 @@ impl Parser {
         }
     }
 
+    /// Ends the text: reports a number or `true`/`false`/`null` it ends
+    /// with, which only what follows it could end otherwise (e.g. `42` as
+    /// the whole text). A string left open is not reported.
+    pub fn finish(&mut self, emit: &mut dyn FnMut(Event<'_>)) {
+        if matches!(self.state, State::Plain) {
+            self.end_plain(emit);
+        }
+    }
+
     /// Adds `bytes` to the text being read.
     fn push_bytes(&mut self, bytes: &[u8]) {
         self.flush_surrogate();
@@ -308,6 +317,7 @@ pub fn read_file(storage: &dyn Storage, path: &str, emit: &mut dyn FnMut(Event<'
         parser.feed(&buf[..n], emit);
         offset += n as u64;
     }
+    parser.finish(emit);
 }
 
 #[cfg(test)]

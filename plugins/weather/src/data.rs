@@ -230,7 +230,9 @@ pub(crate) fn weekday(date: i32) -> u8 {
 /// What a forecast's arrays hold, gathered before they are put together.
 #[derive(Default)]
 struct Columns {
-    dates: Vec<i32>,
+    /// A date each, `None` where it could not be read: the columns stay
+    /// in step, that day is left out.
+    dates: Vec<Option<i32>>,
     codes: Vec<u8>,
     highs: Vec<Option<i32>>,
     lows: Vec<Option<i32>>,
@@ -266,22 +268,28 @@ pub(crate) fn parse_forecast(body: &[u8], coordinates: &str, fetched: i64) -> Op
             ["current", "weather_code"] => code = tenths(text).map(|c| (c / 10) as u8),
             ["current", "wind_speed_10m"] => wind = tenths(text),
             ["current", "is_day"] => day = text.trim() != "0",
-            ["daily", key, "[]"] if columns.dates.len() <= DAYS * 2 => match *key {
-                "time" => {
-                    if let Some(date) = parse_date(text) {
-                        columns.dates.push(date);
+            // Each column cut on its own at twice the days kept, so more
+            // days than asked for leave the first ones.
+            ["daily", key, "[]"] => {
+                fn add<T>(column: &mut Vec<T>, value: T) {
+                    if column.len() < DAYS * 2 {
+                        column.push(value);
                     }
                 }
-                "weather_code" => columns
-                    .codes
-                    .push(tenths(text).map_or(255, |c| (c / 10) as u8)),
-                "temperature_2m_max" => columns.highs.push(tenths(text)),
-                "temperature_2m_min" => columns.lows.push(tenths(text)),
-                "precipitation_probability_max" => columns.rain.push(percent(text)),
-                "sunrise" => columns.sunrise.push(parse_minutes(text)),
-                "sunset" => columns.sunset.push(parse_minutes(text)),
-                _ => {}
-            },
+                match *key {
+                    "time" => add(&mut columns.dates, parse_date(text)),
+                    "weather_code" => add(
+                        &mut columns.codes,
+                        tenths(text).map_or(255, |c| (c / 10) as u8),
+                    ),
+                    "temperature_2m_max" => add(&mut columns.highs, tenths(text)),
+                    "temperature_2m_min" => add(&mut columns.lows, tenths(text)),
+                    "precipitation_probability_max" => add(&mut columns.rain, percent(text)),
+                    "sunrise" => add(&mut columns.sunrise, parse_minutes(text)),
+                    "sunset" => add(&mut columns.sunset, parse_minutes(text)),
+                    _ => {}
+                }
+            }
             _ => {}
         }
     });
@@ -302,7 +310,7 @@ pub(crate) fn parse_forecast(body: &[u8], coordinates: &str, fetched: i64) -> Op
         .enumerate()
         .filter_map(|(i, &date)| {
             Some(Day {
-                date,
+                date: date?,
                 code: *columns.codes.get(i)?,
                 high: (*columns.highs.get(i)?)?,
                 low: (*columns.lows.get(i)?)?,
@@ -525,6 +533,7 @@ pub(crate) enum Temperature {
 impl Temperature {
     /// `tenths` of a degree Celsius in this unit, whole degrees.
     pub fn degrees(self, tenths: i32) -> i32 {
+        let tenths = i64::from(tenths);
         let tenths = match self {
             Temperature::Celsius => tenths,
             Temperature::Fahrenheit => tenths * 9 / 5 + 320,
@@ -553,6 +562,7 @@ pub(crate) enum Wind {
 impl Wind {
     /// `tenths` of km/h in this unit, whole.
     pub fn speed(self, tenths: i32) -> i32 {
+        let tenths = i64::from(tenths);
         let tenths = match self {
             Wind::Kmh => tenths,
             Wind::Mph => tenths * 1000 / 1609,
@@ -573,13 +583,15 @@ impl Wind {
     }
 }
 
-/// Tenths to whole numbers, halves away from zero.
-fn round_tenths(tenths: i32) -> i32 {
-    if tenths >= 0 {
+/// Tenths to whole numbers, halves away from zero (worked out in i64,
+/// so that values at the limits of a kept file or an answer convert).
+fn round_tenths(tenths: i64) -> i32 {
+    let whole = if tenths >= 0 {
         (tenths + 5) / 10
     } else {
         -((-tenths + 5) / 10)
-    }
+    };
+    whole.clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32
 }
 
 /// A temperature as shown: `12°`, `-3°`, with the unit's sign `12°C`.
@@ -780,3 +792,6 @@ mod tests {
         assert!(!is_old(5 * hour, 3 * hour));
     }
 }
+
+#[cfg(test)]
+mod roundtrip_tests;
