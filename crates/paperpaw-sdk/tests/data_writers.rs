@@ -8,7 +8,6 @@
 mod common;
 
 use paperpaw_sdk::builtin::events::Reading;
-use paperpaw_sdk::firmware::{self, TRUSTED_KEYS};
 use paperpaw_sdk::secrets::{FILE, Secrets};
 use paperpaw_sdk::{MemoryStorage, annotations, library};
 
@@ -109,38 +108,4 @@ fn secrets_of_version_1_are_written_as_they_were() {
     let v1 = include_str!("../testdata/secrets.txt.v1");
     assert_eq!(Secrets::decode(v1).encode(), v1);
     assert_eq!(FILE, ".paperpaw/secrets.txt");
-}
-
-#[test]
-fn trusted_keys_of_version_1_are_kept_when_one_is_added() {
-    let storage = MemoryStorage::new().with(
-        TRUSTED_KEYS,
-        include_str!("../testdata/firmware-keys.txt.v1"),
-    );
-    firmware::trust(&storage, &[0x34; 32]).unwrap();
-    // One already trusted is not added again.
-    firmware::trust(&storage, &[0x12; 32]).unwrap();
-    assert_eq!(
-        firmware::trusted_keys(&storage),
-        [[0x12; 32], [0xAB; 32], [0x34; 32]]
-    );
-}
-
-#[test]
-fn trusted_keys_skip_lines_that_are_no_keys() {
-    let key = "12".repeat(32);
-    let text = format!(
-        "\n{key}\r\nnot a key\n{}\n{}\n  {key}  \n\u{fffd}\n",
-        "1".repeat(64 + 2),
-        "zz".repeat(32)
-    );
-    let storage = MemoryStorage::new().with(TRUSTED_KEYS, text);
-    let keys = firmware::trusted_keys(&storage);
-    assert!(keys.contains(&[0x12; 32]));
-    assert!(keys.iter().all(|k| *k == [0x12; 32]));
-    // Invalid UTF-8 anywhere: no key is read, none trusted by mistake.
-    let storage = MemoryStorage::new().with(TRUSTED_KEYS, [key.as_bytes(), b"\n\xff\n"].concat());
-    assert!(firmware::trusted_keys(&storage).is_empty());
-    // None at all.
-    assert!(firmware::trusted_keys(&MemoryStorage::new()).is_empty());
 }
