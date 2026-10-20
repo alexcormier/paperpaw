@@ -401,7 +401,6 @@ fn an_answer_from_a_file_that_is_not_there_is_not_found() {
 /// A shell that reports a request twice (or reuses its number) must not
 /// have a later request reported with the first one's method and target.
 #[test]
-#[ignore = "bug: a request reported twice leaves a stale entry that later takes over its number"]
 fn a_request_reported_twice_does_not_confuse_a_later_one() {
     let harness = Harness::new();
     let mut kernel = kernel(&harness, |b| b.network(true));

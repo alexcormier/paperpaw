@@ -71,11 +71,11 @@ trait Airy {
 }
 
 impl Airy for Shopping {
-    /// Airy's page opened from the list (the entry after *Search*), its
-    /// page at the library answered with `page`.
+    /// Airy's page opened from its group's list, its page at the library
+    /// answered with `page`.
     fn open_airy(&mut self, page: &str) {
-        self.run(actions::DOWN);
-        self.run(actions::CONFIRM);
+        self.choose("Reading");
+        self.choose("Airy");
         let call = self.request(PAGE);
         self.answer(&call, 200, page.as_bytes());
     }
@@ -108,26 +108,23 @@ impl Airy for Shopping {
 #[test]
 fn the_list_shows_what_fits_by_group() {
     let mut shopping = Shopping::new(&list("1.0.0"));
+    // Search, the newest, then the groups in the list's order with how
+    // many plugins each has; the looks for the fonts.
+    shopping.check("start");
+    // A group: how its plugins are ordered, then each with what it does
+    // and its size.
+    shopping.choose("Reading");
     let shown = shopping.shown();
-    assert!(shown.contains("More plugins"), "{shown}");
-    // Search first, then the groups in the list's order, the fonts with
-    // the looks.
-    let at = |text: &str| {
-        shown
-            .find(text)
-            .unwrap_or_else(|| panic!("{text}: {shown}"))
-    };
-    assert!(at("Search") < at("Reading"), "{shown}");
-    assert!(at("Reading") < at("Airy"), "{shown}");
-    assert!(at("Airy") < at("Look"), "{shown}");
-    assert!(at("Look") < at("Fonts"), "{shown}");
-    assert!(shown.contains("Light headers and wide margins."), "{shown}");
-    // The next page: the system, its heading again.
-    shopping.run(actions::NEXT_PAGE);
-    let shown = shopping.shown();
-    assert!(shown.contains("System | Night keys"), "{shown}");
+    assert!(
+        shown.contains("Sort by, A to Z | Airy, 300 B, Light headers and wide margins."),
+        "{shown}"
+    );
     // With code: not for the store.
     assert!(!shown.contains("Reads books."), "{shown}");
+    shopping.run(actions::BACK);
+    shopping.choose("System");
+    let shown = shopping.shown();
+    assert!(shown.contains("Night keys"), "{shown}");
     // Kept for the next visit, the list itself gone.
     let kept = ".paperpaw/plugins/store";
     assert!(shopping.storage.exists(&format!("{kept}/index.txt")));
@@ -140,7 +137,8 @@ fn a_plugin_is_installed_updated_and_removed() {
     let mut shopping = Shopping::new(&list("1.0.0"));
     shopping.open_airy(&page("1.0.0", &old, CATALOG_DE));
     let shown = shopping.shown();
-    assert!(shown.contains("By Someone · Licence: MIT"), "{shown}");
+    assert!(shown.contains("By Someone"), "{shown}");
+    assert!(shown.contains("Licence: MIT"), "{shown}");
     shopping.install("1.0.0", &old, CATALOG_DE);
     // Loaded at once, as a plugin of its own.
     assert_eq!(shopping.installed(), Some(Version::new(1, 0, 0)));
@@ -163,7 +161,7 @@ fn a_plugin_is_installed_updated_and_removed() {
     let call = shopping.request(LIST);
     shopping.answer(&call, 200, list("1.1.0").as_bytes());
     let shown = shopping.shown();
-    assert!(shown.contains("Update"), "{shown}");
+    assert!(shown.contains("Installed, 1 update"), "{shown}");
     shopping.open_airy(&page("1.1.0", &new, CATALOG_DE));
     shopping.install("1.1.0", &new, CATALOG_DE);
     assert_eq!(shopping.installed(), Some(Version::new(1, 1, 0)));
@@ -251,10 +249,9 @@ fn a_device_no_library_knows_is_told_so() {
 #[test]
 fn fonts_open_the_fonts_browser() {
     let mut shopping = Shopping::new(&list("1.0.0"));
-    // Down from Search past Airy to Fonts.
-    shopping.run(actions::DOWN);
-    shopping.run(actions::DOWN);
-    shopping.run(actions::CONFIRM);
+    // With the looks, before their plugins.
+    shopping.choose("Look");
+    shopping.choose("Fonts");
     shopping.request("https://paperpaw.org/api/v1/fonts.json");
 }
 
@@ -296,8 +293,8 @@ fn a_page_fetched_for_another_plugin_is_not_taken() {
     let mut shopping = Shopping::new(&list("1.0.0"));
     // Airy's page asked for, into a file of its own; another plugin's
     // page comes.
-    shopping.run(actions::DOWN);
-    shopping.run(actions::CONFIRM);
+    shopping.choose("Reading");
+    shopping.choose("Airy");
     let call = shopping.request(PAGE);
     assert_eq!(
         call.save_to.as_deref(),
@@ -328,7 +325,7 @@ fn the_pages_of_a_library_with_a_key_keep_it() {
     shopping.run(OPEN);
     let call = shopping.request("https://example.org/p/plugins.json?key=abc&device=x4&lang=en");
     shopping.answer(&call, 200, list("1.0.0").as_bytes());
-    shopping.run(actions::DOWN);
-    shopping.run(actions::CONFIRM);
+    shopping.choose("Reading");
+    shopping.choose("Airy");
     shopping.request("https://example.org/p/plugins/airy.json?key=abc&device=x4&lang=en");
 }

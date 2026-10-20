@@ -124,6 +124,13 @@ pub trait Storage {
         false
     }
 
+    /// Bytes free for new files, where the storage can tell without
+    /// reading much (e.g. a card's own count of its free space); `None`
+    /// where it cannot. Storages that wrap another say what it says.
+    fn free_space(&self) -> Option<u64> {
+        None
+    }
+
     /// Calls `with` with the file's path in the device's own file system,
     /// for platform code that opens files only by name (e.g. a system PDF
     /// renderer); does nothing where files have none.
@@ -282,6 +289,11 @@ impl<B: Storage, M: Storage> Storage for Mounted<B, M> {
     /// then, never less.
     fn ignores_case(&self) -> bool {
         self.base.ignores_case() || self.mounted.ignores_case()
+    }
+
+    /// The base's, where data and plugins are.
+    fn free_space(&self) -> Option<u64> {
+        self.base.free_space()
     }
 }
 

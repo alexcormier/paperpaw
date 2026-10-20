@@ -39,9 +39,10 @@ pub const DEVICE: DeviceInfo = DeviceInfo {
 /// The list for the X4.
 pub const LIST: &str = "https://paperpaw.org/api/v1/plugins.json?device=x4&lang=en";
 
-/// A storage the test looks into while the kernel has it.
+/// A storage the test looks into while the kernel has it, with as much
+/// free space as the test says (none said: not known).
 #[derive(Clone, Default)]
-pub struct Shared(pub Rc<MemoryStorage>);
+pub struct Shared(pub Rc<MemoryStorage>, pub Rc<std::cell::Cell<Option<u64>>>);
 
 impl Storage for Shared {
     fn read_at(&self, path: &str, offset: u64, buf: &mut [u8]) -> Result<usize, StorageError> {
@@ -73,6 +74,9 @@ impl Storage for Shared {
     }
     fn remove_dir_all(&self, path: &str) -> Result<(), StorageError> {
         self.0.remove_dir_all(path)
+    }
+    fn free_space(&self) -> Option<u64> {
+        self.1.get()
     }
 }
 
@@ -106,7 +110,17 @@ impl Shopping {
     /// The store opened on a device libraries call `device`, loading code
     /// plugins as `native` says, its list answered with `list`.
     pub fn on(device: Option<&'static str>, native: Option<Native>, list: &str) -> Self {
-        let storage = Shared::default();
+        Self::with(device, native, list, Shared::default())
+    }
+
+    /// As [`Shopping::on`], on `storage` (plugins already in it are
+    /// installed).
+    pub fn with(
+        device: Option<&'static str>,
+        native: Option<Native>,
+        list: &str,
+        storage: Shared,
+    ) -> Self {
         let mut builder = Kernel::builder(DEVICE)
             .storage(storage.clone())
             .network(true)
@@ -176,6 +190,24 @@ impl Shopping {
     pub fn serve(&mut self, url: &str, body: &[u8]) {
         let call = self.request(url);
         self.answer(&call, 200, body);
+    }
+
+    /// Moves the focus down to the entry whose label begins with `label`
+    /// and chooses it, as with the buttons.
+    pub fn choose(&mut self, label: &str) {
+        for _ in 0..200 {
+            self.kernel.render(&mut |_, _| {});
+            let focused = self
+                .kernel
+                .describe()
+                .into_iter()
+                .any(|p| p.focused && p.label.starts_with(label));
+            if focused {
+                return self.run(paperpaw_sdk::builtin::actions::CONFIRM);
+            }
+            self.run(paperpaw_sdk::builtin::actions::DOWN);
+        }
+        panic!("{label}: {}", self.shown());
     }
 
     /// The labels of what the screen shows, in order.

@@ -1,0 +1,4 @@
+Heading "Installed"
+Row "Update all" (focused)
+Row "Apple, Update, Does apple."
+Row "Cherry, Update, Does cherry."

@@ -215,4 +215,8 @@ impl Storage for Traced {
     fn ignores_case(&self) -> bool {
         self.0.ignores_case()
     }
+
+    fn free_space(&self) -> Option<u64> {
+        self.0.free_space()
+    }
 }

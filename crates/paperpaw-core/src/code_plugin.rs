@@ -47,7 +47,7 @@ pub(crate) fn fetched(storage: &dyn Storage, native: &Native) -> Vec<(Id, String
         .into_iter()
         .filter_map(|id| {
             let folder = paperpaw_sdk::native::fetched_folder(id.as_str());
-            let header = paperpaw_sdk::native::read_header(storage, &native.path(&folder)).ok()?;
+            let header = paperpaw_sdk::native::read_header(storage, &native.path(&folder))?;
             let fetched = paperpaw_sdk::native::fetched_code(storage, id.as_str());
             // Only what the update plugin fetched, and once it is named as
             // installed, the code before no longer runs.
