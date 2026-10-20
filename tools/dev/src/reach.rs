@@ -160,13 +160,15 @@ impl Seen {
         )
     }
 
-    /// The state, and where the part with the focus is: parts with the
-    /// same text told apart.
+    /// The state, the targets shown and where the part with the focus
+    /// is: parts with the same text told apart, and pages of one screen
+    /// (a guide's) whose focus sits on the same button.
     fn spot(&self) -> String {
         format!(
-            "{}#{:?}",
+            "{}#{:?}#{}",
             self.state(),
-            self.focused().map(|p| (p.area.x, p.area.y))
+            self.focused().map(|p| (p.area.x, p.area.y)),
+            self.view()
         )
     }
 
