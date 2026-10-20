@@ -279,8 +279,20 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
             (f32::from(area.height) - notes_h) as u16,
         );
         let size = text_size(env, &font, &shown.sentence, room);
-        let lines = balanced(&font, size, &shown.sentence, f32::from(room.width));
+        let mut lines = balanced(&font, size, &shown.sentence, f32::from(room.width));
         let height = line(&font, size);
+        // No more lines than the place holds: the last one shortened.
+        let fit = ((f32::from(room.height) / height.max(1.0)) as usize).max(1);
+        if lines.len() > fit {
+            let width = f32::from(room.width);
+            lines = super::wrap(&font, size, &shown.sentence, width, fit);
+        }
+        // The notes where they fit below.
+        let notes_h = if height * lines.len() as f32 + notes_h <= f32::from(area.height) {
+            notes_h
+        } else {
+            0.0
+        };
         let total = height * lines.len() as f32 + notes_h;
         let mut y = f32::from(area.y) + (f32::from(area.height) - total).max(0.0) / 2.0;
         for text in &lines {
@@ -288,7 +300,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
             super::label(canvas, &font, size, align, row, text, look.ink);
             y += height;
         }
-        if !notes.is_empty() {
+        if notes_h > 0.0 {
             let row = Rect::new(area.x, y as u16, area.width, small as u16);
             super::label(canvas, &font, style.small, align, row, &notes, look.faint);
         }

@@ -199,6 +199,13 @@ pub(crate) fn label_height(env: &Env<'_>) -> u16 {
     line_height(env, style.small) + style.gap as u16 / 4
 }
 
+/// The height of the line below the cover of the book being read, where
+/// it has no label, and of the room above it.
+pub(crate) fn mark_height(env: &Env<'_>) -> u16 {
+    let style = UiStyle::new(env);
+    (style.line as u16 * 3).max(3) + (style.gap as u16 / 4).max(1)
+}
+
 /// Where `book`'s cover goes in `place`: at its bottom (covers of other
 /// shapes stand on the same line), in the middle from side to side.
 fn cover_at(place: &Place, book: &Book) -> Rect {

@@ -553,6 +553,13 @@ fn draw(
         }
         _ => title_size,
     };
+    // A line of the title no higher than the place: smaller in a flat
+    // cell, down to a little below the small size.
+    let least = style.small.min(title_size) * 0.8;
+    let title_size = widgets::largest_size(title_size, least, |s| {
+        widgets::line_height(env, s) <= rest.height
+    })
+    .unwrap_or(least);
     // The chapter set a little apart from the book's page and time.
     let apart = gap / 2;
     let height = |parts: &[Part]| -> u16 {

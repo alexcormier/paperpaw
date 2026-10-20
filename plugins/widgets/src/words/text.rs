@@ -88,9 +88,17 @@ pub(super) fn draw_lines(
     color: Color,
 ) -> u16 {
     let line = line_height(font, size) as u16;
+    // Slanted letters reach past their advance at the end of a line: a
+    // line ending at the right edge keeps that much clear of it.
+    let overhang = size * 0.12;
+    let right = f32::from(area.x) + f32::from(area.width);
     for (n, text) in lines.iter().enumerate() {
         let row = Rect::new(area.x, top + line * n as u16, area.width, line);
-        let x = align.x(area, font.measure(size, text));
+        let width = font.measure(size, text);
+        let x = align
+            .x(area, width)
+            .min(right - width - overhang)
+            .max(f32::from(area.x));
         ui::draw_label(canvas, font, size, x, row, text, color);
     }
     line * lines.len() as u16

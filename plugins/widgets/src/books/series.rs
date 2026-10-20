@@ -339,7 +339,8 @@ impl Series {
         let label = if Self::labelled(env) {
             shelf::label_height(env)
         } else {
-            0
+            // Room for the line below the book being read.
+            shelf::mark_height(env)
         };
         let align = widgets::align(env, WIDGET);
         let books = &self.shown.books;

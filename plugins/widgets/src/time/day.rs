@@ -281,13 +281,27 @@ fn draw_sheet(
     let left = align.x(area, width);
     let sheet = Rect::new(left as u16, area.y, width as u16, area.height);
     let radius = style.corner.max((width * 0.06) as u32);
-    let month = super::month_name(env, t.month);
-    let month = if with_year {
-        format!("{month} {}", t.year)
-    } else {
-        String::from(month)
+    // The month (with the year where set) on the band where it fits, else
+    // in short, else shortened: never wider than the sheet.
+    let room = width * 0.85;
+    let band_max = (height * 0.11).max(style.small);
+    let full = super::month_name(env, t.month);
+    let short = super::month_short(env, t.month);
+    let mut names = Vec::new();
+    if with_year {
+        names.push(format!("{full} {}", t.year));
+    }
+    names.push(String::from(full));
+    names.push(String::from(short));
+    let fits = |text: &String| {
+        widgets::largest_size(band_max, style.small, |s| font.measure(s, text) <= room).is_some()
     };
-    let band_size = super::fit_size(font, (height * 0.11).max(style.small), &month, width * 0.85);
+    let month = names
+        .iter()
+        .find(|text| fits(text))
+        .cloned()
+        .unwrap_or_else(|| paperpaw_sdk::ui::fit(font, style.small, short, room));
+    let band_size = super::fit_size(font, band_max, &month, room);
     let band_h = (line(font, band_size) * 1.25).min(height * 0.3);
     // The band in ink, the sheet's paper inside a line round it.
     let thick = style.line * 2;
