@@ -75,8 +75,6 @@ const NOTE_ENTERED: Event<Typed> = Event::new("reader.note-entered");
 /// standard ones.
 pub const LAYOUT_MENU: Id = menus::READER_PANEL;
 pub const MORE_MENU: Id = menus::READER_MORE;
-/// Follows a link of the open book: parameters `path` and `href`.
-pub const FOLLOW: Id = Id::new_static("reader.follow");
 /// The reply when a page has been read aloud; parameter `path`.
 const SPOKEN: Id = Id::new_static("reader.spoken");
 /// Skimming through the book, an overlay (see `skim`); it asks the
@@ -334,6 +332,11 @@ impl Plugin for Reader {
             "reader.toc",
             Box::new(|env, params| Box::new(toc::TocScreen::open(env, params))),
         ))?;
+        // Its other screens fill the standard slots, which others may.
+        r.bind_slot(slots::TOC, TOC_SCREEN, Priority::DEFAULT)?;
+        r.bind_slot(slots::ANNOTATIONS, ANNOTATIONS_SCREEN, Priority::DEFAULT)?;
+        r.bind_slot(slots::FOOTNOTE, FOOTNOTE_SCREEN, Priority::DEFAULT)?;
+        r.bind_slot(slots::SEARCH, SEARCH_SCREEN, Priority::DEFAULT)?;
         r.add_action(paperpaw_sdk::ActionSpec::new(actions::TOC, "reader.toc"))?;
         r.add_screen(ScreenSpec::new(
             ANNOTATIONS_SCREEN,

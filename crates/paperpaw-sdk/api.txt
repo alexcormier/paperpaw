@@ -139,6 +139,14 @@ pub fn paperpaw_sdk::builtin::events::DecorationTapped::new(paperpaw_sdk::Id, pa
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::DecorationTapped
 pub fn paperpaw_sdk::builtin::events::DecorationTapped::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::builtin::events::DecorationTapped::to_params(&self) -> paperpaw_sdk::Params
+#[non_exhaustive] pub struct paperpaw_sdk::builtin::events::FollowLink
+pub paperpaw_sdk::builtin::events::FollowLink::href: alloc::string::String
+pub paperpaw_sdk::builtin::events::FollowLink::path: alloc::string::String
+impl paperpaw_sdk::builtin::events::FollowLink
+pub fn paperpaw_sdk::builtin::events::FollowLink::new(alloc::string::String, alloc::string::String) -> Self
+impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::FollowLink
+pub fn paperpaw_sdk::builtin::events::FollowLink::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
+pub fn paperpaw_sdk::builtin::events::FollowLink::to_params(&self) -> paperpaw_sdk::Params
 #[non_exhaustive] pub struct paperpaw_sdk::builtin::events::Goto
 pub paperpaw_sdk::builtin::events::Goto::end_offset: core::option::Option<u32>
 pub paperpaw_sdk::builtin::events::Goto::end_section: core::option::Option<u32>
@@ -262,6 +270,7 @@ pub const paperpaw_sdk::builtin::events::BOOK_OPENED: paperpaw_sdk::event::Event
 pub const paperpaw_sdk::builtin::events::BOOK_REMOVED: paperpaw_sdk::event::Event<paperpaw_sdk::builtin::events::BookRemoved>
 pub const paperpaw_sdk::builtin::events::DECORATION_TAPPED: paperpaw_sdk::event::Event<paperpaw_sdk::builtin::events::DecorationTapped>
 pub const paperpaw_sdk::builtin::events::FIRMWARE_CHANGED: paperpaw_sdk::event::Event<()>
+pub const paperpaw_sdk::builtin::events::FOLLOW_LINK: paperpaw_sdk::event::Event<paperpaw_sdk::builtin::events::FollowLink>
 pub const paperpaw_sdk::builtin::events::GOTO: paperpaw_sdk::event::Event<paperpaw_sdk::builtin::events::Goto>
 pub const paperpaw_sdk::builtin::events::LIBRARY_CHANGED: paperpaw_sdk::event::Event<()>
 pub const paperpaw_sdk::builtin::events::MENU_CHANGED: paperpaw_sdk::event::Event<paperpaw_sdk::builtin::events::MenuChanged>
@@ -445,9 +454,11 @@ pub const paperpaw_sdk::builtin::settings_sections::CUSTOMISE: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::settings_sections::DEVICE: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::settings_sections::READING: paperpaw_sdk::Id
 pub mod paperpaw_sdk::builtin::slots
+pub const paperpaw_sdk::builtin::slots::ANNOTATIONS: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::slots::BOOK_INFO: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::slots::BROWSER: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::slots::CHOOSE_FOLDER: paperpaw_sdk::Id
+pub const paperpaw_sdk::builtin::slots::FOOTNOTE: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::slots::HOME: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::slots::KEYBOARD: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::slots::LIBRARY: paperpaw_sdk::Id
@@ -458,9 +469,11 @@ pub const paperpaw_sdk::builtin::slots::NOTICE: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::slots::PANEL: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::slots::READER: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::slots::REMOTE_KEYBOARD: paperpaw_sdk::Id
+pub const paperpaw_sdk::builtin::slots::SEARCH: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::slots::SETTINGS: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::slots::SETUP: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::slots::SLEEP: paperpaw_sdk::Id
+pub const paperpaw_sdk::builtin::slots::TOC: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::slots::TRANSLATE: paperpaw_sdk::Id
 pub mod paperpaw_sdk::builtin::status_items
 pub const paperpaw_sdk::builtin::status_items::BATTERY: paperpaw_sdk::Id
@@ -847,6 +860,9 @@ pub fn paperpaw_sdk::builtin::events::BookRemoved::to_params(&self) -> paperpaw_
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::DecorationTapped
 pub fn paperpaw_sdk::builtin::events::DecorationTapped::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::builtin::events::DecorationTapped::to_params(&self) -> paperpaw_sdk::Params
+impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::FollowLink
+pub fn paperpaw_sdk::builtin::events::FollowLink::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
+pub fn paperpaw_sdk::builtin::events::FollowLink::to_params(&self) -> paperpaw_sdk::Params
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::Goto
 pub fn paperpaw_sdk::builtin::events::Goto::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::builtin::events::Goto::to_params(&self) -> paperpaw_sdk::Params
@@ -3946,6 +3962,9 @@ pub fn paperpaw_sdk::builtin::events::BookRemoved::to_params(&self) -> paperpaw_
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::DecorationTapped
 pub fn paperpaw_sdk::builtin::events::DecorationTapped::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::builtin::events::DecorationTapped::to_params(&self) -> paperpaw_sdk::Params
+impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::FollowLink
+pub fn paperpaw_sdk::builtin::events::FollowLink::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
+pub fn paperpaw_sdk::builtin::events::FollowLink::to_params(&self) -> paperpaw_sdk::Params
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::Goto
 pub fn paperpaw_sdk::builtin::events::Goto::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::builtin::events::Goto::to_params(&self) -> paperpaw_sdk::Params

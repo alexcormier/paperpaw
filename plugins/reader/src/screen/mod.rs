@@ -560,14 +560,14 @@ impl Screen for ReaderScreen {
             ));
             Handled::Yes
         } else if *action == crate::actions::TOC {
-            cx.command(Command::OpenScreen(
-                crate::TOC_SCREEN,
+            cx.command(Command::OpenSlot(
+                slots::TOC,
                 crate::toc::locator_params(&book.path, book.page.start),
             ));
             Handled::Yes
         } else if *action == crate::actions::ANNOTATIONS {
-            cx.command(Command::OpenScreen(
-                crate::ANNOTATIONS_SCREEN,
+            cx.command(Command::OpenSlot(
+                slots::ANNOTATIONS,
                 Params::new().with(params::PATH, book.path.clone()),
             ));
             Handled::Yes
@@ -853,12 +853,10 @@ impl ReaderScreen {
             }
             return;
         }
-        if *event == crate::FOLLOW && this_book {
-            let href = params
-                .get(crate::footnote::HREF)
-                .unwrap_or_default()
-                .to_string();
-            self.follow(&href, cx);
+        if let Some(link) = events::FOLLOW_LINK.read(event, params)
+            && link.path == book.path
+        {
+            self.follow(&link.href, cx);
             return;
         }
         if let Some(goto) = events::GOTO.read(event, params)
@@ -902,8 +900,8 @@ impl ReaderScreen {
             let text = typed.text.trim();
             if !text.is_empty() {
                 self.last_search = text.to_string();
-                cx.command(Command::OpenScreen(
-                    crate::SEARCH_SCREEN,
+                cx.command(Command::OpenSlot(
+                    slots::SEARCH,
                     Params::new()
                         .with(params::PATH, book.path.clone())
                         .with(params::TEXT, text.to_string()),

@@ -1519,3 +1519,84 @@ fn a_book_closed_says_where_as_an_xpointer() {
     let xpointer = closed.xpointer.clone().unwrap_or_default();
     assert!(xpointer.starts_with("/body/DocFragment["), "{xpointer:?}");
 }
+
+/// The params a screen of one's own was opened with.
+type OpenedWith = Rc<RefCell<Option<Params>>>;
+
+/// A plugin whose contents take the place of the reader's.
+struct OwnContents(OpenedWith);
+
+/// A screen that shows nothing.
+struct Blank;
+
+impl paperpaw_sdk::Screen for Blank {
+    fn draw(&mut self, _: &mut paperpaw_sdk::Canvas<'_>, _: &paperpaw_sdk::Env<'_>) {}
+
+    fn on_action(&mut self, _: &Id, _: &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled {
+        paperpaw_sdk::Handled::No
+    }
+}
+
+impl Plugin for OwnContents {
+    fn manifest(&self) -> Manifest {
+        Manifest::new(
+            Id::new_static("contents"),
+            "Contents",
+            Version::new(0, 1, 0),
+        )
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        let opened = self.0.clone();
+        r.add_screen(paperpaw_sdk::ScreenSpec::new(
+            Id::new_static("contents.list"),
+            "contents",
+            Box::new(move |_, params| {
+                *opened.borrow_mut() = Some(params.clone());
+                Box::new(Blank)
+            }),
+        ))?;
+        r.bind_slot(
+            slots::TOC,
+            Id::new_static("contents.list"),
+            paperpaw_sdk::Priority::PREFERRED,
+        )
+    }
+}
+
+#[test]
+fn the_contents_are_a_slot_another_plugin_fills() {
+    let storage = Shared::default();
+    storage.create_dir("books").unwrap();
+    let text = include_str!("../../../samples/library/books/alice-in-wonderland.txt");
+    storage.write(BOOK, text.as_bytes()).unwrap();
+    let opened = OpenedWith::default();
+    let mut kernel = Kernel::builder(DEVICE)
+        .storage(storage.clone())
+        .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
+        .plugin(paperpaw_plugin_format_txt::TxtFormat)
+        .plugin(Reader)
+        .plugin(OwnContents(opened.clone()))
+        .build()
+        .unwrap();
+    let effects = kernel.start(Instant(0));
+    let mut reading = Reading {
+        kernel,
+        storage,
+        heard: Heard::default(),
+        now: 0,
+        book: BOOK,
+    };
+    reading.settle(effects);
+    reading.open();
+    reading.run(core_actions::NEXT_PAGE);
+    let at = reading.kept();
+    reading.run(actions::TOC);
+    assert_eq!(
+        reading.kernel.active_screen().map(Id::as_str),
+        Some("contents.list")
+    );
+    let params = opened.borrow().clone().expect("opened");
+    assert_eq!(params.get(params::PATH), Some(BOOK));
+    assert_eq!(params.get(params::OFFSET), Some(at.1.to_string().as_str()));
+}

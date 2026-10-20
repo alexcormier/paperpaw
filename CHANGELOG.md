@@ -6,6 +6,10 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: the reader's contents, search, marks and footnotes are standard
+  slots (`slots::TOC`, `SEARCH`, `ANNOTATIONS`, `FOOTNOTE`), and
+  following a link the standard event `events::FOLLOW_LINK`: a plugin
+  replaces one of them, or a reader of one's own uses the shipped ones.
 - SDK: `positions`, where each book was left, shared like its
   annotations (`.paperpaw/positions`, moved and removed with the book):
   readers keep it, plugins read it without opening the book. The reader

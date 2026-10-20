@@ -1,21 +1,18 @@
-//! A footnote over the page (an overlay): the note's text, *Close* and
-//! *Go to the note*. Opened when a link that looks like a note mark
-//! ("1", "[2]", "*") is followed and the setting `core.footnotes` says
-//! so; parameters `text`, `path` (the book) and `href` (the link).
+//! A footnote over the page (an overlay, in the slot `core.footnote`):
+//! the note's text, *Close* and *Go to the note*. Opened when a link that
+//! looks like a note mark ("1", "[2]", "*") is followed and the setting
+//! `core.footnotes` says so; parameters `text`, `path` (the book) and
+//! `url` (the link).
 
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use paperpaw_sdk::builtin::{actions, params};
+use paperpaw_sdk::builtin::{actions, events, params};
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
     Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, Screen,
 };
 
-use crate::FOLLOW;
-
-/// The link's target, a parameter.
-pub(crate) const HREF: &str = "href";
 /// The most of the screen a note covers.
 const SHARE: f32 = 0.5;
 
@@ -91,19 +88,17 @@ impl FootnoteScreen {
             lines,
             buttons,
             path: params.get(params::PATH).unwrap_or_default().to_string(),
-            href: params.get(HREF).unwrap_or_default().to_string(),
+            href: params.get(params::URL).unwrap_or_default().to_string(),
         }
     }
 
     fn press(&self, index: usize, cx: &mut Cx<'_, '_>) {
         cx.command(Command::Back);
         if index == 1 {
-            cx.command(Command::Emit(
-                FOLLOW,
-                Params::new()
-                    .with(params::PATH, self.path.clone())
-                    .with(HREF, self.href.clone()),
-            ));
+            cx.command(events::FOLLOW_LINK.emit(events::FollowLink::new(
+                self.path.clone(),
+                self.href.clone(),
+            )));
         }
     }
 }

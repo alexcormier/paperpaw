@@ -127,6 +127,28 @@ pub mod slots {
     pub const CHOOSE_FOLDER: Id = Id::new_static("core.choose-folder");
     /// Shows what is known of a book: parameter [`PATH`](super::params::PATH).
     pub const BOOK_INFO: Id = Id::new_static("core.book-info");
+    /// The contents of the book being read: parameters
+    /// [`PATH`](super::params::PATH) and, where it is read,
+    /// [`SECTION`](super::params::SECTION) and
+    /// [`OFFSET`](super::params::OFFSET). Choosing an entry closes it and
+    /// sends [`events::GOTO`](super::events::GOTO). The reader opens it;
+    /// bind another screen here for contents that look different.
+    pub const TOC: Id = Id::new_static("core.toc");
+    /// Where a text is found in a book: parameters
+    /// [`PATH`](super::params::PATH) and [`TEXT`](super::params::TEXT),
+    /// what to find. Choosing a place closes it and sends
+    /// [`events::GOTO`](super::events::GOTO) with the text found marked.
+    pub const SEARCH: Id = Id::new_static("core.search");
+    /// A book's bookmarks, highlights and notes: parameter
+    /// [`PATH`](super::params::PATH). Choosing one closes it and sends
+    /// [`events::GOTO`](super::events::GOTO).
+    pub const ANNOTATIONS: Id = Id::new_static("core.annotations");
+    /// A note shown over the page (an overlay), from a note mark followed:
+    /// parameters [`TEXT`](super::params::TEXT), the note,
+    /// [`PATH`](super::params::PATH), the book, and
+    /// [`URL`](super::params::URL), the link; going to the note sends
+    /// [`events::FOLLOW_LINK`](super::events::FOLLOW_LINK).
+    pub const FOOTNOTE: Id = Id::new_static("core.footnote");
     /// Shows a short message ([`Command::Notify`](crate::Command::Notify))
     /// over whatever is open, for a few seconds: parameter
     /// [`TEXT`](super::params::TEXT). It gets no input and is closed by
@@ -419,6 +441,15 @@ pub mod events {
     }
 
     crate::event_data! {
+        /// A link of a book to follow ([`FOLLOW_LINK`]): its target as the
+        /// book has it (`notes.xhtml#n3`, a web address).
+        pub struct FollowLink {
+            pub path: String,
+            pub href: String,
+        }
+    }
+
+    crate::event_data! {
         /// The words of the page shown are wanted ([`PAGE_WORDS_WANTED`],
         /// see [`reading::ask_page_words`](crate::reading::ask_page_words)):
         /// the reader answers with the event `reply`.
@@ -546,6 +577,11 @@ pub mod events {
     /// ([`DecorationTapped`]); sent for decorators that take taps (see
     /// [`decorations`](crate::decorations)), whose plugin answers.
     pub const DECORATION_TAPPED: Event<DecorationTapped> = Event::new("core.decoration-tapped");
+    /// A link of the open book is to be followed ([`FollowLink`]), as a
+    /// tap on it would: the reader goes there (or opens a web address in
+    /// the browser). A footnote shown over the page sends it to go to the
+    /// note.
+    pub const FOLLOW_LINK: Event<FollowLink> = Event::new("core.follow-link");
     /// The words of the page shown are wanted ([`PageWordsWanted`]):
     /// a reader with a book open answers with
     /// [`reading::PageWords`](crate::reading::PageWords).
@@ -1098,7 +1134,10 @@ mod tests {
         };
         let params = reading.to_params();
         assert_eq!(params.get("chapter_left"), Some("7"));
-        assert_eq!(params.get("xpointer"), Some("/body/DocFragment[4]/body/p[2]"));
+        assert_eq!(
+            params.get("xpointer"),
+            Some("/body/DocFragment[4]/body/p[2]")
+        );
         assert_eq!(Reading::from_params(&params).unwrap(), reading);
         assert_eq!(reading.at(), Locator::new(3, 120));
         // A book without a table of contents, its pages not counted.
