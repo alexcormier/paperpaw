@@ -335,7 +335,9 @@ fn picture(
             break;
         };
         let mut put = |index: u8| {
-            if r >= last {
+            // After the sink refused a row, the rest of the string is
+            // dropped: no row is offered again.
+            if r >= last || failure.is_some() {
                 return;
             }
             if interlaced {

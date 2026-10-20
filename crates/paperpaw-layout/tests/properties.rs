@@ -98,8 +98,7 @@ impl Document for Book {
 
 /// Widths by face size (book sizes, headings) and, if `varied`, also by
 /// character and style: CJK twice as wide, soft hyphens without width,
-/// bold wider. Even widths leave out a bug of line breaking (see
-/// `paperpaw-text`'s `the_character_after_a_break_must_fit_the_new_line`).
+/// bold wider.
 #[derive(Clone, Copy)]
 struct Widths {
     varied: bool,
@@ -483,7 +482,6 @@ proptest! {
     }
 
     #[test]
-    #[ignore = "bug: wrap_lines does not check the character after a break against the new line"]
     fn lines_of_varied_glyphs_fit_and_positions_survive(
         book in book(),
         style in style(),
@@ -555,7 +553,6 @@ fn pages_lower_than_a_line_still_move_on() {
 /// after "d " the bold CJK word moves to the next line and keeps its
 /// seventh character, 16.8 wide in a box of 16.25.
 #[test]
-#[ignore = "bug: wrap_lines does not check the character after a break against the new line"]
 fn a_word_moved_to_the_next_line_still_fits_it() {
     let mut book = one_paragraph("aaaaa-aaa\u{ad}äcaaadqqad 一一一一一一一", Align::Auto);
     book.sections[0][0].runs = vec![Run {
@@ -576,7 +573,6 @@ fn a_word_moved_to_the_next_line_still_fits_it() {
 /// line, which must still fit the box. Here "aaaaaaaaaaa" (11) comes on a
 /// line of 10.
 #[test]
-#[ignore = "bug: wrap_lines does not break text carried to a narrower next line again"]
 fn lines_after_a_hanging_first_line_fit_the_box() {
     let mut book = one_paragraph("aaaa-aaaaaaaaaaa", Align::Auto);
     book.sections[0][0].indent = Some(-50);

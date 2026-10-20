@@ -260,13 +260,11 @@ fn progressive_cut_after_a_segment_between_scans_shows_what_came() {
 }
 
 #[test]
-#[ignore = "bug: a progressive JPEG without its end marker fails instead of showing what there is"]
 fn progressive_without_its_end_marker_shows_the_image() {
-    // progressive.rs says "Some files end without EOI: show what there
-    // is", but the end of the data after the last scan is an error
-    // (`Bits::fill` reads ahead and fails at the end, and so does
-    // `next_marker` at the scan's end, passed on with `?`), so the whole
-    // image is lost.
+    // Some files end without EOI: what there is is shown. The end of the
+    // data after the last scan must be no error, neither where
+    // `Bits::fill` reads ahead nor where `next_marker` looks for the
+    // marker after a scan.
     let built = Jpeg::new(32, 24, SAMPLINGS[0], 3, true).progressive();
     for data in [&built[..], include_bytes!("data/kafka-progressive.jpg")] {
         assert_eq!(&data[data.len() - 2..], [0xff, 0xd9]);
@@ -278,12 +276,10 @@ fn progressive_without_its_end_marker_shows_the_image() {
 }
 
 #[test]
-#[ignore = "bug: a JPEG whose data ends without its end marker fails when its last bits are near the end"]
 fn baseline_without_its_end_marker_shows_the_image() {
     // `Bits::fill` takes bytes until more than 24 bits are at hand; at
-    // the end of the data it fails instead of going on with zeros (as it
-    // does after a marker), though the bits the last block needs are
-    // all there: the last row of blocks is lost and decoding fails.
+    // the end of the data it goes on with zeros, as after a marker: the
+    // bits the last block needs are all there.
     let data = Jpeg::new(32, 24, SAMPLINGS[2], 3, false).baseline();
     let whole = decoded(&data, Fit::side(100), true);
     let cut = decoded(&data[..data.len() - 2], Fit::side(100), true);

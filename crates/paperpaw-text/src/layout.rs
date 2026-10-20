@@ -53,24 +53,29 @@ pub fn wrap_lines_hyphenated(
     let mut lines = Vec::new();
     let mut line_start = 0;
     let mut line_width = 0.0f32;
+    // Width of the line without the spaces at its end.
+    let mut trimmed_width = 0.0f32;
     let mut spaces = 0usize;
     // Where the word being read began.
     let mut word_start = 0;
     // Last break opportunity: (end of line text, start of next line, width, spaces).
     let mut last_break: Option<(usize, usize, f32, usize)> = None;
-    let mut chars = text.char_indices().peekable();
+    // Byte offset of the next character to read.
+    let mut at = 0;
 
-    while let Some((i, c)) = chars.next() {
+    while let Some(c) = text[at..].chars().next() {
+        let i = at;
+        at += c.len_utf8();
         if c == '\n' {
-            push(&mut lines, text, line_start..i, line_width, spaces, true);
-            line_start = i + 1;
+            push(&mut lines, text, line_start..i, trimmed_width, spaces, true);
+            line_start = at;
             word_start = line_start;
-            (line_width, spaces, last_break) = (0.0, 0, None);
+            (line_width, trimmed_width, spaces, last_break) = (0.0, 0.0, 0, None);
             continue;
         }
         if c == ' ' && i == line_start {
             // Spaces at the start of a continuation line are dropped.
-            line_start = i + 1;
+            line_start = at;
             word_start = line_start;
             continue;
         }
@@ -91,7 +96,7 @@ pub fn wrap_lines_hyphenated(
                     hyphenate,
                 )
             });
-            if let Some((cut, cut_width)) = hyphenated {
+            let next = if let Some((cut, cut_width)) = hyphenated {
                 lines.push(Line {
                     range: line_start..cut,
                     width: cut_width,
@@ -99,10 +104,7 @@ pub fn wrap_lines_hyphenated(
                     last: false,
                     hyphen: true,
                 });
-                line_start = cut;
-                word_start = cut;
-                line_width = measure(cut..i);
-                spaces = 0;
+                cut
             } else {
                 // Break at the last opportunity, or inside the word if none.
                 let (end, next, end_width, end_spaces) =
@@ -115,34 +117,36 @@ pub fn wrap_lines_hyphenated(
                     end_spaces,
                     false,
                 );
-                line_start = next;
-                word_start = word_start.max(next);
-                // Re-measure what moved to the new line.
-                line_width = measure(next..i);
-                spaces = text[next..i].matches(' ').count();
-            }
-            last_break = None;
+                next
+            };
+            // Read again from the start of the new line, so that what
+            // moved there is broken against its width like any other text
+            // and the line comes out as it would laid out from its start.
+            // Every break moves past the old line start, so this ends.
+            line_start = next;
+            word_start = next;
+            at = next;
+            (line_width, trimmed_width, spaces, last_break) = (0.0, 0.0, 0, None);
+            continue;
         }
         line_width += w;
         match c {
             ' ' => {
                 let trimmed = text[line_start..i].trim_end_matches(' ');
                 let end = line_start + trimmed.len();
-                let trailing = text[end..i].chars().count();
-                let end_width = line_width - w - trailing as f32 * w;
-                let end_spaces = spaces.saturating_sub(trailing);
-                last_break = Some((end, i + 1, end_width, end_spaces));
+                let end_spaces = spaces.saturating_sub(i - end);
+                last_break = Some((end, at, trimmed_width, end_spaces));
                 spaces += 1;
-                word_start = i + 1;
+                word_start = at;
             }
             '-' | '\u{2010}' | '\u{2013}' | '\u{2014}' => {
-                let end = i + c.len_utf8();
-                if chars.peek().is_some_and(|(_, n)| *n != ' ') {
-                    last_break = Some((end, end, line_width, spaces));
-                    word_start = end;
+                trimmed_width = line_width;
+                if text[at..].chars().next().is_some_and(|n| n != ' ') {
+                    last_break = Some((at, at, line_width, spaces));
+                    word_start = at;
                 }
             }
-            _ => {}
+            _ => trimmed_width = line_width,
         }
     }
     if line_start < text.len() || lines.is_empty() || text.ends_with('\n') {
@@ -150,7 +154,7 @@ pub fn wrap_lines_hyphenated(
             &mut lines,
             text,
             line_start..text.len(),
-            line_width,
+            trimmed_width,
             spaces,
             true,
         );
