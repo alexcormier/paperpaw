@@ -73,7 +73,7 @@ impl LocalTime {
             hour: (rest / 3600) as u8,
             minute: (rest / 60 % 60) as u8,
             second: (rest % 60) as u8,
-            weekday: (days + 4).rem_euclid(7) as u8,
+            weekday: weekday_of(days),
         }
     }
 
@@ -268,11 +268,17 @@ impl Parser<'_> {
     }
 }
 
-fn is_leap(year: i32) -> bool {
+// The calendar: days and weeks of the proleptic Gregorian calendar in
+// whole numbers, for plugins that count days (statistics, calendars,
+// forecasts).
+
+/// Whether `year` has a 29 February.
+pub fn is_leap(year: i32) -> bool {
     year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)
 }
 
-fn days_in_month(year: i32, month: u8) -> u8 {
+/// The days of `month` (1 to 12) of `year`.
+pub fn days_in_month(year: i32, month: u8) -> u8 {
     match month {
         2 if is_leap(year) => 29,
         2 => 28,
@@ -281,8 +287,13 @@ fn days_in_month(year: i32, month: u8) -> u8 {
     }
 }
 
-/// Days since 1970-01-01 of a date (proleptic Gregorian calendar).
-fn days_from_civil(year: i32, month: u8, day: u8) -> i64 {
+/// The days of `year`: 365 or 366.
+pub fn days_in_year(year: i32) -> u16 {
+    if is_leap(year) { 366 } else { 365 }
+}
+
+/// Days since 1970-01-01 of a date (negative before it).
+pub fn days_from_civil(year: i32, month: u8, day: u8) -> i64 {
     let y = i64::from(year) - i64::from(month <= 2);
     let era = y.div_euclid(400);
     let yoe = y - era * 400;
@@ -292,7 +303,9 @@ fn days_from_civil(year: i32, month: u8, day: u8) -> i64 {
     era * 146_097 + doe - 719_468
 }
 
-fn civil_from_days(days: i64) -> (i32, u8, u8) {
+/// The date `days` after 1970-01-01 (before it where negative): year,
+/// month (1 to 12), day (1 to 31).
+pub fn civil_from_days(days: i64) -> (i32, u8, u8) {
     let z = days + 719_468;
     let era = z.div_euclid(146_097);
     let doe = z - era * 146_097;
@@ -303,6 +316,44 @@ fn civil_from_days(days: i64) -> (i32, u8, u8) {
     let month = if mp < 10 { mp + 3 } else { mp - 9 } as u8;
     let year = (yoe + era * 400 + i64::from(month <= 2)) as i32;
     (year, month, day)
+}
+
+/// The weekday of the day `days` after 1970-01-01: 0 (Sunday) to 6
+/// (Saturday).
+pub fn weekday_of(days: i64) -> u8 {
+    (days + 4).rem_euclid(7) as u8
+}
+
+/// The weekday of a date: 0 (Sunday) to 6 (Saturday).
+pub fn weekday(year: i32, month: u8, day: u8) -> u8 {
+    weekday_of(days_from_civil(year, month, day))
+}
+
+/// The day of the year of a date: 1 to 366.
+pub fn day_of_year(year: i32, month: u8, day: u8) -> u16 {
+    (days_from_civil(year, month, day) - days_from_civil(year, 1, 1) + 1) as u16
+}
+
+/// The number of the week of a date as ISO 8601 counts (weeks from
+/// Monday, the first holding the year's first Thursday): 1 to 53.
+pub fn iso_week(year: i32, month: u8, day: u8) -> u8 {
+    let monday_based = (i64::from(weekday(year, month, day)) + 6) % 7 + 1;
+    let weeks_in = |y: i32| {
+        let first = weekday(y, 1, 1);
+        if first == 4 || (first == 3 && is_leap(y)) {
+            53
+        } else {
+            52
+        }
+    };
+    let week = (i64::from(day_of_year(year, month, day)) - monday_based + 10) / 7;
+    if week < 1 {
+        weeks_in(year - 1)
+    } else if week > i64::from(weeks_in(year)) {
+        1
+    } else {
+        week as u8
+    }
 }
 
 /// The time zone chosen in the settings; `None` for the system's.
@@ -360,28 +411,37 @@ pub fn next_minute(env: &Env<'_>) -> Option<Instant> {
     Some(env.now.add_millis((60_000 - ms.rem_euclid(60_000)) as u64))
 }
 
-/// The time as the user wants to see it: `14:05` or `2:05 PM`
-/// (setting `core.clock-format`).
+/// The time now as the user wants to see it: `14:05` or `2:05 PM`
+/// (setting `core.clock-format`), if the device knows the time.
 pub fn clock_text(env: &Env<'_>) -> Option<String> {
     let t = local_time(env)?;
-    if env.settings.read(&settings::CLOCK_FORMAT) == CLOCK_12H {
-        let hour = match t.hour % 12 {
-            0 => 12,
-            h => h,
-        };
-        let key = if t.hour < 12 {
-            "core.clock.am"
-        } else {
-            "core.clock.pm"
-        };
-        let time = format!("{hour}:{:02}", t.minute);
-        Some(
-            env.i18n
-                .format(key, &[("time", paperpaw_i18n::Arg::Str(&time))]),
-        )
-    } else {
-        Some(format!("{:02}:{:02}", t.hour, t.minute))
+    Some(clock_of(env, t.hour, t.minute))
+}
+
+/// Whether the user wants times on a twelve-hour clock (setting
+/// `core.clock-format`).
+pub fn twelve_hours(env: &Env<'_>) -> bool {
+    env.settings.read(&settings::CLOCK_FORMAT) == CLOCK_12H
+}
+
+/// A time of day (`hour` 0 to 23) as the user wants to see it: `14:05`
+/// or `2:05 PM` ([`twelve_hours`]).
+pub fn clock_of(env: &Env<'_>, hour: u8, minute: u8) -> String {
+    if !twelve_hours(env) {
+        return format!("{hour:02}:{minute:02}");
     }
+    let key = if hour < 12 {
+        "core.clock.am"
+    } else {
+        "core.clock.pm"
+    };
+    let shown = match hour % 12 {
+        0 => 12,
+        h => h,
+    };
+    let time = format!("{shown}:{minute:02}");
+    env.i18n
+        .format(key, &[("time", paperpaw_i18n::Arg::Str(&time))])
 }
 
 /// Today in words, e.g. "Thursday, 15 October", if the device knows the
@@ -454,6 +514,28 @@ mod tests {
         for seconds in [-86_401, 0, 951_782_400, 1_792_448_650] {
             assert_eq!(LocalTime::from_seconds(seconds).to_seconds(), seconds);
         }
+    }
+
+    #[test]
+    fn days_and_weeks_of_the_calendar() {
+        // Wednesday, 14 October 2026.
+        assert_eq!(weekday(2026, 10, 14), 3);
+        assert_eq!(weekday_of(0), 4);
+        assert_eq!(day_of_year(2026, 10, 14), 287);
+        assert_eq!(day_of_year(2024, 12, 31), 366);
+        assert_eq!(days_in_year(2024), 366);
+        assert_eq!(days_in_year(2100), 365);
+        assert_eq!(days_in_year(2000), 366);
+        assert_eq!(days_in_month(2028, 2), 29);
+        assert_eq!(days_in_month(2026, 2), 28);
+        assert_eq!(iso_week(2026, 10, 14), 42);
+        // 1 January 2027 is a Friday: still week 53 of 2026.
+        assert_eq!(iso_week(2027, 1, 1), 53);
+        assert_eq!(iso_week(2027, 1, 4), 1);
+        // 29 December 2025 (a Monday) is in week 1 of 2026.
+        assert_eq!(iso_week(2025, 12, 29), 1);
+        assert_eq!(iso_week(2024, 12, 30), 1);
+        assert_eq!(iso_week(2021, 1, 3), 53);
     }
 
     #[test]

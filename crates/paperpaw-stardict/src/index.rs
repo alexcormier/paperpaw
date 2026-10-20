@@ -7,13 +7,12 @@
 //! then reads at most a block and a bit of entries.
 
 use alloc::string::String;
-use alloc::vec;
 use alloc::vec::Vec;
 use core::cmp::Ordering;
 
 use paperpaw_platform::Storage;
 
-use crate::{Error, ascii_casecmp, malformed};
+use crate::{Error, ascii_casecmp, malformed, zeroed};
 
 /// Entries per block.
 const BLOCK: u32 = 32;
@@ -176,7 +175,11 @@ impl Index {
         let mut number = block * BLOCK;
         let mut offset = self.block_offset(storage, block)?;
         let mut found = 0;
-        while number < self.count && offset < self.size {
+        // In a sorted file at most a block of other words comes before
+        // the matches; a longer walk means it is not sorted, and is cut.
+        let mut left = 2 * BLOCK as usize + max;
+        while number < self.count && offset < self.size && left > 0 {
+            left -= 1;
             let entry = self.entry(storage, offset)?;
             offset = entry.next;
             number += 1;
@@ -288,7 +291,7 @@ impl Builder {
             storage.write(&self.target, &self.header)?;
             self.started = true;
         }
-        let mut buf = vec![0u8; 4096];
+        let mut buf = zeroed(4096)?;
         let mut read = 0;
         while read < budget && self.entry < self.count {
             let n = storage.read_at(&self.source, self.pos, &mut buf)?;

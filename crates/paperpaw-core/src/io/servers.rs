@@ -1,7 +1,8 @@
 //! Plugins' HTTP servers in the local network: what the shell is to do
 //! for them ([`Io::Server`]), and what it reports (`Kernel::server_event`)
 //! turned into the plugins' [`ServerNotice`]s. A request's body is saved
-//! as it comes, so it never needs to fit in memory.
+//! as it comes, so it never needs to fit in memory; bodies left behind
+//! (by a crash) go when the next one comes.
 //!
 //! [`Io::Server`]: super::Io::Server
 
@@ -240,6 +241,10 @@ impl Servers {
                 let tmp = format!("{}/tmp", paperpaw_sdk::data::DIR);
                 let path = format!("{tmp}/request-{request}");
                 let _ = storage.create_dir(&tmp);
+                if self.bodies.is_empty() {
+                    // None is in use: those there are left from before.
+                    remove_bodies(storage, &tmp);
+                }
                 if storage.write(&path, &[]).is_ok() {
                     self.bodies.push((request, path.clone()));
                     self.incoming.push(Incoming {
@@ -364,4 +369,55 @@ impl Servers {
 /// Tells a server's plugin `notice` on its `events`.
 fn tell(events: &Id, notice: ServerNotice, out: &mut Vec<Command>) {
     out.push(Command::Emit(events.clone(), notice.to_params()));
+}
+
+/// Removes the requests' bodies in `tmp`.
+fn remove_bodies(storage: &dyn Storage, tmp: &str) {
+    let mut names = Vec::new();
+    let _ = storage.list(tmp, &mut |entry| {
+        if !entry.is_dir && entry.name.starts_with("request-") {
+            names.push(format!("{tmp}/{}", entry.name));
+        }
+    });
+    for path in names {
+        let _ = storage.remove(&path);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use paperpaw_sdk::MemoryStorage;
+
+    const SERVER: Id = Id::new_static("test.server");
+    const EVENTS: Id = Id::new_static("test.server-events");
+
+    fn body(request: u32) -> ServerEvent {
+        ServerEvent::Request {
+            server: 1,
+            request,
+            method: String::from("PUT"),
+            target: String::from("/up"),
+            body: true,
+        }
+    }
+
+    #[test]
+    fn bodies_left_behind_go() {
+        let tmp = format!("{}/tmp", paperpaw_sdk::data::DIR);
+        let left = format!("{tmp}/request-3");
+        let storage = MemoryStorage::new()
+            .with(&left, alloc::vec![0; 1000])
+            .with(&format!("{tmp}/other"), "kept");
+        let mut servers = Servers::default();
+        let mut out = Vec::new();
+        servers.serve(SERVER, 8080, EVENTS, true, 1, &mut out);
+        servers.event(body(1), &storage, &mut out);
+        assert!(!storage.exists(&left));
+        assert!(storage.exists(&format!("{tmp}/request-1")));
+        assert!(storage.exists(&format!("{tmp}/other")));
+        // A body still in use stays while another comes.
+        servers.event(body(2), &storage, &mut out);
+        assert!(storage.exists(&format!("{tmp}/request-1")));
+    }
 }

@@ -14,16 +14,20 @@
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
+use core::ops::ControlFlow;
 
 use crate::builtin::events;
 use crate::document::Locator;
-use crate::{Command, Storage};
-use paperpaw_digest::fnv1a64;
+use crate::{Command, Storage, StorageError, files};
 
-/// Longest snippet kept with an annotation, in bytes.
+/// Longest snippet kept with an annotation, in bytes, with the `…` that
+/// ends a cut one.
 const MAX_TEXT: usize = 240;
-/// Longest annotations file read.
-const MAX_FILE: usize = 1 << 20;
+/// Longest note kept, in bytes: a line of the file stays within what
+/// [`files::for_each_line`] reads whole.
+const MAX_NOTE: usize = 3 * 1024;
+/// Longest annotations file changed.
+const MAX_FILE: u64 = 1 << 20;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
@@ -70,74 +74,110 @@ pub struct Annotation {
 /// The file with the annotations of the book at `book`.
 pub fn file(book: &str) -> String {
     format!(
-        "{}/annotations/{:016x}.txt",
+        "{}/annotations/{}.txt",
         crate::data::DIR,
-        fnv1a64(book)
+        crate::library::key(book)
     )
 }
 
-/// Every annotation of the book at `book`, by position.
+/// Every annotation of the book at `book`, by position, for showing them;
+/// none where they cannot be read. Read them with [`load_for_update`] to
+/// change them.
 pub fn load(storage: &dyn Storage, book: &str) -> Vec<Annotation> {
-    let Ok(data) = crate::read_file(storage, &file(book), MAX_FILE) else {
-        return Vec::new();
-    };
-    String::from_utf8_lossy(&data)
-        .lines()
-        .filter_map(parse)
-        .collect()
+    each(storage, book, parse).unwrap_or_default()
 }
 
-/// Only where the annotations are, for drawing them.
+/// Every annotation of the book at `book`, by position, to change them
+/// and [`save`] them: an error where the file is there but cannot be read
+/// (or is larger than a megabyte), so it is not written over.
+pub fn load_for_update(storage: &dyn Storage, book: &str) -> Result<Vec<Annotation>, StorageError> {
+    match storage.size(&file(book)) {
+        Err(StorageError::NotFound) => return Ok(Vec::new()),
+        Err(e) => return Err(e),
+        Ok(size) if size > MAX_FILE => return Err(StorageError::TooLarge),
+        Ok(_) => {}
+    }
+    each(storage, book, parse)
+}
+
+/// Only where the annotations are, for drawing them: read line by line,
+/// without their texts.
 pub fn marks(storage: &dyn Storage, book: &str) -> Vec<Mark> {
-    load(storage, book).into_iter().map(|a| a.mark).collect()
+    each(storage, book, |line| fields(line).map(|(mark, _)| mark)).unwrap_or_default()
 }
 
-fn parse(line: &str) -> Option<Annotation> {
+/// What `parse` makes of each line of the book's file, as it streams; a
+/// missing file has none.
+fn each<T>(
+    storage: &dyn Storage,
+    book: &str,
+    parse: impl Fn(&str) -> Option<T>,
+) -> Result<Vec<T>, StorageError> {
+    let mut all = Vec::new();
+    let read = files::for_each_line(storage, &file(book), &mut |line| {
+        all.extend(parse(line));
+        ControlFlow::Continue(())
+    });
+    match read {
+        Ok(()) | Err(StorageError::NotFound) => Ok(all),
+        Err(e) => Err(e),
+    }
+}
+
+/// The mark a line describes, and the line's fields.
+fn fields(line: &str) -> Option<(Mark, Vec<&str>)> {
     let fields: Vec<&str> = line.splitn(10, '\t').collect();
     let kind = match *fields.first()? {
         "b" => Kind::Bookmark,
         "h" => Kind::Highlight,
         _ => return None,
     };
-    let number = |i: usize| fields.get(i)?.parse::<i64>().ok();
-    let locator = |i: usize| {
-        Some(Locator::new(
-            u32::try_from(number(i)?).ok()?,
-            u32::try_from(number(i + 1)?).ok()?,
-        ))
-    };
+    let number = |i: usize| fields.get(i)?.parse::<u32>().ok();
+    let locator = |i: usize| Some(Locator::new(number(i)?, number(i + 1)?));
     let (start, end) = (locator(1)?, locator(3)?);
-    let percent = number(5)?.clamp(0, 100) as u8;
-    // Before times were kept, the text followed the progress.
-    let (created, updated, rest) = if fields.len() == 10 {
-        (number(6)?, number(7)?, 8)
-    } else {
-        (0, 0, 6)
+    let noted = fields
+        .get(text_field(&fields) + 1)
+        .is_some_and(|note| !note.is_empty());
+    let mark = Mark {
+        kind,
+        start,
+        end,
+        noted,
     };
-    let text = fields.get(rest).copied().unwrap_or_default().to_string();
-    let note = fields
-        .get(rest + 1)
-        .copied()
-        .unwrap_or_default()
-        .to_string();
+    Some((mark, fields))
+}
+
+/// Where the text is among a line's fields: before times were kept, it
+/// followed the progress.
+fn text_field(fields: &[&str]) -> usize {
+    if fields.len() == 10 { 8 } else { 6 }
+}
+
+fn parse(line: &str) -> Option<Annotation> {
+    let (mark, fields) = fields(line)?;
+    let number = |i: usize| fields.get(i)?.parse::<i64>().ok();
+    let percent = number(5)?.clamp(0, 100) as u8;
+    let rest = text_field(&fields);
+    let (created, updated) = if rest == 8 {
+        (number(6)?, number(7)?)
+    } else {
+        (0, 0)
+    };
+    let field = |i: usize| fields.get(i).copied().unwrap_or_default().to_string();
     Some(Annotation {
-        mark: Mark {
-            kind,
-            start,
-            end,
-            noted: !note.is_empty(),
-        },
+        mark,
         percent,
         created,
         updated,
-        text,
-        note,
+        text: field(rest),
+        note: field(rest + 1),
     })
 }
 
 /// Keeps `annotations` as those of the book at `book`, sorted by
-/// position.
-pub fn save(storage: &dyn Storage, book: &str, annotations: &[Annotation]) {
+/// position (a note cut at 3 KB); `false` where they could not be
+/// written.
+pub fn save(storage: &dyn Storage, book: &str, annotations: &[Annotation]) -> bool {
     let mut all: Vec<&Annotation> = annotations.iter().collect();
     all.sort_by_key(|a| (a.mark.start, a.mark.end));
     let mut out = String::new();
@@ -156,32 +196,38 @@ pub fn save(storage: &dyn Storage, book: &str, annotations: &[Annotation]) {
             a.created,
             a.updated,
             one_line(&a.text),
-            one_line(&a.note)
+            cut(one_line(&a.note), MAX_NOTE)
         ));
     }
     let path = file(book);
     if out.is_empty() {
-        let _ = storage.remove(&path);
+        storage.remove(&path).is_ok()
     } else {
-        let _ = storage.write(&path, out.as_bytes());
+        storage.write(&path, out.as_bytes()).is_ok()
     }
 }
 
-/// `text` on one line, at most 240 bytes.
+/// `text` on one line, at most 240 bytes (with the `…` that ends a cut
+/// one).
 pub fn snippet(text: &str) -> String {
-    let mut out: String = text
+    let out: String = text
         .chars()
         .map(|c| if c.is_whitespace() { ' ' } else { c })
         .collect();
-    if out.len() > MAX_TEXT {
-        let mut end = MAX_TEXT;
-        while !out.is_char_boundary(end) {
+    cut(out, MAX_TEXT)
+}
+
+/// `text` in at most `max` bytes, ending in `…` where it is cut.
+fn cut(mut text: String, max: usize) -> String {
+    if text.len() > max {
+        let mut end = max - '…'.len_utf8();
+        while !text.is_char_boundary(end) {
             end -= 1;
         }
-        out.truncate(end);
-        out.push('…');
+        text.truncate(end);
+        text.push('…');
     }
-    out
+    text
 }
 
 /// `text` on one line: tabs and line breaks become spaces.
@@ -201,9 +247,12 @@ pub fn one_line(text: &str) -> String {
 
 /// Puts `note` on the highlight that starts at `start` (an empty one
 /// removes it), changed at `now` (seconds since 1970, 0 if not known);
-/// `false` if there is no such highlight.
+/// `false` if there is no such highlight, or the annotations could not be
+/// read or written.
 pub fn set_note(storage: &dyn Storage, book: &str, start: Locator, note: &str, now: i64) -> bool {
-    let mut all = load(storage, book);
+    let Ok(mut all) = load_for_update(storage, book) else {
+        return false;
+    };
     let Some(a) = all
         .iter_mut()
         .find(|a| a.mark.kind == Kind::Highlight && a.mark.start == start)
@@ -213,8 +262,7 @@ pub fn set_note(storage: &dyn Storage, book: &str, start: Locator, note: &str, n
     a.note = one_line(note);
     a.mark.noted = !a.note.is_empty();
     a.updated = now;
-    save(storage, book, &all);
-    true
+    save(storage, book, &all)
 }
 
 /// The note on the highlight that starts at `start`.
@@ -226,28 +274,25 @@ pub fn note_of(storage: &dyn Storage, book: &str, start: Locator) -> String {
         .unwrap_or_default()
 }
 
-/// Adds an annotation.
-pub fn add(storage: &dyn Storage, book: &str, annotation: Annotation) {
-    let mut all = load(storage, book);
+/// Adds an annotation; `false` where the annotations could not be read
+/// or written (those there are kept as they were).
+pub fn add(storage: &dyn Storage, book: &str, annotation: Annotation) -> bool {
+    let Ok(mut all) = load_for_update(storage, book) else {
+        return false;
+    };
     all.push(annotation);
-    save(storage, book, &all);
+    save(storage, book, &all)
 }
 
-/// Removes the annotations `remove` picks; `true` if there were any.
+/// Removes the annotations `remove` picks; `true` if there were any and
+/// they are gone.
 pub fn remove(storage: &dyn Storage, book: &str, remove: impl Fn(&Mark) -> bool) -> bool {
-    let mut all = load(storage, book);
+    let Ok(mut all) = load_for_update(storage, book) else {
+        return false;
+    };
     let before = all.len();
     all.retain(|a| !remove(&a.mark));
-    let removed = all.len() != before;
-    if removed {
-        save(storage, book, &all);
-    }
-    removed
-}
-
-/// The annotations of a book moved with it from `from` to `to`.
-pub fn moved(storage: &dyn Storage, from: &str, to: &str) {
-    let _ = storage.rename(&file(from), &file(to));
+    all.len() != before && save(storage, book, &all)
 }
 
 /// The event telling that the annotations of the book at `book` changed.
@@ -261,6 +306,7 @@ pub fn changed(book: &str) -> Command {
 mod tests {
     use super::*;
     use crate::MemoryStorage;
+    use crate::memory_storage::Unreadable;
 
     fn highlight(start: u32, end: u32, text: &str) -> Annotation {
         Annotation {
@@ -301,11 +347,48 @@ mod tests {
             (1_700_000_000, 1_700_000_100)
         );
         assert_eq!(note_of(&storage, book, Locator::new(1, 50)), "a note");
-        // Moved along with the book; gone when the last is removed.
-        moved(&storage, book, "books/b.epub");
-        assert!(load(&storage, book).is_empty());
-        assert!(remove(&storage, "books/b.epub", |_| true));
-        assert!(!storage.exists(&file("books/b.epub")));
+        let marks = marks(&storage, book);
+        assert_eq!(marks, [all[0].mark, all[1].mark]);
+        // Gone when the last is removed.
+        assert!(remove(&storage, book, |_| true));
+        assert!(!storage.exists(&file(book)));
+    }
+
+    #[test]
+    fn unreadable_annotations_are_not_written_over() {
+        let book = "books/a.epub";
+        let kept = MemoryStorage::new();
+        assert!(add(&kept, book, highlight(10, 20, "kept")));
+        let before = kept.get(&file(book)).unwrap();
+        let storage = Unreadable(kept);
+        assert_eq!(load_for_update(&storage, book), Err(StorageError::Io));
+        assert!(!add(&storage, book, highlight(30, 40, "new")));
+        assert!(!remove(&storage, book, |_| true));
+        assert!(!set_note(&storage, book, Locator::new(1, 10), "x", 0));
+        assert_eq!(storage.0.get(&file(book)), Some(before));
+        // Too large to be changed whole.
+        let big = MemoryStorage::new().with(&file(book), alloc::vec![b'\n'; (1 << 20) + 1]);
+        assert!(!add(&big, book, highlight(1, 2, "x")));
+        assert_eq!(big.size(&file(book)), Ok((1 << 20) + 1));
+    }
+
+    #[test]
+    fn texts_and_notes_are_cut() {
+        let long = "\u{e4}".repeat(200);
+        let text = snippet(&long);
+        assert!(
+            text.len() <= MAX_TEXT && text.ends_with('…'),
+            "{}",
+            text.len()
+        );
+        let storage = MemoryStorage::new();
+        let mut a = highlight(1, 2, &text);
+        a.note = "n".repeat(10_000);
+        assert!(add(&storage, "a.epub", a));
+        let read = load(&storage, "a.epub");
+        assert_eq!(read[0].text, text);
+        assert!(read[0].note.len() <= MAX_NOTE && read[0].note.ends_with('…'));
+        assert!(storage.size(&file("a.epub")).unwrap() < files::MAX_LINE as u64);
     }
 
     #[test]

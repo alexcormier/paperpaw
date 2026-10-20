@@ -484,7 +484,10 @@ pub(crate) fn action(action: &Id) -> Option<Tap> {
     }
 }
 
-/// Whether `event` asks the chooser to show the layout anew.
+/// Whether `event` asks the chooser to show the layout anew. Only the
+/// chooser's own previews concern the home screen: values shown above it
+/// (a slider moving in the quick panel) leave it alone, as rebuilding its
+/// widgets reads the card.
 pub(crate) fn shows_anew(event: &Id) -> bool {
     *event == events::PREVIEW_CHANGED
 }

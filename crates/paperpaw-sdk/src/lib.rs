@@ -54,6 +54,7 @@ pub mod library;
 pub mod logo;
 mod memory_storage;
 mod menus;
+pub mod numbers;
 mod params;
 mod plugin;
 mod plugins;

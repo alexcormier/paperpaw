@@ -19,6 +19,7 @@ crate-type = ["cdylib", "rlib"]
 paperpaw-digest.workspace = true
 paperpaw-app = { workspace = true, features = ["outline"] }
 paperpaw-core = { workspace = true, features = ["color", "outline"] }
+paperpaw-http.workspace = true
 paperpaw-serve.workspace = true
 paperpaw-fs.workspace = true
 paperpaw-graphics = { workspace = true, features = ["color"] }

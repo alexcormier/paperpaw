@@ -49,7 +49,7 @@ impl Md5 {
     }
 
     pub fn update(&mut self, mut data: &[u8]) {
-        self.length += data.len() as u64;
+        self.length = self.length.wrapping_add(data.len() as u64);
         while !data.is_empty() {
             let take = (64 - self.used).min(data.len());
             self.block[self.used..self.used + take].copy_from_slice(&data[..take]);
@@ -124,7 +124,18 @@ pub fn partial(storage: &dyn Storage, path: &str) -> Option<String> {
     let mut buffer = [0u8; 1024];
     for i in -1i32..=10 {
         let offset: u64 = if i < 0 { 0 } else { 1024 << (2 * i) };
-        let n = storage.read_at(path, offset, &mut buffer).ok()?;
+        // Storages may read less than asked for before the end; KOReader
+        // reads on, so a sample is short only at the end of the file.
+        let mut n = 0;
+        while n < buffer.len() {
+            let read = storage
+                .read_at(path, offset + n as u64, &mut buffer[n..])
+                .ok()?;
+            if read == 0 {
+                break;
+            }
+            n += read.min(buffer.len() - n);
+        }
         if n == 0 {
             break;
         }
@@ -194,5 +205,41 @@ mod tests {
         expected.update(&data[1024..2048]);
         expected.update(&data[4096..5000]);
         assert_eq!(partial(&storage, "b.epub"), Some(expected.hex()));
+    }
+
+    /// A storage that reads at most `limit` bytes at a time, as some
+    /// storages do (and may, whatever is asked for).
+    struct ShortReads(MemoryStorage, usize);
+
+    impl Storage for ShortReads {
+        fn read_at(&self, path: &str, offset: u64, buf: &mut [u8]) -> Result<usize, StorageError> {
+            let limit = buf.len().min(self.1);
+            self.0.read_at(path, offset, &mut buf[..limit])
+        }
+        fn size(&self, path: &str) -> Result<u64, StorageError> {
+            self.0.size(path)
+        }
+        fn write(&self, _: &str, _: &[u8]) -> Result<(), StorageError> {
+            Err(StorageError::Unsupported)
+        }
+        fn append(&self, _: &str, _: &[u8]) -> Result<(), StorageError> {
+            Err(StorageError::Unsupported)
+        }
+        fn list(&self, _: &str, _: &mut dyn FnMut(DirEntry<'_>)) -> Result<(), StorageError> {
+            Ok(())
+        }
+        fn remove(&self, _: &str) -> Result<(), StorageError> {
+            Err(StorageError::Unsupported)
+        }
+    }
+
+    #[test]
+    fn partial_digest_reads_whole_samples() {
+        let data: Vec<u8> = (0..70_000u32).map(|i| (i % 253) as u8).collect();
+        let whole = partial(&MemoryStorage::new().with("b.epub", data.clone()), "b.epub");
+        for limit in [1, 100, 1000] {
+            let storage = ShortReads(MemoryStorage::new().with("b.epub", data.clone()), limit);
+            assert_eq!(partial(&storage, "b.epub"), whole, "{limit} bytes a read");
+        }
     }
 }

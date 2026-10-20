@@ -540,6 +540,11 @@ impl<IO: ReadWriteSeek + 'static> Storage for FatStorage<IO> {
         rename_in(&dir, name(from), &to_dir, name(to))
     }
 
+    /// FAT names entries without regard to case.
+    fn ignores_case(&self) -> bool {
+        true
+    }
+
     fn create_dir(&self, path: &str) -> Result<(), StorageError> {
         let path = path.trim_matches('/');
         if path.is_empty() {
