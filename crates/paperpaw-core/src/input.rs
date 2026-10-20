@@ -80,6 +80,17 @@ impl Recognizer {
         }
     }
 
+    /// Whether button `name` is held: pressed and not let go yet.
+    pub(crate) fn holds(&self, name: &str) -> bool {
+        self.buttons.iter().any(|b| b.name == name)
+    }
+
+    /// Stops following finger `id`, without a gesture: it came down again,
+    /// so its touch before is over.
+    pub(crate) fn forget_pointer(&mut self, id: u8) {
+        self.pointers.retain(|p| p.id != id);
+    }
+
     /// Tracks a pointer the screen did not capture. Returns a gesture when
     /// the pointer is lifted.
     pub(crate) fn pointer(

@@ -287,29 +287,53 @@ impl Kernel {
     }
 
     /// Whether `event` belongs to a press dropped (see [`Kernel::shown`]).
+    /// A button or a finger is down once at a time: its release ends the
+    /// press of it held, the one taken or the one dropped, and a press
+    /// taken ends one dropped before whose release was missed.
     pub(crate) fn stale(&mut self, now: Instant, event: &InputEvent) -> bool {
         let early = self.input.stale_before.is_some_and(|before| now < before)
             || self.input.shown_at[0].is_some_and(|before| now < before);
         match event {
-            InputEvent::Button {
-                name,
-                state: ButtonState::Pressed,
-            } if early => {
-                self.input.dropped_buttons.push(name);
-                true
-            }
-            InputEvent::Button {
-                name,
-                state: ButtonState::Released,
-            } => match self.input.dropped_buttons.iter().position(|b| b == name) {
-                Some(at) => {
-                    self.input.dropped_buttons.remove(at);
-                    true
+            InputEvent::Button { name, state } => {
+                let held = self.input.recognizer.holds(name);
+                let dropped = self.input.dropped_buttons.iter().position(|b| b == name);
+                let pressed = *state == ButtonState::Pressed;
+                if let Some(at) = dropped
+                    && (!pressed || !early)
+                {
+                    self.input.dropped_buttons.swap_remove(at);
                 }
-                None => false,
-            },
-            InputEvent::Pointer(p) if p.phase == PointerPhase::Down && early => {
-                self.input.dropped_pointers.push(p.id);
+                // Pressed again while held: the press held goes on, its
+                // release is still to come.
+                if pressed && early && !held && dropped.is_none() {
+                    self.input.dropped_buttons.push(name);
+                }
+                if pressed {
+                    early
+                } else {
+                    !held && dropped.is_some()
+                }
+            }
+            InputEvent::Pointer(p) if p.phase == PointerPhase::Down => {
+                let dropped = self
+                    .input
+                    .dropped_pointers
+                    .iter()
+                    .position(|&id| id == p.id);
+                if !early {
+                    if let Some(at) = dropped {
+                        self.input.dropped_pointers.swap_remove(at);
+                    }
+                    return false;
+                }
+                // Down again: the touch of that finger before is over.
+                self.input.recognizer.forget_pointer(p.id);
+                if self.input.edge_touch.is_some_and(|t| t.id == p.id) {
+                    self.input.edge_touch = None;
+                }
+                if dropped.is_none() {
+                    self.input.dropped_pointers.push(p.id);
+                }
                 true
             }
             InputEvent::Pointer(p) => match self
