@@ -1,6 +1,8 @@
 //! Plain text (`.txt`) support for PaperPaw.
 //!
-//! - Encodings: UTF-8 (with or without BOM); otherwise Windows-1252.
+//! - Encodings: UTF-8 (with or without BOM), where stray bytes are read as
+//!   Windows-1252; UTF-16 with a BOM, read from a copy in UTF-8 made when
+//!   the file is first opened; otherwise Windows-1252.
 //! - Paragraphs: separated by blank lines when the text uses them (typical
 //!   for hard-wrapped e-texts), otherwise one paragraph per line.
 //! - Project Gutenberg files: the licence header and footer are skipped and
@@ -22,7 +24,7 @@ use alloc::vec;
 
 use paperpaw_sdk::document::Document;
 use paperpaw_sdk::{
-    FormatSpec, Id, Manifest, Plugin, RegisterError, Registrar, SDK_VERSION, Version,
+    Env, FormatSpec, Id, Manifest, Plugin, RegisterError, Registrar, SDK_VERSION, Version,
 };
 
 pub use document::TxtDocument;
@@ -46,6 +48,8 @@ impl Plugin for TxtFormat {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        // Copies in UTF-8 of UTF-16 files, moved and removed with them.
+        r.add_book_data(Env::plugin_dir(PLUGIN.as_str()), "")?;
         r.add_format(FormatSpec {
             id: FORMAT,
             title: Cow::Borrowed("format-txt.title"),

@@ -1,13 +1,16 @@
 use alloc::borrow::Cow;
+use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::cell::{Ref, RefCell};
 use core::fmt;
 
-use paperpaw_sdk::Storage;
+use crate::PLUGIN;
 use paperpaw_sdk::document::{
     Align, Block, BlockKind, Document, DocumentError, Locator, Metadata, OffsetMap,
 };
+use paperpaw_sdk::library::key;
+use paperpaw_sdk::{Env, Storage, read_file};
 
 /// Bytes inspected to detect encoding, paragraph style and metadata.
 const SNIFF: u32 = 16 * 1024;
@@ -26,6 +29,8 @@ const SPLIT_SEARCH: usize = 256;
 /// Bytes read beyond what a block needs, so the blocks after it are found
 /// in what was read: about two pages of the X4.
 const AHEAD: u32 = 4096;
+/// Bytes of a UTF-16 file converted at a time.
+const UTF16_PIECE: u32 = 4096;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Encoding {
@@ -87,9 +92,20 @@ pub struct TxtDocument {
 
 impl TxtDocument {
     pub fn open(storage: &dyn Storage, path: &str) -> Result<Self, DocumentError> {
-        let size = u32::try_from(storage.size(path)?)
-            .map_err(|_| DocumentError::Malformed(Cow::Borrowed("file larger than 4 GiB")))?;
-        let head = read(storage, path, 0, size.min(SNIFF))?;
+        let mut size = file_size(storage, path)?;
+        let mut head = read(storage, path, 0, size.min(SNIFF))?;
+        // UTF-16 is read from a copy in UTF-8, made when it is first opened.
+        let mut text = String::from(path);
+        let big_endian = match head.get(..2) {
+            Some([0xff, 0xfe]) => Some(false),
+            Some([0xfe, 0xff]) => Some(true),
+            _ => None,
+        };
+        if let Some(big_endian) = big_endian {
+            text = utf8_copy(storage, path, size, big_endian)?;
+            size = file_size(storage, &text)?;
+            head = read(storage, &text, 0, size.min(SNIFF))?;
+        }
         let bom = head.starts_with(&[0xef, 0xbb, 0xbf]);
         let encoding = if bom || is_utf8(&head, size <= SNIFF) {
             Encoding::Utf8
@@ -98,7 +114,7 @@ impl TxtDocument {
         };
 
         let mut document = TxtDocument {
-            path: String::from(path),
+            path: text,
             start: if bom { 3 } else { 0 },
             end: size,
             encoding,
@@ -113,7 +129,7 @@ impl TxtDocument {
             document.read_header(&head[..marker]);
             document.start = line_after(&head, marker) as u32;
         }
-        if let Some(end) = find_end_marker(storage, path, document.start, size)? {
+        if let Some(end) = find_end_marker(storage, &document.path, document.start, size)? {
             document.end = end;
         }
 
@@ -467,6 +483,96 @@ fn find_end_marker(
     Ok(None)
 }
 
+fn file_size(storage: &dyn Storage, path: &str) -> Result<u32, DocumentError> {
+    u32::try_from(storage.size(path)?)
+        .map_err(|_| DocumentError::Malformed(Cow::Borrowed("file larger than 4 GiB")))
+}
+
+/// The path of a copy in UTF-8 of the UTF-16 file at `path` (`size`
+/// bytes, a byte order mark first), in the plugin's folder: made a piece
+/// at a time when it is missing or was made from another file.
+fn utf8_copy(
+    storage: &dyn Storage,
+    path: &str,
+    size: u32,
+    big_endian: bool,
+) -> Result<String, DocumentError> {
+    let base = format!("{}/{}", Env::plugin_dir(PLUGIN.as_str()), key(path));
+    let (copy, stamp_path) = (format!("{base}.txt"), format!("{base}.source"));
+    let stamp = format!("{size}\n");
+    if read_file(storage, &stamp_path, 64).ok().as_deref() == Some(stamp.as_bytes())
+        && storage.exists(&copy)
+    {
+        return Ok(copy);
+    }
+    // The stamp goes first and comes last: a copy cut short is made again.
+    storage.remove(&stamp_path)?;
+    storage.write(&copy, b"")?;
+    let mut raw = Vec::new();
+    let mut utf8 = Vec::new();
+    // Each unit takes at most 3 bytes in UTF-8 (a pair of them 4), and a
+    // high surrogate left over from the piece before adds 3 more.
+    raw.try_reserve_exact(UTF16_PIECE as usize)
+        .and_then(|()| utf8.try_reserve_exact(UTF16_PIECE as usize / 2 * 3 + 3))
+        .map_err(|_| DocumentError::OutOfMemory)?;
+    let mut high = None;
+    let mut at = 2;
+    while at < size {
+        raw.clear();
+        read_onto(
+            storage,
+            path,
+            at,
+            at.saturating_add(UTF16_PIECE).min(size),
+            &mut raw,
+        )?;
+        // A last odd byte is no unit.
+        let units = raw.as_chunks::<2>().0;
+        if units.is_empty() {
+            break;
+        }
+        at += 2 * units.len() as u32;
+        utf8.clear();
+        for &pair in units {
+            let unit = if big_endian {
+                u16::from_be_bytes(pair)
+            } else {
+                u16::from_le_bytes(pair)
+            };
+            push_utf16(&mut utf8, &mut high, unit);
+        }
+        storage.append(&copy, &utf8)?;
+    }
+    if high.is_some() {
+        storage.append(&copy, "\u{fffd}".as_bytes())?;
+    }
+    storage.write(&stamp_path, stamp.as_bytes())?;
+    Ok(copy)
+}
+
+/// Appends UTF-16 unit `unit` to `utf8`; `high` keeps a high surrogate
+/// until the unit after it. Surrogates without their pair become U+FFFD.
+fn push_utf16(utf8: &mut Vec<u8>, high: &mut Option<u16>, unit: u16) {
+    let ch = match (high.take(), unit) {
+        (Some(first), 0xdc00..=0xdfff) => {
+            let code = 0x10000 + ((u32::from(first) - 0xd800) << 10) + (u32::from(unit) - 0xdc00);
+            char::from_u32(code)
+        }
+        (first, _) => {
+            if first.is_some() {
+                utf8.extend_from_slice("\u{fffd}".as_bytes());
+            }
+            if (0xd800..=0xdbff).contains(&unit) {
+                *high = Some(unit);
+                return;
+            }
+            char::from_u32(u32::from(unit))
+        }
+    };
+    let ch = ch.unwrap_or('\u{fffd}');
+    utf8.extend_from_slice(ch.encode_utf8(&mut [0; 4]).as_bytes());
+}
+
 /// Reads `from..to`; fails cleanly instead of aborting when memory is short.
 fn read(storage: &dyn Storage, path: &str, from: u32, to: u32) -> Result<Vec<u8>, DocumentError> {
     let mut buf = Vec::new();
@@ -510,18 +616,21 @@ fn is_utf8(bytes: &[u8], complete: bool) -> bool {
     }
 }
 
-/// Decodes one UTF-8 character; invalid bytes become U+FFFD.
+/// Decodes one UTF-8 character. A byte that starts none is read as
+/// Windows-1252, where such bytes in mostly UTF-8 text most likely come
+/// from (e.g. a Latin-1 file whose first letters beyond ASCII come after
+/// the part looked at to tell its encoding).
 fn decode_utf8(bytes: &[u8]) -> (char, usize) {
     let len = match bytes[0] {
         0x00..=0x7f => 1,
         0xc2..=0xdf => 2,
         0xe0..=0xef => 3,
         0xf0..=0xf4 => 4,
-        _ => return ('\u{fffd}', 1),
+        byte => return (cp1252(byte), 1),
     };
     match bytes.get(..len).and_then(|b| core::str::from_utf8(b).ok()) {
         Some(s) => (s.chars().next().unwrap_or('\u{fffd}'), len),
-        None => ('\u{fffd}', 1),
+        None => (cp1252(bytes[0]), 1),
     }
 }
 
@@ -623,7 +732,6 @@ fn line_start(bytes: &[u8], index: usize) -> usize {
 mod tests {
     use super::*;
     use alloc::format;
-    use alloc::string::ToString;
     use paperpaw_sdk::{DirEntry, MemoryStorage, StorageError};
 
     fn open(content: impl Into<Vec<u8>>) -> (MemoryStorage, TxtDocument) {
@@ -836,14 +944,60 @@ mod tests {
     }
 
     #[test]
-    fn invalid_utf8_inside_valid_text_is_replaced() {
-        let (storage, document) = open("caf\u{e9} ok\n".to_string());
-        let block = document
-            .block_at(&storage, Locator::START)
-            .unwrap()
-            .unwrap();
-        assert_eq!(block.text, "café ok");
-        assert_eq!(decode_utf8(&[0xff, b'a']), ('\u{fffd}', 1));
+    fn stray_bytes_in_utf8_are_read_as_windows_1252() {
+        // UTF-8 (ASCII) as far as the encoding is told, Latin-1 later on.
+        let mut bytes = "Plain prose at the start of the file.\n\n"
+            .repeat(1000)
+            .into_bytes();
+        bytes.extend_from_slice(b"Caf\xe9 cr\xe8me, \x93quoted\x94, na\xefve \xc3\xa4.\n");
+        let (storage, document) = open(bytes);
+        let blocks = blocks(&storage, &document);
+        let last = blocks.last().unwrap();
+        assert_eq!(last.text, "Café crème, “quoted”, naïve ä.");
+        // Offsets still map back to the file.
+        let index = last.text.find("naïve").unwrap();
+        let offset = last.source_offset(index);
+        let file = storage.get("books/book.txt").unwrap();
+        assert_eq!(&file[offset as usize..offset as usize + 3], b"na\xef");
+        assert_eq!(decode_utf8(&[0xff, b'a']), ('ÿ', 1));
+        assert_eq!(decode_utf8(&[0xc3]), ('Ã', 1));
+    }
+
+    #[test]
+    fn reads_utf_16_in_either_byte_order() {
+        // Characters of one, two and three bytes in UTF-8 and a surrogate
+        // pair, at offsets that put some pairs across converted pieces.
+        let line = "Grüße 日本 𝄞.";
+        let text = format!("{line}\n\n").repeat(2000);
+        for big_endian in [false, true] {
+            let mut bytes = Vec::new();
+            for unit in core::iter::once(0xfeff).chain(text.encode_utf16()) {
+                let pair = if big_endian {
+                    u16::to_be_bytes(unit)
+                } else {
+                    u16::to_le_bytes(unit)
+                };
+                bytes.extend_from_slice(&pair);
+            }
+            // A high surrogate without its pair, and an odd byte.
+            bytes.extend_from_slice(&if big_endian {
+                [0xd8, 0x00]
+            } else {
+                [0x00, 0xd8]
+            });
+            bytes.push(b'x');
+            let (storage, document) = open(bytes);
+            assert_eq!(document.metadata().title.as_deref(), Some("book"));
+            let blocks = blocks(&storage, &document);
+            assert_eq!(blocks.len(), 2001, "big endian: {big_endian}");
+            assert!(blocks[..2000].iter().all(|b| b.text == line));
+            assert_eq!(blocks[2000].text, "\u{fffd}");
+            // Opened again, the copy made before is read.
+            let copy = storage.get(&document.path).unwrap();
+            let again = TxtDocument::open(&storage, "books/book.txt").unwrap();
+            assert_eq!(again.path, document.path);
+            assert_eq!(storage.get(&again.path).unwrap(), copy);
+        }
     }
 
     #[test]
