@@ -12,13 +12,6 @@ pub(super) const NAME: &str = "name";
 /// Parameter: the authors of a download, as the catalog names them.
 pub(super) const AUTHORS: &str = "authors";
 
-pub(super) fn download_path() -> String {
-    format!(
-        "{}/download.tmp",
-        paperpaw_sdk::Env::plugin_dir(PLUGIN.as_str())
-    )
-}
-
 impl BrowseScreen {
     /// Downloads entry `i`'s book, or opens the feed it leads to.
     pub(super) fn open(&mut self, i: usize, cx: &mut Cx<'_, '_>) {
@@ -41,7 +34,7 @@ impl BrowseScreen {
             cx.command(Command::Http(request(
                 &self.catalog,
                 &book.url,
-                download_path(),
+                self.temp.next("tmp"),
                 &DOWNLOADED,
                 params,
             )));
@@ -57,12 +50,10 @@ impl BrowseScreen {
         self.say(message, cx);
     }
 
-    pub(super) fn downloaded(&mut self, reply: &HttpReply, cx: &mut Cx<'_, '_>) {
+    pub(super) fn downloaded(&mut self, reply: &HttpReply, file: &str, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
         let url = reply.context.get(URL).unwrap_or_default().to_string();
-        let tmp = download_path();
         if !self.answered(reply, &url, cx) {
-            let _ = env.storage.remove(&tmp);
             return;
         }
         // The catalog's folder, for order on the device.
@@ -70,8 +61,7 @@ impl BrowseScreen {
         let name = reply.context.get(NAME).unwrap_or("download").to_string();
         let _ = env.storage.create_dir(&dir);
         let target = files::free_path(env.storage, &dir, &name);
-        if files::move_to(env.storage, &tmp, &target).is_err() {
-            let _ = env.storage.remove(&tmp);
+        if files::move_to(env.storage, file, &target).is_err() {
             let message = env.i18n.tr("opds.cannot-save").to_string();
             return self.say(message, cx);
         }

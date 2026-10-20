@@ -10,7 +10,7 @@ use alloc::vec::Vec;
 
 use paperpaw_sdk::secrets::SecretChange;
 use paperpaw_sdk::web::{clean_name, host};
-use paperpaw_sdk::{Arg, Command, Env};
+use paperpaw_sdk::{Arg, Command, Env, Storage, StorageError};
 
 use crate::PLUGIN;
 
@@ -74,37 +74,62 @@ fn secret_id(url: &str) -> String {
     format!("{SECRETS}{}", &digest[..16])
 }
 
+/// The most the list may take; a list that has outgrown it is not read
+/// (and so not saved over).
+const MAX_FILE: usize = 64 * 1024;
+
+/// The list could not be read: it is there, but the card failed, it is
+/// too large or it is not UTF-8 text. Nothing may be saved over it then,
+/// or the catalogs and their passwords would be lost.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Unreadable;
+
 /// The catalogs; until the user changes them, one to start with.
-pub(crate) fn load(env: &Env<'_>) -> Vec<Catalog> {
-    let Ok(data) = paperpaw_sdk::read_file(env.storage, &path(), 64 * 1024) else {
-        return Vec::from([Catalog {
+pub(crate) fn load(env: &Env<'_>) -> Result<Vec<Catalog>, Unreadable> {
+    let Some(mut catalogs) = read(env.storage)? else {
+        return Ok(Vec::from([Catalog {
             name: String::from("Project Gutenberg"),
             url: String::from("https://www.gutenberg.org/ebooks.opds/"),
             ..Catalog::default()
-        }]);
+        }]));
     };
-    let mut catalogs = parse(&String::from_utf8_lossy(&data));
-    for c in &mut catalogs {
-        // Earlier versions kept it in the list (see `move_passwords`).
-        if c.password.is_empty() {
-            c.password = env
-                .secrets
-                .get(&secret_id(&c.url))
-                .unwrap_or_default()
-                .to_string();
-        }
+    fill_passwords(env, &mut catalogs);
+    Ok(catalogs)
+}
+
+/// The list as the file has it; `None` if there is none yet.
+fn read(storage: &dyn Storage) -> Result<Option<Vec<Catalog>>, Unreadable> {
+    let data = match paperpaw_sdk::read_file(storage, &path(), MAX_FILE) {
+        Ok(data) => data,
+        Err(StorageError::NotFound) => return Ok(None),
+        Err(_) => return Err(Unreadable),
+    };
+    let text = core::str::from_utf8(&data).map_err(|_| Unreadable)?;
+    Ok(Some(parse(text)))
+}
+
+/// The passwords kept with the other passwords and keys, for catalogs
+/// whose line has none (earlier versions kept it there, see
+/// `move_passwords`).
+fn fill_passwords(env: &Env<'_>, catalogs: &mut [Catalog]) {
+    for c in catalogs.iter_mut().filter(|c| c.password.is_empty()) {
+        c.password = env
+            .secrets
+            .get(&secret_id(&c.url))
+            .unwrap_or_default()
+            .to_string();
     }
-    catalogs
 }
 
 /// Moves passwords kept in the list by earlier versions to the other
 /// passwords and keys.
 pub(crate) fn move_passwords(env: &Env<'_>, out: &mut Vec<Command>) {
-    let Ok(data) = paperpaw_sdk::read_file(env.storage, &path(), 64 * 1024) else {
+    let Ok(Some(mut catalogs)) = read(env.storage) else {
         return;
     };
-    let catalogs = parse(&String::from_utf8_lossy(&data));
     if catalogs.iter().any(|c| !c.password.is_empty()) {
+        // Those moved already stay.
+        fill_passwords(env, &mut catalogs);
         save(env, &catalogs, out);
     }
 }
@@ -149,7 +174,8 @@ fn encode(catalogs: &[Catalog]) -> String {
 }
 
 /// Saves the list, and the passwords with the other passwords and keys:
-/// their changes go to `out`.
+/// their changes go to `out`. `catalogs` must come from [`load`]: what is
+/// not in it is removed.
 pub(crate) fn save(env: &Env<'_>, catalogs: &[Catalog], out: &mut Vec<Command>) {
     for c in catalogs {
         let id = secret_id(&c.url);
@@ -201,6 +227,24 @@ mod tests {
         assert!(old[0].sync);
         assert!(secret_id("https://a").starts_with(SECRETS));
         assert_ne!(secret_id("https://a"), secret_id("https://b"));
+    }
+
+    #[test]
+    fn a_list_that_cannot_be_read_is_no_empty_list() {
+        let storage = paperpaw_sdk::MemoryStorage::new();
+        assert_eq!(read(&storage), Ok(None), "none yet");
+        storage
+            .write(&path(), b"Mine\thttps://a.example\n")
+            .unwrap();
+        assert_eq!(read(&storage).unwrap().unwrap()[0].name, "Mine");
+        // Saved on a computer in another encoding.
+        storage
+            .write(&path(), b"B\xfccher\thttps://a.example\n")
+            .unwrap();
+        assert_eq!(read(&storage), Err(Unreadable));
+        let long = "Mine\thttps://a.example\n".repeat(MAX_FILE / 10);
+        storage.write(&path(), long.as_bytes()).unwrap();
+        assert_eq!(read(&storage), Err(Unreadable));
     }
 
     /// What version 1 wrote stays readable (see `docs/data-files.md`).

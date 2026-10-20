@@ -4,7 +4,10 @@
 //!
 //! Every book synced is remembered (by its id in the catalog), so a book
 //! the user deleted is not fetched again. Books already in the folder
-//! under the same name are skipped too.
+//! under the same name are skipped too. The record of a catalog is read
+//! line by line for each page of its list, so it may grow without
+//! limit; one that cannot be read skips the catalog rather than fetch
+//! again what the user deleted.
 //!
 //! It runs in the background: the answers come as events to the plugin's
 //! subscriptions, whatever screen is open. One book is downloaded at a
@@ -14,14 +17,16 @@ use alloc::collections::VecDeque;
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
+use core::ops::ControlFlow;
 
 use paperpaw_digest::md5;
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::HttpReply;
 use paperpaw_sdk::web::{clean_name, file_name};
-use paperpaw_sdk::{Command, Env, HttpRequest, Id, Params, files};
+use paperpaw_sdk::{Command, Env, HttpRequest, Id, Params, Storage, StorageError, files};
 
 use crate::catalogs::Catalog;
+use crate::temp::{self, TempFiles};
 use crate::{PLUGIN, feed};
 use paperpaw_sdk::setting::Setting;
 
@@ -38,22 +43,44 @@ const MAX_PAGES: usize = 50;
 /// Parameter of the requests: which run they belong to.
 const RUN: &str = "run";
 
-/// Where the sync keeps what it is loading.
-fn feed_path() -> String {
-    format!("{}/sync.xml", Env::plugin_dir(PLUGIN.as_str()))
-}
-
-fn book_path() -> String {
-    format!("{}/sync.tmp", Env::plugin_dir(PLUGIN.as_str()))
-}
-
-/// The books synced from the catalog at `url`, one id a line.
+/// The books synced from the catalog at `url`, one id a line (see
+/// [`record_line`]).
 fn record_path(url: &str) -> String {
     format!(
         "{}/synced/{}.txt",
         Env::plugin_dir(PLUGIN.as_str()),
         md5::of(url)
     )
+}
+
+/// How the book with `id` is written in the record: as it is, on one
+/// line; an id longer than a line may be by its digest.
+fn record_line(id: &str) -> String {
+    let line = id.replace(['\n', '\r'], " ");
+    if line.len() <= files::MAX_LINE {
+        line
+    } else {
+        format!("md5:{}", md5::of(&line))
+    }
+}
+
+/// Which of `lines` the record at `path` holds, read line by line. No
+/// record yet holds none; one that cannot be read is an error, never
+/// "none synced".
+fn recorded(storage: &dyn Storage, path: &str, lines: &[&str]) -> Result<Vec<bool>, StorageError> {
+    let mut found = alloc::vec![false; lines.len()];
+    let read = files::for_each_line(storage, path, &mut |line| {
+        for (i, wanted) in lines.iter().enumerate() {
+            if *wanted == line {
+                found[i] = true;
+            }
+        }
+        ControlFlow::Continue(())
+    });
+    match read {
+        Ok(()) | Err(StorageError::NotFound) => Ok(found),
+        Err(e) => Err(e),
+    }
 }
 
 /// What a sync did, for the screens.
@@ -68,12 +95,16 @@ pub(crate) struct Report {
     /// Catalogs whose address lists no books, only further lists (such
     /// as Project Gutenberg's start page): nothing to sync there.
     pub only_lists: usize,
+    /// Catalogs whose record could not be read: left alone, so books
+    /// deleted here do not come again.
+    pub skipped: usize,
     pub running: bool,
 }
 
 /// A book to download.
 #[derive(Debug, Clone)]
 struct Item {
+    /// Its id, as the record has it ([`record_line`]).
     id: String,
     name: String,
     url: String,
@@ -92,22 +123,31 @@ struct Run {
     next: Option<String>,
     /// The pages read.
     pages: Vec<String>,
-    /// Ids of the books synced before.
-    synced: Vec<String>,
     /// Books of this catalog loaded in this run.
     count: usize,
     limit: usize,
 }
 
 /// The sync of the plugin, shared by its screens and subscriptions.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub(crate) struct Sync {
     run: Option<Run>,
     runs: u32,
     pub report: Option<Report>,
+    /// The files the answers are written to.
+    temp: TempFiles,
 }
 
 impl Sync {
+    pub(crate) fn new(temp: TempFiles) -> Self {
+        Self {
+            run: None,
+            runs: 0,
+            report: None,
+            temp,
+        }
+    }
+
     pub(crate) fn running(&self) -> bool {
         self.run.is_some()
     }
@@ -129,7 +169,8 @@ impl Sync {
         self.begin(env, catalog, waiting, out);
     }
 
-    /// Stops the sync; the books loaded stay.
+    /// Stops the sync; the books loaded stay. What is still on its way
+    /// is thrown away when it comes.
     pub(crate) fn stop(&mut self, out: &mut Vec<Command>) {
         if self.run.take().is_some() {
             if let Some(report) = &mut self.report {
@@ -146,14 +187,6 @@ impl Sync {
         waiting: VecDeque<Catalog>,
         out: &mut Vec<Command>,
     ) {
-        let synced = paperpaw_sdk::read_file(env.storage, &record_path(&catalog.url), 1024 * 1024)
-            .map(|data| {
-                String::from_utf8_lossy(&data)
-                    .lines()
-                    .map(ToString::to_string)
-                    .collect()
-            })
-            .unwrap_or_default();
         if let Some(report) = &mut self.report {
             report.catalog = catalog.name.clone();
         }
@@ -165,7 +198,6 @@ impl Sync {
             queue: VecDeque::new(),
             next: None,
             pages: Vec::new(),
-            synced,
             count: 0,
             limit,
             catalog,
@@ -193,7 +225,7 @@ impl Sync {
             out.push(Command::Http(crate::list_request(
                 &run.catalog,
                 url,
-                feed_path(),
+                self.temp.next("xml"),
                 &FEED_LOADED,
                 params,
             )));
@@ -210,18 +242,22 @@ impl Sync {
 
     /// A page of the catalog's list arrived.
     pub(crate) fn feed_loaded(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+        self.read_page(env, reply, out);
+        temp::discard(env.storage, reply);
+    }
+
+    fn read_page(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
         if !self.current(reply) {
             return;
         }
-        let status = reply.status;
-        if !(200..300).contains(&status) {
-            let _ = env.storage.remove(&feed_path());
+        let file = temp::file(reply).filter(|_| (200..300).contains(&reply.status));
+        let Some(file) = file else {
             let first = self.run.as_ref().is_some_and(|run| run.pages.len() <= 1);
             if first && let Some(report) = &mut self.report {
                 report.unreachable += 1;
             }
             return self.next_catalog(env, out);
-        }
+        };
         let base = reply
             .final_url
             .as_deref()
@@ -231,8 +267,7 @@ impl Sync {
         let Some(catalog) = self.run.as_ref().map(|run| run.catalog.clone()) else {
             return;
         };
-        let page = crate::read_list(&catalog, env.storage, &feed_path(), &base);
-        let _ = env.storage.remove(&feed_path());
+        let page = crate::read_list(&catalog, env.storage, file, &base);
         let Some(run) = &mut self.run else {
             return;
         };
@@ -245,30 +280,40 @@ impl Sync {
         {
             report.only_lists += 1;
         }
-        for entry in &page.entries {
-            let Some((book, ext)) =
-                entry.readable_book(|ext| env.formats.supports(&format!("book.{ext}")))
-            else {
-                continue;
-            };
-            let id = if entry.id.is_empty() {
-                book.url.clone()
-            } else {
-                entry.id.clone()
-            };
-            let name = book_name(entry, &book.url, ext);
-            let known = run.synced.contains(&id)
+        let readable = |ext: &str| env.formats.supports(&format!("book.{ext}"));
+        let found: Vec<Item> = page
+            .entries
+            .iter()
+            .filter_map(|entry| {
+                let (book, ext) = entry.readable_book(readable)?;
+                let id = if entry.id.is_empty() {
+                    &book.url
+                } else {
+                    &entry.id
+                };
+                Some(Item {
+                    id: record_line(id),
+                    name: book_name(entry, &book.url, ext),
+                    url: book.url.clone(),
+                })
+            })
+            .collect();
+        let ids: Vec<&str> = found.iter().map(|item| item.id.as_str()).collect();
+        let Ok(synced) = recorded(env.storage, &record_path(&catalog.url), &ids) else {
+            if let Some(report) = &mut self.report {
+                report.skipped += 1;
+            }
+            return self.next_catalog(env, out);
+        };
+        for (item, synced) in found.into_iter().zip(synced) {
+            let known = synced
                 || run
                     .queue
                     .iter()
-                    .any(|item| item.id == id || item.name == name)
-                || env.storage.exists(&files::join(&run.folder, &name));
+                    .any(|queued| queued.id == item.id || queued.name == item.name)
+                || env.storage.exists(&files::join(&run.folder, &item.name));
             if !known {
-                run.queue.push_back(Item {
-                    id,
-                    name,
-                    url: book.url.clone(),
-                });
+                run.queue.push_back(item);
             }
         }
         run.next = page
@@ -287,7 +332,8 @@ impl Sync {
         }
         if let Some(item) = run.queue.front() {
             let (url, id) = (item.url.clone(), item.id.clone());
-            if let Some(mut request) = self.request(&url, book_path(), &BOOK_LOADED) {
+            let file = self.temp.next("tmp");
+            if let Some(mut request) = self.request(&url, file, &BOOK_LOADED) {
                 request.params = request.params.with(crate::ID, id);
                 out.push(Command::Http(request));
             }
@@ -301,6 +347,11 @@ impl Sync {
 
     /// A book arrived.
     pub(crate) fn book_loaded(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+        self.store_book(env, reply, out);
+        temp::discard(env.storage, reply);
+    }
+
+    fn store_book(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
         if !self.current(reply) {
             return;
         }
@@ -310,24 +361,22 @@ impl Sync {
         let Some(item) = run.queue.pop_front() else {
             return;
         };
-        let tmp = book_path();
-        let stored = (200..300).contains(&reply.status) && {
+        let file = temp::file(reply).filter(|_| (200..300).contains(&reply.status));
+        let stored = file.is_some_and(|file| {
             let _ = env.storage.create_dir(&run.folder);
             let target = files::free_path(env.storage, &run.folder, &item.name);
-            files::move_to(env.storage, &tmp, &target).is_ok()
-        };
+            files::move_to(env.storage, file, &target).is_ok()
+        });
         let report = self.report.get_or_insert_with(Report::default);
         if stored {
             out.push(paperpaw_sdk::library::changed());
             run.count += 1;
-            run.synced.push(item.id.clone());
             let _ = env.storage.append(
                 &record_path(&run.catalog.url),
-                format!("{}\n", item.id.replace(['\n', '\r'], " ")).as_bytes(),
+                format!("{}\n", item.id).as_bytes(),
             );
             report.loaded += 1;
         } else {
-            let _ = env.storage.remove(&tmp);
             report.failed += 1;
         }
         out.push(Command::Emit(CHANGED, Params::new()));
