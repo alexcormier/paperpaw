@@ -14,7 +14,11 @@ categories = ["no-std"]
 paperpaw-sdk.workspace = true
 
 [dev-dependencies]
+paperpaw-core.workspace = true
 paperpaw-i18n.workspace = true
+paperpaw-platform.workspace = true
+paperpaw-plugin-fonts-default = { workspace = true, features = ["packs"] }
+paperpaw-plugin-keyboard.workspace = true
 
 [lints]
 workspace = true
