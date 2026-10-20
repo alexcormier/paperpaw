@@ -39,6 +39,8 @@ pub(super) struct GroupList {
     pub(super) keys: bool,
     /// Room for icons at the start of rows.
     pub(super) icon_room: u16,
+    /// Covered by a full screen, and settings changed meanwhile.
+    pub(super) covered: Covered,
 }
 
 impl GroupList {
@@ -153,7 +155,17 @@ impl GroupList {
             rows: ui::Rows::new(area, heights, headings),
             keys: !env.device.input.touch,
             icon_room,
+            covered: Covered::default(),
         }
+    }
+
+    /// Makes the list anew (language, UI size or the advanced switch may
+    /// have changed), keeping its focus.
+    fn rebuild(&mut self, env: &Env<'_>) {
+        let (focus, keys) = (self.rows.focus, self.keys);
+        *self = Self::new(env);
+        self.keys = keys;
+        refocus(&mut self.rows, focus);
     }
 
     pub(super) fn choose(&self, index: usize, cx: &mut Cx<'_, '_>) {
@@ -188,6 +200,10 @@ impl GroupList {
 
 impl Screen for GroupList {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
+        // Shown below an overlay left open above it, without `on_show`.
+        if self.covered.shown() {
+            self.rebuild(env);
+        }
         let style = self.style;
         self.header.draw(
             canvas,
@@ -270,13 +286,21 @@ impl Screen for GroupList {
             }
             return;
         }
-        if *event == events::SETTING_CHANGED {
-            // Language, UI size or the advanced switch may have changed.
+        if *event == events::SETTING_CHANGED && self.covered.changed() {
             let env = *cx.env();
-            let (focus, keys) = (self.rows.focus, self.keys);
-            *self = Self::new(&env);
-            self.keys = keys;
-            refocus(&mut self.rows, focus);
+            self.rebuild(&env);
+            cx.request_redraw();
+        }
+    }
+
+    fn on_hide(&mut self) {
+        self.covered.hide();
+    }
+
+    fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
+        if self.covered.shown() {
+            let env = *cx.env();
+            self.rebuild(&env);
             cx.request_redraw();
         }
     }

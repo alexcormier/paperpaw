@@ -1686,7 +1686,9 @@ dependencies = [
 name = "paperpaw-plugin-settings"
 version = "0.4.0-dev"
 dependencies = [
+ "paperpaw-core",
  "paperpaw-i18n",
+ "paperpaw-platform",
  "paperpaw-sdk",
 ]
 
