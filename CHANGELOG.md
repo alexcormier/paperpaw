@@ -9,6 +9,8 @@ change the plugin SDK.
 - `paperpaw-sign key` makes the key file readable by its owner alone
   (mode 0600 on Linux and macOS) and checks that none is there in the
   same step as making it.
+- The sample plugin (`samples/hello-plugin`) no longer underflows below
+  a header taller than the screen.
 - Android: a PDF page that fails no longer makes every later page of the
   book fail. In the background or with the screen off, PaperPaw neither
   runs timers (unless it reads aloud) nor draws. A restart while reading
