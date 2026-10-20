@@ -9,7 +9,7 @@ use paperpaw_sdk::ui::UiStyle;
 use paperpaw_sdk::widgets::{Align, Look, line_height};
 use paperpaw_sdk::{Canvas, Env, Point, Rect};
 
-use super::{Book, cover_size, draw_cover, draw_line};
+use super::{Book, Covers, cover_size, draw_cover, draw_line};
 
 /// A book on the shelf, as shown.
 #[derive(Debug, Clone, PartialEq)]
@@ -139,28 +139,46 @@ pub(crate) fn label_height(env: &Env<'_>) -> u16 {
     line_height(env, style.small) + style.gap as u16 / 4
 }
 
-/// Draws `books` in their `places`: each cover at the bottom of its
-/// place (covers of other shapes stand on the same line), its label
-/// below, a mark on those read and a line below the one being read.
+/// Where `book`'s cover goes in `place`: at its bottom (covers of other
+/// shapes stand on the same line), in the middle from side to side.
+fn cover_at(place: &Place, book: &Book) -> Rect {
+    let slot = place.cover;
+    let (w, h) = cover_size(book, slot.width, slot.height);
+    Rect::new(
+        slot.x + (slot.width - w) / 2,
+        slot.y + slot.height - h,
+        w,
+        h,
+    )
+}
+
+/// The covers of `books` in their `places`, made small.
+pub(crate) fn covers(env: &Env<'_>, places: &[Place], books: &[Shelved]) -> Covers {
+    Covers::make(
+        env,
+        places
+            .iter()
+            .zip(books)
+            .map(|(place, shelved)| (&shelved.book, cover_at(place, &shelved.book))),
+    )
+}
+
+/// Draws `books` in their `places` (their covers made small in
+/// `covers`): each cover at the bottom of its place, its label below, a
+/// mark on those read and a line below the one being read.
 pub(crate) fn draw(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
     look: &Look,
     places: &[Place],
     books: &[Shelved],
+    covers: &Covers,
 ) {
     let style = UiStyle::new(env);
     let font = style.font(env);
     for (place, shelved) in places.iter().zip(books) {
-        let slot = place.cover;
-        let (w, h) = cover_size(&shelved.book, slot.width, slot.height);
-        let at = Rect::new(
-            slot.x + (slot.width - w) / 2,
-            slot.y + slot.height - h,
-            w,
-            h,
-        );
-        draw_cover(canvas, env, look, at, &shelved.book);
+        let at = cover_at(place, &shelved.book);
+        draw_cover(canvas, env, look, at, &shelved.book, covers);
         if shelved.read {
             draw_read_mark(canvas, env, look, at);
         }

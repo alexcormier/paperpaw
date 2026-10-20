@@ -135,13 +135,19 @@ Some rules every screen should follow:
   Xteink X4), some mostly touch (the Boox). Everything must be easy with
   either: buttons move a focus and confirm, taps act at once. Show the
   focus only once buttons are used (`ListView::focus_on_keys`).
-- **`draw` must not change state.** On small devices a frame is drawn in
-  bands, so `draw` may run several times for one frame. It can skip what
-  lies outside `canvas.clip()`. Small files and sizes it reads come from
-  the card once per frame (the kernel keeps them while it draws), but
-  work on what was read (parsing, sorting, decoding) is done again for
-  every band: keep it in the screen, made when it opens or its data
-  changes.
+- **`draw` only draws.** On small devices a frame is drawn in bands
+  (the X4 draws five), so `draw` runs several times for one frame, and
+  again for every frame after it: whatever it reads or works out, it
+  does over and over. Load what a screen shows when it opens or when
+  that changes (in its factory, `on_show`, `on_event`); parse it, sort
+  it, wrap long texts and make pictures small (`ui::Thumbnail`) then,
+  keep the result in the screen, and only draw it in `draw`, which must
+  not change state. It can skip what lies outside `canvas.clip()`. The
+  one thing read while drawing is a picture too large to keep, such as
+  one filling the screen: `ui::draw_image` reads its rows band by band.
+  The emulator's `--trace` shows what each band of a frame reads;
+  `crates/paperpaw-app/tests/draw.rs` checks every screen of the
+  standard app.
 - **Ask for redraws.** After a change, `cx.request_redraw()` (or a part
   of the screen) and `cx.request_refresh(mode)`: `Fast` for a moving
   focus, `Partial` for new content, `Full` to clear ghosting.
@@ -429,7 +435,10 @@ A widget is a [`Widget`] a screen makes and keeps
 (`env.widgets.make`): it reads what it shows in `update`, which the
 screen calls when it shows the widget, about each minute and after
 events, and only draws in `draw` (which runs for every band of a
-frame). Register it with `WidgetSpec::new(id, title, factory)`; a widget
+frame). The screen tells it where it goes (`place`) before drawing it
+there: what is made for that size, such as a cover made small
+(`ui::Thumbnail`), is made then, and again in `update` when what it
+shows changed. Register it with `WidgetSpec::new(id, title, factory)`; a widget
 with nothing to read, such as a clock, is a pair of functions
 (`WidgetSpec::drawn` with `Drawn::new(height, draw)`, and `shows` to be
 drawn again when what it shows changes). A widget whose content changes

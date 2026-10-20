@@ -381,6 +381,7 @@ impl KernelBuilder {
             registry: Registry::default(),
             subscriptions: Vec::new(),
             screen_timer: None,
+            show_pending: false,
             notice: None,
             scheduled: Vec::new(),
             stack: Vec::new(),

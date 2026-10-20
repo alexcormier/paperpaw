@@ -215,6 +215,9 @@ struct Panel {
     region: Rect,
     /// The text to translate.
     original: String,
+    /// It in one line, shortened to fit left of the service's name in
+    /// the header: made once, for it may be a paragraph.
+    heading: String,
     /// The translation or a message, and its lines as byte ranges.
     text: String,
     lines: Vec<(usize, usize)>,
@@ -233,15 +236,41 @@ impl Panel {
             style,
             region: Rect::new(0, top, display.width, display.height - top),
             original: params.get(params::TEXT).unwrap_or_default().to_string(),
+            heading: String::new(),
             text: String::new(),
             lines: Vec::new(),
             top: 0,
             asked: false,
             needs_key: false,
         };
+        panel.heading = panel.heading(env);
         let loading = env.i18n.tr("translate.loading").to_string();
         panel.set_text(env, loading);
         panel
+    }
+
+    /// Where the service's name begins in the header, from the left.
+    fn source_x(&self, env: &Env<'_>) -> f32 {
+        let source = env.i18n.tr("translate.source");
+        let width = self
+            .style
+            .font(env)
+            .map_or(0.0, |f| f.measure(self.style.small, source));
+        f32::from(self.header().width) - self.style.margin as f32 - width
+    }
+
+    /// The original in one line, as wide as the header leaves it.
+    fn heading(&self, env: &Env<'_>) -> String {
+        let Some(font) = self.style.font(env) else {
+            return String::new();
+        };
+        let original = self
+            .original
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
+        let room = self.source_x(env) - self.style.margin as f32 * 2.0;
+        ui::fit(&font, self.style.title, &original, room)
     }
 
     fn set_text(&mut self, env: &Env<'_>, text: String) {
@@ -384,8 +413,7 @@ impl Screen for Panel {
         let header = self.header();
         let margin = style.margin as f32;
         let source = env.i18n.tr("translate.source");
-        let source_width = font.measure(style.small, source);
-        let right = f32::from(header.width) - margin - source_width;
+        let right = self.source_x(env);
         ui::draw_label(
             canvas,
             &font,
@@ -395,19 +423,13 @@ impl Screen for Panel {
             source,
             style.faint(80),
         );
-        let original: String = self
-            .original
-            .split_whitespace()
-            .collect::<Vec<_>>()
-            .join(" ");
-        let original = ui::fit(&font, style.title, &original, right - margin * 2.0);
         ui::draw_label(
             canvas,
             &font,
             style.title,
             margin,
             header,
-            &original,
+            &self.heading,
             Color::BLACK,
         );
         let height = self.line_height(env);

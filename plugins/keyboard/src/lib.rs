@@ -677,6 +677,10 @@ impl KeyboardScreen {
     }
 
     fn draw_field(&self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
+        // Only in the band it lies in: its text is measured to fit.
+        if self.field.intersection(&canvas.clip()).is_none() {
+            return;
+        }
         let style = self.style;
         let Some(font) = style.font(env) else {
             return;
@@ -712,10 +716,19 @@ impl KeyboardScreen {
             f32::from(box_area.x + box_area.width - area.x) + margin
         });
         let room = f32::from(box_area.width) - margin * 1.5 - buttons_width;
-        let mut start = 0;
-        while font.measure(style.text, &text[start..]) > room {
-            start += text[start..].chars().next().map_or(1, char::len_utf8);
+        // The longest end of it that fits, found by halving.
+        let starts: Vec<usize> = text.char_indices().map(|(i, _)| i).collect();
+        let fits = |n: usize| font.measure(style.text, &text[starts[n]..]) <= room;
+        let (mut low, mut high) = (0, starts.len());
+        while low < high {
+            let mid = (low + high) / 2;
+            if fits(mid) {
+                high = mid;
+            } else {
+                low = mid + 1;
+            }
         }
+        let start = starts.get(low).copied().unwrap_or(text.len());
         let x = f32::from(box_area.x) + margin / 2.0;
         let shown = &text[start..];
         ui::draw_label(canvas, &font, style.text, x, box_area, shown, Color::BLACK);

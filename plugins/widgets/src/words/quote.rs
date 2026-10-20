@@ -4,10 +4,10 @@
 //! the plugin's folder, a quote per line: `text | author`). A tap shows
 //! the next one.
 
+use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
-use core::cell::Cell;
 
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::setting::{Setting, Text};
@@ -230,8 +230,92 @@ struct QuoteWidget {
     quote: Option<Quote>,
     /// The day and the changes it was read at.
     read: Option<(i64, u32)>,
-    /// The size it was last laid out at, in that area.
-    fitted: Cell<Option<(Rect, f32)>>,
+    /// Where it is drawn, once placed, and the quote laid out there.
+    area: Option<Rect>,
+    laid: Option<Laid>,
+}
+
+/// A quote laid out in a widget's area, drawn as it is in every band.
+#[derive(Debug, Clone, PartialEq)]
+struct Laid {
+    /// The caption shows above it.
+    caption: bool,
+    /// Where it goes below the caption, and how large.
+    area: Rect,
+    size: f32,
+    /// The large mark above, and who said it below, if they show.
+    layout: Layout,
+    author: Option<String>,
+    lines: Vec<String>,
+    /// Where the block begins from the top.
+    top: u16,
+}
+
+/// `quote` laid out in widget area `area`: as large as its size setting
+/// says (or as fits); where a line of it would not fit with them, the
+/// large mark and who said it go.
+fn lay_out(env: &Env<'_>, area: Rect, quote: &Quote) -> Option<Laid> {
+    let look = widgets::look::look(env, ID.as_str(), area);
+    let mut area = look.area;
+    let caption = widgets::shows(env, ID.as_str(), CAPTION);
+    if caption {
+        let height = widgets::caption_height(env).min(area.height);
+        area = Rect::new(area.x, area.y + height, area.width, area.height - height);
+    }
+    let font = text::font(env, env.settings.read(&FACE))?;
+    let style = UiStyle::new(env);
+    let language = env.i18n.language();
+    let shown = if widgets::shows(env, ID.as_str(), MARKS) {
+        text::quoted(&quote.text, language)
+    } else {
+        String::from(text::unquoted(&quote.text))
+    };
+    let author = (widgets::shows(env, ID.as_str(), AUTHOR) && !quote.author.is_empty())
+        .then_some(quote.author.as_str());
+    let mut layout = Layout {
+        mark: widgets::shows(env, ID.as_str(), MARK),
+        author: author.map_or(0.0, |_| {
+            f32::from(widgets::line_height(env, style.small)) + style.gap as f32 * 0.75
+        }),
+    };
+    let least = text::line_height(&font, style.small * 0.85);
+    if layout.height(&font, style.small * 0.85, 1) > f32::from(area.height) {
+        layout.mark = false;
+    }
+    let author = author.filter(|_| least + layout.author <= f32::from(area.height));
+    if author.is_none() {
+        layout.author = 0.0;
+    }
+    let width = f32::from(area.width);
+    let size = match widgets::size(env, ID.as_str()) {
+        Size::Fit => text::largest(style.small * 0.85, style.title * 2.0, |size| {
+            let lines = text::count_lines(&font, size, &shown, width);
+            layout.height(&font, size, lines) <= f32::from(area.height)
+        }),
+        size => size.text(&style),
+    };
+    let line = text::line_height(&font, size);
+    let room = f32::from(area.height) - layout.height(&font, size, 0);
+    let lines = text::lines(&font, size, &shown, width, ((room / line) as usize).max(1));
+    let total = layout.height(&font, size, lines.len()) as u16;
+    Some(Laid {
+        caption,
+        area,
+        size,
+        layout,
+        author: author.map(String::from),
+        lines,
+        top: area.y + area.height.saturating_sub(total) / 2,
+    })
+}
+
+impl QuoteWidget {
+    fn lay_out(&mut self, env: &Env<'_>) {
+        self.laid = match (self.area, &self.quote) {
+            (Some(area), Some(quote)) => lay_out(env, area, quote),
+            _ => None,
+        };
+    }
 }
 
 impl Widget for QuoteWidget {
@@ -247,8 +331,17 @@ impl Widget for QuoteWidget {
         let quote = quote_of_the_day(env, day);
         let changed = quote != self.quote;
         self.quote = quote;
-        self.fitted.set(None);
+        if changed {
+            self.lay_out(env);
+        }
         changed
+    }
+
+    fn place(&mut self, env: &Env<'_>, area: Rect) {
+        if self.area != Some(area) {
+            self.area = Some(area);
+            self.lay_out(env);
+        }
     }
 
     fn height(&self, env: &Env<'_>, _: u16) -> u16 {
@@ -267,59 +360,26 @@ impl Widget for QuoteWidget {
             super::draw_empty(canvas, env, &look, message);
             return;
         };
-        let mut area = look.area;
-        if widgets::shows(env, ID.as_str(), CAPTION) {
+        // Laid out when placed; drawn elsewhere, laid out for that.
+        let laid = match &self.laid {
+            Some(laid) if self.area == Some(area) => Cow::Borrowed(laid),
+            _ => match lay_out(env, area, quote) {
+                Some(laid) => Cow::Owned(laid),
+                None => return,
+            },
+        };
+        if laid.caption {
             let caption = env.i18n.tr("widgets.quote.caption");
-            area = widgets::draw_caption(canvas, env, ID.as_str(), &look, caption);
+            widgets::draw_caption(canvas, env, ID.as_str(), &look, caption);
         }
         let Some(font) = text::font(env, env.settings.read(&FACE)) else {
             return;
         };
         let style = UiStyle::new(env);
         let language = env.i18n.language();
-        let shown = if widgets::shows(env, ID.as_str(), MARKS) {
-            text::quoted(&quote.text, language)
-        } else {
-            String::from(text::unquoted(&quote.text))
-        };
-        let author = (widgets::shows(env, ID.as_str(), AUTHOR) && !quote.author.is_empty())
-            .then_some(quote.author.as_str());
-        let mut layout = Layout {
-            mark: widgets::shows(env, ID.as_str(), MARK),
-            author: author.map_or(0.0, |_| {
-                f32::from(widgets::line_height(env, style.small)) + style.gap as f32 * 0.75
-            }),
-        };
-        // Where a line of the quote would not fit with them, the large
-        // mark and who said it go.
-        let least = text::line_height(&font, style.small * 0.85);
-        if layout.height(&font, style.small * 0.85, 1) > f32::from(area.height) {
-            layout.mark = false;
-        }
-        let author = author.filter(|_| least + layout.author <= f32::from(area.height));
-        if author.is_none() {
-            layout.author = 0.0;
-        }
+        let (area, size, layout) = (laid.area, laid.size, laid.layout);
         let width = f32::from(area.width);
-        let size = match self.fitted.get() {
-            Some((at, size)) if at == area => size,
-            _ => {
-                let size = match widgets::size(env, ID.as_str()) {
-                    Size::Fit => text::largest(style.small * 0.85, style.title * 2.0, |size| {
-                        let lines = text::count_lines(&font, size, &shown, width);
-                        layout.height(&font, size, lines) <= f32::from(area.height)
-                    }),
-                    size => size.text(&style),
-                };
-                self.fitted.set(Some((area, size)));
-                size
-            }
-        };
-        let line = text::line_height(&font, size);
-        let room = f32::from(area.height) - layout.height(&font, size, 0);
-        let lines = text::lines(&font, size, &shown, width, ((room / line) as usize).max(1));
-        let total = layout.height(&font, size, lines.len()) as u16;
-        let mut top = area.y + area.height.saturating_sub(total) / 2;
+        let mut top = laid.top;
         let align = widgets::align(env, ID.as_str());
         if layout.mark {
             // The opening mark large and faint above the quote, its top
@@ -332,8 +392,8 @@ impl Widget for QuoteWidget {
             font.draw(canvas, big, x, baseline as i32, mark, look.faint);
             top += layout.mark_height(size) as u16;
         }
-        top += text::draw_lines(canvas, &font, size, &lines, area, top, align, look.ink);
-        if let (Some(author), Some(ui)) = (author, style.font(env)) {
+        top += text::draw_lines(canvas, &font, size, &laid.lines, area, top, align, look.ink);
+        if let (Some(author), Some(ui)) = (&laid.author, style.font(env)) {
             top += (style.gap as f32 * 0.75) as u16;
             let small = widgets::line_height(env, style.small);
             let row = Rect::new(area.x, top, area.width, small);
@@ -365,7 +425,7 @@ fn ornament(language: &str) -> &'static str {
 }
 
 /// What goes with the quote's lines.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 struct Layout {
     /// A large opening mark above.
     mark: bool,

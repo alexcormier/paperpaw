@@ -193,30 +193,23 @@ impl Frame {
         }
     }
 
-    /// Draws the rows; the first `movable` with a grip.
-    fn draw(
+    /// Draws `len` rows, each label and value as `row` gives them; the
+    /// first `movable` with a grip.
+    fn draw<'r>(
         &mut self,
         canvas: &mut Canvas<'_>,
         env: &Env<'_>,
         title: &str,
-        rows: &[(String, String)],
+        len: usize,
+        row: impl Fn(usize) -> (&'r str, &'r str),
         movable: usize,
     ) {
         let style = self.style;
-        self.header.draw(
-            canvas,
-            env,
-            &style,
-            title,
-            None,
-            self.list.paging(rows.len()),
-        );
-        self.list.draw(
-            canvas,
-            &style,
-            rows.len(),
-            |canvas, index, rect, focused| {
-                let (label, value) = &rows[index];
+        self.header
+            .draw(canvas, env, &style, title, None, self.list.paging(len));
+        self.list
+            .draw(canvas, &style, len, |canvas, index, rect, focused| {
+                let (label, value) = row(index);
                 let rect = if index < movable {
                     Reorder::draw_grip(canvas, env, &style, rect, focused);
                     Reorder::content(rect)
@@ -224,8 +217,7 @@ impl Frame {
                     rect
                 };
                 ui::draw_value_row(canvas, env, &style, rect, focused, label, value);
-            },
-        );
+            });
         self.reorder.draw(canvas, &style, &self.list);
     }
 
@@ -292,6 +284,8 @@ struct MenusScreen {
     /// Menus with their names; submenus follow their menu as
     /// "Menu › Submenu".
     menus: Vec<(Id, String)>,
+    /// What the list shows, made when the menus change.
+    rows: Vec<(String, String)>,
     frame: Frame,
 }
 
@@ -312,13 +306,17 @@ impl MenusScreen {
         for (root, name) in roots {
             add_with_submenus(env, root, name, &mut menus);
         }
-        Self {
+        let mut screen = Self {
             menus,
+            rows: Vec::new(),
             frame: Frame::new(env),
-        }
+        };
+        screen.rows = screen.list(env);
+        screen
     }
 
-    fn rows(&self, env: &Env<'_>) -> Vec<(String, String)> {
+    /// The menus, each marked where changed, and *Reset all* where any is.
+    fn list(&self, env: &Env<'_>) -> Vec<(String, String)> {
         let mut rows: Vec<(String, String)> = self
             .menus
             .iter()
@@ -387,13 +385,14 @@ fn name_of_menu(env: &Env<'_>, menu: &Id) -> String {
 
 impl Screen for MenusScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
-        let rows = self.rows(env);
         let title = env.i18n.tr("menu-editor.title");
-        self.frame.draw(canvas, env, title, &rows, 0);
+        let rows = &self.rows;
+        let row = |i: usize| (rows[i].0.as_str(), rows[i].1.as_str());
+        self.frame.draw(canvas, env, title, rows.len(), row, 0);
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
-        let len = self.rows(cx.env()).len();
+        let len = self.rows.len();
         if *action == actions::CONFIRM {
             self.choose(self.frame.list.focus, cx);
             return Handled::Yes;
@@ -402,7 +401,7 @@ impl Screen for MenusScreen {
     }
 
     fn on_gesture(&mut self, gesture: Gesture, cx: &mut Cx<'_, '_>) -> Handled {
-        let len = self.rows(cx.env()).len();
+        let len = self.rows.len();
         match self.frame.on_tap(gesture, len, cx) {
             Some(index) => {
                 self.choose(index, cx);
@@ -414,6 +413,7 @@ impl Screen for MenusScreen {
 
     fn on_event(&mut self, event: &Id, _: &Params, cx: &mut Cx<'_, '_>) {
         if *event == paperpaw_sdk::builtin::events::MENU_CHANGED {
+            self.rows = self.list(cx.env());
             cx.request_redraw();
             cx.request_refresh(RefreshMode::Fast);
         }
@@ -424,19 +424,33 @@ impl Screen for MenusScreen {
 
 struct EntriesScreen {
     menu: String,
+    /// What the list shows, made when the menu changes.
+    rows: Vec<(String, String)>,
+    /// The menu's entries, the first rows (the rest is *Add*, *Reset*).
+    count: usize,
     frame: Frame,
 }
 
 impl EntriesScreen {
     fn open(env: &Env<'_>, params: &Params) -> Self {
-        Self {
+        let mut screen = Self {
             menu: params.get(MENU).unwrap_or_default().to_string(),
+            rows: Vec::new(),
+            count: 0,
             frame: Frame::new(env),
-        }
+        };
+        screen.read(env);
+        screen
+    }
+
+    /// The rows anew, from the menu as it is.
+    fn read(&mut self, env: &Env<'_>) {
+        self.rows = self.list(env);
+        self.count = entries(env, &self.menu).len();
     }
 
     /// The entries, then *Add* and, if the menu was changed, *Reset*.
-    fn rows(&self, env: &Env<'_>) -> Vec<(String, String)> {
+    fn list(&self, env: &Env<'_>) -> Vec<(String, String)> {
         let mut rows: Vec<(String, String)> = entries(env, &self.menu)
             .iter()
             .map(|id| {
@@ -469,10 +483,11 @@ impl EntriesScreen {
 
 impl Screen for EntriesScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
-        let rows = self.rows(env);
-        let title = env.i18n.tr(&self.menu).to_string();
-        let movable = entries(env, &self.menu).len();
-        self.frame.draw(canvas, env, &title, &rows, movable);
+        let title = env.i18n.tr(&self.menu);
+        let rows = &self.rows;
+        let row = |i: usize| (rows[i].0.as_str(), rows[i].1.as_str());
+        self.frame
+            .draw(canvas, env, title, rows.len(), row, self.count);
     }
 
     /// Entries are moved by dragging their grip.
@@ -488,7 +503,7 @@ impl Screen for EntriesScreen {
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
-        let len = self.rows(cx.env()).len();
+        let len = self.rows.len();
         if *action == actions::CONFIRM {
             self.choose(self.frame.list.focus, cx);
             return Handled::Yes;
@@ -497,7 +512,7 @@ impl Screen for EntriesScreen {
     }
 
     fn on_gesture(&mut self, gesture: Gesture, cx: &mut Cx<'_, '_>) -> Handled {
-        let len = self.rows(cx.env()).len();
+        let len = self.rows.len();
         match self.frame.on_tap(gesture, len, cx) {
             Some(index) => {
                 self.choose(index, cx);
@@ -513,7 +528,8 @@ impl Screen for EntriesScreen {
             if let Some(focus) = params.get(INDEX).and_then(|i| i.parse().ok()) {
                 self.frame.list.focus = focus;
             }
-            let len = self.rows(cx.env()).len();
+            self.read(cx.env());
+            let len = self.rows.len();
             self.frame.list.focus = self.frame.list.focus.min(len - 1);
             cx.request_redraw();
             cx.request_refresh(RefreshMode::Fast);
@@ -718,6 +734,8 @@ struct AddScreen {
     menu: String,
     /// Ids with their names, sorted by name.
     candidates: Vec<(Id, String)>,
+    /// Every menu, sorted: those among the candidates show "›".
+    menus: Vec<Id>,
     frame: Frame,
 }
 
@@ -725,12 +743,13 @@ impl AddScreen {
     fn open(env: &Env<'_>, params: &Params) -> Self {
         let menu = params.get(MENU).unwrap_or_default().to_string();
         let present = entries(env, &menu);
+        let menus: Vec<Id> = env.menus.menu_ids().into_iter().cloned().collect();
         let mut candidates: Vec<(Id, String)> = env
             .actions
             .iter()
             .map(|a| a.id.clone())
             .chain(env.settings.specs().map(|s| s.id.clone()))
-            .chain(env.menus.menu_ids().into_iter().cloned())
+            .chain(menus.iter().cloned())
             .filter(|id| !present.contains(id) && id.as_str() != menu)
             .map(|id| {
                 let name = name(env, id.as_str());
@@ -742,18 +761,9 @@ impl AddScreen {
         Self {
             menu,
             candidates,
+            menus,
             frame: Frame::new(env),
         }
-    }
-
-    fn rows(&self, env: &Env<'_>) -> Vec<(String, String)> {
-        self.candidates
-            .iter()
-            .map(|(id, name)| {
-                let more = if is_menu(env, id.as_str()) { "›" } else { "" };
-                (name.clone(), more.to_string())
-            })
-            .collect()
     }
 
     fn choose(&mut self, index: usize, cx: &mut Cx<'_, '_>) {
@@ -770,9 +780,15 @@ impl AddScreen {
 
 impl Screen for AddScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
-        let rows = self.rows(env);
-        let title = env.i18n.tr("menu-editor.add").to_string();
-        self.frame.draw(canvas, env, &title, &rows, 0);
+        let title = env.i18n.tr("menu-editor.add");
+        let (candidates, menus) = (&self.candidates, &self.menus);
+        let row = |i: usize| {
+            let (id, name) = &candidates[i];
+            let menu = menus.binary_search(id).is_ok();
+            (name.as_str(), if menu { "›" } else { "" })
+        };
+        self.frame
+            .draw(canvas, env, title, candidates.len(), row, 0);
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {

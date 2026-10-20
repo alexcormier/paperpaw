@@ -57,7 +57,7 @@ pub mod grid;
 pub mod look;
 
 pub use look::{
-    Frame, Look, Size, caption_height, choice, draw_caption, draw_frame, draw_message,
+    Frame, Look, Size, Wrapped, caption_height, choice, draw_caption, draw_frame, draw_message,
     draw_wrapped, frame, frame_setting, frame_spec, line_height, part_setting, part_spec,
     setting_id, shows, size, size_setting, size_spec,
 };
@@ -126,6 +126,18 @@ pub trait Widget {
     /// shrink keep the default, their full height.
     fn min_height(&self, env: &Env<'_>, width: u16) -> u16 {
         self.height(env, width)
+    }
+
+    /// Where it is drawn from now on, before it is drawn there: screens
+    /// that show it call this once they placed it, and again when its
+    /// place changes. A widget that makes something for the size it is
+    /// drawn at, such as a cover made small
+    /// ([`Thumbnail`](crate::ui::Thumbnail), drawn in every band without
+    /// reading the picture again), makes it here, and anew in
+    /// [`update`](Self::update) when what it shows changed. Most widgets
+    /// need nothing of it.
+    fn place(&mut self, env: &Env<'_>, area: Rect) {
+        let _ = (env, area);
     }
 
     /// Draws it into `area` (cleared before), from what it read.
@@ -419,6 +431,13 @@ impl Widget for Placed {
 
     fn min_height(&self, env: &Env<'_>, width: u16) -> u16 {
         self.with(env, || self.inner.min_height(env, width))
+    }
+
+    fn place(&mut self, env: &Env<'_>, area: Rect) {
+        let placement = core::mem::take(&mut self.placement);
+        env.settings
+            .with_placement(Some(&placement), || self.inner.place(env, area));
+        self.placement = placement;
     }
 
     fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {

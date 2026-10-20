@@ -13,6 +13,8 @@
 //! | `swipe:400:400:100:400` | swipe from one point to another |
 //! | `wait:500` | let 500 ms pass |
 //! | `run:calibre.open` | run an action, as a button bound to it would |
+//! | `open:home.add-widget:kind=core.widgets.books` | open a screen with its parameters, as a plugin would |
+//! | `redraw` | draw the whole screen again, nothing on it changed |
 //! | `serve:20` | answer plugins' servers in real time for 20 s |
 //! | `shot:out/a.png` | save a screenshot now (the last one comes with `--screenshot`) |
 
@@ -81,6 +83,18 @@ fn run_step(device: &mut Device, step: &str) -> Result<(), String> {
             let action = paperpaw_core::sdk::Id::parse(action).map_err(|e| e.to_string())?;
             device.run_action(action);
         }
+        ["open", screen, given @ ..] => {
+            let screen = paperpaw_core::sdk::Id::parse(screen).map_err(|e| e.to_string())?;
+            let mut params = paperpaw_core::sdk::Params::new();
+            for pair in given {
+                let (key, value) = pair
+                    .split_once('=')
+                    .ok_or_else(|| format!("`{pair}` is no key=value"))?;
+                params = params.with(key.to_string(), value);
+            }
+            device.open_screen(screen, params);
+        }
+        ["redraw"] => device.draw_again(),
         ["tap", x, y] => touch(device, Point::new(number(x)?, number(y)?), None, 60),
         ["tap-on", label @ ..] if !label.is_empty() => {
             let label = label.join(":");

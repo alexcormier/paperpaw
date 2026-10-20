@@ -6,7 +6,6 @@ use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
-use core::cell::Cell;
 
 use paperpaw_sdk::ask;
 use paperpaw_sdk::event::Event;
@@ -70,14 +69,85 @@ pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     )
 }
 
-/// The note: its text is a setting, read as it is drawn.
+/// The note: its text is a setting, laid out where the widget is placed
+/// and when the note changes.
 #[derive(Default)]
 struct Note {
-    /// The size it was last laid out at, in that area.
-    fitted: Cell<Option<(Rect, f32)>>,
+    /// Where it is drawn, once placed, and the note laid out there.
+    placed: Option<(Rect, Option<Laid>)>,
+}
+
+/// The note laid out in a widget's area, drawn as it is in every band.
+#[derive(Debug, Clone, PartialEq)]
+struct Laid {
+    /// The heading shows above it.
+    heading: bool,
+    /// Where its lines go, and how large they are.
+    area: Rect,
+    size: f32,
+    lines: Vec<String>,
+    /// Where the first line goes from the top.
+    top: u16,
+}
+
+/// The note laid out in widget area `area`, as large as its size setting
+/// says (or as fits); `None` while it says nothing.
+fn lay_out(env: &Env<'_>, area: Rect) -> Option<Laid> {
+    let note = env.settings.read(&TEXT).trim();
+    if note.is_empty() {
+        return None;
+    }
+    let look = widgets::look::look(env, ID.as_str(), area);
+    let mut area = look.area;
+    let style = UiStyle::new(env);
+    let font = text::font(env, env.settings.read(&FACE))?;
+    // The heading where a line of the note fits below it.
+    let least = text::line_height(&font, style.small) as u16;
+    let heading = !env.settings.read(&HEADING).trim().is_empty()
+        && area.height >= heading_height(env) + least;
+    if heading {
+        let height = widgets::caption_height(env).min(area.height);
+        area = Rect::new(area.x, area.y + height, area.width, area.height - height);
+    }
+    let width = f32::from(area.width);
+    let size = match widgets::size(env, ID.as_str()) {
+        Size::Fit => text::largest(style.small, style.title * 1.8, |size| {
+            let lines = text::count_lines(&font, size, note, width) as f32;
+            lines * text::line_height(&font, size) <= f32::from(area.height)
+        }),
+        size => size.text(&style),
+    };
+    let line = text::line_height(&font, size);
+    let fits = ((f32::from(area.height) / line) as usize).max(1);
+    let lines = text::lines(&font, size, note, width, fits);
+    let total = (line * lines.len() as f32) as u16;
+    Some(Laid {
+        heading,
+        area,
+        size,
+        lines,
+        top: area.y + area.height.saturating_sub(total) / 2,
+    })
 }
 
 impl Widget for Note {
+    /// The note as it is now (its settings changed while shown).
+    fn update(&mut self, env: &Env<'_>) -> bool {
+        let Some((area, laid)) = &mut self.placed else {
+            return false;
+        };
+        let now = lay_out(env, *area);
+        let changed = now != *laid;
+        *laid = now;
+        changed
+    }
+
+    fn place(&mut self, env: &Env<'_>, area: Rect) {
+        if self.placed.as_ref().is_none_or(|(at, _)| *at != area) {
+            self.placed = Some((area, lay_out(env, area)));
+        }
+    }
+
     fn live(&self) -> bool {
         false
     }
@@ -105,39 +175,26 @@ impl Widget for Note {
             super::draw_empty(canvas, env, &look, env.i18n.tr(key));
             return;
         }
-        let mut area = look.area;
-        let style = UiStyle::new(env);
         let Some(font) = text::font(env, env.settings.read(&FACE)) else {
             return;
         };
-        // The heading where a line of the note fits below it.
-        let heading = env.settings.read(&HEADING).trim();
-        let least = text::line_height(&font, style.small) as u16;
-        if !heading.is_empty() && area.height >= heading_height(env) + least {
-            area = widgets::draw_caption(canvas, env, ID.as_str(), &look, heading);
-        }
-        let width = f32::from(area.width);
-        let size = match self.fitted.get() {
-            Some((at, size)) if at == area => size,
-            _ => {
-                let size = match widgets::size(env, ID.as_str()) {
-                    Size::Fit => text::largest(style.small, style.title * 1.8, |size| {
-                        let lines = text::count_lines(&font, size, note, width) as f32;
-                        lines * text::line_height(&font, size) <= f32::from(area.height)
-                    }),
-                    size => size.text(&style),
-                };
-                self.fitted.set(Some((area, size)));
-                size
-            }
+        // Laid out when placed; drawn elsewhere, laid out for that.
+        let laid = match &self.placed {
+            Some((at, Some(laid))) if *at == area => Cow::Borrowed(laid),
+            _ => match lay_out(env, area) {
+                Some(laid) => Cow::Owned(laid),
+                None => return,
+            },
         };
-        let line = text::line_height(&font, size);
-        let fits = ((f32::from(area.height) / line) as usize).max(1);
-        let lines = text::lines(&font, size, note, width, fits);
-        let total = (line * lines.len() as f32) as u16;
-        let top = area.y + area.height.saturating_sub(total) / 2;
+        if laid.heading {
+            let heading = env.settings.read(&HEADING).trim();
+            widgets::draw_caption(canvas, env, ID.as_str(), &look, heading);
+        }
         let align = widgets::align(env, ID.as_str());
-        text::draw_lines(canvas, &font, size, &lines, area, top, align, look.ink);
+        let (size, lines) = (laid.size, &laid.lines);
+        text::draw_lines(
+            canvas, &font, size, lines, laid.area, laid.top, align, look.ink,
+        );
     }
 
     fn targets(&self, env: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {

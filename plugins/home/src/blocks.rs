@@ -15,7 +15,9 @@
 //!
 //! Widgets draw what is stored (covers once looked up, see `covers`),
 //! never opening books themselves, and read it when the home screen
-//! updates them, not as they are drawn, so drawing stays quick.
+//! updates them, not as they are drawn, so drawing stays quick: covers
+//! are made small for their place once it is known ([`Widget::place`])
+//! and drawn from memory in every band.
 
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
@@ -26,7 +28,7 @@ use alloc::vec::Vec;
 use paperpaw_sdk::builtin::{actions, params, screens, slots};
 use paperpaw_sdk::document::ImageRef;
 use paperpaw_sdk::status::{StatusLine, item_ids};
-use paperpaw_sdk::ui::{self, UiStyle};
+use paperpaw_sdk::ui::{self, Thumbnail, UiStyle};
 use paperpaw_sdk::widgets::{
     self, Align, Drawn, Frame, Size, Widget, WidgetSpec, WidgetTarget, grid, line_height,
 };
@@ -414,10 +416,72 @@ impl Book {
     }
 }
 
+/// Where `image` goes, fitted into `place`: `x` and `y` say where in it,
+/// from 0 (left, top) to 1 (right, bottom).
+fn fitted(image: &ImageRef, place: Rect, x: f32, y: f32) -> Rect {
+    let (w, h) = ui::fit_image(image, place.width, place.height);
+    let left = f32::from(place.width - w) * x;
+    let top = f32::from(place.height - h) * y;
+    Rect::new(place.x + left as u16, place.y + top as u16, w, h)
+}
+
+/// `image` made small to `at`, as the panel shows it: read once, then
+/// drawn from memory.
+fn small_cover(env: &Env<'_>, image: &ImageRef, at: Rect) -> Option<Thumbnail> {
+    let format = env.device.display.format;
+    Thumbnail::new(env.storage, image, at.width, at.height, format)
+}
+
+/// Draws `image` at `at`: from `small` where it was made for that size,
+/// otherwise from its file (where there was no memory to make it small).
+fn draw_cover(
+    canvas: &mut Canvas<'_>,
+    env: &Env<'_>,
+    image: &ImageRef,
+    small: Option<&Thumbnail>,
+    at: Rect,
+) {
+    match small {
+        Some(small) if (small.width(), small.height()) == (at.width, at.height) => {
+            small.draw(canvas, at.x, at.y);
+        }
+        _ => ui::draw_image(canvas, env.storage, image, at),
+    }
+}
+
 /// The book read last; the library before any was read.
 #[derive(Debug, Default)]
 struct Card {
     book: Option<Book>,
+    /// Where it is drawn, once placed.
+    area: Option<Rect>,
+    /// The book's cover, made small for that place.
+    cover: Option<Thumbnail>,
+}
+
+impl Card {
+    /// The cover `book` shows in `area` and where, if it shows one: on
+    /// the left, in the middle from top to bottom.
+    fn cover_place<'b>(
+        env: &Env<'_>,
+        area: Rect,
+        book: Option<&'b Book>,
+    ) -> Option<(&'b ImageRef, Rect)> {
+        let image = book?.cover.as_ref()?;
+        if !env.settings.read(&CARD_COVER) {
+            return None;
+        }
+        let r = widgets::look::look(env, CONTINUE, area).area;
+        let place = Rect::new(r.x, r.y, r.width / 3, r.height);
+        Some((image, fitted(image, place, 0.0, 0.5)))
+    }
+
+    fn make_cover(&mut self, env: &Env<'_>) {
+        self.cover = self.area.and_then(|area| {
+            let (image, at) = Self::cover_place(env, area, self.book.as_ref())?;
+            small_cover(env, image, at)
+        });
+    }
 }
 
 impl Widget for Card {
@@ -428,7 +492,17 @@ impl Widget for Card {
             .map(|book| Book::of(env, book));
         let changed = book != self.book;
         self.book = book;
+        if changed {
+            self.make_cover(env);
+        }
         changed
+    }
+
+    fn place(&mut self, env: &Env<'_>, area: Rect) {
+        if self.area != Some(area) {
+            self.area = Some(area);
+            self.make_cover(env);
+        }
     }
 
     fn live(&self) -> bool {
@@ -440,7 +514,7 @@ impl Widget for Card {
     }
 
     fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
-        draw_card(canvas, env, area, self.book.as_ref());
+        draw_card(canvas, env, area, self.book.as_ref(), self.cover.as_ref());
     }
 
     fn targets(&self, _: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
@@ -452,14 +526,20 @@ impl Widget for Card {
     }
 }
 
-fn draw_card(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, shown: Option<&Book>) {
+fn draw_card(
+    canvas: &mut Canvas<'_>,
+    env: &Env<'_>,
+    area: Rect,
+    shown: Option<&Book>,
+    small: Option<&Thumbnail>,
+) {
     let style = UiStyle::new(env);
     let Some(font) = style.font(env) else {
         return;
     };
     let look = widgets::draw_frame(canvas, env, CONTINUE, area);
     let r = look.area;
-    let Some(Book { book, cover }) = shown else {
+    let Some(Book { book, .. }) = shown else {
         // Nothing read yet: where the books are (a tap opens the library).
         ui::draw_empty(
             canvas,
@@ -473,13 +553,10 @@ fn draw_card(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, shown: Option<&
         return;
     };
     // The cover on the left, where there is one.
-    let cover = cover.as_ref().filter(|_| env.settings.read(&CARD_COVER));
-    let r = match cover {
-        Some(cover) => {
-            let (w, h) = ui::fit_image(cover, r.width / 3, r.height);
-            let at = Rect::new(r.x, r.y + (r.height - h) / 2, w, h);
-            ui::draw_image(canvas, env.storage, cover, at);
-            let shift = w + style.gap as u16;
+    let r = match Card::cover_place(env, area, shown) {
+        Some((image, at)) => {
+            draw_cover(canvas, env, image, small, at);
+            let shift = at.width + style.gap as u16;
             Rect::new(r.x + shift, r.y, r.width.saturating_sub(shift), r.height)
         }
         None => r,
@@ -556,6 +633,26 @@ fn draw_card(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, shown: Option<&
 #[derive(Debug, Default)]
 struct Shelf {
     books: Vec<Book>,
+    /// Where it is drawn, once placed.
+    area: Option<Rect>,
+    /// The books' covers, made small for their places.
+    covers: Vec<Option<Thumbnail>>,
+}
+
+impl Shelf {
+    fn make_covers(&mut self, env: &Env<'_>) {
+        let Some(area) = self.area else {
+            return self.covers.clear();
+        };
+        let area = widgets::look::look(env, RECENT, area).area;
+        self.covers = shelf_places(env, area, &self.books)
+            .into_iter()
+            .map(|(place, _, book)| {
+                let image = book.cover.as_ref()?;
+                small_cover(env, image, fitted(image, place, 0.5, 1.0))
+            })
+            .collect();
+    }
 }
 
 impl Widget for Shelf {
@@ -569,7 +666,17 @@ impl Widget for Shelf {
             .collect();
         let changed = books != self.books;
         self.books = books;
+        if changed {
+            self.make_covers(env);
+        }
         changed
+    }
+
+    fn place(&mut self, env: &Env<'_>, area: Rect) {
+        if self.area != Some(area) {
+            self.area = Some(area);
+            self.make_covers(env);
+        }
     }
 
     fn live(&self) -> bool {
@@ -593,7 +700,7 @@ impl Widget for Shelf {
     }
 
     fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
-        draw_shelf(canvas, env, area, &self.books);
+        draw_shelf(canvas, env, area, &self.books, &self.covers);
     }
 
     fn targets(&self, env: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
@@ -681,7 +788,13 @@ fn shelf_places<'b>(env: &Env<'_>, area: Rect, books: &'b [Book]) -> Vec<(Rect, 
         .collect()
 }
 
-fn draw_shelf(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, books: &[Book]) {
+fn draw_shelf(
+    canvas: &mut Canvas<'_>,
+    env: &Env<'_>,
+    area: Rect,
+    books: &[Book],
+    small: &[Option<Thumbnail>],
+) {
     let style = UiStyle::new(env);
     let Some(font) = style.font(env) else {
         return;
@@ -706,17 +819,14 @@ fn draw_shelf(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, books: &[Book]
             look.faint,
         );
     }
-    for (cover, row, Book { book, cover: image }) in shelf_places(env, area, books) {
+    let places = shelf_places(env, area, books);
+    for (i, (cover, row, Book { book, cover: image })) in places.into_iter().enumerate() {
         match image {
+            // In the middle of its place, at the bottom.
             Some(image) => {
-                let (w, h) = ui::fit_image(image, cover.width, cover.height);
-                let at = Rect::new(
-                    cover.x + (cover.width - w) / 2,
-                    cover.y + cover.height - h,
-                    w,
-                    h,
-                );
-                ui::draw_image(canvas, env.storage, image, at);
+                let at = fitted(image, cover, 0.5, 1.0);
+                let small = small.get(i).and_then(Option::as_ref);
+                draw_cover(canvas, env, image, small, at);
             }
             None => draw_placeholder(canvas, env, &style, cover, &book.title, look.ink),
         }

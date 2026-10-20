@@ -1,12 +1,15 @@
 //! PaperPaw's logo alone, its name beside it if wanted: the logo as it is set
-//! (see [`paperpaw_sdk::logo`]), PaperPaw's own or a picture.
+//! (see [`paperpaw_sdk::logo`]), PaperPaw's own or a picture, read when
+//! the widget is placed or the logo set changes (a picture made small
+//! for its place then), drawn from memory.
 
-use alloc::string::String;
+use alloc::boxed::Box;
+use alloc::string::{String, ToString};
 
 use paperpaw_sdk::logo::{LOGO, Logo};
 use paperpaw_sdk::setting::{Setting, Text};
-use paperpaw_sdk::ui::{self, UiStyle};
-use paperpaw_sdk::widgets::{self, Align, Drawn, Frame, Size, WidgetSpec};
+use paperpaw_sdk::ui::{self, Thumbnail, UiStyle};
+use paperpaw_sdk::widgets::{self, Align, Frame, Size, Widget, WidgetSpec};
 use paperpaw_sdk::{Canvas, Env, Id, Rect, RegisterError, Registrar, SettingSpec};
 
 use super::frame_height;
@@ -39,14 +42,76 @@ pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     r.add_setting_group(widgets::settings_group(&ID, "widgets.logo"))?;
     r.add_settings(&SETTINGS)?;
     r.add_widget(
-        WidgetSpec::drawn(ID, "widgets.logo", Drawn::new(height, draw).shows(shows))
+        WidgetSpec::new(ID, "widgets.logo", |_| Box::new(LogoWidget::default()))
             .category(widgets::categories::OTHER),
     )
 }
 
-/// What it shows: drawn again when the logo set changes.
-fn shows(env: &Env<'_>) -> String {
-    String::from(env.settings.read(&LOGO))
+/// The logo, read where it is placed.
+#[derive(Default)]
+struct LogoWidget {
+    /// The logo set ([`LOGO`]) when it was read.
+    set: Option<String>,
+    /// Where it is drawn, once placed, the logo read for it and a
+    /// picture made small for it.
+    placed: Option<(Rect, Logo, Option<Thumbnail>)>,
+}
+
+impl LogoWidget {
+    fn read(&mut self, env: &Env<'_>, area: Rect) {
+        let side = side(env, widgets::look::look(env, ID.as_str(), area).area);
+        let logo = Logo::read(env, side, side);
+        let small = match &logo {
+            Logo::Picture(image) => {
+                let (w, h) = logo.fit(side, side);
+                Thumbnail::new(env.storage, image, w, h, env.device.display.format)
+            }
+            Logo::Drawn => None,
+        };
+        self.placed = Some((area, logo, small));
+    }
+}
+
+impl Widget for LogoWidget {
+    fn update(&mut self, env: &Env<'_>) -> bool {
+        let set = env.settings.read(&LOGO);
+        if self.set.as_deref() == Some(set) {
+            return false;
+        }
+        self.set = Some(set.to_string());
+        if let Some((area, _, _)) = self.placed {
+            self.read(env, area);
+        }
+        true
+    }
+
+    fn place(&mut self, env: &Env<'_>, area: Rect) {
+        if self.placed.as_ref().is_none_or(|(at, _, _)| *at != area) {
+            self.read(env, area);
+        }
+    }
+
+    fn live(&self) -> bool {
+        false
+    }
+
+    fn height(&self, env: &Env<'_>, width: u16) -> u16 {
+        height(env, width)
+    }
+
+    fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
+        let placed = self
+            .placed
+            .as_ref()
+            .filter(|(at, _, _)| *at == area)
+            .map(|(_, logo, small)| (logo, small.as_ref()));
+        draw(canvas, env, area, placed);
+    }
+}
+
+/// The logo's side in `area` (inside the frame).
+fn side(env: &Env<'_>, area: Rect) -> u16 {
+    sizes(env).1.min(area.height).min(area.width)
 }
 
 /// The size of the name, and of the logo: as high as a line and a half
@@ -61,12 +126,26 @@ fn height(env: &Env<'_>, _: u16) -> u16 {
     sizes(env).1 + frame_height(env, ID.as_str())
 }
 
-fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
+/// Draws the logo `placed` (read where the widget was placed, a picture
+/// made small), or read for `area` now.
+fn draw(
+    canvas: &mut Canvas<'_>,
+    env: &Env<'_>,
+    area: Rect,
+    placed: Option<(&Logo, Option<&Thumbnail>)>,
+) {
     let look = widgets::draw_frame(canvas, env, ID.as_str(), area);
     let area = look.area;
-    let (size, side) = sizes(env);
-    let side = side.min(area.height).min(area.width);
-    let logo = Logo::read(env, side, side);
+    let size = sizes(env).0;
+    let side = side(env, area);
+    let read;
+    let (logo, small) = match placed {
+        Some(placed) => placed,
+        None => {
+            read = Logo::read(env, side, side);
+            (&read, None)
+        }
+    };
     let (w, h) = logo.fit(side, side);
     // The name a third of the logo's width after it, where it fits.
     let font = text::font(env, env.settings.read(&FACE));
@@ -83,12 +162,17 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     };
     let x = widgets::align(env, ID.as_str()).x(area, total);
     let top = area.y + area.height.saturating_sub(h) / 2;
-    logo.draw(
-        canvas,
-        env.storage,
-        Rect::new(x as u16, top, w, h),
-        look.ink,
-    );
+    match small {
+        Some(small) if (small.width(), small.height()) == (w, h) => {
+            small.draw(canvas, x as u16, top);
+        }
+        _ => logo.draw(
+            canvas,
+            env.storage,
+            Rect::new(x as u16, top, w, h),
+            look.ink,
+        ),
+    }
     if let (Some(font), true) = (name, with_name) {
         let row = Rect::new(area.x, top, area.width, h);
         let after = x + f32::from(w + gap);

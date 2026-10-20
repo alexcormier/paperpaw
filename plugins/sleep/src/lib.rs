@@ -240,14 +240,16 @@ fn place_widgets(env: &Env<'_>) -> Vec<(Box<dyn Widget>, Rect)> {
     };
     let mut placed = Vec::new();
     for made in made {
-        let Some((widget, height)) = made else {
+        let Some((mut widget, height)) = made else {
             y += fill;
             continue;
         };
         if !placed.is_empty() {
             y += gap * 2;
         }
-        placed.push((widget, Rect::new(margin, y, width, height)));
+        let area = Rect::new(margin, y, width, height);
+        widget.place(env, area);
+        placed.push((widget, area));
         y += height;
     }
     placed

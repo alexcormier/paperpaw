@@ -20,6 +20,8 @@
 
 use alloc::borrow::Cow;
 use alloc::format;
+use alloc::string::String;
+use alloc::vec::Vec;
 
 use paperpaw_graphics::Canvas;
 use paperpaw_platform::{Color, Rect};
@@ -340,6 +342,8 @@ pub fn draw_caption(
 /// it is wider, each line placed as `align` says, together in the
 /// middle from top to bottom; as many lines as fit, the last one
 /// shortened with "…" where there is more. Returns the height drawn.
+/// A widget drawing the same text again and again (in every band of a
+/// frame) breaks it once ([`Wrapped`]) and draws that.
 #[allow(clippy::too_many_arguments)]
 pub fn draw_wrapped(
     canvas: &mut Canvas<'_>,
@@ -350,36 +354,90 @@ pub fn draw_wrapped(
     text: &str,
     color: Color,
 ) -> u16 {
-    let style = UiStyle::new(env);
-    let Some(font) = style.font(env) else {
-        return 0;
-    };
-    let width = f32::from(area.width);
-    let line = f32::from(line_height(env, size)).max(1.0);
-    let mut lines = font.wrap(size, text, width);
-    let fits = ((f32::from(area.height) / line) as usize).max(1);
-    let cut = lines.len() > fits;
-    lines.truncate(fits);
-    let count = lines.len();
-    let total = (line * count as f32) as u16;
-    let top = area.y + area.height.saturating_sub(total) / 2;
-    // Told as one text, drawn as lines.
-    let at = Rect::new(area.x, top, area.width, total);
-    canvas.describe(paperpaw_graphics::Role::Text, text, at, false, None);
-    let metrics = font.line_metrics(size);
-    for (n, range) in lines.into_iter().enumerate() {
-        let shown = if cut && n + 1 == count {
-            let rest = text[range.start..].trim_end();
-            ui::fit(&font, size, &format!("{rest} …"), width)
-        } else {
-            alloc::string::String::from(text[range].trim_end())
+    Wrapped::new(env, text, size, area.width, area.height).draw(canvas, env, area, align, color)
+}
+
+/// A text broken into the lines [`draw_wrapped`] draws, once: made
+/// where what it says or where it goes changes (e.g. in
+/// [`Widget::place`](super::Widget::place)), drawn as often as needed
+/// without measuring the text again.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Wrapped {
+    text: String,
+    size: f32,
+    /// The lines, the last one shortened with "…" where there is more.
+    lines: Vec<String>,
+}
+
+impl Wrapped {
+    /// `text` `size` pixels large in lines `width` pixels wide, as many
+    /// as fit `height` pixels (at least one).
+    pub fn new(env: &Env<'_>, text: &str, size: f32, width: u16, height: u16) -> Self {
+        let mut wrapped = Self {
+            text: String::from(text),
+            size,
+            lines: Vec::new(),
         };
-        let y = f32::from(top) + line * n as f32;
-        let baseline = y + (line + metrics.ascent - metrics.descent) / 2.0;
-        let x = align.x(area, font.measure(size, &shown));
-        font.draw(canvas, size, x, baseline as i32, &shown, color);
+        let Some(font) = UiStyle::new(env).font(env) else {
+            return wrapped;
+        };
+        let width = f32::from(width);
+        let line = f32::from(line_height(env, size)).max(1.0);
+        let mut ranges = font.wrap(size, text, width);
+        let fits = ((f32::from(height) / line) as usize).max(1);
+        let cut = ranges.len() > fits;
+        ranges.truncate(fits);
+        let count = ranges.len();
+        wrapped.lines = ranges
+            .into_iter()
+            .enumerate()
+            .map(|(n, range)| {
+                if cut && n + 1 == count {
+                    let rest = text[range.start..].trim_end();
+                    ui::fit(&font, size, &format!("{rest} …"), width)
+                } else {
+                    String::from(text[range].trim_end())
+                }
+            })
+            .collect();
+        wrapped
     }
-    total
+
+    /// The height its lines take.
+    pub fn height(&self, env: &Env<'_>) -> u16 {
+        let line = f32::from(line_height(env, self.size)).max(1.0);
+        (line * self.lines.len() as f32) as u16
+    }
+
+    /// Draws its lines in `area`, each placed as `align` says, together
+    /// in the middle from top to bottom; returns the height drawn.
+    pub fn draw(
+        &self,
+        canvas: &mut Canvas<'_>,
+        env: &Env<'_>,
+        area: Rect,
+        align: super::Align,
+        color: Color,
+    ) -> u16 {
+        let Some(font) = UiStyle::new(env).font(env) else {
+            return 0;
+        };
+        let size = self.size;
+        let line = f32::from(line_height(env, size)).max(1.0);
+        let total = self.height(env);
+        let top = area.y + area.height.saturating_sub(total) / 2;
+        // Told as one text, drawn as lines.
+        let at = Rect::new(area.x, top, area.width, total);
+        canvas.describe(paperpaw_graphics::Role::Text, &self.text, at, false, None);
+        let metrics = font.line_metrics(size);
+        for (n, shown) in self.lines.iter().enumerate() {
+            let y = f32::from(top) + line * n as f32;
+            let baseline = y + (line + metrics.ascent - metrics.descent) / 2.0;
+            let x = align.x(area, font.measure(size, shown));
+            font.draw(canvas, size, x, baseline as i32, shown, color);
+        }
+        total
+    }
 }
 
 /// Draws `text` in the body size in the middle of `look`'s area, e.g.

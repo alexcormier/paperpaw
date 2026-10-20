@@ -289,6 +289,10 @@ pub struct Kernel {
     subscriptions: Vec<(Id, Id, EventHandler)>,
     /// When the active screen wants `on_timer`.
     screen_timer: Option<Instant>,
+    /// The screen on top changed: it is told ([`Screen::on_show`]) once
+    /// the commands of the call are done, so that one shown for a moment
+    /// (e.g. below a menu that closes to open another screen) is not.
+    show_pending: bool,
     /// Events plugins asked for at a time ([`Command::Schedule`]).
     scheduled: Vec<(Instant, Id, Params)>,
     /// The short message showing ([`Command::Notify`]) and until when.
@@ -725,6 +729,11 @@ impl Kernel {
         self.stack.iter().map(|s| &s.id)
     }
 
+    /// The ids of every screen plugins added, whether open or not.
+    pub fn known_screens(&self) -> impl Iterator<Item = &Id> {
+        self.shared.screens.iter().map(|(id, _)| id)
+    }
+
     /// What the device did since start (see [`paperpaw_sdk::usage`]).
     pub fn usage(&self) -> &paperpaw_sdk::usage::Usage {
         &self.shared.usage
@@ -764,6 +773,19 @@ impl Kernel {
         self.now = now;
         self.last_activity = now;
         self.output.commands.push(Command::OpenSlot(slot, params));
+        self.run_commands();
+        self.finish()
+    }
+
+    /// Opens the screen `screen` with `params`, as a plugin would, e.g.
+    /// asked by a shell's remote control or a test.
+    pub fn open_screen(&mut self, now: Instant, screen: Id, params: Params) -> Effects {
+        let _running = self.shared.meter.enter(meter::CORE);
+        self.now = now;
+        self.last_activity = now;
+        self.output
+            .commands
+            .push(Command::OpenScreen(screen, params));
         self.run_commands();
         self.finish()
     }
