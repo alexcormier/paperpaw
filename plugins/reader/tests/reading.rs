@@ -544,3 +544,22 @@ fn status_lines_know_the_page_in_the_chapter() {
         reading.run(core_actions::NEXT_PAGE);
     }
 }
+
+#[test]
+fn held_select_marks_the_page() {
+    let mut reading = Reading::new(Shared::default());
+    reading.open();
+    reading.run(core_actions::NEXT_PAGE);
+    let bookmarks = |reading: &Reading| {
+        let marks = paperpaw_sdk::annotations::marks(&reading.storage, BOOK);
+        marks.iter().filter(|m| m.kind == Kind::Bookmark).count()
+    };
+    hold(&mut reading, "confirm");
+    assert_eq!(bookmarks(&reading), 1);
+    assert_eq!(
+        reading.kernel.active_screen().map(Id::as_str),
+        Some("reader.screen")
+    );
+    hold(&mut reading, "confirm");
+    assert_eq!(bookmarks(&reading), 0);
+}

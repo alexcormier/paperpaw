@@ -11,9 +11,10 @@ change the plugin SDK.
   back, and *Next chapter* and *Previous chapter* can be put on any
   button or gesture; the X4's front buttons Left and Right turn pages
   in a book, as they did nothing there; *Swap the page buttons* under
-  Controls turns them the other way round with one switch; *Bookmark*
-  sits in the reader's bar, three presses with buttons instead of five;
-  two status items show the page in the chapter (5 / 25) and the pages
+  Controls turns them the other way round with one switch; holding
+  *Select* while reading sets or removes the page's bookmark (one press
+  with buttons instead of five), and *Bookmark* sits in the reader's bar
+  instead of under *More*; two status items show the page in the chapter (5 / 25) and the pages
   left in it. Going a chapter on now goes to the first that begins on a
   later page, and skimming goes chapter by chapter also through parts.
   Fixed: a page back after a jump (contents, skimming, a chapter) went

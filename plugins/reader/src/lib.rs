@@ -570,12 +570,14 @@ impl Plugin for Reader {
         // A tap at the bottom of a page opens it. Swipes in from the sides
         // turn pages, as swipes do, rather than going back; two fingers
         // apart or together make the text larger or smaller. Holding a
-        // page button goes a chapter on or back.
+        // page button goes a chapter on or back; holding Select (which
+        // opens the menu) marks the page, as the corner does by touch.
         r.add_keymap(Cow::Borrowed(
             "[keymap.core.reader]\ntap.bottom = reader.quick-settings\n\
              edge.left = core.prev-page\nedge.right = core.next-page\n\
              pinch.out = reader.font-larger\npinch.in = reader.font-smaller\n\
-             long.page-forward = reader.next-chapter\nlong.page-back = reader.prev-chapter\n",
+             long.page-forward = reader.next-chapter\nlong.page-back = reader.prev-chapter\n\
+             long.confirm = reader.toggle-bookmark\n",
         ))?;
         // A short menu; settings in it show their state and change in
         // place.
@@ -586,8 +588,8 @@ impl Plugin for Reader {
             (MENU, actions::ANNOTATIONS, 40),
             (MENU, actions::QUICK_SETTINGS, 50),
             (MENU, core_settings::NIGHT_MODE.into(), 60),
-            // Beside the night mode: with buttons alone (no corner to
-            // tap) as quick to reach as the contents.
+            // Beside the night mode, to be found; held Select and the
+            // corner are quicker.
             (MENU, actions::TOGGLE_BOOKMARK, 65),
             (MENU, MORE_MENU, 70),
             // Last, so that one press back from the first entry reaches
