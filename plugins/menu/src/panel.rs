@@ -550,7 +550,7 @@ impl PanelScreen {
                 if focused {
                     ui::draw_focus(canvas, &style, rect);
                 }
-                let color = if focused { Color::WHITE } else { Color::BLACK };
+                let color = style.focus_ink(focused);
                 let value = alloc::format!("{} ›", ui::setting_value(env, spec));
                 let title = env.i18n.tr(&spec.title);
                 let gap = style.gap as f32;
@@ -606,7 +606,13 @@ fn draw_slider(
     let value = env.settings.int(id.as_str());
     slider.draw_track(canvas, style, rect, value, Color::BLACK);
     if focused {
-        canvas.stroke(rect, ui::button_border(style), Color::BLACK);
+        // Square, as the track is, or a pill like the other small shapes.
+        let radius = if style.pill {
+            style.radius(u32::from(rect.height))
+        } else {
+            0
+        };
+        canvas.stroke_round(rect, ui::button_border(style), radius, Color::BLACK);
     }
 }
 

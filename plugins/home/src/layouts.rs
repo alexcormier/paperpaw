@@ -392,11 +392,7 @@ impl Chooser {
         let y = i32::from(top) + (i32::from(title_h) - dot as i32) / 2;
         let mut x = dots_x;
         for index in 0..self.entries.len() {
-            if index == self.at {
-                canvas.fill_rect(x, y, dot, dot, Color::BLACK);
-            } else {
-                canvas.stroke_rect(x, y, dot, dot, style.line.max(1), Color::BLACK);
-            }
+            pages::draw_dot(canvas, env, &style, (x, y), dot, index == self.at);
             x += spacing as i32;
         }
         // What it is, where that fits on a line.

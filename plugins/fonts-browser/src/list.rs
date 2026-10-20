@@ -257,7 +257,7 @@ impl Screen for ListScreen {
                 let Some(ui_font) = style.font(env) else {
                     return;
                 };
-                let ink = if focused { Color::WHITE } else { Color::BLACK };
+                let ink = style.focus_ink(focused);
                 let margin = style.margin as f32;
                 let x = f32::from(rect.x) + margin;
                 let room =

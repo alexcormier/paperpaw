@@ -456,7 +456,7 @@ impl Screen for ListScreen {
         let shown = !env.device.input.touch;
         self.rows
             .draw(canvas, &style, shown, |canvas, index, rect, focused| {
-                let ink = if focused { Color::WHITE } else { Color::BLACK };
+                let ink = style.focus_ink(focused);
                 match &entries[index] {
                     Row::Heading(key) => {
                         ui::draw_heading(canvas, env, &style, rect, env.i18n.tr(key))
@@ -882,7 +882,7 @@ impl Screen for PickScreen {
         let shown = !env.device.input.touch;
         self.rows
             .draw(canvas, &style, shown, |canvas, index, rect, focused| {
-                let ink = if focused { Color::WHITE } else { Color::BLACK };
+                let ink = style.focus_ink(focused);
                 match &entries[index] {
                     Pick::Heading(key) => {
                         ui::draw_heading(canvas, env, &style, rect, env.i18n.tr(key))

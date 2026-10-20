@@ -280,8 +280,11 @@ impl Guide {
                 let segments = self.two(env).map(|_| {
                     let inset = style.margin as u16 / 2;
                     let half = (card.width - 3 * inset) / 2;
-                    let top = card.y + inset;
-                    let height = card.height.saturating_sub(2 * inset);
+                    // Wide margins and a short card leave the buttons
+                    // their height.
+                    let above = inset.min(gap).min(card.height / 6);
+                    let top = card.y + above;
+                    let height = card.height.saturating_sub(2 * above);
                     (
                         Rect::new(card.x + inset, top, half, height),
                         Rect::new(card.x + 2 * inset + half, top, half, height),
