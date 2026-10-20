@@ -29,7 +29,8 @@ const NAME: Setting<Text> = Setting::new("widgets.series.name");
 /// Which of a long series' books show: from the first, or those round
 /// the book being read.
 const STARTS: [&str; 2] = ["widgets.series.around", "widgets.series.first"];
-/// Books of a series looked at, at most.
+/// Books of a series kept, at most: of a longer one, those nearest the
+/// book being read (see [`members`]).
 const MAX_MEMBERS: usize = 60;
 
 /// Its settings, kept in the program.
@@ -114,26 +115,69 @@ pub(crate) struct Member {
     pub read: bool,
 }
 
+/// The books of a series, as many as are kept, and how many it has in
+/// all and read.
+#[derive(Debug, Default)]
+pub(crate) struct Members {
+    pub books: Vec<Member>,
+    pub total: usize,
+    pub read: usize,
+}
+
 /// The books of the series `name` (any case), in their order: by number,
-/// then title.
-pub(crate) fn members(env: &Env<'_>, name: &str) -> Vec<Member> {
+/// then title, each `read` as it says. Of a series longer than
+/// [`MAX_MEMBERS`], those whose numbers are nearest `near` (the number
+/// of the book being read), or the first.
+pub(crate) fn members(
+    env: &Env<'_>,
+    name: &str,
+    near: Option<&str>,
+    read: &dyn Fn(&str) -> bool,
+) -> Members {
     let name = name.trim().to_lowercase();
-    let mut found = Vec::new();
+    let mut found = Members::default();
     if name.is_empty() {
         return found;
     }
+    let near = near.map(series_rank);
     each_book(env, &mut |record| {
-        if found.len() < MAX_MEMBERS && record.series.trim().to_lowercase() == name {
-            found.push(Member {
-                path: record.path,
-                title: record.title,
-                number: record.number,
-                read: false,
-            });
+        if record.series.trim().to_lowercase() != name {
+            return;
+        }
+        let member = Member {
+            read: read(&record.path),
+            path: record.path,
+            title: record.title,
+            number: record.number,
+        };
+        found.total += 1;
+        found.read += usize::from(member.read);
+        found.books.push(member);
+        // Not more than twice as many held at once.
+        if found.books.len() >= 2 * MAX_MEMBERS {
+            keep_nearest(&mut found.books, near);
         }
     });
-    order(&mut found);
+    keep_nearest(&mut found.books, near);
+    order(&mut found.books);
     found
+}
+
+/// Of `members`, the [`MAX_MEMBERS`] whose numbers are nearest `near`,
+/// or the first.
+fn keep_nearest(members: &mut Vec<Member>, near: Option<u64>) {
+    if members.len() <= MAX_MEMBERS {
+        return;
+    }
+    let near = near.unwrap_or(0);
+    members.sort_by(|a, b| {
+        let (ra, rb) = (series_rank(&a.number), series_rank(&b.number));
+        ra.abs_diff(near)
+            .cmp(&rb.abs_diff(near))
+            .then(ra.cmp(&rb))
+            .then_with(|| a.title.to_lowercase().cmp(&b.title.to_lowercase()))
+    });
+    members.truncate(MAX_MEMBERS);
 }
 
 /// Puts a series' books in order: by number, then title.
@@ -162,8 +206,9 @@ pub(crate) fn window(
 }
 
 /// What was read of the catalog: the series and its books, and what that
-/// was read for (the series, the library's generation, the catalog).
-type Kept = Rc<RefCell<Option<((String, u32, u64), Vec<Member>)>>>;
+/// was read for (the series, the library's generation, the catalog, the
+/// number its books are kept round).
+type Kept = Rc<RefCell<Option<((String, u32, u64, String), Members)>>>;
 
 #[derive(Debug, Default, PartialEq)]
 struct Shown {
@@ -217,16 +262,24 @@ impl Series {
             self.generation.get(),
             catalog_stamp(env.storage),
         );
+        let around = chosen(env, WIDGET, "start") != STARTS[1];
+        let near = current
+            .as_ref()
+            .filter(|b| around && b.series.trim().eq_ignore_ascii_case(name.trim()))
+            .map(|b| b.number.clone());
+        let key = (key.0, key.1, key.2, near.clone().unwrap_or_default());
         let mut kept = self.kept.borrow_mut();
         if kept.as_ref().is_none_or(|(k, _)| *k != key) {
-            let mut members = members(env, &name);
-            for member in &mut members {
-                member.read = paperpaw_sdk::library::book(env.storage, &member.path)
-                    .is_some_and(|b| b.progress == Some(100));
-            }
-            *kept = Some((key, members));
+            let finished = |path: &str| {
+                paperpaw_sdk::library::book(env.storage, path)
+                    .is_some_and(|b| b.progress == Some(100))
+            };
+            *kept = Some((key, members(env, &name, near.as_deref(), &finished)));
         }
-        let members = kept.as_ref().map(|(_, m)| m.as_slice()).unwrap_or_default();
+        let (members, total, read) = kept
+            .as_ref()
+            .map(|(_, m)| (m.books.as_slice(), m.total, m.read))
+            .unwrap_or_default();
         if members.is_empty() {
             return Shown {
                 name,
@@ -239,7 +292,6 @@ impl Series {
         let at = members
             .iter()
             .position(|m| Some(m.path.as_str()) == current_path);
-        let around = chosen(env, id, "start") != STARTS[1];
         let shown = window(members.len(), count(env, id, "count"), at, around);
         let numbers = widgets::shows(env, id, "numbers");
         let titles = widgets::shows(env, id, "titles");
@@ -262,11 +314,10 @@ impl Series {
                 book,
             });
         }
-        let read = members.iter().filter(|m| m.read).count();
         Shown {
             name,
             current: current_path.unwrap_or_default().to_string(),
-            total: members.len(),
+            total,
             read,
             books,
             empty: None,

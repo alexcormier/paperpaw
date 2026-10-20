@@ -153,11 +153,9 @@ fn in_series(env: &Env<'_>, book: &Book) -> Option<String> {
     if book.series.is_empty() {
         return None;
     }
-    let mut members = members(env, &book.series);
-    for member in &mut members {
-        member.read = !unread(env.storage, &member.path);
-    }
-    next_in_series(&members, &book.path).map(|m| m.path.clone())
+    let begun = |path: &str| !unread(env.storage, path);
+    let members = members(env, &book.series, Some(&book.number), &begun);
+    next_in_series(&members.books, &book.path).map(|m| m.path.clone())
 }
 
 fn seen_file() -> String {

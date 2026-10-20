@@ -425,6 +425,42 @@ fn series_go_by_their_numbers() {
     assert_eq!(series::window(3, 6, None, true), 0..3);
 }
 
+/// Of a series longer than is kept, the books round the one being read
+/// are kept, and it is counted whole.
+#[test]
+fn a_long_series_is_kept_round_the_book_being_read() {
+    let records: Vec<catalog::Record> = (1..=150)
+        .rev()
+        .map(|n| {
+            let book = library::Book {
+                series: Some("Long".to_string()),
+                series_index: Some(n.to_string()),
+                ..library::Book::default()
+            };
+            catalog::Record::of(&alloc::format!("books/long/{n:03}.epub"), &book)
+        })
+        .collect();
+    let storage = MemoryStorage::new();
+    catalog::write(&storage, &records);
+    let h = Harness::new(storage);
+    let env = h.env();
+    let read = |path: &str| path < "books/long/010.epub";
+    let near = series::members(&env, "long", Some("120"), &read);
+    assert_eq!((near.total, near.read), (150, 9));
+    let numbers: Vec<&str> = near.books.iter().map(|m| m.number.as_str()).collect();
+    assert_eq!(numbers.len(), 60);
+    assert!(
+        numbers.contains(&"120") && numbers.contains(&"121"),
+        "{numbers:?}"
+    );
+    // In order, by number.
+    assert_eq!(numbers.first(), Some(&"90"));
+    assert_eq!(numbers.last(), Some(&"149"));
+    let first = series::members(&env, "long", None, &read);
+    assert_eq!(first.books.first().map(|m| m.number.as_str()), Some("1"));
+    assert_eq!(first.books.last().map(|m| m.number.as_str()), Some("60"));
+}
+
 #[test]
 fn chance_picks_another_book_each_day() {
     let books: Vec<String> = (0..50).map(|i| alloc::format!("books/{i}.epub")).collect();
