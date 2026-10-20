@@ -595,7 +595,9 @@ fn headers_are_centred_by_their_ink() {
                     .filter(|col| gray[(row * width + col) as usize] < 128)
                     .count() as u32
             };
-            let end = (y..y + h).find(|row| dark(*row) >= w * 9 / 10).unwrap_or(y + h);
+            let end = (y..y + h)
+                .find(|row| dark(*row) >= w * 9 / 10)
+                .unwrap_or(y + h);
             let inked: Vec<u32> = (y..end).filter(|row| dark(*row) > 0).collect();
             let (Some(first), Some(last)) = (inked.first(), inked.last()) else {
                 failures.push(format!("{profile} screen {n}: no ink in the header"));

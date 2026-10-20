@@ -624,10 +624,31 @@ pub fn draw_header(
     let band = style.header_band(area);
     if let Some(note) = note.as_deref() {
         let (x, baseline) = (right + margin, ink_baseline(&font, band, style.small, note));
-        draw_label_on(&mut canvas, &font, style.small, x, area, baseline, note, ink);
+        draw_label_on(
+            &mut canvas,
+            &font,
+            style.small,
+            x,
+            area,
+            baseline,
+            note,
+            ink,
+        );
     }
-    let (x, baseline) = (f32::from(area.x) + margin, ink_baseline(&font, band, style.head, &title));
-    draw_label_on(&mut canvas, &font, style.head, x, area, baseline, &title, ink);
+    let (x, baseline) = (
+        f32::from(area.x) + margin,
+        ink_baseline(&font, band, style.head, &title),
+    );
+    draw_label_on(
+        &mut canvas,
+        &font,
+        style.head,
+        x,
+        area,
+        baseline,
+        &title,
+        ink,
+    );
 }
 
 /// A screen's header bar for touch screens too: a back arrow on the left

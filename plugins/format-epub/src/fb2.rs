@@ -24,7 +24,6 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::cell::Cell;
 
-use paperpaw_digest::fnv1a64;
 use paperpaw_sdk::document::{
     Block, Document, DocumentError, ImageRef, Link, Locator, Metadata, TocEntry,
 };
@@ -37,11 +36,14 @@ use crate::cached;
 use crate::convert::{self, CachePaths, INDEX, Source};
 
 /// Changes whenever books are read differently, so they are read again.
-const FB2_VERSION: u32 = 1;
+const FB2_VERSION: u32 = 2;
 /// Marks a book whose converted length is not known yet.
 const UNKNOWN: u32 = u32::MAX;
+/// Marks a book that could not be converted since it was opened (see
+/// `document::FAILED`).
+const FAILED: u32 = u32::MAX - 1;
 /// Contents entries kept at most.
-const MAX_TOC: usize = 2000;
+const MAX_TOC: u32 = 10_000;
 /// Longest title of a contents entry kept.
 const MAX_TITLE: usize = 200;
 /// Anchor ids of section titles: this, then their number.
@@ -121,143 +123,254 @@ pub(crate) fn attr(attrs: &paperpaw_sdk::xml::Attrs<'_>, name: &str) -> Option<S
         .map(|(_, v)| decode(v).into_owned())
 }
 
-/// What one look at the book finds.
+/// What one look at the book finds. Its contents are written to the cache
+/// as they are found (`toc.dat`, see `package`), each entry with the
+/// anchor its title gets ([`TOC_ANCHOR`] and its number).
 #[derive(Debug, Default)]
 struct Scan {
     metadata: Metadata,
-    /// Section titles: depth (0 for top-level sections) and text.
-    toc: Vec<(u8, String)>,
+    /// Entries of the contents.
+    toc_len: u32,
     cover: Option<String>,
 }
 
-fn scan(storage: &dyn Storage, path: &str, encoding: Encoding) -> Result<Scan, DocumentError> {
-    let mut found = Scan::default();
-    let mut stack: Vec<String> = Vec::new();
-    let mut text = String::new();
-    // An author's name parts, a title being read and where sections are.
-    let mut name_parts: Vec<String> = Vec::new();
-    let mut nickname = String::new();
-    let mut title: Option<String> = None;
-    let mut depth = 0u32;
-    let mut notes = false;
-    let mut annotation: Option<String> = None;
+/// Elements whose names a look at the book keeps open at most: a book's
+/// description is never deep, its text may be.
+const MAX_SCAN_DEPTH: usize = 64;
+/// Element names are kept to this length.
+const MAX_SCAN_NAME: usize = 32;
+/// Text of a metadata element and the annotation read at most.
+const MAX_SCAN_TEXT: usize = 4096;
+/// Authors and keywords kept at most.
+const MAX_AUTHORS: usize = 16;
+const MAX_SUBJECTS: usize = 32;
+/// Longest value of the metadata kept, but the annotation.
+const MAX_VALUE: usize = 512;
+
+/// A look at the book, element by element. Section titles are counted as
+/// [`Fb2Dialect`] counts them when the book is converted, also those of
+/// self-closing elements, so each entry of the contents leads to its
+/// title.
+struct Scanner<'a> {
+    found: Scan,
+    toc: crate::package::TocWriter<'a>,
+    /// The names of the open elements, as far as kept, and how many more
+    /// are open below them.
+    stack: Vec<String>,
+    overflow: u32,
+    /// Where `<title-info>` is in `stack`, while it is open.
+    info: Option<usize>,
+    text: String,
+    /// An author's name parts, a title being read and where sections are.
+    name_parts: Vec<String>,
+    nickname: String,
+    title: Option<String>,
+    /// Section titles met (as [`Fb2Dialect::titles`]).
+    titles: u32,
+    depth: u32,
+    notes: bool,
+    annotation: Option<String>,
+}
+
+impl Scanner<'_> {
+    fn start(&mut self, name: &str, attrs: &paperpaw_sdk::xml::Attrs<'_>) {
+        let tag = scan_name(name);
+        let in_info = self.info.is_some();
+        match tag.as_str() {
+            "body" => self.notes = attrs.get("name").as_deref() == Some("notes"),
+            "section" => self.depth += 1,
+            "title" => {
+                // As the dialect gives titles anchors.
+                if !self.notes && self.depth > 0 {
+                    self.title = Some(String::new());
+                }
+            }
+            "sequence" if in_info && self.found.metadata.series.is_none() => {
+                let m = &mut self.found.metadata;
+                m.series = attr(attrs, "name")
+                    .map(|n| value(&n))
+                    .filter(|n| !n.is_empty());
+                m.series_index = attr(attrs, "number")
+                    .map(|n| value(&n))
+                    .filter(|n| !n.is_empty() && n != "0");
+            }
+            "image" if in_info && self.stack.last().is_some_and(|t| t == "coverpage") => {
+                self.found.cover = attr(attrs, "href")
+                    .map(|h| value(h.trim_start_matches('#')))
+                    .filter(|h| !h.is_empty());
+            }
+            "annotation" if in_info => self.annotation = Some(String::new()),
+            "author" if in_info => {
+                self.name_parts.clear();
+                self.nickname.clear();
+            }
+            _ => {}
+        }
+        if self.stack.len() < MAX_SCAN_DEPTH {
+            if tag == "title-info" && self.info.is_none() {
+                self.info = Some(self.stack.len());
+            }
+            self.stack.push(tag);
+        } else {
+            self.overflow += 1;
+        }
+        self.text.clear();
+    }
+
+    fn end(&mut self, name: &str) {
+        let tag = scan_name(name);
+        let in_info = self.info.is_some();
+        let value = value(&self.text);
+        let m = &mut self.found.metadata;
+        match tag.as_str() {
+            "book-title" if in_info => m.title = Some(value),
+            "lang" if in_info && !value.is_empty() => m.language = Some(value),
+            "keywords" if in_info => {
+                m.subjects = value
+                    .split([',', ';'])
+                    .map(str::trim)
+                    .filter(|k| !k.is_empty())
+                    .take(MAX_SUBJECTS)
+                    .map(String::from)
+                    .collect();
+            }
+            "first-name" | "middle-name" | "last-name" if in_info && !value.is_empty() => {
+                self.name_parts.push(value);
+            }
+            "nickname" if in_info => self.nickname = value,
+            "author" if in_info && m.authors.len() < MAX_AUTHORS => {
+                let full = if self.name_parts.is_empty() {
+                    core::mem::take(&mut self.nickname)
+                } else {
+                    self.name_parts.join(" ")
+                };
+                if !full.is_empty() {
+                    m.authors.push(full);
+                }
+            }
+            "annotation" if in_info => {
+                m.description = self.annotation.take().map(|a| clean(&a));
+            }
+            "section" => self.depth = self.depth.saturating_sub(1),
+            "title" => {
+                if let Some(title) = self.title.take() {
+                    let anchor = format!("{TOC_ANCHOR}{}", self.titles);
+                    self.titles += 1;
+                    let title = clean(&title);
+                    // A title without words (a picture) is no entry.
+                    if !title.is_empty() && self.found.toc_len < MAX_TOC {
+                        let level = (self.depth.saturating_sub(1)).min(5) as u8;
+                        self.toc
+                            .push(level, 0, Some(&anchor), cut(&title, MAX_TITLE));
+                        self.found.toc_len += 1;
+                    }
+                }
+            }
+            // Lines of a title or an annotation are parted.
+            "p" => {
+                for open in [self.title.as_mut(), self.annotation.as_mut()]
+                    .into_iter()
+                    .flatten()
+                {
+                    open.push(' ');
+                }
+            }
+            _ => {}
+        }
+        if self.overflow > 0 {
+            self.overflow -= 1;
+        } else if let Some(at) = self.stack.iter().rposition(|t| *t == tag) {
+            self.stack.truncate(at);
+            if self.info.is_some_and(|info| info >= at) {
+                self.info = None;
+            }
+        }
+        self.text.clear();
+    }
+
+    fn characters(&mut self, text: &str) {
+        // Pictures are long and of no use here.
+        if self.stack.last().is_some_and(|t| t == "binary") {
+            return;
+        }
+        let text = decode(text);
+        for open in [
+            Some(&mut self.text),
+            self.title.as_mut(),
+            self.annotation.as_mut(),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            if open.len() < MAX_SCAN_TEXT {
+                open.push_str(&text);
+            }
+        }
+    }
+}
+
+/// An element's name as a look at the book keeps it.
+fn scan_name(name: &str) -> String {
+    String::from(cut(local_name(name), MAX_SCAN_NAME))
+}
+
+/// `text` cut to at most `max` bytes, where a character ends.
+fn cut(text: &str, max: usize) -> &str {
+    let mut end = text.len().min(max);
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    &text[..end]
+}
+
+/// A value of the metadata: whitespace collapsed, at most [`MAX_VALUE`]
+/// bytes.
+fn value(text: &str) -> String {
+    String::from(cut(&clean(text), MAX_VALUE))
+}
+
+/// Looks at the book once: its metadata, and its contents written to the
+/// cache folder `cache`.
+fn scan(
+    storage: &dyn Storage,
+    path: &str,
+    encoding: Encoding,
+    cache: &str,
+) -> Result<Scan, DocumentError> {
+    let mut scanner = Scanner {
+        found: Scan::default(),
+        toc: crate::package::TocWriter::new(storage, cache)?,
+        stack: Vec::new(),
+        overflow: 0,
+        info: None,
+        text: String::new(),
+        name_parts: Vec::new(),
+        nickname: String::new(),
+        title: None,
+        titles: 0,
+        depth: 0,
+        notes: false,
+        annotation: None,
+    };
     let mut handle = |token: Token<'_>| match token {
         Token::Start {
             name,
             attrs,
             self_closing,
         } => {
-            let tag = local_name(name).to_string();
-            let in_info = stack.iter().any(|t| t == "title-info");
-            match tag.as_str() {
-                "body" => notes = attrs.get("name").as_deref() == Some("notes"),
-                "section" => depth += 1,
-                "title" if !notes && depth > 0 => title = Some(String::new()),
-                "sequence" if in_info && found.metadata.series.is_none() => {
-                    found.metadata.series = attr(&attrs, "name").filter(|n| !n.is_empty());
-                    found.metadata.series_index =
-                        attr(&attrs, "number").filter(|n| !n.is_empty() && n != "0");
-                }
-                "image" if in_info && stack.last().is_some_and(|t| t == "coverpage") => {
-                    found.cover = attr(&attrs, "href").map(|h| h.trim_start_matches('#').into());
-                }
-                "annotation" if in_info => annotation = Some(String::new()),
-                "author" if in_info => {
-                    name_parts.clear();
-                    nickname.clear();
-                }
-                _ => {}
-            }
-            if !self_closing {
-                stack.push(tag);
-            }
-            text.clear();
-        }
-        Token::End { name } => {
-            let tag = local_name(name);
-            let in_info = stack.iter().any(|t| t == "title-info");
-            let value = clean(&text);
-            match tag {
-                "book-title" if in_info => found.metadata.title = Some(value),
-                "lang" if in_info && !value.is_empty() => found.metadata.language = Some(value),
-                "keywords" if in_info => {
-                    found.metadata.subjects = value
-                        .split([',', ';'])
-                        .map(str::trim)
-                        .filter(|k| !k.is_empty())
-                        .map(String::from)
-                        .collect();
-                }
-                "first-name" | "middle-name" | "last-name" if in_info && !value.is_empty() => {
-                    name_parts.push(value);
-                }
-                "nickname" if in_info => nickname = value,
-                "author" if in_info => {
-                    let full = if name_parts.is_empty() {
-                        core::mem::take(&mut nickname)
-                    } else {
-                        name_parts.join(" ")
-                    };
-                    if !full.is_empty() {
-                        found.metadata.authors.push(full);
-                    }
-                }
-                "annotation" if in_info => {
-                    found.metadata.description = annotation.take().map(|a| clean(&a));
-                }
-                "section" => depth = depth.saturating_sub(1),
-                "title" => {
-                    if let Some(t) = title.take()
-                        && found.toc.len() < MAX_TOC
-                    {
-                        let mut t = clean(&t);
-                        if t.len() > MAX_TITLE {
-                            let mut end = MAX_TITLE;
-                            while !t.is_char_boundary(end) {
-                                end -= 1;
-                            }
-                            t.truncate(end);
-                        }
-                        found.toc.push(((depth.saturating_sub(1)).min(5) as u8, t));
-                    }
-                }
-                // Lines of a title or an annotation are parted.
-                "p" => {
-                    for open in [title.as_mut(), annotation.as_mut()].into_iter().flatten() {
-                        open.push(' ');
-                    }
-                }
-                _ => {}
-            }
-            if let Some(at) = stack.iter().rposition(|t| t == tag) {
-                stack.truncate(at);
-            }
-            text.clear();
-        }
-        Token::Text(t) => {
-            // Pictures are long and of no use here.
-            if stack.last().is_some_and(|t| t == "binary") {
-                return;
-            }
-            let t = decode(&t);
-            if text.len() < 4096 {
-                text.push_str(&t);
-            }
-            if let Some(title) = title.as_mut()
-                && title.len() < MAX_TITLE * 2
-            {
-                title.push_str(&t);
-            }
-            if let Some(a) = annotation.as_mut()
-                && a.len() < 4096
-            {
-                a.push_str(&t);
+            scanner.start(name, &attrs);
+            if self_closing {
+                scanner.end(name);
             }
         }
+        Token::End { name } => scanner.end(name),
+        Token::Text(text) => scanner.characters(&text),
         Token::CData(_) => {}
     };
     let mut tokenizer = Tokenizer::new();
     feed(storage, path, encoding, &mut tokenizer, &mut handle)?;
+    let Scanner { mut found, toc, .. } = scanner;
+    found.toc_len = toc.finish()?;
     Ok(found)
 }
 
@@ -363,9 +476,12 @@ pub struct Fb2Document {
     paths: CachePaths,
     /// The block found last (see [`cached::block_at`]).
     last: core::cell::Cell<Option<u32>>,
+    /// Where an anchor was found last.
+    anchors: cached::AnchorHint,
     encoding: Encoding,
     metadata: Metadata,
-    toc: Vec<(u8, String)>,
+    /// Entries of the contents, kept in the cache (see [`Scan`]).
+    toc_len: u32,
     cover: Option<String>,
     styles: bool,
     /// Pictures in colour (ADR 0015).
@@ -397,35 +513,26 @@ impl Fb2Document {
         let (styles, color) = (options.publisher_styles, options.color);
         let (image_fit, cover_fit) = (options.image_fit, options.cover_fit);
         let size = storage.size(path)?;
-        let head = crate::head(storage, path)?;
+        let book = crate::fingerprint(storage, path)?;
         let mut cache = format!(
-            "{}/fb2-{:016x}",
+            "{}/fb2-{}",
             Env::plugin_dir(PLUGIN.as_str()),
-            fnv1a64(path.as_bytes())
+            paperpaw_sdk::library::key(path)
         );
         if !styles {
             cache.push_str("/plain");
         }
-        let paths = CachePaths {
-            dir: cache.clone(),
-            text: format!("{cache}/0.txt"),
-            index: format!("{cache}/0.idx"),
-            anchors: format!("{cache}/0.anc"),
-            links: format!("{cache}/0.lnk"),
-            positions: format!("{cache}/0.pos"),
-            xpointers: format!("{cache}/0.xpt"),
-            end: format!("{cache}/0.end"),
-        };
-        // Read again when the file or the way it is read changed.
-        let stamp = format!(
-            "{}.{FB2_VERSION} {size} {:016x}\n",
-            crate::package::CACHE_VERSION,
-            fnv1a64(&head)
-        );
+        let paths = CachePaths::new(&cache, "0");
+        // Read again when the file or the way it is read changed, and then
+        // nothing made of it before stays (its pictures).
+        let stamp = format!("{}.{FB2_VERSION} {book}\n", crate::package::CACHE_VERSION);
         let stamp_path = format!("{cache}/source");
         let info_path = format!("{cache}/book.txt");
         let fresh = paperpaw_sdk::read_file(storage, &stamp_path, 256).ok()
             == Some(stamp.clone().into_bytes());
+        if !fresh {
+            let _ = storage.remove_dir_all(&cache);
+        }
         // A zipped book is read from its unpacked copy.
         let zipped = path.to_ascii_lowercase().ends_with(".zip");
         let file = if zipped {
@@ -444,7 +551,7 @@ impl Fb2Document {
             None => {
                 let _ = storage.remove(&paths.end);
                 let _ = storage.create_dir(&cache);
-                let found = scan(storage, &file, encoding)?;
+                let found = scan(storage, &file, encoding, &cache)?;
                 storage.write(&info_path, save_info(&found).as_bytes())?;
                 storage.write(&stamp_path, stamp.as_bytes())?;
                 found
@@ -459,9 +566,10 @@ impl Fb2Document {
             path: file,
             paths,
             last: core::cell::Cell::new(None),
+            anchors: cached::AnchorHint::default(),
             encoding,
             metadata,
-            toc: found.toc,
+            toc_len: found.toc_len,
             cover: found.cover,
             styles,
             color,
@@ -475,14 +583,20 @@ impl Fb2Document {
     /// Converts the book if needed; returns its text length and number of
     /// blocks.
     fn converted(&self, storage: &dyn Storage) -> Result<(u32, u32), DocumentError> {
-        let length = match cached::u32_at(storage, &self.paths.end, 0) {
-            Ok(length) => length,
-            Err(_) => {
+        let length = match cached::converted_length(storage, &self.paths) {
+            Some(length) => length,
+            None if self.length.get() == FAILED => {
+                return Err(DocumentError::Malformed(alloc::borrow::Cow::Borrowed(
+                    "cannot be read",
+                )));
+            }
+            None => {
+                self.anchors.reset();
                 let source = Source::Fb2 {
                     path: &self.path,
                     encoding: self.encoding,
                 };
-                convert::convert(
+                let converted = convert::convert(
                     storage,
                     &source,
                     &self.paths,
@@ -490,7 +604,8 @@ impl Fb2Document {
                     self.styles,
                     self.color,
                     self.image_fit,
-                )?
+                );
+                converted.inspect_err(|_| self.length.set(FAILED))?
             }
         };
         self.length.set(length);
@@ -525,12 +640,12 @@ fn unpack(storage: &dyn Storage, zip: &str, to: &str) -> Result<(), DocumentErro
     }
 }
 
-/// The cached metadata and contents: `key<TAB>value` lines, contents as
-/// `toc<TAB>depth<TAB>title`.
+/// The cached metadata and the number of entries of the contents:
+/// `key<TAB>value` lines.
 fn save_info(found: &Scan) -> String {
     let one = |s: &str| s.replace(['\t', '\n', '\r'], " ");
     let m = &found.metadata;
-    let mut out = String::new();
+    let mut out = format!("toc\t{}\n", found.toc_len);
     let mut line = |key: &str, value: &str| {
         out.push_str(&format!("{key}\t{}\n", one(value)));
     };
@@ -552,14 +667,14 @@ fn save_info(found: &Scan) -> String {
     for subject in &m.subjects {
         line("subject", subject);
     }
-    for (depth, title) in &found.toc {
-        out.push_str(&format!("toc\t{depth}\t{}\n", one(title)));
-    }
     out
 }
 
+/// Longest `book.txt` read: what [`Scan`] keeps is far less.
+const MAX_INFO: usize = 32 * 1024;
+
 fn load_info(storage: &dyn Storage, path: &str) -> Option<Scan> {
-    let data = paperpaw_sdk::read_file(storage, path, 1 << 20).ok()?;
+    let data = paperpaw_sdk::read_file(storage, path, MAX_INFO).ok()?;
     let text = core::str::from_utf8(&data).ok()?;
     let mut found = Scan::default();
     for line in text.lines() {
@@ -575,10 +690,7 @@ fn load_info(storage: &dyn Storage, path: &str) -> Option<Scan> {
             "cover" => found.cover = Some(value),
             "author" => m.authors.push(value),
             "subject" => m.subjects.push(value),
-            "toc" => {
-                let (depth, title) = value.split_once('\t')?;
-                found.toc.push((depth.parse().ok()?, title.to_string()));
-            }
+            "toc" => found.toc_len = value.parse().ok()?,
             _ => {}
         }
     }
@@ -596,7 +708,7 @@ impl Document for Fb2Document {
 
     fn section_len(&self, _: u32) -> u32 {
         match self.length.get() {
-            UNKNOWN => self.size,
+            UNKNOWN | FAILED => self.size,
             length => length,
         }
     }
@@ -621,22 +733,24 @@ impl Document for Fb2Document {
     }
 
     fn toc_len(&self, _: &dyn Storage) -> u32 {
-        self.toc.len() as u32
+        self.toc_len
     }
 
     fn toc_entry(&self, storage: &dyn Storage, index: u32) -> Option<TocEntry> {
-        let (level, title) = self.toc.get(index as usize)?;
+        let entry = crate::package::toc_entry(storage, &self.paths.dir, index)?;
         Some(TocEntry {
-            title: title.clone(),
-            level: *level,
+            title: entry.title,
+            level: entry.level,
             at: self.toc_target(storage, index).unwrap_or(Locator::START),
         })
     }
 
     fn toc_target(&self, storage: &dyn Storage, index: u32) -> Option<Locator> {
+        let entry = crate::package::toc_entry(storage, &self.paths.dir, index)?;
         self.converted(storage).ok()?;
-        let id = format!("{TOC_ANCHOR}{index}");
-        cached::anchor(storage, &self.paths, &id).map(|offset| Locator::new(0, offset))
+        let id = entry.fragment?;
+        cached::anchor(storage, &self.paths, 0, &id, &self.anchors)
+            .map(|offset| Locator::new(0, offset))
     }
 
     fn cover(&self, storage: &dyn Storage) -> Result<Option<ImageRef>, DocumentError> {
@@ -644,6 +758,9 @@ impl Document for Fb2Document {
             return Ok(None);
         };
         let base = format!("{}/cover-{}", self.paths.dir, self.cover_fit.long);
+        if crate::pictures::failed(storage, &base) {
+            return Ok(None);
+        }
         let cache = crate::pictures::file(&base, self.color);
         decode_binaries(
             storage,
@@ -653,7 +770,14 @@ impl Document for Fb2Document {
             &self.paths.dir,
             self.color,
         )?;
-        Ok(crate::pictures::open(storage, &base, self.color))
+        let cover = crate::pictures::open(storage, &base, self.color);
+        if cover.is_none() {
+            // Not in the book, or not decodable: the whole book is not read
+            // through again for it each time it is listed.
+            let missing = DocumentError::Malformed(alloc::borrow::Cow::Borrowed("cover"));
+            crate::pictures::note_failure(storage, &base, &missing);
+        }
+        Ok(cover)
     }
 
     fn links(&self, storage: &dyn Storage, section: u32, from: u32, to: u32) -> Vec<Link> {
@@ -666,7 +790,8 @@ impl Document for Fb2Document {
     fn link_target(&self, storage: &dyn Storage, href: &str) -> Option<Locator> {
         let id = href.rsplit_once('#').map_or(href, |(_, id)| id);
         self.converted(storage).ok()?;
-        cached::anchor(storage, &self.paths, id).map(|offset| Locator::new(0, offset))
+        cached::anchor(storage, &self.paths, 0, id, &self.anchors)
+            .map(|offset| Locator::new(0, offset))
     }
 }
 
@@ -725,6 +850,8 @@ impl Fb2Dialect {
             "emphasis" => "i",
             "strong" => "b",
             "strikethrough" => "s",
+            // A named style of a few words, not a stylesheet.
+            "style" => "span",
             tag => tag,
         };
         name.to_string()
@@ -901,6 +1028,62 @@ mod tests {
         let doc = Fb2Document::open(&storage, "b/test.fb2.zip", true).unwrap();
         assert_eq!(doc.metadata().title.as_deref(), Some("A Test"));
         assert_eq!(texts(&doc, &storage)[4].1, "Some text and a note1.");
+    }
+
+    /// Pictures' long multibyte alternative texts: cut where a character
+    /// ends, not inside one, wherever the limit falls in them.
+    #[test]
+    fn long_alternative_texts_do_not_break_the_book() {
+        let mut images = String::new();
+        for shift in 0..3 {
+            let alt = alloc::format!("{}{}", "a".repeat(shift), "語".repeat(1340));
+            images.push_str(&alloc::format!("<image l:href=\"#none\" alt=\"{alt}\"/>"));
+        }
+        let book = alloc::format!(
+            "<?xml version=\"1.0\" encoding=\"utf-8\"?><FictionBook \
+             xmlns:l=\"http://www.w3.org/1999/xlink\"><body><section>\
+             {images}<p>After</p></section></body></FictionBook>"
+        );
+        let storage = MemoryStorage::new().with("a.fb2", book.into_bytes());
+        let doc = Fb2Document::open(&storage, "a.fb2", true).unwrap();
+        let blocks = texts(&doc, &storage);
+        assert_eq!(blocks.len(), 4);
+        for (_, text) in &blocks[..3] {
+            assert!(text.len() > 3000 && text.len() < 4000, "{}", text.len());
+            assert!(text.chars().all(|c| c == 'a' || c == '語'));
+        }
+        assert_eq!(blocks[3].1, "After");
+    }
+
+    #[test]
+    fn named_styles_keep_their_text() {
+        let book = "<?xml version=\"1.0\"?><FictionBook><body><section>\
+            <p>Before <style name=\"bold\">styled</style> after.</p></section></body></FictionBook>";
+        let storage = MemoryStorage::new().with("s.fb2", book.as_bytes().to_vec());
+        let doc = Fb2Document::open(&storage, "s.fb2", true).unwrap();
+        assert_eq!(texts(&doc, &storage)[0].1, "Before styled after.");
+    }
+
+    /// Self-closing sections and titles, and a title of the body: each
+    /// entry of the contents leads to its own title.
+    #[test]
+    fn contents_lead_to_their_titles_past_self_closing_elements() {
+        let book = "<?xml version=\"1.0\"?><FictionBook><body><section/>\
+            <title><p>The book</p></title>\
+            <section><title/><p>Untitled.</p></section>\
+            <section><title><p>One</p></title><p>First.</p></section>\
+            <section><title><p>Two</p></title><p>Second.</p></section></body></FictionBook>";
+        let storage = MemoryStorage::new().with("c.fb2", book.as_bytes().to_vec());
+        let doc = Fb2Document::open(&storage, "c.fb2", true).unwrap();
+        let entries: Vec<(String, u8, String)> = (0..doc.toc_len(&storage))
+            .map(|i| {
+                let entry = doc.toc_entry(&storage, i).unwrap();
+                let block = doc.block_at(&storage, entry.at).unwrap().unwrap();
+                (entry.title, entry.level, block.text)
+            })
+            .collect();
+        let row = |t: &str, l, b: &str| (String::from(t), l, String::from(b));
+        assert_eq!(entries, [row("One", 0, "One"), row("Two", 0, "Two")]);
     }
 
     #[test]
