@@ -12,7 +12,10 @@
 //!
 //! Each page is a section of one image block, decoded into the gray cache
 //! when it is first shown. Pages are decoded in bands of rows, so a page
-//! never needs more than a few kilobytes, also on the X4.
+//! never needs more than a few kilobytes, also on the X4. Offsets and
+//! sizes from the file are checked against it before they are used, so a
+//! damaged or hostile file fails cleanly instead of filling memory or the
+//! card.
 
 #![no_std]
 
@@ -53,6 +56,11 @@ const BAND: u32 = 32;
 const WINDOW: usize = 4096;
 /// Chapters kept at most.
 const MAX_CHAPTERS: u64 = 1000;
+/// Pages are pictures for a screen: no side longer than this, and no more
+/// pixels than the largest e-paper screens have (13.3", 3200 by 2400),
+/// which bounds the time a page takes to decode and its size on the card.
+const MAX_SIDE: u32 = 4096;
+const MAX_PIXELS: u64 = 8 << 20;
 
 fn malformed(what: &'static str) -> DocumentError {
     DocumentError::Malformed(Cow::Borrowed(what))
@@ -78,6 +86,15 @@ fn text(field: &[u8]) -> String {
     String::from_utf8_lossy(&field[..end]).trim().to_string()
 }
 
+/// `len` zero bytes; an error instead of an abort when memory is short.
+fn zeroed(len: usize) -> Result<Vec<u8>, DocumentError> {
+    let mut buf = Vec::new();
+    buf.try_reserve_exact(len)
+        .map_err(|_| DocumentError::OutOfMemory)?;
+    buf.resize(len, 0);
+    Ok(buf)
+}
+
 fn read_exact(
     storage: &dyn Storage,
     path: &str,
@@ -86,7 +103,10 @@ fn read_exact(
 ) -> Result<(), DocumentError> {
     let mut filled = 0;
     while filled < out.len() {
-        let n = storage.read_at(path, at + filled as u64, &mut out[filled..])?;
+        let from = at
+            .checked_add(filled as u64)
+            .ok_or(malformed("offset past the end"))?;
+        let n = storage.read_at(path, from, &mut out[filled..])?;
         if n == 0 {
             return Err(malformed("file too short"));
         }
@@ -106,29 +126,26 @@ struct Window<'a> {
 }
 
 impl<'a> Window<'a> {
-    fn new(storage: &'a dyn Storage, path: &'a str) -> Self {
-        Self {
+    fn new(storage: &'a dyn Storage, path: &'a str) -> Result<Self, DocumentError> {
+        Ok(Self {
             storage,
             path,
             start: 0,
             len: 0,
-            buf: vec![0; WINDOW],
-        }
+            buf: zeroed(WINDOW)?,
+        })
     }
 
-    /// The byte at `at`, 0 past the end.
-    fn byte(&mut self, at: u64) -> u8 {
-        if at < self.start || at >= self.start + self.len as u64 {
+    /// The byte at `at`; an error past the end.
+    fn byte(&mut self, at: u64) -> Result<u8, DocumentError> {
+        if at < self.start || at - self.start >= self.len as u64 {
             self.start = at;
-            self.len = self
-                .storage
-                .read_at(self.path, at, &mut self.buf)
-                .unwrap_or(0);
+            self.len = self.storage.read_at(self.path, at, &mut self.buf)?;
             if self.len == 0 {
-                return 0;
+                return Err(malformed("file too short"));
             }
         }
-        self.buf[(at - self.start) as usize]
+        Ok(self.buf[(at - self.start) as usize])
     }
 }
 
@@ -136,6 +153,8 @@ impl<'a> Window<'a> {
 #[derive(Debug)]
 pub struct XtcDocument {
     path: String,
+    /// The size of the file, which the offsets in it must lie within.
+    size: u64,
     pages: u32,
     index: u64,
     metadata: Metadata,
@@ -160,10 +179,23 @@ impl XtcDocument {
         if pages == 0 {
             return Err(malformed("no pages"));
         }
+        let size = storage.size(path)?;
+        if index
+            .checked_add(u64::from(pages) * INDEX_ENTRY)
+            .is_none_or(|end| end > size)
+        {
+            return Err(malformed("page index past the end"));
+        }
         let mut metadata = Metadata::default();
         let mut cover = 0;
         let mut chapter_count = None;
+        // Where the chapters start: after the metadata, if there is any.
+        let mut chapters_at = HEADER as u64;
         if has_metadata && metadata_at > 0 {
+            chapters_at = metadata_at
+                .checked_add(METADATA)
+                .filter(|&end| end <= size)
+                .ok_or(malformed("metadata past the end"))?;
             let mut m = [0u8; METADATA as usize];
             read_exact(storage, path, metadata_at, &mut m)?;
             metadata.title = Some(text(&m[..128])).filter(|t| !t.is_empty());
@@ -180,11 +212,8 @@ impl XtcDocument {
         }
         let mut chapters = Vec::new();
         if has_chapters {
-            let at = if has_metadata && metadata_at > 0 {
-                metadata_at + METADATA
-            } else {
-                HEADER as u64
-            };
+            let at = chapters_at;
+            // The chapters lie before the page index.
             let room = index.saturating_sub(at) / CHAPTER;
             let count = chapter_count.unwrap_or(room).min(room).min(MAX_CHAPTERS);
             let mut c = [0u8; CHAPTER as usize];
@@ -206,7 +235,7 @@ impl XtcDocument {
             fnv1a64(path.as_bytes())
         );
         // Pages decoded from another file of the same name go.
-        let stamp = format!("{} {pages}\n", storage.size(path)?);
+        let stamp = format!("{size} {pages}\n");
         let stamp_path = format!("{cache}/source");
         if paperpaw_sdk::read_file(storage, &stamp_path, 64).ok()
             != Some(stamp.clone().into_bytes())
@@ -217,6 +246,7 @@ impl XtcDocument {
         }
         Ok(Self {
             path: path.to_string(),
+            size,
             pages,
             index,
             metadata,
@@ -230,16 +260,15 @@ impl XtcDocument {
     fn page(&self, storage: &dyn Storage, page: u32) -> Result<ImageRef, DocumentError> {
         let cache = format!("{}/p{page}.gray", self.cache);
         if GrayFile::open(storage, &cache).is_none() {
+            let at = self
+                .index
+                .checked_add(u64::from(page) * INDEX_ENTRY)
+                .ok_or(malformed("page index past the end"))?;
             let mut entry = [0u8; INDEX_ENTRY as usize];
-            read_exact(
-                storage,
-                &self.path,
-                self.index + u64::from(page) * INDEX_ENTRY,
-                &mut entry,
-            )?;
+            read_exact(storage, &self.path, at, &mut entry)?;
             let offset = u64_at(&entry, 0);
             let mut writer = GrayWriter::new(storage, &cache);
-            let result = decode_page(storage, &self.path, offset, &mut writer)
+            let result = decode_page(storage, &self.path, self.size, offset, &mut writer)
                 .and_then(|()| writer.finish().map_err(image_error));
             if result.is_err() {
                 let _ = storage.remove(&cache);
@@ -259,13 +288,19 @@ fn image_error(e: ImageError) -> DocumentError {
     DocumentError::Malformed(Cow::Owned(format!("{e}")))
 }
 
-/// Decodes the page picture at `offset` of `path` into `sink`.
+/// Decodes the page picture at `offset` of `path` (`file_size` bytes long)
+/// into `sink`.
 fn decode_page(
     storage: &dyn Storage,
     path: &str,
+    file_size: u64,
     offset: u64,
     sink: &mut dyn ImageSink,
 ) -> Result<(), DocumentError> {
+    let data = offset
+        .checked_add(PAGE_HEADER)
+        .filter(|&data| data <= file_size)
+        .ok_or(malformed("page past the end"))?;
     let mut head = [0u8; PAGE_HEADER as usize];
     read_exact(storage, path, offset, &mut head)?;
     let (width, height) = (u32::from(u16_at(&head, 4)), u32::from(u16_at(&head, 6)));
@@ -273,16 +308,32 @@ fn decode_page(
     if width == 0 || height == 0 {
         return Err(malformed("empty page"));
     }
-    let data = offset + PAGE_HEADER;
-    let mut window = Window::new(storage, path);
-    let mut row = vec![0u8; width as usize];
+    if width > MAX_SIDE || height > MAX_SIDE || u64::from(width) * u64::from(height) > MAX_PIXELS {
+        return Err(malformed("page too large"));
+    }
+    let magic = &head[..4];
+    // The bytes the pixels are read from, all of which must be there.
+    let stride = u64::from(width.div_ceil(8));
+    let column = u64::from(height.div_ceil(8));
+    let plane = size / 2;
+    let pixel_bytes = if magic == XTG {
+        stride * u64::from(height)
+    } else if magic == XTH {
+        plane + column * u64::from(width)
+    } else {
+        return Err(malformed("page format"));
+    };
+    if data.checked_add(pixel_bytes).is_none_or(|end| end > file_size) {
+        return Err(malformed("page data past the end"));
+    }
+    let mut window = Window::new(storage, path)?;
+    let mut row = zeroed(width as usize)?;
     sink.start(width, height).map_err(image_error)?;
-    if &head[..4] == XTG {
+    if magic == XTG {
         // Rows of bits, a set bit white.
-        let stride = u64::from(width.div_ceil(8));
         for y in 0..height {
             for x in 0..width {
-                let byte = window.byte(data + u64::from(y) * stride + u64::from(x / 8));
+                let byte = window.byte(data + u64::from(y) * stride + u64::from(x / 8))?;
                 let on = byte >> (7 - (x % 8)) & 1;
                 row[x as usize] = if on == 1 { 255 } else { 0 };
             }
@@ -290,13 +341,8 @@ fn decode_page(
         }
         return Ok(());
     }
-    if &head[..4] != XTH {
-        return Err(malformed("page format"));
-    }
     // Two bit planes; in each, columns from the right, eight rows a byte.
-    let column = u64::from(height.div_ceil(8));
-    let plane = size / 2;
-    let mut band = vec![0u8; (BAND * width) as usize];
+    let mut band = zeroed((BAND * width) as usize)?;
     let mut y0 = 0;
     while y0 < height {
         let rows = BAND.min(height - y0);
@@ -305,7 +351,7 @@ fn decode_page(
             for x in 0..width {
                 let base = data + p * plane + u64::from(width - 1 - x) * column;
                 for y in y0..y0 + rows {
-                    let byte = window.byte(base + u64::from(y / 8));
+                    let byte = window.byte(base + u64::from(y / 8))?;
                     let bit = byte >> (7 - (y % 8)) & 1;
                     band[((y - y0) * width + x) as usize] |= bit << shift;
                 }
@@ -540,5 +586,54 @@ mod tests {
                 .unwrap()
                 .is_none()
         );
+    }
+
+    #[test]
+    fn oversized_and_truncated_pages_are_refused() {
+        let pages = [
+            // Wider than any screen.
+            page(XTG, 4097, 1, &[0xff; 513]),
+            // 512 bytes of pixels promised, 16 there.
+            page(XTG, 64, 64, &[0xff; 16]),
+            // 4 Gi pixels: hours of decoding and gigabytes on the card.
+            page(XTH, u16::MAX, u16::MAX, &[0; 8]),
+        ];
+        let storage = MemoryStorage::new().with("b/t.xtc", book(&pages));
+        let doc = XtcDocument::open(&storage, "b/t.xtc").unwrap();
+        for p in 0..3 {
+            let block = doc.block_at(&storage, Locator::new(p, 0)).unwrap().unwrap();
+            assert!(block.image.is_none(), "page {p}");
+            assert_eq!(block.text, format!("{}", p + 1));
+            assert!(storage.get(&format!("{}/p{p}.gray", doc.cache)).is_none());
+        }
+    }
+
+    #[test]
+    fn offsets_near_the_end_of_u64_fail_cleanly() {
+        let pages = [page(XTG, 8, 1, &[0xff]), page(XTG, 8, 1, &[0x00])];
+        let good = book(&pages);
+        let patched = |at: usize, value: u64| {
+            let mut data = good.clone();
+            data[at..at + 8].copy_from_slice(&value.to_le_bytes());
+            data
+        };
+        // The page index, the metadata, the first page.
+        let index = u64_at(&good, 24) as usize;
+        for (what, data) in [
+            ("index", patched(24, u64::MAX - 8)),
+            ("metadata", patched(16, u64::MAX - 8)),
+            ("page", patched(index, u64::MAX - 8)),
+        ] {
+            let storage = MemoryStorage::new().with("b/t.xtc", data);
+            let Ok(doc) = XtcDocument::open(&storage, "b/t.xtc") else {
+                assert_ne!(what, "page", "the index entry of one page is read with it");
+                continue;
+            };
+            assert_eq!(what, "page", "{what} past the end opened");
+            let first = doc.block_at(&storage, Locator::new(0, 0)).unwrap().unwrap();
+            assert!(first.image.is_none());
+            let second = doc.block_at(&storage, Locator::new(1, 0)).unwrap().unwrap();
+            assert!(second.image.is_some());
+        }
     }
 }
