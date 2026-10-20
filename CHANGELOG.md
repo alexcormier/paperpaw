@@ -6,6 +6,13 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Screen: a menu or other screen opened again for something else (in
+  its place) no longer leaves pieces of the one before on the screen.
+  Turning the screen on the X4 makes the screens anew once, not twice,
+  and turning it half way round brings the row of button hints back
+  when it is upright again. Where memory is short when the screen is
+  turned or a picture is shown in grays, the frame is drawn in smaller
+  bands rather than not at all until a restart.
 - Buttons: a button let go no longer stays held when its press came
   twice around a new screen showing (pressed again, or its release
   missed): the kernel took it for held, and a long press followed by

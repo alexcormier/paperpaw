@@ -337,10 +337,12 @@ impl Kernel {
         if *id == core_settings::READING_FONT {
             self.apply_reading_font();
         }
-        // Its size follows the interface's.
+        // Its size follows the interface's. A shell that turns the screen
+        // resizes the kernel for it (see `Kernel::rotation`), which makes
+        // the screens anew once, for the row too.
         if *id == core_settings::BUTTON_HINTS
             || *id == core_settings::UI_SIZE
-            || *id == core_settings::ROTATION
+            || (*id == core_settings::ROTATION && !self.shared.caps.rotation)
         {
             self.apply_hint_height();
         }

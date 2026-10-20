@@ -194,9 +194,16 @@ impl Kernel {
                 return;
             }
             // The slot for something else (e.g. another book): opened anew
-            // in place of the old screen.
+            // in place of the old screen. What the closed ones covered is
+            // drawn again, also where the new one does not cover it.
+            let closed = (index..self.stack.len())
+                .map(|i| self.changed_region(i))
+                .reduce(|a, b| a.union(&b));
             self.close_from(index);
             self.stop_for_closed_screens();
+            if let Some(region) = closed {
+                self.invalidate(region);
+            }
         }
         match self.registry.resolve_slot(slot.as_str()).cloned() {
             Some(screen) => self.open(screen, Some(slot), &params),

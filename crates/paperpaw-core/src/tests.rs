@@ -2446,8 +2446,12 @@ fn turned_screens_are_made_anew_for_the_new_size() {
     // The same screens, in the same order.
     let reopened: Vec<Id> = kernel.stack.iter().map(|s| s.id.clone()).collect();
     assert_eq!(reopened, open);
-    // The same size again: nothing to do.
-    assert!(kernel.resize(Instant(300), 120, 60).refresh().is_none());
+    // The same size again (turned half way round): drawn whole.
+    let effects = kernel.resize(Instant(300), 120, 60);
+    assert_eq!(
+        effects.refresh().map(|(_, mode)| mode),
+        Some(RefreshMode::Full)
+    );
 }
 
 #[test]
@@ -3251,6 +3255,7 @@ fn overlays_leave_the_rows_they_do_not_cover() {
     assert_eq!(uncovered(part, Rect::new(40, 200, 400, 600)), Some(part));
 }
 
+mod frames;
 mod input;
 mod screen_life;
 mod settings_files;
