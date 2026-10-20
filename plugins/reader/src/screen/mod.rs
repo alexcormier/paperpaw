@@ -81,6 +81,10 @@ const INDEXES_KEPT: usize = 4;
 /// not reach (the page shown holding less, e.g. a picture).
 const MIN_PAGE_BACK: u32 = 200;
 
+/// Pages laid out at most to find one that reaches the page left, where
+/// the page index does not reach (each takes half a second on the X4).
+const PAGE_BACK_TRIES: usize = 3;
+
 /// Places jumps were made from (links, contents, search, page numbers),
 /// kept for *Back*.
 const RETURNS: usize = 32;

@@ -536,8 +536,25 @@ impl Book {
                 .find(|&s| document.section_len(s) > 0)?;
             (section, document.section_len(section))
         };
-        let from = Locator::new(section, end.saturating_sub(length));
-        Some(self.line_start(env, from))
+        let mut from = self.line_start(env, Locator::new(section, end.saturating_sub(length)));
+        // Where the text before is looser (talk, headings), a page from
+        // there ends short of the page left: begin later by what it
+        // leaves out.
+        for _ in 0..PAGE_BACK_TRIES {
+            let Ok(page) = self.layout(env, from) else {
+                break;
+            };
+            let short = match page.end.section == section && !page.is_past_end() {
+                true => end.saturating_sub(page.end.offset),
+                false => 0,
+            };
+            let later = self.line_start(env, Locator::new(section, from.offset + short));
+            if short == 0 || later <= from {
+                break;
+            }
+            from = later;
+        }
+        Some(from)
     }
 
     pub(super) fn show(&mut self, cx: &mut Cx<'_, '_>, start: Locator, forward: bool) -> bool {

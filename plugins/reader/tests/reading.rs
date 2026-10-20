@@ -786,8 +786,14 @@ fn a_percentage_is_gone_to_and_back_returns() {
 /// Where pages 0 to `pages` of the book begin, turned to one by one, and
 /// the storage with the book's position after the last of them.
 fn page_starts(pages: usize) -> (Shared, Vec<(u32, u32)>) {
+    let text = include_str!("../../../samples/library/books/alice-in-wonderland.txt");
+    page_starts_of(text, pages)
+}
+
+/// The same for the book `text`.
+fn page_starts_of(text: &str, pages: usize) -> (Shared, Vec<(u32, u32)>) {
     let storage = Shared::default();
-    let mut reading = Reading::new(storage.clone());
+    let mut reading = Reading::with_book(storage.clone(), BOOK, text.as_bytes());
     reading.open();
     let mut starts = vec![reading.kept()];
     for _ in 0..pages {
@@ -817,7 +823,8 @@ fn reopened_with_a_short_index(storage: &Shared) -> Reading {
         storage.remove(&index).unwrap();
     }
     storage.1.set(Some(1));
-    let mut reading = Reading::new(storage.clone());
+    // The book is on the card already.
+    let mut reading = Reading::with_book(storage.clone(), BOOK, b"");
     reading.open();
     reading
 }
@@ -1337,4 +1344,49 @@ fn a_page_back_after_returning_from_a_jump_is_the_page_before() {
     assert_eq!(reading.kept(), starts[3]);
     reading.run(core_actions::PREV_PAGE);
     assert_eq!(reading.kept(), starts[2]);
+}
+
+/// The book opened again at `at`, with a short page index (see
+/// [`reopened_with_a_short_index`]).
+fn reopened_at(storage: &Shared, at: (u32, u32)) -> Reading {
+    let dir = format!(
+        ".paperpaw/plugins/reader/books/{:016x}",
+        paperpaw_digest::fnv1a64(BOOK)
+    );
+    let progress = format!("[progress]\nsection = {}\noffset = {}\n", at.0, at.1);
+    storage
+        .write(&format!("{dir}/progress.ini"), progress.as_bytes())
+        .unwrap();
+    reopened_with_a_short_index(storage)
+}
+
+#[test]
+fn a_page_back_over_looser_text_leaves_no_line_out() {
+    // Short lines of talk, then long paragraphs: a page of the talk holds
+    // far less text than a page of the paragraphs after it.
+    let mut text = String::new();
+    for i in 0..400 {
+        text.push_str(&format!("\"Yes,\" said {i}.\n\n"));
+    }
+    let words = "word ".repeat(120);
+    for _ in 0..60 {
+        text.push_str(&words);
+        text.push_str("\n\n");
+    }
+    let loose = u32::try_from(text.find("word").unwrap()).unwrap();
+    let (storage, starts) = page_starts_of(&text, 200);
+    // The second page of the paragraphs.
+    let here = starts
+        .iter()
+        .position(|s| s.1 > loose)
+        .map(|i| i + 1)
+        .unwrap();
+    let mut reading = reopened_at(&storage, starts[here]);
+    reading.run(core_actions::PREV_PAGE);
+    let back = reading.kept();
+    assert!(back < starts[here], "{back:?}");
+    // The page there reaches the page left: on from it, nothing skipped.
+    reading.run(core_actions::NEXT_PAGE);
+    let on = reading.kept();
+    assert!(on >= starts[here], "{on:?} skips to {:?}", starts[here]);
 }
