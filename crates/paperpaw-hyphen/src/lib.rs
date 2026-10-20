@@ -87,7 +87,10 @@ impl<'a> Patterns<'a> {
             u32_at(data, 16).ok_or(InvalidPatterns)?,
             u32_at(data, 20).ok_or(InvalidPatterns)?,
         );
-        if HEADER + blocks * 4 > data.len() || exceptions.0 > data.len() {
+        let index_end = blocks
+            .checked_mul(4)
+            .and_then(|index| index.checked_add(HEADER));
+        if index_end.is_none_or(|end| end > data.len()) || exceptions.0 > data.len() {
             return Err(InvalidPatterns);
         }
         Ok(Self {
@@ -112,14 +115,13 @@ impl<'a> Patterns<'a> {
     /// The pattern at `at` (relative to the entries): key, points and the
     /// offset of the next pattern.
     fn entry(&self, at: usize) -> Option<(&'a [u8], &'a [u8], usize)> {
-        let start = self.entries() + at;
-        let len = usize::from(*self.data.get(start)?);
-        let key = self.data.get(start + 1..start + 1 + len)?;
+        // Offsets come from the table: checked, as `usize` may be 32 bits.
+        let key_at = self.entries().checked_add(at)?.checked_add(1)?;
+        let len = usize::from(*self.data.get(key_at - 1)?);
+        let key = self.data.get(key_at..key_at + len)?;
         let chars = key.iter().filter(|&&b| b & 0xc0 != 0x80).count();
         let points_len = (chars + 2) / 2;
-        let points = self
-            .data
-            .get(start + 1 + len..start + 1 + len + points_len)?;
+        let points = self.data.get(key_at + len..key_at + len + points_len)?;
         Some((key, points, at + 1 + len + points_len))
     }
 
@@ -148,7 +150,7 @@ impl<'a> Patterns<'a> {
                 Ordering::Greater => return None,
                 Ordering::Less => at = next,
             }
-            if self.entries() + at >= self.exceptions.0 {
+            if self.entries().saturating_add(at) >= self.exceptions.0 {
                 return None;
             }
         }
@@ -159,6 +161,10 @@ impl<'a> Patterns<'a> {
     /// it may be hyphenated, in ascending order. `word` should consist of
     /// letters only; it is matched without regard to case.
     pub fn hyphenate(&self, word: &str, out: &mut dyn FnMut(usize)) {
+        // A character takes at most 4 bytes.
+        if word.len() > 4 * MAX_WORD {
+            return;
+        }
         let mut chars: Vec<char> = Vec::with_capacity(word.len() + 2);
         chars.push('.');
         for c in word.chars() {
@@ -212,7 +218,8 @@ impl<'a> Patterns<'a> {
         }
     }
 
-    /// Positions (letter indices) from the exception list, if `word` is in it.
+    /// Positions (letter indices) from the exception list, if `word` is in
+    /// it: ascending, and only between two letters.
     fn exception(&self, word: &[char]) -> Option<Vec<usize>> {
         let (mut at, count) = self.exceptions;
         for _ in 0..count {
@@ -229,7 +236,11 @@ impl<'a> Patterns<'a> {
             let mut index = 0;
             for c in entry.chars() {
                 if c == '-' {
-                    positions.push(index);
+                    // Not before the first letter or after the last, and
+                    // once for `--`.
+                    if index > 0 && index < word.len() && positions.last() != Some(&index) {
+                        positions.push(index);
+                    }
                 } else {
                     index += 1;
                 }
@@ -275,6 +286,38 @@ mod tests {
         let patterns = Patterns::new(&table).unwrap();
         assert_eq!(hyphenated(&patterns, "table"), "ta-ble");
         assert_eq!(hyphenated(&patterns, "banana"), "ba-na-na");
+    }
+
+    #[test]
+    fn exceptions_break_only_between_letters() {
+        // As written by hand in a community pattern file.
+        let table = compile("", "table- -word dou--ble", 1, 1);
+        let patterns = Patterns::new(&table).unwrap();
+        assert_eq!(hyphenated(&patterns, "table"), "table");
+        assert_eq!(hyphenated(&patterns, "word"), "word");
+        assert_eq!(hyphenated(&patterns, "double"), "dou-ble");
+
+        // A table made elsewhere may still hold such exceptions.
+        let mut table = compile("", "", 1, 1);
+        let count = u32::from_le_bytes(table[20..24].try_into().unwrap()) + 3;
+        table[20..24].copy_from_slice(&count.to_le_bytes());
+        for word in ["table-", "-word", "dou--ble"] {
+            table.push(word.len() as u8);
+            table.extend_from_slice(word.as_bytes());
+        }
+        let patterns = Patterns::new(&table).unwrap();
+        assert_eq!(hyphenated(&patterns, "table"), "table");
+        assert_eq!(hyphenated(&patterns, "word"), "word");
+        assert_eq!(hyphenated(&patterns, "double"), "dou-ble");
+    }
+
+    #[test]
+    fn patterns_with_letters_that_lowercase_to_several() {
+        // "İ" lowercases to two characters; the patterns after it must
+        // still be found.
+        let table = compile("İ1 1x", "", 1, 1);
+        let patterns = Patterns::new(&table).unwrap();
+        assert_eq!(hyphenated(&patterns, "axa"), "a-xa");
     }
 
     #[test]
