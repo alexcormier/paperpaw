@@ -857,10 +857,7 @@ fn a_position_that_cannot_be_laid_out_opens_the_book_at_its_start() {
     storage
         .write(
             &format!("{dir}/progress.ini"),
-            b"[progress]
-section = 2
-offset = 100
-",
+            b"[progress]\nsection = 2\noffset = 100\n",
         )
         .unwrap();
     // Its third part cannot be read (a damaged card, say).
@@ -868,4 +865,62 @@ offset = 100
     reading.open();
     reading.run(core_actions::NEXT_PAGE);
     assert_eq!(reading.kept(), second);
+}
+
+/// The page indexes kept for `book`.
+fn indexes(storage: &Shared, book: &str) -> Vec<String> {
+    let dir = format!(
+        ".paperpaw/plugins/reader/books/{:016x}",
+        paperpaw_digest::fnv1a64(book)
+    );
+    let mut found = Vec::new();
+    let _ = storage.list(&dir, &mut |entry| {
+        if entry.name.starts_with("pages-") {
+            found.push(entry.name.to_string());
+        }
+    });
+    found
+}
+
+/// The pages of the book as counted once it is opened.
+fn pages_counted(reading: &mut Reading) -> u32 {
+    reading.run(core_actions::NEXT_PAGE);
+    let last = reading.heard.borrow().last().unwrap().1.clone();
+    last.pages.expect("the pages are counted")
+}
+
+#[test]
+fn another_edition_of_a_book_is_counted_anew() {
+    let text = include_str!("../../../samples/library/books/alice-in-wonderland.txt");
+    let storage = Shared::default();
+    let mut reading = Reading::new(storage.clone());
+    reading.open();
+    let whole = pages_counted(&mut reading);
+    // Replaced by a shorter one under the same name, and opened again.
+    let half = &text[..text.len() / 2];
+    let half = &half[..half.rfind('\n').unwrap()];
+    storage.write(BOOK, half.as_bytes()).unwrap();
+    let mut again = Reading::new(storage);
+    again.open();
+    let shorter = pages_counted(&mut again);
+    let mut fresh = Reading::with_book(Shared::default(), BOOK, half.as_bytes());
+    fresh.open();
+    assert_eq!(shorter, pages_counted(&mut fresh));
+    assert!(shorter < whole, "{shorter} of {whole}");
+}
+
+#[test]
+fn page_indexes_of_layouts_left_do_not_pile_up() {
+    let storage = Shared::default();
+    let mut reading = Reading::new(storage.clone());
+    reading.open();
+    for size in 10..20 {
+        set(
+            &mut reading,
+            settings::FONT_SIZE.static_str(),
+            &size.to_string(),
+        );
+    }
+    let kept = indexes(&storage, BOOK).len();
+    assert!((1..=4).contains(&kept), "{kept} indexes");
 }

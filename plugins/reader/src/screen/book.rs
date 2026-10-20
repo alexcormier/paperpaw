@@ -307,11 +307,32 @@ impl Book {
         Some(first)
     }
 
+    /// The page index of this layout of the book as it is now: its name
+    /// tells layouts and editions of the book (by size) apart. A new one
+    /// removes those of other layouts once more than a few are kept;
+    /// switching back finds the others.
     pub(super) fn open_index(&self, env: &Env<'_>) -> PageIndex {
-        PageIndex::open(
-            env.storage,
-            format!("{}/pages-{}.bin", self.dir, self.typography.key),
-        )
+        let storage = env.storage;
+        let size = storage.size(&self.path).unwrap_or(0);
+        let name = format!(
+            "pages-{:016x}.bin",
+            fnv1a64(format!("{}|{size}", self.typography.key))
+        );
+        let path = format!("{}/{name}", self.dir);
+        if !storage.exists(&path) {
+            let mut others = Vec::new();
+            let _ = storage.list(&self.dir, &mut |entry| {
+                if entry.name.starts_with("pages-") && !entry.is_dir {
+                    others.push(format!("{}/{}", self.dir, entry.name));
+                }
+            });
+            if others.len() >= INDEXES_KEPT {
+                for other in others {
+                    let _ = storage.remove(&other);
+                }
+            }
+        }
+        PageIndex::open(storage, path)
     }
 
     /// Applies changed reading settings: new typography, the current
