@@ -28,6 +28,9 @@ pub(crate) struct InputState {
     pub(crate) shown_at: [Option<Instant>; 2],
     pub(crate) dropped_buttons: Vec<&'static str>,
     pub(crate) dropped_pointers: Vec<u8>,
+    /// Page buttons pressed while they were swapped (see
+    /// `Kernel::page_buttons_swapped`): let go, they stay swapped.
+    pub(crate) swapped: Vec<&'static str>,
 }
 
 impl Kernel {

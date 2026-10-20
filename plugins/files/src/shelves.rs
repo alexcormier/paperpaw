@@ -2,7 +2,9 @@
 //!
 //! A catalog of every book under the library folder (`catalog.txt`, one
 //! book a line: path, author, title, series, number, tags) is made anew in the
-//! background whenever one of these views opens: from the details the
+//! background when one of these views opens: the first time after PaperPaw
+//! starts, after books came, went or moved or the library folder changed,
+//! and once it is half an hour old. It is made from the details the
 //! library keeps of each book, opening only books not seen before, a few
 //! entries at a time. The view shows the catalog there was until the new
 //! one is complete.
@@ -14,6 +16,7 @@
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
+use core::sync::atomic::{AtomicU32, Ordering};
 
 use paperpaw_sdk::builtin::{actions, params, slots};
 use paperpaw_sdk::ui::{self, ListView, UiStyle};
@@ -63,6 +66,32 @@ const MAX_NAMES: usize = 2000;
 /// Pause between steps of making the catalog, so the screen stays
 /// responsive.
 const STEP_DELAY_MS: u64 = 30;
+/// How long a catalog made is taken as it is, in seconds, unless books
+/// came, went or moved meanwhile: changes made outside PaperPaw (a phone's
+/// own file manager, a computer) are found after that.
+const CATALOG_AGE: u64 = 30 * 60;
+
+/// When the catalog was made last, in seconds since PaperPaw started,
+/// plus one; 0 where it is to be made (anew) when a view shows.
+static CATALOG_MADE: AtomicU32 = AtomicU32::new(0);
+
+/// The catalog is to be made anew: books came, went or moved, or the
+/// library folder changed.
+pub(crate) fn outdated() {
+    CATALOG_MADE.store(0, Ordering::Relaxed);
+}
+
+fn seconds(env: &Env<'_>) -> u32 {
+    u32::try_from(env.now.millis() / 1000).unwrap_or(u32::MAX - 1)
+}
+
+/// Whether the catalog is to be made anew before a view shows it.
+fn is_outdated(env: &Env<'_>) -> bool {
+    match CATALOG_MADE.load(Ordering::Relaxed) {
+        0 => true,
+        made => u64::from(seconds(env).saturating_sub(made - 1)) >= CATALOG_AGE,
+    }
+}
 
 /// What a book is listed under in a view: its author, its series, or
 /// each of its tags.
@@ -100,15 +129,7 @@ fn names(storage: &dyn Storage, shelf: Shelf) -> Vec<(String, usize)> {
 /// A book's format as its file says, e.g. `EPUB`; a zipped book by
 /// what is inside (`FB2` for `.fb2.zip`).
 fn format_of(path: &str) -> String {
-    let name = files::name(path);
-    let lower = name.to_ascii_lowercase();
-    let name = match lower.strip_suffix(".zip") {
-        Some(inner) if inner.contains('.') => &name[..inner.len()],
-        _ => name,
-    };
-    name.rsplit_once('.')
-        .map(|(_, ext)| ext.to_uppercase())
-        .unwrap_or_default()
+    crate::stem_and_format(files::name(path)).1
 }
 
 /// The favourite books still there, as catalog lines from the details
@@ -344,9 +365,13 @@ impl Screen for ShelfScreen {
             cx.request_redraw();
             return;
         }
-        if self.walk.is_none() && !self.walked {
-            let env = *cx.env();
+        let env = *cx.env();
+        if self.walk.is_none() && !self.walked && is_outdated(&env) {
             self.walk = Some(Walk::start(env.storage, env.settings.read(&ROOT)));
+        }
+        // Also where it was on its way when another screen came on top:
+        // the timer asked for went with it.
+        if self.walk.is_some() {
             cx.wake_at(env.now);
         }
     }
@@ -367,6 +392,7 @@ impl Screen for ShelfScreen {
         // The new catalog: the lists again, keeping the place.
         self.walk = None;
         self.walked = true;
+        CATALOG_MADE.store(seconds(&env).saturating_add(1), Ordering::Relaxed);
         self.names = names(env.storage, self.shelf);
         if let Some((name, books)) = &mut self.chosen {
             *books = if self.shelf == Shelf::Search {

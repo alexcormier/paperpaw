@@ -25,6 +25,7 @@ mod feed;
 mod json;
 mod list;
 mod sync;
+mod temp;
 
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
@@ -44,6 +45,7 @@ use paperpaw_sdk::{
 
 use crate::catalogs::Catalog;
 use crate::sync::Sync;
+use crate::temp::TempFiles;
 use paperpaw_sdk::setting::Setting;
 
 pub const PLUGIN: Id = Id::new_static("opds");
@@ -62,11 +64,13 @@ const OPTION_LABELS: &str = "opds.option.";
 const URL: &str = params::URL;
 const ID: &str = params::ID;
 
-const USER_AGENT: &str = "PaperPaw/0.1 (e-reader)";
 /// Setting: covers in the lists of catalogs (on devices with the memory).
 const COVERS: Setting<bool> = Setting::new("opds.covers");
 
-/// A request to a catalog, with its credentials.
+/// A request to a catalog, its answer written to `save_to` (see
+/// [`temp`]). The catalog's credentials go only to the catalog itself:
+/// feeds may link to covers, books or further feeds anywhere, and those
+/// get no password.
 fn request(
     catalog: &Catalog,
     url: &str,
@@ -75,17 +79,48 @@ fn request(
     params: Params,
 ) -> HttpRequest {
     let mut request = HttpRequest {
+        params: params.with(temp::FILE, save_to.clone()),
         save_to: Some(save_to),
-        params,
         ..HttpRequest::new("GET", url, reply)
     };
-    request
-        .headers
-        .push((String::from("User-Agent"), String::from(USER_AGENT)));
-    if let Some(auth) = catalog.authorization() {
+    request.headers.push(paperpaw_sdk::web::user_agent());
+    if let Some(auth) = catalog.authorization()
+        && same_origin(url, &catalog.url)
+    {
         request.headers.push((String::from("Authorization"), auth));
     }
     request
+}
+
+/// The scheme, host and port of `url` (the port filled in for `http` and
+/// `https`), in lower case; `None` where any of them is missing or in
+/// doubt, such as an address with a user name (`https://me@host/`).
+fn origin(url: &str) -> Option<(String, String, u16)> {
+    let (scheme, rest) = url.split_once("://")?;
+    let authority = &rest[..rest.find(['/', '?', '#']).unwrap_or(rest.len())];
+    let doubtful = |c: char| matches!(c, '@' | '\\' | '%') || c.is_whitespace() || c.is_control();
+    if authority.contains(doubtful) {
+        return None;
+    }
+    // A colon inside `[…]` belongs to an IPv6 address, not the port.
+    let (host, port) = match authority.rsplit_once(':') {
+        Some((host, port)) if !port.contains(']') => (host, Some(port)),
+        _ => (authority, None),
+    };
+    let scheme = scheme.to_ascii_lowercase();
+    let port = match (port, scheme.as_str()) {
+        (Some(port), _) => port.parse().ok()?,
+        (None, "http") => 80,
+        (None, "https") => 443,
+        (None, _) => return None,
+    };
+    (!host.is_empty()).then(|| (scheme, host.to_ascii_lowercase(), port))
+}
+
+/// Whether `a` and `b` are on the same server: the same scheme, host and
+/// port.
+fn same_origin(a: &str, b: &str) -> bool {
+    matches!((origin(a), origin(b)), (Some(a), Some(b)) if a == b)
 }
 
 /// A request for a list of a catalog: for a WebDAV folder its listing
@@ -130,7 +165,8 @@ fn read_list(
 
 /// The catalogs marked for syncing.
 fn marked(env: &Env<'_>) -> Vec<Catalog> {
-    catalogs::load(env).into_iter().filter(|c| c.sync).collect()
+    let all = catalogs::load(env).unwrap_or_default();
+    all.into_iter().filter(|c| c.sync).collect()
 }
 
 /// The OPDS plugin.
@@ -180,7 +216,8 @@ impl Plugin for Opds {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        let state = Rc::new(RefCell::new(Sync::default()));
+        let temp = TempFiles::default();
+        let state = Rc::new(RefCell::new(Sync::new(temp.clone())));
         let shared = state.clone();
         r.add_screen(ScreenSpec {
             id: LIST_SCREEN,
@@ -190,7 +227,9 @@ impl Plugin for Opds {
         r.add_screen(ScreenSpec {
             id: BROWSE_SCREEN,
             title: Cow::Borrowed("opds.title"),
-            factory: Box::new(|env, params| Box::new(browse::BrowseScreen::new(env, params))),
+            factory: Box::new(move |env, params| {
+                Box::new(browse::BrowseScreen::new(env, params, temp.clone()))
+            }),
         })?;
         r.add_screen(ScreenSpec {
             id: EDIT_SCREEN,
@@ -221,6 +260,7 @@ impl Plugin for Opds {
         r.add_icon(OPEN, Cow::Borrowed("book-download"))?;
         r.add_icon(SYNC, Cow::Borrowed("refresh"))?;
         r.on(events::STARTED, |env, _, out| {
+            temp::clean(env.storage);
             catalogs::move_passwords(env, out);
         })?;
         let shared = state.clone();
@@ -241,6 +281,48 @@ impl Plugin for Opds {
 #[cfg(test)]
 mod tests {
     use paperpaw_i18n::{Catalog, check};
+
+    use super::*;
+
+    #[test]
+    fn origins_are_scheme_host_and_port() {
+        let catalog = "https://Books.example.org/opds";
+        assert!(same_origin(catalog, "https://books.example.org:443/b.epub"));
+        assert!(same_origin("http://[::1]:8080/a", "http://[::1]:8080/b"));
+        for other in [
+            "http://books.example.org/b.epub",
+            "https://books.example.org:8443/b.epub",
+            "https://covers.example.org/c.png",
+            "https://books.example.org.evil.example/b.epub",
+            "https://books.example.org@evil.example/b.epub",
+            "https://evil.example\\@books.example.org/b.epub",
+            "http://[::1]:8081/b",
+            "ftp://books.example.org/b.epub",
+            "/b.epub",
+        ] {
+            assert!(!same_origin(catalog, other), "{other}");
+        }
+    }
+
+    #[test]
+    fn credentials_go_only_to_the_catalog() {
+        let catalog = catalogs::Catalog {
+            user: String::from("me"),
+            password: String::from("s3cret"),
+            ..catalogs::Catalog::new("https://books.example.org/opds")
+        };
+        let reply = Event::<HttpReply>::new("opds.test");
+        let auth = |url: &str| {
+            let request = request(&catalog, url, String::from("a.tmp"), &reply, Params::new());
+            request
+                .headers
+                .iter()
+                .any(|(name, _)| name == "Authorization")
+        };
+        assert!(auth("https://books.example.org/opds/new"));
+        assert!(!auth("http://books.example.org/opds/new"), "not in clear");
+        assert!(!auth("https://tracker.example/x.png"));
+    }
 
     #[test]
     fn translations_are_complete() {

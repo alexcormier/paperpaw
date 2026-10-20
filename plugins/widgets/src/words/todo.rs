@@ -2,8 +2,12 @@
 //! folder (as todo.txt has them: an item a line, `x 2026-10-19 ` before
 //! those done). The widget shows the open ones with a box each; a tap on
 //! one ticks it off: it shows struck through for the rest of the day (or
-//! goes at once), then it goes. The list's own screen adds, ticks, edits
-//! and removes them.
+//! goes at once), then it goes. The list's own screen adds, ticks, edits,
+//! moves and removes them.
+//!
+//! The list is written back only once it was read: a file that cannot be
+//! read is left as it is, and the widget and the screen say so. Items
+//! past the first [`MAX_ITEMS`] are not shown and kept as they are.
 
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
@@ -16,14 +20,14 @@ use paperpaw_sdk::builtin::actions;
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::setting::{Setting, Text};
-use paperpaw_sdk::time::LocalTime;
+use paperpaw_sdk::time;
 use paperpaw_sdk::ui::choice::{self, Choice};
 use paperpaw_sdk::ui::{self, ListView, UiStyle};
 use paperpaw_sdk::widgets::{self, Align, Frame, Look, Size, Widget, WidgetSpec, WidgetTarget};
 use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Color, Command, Cx, Env, FontHandle, Gesture, GestureKind, Handled,
     Id, Params, Point, Rect, RefreshMode, RegisterError, Registrar, Screen, ScreenSpec,
-    SettingSpec, Storage,
+    SettingSpec, Storage, StorageError,
 };
 
 use super::{changed, changes, data, frame_height, today};
@@ -59,7 +63,8 @@ const ADDED: Event<Typed> = Event::new("widgets.todo.added");
 const EDITED: Event<Typed> = Event::new("widgets.todo.edited");
 const INDEX: &str = "index";
 const OPTION_LABELS: &str = "widgets.todo.option.";
-/// Items kept at most, and their length.
+/// Items shown and changed at most (those after them are kept as they
+/// are), and their length.
 const MAX_ITEMS: usize = 100;
 const MAX_TEXT: usize = 200;
 
@@ -110,14 +115,24 @@ pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
             return;
         };
         let today = today(env);
-        let mut items = load(env.storage, today);
+        let Ok(mut list) = load(env.storage, today) else {
+            out.push(Command::Notify(
+                env.i18n.tr("widgets.todo.unreadable").into(),
+            ));
+            return;
+        };
         let was_done = params.get(WAS_DONE).is_some();
-        if let Some(item) = items
+        if let Some(item) = list
+            .items
             .iter_mut()
             .find(|i| i.text == text && i.done.is_some() == was_done)
         {
             item.done = if was_done { None } else { Some(today) };
-            save(env.storage, &items);
+            if save(env.storage, &list).is_err() {
+                out.push(Command::Notify(
+                    env.i18n.tr("widgets.todo.not-saved").into(),
+                ));
+            }
         }
         changed(out, &ID);
     })?;
@@ -152,35 +167,39 @@ struct Item {
     done: Option<i64>,
 }
 
-/// Days since 1970 of a date (the proleptic Gregorian calendar).
-fn days_of(year: i64, month: u32, day: u32) -> i64 {
-    let year = if month <= 2 { year - 1 } else { year };
-    let era = year.div_euclid(400);
-    let of_era = year - era * 400;
-    let of_year = (153 * i64::from((month + 9) % 12) + 2) / 5 + i64::from(day) - 1;
-    let of_era_days = of_era * 365 + of_era / 4 - of_era / 100 + of_year;
-    era * 146_097 + of_era_days - 719_468
-}
-
 /// `2026-10-19` of a day since 1970.
 fn date_of(day: i64) -> String {
-    let date = LocalTime::from_seconds(day * 86_400);
-    format!("{:04}-{:02}-{:02}", date.year, date.month, date.day)
+    let (year, month, day) = time::civil_from_days(day);
+    format!("{year:04}-{month:02}-{day:02}")
 }
 
 /// The day since 1970 of `2026-10-19`.
 fn day_of(date: &str) -> Option<i64> {
     let mut parts = date.splitn(3, '-');
-    let year = parts.next()?.parse::<i64>().ok()?;
-    let month = parts.next()?.parse::<u32>().ok()?;
-    let day = parts.next()?.parse::<u32>().ok()?;
-    ((1..=12).contains(&month) && (1..=31).contains(&day)).then(|| days_of(year, month, day))
+    let year = parts.next()?.parse::<i32>().ok()?;
+    let month = parts.next()?.parse::<u8>().ok()?;
+    let day = parts.next()?.parse::<u8>().ok()?;
+    ((1..=12).contains(&month) && (1..=31).contains(&day))
+        .then(|| time::days_from_civil(year, month, day))
 }
 
-/// The items of a list as kept, but those done before `today`.
-fn parse(text: &str, today: i64) -> Vec<Item> {
+/// The list as kept: its first items, and the lines after them as they
+/// are, written back after them.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+struct List {
+    items: Vec<Item>,
+    rest: String,
+}
+
+/// The items of a list as kept, but those done before `today`; past
+/// [`MAX_ITEMS`], the rest of the lines as they are.
+fn parse(text: &str, today: i64) -> List {
     let mut items = Vec::new();
-    for line in text.lines() {
+    let mut lines = text.lines();
+    while items.len() < MAX_ITEMS {
+        let Some(line) = lines.next() else {
+            break;
+        };
         let line = line.trim();
         if line.is_empty() {
             continue;
@@ -207,34 +226,43 @@ fn parse(text: &str, today: i64) -> Vec<Item> {
             },
         };
         let gone = item.done.is_some_and(|day| day < today);
-        if !gone && !item.text.is_empty() && items.len() < MAX_ITEMS {
+        if !gone && !item.text.is_empty() {
             items.push(item);
         }
     }
-    items
+    let mut rest = String::new();
+    for line in lines {
+        rest.push_str(line);
+        rest.push('\n');
+    }
+    List { items, rest }
 }
 
-/// The list as kept: an item a line, those done after `x` and the day.
-fn format(items: &[Item]) -> String {
+/// The list as kept: an item a line, those done after `x` and the day,
+/// then the lines after the first items as they were.
+fn format(list: &List) -> String {
     let mut text = String::new();
-    for item in items {
+    for item in &list.items {
         let line = item.text.replace(['\n', '\r'], " ");
         match item.done {
             Some(day) => text.push_str(&format!("x {} {line}\n", date_of(day))),
             None => text.push_str(&format!("{line}\n")),
         }
     }
+    text.push_str(&list.rest);
     text
 }
 
-fn load(storage: &dyn Storage, today: i64) -> Vec<Item> {
-    paperpaw_sdk::read_file(storage, &file(), 32 * 1024)
-        .map(|data| parse(&String::from_utf8_lossy(&data), today))
-        .unwrap_or_default()
+/// The list kept, empty where there is none; an error where it is there
+/// but cannot be read (too large, not text, the card failing), so that
+/// it is not written over.
+fn load(storage: &dyn Storage, today: i64) -> Result<List, StorageError> {
+    let text = paperpaw_sdk::files::load_text_for_update(storage, &file(), 32 * 1024)?;
+    Ok(text.map_or_else(List::default, |text: String| parse(&text, today)))
 }
 
-fn save(storage: &dyn Storage, items: &[Item]) {
-    let _ = storage.write(&file(), format(items).as_bytes());
+fn save(storage: &dyn Storage, list: &List) -> Result<(), StorageError> {
+    storage.write(&file(), format(list).as_bytes())
 }
 
 /// `text` as an item's: one line, not too long.
@@ -256,6 +284,8 @@ struct TodoWidget {
     more: usize,
     /// The day and the changes it was read at.
     read: Option<(i64, u32)>,
+    /// The list could not be read.
+    unreadable: bool,
 }
 
 impl Widget for TodoWidget {
@@ -269,7 +299,11 @@ impl Widget for TodoWidget {
         }
         self.read = read;
         let hide = env.settings.read(&DONE_SETTING) == DONE[1];
-        let all: Vec<Item> = load(env.storage, day)
+        let loaded = load(env.storage, day);
+        let unreadable = loaded.is_err();
+        let all: Vec<Item> = loaded
+            .unwrap_or_default()
+            .items
             .into_iter()
             .filter(|i| !(hide && i.done.is_some()))
             .collect();
@@ -277,8 +311,12 @@ impl Widget for TodoWidget {
         let open = all.iter().filter(|i| i.done.is_none()).count();
         let more = all.len().saturating_sub(count);
         let items: Vec<Item> = all.into_iter().take(count).collect();
-        let changed = items != self.items || open != self.open || more != self.more;
+        let changed = items != self.items
+            || open != self.open
+            || more != self.more
+            || unreadable != self.unreadable;
         (self.items, self.open, self.more) = (items, open, more);
+        self.unreadable = unreadable;
         changed
     }
 
@@ -299,6 +337,11 @@ impl Widget for TodoWidget {
             return;
         };
         let align = widgets::align(env, ID.as_str());
+        if self.unreadable {
+            let text = env.i18n.tr("widgets.todo.unreadable");
+            super::draw_empty(canvas, env, &look, text);
+            return;
+        }
         if self.items.is_empty() {
             // The whole place to say how to add some, small.
             let key = if env.device.input.touch {
@@ -530,6 +573,10 @@ struct TodoScreen {
     header: ui::Header,
     list: ListView,
     items: Vec<Item>,
+    /// The lines after the items, kept as they are.
+    rest: String,
+    /// The list could not be read: it is shown empty and not changed.
+    unreadable: bool,
 }
 
 impl TodoScreen {
@@ -539,11 +586,16 @@ impl TodoScreen {
         let header = ui::Header::new(env, &style, true);
         let top = header.area.height + style.gap as u16;
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
+        let loaded = load(env.storage, today(env));
+        let unreadable = loaded.is_err();
+        let List { items, rest } = loaded.unwrap_or_default();
         Self {
             list: ListView::new(area, style.row).focus_on_keys(env),
             style,
             header,
-            items: load(env.storage, today(env)),
+            items,
+            rest,
+            unreadable,
         }
     }
 
@@ -553,7 +605,16 @@ impl TodoScreen {
 
     fn changed(&mut self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        save(env.storage, &self.items);
+        let list = List {
+            items: core::mem::take(&mut self.items),
+            rest: core::mem::take(&mut self.rest),
+        };
+        if save(env.storage, &list).is_err() {
+            cx.command(Command::Notify(
+                env.i18n.tr("widgets.todo.not-saved").into(),
+            ));
+        }
+        (self.items, self.rest) = (list.items, list.rest);
         let mut out = Vec::new();
         changed(&mut out, &ID);
         for command in out {
@@ -568,6 +629,12 @@ impl TodoScreen {
     /// on.
     fn open(&mut self, row: usize, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
+        if self.unreadable {
+            cx.command(Command::Notify(
+                env.i18n.tr("widgets.todo.unreadable").into(),
+            ));
+            return;
+        }
         if row == 0 {
             cx.command(ask::text(env.i18n.tr("widgets.todo.add"), &ADDED).command());
             return;
@@ -598,7 +665,7 @@ impl TodoScreen {
             &item.text,
             &format!("{}", row - 1),
             OPTION_LABELS,
-            &[tick, "edit", "up", "remove"],
+            &[tick, "edit", "up", "down", "remove"],
         ));
     }
 }
@@ -670,6 +737,11 @@ impl Screen for TodoScreen {
                 }
             });
         if self.items.is_empty() {
+            let key = if self.unreadable {
+                "widgets.todo.unreadable"
+            } else {
+                "widgets.todo.empty"
+            };
             let row = self.list.row_rect(1);
             let area = Rect::new(
                 row.x + style.margin as u16,
@@ -684,7 +756,7 @@ impl Screen for TodoScreen {
                 paper: Color::WHITE,
                 frame: widgets::Frame::None,
             };
-            widgets::draw_message(canvas, env, &look, env.i18n.tr("widgets.todo.empty"));
+            widgets::draw_message(canvas, env, &look, env.i18n.tr(key));
         }
     }
 
@@ -734,7 +806,15 @@ impl Screen for TodoScreen {
         let env = *cx.env();
         if let Some(typed) = ADDED.read(event, params) {
             let text = cleaned(&typed.text);
-            if text.is_empty() || self.items.len() >= MAX_ITEMS {
+            if text.is_empty() || self.unreadable {
+                return;
+            }
+            if self.items.len() >= MAX_ITEMS {
+                let full = env.i18n.format(
+                    "widgets.todo.full",
+                    &[("count", Arg::Int(MAX_ITEMS as i64))],
+                );
+                cx.command(Command::Notify(full));
                 return;
             }
             self.items.push(Item { text, done: None });
@@ -775,6 +855,11 @@ impl Screen for TodoScreen {
                     self.list.focus = index;
                     self.changed(cx);
                 }
+                "down" if index + 1 < self.items.len() => {
+                    self.items.swap(index, index + 1);
+                    self.list.focus = index + 2;
+                    self.changed(cx);
+                }
                 "remove" => {
                     self.items.remove(index);
                     self.changed(cx);
@@ -810,9 +895,9 @@ mod tests {
 
     #[test]
     fn days_and_dates_agree() {
-        assert_eq!(days_of(1970, 1, 1), 0);
-        assert_eq!(days_of(2000, 3, 1), 11_017);
-        let day = days_of(2026, 10, 19);
+        assert_eq!(time::days_from_civil(1970, 1, 1), 0);
+        assert_eq!(time::days_from_civil(2000, 3, 1), 11_017);
+        let day = time::days_from_civil(2026, 10, 19);
         assert_eq!(date_of(day), "2026-10-19");
         assert_eq!(day_of("2026-10-19"), Some(day));
         assert_eq!(
@@ -826,7 +911,7 @@ mod tests {
     #[test]
     fn the_list_is_kept() {
         let storage = MemoryStorage::new();
-        let today = days_of(2026, 10, 19);
+        let today = time::days_from_civil(2026, 10, 19);
         let items = [
             Item {
                 text: String::from("Return the library book"),
@@ -837,30 +922,73 @@ mod tests {
                 done: Some(today),
             },
         ];
-        save(&storage, &items);
+        let list = List {
+            items: items.to_vec(),
+            rest: String::new(),
+        };
+        save(&storage, &list).unwrap();
         let text = String::from_utf8(paperpaw_sdk::read_file(&storage, &file(), 1024).unwrap());
         assert_eq!(
             text.unwrap(),
             "Return the library book\nx 2026-10-19 Call Anna back\n"
         );
-        let loaded = load(&storage, today);
+        let loaded = load(&storage, today).unwrap().items;
         assert_eq!(loaded.len(), 2);
         assert_eq!(loaded[0], items[0]);
         assert_eq!(loaded[1].text, "Call Anna back");
         assert_eq!(loaded[1].done, Some(today));
         // The next day, what was done is gone.
-        assert_eq!(load(&storage, today + 1), alloc::vec![items[0].clone()]);
+        assert_eq!(
+            load(&storage, today + 1).unwrap().items,
+            alloc::vec![items[0].clone()]
+        );
     }
 
     /// What version 1 wrote stays readable (see `docs/data-files.md`).
     #[test]
     fn the_list_of_version_1_is_read() {
-        let today = days_of(2026, 10, 19);
-        let items = parse(include_str!("../../testdata/todo.txt.v1"), today);
+        let today = time::days_from_civil(2026, 10, 19);
+        let items = parse(include_str!("../../testdata/todo.txt.v1"), today).items;
         let texts: Vec<&str> = items.iter().map(|i| i.text.as_str()).collect();
         assert_eq!(texts, ["Buy bread", "Water the plants", "Read chapter 3"]);
         assert_eq!(items[1].done, Some(today));
         assert_eq!(items[0].done, None);
+    }
+
+    /// A list longer than is shown keeps its items past the first
+    /// hundred when it is changed.
+    #[test]
+    fn a_long_list_keeps_what_is_not_shown() {
+        let storage = MemoryStorage::new();
+        let text: String = (1..=130).map(|n| format!("Item {n}\n")).collect();
+        storage.write(&file(), text.as_bytes()).unwrap();
+        let mut list = load(&storage, 0).unwrap();
+        assert_eq!(list.items.len(), MAX_ITEMS);
+        list.items[0].text = String::from("First");
+        save(&storage, &list).unwrap();
+        let kept = String::from_utf8(paperpaw_sdk::read_file(&storage, &file(), 4096).unwrap());
+        let kept = kept.unwrap();
+        assert_eq!(kept.lines().count(), 130);
+        assert!(kept.starts_with("First\nItem 2\n"), "{kept}");
+        assert!(kept.ends_with("Item 129\nItem 130\n"), "{kept}");
+    }
+
+    /// A list that is there but cannot be read is an error, not an empty
+    /// list that the next change would write over it.
+    #[test]
+    fn an_unreadable_list_is_not_empty() {
+        let storage = MemoryStorage::new();
+        assert_eq!(load(&storage, 0), Ok(List::default()));
+        // Saved by another program in another encoding.
+        storage.write(&file(), b"Br\xf6tchen holen\n").unwrap();
+        assert!(load(&storage, 0).is_err());
+        // Larger than is read.
+        storage.write(&file(), &[b'a'; 40 * 1024]).unwrap();
+        assert!(load(&storage, 0).is_err());
+        // Saved by a program that marks UTF-8 at the start: read.
+        storage.write(&file(), b"\xef\xbb\xbfBuy bread\n").unwrap();
+        let items = load(&storage, 0).unwrap().items;
+        assert_eq!(items[0].text, "Buy bread");
     }
 
     #[test]

@@ -36,7 +36,8 @@ use crate::annotations::{self, Annotation, Kind, Mark};
 use crate::index::PageIndex;
 use crate::selection::{self, Item, Mode, Selection};
 use crate::settings::{
-    FONT_SIZE, FONT_WEIGHT, HYPHENATE, INDENT, JUSTIFY, LINE_SPACING, MARGIN, WORD_SPACING,
+    FONT_SIZE, FONT_WEIGHT, HYPHENATE, INDENT, JUSTIFY, LINE_SPACING, MARGIN, MARGIN_ENDS,
+    PARAGRAPH_SPACING, WORD_SPACING,
 };
 use crate::status;
 use crate::{PLUGIN, state_path};
@@ -237,6 +238,12 @@ impl ReaderScreen {
         let question = if *action == crate::actions::SEARCH {
             ask::text(env.i18n.tr("reader.search.prompt"), &crate::SEARCH_ENTERED)
                 .initial(self.last_search.clone())
+        } else if *action == crate::actions::GO_TO_PERCENT {
+            ask::text(
+                env.i18n.tr("reader.go-to-percent.prompt"),
+                &crate::PERCENT_ENTERED,
+            )
+            .number()
         } else {
             let (pages, complete) = book
                 .index
@@ -454,6 +461,10 @@ impl Screen for ReaderScreen {
             self.pause_aloud(cx);
             return Handled::Yes;
         }
+        // The arrows turn pages as the page buttons do: the X4's buttons
+        // in front, a keyboard's arrows.
+        let turn = page_turn(action);
+        let action = turn.as_ref().unwrap_or(action);
         if *action == crate::actions::READ_ALOUD {
             self.start_aloud(cx);
             return Handled::Yes;
@@ -519,7 +530,10 @@ impl Screen for ReaderScreen {
             self.next_status_line(top, cx);
             return Handled::Yes;
         }
-        if *action == crate::actions::SEARCH || *action == crate::actions::GO_TO_PAGE {
+        if *action == crate::actions::SEARCH
+            || *action == crate::actions::GO_TO_PAGE
+            || *action == crate::actions::GO_TO_PERCENT
+        {
             self.ask(action, cx);
             return Handled::Yes;
         }
@@ -533,6 +547,18 @@ impl Screen for ReaderScreen {
         } else if *action == actions::PREV_PAGE {
             let env = *cx.env();
             if let Some(start) = book.previous_start(&env) {
+                book.show(cx, start, false);
+            }
+            Handled::Yes
+        } else if *action == crate::actions::NEXT_CHAPTER || *action == crate::actions::PREV_CHAPTER
+        {
+            let env = *cx.env();
+            let to = match *action == crate::actions::NEXT_CHAPTER {
+                true => "chapter:+1",
+                false => "chapter:-1",
+            };
+            if let Some(target) = book.skim_target(&env, to) {
+                let start = book.page_start(&env, target);
                 book.show(cx, start, false);
             }
             Handled::Yes
@@ -807,6 +833,25 @@ impl Screen for ReaderScreen {
             }
             return;
         }
+        if let Some(typed) = crate::PERCENT_ENTERED.read(event, params)
+            && this_book
+        {
+            let env = *cx.env();
+            // 100 % is the last page.
+            let permille = typed
+                .text
+                .trim()
+                .parse::<u32>()
+                .ok()
+                .map(|p| (p * 10).min(999));
+            if let Some(target) =
+                permille.and_then(|p| book.skim_target(&env, &format!("permille:{p}")))
+            {
+                self.selection = None;
+                book.jump(cx, target);
+            }
+            return;
+        }
         // Which setting changed, if one did.
         let changed = events::SETTING_CHANGED.read(event, params).map(|c| c.id);
         let id = changed.as_ref().map_or("", Id::as_str);
@@ -874,6 +919,18 @@ impl Screen for ReaderScreen {
             let now = env.now;
             cx.wake_at(now);
         }
+    }
+}
+
+/// The page turn an arrow stands for in a book: left and up back, right
+/// and down on.
+fn page_turn(action: &Id) -> Option<Id> {
+    if *action == actions::LEFT || *action == actions::UP {
+        Some(actions::PREV_PAGE)
+    } else if *action == actions::RIGHT || *action == actions::DOWN {
+        Some(actions::NEXT_PAGE)
+    } else {
+        None
     }
 }
 

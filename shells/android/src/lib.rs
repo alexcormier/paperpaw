@@ -16,6 +16,7 @@
 
 pub mod keys;
 pub mod pixels;
+pub mod private;
 
 #[cfg(target_os = "android")]
 mod access;
@@ -37,3 +38,16 @@ mod plugin;
 mod speech;
 #[cfg(target_os = "android")]
 mod status;
+
+#[cfg(test)]
+mod tests {
+    use paperpaw_i18n::{Catalog, check};
+
+    #[test]
+    fn translations_are_complete() {
+        let en = Catalog::parse(include_str!("../i18n/en.ini")).unwrap();
+        let de = Catalog::parse(include_str!("../i18n/de.ini")).unwrap();
+        let issues = check::compare(&en, &de);
+        assert!(issues.is_empty(), "{issues:?}");
+    }
+}

@@ -70,6 +70,12 @@ pub enum Contribution {
         id: Id,
         source: Cow<'static, str>,
     },
+    /// Key bindings that apply while a switch is on (see
+    /// [`Registrar::add_keymap_when`]).
+    KeymapWhen {
+        setting: Id,
+        source: Cow<'static, str>,
+    },
     Stylesheet(Cow<'static, str>),
     BookData(crate::library::BookData),
     Font(Box<FontSpec>),
@@ -148,6 +154,7 @@ impl Contribution {
             Contribution::SettingDefault { .. } => "setting-default",
             Contribution::Keymap(_) => "keymap",
             Contribution::KeymapPreset { .. } => "keymap-preset",
+            Contribution::KeymapWhen { .. } => "keymap-when",
             Contribution::Stylesheet(_) => "stylesheet",
             Contribution::BookData(_) => "book data",
             Contribution::Font(_) => "font",
@@ -359,6 +366,21 @@ impl Registrar {
     /// ```
     pub fn add_keymap(&mut self, source: Cow<'static, str>) -> Result<(), RegisterError> {
         self.add(Contribution::Keymap(source))
+    }
+
+    /// Adds key bindings (as [`Registrar::add_keymap`]) that apply only
+    /// while the switch `setting` is on, e.g. a held button that does
+    /// something users may turn off: with the switch off the binding is
+    /// gone, so the button acts on its short press at once again.
+    pub fn add_keymap_when(
+        &mut self,
+        setting: &crate::setting::Setting<bool>,
+        source: Cow<'static, str>,
+    ) -> Result<(), RegisterError> {
+        self.add(Contribution::KeymapWhen {
+            setting: setting.into(),
+            source,
+        })
     }
 
     /// A stylesheet for books, applied after a book's own (where the

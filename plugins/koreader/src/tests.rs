@@ -1,6 +1,6 @@
 use super::*;
 use paperpaw_plugin_format_epub::EpubDocument;
-use paperpaw_sdk::MemoryStorage;
+use paperpaw_sdk::{DirEntry, MemoryStorage};
 use paperpaw_zip::testing::ZipBuilder;
 
 const BOOK: &str = "books/alice.epub";
@@ -74,7 +74,12 @@ fn storage() -> MemoryStorage {
         .with(SIDECAR, METADATA.as_bytes().to_vec())
 }
 
-fn run(storage: &MemoryStorage, now: i64) -> bool {
+/// An exchange at `now`, with KOReader's files read up to `limit`:
+/// whether ours changed, `None` if KOReader has no file.
+fn try_run(storage: &dyn Storage, now: i64, limit: usize) -> Result<Option<bool>, Unreadable> {
+    let Some(theirs) = read_theirs(storage, BOOK, limit)? else {
+        return Ok(None);
+    };
     let doc = EpubDocument::open(storage, BOOK).unwrap();
     let local = |unix| unix;
     let x = Exchange {
@@ -84,11 +89,133 @@ fn run(storage: &MemoryStorage, now: i64) -> bool {
         local: &local,
         drawer: "lighten",
     };
-    exchange(&x, BOOK)
+    exchange(&x, BOOK, theirs).map(Some)
+}
+
+fn run(storage: &dyn Storage, now: i64) -> bool {
+    try_run(storage, now, MAX_FILE).unwrap().unwrap()
 }
 
 fn items(storage: &MemoryStorage, path: &str) -> Vec<Table> {
-    read_items(storage, path)
+    read_items(storage, path, MAX_FILE).unwrap().unwrap()
+}
+
+fn text(storage: &MemoryStorage, path: &str) -> String {
+    String::from_utf8(paperpaw_sdk::read_file(storage, path, 1 << 20).unwrap()).unwrap()
+}
+
+/// KOReader opens the book: it takes over the exchange file.
+fn koreader_takes_over(storage: &MemoryStorage) {
+    storage
+        .write(SIDECAR, text(storage, EXCHANGE).as_bytes())
+        .unwrap();
+    storage.remove(EXCHANGE).unwrap();
+}
+
+/// A card on which the file `broken` cannot be read.
+struct Broken<'a> {
+    storage: &'a MemoryStorage,
+    broken: String,
+}
+
+impl Broken<'_> {
+    fn check(&self, path: &str) -> Result<(), StorageError> {
+        if path == self.broken {
+            Err(StorageError::Io)
+        } else {
+            Ok(())
+        }
+    }
+}
+
+impl Storage for Broken<'_> {
+    fn read_at(&self, path: &str, offset: u64, buf: &mut [u8]) -> Result<usize, StorageError> {
+        self.check(path)?;
+        self.storage.read_at(path, offset, buf)
+    }
+
+    fn size(&self, path: &str) -> Result<u64, StorageError> {
+        self.check(path)?;
+        self.storage.size(path)
+    }
+
+    fn write(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
+        self.storage.write(path, data)
+    }
+
+    fn append(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
+        self.storage.append(path, data)
+    }
+
+    fn list(&self, dir: &str, visit: &mut dyn FnMut(DirEntry<'_>)) -> Result<(), StorageError> {
+        self.storage.list(dir, visit)
+    }
+
+    fn remove(&self, path: &str) -> Result<(), StorageError> {
+        self.storage.remove(path)
+    }
+}
+
+/// A card on which the file `path` cannot be written (it is full).
+struct Unwritable<'a> {
+    storage: &'a MemoryStorage,
+    path: String,
+}
+
+impl Storage for Unwritable<'_> {
+    fn read_at(&self, path: &str, offset: u64, buf: &mut [u8]) -> Result<usize, StorageError> {
+        self.storage.read_at(path, offset, buf)
+    }
+
+    fn size(&self, path: &str) -> Result<u64, StorageError> {
+        self.storage.size(path)
+    }
+
+    fn write(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
+        if path == self.path {
+            return Err(StorageError::Full);
+        }
+        self.storage.write(path, data)
+    }
+
+    fn append(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
+        self.storage.append(path, data)
+    }
+
+    fn list(&self, dir: &str, visit: &mut dyn FnMut(DirEntry<'_>)) -> Result<(), StorageError> {
+        self.storage.list(dir, visit)
+    }
+
+    fn remove(&self, path: &str) -> Result<(), StorageError> {
+        self.storage.remove(path)
+    }
+}
+
+/// Both sides after an exchange that KOReader took over: three
+/// annotations here, four there (one not placed here).
+fn exchanged() -> MemoryStorage {
+    let storage = storage();
+    let tired = highlight(
+        &storage,
+        "/body/DocFragment[1]/body/p[1]/text().32",
+        "/body/DocFragment[1]/body/p[1]/text().37",
+        "",
+    );
+    annotations::add(&storage, BOOK, tired);
+    assert!(run(&storage, NOW));
+    koreader_takes_over(&storage);
+    assert!(!run(&storage, NOW + 10));
+    assert!(!storage.exists(EXCHANGE));
+    storage
+}
+
+/// What both sides keep, to see that nothing changed.
+fn state(storage: &MemoryStorage) -> (Vec<Annotation>, Option<String>, String) {
+    let theirs = paperpaw_sdk::read_file(storage, SIDECAR, MAX_FILE)
+        .ok()
+        .map(|data| String::from_utf8_lossy(&data).into_owned());
+    let known = text(storage, &known_file(BOOK));
+    (annotations::load(storage, BOOK), theirs, known)
 }
 
 /// A highlight here of the text at `pos0..pos1`.
@@ -169,9 +296,7 @@ fn annotations_go_back_and_forth() {
         new.str("pos1"),
         Some("/body/DocFragment[1]/body/p[1]/text()[1].37")
     );
-    let Some(Value::Table(root)) = lua::parse(
-        &String::from_utf8(paperpaw_sdk::read_file(&storage, EXCHANGE, 1 << 20).unwrap()).unwrap(),
-    ) else {
+    let Some(Value::Table(root)) = lua::parse(&text(&storage, EXCHANGE)) else {
         panic!("not Lua");
     };
     assert_eq!(root.str("device_id"), Some("PaperPaw"));
@@ -228,6 +353,238 @@ fn later_notes_win() {
         passed[0].str("datetime_updated"),
         Some("2026-10-05 12:00:00")
     );
+}
+
+#[test]
+fn a_missing_koreader_file_changes_nothing() {
+    // A sync has brought `alice.sdr`, but not yet the file in it: that
+    // is not KOReader having removed everything.
+    let storage = exchanged();
+    let (ours, _, known) = state(&storage);
+    assert_eq!(ours.len(), 3);
+    storage.remove(SIDECAR).unwrap();
+    assert_eq!(try_run(&storage, NOW + 20, MAX_FILE), Ok(None));
+    assert_eq!(state(&storage), (ours, None, known));
+    assert!(!storage.exists(EXCHANGE));
+}
+
+#[test]
+fn unreadable_koreader_files_change_nothing() {
+    let taken = text(&exchanged(), SIDECAR);
+    let mut invalid_utf8 = taken.clone().into_bytes();
+    invalid_utf8.insert(taken.find("Alice").unwrap(), 0xff);
+    let mut large = taken.clone();
+    large.push_str(&"-- padding\n".repeat(MAX_FILE_SMALL / 10));
+    let broken: [(&str, Vec<u8>, usize); 7] = [
+        (
+            "cut short",
+            taken.as_bytes()[..taken.len() / 2].to_vec(),
+            MAX_FILE,
+        ),
+        ("not UTF-8", invalid_utf8, MAX_FILE),
+        (
+            "not a list",
+            b"return { [\"annotations\"] = \"none\" }".to_vec(),
+            MAX_FILE,
+        ),
+        (
+            "not a table in the list",
+            b"return { [\"annotations\"] = { [1] = \"Alice\" } }".to_vec(),
+            MAX_FILE,
+        ),
+        (
+            "an older KOReader",
+            b"return { [\"bookmarks\"] = {}, [\"highlight\"] = {} }".to_vec(),
+            MAX_FILE,
+        ),
+        ("too large here", large.clone().into_bytes(), MAX_FILE_SMALL),
+        ("cannot be read", taken.clone().into_bytes(), MAX_FILE),
+    ];
+    for (what, file, limit) in broken {
+        let storage = exchanged();
+        storage.write(SIDECAR, &file).unwrap();
+        let before = state(&storage);
+        let card = Broken {
+            storage: &storage,
+            broken: String::from(if what == "cannot be read" {
+                SIDECAR
+            } else {
+                ""
+            }),
+        };
+        assert_eq!(try_run(&card, NOW + 20, limit), Err(Unreadable), "{what}");
+        assert_eq!(state(&storage), before, "{what}");
+        assert!(!storage.exists(EXCHANGE), "{what}");
+    }
+    // Where there is room, the large file is read.
+    let storage = exchanged();
+    storage.write(SIDECAR, large.as_bytes()).unwrap();
+    assert_eq!(try_run(&storage, NOW + 20, MAX_FILE), Ok(Some(false)));
+}
+
+#[test]
+fn a_koreader_file_without_annotations_has_none() {
+    let storage =
+        MemoryStorage::new().with(SIDECAR, b"return { [\"percent_finished\"] = 0.5 }".to_vec());
+    assert_eq!(
+        read_items(&storage, SIDECAR, MAX_FILE),
+        Ok(Some(Vec::new()))
+    );
+    assert_eq!(read_items(&storage, EXCHANGE, MAX_FILE), Ok(None));
+}
+
+#[test]
+fn small_devices_read_small_files_only() {
+    // A KOReader file of 40 KiB: too much for the X4, fine elsewhere.
+    let mut file = String::from(METADATA);
+    file.push_str(&"-- padding\n".repeat(4096));
+    let storage = MemoryStorage::new().with(SIDECAR, file.into_bytes());
+    let small = max_file(MemoryClass::Small);
+    assert_eq!(read_items(&storage, SIDECAR, small), Err(Unreadable));
+    let large = max_file(MemoryClass::Large);
+    assert_eq!(
+        read_items(&storage, SIDECAR, large).unwrap().unwrap().len(),
+        3
+    );
+}
+
+#[test]
+fn unreadable_files_here_change_nothing() {
+    for broken in [annotations::file(BOOK), known_file(BOOK)] {
+        // Removed here: without what is known, it would come back.
+        let storage = exchanged();
+        assert!(annotations::remove(&storage, BOOK, |m| m.kind == Kind::Bookmark));
+        let before = state(&storage);
+        let card = Broken {
+            storage: &storage,
+            broken: broken.clone(),
+        };
+        assert_eq!(
+            try_run(&card, NOW + 20, MAX_FILE),
+            Err(Unreadable),
+            "{broken}"
+        );
+        assert_eq!(state(&storage), before, "{broken}");
+        assert!(!storage.exists(EXCHANGE), "{broken}");
+    }
+}
+
+#[test]
+fn what_cannot_be_kept_here_is_not_known() {
+    let storage = storage();
+    let card = Unwritable {
+        storage: &storage,
+        path: annotations::file(BOOK),
+    };
+    assert_eq!(try_run(&card, NOW, MAX_FILE), Err(Unreadable));
+    assert!(!storage.exists(&known_file(BOOK)));
+    assert!(!storage.exists(EXCHANGE));
+    // With room again, KOReader's come over and stay there: they were
+    // never known, so they are not taken for removed here.
+    assert!(run(&storage, NOW + 10));
+    assert_eq!(annotations::load(&storage, BOOK).len(), 2);
+    assert!(!storage.exists(EXCHANGE));
+    assert_eq!(items(&storage, SIDECAR).len(), 3);
+}
+
+#[test]
+fn without_a_clock_nothing_is_dated_1970() {
+    let storage = storage();
+    let mut tired = highlight(
+        &storage,
+        "/body/DocFragment[1]/body/p[1]/text().32",
+        "/body/DocFragment[1]/body/p[1]/text().37",
+        "",
+    );
+    tired.created = 0;
+    annotations::add(&storage, BOOK, tired);
+
+    // KOReader's come over; ours waits for a time, and stays.
+    for _ in 0..2 {
+        run(&storage, 0);
+        assert!(!storage.exists(EXCHANGE));
+        let ours = annotations::load(&storage, BOOK);
+        assert_eq!(ours.len(), 3);
+        assert!(ours.iter().any(|a| a.text == "tired"));
+    }
+
+    // With the clock set, it goes over, made then.
+    assert!(!run(&storage, NOW));
+    let passed = items(&storage, EXCHANGE);
+    let tired = passed
+        .iter()
+        .find(|i| i.str("text") == Some("tired"))
+        .unwrap();
+    assert_eq!(unix_of_utc(tired.str("datetime").unwrap()), NOW);
+    assert!(!text(&storage, EXCHANGE).contains("1970"));
+}
+
+#[test]
+fn notes_changed_on_one_side_go_over_without_a_clock() {
+    let storage = storage();
+    // The same highlight as KOReader's, with the same note, made while
+    // the clock was not set.
+    let mut alice = highlight(
+        &storage,
+        "/body/DocFragment[1]/body/p[1]/text().0",
+        "/body/DocFragment[1]/body/p[1]/text().5",
+        "Her name",
+    );
+    alice.created = 0;
+    let at = alice.mark.start;
+    annotations::add(&storage, BOOK, alice);
+    run(&storage, 0);
+    assert!(!storage.exists(EXCHANGE));
+    let note = |storage: &MemoryStorage| annotations::note_of(storage, BOOK, at);
+
+    // Changed here only: it goes to KOReader, though KOReader's is dated
+    // and ours is not.
+    annotations::set_note(&storage, BOOK, at, "Mine", 0);
+    assert!(!run(&storage, 0));
+    assert_eq!(note(&storage), "Mine");
+    assert_eq!(items(&storage, EXCHANGE)[0].str("note"), Some("Mine"));
+    assert!(!text(&storage, EXCHANGE).contains("1970"));
+    koreader_takes_over(&storage);
+
+    // Changed there only: it comes over.
+    let mut theirs = items(&storage, SIDECAR);
+    theirs[0].set("note", lua::string("Theirs"));
+    let file = lua::table([(
+        "annotations",
+        Value::Table(Table::from_list(theirs.iter().cloned().map(Value::Table))),
+    )]);
+    storage
+        .write(SIDECAR, lua::write(&file).as_bytes())
+        .unwrap();
+    assert!(run(&storage, 0));
+    assert_eq!(note(&storage), "Theirs");
+    assert!(!storage.exists(EXCHANGE));
+
+    // Changed on both, with no time here: both stay as they are.
+    annotations::set_note(&storage, BOOK, at, "Again", 0);
+    theirs[0].set("note", lua::string("Other"));
+    let file = lua::table([(
+        "annotations",
+        Value::Table(Table::from_list(theirs.into_iter().map(Value::Table))),
+    )]);
+    storage
+        .write(SIDECAR, lua::write(&file).as_bytes())
+        .unwrap();
+    assert!(!run(&storage, 0));
+    assert_eq!(note(&storage), "Again");
+    assert!(!storage.exists(EXCHANGE));
+    assert_eq!(items(&storage, SIDECAR)[0].str("note"), Some("Other"));
+}
+
+#[test]
+fn own_announcements_need_no_exchange() {
+    let announced = Announced::default();
+    assert!(!announced.is_own(BOOK));
+    announced.set(BOOK);
+    assert!(!announced.is_own("books/other.epub"));
+    assert!(announced.is_own(BOOK));
+    // Only once: a change after it is exchanged.
+    assert!(!announced.is_own(BOOK));
 }
 
 fn unix_of_utc(text: &str) -> i64 {

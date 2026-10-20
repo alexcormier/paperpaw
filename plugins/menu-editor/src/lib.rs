@@ -5,6 +5,10 @@
 //! One cannot lock oneself out: a menu that leads to the settings (directly
 //! or through submenus) keeps doing so, and this editor stays on the
 //! settings page. Back arrows and buttons do not depend on menus anyway.
+//! Nor can a menu be put into one of its own submenus: such a circle
+//! would hide both from the list. Menus caught in one all the same (by
+//! an edited `paperpaw.ini`) are listed, and *Reset all* resets every
+//! menu changed, listed or not.
 //!
 //! Reached from the main settings page (menu `core.settings-pages`).
 
@@ -162,6 +166,25 @@ fn keeps_access(env: &Env<'_>, menu: &str, proposed: &[Id]) -> bool {
     })
 }
 
+/// Whether putting `entry` into `menu` would make a circle: `entry` is a
+/// menu that leads to `menu` (or is it).
+fn makes_circle(env: &Env<'_>, menu: &str, entry: &Id) -> bool {
+    if entry.as_str() == menu {
+        return true;
+    }
+    let Ok(target) = Id::parse(menu) else {
+        return false;
+    };
+    let ids = |m: &str| -> Vec<Id> {
+        if is_menu(env, m) {
+            entries(env, m)
+        } else {
+            Vec::new()
+        }
+    };
+    is_menu(env, entry.as_str()) && reaches(&ids, entry.as_str(), &target, &mut Vec::new())
+}
+
 /// Saves `menu` as `ids`.
 fn save(menu: &str, ids: Vec<Id>, cx: &mut Cx<'_, '_>) {
     if let Ok(menu) = Id::parse(menu) {
@@ -306,6 +329,11 @@ impl MenusScreen {
         for (root, name) in roots {
             add_with_submenus(env, root, name, &mut menus);
         }
+        // Menus in a circle are no one's root: listed after the others.
+        for menu in all {
+            let name = env.i18n.tr(menu.as_str()).to_string();
+            add_with_submenus(env, menu.clone(), name, &mut menus);
+        }
         let mut screen = Self {
             menus,
             rows: Vec::new(),
@@ -330,11 +358,7 @@ impl MenusScreen {
                 (name.clone(), alloc::format!("{value} ›"))
             })
             .collect();
-        if self
-            .menus
-            .iter()
-            .any(|(m, _)| env.menus.is_customized(m.as_str()))
-        {
+        if changed_menus(env).next().is_some() {
             rows.push((
                 env.i18n.tr("menu-editor.reset-all").to_string(),
                 String::new(),
@@ -350,17 +374,24 @@ impl MenusScreen {
                 ENTRIES_SCREEN,
                 Params::new().with(MENU, menu.as_str().to_string()),
             )),
-            // Everything as the plugins define it.
+            // Everything as the plugins define it, listed or not.
             None => {
-                for (menu, _) in &self.menus {
-                    if env.menus.is_customized(menu.as_str()) {
-                        cx.command(Command::SetMenu(menu.clone(), None));
-                    }
+                for menu in changed_menus(&env) {
+                    cx.command(Command::SetMenu(menu.clone(), None));
                 }
                 self.frame.list.focus = 0;
             }
         }
     }
+}
+
+/// The menus the user changed.
+fn changed_menus<'e>(env: &Env<'e>) -> impl Iterator<Item = &'e Id> {
+    let menus = env.menus;
+    menus
+        .menu_ids()
+        .into_iter()
+        .filter(move |m| menus.is_customized(m.as_str()))
 }
 
 /// Adds `menu` and, after it, its submenus.
@@ -750,7 +781,7 @@ impl AddScreen {
             .map(|a| a.id.clone())
             .chain(env.settings.specs().map(|s| s.id.clone()))
             .chain(menus.iter().cloned())
-            .filter(|id| !present.contains(id) && id.as_str() != menu)
+            .filter(|id| !present.contains(id) && !makes_circle(env, &menu, id))
             .map(|id| {
                 let name = name(env, id.as_str());
                 (id, name)
@@ -771,6 +802,9 @@ impl AddScreen {
         let Some((id, _)) = self.candidates.get(index) else {
             return;
         };
+        if makes_circle(&env, &self.menu, id) {
+            return;
+        }
         let mut ids = entries(&env, &self.menu);
         ids.push(id.clone());
         cx.command(Command::Back);

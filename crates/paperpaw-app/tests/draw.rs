@@ -479,6 +479,17 @@ fn walks() -> Vec<(String, Vec<Step>)> {
             "a book with the words looked up marked",
             vec![Set("vocabulary.mark", "on"), reader()],
         ),
+        (
+            "the next chapter, its page in the status line",
+            vec![
+                Set(
+                    "reader.status.bottom-left",
+                    "reader.status.chapter-page, reader.status.chapter-left",
+                ),
+                reader(),
+                Run(Id::new_static("reader.next-chapter")),
+            ],
+        ),
     ];
     // The widgets of each kind as the home screen offers them, each drawn
     // as it would show, page by page.

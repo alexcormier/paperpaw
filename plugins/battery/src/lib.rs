@@ -70,13 +70,22 @@ fn dir() -> alloc::string::String {
 }
 
 /// Appends `text` to the log `name` (with `header` first), starting a new
-/// one when it is full.
+/// one when it is full. A log that cannot become the old one (the old
+/// one in the way) starts anew all the same: it never grows past
+/// [`log::MAX_BYTES`] by much. Lines not written are lost, nothing else:
+/// the log is a record, not the user's data.
 fn append(env: &Env<'_>, name: &str, old: &str, header: &str, text: &str) {
     let storage = env.storage;
     let path = format!("{}/{name}", dir());
     match storage.size(&path) {
         Ok(size) if size >= log::MAX_BYTES => {
-            let _ = storage.rename(&path, &format!("{}/{old}", dir()));
+            let old = format!("{}/{old}", dir());
+            if storage.rename(&path, &old).is_err() {
+                let _ = storage.remove(&old);
+                if storage.rename(&path, &old).is_err() {
+                    let _ = storage.remove(&path);
+                }
+            }
             let _ = storage.append(&path, header.as_bytes());
         }
         Ok(_) => {}
@@ -112,9 +121,9 @@ fn record(env: &Env<'_>, state: &mut State, kind: Kind) {
             log::PLUGINS_HEADER,
             &log::plugin_lines(now.ms, &env.plugin_usage()),
         );
-    }
-    // On the card at once: an empty battery ends it all without warning.
-    if kind != Kind::Start {
+        // On the card every ten minutes and at sleep: an empty battery
+        // ends it all without warning, and a write to the card each
+        // minute wears it for little.
         let _ = env.storage.sync();
     }
     state.awake = kind != Kind::End;
@@ -212,5 +221,18 @@ impl Plugin for Battery {
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use paperpaw_i18n::{Catalog, check};
+
+    #[test]
+    fn translations_are_complete() {
+        let en = Catalog::parse(include_str!("../i18n/en.ini")).unwrap();
+        let de = Catalog::parse(include_str!("../i18n/de.ini")).unwrap();
+        let issues = check::compare(&en, &de);
+        assert!(issues.is_empty(), "{issues:?}");
     }
 }

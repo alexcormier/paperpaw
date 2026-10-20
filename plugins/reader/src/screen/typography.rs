@@ -305,23 +305,27 @@ impl Typography {
         let word_spacing = settings.read(&WORD_SPACING).clamp(50, 200) as f32 / 100.0;
         let metrics = font.line_metrics(size);
         let natural = metrics.ascent + metrics.descent;
-        let line_height = (size * settings.read(&LINE_SPACING) as f32 / 100.0).max(natural);
+        // At least the font's own distance; below 100 % that much of it.
+        let spacing = settings.read(&LINE_SPACING).clamp(80, 250) as f32 / 100.0;
+        let line_height = (size * spacing).max(natural * spacing.min(1.0));
         let indent = settings.read(&INDENT);
+        let spaced = settings.read(&PARAGRAPH_SPACING);
         let justify = settings.read(&JUSTIFY);
         let ascent = metrics.ascent + (line_height - natural) / 2.0;
         let style = Style {
-            paragraph_spacing: if indent { 0.0 } else { line_height * 0.6 },
+            paragraph_spacing: if spaced { line_height * 0.6 } else { 0.0 },
             indent: if indent { size * 1.5 } else { 0.0 },
             em: size,
             justify,
         };
 
         let display = env.device.display;
-        let margin = if whole_pages {
-            0.0
-        } else {
-            m.mm(settings.read(&MARGIN).max(0) as u32) as f32
+        let millimetres = |setting: &paperpaw_sdk::setting::Setting<i64>| match whole_pages {
+            true => 0.0,
+            false => m.mm(settings.read(setting).max(0) as u32) as f32,
         };
+        // At the sides, and at the top and bottom.
+        let (margin, ends) = (millimetres(&MARGIN), millimetres(&MARGIN_ENDS));
         let status_height = status::height(env);
         let (top, bottom) = if whole_pages {
             (false, false)
@@ -337,14 +341,14 @@ impl Typography {
         let status_room = status_height + status_gap;
         let screen = f32::from(display.height);
         let y = if top {
-            margin.max(edge + status_room)
+            ends.max(edge + status_room)
         } else {
-            margin
+            ends
         };
         let end = if bottom {
-            (screen - margin).min(screen - edge - status_room)
+            (screen - ends).min(screen - edge - status_room)
         } else {
-            screen - margin
+            screen - ends
         };
         let height = (end - y).max(1.0);
         let line = |y: f32| Rect::new(margin as u16, y as u16, width as u16, status_height as u16);

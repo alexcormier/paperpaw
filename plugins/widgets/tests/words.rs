@@ -1,7 +1,8 @@
 //! The words and personal widgets on the real home screen: each draws
 //! what it should (the quote of the day and who said it, a greeting, the
-//! note, the open to-dos, how to add pictures), and a tap on a to-do
-//! ticks it off.
+//! note, the open to-dos, how to add pictures), a tap on a to-do ticks
+//! it off, buttons move one down, and a list that cannot be read is
+//! left as it is.
 
 // Tests panic on purpose when something is wrong.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
@@ -193,4 +194,94 @@ fn empty_ones_say_how_to_fill_them() {
     let shown = home.shown();
     assert!(has(&shown, "Press to write a note"), "{shown:?}");
     assert!(has(&shown, "quotes.txt"), "{shown:?}");
+}
+
+/// Runs `actions` one after another.
+fn press(home: &mut Home, actions: &[paperpaw_sdk::Id]) {
+    for action in actions {
+        home.now += 100;
+        home.kernel.run_action(Instant(home.now), action.clone());
+        home.shown();
+    }
+}
+
+#[test]
+fn a_to_do_moves_down_with_buttons() {
+    use paperpaw_sdk::builtin::actions::{CONFIRM, DOWN, MENU};
+    let mut home = Home::new("widgets.todo 0/0 4x3", &[]);
+    home.now += 100;
+    home.kernel.open_screen(
+        Instant(home.now),
+        paperpaw_sdk::Id::new_static("widgets.todo.list"),
+        paperpaw_sdk::Params::new(),
+    );
+    home.shown();
+    // The first item, its options: done, edit, up, down.
+    press(&mut home, &[DOWN, MENU]);
+    let shown = home.shown();
+    assert!(has(&shown, "Move down"), "{shown:?}");
+    while !home
+        .kernel
+        .describe()
+        .iter()
+        .any(|p| p.focused && p.label.contains("Move down"))
+    {
+        press(&mut home, &[DOWN]);
+    }
+    press(&mut home, &[CONFIRM]);
+    let kept = paperpaw_sdk::read_file(&home.storage, TODO, 1024).unwrap();
+    assert_eq!(
+        String::from_utf8(kept).unwrap(),
+        "Buy bread\nReturn the library book\n"
+    );
+}
+
+#[test]
+fn a_list_that_cannot_be_read_is_left_as_it_is() {
+    let mut home = Home::new("widgets.todo 0/0 4x3", &[]);
+    // Saved by another program in another encoding.
+    let ansi = b"Br\xf6tchen holen\nMilch\n";
+    home.storage.write(TODO, ansi).unwrap();
+    home.set("widgets.todo.count", "6");
+    let shown = home.shown();
+    assert!(has(&shown, "could not be read"), "{shown:?}");
+    home.now += 100;
+    home.kernel.open_screen(
+        Instant(home.now),
+        paperpaw_sdk::Id::new_static("widgets.todo.list"),
+        paperpaw_sdk::Params::new(),
+    );
+    let shown = home.shown();
+    assert!(has(&shown, "could not be read"), "{shown:?}");
+    press(
+        &mut home,
+        &[
+            paperpaw_sdk::builtin::actions::DOWN,
+            paperpaw_sdk::builtin::actions::CONFIRM,
+        ],
+    );
+    let kept = paperpaw_sdk::read_file(&home.storage, TODO, 1024).unwrap();
+    assert_eq!(kept, ansi);
+}
+
+/// Made to be shown (to measure it, place it, show it anew after a
+/// change), a quote or picture that changes each time it shows writes
+/// nothing to the card.
+#[test]
+fn widgets_that_change_as_they_show_write_nothing_as_they_are_made() {
+    let mut home = Home::new(
+        "widgets.quote 0/0 4x2, widgets.picture 0/2 4x2",
+        &[
+            ("widgets.quote.change", "widgets.change.shown"),
+            ("widgets.picture.change", "widgets.change.shown"),
+            ("widgets.quote.size", "core.size.small"),
+        ],
+    );
+    home.shown();
+    home.set("widgets.picture.caption", "true");
+    home.shown();
+    for kept in ["quote.txt", "picture.txt"] {
+        let path = format!(".paperpaw/plugins/widgets/{kept}");
+        assert!(!home.storage.exists(&path), "{path}");
+    }
 }

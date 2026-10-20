@@ -231,7 +231,7 @@ impl Kernel {
             self.framebuffer
                 .set_mono_coverage(mono_coverage(&self.shared.settings));
         }
-        if *id == core_settings::KEYMAP_PRESET {
+        if *id == core_settings::KEYMAP_PRESET || self.keys.when.iter().any(|(s, _)| s == id) {
             self.rebuild_keymap();
         }
         if *id == core_settings::STATUS_FONT {
@@ -348,6 +348,11 @@ impl Kernel {
                 messages.push(format!("unknown slot `{slot}`"));
             } else if !self.registry.screens.contains_key(screen) {
                 messages.push(format!("unknown screen `{screen}` for slot `{slot}`"));
+            }
+        }
+        for (setting, _) in &self.keys.when {
+            if self.shared.settings.get(setting.as_str()).is_none() {
+                messages.push(format!("unknown switch `{setting}` for a key map"));
             }
         }
         let preset_actions = self.preset_actions();
