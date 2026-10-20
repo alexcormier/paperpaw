@@ -6,6 +6,13 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: a time a screen asks for with `Cx::wake_at` is that screen's:
+  it comes while the screen is on top, waits while another covers it
+  (a menu, a keyboard, a quick panel) and is kept when the screen is
+  made anew for another size; before, it came to whatever screen was on
+  top and was forgotten whenever a screen opened or closed.
+  `Screen::on_close` is also called on the old screen when a screen is
+  made anew; the commands it gives then are not run.
 - Data plugins: translations named in capitals (`DE.INI`, as a memory
   card or an old computer may name them) are read too.
 - Clean up storage: what is kept for a book still on the memory card
@@ -43,13 +50,14 @@ change the plugin SDK.
   a book (to select a word) and on the keys along the edges of the
   keyboard. Swipes in from the edges work as before.
 - Screens: a time a screen asks for is its own: it comes to that screen
-  also below a menu or another screen over part of it, and below a
-  screen over all of it once it shows again, where before it came to
-  the screen on top and was forgotten whenever a screen opened or
-  closed (the reader below a menu stopped laying out a book after a
-  font change, the library's shelves stopped being made). A screen made
-  anew (the screen turned) first keeps what it would lose, as when it
-  closes: the reader its position, which went back a few pages.
+  once it is on top again, where before it came to whatever screen was
+  on top (a menu over the reader got the reader's) and was forgotten
+  whenever a screen opened or closed (the library's shelves stopped
+  being made). A screen covered by a menu, a keyboard or the quick panel
+  waits meanwhile: pages no longer turn by themselves and the clock no
+  longer refreshes below them. A screen made anew (the screen turned)
+  first keeps what it would lose, as when it closes: the reader its
+  position, which went back a few pages.
 - Settings: a `paperpaw.ini` that is there but cannot be read (saved in
   another encoding than UTF-8, larger than 64 KiB, or a read of the
   memory card failed) is no longer written over: PaperPaw starts with

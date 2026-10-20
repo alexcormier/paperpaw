@@ -282,8 +282,8 @@ struct ActiveScreen {
     /// What it was opened with, e.g. the book.
     params: Params,
     screen: Box<dyn Screen>,
-    /// When it wants [`Screen::on_timer`] ([`Cx::wake_at`]); below a full
-    /// screen, once it shows again.
+    /// When it wants [`Screen::on_timer`] ([`Cx::wake_at`]); below another
+    /// screen, once it is on top again.
     timer: Option<Instant>,
 }
 
@@ -703,14 +703,14 @@ impl Kernel {
         for recognized in self.input.recognizer.tick(now, &thresholds) {
             self.recognized(recognized);
         }
-        for index in self.shown_base()..self.stack.len() {
-            if self.stack[index].timer.is_some_and(|at| at <= now) {
-                self.stack[index].timer = None;
-                self.with_screen(index, |screen, cx| {
-                    screen.on_timer(cx);
-                    Handled::Yes
-                });
-            }
+        if let Some(top) = self.stack.last_mut()
+            && top.timer.is_some_and(|at| at <= now)
+        {
+            top.timer = None;
+            self.with_top(|screen, cx| {
+                screen.on_timer(cx);
+                Handled::Yes
+            });
         }
         if self.notice.as_ref().is_some_and(|(_, until)| *until <= now) {
             self.end_notice();

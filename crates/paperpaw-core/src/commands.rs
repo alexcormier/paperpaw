@@ -88,10 +88,8 @@ impl Kernel {
             .screenshot
             .is_some()
             .then(|| self.now.add_millis(300));
-        let timer = self.stack[self.shown_base()..]
-            .iter()
-            .filter_map(|s| s.timer)
-            .min();
+        // Only the screen on top runs: a covered one's time waits.
+        let timer = self.stack.last().and_then(|top| top.timer);
         effects.wake_at = [
             self.hint.until,
             input,

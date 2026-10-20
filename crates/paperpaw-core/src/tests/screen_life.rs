@@ -175,41 +175,39 @@ fn screens_made_anew_keep_what_they_would_lose() {
     assert_eq!(*log.borrow(), ["reader close"], "the one below too");
 }
 
-/// A timer is the screen's that asked for it: it comes to it, also
-/// below an overlay opened after it asked; below a full screen it waits
-/// until the screen shows again.
+/// A timer is the screen's that asked for it, and it runs only while
+/// that screen is on top: below a menu (a quick panel, a keyboard) or a
+/// full screen it waits until the screen is on top again, also where the
+/// screen was made anew meanwhile; it never comes to the screen over it.
 #[test]
-fn timers_come_to_the_screen_that_asked() {
+fn timers_come_to_the_screen_that_asked_once_it_is_on_top() {
     let log = log();
     let mut kernel = book_kernel(&log);
-    kernel.open_screen(Instant(1), MENU, Params::new());
-    // A setting changed in the menu: the reader below asks for a timer.
+    for (at, over) in [(0, MENU), (100, FULL)] {
+        kernel.open_screen(Instant(at + 1), over, Params::new());
+        // A setting changed over it: the reader below asks for a timer.
+        let value = if at == 0 { "on" } else { "off" };
+        kernel
+            .set_setting(Instant(at + 2), "core.night-mode", value)
+            .unwrap();
+        let effects = kernel.tick(Instant(at + 12));
+        assert!(log.borrow().is_empty(), "{:?}", log.borrow());
+        assert_eq!(effects.wake_at(), None);
+        let effects = kernel.run_action(Instant(at + 20), actions::BACK);
+        assert_eq!(effects.wake_at(), Some(Instant(at + 12)));
+        kernel.tick(Instant(at + 20));
+        assert_eq!(*log.borrow(), ["reader timer"]);
+        log.borrow_mut().clear();
+    }
+    // Made anew below a menu (the screen turned there): still asked for.
+    kernel.open_screen(Instant(201), MENU, Params::new());
     kernel
-        .set_setting(Instant(2), "core.night-mode", "on")
+        .set_setting(Instant(202), "core.night-mode", "on")
         .unwrap();
-    let effects = kernel.tick(Instant(12));
-    assert_eq!(*log.borrow(), ["reader timer"]);
-    assert_eq!(effects.wake_at(), None);
+    kernel.resize(Instant(203), 80, 90);
     log.borrow_mut().clear();
-    // Asked for, then an overlay over it: it still comes.
-    kernel
-        .set_setting(Instant(20), "core.night-mode", "off")
-        .unwrap();
-    kernel.open_screen(Instant(21), MENU, Params::new());
-    kernel.tick(Instant(30));
-    assert_eq!(*log.borrow(), ["reader timer"]);
-    log.borrow_mut().clear();
-    // Below a full screen: once it shows again.
-    kernel
-        .set_setting(Instant(40), "core.night-mode", "on")
-        .unwrap();
-    kernel.open_screen(Instant(41), FULL, Params::new());
-    let effects = kernel.tick(Instant(50));
-    assert!(log.borrow().is_empty(), "{:?}", log.borrow());
-    assert_eq!(effects.wake_at(), None);
-    let effects = kernel.run_action(Instant(60), actions::BACK);
-    assert_eq!(effects.wake_at(), Some(Instant(50)));
-    kernel.tick(Instant(60));
+    kernel.run_action(Instant(220), actions::BACK);
+    kernel.tick(Instant(220));
     assert_eq!(*log.borrow(), ["reader timer"]);
 }
 

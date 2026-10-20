@@ -39,7 +39,7 @@ impl Kernel {
     }
 
     /// The topmost full screen: it and the overlays above it show.
-    pub(crate) fn shown_base(&self) -> usize {
+    fn shown_base(&self) -> usize {
         (0..self.stack.len())
             .rev()
             .find(|&i| self.overlay(i).is_none())
@@ -216,8 +216,6 @@ impl Kernel {
             };
             let _running = self.shared.meter.enter(active.id.namespace());
             active.screen = (spec.factory)(&env, &active.params);
-            // Its times were the old one's.
-            active.timer = None;
         }
         // Made anew, those below the screen shown are hidden again.
         let base = self.shown_base();
@@ -250,7 +248,8 @@ impl Kernel {
         let mut cx = Cx::new(&env, &mut self.output);
         let handled = f(active.screen.as_mut(), &mut cx);
         drop(running);
-        // A time it asked for is its own, also below other screens.
+        // A time it asked for is its own: it waits while the screen is
+        // covered.
         if let Some(at) = self.output.wake_at.take() {
             active.timer = Some(active.timer.map_or(at, |t| t.min(at)));
         }
