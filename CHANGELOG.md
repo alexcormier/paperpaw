@@ -6,6 +6,9 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Wi-Fi transfer: PaperPaw's settings file, `paperpaw.ini`, can be
+  fetched but no longer deleted or replaced from the browser: it names
+  the servers that get passwords and keys.
 - Wi-Fi transfer: a folder is listed to the browser in parts of about
   8 KB, which the page puts together and sorts, so a folder of thousands
   of books no longer has to fit in the X4's memory at once.

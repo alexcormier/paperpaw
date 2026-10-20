@@ -244,6 +244,47 @@ fn big_folders_are_listed_in_parts() {
 }
 
 #[test]
+fn the_settings_file_is_read_only() {
+    for name in ["paperpaw.ini", "PaperPaw.INI"] {
+        let storage = MemoryStorage::new().with(
+            name,
+            b"[core]
+"
+            .to_vec(),
+        );
+        // Fetched, e.g. to keep a copy.
+        let fetch = format!("/api/file?k=abc&path={name}");
+        assert_eq!(ask(&storage, "GET", &fetch, None).0, 200);
+        // Neither deleted nor put back changed.
+        let delete = format!("/api/delete?k=abc&path={name}");
+        assert_eq!(ask(&storage, "POST", &delete, None).0, 403, "{name}");
+        assert!(storage.exists(name));
+        storage.remove(name).unwrap();
+        storage
+            .write(
+                "upload",
+                b"[kosync]
+server = x
+",
+            )
+            .unwrap();
+        let put = format!("/api/file?k=abc&path={name}");
+        let (status, .., done) = ask(&storage, "PUT", &put, Some("upload"));
+        assert_eq!(status, 403, "{name}");
+        assert_eq!(done, Some(Done::NotReceived(String::from(name))));
+        assert!(!storage.exists(name));
+        // Nor a folder in its place.
+        let mkdir = format!("/api/mkdir?k=abc&path={name}");
+        assert_eq!(ask(&storage, "POST", &mkdir, None).0, 403, "{name}");
+        // Elsewhere, a file of that name is just a file.
+        storage.write("upload", b"x").unwrap();
+        let put = format!("/api/file?k=abc&path=Books/{name}");
+        storage.write("Books/a.epub", b"x").unwrap();
+        assert_eq!(ask(&storage, "PUT", &put, Some("upload")).0, 200);
+    }
+}
+
+#[test]
 fn files_come_and_go() {
     let storage = MemoryStorage::new().with("Books/a.epub", b"old".to_vec());
     storage.write(".paperpaw/tmp/request-1", b"new").unwrap();
