@@ -251,10 +251,8 @@ impl Screen for SetupScreen {
         );
         // The help in small letters, to fit on small screens.
         let help = env.i18n.tr(self.focused().help());
-        let small = UiStyle {
-            text: style.small,
-            ..style
-        };
+        let mut small = style;
+        small.text = style.small;
         ui::draw_message(canvas, env, &small, self.help, help);
         ui::draw_note_line(canvas, env, &style, self.status, &self.message);
     }

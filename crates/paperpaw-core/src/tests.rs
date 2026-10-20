@@ -1226,11 +1226,11 @@ fn bindings_change_at_once_and_are_saved() {
         .build()
         .unwrap();
     kernel.start(Instant(0));
-    kernel.apply(Command::Bind {
-        layer: String::from("global"),
-        input: String::from("button.menu"),
-        action: Some(actions::TOGGLE_NIGHT_MODE),
-    });
+    kernel.apply(Command::bind(
+        String::from("global"),
+        String::from("button.menu"),
+        Some(actions::TOGGLE_NIGHT_MODE),
+    ));
     kernel.finish();
     press(&mut kernel, 100, "menu");
     assert_eq!(
@@ -1248,11 +1248,11 @@ fn bindings_change_at_once_and_are_saved() {
     assert!(String::from_utf8_lossy(&saved).contains("menu = core.toggle-night-mode"));
 
     // Back to what the plugins bind: the menu again.
-    kernel.apply(Command::Bind {
-        layer: String::from("global"),
-        input: String::from("button.menu"),
-        action: None,
-    });
+    kernel.apply(Command::bind(
+        String::from("global"),
+        String::from("button.menu"),
+        None,
+    ));
     kernel.finish();
     press(&mut kernel, 300, "menu");
     assert_eq!(kernel.active_screen().map(Id::as_str), Some("ov.half"));
@@ -1618,11 +1618,11 @@ fn plugins_serve_through_the_shell() {
         .unwrap();
     kernel.start(Instant(0));
     let events = Id::new_static("ov.reply");
-    kernel.output.commands.push(Command::Serve {
-        server: Id::new_static("ov.server"),
-        port: 8080,
-        events: events.clone(),
-    });
+    kernel.output.commands.push(Command::serve(
+        Id::new_static("ov.server"),
+        8080,
+        events.clone(),
+    ));
     kernel.run_commands();
     assert!(kernel.serving());
     let calls = kernel.take_server_calls();
@@ -1713,11 +1713,11 @@ fn plugins_serve_through_the_shell() {
         paperpaw_sdk::Params::new(),
     ));
     kernel.run_commands();
-    kernel.output.commands.push(Command::Serve {
-        server: Id::new_static("ov.server"),
-        port: 8080,
-        events: events.clone(),
-    });
+    kernel.output.commands.push(Command::serve(
+        Id::new_static("ov.server"),
+        8080,
+        events.clone(),
+    ));
     kernel.run_commands();
     assert!(kernel.serving());
     kernel.take_server_calls();

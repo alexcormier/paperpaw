@@ -4,8 +4,11 @@
 #[allow(clippy::wildcard_imports)]
 use super::*;
 
-/// Sizes of the standard UI elements, in pixels.
+/// Sizes of the standard UI elements, in pixels: made for the device and
+/// the user's settings with [`UiStyle::new`], or [`UiStyle::PLAIN`] where
+/// there is no environment (tests, pictures made beforehand).
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub struct UiStyle {
     /// Body text size.
     pub text: f32,
@@ -81,6 +84,31 @@ pub enum Separators {
 }
 
 impl UiStyle {
+    /// Fixed sizes for text 20 pixels high, square corners, lines between
+    /// rows, the focus a dark bar, two grays: what no device or setting
+    /// changes. Its fields can be changed as any style's.
+    pub const PLAIN: UiStyle = UiStyle {
+        text: 20.0,
+        small: 15.0,
+        title: 23.0,
+        head: 23.0,
+        row: 60,
+        header: 64,
+        margin: 12,
+        gap: 8,
+        line: 2,
+        dark_header: false,
+        corner: 0,
+        strong: false,
+        pill: false,
+        focus: Focus::Fill,
+        separators: Separators::Line,
+        plain_header: false,
+        cards: false,
+        grays: 2,
+        finger: 0,
+    };
+
     pub fn new(env: &Env<'_>) -> Self {
         let m = env.metrics;
         let base = env.settings.read(&settings::UI_SIZE).clamp(6, 40) as f32;

@@ -49,6 +49,7 @@ pub enum Contribution {
     Screen(ScreenSpec),
     Slot(SlotSpec),
     /// A screen proposed for a slot (see [`Registrar::bind_slot`]).
+    #[non_exhaustive]
     SlotBinding {
         slot: Id,
         screen: Id,
@@ -60,18 +61,21 @@ pub enum Contribution {
     SettingGroup(SettingGroupSpec),
     /// Another default for any plugin's setting (see
     /// [`Registrar::set_setting_default`]).
+    #[non_exhaustive]
     SettingDefault {
         setting: Id,
         value: Cow<'static, str>,
     },
     /// Default key bindings (see [`Registrar::add_keymap`]).
     Keymap(Cow<'static, str>),
+    #[non_exhaustive]
     KeymapPreset {
         id: Id,
         source: Cow<'static, str>,
     },
     /// Key bindings that apply while a switch is on (see
     /// [`Registrar::add_keymap_when`]).
+    #[non_exhaustive]
     KeymapWhen {
         setting: Id,
         source: Cow<'static, str>,
@@ -79,10 +83,12 @@ pub enum Contribution {
     Stylesheet(Cow<'static, str>),
     BookData(crate::library::BookData),
     Font(Box<FontSpec>),
+    #[non_exhaustive]
     FontFile {
         id: Id,
         path: String,
     },
+    #[non_exhaustive]
     FontExtension {
         id: Id,
         path: String,
@@ -90,6 +96,7 @@ pub enum Contribution {
     },
     /// A face of a family in a file (see [`Registrar::add_font_face`]).
     FontFace(Box<FontFace>),
+    #[non_exhaustive]
     FontBinding {
         role: Id,
         font: Id,
@@ -99,18 +106,22 @@ pub enum Contribution {
     Hyphenation(HyphenationSpec),
     MenuEntry(MenuEntry),
     MenuSection(MenuSection),
+    #[non_exhaustive]
     Icon {
         item: Id,
         icon: Cow<'static, str>,
     },
+    #[non_exhaustive]
     MenuNeed {
         item: Id,
         need: MenuNeed,
     },
+    #[non_exhaustive]
     ScreenHints {
         screen: Id,
         hints: Hints,
     },
+    #[non_exhaustive]
     Subscription {
         event: Id,
         handler: EventHandler,
@@ -131,17 +142,20 @@ pub enum Contribution {
     FixedPresets(&'static [Preset]),
     /// A service found by its type's `TypeId` alone (see
     /// `Registrar::add_service`).
+    #[non_exhaustive]
     Service {
         id: Id,
         service: Box<dyn Any>,
     },
     /// A service with the name of its type (see [`Registrar::publish`]).
+    #[non_exhaustive]
     Published {
         id: Id,
         service: crate::services::Service,
     },
     /// Text for a point another plugin defined (see
     /// [`services`](crate::services)).
+    #[non_exhaustive]
     ToPoint {
         point: Id,
         text: Cow<'static, str>,

@@ -268,6 +268,7 @@ impl Harness {
                     role,
                     font,
                     priority,
+                    ..
                 } => self.fonts.propose(role, font, priority),
                 _ => {}
             }

@@ -169,17 +169,8 @@ fn work_that_waited_too_long_fails_once_and_late_answers_are_dropped() {
         1000,
         [
             get("a"),
-            Command::Serve {
-                server: SERVER,
-                port: 8080,
-                events: REPLY,
-            },
-            Command::Connect {
-                socket: SOCKET,
-                host: String::from("calibre.local"),
-                port: 9090,
-                events: REPLY,
-            },
+            Command::serve(SERVER, 8080, REPLY),
+            Command::connect(SOCKET, String::from("calibre.local"), 9090, REPLY),
         ],
     );
     // Nothing for the shell but the radio.
@@ -232,11 +223,7 @@ fn listening(kernel: &mut Kernel) -> u32 {
 }
 
 fn serve() -> Command {
-    Command::Serve {
-        server: SERVER,
-        port: 8080,
-        events: REPLY,
-    }
+    Command::serve(SERVER, 8080, REPLY)
 }
 
 fn request(server: u32, request: u32, target: &str, body: bool) -> ServerEvent {
@@ -425,12 +412,7 @@ fn a_request_reported_twice_does_not_confuse_a_later_one() {
 }
 
 fn connect() -> Command {
-    Command::Connect {
-        socket: SOCKET,
-        host: String::from("calibre.local"),
-        port: 9090,
-        events: REPLY,
-    }
+    Command::connect(SOCKET, String::from("calibre.local"), 9090, REPLY)
 }
 
 /// The number the shell was given for the socket.
@@ -519,14 +501,8 @@ fn a_socket_failing_twice_is_heard_of_once() {
         &mut kernel,
         30,
         [
-            Command::SocketSend {
-                socket: SOCKET,
-                data: b"x".to_vec(),
-            },
-            Command::SocketRead {
-                socket: SOCKET,
-                read: SocketRead::Text { max: 10 },
-            },
+            Command::socket_send(SOCKET, b"x".to_vec()),
+            Command::socket_read(SOCKET, SocketRead::Text { max: 10 }),
             Command::Disconnect(SOCKET),
         ],
     );
@@ -543,13 +519,13 @@ fn a_file_read_from_a_socket_closed_halfway_is_reported_closed() {
     harness.run(
         &mut kernel,
         21,
-        [Command::SocketRead {
-            socket: SOCKET,
-            read: SocketRead::File {
+        [Command::socket_read(
+            SOCKET,
+            SocketRead::File {
                 path: String::from("books/new.epub"),
                 len: 10,
             },
-        }],
+        )],
     );
     let reads: Vec<u32> = kernel
         .take_io()
@@ -596,13 +572,13 @@ fn a_broadcast_done_twice_is_heard_of_once_and_answers_after_are_dropped() {
     harness.run(
         &mut kernel,
         10,
-        [Command::Broadcast {
-            id: SOCKET,
-            ports: vec![54982],
-            data: b"hello".to_vec(),
-            wait_ms: 500,
-            events: REPLY,
-        }],
+        [Command::broadcast(
+            SOCKET,
+            vec![54982],
+            b"hello".to_vec(),
+            500,
+            REPLY,
+        )],
     );
     let number = kernel
         .take_io()

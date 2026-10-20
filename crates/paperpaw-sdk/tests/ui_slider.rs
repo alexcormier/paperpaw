@@ -21,27 +21,12 @@ use proptest::prelude::*;
 
 use support::{Device, Harness, describe, drawn_outside, frame, pointer};
 
-const STYLE: UiStyle = UiStyle {
-    text: 20.0,
-    small: 15.0,
-    title: 23.0,
-    head: 23.0,
-    row: 60,
-    header: 64,
-    margin: 12,
-    gap: 8,
-    line: 2,
-    dark_header: false,
-    corner: 6,
-    strong: false,
-    pill: false,
-    focus: paperpaw_sdk::ui::Focus::Fill,
-    separators: paperpaw_sdk::ui::Separators::Line,
-    plain_header: false,
-    cards: false,
-    grays: 2,
-    finger: 0,
-};
+/// Sizes for tests: no fonts needed.
+fn style() -> UiStyle {
+    let mut style = UiStyle::PLAIN;
+    style.corner = 6;
+    style
+}
 
 fn slider_strategy() -> impl Strategy<Value = Slider> {
     (-1000i64..1000, 0i64..2000, 1i64..50)
@@ -129,7 +114,7 @@ proptest! {
         xs in proptest::collection::vec(0i32..400, 1..12),
     ) {
         let band = Rect::new(20, 40, 360, 30);
-        let track = parts(&STYLE, band).track;
+        let track = parts(&style(), band).track;
         // A value the slider offers (one off its steps comes back on
         // them).
         let value = slider.min() + (slider.clamp(value) - slider.min()) / slider.step_size() * slider.step_size();
@@ -142,12 +127,12 @@ proptest! {
         let mut drag = SliderDrag::default();
         // Down anywhere in the band: taken, nothing to draw yet.
         let first = xs[0].clamp(20, 379);
-        let down = drag.on_pointer(&pointer(PointerPhase::Down, first, 50), &STYLE, &slider, band, value);
+        let down = drag.on_pointer(&pointer(PointerPhase::Down, first, 50), &style(), &slider, band, value);
         prop_assert_eq!(down, Some(SliderStep::Same));
         prop_assert_eq!(drag.dragging(), Some(value));
         let mut moved = false;
         for &x in &xs[1..] {
-            let step = drag.on_pointer(&pointer(PointerPhase::Move, x, 300), &STYLE, &slider, band, value);
+            let step = drag.on_pointer(&pointer(PointerPhase::Move, x, 300), &style(), &slider, band, value);
             match step {
                 Some(SliderStep::Moved(shown)) => {
                     moved = true;
@@ -170,9 +155,9 @@ proptest! {
             prop_assert!(offered(&slider, shown) || shown == value);
         }
         if moved && coarse(&slider, track) {
-            drag.on_pointer(&pointer(PointerPhase::Move, first, 300), &STYLE, &slider, band, value);
+            drag.on_pointer(&pointer(PointerPhase::Move, first, 300), &style(), &slider, band, value);
             prop_assert_eq!(drag.dragging(), Some(value));
-            let up = drag.on_pointer(&pointer(PointerPhase::Up, first, 300), &STYLE, &slider, band, value);
+            let up = drag.on_pointer(&pointer(PointerPhase::Up, first, 300), &style(), &slider, band, value);
             prop_assert_eq!(up, Some(SliderStep::Chosen(value)));
             prop_assert_eq!(drag.dragging(), None);
         }
@@ -215,8 +200,8 @@ proptest! {
         height in 20u16..120,
     ) {
         let band = Rect::new(x, 300, width, height);
-        let SliderParts { minus, track, plus } = parts(&STYLE, band);
-        let margin = STYLE.margin;
+        let SliderParts { minus, track, plus } = parts(&style(), band);
+        let margin = style().margin;
         prop_assert_eq!(u32::from(minus.x), u32::from(band.x) + margin);
         prop_assert_eq!(plus.right() + margin, band.right());
         prop_assert!(minus.right() <= u32::from(track.x));
@@ -244,7 +229,11 @@ proptest! {
         round in any::<bool>(),
     ) {
         let track = Rect::new(40, 20, width, height);
-        let style = UiStyle { corner: if round { 6 } else { 0 }, ..STYLE };
+        let style = {
+            let mut style = style();
+            style.corner = if round { 6 } else { 0 };
+            style
+        };
         let ink = if white { Color::WHITE } else { Color::BLACK };
         let mut frame = frame(500, 120);
         slider.draw_track(&mut frame.canvas(), &style, track, value, ink);
@@ -266,7 +255,7 @@ fn a_drag_brought_back_keeps_the_value() {
     ] {
         let mut drag = SliderDrag::default();
         let mut at =
-            |phase, x| drag.on_pointer(&pointer(phase, x, 50), &STYLE, &slider, band, value);
+            |phase, x| drag.on_pointer(&pointer(phase, x, 50), &style(), &slider, band, value);
         assert_eq!(at(PointerPhase::Down, 20), Some(SliderStep::Same));
         assert!(matches!(
             at(PointerPhase::Move, 28),
@@ -304,7 +293,13 @@ fn the_widest_range_does_not_bring_it_down() {
     assert!((0.0..=1.0).contains(&share));
     let value = slider.value_at(track, 100);
     assert!((slider.min()..=slider.max()).contains(&value));
-    slider.draw_track(&mut frame(200, 20).canvas(), &STYLE, track, 0, Color::BLACK);
+    slider.draw_track(
+        &mut frame(200, 20).canvas(),
+        &style(),
+        track,
+        0,
+        Color::BLACK,
+    );
 }
 
 #[test]
@@ -332,7 +327,13 @@ fn a_finger_beside_the_band_is_left_to_the_screen() {
     let mut drag = SliderDrag::default();
     for (x, y) in [(99, 60), (300, 60), (150, 49), (150, 70)] {
         assert_eq!(
-            drag.on_pointer(&pointer(PointerPhase::Down, x, y), &STYLE, &slider, band, 5),
+            drag.on_pointer(
+                &pointer(PointerPhase::Down, x, y),
+                &style(),
+                &slider,
+                band,
+                5
+            ),
             None,
             "({x}, {y})"
         );
@@ -340,7 +341,7 @@ fn a_finger_beside_the_band_is_left_to_the_screen() {
     // Another finger while one drags: not taken.
     drag.on_pointer(
         &pointer(PointerPhase::Down, 150, 60),
-        &STYLE,
+        &style(),
         &slider,
         band,
         5,
@@ -348,7 +349,7 @@ fn a_finger_beside_the_band_is_left_to_the_screen() {
     .unwrap();
     let mut other = pointer(PointerPhase::Up, 290, 60);
     other.id = 3;
-    assert_eq!(drag.on_pointer(&other, &STYLE, &slider, band, 5), None);
+    assert_eq!(drag.on_pointer(&other, &style(), &slider, band, 5), None);
     assert!(drag.dragging().is_some());
 }
 

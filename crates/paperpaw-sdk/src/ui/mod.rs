@@ -57,27 +57,7 @@ pub(crate) mod tests {
     use super::*;
 
     /// Sizes for tests: no fonts needed, nothing rounded.
-    pub(crate) const STYLE: UiStyle = UiStyle {
-        text: 20.0,
-        small: 15.0,
-        title: 23.0,
-        head: 23.0,
-        row: 60,
-        header: 64,
-        margin: 12,
-        gap: 8,
-        line: 2,
-        dark_header: false,
-        corner: 0,
-        strong: false,
-        pill: false,
-        focus: crate::ui::Focus::Fill,
-        separators: crate::ui::Separators::Line,
-        plain_header: false,
-        cards: false,
-        grays: 2,
-        finger: 0,
-    };
+    pub(crate) const STYLE: UiStyle = UiStyle::PLAIN;
 
     #[test]
     fn list_pages_focus_and_hits() {

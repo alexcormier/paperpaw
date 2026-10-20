@@ -216,13 +216,13 @@ impl CalibreScreen {
         let address = env.settings.read(&ADDRESS).trim();
         if address.is_empty() {
             self.state = State::Finding;
-            cx.command(Command::Broadcast {
-                id: FIND,
-                ports: protocol::BROADCAST_PORTS.to_vec(),
-                data: b"hello".to_vec(),
-                wait_ms: FIND_MS,
-                events: EVENTS.into(),
-            });
+            cx.command(Command::broadcast(
+                FIND,
+                protocol::BROADCAST_PORTS.to_vec(),
+                b"hello".to_vec(),
+                FIND_MS,
+                EVENTS.into(),
+            ));
         } else {
             let (host, port) = match address.rsplit_once(':') {
                 Some((host, port)) if port.parse::<u16>().is_ok() => {
@@ -237,12 +237,12 @@ impl CalibreScreen {
 
     fn connect(&mut self, host: &str, port: u16, cx: &mut Cx<'_, '_>) {
         self.state = State::Connecting;
-        cx.command(Command::Connect {
-            socket: SOCKET,
-            host: host.to_string(),
+        cx.command(Command::connect(
+            SOCKET,
+            host.to_string(),
             port,
-            events: EVENTS.into(),
-        });
+            EVENTS.into(),
+        ));
     }
 
     fn end(&mut self, text: String, cx: &mut Cx<'_, '_>) {
@@ -263,20 +263,17 @@ impl CalibreScreen {
     }
 
     fn send(&self, op: u8, args: &str, cx: &mut Cx<'_, '_>) {
-        cx.command(Command::SocketSend {
-            socket: SOCKET,
-            data: protocol::frame(op, args),
-        });
+        cx.command(Command::socket_send(SOCKET, protocol::frame(op, args)));
     }
 
     /// Asks for what comes next of a message.
     fn read_on(&self, cx: &mut Cx<'_, '_>) {
-        cx.command(Command::SocketRead {
-            socket: SOCKET,
-            read: SocketRead::Text {
+        cx.command(Command::socket_read(
+            SOCKET,
+            SocketRead::Text {
                 max: self.framing.wanted(),
             },
-        });
+        ));
     }
 
     fn on_socket(&mut self, notice: SocketNotice, cx: &mut Cx<'_, '_>) {
@@ -559,13 +556,13 @@ impl CalibreScreen {
             part: part.clone(),
             metadata,
         });
-        cx.command(Command::SocketRead {
-            socket: SOCKET,
-            read: SocketRead::File {
+        cx.command(Command::socket_read(
+            SOCKET,
+            SocketRead::File {
                 path: part,
                 len: length,
             },
-        });
+        ));
         self.redraw(cx);
     }
 

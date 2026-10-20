@@ -72,11 +72,8 @@ impl Kernel {
                 .frame
                 .refresh
                 .decide(requested, dirty, screen, interval);
-            let refresh = paperpaw_sdk::filters::Refresh {
-                mode,
-                region,
-                screen: self.stack.last().map(|top| top.id.clone()),
-            };
+            let on_top = self.stack.last().map(|top| top.id.clone());
+            let refresh = paperpaw_sdk::filters::Refresh::new(mode, region, on_top);
             let env = self.shared.env(self.now);
             let refresh = self.shared.refresh_filters.apply(&env, refresh, screen);
             // Counted as done, after the filters.
@@ -302,6 +299,7 @@ impl Kernel {
                 layer,
                 input,
                 action,
+                ..
             } => self.bind(&layer, &input, action),
             _ => {}
         }
@@ -380,6 +378,7 @@ impl Kernel {
                 server,
                 port,
                 events,
+                ..
             } => self
                 .io
                 .servers

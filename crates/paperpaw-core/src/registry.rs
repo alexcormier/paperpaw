@@ -219,6 +219,7 @@ pub(crate) fn stage(
                 slot,
                 screen,
                 priority,
+                ..
             } => staging.candidates.push(SlotCandidate {
                 slot,
                 screen,
@@ -229,26 +230,30 @@ pub(crate) fn stage(
                 staging.settings.extend(list.iter().map(Staged::Fixed));
             }
             Contribution::SettingGroup(group) => staging.setting_groups.push(group),
-            Contribution::SettingDefault { setting, value } => {
+            Contribution::SettingDefault { setting, value, .. } => {
                 staging.setting_defaults.push((setting, value));
             }
             Contribution::Keymap(source) => {
                 validate_keymap(&source)?;
                 staging.keymaps.push(source);
             }
-            Contribution::KeymapPreset { id, source } => {
+            Contribution::KeymapPreset { id, source, .. } => {
                 validate_keymap(&source)?;
                 staging.keymap_presets.push((id, source));
             }
-            Contribution::KeymapWhen { setting, source } => {
+            Contribution::KeymapWhen {
+                setting, source, ..
+            } => {
                 validate_keymap(&source)?;
                 staging.keymaps_when.push((setting, source));
             }
             Contribution::Stylesheet(css) => staging.stylesheets.push(css),
             Contribution::BookData(data) => staging.book_data.push(data),
             Contribution::Font(font) => staging.fonts.push(*font),
-            Contribution::FontFile { id, path } => staging.font_files.push((id, path)),
-            Contribution::FontExtension { id, path, extends } => {
+            Contribution::FontFile { id, path, .. } => staging.font_files.push((id, path)),
+            Contribution::FontExtension {
+                id, path, extends, ..
+            } => {
                 staging.font_extensions.push((id, path, extends));
             }
             Contribution::FontFace(face) => staging.font_faces.push(*face),
@@ -256,6 +261,7 @@ pub(crate) fn stage(
                 role,
                 font,
                 priority,
+                ..
             } => staging.font_roles.push((role, font, priority)),
             Contribution::Format(format) => staging.formats.push(*format),
             Contribution::Hyphenation(spec) => {
@@ -268,12 +274,12 @@ pub(crate) fn stage(
             }
             Contribution::MenuEntry(entry) => staging.menu_entries.push(entry),
             Contribution::MenuSection(section) => staging.menu_sections.push(section),
-            Contribution::Icon { item, icon } => staging.icons.push((item, icon)),
-            Contribution::MenuNeed { item, need } => staging.menu_needs.push((item, need)),
-            Contribution::ScreenHints { screen, hints } => {
+            Contribution::Icon { item, icon, .. } => staging.icons.push((item, icon)),
+            Contribution::MenuNeed { item, need, .. } => staging.menu_needs.push((item, need)),
+            Contribution::ScreenHints { screen, hints, .. } => {
                 staging.screen_hints.push((screen, hints));
             }
-            Contribution::Subscription { event, handler } => {
+            Contribution::Subscription { event, handler, .. } => {
                 staging.subscriptions.push((event, plugin.clone(), handler));
             }
             Contribution::StatusItem(item) => staging.status_items.push(item),
@@ -287,11 +293,11 @@ pub(crate) fn stage(
             Contribution::SetupStep(step) => staging.setup_steps.push(*step),
             Contribution::Preset(preset) => staging.presets.push(*preset),
             Contribution::FixedPresets(list) => staging.fixed_presets.push(list),
-            Contribution::Service { id, service } => staging
+            Contribution::Service { id, service, .. } => staging
                 .services
                 .push((id, paperpaw_sdk::services::Service::any(service))),
-            Contribution::Published { id, service } => staging.services.push((id, service)),
-            Contribution::ToPoint { point, text } => staging.contributions.push((point, text)),
+            Contribution::Published { id, service, .. } => staging.services.push((id, service)),
+            Contribution::ToPoint { point, text, .. } => staging.contributions.push((point, text)),
             Contribution::Translations(source) => staging.catalogs.push(catalog(source)?),
             // A kind of a newer SDK than this kernel knows: said, not lost.
             other => {

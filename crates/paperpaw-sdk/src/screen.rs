@@ -236,6 +236,7 @@ pub trait Screen {
 
 /// What a plugin asked the kernel to do during an event.
 #[derive(Debug, Default)]
+#[non_exhaustive]
 pub struct Output {
     pub commands: Vec<Command>,
     /// Requested refresh mode for the region drawn during the event.

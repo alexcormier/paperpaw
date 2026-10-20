@@ -103,11 +103,11 @@ fn a_config_that_cannot_be_read_is_said_and_left_as_it_is() {
             .unwrap();
         // It applies, only it is not saved.
         assert!(kernel.settings().bool("core.night-mode"), "{case}");
-        kernel.apply(Command::Bind {
-            layer: String::from("global"),
-            input: String::from("button.menu"),
-            action: Some(actions::TOGGLE_NIGHT_MODE),
-        });
+        kernel.apply(Command::bind(
+            String::from("global"),
+            String::from("button.menu"),
+            Some(actions::TOGGLE_NIGHT_MODE),
+        ));
         kernel.apply(Command::SetMenu(
             Id::new_static("core.main"),
             Some(alloc::vec![actions::BACK]),
@@ -162,11 +162,11 @@ fn bindings_made_keep_the_shells_own() {
     kernel.start(Instant(0));
     let key = |name: &'static str| crate::keymap::InputKey::Button(Cow::Borrowed(name));
     assert_eq!(kernel.resolve(&key("up")), Some(&actions::HOME));
-    kernel.apply(Command::Bind {
-        layer: String::from("global"),
-        input: String::from("button.menu"),
-        action: Some(actions::TOGGLE_NIGHT_MODE),
-    });
+    kernel.apply(Command::bind(
+        String::from("global"),
+        String::from("button.menu"),
+        Some(actions::TOGGLE_NIGHT_MODE),
+    ));
     kernel.finish();
     assert_eq!(
         kernel.resolve(&key("menu")),
@@ -174,11 +174,11 @@ fn bindings_made_keep_the_shells_own() {
     );
     assert_eq!(kernel.resolve(&key("up")), Some(&actions::HOME), "kept");
     // One the shell binds, bound here: the choice made here wins.
-    kernel.apply(Command::Bind {
-        layer: String::from("global"),
-        input: String::from("button.up"),
-        action: Some(actions::NOTHING),
-    });
+    kernel.apply(Command::bind(
+        String::from("global"),
+        String::from("button.up"),
+        Some(actions::NOTHING),
+    ));
     kernel.finish();
     assert_eq!(kernel.resolve(&key("up")), Some(&actions::NOTHING));
 }

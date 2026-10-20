@@ -259,12 +259,7 @@ impl AddScreen {
                 continue;
             };
             let (w, h) = geometry.size_of(env, what);
-            let cells = Cells {
-                col: 0,
-                row: 0,
-                w,
-                h: h.clamp(1, PREVIEW_ROWS),
-            };
+            let cells = Cells::new(0, 0, w, h.clamp(1, PREVIEW_ROWS));
             let at = geometry.rect(cells);
             let height = title_h + at.height + 2 * gap;
             if y + height > bottom && y > area.y {

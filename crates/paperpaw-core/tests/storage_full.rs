@@ -119,11 +119,11 @@ fn a_setting_changed_on_a_full_card_applies_and_keeps_the_file() {
         [
             Command::ResetSetting(Id::new_static("core.ui-size")),
             Command::SetMenu(Id::new_static("core.main"), Some(vec![])),
-            Command::Bind {
-                layer: String::from("global"),
-                input: String::from("button.up"),
-                action: Some(Id::new_static("core.menu")),
-            },
+            Command::bind(
+                String::from("global"),
+                String::from("button.up"),
+                Some(Id::new_static("core.menu")),
+            ),
         ],
     );
     assert_eq!(card.text(CONFIG_FILE), before);
@@ -156,11 +156,7 @@ fn request_bodies_that_do_not_fit_are_refused_and_not_passed_on() {
     harness.run(
         &mut kernel,
         10,
-        [Command::Serve {
-            server: Id::new_static("drv.server"),
-            port: 8080,
-            events: REPLY,
-        }],
+        [Command::serve(Id::new_static("drv.server"), 8080, REPLY)],
     );
     let number = kernel
         .take_io()
@@ -222,12 +218,12 @@ fn a_file_read_from_a_socket_onto_a_full_card_fails_and_closes() {
     harness.run(
         &mut kernel,
         10,
-        [Command::Connect {
-            socket: socket.clone(),
-            host: String::from("calibre.local"),
-            port: 9090,
-            events: REPLY,
-        }],
+        [Command::connect(
+            socket.clone(),
+            String::from("calibre.local"),
+            9090,
+            REPLY,
+        )],
     );
     let number = kernel
         .take_io()
@@ -238,12 +234,14 @@ fn a_file_read_from_a_socket_onto_a_full_card_fails_and_closes() {
         })
         .unwrap();
     kernel.socket_event(Instant(20), SocketEvent::Connected { socket: number });
-    let read = || Command::SocketRead {
-        socket: socket.clone(),
-        read: SocketRead::File {
-            path: String::from("books/new.epub"),
-            len: 100,
-        },
+    let read = || {
+        Command::socket_read(
+            socket.clone(),
+            SocketRead::File {
+                path: String::from("books/new.epub"),
+                len: 100,
+            },
+        )
     };
     harness.run(&mut kernel, 21, [read()]);
     kernel.socket_event(
@@ -269,12 +267,12 @@ fn a_file_read_from_a_socket_onto_a_full_card_fails_and_closes() {
     harness.run(
         &mut kernel,
         30,
-        [Command::Connect {
-            socket: socket.clone(),
-            host: String::from("calibre.local"),
-            port: 9090,
-            events: REPLY,
-        }],
+        [Command::connect(
+            socket.clone(),
+            String::from("calibre.local"),
+            9090,
+            REPLY,
+        )],
     );
     harness.run(&mut kernel, 31, [read()]);
     let told = harness.lines("event drv.reply");

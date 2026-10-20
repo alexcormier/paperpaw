@@ -442,11 +442,7 @@ impl Screen for TransferScreen {
                 self.redraw(cx);
                 return;
             }
-            cx.command(Command::Serve {
-                server: SERVER,
-                port: PORT,
-                events: SERVER_EVENT.into(),
-            });
+            cx.command(Command::serve(SERVER, PORT, SERVER_EVENT.into()));
         }
     }
 

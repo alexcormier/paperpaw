@@ -192,12 +192,24 @@ impl InputFilters {
 
 /// A refresh about to be made, as the kernel decided it.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Refresh {
     pub mode: RefreshMode,
     /// What is refreshed.
     pub region: Rect,
     /// The screen shown on top.
     pub screen: Option<Id>,
+}
+
+impl Refresh {
+    /// A refresh of `region` in `mode`, `screen` on top.
+    pub fn new(mode: RefreshMode, region: Rect, screen: Option<Id>) -> Self {
+        Self {
+            mode,
+            region,
+            screen,
+        }
+    }
 }
 
 /// Changes how the panel is refreshed: another mode, or `None` to leave it.

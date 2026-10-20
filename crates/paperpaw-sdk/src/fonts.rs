@@ -18,6 +18,7 @@ use crate::plugin::{Priority, RegisterError};
 
 /// A font contribution.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct FontSpec {
     /// `<plugin>.<name>`, e.g. `fonts-default.literata`.
     pub id: Id,

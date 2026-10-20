@@ -205,7 +205,9 @@ impl Harness {
                 }
                 Contribution::SettingGroup(group) => h.settings.add_group(group).unwrap(),
                 Contribution::Translations(text) => h.i18n.add(Catalog::parse(text).unwrap()),
-                Contribution::Subscription { event, handler } => h.handlers.push((event, handler)),
+                Contribution::Subscription { event, handler, .. } => {
+                    h.handlers.push((event, handler))
+                }
                 Contribution::Action(action) if action.id == SYNC_NOW => {
                     h.sync_now = action.handler;
                 }

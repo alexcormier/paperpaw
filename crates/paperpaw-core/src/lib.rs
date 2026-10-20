@@ -644,14 +644,9 @@ impl Kernel {
         }
         if let Some(text) = &said {
             let language = self.shared.translator.language().to_string();
-            let speech = paperpaw_sdk::Speech {
-                text: text.clone(),
-                language,
-                rate: 100,
-                reply: Id::new_static("core.focus-spoken"),
-                params: Params::new(),
-                queue: false,
-            };
+            let speech =
+                paperpaw_sdk::Speech::new(text.clone(), Id::new_static("core.focus-spoken"))
+                    .language(language);
             let (available, screens) = (self.shared.caps.speech, self.stack.len());
             self.io
                 .speech

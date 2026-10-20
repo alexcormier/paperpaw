@@ -19,27 +19,12 @@ use proptest::prelude::*;
 
 use support::{Device, Harness, drawn_outside, frame, middle};
 
-const STYLE: UiStyle = UiStyle {
-    text: 20.0,
-    small: 15.0,
-    title: 23.0,
-    head: 23.0,
-    row: 60,
-    header: 64,
-    margin: 12,
-    gap: 8,
-    line: 2,
-    dark_header: false,
-    corner: 6,
-    strong: false,
-    pill: false,
-    focus: paperpaw_sdk::ui::Focus::Fill,
-    separators: paperpaw_sdk::ui::Separators::Line,
-    plain_header: false,
-    cards: false,
-    grays: 2,
-    finger: 0,
-};
+/// Sizes for tests: no fonts needed.
+fn style() -> UiStyle {
+    let mut style = UiStyle::PLAIN;
+    style.corner = 6;
+    style
+}
 
 /// Every point of `rect` worth trying: its corners and its middle.
 fn probes(rect: Rect) -> [Point; 5] {
@@ -222,7 +207,7 @@ proptest! {
         list.set_focus(focus.min(len.saturating_sub(1)));
         let mut frame = frame(560, 1000);
         let mut focused_rows = Vec::new();
-        list.draw(&mut frame.canvas(), &STYLE, len, |_, index, rect, focused| {
+        list.draw(&mut frame.canvas(), &style(), len, |_, index, rect, focused| {
             assert!(inside(rect, list.area()));
             if focused {
                 focused_rows.push((index, rect));
@@ -249,7 +234,7 @@ fn an_empty_list_has_one_page_and_nothing_to_focus_or_hit() {
     assert_eq!(list.focus(), 0);
     assert_eq!(list.hit(Point::new(10, 10), 0), None);
     let mut rows = 0;
-    list.draw(&mut frame(400, 300).canvas(), &STYLE, 0, |_, _, _, _| {
+    list.draw(&mut frame(400, 300).canvas(), &style(), 0, |_, _, _, _| {
         rows += 1
     });
     assert_eq!(rows, 0);
@@ -275,7 +260,7 @@ fn a_hidden_focus_shows_on_the_first_step_and_stays_hidden_while_paging() {
     let mut hidden = ListView::new(Rect::new(0, 0, 400, 300), 100).focus_on_keys(&env);
     hidden.set_focus(1);
     let mut focused = 0;
-    hidden.draw(&mut frame(400, 300).canvas(), &STYLE, 3, |_, _, _, f| {
+    hidden.draw(&mut frame(400, 300).canvas(), &style(), 3, |_, _, _, f| {
         focused += usize::from(f)
     });
     assert_eq!(focused, 0);
@@ -455,7 +440,7 @@ proptest! {
         }
         let mut frame = frame(400, 300);
         let mut focused = Vec::new();
-        rows.draw(&mut frame.canvas(), &STYLE, true, |_, index, _, f| {
+        rows.draw(&mut frame.canvas(), &style(), true, |_, index, _, f| {
             if f {
                 focused.push(index);
             }
@@ -651,7 +636,7 @@ proptest! {
         }
         let mut frame = frame(400, 300);
         let mut focused = Vec::new();
-        list.draw(&mut frame.canvas(), &STYLE, true, |_, item, _, f| {
+        list.draw(&mut frame.canvas(), &style(), true, |_, item, _, f| {
             if f {
                 focused.push(item);
             }

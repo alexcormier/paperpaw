@@ -229,7 +229,8 @@ fn typed_handlers_hear_only_what_they_can_read() {
         out.push(Command::Restart);
     })
     .unwrap();
-    let Some(Contribution::Subscription { event, handler }) = r.into_contributions().pop() else {
+    let Some(Contribution::Subscription { event, handler, .. }) = r.into_contributions().pop()
+    else {
         panic!("a subscription");
     };
     assert_eq!(event.as_str(), "demo.counted");
@@ -297,11 +298,11 @@ fn refresh_filters_change_the_mode_in_turn_and_full_covers_the_screen() {
     let mut filters = RefreshFilters::new();
     let h = common::Harness::new();
     let env = h.env();
-    let refresh = Refresh {
-        mode: RefreshMode::Partial,
-        region: part,
-        screen: Some(Id::new_static("core.reader")),
-    };
+    let refresh = Refresh::new(
+        RefreshMode::Partial,
+        part,
+        Some(Id::new_static("core.reader")),
+    );
     assert_eq!(filters.apply(&env, refresh.clone(), screen), refresh);
     filters.add(RefreshFilterSpec::new(
         Id::new_static("f.full"),
@@ -322,10 +323,8 @@ fn refresh_filters_change_the_mode_in_turn_and_full_covers_the_screen() {
     ));
     let changed = filters.apply(&env, refresh.clone(), screen);
     assert_eq!((changed.mode, changed.region), (RefreshMode::Fast, screen));
-    let elsewhere = Refresh {
-        screen: None,
-        ..refresh
-    };
+    let mut elsewhere = refresh.clone();
+    elsewhere.screen = None;
     assert_eq!(filters.apply(&env, elsewhere.clone(), screen), elsewhere);
 }
 

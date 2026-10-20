@@ -537,11 +537,11 @@ impl ListScreen {
                     .and_then(|id| POLICIES.iter().position(|p| *p == id.as_str()))
                     .unwrap_or(0);
                 let next = Id::parse(POLICIES[(at + 1) % POLICIES.len()]).ok();
-                cx.command(Command::Bind {
-                    layer: place.layer().to_string(),
-                    input: POLICY.to_string(),
-                    action: next,
-                });
+                cx.command(Command::bind(
+                    place.layer().to_string(),
+                    POLICY.to_string(),
+                    next,
+                ));
                 cx.request_redraw();
                 cx.request_refresh(RefreshMode::Fast);
             }
@@ -574,11 +574,7 @@ impl ListScreen {
             return;
         };
         for (layer, input) in changes {
-            cx.command(Command::Bind {
-                layer,
-                input,
-                action: None,
-            });
+            cx.command(Command::bind(layer, input, None));
         }
         cx.command(Command::Notify(env.i18n.tr("keys.reset.done").to_string()));
         cx.request_redraw();
@@ -750,11 +746,11 @@ impl Screen for ListScreen {
             cx.command(Command::Notify(env.i18n.tr(message).to_string()));
             return;
         }
-        cx.command(Command::Bind {
-            layer: place.layer().to_string(),
-            input: input.to_string(),
+        cx.command(Command::bind(
+            place.layer().to_string(),
+            input.to_string(),
             action,
-        });
+        ));
         cx.request_redraw();
         cx.request_refresh(RefreshMode::Fast);
     }

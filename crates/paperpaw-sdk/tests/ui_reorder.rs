@@ -15,27 +15,10 @@ use proptest::prelude::*;
 
 use support::{drawn_outside, frame, middle, pointer};
 
-const STYLE: UiStyle = UiStyle {
-    text: 20.0,
-    small: 15.0,
-    title: 23.0,
-    head: 23.0,
-    row: 60,
-    header: 64,
-    margin: 12,
-    gap: 8,
-    line: 2,
-    dark_header: false,
-    corner: 0,
-    strong: false,
-    pill: false,
-    focus: paperpaw_sdk::ui::Focus::Fill,
-    separators: paperpaw_sdk::ui::Separators::Line,
-    plain_header: false,
-    cards: false,
-    grays: 2,
-    finger: 0,
-};
+/// Sizes for tests: no fonts needed.
+fn style() -> UiStyle {
+    UiStyle::PLAIN
+}
 
 /// Rows 50 high, 8 a page.
 fn list() -> ListView {
@@ -230,7 +213,7 @@ fn the_grip_is_a_square_at_the_rows_end_and_the_content_the_rest() {
 /// the first and last rows, half of it past the list.
 #[test]
 fn the_bar_where_a_row_lands_is_drawn_in_the_list() {
-    let half = (STYLE.line * 2) as u16;
+    let half = (style().line * 2) as u16;
     for (from, to) in [(0, 7), (7, 0), (3, 4), (2, 2)] {
         let list = list();
         let mut reorder = Reorder::default();
@@ -242,7 +225,7 @@ fn the_bar_where_a_row_lands_is_drawn_in_the_list() {
         reorder.on_pointer(&pointer(PointerPhase::Move, x, target.y), &list, 8);
         assert_eq!(reorder.dragging(), Some((from, to)));
         let mut frame = frame(400, 600);
-        reorder.draw(&mut frame.canvas(), &STYLE, &list);
+        reorder.draw(&mut frame.canvas(), &style(), &list);
         let a = list.area();
         let bound = Rect::new(a.x, a.y - half, a.width, a.height + 2 * half);
         assert_eq!(

@@ -127,6 +127,7 @@ impl Item {
 
 /// A rectangle of cells.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Cells {
     pub col: u8,
     pub row: u8,

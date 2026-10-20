@@ -244,6 +244,7 @@ pub mod http_params {
 
 /// Text to speak aloud (see [`Command::Speak`]).
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Speech {
     pub text: String,
     /// The language of the text, e.g. `de` or `en-GB`, for the voice;
@@ -272,6 +273,30 @@ impl Speech {
             params: Params::new(),
             queue: false,
         }
+    }
+
+    /// In the language with this tag (empty: the system's).
+    pub fn language(mut self, language: impl Into<String>) -> Self {
+        self.language = language.into();
+        self
+    }
+
+    /// At `rate` percent of the normal speed.
+    pub fn rate(mut self, rate: u16) -> Self {
+        self.rate = rate;
+        self
+    }
+
+    /// With `params` passed back in the reply.
+    pub fn params(mut self, params: Params) -> Self {
+        self.params = params;
+        self
+    }
+
+    /// After what is being spoken, instead of in its place.
+    pub fn queue(mut self, queue: bool) -> Self {
+        self.queue = queue;
+        self
     }
 }
 
@@ -370,6 +395,7 @@ pub enum Command {
     /// effect at once; `None` returns it to what plugins and presets bind.
     /// Bind [`actions::NOTHING`](crate::builtin::actions::NOTHING) to make
     /// an input do nothing.
+    #[non_exhaustive]
     Bind {
         layer: String,
         input: String,
@@ -443,6 +469,7 @@ pub enum Command {
     /// with [`Command::Respond`]), that it failed or stopped; see
     /// [`server_params`]. Serve only while the user wants it: a server
     /// also stops when the screen showing as it started is closed.
+    #[non_exhaustive]
     Serve { server: Id, port: u16, events: Id },
     /// Stops serving.
     StopServing(Id),
@@ -453,6 +480,7 @@ pub enum Command {
     /// happened ([`socket_params`]): connected, received, saved, closed,
     /// failed. Nothing is read unasked ([`Command::SocketRead`]). A socket
     /// also closes when the screen showing as it was opened is closed.
+    #[non_exhaustive]
     Connect {
         socket: Id,
         host: String,
@@ -460,8 +488,10 @@ pub enum Command {
         events: Id,
     },
     /// Sends bytes on a socket.
+    #[non_exhaustive]
     SocketSend { socket: Id, data: Vec<u8> },
     /// Asks a socket for what comes next (one read at a time).
+    #[non_exhaustive]
     SocketRead { socket: Id, read: SocketRead },
     /// Closes a socket.
     Disconnect(Id),
@@ -469,6 +499,7 @@ pub enum Command {
     /// `ports`, e.g. to find a service. Each answer within `wait_ms` comes
     /// as the event `events` ([`socket_params::ANSWER`], with `id`), then
     /// [`socket_params::DONE`].
+    #[non_exhaustive]
     Broadcast {
         id: Id,
         ports: Vec<u16>,
@@ -492,6 +523,60 @@ pub enum Command {
     Speak(Speech),
     /// Stops speaking; no reply comes for the texts cut off.
     StopSpeaking,
+}
+
+impl Command {
+    /// [`Command::Bind`]: `input` in key map `layer` to `action` (`None`:
+    /// back to what plugins and presets bind).
+    pub fn bind(layer: impl Into<String>, input: impl Into<String>, action: Option<Id>) -> Self {
+        Command::Bind {
+            layer: layer.into(),
+            input: input.into(),
+            action,
+        }
+    }
+
+    /// [`Command::Serve`]: server `server` on `port`, heard as `events`.
+    pub fn serve(server: Id, port: u16, events: Id) -> Self {
+        Command::Serve {
+            server,
+            port,
+            events,
+        }
+    }
+
+    /// [`Command::Connect`]: socket `socket` to `host` and `port`, heard as
+    /// `events`.
+    pub fn connect(socket: Id, host: impl Into<String>, port: u16, events: Id) -> Self {
+        Command::Connect {
+            socket,
+            host: host.into(),
+            port,
+            events,
+        }
+    }
+
+    /// [`Command::SocketSend`]: `data` on `socket`.
+    pub fn socket_send(socket: Id, data: Vec<u8>) -> Self {
+        Command::SocketSend { socket, data }
+    }
+
+    /// [`Command::SocketRead`]: what comes next on `socket`, as `read` says.
+    pub fn socket_read(socket: Id, read: SocketRead) -> Self {
+        Command::SocketRead { socket, read }
+    }
+
+    /// [`Command::Broadcast`]: `data` to `ports` on the local network,
+    /// answers within `wait_ms` heard as `events` with `id`.
+    pub fn broadcast(id: Id, ports: Vec<u16>, data: Vec<u8>, wait_ms: u32, events: Id) -> Self {
+        Command::Broadcast {
+            id,
+            ports,
+            data,
+            wait_ms,
+            events,
+        }
+    }
 }
 
 /// The most text the clipboard holds, in bytes.

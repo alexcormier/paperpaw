@@ -167,6 +167,7 @@ impl Sockets {
                 host,
                 port,
                 events,
+                ..
             } => {
                 if let Some(at) = self.at(&socket) {
                     let old = self.sockets.remove(at);
@@ -192,7 +193,7 @@ impl Sockets {
                     port,
                 });
             }
-            Command::SocketSend { socket, data } => {
+            Command::SocketSend { socket, data, .. } => {
                 if let Some(at) = self.at(&socket) {
                     let number = self.sockets[at].number;
                     self.calls.push(SocketCall::Send {
@@ -201,7 +202,7 @@ impl Sockets {
                     });
                 }
             }
-            Command::SocketRead { socket, read } => {
+            Command::SocketRead { socket, read, .. } => {
                 let Some(at) = self.at(&socket) else {
                     return;
                 };
@@ -248,6 +249,7 @@ impl Sockets {
                 data,
                 wait_ms,
                 events,
+                ..
             } => {
                 if !network {
                     let reason = String::from("no network");
@@ -446,12 +448,7 @@ mod tests {
     fn connected(storage: &MemoryStorage) -> (Sockets, Vec<Command>) {
         let mut sockets = Sockets::default();
         let mut out = Vec::new();
-        let connect = Command::Connect {
-            socket: SOCKET,
-            host: String::from("calibre.local"),
-            port: 9090,
-            events: EVENTS,
-        };
+        let connect = Command::connect(SOCKET, String::from("calibre.local"), 9090, EVENTS);
         sockets.command(connect, true, 2, storage, &mut out);
         assert_eq!(
             sockets.calls.pop(),
@@ -469,10 +466,7 @@ mod tests {
     fn text_is_read_when_asked() {
         let storage = MemoryStorage::new();
         let (mut sockets, mut out) = connected(&storage);
-        let read = Command::SocketRead {
-            socket: SOCKET,
-            read: SocketRead::Text { max: 100 },
-        };
+        let read = Command::socket_read(SOCKET, SocketRead::Text { max: 100 });
         sockets.command(read.clone(), true, 2, &storage, &mut out);
         // A second read before the first came fails.
         sockets.command(read, true, 2, &storage, &mut out);
@@ -506,10 +500,7 @@ mod tests {
         let reads: [&[u8]; 5] = [b"Gr\xc3", b"\xbc\xc3", b"\x9fe \xf0", b"\x9f\x90", b"\xbe"];
         for data in reads {
             out.clear();
-            let read = Command::SocketRead {
-                socket: SOCKET,
-                read: SocketRead::Text { max: 4 },
-            };
+            let read = Command::socket_read(SOCKET, SocketRead::Text { max: 4 });
             if sockets.calls.is_empty() {
                 sockets.command(read, true, 2, &storage, &mut out);
             }
@@ -528,10 +519,7 @@ mod tests {
         }
         assert_eq!(texts, ["Gr", "ü", "ße ", "🐾"]);
         // An invalid byte is replaced, as before.
-        let read = Command::SocketRead {
-            socket: SOCKET,
-            read: SocketRead::Text { max: 4 },
-        };
+        let read = Command::socket_read(SOCKET, SocketRead::Text { max: 4 });
         sockets.command(read, true, 2, &storage, &mut out);
         let data = SocketEvent::Data {
             socket: 1,
@@ -549,13 +537,13 @@ mod tests {
         let storage = MemoryStorage::new();
         let (mut sockets, mut out) = connected(&storage);
         let len = u64::from(SOCKET_PART) + 10;
-        let read = Command::SocketRead {
-            socket: SOCKET,
-            read: SocketRead::File {
+        let read = Command::socket_read(
+            SOCKET,
+            SocketRead::File {
                 path: String::from("books/new.epub"),
                 len,
             },
-        };
+        );
         sockets.command(read, true, 2, &storage, &mut out);
         assert_eq!(
             sockets.calls.pop(),
@@ -595,13 +583,13 @@ mod tests {
     fn closing_too_early_closes_the_socket() {
         let storage = MemoryStorage::new();
         let (mut sockets, mut out) = connected(&storage);
-        let read = Command::SocketRead {
-            socket: SOCKET,
-            read: SocketRead::File {
+        let read = Command::socket_read(
+            SOCKET,
+            SocketRead::File {
                 path: String::from("b.epub"),
                 len: 5,
             },
-        };
+        );
         sockets.command(read, true, 2, &storage, &mut out);
         sockets.calls.clear();
         sockets.event(
@@ -633,20 +621,9 @@ mod tests {
         let storage = MemoryStorage::new();
         let mut sockets = Sockets::default();
         let mut out = Vec::new();
-        let connect = Command::Connect {
-            socket: SOCKET,
-            host: String::from("h"),
-            port: 1,
-            events: EVENTS,
-        };
+        let connect = Command::connect(SOCKET, String::from("h"), 1, EVENTS);
         sockets.command(connect, false, 1, &storage, &mut out);
-        let broadcast = Command::Broadcast {
-            id: SOCKET,
-            ports: alloc::vec![54982],
-            data: b"hi".to_vec(),
-            wait_ms: 100,
-            events: EVENTS,
-        };
+        let broadcast = Command::broadcast(SOCKET, alloc::vec![54982], b"hi".to_vec(), 100, EVENTS);
         sockets.command(broadcast, false, 1, &storage, &mut out);
         assert_eq!(kinds(&out), [p::FAILED, p::DONE]);
         assert!(sockets.calls.is_empty());
@@ -657,13 +634,13 @@ mod tests {
         let storage = MemoryStorage::new();
         let mut sockets = Sockets::default();
         let mut out = Vec::new();
-        let broadcast = Command::Broadcast {
-            id: SOCKET,
-            ports: alloc::vec![54982, 48123],
-            data: b"hi".to_vec(),
-            wait_ms: 500,
-            events: EVENTS,
-        };
+        let broadcast = Command::broadcast(
+            SOCKET,
+            alloc::vec![54982, 48123],
+            b"hi".to_vec(),
+            500,
+            EVENTS,
+        );
         sockets.command(broadcast, true, 1, &storage, &mut out);
         assert!(matches!(
             sockets.calls[0],

@@ -486,67 +486,67 @@ pub paperpaw_sdk::contribution::Contribution::Decorator(alloc::boxed::Box<paperp
 pub paperpaw_sdk::contribution::Contribution::FixedPresets(&'static [paperpaw_sdk::presets::Preset])
 pub paperpaw_sdk::contribution::Contribution::FixedSettings(&'static [paperpaw_sdk::SettingSpec])
 pub paperpaw_sdk::contribution::Contribution::Font(alloc::boxed::Box<paperpaw_sdk::FontSpec>)
-pub paperpaw_sdk::contribution::Contribution::FontBinding
+#[non_exhaustive] pub paperpaw_sdk::contribution::Contribution::FontBinding
 pub paperpaw_sdk::contribution::Contribution::FontBinding::font: paperpaw_sdk::Id
 pub paperpaw_sdk::contribution::Contribution::FontBinding::priority: paperpaw_sdk::Priority
 pub paperpaw_sdk::contribution::Contribution::FontBinding::role: paperpaw_sdk::Id
-pub paperpaw_sdk::contribution::Contribution::FontExtension
+#[non_exhaustive] pub paperpaw_sdk::contribution::Contribution::FontExtension
 pub paperpaw_sdk::contribution::Contribution::FontExtension::extends: paperpaw_sdk::Id
 pub paperpaw_sdk::contribution::Contribution::FontExtension::id: paperpaw_sdk::Id
 pub paperpaw_sdk::contribution::Contribution::FontExtension::path: alloc::string::String
 pub paperpaw_sdk::contribution::Contribution::FontFace(alloc::boxed::Box<paperpaw_sdk::FontFace>)
-pub paperpaw_sdk::contribution::Contribution::FontFile
+#[non_exhaustive] pub paperpaw_sdk::contribution::Contribution::FontFile
 pub paperpaw_sdk::contribution::Contribution::FontFile::id: paperpaw_sdk::Id
 pub paperpaw_sdk::contribution::Contribution::FontFile::path: alloc::string::String
 pub paperpaw_sdk::contribution::Contribution::Format(alloc::boxed::Box<paperpaw_sdk::FormatSpec>)
 pub paperpaw_sdk::contribution::Contribution::Hyphenation(paperpaw_sdk::HyphenationSpec)
-pub paperpaw_sdk::contribution::Contribution::Icon
+#[non_exhaustive] pub paperpaw_sdk::contribution::Contribution::Icon
 pub paperpaw_sdk::contribution::Contribution::Icon::icon: alloc::borrow::Cow<'static, str>
 pub paperpaw_sdk::contribution::Contribution::Icon::item: paperpaw_sdk::Id
 pub paperpaw_sdk::contribution::Contribution::InputFilter(paperpaw_sdk::filters::InputFilterSpec)
 pub paperpaw_sdk::contribution::Contribution::Keymap(alloc::borrow::Cow<'static, str>)
-pub paperpaw_sdk::contribution::Contribution::KeymapPreset
+#[non_exhaustive] pub paperpaw_sdk::contribution::Contribution::KeymapPreset
 pub paperpaw_sdk::contribution::Contribution::KeymapPreset::id: paperpaw_sdk::Id
 pub paperpaw_sdk::contribution::Contribution::KeymapPreset::source: alloc::borrow::Cow<'static, str>
-pub paperpaw_sdk::contribution::Contribution::KeymapWhen
+#[non_exhaustive] pub paperpaw_sdk::contribution::Contribution::KeymapWhen
 pub paperpaw_sdk::contribution::Contribution::KeymapWhen::setting: paperpaw_sdk::Id
 pub paperpaw_sdk::contribution::Contribution::KeymapWhen::source: alloc::borrow::Cow<'static, str>
 pub paperpaw_sdk::contribution::Contribution::MenuEntry(paperpaw_sdk::MenuEntry)
-pub paperpaw_sdk::contribution::Contribution::MenuNeed
+#[non_exhaustive] pub paperpaw_sdk::contribution::Contribution::MenuNeed
 pub paperpaw_sdk::contribution::Contribution::MenuNeed::item: paperpaw_sdk::Id
 pub paperpaw_sdk::contribution::Contribution::MenuNeed::need: paperpaw_sdk::MenuNeed
 pub paperpaw_sdk::contribution::Contribution::MenuSection(paperpaw_sdk::MenuSection)
 pub paperpaw_sdk::contribution::Contribution::Preset(alloc::boxed::Box<paperpaw_sdk::presets::Preset>)
-pub paperpaw_sdk::contribution::Contribution::Published
+#[non_exhaustive] pub paperpaw_sdk::contribution::Contribution::Published
 pub paperpaw_sdk::contribution::Contribution::Published::id: paperpaw_sdk::Id
 pub paperpaw_sdk::contribution::Contribution::Published::service: paperpaw_sdk::services::Service
 pub paperpaw_sdk::contribution::Contribution::RefreshFilter(paperpaw_sdk::filters::RefreshFilterSpec)
 pub paperpaw_sdk::contribution::Contribution::Screen(paperpaw_sdk::ScreenSpec)
-pub paperpaw_sdk::contribution::Contribution::ScreenHints
+#[non_exhaustive] pub paperpaw_sdk::contribution::Contribution::ScreenHints
 pub paperpaw_sdk::contribution::Contribution::ScreenHints::hints: paperpaw_sdk::Hints
 pub paperpaw_sdk::contribution::Contribution::ScreenHints::screen: paperpaw_sdk::Id
-pub paperpaw_sdk::contribution::Contribution::Service
+#[non_exhaustive] pub paperpaw_sdk::contribution::Contribution::Service
 pub paperpaw_sdk::contribution::Contribution::Service::id: paperpaw_sdk::Id
 pub paperpaw_sdk::contribution::Contribution::Service::service: alloc::boxed::Box<dyn core::any::Any>
 pub paperpaw_sdk::contribution::Contribution::Setting(alloc::boxed::Box<paperpaw_sdk::SettingSpec>)
-pub paperpaw_sdk::contribution::Contribution::SettingDefault
+#[non_exhaustive] pub paperpaw_sdk::contribution::Contribution::SettingDefault
 pub paperpaw_sdk::contribution::Contribution::SettingDefault::setting: paperpaw_sdk::Id
 pub paperpaw_sdk::contribution::Contribution::SettingDefault::value: alloc::borrow::Cow<'static, str>
 pub paperpaw_sdk::contribution::Contribution::SettingGroup(paperpaw_sdk::SettingGroupSpec)
 pub paperpaw_sdk::contribution::Contribution::SetupStep(alloc::boxed::Box<paperpaw_sdk::setup::SetupStepSpec>)
 pub paperpaw_sdk::contribution::Contribution::Slot(paperpaw_sdk::SlotSpec)
-pub paperpaw_sdk::contribution::Contribution::SlotBinding
+#[non_exhaustive] pub paperpaw_sdk::contribution::Contribution::SlotBinding
 pub paperpaw_sdk::contribution::Contribution::SlotBinding::priority: paperpaw_sdk::Priority
 pub paperpaw_sdk::contribution::Contribution::SlotBinding::screen: paperpaw_sdk::Id
 pub paperpaw_sdk::contribution::Contribution::SlotBinding::slot: paperpaw_sdk::Id
 pub paperpaw_sdk::contribution::Contribution::StatusItem(paperpaw_sdk::status::StatusItemSpec)
 pub paperpaw_sdk::contribution::Contribution::StatusLine(paperpaw_sdk::status::StatusLineSpec)
 pub paperpaw_sdk::contribution::Contribution::Stylesheet(alloc::borrow::Cow<'static, str>)
-pub paperpaw_sdk::contribution::Contribution::Subscription
+#[non_exhaustive] pub paperpaw_sdk::contribution::Contribution::Subscription
 pub paperpaw_sdk::contribution::Contribution::Subscription::event: paperpaw_sdk::Id
 pub paperpaw_sdk::contribution::Contribution::Subscription::handler: paperpaw_sdk::event::EventHandler
 pub paperpaw_sdk::contribution::Contribution::TextFilter(paperpaw_sdk::filters::TextFilterSpec)
-pub paperpaw_sdk::contribution::Contribution::ToPoint
+#[non_exhaustive] pub paperpaw_sdk::contribution::Contribution::ToPoint
 pub paperpaw_sdk::contribution::Contribution::ToPoint::point: paperpaw_sdk::Id
 pub paperpaw_sdk::contribution::Contribution::ToPoint::text: alloc::borrow::Cow<'static, str>
 pub paperpaw_sdk::contribution::Contribution::Translations(alloc::borrow::Cow<'static, str>)
@@ -935,10 +935,12 @@ pub fn paperpaw_sdk::filters::InputFilters::add(&mut self, paperpaw_sdk::filters
 pub fn paperpaw_sdk::filters::InputFilters::apply(&self, &paperpaw_sdk::Env<'_>, &paperpaw_platform::input::InputEvent) -> paperpaw_sdk::filters::InputVerdict
 pub fn paperpaw_sdk::filters::InputFilters::new() -> Self
 pub fn paperpaw_sdk::filters::InputFilters::shrink_to_fit(&mut self)
-pub struct paperpaw_sdk::filters::Refresh
+#[non_exhaustive] pub struct paperpaw_sdk::filters::Refresh
 pub paperpaw_sdk::filters::Refresh::mode: paperpaw_platform::display::RefreshMode
 pub paperpaw_sdk::filters::Refresh::region: paperpaw_platform::geometry::Rect
 pub paperpaw_sdk::filters::Refresh::screen: core::option::Option<paperpaw_sdk::Id>
+impl paperpaw_sdk::filters::Refresh
+pub fn paperpaw_sdk::filters::Refresh::new(paperpaw_platform::display::RefreshMode, paperpaw_platform::geometry::Rect, core::option::Option<paperpaw_sdk::Id>) -> Self
 #[non_exhaustive] pub struct paperpaw_sdk::filters::RefreshFilterSpec
 pub paperpaw_sdk::filters::RefreshFilterSpec::filter: paperpaw_sdk::filters::RefreshFilterFn
 pub paperpaw_sdk::filters::RefreshFilterSpec::id: paperpaw_sdk::Id
@@ -2058,7 +2060,7 @@ pub fn paperpaw_sdk::ui::Thumbnail::keep(&self, &dyn paperpaw_platform::storage:
 pub fn paperpaw_sdk::ui::Thumbnail::kept(&dyn paperpaw_platform::storage::Storage, &str, u64, (u16, u16)) -> core::option::Option<Self>
 pub fn paperpaw_sdk::ui::Thumbnail::new(&dyn paperpaw_platform::storage::Storage, &paperpaw_document::ImageRef, u16, u16, paperpaw_platform::pixel::PixelFormat) -> core::option::Option<Self>
 pub fn paperpaw_sdk::ui::Thumbnail::width(&self) -> u16
-pub struct paperpaw_sdk::ui::UiStyle
+#[non_exhaustive] pub struct paperpaw_sdk::ui::UiStyle
 pub paperpaw_sdk::ui::UiStyle::cards: bool
 pub paperpaw_sdk::ui::UiStyle::corner: u32
 pub paperpaw_sdk::ui::UiStyle::dark_header: bool
@@ -2079,6 +2081,7 @@ pub paperpaw_sdk::ui::UiStyle::strong: bool
 pub paperpaw_sdk::ui::UiStyle::text: f32
 pub paperpaw_sdk::ui::UiStyle::title: f32
 impl paperpaw_sdk::ui::UiStyle
+pub const paperpaw_sdk::ui::UiStyle::PLAIN: paperpaw_sdk::ui::UiStyle
 pub fn paperpaw_sdk::ui::UiStyle::dark_focus(&self) -> bool
 pub fn paperpaw_sdk::ui::UiStyle::faint(&self, u8) -> paperpaw_platform::pixel::Color
 pub fn paperpaw_sdk::ui::UiStyle::focus_faint(&self, bool, u8) -> paperpaw_platform::pixel::Color
@@ -2206,7 +2209,7 @@ pub paperpaw_sdk::widgets::grid::What::Tool(paperpaw_sdk::Id)
 pub paperpaw_sdk::widgets::grid::What::Widget(alloc::string::String)
 impl paperpaw_sdk::widgets::grid::What
 pub fn paperpaw_sdk::widgets::grid::What::title(&self, &paperpaw_sdk::Env<'_>) -> alloc::string::String
-pub struct paperpaw_sdk::widgets::grid::Cells
+#[non_exhaustive] pub struct paperpaw_sdk::widgets::grid::Cells
 pub paperpaw_sdk::widgets::grid::Cells::col: u8
 pub paperpaw_sdk::widgets::grid::Cells::h: u8
 pub paperpaw_sdk::widgets::grid::Cells::row: u8
@@ -2712,11 +2715,11 @@ pub fn paperpaw_sdk::Choices::from_iter<I: core::iter::traits::collect::IntoIter
 #[non_exhaustive] pub enum paperpaw_sdk::Command
 pub paperpaw_sdk::Command::Announce(alloc::string::String)
 pub paperpaw_sdk::Command::Back
-pub paperpaw_sdk::Command::Bind
+#[non_exhaustive] pub paperpaw_sdk::Command::Bind
 pub paperpaw_sdk::Command::Bind::action: core::option::Option<paperpaw_sdk::Id>
 pub paperpaw_sdk::Command::Bind::input: alloc::string::String
 pub paperpaw_sdk::Command::Bind::layer: alloc::string::String
-pub paperpaw_sdk::Command::Broadcast
+#[non_exhaustive] pub paperpaw_sdk::Command::Broadcast
 pub paperpaw_sdk::Command::Broadcast::data: alloc::vec::Vec<u8>
 pub paperpaw_sdk::Command::Broadcast::events: paperpaw_sdk::Id
 pub paperpaw_sdk::Command::Broadcast::id: paperpaw_sdk::Id
@@ -2724,7 +2727,7 @@ pub paperpaw_sdk::Command::Broadcast::ports: alloc::vec::Vec<u16>
 pub paperpaw_sdk::Command::Broadcast::wait_ms: u32
 pub paperpaw_sdk::Command::CancelHttp(paperpaw_sdk::Id)
 pub paperpaw_sdk::Command::CancelWork(paperpaw_sdk::Id, core::option::Option<alloc::string::String>)
-pub paperpaw_sdk::Command::Connect
+#[non_exhaustive] pub paperpaw_sdk::Command::Connect
 pub paperpaw_sdk::Command::Connect::events: paperpaw_sdk::Id
 pub paperpaw_sdk::Command::Connect::host: alloc::string::String
 pub paperpaw_sdk::Command::Connect::port: u16
@@ -2749,7 +2752,7 @@ pub paperpaw_sdk::Command::Respond(paperpaw_sdk::ServerResponse)
 pub paperpaw_sdk::Command::Restart
 pub paperpaw_sdk::Command::RunAction(paperpaw_sdk::Id)
 pub paperpaw_sdk::Command::Screenshot(alloc::string::String)
-pub paperpaw_sdk::Command::Serve
+#[non_exhaustive] pub paperpaw_sdk::Command::Serve
 pub paperpaw_sdk::Command::Serve::events: paperpaw_sdk::Id
 pub paperpaw_sdk::Command::Serve::port: u16
 pub paperpaw_sdk::Command::Serve::server: paperpaw_sdk::Id
@@ -2761,10 +2764,10 @@ pub paperpaw_sdk::Command::SetSecret(paperpaw_sdk::secrets::SecretChange)
 pub paperpaw_sdk::Command::SetSetting(paperpaw_sdk::Id, paperpaw_sdk::SettingValue)
 pub paperpaw_sdk::Command::ShowHints
 pub paperpaw_sdk::Command::Sleep
-pub paperpaw_sdk::Command::SocketRead
+#[non_exhaustive] pub paperpaw_sdk::Command::SocketRead
 pub paperpaw_sdk::Command::SocketRead::read: paperpaw_sdk::SocketRead
 pub paperpaw_sdk::Command::SocketRead::socket: paperpaw_sdk::Id
-pub paperpaw_sdk::Command::SocketSend
+#[non_exhaustive] pub paperpaw_sdk::Command::SocketSend
 pub paperpaw_sdk::Command::SocketSend::data: alloc::vec::Vec<u8>
 pub paperpaw_sdk::Command::SocketSend::socket: paperpaw_sdk::Id
 pub paperpaw_sdk::Command::Speak(paperpaw_sdk::Speech)
@@ -2773,6 +2776,13 @@ pub paperpaw_sdk::Command::StopSpeaking
 pub paperpaw_sdk::Command::Wear(paperpaw_sdk::power::Wear)
 pub paperpaw_sdk::Command::Wifi(paperpaw_sdk::wifi::WifiCommand)
 pub paperpaw_sdk::Command::Work(paperpaw_sdk::work::Work)
+impl paperpaw_sdk::Command
+pub fn paperpaw_sdk::Command::bind(impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>, core::option::Option<paperpaw_sdk::Id>) -> Self
+pub fn paperpaw_sdk::Command::broadcast(paperpaw_sdk::Id, alloc::vec::Vec<u16>, alloc::vec::Vec<u8>, u32, paperpaw_sdk::Id) -> Self
+pub fn paperpaw_sdk::Command::connect(paperpaw_sdk::Id, impl core::convert::Into<alloc::string::String>, u16, paperpaw_sdk::Id) -> Self
+pub fn paperpaw_sdk::Command::serve(paperpaw_sdk::Id, u16, paperpaw_sdk::Id) -> Self
+pub fn paperpaw_sdk::Command::socket_read(paperpaw_sdk::Id, paperpaw_sdk::SocketRead) -> Self
+pub fn paperpaw_sdk::Command::socket_send(paperpaw_sdk::Id, alloc::vec::Vec<u8>) -> Self
 impl paperpaw_sdk::Command
 pub fn paperpaw_sdk::Command::open_slot(paperpaw_sdk::Id) -> paperpaw_sdk::Command
 pub fn paperpaw_sdk::Command::set<T: paperpaw_sdk::setting::SettingType>(&paperpaw_sdk::setting::Setting<T>, <T as paperpaw_sdk::setting::SettingType>::Input) -> paperpaw_sdk::Command
@@ -2783,67 +2793,67 @@ pub paperpaw_sdk::Contribution::Decorator(alloc::boxed::Box<paperpaw_sdk::decora
 pub paperpaw_sdk::Contribution::FixedPresets(&'static [paperpaw_sdk::presets::Preset])
 pub paperpaw_sdk::Contribution::FixedSettings(&'static [paperpaw_sdk::SettingSpec])
 pub paperpaw_sdk::Contribution::Font(alloc::boxed::Box<paperpaw_sdk::FontSpec>)
-pub paperpaw_sdk::Contribution::FontBinding
+#[non_exhaustive] pub paperpaw_sdk::Contribution::FontBinding
 pub paperpaw_sdk::Contribution::FontBinding::font: paperpaw_sdk::Id
 pub paperpaw_sdk::Contribution::FontBinding::priority: paperpaw_sdk::Priority
 pub paperpaw_sdk::Contribution::FontBinding::role: paperpaw_sdk::Id
-pub paperpaw_sdk::Contribution::FontExtension
+#[non_exhaustive] pub paperpaw_sdk::Contribution::FontExtension
 pub paperpaw_sdk::Contribution::FontExtension::extends: paperpaw_sdk::Id
 pub paperpaw_sdk::Contribution::FontExtension::id: paperpaw_sdk::Id
 pub paperpaw_sdk::Contribution::FontExtension::path: alloc::string::String
 pub paperpaw_sdk::Contribution::FontFace(alloc::boxed::Box<paperpaw_sdk::FontFace>)
-pub paperpaw_sdk::Contribution::FontFile
+#[non_exhaustive] pub paperpaw_sdk::Contribution::FontFile
 pub paperpaw_sdk::Contribution::FontFile::id: paperpaw_sdk::Id
 pub paperpaw_sdk::Contribution::FontFile::path: alloc::string::String
 pub paperpaw_sdk::Contribution::Format(alloc::boxed::Box<paperpaw_sdk::FormatSpec>)
 pub paperpaw_sdk::Contribution::Hyphenation(paperpaw_sdk::HyphenationSpec)
-pub paperpaw_sdk::Contribution::Icon
+#[non_exhaustive] pub paperpaw_sdk::Contribution::Icon
 pub paperpaw_sdk::Contribution::Icon::icon: alloc::borrow::Cow<'static, str>
 pub paperpaw_sdk::Contribution::Icon::item: paperpaw_sdk::Id
 pub paperpaw_sdk::Contribution::InputFilter(paperpaw_sdk::filters::InputFilterSpec)
 pub paperpaw_sdk::Contribution::Keymap(alloc::borrow::Cow<'static, str>)
-pub paperpaw_sdk::Contribution::KeymapPreset
+#[non_exhaustive] pub paperpaw_sdk::Contribution::KeymapPreset
 pub paperpaw_sdk::Contribution::KeymapPreset::id: paperpaw_sdk::Id
 pub paperpaw_sdk::Contribution::KeymapPreset::source: alloc::borrow::Cow<'static, str>
-pub paperpaw_sdk::Contribution::KeymapWhen
+#[non_exhaustive] pub paperpaw_sdk::Contribution::KeymapWhen
 pub paperpaw_sdk::Contribution::KeymapWhen::setting: paperpaw_sdk::Id
 pub paperpaw_sdk::Contribution::KeymapWhen::source: alloc::borrow::Cow<'static, str>
 pub paperpaw_sdk::Contribution::MenuEntry(paperpaw_sdk::MenuEntry)
-pub paperpaw_sdk::Contribution::MenuNeed
+#[non_exhaustive] pub paperpaw_sdk::Contribution::MenuNeed
 pub paperpaw_sdk::Contribution::MenuNeed::item: paperpaw_sdk::Id
 pub paperpaw_sdk::Contribution::MenuNeed::need: paperpaw_sdk::MenuNeed
 pub paperpaw_sdk::Contribution::MenuSection(paperpaw_sdk::MenuSection)
 pub paperpaw_sdk::Contribution::Preset(alloc::boxed::Box<paperpaw_sdk::presets::Preset>)
-pub paperpaw_sdk::Contribution::Published
+#[non_exhaustive] pub paperpaw_sdk::Contribution::Published
 pub paperpaw_sdk::Contribution::Published::id: paperpaw_sdk::Id
 pub paperpaw_sdk::Contribution::Published::service: paperpaw_sdk::services::Service
 pub paperpaw_sdk::Contribution::RefreshFilter(paperpaw_sdk::filters::RefreshFilterSpec)
 pub paperpaw_sdk::Contribution::Screen(paperpaw_sdk::ScreenSpec)
-pub paperpaw_sdk::Contribution::ScreenHints
+#[non_exhaustive] pub paperpaw_sdk::Contribution::ScreenHints
 pub paperpaw_sdk::Contribution::ScreenHints::hints: paperpaw_sdk::Hints
 pub paperpaw_sdk::Contribution::ScreenHints::screen: paperpaw_sdk::Id
-pub paperpaw_sdk::Contribution::Service
+#[non_exhaustive] pub paperpaw_sdk::Contribution::Service
 pub paperpaw_sdk::Contribution::Service::id: paperpaw_sdk::Id
 pub paperpaw_sdk::Contribution::Service::service: alloc::boxed::Box<dyn core::any::Any>
 pub paperpaw_sdk::Contribution::Setting(alloc::boxed::Box<paperpaw_sdk::SettingSpec>)
-pub paperpaw_sdk::Contribution::SettingDefault
+#[non_exhaustive] pub paperpaw_sdk::Contribution::SettingDefault
 pub paperpaw_sdk::Contribution::SettingDefault::setting: paperpaw_sdk::Id
 pub paperpaw_sdk::Contribution::SettingDefault::value: alloc::borrow::Cow<'static, str>
 pub paperpaw_sdk::Contribution::SettingGroup(paperpaw_sdk::SettingGroupSpec)
 pub paperpaw_sdk::Contribution::SetupStep(alloc::boxed::Box<paperpaw_sdk::setup::SetupStepSpec>)
 pub paperpaw_sdk::Contribution::Slot(paperpaw_sdk::SlotSpec)
-pub paperpaw_sdk::Contribution::SlotBinding
+#[non_exhaustive] pub paperpaw_sdk::Contribution::SlotBinding
 pub paperpaw_sdk::Contribution::SlotBinding::priority: paperpaw_sdk::Priority
 pub paperpaw_sdk::Contribution::SlotBinding::screen: paperpaw_sdk::Id
 pub paperpaw_sdk::Contribution::SlotBinding::slot: paperpaw_sdk::Id
 pub paperpaw_sdk::Contribution::StatusItem(paperpaw_sdk::status::StatusItemSpec)
 pub paperpaw_sdk::Contribution::StatusLine(paperpaw_sdk::status::StatusLineSpec)
 pub paperpaw_sdk::Contribution::Stylesheet(alloc::borrow::Cow<'static, str>)
-pub paperpaw_sdk::Contribution::Subscription
+#[non_exhaustive] pub paperpaw_sdk::Contribution::Subscription
 pub paperpaw_sdk::Contribution::Subscription::event: paperpaw_sdk::Id
 pub paperpaw_sdk::Contribution::Subscription::handler: paperpaw_sdk::event::EventHandler
 pub paperpaw_sdk::Contribution::TextFilter(paperpaw_sdk::filters::TextFilterSpec)
-pub paperpaw_sdk::Contribution::ToPoint
+#[non_exhaustive] pub paperpaw_sdk::Contribution::ToPoint
 pub paperpaw_sdk::Contribution::ToPoint::point: paperpaw_sdk::Id
 pub paperpaw_sdk::Contribution::ToPoint::text: alloc::borrow::Cow<'static, str>
 pub paperpaw_sdk::Contribution::Translations(alloc::borrow::Cow<'static, str>)
@@ -3162,7 +3172,7 @@ pub fn paperpaw_sdk::FontSet::len(&self) -> usize
 pub fn paperpaw_sdk::FontSet::new(usize) -> Self
 impl core::fmt::Debug for paperpaw_sdk::FontSet
 pub fn paperpaw_sdk::FontSet::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub struct paperpaw_sdk::FontSpec
+#[non_exhaustive] pub struct paperpaw_sdk::FontSpec
 pub paperpaw_sdk::FontSpec::bold: bool
 pub paperpaw_sdk::FontSpec::family: core::option::Option<alloc::borrow::Cow<'static, str>>
 pub paperpaw_sdk::FontSpec::font: paperpaw_text::font::Font
@@ -3418,7 +3428,7 @@ pub fn paperpaw_sdk::OpenOptions::image_fit(self, paperpaw_image::Fit) -> Self
 pub fn paperpaw_sdk::OpenOptions::publisher_styles(self, bool) -> Self
 impl core::default::Default for paperpaw_sdk::OpenOptions
 pub fn paperpaw_sdk::OpenOptions::default() -> Self
-pub struct paperpaw_sdk::Output
+#[non_exhaustive] pub struct paperpaw_sdk::Output
 pub paperpaw_sdk::Output::commands: alloc::vec::Vec<paperpaw_sdk::Command>
 pub paperpaw_sdk::Output::redraw: bool
 pub paperpaw_sdk::Output::redraw_area: core::option::Option<paperpaw_platform::geometry::Rect>
@@ -3672,7 +3682,7 @@ pub paperpaw_sdk::SlotSpec::id: paperpaw_sdk::Id
 pub paperpaw_sdk::SlotSpec::title: alloc::borrow::Cow<'static, str>
 impl paperpaw_sdk::SlotSpec
 pub fn paperpaw_sdk::SlotSpec::new(paperpaw_sdk::Id, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
-pub struct paperpaw_sdk::Speech
+#[non_exhaustive] pub struct paperpaw_sdk::Speech
 pub paperpaw_sdk::Speech::language: alloc::string::String
 pub paperpaw_sdk::Speech::params: paperpaw_sdk::Params
 pub paperpaw_sdk::Speech::queue: bool
@@ -3680,7 +3690,11 @@ pub paperpaw_sdk::Speech::rate: u16
 pub paperpaw_sdk::Speech::reply: paperpaw_sdk::Id
 pub paperpaw_sdk::Speech::text: alloc::string::String
 impl paperpaw_sdk::Speech
+pub fn paperpaw_sdk::Speech::language(self, impl core::convert::Into<alloc::string::String>) -> Self
 pub fn paperpaw_sdk::Speech::new(impl core::convert::Into<alloc::string::String>, paperpaw_sdk::Id) -> Self
+pub fn paperpaw_sdk::Speech::params(self, paperpaw_sdk::Params) -> Self
+pub fn paperpaw_sdk::Speech::queue(self, bool) -> Self
+pub fn paperpaw_sdk::Speech::rate(self, u16) -> Self
 #[non_exhaustive] pub struct paperpaw_sdk::StatusFrame<'a>
 pub paperpaw_sdk::StatusFrame::area: paperpaw_platform::geometry::Rect
 pub paperpaw_sdk::StatusFrame::color: paperpaw_platform::pixel::Color
