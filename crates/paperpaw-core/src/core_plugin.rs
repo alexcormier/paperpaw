@@ -670,7 +670,6 @@ static DEVICE: [SettingSpec; 8] = [
         6,
         groups::DISPLAY,
     )
-    .advanced()
     .with_extra(&PAGES)
     .described("core.setting.full-refresh-interval.help"),
     SettingSpec::fixed_switch(
@@ -735,6 +734,9 @@ fn register_device_settings(r: &mut Registrar) -> Result<(), RegisterError> {
     r.set_menu_need(settings::SLEEP_AFTER, paperpaw_sdk::MenuNeed::Sleep)?;
     r.set_menu_need(settings::ROTATION, paperpaw_sdk::MenuNeed::Rotation)?;
     r.set_menu_need(settings::BUTTON_HINTS, paperpaw_sdk::MenuNeed::ButtonRow)?;
+    for edge in [settings::EDGE_ENDS, settings::EDGE_SIDES] {
+        r.set_menu_need(edge, paperpaw_sdk::MenuNeed::Touch)?;
+    }
     Ok(())
 }
 

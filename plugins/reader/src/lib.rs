@@ -347,6 +347,7 @@ static SETTINGS: [SettingSpec; 17] = [
         true,
         groups::READING,
     )
+    .advanced()
     .with_extra(&extras::IN_BEHAVIOUR)
     .described("reader.setting.open-last.help"),
     SettingSpec::fixed_choice(
@@ -356,6 +357,7 @@ static SETTINGS: [SettingSpec; 17] = [
         settings::FOOTNOTES_POPUP,
         groups::READING,
     )
+    .advanced()
     .with_extra(&extras::IN_BEHAVIOUR)
     .described("reader.setting.footnotes.help"),
     SettingSpec::fixed_switch(
@@ -364,6 +366,7 @@ static SETTINGS: [SettingSpec; 17] = [
         true,
         groups::CONTROLS,
     )
+    .advanced()
     .described("reader.setting.corner-bookmark.help"),
     SettingSpec::fixed_number(
         settings::AUTO_TURN_SECONDS.static_str(),
@@ -373,6 +376,7 @@ static SETTINGS: [SettingSpec; 17] = [
         30,
         groups::READING,
     )
+    .advanced()
     .with_extra(&extras::AUTO_TURN)
     .described("reader.setting.auto-turn-seconds.help"),
     SettingSpec::fixed_number(
@@ -623,6 +627,7 @@ impl Plugin for Reader {
             r.set_menu_need(item, paperpaw_sdk::MenuNeed::NoTouch)?;
         }
         r.set_menu_need(settings::SMOOTH_TEXT, paperpaw_sdk::MenuNeed::BlackAndWhite)?;
+        r.set_menu_need(settings::CORNER_BOOKMARK, paperpaw_sdk::MenuNeed::Touch)?;
         for (item, icon) in [
             (actions::TOC, "list"),
             (actions::LINKS, "link"),

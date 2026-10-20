@@ -2347,6 +2347,7 @@ pub paperpaw_sdk::MenuNeed::NoTouch
 pub paperpaw_sdk::MenuNeed::Rotation
 pub paperpaw_sdk::MenuNeed::Sleep
 pub paperpaw_sdk::MenuNeed::Speech
+pub paperpaw_sdk::MenuNeed::Touch
 pub paperpaw_sdk::MenuNeed::Wifi
 pub enum paperpaw_sdk::PluginState
 pub paperpaw_sdk::PluginState::Failed

@@ -164,6 +164,7 @@ static SETTINGS: [SettingSpec; 11] = [
         .with_extra(&PT)
         .described("reader.status.size.help"),
     SettingSpec::fixed_number(EDGE.static_str(), "reader.status.edge", 0, 150, 15, GROUP)
+        .advanced()
         .with_extra(&TENTH_MM_5)
         .described("reader.status.edge.help"),
     list(TOP_LINES, "reader.status.top-lines", "", &TOP_LINES_EXTRA)
