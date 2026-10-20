@@ -6,6 +6,10 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- The Android app installs on devices with 16 KB memory pages: its
+  library is linked and aligned in the APK for them (`zipalign -P 16`,
+  build tools 35 or later). `build-apk.sh` also builds in folders whose
+  path has spaces.
 - Android: holding a page key that is a volume key no longer brings up
   the system's volume panel. A crash writes its message, place and stack
   to the log (`adb logcat -s PaperPaw`). Reading aloud goes on after the
