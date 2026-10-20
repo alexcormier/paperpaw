@@ -182,15 +182,14 @@ impl Formats {
     /// The format handling `path`, by file extension (the longest that
     /// matches, so `book.fb2.zip` goes to `fb2.zip`).
     pub fn for_path(&self, path: &str) -> Option<&FormatSpec> {
-        let name = path.rsplit('/').next().unwrap_or(path).to_ascii_lowercase();
-        let matches = |e: &str| {
-            name.len() > e.len()
-                && name.ends_with(&e.to_ascii_lowercase())
-                && name.as_bytes()[name.len() - e.len() - 1] == b'.'
-        };
+        let name = crate::files::name(path);
         let mut best: Option<(&FormatSpec, usize)> = None;
         for spec in self.specs.iter().rev() {
-            for e in spec.extensions.iter().filter(|e| matches(e)) {
+            for e in spec
+                .extensions
+                .iter()
+                .filter(|e| crate::files::has_extension(name, e))
+            {
                 if best.is_none_or(|(_, len)| e.len() > len) {
                     best = Some((spec, e.len()));
                 }
