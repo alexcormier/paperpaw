@@ -415,7 +415,6 @@ fn the_week_starts_as_set_or_as_the_language_has_it() {
 /// file and shown in local time) overflow when the zone's offset is
 /// added: a panic in debug builds, a wrong date in release builds.
 #[test]
-#[ignore = "bug: TimeZone::offset_at and time::local_seconds overflow for times near i64::MAX"]
 fn local_times_at_the_end_of_time_do_not_overflow() {
     let berlin = TimeZone::parse("CET-1CEST,M3.5.0,M10.5.0/3").unwrap();
     let _ = berlin.offset_at(i64::MAX);

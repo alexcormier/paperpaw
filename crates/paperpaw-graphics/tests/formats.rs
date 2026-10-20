@@ -317,7 +317,6 @@ fn the_changed_region_grows_with_each_drawing_and_is_taken_once() {
 }
 
 #[test]
-#[ignore = "bug: shading on panels of few grays is not reported as changed"]
 fn shading_on_few_grays_is_reported_dirty() {
     // `Framebuffer::shade_clipped` stores the dithered pixels without
     // `mark_dirty`, where the format has 2 to 16 grays: a shade behind

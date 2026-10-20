@@ -18,6 +18,7 @@ paperpaw-app.workspace = true
 paperpaw-core.workspace = true
 paperpaw-i18n.workspace = true
 paperpaw-platform.workspace = true
+paperpaw-plugin-settings.workspace = true
 proptest.workspace = true
 
 [lints]

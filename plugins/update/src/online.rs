@@ -36,7 +36,8 @@
 //! signature is checked then, as always.
 //!
 //! The answer is kept in the plugin's `offer.txt` until it is downloaded
-//! or no longer newer.
+//! or no longer newer. A `version` that is no version (SemVer) is no
+//! answer: it names the file the update is downloaded to.
 
 use alloc::format;
 use alloc::string::{String, ToString};
@@ -47,7 +48,7 @@ use paperpaw_sdk::firmware::{Firmware, Plugins, UPDATE_DIR, compare_versions};
 use paperpaw_sdk::native::Native;
 use paperpaw_sdk::replies::HttpReply;
 use paperpaw_sdk::setting::{Setting, Text};
-use paperpaw_sdk::{Arg, Command, Env, HttpRequest, Params, PluginKind, Storage};
+use paperpaw_sdk::{Arg, Command, Env, HttpRequest, Params, PluginKind, Storage, files};
 
 use crate::fetch::{self, Build};
 use crate::{OFFERED, PAGE, file, read_pair, write_pair};
@@ -64,6 +65,8 @@ pub(crate) const DOWNLOADED: Event<HttpReply> = Event::new("update.downloaded");
 const OFFER: &str = "offer.txt";
 /// The download until it is whole, not seen as an update before.
 const PART: &str = "updates/.download";
+/// The longest version taken from the server.
+const MAX_VERSION: usize = 64;
 /// Set on a question asked in the background (by the action): what it
 /// finds is offered by opening the page.
 const QUIET: &str = "quiet";
@@ -90,7 +93,7 @@ impl Offer {
         let members = paperpaw_json::object(body);
         let version = paperpaw_json::text(&members, "version")?.trim().to_string();
         let url = paperpaw_json::text(&members, "url")?.trim().to_string();
-        if version.is_empty()
+        if !is_version(&version)
             || url.is_empty()
             || !compare_versions(&version, &firmware.version).is_gt()
         {
@@ -159,6 +162,9 @@ impl Offer {
         let version = lines.next()?.trim().to_string();
         let url = lines.next()?.trim().to_string();
         let size = lines.next()?.trim().parse().ok()?;
+        if !is_version(&version) {
+            return None;
+        }
         let (mut plugins, mut missing) = (String::new(), String::new());
         for line in lines {
             if let Some(rest) = line.strip_prefix("plugin ") {
@@ -178,6 +184,32 @@ impl Offer {
             builds: fetch::from_lines(text.lines()),
         })
     }
+}
+
+/// Whether `version` reads as a version: three numbers, then a
+/// pre-release (`-dev`) or build (`+abc`) of letters, digits, `.` and `-`
+/// where it has one. Nothing else may name a file in `updates`.
+pub(crate) fn is_version(version: &str) -> bool {
+    let (numbers, rest) = version.split_once(['-', '+']).unwrap_or((version, ""));
+    let mut count = 0;
+    let numbers_read = numbers.split('.').all(|number| {
+        count += 1;
+        !number.is_empty() && number.bytes().all(|b| b.is_ascii_digit())
+    });
+    numbers_read
+        && count == 3
+        && version.len() <= MAX_VERSION
+        && rest
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"-+.".contains(&b))
+}
+
+/// Removes what a download cut off (by a restart, a failure) left in
+/// `updates`: the file being downloaded, and the part the shell writes
+/// it through.
+pub(crate) fn clear_download(storage: &dyn Storage) {
+    let _ = storage.remove(PART);
+    let _ = storage.remove(&files::part_path(PART));
 }
 
 /// The update the server named last, if it is still newer than
@@ -297,7 +329,7 @@ fn path_for(firmware: &Firmware, version: &str) -> String {
 /// Downloads `offer` into `updates`.
 pub(crate) fn download(env: &Env<'_>, offer: &Offer, out: &mut Vec<Command>) {
     let _ = env.storage.create_dir(UPDATE_DIR);
-    let _ = env.storage.remove(PART);
+    clear_download(env.storage);
     // A path on the server asked.
     let url = if offer.url.starts_with('/') {
         format!("{}{}", server(env), offer.url)
@@ -330,7 +362,7 @@ pub(crate) fn downloaded(env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command
             .size(PART)
             .is_ok_and(|got| got > 0 && (size == 0 || got == size));
     let path = path_for(firmware, version);
-    if whole && !version.is_empty() {
+    if whole && is_version(version) {
         let _ = storage.remove(&path);
         if storage.rename(PART, &path).is_ok() {
             // The code plugins for it next; it is ready once they are here.
@@ -347,7 +379,7 @@ pub(crate) fn downloaded(env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command
             return;
         }
     }
-    let _ = storage.remove(PART);
+    clear_download(storage);
     out.push(Command::Notify(String::from(
         env.i18n.tr("update.download-failed.title"),
     )));
@@ -360,7 +392,7 @@ mod tests {
     use paperpaw_sdk::firmware::{Firmware, Plugins};
     use paperpaw_sdk::native::{Fingerprint, Native};
 
-    use super::{Offer, question};
+    use super::{Offer, is_version, question};
 
     fn firmware() -> Firmware {
         Firmware {
@@ -420,6 +452,10 @@ mod tests {
             r#"{"version": "0.4.0", "url": "https://paperpaw.org/u.bin"}"#,
             r#"{"version": "0.3.0", "url": "https://paperpaw.org/u.bin"}"#,
             r#"{"version": "0.5.0"}"#,
+            // No versions: they would name the file downloaded to.
+            r#"{"version": "0.5.0/../../x", "url": "u"}"#,
+            r#"{"version": "1.0.0-a/b", "url": "u"}"#,
+            r#"{"version": "9", "url": "u"}"#,
             "not json",
         ] {
             assert_eq!(Offer::from_answer(body, &firmware), None, "{body}");
@@ -431,5 +467,25 @@ mod tests {
         .unwrap();
         let storage = paperpaw_sdk::MemoryStorage::new();
         assert!(all.leaves_out(&storage, &firmware).is_empty());
+    }
+
+    #[test]
+    fn versions_are_read_as_semver() {
+        for good in ["0.5.0", "10.20.30", "0.5.0-dev", "1.0.0-rc.1+build-7"] {
+            assert!(is_version(good), "{good}");
+        }
+        for bad in [
+            "",
+            "0.5",
+            "0.5.0.1",
+            "a.b.c",
+            "0..5",
+            "0.5.0/x",
+            "0.5.0-a b",
+            "0.5.0-a\\b",
+        ] {
+            assert!(!is_version(bad), "{bad}");
+        }
+        assert!(!is_version(&alloc::format!("1.0.0-{}", "a".repeat(64))));
     }
 }

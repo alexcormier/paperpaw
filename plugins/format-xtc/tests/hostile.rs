@@ -259,45 +259,50 @@ fn pages_outside_the_file_or_damaged_are_named_by_number() {
 }
 
 #[test]
-fn an_index_past_the_end_names_its_pages() {
+fn an_index_past_the_end_is_refused() {
+    // Without its index no page can be found: the book does not open.
     let (mut data, _) = book(&[white(8, 8), white(8, 8)]);
     put_u64(&mut data, 24, 1 << 40);
-    let (storage, doc) = open(data);
-    assert_eq!(
-        read_all(&doc, &storage),
-        [
-            (BlockKind::Paragraph, "1".into()),
-            (BlockKind::Paragraph, "2".into())
-        ]
-    );
+    let storage = MemoryStorage::new().with("b.xtc", data);
+    assert!(XtcDocument::open(&storage, "b.xtc").is_err());
 }
 
 #[test]
-#[ignore = "bug: an index offset near u64::MAX overflows when a page's entry is found"]
 fn an_index_offset_near_the_largest_number_does_not_panic() {
     let (mut data, _) = book(&[white(8, 8), white(8, 8)]);
     put_u64(&mut data, 24, u64::MAX - 8);
-    let (storage, doc) = open(data);
-    let read = catch_unwind(AssertUnwindSafe(|| read_all(&doc, &storage)));
-    assert!(read.is_ok());
+    let storage = MemoryStorage::new().with("b.xtc", data);
+    let opened = catch_unwind(AssertUnwindSafe(|| {
+        XtcDocument::open(&storage, "b.xtc").is_err()
+    }));
+    assert_eq!(opened.ok(), Some(true));
 }
 
 #[test]
-fn pages_cut_short_are_decoded_from_what_there_is() {
-    // The data stops halfway: the rest of the page reads as zero bits.
-    let full = white(16, 16);
-    let cut = full[..22 + 16].to_vec();
-    let mut xth = page(b"XTH\0", 4, 9, &[0xff; 4]);
-    xth.truncate(xth.len() - 2);
-    let (data, _) = book(&[cut, xth]);
-    let (storage, doc) = open(data);
-    let read = read_all(&doc, &storage);
-    assert_eq!(read[0].0, BlockKind::Image);
-    assert_eq!(read[1].0, BlockKind::Image);
+fn pages_cut_short_are_named_by_number() {
+    // The file ends halfway through the last page: it is not decoded from
+    // bits that are not there, it is named by its number like any other
+    // damaged page.
+    let xtg = white(16, 16);
+    // Two planes of 4 columns of 2 bytes.
+    let xth = page(b"XTH\0", 4, 9, &[0xff; 16]);
+    for (full, cut) in [(&xtg, xtg.len() / 2), (&xth, xth.len() - 2)] {
+        let (data, _) = book(&[white(8, 8), full.clone()]);
+        let (storage, doc) = open(data);
+        assert_eq!(read_all(&doc, &storage)[1].0, BlockKind::Image);
+        let (data, _) = book(&[white(8, 8), full[..cut].to_vec()]);
+        let (storage, doc) = open(data);
+        assert_eq!(
+            read_all(&doc, &storage),
+            [
+                (BlockKind::Image, String::new()),
+                (BlockKind::Paragraph, "2".into())
+            ]
+        );
+    }
 }
 
 #[test]
-#[ignore = "bug: a page header's size is decoded whatever data the page has, up to 4 GB"]
 fn page_sizes_the_data_cannot_fill_are_refused() {
     // 65535 by 65535 pixels from a few bytes: decoding would write 4 GB
     // and take minutes. The storage refuses files past 64 MB here, so the
@@ -315,7 +320,6 @@ fn page_sizes_the_data_cannot_fill_are_refused() {
 }
 
 #[test]
-#[ignore = "bug: the XTC cache is stamped with the book's size and page count only, not its start (docs/data-files.md)"]
 fn a_book_changed_but_not_in_size_is_decoded_anew() {
     let black = page(b"XTG\0", 8, 1, &[0x00]);
     let (old, _) = book(&[white(8, 1)]);

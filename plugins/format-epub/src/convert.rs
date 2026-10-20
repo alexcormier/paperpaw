@@ -895,7 +895,8 @@ impl Converter<'_> {
         }
     }
 
-    fn characters(&mut self, text: &str) {
+    /// Text of the chapter: with entities to decode, or as written (CDATA).
+    fn characters(&mut self, text: &str, cdata: bool) {
         if self.full {
             return;
         }
@@ -911,7 +912,12 @@ impl Converter<'_> {
         if self.node.is_none() {
             self.start_node();
         }
-        for c in decode(text).chars() {
+        let text = if cdata {
+            alloc::borrow::Cow::Borrowed(text)
+        } else {
+            decode(text)
+        };
+        for c in text.chars() {
             let origin = self.node_char(c);
             if self.pre > 0 {
                 match c {
@@ -1497,8 +1503,8 @@ pub(crate) fn convert(
                 }
             }
             Token::End { name } => converter.end(name),
-            Token::Text(text) => converter.characters(&text),
-            Token::CData(text) => converter.characters(text),
+            Token::Text(text) => converter.characters(&text, false),
+            Token::CData(text) => converter.characters(text, true),
         }
         full.set(converter.full);
     };

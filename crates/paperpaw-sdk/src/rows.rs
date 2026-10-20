@@ -25,14 +25,19 @@ pub struct Rows {
 }
 
 impl Rows {
-    /// Rows of `heights` in `area`; `headings` marks the headings.
-    pub fn new(area: Rect, heights: Vec<u16>, headings: Vec<bool>) -> Self {
+    /// Rows of `heights` in `area`; `headings` marks the headings (rows
+    /// it does not reach are entries, marks past the rows are left out).
+    pub fn new(area: Rect, heights: Vec<u16>, mut headings: Vec<bool>) -> Self {
+        headings.resize(heights.len(), false);
         let mut pages: Vec<(Option<usize>, Range<usize>)> = Vec::new();
         let mut start = 0;
         let mut carried: Option<usize> = None;
-        let mut used = 0u16;
+        // Wider than the heights: many rows add up past `u16`.
+        let mut used = 0u32;
+        let room = u32::from(area.height);
         for (i, &height) in heights.iter().enumerate() {
-            if i > start && used + height > area.height {
+            let height = u32::from(height);
+            if i > start && used + height > room {
                 // A heading never ends a page: it goes with its entries.
                 let end = if headings[i - 1] && i - 1 > start {
                     i - 1
@@ -44,7 +49,8 @@ impl Rows {
                 carried = (!headings[end])
                     .then(|| (0..end).rev().find(|&h| headings[h]))
                     .flatten();
-                used = carried.map_or(0, |h| heights[h]) + heights[end..i].iter().sum::<u16>();
+                used = carried.map_or(0, |h| u32::from(heights[h]))
+                    + heights[end..i].iter().map(|&h| u32::from(h)).sum::<u32>();
                 start = end;
             }
             used += height;
@@ -112,7 +118,7 @@ impl Rows {
     /// rect, focused)`, headings included: the focused entry (if `focus`
     /// shows) on black, thin lines between entries but not above a
     /// heading; with [`UiStyle::cards`] the entries between headings on
-    /// cards ([`draw_cards`]).
+    /// rounded cards.
     pub fn draw(
         &self,
         canvas: &mut Canvas<'_>,
@@ -356,6 +362,21 @@ mod tests {
         rows.step(true);
         rows.step(true);
         assert_eq!(rows.focus, 4, "over the heading between");
+    }
+
+    #[test]
+    fn marks_and_heights_of_different_lengths_do_not_panic() {
+        let area = Rect::new(0, 0, 100, 50);
+        // Fewer marks than rows: the rest are entries.
+        let rows = Rows::new(area, alloc::vec![20; 4], alloc::vec![true]);
+        assert_eq!(rows.len(), 4);
+        assert_eq!(rows.focus, 1);
+        // More marks than rows: those past them left out.
+        let rows = Rows::new(area, alloc::vec![20; 2], alloc::vec![false; 6]);
+        assert_eq!(rows.len(), 2);
+        // Rows adding up past what a u16 holds still go on pages.
+        let rows = Rows::new(area, alloc::vec![u16::MAX; 3], alloc::vec![]);
+        assert_eq!(rows.paging().1, 3);
     }
 
     #[test]

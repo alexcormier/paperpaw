@@ -155,3 +155,66 @@ fn turning_the_screen_makes_the_screens_once() {
     assert_eq!(*log.borrow(), ["base made"]);
     assert_eq!(kernel.hint.height, row);
 }
+
+/// Turns the first refresh full, as a plugin that flashes on some page
+/// turns does.
+struct Flash;
+
+impl Plugin for Flash {
+    fn manifest(&self) -> Manifest {
+        Manifest {
+            id: Id::new_static("flash"),
+            name: Cow::Borrowed("Flash"),
+            description: Cow::Borrowed(""),
+            version: Version::new(1, 0, 0),
+            sdk: SDK_VERSION,
+        }
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        let seen = core::cell::Cell::new(0u32);
+        r.add_refresh_filter(paperpaw_sdk::filters::RefreshFilterSpec {
+            id: Id::new_static("flash.first"),
+            title: Cow::Borrowed("flash"),
+            filter: Box::new(move |_, refresh| {
+                seen.set(seen.get() + 1);
+                (seen.get() == 2 && refresh.mode == RefreshMode::Partial)
+                    .then_some(RefreshMode::Full)
+            }),
+        })
+    }
+}
+
+/// A full refresh a refresh filter made starts the count of partial
+/// refreshes anew: the periodic full refresh comes as many refreshes
+/// after it as after any other.
+#[test]
+fn a_full_refresh_from_a_filter_starts_the_count_anew() {
+    let log = log();
+    let builder = Kernel::builder(DEVICE)
+        .plugin(Flash)
+        .setting_default(&settings::FULL_REFRESH_INTERVAL, 3);
+    let mut kernel = frames_kernel(builder, &log);
+    let mut modes = Vec::new();
+    for i in 0..4u64 {
+        kernel.apply(Command::Redraw(RefreshMode::Partial));
+        let effects = kernel.finish();
+        render(&mut kernel);
+        modes.push(effects.refresh().map(|(_, mode)| mode).unwrap());
+        kernel.tick(Instant(100 + i));
+    }
+    use RefreshMode::{Full, Partial};
+    assert_eq!(modes, [Full, Partial, Partial, Full]);
+}
+
+/// How often the screen is refreshed in full may be a book's own (a
+/// comic wants it more often than a novel).
+#[test]
+fn the_full_refresh_interval_may_be_a_books_own() {
+    let kernel = Kernel::builder(DEVICE).build().unwrap();
+    let spec = kernel
+        .settings()
+        .spec("core.full-refresh-interval")
+        .unwrap();
+    assert!(spec.scoped);
+}

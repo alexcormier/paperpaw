@@ -101,6 +101,9 @@ pub(crate) struct Bits<'r, 'a> {
     count: u32,
     /// A marker ended the data; zeros are read from here on.
     pub marker: Option<u8>,
+    /// The data ended without a marker; zeros are read from here on, to
+    /// look ahead, but taking them is an error.
+    ended: bool,
     /// How many of the last bits taken in are such zeros.
     padding: u32,
 }
@@ -112,31 +115,41 @@ impl<'r, 'a> Bits<'r, 'a> {
             bits: 0,
             count: 0,
             marker: None,
+            ended: false,
             padding: 0,
         }
     }
 
     /// Takes bytes until more than 24 bits are at hand (zeros after a
-    /// marker).
+    /// marker or the end of the data, which a file without its end
+    /// marker reaches while its last bits are looked ahead of).
     fn fill(&mut self) -> Result<(), ImageError> {
         while self.count <= 24 {
-            let byte = match self.marker {
-                Some(_) => None,
-                None => {
-                    let byte = self.reader.byte()?;
-                    if byte == 0xff {
-                        let mut next = self.reader.byte()?;
-                        while next == 0xff {
-                            next = self.reader.byte()?;
+            let byte = if self.marker.is_some() || self.ended {
+                None
+            } else {
+                match self.reader.next()? {
+                    Some(0xff) => {
+                        let mut next = self.reader.next()?;
+                        while next == Some(0xff) {
+                            next = self.reader.next()?;
                         }
-                        if next != 0 {
-                            self.marker = Some(next);
-                            None
-                        } else {
-                            Some(0xff)
+                        match next {
+                            Some(0) => Some(0xff),
+                            Some(marker) => {
+                                self.marker = Some(marker);
+                                None
+                            }
+                            None => {
+                                self.ended = true;
+                                None
+                            }
                         }
-                    } else {
-                        Some(byte)
+                    }
+                    Some(byte) => Some(byte),
+                    None => {
+                        self.ended = true;
+                        None
                     }
                 }
             };
@@ -150,9 +163,14 @@ impl<'r, 'a> Bits<'r, 'a> {
     }
 
     /// Whether the data ran out: zeros after a marker were taken as
-    /// bits (the bits not taken yet are the last ones taken in).
-    pub(crate) fn exhausted(&self) -> bool {
-        self.padding > self.count
+    /// bits (the bits not taken yet are the last ones taken in). Zeros
+    /// after the end of the data are an error: it was cut short.
+    pub(crate) fn exhausted(&self) -> Result<bool, ImageError> {
+        let out = self.padding > self.count;
+        if out && self.ended {
+            return Err(ImageError::Invalid("unexpected end"));
+        }
+        Ok(out)
     }
 
     /// Whether the data goes on: it ran out at a restart marker, and a
@@ -648,7 +666,7 @@ fn scan(
                 until_restart -= 1;
             }
             blocks += blocks_per_mcu;
-            let exhausted = bits.exhausted();
+            let exhausted = bits.exhausted()?;
             if exhausted && !bits.resumes(restart_interval) || !bits.affords(blocks) {
                 ended = true;
             }
@@ -752,6 +770,8 @@ fn scan(
                 }
             }
         }
+        // Data cut short in this MCU row is an error.
+        bits.exhausted()?;
         // Hand over the rows of this MCU row that belong to the image.
         for y in 0..mcu_h {
             if emitted == height {

@@ -23,6 +23,7 @@ const STYLE: UiStyle = UiStyle {
     text: 20.0,
     small: 15.0,
     title: 23.0,
+    head: 23.0,
     row: 60,
     header: 64,
     margin: 12,
@@ -31,6 +32,12 @@ const STYLE: UiStyle = UiStyle {
     dark_header: false,
     corner: 6,
     strong: false,
+    pill: false,
+    focus: paperpaw_sdk::ui::Focus::Fill,
+    separators: paperpaw_sdk::ui::Separators::Line,
+    plain_header: false,
+    cards: false,
+    grays: 2,
     finger: 0,
 };
 

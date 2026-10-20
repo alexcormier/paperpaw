@@ -130,32 +130,46 @@ impl PluginList {
         let header = ui::Header::new(env, &style, true);
         let top = header.area.height + style.gap as u16;
         let bar_height = style.row as u16 + style.gap as u16;
-        let bar = Rect::new(0, display.height - bar_height, display.width, bar_height);
+        let bar = Rect::new(
+            0,
+            display.height.saturating_sub(bar_height),
+            display.width,
+            bar_height,
+        );
         let height = display.height.saturating_sub(top + bar_height);
         let area = Rect::new(0, top, display.width, height);
         let list = ListView::new(area, style.noted_row()).focus_on_keys(env);
-        let mut plugins: Vec<&PluginInfo> = env.plugins.iter().collect();
-        plugins.sort_by_key(|p| {
-            (
-                p.manifest.id != CORE_PLUGIN,
-                p.name(env.i18n).to_lowercase(),
-            )
-        });
-        Self {
-            more: env
-                .menus
-                .items(MORE.as_str())
-                .into_iter()
-                .filter(|item| !item.section && env.actions.contains(item.id.as_str()))
-                .map(|item| item.id.clone())
-                .collect(),
-            plugins: plugins.iter().map(|p| p.manifest.id.clone()).collect(),
+        let mut manager = Self {
+            more: Vec::new(),
+            plugins: Vec::new(),
             style,
             header,
             list,
             bar,
             focus: Focus::List,
-        }
+        };
+        manager.read_rows(env);
+        manager
+    }
+
+    /// The rows as they are now: plugins come and go while the manager is
+    /// open (e.g. installed from a store opened from it).
+    fn read_rows(&mut self, env: &Env<'_>) {
+        self.more = env
+            .menus
+            .items(MORE.as_str())
+            .into_iter()
+            .filter(|item| !item.section && env.actions.contains(item.id.as_str()))
+            .map(|item| item.id.clone())
+            .collect();
+        let mut plugins: Vec<&PluginInfo> = env.plugins.iter().collect();
+        plugins.sort_by_cached_key(|p| {
+            (
+                p.manifest.id != CORE_PLUGIN,
+                p.name(env.i18n).to_lowercase(),
+            )
+        });
+        self.plugins = plugins.iter().map(|p| p.manifest.id.clone()).collect();
     }
 
     /// The *Restart now* button, while a change waits for a restart.
@@ -440,6 +454,20 @@ impl Screen for PluginList {
                 ui::tr_input(env, key),
                 style.faint(60),
             );
+        }
+    }
+
+    fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
+        let env = *cx.env();
+        self.read_rows(&env);
+    }
+
+    fn on_event(&mut self, event: &Id, _: &Params, cx: &mut Cx<'_, '_>) {
+        if *event == events::PLUGINS_CHANGED {
+            let env = *cx.env();
+            self.read_rows(&env);
+            cx.request_redraw();
+            cx.request_refresh(RefreshMode::Partial);
         }
     }
 

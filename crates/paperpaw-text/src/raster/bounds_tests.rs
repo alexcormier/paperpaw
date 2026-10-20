@@ -75,11 +75,10 @@ proptest! {
         prop_assert_eq!(coverage.len(), width * height);
     }
 
-    /// `floor` and `ceil` overflow for values beyond `i32` (`ceil` adds
-    /// one to `i32::MAX`): a panic in debug builds, nonsense bounds in
-    /// release ones, for outlines that far out or at absurd sizes.
+    /// `floor` and `ceil` saturate for values beyond `i32`, and segments
+    /// that far out (outlines at absurd sizes) cost no more than others:
+    /// no panic in debug builds, no nonsense bounds in release ones.
     #[test]
-    #[ignore = "bug: raster::floor and raster::ceil overflow for values beyond i32"]
     fn segments_beyond_i32_give_a_bitmap_of_the_asked_size(
         lines in proptest::collection::vec((huge_point(), huge_point()), 0..20),
         width in 0usize..40,
@@ -176,7 +175,6 @@ fn curves_without_a_start_draw_nothing() {
 
 /// The shrunk case of `segments_beyond_i32_give_a_bitmap_of_the_asked_size`.
 #[test]
-#[ignore = "bug: raster::floor and raster::ceil overflow for values beyond i32"]
 fn float_helpers_saturate_beyond_i32() {
     assert_eq!(ceil(f32::INFINITY), i32::MAX);
     assert_eq!(ceil(3.0e9), i32::MAX);

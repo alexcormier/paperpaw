@@ -46,6 +46,18 @@ fn context(reserved: &'static [&'static str]) -> impl Strategy<Value = Params> {
     })
 }
 
+/// `read` with its float taken for `sent`'s where they are a unit of the
+/// last place apart at most.
+fn nearly(read: Option<Sample>, sent: &Sample) -> Option<Sample> {
+    read.map(|mut back| {
+        let apart = back.ratio.to_bits().abs_diff(sent.ratio.to_bits());
+        if apart <= 1 {
+            back.ratio = sent.ratio;
+        }
+        back
+    })
+}
+
 const HTTP_KEYS: &[&str] = &[
     http_params::STATUS,
     http_params::BODY,
@@ -57,7 +69,9 @@ const HTTP_KEYS: &[&str] = &[
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(128)))]
 
-    /// A typed event comes back as emitted, every field exact.
+    /// A typed event comes back as emitted, every field exact but the
+    /// float, which is read within a unit of its last place (the SDK
+    /// leaves out `core`'s exact parser, for native plugins' size).
     #[test]
     fn typed_events_come_back(
         text in "\\PC{0,20}",
@@ -74,14 +88,14 @@ proptest! {
         let Command::Emit(event, params) = SAMPLE.emit(sample.clone()) else {
             panic!("an event");
         };
-        prop_assert_eq!(SAMPLE.read(&event, &params), Some(sample.clone()));
+        prop_assert_eq!(nearly(SAMPLE.read(&event, &params), &sample), Some(sample.clone()));
         // Another event's id: not this one.
         prop_assert_eq!(SAMPLE.read(&Id::new_static("t.other"), &params), None);
         let Command::Schedule(event, params, at) = SAMPLE.schedule(sample.clone(), Instant(5)) else {
             panic!("a scheduled event");
         };
         prop_assert_eq!(at, Instant(5));
-        prop_assert_eq!(SAMPLE.read(&event, &params), Some(sample));
+        prop_assert_eq!(nearly(SAMPLE.read(&event, &params), &sample), Some(sample));
     }
 
     /// Whatever parameters come, reading them does not panic.

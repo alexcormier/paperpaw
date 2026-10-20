@@ -371,7 +371,6 @@ fn settings_changed_in_the_ui_are_saved_and_read_back_after_a_restart() {
 /// a word broken at the end of a line is whole in it, not
 /// "restric- tions" with the hyphen and the line break of the page.
 #[test]
-#[ignore = "bug: a bookmark's text joins the page's lines with the hyphens of words broken across them"]
 fn bookmarks_keep_words_broken_across_lines_whole() {
     let card = Card::new(true);
     let mut app = App::start(BUTTONS, &card);

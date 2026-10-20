@@ -6,9 +6,9 @@ use super::*;
 
 /// The book as the layout sees it: every block through the text
 /// filters of plugins (see `paperpaw_sdk::filters`).
-pub(super) struct Filtered<'d, 'e> {
-    pub(super) document: &'d dyn Document,
-    pub(super) env: &'d Env<'e>,
+pub(crate) struct Filtered<'d, 'e> {
+    pub(crate) document: &'d dyn Document,
+    pub(crate) env: &'d Env<'e>,
 }
 
 impl Document for Filtered<'_, '_> {
@@ -52,6 +52,8 @@ pub(super) struct Book {
     pub(super) language: String,
     pub(super) typography: Typography,
     pub(super) page: Page,
+    /// The words of the page, once measured (see [`Book::words`]).
+    pub(super) words: core::cell::OnceCell<Vec<WordBox>>,
     /// The starts of the pages turned forward to this one, one after
     /// another (none before a jump).
     pub(super) history: Vec<Locator>,
@@ -59,9 +61,14 @@ pub(super) struct Book {
     /// changed since.
     pub(super) saved_at: Option<paperpaw_sdk::Instant>,
     pub(super) unsaved: bool,
+    /// Whether it could not be written once (and the reader was told).
+    pub(super) save_failed: bool,
     pub(super) index: Option<PageIndex>,
     /// Where background pagination continues.
     pub(super) indexing: Option<Locator>,
+    /// Whether pagination stopped for this layout (a page that cannot be
+    /// laid out, a storage that takes no more).
+    pub(super) index_stopped: bool,
     /// Where the bookmarks and highlights are.
     pub(super) marks: Vec<Mark>,
     /// Text to point out on this page, e.g. a search hit.
@@ -181,10 +188,13 @@ impl Book {
             path: path.to_string(),
             index: None,
             indexing: None,
+            index_stopped: false,
             page: Page::default(),
+            words: core::cell::OnceCell::new(),
             history: Vec::new(),
             saved_at: None,
             unsaved: false,
+            save_failed: false,
             dir,
             title,
             document,
@@ -209,14 +219,15 @@ impl Book {
         book.chapter_marks = book.chapter_marks(env);
         book.embedded = Embedded::load(env, book.document.as_ref());
         // Kept with another layout maybe: from the start of its line.
+        // Where the book cannot be shown there (it changed, say), from its
+        // start.
         let start = book
             .saved_position(env)
             .map_or(Locator::START, |at| book.line_start(env, at));
-        book.page = match book.layout(env, start).map_err(error)? {
-            page if page.is_past_end() && start != Locator::START => {
-                book.layout(env, Locator::START).map_err(error)?
-            }
-            page => page,
+        book.page = match book.layout(env, start) {
+            Ok(page) if !page.is_past_end() => page,
+            _ if start != Locator::START => book.layout(env, Locator::START).map_err(error)?,
+            page => page.map_err(error)?,
         };
         book.prepare_images(env);
         book.index = Some(book.open_index(env));
@@ -228,9 +239,9 @@ impl Book {
         Ok(book)
     }
 
-    /// Parameters of the standard reading events; the page and the number
-    /// of pages once they are counted.
-    /// Where the book is read, for [`events::BOOK_OPENED`] and the others.
+    /// Where the book is read, for [`events::BOOK_OPENED`] and the other
+    /// standard reading events; the page and the number of pages once
+    /// they are counted.
     pub(super) fn reading(&self, env: &Env<'_>) -> events::Reading {
         let counted = self
             .index
@@ -302,11 +313,32 @@ impl Book {
         Some(first)
     }
 
+    /// The page index of this layout of the book as it is now: its name
+    /// tells layouts and editions of the book (by size) apart. A new one
+    /// removes those of other layouts once more than a few are kept;
+    /// switching back finds the others.
     pub(super) fn open_index(&self, env: &Env<'_>) -> PageIndex {
-        PageIndex::open(
-            env.storage,
-            format!("{}/pages-{}.bin", self.dir, self.typography.key),
-        )
+        let storage = env.storage;
+        let size = storage.size(&self.path).unwrap_or(0);
+        let name = format!(
+            "pages-{:016x}.bin",
+            fnv1a64(format!("{}|{size}", self.typography.key))
+        );
+        let path = format!("{}/{name}", self.dir);
+        if !storage.exists(&path) {
+            let mut others = Vec::new();
+            let _ = storage.list(&self.dir, &mut |entry| {
+                if entry.name.starts_with("pages-") && !entry.is_dir {
+                    others.push(format!("{}/{}", self.dir, entry.name));
+                }
+            });
+            if others.len() >= INDEXES_KEPT {
+                for other in others {
+                    let _ = storage.remove(&other);
+                }
+            }
+        }
+        PageIndex::open(storage, path)
     }
 
     /// Applies changed reading settings: new typography, the current
@@ -316,6 +348,7 @@ impl Book {
             return;
         };
         self.typography = Typography::new(env, &font, &self.language, self.document.whole_pages());
+        self.words = core::cell::OnceCell::new();
         let start = self.line_start(env, self.page.start);
         if let Ok(page) = self.layout(env, start) {
             self.page = page;
@@ -328,6 +361,7 @@ impl Book {
         self.chapter_end.set(None);
         self.chapter_first.set(None);
         self.indexing = None;
+        self.index_stopped = false;
     }
 
     /// Decodes the pictures of the page shown that are not yet: books
@@ -355,39 +389,23 @@ impl Book {
     /// The start of the line `at` is in, as this book is laid out now
     /// (see `layout::line_start`).
     pub(super) fn line_start(&self, env: &Env<'_>, at: Locator) -> Locator {
-        let t = &self.typography;
-        let Some(faces) = Faces::new(env, t, self.embedded.as_ref()) else {
-            return at;
-        };
-        let patterns = t
-            .hyphenation
-            .as_deref()
-            .and_then(|language| env.hyphenation.get(language));
-        let hyphenate = |word: &str, out: &mut dyn FnMut(usize)| {
-            if let Some(patterns) = patterns {
-                patterns.hyphenate(word, out);
-            }
-        };
-        let filtered = Filtered {
-            document: self.document.as_ref(),
-            env,
-        };
-        let cx = LayoutContext {
-            document: &filtered,
-            storage: env.storage,
-            width: t.width,
-            style: &t.style,
-            typesetter: &faces,
-            hyphenate: patterns.is_some().then_some(&hyphenate as Hyphenate<'_>),
-        };
-        line_start(&cx, at).unwrap_or(at)
+        self.laid_out(env, |cx| line_start(cx, at).unwrap_or(at))
+            .unwrap_or(at)
     }
 
+    /// The page that starts at `at`, as this book is laid out now.
     pub(super) fn layout(&self, env: &Env<'_>, at: Locator) -> Result<Page, DocumentError> {
+        let height = self.typography.height;
+        self.laid_out(env, |cx| layout_page(cx, at, height))
+            .unwrap_or_else(|| Ok(Page::default()))
+    }
+
+    /// `f` with the context this book is laid out in now: its type, its
+    /// faces and hyphenation, the text through the plugins' filters;
+    /// `None` without the reading font.
+    fn laid_out<R>(&self, env: &Env<'_>, f: impl FnOnce(&LayoutContext<'_>) -> R) -> Option<R> {
         let t = &self.typography;
-        let Some(faces) = Faces::new(env, t, self.embedded.as_ref()) else {
-            return Ok(Page::default());
-        };
+        let faces = Faces::new(env, t, self.embedded.as_ref())?;
         let patterns = t
             .hyphenation
             .as_deref()
@@ -409,7 +427,7 @@ impl Book {
             typesetter: &faces,
             hyphenate: patterns.is_some().then_some(&hyphenate as Hyphenate<'_>),
         };
-        layout_page(&cx, at, t.height)
+        Some(f(&cx))
     }
 
     pub(super) fn progress_path(&self) -> String {
@@ -427,29 +445,34 @@ impl Book {
 
     /// Writes the position now, or soon if it was written a moment ago;
     /// `true` while it waits ([`Book::save_due`]).
-    pub(super) fn position_changed(&mut self, env: &Env<'_>) -> bool {
+    pub(super) fn position_changed(&mut self, cx: &mut Cx<'_, '_>) -> bool {
+        let now = cx.env().now;
         let recent = self
             .saved_at
-            .is_some_and(|at| env.now.since(at) < SAVE_EVERY_MS);
+            .is_some_and(|at| now.since(at) < SAVE_EVERY_MS);
         self.unsaved = recent;
         if !recent {
-            self.save_position(env);
+            self.save_position(cx);
         }
         recent
     }
 
     /// Writes the position if it waits; `force` also before its time.
-    pub(super) fn save_due(&mut self, env: &Env<'_>, force: bool) {
+    pub(super) fn save_due(&mut self, cx: &mut Cx<'_, '_>, force: bool) {
+        let now = cx.env().now;
         let due = self
             .saved_at
-            .is_none_or(|at| env.now.since(at) >= SAVE_EVERY_MS);
+            .is_none_or(|at| now.since(at) >= SAVE_EVERY_MS);
         if self.unsaved && (force || due) {
             self.unsaved = false;
-            self.save_position(env);
+            self.save_position(cx);
         }
     }
 
-    pub(super) fn save_position(&mut self, env: &Env<'_>) {
+    /// Writes the position; where the storage refuses, says so once a
+    /// book (not at every page).
+    pub(super) fn save_position(&mut self, cx: &mut Cx<'_, '_>) {
+        let env = *cx.env();
         self.saved_at = Some(env.now);
         let start = self.page.start;
         let text = format!(
@@ -458,21 +481,80 @@ impl Book {
             start.offset,
             self.percent()
         );
-        let _ = env.storage.write(&self.progress_path(), text.as_bytes());
+        let saved = env.storage.write(&self.progress_path(), text.as_bytes());
+        if saved.is_err() && !self.save_failed {
+            self.save_failed = true;
+            cx.command(Command::Notify(env.i18n.tr("reader.not-saved").to_string()));
+        }
     }
 
     /// The start of the previous page: the page shown before (this
-    /// session), else from the page index.
+    /// session), else from the page index, else about a page back.
     pub(super) fn previous_start(&mut self, env: &Env<'_>) -> Option<Locator> {
         if let Some(start) = self.history.pop() {
             return Some(start);
         }
-        let index = self.index.as_ref()?;
-        match index.locate(env.storage, self.page.start)? {
-            (page, true) if page > 0 => index.entry(env.storage, page - 1),
-            (page, false) => index.entry(env.storage, page),
-            _ => None,
+        let here = self.page.start;
+        if let Some(index) = &self.index {
+            match index.locate(env.storage, here) {
+                Some((0, true)) => return None,
+                Some((page, true)) => return index.entry(env.storage, page - 1),
+                // Inside a page whose end the index knows: its start.
+                Some((page, false)) if index.is_complete() || page + 1 < index.pages() => {
+                    return index.entry(env.storage, page);
+                }
+                // Past the pages counted so far.
+                _ => {}
+            }
         }
+        self.page_back(env, here)
+    }
+
+    /// About a page before `here`, where the page index does not reach
+    /// yet: as much text back as the page shown holds, from the start of
+    /// its line. The page there may show a line again, but leaves nothing
+    /// out.
+    fn page_back(&self, env: &Env<'_>, here: Locator) -> Option<Locator> {
+        let document = &self.document;
+        let page = &self.page;
+        let end = match page.end.section == page.start.section {
+            true => page.end.offset,
+            false => document.section_len(page.start.section),
+        };
+        let length = end.saturating_sub(page.start.offset).max(MIN_PAGE_BACK);
+        // At the start of its section, the end of the one before.
+        let first = document
+            .block_at(env.storage, Locator::new(here.section, 0))
+            .ok()
+            .flatten()
+            .map_or(0, |block| block.start);
+        let (section, end) = if here.offset > first {
+            (here.section, here.offset)
+        } else {
+            let section = (0..here.section)
+                .rev()
+                .find(|&s| document.section_len(s) > 0)?;
+            (section, document.section_len(section))
+        };
+        let mut from = self.line_start(env, Locator::new(section, end.saturating_sub(length)));
+        // Where the text before is looser (talk, headings), a page from
+        // there ends short of the page left: begin later by what it
+        // leaves out.
+        for _ in 0..PAGE_BACK_TRIES {
+            let Ok(page) = self.layout(env, from) else {
+                break;
+            };
+            let short = match page.end.section == section && !page.is_past_end() {
+                true => end.saturating_sub(page.end.offset),
+                false => 0,
+            };
+            let later = self.line_start(env, Locator::new(section, from.offset + short));
+            if short == 0 || later <= from {
+                break;
+            }
+            from = later;
+        }
+        Some(from)
     }
 
     pub(super) fn show(&mut self, cx: &mut Cx<'_, '_>, start: Locator, forward: bool) -> bool {
@@ -495,12 +577,13 @@ impl Book {
             self.history.clear();
         }
         self.page = page;
+        self.words = core::cell::OnceCell::new();
         self.prepare_images(&env);
         self.update_chapter(&env);
         // Found now, so the status lines read nothing while drawn.
         self.chapter_first(&env);
         self.update_links(&env);
-        if self.position_changed(&env) {
+        if self.position_changed(cx) {
             cx.wake_at(env.now.add_millis(SAVE_EVERY_MS));
         }
         if !self.web() {
@@ -515,22 +598,26 @@ impl Book {
         true
     }
 
-    /// One step of background pagination. Returns whether more work remains.
+    /// One step of background pagination. Returns whether more work
+    /// remains. A page that cannot be laid out or a storage that takes no
+    /// more end it for this layout; the pages counted so far are used.
     pub(super) fn index_step(&mut self, env: &Env<'_>) -> bool {
-        let Some(mut index) = self.index.take() else {
-            return false;
-        };
-        if index.is_complete() {
-            self.index = Some(index);
+        if self.index_stopped || self.index.as_ref().is_none_or(PageIndex::is_complete) {
             return false;
         }
+        let more = self.index_pages(env);
+        self.index_stopped = more.is_none();
+        more == Some(true)
+    }
+
+    /// Lays out the next pages and adds them to the index: whether more
+    /// remain, `None` if it cannot go on.
+    fn index_pages(&mut self, env: &Env<'_>) -> Option<bool> {
+        let index = self.index.as_ref()?;
         let mut next = match self.indexing {
             Some(next) => next,
             None => match index.last(env.storage) {
-                Some(last) => match self.layout(env, last) {
-                    Ok(page) => page.end,
-                    Err(_) => return false,
-                },
+                Some(last) => self.layout(env, last).ok()?.end,
                 None => Locator::START,
             },
         };
@@ -541,10 +628,8 @@ impl Book {
         let mut starts = Vec::with_capacity(per_step);
         let mut done = false;
         for _ in 0..per_step {
-            let Ok(page) = self.layout(env, next) else {
-                // Unreadable: give up indexing, reading still works.
-                return false;
-            };
+            // Unreadable: reading still works.
+            let page = self.layout(env, next).ok()?;
             if page.is_past_end() {
                 done = true;
                 break;
@@ -556,16 +641,16 @@ impl Book {
             }
             next = page.end;
         }
+        let index = self.index.as_mut()?;
+        // A storage that is read-only or full.
         if !index.append(env.storage, &starts) {
-            // Read-only storage: no index.
-            return false;
+            return None;
         }
         if done {
             index.finish(env.storage);
         }
         self.indexing = Some(next);
-        self.index = Some(index);
-        !done
+        Some(!done)
     }
 
     /// "12 / 340" once the index covers the page exactly, else a percentage.
@@ -648,8 +733,13 @@ impl Book {
     pub(super) fn note_text(&self, env: &Env<'_>, href: &str) -> Option<String> {
         let mut at = self.document.link_target(env.storage, href)?;
         let mut text = String::new();
+        // As the page shows it.
+        let filtered = Filtered {
+            document: self.document.as_ref(),
+            env,
+        };
         for _ in 0..4 {
-            let Ok(Some(block)) = self.document.block_at(env.storage, at) else {
+            let Ok(Some(block)) = filtered.block_at(env.storage, at) else {
                 break;
             };
             if matches!(block.kind, paperpaw_sdk::document::BlockKind::Heading(_))
@@ -717,10 +807,6 @@ impl Book {
             .any(|m| m.kind == Kind::Bookmark && m.start >= start && m.start < end)
     }
 
-    /// Where the bookmark ribbon is: in the top margin, on the right.
-    /// The start of the page that contains `at`, as the page index has it
-    /// (so pages look the same as when paging there); `at` itself where
-    /// the index does not reach yet.
     /// Where the book is, for the skimming overlay: the page, the chapter
     /// and how far, in thousandths.
     pub(super) fn skim_params(&self, env: &Env<'_>) -> Params {
@@ -811,6 +897,9 @@ impl Book {
         Locator::new(sections.saturating_sub(1), 0)
     }
 
+    /// The start of the page that contains `at`, as the page index has it
+    /// (so pages look the same as when paging there); `at` itself where
+    /// the index does not reach yet.
     pub(super) fn page_start(&self, env: &Env<'_>, at: Locator) -> Locator {
         let Some(index) = &self.index else {
             return at;
@@ -859,8 +948,9 @@ impl Book {
 }
 
 /// How the reader opens books: with the publisher's styles as set, and
-/// the plugins' stylesheets.
-pub(super) fn open_options(env: &Env<'_>) -> paperpaw_sdk::OpenOptions {
+/// the plugins' stylesheets. Its search and contents open them so too,
+/// or they would convert the book again (and find other places).
+pub(crate) fn open_options(env: &Env<'_>) -> paperpaw_sdk::OpenOptions {
     let styles = env
         .settings
         .bool(crate::settings::PUBLISHER_STYLES.as_str());

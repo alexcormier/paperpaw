@@ -22,6 +22,73 @@ change the plugin SDK.
 - Files, widgets and vocabulary keep no writable statics, so they pack
   as plugin files.
 
+- Reader: a new text size (pinch, the slider, Larger and Smaller, a
+  book's own size) lays the open book out again at once; before, it
+  applied only when the book was opened again.
+- Reader: "Next status line" is in the More menu of the reader on
+  devices without a touch screen (by touch, a tap on the line switches
+  it).
+- Reader: skimming through the book starts without a focused button;
+  Up and Down move to the buttons below the bar, Select presses the one
+  moved to, and with none it stays where skimming went.
+- Reader: where the position in a book, a bookmark, a highlight or a
+  note cannot be saved (a full or failing card), a notice says so; for
+  the position once a book.
+- Reader: a page back where the pages are not counted yet goes about a
+  page back and reaches the page left, instead of to the last page
+  counted; a book whose saved place cannot be shown opens at its start.
+- Reader: search and the contents open a book as the page shows it, so
+  without the book's styles or with a stylesheet plugin a search no
+  longer converts the whole book again; a search hit's row shows the
+  word found on narrow screens.
+- Reader: a bookmark keeps words broken across lines whole, and Up and
+  Down move to the line above and below while a word is chosen.
+
+- The library anew, as a calm list: the book being read first as a card
+  (one press or tap to go on reading), then every book with its cover,
+  its title on up to two lines, its author and how far it is read (a
+  bar and the percentage, a check once finished, New for a book added
+  in the last 30 days and never opened). What is shown is chosen above
+  the books, from one row on small screens (All books, Reading, Unread,
+  Finished, Next in your series, Shelves, Find a book) and from pills
+  on larger ones. Folders no longer come first: they are collections
+  on the shelves, with favourites, authors and series. A series lists
+  its books by number with the next one marked; Next in your series
+  lists the next book of every series begun. Find picks a book by a
+  letter of its title or its author's surname, without a keyboard.
+  Buttons work as in every list: left and right move a book, the page
+  buttons turn a page. A book's sheet (hold it, or the menu button)
+  shows it with its cover and progress: go on reading, its series,
+  finished or unread, favourite, information, archive. The library's
+  menu holds only the library's things.
+- Library: books as covers (Show books as: Covers) in a grid from
+  margin to margin, how far each is read on its cover, the books of a
+  series as one stack with their count.
+- Library: on the X4 and the X4 Pro more room: fewer rows a page, one
+  line of details under a title, the filters behind one row.
+- SDK: `library::Book::added` (the day the library first read a book),
+  `library::{today, is_new, is_new_on, NEW_DAYS}`. A change for
+  plugins: a `Book` written out field by field needs `added` too (or
+  `..Book::default()`).
+- Library: while a book is read, the library holds next to nothing (its
+  list of books is kept in a file and read back when it shows again);
+  coming back, the focus is on the book it was on and only what may
+  have changed is read again. A book moved (to the archive, by the file
+  manager) or deleted goes from the list at once and shows where it
+  went; one gone unannounced is not opened but said to be gone. The
+  archive's books are on the shelves, not among the others. Settings
+  changed while the library shows (how books show, the order, the size
+  of the interface) apply at once. On devices of little memory (the X4)
+  it lists 2000 books at most and says how many there are beyond.
+- Themes: a theme's defaults (a data plugin's `settings.ini`, or the
+  Pebble theme switched on) win over the device's own: a large-print
+  theme now enlarges the interface on the X4 too, whose own default is
+  small. What the user chose still wins over both.
+- Screen: a full refresh a plugin's refresh filter asks for (a flash on
+  some page turns) starts the count to the next periodic full refresh
+  anew, where it came again as soon as if there had been none. How often
+  the screen is refreshed in full may be a book's own ("Only this
+  book"), e.g. more often for a comic.
 - Plugins: a data plugin updated or removed while running takes its
   stylesheet for books and its key bindings with it; before, the old
   version's applied until a restart, beside the new one's.
@@ -121,6 +188,35 @@ change the plugin SDK.
   (away from every known network), nothing wants the radio any more,
   so it may go off: before, it stayed wanted and the Wi-Fi plugin
   looked for networks every few seconds until the device slept.
+- SDK: `firmware::compare_versions` orders pre-releases as SemVer does,
+  numbered parts as numbers (`0.5.0-rc.9` before `0.5.0-rc.10`), so an
+  update between numbered pre-releases is offered.
+- Fonts browser: lighter on the X4. Only the files this device installs
+  are kept of the catalog, a font's page gets its font from the list
+  instead of reading the catalog again, and the samples held share 48 KB
+  there (the fonts past it are named in the menus' font); the list lets
+  go of its samples while a font's page is open. The catalog is fetched
+  once each time the list opens, no longer on every return to it. A
+  catalog with more fonts or files than are read no longer mixes the
+  last font kept with those after it, and a download a restart cut off
+  no longer shows as going on forever.
+- Store: a plugin of the library with the id of a plugin built into
+  PaperPaw, or of the other kind (data for code, code for data), is
+  neither listed nor installed (*... cannot replace*), so a library can
+  no longer take the place of, say, the fonts or Wi-Fi. A plugin's page
+  is fetched into a file of its own and taken only if it is that
+  plugin's, and it keeps the query of the library's address (a key a
+  library of one's own asks for).
+- Plugin manager: a plugin installed or removed while its list is open
+  (from the store opened from it, say) shows there at once; the list
+  was the one of when it opened.
+- Update: an update file on the card no newer than the version running
+  says so (*an older version*, *again*) and installs as *Install older
+  version* or *Install again*, with *Search online* beside it; a newer
+  update the server names comes first. A version from the update server
+  that is no version (with `/`, say) is no offer, so it can no longer
+  name a file outside `updates`, and a download a restart cut off
+  (`updates/.download`, `.download.part`) is removed at start.
 - A new look, rounder and friendlier: soft corners, pills for buttons,
   switches, chips and the highlight, plain headers (the title on the
   page, a little larger, no bar or line), faint lines between rows from
@@ -193,6 +289,45 @@ change the plugin SDK.
 - XTC books with damaged or oversized pages fail cleanly instead of
   crashing the X4 or filling the card, gray pages open much faster, and
   long chapter lists take little memory.
+- EPUB: small capitals of a book's stylesheet apply.
+- EPUB: a quoted string left open in a stylesheet ends at its line, so
+  the rules after it apply, and a font name can no longer break the
+  stylesheet's cache.
+- EPUB: CDATA in a chapter is shown as written, its entities not decoded.
+- FictionBook: a second picture of the same id that cannot be decoded no
+  longer removes the first.
+- Markdown: two spaces at a line's end break the line after it, not
+  before; very long lines are no longer cut inside words.
+- Plain text: old Mac line ends (a carriage return alone) part words.
+- Plain text: a long paragraph starting at certain places no longer
+  loses its first word when read from inside it.
+- Memory cards: books and folders whose names begin with a letter
+  beyond ASCII ("Ärger.epub") no longer crash the X4; names of up to 255
+  letters can be written, a file named like another's temporary one is
+  never replaced, and a write that fails on a full card leaves nothing.
+- Desktop and Android: no call can remove or write over the storage's
+  top folder through an empty path.
+- Updates: numbered pre-releases compare by number, so `0.5.0-rc.10`
+  is offered on `0.5.0-rc.9`.
+- Library: going up to a folder that starts a page shows that page.
+- HTTP: an answer's head over the limit is refused also when it comes
+  at once; redirects from an address without a path keep their target.
+- Servers: port 65535 can be listened on; a socket closed right after
+  sending still delivers what was sent.
+- Progress sync: a position held back while its book's progress was
+  fetched is sent even when another book was opened meanwhile.
+- Browser: a server's error page is shown again.
+- Weather: a day whose date cannot be read no longer shifts the others,
+  answers with more days than asked for keep the first ones, and values
+  at their limits no longer overflow.
+- OPDS: a cover of the catalog shown before no longer appears beside
+  another entry.
+- News: very long feed titles are cut like article titles.
+- Lock: a damaged kept code no longer locks the device for good, and the
+  wait no longer shows a second too many.
+- Battery: hostile logs no longer overflow, a damaged line loses only
+  itself, 3999 mV shows as 4.00 V, and the hours left fit on the X4.
+- Joplin: its menu entries show icons again.
 - Native code plugins as files (ADR 0024, PLANNING P5): a code plugin
   can be a file in its folder on the card (`plugins/<id>/code.ppn`),
   which the Xteink X4 and X4 Pro load at their start, without a new
@@ -444,6 +579,56 @@ change the plugin SDK.
   in the emulator (a page of an empty listing was counted below zero).
 - Data files: a file marked `# format 0` is left as it is instead of
   stopping PaperPaw; versions start at 1.
+- The order of a status line's items can be changed with buttons alone:
+  *Menu* (a long press of *Confirm* on the X4) takes the focused item
+  along, the direction and page buttons move it, *Confirm* or *Back*
+  put it down. Items of plugins not there now keep their places when
+  others are shown, hidden or moved.
+- The choice overlay (what to do with a file, whether to delete it)
+  puts options that do not fit on pages, with a pager below them, so
+  every option can be reached by touch. On touch screens, a button
+  pressed on such a list or on a status line's items first shows the
+  focus instead of choosing a row nobody saw.
+- Home: on a touch screen with buttons, a tap during a move by the
+  buttons (e.g. on the pencil) keeps what they moved; the second of two
+  equal items without room is no longer dropped from the page.
+- Status lines draw nothing past their area: icons, gauges and bars
+  that do not fit whole are left out, a battery without its percentage
+  where only the battery fits. A word's background at the left edge of
+  the page keeps its padding on the right.
+- Sliders: the buttons come back from an end that is no whole step to
+  the steps a drag gives (from 12 in fives to 10, not 7); a drag brought
+  back to where it began keeps the value, also where steps are finer
+  than pixels; a touch whose end got lost no longer holds a slider or a
+  row's grip.
+- A kept thumbnail whose header claims a picture larger than the box it
+  was made for takes no memory for it (a file of 17 bytes could ask for
+  8 MB). Empty
+  screens in narrow areas leave out the paw (or the icon) that would
+  not fit.
+- SDK: `Settings::define` and `define_fixed` refuse a setting past the
+  32,768th of its kind instead of mixing it up with another; changing a
+  spec kept in the program with no place left for its copy says
+  `SettingError::Full`, and `Settings::set_choices` says whether it
+  did. `Thumbnail::kept` takes the box the thumbnail was made for and
+  reads no header claiming more.
+- Headers translate their page number; on and off in setting rows are
+  the kernel's words (`core.on`, `core.off`), also where the settings
+  plugin is switched off.
+- SDK: `ListView::confirm` (the first press shows a hidden focus) and
+  `ListView::set_len` (the focus kept in a shorter list).
+  `Slider::stepped` goes to the next step a drag gives;
+  `ui::next_value` steps from a value not among the options to the
+  first (or last) option and stays within a number's range at its
+  ends. Fields set past what the constructors allow no longer bring a
+  list down (`ListView::row` 0, more columns than fit, a `Slider` with
+  `max` below `min`), nor do `Rows::new` with marks and heights of
+  different lengths. Steppers measure the room of their value by its
+  width.
+- Headers: the back arrow's ink begins at the content's margin, where
+  list icons begin, and the title where labels after icons do; the next
+  page's arrow ends at the right margin (on the Boox the arrow sat 8 px
+  left of the icons).
 - SDK: helpers that plugins wrote each for themselves, now in one place.
   `Storage::ignores_case` says whether a storage takes `Books` for
   `books` (memory cards, Windows and macOS disks do), and
@@ -740,6 +925,16 @@ change the plugin SDK.
   1.97.0.0 with the Xtensa GCC 14.2.0 for the ESP32-S3 devices
   (`shells/xteink/versions.env`). The firmware is a workspace of its
   own, so it also builds in a checkout inside another one.
+- Releases name, for each device, the fingerprint a native code plugin
+  must have to run on its firmware (`paperpaw-<device>-<version>-abi.txt`,
+  16 hexadecimal digits), for the plugin library and authors. The
+  firmware's ELF file names it, the one its loader compares, and
+  `paperpaw-sign fingerprint` reads it; a release fails if the sample
+  code plugin, built and packed as an author does, does not fit its
+  firmware. CI checks the same for the X4, X4 Pro and X4 Classic, loads
+  a plugin built in another workspace into a kernel, keeps the SDK free
+  of mutable statics, and checks that the sample and its CI template
+  name the firmware's compilers.
 - Security: PaperPaw's own data (`.paperpaw`: passwords, trusted
   firmware keys, settings) can no longer be reached by another spelling
   of its name. On the X4's card a name stands for an entry by its long
@@ -1854,6 +2049,48 @@ change the plugin SDK.
   removed stays away. When the card is full, reading is kept, written
   once there is room, and a notice says so. Every widget setting has a
   help text.
+- To-do list: an open item beginning with "x " ("x ray at 3") is no
+  longer read back as done and lost; it is kept with a date in front, as
+  todo.txt has the day an item was made.
+- Picture widget: its hint for a folder name of thousands of words is
+  measured without overflow (a panic in debug builds).
+- Text layout: a word moved to the next line, and text carried to a
+  narrower line (after a hanging first line), is broken again where it
+  does not fit, so no line comes out wider than its box, and lines laid
+  out from a kept position are those laid out from the paragraph's
+  start. A paragraph's last line no longer counts the spaces after it,
+  so right-aligned and centred last lines end where they should.
+- Fonts: family names in Mac Roman show their letters beyond ASCII
+  ("Café" had a control character for the "é"); absurd text sizes and
+  outlines far outside a glyph's box no longer overflow (a panic in
+  debug builds) or take long to draw.
+- Hyphenation: words from a pattern file's exception list keep the
+  minimum letters before and after a hyphen, as in TeX.
+- Documents: a position in a gap before a block's first checkpoint (a
+  comment at its start) maps to the next character, no longer past it;
+  `Block::replace` keeps styled runs apart where the replaced text
+  reaches from one run into the next.
+- Pictures: a JPEG whose data ends without its end marker is shown,
+  baseline and progressive, instead of failing; a GIF stops offering
+  rows once the sink refused one; decoded image files open on storage
+  that reads in pieces; `PngWriter::new` refuses a width of `u32::MAX`
+  instead of overflowing.
+- JSON: `stream::Parser::finish` reports a number or literal that ends
+  the text (`42` as the whole text was never reported); `read_file`
+  calls it.
+- SQLite: integers and reals beyond 2^53 are ordered exactly, as SQLite
+  orders them in indexes; a schema too large for page 1 leaves no
+  `.part` file behind; `columns` passes over commas in comments and
+  quoted texts.
+- Dictionaries: a short definition that decoding makes longer (brackets
+  around a pronunciation) comes whole, no longer cut at its end.
+- Graphics: shading on panels of 2 to 16 grays is reported changed, so
+  it is refreshed; `round::point_at` rounds to the nearest pixel on
+  every side of the centre; two half rings meet without a seam; rounded
+  rectangles and pills reach their sides wherever the circle covers
+  most of a pixel (`round::corner_inset` rounds to the nearest pixel),
+  and a 2 by 2 square of radius 1 is drawn. `Rect::union` keeps the
+  largest size instead of wrapping past 65535.
 
 ## [0.3.0] - 2026-10-16
 

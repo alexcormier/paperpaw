@@ -113,7 +113,6 @@ fn only_covers_on_the_page_shown_are_loaded() {
 }
 
 #[test]
-#[ignore = "bug: a cover answer for the feed before is taken for the entry at the same place in the feed shown"]
 fn a_late_cover_of_the_feed_before_is_not_shown_for_another_entry() {
     let (mut h, call) = open(MemoryClass::Large, "");
     h.answer(&call, 200, feed(&["A"]).as_bytes());

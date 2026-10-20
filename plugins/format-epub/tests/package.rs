@@ -290,11 +290,11 @@ fn metadata_of_any_size_is_read_and_bounded() {
 }
 
 #[test]
-#[ignore = "bug: package.ini over 16 KB is never found again, so every open rebuilds the cache"]
 fn a_book_with_long_metadata_reuses_its_cache() {
-    // `package.ini` is read back with a limit of 16 KB; a longer one
-    // (long titles, many subjects) is never found again: each open reads
-    // the package anew and drops the converted chapters.
+    // `package.ini` was read back with a limit of 16 KB; a longer one
+    // (long titles, many subjects) was never found again: each open read
+    // the package anew and dropped the converted chapters. What is kept of
+    // a package is bounded now (32 subjects), and is found again.
     let subjects: String = (0..2_000)
         .map(|i| format!("<dc:subject>Subject number {i}</dc:subject>"))
         .collect();
@@ -305,10 +305,10 @@ fn a_book_with_long_metadata_reuses_its_cache() {
     );
     let epub = package_book(package, &[("OEBPS/a.xhtml", bytes(xhtml("<p>x</p>")))]);
     let (storage, doc) = open(epub);
-    assert_eq!(doc.unwrap().metadata().subjects.len(), 2_000);
+    assert_eq!(doc.unwrap().metadata().subjects.len(), 32);
     storage.written.borrow_mut().clear();
     let again = EpubDocument::open(&storage, "book.epub").unwrap();
-    assert_eq!(again.metadata().subjects.len(), 2_000);
+    assert_eq!(again.metadata().subjects.len(), 32);
     let rewritten: Vec<String> = storage
         .written
         .borrow()
@@ -365,7 +365,6 @@ fn deeply_nested_contents_keep_every_entry() {
 }
 
 #[test]
-#[ignore = "bug: more than 255 nested lists in a navigation document overflow its depth (u8)"]
 fn contents_nested_deeper_than_255_levels_do_not_panic() {
     // `ol_depth += 1` in `read_nav` overflows at the 256th list.
     let result = std::panic::catch_unwind(|| {

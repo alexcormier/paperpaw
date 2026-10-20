@@ -142,8 +142,10 @@ fn draw_empty(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &widgets::Look, text
     let style = UiStyle::new(env);
     let area = look.area;
     let fits = style.font(env).is_some_and(|font| {
-        let lines = font.wrap(style.text, text, f32::from(area.width)).len() as u16;
-        lines * widgets::line_height(env, style.text) <= area.height
+        // In `usize`: thousands of lines must not overflow.
+        let lines = font.wrap(style.text, text, f32::from(area.width)).len();
+        let line = usize::from(widgets::line_height(env, style.text));
+        lines.saturating_mul(line) <= usize::from(area.height)
     });
     if fits {
         widgets::draw_message(canvas, env, look, text);

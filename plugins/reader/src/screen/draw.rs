@@ -223,17 +223,18 @@ impl Book {
         context
     }
 
-    /// Where the top-level chapters begin, as thousandths of the book.
+    /// Where the chapters begin, as thousandths of the book (see
+    /// [`chapter_ticks`]).
     pub(super) fn chapter_marks(&self, env: &Env<'_>) -> String {
         let (document, storage) = (&self.document, env.storage);
-        let mut marks: Vec<u32> = Vec::new();
-        for index in 0..document.toc_len(storage).min(500) {
-            if let Some(entry) = document.toc_entry(storage, index).filter(|e| e.level == 0) {
-                marks.push((document.progress(entry.at) * 1000.0) as u32);
-            }
-        }
-        marks.dedup();
-        let marks: Vec<String> = marks.iter().map(ToString::to_string).collect();
+        let entries: Vec<(u8, u32)> = (0..document.toc_len(storage).min(500))
+            .filter_map(|index| document.toc_entry(storage, index))
+            .map(|entry| (entry.level, (document.progress(entry.at) * 1000.0) as u32))
+            .collect();
+        let marks: Vec<String> = chapter_ticks(&entries)
+            .iter()
+            .map(ToString::to_string)
+            .collect();
         marks.join(",")
     }
 
@@ -260,9 +261,19 @@ impl Book {
             .chain(t.status.map(|r| (r, false)))
     }
 
+    /// Draws the status lines in the canvas's band; in the others what
+    /// they show is not even asked (the X4 draws a page in eight bands).
     pub(super) fn draw_status(&self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
+        let clip = canvas.clip();
+        let mut areas = self
+            .status_areas()
+            .filter(|(area, _)| area.intersection(&clip).is_some())
+            .peekable();
+        if areas.peek().is_none() {
+            return;
+        }
         let context = self.status_context(env);
-        for (area, top) in self.status_areas() {
+        for (area, top) in areas {
             canvas.fill(area, Color::WHITE);
             let id = status::current(env, top, &self.status_lines[usize::from(!top)]);
             let frame = paperpaw_sdk::StatusFrame {
@@ -293,4 +304,27 @@ pub(super) fn draw_image(
         &image.image,
         Rect::new(left as u16, top as u16, w as u16, h as u16),
     );
+}
+
+/// Ticks on a bar across the book that deeper levels of the contents
+/// may bring it to: more crowd it into a line.
+const MAX_TICKS: usize = 60;
+
+/// The places of the contents' `entries` (level, thousandths) that get a
+/// tick: every top-level entry, and the deeper ones (chapters in parts)
+/// down to the deepest level whose entries and those above still leave
+/// the ticks apart.
+pub(super) fn chapter_ticks(entries: &[(u8, u32)]) -> Vec<u32> {
+    let deepest = entries.iter().map(|&(level, _)| level).max().unwrap_or(0);
+    let shown = (0..=deepest)
+        .rev()
+        .find(|&depth| entries.iter().filter(|&&(level, _)| level <= depth).count() <= MAX_TICKS)
+        .unwrap_or(0);
+    let mut ticks: Vec<u32> = entries
+        .iter()
+        .filter(|&&(level, _)| level <= shown)
+        .map(|&(_, at)| at)
+        .collect();
+    ticks.dedup();
+    ticks
 }

@@ -90,7 +90,8 @@ impl Rect {
             && (point.y as i64) < self.bottom() as i64
     }
 
-    /// The smallest rectangle containing both `self` and `other`.
+    /// The smallest rectangle containing both `self` and `other`, as far
+    /// as a width and height of `u16` reach.
     ///
     /// Empty rectangles are ignored.
     pub fn union(&self, other: &Rect) -> Rect {
@@ -104,7 +105,8 @@ impl Rect {
         let y = self.y.min(other.y);
         let right = self.right().max(other.right());
         let bottom = self.bottom().max(other.bottom());
-        Rect::new(x, y, (right - x as u32) as u16, (bottom - y as u32) as u16)
+        let size = |end: u32, start: u16| (end - u32::from(start)).min(u32::from(u16::MAX)) as u16;
+        Rect::new(x, y, size(right, x), size(bottom, y))
     }
 
     /// The overlapping part of `self` and `other`, if any.

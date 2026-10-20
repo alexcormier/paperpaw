@@ -158,7 +158,7 @@ impl TimeZone {
         let Some(summer) = self.summer else {
             return self.standard;
         };
-        let year = LocalTime::from_seconds(unix + i64::from(self.standard)).year;
+        let year = LocalTime::from_seconds(unix.saturating_add(i64::from(self.standard))).year;
         // Start is given in standard time, end in summer time.
         let start = summer.start.local_seconds(year) - i64::from(self.standard);
         let end = summer.end.local_seconds(year) - i64::from(summer.offset);
@@ -439,7 +439,7 @@ pub fn local_seconds(env: &Env<'_>, unix: i64) -> i64 {
             .and_then(|c| c.utc_offset_minutes)
             .map_or(0, |m| i64::from(m) * 60),
     };
-    unix + offset
+    unix.saturating_add(offset)
 }
 
 /// The local date and time now, if the device knows the time.

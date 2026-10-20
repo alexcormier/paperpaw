@@ -55,7 +55,8 @@ fn deeply_nested_elements_keep_their_text_and_positions() {
             "after"
         ]
     );
-    // The deepest word's position goes to KOReader's form and back.
+    // The deepest word's position goes to KOReader's form and back; the
+    // path is kept to its first levels, so it stays short.
     let read = blocks(&doc, &storage);
     let (_, block) = read
         .iter()
@@ -64,9 +65,10 @@ fn deeply_nested_elements_keep_their_text_and_positions() {
     let at = Locator::new(0, block.start + block.text.find("bottom").unwrap() as u32);
     let xpointer = doc.xpointer(&storage, at).unwrap();
     assert!(
-        xpointer.matches("div[1]").count() >= depth / 2,
-        "{xpointer:.80}"
+        xpointer.starts_with("/body/DocFragment[1]/body/div[1]/span[1]/div[1]"),
+        "{xpointer}"
     );
+    assert!(xpointer.len() < 256, "{xpointer}");
     assert_eq!(doc.locate_xpointer(&storage, &xpointer), Some(at));
 }
 
@@ -85,18 +87,23 @@ fn huge_attribute_values_do_not_cost_the_text() {
     let huge = "x".repeat(1 << 20);
     let body = format!(
         "<p class=\"{huge}\" id=\"{huge}\" style=\"{huge}\">First</p>\
-         <p><a href=\"{huge}\">Linked</a> <a href=\"#{}\">Long</a></p>\
+         <p><a href=\"{huge}\">Linked</a> <a href=\"#{}\">Long</a> \
+         <a href=\"#{}\">Longer</a></p>\
          <p title='{huge}' data-x=\"{}\">Last</p>",
+        "y".repeat(1500),
         "y".repeat(3000),
         "&amp;".repeat(100_000),
     );
     let (storage, doc) = one(&body);
-    assert_eq!(words(&doc, &storage), ["First", "Linked", "Long", "Last"]);
-    // The link of a tag that was kept is there, its target cut short
-    // (an anchor that long matches nothing anyway).
+    assert_eq!(
+        words(&doc, &storage),
+        ["First", "Linked", "Long", "Longer", "Last"]
+    );
+    // The link of a tag that was kept is there; one whose target is over
+    // 2000 bytes is left out (an anchor that long matches nothing anyway).
     let links = doc.links(&storage, 0, 0, u32::MAX);
     assert_eq!(links.len(), 1);
-    assert!(links[0].href.len() <= 2048);
+    assert!(links[0].href.ends_with(&format!("#{}", "y".repeat(1500))));
     assert_eq!(
         doc.link_target(&storage, &links[0].href),
         Some(Locator::new(0, 0))
@@ -159,7 +166,6 @@ fn scripts_styles_and_hidden_parts_are_not_shown() {
 }
 
 #[test]
-#[ignore = "bug: CDATA in a chapter is entity-decoded as if it were text"]
 fn cdata_is_shown_as_written() {
     let (storage, doc) = one("<p><![CDATA[a &amp; b < c]]></p>");
     assert_eq!(text(&doc, &storage), "a &amp; b < c");
@@ -251,7 +257,6 @@ fn long_alternative_text_is_cut() {
 }
 
 #[test]
-#[ignore = "bug: a picture's alternative text over 4000 bytes is cut inside a character"]
 fn long_alternative_text_is_cut_at_a_character() {
     // The record of a picture (its cache name, a tab, the alternative
     // text) is cut at 4000 bytes wherever that falls; three lengths before
@@ -394,7 +399,6 @@ fn locators_past_the_end_or_in_other_sections_find_nothing() {
 }
 
 #[test]
-#[ignore = "bug: small capitals of a book's stylesheet are lost in its cache (styles.txt)"]
 fn small_capitals_of_the_books_stylesheet_apply() {
     let body = "<p class=\"sc\">From the sheet</p>\
                 <p style=\"font-variant: small-caps\">From the attribute</p>";
