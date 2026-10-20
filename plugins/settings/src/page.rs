@@ -429,10 +429,6 @@ impl GroupPage {
 
 impl Screen for GroupPage {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
-        // Shown below an overlay left open above it, without `on_show`.
-        if self.covered.shown() {
-            self.rebuild(env);
-        }
         let style = self.style;
         self.header
             .draw(canvas, env, &style, &self.title, None, paging(&self.rows));
@@ -706,6 +702,12 @@ impl Screen for GroupPage {
         self.covered.hide();
     }
 
+    /// Asked for while covered: it comes once the page shows again, also
+    /// below an overlay left open above it (where `on_show` does not).
+    fn on_timer(&mut self, cx: &mut Cx<'_, '_>) {
+        self.on_show(cx);
+    }
+
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
         if self.covered.shown() {
             let env = *cx.env();
@@ -723,7 +725,7 @@ impl Screen for GroupPage {
             return;
         }
         if *event == events::SETTING_CHANGED {
-            if self.covered.changed() {
+            if self.covered.changed(cx) {
                 let env = *cx.env();
                 self.rebuild(&env);
                 cx.request_redraw();

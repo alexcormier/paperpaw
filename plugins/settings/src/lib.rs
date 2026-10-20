@@ -336,9 +336,14 @@ struct Covered {
 }
 
 impl Covered {
-    /// A setting changed: `true` if the page is made anew now; covered,
-    /// it is only noted.
-    fn changed(&mut self) -> bool {
+    /// A setting changed: `true` if the page is made anew now. Covered,
+    /// it is noted and a timer asked for, which comes once the page shows
+    /// again (see the pages' `on_timer`).
+    fn changed(&mut self, cx: &mut Cx<'_, '_>) -> bool {
+        if self.hidden && !self.stale {
+            let now = cx.env().now;
+            cx.wake_at(now);
+        }
         self.stale |= self.hidden;
         !self.hidden
     }
