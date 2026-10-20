@@ -143,7 +143,10 @@ fn received(env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
     let key = match trust::verdict(env, &done.plugin, &folder) {
         Verdict::Install { code } => {
             let before = env.plugins.get(&done.plugin).is_some();
-            trust::install(env, code, out);
+            if trust::install(env, code, out).is_none() {
+                INSTALLER.cancel(env.storage);
+                return out.push(failed(env, &done.name));
+            }
             match (code.is_some(), before) {
                 (true, true) => "store.updated-code",
                 (true, false) => "store.installed-code",

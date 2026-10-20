@@ -148,16 +148,19 @@ pub(crate) fn verdict(env: &Env<'_>, plugin: &str, folder: &str) -> Verdict {
 
 /// Installs the complete job's plugin, remembering its author's key and
 /// naming its code as installed; for one signed by another author, after
-/// the reader said to.
+/// the reader said to. `None` where either cannot be kept (its code would
+/// not run): not installed, the job left for another try.
 pub(crate) fn install(
     env: &Env<'_>,
     code: Option<Code>,
     out: &mut Vec<Command>,
 ) -> Option<Progress> {
     let progress = INSTALLER.progress(env.storage)?;
-    if let Some(code) = code {
-        native::remember_author(env.storage, &progress.plugin, &code.author);
-        native::remember_code(env.storage, &progress.plugin, &code.sha256);
+    if let Some(code) = code
+        && !(native::remember_author(env.storage, &progress.plugin, &code.author)
+            && native::remember_code(env.storage, &progress.plugin, &code.sha256))
+    {
+        return None;
     }
     let _ = env.storage.remove(&expected_path());
     INSTALLER.install(env, out)

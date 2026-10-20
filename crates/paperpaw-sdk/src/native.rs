@@ -150,7 +150,8 @@ pub fn known_author(storage: &dyn Storage, plugin: &str) -> Option<[u8; 32]> {
 
 /// Remembers `key` as the author of `plugin`'s code, in place of one
 /// known before: at its first install, and when the reader installed an
-/// update by another; `false` if it could not be kept.
+/// update by another; `false` if it could not be kept (the file left as
+/// it is where it could not be read).
 pub fn remember_author(storage: &dyn Storage, plugin: &str, key: &[u8; 32]) -> bool {
     keep_entry(storage, AUTHORS, plugin, key)
 }
@@ -172,7 +173,8 @@ pub fn installed_code(storage: &dyn Storage, plugin: &str) -> Option<[u8; 32]> {
 
 /// Names the code of `plugin` as installed, by its header's SHA-256, in
 /// place of the version before: every installer does, once it checked the
-/// file ([`check_file`]) and its author; `false` if it could not be kept.
+/// file ([`check_file`]) and its author; `false` if it could not be kept
+/// (the file left as it is where it could not be read).
 pub fn remember_code(storage: &dyn Storage, plugin: &str, sha256: &[u8; 32]) -> bool {
     keep_entry(storage, INSTALLED, plugin, sha256)
 }
@@ -187,10 +189,14 @@ fn entry(storage: &dyn Storage, file: &str, plugin: &str) -> Option<[u8; 32]> {
     paperpaw_digest::hex::decode(hex.trim())?.try_into().ok()
 }
 
-/// Keeps `value` for `plugin` in `file`, in place of what was kept.
+/// Keeps `value` for `plugin` in `file`, in place of what was kept. A
+/// file that is there but cannot be read (a failing card, too large) is
+/// not written over: it holds every other plugin's.
 fn keep_entry(storage: &dyn Storage, file: &str, plugin: &str, value: &[u8; 32]) -> bool {
-    let kept = crate::read_file(storage, file, 64 * 1024).unwrap_or_default();
-    let kept = core::str::from_utf8(&kept).unwrap_or_default();
+    let Ok(kept) = crate::files::load_text_for_update(storage, file, 64 * 1024) else {
+        return false;
+    };
+    let kept = kept.unwrap_or_default();
     let mut text: String = kept
         .lines()
         .filter(|line| line.split('\t').next() != Some(plugin))
@@ -535,6 +541,31 @@ mod tests {
     use alloc::string::ToString;
 
     use super::*;
+
+    #[test]
+    fn what_cannot_be_read_is_not_written_over() {
+        let kept = crate::MemoryStorage::new();
+        assert!(remember_author(&kept, "clock", &[1; 32]));
+        assert!(remember_code(&kept, "clock", &[2; 32]));
+        let authors = crate::read_file(&kept, AUTHORS, 1024).unwrap();
+        let codes = crate::read_file(&kept, INSTALLED, 1024).unwrap();
+        // The card fails: nothing kept, the other plugins' left as they were.
+        let failing = crate::memory_storage::Unreadable(kept);
+        assert!(!remember_author(&failing, "weather", &[3; 32]));
+        assert!(!remember_code(&failing, "weather", &[4; 32]));
+        assert_eq!(
+            crate::read_file(&failing.0, AUTHORS, 1024).unwrap(),
+            authors
+        );
+        assert_eq!(
+            crate::read_file(&failing.0, INSTALLED, 1024).unwrap(),
+            codes
+        );
+        // A file too large to read is not written over either.
+        let large = crate::MemoryStorage::new().with(INSTALLED, "x".repeat(70 * 1024));
+        assert!(!remember_code(&large, "clock", &[2; 32]));
+        assert_eq!(large.size(INSTALLED), Ok(70 * 1024));
+    }
 
     #[test]
     fn code_is_named_as_installed() {
