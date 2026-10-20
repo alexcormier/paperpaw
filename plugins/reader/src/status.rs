@@ -442,3 +442,6 @@ fn items_signature(env: &Env<'_>, context: &Params) -> String {
     }
     out
 }
+
+#[cfg(test)]
+mod choice_tests;
