@@ -392,3 +392,58 @@ fn the_settings_open_on_a_setting_focused() {
         app.described()
     );
 }
+
+/// A data plugin with two themes: presets of the kind `core.theme`.
+const THEMES: &[(&str, &[u8])] = &[
+    (
+        "plugins/themes/plugin.ini",
+        b"[plugin]\nid = themes\nname = Themes\ndescription = Two themes.\nversion = 1.0.0\nformats = 1\n",
+    ),
+    (
+        "plugins/themes/presets.ini",
+        b"[tall]\nkind = core.theme\nname = Tall\ndescription = Taller rows.\ncore.ui-row = 180\n\n[framed]\nkind = core.theme\nname = Framed\ndescription = A frame for the focus.\ncore.ui-focus = core.focus.ring\n",
+    ),
+];
+
+/// Themes are chosen as a whole at the top of the appearance settings;
+/// choosing one gives the others' values back their defaults.
+#[test]
+fn a_theme_is_chosen_at_the_top_of_the_appearance_settings() {
+    for device in DEVICES {
+        let mut app = App::new(device, Shared::memory("", THEMES));
+        let look = || {
+            Params::new().with(
+                params::ID,
+                paperpaw_sdk::builtin::groups::LOOK.as_str().to_string(),
+            )
+        };
+        app.open_slot(slots::SETTINGS, look());
+        let first = rows(&mut app)[0].clone();
+        assert!(
+            first.starts_with("Theme") && first.contains("Your own"),
+            "{first}"
+        );
+        choose(&mut app, "Theme");
+        assert_eq!(app.screen(), "settings.themes", "{}", app.described());
+        choose(&mut app, "Tall");
+        assert_ne!(app.screen(), "settings.themes");
+        assert_eq!(app.kernel.settings().int("core.ui-row"), 180);
+        assert!(rows(&mut app)[0].contains("Tall"), "{:?}", rows(&mut app));
+        // The other theme: its value set, the first one's at its default.
+        choose(&mut app, "Theme");
+        choose(&mut app, "Framed");
+        let settings = app.kernel.settings();
+        assert_eq!(settings.text("core.ui-focus"), "core.focus.ring");
+        assert!(!settings.is_set("core.ui-row"));
+    }
+    // Without themes, no such row.
+    let mut app = App::new(X4, Shared::memory("", &[]));
+    app.open_slot(
+        slots::SETTINGS,
+        Params::new().with(
+            params::ID,
+            paperpaw_sdk::builtin::groups::LOOK.as_str().to_string(),
+        ),
+    );
+    assert!(!rows(&mut app)[0].starts_with("Theme"));
+}

@@ -40,6 +40,7 @@ mod group_list;
 mod page;
 mod search;
 mod secrets;
+mod themes;
 
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
@@ -140,6 +141,11 @@ impl Plugin for SettingsPlugin {
                 }
                 Box::new(page)
             }),
+        ))?;
+        r.add_screen(ScreenSpec::new(
+            themes::SCREEN,
+            "settings.theme",
+            Box::new(|env, _| Box::new(themes::Themes::new(env))),
         ))?;
         r.add_screen(ScreenSpec::new(
             CHOICE,

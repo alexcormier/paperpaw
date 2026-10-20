@@ -115,6 +115,9 @@ pub(super) enum Row {
     Setting(Box<SettingSpec>),
     /// Resets the page's settings to their defaults, at its end.
     Reset,
+    /// The theme in use, at the top of the appearance settings where
+    /// there are themes (see [`themes`](super::themes)).
+    Theme,
 }
 
 #[derive(Debug)]
@@ -188,6 +191,9 @@ impl GroupPage {
         // Headings only where there is more than one part.
         let headed = sections.len() > 1;
         let mut entries = Vec::new();
+        if *of == groups::LOOK && own.is_none() && super::themes::themes(env).next().is_some() {
+            entries.push(Row::Theme);
+        }
         for section in &sections {
             if let Some(key) = section.filter(|_| headed) {
                 entries.push(Row::Heading(env.i18n.tr(key).to_string()));
@@ -219,7 +225,7 @@ impl GroupPage {
                 Row::Heading(_) => heading,
                 Row::Setting(spec) if ui::slider::shows(env, spec) => slider_row,
                 Row::Setting(_) => row,
-                Row::Reset => style.row as u16,
+                Row::Reset | Row::Theme => style.row as u16,
             })
             .collect();
         let headings = entries
@@ -231,7 +237,7 @@ impl GroupPage {
             &style,
             entries.iter().filter_map(|e| match e {
                 Row::Setting(spec) => Some(&**spec),
-                Row::Heading(_) | Row::Reset => None,
+                Row::Heading(_) | Row::Reset | Row::Theme => None,
             }),
         );
         Self {
@@ -382,9 +388,16 @@ impl GroupPage {
 
     /// What confirming (or tapping) the focused setting does.
     pub(super) fn activate(&mut self, env: &Env<'_>, cx: &mut Cx<'_, '_>) {
-        if matches!(self.entries.get(self.rows.focus()), Some(Row::Reset)) {
-            cx.command(ask_reset(env, Some((&self.group, &self.title))));
-            return;
+        match self.entries.get(self.rows.focus()) {
+            Some(Row::Reset) => {
+                cx.command(ask_reset(env, Some((&self.group, &self.title))));
+                return;
+            }
+            Some(Row::Theme) => {
+                cx.command(Command::OpenScreen(super::themes::SCREEN, Params::new()));
+                return;
+            }
+            _ => {}
         }
         let Some(spec) = self.focused() else {
             return;
@@ -448,6 +461,13 @@ impl Screen for GroupPage {
                         let title = env.i18n.tr("settings.reset-page");
                         let rect = Rect::new(rect.x, rect.y, rect.width, style.row as u16);
                         ui::draw_value_row(canvas, env, &style, rect, focused, title, "");
+                        return;
+                    }
+                    Row::Theme => {
+                        let title = env.i18n.tr("settings.theme");
+                        let rect = Rect::new(rect.x, rect.y, rect.width, style.row as u16);
+                        let name = super::themes::applied_name(env);
+                        ui::draw_value_row(canvas, env, &style, rect, focused, title, &name);
                         return;
                     }
                     Row::Setting(spec) => spec,

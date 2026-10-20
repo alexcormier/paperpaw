@@ -6,6 +6,10 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: themes are presets of the kind `core.theme` (`presets::THEME`,
+  covering `presets::theme_settings`, the appearance group): the
+  settings plugin lists them under *Theme* at the top of the appearance
+  settings where any is installed, so two themes no longer fight.
 - SDK: semantic icons (`icons::BACK`, `PREV`, `NEXT`, `HOLD`, `BUSY`,
   `SHIFT`, `DELETE`, `SPACE`) take the icon a plugin names for them with
   `add_icon`, so a theme changes the headers' arrows, the hints' marks
