@@ -6,6 +6,15 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Passwords and keys: the file that holds them is read again before
+  each change is saved. Where it cannot be read, it is left as it is and
+  the device says so; once it can be read again (corrected on a
+  computer), what it holds is used again and kept along with what was
+  entered since. Before, one failed read at start kept every later
+  password from being saved, without a word.
+- Languages: the kernel's translations name the language's decimal mark
+  (`.` in English, `,` in German), which every plugin can use for the
+  numbers it shows.
 - SDK: a time a screen asks for with `Cx::wake_at` is that screen's:
   it comes while the screen is on top, waits while another covers it
   (a menu, a keyboard, a quick panel) and is kept when the screen is

@@ -239,4 +239,25 @@ fn passwords_that_cannot_be_read_are_left_as_they_are() {
     kernel.start(Instant(0));
     kernel.set_secret(SecretChange::keep("a.key", "a.label", "hunter2"));
     assert_eq!(bytes(&kernel, FILE), source);
+    kernel.finish();
+    assert!(kernel.notice.is_some(), "the user is told");
+    // Readable again (corrected on a computer): what it holds is kept,
+    // and what is entered now goes with it.
+    let fixed = SecretChange::keep("wifi.home", "Home", "secret");
+    kernel
+        .storage()
+        .write(FILE, &{
+            let mut secrets = paperpaw_sdk::secrets::Secrets::default();
+            secrets.apply(fixed);
+            secrets.encode().into_bytes()
+        })
+        .unwrap();
+    kernel.set_secret(SecretChange::keep("b.key", "b.label", "swordfish"));
+    let secrets = &kernel.shared.secrets;
+    assert_eq!(secrets.get("wifi.home"), Some("secret"));
+    assert_eq!(secrets.get("b.key"), Some("swordfish"));
+    let saved =
+        paperpaw_sdk::secrets::Secrets::decode(&String::from_utf8(bytes(&kernel, FILE)).unwrap());
+    assert_eq!(saved.get("wifi.home"), Some("secret"));
+    assert_eq!(saved.get("b.key"), Some("swordfish"));
 }

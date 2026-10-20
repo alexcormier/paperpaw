@@ -483,7 +483,7 @@ impl Kernel {
     fn read_secrets(&mut self) {
         use paperpaw_sdk::secrets::{FILE, Secrets};
         let storage = self.shared.storage.as_ref();
-        match paperpaw_sdk::files::load_text_for_update(storage, FILE, 64 * 1024) {
+        match paperpaw_sdk::files::load_text_for_update(storage, FILE, MAX_SECRETS) {
             Ok(text) => self.shared.secrets = Secrets::decode(&text.unwrap_or_default()),
             Err(error) => {
                 self.secrets_unreadable = true;

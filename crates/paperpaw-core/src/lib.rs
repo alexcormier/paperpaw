@@ -122,6 +122,8 @@ const HINTS_MS: u64 = 4000;
 const SLOW_MS: u32 = 400;
 /// What was timed is remembered for this many things at most.
 const TIMED: usize = 24;
+/// Largest file of passwords and keys read.
+const MAX_SECRETS: usize = 64 * 1024;
 /// Default memory for glyphs rasterized at runtime.
 const DEFAULT_GLYPH_CACHE: usize = 32 * 1024;
 
@@ -755,13 +757,36 @@ impl Kernel {
 
     /// Keeps or removes a password or key, as [`Command::SetSecret`] of a
     /// plugin does (e.g. a network's password a shell was given).
+    ///
+    /// The file is read again first: where it is there but cannot be
+    /// read, it is left as it is (written, the others in it would be
+    /// lost), the change applies until the end, and the user is told; one
+    /// readable again takes the place of what could not be read at start.
     pub fn set_secret(&mut self, change: paperpaw_sdk::secrets::SecretChange) {
-        use paperpaw_sdk::secrets;
+        use paperpaw_sdk::secrets::{self, Secrets};
+        let storage = self.shared.storage.clone();
+        let read =
+            paperpaw_sdk::files::load_text_for_update(storage.as_ref(), secrets::FILE, MAX_SECRETS);
+        if let Ok(text) = &read
+            && self.secrets_unreadable
+        {
+            self.shared.secrets = Secrets::decode(text.as_deref().unwrap_or_default());
+            self.secrets_unreadable = false;
+        }
         self.shared.secrets.apply(change);
-        if self.secrets_unreadable {
-            // Written from what was read, the others would be lost.
-            let message = format!("{}: could not be read at start; not saved", secrets::FILE);
-            return self.warn_runtime(message);
+        if let Err(error) = read {
+            self.secrets_unreadable = true;
+            let file = secrets::FILE;
+            self.warn_runtime(format!(
+                "{file} cannot be read ({error}): not saved, left as it is"
+            ));
+            let file = paperpaw_sdk::Arg::Str(file);
+            let text = self
+                .shared
+                .translator
+                .format("core.secrets-unreadable", &[("file", file)]);
+            self.output.commands.push(Command::Notify(text));
+            return;
         }
         let text = self.shared.secrets.encode();
         let storage = self.shared.storage.as_ref();
