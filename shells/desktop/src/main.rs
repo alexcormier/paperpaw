@@ -35,6 +35,8 @@ OPTIONS:
     --heap-budget <KiB>   Override the profile's heap budget (`none` = unlimited)
     --trace-alloc <bytes> Print every kernel allocation of at least this size, with where
     --heap-report         After a headless run, list the live heap by call site
+    --free-space <bytes>  Say the storage has this much free, not the computer's
+                          disk (screenshots alike everywhere)
     --trace               Print what each frame's drawing asks the storage, band by band,
                           and how long it takes
     -h, --help            Show this help
@@ -86,8 +88,8 @@ fn run() -> Result<(), String> {
         .library
         .clone()
         .unwrap_or_else(|| PathBuf::from("samples/library"));
-    let storage = paperpaw_fs::DirStorage::new(&library)
-        .map_err(|e| format!("library {}: {e}", library.display()))?;
+    let storage =
+        device::library(&library).map_err(|e| format!("library {}: {e}", library.display()))?;
     if options.record.is_some() && options.headless {
         return Err("--record records the window: not with --headless".into());
     }
@@ -197,6 +199,14 @@ fn parse_args(mut args: impl Iterator<Item = String>) -> Result<Option<Options>,
                 options.screenshot_dir = Some(PathBuf::from(value("--screenshot-dir")?));
             }
             "--heap-report" => options.heap_report = true,
+            "--free-space" => {
+                let bytes = value("--free-space")?;
+                device::set_free_space(
+                    bytes
+                        .parse()
+                        .map_err(|_| format!("--free-space expects bytes, got `{bytes}`"))?,
+                );
+            }
             "--trace" => trace::start(),
             "--trace-alloc" => {
                 let bytes = value("--trace-alloc")?;

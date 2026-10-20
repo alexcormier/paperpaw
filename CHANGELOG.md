@@ -6,6 +6,9 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Emulator: `--free-space <bytes>` makes the emulated storage say it has
+  that much free, whatever the computer's disk has, so screenshots of the
+  store look the same everywhere (the snapshot tests use it).
 - Plugin authors: `paperpaw-dev` (`tools/dev`) checks a plugin before it
   is published, on the emulated X4, X4 Pro, X4 Classic and Boox, in
   every language, light and dark, and look: contact sheets of every
