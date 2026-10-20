@@ -1059,7 +1059,7 @@ impl Plugin for OverlayPlugin {
             description: Cow::Borrowed(""),
             version: Version::new(1, 0, 0),
             sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
+            uses: paperpaw_sdk::Uses::NETWORK,
         }
     }
 
@@ -1213,13 +1213,13 @@ fn scheduled_events_come_at_their_time() {
     kernel.start(Instant(0));
     let event = Id::new_static("ov.later");
     let params = paperpaw_sdk::Params::new().with("id", "x");
-    kernel.apply(Command::Schedule(
-        event.clone(),
-        params.clone(),
-        Instant(9000),
+    kernel.apply(Command::Work(
+        paperpaw_sdk::work::Work::at(event.clone(), Instant(9000)).with(params.clone()),
     ));
     // Scheduled again: moved, not doubled.
-    kernel.apply(Command::Schedule(event, params, Instant(5000)));
+    kernel.apply(Command::Work(
+        paperpaw_sdk::work::Work::at(event, Instant(5000)).with(params),
+    ));
     assert_eq!(kernel.finish().wake_at(), Some(Instant(5000)));
     log.borrow_mut().clear();
     kernel.tick(Instant(4999));
@@ -3010,7 +3010,7 @@ impl Plugin for NetPlugin {
             description: Cow::Borrowed(""),
             version: Version::new(1, 0, 0),
             sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
+            uses: paperpaw_sdk::Uses::NETWORK,
         }
     }
 
@@ -3281,6 +3281,7 @@ fn overlays_leave_the_rows_they_do_not_cover() {
 }
 
 mod clean_up;
+mod declared_work;
 mod frames;
 mod input;
 mod kernel_calls;

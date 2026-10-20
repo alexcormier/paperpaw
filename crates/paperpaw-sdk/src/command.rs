@@ -378,6 +378,10 @@ pub enum Command {
     /// is open then: a timer for plugins, e.g. for something to do at a
     /// time of day. Scheduling the same event again moves it; it is
     /// emitted once.
+    #[deprecated(
+        since = "0.4.0",
+        note = "declare work at a time: `Command::Work(Work::at(event, at).with(params))`"
+    )]
     Schedule(Id, Params, paperpaw_platform::Instant),
     /// Shows a short message for a few seconds, e.g. "Sync done", by the
     /// screen bound to [`slots::NOTICE`](crate::builtin::slots::NOTICE),

@@ -87,7 +87,7 @@ use crate::params::Params;
 
 /// Natural moments at which work may run, cheaply: the radio is on
 /// anyway, or about to be for the reader.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
 pub struct Moments(u8);
 
 impl Moments {
@@ -621,6 +621,65 @@ impl fmt::Debug for WorkSpec {
 pub struct Note {
     pub at: Instant,
     pub text: String,
+}
+
+/// Where every declared work stands, and the plugins' notes, kept by the
+/// kernel ([`Env::work`](crate::Env)).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct WorkStates {
+    works: Vec<(Id, String, WorkState)>,
+    notes: Vec<(Id, Note)>,
+}
+
+/// [`WorkStates::none`].
+static NO_WORK: WorkStates = WorkStates {
+    works: Vec::new(),
+    notes: Vec::new(),
+};
+
+impl WorkStates {
+    /// No work and no notes, e.g. for tests.
+    pub fn none() -> &'static WorkStates {
+        &NO_WORK
+    }
+
+    /// Where the work with this id stands (its first key, if several).
+    pub fn get(&self, id: &Id) -> Option<&WorkState> {
+        self.works.iter().find(|(i, ..)| i == id).map(|(.., s)| s)
+    }
+
+    /// Where the work with this id and key stands.
+    pub fn keyed(&self, id: &Id, key: &str) -> Option<&WorkState> {
+        self.works
+            .iter()
+            .find(|(i, k, _)| i == id && k == key)
+            .map(|(.., s)| s)
+    }
+
+    /// Every declared work: its id, key and state.
+    pub fn iter(&self) -> impl Iterator<Item = (&Id, &str, &WorkState)> {
+        self.works.iter().map(|(i, k, s)| (i, k.as_str(), s))
+    }
+
+    /// What the plugin's background work last said.
+    pub fn note(&self, plugin: &Id) -> Option<&Note> {
+        self.notes.iter().find(|(p, _)| p == plugin).map(|(_, n)| n)
+    }
+
+    /// Sets every work's state at once (for the kernel).
+    #[doc(hidden)]
+    pub fn set_works(&mut self, works: Vec<(Id, String, WorkState)>) {
+        self.works = works;
+    }
+
+    /// Keeps a plugin's note in place of the one before (for the kernel).
+    #[doc(hidden)]
+    pub fn set_note(&mut self, plugin: Id, note: Note) {
+        match self.notes.iter_mut().find(|(p, _)| *p == plugin) {
+            Some((_, old)) => *old = note,
+            None => self.notes.push((plugin, note)),
+        }
+    }
 }
 
 #[cfg(test)]

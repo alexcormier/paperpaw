@@ -18,8 +18,19 @@ change the plugin SDK.
   `Registrar::add_work`, `events::WORK_CHANGED`), timers have keys
   (`Work::key`, `Command::CancelWork(id, key)`), work may be kept across
   starts (`Work::persist`), and `Command::CancelHttp` takes requests
-  back. The kernel runs declared work in a following step; until then
-  these commands do nothing.
+  back.
+- Kernel, declared work (ADR 0025): one queue for plugins' timers and
+  work. Work runs at its time, at one of its moments (waking, a book
+  opened or closed, going to sleep, the radio on anyway, charging, idle)
+  or at its deadline, whichever comes first; work that needs the
+  network and is only nice to have runs only while the radio is on
+  anyway, so it never switches it on. Jobs take one step a tick, never
+  while input waits; work with a period comes again; Offline holds
+  network work back. `Command::Schedule` is deprecated, as work at a
+  time (`Work::at`, or `EVENT.schedule`) replaces it; the rules and
+  Wi-Fi plugins use that. Requests, servers and sockets of a plugin
+  whose manifest does not declare the network are refused, with
+  `Reason::NotDeclared`.
 - SDK, HTTP: `HttpRequest` is made with `HttpRequest::get` or `new` and
   methods (`header`, `body`, `body_from`, `save_to`, `with`), no longer
   field by field (`#[non_exhaustive]`). A request may set a `timeout`

@@ -16,6 +16,7 @@ impl Kernel {
         self.check_scope_owner();
         self.check_preview_owner();
         self.check_network();
+        self.run_work();
         self.run_commands();
         if let Some(row) = self.hint_row() {
             let (hints, held) = (self.current_hints(), self.current_holds());
@@ -81,7 +82,7 @@ impl Kernel {
         }
         let input = self.input.recognizer.next_deadline(&self.thresholds());
         let notice = self.notice.as_ref().map(|(_, until)| *until);
-        let scheduled = self.scheduled.iter().map(|(at, ..)| *at).min();
+        let work = self.works.next_wake(&self.shared.power, self.last_activity);
         // After a screenshot is drawn, a message says where it went.
         let shot = self
             .frame
@@ -95,7 +96,7 @@ impl Kernel {
             input,
             timer,
             notice,
-            scheduled,
+            work,
             self.sleep_due(),
             shot,
             self.network_deadline(),
@@ -142,6 +143,10 @@ impl Kernel {
 
     /// Carries out a command, by its kind.
     pub(crate) fn apply(&mut self, command: Command) {
+        // Network use the plugin's manifest does not declare: refused.
+        let Some(command) = self.declared_network(command) else {
+            return;
+        };
         match command {
             Command::OpenSlot(slot, params) => self.open_slot_command(slot, params),
             Command::OpenScreen(screen, params) => self.open(screen, None, &params),
@@ -153,10 +158,9 @@ impl Kernel {
             Command::Notify(text) => self.notify(text),
             Command::Emit(event, params) => self.emit(&event, &params),
             Command::RunAction(action) => self.dispatch(action),
-            Command::Schedule(event, params, at) => {
-                self.scheduled.retain(|(_, e, _)| *e != event);
-                self.scheduled.push((at, event, params));
-            }
+            command @ (Command::Work(_) | Command::CancelWork(..)) => self.apply_work(command),
+            #[expect(deprecated, reason = "timers of plugins not moved yet")]
+            command @ Command::Schedule(..) => self.apply_work(command),
             Command::Restart => self.restart = true,
             Command::LoadPlugin(folder) => self.load_plugin(&folder),
             Command::RemovePlugin(id) => self.remove_plugin(&id),
@@ -215,6 +219,8 @@ impl Kernel {
         if *event == events::PAGE_TURNED {
             self.last_activity = self.now;
         }
+        // Moments for declared work, and jobs waiting for this event.
+        self.works.saw(event);
         let env = self.shared.env(self.now);
         for (_, plugin, handler) in self.subscriptions.iter().filter(|(id, ..)| id == event) {
             let _running = self.shared.meter.enter(plugin.as_str());

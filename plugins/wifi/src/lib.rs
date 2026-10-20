@@ -27,6 +27,7 @@ use paperpaw_sdk::builtin::{events, params};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::wifi::{self, JoinFailure, WifiCommand, WifiState};
+use paperpaw_sdk::work::Work;
 use paperpaw_sdk::{
     Arg, Command, Env, Id, Manifest, MenuNeed, Params, Plugin, RegisterError, Registrar,
     SDK_VERSION, ScreenSpec, SettingGroupSpec, SettingSpec, StatusItemSpec, StatusValue, Version,
@@ -95,7 +96,7 @@ fn schedule_off(env: &Env<'_>, policy: &Policy, out: &mut Vec<Command>) {
     if wifi.state.is_on() && policy.may_go_off(charging_keeps_it(env)) {
         let at = env.now.add_millis(idle_seconds(env) * 1000);
         let params = Params::new().with(GENERATION, alloc::format!("{}", policy.generation));
-        out.push(Command::Schedule(IDLE_CHECK, params, at));
+        out.push(Command::Work(Work::at(IDLE_CHECK, at).with(params)));
     }
 }
 
@@ -108,10 +109,8 @@ fn schedule_retry(env: &Env<'_>, policy: &Policy, out: &mut Vec<Command>) {
     };
     if policy.still_wanted(wifi, env.now) || charging_keeps_it(env) {
         let params = Params::new().with(GENERATION, alloc::format!("{}", policy.generation));
-        out.push(Command::Schedule(
-            RETRY,
-            params,
-            env.now.add_millis(RETRY_MS),
+        out.push(Command::Work(
+            Work::at(RETRY, env.now.add_millis(RETRY_MS)).with(params),
         ));
     } else if !wifi.busy {
         schedule_off(env, policy, out);

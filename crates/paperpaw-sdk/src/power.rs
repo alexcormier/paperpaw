@@ -89,7 +89,20 @@ impl Default for Power {
     }
 }
 
+/// [`Power::normal`].
+static NORMAL_POWER: Power = Power {
+    level: PowerLevel::Normal,
+    mode: NORMAL,
+    automatic: false,
+    stretch: 1,
+};
+
 impl Power {
+    /// Normal, nothing saved beyond the defaults, e.g. for tests.
+    pub fn normal() -> &'static Power {
+        &NORMAL_POWER
+    }
+
     pub fn new(level: PowerLevel, mode: Id, automatic: bool, stretch: u32) -> Self {
         Self {
             level,

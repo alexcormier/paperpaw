@@ -18,7 +18,7 @@
 //! The rules are listed under Settings › Customise › Rules: tapping one
 //! pauses it, holding it offers a condition or to remove it, *Add rule*
 //! asks when and what. Times
-//! come through the kernel's timer for plugins (`Command::Schedule`), so
+//! come as work at a time (`Work::at`, see `paperpaw_sdk::work`), so
 //! they apply whatever screen is open; they are set again when the clock
 //! becomes known or the time zone changes. Rules that repeat count the
 //! minutes from the start, clock or not.
@@ -44,6 +44,7 @@ use core::cell::{Cell, RefCell};
 
 use paperpaw_sdk::builtin::{events, menus, settings};
 use paperpaw_sdk::ui::choice::Choice;
+use paperpaw_sdk::work::Work;
 use paperpaw_sdk::{
     ActionSpec, Arg, Command, Env, Id, Manifest, MenuEntry, Params, Plugin, RegisterError,
     Registrar, SDK_VERSION, ScreenSpec, SettingValue, Version, time,
@@ -191,10 +192,8 @@ fn schedule_time(env: &Env<'_>, store: &Store, out: &mut Vec<Command>) {
         let at_minute = env
             .now
             .add_millis(u64::from(ahead) * 60_000 - u64::from(now.second) * 1000);
-        out.push(Command::Schedule(
-            TIME,
-            Params::new().with(MINUTE, at.to_string()),
-            at_minute,
+        out.push(Command::Work(
+            Work::at(TIME, at_minute).with(Params::new().with(MINUTE, at.to_string())),
         ));
     }
 }
@@ -208,11 +207,7 @@ fn schedule_tick(env: &Env<'_>, store: &Store, out: &mut Vec<Command>) {
             .any(|r| r.on && matches!(r.trigger, Trigger::Every(_)))
     });
     if repeats {
-        out.push(Command::Schedule(
-            TICK,
-            Params::new(),
-            env.now.add_millis(60_000),
-        ));
+        out.push(Command::Work(Work::at(TICK, env.now.add_millis(60_000))));
     }
 }
 

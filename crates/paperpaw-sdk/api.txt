@@ -1258,6 +1258,7 @@ pub paperpaw_sdk::power::Power::stretch: u32
 impl paperpaw_sdk::power::Power
 pub fn paperpaw_sdk::power::Power::every(&self, u64) -> core::option::Option<u64>
 pub fn paperpaw_sdk::power::Power::new(paperpaw_sdk::power::PowerLevel, paperpaw_sdk::Id, bool, u32) -> Self
+pub fn paperpaw_sdk::power::Power::normal() -> &'static paperpaw_sdk::power::Power
 pub fn paperpaw_sdk::power::Power::online(&self) -> bool
 impl core::default::Default for paperpaw_sdk::power::Power
 pub fn paperpaw_sdk::power::Power::default() -> Self
@@ -2487,6 +2488,13 @@ impl paperpaw_sdk::work::WorkSpec
 pub fn paperpaw_sdk::work::WorkSpec::new(impl core::convert::Into<paperpaw_sdk::Id>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, impl core::ops::function::Fn(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::Params, &mut alloc::vec::Vec<paperpaw_sdk::Command>) -> paperpaw_sdk::work::Step + 'static) -> Self
 impl core::fmt::Debug for paperpaw_sdk::work::WorkSpec
 pub fn paperpaw_sdk::work::WorkSpec::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct paperpaw_sdk::work::WorkStates
+impl paperpaw_sdk::work::WorkStates
+pub fn paperpaw_sdk::work::WorkStates::get(&self, &paperpaw_sdk::Id) -> core::option::Option<&paperpaw_sdk::work::WorkState>
+pub fn paperpaw_sdk::work::WorkStates::iter(&self) -> impl core::iter::traits::iterator::Iterator<Item = (&paperpaw_sdk::Id, &str, &paperpaw_sdk::work::WorkState)>
+pub fn paperpaw_sdk::work::WorkStates::keyed(&self, &paperpaw_sdk::Id, &str) -> core::option::Option<&paperpaw_sdk::work::WorkState>
+pub fn paperpaw_sdk::work::WorkStates::none() -> &'static paperpaw_sdk::work::WorkStates
+pub fn paperpaw_sdk::work::WorkStates::note(&self, &paperpaw_sdk::Id) -> core::option::Option<&paperpaw_sdk::work::Note>
 pub const paperpaw_sdk::work::RETRY_FIRST: core::time::Duration
 pub const paperpaw_sdk::work::RETRY_MOST: core::time::Duration
 pub fn paperpaw_sdk::work::backoff(u32, u8) -> core::time::Duration
@@ -2893,6 +2901,7 @@ pub paperpaw_sdk::Env::metrics: paperpaw_sdk::Metrics
 pub paperpaw_sdk::Env::native: core::option::Option<&'a paperpaw_sdk::native::Native>
 pub paperpaw_sdk::Env::now: paperpaw_platform::input::Instant
 pub paperpaw_sdk::Env::plugins: &'a paperpaw_sdk::Plugins
+pub paperpaw_sdk::Env::power: &'a paperpaw_sdk::power::Power
 pub paperpaw_sdk::Env::random: paperpaw_sdk::random::Random
 pub paperpaw_sdk::Env::screens: &'a [(paperpaw_sdk::Id, alloc::borrow::Cow<'static, str>)]
 pub paperpaw_sdk::Env::secrets: &'a paperpaw_sdk::secrets::Secrets
@@ -2908,6 +2917,7 @@ pub paperpaw_sdk::Env::text_filters: &'a paperpaw_sdk::filters::TextFilters
 pub paperpaw_sdk::Env::usage: &'a paperpaw_sdk::usage::Usage
 pub paperpaw_sdk::Env::widgets: &'a paperpaw_sdk::widgets::Widgets
 pub paperpaw_sdk::Env::wifi: core::option::Option<&'a paperpaw_sdk::wifi::Wifi>
+pub paperpaw_sdk::Env::work: &'a paperpaw_sdk::work::WorkStates
 impl paperpaw_sdk::Env<'_>
 pub fn paperpaw_sdk::Env<'_>::has_slot(&self, &paperpaw_sdk::Id) -> bool
 pub fn paperpaw_sdk::Env<'_>::plugin_dir(&str) -> alloc::string::String

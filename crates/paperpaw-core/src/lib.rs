@@ -58,6 +58,7 @@ mod registry;
 mod screens;
 #[cfg(test)]
 mod tests;
+mod work;
 
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
@@ -308,8 +309,8 @@ pub struct Kernel {
     /// the commands of the call are done, so that one shown for a moment
     /// (e.g. below a menu that closes to open another screen) is not.
     show_pending: bool,
-    /// Events plugins asked for at a time ([`Command::Schedule`]).
-    scheduled: Vec<(Instant, Id, Params)>,
+    /// Work plugins declared, timers among it (see [`work`]).
+    works: work::Queue,
     /// The short message showing ([`Command::Notify`]) and until when.
     notice: Option<(Box<dyn Screen>, Instant)>,
     stack: Vec<ActiveScreen>,
@@ -719,10 +720,9 @@ impl Kernel {
         if self.notice.as_ref().is_some_and(|(_, until)| *until <= now) {
             self.end_notice();
         }
-        while let Some(due) = self.scheduled.iter().position(|(at, ..)| *at <= now) {
-            let (_, event, params) = self.scheduled.remove(due);
-            self.output.commands.push(Command::Emit(event, params));
-        }
+        // Times and deadlines come due here; jobs step only here, never
+        // while input waits.
+        self.works.ticking();
         self.finish()
     }
 
@@ -1009,6 +1009,10 @@ struct Shared {
     /// How code plugins are loaded, where they are (see
     /// [`KernelBuilder::code_plugins`]).
     native: Option<paperpaw_sdk::native::Native>,
+    /// The power level and mode in use (see [`paperpaw_sdk::power`]).
+    power: paperpaw_sdk::power::Power,
+    /// Where declared work stands, and plugins' notes (see [`work`]).
+    work_states: paperpaw_sdk::work::WorkStates,
     /// Text copied here.
     clipboard: String,
     /// The system's clipboard has text (see
@@ -1069,6 +1073,8 @@ impl Shared {
             wifi: self.wifi.as_ref(),
             firmware: self.firmware.as_ref(),
             native: self.native.as_ref(),
+            power: &self.power,
+            work: &self.work_states,
             clipboard: self.system_clipboard || !self.clipboard.is_empty(),
             slots: &self.slots,
             screens: &self.screens,

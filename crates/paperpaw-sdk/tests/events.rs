@@ -79,11 +79,11 @@ proptest! {
         prop_assert_eq!(SAMPLE.read(&event, &params), Some(sample.clone()));
         // Another event's id: not this one.
         prop_assert_eq!(SAMPLE.read(&Id::new_static("t.other"), &params), None);
-        let Command::Schedule(event, params, at) = SAMPLE.schedule(sample.clone(), Instant(5)) else {
-            panic!("a scheduled event");
+        let Command::Work(work) = SAMPLE.schedule(sample.clone(), Instant(5)) else {
+            panic!("work at a time");
         };
-        prop_assert_eq!(at, Instant(5));
-        prop_assert_eq!(SAMPLE.read(&event, &params), Some(sample));
+        prop_assert_eq!(work.at, Some(Instant(5)));
+        prop_assert_eq!(SAMPLE.read(&work.id, &work.params), Some(sample));
     }
 
     /// Whatever parameters come, reading them does not panic.
