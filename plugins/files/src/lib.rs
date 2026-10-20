@@ -21,6 +21,10 @@
 
 extern crate alloc;
 
+// Drafts of a redesigned library, chosen by [`DRAFT`] (experiment).
+mod draft_list;
+mod draft_shelves;
+mod draft_wall;
 mod folders;
 mod info;
 mod shelves;
@@ -66,6 +70,13 @@ pub const ARCHIVE: Setting<Text> = Setting::new("files.archive");
 pub const VIEW: Setting<Text> = Setting::new("files.view");
 pub const VIEW_LIST: &str = "files.view.list";
 pub const VIEW_COVERS: &str = "files.view.covers";
+/// Which draft of a redesigned library shows (experiment): today's
+/// ([`DRAFT_TODAY`]), a calm list, a cover wall or shelves.
+pub const DRAFT: Setting<Text> = Setting::new("files.draft");
+pub const DRAFT_TODAY: &str = "files.draft.today";
+pub const DRAFT_LIST: &str = "files.draft.list";
+pub const DRAFT_WALL: &str = "files.draft.wall";
+pub const DRAFT_SHELVES: &str = "files.draft.shelves";
 /// Chooses a folder for the setting named by the parameter `id`.
 pub const CHOOSE_FOLDER: Id = Id::new_static("files.choose-folder");
 /// The library's menu.
@@ -97,7 +108,7 @@ pub struct Files;
 static FOLDER: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new().editor(CHOOSE_FOLDER);
 
 /// Where the books and the archive are, and how the library shows them.
-static SETTINGS: [SettingSpec; 4] = [
+static SETTINGS: [SettingSpec; 5] = [
     SettingSpec::fixed_text(
         ROOT.static_str(),
         "files.setting.root",
@@ -131,6 +142,15 @@ static SETTINGS: [SettingSpec; 4] = [
         groups::LIBRARY,
     )
     .described("files.setting.sort.help"),
+    SettingSpec::fixed_choice(
+        DRAFT.static_str(),
+        "files.setting.draft",
+        &[DRAFT_TODAY, DRAFT_LIST, DRAFT_WALL, DRAFT_SHELVES],
+        DRAFT_TODAY,
+        groups::LIBRARY,
+    )
+    .advanced()
+    .described("files.setting.draft.help"),
 ];
 
 impl Plugin for Files {
@@ -148,8 +168,11 @@ impl Plugin for Files {
         r.add_screen(ScreenSpec {
             id: SCREEN,
             title: Cow::Borrowed("files.title"),
-            factory: Box::new(|env, params| Box::new(Browser::new(env, params))),
+            factory: Box::new(|env, params| library_screen(env, params)),
         })?;
+        draft_list::register(r)?;
+        draft_wall::register(r)?;
+        draft_shelves::register(r)?;
         r.add_screen(ScreenSpec {
             id: CHOOSE_FOLDER,
             title: Cow::Borrowed("files.choose.title"),
@@ -284,11 +307,21 @@ impl Plugin for Files {
     }
 }
 
+/// The library screen of the chosen draft ([`DRAFT`]).
+fn library_screen(env: &Env<'_>, params: &Params) -> Box<dyn Screen> {
+    match env.settings.read(&DRAFT) {
+        DRAFT_LIST => draft_list::screen(env, params),
+        DRAFT_WALL => draft_wall::screen(env, params),
+        DRAFT_SHELVES => draft_shelves::screen(env, params),
+        _ => Box::new(Browser::new(env, params)),
+    }
+}
+
 /// Delay between two books read in the background, so input stays quick.
-const STEP_DELAY_MS: u64 = 20;
+pub(crate) const STEP_DELAY_MS: u64 = 20;
 
 #[derive(Debug)]
-struct Browser {
+pub(crate) struct Browser {
     root: String,
     dir: String,
     /// Recently read files of this folder: `(name, rank)`.
@@ -310,7 +343,7 @@ struct Browser {
 }
 
 impl Browser {
-    fn new(env: &Env<'_>, params: &Params) -> Self {
+    pub(crate) fn new(env: &Env<'_>, params: &Params) -> Self {
         let root = env
             .settings
             .text(ROOT.as_str())
@@ -663,14 +696,14 @@ impl Browser {
 /// and a note (author and format).
 /// An entry of the page as drawn: the file or folder, its details, its
 /// cover made small.
-struct Shown<'a> {
-    entry: &'a Entry,
-    book: Option<&'a Book>,
-    thumb: Option<&'a Thumbnail>,
+pub(crate) struct Shown<'a> {
+    pub(crate) entry: &'a Entry,
+    pub(crate) book: Option<&'a Book>,
+    pub(crate) thumb: Option<&'a Thumbnail>,
 }
 
 /// Where a row of the list shows its cover.
-fn row_thumb(style: &UiStyle, rect: Rect) -> Rect {
+pub(crate) fn row_thumb(style: &UiStyle, rect: Rect) -> Rect {
     let margin = style.margin as u16;
     let thumb_h = rect.height.saturating_sub(style.gap as u16 * 2);
     Rect::new(
@@ -682,7 +715,7 @@ fn row_thumb(style: &UiStyle, rect: Rect) -> Rect {
 }
 
 /// Where a cell of the grid shows its cover, above its title's lines.
-fn cell_cover(env: &Env<'_>, style: &UiStyle, rect: Rect) -> Option<Rect> {
+pub(crate) fn cell_cover(env: &Env<'_>, style: &UiStyle, rect: Rect) -> Option<Rect> {
     let gap = style.gap as u16;
     let side = cell_side(style, rect.width);
     let line = style.font(env)?.line_metrics(style.small).line_height as u16;
@@ -698,7 +731,7 @@ fn cell_cover(env: &Env<'_>, style: &UiStyle, rect: Rect) -> Option<Rect> {
 /// How far the covers of the grid sit in from the sides of their cells
 /// `width` pixels wide: clear of the focus drawn around a cell
 /// ([`ui::focus_rect`]), a line apart from a frame.
-fn cell_side(style: &UiStyle, width: u16) -> u16 {
+pub(crate) fn cell_side(style: &UiStyle, width: u16) -> u16 {
     let focus = ui::focus_rect(style, Rect::new(0, 0, width, width)).x;
     let frame = match style.focus {
         Focus::Fill => 0,
@@ -710,7 +743,7 @@ fn cell_side(style: &UiStyle, width: u16) -> u16 {
 
 /// The style the grid's focus is drawn with: around a cover and its
 /// title, a box with the style's corners, not a pill.
-fn grid_style(style: &UiStyle) -> UiStyle {
+pub(crate) fn grid_style(style: &UiStyle) -> UiStyle {
     UiStyle {
         pill: false,
         ..*style
@@ -736,7 +769,7 @@ pub(crate) fn picture_radius(style: &UiStyle, area: Rect) -> u32 {
 /// What a cover drawn from its picture has its corners filled with, on a
 /// row or cell `focused` or not: the paper behind it; none on a light
 /// gray focus, where it stays square.
-fn cover_paper(style: &UiStyle, focused: bool) -> Option<Color> {
+pub(crate) fn cover_paper(style: &UiStyle, focused: bool) -> Option<Color> {
     let gray = focused && style.focus == Focus::Soft && style.grays > 2;
     (!gray).then(|| style.focus_paper(focused))
 }
@@ -757,7 +790,7 @@ pub(crate) fn draw_cover_image(
     }
 }
 
-fn draw_row(
+pub(crate) fn draw_row(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
     style: &UiStyle,
@@ -832,7 +865,7 @@ fn draw_row(
 
 /// The library's list, or its grid of covers ([`VIEW`]): as many columns
 /// as covers about 3 cm wide fit, at least three.
-fn list_view(env: &Env<'_>, style: &UiStyle, area: Rect) -> ListView {
+pub(crate) fn list_view(env: &Env<'_>, style: &UiStyle, area: Rect) -> ListView {
     if env.settings.read(&VIEW) != VIEW_COVERS {
         return ListView::new(area, style.noted_row()).focus_on_keys(env);
     }
@@ -861,7 +894,7 @@ fn list_view(env: &Env<'_>, style: &UiStyle, area: Rect) -> ListView {
 
 /// One cover of the grid: the cover (or folder, or a stand-in) and the
 /// title below it, shortened to its width.
-fn draw_cell(
+pub(crate) fn draw_cell(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
     style: &UiStyle,
@@ -942,7 +975,7 @@ fn draw_cell(
 }
 
 /// A simple folder outline with a tab.
-fn draw_folder(canvas: &mut Canvas<'_>, style: &UiStyle, area: Rect, color: Color) {
+pub(crate) fn draw_folder(canvas: &mut Canvas<'_>, style: &UiStyle, area: Rect, color: Color) {
     let line = style.line.max(2);
     let (x, w) = (i32::from(area.x), u32::from(area.width));
     let h = w * 3 / 4;
@@ -954,7 +987,7 @@ fn draw_folder(canvas: &mut Canvas<'_>, style: &UiStyle, area: Rect, color: Colo
 
 /// A book without a cover: an outline with the title's first letter,
 /// large, and the format below it.
-fn draw_placeholder(
+pub(crate) fn draw_placeholder(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
     style: &UiStyle,
@@ -1222,7 +1255,7 @@ impl Screen for Browser {
 }
 
 /// A book's title, else its file's name made readable.
-fn shown_title<'a>(book: Option<&'a library::Book>, stem: &'a str) -> Cow<'a, str> {
+pub(crate) fn shown_title<'a>(book: Option<&'a library::Book>, stem: &'a str) -> Cow<'a, str> {
     match book.and_then(|b| b.title.as_deref()) {
         Some(title) if !title.is_empty() => Cow::Borrowed(title),
         _ => library::readable_name(stem),
@@ -1239,5 +1272,24 @@ mod tests {
         let de = Catalog::parse(include_str!("../i18n/de.ini")).unwrap();
         let issues = check::compare(&en, &de);
         assert!(issues.is_empty(), "{issues:?}");
+        for (en, de) in [
+            (
+                include_str!("../i18n/draft-list.en.ini"),
+                include_str!("../i18n/draft-list.de.ini"),
+            ),
+            (
+                include_str!("../i18n/draft-wall.en.ini"),
+                include_str!("../i18n/draft-wall.de.ini"),
+            ),
+            (
+                include_str!("../i18n/draft-shelves.en.ini"),
+                include_str!("../i18n/draft-shelves.de.ini"),
+            ),
+        ] {
+            let en = Catalog::parse(en).unwrap();
+            let de = Catalog::parse(de).unwrap();
+            let issues = check::compare(&en, &de);
+            assert!(issues.is_empty(), "{issues:?}");
+        }
     }
 }
