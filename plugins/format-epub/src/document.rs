@@ -56,8 +56,10 @@ pub struct EpubDocument {
     /// One's own stylesheets for this book (see [`user_css`]), applied
     /// after the book's.
     user_css: String,
-    /// The printed pages of one section, resolved: offset and label.
+    /// The printed pages of one section, resolved.
     pages: core::cell::RefCell<Option<SectionPages>>,
+    /// Where an anchor was found last.
+    anchors: cached::AnchorHint,
     /// The chapter read last, known: its paths, text length and number of
     /// blocks, and the block found last in it. A page is laid out a block
     /// at a time, the next one mostly right after the last.
@@ -74,8 +76,18 @@ struct Known {
     last: Option<u32>,
 }
 
-/// A section and its printed pages: offset and label.
-type SectionPages = (u32, Vec<(u32, String)>);
+/// The printed pages of a section: where each begins and where its line
+/// is in `pages.txt`, for its label; the line of the last page before the
+/// section.
+#[derive(Debug)]
+struct SectionPages {
+    section: u32,
+    before: Option<u64>,
+    here: Vec<(u32, u64)>,
+}
+
+/// Printed pages resolved in a section at most.
+const MAX_SECTION_PAGES: usize = 2048;
 
 fn paths(cache: &str, section: u32) -> CachePaths {
     CachePaths::new(cache, &alloc::format!("{section}"))
@@ -308,6 +320,7 @@ impl EpubDocument {
             cover_fit,
             user_css,
             pages: core::cell::RefCell::new(None),
+            anchors: cached::AnchorHint::default(),
             known: core::cell::RefCell::new(None),
         })
     }
@@ -343,6 +356,7 @@ impl EpubDocument {
                 )));
             }
             Err(_) => {
+                self.anchors.reset();
                 let entry = self
                     .archive
                     .entry_by_record(storage, chapter.record)
@@ -380,7 +394,7 @@ impl EpubDocument {
     /// The offset of anchor `id` in a chapter.
     fn anchor(&self, storage: &dyn Storage, section: u32, id: &str) -> Option<u32> {
         let (paths, ..) = self.chapter(storage, section).ok()?;
-        cached::anchor(storage, &paths, id)
+        cached::anchor(storage, &paths, section, id, &self.anchors)
     }
 }
 
@@ -410,41 +424,39 @@ pub(crate) fn user_css(storage: &dyn Storage, path: &str, plugins: &str) -> Stri
 }
 
 impl EpubDocument {
-    /// The printed pages listed for `section`, with their offsets; the
-    /// label of the last page before it.
-    fn section_pages(
-        &self,
-        storage: &dyn Storage,
-        section: u32,
-    ) -> (Option<String>, Vec<(u32, String)>) {
-        let Ok(data) = paperpaw_sdk::read_file(
-            storage,
-            &alloc::format!("{}/pages.txt", self.cache),
-            1 << 20,
-        ) else {
-            return (None, Vec::new());
+    /// The printed pages listed for `section`. The list is read a line at
+    /// a time, the labels when they are shown.
+    fn section_pages(&self, storage: &dyn Storage, section: u32) -> SectionPages {
+        let mut pages = SectionPages {
+            section,
+            before: None,
+            here: Vec::new(),
         };
-        let text = String::from_utf8_lossy(&data);
-        let mut before = None;
-        let mut here = Vec::new();
-        for line in text.lines() {
-            let mut f = line.splitn(3, '\t');
-            let (Some(s), Some(fragment), Some(label)) = (f.next(), f.next(), f.next()) else {
-                continue;
-            };
-            let Ok(s) = s.parse::<u32>() else {
-                continue;
+        let mut at = 0;
+        cached::lines_from(storage, &self.pages_path(), 0, |line, next| {
+            let line_at = core::mem::replace(&mut at, next);
+            let mut fields = line.splitn(3, '\t');
+            let (Some(Ok(s)), Some(fragment)) =
+                (fields.next().map(str::parse::<u32>), fields.next())
+            else {
+                return true;
             };
             if s < section {
-                before = Some(String::from(label));
+                pages.before = Some(line_at);
             } else if s == section
+                && pages.here.len() < MAX_SECTION_PAGES
                 && let Some(offset) = self.anchor(storage, section, fragment)
             {
-                here.push((offset, String::from(label)));
+                pages.here.push((offset, line_at));
             }
-        }
-        here.sort_by_key(|(offset, _)| *offset);
-        (before, here)
+            true
+        });
+        pages.here.sort_by_key(|(offset, _)| *offset);
+        pages
+    }
+
+    fn pages_path(&self) -> String {
+        alloc::format!("{}/pages.txt", self.cache)
     }
 }
 
@@ -454,20 +466,28 @@ impl Document for EpubDocument {
     }
 
     fn page_label(&self, storage: &dyn Storage, at: Locator) -> Option<String> {
+        if at.section >= self.sections() {
+            return None;
+        }
         // One section's pages are resolved once.
         let mut pages = self.pages.borrow_mut();
-        if pages.as_ref().is_none_or(|(s, _)| *s != at.section) {
-            let (before, mut here) = self.section_pages(storage, at.section);
-            if let Some(before) = before {
-                here.insert(0, (0, before));
-            }
-            *pages = Some((at.section, here));
+        if pages.as_ref().is_none_or(|p| p.section != at.section) {
+            *pages = Some(self.section_pages(storage, at.section));
         }
-        let (_, here) = pages.as_ref()?;
-        here.iter()
+        let pages = pages.as_ref()?;
+        let line = pages
+            .here
+            .iter()
             .take_while(|(offset, _)| *offset <= at.offset)
             .last()
-            .map(|(_, label)| label.clone())
+            .map(|(_, line)| *line)
+            .or(pages.before)?;
+        let mut label = None;
+        cached::lines_from(storage, &self.pages_path(), line, |line, _| {
+            label = line.splitn(3, '\t').nth(2).map(String::from);
+            false
+        });
+        label
     }
 
     fn prepare_image(&self, storage: &dyn Storage, image: &ImageRef) -> Option<ImageRef> {

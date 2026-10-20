@@ -45,7 +45,9 @@ impl MarkdownDocument {
             convert(storage, path, &html_path)?;
             storage.write(&stamp_path, stamp.as_bytes())?;
         }
-        let html = HtmlDocument::open_with_pictures(storage, &html_path, styles)?;
+        // Converted in the Markdown file's cache, so it goes with it.
+        let html =
+            HtmlDocument::open_with_pictures(storage, &html_path, styles, format!("{dir}/html"))?;
         let mut metadata = html.metadata().clone();
         if metadata.title.as_deref().is_none_or(|t| t == "book") {
             let name = path.rsplit('/').next().unwrap_or(path);

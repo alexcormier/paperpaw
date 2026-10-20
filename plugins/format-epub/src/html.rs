@@ -36,6 +36,8 @@ pub struct HtmlDocument {
     paths: CachePaths,
     /// The block found last (see [`cached::block_at`]).
     last: core::cell::Cell<Option<u32>>,
+    /// Where an anchor was found last.
+    anchors: cached::AnchorHint,
     metadata: Metadata,
     /// The element holding the reading matter, if the page marks it.
     focus: Option<&'static str>,
@@ -65,12 +67,20 @@ fn scan(storage: &dyn Storage, path: &str) -> Result<Scan, DocumentError> {
     let mut title: Option<String> = None;
     let mut handle = |token: Token<'_>| match token {
         Token::Start { name, attrs, .. } => match local_name(name).to_ascii_lowercase().as_str() {
-            "html" => found.language = attrs.get("lang").map(|l| l.trim().to_string()),
+            "html" => {
+                found.language = attrs
+                    .get("lang")
+                    .map(|l| l.trim().to_string())
+                    .filter(|l| l.len() <= MAX_LANGUAGE);
+            }
             "title" if found.title.is_none() => title = Some(String::new()),
             "main" => main = true,
             "article" => article = true,
             "base" if found.base.is_none() => {
-                found.base = attrs.get("href").map(|h| h.into_owned())
+                found.base = attrs
+                    .get("href")
+                    .filter(|h| h.len() <= MAX_BASE)
+                    .map(|h| h.into_owned());
             }
             _ => {}
         },
@@ -112,20 +122,67 @@ fn scan(storage: &dyn Storage, path: &str) -> Result<Scan, DocumentError> {
     Ok(found)
 }
 
+/// Longest address and language kept (no address read is longer).
+const MAX_BASE: usize = 2000;
+const MAX_LANGUAGE: usize = 64;
+
+/// What [`scan`] found, as kept in the cache: `key<TAB>value` lines.
+fn save_scan(found: &Scan) -> String {
+    let mut out = String::new();
+    let one = |s: &str| s.replace(['\t', '\n', '\r'], " ");
+    for (key, value) in [
+        ("title", found.title.as_deref()),
+        ("language", found.language.as_deref()),
+        ("focus", found.focus),
+        ("base", found.base.as_deref()),
+    ] {
+        if let Some(value) = value {
+            out.push_str(&format!("{key}\t{}\n", one(value)));
+        }
+    }
+    out
+}
+
+/// What [`scan`] found, from the cache.
+fn load_scan(storage: &dyn Storage, path: &str) -> Option<Scan> {
+    let data = paperpaw_sdk::read_file(storage, path, 4 * 1024).ok()?;
+    let text = core::str::from_utf8(&data).ok()?;
+    let mut found = Scan::default();
+    for line in text.lines() {
+        let (key, value) = line.split_once('\t')?;
+        match key {
+            "title" => found.title = Some(value.to_string()),
+            "language" => found.language = Some(value.to_string()),
+            "focus" if value == "main" => found.focus = Some("main"),
+            "focus" if value == "article" => found.focus = Some("article"),
+            "base" => found.base = Some(value.to_string()),
+            _ => {}
+        }
+    }
+    Some(found)
+}
+
 impl HtmlDocument {
     /// Opens an HTML file; without `styles` its CSS is ignored.
     pub fn open(storage: &dyn Storage, path: &str, styles: bool) -> Result<Self, DocumentError> {
-        Self::open_as(storage, path, styles, false)
+        let cache = format!(
+            "{}/html-{}",
+            Env::plugin_dir(PLUGIN.as_str()),
+            paperpaw_sdk::library::key(path)
+        );
+        Self::open_as(storage, path, styles, false, cache)
     }
 
     /// Opens an HTML file made from Markdown: as [`HtmlDocument::open`],
-    /// the pictures it names on the storage shown.
+    /// the pictures it names on the storage shown, converted into `cache`
+    /// (the Markdown file's, so it goes with it).
     pub(crate) fn open_with_pictures(
         storage: &dyn Storage,
         path: &str,
         styles: bool,
+        cache: String,
     ) -> Result<Self, DocumentError> {
-        Self::open_as(storage, path, styles, true)
+        Self::open_as(storage, path, styles, true, cache)
     }
 
     fn open_as(
@@ -133,19 +190,15 @@ impl HtmlDocument {
         path: &str,
         styles: bool,
         pictures: bool,
+        mut cache: String,
     ) -> Result<Self, DocumentError> {
         let size = storage.size(path)?;
-        let found = scan(storage, path)?;
-        let mut cache = format!(
-            "{}/html-{:016x}",
-            Env::plugin_dir(PLUGIN.as_str()),
-            fnv1a64(path.as_bytes())
-        );
         if !styles {
             cache.push_str("/plain");
         }
         let paths = CachePaths::new(&cache, "0");
-        // Converted again when the file or the cache format changed.
+        // Read and converted again when the file or the cache format
+        // changed; what a look at the page finds is kept meanwhile.
         let head = crate::head(storage, path)?;
         let stamp = format!(
             "{}.{HTML_VERSION} {size} {:016x}\n",
@@ -153,12 +206,19 @@ impl HtmlDocument {
             fnv1a64(&head)
         );
         let stamp_path = format!("{cache}/source");
-        if paperpaw_sdk::read_file(storage, &stamp_path, 256).ok()
-            != Some(stamp.clone().into_bytes())
-        {
-            let _ = storage.remove(&paths.end);
-            storage.write(&stamp_path, stamp.as_bytes())?;
-        }
+        let page_path = format!("{cache}/page.txt");
+        let fresh = paperpaw_sdk::read_file(storage, &stamp_path, 256).ok()
+            == Some(stamp.clone().into_bytes());
+        let found = match fresh.then(|| load_scan(storage, &page_path)).flatten() {
+            Some(found) => found,
+            None => {
+                let _ = storage.remove(&paths.end);
+                let found = scan(storage, path)?;
+                storage.write(&page_path, save_scan(&found).as_bytes())?;
+                storage.write(&stamp_path, stamp.as_bytes())?;
+                found
+            }
+        };
         let name = path.rsplit('/').next().unwrap_or(path);
         let name = name.rsplit_once('.').map_or(name, |(stem, _)| stem);
         let metadata = Metadata {
@@ -171,6 +231,7 @@ impl HtmlDocument {
             path: path.to_string(),
             paths,
             last: core::cell::Cell::new(None),
+            anchors: cached::AnchorHint::default(),
             metadata,
             focus: found.focus,
             base: found.base,
@@ -192,6 +253,7 @@ impl HtmlDocument {
                 )));
             }
             Err(_) => {
+                self.anchors.reset();
                 let source = Source::Html {
                     path: &self.path,
                     focus: self.focus,
@@ -262,7 +324,8 @@ impl Document for HtmlDocument {
     fn link_target(&self, storage: &dyn Storage, href: &str) -> Option<Locator> {
         let id = href.strip_prefix('#')?;
         self.converted(storage).ok()?;
-        cached::anchor(storage, &self.paths, id).map(|offset| Locator::new(0, offset))
+        cached::anchor(storage, &self.paths, 0, id, &self.anchors)
+            .map(|offset| Locator::new(0, offset))
     }
 }
 

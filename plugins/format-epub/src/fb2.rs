@@ -366,6 +366,8 @@ pub struct Fb2Document {
     paths: CachePaths,
     /// The block found last (see [`cached::block_at`]).
     last: core::cell::Cell<Option<u32>>,
+    /// Where an anchor was found last.
+    anchors: cached::AnchorHint,
     encoding: Encoding,
     metadata: Metadata,
     toc: Vec<(u8, String)>,
@@ -453,6 +455,7 @@ impl Fb2Document {
             path: file,
             paths,
             last: core::cell::Cell::new(None),
+            anchors: cached::AnchorHint::default(),
             encoding,
             metadata,
             toc: found.toc,
@@ -477,6 +480,7 @@ impl Fb2Document {
                 )));
             }
             Err(_) => {
+                self.anchors.reset();
                 let source = Source::Fb2 {
                     path: &self.path,
                     encoding: self.encoding,
@@ -636,7 +640,8 @@ impl Document for Fb2Document {
     fn toc_target(&self, storage: &dyn Storage, index: u32) -> Option<Locator> {
         self.converted(storage).ok()?;
         let id = format!("{TOC_ANCHOR}{index}");
-        cached::anchor(storage, &self.paths, &id).map(|offset| Locator::new(0, offset))
+        cached::anchor(storage, &self.paths, 0, &id, &self.anchors)
+            .map(|offset| Locator::new(0, offset))
     }
 
     fn cover(&self, storage: &dyn Storage) -> Result<Option<ImageRef>, DocumentError> {
@@ -666,7 +671,8 @@ impl Document for Fb2Document {
     fn link_target(&self, storage: &dyn Storage, href: &str) -> Option<Locator> {
         let id = href.rsplit_once('#').map_or(href, |(_, id)| id);
         self.converted(storage).ok()?;
-        cached::anchor(storage, &self.paths, id).map(|offset| Locator::new(0, offset))
+        cached::anchor(storage, &self.paths, 0, id, &self.anchors)
+            .map(|offset| Locator::new(0, offset))
     }
 }
 

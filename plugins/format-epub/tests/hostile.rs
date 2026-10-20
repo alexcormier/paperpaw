@@ -7,9 +7,10 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use std::alloc::{GlobalAlloc, Layout, System};
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
+use std::collections::BTreeMap;
 
-use paperpaw_plugin_format_epub::EpubDocument;
+use paperpaw_plugin_format_epub::{EpubDocument, Fb2Document, HtmlDocument, MarkdownDocument};
 use paperpaw_sdk::document::{Align, Document, Locator};
 use paperpaw_sdk::zip::testing::ZipBuilder;
 use paperpaw_sdk::{DirEntry, MemoryStorage, Storage, StorageError};
@@ -84,6 +85,8 @@ struct Card {
     files: MemoryStorage,
     reads: Cell<usize>,
     writes: Cell<usize>,
+    /// Reads by file.
+    reads_by_file: RefCell<BTreeMap<String, usize>>,
 }
 
 impl Card {
@@ -92,7 +95,18 @@ impl Card {
             files: MemoryStorage::new().with(path, book),
             reads: Cell::new(0),
             writes: Cell::new(0),
+            reads_by_file: RefCell::new(BTreeMap::new()),
         }
+    }
+
+    /// Reads so far of the files whose path ends in `end`.
+    fn reads_of(&self, end: &str) -> usize {
+        let reads = self.reads_by_file.borrow();
+        reads
+            .iter()
+            .filter(|(path, _)| path.ends_with(end))
+            .map(|(_, n)| n)
+            .sum()
     }
 
     /// The bytes of all files below `dir`.
@@ -121,6 +135,11 @@ impl Storage for Card {
     fn read_at(&self, path: &str, offset: u64, buf: &mut [u8]) -> Result<usize, StorageError> {
         paused(|| {
             self.reads.set(self.reads.get() + 1);
+            *self
+                .reads_by_file
+                .borrow_mut()
+                .entry(String::from(path))
+                .or_default() += 1;
             self.files.read_at(path, offset, buf)
         })
     }
@@ -472,4 +491,127 @@ fn stale_positions_are_refused() {
     let (xpointer, heap) = peak(|| doc.xpointer(&card, Locator::new(0, 50 << 20)));
     assert!(heap < 16 * 1024, "{heap} bytes at once");
     assert_eq!(xpointer.as_deref(), Some("/body/DocFragment[1]/body/p[1]"));
+}
+
+#[test]
+fn the_contents_of_a_long_fictionbook_are_found_in_few_reads() {
+    let mut book = String::from("<?xml version=\"1.0\" encoding=\"utf-8\"?><FictionBook><body>");
+    for i in 0..1000 {
+        book.push_str(&format!(
+            "<section id=\"s{i}\"><title><p>Part {i}</p></title><p>Text {i}.</p></section>"
+        ));
+    }
+    book.push_str("</body></FictionBook>");
+    let card = Card::new("book.fb2", book.into_bytes());
+    let doc = Fb2Document::open(&card, "book.fb2", true).unwrap();
+    assert_eq!(doc.toc_len(&card), 1000);
+    doc.block_at(&card, Locator::START).unwrap();
+    // As the reader goes through them: entries, then their places.
+    let before = card.reads_of(".anc");
+    let mut starts = Vec::new();
+    for i in 0..1000 {
+        let entry = doc.toc_entry(&card, i).unwrap();
+        starts.push(doc.toc_target(&card, i).unwrap());
+        assert_eq!(entry.at, starts[i as usize]);
+    }
+    let reads = card.reads_of(".anc") - before;
+    assert!(reads < 5000, "{reads} reads");
+    assert!(starts.windows(2).all(|w| w[0] < w[1]));
+    let last = doc.block_at(&card, starts[999]).unwrap().unwrap();
+    assert_eq!(last.text, "Part 999");
+}
+
+/// An EPUB of one chapter and a navigation document listing printed
+/// pages.
+fn epub_with_pages(chapter: &str, nav: &str) -> Vec<u8> {
+    let opf = "<?xml version=\"1.0\"?><package xmlns=\"http://www.idpf.org/2007/opf\" \
+        version=\"3.0\"><metadata xmlns:dc=\"http://purl.org/dc/elements/1.1/\">\
+        <dc:title>Pages</dc:title></metadata><manifest>\
+        <item id=\"nav\" href=\"nav.xhtml\" media-type=\"application/xhtml+xml\" properties=\"nav\"/>\
+        <item id=\"c1\" href=\"ch1.xhtml\" media-type=\"application/xhtml+xml\"/>\
+        </manifest><spine><itemref idref=\"c1\"/></spine></package>";
+    ZipBuilder::new()
+        .stored("mimetype", "application/epub+zip")
+        .deflated("META-INF/container.xml", CONTAINER)
+        .deflated("OEBPS/content.opf", opf)
+        .deflated("OEBPS/nav.xhtml", nav)
+        .deflated("OEBPS/ch1.xhtml", chapter)
+        .build()
+}
+
+#[test]
+fn printed_pages_are_resolved_in_few_reads_and_little_memory() {
+    let (mut chapter, mut nav) = (
+        String::from("<html><body>"),
+        String::from("<html><body><nav epub:type=\"page-list\"><ol>"),
+    );
+    for i in 0..2000 {
+        chapter.push_str(&format!(
+            "<p><span id=\"page{i}\"/>Page {i} begins here.</p>"
+        ));
+        nav.push_str(&format!(
+            "<li><a href=\"ch1.xhtml#page{i}\">{}</a></li>",
+            i + 1
+        ));
+    }
+    chapter.push_str("</body></html>");
+    nav.push_str("</ol></nav></body></html>");
+    let card = Card::new("book.epub", epub_with_pages(&chapter, &nav));
+    let doc = EpubDocument::open(&card, "book.epub").unwrap();
+    doc.block_at(&card, Locator::START).unwrap();
+    let before = card.reads_of(".anc") + card.reads_of("pages.txt");
+    let (labels, heap) = peak(|| {
+        let mut at = Locator::START;
+        let mut labels = 0;
+        while let Some(block) = doc.block_at(&card, at).unwrap() {
+            let label = doc.page_label(&card, Locator::new(0, block.start)).unwrap();
+            assert_eq!(label, (labels + 1).to_string(), "{}", block.text);
+            labels += 1;
+            at = Locator::new(0, block.end);
+        }
+        labels
+    });
+    assert_eq!(labels, 2000);
+    assert!(heap < 64 * 1024, "{heap} bytes at once");
+    let reads = card.reads_of(".anc") + card.reads_of("pages.txt") - before;
+    assert!(reads < 4 * 2000, "{reads} reads");
+}
+
+#[test]
+fn a_web_page_is_read_once_until_it_changes() {
+    let page = format!(
+        "<html lang=\"en\"><head><title>A page</title></head><body><main>{}</main></body></html>",
+        "<p>Some text of the page.</p>".repeat(2000)
+    );
+    let card = Card::new("page.html", page.into_bytes());
+    let doc = HtmlDocument::open(&card, "page.html", true).unwrap();
+    doc.block_at(&card, Locator::START).unwrap();
+    let before = card.reads_of("page.html");
+    let again = HtmlDocument::open(&card, "page.html", true).unwrap();
+    assert_eq!(again.metadata().title.as_deref(), Some("A page"));
+    assert_eq!(again.metadata().language.as_deref(), Some("en"));
+    let first = again.block_at(&card, Locator::START).unwrap().unwrap();
+    assert_eq!(first.text, "Some text of the page.");
+    // Its first bytes, to know it again.
+    let reads = card.reads_of("page.html") - before;
+    assert!(reads <= 2, "{reads} reads");
+}
+
+#[test]
+fn markdown_is_converted_into_its_own_cache() {
+    let card = Card::new("notes.md", b"# Notes\n\nSome *text*.\n".to_vec());
+    let doc = MarkdownDocument::open(&card, "notes.md", true).unwrap();
+    assert_eq!(
+        doc.block_at(&card, Locator::START).unwrap().unwrap().text,
+        "Notes"
+    );
+    // All of it in the folder kept for the file (by its key), none in
+    // a folder of an internal path that no book has.
+    let mut files = Vec::new();
+    list_all(&card.files, ".paperpaw/plugins/format-epub", &mut files);
+    let key = paperpaw_sdk::library::key("notes.md");
+    assert!(!files.is_empty());
+    for file in files {
+        assert!(file.contains(&format!("/md-{key}/")), "{file}");
+    }
 }

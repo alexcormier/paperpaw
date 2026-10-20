@@ -3,6 +3,7 @@
 
 use alloc::string::String;
 use alloc::vec::Vec;
+use core::cell::Cell;
 
 use paperpaw_sdk::document::{
     Align, Block, BlockKind, DocumentError, Link, OffsetMap, Run, TextStyle,
@@ -209,18 +210,53 @@ pub(crate) fn lines_from(
     }
 }
 
-/// The offset of anchor `id` in a converted chapter.
-pub(crate) fn anchor(storage: &dyn Storage, paths: &CachePaths, id: &str) -> Option<u32> {
+/// Where an anchor of a document was found last: its chapter, and where
+/// its line starts in the chapter's `<n>.anc`. Anchors are mostly looked
+/// up in the order of the text (the entries of the contents, the printed
+/// pages), often one twice in a row, and each is then found there or
+/// right after it, where a search from the start would read the list
+/// again for each.
+#[derive(Debug, Default)]
+pub(crate) struct AnchorHint(Cell<(u32, u64)>);
+
+impl AnchorHint {
+    /// Forgets the place, as when its chapter is converted again.
+    pub fn reset(&self) {
+        self.0.set((0, 0));
+    }
+}
+
+/// The offset of anchor `id` in converted chapter `section`, looked for
+/// from where `hint` says on, then from the start up to there.
+pub(crate) fn anchor(
+    storage: &dyn Storage,
+    paths: &CachePaths,
+    section: u32,
+    id: &str,
+    hint: &AnchorHint,
+) -> Option<u32> {
+    let (last, from) = hint.0.get();
+    let from = if last == section { from } else { 0 };
     let mut found = None;
-    lines(storage, &paths.anchors, |line| {
-        if let Some((name, offset)) = line.split_once('\t')
-            && name == id
-        {
-            found = offset.parse().ok();
-            return false;
+    for (start, end) in [(from, u64::MAX), (0, from)] {
+        let mut at = start;
+        lines_from(storage, &paths.anchors, start, |line, next| {
+            if at >= end {
+                return false;
+            }
+            if let Some((name, offset)) = line.split_once('\t')
+                && name == id
+            {
+                found = offset.parse().ok();
+                hint.0.set((section, at));
+            }
+            at = next;
+            found.is_none()
+        });
+        if found.is_some() || from == 0 {
+            break;
         }
-        true
-    });
+    }
     found
 }
 
