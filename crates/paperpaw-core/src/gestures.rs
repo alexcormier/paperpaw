@@ -49,14 +49,24 @@ impl Kernel {
 
     pub(crate) fn pointer(&mut self, event: PointerEvent) {
         // Swipes in from an edge come before the screen sees the finger.
+        // Held still there, it becomes a long press all the same.
         if let Some(touch) = self.input.edge_touch.filter(|t| t.id == event.id) {
             match event.phase {
                 PointerPhase::Up => {
                     self.input.edge_touch = None;
-                    self.edge_lifted(touch, event.point);
+                    if !self.input.recognizer.lift_edge(event.id) {
+                        self.edge_lifted(touch, event.point);
+                    }
                 }
-                PointerPhase::Cancel => self.input.edge_touch = None,
-                _ => {}
+                PointerPhase::Cancel => {
+                    self.input.edge_touch = None;
+                    self.input.recognizer.forget_pointer(event.id);
+                }
+                PointerPhase::Move => {
+                    let thresholds = self.thresholds();
+                    self.input.recognizer.pointer(&event, self.now, &thresholds);
+                }
+                PointerPhase::Down => {}
             }
             return;
         }
@@ -86,6 +96,7 @@ impl Kernel {
                 start: event.point,
                 tool: event.tool,
             });
+            self.input.recognizer.follow_edge(&event, self.now);
             return;
         }
         let thresholds = self.thresholds();

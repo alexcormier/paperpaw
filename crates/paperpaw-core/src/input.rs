@@ -41,6 +41,9 @@ struct TrackedPointer {
     long_fired: bool,
     /// Lifted as part of two fingers: no tap or swipe of its own.
     paired: bool,
+    /// Taken by the kernel at an edge: followed for its long press only,
+    /// what its lift makes is the edge's.
+    edge: bool,
 }
 
 #[derive(Debug, Default)]
@@ -91,6 +94,35 @@ impl Recognizer {
         self.pointers.retain(|p| p.id != id);
     }
 
+    /// Follows a finger that came down at an edge, so that held still it
+    /// becomes a long press as anywhere else. Its moves come through
+    /// [`Self::pointer`], its lift through [`Self::lift_edge`].
+    pub(crate) fn follow_edge(&mut self, event: &PointerEvent, now: Instant) {
+        self.down(event, now, true);
+    }
+
+    /// The finger at an edge was lifted: whether it was a long press
+    /// already, so that its lift makes nothing more.
+    pub(crate) fn lift_edge(&mut self, id: u8) -> bool {
+        let index = self.pointers.iter().position(|p| p.id == id);
+        index.is_some_and(|i| self.pointers.swap_remove(i).long_fired)
+    }
+
+    fn down(&mut self, event: &PointerEvent, now: Instant, edge: bool) {
+        self.forget_pointer(event.id);
+        self.pointers.push(TrackedPointer {
+            id: event.id,
+            start: event.point,
+            last: event.point,
+            since: now,
+            tool: event.tool,
+            moved: false,
+            long_fired: false,
+            paired: false,
+            edge,
+        });
+    }
+
     /// Tracks a pointer the screen did not capture. Returns a gesture when
     /// the pointer is lifted.
     pub(crate) fn pointer(
@@ -102,19 +134,7 @@ impl Recognizer {
         let index = self.pointers.iter().position(|p| p.id == event.id);
         match (event.phase, index) {
             (PointerPhase::Down, _) => {
-                if let Some(i) = index {
-                    self.pointers.swap_remove(i);
-                }
-                self.pointers.push(TrackedPointer {
-                    id: event.id,
-                    start: event.point,
-                    last: event.point,
-                    since: now,
-                    tool: event.tool,
-                    moved: false,
-                    long_fired: false,
-                    paired: false,
-                });
+                self.down(event, now, false);
                 None
             }
             (PointerPhase::Move, Some(i)) => {
@@ -131,12 +151,13 @@ impl Recognizer {
                 if distance(pointer.start, event.point) > thresholds.tap_slop {
                     pointer.moved = true;
                 }
-                if pointer.long_fired || pointer.paired {
+                if pointer.long_fired || pointer.paired || pointer.edge {
                     return None;
                 }
                 // Two fingers: a pinch if they moved apart or together;
-                // the other one then makes no gesture of its own.
-                if let Some(other) = self.pointers.iter_mut().find(|p| !p.paired) {
+                // the other one then makes no gesture of its own. Not
+                // with one at an edge, whose lift is the edge's.
+                if let Some(other) = self.pointers.iter_mut().find(|p| !p.paired && !p.edge) {
                     other.paired = true;
                     let before = distance(pointer.start, other.start).max(1);
                     let now = distance(pointer.last, other.last);

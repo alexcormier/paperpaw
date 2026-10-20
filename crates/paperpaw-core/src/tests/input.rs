@@ -9,7 +9,13 @@ fn button(kernel: &mut Kernel, at: u64, name: &'static str, state: ButtonState) 
 }
 
 /// A finger going down, moving or lifted at `at`.
-fn finger(kernel: &mut Kernel, at: u64, id: u8, phase: PointerPhase, (x, y): (i32, i32)) {
+fn finger(
+    kernel: &mut Kernel,
+    at: u64,
+    id: u8,
+    phase: PointerPhase,
+    (x, y): (i32, i32),
+) -> crate::Effects {
     let event = PointerEvent {
         id,
         phase,
@@ -17,7 +23,7 @@ fn finger(kernel: &mut Kernel, at: u64, id: u8, phase: PointerPhase, (x, y): (i3
         tool: PointerTool::Finger,
         pressure: 1000,
     };
-    kernel.handle(Instant(at), InputEvent::Pointer(event));
+    kernel.handle(Instant(at), InputEvent::Pointer(event))
 }
 
 /// Whether nothing is held: no button and no finger waits for its long
@@ -171,5 +177,95 @@ fn two_fingers_resting_wake_the_shell_no_more() {
     finger(&mut kernel, 5100, 1, PointerPhase::Up, (60, 45));
     kernel.tick(Instant(6000));
     assert!(!kernel.settings().read(&settings::NIGHT_MODE));
+    assert!(nothing_held(&kernel));
+}
+
+/// A home screen that notes the gestures and actions it gets.
+struct GesturePlugin(Log);
+
+struct GestureScreen(Log);
+
+impl Screen for GestureScreen {
+    fn draw(&mut self, _: &mut Canvas<'_>, _: &Env<'_>) {}
+
+    fn on_action(&mut self, action: &Id, _: &mut Cx<'_, '_>) -> Handled {
+        self.0.borrow_mut().push(alloc::format!("{action}"));
+        Handled::Yes
+    }
+
+    fn on_gesture(&mut self, gesture: paperpaw_sdk::Gesture, _: &mut Cx<'_, '_>) -> Handled {
+        let start = gesture.start;
+        let noted = alloc::format!("{:?} {},{}", gesture.kind, start.x, start.y);
+        self.0.borrow_mut().push(noted);
+        Handled::Yes
+    }
+}
+
+impl Plugin for GesturePlugin {
+    fn manifest(&self) -> Manifest {
+        Manifest {
+            id: Id::new_static("g"),
+            name: Cow::Borrowed("Gestures"),
+            description: Cow::Borrowed(""),
+            version: Version::new(1, 0, 0),
+            sdk: SDK_VERSION,
+        }
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        let log = self.0.clone();
+        r.add_screen(ScreenSpec {
+            id: Id::new_static("g.screen"),
+            title: Cow::Borrowed("g"),
+            factory: Box::new(move |_, _| Box::new(GestureScreen(log.clone()))),
+        })?;
+        r.bind_slot(slots::HOME, Id::new_static("g.screen"), Priority::DEFAULT)?;
+        // Every edge swipes in: the strips along them are the kernel's.
+        r.add_keymap(Cow::Borrowed(
+            "[keymap.g.screen]
+edge.top = core.quick-panel
+edge.bottom = core.home
+edge.left = core.back
+edge.right = core.back
+",
+        ))
+    }
+}
+
+#[test]
+fn a_finger_held_at_an_edge_is_a_long_press() {
+    let log = log();
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(GesturePlugin(log.clone()))
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    render(&mut kernel);
+    // Held still on the first line, in the strip along the top: a long
+    // press when its time comes, as anywhere else; lifted, nothing more.
+    let effects = finger(&mut kernel, 100, 0, PointerPhase::Down, (45, 5));
+    assert_eq!(effects.wake_at(), Some(Instant(600)));
+    kernel.tick(Instant(600));
+    assert_eq!(*log.borrow(), ["LongPress 45,5"]);
+    finger(&mut kernel, 700, 0, PointerPhase::Up, (45, 5));
+    assert_eq!(*log.borrow(), ["LongPress 45,5"]);
+    assert!(nothing_held(&kernel));
+    // At a side too.
+    finger(&mut kernel, 1000, 0, PointerPhase::Down, (88, 45));
+    kernel.tick(Instant(1500));
+    finger(&mut kernel, 1600, 0, PointerPhase::Up, (88, 45));
+    assert_eq!(*log.borrow(), ["LongPress 45,5", "LongPress 88,45"]);
+    log.borrow_mut().clear();
+
+    // Swipes in from the edges still apply what they are bound to, also
+    // after resting a moment; a tap at an edge is a tap.
+    swipe(&mut kernel, 2000, (45, 88), (45, 30));
+    finger(&mut kernel, 3000, 0, PointerPhase::Down, (2, 45));
+    kernel.tick(Instant(3300));
+    finger(&mut kernel, 3300, 0, PointerPhase::Move, (70, 45));
+    kernel.tick(Instant(3600));
+    finger(&mut kernel, 3700, 0, PointerPhase::Up, (70, 45));
+    tap(&mut kernel, 4000, 88, 45);
+    assert_eq!(*log.borrow(), ["core.home", "core.back", "Tap 88,45"]);
     assert!(nothing_held(&kernel));
 }
