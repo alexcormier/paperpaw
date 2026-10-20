@@ -6,6 +6,19 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Security: Calibre is connected to only on a computer the reader chose.
+  One found in the network is shown with its name and address and
+  trusted once the reader connects to it (kept in
+  `.paperpaw/plugins/calibre/host.txt`; the address set by hand is
+  trusted as it is), so another device in the network can no longer
+  answer first and pose as Calibre. Calibre writes only books of formats
+  PaperPaw reads, replaces and deletes only books it sent itself, and
+  leaves the reader's own files as they are (a book whose name is taken
+  is not received, with a notice).
+- Calibre: the books on the device are listed to Calibre a part at a
+  time and without their cover thumbnails, and on the X4 a message from
+  Calibre may be 64 KB at most (a megabyte elsewhere), so a large
+  library or a hostile peer no longer exhausts its memory.
 - Wi-Fi transfer: PaperPaw's settings file, `paperpaw.ini`, can be
   fetched but no longer deleted or replaced from the browser: it names
   the servers that get passwords and keys.

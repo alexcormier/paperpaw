@@ -1381,6 +1381,7 @@ dependencies = [
  "paperpaw-i18n",
  "paperpaw-json",
  "paperpaw-platform",
+ "paperpaw-plugin-format-epub",
  "paperpaw-sdk",
 ]
 
