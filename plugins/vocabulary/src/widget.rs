@@ -20,7 +20,7 @@ use alloc::vec::Vec;
 
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::widgets::{
-    self, Align, Frame, Look, Size, Widget, WidgetSpec, WidgetTarget, Wrapped,
+    self, Align, Frame, Look, Padding, Size, Widget, WidgetSpec, WidgetTarget, Wrapped,
 };
 use paperpaw_sdk::{
     Arg, Canvas, Command, Env, FontHandle, Id, Rect, RegisterError, Registrar, SettingSpec,
@@ -39,8 +39,9 @@ const SAVED_NAME: &str = "vocabulary.widget.saved";
 const PICKS: [&str; 2] = ["vocabulary.pick.daily", "vocabulary.pick.newest"];
 
 /// The word of the day's settings, kept in the program.
-static WORD_SETTINGS: [SettingSpec; 7] = [
+static WORD_SETTINGS: [SettingSpec; 8] = [
     widgets::frame_spec("vocabulary.widget.word.frame", WORD, Frame::None),
+    widgets::padding_spec("vocabulary.widget.word.padding", WORD, Padding::Auto),
     widgets::size_spec("vocabulary.widget.word.size", WORD, Size::Medium, true),
     widgets::align_spec("vocabulary.widget.word.align", WORD, Align::Left),
     SettingSpec::fixed_choice(
@@ -71,8 +72,9 @@ static WORD_SETTINGS: [SettingSpec; 7] = [
 ];
 
 /// The words saved's settings, kept in the program.
-static SAVED_SETTINGS: [SettingSpec; 7] = [
+static SAVED_SETTINGS: [SettingSpec; 8] = [
     widgets::frame_spec("vocabulary.widget.saved.frame", SAVED, Frame::None),
+    widgets::padding_spec("vocabulary.widget.saved.padding", SAVED, Padding::Auto),
     widgets::size_spec("vocabulary.widget.saved.size", SAVED, Size::Medium, true),
     widgets::align_spec("vocabulary.widget.saved.align", SAVED, Align::Left),
     widgets::part_spec(
@@ -140,13 +142,33 @@ fn caption_room(env: &Env<'_>, widget: &str) -> u16 {
     }
 }
 
-/// The caption's height in `height` pixels, if `widget` shows it and
-/// there is room for a line of text below it as well (else the content
-/// goes first).
-fn caption_in(env: &Env<'_>, widget: &str, height: u16) -> u16 {
+/// `widget`'s caption: "Word of the day" (or "Newest word"), "Vocabulary".
+fn caption_text<'e>(env: &Env<'e>, widget: &str) -> &'e str {
+    if widget == SAVED_NAME {
+        env.i18n.tr("vocabulary.title")
+    } else if env.settings.text(&format!("{WORD_NAME}.pick")) == PICKS[1] {
+        env.i18n.tr("vocabulary.widget.newest")
+    } else {
+        env.i18n.tr("vocabulary.widget.word")
+    }
+}
+
+/// The caption's height in `area`, if `widget` shows it, it fits the
+/// width whole and there is room for a line of text below it as well
+/// (else the content goes first, and the caption is left out rather
+/// than cut).
+fn caption_in(env: &Env<'_>, widget: &str, area: Rect) -> u16 {
+    let style = UiStyle::new(env);
     let cap = caption_room(env, widget);
-    let least = widgets::line_height(env, UiStyle::new(env).text);
-    if cap + least <= height { cap } else { 0 }
+    let least = widgets::line_height(env, style.text);
+    let fits = style.font(env).is_some_and(|font| {
+        font.measure(style.small, caption_text(env, widget)) <= f32::from(area.width)
+    });
+    if fits && cap + least <= area.height {
+        cap
+    } else {
+        0
+    }
 }
 
 /// Where content `height` high goes with `widget`'s caption above it
@@ -154,7 +176,7 @@ fn caption_in(env: &Env<'_>, widget: &str, height: u16) -> u16 {
 /// both, and the caption's height in it.
 fn captioned_block(env: &Env<'_>, widget: &str, area: Rect, height: u16) -> (Rect, u16) {
     // Where they do not fit together, the content goes first.
-    let cap = caption_room(env, widget);
+    let cap = caption_in(env, widget, area);
     let cap = if cap + height <= area.height { cap } else { 0 };
     let total = (cap + height).min(area.height);
     let block = Rect::new(
@@ -189,9 +211,11 @@ fn captioned(
     Rect::new(block.x, block.y + cap, block.width, height.min(total - cap))
 }
 
-/// The size of `widget`'s main text: as its setting says, smaller where
-/// a line of it is higher than `height`; "as large as fits" fits `text`
-/// into `width` and `height` (up to three times a title's size).
+/// The size of `widget`'s main text: as its setting says ("as large as
+/// fits": up to three times a title's size), smaller where it is wider
+/// than `width` (down to the body's size; then it is shortened) or a
+/// line of it higher than `height` (down to the small size), measured
+/// as drawn.
 fn text_size(
     env: &Env<'_>,
     font: &FontHandle<'_>,
@@ -200,20 +224,54 @@ fn text_size(
     (width, height): (u16, u16),
 ) -> f32 {
     let style = UiStyle::new(env);
-    let base = style.title;
-    let line = font.line_metrics(base).line_height.max(1.0);
-    let by_height = base * f32::from(height) / line;
-    let wide = font.measure(base, text).max(1.0);
-    let by_width = base * f32::from(width) / wide;
-    match widgets::size(env, widget) {
-        Size::Fit => by_width.min(by_height).clamp(style.small, base * 3.0),
-        // Smaller where wider than the room (down to the body's size;
-        // then it is shortened) or higher.
-        size => size
-            .text(&style)
-            .min(by_width.max(style.text))
-            .min(by_height.max(style.small)),
+    let max = match widgets::size(env, widget) {
+        Size::Fit => style.title * 3.0,
+        size => size.text(&style),
+    };
+    let wide = f32::from(width);
+    let tall = |size: f32| line(font, size) <= height;
+    widgets::largest_size(max, style.text.min(max), |size| {
+        tall(size) && font.measure(size, text) <= wide
+    })
+    .or_else(|| widgets::largest_size(max.min(style.text), style.small, tall))
+    .unwrap_or(style.small.min(max))
+}
+
+/// What a widget says without words in `area` (its whole place): that
+/// words looked up show here, or where that does not fit whole, that
+/// there are none yet.
+fn empty(env: &Env<'_>, widget: &str, area: Rect) -> Wrapped {
+    let style = UiStyle::new(env);
+    // A short message as wide as the spacing leaves, as high as half of
+    // it: the lines' own room above and below the letters keeps them clear of the edges
+    // (two lines fit a low place then).
+    let inner = widgets::look::look(env, widget, area).area;
+    let (width, height) = (inner.width, (inner.height + area.height) / 2);
+    // The sentence inside the spacing, the short form where it does not
+    // fit whole.
+    let long = env.i18n.tr("vocabulary.widget.empty");
+    let wrapped = Wrapped::fitting(env, long, style.text, style.small, width, inner.height);
+    if wrapped.lines().iter().all(|l| !l.ends_with('…')) {
+        return wrapped;
     }
+    let short = env.i18n.tr("vocabulary.widget.empty.short");
+    Wrapped::fitting(env, short, style.text, style.small, width, height)
+}
+
+/// Draws what a widget says without words, as laid out where it was
+/// placed (made anew where it is drawn elsewhere).
+fn draw_empty(
+    canvas: &mut Canvas<'_>,
+    env: &Env<'_>,
+    (widget, look, area): (&str, &Look, Rect),
+    laid: Option<&(Rect, Wrapped)>,
+) {
+    let laid = match laid {
+        Some((at, laid)) if *at == area => Cow::Borrowed(laid),
+        _ => Cow::Owned(empty(env, widget, area)),
+    };
+    let at = Rect::new(look.area.x, area.y, look.area.width, area.height);
+    laid.draw(canvas, env, at, Align::Center, look.ink);
 }
 
 /// A tap opens the list of words.
@@ -269,12 +327,18 @@ struct WordWidget {
     /// Where it is drawn, once placed, and the word laid out there.
     area: Option<Rect>,
     laid: Option<Laid>,
+    /// What it says without words, laid out where it is placed.
+    empty: Option<(Rect, Wrapped)>,
 }
 
 impl WordWidget {
     fn lay_out(&mut self, env: &Env<'_>) {
         self.laid = match (self.area, &self.word) {
             (Some(area), Some(word)) => lay_out(env, area, word),
+            _ => None,
+        };
+        self.empty = match (self.area, &self.word) {
+            (Some(area), None) => Some((area, empty(env, WORD_NAME, area))),
             _ => None,
         };
     }
@@ -308,7 +372,7 @@ fn lay_out(env: &Env<'_>, area: Rect, word: &Word) -> Option<Laid> {
     let id = WORD_NAME;
     let small = line(&font, style.small);
     let area = widgets::look::look(env, id, area).area;
-    let room = area.height.saturating_sub(caption_in(env, id, area.height));
+    let room = area.height.saturating_sub(caption_in(env, id, area));
     let width = f32::from(area.width);
     let book = if widgets::shows(env, id, "book") && !word.title.is_empty() {
         small
@@ -323,13 +387,11 @@ fn lay_out(env: &Env<'_>, area: Rect, word: &Word) -> Option<Laid> {
         (area.width, room.saturating_sub(book)),
     );
     let big = line(&font, size);
-    let sentence_h = if widgets::shows(env, id, "sentence") && !word.sentence.is_empty() {
-        let lines = font.wrap(style.small, &word.sentence, width).len().min(3) as u16;
-        let fit = room.saturating_sub(big + book) / small.max(1);
-        lines.min(fit) * small
-    } else {
-        0
-    };
+    // The sentence on as many lines as it needs and fit, three at most.
+    let fit = (room.saturating_sub(big + book) / small.max(1)).min(3);
+    let sentence = (widgets::shows(env, id, "sentence") && !word.sentence.is_empty() && fit > 0)
+        .then(|| Wrapped::new(env, &word.sentence, style.small, area.width, fit * small));
+    let sentence_h = sentence.as_ref().map_or(0, |s| s.height(env));
     let (block, caption) = captioned_block(env, id, area, big + sentence_h + book);
     let from = (book > 0).then(|| {
         let text = env.i18n.format(
@@ -344,8 +406,7 @@ fn lay_out(env: &Env<'_>, area: Rect, word: &Word) -> Option<Laid> {
         size,
         shown: ui::fit(&font, size, &word.word, width),
         big,
-        sentence: (sentence_h > 0)
-            .then(|| Wrapped::new(env, &word.sentence, style.small, area.width, sentence_h)),
+        sentence,
         sentence_h,
         book: from,
     })
@@ -407,7 +468,8 @@ impl Widget for WordWidget {
     fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         let look = widgets::draw_frame(canvas, env, WORD_NAME, area);
         let Some(word) = &self.word else {
-            widgets::draw_message(canvas, env, &look, env.i18n.tr("vocabulary.widget.empty"));
+            let at = (WORD_NAME, &look, area);
+            draw_empty(canvas, env, at, self.empty.as_ref());
             return;
         };
         // Laid out when placed; drawn elsewhere, laid out for that.
@@ -435,12 +497,7 @@ fn draw_word(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, laid: &Laid) {
     let id = WORD_NAME;
     let area = look.area;
     if laid.caption > 0 {
-        let pick = env.settings.text(&format!("{id}.pick"));
-        let caption = if pick == PICKS[1] {
-            env.i18n.tr("vocabulary.widget.newest")
-        } else {
-            env.i18n.tr("vocabulary.widget.word")
-        };
+        let caption = caption_text(env, id);
         let at = Look {
             area: laid.block,
             ..*look
@@ -477,6 +534,19 @@ fn draw_word(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, laid: &Laid) {
 #[derive(Default)]
 struct Saved {
     summary: Summary,
+    /// Where it is drawn, once placed, and what it says there without
+    /// words.
+    area: Option<Rect>,
+    empty: Option<(Rect, Wrapped)>,
+}
+
+impl Saved {
+    fn lay_out(&mut self, env: &Env<'_>) {
+        self.empty = match self.area {
+            Some(area) if self.summary.count == 0 => Some((area, empty(env, SAVED_NAME, area))),
+            _ => None,
+        };
+    }
 }
 
 impl Widget for Saved {
@@ -484,7 +554,17 @@ impl Widget for Saved {
         let summary = store::summary(env.storage);
         let changed = summary != self.summary;
         self.summary = summary;
+        if changed {
+            self.lay_out(env);
+        }
         changed
+    }
+
+    fn place(&mut self, env: &Env<'_>, area: Rect) {
+        if self.area != Some(area) {
+            self.area = Some(area);
+            self.lay_out(env);
+        }
     }
 
     fn live(&self) -> bool {
@@ -508,7 +588,8 @@ impl Widget for Saved {
     fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         let look = widgets::draw_frame(canvas, env, SAVED_NAME, area);
         if self.summary.count == 0 {
-            widgets::draw_message(canvas, env, &look, env.i18n.tr("vocabulary.widget.empty"));
+            let at = (SAVED_NAME, &look, area);
+            draw_empty(canvas, env, at, self.empty.as_ref());
             return;
         }
         draw_saved(canvas, env, &look, &self.summary);
@@ -565,14 +646,14 @@ fn draw_saved(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, summary: &Sum
     let id = SAVED_NAME;
     let small = line(&font, style.small);
     let area = look.area;
-    let room = area.height.saturating_sub(caption_in(env, id, area.height));
+    let room = area.height.saturating_sub(caption_in(env, id, area));
     let headline = env
         .i18n
         .plural("vocabulary.widget.words", summary.count as i64, &[]);
     let width = f32::from(area.width);
     let fits = |text: &str| text.is_empty() || font.measure(style.small, text) <= width;
     let mut notes = notes(env, summary, fits);
-    notes.retain(|n| !n.is_empty());
+    notes.retain(|n| !n.is_empty() && fits(n));
     let least = line(&font, style.text);
     while !notes.is_empty() && least + notes.len() as u16 * small > room {
         notes.pop();
@@ -580,7 +661,7 @@ fn draw_saved(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, summary: &Sum
     let notes_h = notes.len() as u16 * small;
     let size = text_size(env, &font, id, &headline, (area.width, room - notes_h));
     let big = line(&font, size);
-    let caption = env.i18n.tr("vocabulary.title");
+    let caption = caption_text(env, id);
     let block = captioned(canvas, env, id, look, caption, big + notes_h);
     let align = widgets::align(env, id);
     let row = |y: u16, h: u16| Rect::new(area.x, y, area.width, h);
