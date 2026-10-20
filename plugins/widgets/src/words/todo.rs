@@ -23,7 +23,9 @@ use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::time;
 use paperpaw_sdk::ui::choice::{self, Choice};
 use paperpaw_sdk::ui::{self, ListView, UiStyle};
-use paperpaw_sdk::widgets::{self, Align, Frame, Look, Size, Widget, WidgetSpec, WidgetTarget};
+use paperpaw_sdk::widgets::{
+    self, Align, Frame, Look, Padding, Size, Widget, WidgetSpec, WidgetTarget,
+};
 use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Color, Command, Cx, Env, FontHandle, Gesture, GestureKind, Handled,
     Id, Params, Point, Rect, RefreshMode, RegisterError, Registrar, Screen, ScreenSpec,
@@ -73,7 +75,7 @@ fn file() -> String {
 }
 
 /// The list's settings, kept in the program.
-static SETTINGS: [SettingSpec; 7] = [
+static SETTINGS: [SettingSpec; 8] = [
     SettingSpec::fixed_number(
         "widgets.todo.count",
         "widgets.todo.setting.count",
@@ -105,6 +107,7 @@ static SETTINGS: [SettingSpec; 7] = [
     widgets::size_spec("widgets.todo.size", ID, Size::Small, false),
     widgets::align_spec("widgets.todo.align", ID, Align::Left),
     widgets::frame_spec("widgets.todo.frame", ID, Frame::None),
+    widgets::padding_spec("widgets.todo.padding", ID, Padding::Auto),
 ];
 
 pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
@@ -358,8 +361,8 @@ impl Widget for TodoWidget {
             let text = caption_text(env, self.open);
             widgets::draw_caption(canvas, env, ID.as_str(), &look, &text);
         }
-        let size = text_size(env);
         let boxes = env.settings.read(&BOX);
+        let size = items_size(env, &font, &places.rows, &self.items, boxes);
         for (row, item) in places.rows.iter().zip(&self.items) {
             draw_item(canvas, env, &font, size, *row, item, boxes, align, &look);
         }
@@ -504,11 +507,7 @@ fn draw_item(
     let done = item.done.is_some();
     let side = (size * 0.8) as u16;
     let with_box = boxes != BOXES[2];
-    let lead = if with_box {
-        side + (size * 0.55) as u16
-    } else {
-        0
-    };
+    let lead = lead(size, boxes);
     let room = f32::from(row.width.saturating_sub(lead));
     let text = ui::fit(font, size, &item.text, room);
     let width = font.measure(size, &text);
@@ -530,6 +529,37 @@ fn draw_item(
         let line = style.line.max(1) as u16;
         canvas.fill(Rect::new(label.x, y, width as u16, line), color);
     }
+}
+
+/// How far an item's text begins from its row's edge at `size`: the
+/// box and a space after it, where there are boxes.
+fn lead(size: f32, boxes: &str) -> u16 {
+    if boxes == BOXES[2] {
+        0
+    } else {
+        (size * 0.8) as u16 + (size * 0.55) as u16
+    }
+}
+
+/// The size of the items in `rows`: the list's own, or smaller (down to
+/// the small size) where an item would be shortened at it, the same for
+/// all so that they line up.
+fn items_size(
+    env: &Env<'_>,
+    font: &FontHandle<'_>,
+    rows: &[Rect],
+    items: &[Item],
+    boxes: &str,
+) -> f32 {
+    let size = text_size(env);
+    let least = UiStyle::new(env).small.min(size);
+    rows.iter()
+        .zip(items)
+        .map(|(row, item)| {
+            let room = f32::from(row.width.saturating_sub(lead(size, boxes)));
+            widgets::fit_line(font, size, least, &item.text, room).0
+        })
+        .fold(size, f32::min)
 }
 
 /// A box in `place`: round or square, filled and ticked when done.
