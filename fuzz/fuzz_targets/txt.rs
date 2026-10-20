@@ -3,18 +3,13 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
+use paperpaw_fuzz::read_document;
 use paperpaw_plugin_format_txt::TxtDocument;
 use paperpaw_sdk::MemoryStorage;
-use paperpaw_sdk::document::{Document, Locator};
 
 fuzz_target!(|data: &[u8]| {
     let storage = MemoryStorage::new().with("book.txt", data.to_vec());
-    let Ok(doc) = TxtDocument::open(&storage, "book.txt") else {
-        return;
-    };
-    let mut at = Locator::new(0, 0);
-    while let Ok(Some(block)) = doc.block_at(&storage, at) {
-        assert!(block.end > at.offset);
-        at = Locator::new(0, block.end);
+    if let Ok(doc) = TxtDocument::open(&storage, "book.txt") {
+        read_document(&doc, &storage);
     }
 });
