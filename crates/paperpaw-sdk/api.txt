@@ -1007,6 +1007,7 @@ pub const paperpaw_sdk::http_params::BODY: &str
 pub const paperpaw_sdk::http_params::CONTENT_TYPE: &str
 pub const paperpaw_sdk::http_params::ETAG: &str
 pub const paperpaw_sdk::http_params::FINAL_URL: &str
+pub const paperpaw_sdk::http_params::HEADER: &str
 pub const paperpaw_sdk::http_params::STATUS: &str
 pub mod paperpaw_sdk::hyphen
 pub use paperpaw_sdk::hyphen::<<paperpaw_hyphen::*>>
@@ -1361,10 +1362,12 @@ pub paperpaw_sdk::replies::HttpReply::content_type: core::option::Option<alloc::
 pub paperpaw_sdk::replies::HttpReply::context: paperpaw_sdk::Params
 pub paperpaw_sdk::replies::HttpReply::etag: core::option::Option<alloc::string::String>
 pub paperpaw_sdk::replies::HttpReply::final_url: core::option::Option<alloc::string::String>
+pub paperpaw_sdk::replies::HttpReply::headers: alloc::vec::Vec<(alloc::string::String, alloc::string::String)>
 pub paperpaw_sdk::replies::HttpReply::refused: core::option::Option<paperpaw_sdk::work::Refusal>
 pub paperpaw_sdk::replies::HttpReply::status: u16
 impl paperpaw_sdk::replies::HttpReply
 pub fn paperpaw_sdk::replies::HttpReply::failed(impl core::convert::Into<alloc::string::String>, paperpaw_sdk::Params) -> Self
+pub fn paperpaw_sdk::replies::HttpReply::header(&self, &str) -> core::option::Option<&str>
 pub fn paperpaw_sdk::replies::HttpReply::ok(&self) -> bool
 pub fn paperpaw_sdk::replies::HttpReply::refused(paperpaw_sdk::work::Refusal, paperpaw_sdk::Params) -> Self
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::replies::HttpReply
@@ -3027,22 +3030,28 @@ pub paperpaw_sdk::Gesture::end: paperpaw_platform::geometry::Point
 pub paperpaw_sdk::Gesture::kind: paperpaw_sdk::GestureKind
 pub paperpaw_sdk::Gesture::start: paperpaw_platform::geometry::Point
 pub paperpaw_sdk::Gesture::tool: paperpaw_platform::input::PointerTool
+#[non_exhaustive] pub struct paperpaw_sdk::HttpOptions
+pub paperpaw_sdk::HttpOptions::max_body: core::option::Option<usize>
+pub paperpaw_sdk::HttpOptions::timeout: core::option::Option<core::time::Duration>
+pub paperpaw_sdk::HttpOptions::want_headers: alloc::vec::Vec<alloc::string::String>
 pub struct paperpaw_sdk::HttpReply
 pub paperpaw_sdk::HttpReply::body: alloc::string::String
 pub paperpaw_sdk::HttpReply::content_type: core::option::Option<alloc::string::String>
 pub paperpaw_sdk::HttpReply::context: paperpaw_sdk::Params
 pub paperpaw_sdk::HttpReply::etag: core::option::Option<alloc::string::String>
 pub paperpaw_sdk::HttpReply::final_url: core::option::Option<alloc::string::String>
+pub paperpaw_sdk::HttpReply::headers: alloc::vec::Vec<(alloc::string::String, alloc::string::String)>
 pub paperpaw_sdk::HttpReply::refused: core::option::Option<paperpaw_sdk::work::Refusal>
 pub paperpaw_sdk::HttpReply::status: u16
 impl paperpaw_sdk::replies::HttpReply
 pub fn paperpaw_sdk::replies::HttpReply::failed(impl core::convert::Into<alloc::string::String>, paperpaw_sdk::Params) -> Self
+pub fn paperpaw_sdk::replies::HttpReply::header(&self, &str) -> core::option::Option<&str>
 pub fn paperpaw_sdk::replies::HttpReply::ok(&self) -> bool
 pub fn paperpaw_sdk::replies::HttpReply::refused(paperpaw_sdk::work::Refusal, paperpaw_sdk::Params) -> Self
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::replies::HttpReply
 pub fn paperpaw_sdk::replies::HttpReply::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::replies::HttpReply::to_params(&self) -> paperpaw_sdk::Params
-pub struct paperpaw_sdk::HttpRequest
+#[non_exhaustive] pub struct paperpaw_sdk::HttpRequest
 pub paperpaw_sdk::HttpRequest::body: core::option::Option<alloc::string::String>
 pub paperpaw_sdk::HttpRequest::body_from: core::option::Option<alloc::string::String>
 pub paperpaw_sdk::HttpRequest::headers: alloc::vec::Vec<(alloc::string::String, alloc::string::String)>
@@ -3052,7 +3061,17 @@ pub paperpaw_sdk::HttpRequest::reply: paperpaw_sdk::Id
 pub paperpaw_sdk::HttpRequest::save_to: core::option::Option<alloc::string::String>
 pub paperpaw_sdk::HttpRequest::url: alloc::string::String
 impl paperpaw_sdk::HttpRequest
+pub fn paperpaw_sdk::HttpRequest::body(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn paperpaw_sdk::HttpRequest::body_from(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn paperpaw_sdk::HttpRequest::get(&str, impl core::convert::Into<paperpaw_sdk::Id>) -> Self
+pub fn paperpaw_sdk::HttpRequest::header(self, impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn paperpaw_sdk::HttpRequest::max_body(self, usize) -> Self
 pub fn paperpaw_sdk::HttpRequest::new(&str, &str, impl core::convert::Into<paperpaw_sdk::Id>) -> Self
+pub fn paperpaw_sdk::HttpRequest::options(&self) -> &paperpaw_sdk::HttpOptions
+pub fn paperpaw_sdk::HttpRequest::save_to(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn paperpaw_sdk::HttpRequest::timeout(self, core::time::Duration) -> Self
+pub fn paperpaw_sdk::HttpRequest::want_headers(self, &[&str]) -> Self
+pub fn paperpaw_sdk::HttpRequest::with(self, paperpaw_sdk::Params) -> Self
 pub struct paperpaw_sdk::Hyphenation
 impl paperpaw_sdk::Hyphenation
 pub fn paperpaw_sdk::Hyphenation::add(&mut self, paperpaw_sdk::HyphenationSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>

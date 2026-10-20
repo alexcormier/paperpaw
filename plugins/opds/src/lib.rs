@@ -78,11 +78,9 @@ fn request(
     reply: &Event<HttpReply>,
     params: Params,
 ) -> HttpRequest {
-    let mut request = HttpRequest {
-        params: params.with(temp::FILE, save_to.clone()),
-        save_to: Some(save_to),
-        ..HttpRequest::new("GET", url, reply)
-    };
+    let mut request = HttpRequest::get(url, reply)
+        .with(params.with(temp::FILE, save_to.clone()))
+        .save_to(save_to);
     request.headers.push(paperpaw_sdk::web::user_agent());
     if let Some(auth) = catalog.authorization()
         && same_origin(url, &catalog.url)

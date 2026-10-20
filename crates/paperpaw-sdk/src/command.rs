@@ -9,7 +9,12 @@ use paperpaw_platform::RefreshMode;
 /// An HTTP request of a plugin. When it is answered the kernel emits
 /// `reply` with `params` plus `status` (the HTTP status; `0` when the
 /// request failed, e.g. without network) and `body` (the response as text).
+///
+/// Made with [`get`](Self::get) or [`new`](Self::new) and the methods
+/// that set the rest; every request is answered once, also when it is
+/// refused or taken back ([`HttpReply::refused`](crate::HttpReply)).
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct HttpRequest {
     /// `GET`, `PUT`, `POST`, …
     pub method: String,
@@ -24,7 +29,35 @@ pub struct HttpRequest {
     pub save_to: Option<String>,
     pub reply: Id,
     pub params: Params,
+    /// What few requests set, kept apart so that commands stay small
+    /// ([`options`](Self::options)).
+    options: Option<alloc::boxed::Box<HttpOptions>>,
 }
+
+/// What few requests set ([`HttpRequest::options`]).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct HttpOptions {
+    /// How long it may take in all, the connection and TLS counted;
+    /// `None`: the default, 30 s.
+    pub timeout: Option<core::time::Duration>,
+    /// Headers of the answer to pass back in
+    /// [`HttpReply::headers`](crate::HttpReply), by name (any case).
+    /// `ETag` and `Content-Type` always come back.
+    pub want_headers: Vec<String>,
+    /// The longest body kept in memory, in bytes: a longer one is cut
+    /// there. `None`: by the device's memory (64 KiB on small devices,
+    /// 1 MiB on others); at most 1 MiB. Large answers go to a file
+    /// ([`HttpRequest::save_to`]).
+    pub max_body: Option<usize>,
+}
+
+/// The options of a request that sets none.
+static NO_OPTIONS: HttpOptions = HttpOptions {
+    timeout: None,
+    want_headers: Vec::new(),
+    max_body: None,
+};
 
 impl HttpRequest {
     /// A request without headers or body; its answer comes as `reply`, an
@@ -39,7 +72,70 @@ impl HttpRequest {
             save_to: None,
             reply: reply.into(),
             params: Params::new(),
+            options: None,
         }
+    }
+
+    /// Its timeout, the headers it wants back and the longest body.
+    pub fn options(&self) -> &HttpOptions {
+        self.options.as_deref().unwrap_or(&NO_OPTIONS)
+    }
+
+    fn options_mut(&mut self) -> &mut HttpOptions {
+        self.options.get_or_insert_with(Default::default)
+    }
+
+    /// A `GET` of `url`.
+    pub fn get(url: &str, reply: impl Into<Id>) -> Self {
+        Self::new("GET", url, reply)
+    }
+
+    /// With this header.
+    pub fn header(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
+        self.headers.push((name.into(), value.into()));
+        self
+    }
+
+    /// With this body, as text.
+    pub fn body(mut self, body: impl Into<String>) -> Self {
+        self.body = Some(body.into());
+        self
+    }
+
+    /// With the file at this storage path as its body.
+    pub fn body_from(mut self, path: impl Into<String>) -> Self {
+        self.body_from = Some(path.into());
+        self
+    }
+
+    /// Its answer's body written to the file at this storage path.
+    pub fn save_to(mut self, path: impl Into<String>) -> Self {
+        self.save_to = Some(path.into());
+        self
+    }
+
+    /// With these parameters, passed back with the reply.
+    pub fn with(mut self, params: Params) -> Self {
+        self.params = params;
+        self
+    }
+
+    /// Taking at most this long in all.
+    pub fn timeout(mut self, timeout: core::time::Duration) -> Self {
+        self.options_mut().timeout = Some(timeout);
+        self
+    }
+
+    /// Passing back these headers of the answer.
+    pub fn want_headers(mut self, names: &[&str]) -> Self {
+        self.options_mut().want_headers = names.iter().map(|n| String::from(*n)).collect();
+        self
+    }
+
+    /// Keeping at most this many bytes of the answer's body in memory.
+    pub fn max_body(mut self, bytes: usize) -> Self {
+        self.options_mut().max_body = Some(bytes);
+        self
     }
 }
 
@@ -140,6 +236,9 @@ pub mod http_params {
     /// Where the answer came from, if redirected elsewhere (named apart
     /// from a request's own parameters, which come back too).
     pub const FINAL_URL: &str = "final-url";
+    /// Before a header's name in lower case, for the headers asked for
+    /// ([`HttpOptions::want_headers`]), e.g. `header:last-modified`.
+    pub const HEADER: &str = "header:";
 }
 
 /// Text to speak aloud (see [`Command::Speak`]).

@@ -20,6 +20,15 @@ change the plugin SDK.
   starts (`Work::persist`), and `Command::CancelHttp` takes requests
   back. The kernel runs declared work in a following step; until then
   these commands do nothing.
+- SDK, HTTP: `HttpRequest` is made with `HttpRequest::get` or `new` and
+  methods (`header`, `body`, `body_from`, `save_to`, `with`), no longer
+  field by field (`#[non_exhaustive]`). A request may set a `timeout`
+  (30 s by default), the answer's headers it wants back
+  (`want_headers`, read with `HttpReply::header`) and the longest body
+  kept in memory (`max_body`); by default that is 64 KiB on the X4 and
+  the X4 Pro (it was 1 MiB everywhere) and 1 MiB elsewhere. The desktop
+  and Android shells keep the timeout and pass the headers back; the
+  X4's keeps its own limits for now.
 - A new look, rounder and friendlier: soft corners, pills for buttons,
   switches, chips and the highlight, plain headers (the title on the
   page, a little larger, no bar or line), faint lines between rows from

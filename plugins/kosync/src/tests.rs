@@ -305,6 +305,7 @@ impl Harness {
             final_url: None,
             context: request.params.clone(),
             refused: None,
+            headers: Vec::new(),
         };
         self.dispatch(&request.reply, &reply.to_params())
     }

@@ -428,7 +428,7 @@ impl KernelBuilder {
                 swapped: Vec::new(),
             },
             io: network::IoState {
-                http: io::http::Http::default(),
+                http: io::http::Http::for_memory(self.device.memory),
                 servers: io::servers::Servers::default(),
                 sockets: io::sockets::Sockets::default(),
                 speech: io::speech::Speech::default(),

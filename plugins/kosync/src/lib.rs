@@ -482,12 +482,11 @@ pub(crate) fn server_request(
         headers.push(("x-auth-user".to_string(), user.to_string()));
         headers.push(("x-auth-key".to_string(), key.to_string()));
     }
-    HttpRequest {
-        headers,
-        body,
-        params,
-        ..HttpRequest::new(method, &format!("{}{path}", server(env)), reply)
-    }
+    let mut request =
+        HttpRequest::new(method, &format!("{}{path}", server(env)), reply).with(params);
+    request.headers = headers;
+    request.body = body;
+    request
 }
 
 /// The position in the parameters of a reading event.

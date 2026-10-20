@@ -286,6 +286,7 @@ mod tests {
             final_url: None,
             context: Params::new(),
             refused: None,
+            headers: Vec::new(),
         };
         let name = || String::from("Berlin");
         let (places, search) =

@@ -1579,10 +1579,10 @@ ui-size = 12
 
 #[test]
 fn http_requests_go_to_the_shell_and_answers_come_back() {
-    let request = |id: &str| paperpaw_sdk::HttpRequest {
-        headers: alloc::vec![(String::from("accept"), String::from("text/plain"))],
-        params: paperpaw_sdk::Params::new().with("id", String::from(id)),
-        ..paperpaw_sdk::HttpRequest::new("GET", "https://example.org/x", Id::new_static("ov.reply"))
+    let request = |id: &str| {
+        paperpaw_sdk::HttpRequest::get("https://example.org/x", Id::new_static("ov.reply"))
+            .header("accept", "text/plain")
+            .with(paperpaw_sdk::Params::new().with("id", String::from(id)))
     };
     // With network: the shell gets it and answers.
     let log = log();
@@ -1759,11 +1759,11 @@ fn files_go_up_and_come_down() {
         .unwrap();
     kernel.start(Instant(0));
     let reply = Id::new_static("core.test-reply");
-    kernel.request(paperpaw_sdk::HttpRequest {
-        body_from: Some(String::from("up.bin")),
-        save_to: Some(String::from("down.bin")),
-        ..paperpaw_sdk::HttpRequest::new("PUT", "https://example.org/f", reply.clone())
-    });
+    kernel.request(
+        paperpaw_sdk::HttpRequest::new("PUT", "https://example.org/f", reply.clone())
+            .body_from("up.bin")
+            .save_to("down.bin"),
+    );
     let calls = kernel.take_requests();
     // The shell reads the file to send, so it never needs to fit in memory.
     assert_eq!(calls[0].body, None);
@@ -1780,6 +1780,7 @@ fn files_go_up_and_come_down() {
             content_type: Some(String::from("application/epub+zip")),
             url: Some(String::from("https://example.org/g")),
             saved: false,
+            headers: Vec::new(),
         },
     );
     let storage = kernel.shared.storage.as_ref();
@@ -1788,10 +1789,9 @@ fn files_go_up_and_come_down() {
         b"\xffbinary"
     );
     // Written by the shell itself as it came: left as it is.
-    kernel.request(paperpaw_sdk::HttpRequest {
-        save_to: Some(String::from("kept.bin")),
-        ..paperpaw_sdk::HttpRequest::new("GET", "http://example.org/k", reply.clone())
-    });
+    kernel.request(
+        paperpaw_sdk::HttpRequest::get("http://example.org/k", reply.clone()).save_to("kept.bin"),
+    );
     let calls = kernel.take_requests();
     kernel.storage().write("kept.bin", b"streamed").unwrap();
     kernel.http_response(
@@ -1808,10 +1808,10 @@ fn files_go_up_and_come_down() {
         b"streamed"
     );
     // A file that is not there fails at once.
-    kernel.request(paperpaw_sdk::HttpRequest {
-        body_from: Some(String::from("missing.bin")),
-        ..paperpaw_sdk::HttpRequest::new("PUT", "https://example.org/f", reply)
-    });
+    kernel.request(
+        paperpaw_sdk::HttpRequest::new("PUT", "https://example.org/f", reply)
+            .body_from("missing.bin"),
+    );
     assert!(kernel.take_requests().is_empty());
 }
 

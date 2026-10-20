@@ -83,8 +83,8 @@ pub mod work;
 
 pub use action::{ActionHandler, ActionHint, ActionSpec, Actions};
 pub use command::{
-    Command, HttpRequest, MAX_CLIPBOARD, ServerResponse, SocketRead, Speech, http_params,
-    server_params, socket_params, speech_params,
+    Command, HttpOptions, HttpRequest, MAX_CLIPBOARD, ServerResponse, SocketRead, Speech,
+    http_params, server_params, socket_params, speech_params,
 };
 pub use contribution::{Contribution, Registrar};
 pub use env::{Capabilities, Env, EnvParts, Metrics};

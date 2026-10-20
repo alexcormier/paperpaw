@@ -9,10 +9,16 @@ use alloc::vec::Vec;
 
 use paperpaw_platform::{Storage, StorageError};
 use paperpaw_sdk::event::EventData;
-use paperpaw_sdk::{Command, HttpReply, HttpRequest, Id, Params, http_params};
+use paperpaw_sdk::{Command, HttpOptions, HttpReply, HttpRequest, Id, Params, http_params};
 
 /// Longest response body passed on to plugins.
 pub const MAX_RESPONSE: usize = 1 << 20;
+/// Longest response body passed on to plugins on small devices, unless a
+/// request asks for more ([`HttpOptions::max_body`]).
+pub const MAX_RESPONSE_SMALL: usize = 64 << 10;
+/// How long a request may take in all unless it says
+/// ([`HttpOptions::timeout`]).
+pub const TIMEOUT_MS: u32 = 30_000;
 /// Longest response body saved to a file, and longest file sent.
 pub const MAX_FILE: usize = 64 << 20;
 
@@ -35,6 +41,12 @@ pub struct HttpCall {
     /// ([`save_to`](Self::save_to)) instead, so that no file is saved cut
     /// short as if whole.
     pub max_response: usize,
+    /// How long it may take in all, the connection and TLS counted; the
+    /// shell answers with status 0 after that.
+    pub timeout_ms: u32,
+    /// Headers of the answer to pass back ([`HttpResponse::headers`]),
+    /// by name in any case.
+    pub want_headers: Vec<String>,
     /// The file in storage the body is for, if it is one (e.g. a
     /// download). A shell may write it there itself as it comes, for one
     /// too large for memory, and say so with [`HttpResponse::saved`];
@@ -84,6 +96,9 @@ pub struct HttpResponse {
     /// The body was written to [`HttpCall::save_to`] by the shell (and
     /// is not in `body`).
     pub saved: bool,
+    /// The headers asked for ([`HttpCall::want_headers`]) that the answer
+    /// had, their names in lower case.
+    pub headers: Vec<(String, String)>,
 }
 
 impl HttpResponse {
@@ -108,14 +123,39 @@ struct Awaiting {
 }
 
 /// Plugins' requests: those for the shell, and those it has not answered.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub(crate) struct Http {
     calls: Vec<HttpCall>,
     awaiting: Vec<Awaiting>,
     next: u32,
+    /// The longest body kept in memory unless a request says.
+    max_response: usize,
+}
+
+impl Default for Http {
+    fn default() -> Self {
+        Self {
+            calls: Vec::new(),
+            awaiting: Vec::new(),
+            next: 0,
+            max_response: MAX_RESPONSE,
+        }
+    }
 }
 
 impl Http {
+    /// Keeps bodies to what the device's memory allows by default.
+    pub fn for_memory(memory: paperpaw_platform::MemoryClass) -> Self {
+        let max_response = match memory {
+            paperpaw_platform::MemoryClass::Small => MAX_RESPONSE_SMALL,
+            paperpaw_platform::MemoryClass::Large => MAX_RESPONSE,
+        };
+        Self {
+            max_response,
+            ..Self::default()
+        }
+    }
+
     /// Queues a plugin's request for the shell, or fails it at once
     /// (without a network, or a file to send that is not there). One
     /// that saves to a file another request still saves to replaces that
@@ -156,6 +196,12 @@ impl Http {
             let failed = HttpReply::failed("replaced by a newer request", older.context);
             reply(older.reply, failed, out);
         }
+        let HttpOptions {
+            timeout,
+            want_headers,
+            max_body,
+            ..
+        } = request.options().clone();
         let body = match request.body_from {
             Some(_) => None,
             None => request.body.map(String::into_bytes),
@@ -165,8 +211,11 @@ impl Http {
         let max_response = if request.save_to.is_some() {
             MAX_FILE
         } else {
-            MAX_RESPONSE
+            max_body.unwrap_or(self.max_response).min(MAX_RESPONSE)
         };
+        let timeout_ms = timeout.map_or(TIMEOUT_MS, |t| {
+            u32::try_from(t.as_millis()).unwrap_or(u32::MAX)
+        });
         self.calls.push(HttpCall {
             id,
             method: request.method,
@@ -175,6 +224,8 @@ impl Http {
             body,
             body_from: request.body_from,
             max_response,
+            timeout_ms,
+            want_headers,
             save_to: request.save_to.clone(),
         });
         self.awaiting.push(Awaiting {
@@ -227,6 +278,7 @@ impl Http {
             final_url: response.url,
             context: awaiting.context,
             refused: None,
+            headers: response.headers,
         };
         let mut params = answer.to_params();
         params.set(http_params::BODY, body);
