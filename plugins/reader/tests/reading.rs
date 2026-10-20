@@ -1307,3 +1307,26 @@ fn a_bookmark_that_cannot_be_kept_is_said() {
         notices.borrow()
     );
 }
+
+#[test]
+fn a_page_back_after_returning_from_a_jump_is_the_page_before() {
+    let (storage, starts) = page_starts(3);
+    let mut reading = Reading::new(storage);
+    reading.open();
+    assert_eq!(reading.kept(), starts[3]);
+    reading.now += 10;
+    let params = Params::new()
+        .with(params::PATH, BOOK)
+        .with(params::TEXT, "20");
+    let effects = reading.kernel.send_event(
+        Instant(reading.now),
+        Id::new_static("reader.page-entered"),
+        params,
+    );
+    reading.settle(effects);
+    assert!(reading.kept() > starts[3]);
+    reading.run(core_actions::BACK);
+    assert_eq!(reading.kept(), starts[3]);
+    reading.run(core_actions::PREV_PAGE);
+    assert_eq!(reading.kept(), starts[2]);
+}
