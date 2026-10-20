@@ -27,14 +27,14 @@ use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::{actions, params, screens, slots};
 use paperpaw_sdk::document::ImageRef;
-use paperpaw_sdk::status::{StatusLine, item_ids};
+use paperpaw_sdk::status::{StatusLine, StatusValue, item_ids};
 use paperpaw_sdk::ui::{self, Thumbnail, UiStyle};
 use paperpaw_sdk::widgets::{
     self, Align, Drawn, Frame, Size, Widget, WidgetSpec, WidgetTarget, grid, line_height,
 };
 use paperpaw_sdk::{
-    Arg, Canvas, Color, Command, Env, Id, Params, Rect, RegisterError, Registrar, SettingExtra,
-    SettingKind, SettingSpec, SettingValue, time,
+    Arg, Canvas, Color, Command, Env, FontHandle, Id, Params, Rect, RegisterError, Registrar,
+    SettingExtra, SettingKind, SettingSpec, SettingValue, time,
 };
 
 use crate::pages::{CONTINUE, DATE, RECENT, STATUS};
@@ -106,8 +106,8 @@ static RECENT_SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_number(
 )];
 
 /// The widgets' settings: where each sits, its frame, size and parts.
-static SETTINGS: [SettingSpec; 16] = {
-    use widgets::{align_spec, frame_spec, part_spec, size_spec};
+static SETTINGS: [SettingSpec; 21] = {
+    use widgets::{Padding, align_spec, frame_spec, padding_spec, part_spec, size_spec};
     const STATUS_ID: Id = Id::new_static(STATUS);
     const DATE_ID: Id = Id::new_static(DATE);
     const CLOCK_ID: Id = Id::new_static(CLOCK);
@@ -115,15 +115,19 @@ static SETTINGS: [SettingSpec; 16] = {
     const RECENT_ID: Id = Id::new_static(RECENT);
     [
         frame_spec("home.status.frame", STATUS_ID, Frame::None),
+        padding_spec("home.status.padding", STATUS_ID, Padding::Auto),
         align_spec("home.date.align", DATE_ID, Align::Center),
         frame_spec("home.date.frame", DATE_ID, Frame::None),
+        padding_spec("home.date.padding", DATE_ID, Padding::Auto),
         size_spec("home.date.size", DATE_ID, Size::Medium, false),
         align_spec("home.clock.align", CLOCK_ID, Align::Center),
         frame_spec("home.clock.frame", CLOCK_ID, Frame::None),
+        padding_spec("home.clock.padding", CLOCK_ID, Padding::Auto),
         size_spec("home.clock.size", CLOCK_ID, Size::Fit, true),
         part_spec("home.clock.date", CLOCK_ID, "home.setting.clock-date", true),
         align_spec("home.continue.align", CONTINUE_ID, Align::Left),
         frame_spec("home.continue.frame", CONTINUE_ID, Frame::Line),
+        padding_spec("home.continue.padding", CONTINUE_ID, Padding::Auto),
         part_spec(
             "home.continue.cover",
             CONTINUE_ID,
@@ -138,6 +142,7 @@ static SETTINGS: [SettingSpec; 16] = {
         ),
         align_spec("home.recent.align", RECENT_ID, Align::Center),
         frame_spec("home.recent.frame", RECENT_ID, Frame::None),
+        padding_spec("home.recent.padding", RECENT_ID, Padding::Auto),
         part_spec(
             "home.recent.heading",
             RECENT_ID,
@@ -159,7 +164,7 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
         WidgetSpec::drawn(
             Id::new_static(STATUS),
             "home.widget.status",
-            Drawn::new(status_height, draw_status).shows(status_signature),
+            Drawn::new(status_widget_height, draw_status_widget).shows(status_signature),
         )
         .category(categories::DEVICE),
     )?;
@@ -224,31 +229,110 @@ fn centred(area: Rect, height: u16) -> u16 {
 
 // ---- Status line --------------------------------------------------------
 
+/// The height of the status line above the grid: without a frame, flush
+/// with the screen's margins (its spacing setting is for the widget).
 pub(crate) fn status_height(env: &Env<'_>, _: u16) -> u16 {
+    let style = UiStyle::new(env);
+    let frame = if widgets::frame(env, STATUS) == Frame::None {
+        0
+    } else {
+        frame_height(env, STATUS)
+    };
+    line_height(env, style.small) + style.gap as u16 / 2 + frame
+}
+
+/// The status line above the grid ([`status_height`]): the status items
+/// chosen for its left, centre and right ([`STATUS_PARTS`]), any
+/// plugin's, as the reader's lines have them.
+pub(crate) fn draw_status(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
+    let look = widgets::draw_frame(canvas, env, STATUS, area);
+    let inner = if look.frame == Frame::None {
+        area
+    } else {
+        look.area
+    };
+    draw_status_line(canvas, env, &look, inner);
+}
+
+/// The status line as a widget in the grid: inside its spacing.
+fn status_widget_height(env: &Env<'_>, _: u16) -> u16 {
     let style = UiStyle::new(env);
     line_height(env, style.small) + style.gap as u16 / 2 + frame_height(env, STATUS)
 }
 
-/// The status line: the status items chosen for its left, centre and
-/// right ([`STATUS_PARTS`]), any plugin's, as the reader's lines have them.
-pub(crate) fn draw_status(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
+fn draw_status_widget(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
+    let look = widgets::draw_frame(canvas, env, STATUS, area);
+    draw_status_line(canvas, env, &look, look.area);
+}
+
+/// The status items in `area`, as many as fit whole: where all do not,
+/// the battery's percentage is left out first, then the centre's items,
+/// then the left's (the percentage back where that makes room), so that
+/// nothing is cut or drawn outside.
+fn draw_status_line(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &widgets::Look, area: Rect) {
     let style = UiStyle::new(env);
     let Some(font) = style.font(env) else {
         return;
     };
-    let look = widgets::draw_frame(canvas, env, STATUS, area);
+    let size = style.small;
+    let mut lists = STATUS_PARTS.each_ref().map(|part| env.settings.read(part));
+    let mut percent = true;
+    let room = f32::from(area.width);
+    'fit: for drop in [None, Some(1), Some(0)] {
+        if let Some(part) = drop {
+            lists[part] = "";
+        }
+        for with in [true, false] {
+            percent = with;
+            if status_width(env, &font, size, &lists, percent) <= room {
+                break 'fit;
+            }
+        }
+    }
     let line = StatusLine {
-        area: look.area,
-        lists: STATUS_PARTS.each_ref().map(|part| env.settings.read(part)),
-        size: style.small,
+        area,
+        lists,
+        size,
         color: if look.frame == Frame::Dark {
             look.faint
         } else {
             style.faint(60)
         },
-        percent: true,
+        percent,
     };
     line.draw(canvas, env, &font, &Params::new());
+}
+
+/// How wide the status items of `lists` are side by side at `size`,
+/// with the narrowest gaps the status line leaves between them (as
+/// [`StatusLine`] measures them).
+fn status_width(
+    env: &Env<'_>,
+    font: &paperpaw_sdk::FontHandle<'_>,
+    size: f32,
+    lists: &[&str; 3],
+    percent: bool,
+) -> f32 {
+    let mut width = 0.0;
+    let mut count = 0usize;
+    for list in lists {
+        for id in item_ids(list) {
+            let Some(value) = env.status_items.value(id, env, &Params::new()) else {
+                continue;
+            };
+            count += 1;
+            width += match value {
+                StatusValue::Icon(name) => ui::icon_width(env, &name, size),
+                StatusValue::Text(text) => font.measure(size, &text),
+                StatusValue::Level { percent: p, .. } if percent => {
+                    size * 1.6 + font.measure(size, &format!("{p} %"))
+                }
+                StatusValue::Level { .. } => size * 1.3,
+                StatusValue::Bar { .. } => size * 4.0,
+            };
+        }
+    }
+    width + size * 0.4 * count.saturating_sub(1) as f32
 }
 
 /// What the status line shows now, to draw it again when it changes.
@@ -272,6 +356,25 @@ pub(crate) fn date_text(env: &Env<'_>) -> String {
     time::date_text(env).unwrap_or_default()
 }
 
+/// Today as long as fits `width` pixels whole at a size from `max` down
+/// to `min`: in full ("Thursday, 15 October"), else short ("Thu 15
+/// Oct"); `None` where not even the short one does.
+fn fitting_date(
+    env: &Env<'_>,
+    font: &FontHandle<'_>,
+    max: f32,
+    min: f32,
+    width: f32,
+) -> Option<(f32, String)> {
+    [time::date_text(env), time::short_date_text(env)]
+        .into_iter()
+        .flatten()
+        .find_map(|text| {
+            widgets::largest_size(max, min, |size| font.measure(size, &text) <= width)
+                .map(|size| (size, text))
+        })
+}
+
 fn date_height(env: &Env<'_>, _: u16) -> u16 {
     if time::local_time(env).is_none() {
         return 0;
@@ -284,17 +387,26 @@ fn draw_date(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     let style = UiStyle::new(env);
     let look = widgets::draw_frame(canvas, env, DATE, area);
     let area = look.area;
-    if let Some(font) = style.font(env) {
-        // Smaller rather than cut short, down to the body's size.
-        let text = date_text(env);
-        let width = f32::from(area.width);
-        let mut size = widgets::size(env, DATE).text(&style);
-        while size > style.text && font.measure(size, &text) > width {
-            size = (size * 0.9).max(style.text);
-        }
-        let date = ui::fit(&font, size, &text, width);
-        let x = widgets::align(env, DATE).x(area, font.measure(size, &date));
-        ui::draw_label(canvas, &font, size, x, area, &date, look.ink);
+    let Some(font) = style.font(env) else {
+        return;
+    };
+    // As large as set, smaller down to the body's size rather than cut
+    // short, then in short words; where not even those fit a line, in
+    // lines ("Wed" above "14 Oct"), down to the small size.
+    let width = f32::from(area.width);
+    let max = widgets::size(env, DATE).text(&style);
+    let align = widgets::align(env, DATE);
+    if let Some((size, text)) = fitting_date(env, &font, max, style.text.min(max), width) {
+        widgets::draw_line(canvas, env, area, align, size, size, &text, look.ink);
+    } else if let Some(short) = time::short_date_text(env) {
+        // The weekday above the day and the month.
+        let short = match short.split_once(' ') {
+            Some((weekday, rest)) => format!("{}\n{rest}", weekday.trim_end_matches(',')),
+            None => short,
+        };
+        let lines =
+            widgets::Wrapped::fitting(env, &short, max, style.small, area.width, area.height);
+        lines.draw(canvas, env, area, align, look.ink);
     }
 }
 
@@ -309,29 +421,24 @@ fn clock_shows(env: &Env<'_>) -> String {
     )
 }
 
-/// The clock's size in `area`: as set, or as large as fits.
-fn clock_size(env: &Env<'_>, style: &UiStyle, area: Option<Rect>) -> f32 {
-    let size = widgets::size(env, CLOCK);
-    if size != Size::Fit {
-        return size.text(style) * 1.4;
-    }
-    let Some(area) = area else {
-        return style.title * 2.2;
+/// The clock's size for `clock` in `width` pixels with `height` pixels
+/// for its digits: as set, or as large as fits; smaller where the width
+/// needs it, down to the body's size.
+fn clock_size(
+    env: &Env<'_>,
+    style: &UiStyle,
+    font: &FontHandle<'_>,
+    clock: &str,
+    width: f32,
+    height: f32,
+) -> f32 {
+    let want = match widgets::size(env, CLOCK) {
+        // The digits about half the height (their line about 0.7).
+        Size::Fit => (height * 0.7).max(style.text),
+        size => size.text(style) * 1.4,
     };
-    let Some(font) = style.font(env) else {
-        return style.title * 2.2;
-    };
-    // The digits fill the height left by the date, and fit the width.
-    let date = if env.settings.read(&CLOCK_DATE) {
-        f32::from(line_height(env, style.small))
-    } else {
-        0.0
-    };
-    let by_height = (f32::from(area.height) - date) * 0.7;
-    let sample = time::clock_text(env).unwrap_or_else(|| String::from("00:00"));
-    let at_title = font.measure(style.title, &sample).max(1.0);
-    let by_width = style.title * f32::from(area.width) * 0.95 / at_title;
-    by_height.min(by_width).max(style.title)
+    widgets::largest_size(want, style.text, |size| font.measure(size, clock) <= width)
+        .unwrap_or(style.text)
 }
 
 fn clock_height(env: &Env<'_>, _: u16) -> u16 {
@@ -341,10 +448,20 @@ fn clock_height(env: &Env<'_>, _: u16) -> u16 {
     } else {
         0
     };
-    line_height(env, clock_size(env, &style, None))
-        + date
-        + style.gap as u16
-        + frame_height(env, CLOCK)
+    let size = match widgets::size(env, CLOCK) {
+        Size::Fit => style.title * 2.2,
+        size => size.text(&style) * 1.4,
+    };
+    line_height(env, size) + date + style.gap as u16 + frame_height(env, CLOCK)
+}
+
+/// The top and bottom of the ink of `text` at `size` from its baseline
+/// (the top negative); the line's where it draws nothing.
+fn ink_of(font: &FontHandle<'_>, size: f32, text: &str) -> (i32, i32) {
+    font.ink(size, text).unwrap_or_else(|| {
+        let metrics = font.line_metrics(size);
+        (-(metrics.ascent as i32), -(metrics.descent as i32))
+    })
 }
 
 fn draw_clock(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
@@ -354,39 +471,54 @@ fn draw_clock(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     };
     let look = widgets::draw_frame(canvas, env, CLOCK, area);
     let area = look.area;
-    let size = clock_size(env, &style, Some(area));
-    let big = line_height(env, size);
-    let with_date = env.settings.read(&CLOCK_DATE);
-    let small = if with_date {
-        line_height(env, style.small)
-    } else {
-        0
-    };
-    let top = centred(area, big + small);
+    let width = f32::from(area.width);
     let clock = time::clock_text(env).unwrap_or_else(|| String::from("--:--"));
-    let align = widgets::align(env, CLOCK);
-    ui::draw_label(
-        canvas,
-        &font,
-        size,
-        align.x(area, font.measure(size, &clock)),
-        Rect::new(area.x, top, area.width, big),
-        &clock,
-        look.ink,
-    );
-    if !with_date {
-        return;
+    let gap = (style.gap / 2) as i32;
+    // The date below where it fits whole (in short words where the full
+    // ones do not), small; the time in the rest.
+    let mut date = if env.settings.read(&CLOCK_DATE) {
+        fitting_date(env, &font, style.small, style.small, width).map(|(size, text)| {
+            let (top, bottom) = ink_of(&font, size, &text);
+            (size, text, top, bottom)
+        })
+    } else {
+        None
+    };
+    let date_height = |date: &Option<(f32, String, i32, i32)>| {
+        date.as_ref()
+            .map_or(0, |(_, _, top, bottom)| bottom - top + gap)
+    };
+    let digits = |date: &Option<(f32, String, i32, i32)>| {
+        let room = (i32::from(area.height) - date_height(date)).max(0) as f32;
+        let size = clock_size(env, &style, &font, &clock, width, room);
+        let (top, bottom) = ink_of(&font, size, &clock);
+        (size, top, bottom)
+    };
+    let (mut size, mut top, mut bottom) = digits(&date);
+    // Both do not fit: the time alone.
+    if date.is_some() && bottom - top + date_height(&date) > i32::from(area.height) {
+        date = None;
+        (size, top, bottom) = digits(&date);
     }
-    let date = date_text(env);
-    ui::draw_label(
-        canvas,
-        &font,
-        style.small,
-        align.x(area, font.measure(style.small, &date)),
-        Rect::new(area.x, top + big, area.width, small),
-        &date,
-        look.faint,
-    );
+    // Together in the middle by their ink.
+    let total = bottom - top + date_height(&date);
+    let y = i32::from(area.y) + (i32::from(area.height) - total) / 2;
+    let align = widgets::align(env, CLOCK);
+    // Shortened only where not even the body's size fits (a sliver).
+    let shown = ui::fit(&font, size, &clock, width);
+    let x = align.x(area, font.measure(size, &shown));
+    let high = (bottom - top) as u16;
+    let at = Rect::new(x.max(0.0) as u16, y.max(0) as u16, area.width, high);
+    canvas.describe(paperpaw_sdk::semantics::Role::Text, &clock, at, false, None);
+    font.draw(canvas, size, x, y - top, &shown, look.ink);
+    if let Some((small, text, date_top, date_bottom)) = &date {
+        let y = y + (bottom - top) + gap;
+        let x = align.x(area, font.measure(*small, text));
+        font.draw(canvas, *small, x, y - date_top, text, look.faint);
+        let high = (date_bottom - date_top) as u16;
+        let at = Rect::new(x.max(0.0) as u16, y.max(0) as u16, area.width, high);
+        canvas.describe(paperpaw_sdk::semantics::Role::Text, text, at, false, None);
+    }
 }
 
 // ---- Continue reading -----------------------------------------------------
@@ -455,32 +587,114 @@ struct Card {
     book: Option<Book>,
     /// Where it is drawn, once placed.
     area: Option<Rect>,
+    /// Where its parts go there, worked out with the place.
+    parts: CardParts,
     /// The book's cover, made small for that place.
     cover: Option<Thumbnail>,
 }
 
-impl Card {
-    /// The cover `book` shows in `area` and where, if it shows one: on
-    /// the left, in the middle from top to bottom.
-    fn cover_place<'b>(
-        env: &Env<'_>,
-        area: Rect,
-        book: Option<&'b Book>,
-    ) -> Option<(&'b ImageRef, Rect)> {
-        let image = book?.cover.as_ref()?;
-        if !env.settings.read(&CARD_COVER) {
-            return None;
-        }
+/// Where the parts of the continue card go: the cover, and beside it
+/// the column of text with the caption, the title and the progress,
+/// each where it fits.
+#[derive(Debug, Default, Clone, PartialEq)]
+struct CardParts {
+    /// Where the cover goes, if it shows.
+    cover: Option<Rect>,
+    /// The column of text; none where the cover alone fits.
+    text: Option<Rect>,
+    /// "Continue reading" above the title.
+    caption: bool,
+    /// The title, in one line or two.
+    title: widgets::Wrapped,
+    /// The percentage and the bar below.
+    progress: bool,
+}
+
+impl CardParts {
+    /// The parts of `book`'s card in `area`: the cover on the left where
+    /// the text keeps room enough beside it (else the text alone, or the
+    /// cover alone where not even the text has room); the title as large
+    /// as fits in up to two lines, then the progress and the caption
+    /// where there is room for them too (the caption is left out first).
+    fn of(env: &Env<'_>, area: Rect, book: &Book) -> Self {
+        let style = UiStyle::new(env);
         let r = widgets::look::look(env, CONTINUE, area).area;
-        let place = Rect::new(r.x, r.y, r.width / 3, r.height);
-        Some((image, fitted(image, place, 0.0, 0.5)))
+        let gap = style.gap as u16;
+        // A few words of a title at the body's size.
+        let least = (style.text * 4.0) as u16;
+        let mut parts = Self::default();
+        let image = book
+            .cover
+            .as_ref()
+            .filter(|_| env.settings.read(&CARD_COVER));
+        let mut text = r;
+        if let Some(image) = image {
+            let place = Rect::new(r.x, r.y, r.width / 3, r.height);
+            let at = fitted(image, place, 0.0, 0.5);
+            let beside = r.width.saturating_sub(at.width + gap);
+            if beside >= least {
+                parts.cover = Some(at);
+                text = Rect::new(r.x + at.width + gap, r.y, beside, r.height);
+            } else if r.width < least {
+                // No room for text: the cover alone, in the middle.
+                parts.cover = Some(fitted(image, r, 0.5, 0.5));
+                return parts;
+            }
+        }
+        let small = line_height(env, style.small);
+        let half = gap / 2;
+        let line = line_height(env, style.text);
+        let mut room = text.height;
+        parts.progress = env.settings.read(&CARD_PROGRESS) && room >= line + half + small;
+        if parts.progress {
+            room -= half + small;
+        }
+        let caption = env.i18n.tr("home.continue");
+        let caption_fits = style
+            .font(env)
+            .is_some_and(|font| font.measure(style.small, caption) <= f32::from(text.width));
+        parts.caption = caption_fits && room >= line + half + small;
+        if parts.caption {
+            room -= half + small;
+        }
+        // Two lines at most; in a flat card, down to the small size.
+        let two = room.min(2 * line_height(env, style.title));
+        let least = if room >= line {
+            style.text
+        } else {
+            style.small
+        };
+        let title = &book.book.title;
+        parts.title = widgets::Wrapped::fitting(env, title, style.title, least, text.width, two);
+        parts.text = Some(text);
+        parts
     }
 
-    fn make_cover(&mut self, env: &Env<'_>) {
-        self.cover = self.area.and_then(|area| {
-            let (image, at) = Self::cover_place(env, area, self.book.as_ref())?;
-            small_cover(env, image, at)
-        });
+    /// The height its column of text takes.
+    fn height(&self, env: &Env<'_>) -> u16 {
+        let style = UiStyle::new(env);
+        let small = line_height(env, style.small) + style.gap as u16 / 2;
+        self.title.height(env)
+            + if self.caption { small } else { 0 }
+            + if self.progress { small } else { 0 }
+    }
+}
+
+impl Card {
+    fn make_parts(&mut self, env: &Env<'_>) {
+        self.parts = match (self.area, &self.book) {
+            (Some(area), Some(book)) => CardParts::of(env, area, book),
+            _ => CardParts::default(),
+        };
+        self.cover = match (self.parts.cover, &self.book) {
+            (
+                Some(at),
+                Some(Book {
+                    cover: Some(image), ..
+                }),
+            ) => small_cover(env, image, at),
+            _ => None,
+        };
     }
 }
 
@@ -493,7 +707,7 @@ impl Widget for Card {
         let changed = book != self.book;
         self.book = book;
         if changed {
-            self.make_cover(env);
+            self.make_parts(env);
         }
         changed
     }
@@ -501,7 +715,7 @@ impl Widget for Card {
     fn place(&mut self, env: &Env<'_>, area: Rect) {
         if self.area != Some(area) {
             self.area = Some(area);
-            self.make_cover(env);
+            self.make_parts(env);
         }
     }
 
@@ -514,7 +728,16 @@ impl Widget for Card {
     }
 
     fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
-        draw_card(canvas, env, area, self.book.as_ref(), self.cover.as_ref());
+        let book = self.book.as_ref();
+        if self.area == Some(area) {
+            draw_card(canvas, env, area, book, &self.parts, self.cover.as_ref());
+        } else {
+            // Drawn where it was not placed (e.g. while dragged).
+            let parts = book
+                .map(|b| CardParts::of(env, area, b))
+                .unwrap_or_default();
+            draw_card(canvas, env, area, book, &parts, None);
+        }
     }
 
     fn targets(&self, _: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
@@ -531,6 +754,7 @@ fn draw_card(
     env: &Env<'_>,
     area: Rect,
     shown: Option<&Book>,
+    parts: &CardParts,
     small: Option<&Thumbnail>,
 ) {
     let style = UiStyle::new(env);
@@ -538,14 +762,13 @@ fn draw_card(
         return;
     };
     let look = widgets::draw_frame(canvas, env, CONTINUE, area);
-    let r = look.area;
-    let Some(Book { book, .. }) = shown else {
+    let Some(Book { book, cover }) = shown else {
         // Nothing read yet: where the books are (a tap opens the library).
         ui::draw_empty(
             canvas,
             env,
             &style,
-            r,
+            look.area,
             "books",
             env.i18n.tr("home.start.title"),
             env.i18n.tr("home.start.text"),
@@ -553,53 +776,37 @@ fn draw_card(
         return;
     };
     // The cover on the left, where there is one.
-    let r = match Card::cover_place(env, area, shown) {
-        Some((image, at)) => {
-            draw_cover(canvas, env, image, small, at);
-            let shift = at.width + style.gap as u16;
-            Rect::new(r.x + shift, r.y, r.width.saturating_sub(shift), r.height)
-        }
-        None => r,
+    if let (Some(at), Some(image)) = (parts.cover, cover) {
+        draw_cover(canvas, env, image, small, at);
+    }
+    let Some(r) = parts.text else {
+        return;
     };
-    let inner = f32::from(r.width);
-    let progress = env.settings.read(&CARD_PROGRESS);
     // The lines of text, together in the middle.
     let label_h = line_height(env, style.small);
-    // Long titles in the body size rather than cut short.
-    let size = if font.measure(style.title, &book.title) <= inner {
-        style.title
-    } else {
-        style.text
-    };
-    let title_h = line_height(env, size);
     let gap = style.gap as u16 / 2;
-    let total = label_h + gap + title_h + if progress { gap + label_h } else { 0 };
-    let mut y = centred(r, total);
+    let mut y = centred(r, parts.height(env));
     let align = widgets::align(env, CONTINUE);
     let row = |y: u16, h: u16| Rect::new(r.x, y, r.width, h);
-    let label = env.i18n.tr("home.continue");
-    ui::draw_label(
-        canvas,
-        &font,
-        style.small,
-        align.x(r, font.measure(style.small, label)),
-        row(y, label_h),
-        label,
-        look.faint,
-    );
-    y += label_h + gap;
-    let title = ui::fit(&font, size, &book.title, inner);
-    ui::draw_label(
-        canvas,
-        &font,
-        size,
-        align.x(r, font.measure(size, &title)),
-        row(y, title_h),
-        &title,
-        look.ink,
-    );
+    if parts.caption {
+        let label = env.i18n.tr("home.continue");
+        ui::draw_label(
+            canvas,
+            &font,
+            style.small,
+            align.x(r, font.measure(style.small, label)),
+            row(y, label_h),
+            label,
+            look.faint,
+        );
+        y += label_h + gap;
+    }
+    let title_h = parts.title.height(env);
+    parts
+        .title
+        .draw(canvas, env, row(y, title_h), align, look.ink);
     y += title_h + gap;
-    if !progress {
+    if !parts.progress {
         return;
     }
     let percent = env.i18n.format(
@@ -621,7 +828,7 @@ fn draw_card(
     let percent_w = font.measure(style.small, &percent) + style.gap as f32;
     let bx = (x + percent_w) as i32;
     let by = i32::from(y) + i32::from(label_h) / 2 - bar_h as i32 / 2;
-    let w = (inner - percent_w).max(1.0) as u32;
+    let w = (f32::from(r.width) - percent_w).max(1.0) as u32;
     canvas.stroke_rect(bx, by, w, bar_h, style.line.max(1), look.ink);
     let filled = (w as f32 * (book.progress / 100.0).clamp(0.0, 1.0)) as u32;
     canvas.fill_rect(bx, by, filled, bar_h, look.ink);
@@ -635,21 +842,99 @@ struct Shelf {
     books: Vec<Book>,
     /// Where it is drawn, once placed.
     area: Option<Rect>,
+    /// Where its parts go there.
+    parts: ShelfParts,
     /// The books' covers, made small for their places.
     covers: Vec<Option<Thumbnail>>,
+    /// The lines of the titles of books without a cover, in their frames.
+    names: Vec<Vec<String>>,
+}
+
+/// Where the parts of the shelf go: the heading, and each book's cover
+/// with its title below; together in the middle of the place.
+#[derive(Debug, Default, Clone, PartialEq)]
+struct ShelfParts {
+    /// The heading's row, where it shows.
+    heading: Option<Rect>,
+    /// Each book's place for its cover, and the row of its title where
+    /// titles show.
+    places: Vec<(Rect, Option<Rect>)>,
+}
+
+impl ShelfParts {
+    /// The parts of a shelf of `books` in `area` (inside its spacing):
+    /// covers 3:4 as large as the columns and the height allow; where
+    /// they would be smaller than two lines of text, the heading is left
+    /// out, then the titles.
+    fn of(env: &Env<'_>, area: Rect, books: &[Book]) -> Self {
+        if books.is_empty() {
+            return Self::default();
+        }
+        let style = UiStyle::new(env);
+        let Some(font) = style.font(env) else {
+            return Self::default();
+        };
+        let (fit, _) = shelf_columns(env, area.width);
+        let columns = books.len().clamp(1, fit) as u16;
+        let gap = style.gap as u16;
+        let label = line_height(env, style.small);
+        let heading_fits =
+            font.measure(style.small, env.i18n.tr("home.recent")) <= f32::from(area.width);
+        let (mut heading, mut title) = shelf_labels(env);
+        if !heading_fits {
+            heading = 0;
+        }
+        let least = 2 * label;
+        if area.height.saturating_sub(heading + title) < least {
+            heading = 0;
+        }
+        if area.height.saturating_sub(heading + title) < least {
+            title = 0;
+        }
+        let room = area.height.saturating_sub(heading + title);
+        // Covers 3:4, as wide as the columns or as high as the room allows.
+        let column = area.width / columns;
+        let w = column.saturating_sub(gap).min(room * 3 / 4);
+        let h = w * 4 / 3;
+        let total = heading + h + title;
+        let top = area.y + area.height.saturating_sub(total) / 2;
+        let left = area.x + area.width.saturating_sub(column * columns) / 2;
+        let heading = (heading > 0).then(|| Rect::new(area.x, top, area.width, label));
+        let top = top + heading.map_or(0, |_| label + gap / 2);
+        let places = (0..columns)
+            .map(|i| {
+                let start = left + i * column;
+                let cover = Rect::new(start + (column - w) / 2, top, w, h);
+                let row = Rect::new(start + gap / 2, top + h, column.saturating_sub(gap), title);
+                (cover, (title > 0).then_some(row))
+            })
+            .collect();
+        Self { heading, places }
+    }
 }
 
 impl Shelf {
     fn make_covers(&mut self, env: &Env<'_>) {
         let Some(area) = self.area else {
-            return self.covers.clear();
+            self.parts = ShelfParts::default();
+            self.covers.clear();
+            self.names.clear();
+            return;
         };
-        let area = widgets::look::look(env, RECENT, area).area;
-        self.covers = shelf_places(env, area, &self.books)
-            .into_iter()
-            .map(|(place, _, book)| {
+        let inner = widgets::look::look(env, RECENT, area).area;
+        self.parts = ShelfParts::of(env, inner, &self.books);
+        let shown = self.parts.places.iter().zip(&self.books);
+        self.covers = shown
+            .clone()
+            .map(|((place, _), book)| {
                 let image = book.cover.as_ref()?;
-                small_cover(env, image, fitted(image, place, 0.5, 1.0))
+                small_cover(env, image, fitted(image, *place, 0.5, 1.0))
+            })
+            .collect();
+        self.names = shown
+            .map(|((place, _), book)| match book.cover {
+                Some(_) => Vec::new(),
+                None => placeholder_lines(env, *place, &book.book.title),
             })
             .collect();
     }
@@ -700,15 +985,34 @@ impl Widget for Shelf {
     }
 
     fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
-        draw_shelf(canvas, env, area, &self.books, &self.covers);
+        if self.area == Some(area) {
+            draw_shelf(canvas, env, area, self);
+        } else {
+            // Drawn where it was not placed (e.g. while dragged).
+            let mut moved = Shelf {
+                books: self.books.clone(),
+                area: Some(area),
+                ..Shelf::default()
+            };
+            let inner = widgets::look::look(env, RECENT, area).area;
+            moved.parts = ShelfParts::of(env, inner, &moved.books);
+            draw_shelf(canvas, env, area, &moved);
+        }
     }
 
     fn targets(&self, env: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
-        let area = widgets::look::look(env, RECENT, area).area;
-        shelf_places(env, area, &self.books)
-            .into_iter()
-            .map(|(cover, title, book)| WidgetTarget {
-                area: cover.union(&title),
+        let parts = if self.area == Some(area) {
+            self.parts.clone()
+        } else {
+            let inner = widgets::look::look(env, RECENT, area).area;
+            ShelfParts::of(env, inner, &self.books)
+        };
+        parts
+            .places
+            .iter()
+            .zip(&self.books)
+            .map(|((cover, title), book)| WidgetTarget {
+                area: title.map_or(*cover, |t| cover.union(&t)),
                 command: book.open(),
             })
             .collect()
@@ -757,44 +1061,8 @@ fn shelf_height(env: &Env<'_>, width: u16, books: &[Book]) -> u16 {
     heading + cover + title + frame_height(env, RECENT)
 }
 
-/// Where each cover goes, and its title below (as wide as its column),
-/// with its book: as large as the area allows, the row in the middle.
-fn shelf_places<'b>(env: &Env<'_>, area: Rect, books: &'b [Book]) -> Vec<(Rect, Rect, &'b Book)> {
-    let style = UiStyle::new(env);
-    // Few books: larger covers, as many columns as books.
-    let (fit, _) = shelf_columns(env, area.width);
-    let columns = books.len().clamp(1, fit);
-    let shown = columns;
-    let (heading, title) = shelf_labels(env);
-    let gap = style.gap as u16;
-    let room = area.height.saturating_sub(heading + title);
-    // Covers 3:4, as wide as the columns or as high as the room allows.
-    let column = area.width / columns as u16;
-    let w = column.saturating_sub(gap).min(room * 3 / 4);
-    let h = w * 4 / 3;
-    let row_w = column * shown as u16;
-    let left = area.x + (area.width.saturating_sub(row_w)) / 2;
-    let top = area.y + heading + room.saturating_sub(h) / 2;
-    books
-        .iter()
-        .take(columns)
-        .enumerate()
-        .map(|(i, book)| {
-            let start = left + i as u16 * column;
-            let cover = Rect::new(start + (column - w) / 2, top, w, h);
-            let label = Rect::new(start + gap / 2, top + h, column.saturating_sub(gap), title);
-            (cover, label, book)
-        })
-        .collect()
-}
-
-fn draw_shelf(
-    canvas: &mut Canvas<'_>,
-    env: &Env<'_>,
-    area: Rect,
-    books: &[Book],
-    small: &[Option<Thumbnail>],
-) {
+fn draw_shelf(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, shelf: &Shelf) {
+    let books = &shelf.books;
     let style = UiStyle::new(env);
     let Some(font) = style.font(env) else {
         return;
@@ -804,61 +1072,54 @@ fn draw_shelf(
         return;
     }
     let look = widgets::draw_frame(canvas, env, RECENT, area);
-    let area = look.area;
-    let (heading, title_h) = shelf_labels(env);
     let align = widgets::align(env, RECENT);
-    if heading > 0 {
+    if let Some(row) = shelf.parts.heading {
         let text = env.i18n.tr("home.recent");
-        ui::draw_label(
-            canvas,
-            &font,
-            style.small,
-            align.x(area, font.measure(style.small, text)),
-            Rect::new(area.x, area.y, area.width, line_height(env, style.small)),
-            text,
-            look.faint,
-        );
+        let x = align.x(row, font.measure(style.small, text));
+        ui::draw_label(canvas, &font, style.small, x, row, text, look.faint);
     }
-    let places = shelf_places(env, area, books);
-    for (i, (cover, row, Book { book, cover: image })) in places.into_iter().enumerate() {
+    for (i, ((cover, row), Book { book, cover: image })) in
+        shelf.parts.places.iter().zip(books).enumerate()
+    {
         match image {
             // In the middle of its place, at the bottom.
             Some(image) => {
-                let at = fitted(image, cover, 0.5, 1.0);
-                let small = small.get(i).and_then(Option::as_ref);
+                let at = fitted(image, *cover, 0.5, 1.0);
+                let small = shelf.covers.get(i).and_then(Option::as_ref);
                 draw_cover(canvas, env, image, small, at);
             }
-            None => draw_placeholder(canvas, env, &style, cover, &book.title, look.ink),
+            None => {
+                let lines = shelf.names.get(i).map_or(&[][..], Vec::as_slice);
+                draw_placeholder(canvas, env, &style, *cover, lines, look.ink);
+            }
         }
-        if title_h == 0 {
-            continue;
+        if let Some(row) = row {
+            let title = ui::fit(&font, style.small, &book.title, f32::from(row.width));
+            let x = align.x(*row, font.measure(style.small, &title));
+            ui::draw_label(canvas, &font, style.small, x, *row, &title, look.ink);
         }
-        let title = ui::fit(&font, style.small, &book.title, f32::from(row.width));
-        let x = align.x(row, font.measure(style.small, &title));
-        ui::draw_label(canvas, &font, style.small, x, row, &title, look.ink);
     }
 }
 
-/// A book without a cover: a frame with its title.
-fn draw_placeholder(
-    canvas: &mut Canvas<'_>,
-    env: &Env<'_>,
-    style: &UiStyle,
-    area: Rect,
-    title: &str,
-    ink: Color,
-) {
-    canvas.stroke(area, style.line.max(2), ink);
+/// The lines of `title` in the frame of a book without a cover at
+/// `area`: broken between words, as many as fit; where a word is wider
+/// than a line, or more is left than fits, the last line shown ends in
+/// "…" and nothing follows it. None where the frame is too small.
+fn placeholder_lines(env: &Env<'_>, area: Rect, title: &str) -> Vec<String> {
+    let style = UiStyle::new(env);
     let Some(font) = style.font(env) else {
-        return;
+        return Vec::new();
     };
     let pad = style.gap as f32 / 2.0;
     let width = f32::from(area.width) - 2.0 * pad;
     let line = font.line_metrics(style.small).line_height;
-    let fits = ((f32::from(area.height) - 2.0 * pad) / line).max(1.0) as usize;
-    // Broken between words only; a word longer than a line shortened.
+    let fits = ((f32::from(area.height) - 2.0 * pad) / line) as usize;
+    if width < style.small * 2.0 || fits == 0 {
+        return Vec::new();
+    }
+    let words: Vec<&str> = title.split_whitespace().collect();
     let mut lines: Vec<String> = Vec::new();
-    for word in title.split_whitespace() {
+    for (n, word) in words.iter().enumerate() {
         let joined = lines.last().map(|last| format!("{last} {word}"));
         match joined {
             Some(joined) if font.measure(style.small, &joined) <= width => {
@@ -866,10 +1127,41 @@ fn draw_placeholder(
                     *last = joined;
                 }
             }
-            _ => lines.push(ui::fit(&font, style.small, word, width)),
+            _ if lines.len() == fits || font.measure(style.small, word) > width => {
+                // No line left, or a word too wide: the rest shortened
+                // on the last line there is, and no more.
+                let rest = words[n..].join(" ");
+                let full = lines.len() == fits;
+                match lines.last_mut() {
+                    Some(last) if full => {
+                        *last = ui::fit(&font, style.small, &format!("{last} {rest}"), width);
+                    }
+                    _ => lines.push(ui::fit(&font, style.small, &rest, width)),
+                }
+                break;
+            }
+            _ => lines.push(String::from(*word)),
         }
     }
-    for (n, text) in lines.iter().take(fits).enumerate() {
+    lines
+}
+
+/// A book without a cover: a frame with its title (`lines`).
+fn draw_placeholder(
+    canvas: &mut Canvas<'_>,
+    env: &Env<'_>,
+    style: &UiStyle,
+    area: Rect,
+    lines: &[String],
+    ink: Color,
+) {
+    canvas.stroke(area, style.line.max(2), ink);
+    let Some(font) = style.font(env) else {
+        return;
+    };
+    let pad = style.gap as f32 / 2.0;
+    let line = font.line_metrics(style.small).line_height;
+    for (n, text) in lines.iter().enumerate() {
         let y = area.y + pad as u16 + (n as f32 * line) as u16;
         let row = Rect::new(area.x, y, area.width, line as u16);
         ui::draw_label(
