@@ -503,18 +503,18 @@ fn start_kernel(
         paperpaw_app::StorePlugins::Off(&|_| ran_before),
     )
     .plugin(AndroidPlugin {
-            app: app.clone(),
-            shared_storage,
-            screen: (
-                u32::from(device.display.width),
-                u32::from(device.display.height),
-            ),
-            frontlight: lights.map(|lights| Frontlight {
-                lights,
-                brightness: lights.brightness(app),
-                warmth: lights.warmth(app),
-            }),
-        });
+        app: app.clone(),
+        shared_storage,
+        screen: (
+            u32::from(device.display.width),
+            u32::from(device.display.height),
+        ),
+        frontlight: lights.map(|lights| Frontlight {
+            lights,
+            brightness: lights.brightness(app),
+            warmth: lights.warmth(app),
+        }),
+    });
     let mut kernel = match builder.build() {
         Ok(kernel) => kernel,
         Err(e) => {

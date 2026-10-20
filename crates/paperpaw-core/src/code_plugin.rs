@@ -40,8 +40,12 @@ pub(crate) fn fetched(storage: &dyn Storage, native: &Native) -> Vec<(Id, String
             let id = Id::parse(&id).ok()?;
             // Once it is named as installed, the code before no longer
             // runs.
-            paperpaw_sdk::native::remember_code(storage, id.as_str(), &sha256)
-                .then(|| (id.clone(), paperpaw_sdk::native::fetched_folder(id.as_str())))
+            paperpaw_sdk::native::remember_code(storage, id.as_str(), &sha256).then(|| {
+                (
+                    id.clone(),
+                    paperpaw_sdk::native::fetched_folder(id.as_str()),
+                )
+            })
         })
         .collect()
 }
