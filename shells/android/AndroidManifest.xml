@@ -42,13 +42,16 @@
         android:requestLegacyExternalStorage="true"
         android:usesCleartextTraffic="true">
 
+        <!-- configChanges: every change of the configuration (turning, a
+             new language, a keyboard) comes to PaperPaw as an event; the
+             activity is never made anew for one. -->
         <activity
             android:name="android.app.NativeActivity"
             android:exported="true"
             android:launchMode="singleTask"
             android:screenOrientation="portrait"
             android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen"
-            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|density|fontScale|locale">
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|touchscreen|uiMode|density|fontScale|fontWeightAdjustment|locale|layoutDirection|colorMode|mcc|mnc|grammaticalGender">
             <meta-data
                 android:name="android.app.lib_name"
                 android:value="paperpaw" />

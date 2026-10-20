@@ -85,6 +85,7 @@ fn android_main(app: AndroidApp) {
             .with_max_level(log::LevelFilter::Info)
             .with_tag("PaperPaw"),
     );
+    log_panics();
     let start = StdInstant::now();
     let now = move || Instant(start.elapsed().as_millis() as u64);
     let mut epd = Epd::detect(&app);
@@ -195,20 +196,17 @@ fn android_main(app: AndroidApp) {
         let mut changed = false;
         if let Ok(mut events) = app.input_events_iter() {
             while events.next(|event| {
-                let handled = input(event)
-                    .into_iter()
-                    .flatten()
-                    .map(|event| {
-                        let effects = state.kernel.handle(now(), event);
-                        changed |= apply(state, effects);
-                    })
-                    .count()
-                    > 0;
-                if handled {
-                    InputStatus::Handled
-                } else {
-                    InputStatus::Unhandled
+                // What PaperPaw takes is handled, also when it brings no
+                // event (a held key's repeats): Android would otherwise act
+                // on it too, e.g. change the volume.
+                let Some(events) = input(event) else {
+                    return InputStatus::Unhandled;
+                };
+                for event in events {
+                    let effects = state.kernel.handle(now(), event);
+                    changed |= apply(state, effects);
                 }
+                InputStatus::Handled
             }) {}
         }
         if now().since(state.status_read) >= STATUS_EVERY_MS || state.status_read == Instant(0) {
@@ -289,6 +287,26 @@ fn android_main(app: AndroidApp) {
             }
         }
     }
+}
+
+/// Writes a panic's message, place and stack to the log: release builds
+/// abort at once (`panic = "abort"`), and what goes to stderr is lost, so
+/// a crash would otherwise leave only the system's signal report.
+fn log_panics() {
+    std::panic::set_hook(Box::new(|info| {
+        let payload = info.payload();
+        let message = payload
+            .downcast_ref::<&str>()
+            .copied()
+            .or_else(|| payload.downcast_ref::<String>().map(String::as_str))
+            .unwrap_or("(no message)");
+        let place = info
+            .location()
+            .map(|at| format!("{}:{}", at.file(), at.line()))
+            .unwrap_or_default();
+        let stack = std::backtrace::Backtrace::force_capture();
+        log::error!("panic at {place}: {message}\n{stack}");
+    }));
 }
 
 /// Builds the kernel for the window's size.

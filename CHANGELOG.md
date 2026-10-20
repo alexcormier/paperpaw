@@ -6,6 +6,11 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Android: holding a page key that is a volume key no longer brings up
+  the system's volume panel. A crash writes its message, place and stack
+  to the log (`adb logcat -s PaperPaw`). Reading aloud goes on after the
+  activity is made anew in the same process, and changes such as a new
+  system language no longer make it anew.
 - Android 8 to 10: PaperPaw asks for the permission to write the shared
   storage besides the one to read it, so downloads, uploads through
   Transfer, renaming and deleting books work there; who allowed reading
