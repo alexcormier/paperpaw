@@ -6,6 +6,10 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Themes: a theme's defaults (a data plugin's `settings.ini`, or the
+  Pebble theme switched on) win over the device's own: a large-print
+  theme now enlarges the interface on the X4 too, whose own default is
+  small. What the user chose still wins over both.
 - Screen: a full refresh a plugin's refresh filter asks for (a flash on
   some page turns) starts the count to the next periodic full refresh
   anew, where it came again as soon as if there had been none. How often
