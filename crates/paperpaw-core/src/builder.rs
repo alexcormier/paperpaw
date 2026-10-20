@@ -393,6 +393,7 @@ impl KernelBuilder {
                 firmware_calls: Vec::new(),
                 network_waiting: None,
                 network_busy: false,
+                focus_spoken: false,
             },
             keys: plugins::KeySources::default(),
             timing: drawing::Timing::default(),

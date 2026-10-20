@@ -465,6 +465,7 @@ impl Kernel {
     /// Draws the whole screen again, refreshed fully: after the shell
     /// showed something of its own on the panel (e.g. a test picture).
     pub fn draw_again(&mut self, now: Instant) -> Effects {
+        let _running = self.shared.meter.enter(meter::CORE);
         self.now = now;
         self.apply(Command::Redraw(RefreshMode::Full));
         self.finish()

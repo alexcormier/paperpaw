@@ -3257,6 +3257,7 @@ fn overlays_leave_the_rows_they_do_not_cover() {
 
 mod frames;
 mod input;
+mod kernel_calls;
 mod screen_life;
 mod settings_files;
 mod storage;

@@ -6,6 +6,9 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Speech: with "Say what has the focus" on, moving the focus quickly
+  says each row in place of the one before, where only the first was
+  said until it was done.
 - Screen: a menu or other screen opened again for something else (in
   its place) no longer leaves pieces of the one before on the screen.
   Turning the screen on the X4 makes the screens anew once, not twice,

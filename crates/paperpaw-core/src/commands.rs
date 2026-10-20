@@ -327,8 +327,12 @@ impl Kernel {
             Command::Speak(speech) => {
                 let available = self.shared.caps.speech;
                 self.io.speech.speak(speech, available, screens, out);
+                self.io.focus_spoken = false;
             }
-            Command::StopSpeaking => self.io.speech.stop(),
+            Command::StopSpeaking => {
+                self.io.speech.stop();
+                self.io.focus_spoken = false;
+            }
             Command::Serve {
                 server,
                 port,

@@ -137,6 +137,11 @@ pub enum Effect {
     /// Sleep once the frame is shown (the sleep screen): call
     /// [`Kernel::suspend`], and [`Kernel::resume`] on waking.
     Sleep,
+    /// The frame is best shown in grays (see [`Effects::grays`]).
+    Grays,
+    /// Call [`Kernel::proceed`] while the panel shows the busy mark (see
+    /// [`Effects::proceed`]).
+    Proceed,
 }
 
 /// The effects of one kernel call. Refreshes are already coalesced: there
@@ -205,6 +210,8 @@ impl Effects {
             .chain(self.wake_at.map(Effect::WakeAt))
             .chain(self.restart.then_some(Effect::Restart))
             .chain(self.sleep.then_some(Effect::Sleep))
+            .chain(self.grays.then_some(Effect::Grays))
+            .chain(self.proceed.then_some(Effect::Proceed))
     }
 }
 
@@ -582,15 +589,16 @@ impl Kernel {
     }
 
     /// Says what has the focus now, if it changed and the user asked for
-    /// it ([`core_settings::SPEAK_FOCUS`]); not while something is read
-    /// aloud.
+    /// it ([`core_settings::SPEAK_FOCUS`]): in place of what it said of
+    /// the focus before, if that is still spoken; not while a plugin
+    /// reads aloud.
     fn speak_focus(&mut self) {
         if !self.shared.caps.speech
             || !self
                 .shared
                 .settings
                 .bool(core_settings::SPEAK_FOCUS.as_str())
-            || self.io.speech.speaking()
+            || (self.io.speech.speaking() && !self.io.focus_spoken)
         {
             return;
         }
@@ -624,6 +632,7 @@ impl Kernel {
             self.io
                 .speech
                 .speak(speech, available, screens, &mut self.output.commands);
+            self.io.focus_spoken = true;
         }
         self.io.speech.focus = said;
     }
@@ -639,9 +648,15 @@ impl Kernel {
         let old = self.shared.status;
         self.shared.status = status;
         let offset = |s: &SystemStatus| s.clock.map(|c| c.utc_offset_minutes);
-        // A new wall clock reading alone changes nothing visible.
+        // A new wall clock reading alone changes nothing visible. Compared
+        // wide: readings that make no sense must not overflow.
         let jumped = match (old.clock, status.clock) {
-            (Some(a), Some(b)) => (a.unix_millis_at(now) - b.unix_millis_at(now)).abs() > 30_000,
+            (Some(a), Some(b)) => {
+                let base = |c: &paperpaw_platform::WallClock| {
+                    i128::from(c.unix_millis) - i128::from(c.at.millis())
+                };
+                (base(&a) - base(&b)).abs() > 30_000
+            }
             (a, b) => a.is_some() != b.is_some(),
         };
         // What status lines show: not the voltage, which moves a little at
