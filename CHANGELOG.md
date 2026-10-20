@@ -6,6 +6,11 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Library: searching a large library no longer runs the X4 out of
+  memory. A search holds the first 200 books by title (it held up to
+  2,000, unsorted until all were found); `catalog::search_after` pages
+  through the rest and `catalog::page` and `catalog::count` page any
+  view of the catalog the same way, a page in memory at a time.
 - SDK: `library::clean_up_unused` removes what is kept for books no
   longer on the storage without touching what any book there needs:
   the data of files of formats switched off stays, and so does the data
