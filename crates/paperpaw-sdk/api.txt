@@ -1043,8 +1043,13 @@ impl paperpaw_sdk::library::catalog::Walk
 pub fn paperpaw_sdk::library::catalog::Walk::found(&self) -> usize
 pub fn paperpaw_sdk::library::catalog::Walk::start(&dyn paperpaw_platform::storage::Storage, &str) -> paperpaw_sdk::library::catalog::Walk
 pub fn paperpaw_sdk::library::catalog::Walk::step(&mut self, &paperpaw_sdk::Env<'_>) -> bool
+pub const paperpaw_sdk::library::catalog::MAX_FOUND: usize
+pub fn paperpaw_sdk::library::catalog::count(&dyn paperpaw_platform::storage::Storage, &dyn core::ops::function::Fn(&paperpaw_sdk::library::catalog::Record) -> bool) -> usize
 pub fn paperpaw_sdk::library::catalog::each(&dyn paperpaw_platform::storage::Storage, &mut dyn core::ops::function::FnMut(paperpaw_sdk::library::catalog::Record))
+pub fn paperpaw_sdk::library::catalog::page(&dyn paperpaw_platform::storage::Storage, &dyn core::ops::function::Fn(&paperpaw_sdk::library::catalog::Record) -> bool, core::option::Option<&paperpaw_sdk::library::catalog::Record>, usize) -> alloc::vec::Vec<paperpaw_sdk::library::catalog::Record>
+pub fn paperpaw_sdk::library::catalog::query_words(&str) -> alloc::vec::Vec<alloc::string::String>
 pub fn paperpaw_sdk::library::catalog::search(&dyn paperpaw_platform::storage::Storage, &str) -> alloc::vec::Vec<paperpaw_sdk::library::catalog::Record>
+pub fn paperpaw_sdk::library::catalog::search_after(&dyn paperpaw_platform::storage::Storage, &str, core::option::Option<&paperpaw_sdk::library::catalog::Record>, usize) -> alloc::vec::Vec<paperpaw_sdk::library::catalog::Record>
 pub fn paperpaw_sdk::library::catalog::write(&dyn paperpaw_platform::storage::Storage, &[paperpaw_sdk::library::catalog::Record])
 pub mod paperpaw_sdk::library::listing
 pub struct paperpaw_sdk::library::listing::Entry
@@ -1105,6 +1110,7 @@ pub fn paperpaw_sdk::library::book_sized(&dyn paperpaw_platform::storage::Storag
 pub fn paperpaw_sdk::library::books_in(&dyn paperpaw_platform::storage::Storage, &paperpaw_sdk::Formats, &str, &mut dyn core::ops::function::FnMut(&str))
 pub fn paperpaw_sdk::library::changed() -> paperpaw_sdk::Command
 pub fn paperpaw_sdk::library::clean_up(&dyn paperpaw_platform::storage::Storage, &[paperpaw_sdk::library::BookData], &dyn core::ops::function::Fn(&str) -> bool) -> u32
+pub fn paperpaw_sdk::library::clean_up_unused(&dyn paperpaw_platform::storage::Storage, &[paperpaw_sdk::library::BookData], &str) -> core::result::Result<u32, paperpaw_platform::storage::StorageError>
 pub fn paperpaw_sdk::library::cover(&dyn paperpaw_platform::storage::Storage, &str, &paperpaw_sdk::library::Book, u16, u16, paperpaw_platform::pixel::PixelFormat) -> core::option::Option<paperpaw_sdk::ui::Thumbnail>
 pub fn paperpaw_sdk::library::favourites(&dyn paperpaw_platform::storage::Storage) -> alloc::vec::Vec<alloc::string::String>
 pub fn paperpaw_sdk::library::folder<'e>(&paperpaw_sdk::Env<'e>) -> &'e str
@@ -1252,6 +1258,8 @@ pub paperpaw_sdk::secrets::Secret::changeable: bool
 pub paperpaw_sdk::secrets::Secret::id: alloc::string::String
 pub paperpaw_sdk::secrets::Secret::label: alloc::string::String
 pub paperpaw_sdk::secrets::Secret::value: alloc::string::String
+impl core::fmt::Debug for paperpaw_sdk::secrets::Secret
+pub fn paperpaw_sdk::secrets::Secret::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct paperpaw_sdk::secrets::SecretChange
 pub paperpaw_sdk::secrets::SecretChange::changeable: bool
 pub paperpaw_sdk::secrets::SecretChange::id: alloc::string::String
@@ -1260,6 +1268,8 @@ pub paperpaw_sdk::secrets::SecretChange::value: core::option::Option<alloc::stri
 impl paperpaw_sdk::secrets::SecretChange
 pub fn paperpaw_sdk::secrets::SecretChange::keep(&str, &str, &str) -> Self
 pub fn paperpaw_sdk::secrets::SecretChange::remove(&str) -> Self
+impl core::fmt::Debug for paperpaw_sdk::secrets::SecretChange
+pub fn paperpaw_sdk::secrets::SecretChange::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct paperpaw_sdk::secrets::Secrets
 impl paperpaw_sdk::secrets::Secrets
 pub fn paperpaw_sdk::secrets::Secrets::apply(&mut self, paperpaw_sdk::secrets::SecretChange)
@@ -2145,6 +2155,8 @@ pub paperpaw_sdk::wifi::WifiCommand::Leave
 pub paperpaw_sdk::wifi::WifiCommand::Off
 pub paperpaw_sdk::wifi::WifiCommand::On
 pub paperpaw_sdk::wifi::WifiCommand::Scan
+impl core::fmt::Debug for paperpaw_sdk::wifi::WifiCommand
+pub fn paperpaw_sdk::wifi::WifiCommand::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub enum paperpaw_sdk::wifi::WifiState
 pub paperpaw_sdk::wifi::WifiState::Joining
 pub paperpaw_sdk::wifi::WifiState::Joining::ssid: alloc::string::String
@@ -2740,9 +2752,9 @@ pub fn paperpaw_sdk::Id::is_owned_by(&self, &paperpaw_sdk::Id) -> bool
 pub fn paperpaw_sdk::Id::namespace(&self) -> &str
 pub const fn paperpaw_sdk::Id::new_static(&'static str) -> paperpaw_sdk::Id
 pub fn paperpaw_sdk::Id::parse(&str) -> core::result::Result<paperpaw_sdk::Id, paperpaw_sdk::InvalidId>
-pub fn paperpaw_sdk::Id::placed(&self) -> core::option::Option<alloc::string::String>
 pub fn paperpaw_sdk::Id::placement(&self, u32) -> paperpaw_sdk::Id
 pub const fn paperpaw_sdk::Id::static_str(self) -> &'static str
+pub fn paperpaw_sdk::Id::unplaced(&self) -> core::option::Option<paperpaw_sdk::Id>
 impl core::borrow::Borrow<str> for paperpaw_sdk::Id
 pub fn paperpaw_sdk::Id::borrow(&self) -> &str
 impl core::fmt::Debug for paperpaw_sdk::Id

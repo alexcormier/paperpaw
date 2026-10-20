@@ -6,6 +6,12 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: `Id::unplaced` gives an id without its placement
+  (`widgets.clock@2.face` to `widgets.clock.face`) as an id; `placed`,
+  which did the same under a name that said the opposite, stays until
+  plugins have moved. `Id::placement` of a placed id is another
+  placement of the same (`widgets.clock@2` and 3 make `widgets.clock@3`),
+  not an invalid `widgets.clock@2@3`.
 - Storage: paths with control characters, a dot or space at the end of
   a name, or a name Windows keeps for a device (`CON`, `nul.txt`,
   `COM1`) are refused on every storage, as FAT and Windows take them for
