@@ -6,6 +6,14 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Screens: a time a screen asks for is its own: it comes to that screen
+  also below a menu or another screen over part of it, and below a
+  screen over all of it once it shows again, where before it came to
+  the screen on top and was forgotten whenever a screen opened or
+  closed (the reader below a menu stopped laying out a book after a
+  font change, the library's shelves stopped being made). A screen made
+  anew (the screen turned) first keeps what it would lose, as when it
+  closes: the reader its position, which went back a few pages.
 - Settings: a `paperpaw.ini` that is there but cannot be read (saved in
   another encoding than UTF-8, larger than 64 KiB, or a read of the
   memory card failed) is no longer written over: PaperPaw starts with

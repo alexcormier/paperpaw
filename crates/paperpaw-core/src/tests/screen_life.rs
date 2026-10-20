@@ -159,3 +159,56 @@ fn a_books_own_settings_last_while_it_is_open() {
         .unwrap();
     assert!(text(&kernel, BOOK_SETTINGS).contains("font-size = 15"));
 }
+
+/// A screen made anew for another size is told first, as when it is
+/// closed, so it keeps what it would lose (the reader its position); what
+/// it asks for then is not done, as it stays open.
+#[test]
+fn screens_made_anew_keep_what_they_would_lose() {
+    let log = log();
+    let mut kernel = book_kernel(&log);
+    kernel.resize(Instant(1), 80, 90);
+    assert_eq!(*log.borrow(), ["reader close"]);
+    kernel.open_screen(Instant(2), FULL, Params::new());
+    log.borrow_mut().clear();
+    kernel.resize(Instant(3), 90, 90);
+    assert_eq!(*log.borrow(), ["reader close"], "the one below too");
+}
+
+/// A timer is the screen's that asked for it: it comes to it, also
+/// below an overlay opened after it asked; below a full screen it waits
+/// until the screen shows again.
+#[test]
+fn timers_come_to_the_screen_that_asked() {
+    let log = log();
+    let mut kernel = book_kernel(&log);
+    kernel.open_screen(Instant(1), MENU, Params::new());
+    // A setting changed in the menu: the reader below asks for a timer.
+    kernel
+        .set_setting(Instant(2), "core.night-mode", "on")
+        .unwrap();
+    let effects = kernel.tick(Instant(12));
+    assert_eq!(*log.borrow(), ["reader timer"]);
+    assert_eq!(effects.wake_at(), None);
+    log.borrow_mut().clear();
+    // Asked for, then an overlay over it: it still comes.
+    kernel
+        .set_setting(Instant(20), "core.night-mode", "off")
+        .unwrap();
+    kernel.open_screen(Instant(21), MENU, Params::new());
+    kernel.tick(Instant(30));
+    assert_eq!(*log.borrow(), ["reader timer"]);
+    log.borrow_mut().clear();
+    // Below a full screen: once it shows again.
+    kernel
+        .set_setting(Instant(40), "core.night-mode", "on")
+        .unwrap();
+    kernel.open_screen(Instant(41), FULL, Params::new());
+    let effects = kernel.tick(Instant(50));
+    assert!(log.borrow().is_empty(), "{:?}", log.borrow());
+    assert_eq!(effects.wake_at(), None);
+    let effects = kernel.run_action(Instant(60), actions::BACK);
+    assert_eq!(effects.wake_at(), Some(Instant(50)));
+    kernel.tick(Instant(60));
+    assert_eq!(*log.borrow(), ["reader timer"]);
+}

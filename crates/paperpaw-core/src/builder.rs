@@ -399,7 +399,6 @@ impl KernelBuilder {
             framebuffer,
             registry: Registry::default(),
             subscriptions: Vec::new(),
-            screen_timer: None,
             show_pending: false,
             notice: None,
             scheduled: Vec::new(),

@@ -79,9 +79,6 @@ impl Kernel {
                 .meter
                 .refreshed(top, refresh.mode, refresh.region);
         }
-        if let Some(at) = self.output.wake_at.take() {
-            self.screen_timer = Some(self.screen_timer.map_or(at, |t| t.min(at)));
-        }
         let input = self.input.recognizer.next_deadline(&self.thresholds());
         let notice = self.notice.as_ref().map(|(_, until)| *until);
         let scheduled = self.scheduled.iter().map(|(at, ..)| *at).min();
@@ -91,10 +88,14 @@ impl Kernel {
             .screenshot
             .is_some()
             .then(|| self.now.add_millis(300));
+        let timer = self.stack[self.shown_base()..]
+            .iter()
+            .filter_map(|s| s.timer)
+            .min();
         effects.wake_at = [
             self.hint.until,
             input,
-            self.screen_timer,
+            timer,
             notice,
             scheduled,
             self.sleep_due(),

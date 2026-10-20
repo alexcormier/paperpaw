@@ -31,6 +31,7 @@ impl Kernel {
             hinted,
             params: params.clone(),
             screen,
+            timer: None,
         });
         let top = self.stack.len() - 1;
         let overlay = self.overlay(top);
@@ -38,7 +39,7 @@ impl Kernel {
     }
 
     /// The topmost full screen: it and the overlays above it show.
-    fn shown_base(&self) -> usize {
+    pub(crate) fn shown_base(&self) -> usize {
         (0..self.stack.len())
             .rev()
             .find(|&i| self.overlay(i).is_none())
@@ -195,14 +196,28 @@ impl Kernel {
     pub(crate) fn remake_screens(&mut self) {
         let now = self.now;
         for i in 0..self.stack.len() {
-            let Some(spec) = self.registry.screens.get(&self.stack[i].id) else {
+            if !self.registry.screens.contains_key(&self.stack[i].id) {
                 continue;
-            };
+            }
+            // The old one goes: told as when it closes, so it keeps what
+            // it would lose (a reading position, text typed). What it asks
+            // for then is not done: the screen stays open, made anew.
+            let asked = self.output.commands.len();
+            self.with_screen(i, |screen, cx| {
+                screen.on_close(cx);
+                Handled::Yes
+            });
+            self.output.commands.truncate(asked);
             self.shared.device.display.height = self.content_height(self.stack[i].hinted);
             let env = self.shared.env(now);
             let active = &mut self.stack[i];
+            let Some(spec) = self.registry.screens.get(&active.id) else {
+                continue;
+            };
             let _running = self.shared.meter.enter(active.id.namespace());
             active.screen = (spec.factory)(&env, &active.params);
+            // Its times were the old one's.
+            active.timer = None;
         }
         // Made anew, those below the screen shown are hidden again.
         let base = self.shown_base();
@@ -235,6 +250,10 @@ impl Kernel {
         let mut cx = Cx::new(&env, &mut self.output);
         let handled = f(active.screen.as_mut(), &mut cx);
         drop(running);
+        // A time it asked for is its own, also below other screens.
+        if let Some(at) = self.output.wake_at.take() {
+            active.timer = Some(active.timer.map_or(at, |t| t.min(at)));
+        }
         // `request_redraw` means the caller's own region. A screen below an
         // overlay is still partly visible (e.g. the page behind a menu that
         // changes a reading setting); one below a full screen is redrawn
@@ -267,8 +286,6 @@ impl Kernel {
     /// screens and refreshing quickly when only overlays changed.
     pub(crate) fn screen_changed(&mut self, region: Rect, overlays_only: bool) {
         self.input.captured.clear();
-        self.screen_timer = None;
-        self.output.wake_at = None;
         self.invalidate(region);
         let flash = self
             .shared

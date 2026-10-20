@@ -274,6 +274,9 @@ struct ActiveScreen {
     /// What it was opened with, e.g. the book.
     params: Params,
     screen: Box<dyn Screen>,
+    /// When it wants [`Screen::on_timer`] ([`Cx::wake_at`]); below a full
+    /// screen, once it shows again.
+    timer: Option<Instant>,
 }
 
 /// A finger that came down at an edge (see [`Kernel::edge_lifted`]).
@@ -291,8 +294,6 @@ pub struct Kernel {
     framebuffer: Framebuffer,
     registry: Registry,
     subscriptions: Vec<(Id, Id, EventHandler)>,
-    /// When the active screen wants `on_timer`.
-    screen_timer: Option<Instant>,
     /// The screen on top changed: it is told ([`Screen::on_show`]) once
     /// the commands of the call are done, so that one shown for a moment
     /// (e.g. below a menu that closes to open another screen) is not.
@@ -686,12 +687,14 @@ impl Kernel {
         for recognized in self.input.recognizer.tick(now, &thresholds) {
             self.recognized(recognized);
         }
-        if self.screen_timer.is_some_and(|at| at <= now) {
-            self.screen_timer = None;
-            self.with_top(|screen, cx| {
-                screen.on_timer(cx);
-                Handled::Yes
-            });
+        for index in self.shown_base()..self.stack.len() {
+            if self.stack[index].timer.is_some_and(|at| at <= now) {
+                self.stack[index].timer = None;
+                self.with_screen(index, |screen, cx| {
+                    screen.on_timer(cx);
+                    Handled::Yes
+                });
+            }
         }
         if self.notice.as_ref().is_some_and(|(_, until)| *until <= now) {
             self.end_notice();
