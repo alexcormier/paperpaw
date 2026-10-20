@@ -576,8 +576,11 @@ fn a_password_typed_and_cancelled_joins_nothing() {
     assert!(device.saved().is_empty());
 }
 
+/// An open network is joined when chosen, without a password; it is not
+/// saved, as anyone can set one up under any name, so it is not joined by
+/// itself later.
 #[test]
-fn an_open_network_is_joined_without_asking() {
+fn an_open_network_is_joined_without_asking_and_not_saved() {
     let mut device = Device::new(TOUCH);
     device.open();
     device.radio_on_with(vec![network("Library", -50, false)]);
@@ -594,7 +597,7 @@ fn an_open_network_is_joined_without_asking() {
         ssid: "Library".into(),
         address: "10.0.0.2".into(),
     }));
-    assert_eq!(device.saved(), [("Library".into(), String::new())]);
+    assert!(device.saved().is_empty());
 }
 
 #[test]
@@ -645,14 +648,16 @@ fn a_saved_network_is_joined_again_without_asking_and_forgotten() {
 fn forgetting_by_buttons_with_the_menu_button() {
     let mut device = Device::new(BUTTONS);
     device.open();
-    device.radio_on_with(vec![network("Home", -50, false)]);
+    // Secured: only those are saved.
+    device.radio_on_with(vec![network("Home", -50, true)]);
     device.focus("Home");
     device.run(actions::CONFIRM);
+    device.type_text("pw1");
     device.radio(WifiEvent::State(WifiState::Online {
         ssid: "Home".into(),
         address: "10.0.0.2".into(),
     }));
-    assert_eq!(device.saved().len(), 1);
+    assert_eq!(device.saved(), [("Home".into(), "pw1".into())]);
     device.told();
     device.focus("Home");
     device.run(actions::MENU);
@@ -674,24 +679,24 @@ fn no_networks_found_says_so() {
 }
 
 /// Names of networks may hold any bytes, tabs and line breaks too; the
-/// secrets' file turns those into spaces, so after a restart the network
-/// kept is another than the one joined: not known, not forgotten.
+/// secrets' file keeps them as they are, so after a restart the network
+/// kept is the one joined: known, and can be forgotten.
 #[test]
-#[ignore = "bug: a network name with a tab or line break is kept under another name (secrets file)"]
 fn a_name_with_a_tab_stays_known_after_a_restart() {
     let name = "Cafe\tGuest";
     let storage = Shared::default();
     let mut device = Device::on(TOUCH, storage.clone());
     device.open();
-    device.radio_on_with(vec![network(name, -50, false)]);
+    device.radio_on_with(vec![network(name, -50, true)]);
     device.tap("Cafe");
+    device.type_text("pw1");
     device.radio(WifiEvent::State(WifiState::Online {
         ssid: name.into(),
         address: "10.0.0.2".into(),
     }));
-    assert_eq!(device.saved(), [(name.into(), String::new())]);
+    assert_eq!(device.saved(), [(name.into(), "pw1".into())]);
     let device = Device::on(TOUCH, storage);
-    assert_eq!(device.saved(), [(name.into(), String::new())]);
+    assert_eq!(device.saved(), [(name.into(), "pw1".into())]);
 }
 
 #[test]

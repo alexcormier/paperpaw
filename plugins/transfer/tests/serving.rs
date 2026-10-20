@@ -82,6 +82,14 @@ struct Answer {
     file: Option<String>,
 }
 
+/// A random source for the tests: bytes that differ, the same each run.
+fn fill(buf: &mut [u8]) -> bool {
+    for (i, byte) in buf.iter_mut().enumerate() {
+        *byte = (i as u8).wrapping_mul(97).wrapping_add(13);
+    }
+    true
+}
+
 struct Device {
     kernel: Kernel,
     storage: Shared,
@@ -101,6 +109,8 @@ impl Device {
             .storage(storage.clone())
             .user_config("[core]\nlanguage = en\n")
             .network(true)
+            // The key is drawn from the platform's random source.
+            .random(fill)
             .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
             .plugin(Transfer)
             .build()
@@ -143,7 +153,8 @@ impl Device {
             .find(|l| l.contains("k="))
             .unwrap_or_else(|| panic!("no address: {shown:?}"));
         device.key = address.rsplit("k=").next().unwrap().to_string();
-        assert_eq!(device.key.len(), 8, "{address}");
+        // 13 letters of 5 bits: 65 bits.
+        assert_eq!(device.key.len(), 13, "{address}");
         device
     }
 
@@ -376,7 +387,7 @@ fn files_are_sent_listed_and_deleted() {
     let list = device.request("GET", &format!("/api/list?k={key}&path=Books"), None);
     assert_eq!(
         String::from_utf8(list.body).unwrap(),
-        r#"[{"name":"a.epub","dir":false,"size":3}]"#
+        r#"{"entries":[{"name":"a.epub","dir":false,"size":3}]}"#
     );
     // The top lists no hidden folders.
     let top = device.request("GET", &format!("/api/list?k={key}"), None);

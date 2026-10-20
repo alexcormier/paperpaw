@@ -140,6 +140,8 @@ fn open(storage: &Shared, config: &str, network: bool) -> Kernel {
         .network(network)
         .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
         .plugin(Library)
+        // Calibre writes only books of formats PaperPaw reads.
+        .plugin(paperpaw_plugin_format_epub::EpubFormat)
         .plugin(Calibre)
         .build()
         .unwrap();
@@ -449,8 +451,9 @@ fn books_with_paths_out_of_the_library_are_dropped() {
     assert_eq!(s.storage.0.get("books/etc/x.epub").unwrap(), b"fine");
 }
 
+/// With the library at the storage's top, a book path into `.paperpaw`
+/// must not overwrite PaperPaw's own data.
 #[test]
-#[ignore = "bug: with the library at the storage's top a book path into .paperpaw overwrites PaperPaw's own data"]
 fn books_never_land_in_paperpaws_data_folder() {
     // The library folder may be the storage's top (`files.root` empty);
     // whoever answers the broadcast can then name any hidden path.
@@ -470,23 +473,29 @@ fn books_never_land_in_paperpaws_data_folder() {
 }
 
 #[test]
-fn deleting_never_reaches_out_of_the_library() {
+fn deleting_never_reaches_out_of_the_library_nor_the_readers_own_books() {
     let storage = Shared::default();
     storage.write("outside.epub", b"keep me").unwrap();
-    storage.write("books/Ann/A.epub", b"a").unwrap();
+    // A book of the reader's own, not sent by Calibre.
+    storage.write("books/Ann/Own.epub", b"mine").unwrap();
     let mut s = Session::connected(storage, CONFIG);
+    s.book("Ann/A.epub", b"a");
+    s.answers();
     s.say(
         op::DELETE_BOOK,
-        r#"{"lpaths": ["../outside.epub", "..\\outside.epub", "/../outside.epub", "Ann/A.epub", "Never/Sent.epub"]}"#,
+        r#"{"lpaths": ["../outside.epub", "..\\outside.epub", "/../outside.epub", "Ann/A.epub", "Ann/Own.epub", "Never/Sent.epub"]}"#,
     );
     let answers = s.answers();
     // An OK, then one for each book, with the uuid if it was known.
-    assert_eq!(answers.len(), 6);
-    for answer in &answers[1..] {
-        assert_eq!(protocol::text(&answer.args, "uuid").as_deref(), Some(""));
-    }
+    assert_eq!(answers.len(), 7);
+    let uuids: Vec<String> = answers[1..]
+        .iter()
+        .map(|a| protocol::text(&a.args, "uuid").unwrap())
+        .collect();
+    assert_eq!(uuids, ["", "", "", "u-1", "", ""]);
     assert!(s.storage.exists("outside.epub"));
     assert!(!s.storage.exists("books/Ann/A.epub"));
+    assert_eq!(s.storage.0.get("books/Ann/Own.epub").unwrap(), b"mine");
     assert!(s.alive());
 }
 
@@ -495,23 +504,39 @@ fn books_gone_from_the_device_or_with_bad_records_are_not_listed() {
     let mut s = Session::new();
     s.book("Ann/A.epub", b"a");
     s.book("Bo/B.epub", b"b");
-    // B deleted on the device; a broken record and one that points out.
-    // Through the kernel's storage, as a file manager would.
+    // B deleted on the device; a broken record and one that points out,
+    // named as records are (an id of 32 hex digits), and a file that is
+    // no record. Through the kernel's storage, as a file manager would.
     let storage = s.kernel.storage();
     storage.remove("books/Bo/B.epub").unwrap();
     let records = ".paperpaw/plugins/calibre/books";
     storage
-        .write(&format!("{records}/broken.json"), &[0xff, 0x00])
+        .write(
+            &format!("{records}/0123456789abcdef0123456789abcdef.json"),
+            &[0xff, 0x00],
+        )
+        .unwrap();
+    storage
+        .write(
+            &format!("{records}/fedcba9876543210fedcba9876543210.json"),
+            br#"{"lpath": "../../outside.epub"}"#,
+        )
         .unwrap();
     storage
         .write(
             &format!("{records}/out.json"),
-            br#"{"lpath": "../../outside.epub"}"#,
+            br#"{"lpath": "Ann/A.epub"}"#,
         )
         .unwrap();
     storage.write("outside.epub", b"x").unwrap();
     s.answers();
     s.say(op::GET_BOOK_COUNT, r#"{"canStream": true}"#);
+    // The count at once, the books' metadata in the next turns.
+    for _ in 0..10 {
+        s.now += 100;
+        s.kernel.tick(Instant(s.now));
+        s.pump();
+    }
     let answers = s.answers();
     assert_eq!(
         protocol::number(&answers[0].args, "count"),

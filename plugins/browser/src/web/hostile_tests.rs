@@ -84,10 +84,17 @@ fn a_title_far_into_a_page_is_not_looked_for() {
 }
 
 #[test]
-fn script_and_data_addresses_stay_as_typed() {
-    assert_eq!(address("javascript:alert(1)"), "javascript:alert(1)");
-    assert_eq!(address("data:text/html,x"), "data:text/html,x");
-    // Not a scheme: searched for.
+fn script_and_data_addresses_are_searched_for() {
+    // Only `http://` and `https://` are taken as they are: other schemes
+    // are words to search for, never loaded.
+    assert_eq!(
+        address("javascript:alert(1)"),
+        "https://html.duckduckgo.com/html/?q=javascript%3Aalert%281%29"
+    );
+    assert!(address("data:text/html,x").starts_with("https://html.duckduckgo.com/html/?q=data%3A"));
+    assert!(
+        address("file:///etc/passwd").starts_with("https://html.duckduckgo.com/html/?q=file%3A")
+    );
     assert!(address("a:b c").starts_with("https://html.duckduckgo.com/"));
     assert_eq!(address("..."), "https://html.duckduckgo.com/html/?q=...");
 }
@@ -100,8 +107,9 @@ fn a_page_that_cannot_be_kept_is_an_error() {
     assert!(keep_page(&storage, "tmp", "../page.html", "https://a.org/").is_err());
 }
 
+/// A host with a port typed without a scheme is an address, not a
+/// scheme to load as it is.
 #[test]
-#[ignore = "bug: a host with a port typed without a scheme is taken for a scheme and loaded as it is"]
 fn a_host_with_a_port_is_an_address() {
     assert_eq!(address("calibre.local:8080"), "https://calibre.local:8080");
     assert_eq!(

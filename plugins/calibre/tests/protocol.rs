@@ -191,6 +191,10 @@ fn book_paths_never_leave_the_library_folder() {
         "/",
         "./.",
         "\\\\server\\share\\..\\x",
+        // Hidden names: PaperPaw's own data, and what plugins keep.
+        ".paperpaw/secrets.txt",
+        "a/.hidden.epub",
+        "..a/b.epub",
     ];
     for path in refused {
         assert_eq!(safe_path(path), None, "{path}");
@@ -200,7 +204,7 @@ fn book_paths_never_leave_the_library_folder() {
         ("//a///b.epub", "a/b.epub"),
         ("a\\b\\c.epub", "a/b/c.epub"),
         ("./a/./b.epub", "a/b.epub"),
-        ("..a/b...epub", "..a/b...epub"),
+        ("a..b/c...epub", "a..b/c...epub"),
         ("Zoë/Ünïcödé ✓.epub", "Zoë/Ünïcödé ✓.epub"),
     ];
     for (path, safe) in kept {

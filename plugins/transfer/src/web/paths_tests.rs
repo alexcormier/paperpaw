@@ -113,7 +113,8 @@ fn uploads_out_of_reach_are_refused_and_change_nothing() {
         let before = files(&storage);
         let (status, done) = upload(&storage, path, b"evil");
         assert_eq!(status, 400, "{path}");
-        assert_eq!(done, None, "{path}");
+        // Told on the device as not received.
+        assert!(matches!(done, Some(Done::NotReceived(_))), "{path}");
         // Only the body itself is there in addition (the kernel removes
         // it after the answer).
         let mut after = files(&storage);
@@ -295,7 +296,7 @@ fn lists_escape_names_for_json() {
     let (response, _) = answer(&storage, &mut guard, "", request);
     assert_eq!(
         String::from_utf8(response.body).unwrap(),
-        r#"[{"name":"a\"b\u003c\\c.epub","dir":false,"size":0}]"#
+        r#"{"entries":[{"name":"a\"b\u003c\\c.epub","dir":false,"size":0}]}"#
     );
 }
 
