@@ -73,7 +73,7 @@ impl Kernel {
             WifiEvent::Failed { ssid, reason } => {
                 self.output
                     .commands
-                    .push(events::WIFI_FAILED.emit(events::WifiFailed { ssid, reason }));
+                    .push(events::WIFI_FAILED.emit(events::WifiFailed::new(ssid, reason)));
             }
         }
         self.finish()

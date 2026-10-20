@@ -221,13 +221,7 @@ fn a_rules_file_that_cannot_be_read_is_not_saved_over() {
     let mut test = Test::reading(kept, false);
     // A rule added in the list: when PaperPaw starts, a message.
     test.kernel.run_action(Instant(1000), OPEN);
-    let picked = |option: &str| {
-        Picked {
-            path: String::new(),
-            option: option.to_string(),
-        }
-        .to_params()
-    };
+    let picked = |option: &str| Picked::new(String::new(), option.to_string()).to_params();
     test.kernel.send_event(
         Instant(1100),
         Id::new_static("rules.trigger-chosen"),

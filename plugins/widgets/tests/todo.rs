@@ -154,10 +154,7 @@ impl List {
 
     /// `option` chosen from item `index`'s menu: tick, untick, up, remove.
     fn choose(&mut self, index: usize, option: &str) {
-        let picked = Picked {
-            path: index.to_string(),
-            option: option.to_string(),
-        };
+        let picked = Picked::new(index.to_string(), option.to_string());
         self.send("widgets.todo.chosen", picked.to_params());
     }
 
@@ -336,10 +333,7 @@ fn choices_for_items_that_are_not_there_change_nothing() {
         list.choose(index, option);
     }
     // Not a number at all.
-    let picked = Picked {
-        path: "-1".into(),
-        option: "remove".into(),
-    };
+    let picked = Picked::new("-1".into(), "remove".into());
     list.send("widgets.todo.chosen", picked.to_params());
     list.edit(7, "Seven");
     list.add("   ");

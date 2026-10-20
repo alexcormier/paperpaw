@@ -44,17 +44,14 @@ fn opened_books_of_version_1_are_written_as_read() {
         include_str!("../testdata/opened.txt.v1"),
     );
     let env = h.env();
-    let reading = Reading {
-        path: "books/c.epub".into(),
-        title: String::new(),
-        progress: 0.0,
-        section: 0,
-        offset: 0,
-        page: None,
-        pages: None,
-        chapter: String::new(),
-        chapter_left: None,
-    };
+    let reading = Reading::new(
+        "books/c.epub".into(),
+        String::new(),
+        0.0,
+        0,
+        0,
+        String::new(),
+    );
     library::record(&env, &reading, true);
     assert_eq!(
         library::opened_books(&h.storage),

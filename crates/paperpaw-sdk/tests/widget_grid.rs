@@ -156,10 +156,7 @@ fn with_cx<R>(env: &Env<'_>, f: impl FnOnce(&mut Cx<'_, '_>) -> R) -> (R, Output
 
 /// Chooses `option` for item `index`, as the choice screen answers.
 fn choose(view: &mut GridView, env: &Env<'_>, index: usize, option: &str) -> GridResponse {
-    let picked = Picked {
-        path: index.to_string(),
-        option: option.to_string(),
-    };
+    let picked = Picked::new(index.to_string(), option.to_string());
     let event = Id::parse(CHOSEN.as_str()).unwrap();
     with_cx(env, |cx| view.on_event(&event, &picked.to_params(), cx)).0
 }

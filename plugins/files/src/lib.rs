@@ -404,10 +404,7 @@ pub(crate) fn archive(env: &Env<'_>, path: &str, cx: &mut Cx<'_, '_>) {
     let target = files::free_path(env.storage, &archive, files::name(path));
     match files::move_to(env.storage, path, &target) {
         Ok(()) => {
-            cx.command(events::BOOK_MOVED.emit(events::BookMoved {
-                from: path.to_string(),
-                path: target,
-            }));
+            cx.command(events::BOOK_MOVED.emit(events::BookMoved::new(path.to_string(), target)));
             cx.command(Command::Notify(env.i18n.tr("files.archived").to_string()));
         }
         Err(_) => cx.command(Command::Notify(

@@ -83,15 +83,15 @@ impl ReaderScreen {
                         .with(params::WORD, phrase.to_string())
                         .with(params::LANGUAGE, book.language.clone()),
                 ));
-                cx.command(events::WORD_LOOKED_UP.emit(events::WordLookedUp {
-                    word: phrase.to_string(),
-                    language: book.language.clone(),
-                    text: sentence(words, lo, hi),
-                    path: book.path.clone(),
-                    title: book.title.clone(),
-                    section: start.section,
-                    offset: start.offset,
-                }));
+                cx.command(events::WORD_LOOKED_UP.emit(events::WordLookedUp::new(
+                    phrase.to_string(),
+                    book.language.clone(),
+                    sentence(words, lo, hi),
+                    book.path.clone(),
+                    book.title.clone(),
+                    start.section,
+                    start.offset,
+                )));
             }
             return;
         }
@@ -197,16 +197,16 @@ impl ReaderScreen {
                     .command(),
             );
         } else if *item != crate::actions::CANCEL {
-            cx.command(events::TEXT_CHOSEN.emit(events::TextChosen {
-                action: item.clone(),
+            cx.command(events::TEXT_CHOSEN.emit(events::TextChosen::new(
+                item.clone(),
                 text,
-                language: book.language.clone(),
-                path: book.path.clone(),
-                section: start.section,
-                offset: start.offset,
-                end_section: end.section,
-                end_offset: end.offset,
-            }));
+                book.language.clone(),
+                book.path.clone(),
+                start.section,
+                start.offset,
+                end.section,
+                end.offset,
+            )));
             // Then the action runs as usual (after the selection is gone),
             // so any action works here, e.g. the night mode.
             cx.command(Command::RunAction(item.clone()));

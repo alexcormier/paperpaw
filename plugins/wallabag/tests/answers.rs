@@ -490,16 +490,17 @@ fn a_list_that_fails_keeps_the_books_fetched() {
 fn articles_read_to_the_end_are_noted_and_archived_even_after_a_failure() {
     let mut h = Harness::new();
     h.list_and_download(&items(&[("1", r#""One""#), ("2", r#""Two""#)]), 200);
-    let reading = |path: &str, page: Option<u32>, pages: Option<u32>, progress: f32| Reading {
-        path: String::from(path),
-        title: String::new(),
-        progress,
-        section: 0,
-        offset: 0,
-        page,
-        pages,
-        chapter: String::new(),
-        chapter_left: None,
+    let reading = |path: &str, page: Option<u32>, pages: Option<u32>, progress: f32| {
+        Reading::new(
+            String::from(path),
+            String::new(),
+            progress,
+            0,
+            0,
+            String::new(),
+        )
+        .page(page)
+        .pages(pages)
     };
     // Not at the end yet; another book; then the end, twice.
     h.send(

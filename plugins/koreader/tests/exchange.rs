@@ -200,17 +200,14 @@ impl Device {
     }
 
     fn open(&mut self) {
-        let reading = Reading {
-            path: BOOK.to_string(),
-            title: String::from("Alice"),
-            progress: 0.0,
-            section: 0,
-            offset: 0,
-            page: None,
-            pages: None,
-            chapter: String::new(),
-            chapter_left: None,
-        };
+        let reading = Reading::new(
+            BOOK.to_string(),
+            String::from("Alice"),
+            0.0,
+            0,
+            0,
+            String::new(),
+        );
         self.send(events::BOOK_OPENED, &reading);
     }
 
@@ -306,9 +303,7 @@ fn changes_here_are_passed_on_to_koreader() {
             note: String::from("Quote \"this\"\\"),
         },
     );
-    let changed = AnnotationsChanged {
-        path: BOOK.to_string(),
-    };
+    let changed = AnnotationsChanged::new(BOOK.to_string());
     device.send(events::ANNOTATIONS_CHANGED, &changed);
     let passed = device.passed();
     assert_eq!(passed.len(), 3, "{passed:?}");
@@ -454,10 +449,7 @@ fn a_moved_book_takes_its_koreader_folder_along() {
         .write("books/new/wonder.epub", &epub())
         .unwrap();
     device.storage.remove(BOOK).unwrap();
-    let moved = BookMoved {
-        from: BOOK.to_string(),
-        path: String::from("books/new/wonder.epub"),
-    };
+    let moved = BookMoved::new(BOOK.to_string(), String::from("books/new/wonder.epub"));
     device.send(events::BOOK_MOVED, &moved);
     assert!(!device.storage.exists(SIDECAR));
     assert_eq!(

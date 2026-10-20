@@ -285,7 +285,7 @@ impl Kernel {
                     self.persist_setting(&id);
                     self.setting_changed(&id);
                     self.output.commands.push(
-                        events::SETTING_CHANGED.emit(events::SettingChanged { id: id.clone() }),
+                        events::SETTING_CHANGED.emit(events::SettingChanged::new(id.clone())),
                     );
                 }
                 Err(error) => {

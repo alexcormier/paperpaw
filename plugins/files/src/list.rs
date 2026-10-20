@@ -159,10 +159,10 @@ const TOUCHED: Event<paperpaw_sdk::ui::choice::Picked> = Event::new("files.list.
 
 /// The command that says the book at `path` changed on its sheet.
 fn touched(path: &str) -> Command {
-    TOUCHED.emit(paperpaw_sdk::ui::choice::Picked {
-        path: path.to_string(),
-        option: String::new(),
-    })
+    TOUCHED.emit(paperpaw_sdk::ui::choice::Picked::new(
+        path.to_string(),
+        String::new(),
+    ))
 }
 
 /// Opens the book at `path` in the reader.

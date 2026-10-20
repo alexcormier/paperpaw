@@ -122,16 +122,18 @@ impl Book {
             .filter(|w| mark.overlaps(w.start, w.end))
             .map(|w| w.text.as_str())
             .collect();
-        cx.command(events::DECORATION_TAPPED.emit(events::DecorationTapped {
-            decorator: mark.decorator.clone(),
-            role: mark.role.clone(),
-            text: text.join(" "),
-            path: self.path.clone(),
-            section: mark.start.section,
-            offset: mark.start.offset,
-            end_section: mark.end.section,
-            end_offset: mark.end.offset,
-        }));
+        cx.command(
+            events::DECORATION_TAPPED.emit(events::DecorationTapped::new(
+                mark.decorator.clone(),
+                mark.role.clone(),
+                text.join(" "),
+                self.path.clone(),
+                mark.start.section,
+                mark.start.offset,
+                mark.end.section,
+                mark.end.offset,
+            )),
+        );
     }
 
     /// Every mark of the page, by priority, as spans in their looks.

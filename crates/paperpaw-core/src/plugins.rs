@@ -404,7 +404,7 @@ impl Kernel {
         });
         self.output
             .commands
-            .push(events::MENU_CHANGED.emit(events::MenuChanged { id: menu.clone() }));
+            .push(events::MENU_CHANGED.emit(events::MenuChanged::new(menu.clone())));
     }
 
     /// Adds a font file of `plugin`, described by its header.

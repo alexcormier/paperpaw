@@ -181,10 +181,7 @@ impl Device {
     }
 
     fn export(&mut self, path: &str) -> Vec<HttpCall> {
-        let exported = NotesExported {
-            path: path.to_string(),
-            title: String::from("Alice"),
-        };
+        let exported = NotesExported::new(path.to_string(), String::from("Alice"));
         let now = self.later();
         self.kernel.send_event(
             now,

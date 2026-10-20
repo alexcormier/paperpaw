@@ -128,10 +128,9 @@ impl AnnotationsScreen {
             Ok(()) => {
                 // Plugins read the file (e.g. `readwise`), so its form
                 // (see [`markdown`]) stays as it is.
-                cx.command(events::NOTES_EXPORTED.emit(events::NotesExported {
-                    path: file.clone(),
-                    title,
-                }));
+                cx.command(
+                    events::NOTES_EXPORTED.emit(events::NotesExported::new(file.clone(), title)),
+                );
                 env.i18n.format(
                     "reader.exported",
                     &[("path", paperpaw_sdk::Arg::Str(&file))],
@@ -157,7 +156,7 @@ impl AnnotationsScreen {
         if let Some(annotation) = self.annotations.get(index) {
             cx.command(Command::Back);
             cx.command(
-                events::GOTO.emit(events::Goto::new(self.path.clone(), annotation.mark.start)),
+                events::GOTO.emit(events::Goto::to(self.path.clone(), annotation.mark.start)),
             );
         }
     }

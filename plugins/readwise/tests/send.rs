@@ -138,10 +138,7 @@ impl Test {
 
     /// The reader exported the notes in `path`.
     fn export(&mut self, path: &str) -> Vec<HttpCall> {
-        let exported = NotesExported {
-            path: path.to_string(),
-            title: String::new(),
-        };
+        let exported = NotesExported::new(path.to_string(), String::new());
         let now = self.now();
         let id = events::NOTES_EXPORTED.id().clone();
         self.kernel.send_event(now, id, exported.to_params());

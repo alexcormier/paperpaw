@@ -35,10 +35,7 @@ fn field(key: &'static str, text: &str) -> Typed {
 }
 
 fn picked(index: &str, option: &str) -> Picked {
-    Picked {
-        path: String::from(index),
-        option: String::from(option),
-    }
+    Picked::new(String::from(index), String::from(option))
 }
 
 /// The lines of the list, each split into its fields.

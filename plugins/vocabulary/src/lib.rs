@@ -463,7 +463,7 @@ impl Screen for WordsScreen {
                     slots::READER,
                     Params::new().with(params::PATH, word.path.clone()),
                 ));
-                cx.command(events::GOTO.emit(events::Goto::new(
+                cx.command(events::GOTO.emit(events::Goto::to(
                     word.path.clone(),
                     paperpaw_sdk::document::Locator::new(word.section, word.offset),
                 )));

@@ -48,10 +48,7 @@ fn a_book_moved_elsewhere_is_listed_where_it_went() {
         // The file manager moves a book into a folder and says so.
         let (from, to) = ("books/Book 02.txt", "books/Kept/Book 02.txt");
         app.storage.rename(from, to).unwrap();
-        let moved = events::BookMoved {
-            from: from.into(),
-            path: to.into(),
-        };
+        let moved = events::BookMoved::new(from.into(), to.into());
         app.send(events::BOOK_MOVED.id().clone(), moved.to_params());
         // Listed again where it is now, and it opens from there.
         assert_eq!(rows(&mut app), ["Book 01", "Book 02", "Book 03"]);

@@ -50,17 +50,17 @@ struct StandIn(Rc<Cell<u32>>);
 
 impl StandIn {
     fn reading(page: u32) -> events::Reading {
-        events::Reading {
-            path: BOOK.into(),
-            title: "Alice's Adventures in Wonderland".into(),
-            progress: page as f32 / 2.0,
-            section: 3,
-            offset: page * 100,
-            page: Some(page),
-            pages: Some(200),
-            chapter: "Down the Rabbit-Hole".into(),
-            chapter_left: Some(60 - page),
-        }
+        events::Reading::new(
+            BOOK.into(),
+            "Alice's Adventures in Wonderland".into(),
+            page as f32 / 2.0,
+            3,
+            page * 100,
+            "Down the Rabbit-Hole".into(),
+        )
+        .page(page)
+        .pages(200)
+        .chapter_left(60 - page)
     }
 }
 

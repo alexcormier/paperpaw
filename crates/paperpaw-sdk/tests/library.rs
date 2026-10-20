@@ -87,17 +87,7 @@ fn any_book() -> impl Strategy<Value = Book> {
 }
 
 fn reading(path: &str, title: &str, progress: f32) -> Reading {
-    Reading {
-        path: path.into(),
-        title: title.into(),
-        progress,
-        section: 0,
-        offset: 0,
-        page: None,
-        pages: None,
-        chapter: String::new(),
-        chapter_left: None,
-    }
+    Reading::new(path.into(), title.into(), progress, 0, 0, String::new())
 }
 
 proptest! {

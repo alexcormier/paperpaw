@@ -292,18 +292,18 @@ impl Book {
                 _ => None,
             });
         let chapter = self.chapter.as_ref().map(|(_, _, title)| title.clone());
-        events::Reading {
-            path: self.path.clone(),
-            title: self.title.clone(),
+        events::Reading::new(
+            self.path.clone(),
+            self.title.clone(),
             // One decimal, as written before.
-            progress: (self.percent() * 10.0 + 0.5) as u32 as f32 / 10.0,
-            section: self.page.start.section,
-            offset: self.page.start.offset,
-            page: counted.map(|(page, _)| page),
-            pages: counted.map(|(_, pages)| pages),
-            chapter: chapter.unwrap_or_default(),
-            chapter_left: counted.and_then(|(page, _)| self.chapter_left(env, page - 1)),
-        }
+            (self.percent() * 10.0 + 0.5) as u32 as f32 / 10.0,
+            self.page.start.section,
+            self.page.start.offset,
+            chapter.unwrap_or_default(),
+        )
+        .page(counted.map(|(page, _)| page))
+        .pages(counted.map(|(_, pages)| pages))
+        .chapter_left(counted.and_then(|(page, _)| self.chapter_left(env, page - 1)))
     }
 
     /// The pages after page `page` (from 0) up to the chapter's end, where

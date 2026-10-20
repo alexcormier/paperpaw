@@ -270,17 +270,19 @@ pub mod events {
             /// The page's start ([`Reading::at`]).
             pub section: u32,
             pub offset: u32,
-            /// The page and the pages, once the reader counted them.
-            pub page: Option<u32>,
-            pub pages: Option<u32>,
             /// The title of the chapter the page is in: empty where the
             /// book has no table of contents or the page comes before
             /// its first entry.
             pub chapter: String,
+        }
+        optional {
+            /// The page and the pages, once the reader counted them.
+            pub page: u32,
+            pub pages: u32,
             /// The pages after this one in the chapter (0 on its last
             /// page), once the reader counted the pages and where the
             /// chapter is known.
-            pub chapter_left: Option<u32>,
+            pub chapter_left: u32,
         }
     }
 
@@ -348,21 +350,18 @@ pub mod events {
             pub path: String,
             pub section: u32,
             pub offset: u32,
-            pub end_section: Option<u32>,
-            pub end_offset: Option<u32>,
+        }
+        optional {
+            /// Where the part to mark ends ([`Goto::end`]).
+            pub end_section: u32,
+            pub end_offset: u32,
         }
     }
 
     impl Goto {
         /// Place `at` in the book at `path`, nothing marked.
-        pub fn new(path: impl Into<String>, at: Locator) -> Self {
-            Self {
-                path: path.into(),
-                section: at.section,
-                offset: at.offset,
-                end_section: None,
-                end_offset: None,
-            }
+        pub fn to(path: impl Into<String>, at: Locator) -> Self {
+            Self::new(path.into(), at.section, at.offset)
         }
 
         /// The same place, with the text up to `end` marked.
@@ -1002,7 +1001,7 @@ mod tests {
     #[test]
     fn standard_events_carry_what_they_say() {
         use super::events::{Goto, TextChosen};
-        let goto = Goto::new("books/a.epub", Locator::new(3, 120));
+        let goto = Goto::to("books/a.epub", Locator::new(3, 120));
         assert_eq!(goto.end(), None);
         let back = Goto::from_params(&goto.to_params()).unwrap();
         assert_eq!((back.at(), back.end()), (Locator::new(3, 120), None));

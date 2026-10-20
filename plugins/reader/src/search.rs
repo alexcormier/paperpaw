@@ -183,7 +183,7 @@ impl SearchScreen {
         if let Some(hit) = self.hits.get(index) {
             cx.command(Command::Back);
             cx.command(
-                events::GOTO.emit(events::Goto::new(self.path.clone(), hit.start).marking(hit.end)),
+                events::GOTO.emit(events::Goto::to(self.path.clone(), hit.start).marking(hit.end)),
             );
         }
     }

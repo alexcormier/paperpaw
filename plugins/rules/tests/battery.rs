@@ -123,10 +123,7 @@ impl Test {
     }
 
     fn pick(&mut self, event: &str, path: &str, option: &str) {
-        let picked = Picked {
-            path: path.to_string(),
-            option: option.to_string(),
-        };
+        let picked = Picked::new(path.to_string(), option.to_string());
         self.answer(event, picked.to_params());
     }
 

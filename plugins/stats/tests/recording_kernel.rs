@@ -26,17 +26,16 @@ fn card() -> MemoryStorage {
 }
 
 fn reading(page: Option<(u32, u32)>, progress: f32) -> events::Reading {
-    events::Reading {
-        path: BOOK.to_string(),
-        title: String::new(),
+    events::Reading::new(
+        BOOK.to_string(),
+        String::new(),
         progress,
-        section: 0,
-        offset: 0,
-        page: page.map(|p| p.0),
-        pages: page.map(|p| p.1),
-        chapter: String::new(),
-        chapter_left: None,
-    }
+        0,
+        0,
+        String::new(),
+    )
+    .page(page.map(|p| p.0))
+    .pages(page.map(|p| p.1))
 }
 
 impl App {
@@ -162,10 +161,10 @@ fn a_book_is_registered_by_its_fingerprint() {
     app.turned(40, 7, 140);
     assert!(app.books_ini().contains("pages = 140\n"));
     // Moved: found where it is now; the same file again is the same book.
-    let moved = events::BookMoved {
-        from: BOOK.to_string(),
-        path: String::from("books/kafka/Der Process.txt"),
-    };
+    let moved = events::BookMoved::new(
+        BOOK.to_string(),
+        String::from("books/kafka/Der Process.txt"),
+    );
     let at = app.at(50);
     let effects = app
         .kernel
@@ -177,9 +176,10 @@ fn a_book_is_registered_by_its_fingerprint() {
     );
     // Read to the end, where it is now.
     let at = app.at(60);
-    let finished = events::Reading {
-        path: String::from("books/kafka/Der Process.txt"),
-        ..reading(Some((140, 140)), 100.0)
+    let finished = {
+        let mut finished = reading(Some((140, 140)), 100.0);
+        finished.path = String::from("books/kafka/Der Process.txt");
+        finished
     };
     let effects =
         app.kernel

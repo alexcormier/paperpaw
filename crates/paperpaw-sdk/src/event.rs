@@ -19,7 +19,7 @@
 //!
 //! pub const SAVED: Event<Saved> = Event::new("demo.saved");
 //!
-//! // Emitting: out.push(SAVED.emit(Saved { word, count }));
+//! // Emitting: out.push(SAVED.emit(Saved::new(word, count)));
 //! // Hearing:  r.on(SAVED, |env, saved, out| { /* saved.word */ })?;
 //! // On a screen: if let Some(saved) = SAVED.read(event, params) { … }
 //! ```
@@ -256,6 +256,27 @@ pub fn take<T: ParamValue>(params: &Params, key: &str) -> Option<T> {
 /// A struct of named values an event carries, each a [`ParamValue`]
 /// (`String`, `Id`, numbers, `bool`, or an `Option` of one); each is
 /// carried under its field's name. See the [module documentation](self).
+///
+/// The struct is `#[non_exhaustive]` and made with `new`, from its fields
+/// in their order. Fields in an `optional` block after it are `Option`s,
+/// `None` from `new` and set with a method of their name; a field added
+/// there later breaks no one who emits the event:
+///
+/// ```
+/// paperpaw_sdk::event_data! {
+///     /// A page was read.
+///     pub struct Read {
+///         pub path: String,
+///     }
+///     optional {
+///         /// Its number, where it is known.
+///         pub page: u32,
+///     }
+/// }
+///
+/// let read = Read::new(String::from("books/a.epub")).page(12);
+/// assert_eq!(read.page, Some(12));
+/// ```
 #[macro_export]
 macro_rules! event_data {
     (
@@ -266,26 +287,62 @@ macro_rules! event_data {
                 $field_vis:vis $field:ident : $type:ty
             ),* $(,)?
         }
+        $(
+            optional {
+                $(
+                    $(#[$opt_meta:meta])*
+                    $opt_vis:vis $opt:ident : $opt_type:ty
+                ),* $(,)?
+            }
+        )?
     ) => {
         $(#[$meta])*
         #[derive(Debug, Clone, PartialEq)]
+        #[non_exhaustive]
         $vis struct $name {
             $(
                 $(#[$field_meta])*
                 $field_vis $field: $type,
             )*
+            $($(
+                $(#[$opt_meta])*
+                $opt_vis $opt: Option<$opt_type>,
+            )*)?
+        }
+
+        impl $name {
+            /// Made of its fields in their order; the optional ones are
+            /// `None`.
+            #[allow(clippy::too_many_arguments, dead_code)]
+            $vis fn new($($field: $type),*) -> Self {
+                Self {
+                    $( $field, )*
+                    $($( $opt: None, )*)?
+                }
+            }
+
+            $($(
+                /// Sets this optional field (to `None` too).
+                #[allow(dead_code)]
+                $opt_vis fn $opt(mut self, $opt: impl Into<Option<$opt_type>>) -> Self {
+                    self.$opt = $opt.into();
+                    self
+                }
+            )*)?
         }
 
         impl $crate::event::EventData for $name {
             fn to_params(&self) -> $crate::Params {
                 let mut params = $crate::Params::new();
                 $( $crate::event::put(&mut params, stringify!($field), &self.$field); )*
+                $($( $crate::event::put(&mut params, stringify!($opt), &self.$opt); )*)?
                 params
             }
 
             fn from_params(params: &$crate::Params) -> Option<Self> {
                 Some(Self {
                     $( $field: $crate::event::take(params, stringify!($field))?, )*
+                    $($( $opt: $crate::event::take(params, stringify!($opt))?, )*)?
                 })
             }
         }

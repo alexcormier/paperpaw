@@ -578,30 +578,21 @@ fn removing_a_feed_removes_its_book() {
     ] {
         h.send(
             "news.chosen",
-            Picked {
-                path: String::from(index),
-                option: String::from(option),
-            },
+            Picked::new(String::from(index), String::from(option)),
         );
     }
     assert!(h.requests().is_empty());
     assert_eq!(h.storage.names("News").len(), 2);
     h.send(
         "news.chosen",
-        Picked {
-            path: String::from("0"),
-            option: String::from("remove"),
-        },
+        Picked::new(String::from("0"), String::from("remove")),
     );
     assert_eq!(h.storage.text(FEEDS).unwrap(), "https://b.example/\tB\n");
     assert_eq!(h.storage.names("News"), ["B.html"]);
     // *Fetch* of the one left asks for it alone.
     h.send(
         "news.chosen",
-        Picked {
-            path: String::from("0"),
-            option: String::from("fetch"),
-        },
+        Picked::new(String::from("0"), String::from("fetch")),
     );
     let call = h.request();
     assert_eq!(call.url, "https://b.example/");
@@ -619,10 +610,7 @@ fn feeds_removed_while_fetching_end_the_round() {
     for index in ["1", "0"] {
         h.send(
             "news.chosen",
-            Picked {
-                path: String::from(index),
-                option: String::from("remove"),
-            },
+            Picked::new(String::from(index), String::from("remove")),
         );
     }
     assert_eq!(h.storage.text(FEEDS).as_deref(), Some(""));

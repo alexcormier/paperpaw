@@ -106,15 +106,15 @@ impl Vocabulary {
     /// The reader says `word` was looked up in `sentence`.
     fn looked_up(&mut self, word: &str, sentence: &str) {
         self.now += 100;
-        let looked_up = events::WordLookedUp {
-            word: word.to_string(),
-            language: "en".to_string(),
-            text: sentence.to_string(),
-            path: "books/alice.epub".to_string(),
-            title: "Alice\tin\nWonderland".to_string(),
-            section: 3,
-            offset: 1234,
-        };
+        let looked_up = events::WordLookedUp::new(
+            word.to_string(),
+            "en".to_string(),
+            sentence.to_string(),
+            "books/alice.epub".to_string(),
+            "Alice\tin\nWonderland".to_string(),
+            3,
+            1234,
+        );
         self.kernel.send_event(
             Instant(self.now),
             events::WORD_LOOKED_UP.id().clone(),

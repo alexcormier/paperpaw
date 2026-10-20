@@ -185,10 +185,7 @@ impl Harness {
     fn pick(&mut self, context: &str, option: &str) {
         self.send(
             "browser.chosen",
-            Picked {
-                path: String::from(context),
-                option: String::from(option),
-            },
+            Picked::new(String::from(context), String::from(option)),
         );
     }
 

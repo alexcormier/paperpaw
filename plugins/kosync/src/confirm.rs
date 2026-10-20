@@ -137,7 +137,7 @@ impl ConfirmScreen {
             .unwrap_or_else(|| at_progress(&*document, *percentage));
         cx.command(
             paperpaw_sdk::builtin::events::GOTO
-                .emit(paperpaw_sdk::builtin::events::Goto::new(path.clone(), at)),
+                .emit(paperpaw_sdk::builtin::events::Goto::to(path.clone(), at)),
         );
         self.went = true;
     }

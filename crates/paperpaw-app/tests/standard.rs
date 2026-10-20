@@ -72,7 +72,7 @@ impl Plugin for Probe {
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_action(ActionSpec::new(GO, "probe.go").handler(
             |_: &Env<'_>, out: &mut Vec<Command>| {
-                let goto = events::Goto::new(BOOK, Locator::new(0, TARGET));
+                let goto = events::Goto::to(BOOK, Locator::new(0, TARGET));
                 out.push(events::GOTO.emit(goto));
             },
         ))?;

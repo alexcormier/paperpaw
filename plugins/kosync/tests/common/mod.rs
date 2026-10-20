@@ -207,18 +207,15 @@ impl Sync {
     }
 
     pub fn reading(&mut self, event: Event<Reading>, path: &str, percent: f32) -> Vec<HttpCall> {
-        let reading = Reading {
-            path: path.to_string(),
-            title: String::new(),
-            progress: percent,
-            section: 0,
+        let reading = Reading::new(
+            path.to_string(),
+            String::new(),
+            percent,
+            0,
             // Each progress another place.
-            offset: (percent * 100.0) as u32,
-            page: None,
-            pages: None,
-            chapter: String::new(),
-            chapter_left: None,
-        };
+            (percent * 100.0) as u32,
+            String::new(),
+        );
         let now = self.later(1000);
         self.kernel
             .send_event(now, event.id().clone(), reading.to_params());

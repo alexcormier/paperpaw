@@ -109,17 +109,16 @@ impl Plugin for StandIn {
 
 /// Page `page` of 300 of the book at `path`.
 fn page(path: &str, page: u32) -> events::Reading {
-    events::Reading {
-        path: path.into(),
-        title: String::new(),
-        progress: page as f32 / 3.0,
-        section: 0,
-        offset: page * 1000,
-        page: Some(page),
-        pages: Some(300),
-        chapter: String::new(),
-        chapter_left: None,
-    }
+    events::Reading::new(
+        path.into(),
+        String::new(),
+        page as f32 / 3.0,
+        0,
+        page * 1000,
+        String::new(),
+    )
+    .page(page)
+    .pages(300)
 }
 
 /// A stay as logged: book, page, start (seconds after [`NOW`]) and
@@ -398,12 +397,13 @@ fn reading_before_the_clock_is_set_counts_once_it_is() {
 fn pages_counted_by_the_progress_are_told_apart() {
     // Before the reader counted the pages: a page in a thousand, by the
     // progress, which two pages of a long book may share.
-    let estimated = |progress: f32, offset: u32| events::Reading {
-        page: None,
-        pages: None,
-        progress,
-        offset,
-        ..page(ALICE, 1)
+    let estimated = |progress: f32, offset: u32| {
+        let mut reading = page(ALICE, 1);
+        reading.page = None;
+        reading.pages = None;
+        reading.progress = progress;
+        reading.offset = offset;
+        reading
     };
     let mut device = Device::new(true, "");
     device.open(0, estimated(10.0, 0));

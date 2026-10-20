@@ -471,7 +471,7 @@ impl Browser {
                 let deleted = ops::delete(env.storage, path);
                 if deleted.is_ok() {
                     for path in books {
-                        cx.command(events::BOOK_REMOVED.emit(events::BookRemoved { path }));
+                        cx.command(events::BOOK_REMOVED.emit(events::BookRemoved::new(path)));
                     }
                     cx.command(paperpaw_sdk::library::changed());
                 }
@@ -819,10 +819,10 @@ fn tell_moved(env: &Env<'_>, from: &str, to: &str, cx: &mut Cx<'_, '_>) -> Optio
             return;
         }
         told += 1;
-        cx.command(events::BOOK_MOVED.emit(events::BookMoved {
-            from: format!("{from}{rest}"),
-            path: book.to_string(),
-        }));
+        cx.command(events::BOOK_MOVED.emit(events::BookMoved::new(
+            format!("{from}{rest}"),
+            book.to_string(),
+        )));
     });
     more.then(|| env.i18n.tr("file-manager.moved-many").to_string())
 }

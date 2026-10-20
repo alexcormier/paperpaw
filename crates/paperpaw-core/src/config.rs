@@ -42,7 +42,7 @@ impl Kernel {
         self.setting_changed(id);
         self.output
             .commands
-            .push(events::SETTING_CHANGED.emit(events::SettingChanged { id: id.clone() }));
+            .push(events::SETTING_CHANGED.emit(events::SettingChanged::new(id.clone())));
     }
 
     /// Writes a changed setting to the configuration file on the device,
@@ -79,7 +79,7 @@ impl Kernel {
                 self.setting_changed(&id);
                 self.output
                     .commands
-                    .push(events::SETTING_CHANGED.emit(events::SettingChanged { id: id.clone() }));
+                    .push(events::SETTING_CHANGED.emit(events::SettingChanged::new(id.clone())));
             }
         }
     }
@@ -150,7 +150,7 @@ impl Kernel {
         if *id == core_settings::SCOPE_ONLY {
             self.output
                 .commands
-                .push(events::SETTING_CHANGED.emit(events::SettingChanged { id: id.clone() }));
+                .push(events::SETTING_CHANGED.emit(events::SettingChanged::new(id.clone())));
         }
     }
 

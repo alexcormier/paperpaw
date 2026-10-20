@@ -622,23 +622,23 @@ mod tests {
 
     #[test]
     fn pages_come_from_the_reader_or_the_progress() {
-        let counted = paperpaw_sdk::builtin::events::Reading {
-            path: "books/a.epub".into(),
-            title: String::new(),
-            progress: 4.0,
-            section: 3,
-            offset: 120,
-            page: Some(12),
-            pages: Some(300),
-            chapter: String::new(),
-            chapter_left: None,
-        };
+        let counted = paperpaw_sdk::builtin::events::Reading::new(
+            "books/a.epub".into(),
+            String::new(),
+            4.0,
+            3,
+            120,
+            String::new(),
+        )
+        .page(12)
+        .pages(300);
         assert_eq!(page_of(&counted), (12, 300));
-        let estimated = paperpaw_sdk::builtin::events::Reading {
-            page: None,
-            pages: None,
-            progress: 42.5,
-            ..counted
+        let estimated = {
+            let mut reading = counted;
+            reading.page = None;
+            reading.pages = None;
+            reading.progress = 42.5;
+            reading
         };
         assert_eq!(page_of(&estimated), (426, 1000));
     }

@@ -83,17 +83,16 @@ impl Device {
     /// The reader says `event` about page `page` of the book at `path`,
     /// `seconds` after the start.
     fn reader(&mut self, seconds: u64, event: Event<Reading>, path: &str, page: u32) {
-        let reading = Reading {
-            path: path.into(),
-            title: String::new(),
-            progress: page as f32 / 3.0,
-            section: 0,
-            offset: page * 1000,
-            page: Some(page),
-            pages: Some(300),
-            chapter: String::new(),
-            chapter_left: None,
-        };
+        let reading = Reading::new(
+            path.into(),
+            String::new(),
+            page as f32 / 3.0,
+            0,
+            page * 1000,
+            String::new(),
+        )
+        .page(page)
+        .pages(300);
         let Command::Emit(id, params) = event.emit(reading) else {
             unreachable!("an event");
         };

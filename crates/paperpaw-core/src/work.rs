@@ -537,7 +537,7 @@ impl Kernel {
             return;
         }
         for id in touched {
-            let changed = events::SettingChanged { id };
+            let changed = events::SettingChanged::new(id);
             self.output
                 .commands
                 .push(events::SETTING_CHANGED.emit(changed));

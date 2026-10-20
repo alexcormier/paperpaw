@@ -138,10 +138,7 @@ impl Harness {
     fn export(&mut self, path: &str) -> Vec<HttpCall> {
         self.send(
             "core.notes-exported",
-            NotesExported {
-                path: String::from(path),
-                title: String::from("Alice"),
-            },
+            NotesExported::new(String::from(path), String::from("Alice")),
         );
         self.requests()
     }

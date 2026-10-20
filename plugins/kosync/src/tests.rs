@@ -29,10 +29,11 @@ fn translations_are_complete() {
 
 #[test]
 fn positions_come_from_reading_events() {
-    let found = position(&Reading {
-        section: 3,
-        offset: 120,
-        ..reading(42.5)
+    let found = position(&{
+        let mut moved = reading(42.5);
+        moved.section = 3;
+        moved.offset = 120;
+        moved
     });
     assert_eq!(found.path, BOOK);
     assert_eq!(found.at, Locator::new(3, 120));
@@ -326,17 +327,14 @@ impl Harness {
 }
 
 fn reading(percent: f32) -> Reading {
-    Reading {
-        path: BOOK.to_string(),
-        title: String::new(),
-        progress: percent,
-        section: 0,
-        offset: (percent * 10.0) as u32,
-        page: None,
-        pages: None,
-        chapter: String::new(),
-        chapter_left: None,
-    }
+    Reading::new(
+        BOOK.to_string(),
+        String::new(),
+        percent,
+        0,
+        (percent * 10.0) as u32,
+        String::new(),
+    )
 }
 
 fn requests(out: &[Command]) -> Vec<&HttpRequest> {
@@ -523,9 +521,7 @@ fn another_server_signs_out() {
     let mut h = Harness::new(false);
     h.emit(&events::BOOK_OPENED, reading(20.0));
     h.set(&SERVER, "sync.example.org");
-    let changed = SettingChanged {
-        id: SERVER.id().clone(),
-    };
+    let changed = SettingChanged::new(SERVER.id().clone());
     let out = h.emit(&events::SETTING_CHANGED, changed);
     assert!(out.contains(&save_key(None)), "{out:?}");
     h.apply(out);
@@ -541,8 +537,6 @@ fn another_server_signs_out() {
 fn the_same_server_keeps_the_account() {
     let mut h = Harness::new(false);
     h.set(&SERVER, "sync.koreader.rocks/");
-    let changed = SettingChanged {
-        id: SERVER.id().clone(),
-    };
+    let changed = SettingChanged::new(SERVER.id().clone());
     assert!(h.emit(&events::SETTING_CHANGED, changed).is_empty());
 }

@@ -226,7 +226,7 @@ impl TocScreen {
         };
         if let Some(at) = target {
             cx.command(Command::Back);
-            cx.command(events::GOTO.emit(events::Goto::new(self.path.clone(), at)));
+            cx.command(events::GOTO.emit(events::Goto::to(self.path.clone(), at)));
         }
     }
 

@@ -128,10 +128,7 @@ fn rename(kernel: &mut Kernel, path: &str, name: &str) {
 }
 
 fn choose(kernel: &mut Kernel, path: &str, option: &str) {
-    let picked = Picked {
-        path: path.into(),
-        option: option.into(),
-    };
+    let picked = Picked::new(path.into(), option.into());
     let event = Id::new_static("file-manager.chosen");
     let effects = kernel.send_event(Instant(0), event, picked.to_params());
     settle(kernel, effects);
