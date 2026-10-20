@@ -256,3 +256,6 @@ mod tests {
         assert!(catalogs.iter().all(|c| c.password.is_empty()));
     }
 }
+
+#[cfg(test)]
+mod format_tests;

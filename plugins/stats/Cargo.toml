@@ -16,6 +16,7 @@ paperpaw-sqlite.workspace = true
 paperpaw-sdk.workspace = true
 
 [dev-dependencies]
+proptest.workspace = true
 paperpaw-i18n.workspace = true
 paperpaw-core.workspace = true
 paperpaw-platform.workspace = true

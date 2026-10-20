@@ -311,6 +311,9 @@ fn nearest_on_line(words: &[WordBox], index: usize, below: bool) -> usize {
 }
 
 #[cfg(test)]
+mod moving_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use paperpaw_sdk::document::Locator;

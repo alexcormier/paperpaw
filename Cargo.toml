@@ -27,6 +27,7 @@ members = [
     "crates/paperpaw-fat",
     "crates/paperpaw-update",
     "crates/paperpaw-digest",
+    "crates/paperpaw-native",
     "crates/paperpaw-json",
     "crates/paperpaw-qr",
     "plugins/diagnostics",
@@ -108,6 +109,7 @@ paperpaw-x4 = { path = "crates/paperpaw-x4", version = "0.4.0-dev" }
 paperpaw-fat = { path = "crates/paperpaw-fat" }
 paperpaw-update = { path = "crates/paperpaw-update", version = "0.4.0-dev" }
 paperpaw-digest = { path = "crates/paperpaw-digest", version = "0.4.0-dev" }
+paperpaw-native = { path = "crates/paperpaw-native", version = "0.4.0-dev" }
 paperpaw-json = { path = "crates/paperpaw-json", version = "0.4.0-dev" }
 paperpaw-qr = { path = "crates/paperpaw-qr", version = "0.4.0-dev" }
 paperpaw-sdk = { path = "crates/paperpaw-sdk", version = "0.4.0-dev" }
@@ -161,6 +163,8 @@ paperpaw-plugin-format-epub = { path = "plugins/format-epub", version = "0.4.0-d
 paperpaw-plugin-format-txt = { path = "plugins/format-txt", version = "0.4.0-dev" }
 paperpaw-plugin-format-xtc = { path = "plugins/format-xtc", version = "0.4.0-dev" }
 paperpaw-plugin-fonts-default = { path = "plugins/fonts-default", version = "0.4.0-dev", default-features = false }
+# Tests only: property-based tests (parsers never panic, round trips).
+proptest = { version = "1.5", default-features = false, features = ["std"] }
 
 [workspace.lints.rust]
 unsafe_op_in_unsafe_fn = "deny"

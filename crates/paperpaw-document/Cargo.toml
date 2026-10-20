@@ -14,5 +14,8 @@ keywords = ["e-reader", "ebook", "document"]
 [dependencies]
 paperpaw-platform.workspace = true
 
+[dev-dependencies]
+proptest.workspace = true
+
 [lints]
 workspace = true

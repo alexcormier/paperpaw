@@ -235,3 +235,6 @@ mod tests {
         assert_eq!(super::last(&storage), "Night reading");
     }
 }
+
+#[cfg(test)]
+mod format_tests;

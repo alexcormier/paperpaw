@@ -18,7 +18,9 @@ miniz_oxide = { version = "0.8", default-features = false, features = ["with-all
 
 [dev-dependencies]
 paperpaw-i18n.workspace = true
+paperpaw-layout.workspace = true
 paperpaw-zip = { workspace = true, features = ["testing"] }
+proptest.workspace = true
 
 [lints]
 workspace = true

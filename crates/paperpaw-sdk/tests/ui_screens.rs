@@ -1,0 +1,347 @@
+//! The SDK's own small screens, by touch and by buttons alike: the
+//! choice overlay ([`Choice`]) picks the option tapped or confirmed and
+//! says so with its reply, and the screen choosing a status line's items
+//! ([`ItemsScreen`]) shows, hides and reorders them, writing the setting
+//! the same whether a finger or a button did it.
+
+// Tests panic on purpose when something is wrong.
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
+mod support;
+
+use std::borrow::Cow;
+
+use paperpaw_sdk::builtin::{actions, params};
+use paperpaw_sdk::event::{Event, EventData};
+use paperpaw_sdk::setting::Setting;
+use paperpaw_sdk::ui::choice::{self, Choice, Picked};
+use paperpaw_sdk::ui::items::ItemsScreen;
+use paperpaw_sdk::ui::{Reorder, UiStyle};
+use paperpaw_sdk::{
+    Command, Cx, Handled, Id, Output, Params, PointerPhase, Rect, Screen, SettingSpec,
+    SettingValue, StatusItemSpec, StatusValue,
+};
+
+use support::{Device, Harness, describe, drawn_outside, middle, pointer, tap};
+
+const SCREEN: Id = Id::new_static("t.choice");
+const CHOSEN: Event<Picked> = Event::new("t.chosen");
+
+/// The parameters `choice::open` gives the screen.
+fn opened(options: &[&str]) -> Params {
+    let Command::OpenScreen(screen, params) = choice::open(
+        SCREEN,
+        &CHOSEN,
+        "Delete “a.epub”?",
+        "books/a.epub",
+        "t.option.",
+        options,
+    ) else {
+        panic!("not a screen");
+    };
+    assert_eq!(screen, SCREEN);
+    params
+}
+
+fn run<R>(h: &Harness, f: impl FnOnce(&mut Cx<'_, '_>) -> R) -> (R, Vec<Command>) {
+    let env = h.env();
+    let mut output = Output::default();
+    let result = {
+        let mut cx = Cx::new(&env, &mut output);
+        f(&mut cx)
+    };
+    (result, output.commands)
+}
+
+/// The option a reply among `commands` picked, after going back.
+fn picked(commands: &[Command]) -> Option<String> {
+    match commands {
+        [Command::Back, Command::Emit(event, params)] => {
+            assert_eq!(event.as_str(), CHOSEN.as_str());
+            let picked = Picked::from_params(params).unwrap();
+            assert_eq!(picked.path, "books/a.epub");
+            Some(picked.option)
+        }
+        [Command::Back] | [] => None,
+        other => panic!("{other:?}"),
+    }
+}
+
+// ---- The choice overlay -------------------------------------------------
+
+#[test]
+fn each_option_is_picked_alike_by_tap_and_by_confirm() {
+    for device in [Device::TOUCH, Device::BUTTONS] {
+        let h = Harness::new(device);
+        let options = ["open", "rename", "delete", "cancel"];
+        let mut screen = Choice::new(&h.env(), &opened(&options));
+        let region = screen.region(&h.env()).unwrap();
+        assert!(screen.dims_below());
+        assert_eq!(region.bottom(), 800, "at the bottom");
+        // Drawn inside its region, one row for each option.
+        let (described, mut frame) = describe(480, 800, |c| screen.draw(c, &h.env()));
+        assert_eq!(drawn_outside(&mut frame, region), None);
+        let rows: Vec<Rect> = described
+            .iter()
+            .filter(|d| d.role == paperpaw_sdk::semantics::Role::Row)
+            .map(|d| d.area)
+            .collect();
+        assert_eq!(rows.len(), options.len());
+        // Tapped.
+        let mut by_tap = Vec::new();
+        for row in &rows {
+            let m = middle(*row);
+            let mut screen = Choice::new(&h.env(), &opened(&options));
+            let (handled, commands) = run(&h, |cx| screen.on_gesture(tap(m.x, m.y), cx));
+            assert_eq!(handled, Handled::Yes);
+            by_tap.push(picked(&commands).unwrap());
+        }
+        assert_eq!(by_tap, options);
+        // With the buttons: down to each, then confirm.
+        let mut by_buttons = Vec::new();
+        for n in 0..options.len() {
+            let mut screen = Choice::new(&h.env(), &opened(&options));
+            // On touch screens the first press shows the focus.
+            let presses = n + usize::from(device.touch);
+            for _ in 0..presses {
+                run(&h, |cx| screen.on_action(&actions::DOWN, cx));
+            }
+            let (_, commands) = run(&h, |cx| screen.on_action(&actions::CONFIRM, cx));
+            by_buttons.push(picked(&commands).unwrap());
+        }
+        assert_eq!(by_buttons, options);
+    }
+}
+
+#[test]
+fn the_focus_goes_round_and_back_picks_nothing() {
+    let h = Harness::new(Device::BUTTONS);
+    let options = ["a", "b", "c"];
+    let mut screen = Choice::new(&h.env(), &opened(&options));
+    // Up from the first: the last.
+    run(&h, |cx| screen.on_action(&actions::UP, cx));
+    let (_, commands) = run(&h, |cx| screen.on_action(&actions::CONFIRM, cx));
+    assert_eq!(picked(&commands).as_deref(), Some("c"));
+    // The page buttons step too (a short list is one page).
+    let mut screen = Choice::new(&h.env(), &opened(&options));
+    run(&h, |cx| screen.on_action(&actions::NEXT_PAGE, cx));
+    let (_, commands) = run(&h, |cx| screen.on_action(&actions::CONFIRM, cx));
+    assert_eq!(picked(&commands).as_deref(), Some("b"));
+    // Back is left to the kernel: it closes the overlay, nothing picked.
+    let (handled, commands) = run(&h, |cx| screen.on_action(&actions::BACK, cx));
+    assert_eq!(handled, Handled::No);
+    assert!(commands.is_empty());
+}
+
+#[test]
+fn broken_parameters_make_an_empty_choice_that_picks_nothing() {
+    let h = Harness::new(Device::TOUCH);
+    let params = Params::new()
+        .with("options", ",,,")
+        .with(params::REPLY, "Not An Id");
+    let mut screen = Choice::new(&h.env(), &params);
+    let region = screen.region(&h.env()).unwrap();
+    assert!(region.bottom() <= 800);
+    let (_, mut frame) = describe(480, 800, |c| screen.draw(c, &h.env()));
+    assert_eq!(drawn_outside(&mut frame, region), None);
+    let (_, commands) = run(&h, |cx| screen.on_action(&actions::CONFIRM, cx));
+    assert_eq!(commands, [Command::Back], "closed, nothing to say");
+    let m = middle(region);
+    let (_, commands) = run(&h, |cx| screen.on_gesture(tap(m.x, m.y), cx));
+    assert!(commands.is_empty());
+    // No parameters at all.
+    let screen = Choice::new(&h.env(), &Params::new());
+    assert!(screen.region(&h.env()).unwrap().bottom() <= 800);
+}
+
+#[test]
+fn a_long_title_takes_up_to_three_lines_and_the_options_stay_below_it() {
+    let h = Harness::new(Device::TOUCH);
+    let title = "Delete all the books of the series “The Long Name of a Series That Goes On and On” and their notes, highlights and bookmarks from this device?";
+    let params = opened(&["delete", "cancel"]).with(params::TITLE, title);
+    let screen = Choice::new(&h.env(), &params);
+    let region = screen.region(&h.env()).unwrap();
+    let mut screen = screen;
+    let (described, mut frame) = describe(480, 800, |c| screen.draw(c, &h.env()));
+    assert_eq!(drawn_outside(&mut frame, region), None);
+    let rows: Vec<Rect> = described
+        .iter()
+        .filter(|d| d.role == paperpaw_sdk::semantics::Role::Row)
+        .map(|d| d.area)
+        .collect();
+    let texts: Vec<Rect> = described
+        .iter()
+        .filter(|d| d.role == paperpaw_sdk::semantics::Role::Text && d.area.y < rows[0].y)
+        .map(|d| d.area)
+        .collect();
+    assert!((1..=3).contains(&texts.len()), "{} lines", texts.len());
+    assert!(texts.iter().all(|t| t.bottom() <= u32::from(rows[0].y)));
+}
+
+/// More options than the screen holds (a plugin offering many): every
+/// option is still to be reached, on the screen.
+#[test]
+#[ignore = "bug: Choice lays all options out in one list taller than the screen; those below are off it"]
+fn more_options_than_fit_stay_on_the_screen() {
+    let h = Harness::new(Device::TOUCH);
+    let options: Vec<String> = (0..30).map(|n| format!("option{n}")).collect();
+    let options: Vec<&str> = options.iter().map(String::as_str).collect();
+    let mut screen = Choice::new(&h.env(), &opened(&options));
+    let (described, _) = describe(480, 800, |c| screen.draw(c, &h.env()));
+    let rows: Vec<Rect> = described
+        .iter()
+        .filter(|d| d.role == paperpaw_sdk::semantics::Role::Row)
+        .map(|d| d.area)
+        .collect();
+    assert!(!rows.is_empty());
+    assert!(
+        rows.iter().all(|r| r.bottom() <= 800),
+        "rows below the screen: {:?}",
+        rows.last()
+    );
+}
+
+// ---- Choosing a status line's items -------------------------------------
+
+const STATUS: Setting<paperpaw_sdk::Text> = Setting::new("t.status");
+
+fn status_harness(device: Device, value: &str) -> Harness {
+    let mut h = Harness::new(device);
+    for (id, title) in [
+        ("t.time", "t.time"),
+        ("t.page", "t.page"),
+        ("t.battery", "t.battery"),
+    ] {
+        h.status_items.add(StatusItemSpec {
+            id: Id::new_static(id),
+            title: Cow::Borrowed(title),
+            value: Box::new(|_, _| Some(StatusValue::Text("x".into()))),
+        });
+    }
+    h.settings
+        .define(SettingSpec::list(
+            &STATUS,
+            "t.status",
+            Cow::Owned(value.to_string()),
+        ))
+        .unwrap();
+    h
+}
+
+fn items_screen(h: &Harness) -> ItemsScreen {
+    let params = Params::new().with(params::ID, "t.status");
+    ItemsScreen::open(&h.env(), &params)
+}
+
+/// The value the screen wrote for the setting.
+fn written(commands: &[Command]) -> Option<String> {
+    commands.iter().find_map(|c| match c {
+        Command::SetSetting(id, SettingValue::Text(v)) if id.as_str() == "t.status" => {
+            Some(v.to_string())
+        }
+        _ => None,
+    })
+}
+
+/// The rows of the items screen, as drawn: shown items first, in their
+/// order, then the others.
+fn item_rows(h: &Harness, screen: &mut ItemsScreen) -> Vec<Rect> {
+    let (described, mut frame) = describe(480, 800, |c| screen.draw(c, &h.env()));
+    assert_eq!(drawn_outside(&mut frame, Rect::new(0, 0, 480, 800)), None);
+    described
+        .iter()
+        .filter(|d| d.role == paperpaw_sdk::semantics::Role::Row)
+        .map(|d| d.area)
+        .collect()
+}
+
+#[test]
+fn items_are_shown_and_hidden_alike_by_tap_and_by_confirm() {
+    // "t.page, t.time" shown: rows page, time, then battery.
+    for (row, expected) in [
+        (0, "t.time"),
+        (1, "t.page"),
+        (2, "t.page, t.time, t.battery"),
+    ] {
+        let mut by_tap = None;
+        let mut by_button = None;
+        for device in [Device::TOUCH, Device::BUTTONS] {
+            let h = status_harness(device, "t.page, t.time");
+            let mut screen = items_screen(&h);
+            if device.touch {
+                let rows = item_rows(&h, &mut screen);
+                assert_eq!(rows.len(), 3);
+                // On the row, away from the grip.
+                let at = rows[row];
+                let (_, commands) = run(&h, |cx| {
+                    screen.on_gesture(tap(i32::from(at.x) + 20, middle(at).y), cx)
+                });
+                by_tap = written(&commands);
+            } else {
+                for _ in 0..row {
+                    run(&h, |cx| screen.on_action(&actions::DOWN, cx));
+                }
+                let (_, commands) = run(&h, |cx| screen.on_action(&actions::CONFIRM, cx));
+                by_button = written(&commands);
+            }
+        }
+        assert_eq!(by_tap.as_deref(), Some(expected), "row {row}");
+        assert_eq!(by_button, by_tap, "row {row}");
+    }
+}
+
+#[test]
+fn shown_items_are_reordered_by_their_grip() {
+    let h = status_harness(Device::TOUCH, "t.page, t.time, t.battery");
+    let mut screen = items_screen(&h);
+    let rows = item_rows(&h, &mut screen);
+    let grip = middle(Reorder::grip(rows[0]));
+    let to = middle(rows[2]);
+    let (_, commands) = run(&h, |cx| {
+        assert_eq!(
+            screen.on_pointer(&pointer(PointerPhase::Down, grip.x, grip.y), cx),
+            Handled::Yes
+        );
+        screen.on_pointer(&pointer(PointerPhase::Move, grip.x, to.y), cx);
+        screen.on_pointer(&pointer(PointerPhase::Up, grip.x, to.y), cx)
+    });
+    assert_eq!(
+        written(&commands).as_deref(),
+        Some("t.time, t.battery, t.page")
+    );
+    // Items not shown have no grip: a finger there is a tap's.
+    let h = status_harness(Device::TOUCH, "t.page");
+    let mut screen = items_screen(&h);
+    let rows = item_rows(&h, &mut screen);
+    let grip = middle(Reorder::grip(rows[1]));
+    let (handled, _) = run(&h, |cx| {
+        screen.on_pointer(&pointer(PointerPhase::Down, grip.x, grip.y), cx)
+    });
+    assert_eq!(handled, Handled::No);
+}
+
+/// Items of a plugin that is not there now (switched off, being
+/// updated) are part of the setting: changing the others keeps them, so
+/// they are back in their place when the plugin is.
+#[test]
+#[ignore = "bug: ItemsScreen writes back only the items there are now, dropping those of absent plugins"]
+fn items_of_a_plugin_not_there_now_are_kept() {
+    let h = status_harness(Device::BUTTONS, "t.page, gone.clock, t.time");
+    let mut screen = items_screen(&h);
+    // Hide the time (the second row).
+    run(&h, |cx| screen.on_action(&actions::DOWN, cx));
+    let (_, commands) = run(&h, |cx| screen.on_action(&actions::CONFIRM, cx));
+    let value = written(&commands).unwrap();
+    assert!(value.contains("gone.clock"), "{value}");
+}
+
+#[test]
+fn a_status_line_setting_without_an_id_writes_nothing() {
+    let h = status_harness(Device::BUTTONS, "t.page");
+    let mut screen = ItemsScreen::open(&h.env(), &Params::new().with(params::ID, "Not An Id"));
+    let (handled, commands) = run(&h, |cx| screen.on_action(&actions::CONFIRM, cx));
+    assert_eq!(handled, Handled::Yes);
+    assert_eq!(written(&commands), None);
+    let style = UiStyle::new(&h.env());
+    assert!(style.row > 0);
+}

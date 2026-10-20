@@ -13,5 +13,8 @@ keywords = ["xml", "xhtml", "epub", "streaming", "no-std"]
 
 [dependencies]
 
+[dev-dependencies]
+proptest.workspace = true
+
 [lints]
 workspace = true

@@ -1,0 +1,422 @@
+//! The emulator run headless, as CI and bug reports run it: its command
+//! line, its script steps (and what a wrong one says), and what the
+//! emulated device does beyond drawing: sleeping until the power button
+//! wakes it, turning its screen, restarting when a plugin asks, speaking
+//! a book aloud.
+
+// Tests panic on purpose when something is wrong.
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
+use std::fs::{self, File};
+use std::path::{Path, PathBuf};
+use std::process::{Command, Output};
+
+/// The repository: two folders above this crate.
+fn root() -> PathBuf {
+    let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
+    manifest
+        .ancestors()
+        .nth(2)
+        .unwrap_or(manifest)
+        .to_path_buf()
+}
+
+/// A fresh library named `name` with the sample books, past the setup.
+fn library(name: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!("paperpaw-headless-{name}-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    let books = dir.join("books");
+    fs::create_dir_all(&books).unwrap();
+    for entry in fs::read_dir(root().join("samples/library/books")).unwrap() {
+        let entry = entry.unwrap();
+        fs::copy(entry.path(), books.join(entry.file_name())).unwrap();
+    }
+    let setup = dir.join(".paperpaw/plugins/setup");
+    fs::create_dir_all(&setup).unwrap();
+    fs::write(setup.join("done"), "").unwrap();
+    dir
+}
+
+/// What a run printed, and how it ended.
+struct Run {
+    ok: bool,
+    stdout: String,
+    stderr: String,
+}
+
+impl Run {
+    /// The screen shown at the end, from the summary line.
+    fn screen(&self) -> &str {
+        let line = self.stdout.lines().last().unwrap_or_default();
+        line.split("screen ")
+            .nth(1)
+            .and_then(|s| s.split(',').next())
+            .unwrap_or_default()
+    }
+}
+
+impl From<Output> for Run {
+    fn from(output: Output) -> Self {
+        Self {
+            ok: output.status.success(),
+            stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+        }
+    }
+}
+
+fn emulator(args: &[&str]) -> Run {
+    Command::new(env!("CARGO_BIN_EXE_paperpaw-emu"))
+        .args(args)
+        .output()
+        .unwrap()
+        .into()
+}
+
+/// Runs `script` headless on `profile` in the library `library`, with
+/// `args` more.
+fn run_in(library: &Path, profile: &str, script: &str, args: &[&str]) -> Run {
+    Command::new(env!("CARGO_BIN_EXE_paperpaw-emu"))
+        .args(["--profile", profile, "--headless", "--library"])
+        .arg(library)
+        .args(["--set", "home.gesture-tips=false"])
+        .args(["--script", script])
+        .args(args)
+        .output()
+        .unwrap()
+        .into()
+}
+
+/// The same in a fresh library named `name`, no book open at start.
+fn run(name: &str, profile: &str, script: &str, args: &[&str]) -> Run {
+    let library = library(name);
+    let mut all = vec!["--set", "reader.open-last=false"];
+    all.extend_from_slice(args);
+    let run = run_in(&library, profile, script, &all);
+    let _ = fs::remove_dir_all(&library);
+    run
+}
+
+/// A PNG's width and height.
+fn size(path: &Path) -> (u32, u32) {
+    let decoder = png::Decoder::new(File::open(path).unwrap());
+    let reader = decoder.read_info().unwrap();
+    let info = reader.info();
+    (info.width, info.height)
+}
+
+#[test]
+fn help_and_the_profiles_are_printed() {
+    let help = emulator(&["--help"]);
+    assert!(help.ok);
+    assert!(help.stdout.contains("USAGE:"), "{}", help.stdout);
+    assert!(help.stdout.contains("--heap-budget"));
+    let profiles = emulator(&["--list-profiles"]);
+    assert!(profiles.ok);
+    for id in [
+        "xteink-x4",
+        "xteink-x4-pro",
+        "boox-go-7",
+        "kobo-libra-colour",
+    ] {
+        assert!(
+            profiles.stdout.lines().any(|l| l.starts_with(id)),
+            "{id}: {}",
+            profiles.stdout
+        );
+    }
+}
+
+/// Wrong arguments end the run with a message saying what is wrong,
+/// before any window could open.
+#[test]
+fn wrong_arguments_are_errors_that_say_why() {
+    let cases: &[(&[&str], &str)] = &[
+        (&["--frobnicate"], "unknown argument `--frobnicate`"),
+        (
+            &["--headless", "--profile", "nope"],
+            "unknown profile `nope`",
+        ),
+        (&["--headless", "--profile"], "--profile requires a value"),
+        (
+            &["--headless", "--set", "no-value"],
+            "--set expects <key>=<value>",
+        ),
+        (
+            &["--headless", "--set", "nosection=1"],
+            "--set expects <section>.<key>=<value>",
+        ),
+        (
+            &["--headless", "--heap-budget", "lots"],
+            "--heap-budget expects KiB or `none`",
+        ),
+        (
+            &["--headless", "--trace-alloc", "big"],
+            "--trace-alloc expects bytes",
+        ),
+        (&["--heap-report"], "--heap-report requires --headless"),
+        (
+            &["--script", "confirm"],
+            "--script and --screenshot require --headless",
+        ),
+        (
+            &["--headless", "--config", "no/such/paperpaw.ini"],
+            "cannot read no/such/paperpaw.ini",
+        ),
+    ];
+    for (args, says) in cases {
+        let run = emulator(args);
+        assert!(!run.ok, "{args:?} ran");
+        assert!(run.stderr.contains(says), "{args:?}: {}", run.stderr);
+    }
+}
+
+/// A step the device cannot do, or that is written wrong, stops the
+/// script with the step and the reason.
+#[test]
+fn wrong_script_steps_are_errors_that_name_the_step() {
+    let cases = [
+        ("xteink-x4", "tap:10:10", "has no touch screen"),
+        ("xteink-x4", "swipe:1:1:2:2", "has no touch screen"),
+        ("xteink-x4", "menu", "has no button `menu`"),
+        ("xteink-x4", "long:home", "has no button `home`"),
+        ("xteink-x4", "wait:soon", "`soon` is not a number"),
+        ("xteink-x4", "serve:ever", "`ever` is not a number"),
+        ("xteink-x4", "a:b:c:d:e:f", "unknown step"),
+        ("xteink-x4", "run:Not An Id", "step `run:Not An Id`"),
+        (
+            "xteink-x4",
+            "open:settings.group:novalue",
+            "`novalue` is no key=value",
+        ),
+        ("boox-go-7", "tap:ten:10", "`ten` is not a number"),
+        (
+            "boox-go-7",
+            "tap-on:Nothing says this",
+            "nothing on the screen says",
+        ),
+    ];
+    let library = library("steps");
+    for (profile, step, says) in cases {
+        let run = run_in(
+            &library,
+            profile,
+            step,
+            &["--set", "reader.open-last=false"],
+        );
+        assert!(!run.ok, "{profile} {step} ran");
+        assert!(
+            run.stderr.contains(&format!("step `{step}`")),
+            "{step}: {}",
+            run.stderr
+        );
+        assert!(run.stderr.contains(says), "{step}: {}", run.stderr);
+    }
+    let _ = fs::remove_dir_all(&library);
+}
+
+/// `shot:` saves the screen in the middle of a script, `--screenshot`
+/// at its end; `redraw` draws the same again.
+#[test]
+fn screenshots_are_taken_during_and_after_a_script() {
+    let library = library("shots");
+    let during = library.join("out/home.png");
+    let after = library.join("menu.png");
+    let script = format!("shot:{},redraw,run:core.menu", during.display());
+    let run = run_in(
+        &library,
+        "xteink-x4",
+        &script,
+        &[
+            "--set",
+            "reader.open-last=false",
+            "--screenshot",
+            after.to_str().unwrap(),
+        ],
+    );
+    assert!(run.ok, "{}", run.stderr);
+    assert_eq!(run.screen(), "menu.list");
+    // The X4 held upright: 480 wide, 800 high.
+    assert_eq!(size(&during), (480, 800));
+    assert_eq!(size(&after), (480, 800));
+    assert_ne!(fs::read(&during).unwrap(), fs::read(&after).unwrap());
+    let _ = fs::remove_dir_all(&library);
+}
+
+/// The power button puts the device to sleep (the sleep screen shown,
+/// plugins told to save); asleep, other buttons do nothing, and power
+/// wakes it where it was.
+#[test]
+fn power_sleeps_and_only_power_wakes() {
+    let asleep = run(
+        "sleep",
+        "xteink-x4",
+        "power,wait:500,page-forward,confirm",
+        &[],
+    );
+    assert!(asleep.ok, "{}", asleep.stderr);
+    assert!(
+        asleep.stderr.contains("xteink-x4: asleep"),
+        "{}",
+        asleep.stderr
+    );
+    assert!(!asleep.stderr.contains("awake"));
+    assert_eq!(asleep.screen(), "sleep.screen");
+    let woken = run(
+        "wake",
+        "xteink-x4",
+        "power,wait:500,page-forward,power,wait:500",
+        &[],
+    );
+    assert!(woken.ok, "{}", woken.stderr);
+    assert!(
+        woken.stderr.contains("xteink-x4: awake"),
+        "{}",
+        woken.stderr
+    );
+    assert_eq!(woken.screen(), "home.dashboard");
+}
+
+/// The screen turned, by the configuration at start or chosen in the
+/// settings while running: the panel trades width and height.
+#[test]
+fn turning_the_screen_trades_the_panels_width_and_height() {
+    let library = library("turned");
+    let shot = library.join("shot.png");
+    let shot_arg = shot.to_str().unwrap();
+    let upright = run_in(
+        &library,
+        "boox-go-7",
+        "",
+        &["--set", "reader.open-last=false", "--screenshot", shot_arg],
+    );
+    assert!(upright.ok, "{}", upright.stderr);
+    assert_eq!(size(&shot), (1264, 1680));
+    let configured = run_in(
+        &library,
+        "boox-go-7",
+        "",
+        &[
+            "--set",
+            "reader.open-last=false",
+            "--set",
+            "core.rotation=core.rotation.landscape",
+            "--screenshot",
+            shot_arg,
+        ],
+    );
+    assert!(configured.ok, "{}", configured.stderr);
+    assert_eq!(size(&shot), (1680, 1264));
+    let chosen = run_in(
+        &library,
+        "boox-go-7",
+        "open:settings.choose:id=core.rotation,wait:300,tap-on:On its side,wait:300",
+        &["--set", "reader.open-last=false", "--screenshot", shot_arg],
+    );
+    assert!(chosen.ok, "{}", chosen.stderr);
+    assert_eq!(size(&shot), (1680, 1264));
+    // Kept: written to the configuration on the card.
+    let ini = fs::read_to_string(library.join("paperpaw.ini")).unwrap();
+    assert!(ini.contains("rotation = core.rotation.landscape"), "{ini}");
+    let _ = fs::remove_dir_all(&library);
+}
+
+/// A plugin switched on in the plugin manager applies after the restart
+/// it offers: the emulated device builds its kernel anew, the plugin on.
+#[test]
+fn a_plugin_switched_on_applies_after_the_restart() {
+    let run = run(
+        "restart",
+        "boox-go-7",
+        "open:plugin-manager.list,wait:300,tap-on:Browser,wait:300,\
+         tap-on:Restart now,wait:500,open:plugin-manager.list,wait:300,describe",
+        &[],
+    );
+    assert!(run.ok, "{}", run.stderr);
+    assert!(run.stdout.contains("Row \"Browser, On,"), "{}", run.stdout);
+    // Asked for no restart again.
+    assert!(!run.stdout.contains("Restart now"), "{}", run.stdout);
+}
+
+/// Reading aloud where the device speaks: each passage logged, the next
+/// spoken when the one before has ended.
+#[test]
+fn reading_aloud_speaks_passage_after_passage() {
+    let library = library("speech");
+    let state = library.join(".paperpaw/plugins/reader");
+    fs::create_dir_all(&state).unwrap();
+    fs::write(
+        state.join("state.ini"),
+        "[reader]\nlast = books/alice-in-wonderland.txt\n",
+    )
+    .unwrap();
+    let aloud = run_in(
+        &library,
+        "boox-go-7",
+        "run:reader.read-aloud,wait:15000",
+        &[],
+    );
+    let _ = fs::remove_dir_all(&library);
+    assert!(aloud.ok, "{}", aloud.stderr);
+    assert_eq!(aloud.screen(), "reader.screen");
+    let spoken = aloud
+        .stderr
+        .lines()
+        .filter(|l| l.starts_with("speech (en, 100 %"))
+        .count();
+    assert!(spoken >= 2, "{}", aloud.stderr);
+    // The X4 does not speak: nothing is said there.
+    let silent = run(
+        "silent",
+        "xteink-x4",
+        "run:reader.read-aloud,wait:3000",
+        &[],
+    );
+    assert!(!silent.stderr.contains("speech ("), "{}", silent.stderr);
+}
+
+/// A configuration file (`--config`) is read, and `--set` wins over it.
+#[test]
+fn the_configuration_file_is_read_and_set_wins_over_it() {
+    let library = library("config");
+    let config = library.join("user.ini");
+    fs::write(&config, "[core]\nlanguage = de\nnight-mode = on\n").unwrap();
+    let config_arg = config.to_str().unwrap();
+    let german = run_in(
+        &library,
+        "boox-go-7",
+        "run:core.menu,describe",
+        &["--set", "reader.open-last=false", "--config", config_arg],
+    );
+    assert!(german.ok, "{}", german.stderr);
+    assert!(
+        german.stdout.contains("Row \"Einstellungen\""),
+        "{}",
+        german.stdout
+    );
+    assert!(
+        german.stdout.contains("(on)"),
+        "night mode on: {}",
+        german.stdout
+    );
+    let english = run_in(
+        &library,
+        "boox-go-7",
+        "run:core.menu,describe",
+        &[
+            "--set",
+            "reader.open-last=false",
+            "--config",
+            config_arg,
+            "--set",
+            "core.language=en",
+        ],
+    );
+    assert!(english.ok, "{}", english.stderr);
+    assert!(
+        english.stdout.contains("Row \"Settings\""),
+        "{}",
+        english.stdout
+    );
+    let _ = fs::remove_dir_all(&library);
+}

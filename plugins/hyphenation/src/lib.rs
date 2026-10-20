@@ -90,3 +90,6 @@ mod tests {
         assert_eq!(hyphenated(EN, "table"), "ta-ble");
     }
 }
+
+#[cfg(test)]
+mod words_tests;

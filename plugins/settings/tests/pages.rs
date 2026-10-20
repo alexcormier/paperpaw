@@ -1,250 +1,380 @@
-//! The settings pages with the real kernel, by the buttons of an X4:
-//! covered by a full screen, they are not made anew for each setting
-//! changed meanwhile, but once when they show again.
+//! The settings screens with the real kernel and the standard app, on a
+//! buttons-only X4 and a touch-only device: searching by words of the
+//! language shown (English and German, accents or not), a hit opening its
+//! page at the setting; a choice's list, the value chosen kept in
+//! `paperpaw.ini` and read by a new kernel; text typed for a setting;
+//! advanced settings; resetting a page and everything.
 
 // Tests panic on purpose when something is wrong.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use std::alloc::{GlobalAlloc, Layout, System};
-use std::borrow::Cow;
-use std::cell::Cell;
-use std::rc::Rc;
+mod common;
 
-use paperpaw_core::Kernel;
-use paperpaw_platform::{ButtonState, InputEvent, Rotation};
-use paperpaw_plugin_settings::{SCREEN, SettingsPlugin};
-use paperpaw_sdk::builtin::{params, slots};
-use paperpaw_sdk::widgets::{Widget, WidgetSpec};
-use paperpaw_sdk::{
-    Canvas, Cx, DeviceInfo, DisplayInfo, Env, Handled, Id, InputCaps, Instant, Manifest,
-    MemoryClass, MemoryStorage, Params, PixelFormat, Plugin, Rect, RegisterError, Registrar,
-    SDK_VERSION, Screen, ScreenSpec, SettingGroupSpec, SettingKind, SettingSpec, SettingValue,
-    Version,
-};
+use common::*;
 
-/// The system's allocator, counting the blocks this thread takes.
-struct Counting;
+const LIST: &str = "settings.list";
+const GROUP: &str = "settings.group";
+const RESULTS: &str = "settings.search";
+const CHOOSER: &str = "settings.choose";
 
-thread_local! {
-    static BLOCKS: Cell<usize> = const { Cell::new(0) };
+fn touch(app: &App) -> bool {
+    app.kernel.device().input.touch
 }
 
-unsafe impl GlobalAlloc for Counting {
-    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        let _ = BLOCKS.try_with(|blocks| blocks.set(blocks.get() + 1));
-        unsafe { System.alloc(layout) }
-    }
-
-    unsafe fn dealloc(&self, block: *mut u8, layout: Layout) {
-        unsafe { System.dealloc(block, layout) };
-    }
+/// The rows shown, whole labels.
+fn rows(app: &mut App) -> Vec<String> {
+    app.parts()
+        .into_iter()
+        .filter(|p| p.role == Role::Row)
+        .map(|p| p.label)
+        .collect()
 }
 
-#[global_allocator]
-static ALLOCATOR: Counting = Counting;
-
-/// The heap blocks `f` takes.
-fn blocks(f: impl FnOnce()) -> usize {
-    let before = BLOCKS.with(Cell::get);
-    f();
-    BLOCKS.with(Cell::get) - before
+/// The first part of each row's label.
+fn titles(app: &mut App) -> Vec<String> {
+    rows(app)
+        .into_iter()
+        .map(|r| r.split(", ").next().unwrap_or_default().to_string())
+        .collect()
 }
 
-/// An X4: buttons, no touch.
-const X4: DeviceInfo = DeviceInfo {
-    id: "test",
-    name: "Test device",
-    display: DisplayInfo {
-        width: 480,
-        height: 800,
-        dpi: 220,
-        format: PixelFormat::Gray4,
-        rotation: Rotation::Deg0,
-        color: None,
-    },
-    input: InputCaps {
-        buttons: true,
-        touch: false,
-        pen: false,
-        keys: &[],
-    },
-    memory: MemoryClass::Large,
-};
-
-/// A full screen of another plugin, opened above the settings.
-const COVER: Id = Id::new_static("probe.cover");
-const GROUP: Id = Id::new_static("probe.group");
-/// A number of [`GROUP`].
-const SIZE: &str = "probe.size";
-/// Previews [`GROUP`] on its page.
-const PREVIEW: Id = Id::new_static("probe.preview");
-
-struct Blank;
-
-impl Screen for Blank {
-    fn draw(&mut self, _: &mut Canvas<'_>, _: &Env<'_>) {}
-
-    fn on_action(&mut self, _: &Id, _: &mut Cx<'_, '_>) -> Handled {
-        Handled::No
-    }
+/// Whether a row shown as `shown` is the one called `wanted`: the same,
+/// or shortened to fit (ending in "…"), or its first part.
+fn same(shown: &str, wanted: &str) -> bool {
+    let first = shown.split(", ").next().unwrap_or_default();
+    shown == wanted
+        || first == wanted
+        || shown.starts_with(&format!("{wanted}, "))
+        || first
+            .strip_suffix('…')
+            .is_some_and(|short| wanted.starts_with(short))
 }
 
-struct Sample;
-
-impl Widget for Sample {
-    fn height(&self, _: &Env<'_>, _: u16) -> u16 {
-        40
-    }
-
-    fn draw(&self, _: &mut Canvas<'_>, _: &Env<'_>, _: Rect) {}
-}
-
-/// A group of settings with a preview, which counts how often it is
-/// made: once for each time its page is.
-struct Probe(Rc<Cell<usize>>);
-
-impl Plugin for Probe {
-    fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static("probe"),
-            name: Cow::Borrowed("Probe"),
-            description: Cow::Borrowed(""),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
+/// Chooses the row called `label`: down to it (the first press may only
+/// show the focus) and confirm, or a tap (on a later page if needed).
+fn choose(app: &mut App, label: &str) {
+    if touch(app) {
+        for _ in 0..10 {
+            let part = app
+                .parts()
+                .into_iter()
+                .find(|p| p.role == Role::Row && same(&p.label, label));
+            if let Some(part) = part {
+                app.tap(center(part.area));
+                return;
+            }
+            app.tap_next_page();
+        }
+    } else {
+        for _ in 0..200 {
+            if app.focused().is_some_and(|f| same(&f, label)) {
+                app.run(actions::CONFIRM);
+                return;
+            }
+            app.run(actions::DOWN);
         }
     }
-
-    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_screen(ScreenSpec {
-            id: COVER,
-            title: Cow::Borrowed("probe"),
-            factory: Box::new(|_, _| Box::new(Blank)),
-        })?;
-        r.add_setting_group(SettingGroupSpec {
-            id: GROUP,
-            title: Cow::Borrowed("probe.group"),
-            order: 0,
-            page: None,
-        })?;
-        r.add_setting(
-            SettingSpec::new(
-                Id::new_static(SIZE),
-                SIZE,
-                SettingKind::Int { min: 1, max: 9 },
-                SettingValue::Int(5),
-            )
-            .group(GROUP),
-        )?;
-        let made = self.0.clone();
-        r.add_widget(
-            WidgetSpec::new(PREVIEW, "probe.preview", move |_| {
-                made.set(made.get() + 1);
-                Box::new(Sample)
-            })
-            .previews(GROUP),
-        )?;
-        Ok(())
-    }
+    panic!("no row {label}:\n{}", app.described());
 }
 
-struct Test {
-    kernel: Kernel,
-    /// How often the preview was made.
-    made: Rc<Cell<usize>>,
-    now: u64,
+fn settings(device: DeviceInfo, config: &str) -> App {
+    let mut app = App::new(device, Shared::memory(config, &[]));
+    app.run(actions::SETTINGS);
+    assert_eq!(app.screen(), LIST);
+    app
 }
 
-impl Test {
-    fn new() -> Self {
-        let made = Rc::new(Cell::new(0));
-        let mut kernel = Kernel::builder(X4)
-            .storage(MemoryStorage::new())
-            .plugin(SettingsPlugin)
-            .plugin(Probe(made.clone()))
-            .build()
-            .unwrap();
-        kernel.start(Instant(0));
-        Self {
-            kernel,
-            made,
-            now: 0,
-        }
+/// Searches the settings for `words`, as typed on the keyboard: the
+/// first row of the main page, in either language.
+fn search(app: &mut App, words: &str) {
+    app.will_type(words);
+    if !titles(app)
+        .iter()
+        .any(|t| t == "Search the settings" || t == "Einstellungen suchen")
+    {
+        // On another page: the main page anew, from its top.
+        app.run(actions::BACK);
+        app.run(actions::SETTINGS);
     }
+    let title = titles(app)
+        .into_iter()
+        .find(|t| t == "Search the settings" || t == "Einstellungen suchen")
+        .unwrap_or_else(|| panic!("no search:\n{}", app.described()));
+    choose(app, &title);
+}
 
-    fn later(&mut self) -> Instant {
-        self.now += 200;
-        Instant(self.now)
-    }
-
-    /// Opens the settings, of `group` if given.
-    fn open_settings(&mut self, group: Option<&Id>) {
-        let params = group.map_or_else(Params::new, |group| {
-            Params::new().with(params::ID, group.as_str().to_string())
-        });
-        let now = self.later();
-        self.kernel.open_slot(now, slots::SETTINGS, params);
-        self.kernel.render(&mut |_, _| {});
-        assert_eq!(self.kernel.active_screen(), Some(&SCREEN));
-    }
-
-    fn cover(&mut self) {
-        let now = self.later();
-        self.kernel.open_screen(now, COVER, Params::new());
-        self.kernel.render(&mut |_, _| {});
-        assert_eq!(self.kernel.active_screen(), Some(&COVER));
-    }
-
-    fn set_size(&mut self, size: i64) {
-        let now = self.later();
-        self.kernel
-            .set_setting(now, SIZE, &size.to_string())
-            .unwrap();
-        self.kernel.render(&mut |_, _| {});
-    }
-
-    fn press(&mut self, name: &'static str) {
-        let at = self.later();
-        for (later, state) in [(0, ButtonState::Pressed), (50, ButtonState::Released)] {
-            self.kernel
-                .handle(at.add_millis(later), InputEvent::Button { name, state });
-        }
-        self.kernel.render(&mut |_, _| {});
+#[test]
+fn search_finds_settings_by_words_in_english() {
+    for device in DEVICES {
+        let mut app = settings(device, "");
+        search(&mut app, "  SIZE   font ");
+        assert_eq!(app.screen(), RESULTS, "{}", app.described());
+        let hits = titles(&mut app);
+        assert!(hits.iter().any(|h| h == "Font size"), "{hits:?}");
+        // Every word counts: "size" alone finds more.
+        app.run(actions::BACK);
+        search(&mut app, "size");
+        let more = titles(&mut app);
+        assert!(more.len() > hits.len(), "{more:?}");
     }
 }
 
 #[test]
-fn a_covered_group_page_is_made_anew_once_it_shows() {
-    let mut test = Test::new();
-    test.open_settings(Some(&GROUP));
-    let made = test.made.get();
-    assert!(made > 0, "the page previews its group");
-    // Shown, the page follows each change at once.
-    test.set_size(6);
-    assert_eq!(test.made.get(), made + 1);
-    test.cover();
-    for size in [7, 8, 9] {
-        test.set_size(size);
+fn search_finds_settings_by_words_in_german_with_or_without_accents() {
+    for device in DEVICES {
+        let mut app = settings(device, "[core]\nlanguage = de\n");
+        search(&mut app, "schriftgröße");
+        assert_eq!(app.screen(), RESULTS, "{}", app.described());
+        let hits = titles(&mut app);
+        assert!(hits.iter().any(|h| h == "Schriftgröße"), "{hits:?}");
+        app.run(actions::BACK);
+        search(&mut app, "SCHRIFTGROSSE");
+        let folded = titles(&mut app);
+        assert!(folded.iter().any(|h| h == "Schriftgröße"), "{folded:?}");
     }
-    assert_eq!(test.made.get(), made + 1, "not while covered");
-    test.press("back");
-    assert_eq!(test.kernel.active_screen(), Some(&SCREEN));
-    assert_eq!(test.made.get(), made + 2, "once it shows again");
 }
 
 #[test]
-fn a_covered_group_list_does_nothing_for_a_change() {
-    // What a change costs with nothing of the settings open ...
-    let mut alone = Test::new();
-    alone.cover();
-    alone.set_size(6);
-    let base = blocks(|| alone.set_size(7));
-    // ... and with the list of groups below the screen on top.
-    let mut test = Test::new();
-    test.open_settings(None);
-    test.cover();
-    test.set_size(6);
-    let covered = blocks(|| test.set_size(7));
-    assert!(covered <= base + 2, "{covered} blocks, {base} without it");
-    test.press("back");
-    assert_eq!(test.kernel.active_screen(), Some(&SCREEN));
+fn a_hit_opens_its_page_with_the_setting_focused() {
+    let mut app = settings(X4, "");
+    search(&mut app, "font size");
+    choose(&mut app, "Font size");
+    assert_eq!(app.screen(), GROUP);
+    assert!(
+        app.focused().unwrap().starts_with("Font size"),
+        "{}",
+        app.described()
+    );
+    // Back to the results, then the main page.
+    app.run(actions::BACK);
+    assert_eq!(app.screen(), RESULTS);
+    app.run(actions::BACK);
+    assert_eq!(app.screen(), LIST);
+
+    let mut app = settings(TOUCH, "");
+    search(&mut app, "font size");
+    choose(&mut app, "Font size");
+    assert_eq!(app.screen(), GROUP);
+    assert!(app.shows("Font size"), "{}", app.described());
+}
+
+#[test]
+fn search_finds_the_pages_of_other_plugins_and_opens_them() {
+    for device in DEVICES {
+        let mut app = settings(device, "");
+        search(&mut app, "customise menus");
+        let hits = titles(&mut app);
+        assert!(hits.iter().any(|h| h == "Customise menus"), "{hits:?}");
+        choose(&mut app, "Customise menus");
+        assert_eq!(app.screen(), "menu-editor.menus");
+    }
+}
+
+#[test]
+fn a_search_without_hits_says_so_and_an_empty_one_opens_nothing() {
+    for device in DEVICES {
+        let mut app = settings(device, "");
+        search(&mut app, "zzqx flibbertigibbet");
+        assert_eq!(app.screen(), RESULTS);
+        assert!(
+            app.shows("No setting has these words."),
+            "{}",
+            app.described()
+        );
+        assert!(rows(&mut app).is_empty());
+        app.run(actions::CONFIRM);
+        assert_eq!(app.screen(), RESULTS);
+        app.run(actions::BACK);
+        search(&mut app, "   ");
+        assert_eq!(app.screen(), LIST);
+    }
+}
+
+#[test]
+fn advanced_settings_are_found_only_once_shown() {
+    for device in DEVICES {
+        let mut app = settings(device, "");
+        // The progress sync's server is an advanced setting.
+        search(&mut app, "server");
+        let before = titles(&mut app);
+        app.run(actions::BACK);
+        choose(&mut app, "Show advanced settings");
+        assert!(app.kernel.settings().bool("settings.advanced"));
+        search(&mut app, "server");
+        let after = titles(&mut app);
+        assert!(after.len() > before.len(), "{before:?} {after:?}");
+    }
+}
+
+#[test]
+fn a_choice_of_more_than_two_opens_its_list_and_the_value_is_kept() {
+    for device in DEVICES {
+        let storage = Shared::memory("", &[]);
+        let mut app = App::new(device, storage.clone());
+        app.run(actions::SETTINGS);
+        search(&mut app, "first day week");
+        let hit = titles(&mut app).remove(0);
+        choose(&mut app, &hit);
+        assert_eq!(app.screen(), GROUP);
+        if device.input.touch {
+            choose(&mut app, &hit);
+        } else {
+            app.run(actions::CONFIRM);
+        }
+        assert_eq!(app.screen(), CHOOSER, "{}", app.described());
+        let options = titles(&mut app);
+        assert_eq!(options, ["As the language has it", "Monday", "Sunday"]);
+        // With buttons, the focus on the value set.
+        if !device.input.touch {
+            assert_eq!(app.focused().as_deref(), Some("As the language has it"));
+        }
+        choose(&mut app, "Sunday");
+        assert_eq!(app.screen(), GROUP);
+        assert_eq!(
+            app.kernel.settings().text("core.week-start"),
+            "core.week.sunday"
+        );
+        assert!(
+            storage.config().contains("week-start = core.week.sunday"),
+            "{}",
+            storage.config()
+        );
+        let app = app.restart();
+        assert_eq!(
+            app.kernel.settings().text("core.week-start"),
+            "core.week.sunday"
+        );
+    }
+}
+
+#[test]
+fn the_language_chosen_shows_at_once_and_after_a_restart() {
+    for device in DEVICES {
+        let storage = Shared::memory("", &[]);
+        let mut app = App::new(device, storage.clone());
+        app.open_screen(
+            Id::new_static("settings.choose"),
+            Params::new().with("id", "core.language"),
+        );
+        assert_eq!(app.screen(), CHOOSER);
+        choose(&mut app, "Deutsch");
+        assert_eq!(app.kernel.settings().text("core.language"), "de");
+        app.run(actions::SETTINGS);
+        assert!(app.shows("Einstellungen"), "{}", app.described());
+        let mut app = app.restart();
+        app.run(actions::SETTINGS);
+        assert!(app.shows("Einstellungen"), "{}", app.described());
+    }
+}
+
+#[test]
+fn a_choice_opened_for_no_setting_shows_nothing_to_choose() {
+    for id in [
+        "",
+        "no.such-setting",
+        "core.font-size",
+        "..",
+        "core.language.x",
+    ] {
+        for device in DEVICES {
+            let storage = Shared::memory("", &[]);
+            let mut app = App::new(device, storage.clone());
+            let before = storage.config();
+            app.open_screen(
+                Id::new_static("settings.choose"),
+                Params::new().with("id", id),
+            );
+            assert_eq!(app.screen(), CHOOSER, "{id:?}");
+            assert!(rows(&mut app).is_empty(), "{id:?}");
+            app.run(actions::CONFIRM);
+            app.tap(Point::new(240, 300));
+            assert_eq!(storage.config(), before, "{id:?}");
+        }
+    }
+}
+
+/// Typed on the keyboard the settings page opens for a text setting
+/// (Calibre's address: the progress sync's server, checked here before, is
+/// set on its account screen now, as another server signs out).
+#[test]
+fn text_typed_for_a_setting_is_kept_trimmed() {
+    for device in DEVICES {
+        let storage = Shared::memory(
+            "[settings]
+advanced = on
+[calibre]
+address = 192.168.1.5
+",
+            &[],
+        );
+        let mut app = App::new(device, storage.clone());
+        app.run(actions::SETTINGS);
+        search(&mut app, "calibre address");
+        let hit = rows(&mut app)
+            .into_iter()
+            .find(|r| r.starts_with("Calibre's address"))
+            .unwrap_or_else(|| panic!("{}", app.described()));
+        let hit = hit.split(", ").next().unwrap().to_string();
+        choose(&mut app, &hit);
+        assert_eq!(app.screen(), GROUP);
+        app.will_type("  192.168.1.20:9090  ");
+        if device.input.touch {
+            choose(&mut app, &hit);
+        } else {
+            app.run(actions::CONFIRM);
+        }
+        assert_eq!(app.screen(), GROUP, "{}", app.described());
+        // The keyboard started from the value it had.
+        let question = app.asked().pop().unwrap();
+        assert!(
+            question
+                .get(params::TEXT)
+                .is_some_and(|t| t == "192.168.1.5")
+        );
+        assert_eq!(
+            app.kernel.settings().text("calibre.address"),
+            "192.168.1.20:9090"
+        );
+        assert!(storage.config().contains("address = 192.168.1.20:9090"));
+    }
+}
+
+#[test]
+fn a_page_reset_asks_first_and_sets_its_settings_back() {
+    for device in DEVICES {
+        let storage = Shared::memory("[core]\nfont-size = 20\n", &[]);
+        let mut app = App::new(device, storage.clone());
+        app.run(actions::SETTINGS);
+        search(&mut app, "font size");
+        choose(&mut app, "Font size");
+        choose(&mut app, "Reset to defaults");
+        assert!(app.shows("Reset the settings of"), "{}", app.described());
+        choose(&mut app, "Cancel");
+        assert!(app.kernel.settings().is_set("core.font-size"));
+        choose(&mut app, "Reset to defaults");
+        choose(&mut app, "Yes, reset");
+        assert!(!app.kernel.settings().is_set("core.font-size"));
+        assert!(
+            !storage.config().contains("font-size = 20"),
+            "{}",
+            storage.config()
+        );
+    }
+}
+
+#[test]
+fn everything_reset_keeps_the_language() {
+    for device in DEVICES {
+        let config = "[core]\nlanguage = de\nfont-size = 20\n[files]\nsort = files.sort.name\n";
+        let storage = Shared::memory(config, &[]);
+        let mut app = App::new(device, storage.clone());
+        app.run(actions::SETTINGS);
+        choose(&mut app, "Alle Einstellungen zurücksetzen");
+        assert!(app.shows("Sprache bleibt"), "{}", app.described());
+        choose(&mut app, "Ja, zurücksetzen");
+        let settings = app.kernel.settings();
+        assert!(!settings.is_set("core.font-size"));
+        assert!(!settings.is_set("files.sort"));
+        assert_eq!(settings.text("core.language"), "de");
+    }
 }

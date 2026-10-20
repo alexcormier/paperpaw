@@ -155,7 +155,7 @@ pub(crate) struct Staging {
     pub(crate) refresh_filters: Vec<paperpaw_sdk::filters::RefreshFilterSpec>,
     pub(crate) stylesheets: Vec<Cow<'static, str>>,
     pub(crate) book_data: Vec<paperpaw_sdk::library::BookData>,
-    pub(crate) services: Vec<(Id, alloc::boxed::Box<dyn core::any::Any>)>,
+    pub(crate) services: Vec<(Id, paperpaw_sdk::services::Service)>,
     pub(crate) contributions: Vec<(Id, Cow<'static, str>)>,
 }
 
@@ -284,7 +284,10 @@ pub(crate) fn stage(
             Contribution::SetupStep(step) => staging.setup_steps.push(*step),
             Contribution::Preset(preset) => staging.presets.push(*preset),
             Contribution::FixedPresets(list) => staging.fixed_presets.push(list),
-            Contribution::Service { id, service } => staging.services.push((id, service)),
+            Contribution::Service { id, service } => staging
+                .services
+                .push((id, paperpaw_sdk::services::Service::any(service))),
+            Contribution::Published { id, service } => staging.services.push((id, service)),
             Contribution::ToPoint { point, text } => staging.contributions.push((point, text)),
             Contribution::Translations(source) => staging.catalogs.push(catalog(source)?),
             // A kind of a newer SDK than this kernel knows: said, not lost.
