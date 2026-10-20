@@ -245,10 +245,36 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, numbers: Numbers) {
         let size = super::fit_size(&font, &style, &first, room, area.height / 2).min(style.title);
         let big = line(&font, size);
         let first = ui::fit(&font, size, &first, f32::from(room));
-        // The note where it fits whole below the time.
-        let note = note.filter(|n| {
-            big + small <= area.height && font.measure(style.small, n) <= f32::from(room)
-        });
+        // The note where it fits whole below the time; else, where it
+        // fits whole on two lines, the note instead of the time (the
+        // ring shows the minutes).
+        let (note, instead) = match note {
+            Some(n)
+                if big + small <= area.height
+                    && font.measure(style.small, &n) <= f32::from(room) =>
+            {
+                (Some(n), None)
+            }
+            Some(n) => (
+                None,
+                super::note_lines(env, &n, room, area.height, 2).filter(|l| l.whole()),
+            ),
+            None => (None, None),
+        };
+        if let Some(lines) = instead {
+            let wide = lines
+                .lines()
+                .iter()
+                .map(|l| font.measure(style.small, l))
+                .fold(0.0, f32::max);
+            let group = d + gap + ((wide + 0.99) as u16).min(room);
+            let left = align.x(area, f32::from(group)) as u16;
+            let ring = middle(Rect::new(left, area.y, d, area.height), d);
+            draw_ring(canvas, env, look, ring, progress, numbers.today, true);
+            let text = Rect::new(left + d + gap, area.y, room, area.height);
+            lines.draw(canvas, env, text, Align::Left, look.faint);
+            return;
+        }
         let wide = note
             .as_ref()
             .map_or(0.0, |n| font.measure(style.small, n))
@@ -318,20 +344,34 @@ fn draw_time(
     let id = NAME;
     let first = time_text(env, numbers);
     let note_h = note.as_ref().map_or(0, |n| n.height(env));
-    let fits = |note_h: u16| {
-        let room = area.height.saturating_sub(note_h);
-        let size = super::text_size(env, &font, id, &first, area.width, room);
-        (size, line(&font, size))
+    // The time's size in `area` with the note below it (if `with`), and
+    // whether the note keeps: not where it leaves no room or makes the
+    // time smaller than the body's size.
+    let lay = |area: Rect, with: bool| {
+        let fits = |note_h: u16| {
+            let room = area.height.saturating_sub(note_h);
+            let size = super::text_size(env, &font, id, &first, area.width, room);
+            (size, line(&font, size))
+        };
+        let (size, big) = fits(note_h);
+        let alone = fits(0);
+        if !with || big + note_h > area.height || (size < style.text && alone.0 > size) {
+            (alone.0, alone.1, false)
+        } else {
+            (size, big, true)
+        }
     };
-    let (mut size, mut big) = fits(note_h);
-    let mut note = note;
-    // The note goes where it leaves no room or makes the time smaller
-    // than the body's size.
-    let alone = fits(0);
-    if big + note_h > area.height || (size < style.text && alone.0 > size) {
-        note = None;
-        (size, big) = alone;
+    let (mut size, mut big, mut keep) = lay(area, note.is_some());
+    let (mut area, mut caption) = (area, caption);
+    // The caption goes before the note.
+    if note.is_some() && !keep && caption.is_some() {
+        let without = lay(look.area, true);
+        if without.2 {
+            (size, big, keep) = without;
+            (area, caption) = (look.area, None);
+        }
     }
+    let note = note.filter(|_| keep);
     let note_h = note.as_ref().map_or(0, |n| n.height(env));
     let align = widgets::align(env, id);
     let block = super::captioned(canvas, env, id, look, caption, big + note_h);

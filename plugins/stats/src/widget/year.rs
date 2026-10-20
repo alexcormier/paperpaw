@@ -16,7 +16,7 @@ use alloc::vec::Vec;
 
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::widgets::{
-    self, Align, Frame, Look, Padding, Size, Widget, WidgetSpec, WidgetTarget,
+    self, Align, Frame, Look, Padding, Size, Widget, WidgetSpec, WidgetTarget, Wrapped,
 };
 use paperpaw_sdk::{
     Arg, Canvas, Command, Env, Id, Params, Point, Rect, RegisterError, Registrar, SettingSpec,
@@ -314,24 +314,38 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown) {
     );
     // "Books in 2026", or where that is too long the year alone.
     let year = alloc::format!("{}", shown.year);
-    let caption = super::caption(env, id, look.area, &[&title, &year]);
-    let area = super::below_caption(env, caption, look.area);
+    let mut caption = super::caption(env, id, look.area, &[&title, &year]);
+    let mut area = super::below_caption(env, caption, look.area);
     let goal = books_goal(env);
     let progress = goal.map(|g| shown.done.min(g) * 1000 / g.max(1));
     let style_set = chosen(env, id, "style");
     let small = line(&font, style.small);
-    // The notes that fit whole (the last book's title may be shortened).
-    let width = f32::from(area.width);
-    let mut notes: Vec<String> = notes(env, shown)
-        .into_iter()
-        .filter(|(note, cut)| *cut || font.measure(style.small, note) <= width)
-        .map(|(note, _)| note)
-        .collect();
     let align = widgets::align(env, id);
     if style_set == STYLES[1] && goal.is_some() {
+        // Beside or below the ring, the notes that fit a line whole (the
+        // last book's title may be shortened).
+        let width = f32::from(area.width);
+        let notes: Vec<String> = notes(env, shown)
+            .into_iter()
+            .filter(|(note, cut)| *cut || font.measure(style.small, note) <= width)
+            .map(|(note, _)| note)
+            .collect();
         draw_ring(canvas, env, (look, caption), area, shown, progress, &notes);
         return;
     }
+    // The notes on two lines where they need them (shortened where even
+    // two do not hold them), the last book's title on one.
+    let mut notes: Vec<Wrapped> = notes(env, shown)
+        .into_iter()
+        .filter_map(|(note, cut)| {
+            if cut {
+                Some(Wrapped::new(env, &note, style.small, area.width, small))
+            } else {
+                super::note_lines(env, &note, area.width, small * 2, 2)
+            }
+        })
+        .collect();
+    let height_of = |notes: &[Wrapped]| notes.iter().map(|n| n.height(env)).sum::<u16>();
     let headline = headline(env, shown);
     // Notes as fit below the rest, the plan first.
     let dots = style_set == STYLES[2];
@@ -341,10 +355,26 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown) {
         None => 0,
     };
     let least = line(&font, style.text);
-    while !notes.is_empty() && notes.len() as u16 * small + band + least > area.height {
-        notes.pop();
+    // As many notes as fit `height` with the rest.
+    let kept = |height: u16| {
+        let mut kept = 0;
+        let mut used = band + least;
+        for note in &notes {
+            used += note.height(env);
+            if used > height {
+                break;
+            }
+            kept += 1;
+        }
+        kept
+    };
+    // The caption goes before a note.
+    if caption.is_some() && kept(look.area.height) > kept(area.height) {
+        caption = None;
+        area = look.area;
     }
-    let notes_h = notes.len() as u16 * small;
+    notes.truncate(kept(area.height));
+    let notes_h = height_of(&notes);
     let room = area.height.saturating_sub(band + notes_h);
     let size = super::text_size(env, &font, id, &headline, area.width, room);
     let big = line(&font, size);
@@ -392,18 +422,9 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown) {
         y += band;
     }
     for note in &notes {
-        let note = ui::fit(&font, style.small, note, f32::from(area.width));
-        let x = align.x(area, font.measure(style.small, &note));
-        ui::draw_label(
-            canvas,
-            &font,
-            style.small,
-            x,
-            row(y, small),
-            &note,
-            look.faint,
-        );
-        y += small;
+        let h = note.height(env);
+        note.draw(canvas, env, row(y, h), align, look.faint);
+        y += h;
     }
 }
 

@@ -338,13 +338,10 @@ fn number_if_narrow<'t>(font: &FontHandle<'_>, size: f32, text: &'t str, width: 
     if digits == 0 { text } else { &text[..digits] }
 }
 
-/// Whether `wrapped` holds its whole text: no line shortened with "…".
-fn whole(wrapped: &widgets::Wrapped) -> bool {
-    !wrapped.lines().is_empty() && wrapped.lines().iter().all(|l| !l.ends_with('…'))
-}
-
 /// `text` small in lines `width` wide, as many as fit `height` (`most`
-/// at most), if it fits whole: a note is left out rather than cut.
+/// at most): whole where it fits, else ending in "…" where there is no
+/// room for more ([`Wrapped::whole`](widgets::Wrapped::whole) tells);
+/// none where not even a line fits.
 fn note_lines(
     env: &Env<'_>,
     text: &str,
@@ -358,8 +355,14 @@ fn note_lines(
     if text.is_empty() || height < small {
         return None;
     }
-    let lines = widgets::Wrapped::fitting(env, text, style.small, style.small, width, height);
-    whole(&lines).then_some(lines)
+    Some(widgets::Wrapped::fitting(
+        env,
+        text,
+        style.small,
+        style.small,
+        width,
+        height,
+    ))
 }
 
 /// The height of a line of text `size` pixels large.
