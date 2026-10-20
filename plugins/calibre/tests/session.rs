@@ -88,6 +88,9 @@ struct Peer {
     got: Vec<u8>,
     waiting: Option<(u32, u32)>,
     closed: bool,
+    /// At most this many bytes a read, as a network may deliver them
+    /// (`None`: as many as asked for).
+    chunk: Option<usize>,
 }
 
 impl Peer {
@@ -106,7 +109,9 @@ impl Peer {
             match self.waiting {
                 Some((socket, max)) if !self.wire.is_empty() => {
                     self.waiting = None;
-                    let n = (max as usize).min(self.wire.len());
+                    let n = (max as usize)
+                        .min(self.wire.len())
+                        .min(self.chunk.unwrap_or(usize::MAX));
                     let data: Vec<u8> = self.wire.drain(..n).collect();
                     kernel.socket_event(Instant(5), SocketEvent::Data { socket, data });
                 }
@@ -528,6 +533,31 @@ fn a_message_larger_than_the_device_holds_ends_the_connection() {
     calibre.wire.extend_from_slice(b"1000000[");
     calibre.pump(&mut kernel);
     assert!(calibre.closed);
+}
+
+#[test]
+#[ignore = "bug: H-8, the kernel reads socket text lossily per read, so a             character split between reads becomes two replacement             characters and Calibre's framing by bytes slips"]
+fn a_character_split_between_reads_keeps_messages_in_step() {
+    let storage = Shared(Rc::new(MemoryStorage::new()));
+    let (mut kernel, mut calibre) = connected(DEVICE, &storage);
+    // Three bytes a read: `ö` and `ß` come in two reads each.
+    calibre.chunk = Some(3);
+    let book = b"abc";
+    let message = format!(
+        r#"{{"lpath": "Ann/Größe.epub", "length": {}, "metadata": {{"title": "Größe"}}}}"#,
+        book.len()
+    );
+    calibre
+        .wire
+        .extend_from_slice(&frame(op::SEND_BOOK, &message));
+    calibre.wire.extend_from_slice(book);
+    calibre.say(&mut kernel, op::NOOP, "{}");
+    assert!(!calibre.closed);
+    assert_eq!(calibre.answers().len(), 1, "the NOOP after the book");
+    assert_eq!(
+        paperpaw_sdk::read_file(&storage, "Ann/Größe.epub", 64).unwrap(),
+        book
+    );
 }
 
 /// What the kernel asks the shell to do with sockets.
