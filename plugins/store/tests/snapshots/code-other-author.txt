@@ -4,5 +4,5 @@ Text "Install it only if you trust where it comes from. If you are not sure, kee
 Row "Not now" (focused)
 Row "Install anyway"
 Text "Clock: the update is signed by"
-Text "someone else. Open its page to"
-Text "decide."
+Text "someone else. Open its page"
+Text "to decide."
