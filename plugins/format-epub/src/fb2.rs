@@ -583,14 +583,14 @@ impl Fb2Document {
     /// Converts the book if needed; returns its text length and number of
     /// blocks.
     fn converted(&self, storage: &dyn Storage) -> Result<(u32, u32), DocumentError> {
-        let length = match cached::u32_at(storage, &self.paths.end, 0) {
-            Ok(length) => length,
-            Err(_) if self.length.get() == FAILED => {
+        let length = match cached::converted_length(storage, &self.paths) {
+            Some(length) => length,
+            None if self.length.get() == FAILED => {
                 return Err(DocumentError::Malformed(alloc::borrow::Cow::Borrowed(
                     "cannot be read",
                 )));
             }
-            Err(_) => {
+            None => {
                 self.anchors.reset();
                 let source = Source::Fb2 {
                     path: &self.path,

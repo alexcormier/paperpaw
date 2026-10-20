@@ -809,3 +809,41 @@ fn the_first_pages_of_a_long_comic_are_kept_and_not_held_in_memory() {
     assert!(heap < 64 * 1024, "{heap} bytes at once");
     assert_eq!(again.sections(), 5000);
 }
+
+/// The converted text of the book `book.epub`'s first chapter.
+fn chapter_text() -> String {
+    format!(
+        ".paperpaw/plugins/format-epub/{}/0.txt",
+        paperpaw_sdk::library::key("book.epub")
+    )
+}
+
+#[test]
+fn a_cut_cache_is_converted_again() {
+    let chapter = format!("<html><body><p>{}</p></body></html>", "Word ".repeat(500));
+    let card = Card::new("book.epub", epub(&chapter));
+    let doc = EpubDocument::open(&card, "book.epub").unwrap();
+    let whole = read_all(&doc, &card);
+    // Cut short, as by a power cut after its end was marked.
+    let text = card.files.get(&chapter_text()).unwrap();
+    card.files
+        .write(&chapter_text(), &text[..text.len() / 2])
+        .unwrap();
+    let doc = EpubDocument::open(&card, "book.epub").unwrap();
+    assert_eq!(read_all(&doc, &card), whole);
+}
+
+#[test]
+fn a_damaged_cache_record_takes_little_memory() {
+    let card = Card::new("book.epub", epub("<html><body><p>Text.</p></body></html>"));
+    let doc = EpubDocument::open(&card, "book.epub").unwrap();
+    doc.block_at(&card, Locator::START).unwrap();
+    // The record's lengths at their most, the file as long as before.
+    let mut text = card.files.get(&chapter_text()).unwrap();
+    text[4..8].fill(0xff);
+    card.files.write(&chapter_text(), &text).unwrap();
+    let doc = EpubDocument::open(&card, "book.epub").unwrap();
+    let (block, heap) = peak(|| doc.block_at(&card, Locator::START));
+    assert!(heap < 32 * 1024, "{heap} bytes at once");
+    assert!(block.is_err());
+}

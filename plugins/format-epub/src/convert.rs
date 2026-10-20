@@ -65,8 +65,9 @@ pub(crate) const NO_INDENT: i16 = i16::MIN;
 pub(crate) const NO_SPACE: u16 = u16::MAX;
 /// Size of a style run after a record's text.
 pub(crate) const RUN: usize = 5;
-/// Longer paragraphs are split into continued blocks.
-const LIMIT: usize = 4000;
+/// Longer paragraphs are split into continued blocks; no record's text
+/// is longer.
+pub(crate) const LIMIT: usize = 4000;
 /// Output is written to storage in chunks of about this size.
 const FLUSH: usize = 1024;
 /// Index and anchors are written in chunks of about this size.

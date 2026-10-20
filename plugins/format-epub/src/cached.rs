@@ -12,6 +12,13 @@ use paperpaw_sdk::{Storage, StorageError};
 
 use crate::convert::{self, CachePaths, HEADER, INDEX};
 
+/// The length of a converted chapter's text, if its conversion is
+/// complete: `<n>.end` says it, and `<n>.txt` is as long.
+pub(crate) fn converted_length(storage: &dyn Storage, paths: &CachePaths) -> Option<u32> {
+    let length = u32_at(storage, &paths.end, 0).ok()?;
+    (storage.size(&paths.text).ok()? == u64::from(length)).then_some(length)
+}
+
 pub(crate) fn u32_at(storage: &dyn Storage, path: &str, offset: u64) -> Result<u32, StorageError> {
     let mut buf = [0u8; 4];
     if storage.read_at(path, offset, &mut buf)? != 4 {
@@ -47,6 +54,12 @@ pub(crate) fn read_block(
     storage.read_at(&paths.text, u64::from(at), &mut header)?;
     let len = usize::from(u16::from_le_bytes([header[4], header[5]]));
     let run_count = usize::from(u16::from_le_bytes([header[6], header[7]]));
+    // A record the converter cannot have written: the cache is damaged.
+    if len > convert::LIMIT || run_count > len {
+        return Err(DocumentError::Malformed(alloc::borrow::Cow::Borrowed(
+            "cache record",
+        )));
+    }
     let mut text = alloc::vec![0u8; len];
     let mut filled = 0;
     while filled < len {

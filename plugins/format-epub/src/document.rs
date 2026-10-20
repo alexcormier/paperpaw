@@ -365,14 +365,14 @@ impl EpubDocument {
             return Err(DocumentError::Malformed(Cow::Borrowed("no such chapter")));
         };
         let paths = self.paths(section);
-        let length = match cached::u32_at(storage, &paths.end, 0) {
-            Ok(length) => length,
-            Err(_) if slot.get() == FAILED => {
+        let length = match cached::converted_length(storage, &paths) {
+            Some(length) => length,
+            None if slot.get() == FAILED => {
                 return Err(DocumentError::Malformed(Cow::Borrowed(
                     "chapter cannot be read",
                 )));
             }
-            Err(_) => {
+            None => {
                 self.anchors.reset();
                 let entry = self
                     .archive
