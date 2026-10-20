@@ -457,7 +457,7 @@ fn truncate(text: &str, max: usize) -> &str {
 }
 
 /// Writes table of contents records to the cache in small chunks.
-struct TocWriter<'a> {
+pub(crate) struct TocWriter<'a> {
     storage: &'a dyn Storage,
     data_path: String,
     index_path: String,
@@ -469,7 +469,7 @@ struct TocWriter<'a> {
 }
 
 impl<'a> TocWriter<'a> {
-    fn new(storage: &'a dyn Storage, cache: &str) -> Result<Self, DocumentError> {
+    pub(crate) fn new(storage: &'a dyn Storage, cache: &str) -> Result<Self, DocumentError> {
         let writer = Self {
             storage,
             data_path: path(cache, "toc.dat"),
@@ -485,7 +485,7 @@ impl<'a> TocWriter<'a> {
         Ok(writer)
     }
 
-    fn push(&mut self, level: u8, section: u32, fragment: Option<&str>, title: &str) {
+    pub(crate) fn push(&mut self, level: u8, section: u32, fragment: Option<&str>, title: &str) {
         // Longer ids cannot match an anchor; titles are shown on one line.
         let fragment = truncate(fragment.unwrap_or_default(), 255);
         let title = truncate(title, 1024);
@@ -520,7 +520,7 @@ impl<'a> TocWriter<'a> {
         }
     }
 
-    fn finish(mut self) -> Result<u32, DocumentError> {
+    pub(crate) fn finish(mut self) -> Result<u32, DocumentError> {
         self.flush();
         match self.failed {
             Some(e) => Err(e),

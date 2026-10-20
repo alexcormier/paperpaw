@@ -751,3 +751,25 @@ fn a_comic_page_or_cover_that_cannot_be_decoded_is_tried_once() {
     }
     assert_eq!(card.reads_of("book.fb2"), reads, "read through again");
 }
+
+#[test]
+fn the_contents_of_a_fictionbook_are_kept_on_the_card() {
+    let mut book = String::from("<?xml version=\"1.0\" encoding=\"utf-8\"?><FictionBook><body>");
+    let title = "A long title of a section, as some books have them. ".repeat(4);
+    for i in 0..5000 {
+        book.push_str(&format!(
+            "<section><title><p>{i} {title}</p></title><p>T.</p></section>"
+        ));
+    }
+    book.push_str("</body></FictionBook>");
+    let card = Card::new("book.fb2", book.into_bytes());
+    let (doc, heap) = peak(|| Fb2Document::open(&card, "book.fb2", true).unwrap());
+    assert!(heap < 64 * 1024, "{heap} bytes at once");
+    assert_eq!(doc.toc_len(&card), 5000);
+    let (again, heap) = peak(|| Fb2Document::open(&card, "book.fb2", true).unwrap());
+    assert!(heap < 16 * 1024, "{heap} bytes at once");
+    let entry = again.toc_entry(&card, 4999).unwrap();
+    assert!(entry.title.starts_with("4999 A long title"));
+    let block = again.block_at(&card, entry.at).unwrap().unwrap();
+    assert!(block.text.starts_with("4999 A long title"));
+}
