@@ -36,5 +36,8 @@ android_logger = { version = "0.15", default-features = false }
 jni = "0.21"
 ndk = "0.9"
 
+[dev-dependencies]
+paperpaw-i18n.workspace = true
+
 [lints]
 workspace = true

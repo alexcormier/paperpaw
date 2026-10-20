@@ -6,6 +6,13 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Android: a PDF page that fails no longer makes every later page of the
+  book fail. In the background or with the screen off, PaperPaw neither
+  runs timers (unless it reads aloud) nor draws. A restart while reading
+  aloud no longer keeps the screen on. Only the rows that changed are
+  copied to the screen, not all 2.1 million pixels of a Boox Go 7. The
+  sample books are copied once, into a library folder that is not there
+  yet: deleted, they stay deleted.
 - The Android app installs on devices with 16 KB memory pages: its
   library is linked and aligned in the APK for them (`zipalign -P 16`,
   build tools 35 or later). `build-apk.sh` also builds in folders whose

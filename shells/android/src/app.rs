@@ -2,6 +2,7 @@
 
 use std::ffi::CString;
 use std::io::Read;
+use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant as StdInstant};
 
@@ -54,6 +55,8 @@ struct Running {
     shared_storage: bool,
     /// The strongest refresh requested since the last frame was shown.
     refresh: Option<RefreshMode>,
+    /// The rows of the frame changed since it was shown last.
+    changed_rows: Option<Range<u16>>,
     /// When the battery and time zone were read last.
     status_read: Instant,
     /// HTTP requests in flight.
@@ -93,11 +96,18 @@ fn android_main(app: AndroidApp) {
     let mut running: Option<Running> = None;
     let mut window: Option<NativeWindow> = None;
     let mut quit = false;
+    // In the background (or the screen is off): timers wait, unless
+    // reading aloud goes on, and nothing is shown.
+    let mut paused = false;
+    // The frame changed and is still to be shown.
+    let mut unshown = false;
 
     while !quit {
+        let ticking = !paused || running.as_ref().is_some_and(|r| r.kernel.speaking());
         let mut timeout = running
             .as_ref()
             .and_then(|r| r.wake_at)
+            .filter(|_| ticking)
             .map(|at| Duration::from_millis(at.since(now())));
         // Speech waiting for the engine looks again soon.
         if running.as_ref().is_some_and(|r| r.speech.waiting()) {
@@ -120,7 +130,7 @@ fn android_main(app: AndroidApp) {
                             if let Some(epd) = epd.as_mut() {
                                 epd.set(RefreshMode::Full);
                             }
-                            present(window, &running.frame, running.kernel.colors());
+                            present(window, &running.frame, running.kernel.colors(), None);
                         }
                     }
                 }
@@ -142,19 +152,21 @@ fn android_main(app: AndroidApp) {
                             running.frame = new;
                             let effects = running.kernel.resize(now(), width, height);
                             apply(running, effects);
+                            running.changed_rows = None;
                             if let Some(epd) = epd.as_mut() {
                                 epd.set(RefreshMode::Full);
                             }
                         }
-                        present(window, &running.frame, running.kernel.colors());
+                        present(window, &running.frame, running.kernel.colors(), None);
                     }
                 }
                 MainEvent::Resume { .. } => {
+                    paused = false;
                     // The time zone or the battery may have changed.
                     if let Some(running) = running.as_mut() {
                         running.status_read = Instant(0);
                         let effects = running.kernel.resume(now());
-                        apply(running, effects);
+                        unshown |= apply(running, effects);
                     }
                     // Back from the settings page that grants storage
                     // access: restart with the shared storage.
@@ -166,6 +178,7 @@ fn android_main(app: AndroidApp) {
                     }
                 }
                 MainEvent::Pause => {
+                    paused = true;
                     // Other apps get the device's own refresh setting.
                     if let Some(epd) = epd.as_mut() {
                         epd.reset();
@@ -173,7 +186,7 @@ fn android_main(app: AndroidApp) {
                     // Plugins save or send what is pending (e.g. progress).
                     if let Some(running) = running.as_mut() {
                         let effects = running.kernel.suspend(now());
-                        apply(running, effects);
+                        unshown |= apply(running, effects);
                     }
                 }
                 MainEvent::GainedFocus => {
@@ -193,7 +206,7 @@ fn android_main(app: AndroidApp) {
         let Some(state) = running.as_mut() else {
             continue;
         };
-        let mut changed = false;
+        let mut changed = core::mem::take(&mut unshown);
         if let Ok(mut events) = app.input_events_iter() {
             while events.next(|event| {
                 // What PaperPaw takes is handled, also when it brings no
@@ -240,10 +253,13 @@ fn android_main(app: AndroidApp) {
             let effects = state.kernel.speech_done(now(), id, spoken);
             changed |= apply(state, effects);
         }
-        if state.wake_at.is_some_and(|at| at <= now()) {
+        if ticking && state.wake_at.is_some_and(|at| at <= now()) {
             // What changed shows before the timer runs: it may take a
             // while (e.g. reading a folder on an SD card) and say so first.
-            if changed && let Some(window) = &window {
+            if changed
+                && !paused
+                && let Some(window) = &window
+            {
                 show(window, epd.as_mut(), state);
                 changed = false;
             }
@@ -265,8 +281,11 @@ fn android_main(app: AndroidApp) {
                 app.set_window_flags(none, on);
             }
         }
-        if changed && let Some(window) = &window {
-            show(window, epd.as_mut(), state);
+        if changed {
+            match &window {
+                Some(window) if !paused => show(window, epd.as_mut(), state),
+                _ => unshown = true,
+            }
         }
         for warning in state.kernel.take_warnings() {
             log::warn!("{warning}");
@@ -275,6 +294,14 @@ fn android_main(app: AndroidApp) {
             && let Some(window) = &window
         {
             log::info!("restarting");
+            // The new kernel does not read aloud (yet): the screen may
+            // turn off again.
+            if state.awake {
+                app.set_window_flags(
+                    WindowManagerFlags::empty(),
+                    WindowManagerFlags::KEEP_SCREEN_ON,
+                );
+            }
             // The old kernel goes first: its files are closed and its
             // memory is free before the new one starts.
             drop(running.take());
@@ -283,8 +310,9 @@ fn android_main(app: AndroidApp) {
                 if let Some(epd) = epd.as_mut() {
                     epd.set(RefreshMode::Full);
                 }
-                present(window, &running.frame, running.kernel.colors());
+                present(window, &running.frame, running.kernel.colors(), None);
             }
+            unshown = false;
         }
     }
 }
@@ -496,6 +524,7 @@ fn start_kernel(
         restart: false,
         shared_storage,
         refresh: None,
+        changed_rows: None,
         status_read: now,
         net: crate::net::Net::new(app),
         app: app.clone(),
@@ -517,11 +546,11 @@ fn start_kernel(
 }
 
 /// Copies the sample books from the APK on first start, so there is
-/// something to read.
+/// something to read. Once the folder is there, it is the user's: sample
+/// books deleted from it stay deleted.
 fn install_samples(app: &AndroidApp, root: &Path) {
     let books = root.join("books");
-    let has_books = std::fs::read_dir(&books).is_ok_and(|mut entries| entries.next().is_some());
-    if has_books {
+    if books.exists() {
         return;
     }
     if let Err(e) = std::fs::create_dir_all(&books) {
@@ -582,16 +611,22 @@ fn apply(state: &mut Running, effects: Effects) -> bool {
         state.rotation = rotation;
         turn(&state.app, rotation);
     }
-    if let Some((_, mode)) = effects.refresh() {
-        state.refresh = Some(state.refresh.map_or(mode, |m| m.max(mode)));
-    }
-    if effects.refresh().is_none() {
+    let Some((region, mode)) = effects.refresh() else {
         return false;
-    }
+    };
+    state.refresh = Some(state.refresh.map_or(mode, |m| m.max(mode)));
+    // What is to be refreshed is shown anew, with the rows drawn.
+    let bottom = u16::try_from(region.bottom()).unwrap_or(u16::MAX);
+    let mut rows = state.changed_rows.take().map_or(region.y..bottom, |r| {
+        r.start.min(region.y)..r.end.max(bottom)
+    });
     let frame = &mut state.frame;
-    state
-        .kernel
-        .render(&mut |top, rows| frame.write_rows(top, rows));
+    state.kernel.render(&mut |top, band| {
+        let end = top.saturating_add(band.height);
+        rows = rows.start.min(top)..rows.end.max(end);
+        frame.write_rows(top, band);
+    });
+    state.changed_rows = Some(rows);
     true
 }
 
@@ -623,12 +658,19 @@ fn show(window: &NativeWindow, epd: Option<&mut Epd>, state: &mut Running) {
     if let (Some(epd), Some(mode)) = (epd, state.refresh.take()) {
         epd.set(mode);
     }
-    present(window, &state.frame, state.kernel.colors());
+    let rows = state.changed_rows.take();
+    present(window, &state.frame, state.kernel.colors(), rows);
 }
 
-/// Copies the whole frame into the window, in the colours of the
-/// settings.
-fn present(window: &NativeWindow, frame: &Framebuffer, colors: [[u8; 3]; 2]) {
+/// Copies the frame into the window, in the colours of the settings: the
+/// `rows` that changed, or all of them. The window keeps the others (it
+/// may ask for more, e.g. for a new buffer).
+fn present(
+    window: &NativeWindow,
+    frame: &Framebuffer,
+    colors: [[u8; 3]; 2],
+    rows: Option<Range<u16>>,
+) {
     let (width, height) = (i32::from(frame.width()), i32::from(frame.height()));
     if let Err(e) =
         window.set_buffers_geometry(width, height, Some(HardwareBufferFormat::R8G8B8A8_UNORM))
@@ -636,15 +678,25 @@ fn present(window: &NativeWindow, frame: &Framebuffer, colors: [[u8; 3]; 2]) {
         log::warn!("window geometry: {e}");
         return;
     }
-    let Ok(mut buffer) = window.lock(None) else {
+    let rows = rows.unwrap_or(0..frame.height());
+    let mut bounds = ndk::native_window::Rect {
+        left: 0,
+        top: i32::from(rows.start),
+        right: width,
+        bottom: i32::from(rows.end),
+    };
+    let Ok(mut buffer) = window.lock(Some(&mut bounds)) else {
         return;
     };
+    // The rows the window asks for.
+    let rows =
+        usize::try_from(bounds.top).unwrap_or(0)..usize::try_from(bounds.bottom).unwrap_or(0);
     let stride = buffer.stride();
     let Some(bytes) = buffer.bytes() else {
         return;
     };
     let tint = pixels::tint(colors);
-    pixels::to_rgba(&frame.view(), 0, stride, &tint, |at, rgba| {
+    pixels::to_rgba(&frame.view(), rows, stride, &tint, |at, rgba| {
         if let Some(pixel) = bytes.get_mut(at..at + 4) {
             for (slot, value) in pixel.iter_mut().zip(rgba) {
                 slot.write(value);

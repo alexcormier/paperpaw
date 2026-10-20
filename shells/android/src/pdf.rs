@@ -200,6 +200,9 @@ impl PdfDocument {
             )?
             .l()?;
         let result = self.render_open(env, &open, sink);
+        // A Java exception must go before the page can be closed: a page
+        // left open fails every later one of the book.
+        clear_exception(env);
         let _ = env.call_method(&open, "close", "()V", &[]);
         result
     }
@@ -246,6 +249,7 @@ impl PdfDocument {
             ],
         )?;
         let result = self.copy_rows(env, &bitmap, w, h, sink);
+        clear_exception(env);
         let _ = env.call_method(&bitmap, "recycle", "()V", &[]);
         result
     }
@@ -296,6 +300,15 @@ impl PdfDocument {
             y += rows;
         }
         Ok(Ok(()))
+    }
+}
+
+/// Logs and clears a pending Java exception, so that JNI can be called
+/// again.
+fn clear_exception(env: &mut JNIEnv<'_>) {
+    if env.exception_check().unwrap_or(false) {
+        let _ = env.exception_describe();
+        let _ = env.exception_clear();
     }
 }
 
