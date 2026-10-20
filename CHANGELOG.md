@@ -6,6 +6,10 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Library: a folder that has become empty no longer stops the library
+  in the emulator (a page of an empty listing was counted below zero).
+- Data files: a file marked `# format 0` is left as it is instead of
+  stopping PaperPaw; versions start at 1.
 - SDK: helpers that plugins wrote each for themselves, now in one place.
   `Storage::ignores_case` says whether a storage takes `Books` for
   `books` (memory cards, Windows and macOS disks do), and

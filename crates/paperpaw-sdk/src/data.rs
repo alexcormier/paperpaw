@@ -89,7 +89,8 @@ impl Format {
         Self { version, upgrades }
     }
 
-    /// The version of a file's `text` (see the [module documentation](self)).
+    /// The version of a file's `text` (see the [module documentation](self)):
+    /// 0 where its mark says so (`# format 0`), which no format reads.
     pub fn version_of(text: &str) -> u32 {
         text.lines()
             .next()
@@ -105,6 +106,9 @@ impl Format {
         let mut version = Self::version_of(text);
         if version > self.version {
             return Err(Error::Newer(version));
+        }
+        if version == 0 {
+            return Err(Error::Unreadable);
         }
         let body = if version > 1 {
             text.split_once('\n').map_or("", |(_, rest)| rest)
@@ -212,6 +216,8 @@ mod tests {
         assert_eq!(FORMAT.read("# format 4\nx\n"), Err(Error::Newer(4)));
         // A comment that is no mark is version 1.
         assert_eq!(Format::version_of("# my colours\ncolour = red"), 1);
+        // Versions start at 1.
+        assert_eq!(FORMAT.read("# format 0\nx\n"), Err(Error::Unreadable));
     }
 
     #[test]
