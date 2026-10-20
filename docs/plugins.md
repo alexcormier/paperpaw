@@ -610,8 +610,13 @@ where memory goes.
 
 A code plugin can also be a file, `code.ppn`, in a plugin's folder on
 the card, which the X4 and the X4 Pro load at their start (ADR 0024):
-from the plugin store, from the web flasher with the firmware, or copied
-by hand. Its code is the same as that of a plugin built in, and it runs
+from the plugin store or from the web flasher with the firmware. Only
+code installed runs: an installer names the file by its digest
+(`native::remember_code`, kept in `.paperpaw` where neither the Wi-Fi
+transfer nor plugins' folders reach), and a file put into a plugin's
+folder otherwise is not run (the plugin manager says why); an author
+trying their own build names it over USB
+(`tools/x4-remote.py --trust-code <id>`). Its code is the same as that of a plugin built in, and it runs
 as part of PaperPaw, at full speed and without a sandbox: it can do
 whatever PaperPaw can, also past the SDK. The X4 Pro runs it from its
 PSRAM; the X4 writes it once into flash behind its firmware (about 1.8

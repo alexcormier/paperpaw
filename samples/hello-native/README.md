@@ -36,10 +36,14 @@ repository's top):
 cp -r samples/hello-native/plugin hello
 cargo run -p paperpaw-sign -- pack samples/hello-native/target/riscv32imc-unknown-none-elf/release/hello hello/code.ppn --key author.key
 python tools/x4-remote.py --push hello plugins/hello
+python tools/x4-remote.py --trust-code hello
 ```
 
 The file runs only on a PaperPaw built by the same compiler from the
-same SDK; *About* on the device names both.
+same SDK; *About* on the device names both. And only once installed: a
+file copied into a plugin's folder does not run until it is named as
+installed, as the store and the web flasher do, here over USB
+(`--trust-code`, which only a firmware built for development answers).
 
 ## Size
 

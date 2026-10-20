@@ -81,7 +81,11 @@ impl Storage for Shared {
 struct NoCode;
 
 impl CodeLoader for NoCode {
-    fn load(&mut self, _: &dyn Storage, _: &str) -> Result<Box<dyn Plugin>, PluginProblem> {
+    fn load(
+        &mut self,
+        _: &dyn Storage,
+        _: &paperpaw_core::CodeFile<'_>,
+    ) -> Result<Box<dyn Plugin>, PluginProblem> {
         Err(PluginProblem::Damaged)
     }
 }

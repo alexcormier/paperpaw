@@ -104,6 +104,11 @@ pub enum PluginProblem {
     SafeMode,
     /// Safe mode switched it off: PaperPaw did not start with it.
     Crashed,
+    /// Its code was never installed (by a store, or from the web
+    /// flasher): a file copied into its folder is not run.
+    NotInstalled,
+    /// Its code is not the file installed: changed since.
+    Changed,
 }
 
 /// A plugin and its state.

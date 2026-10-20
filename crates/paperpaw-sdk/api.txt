@@ -1210,8 +1210,10 @@ pub const paperpaw_sdk::native::FINGERPRINT: paperpaw_sdk::native::Fingerprint
 pub const paperpaw_sdk::native::TOOLCHAIN: &str
 pub fn paperpaw_sdk::native::author(&dyn paperpaw_platform::storage::Storage, &str, &[u8; 32]) -> paperpaw_sdk::native::Author
 pub fn paperpaw_sdk::native::check_file(&dyn paperpaw_platform::storage::Storage, &str) -> core::result::Result<(paperpaw_native::header::Header, core::option::Option<paperpaw_native::signature::Signature>), paperpaw_native::header::Problem>
+pub fn paperpaw_sdk::native::installed_code(&dyn paperpaw_platform::storage::Storage, &str) -> core::option::Option<[u8; 32]>
 pub fn paperpaw_sdk::native::known_author(&dyn paperpaw_platform::storage::Storage, &str) -> core::option::Option<[u8; 32]>
 pub fn paperpaw_sdk::native::remember_author(&dyn paperpaw_platform::storage::Storage, &str, &[u8; 32]) -> bool
+pub fn paperpaw_sdk::native::remember_code(&dyn paperpaw_platform::storage::Storage, &str, &[u8; 32]) -> bool
 pub unsafe fn paperpaw_sdk::native::take(*mut core::ffi::c_void) -> core::option::Option<alloc::boxed::Box<dyn paperpaw_sdk::Plugin>>
 pub mod paperpaw_sdk::numbers
 pub const paperpaw_sdk::numbers::DECIMAL_MARK: &str
@@ -2500,10 +2502,12 @@ pub paperpaw_sdk::PluginKind::BuiltIn
 pub paperpaw_sdk::PluginKind::Code
 pub paperpaw_sdk::PluginKind::Data
 #[non_exhaustive] pub enum paperpaw_sdk::PluginProblem
+pub paperpaw_sdk::PluginProblem::Changed
 pub paperpaw_sdk::PluginProblem::Crashed
 pub paperpaw_sdk::PluginProblem::Damaged
 pub paperpaw_sdk::PluginProblem::Mismatch
 pub paperpaw_sdk::PluginProblem::NoRoom
+pub paperpaw_sdk::PluginProblem::NotInstalled
 pub paperpaw_sdk::PluginProblem::OtherBuild
 pub paperpaw_sdk::PluginProblem::SafeMode
 pub paperpaw_sdk::PluginProblem::Unsupported

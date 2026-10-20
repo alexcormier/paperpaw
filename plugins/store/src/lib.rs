@@ -141,10 +141,10 @@ fn received(env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
     let name = [("name", Arg::Str(&done.name))];
     let folder = INSTALLER.folder(env.storage).unwrap_or_default();
     let key = match trust::verdict(env, &done.plugin, &folder) {
-        Verdict::Install { author } => {
+        Verdict::Install { code } => {
             let before = env.plugins.get(&done.plugin).is_some();
-            trust::install(env, author, out);
-            match (author.is_some(), before) {
+            trust::install(env, code, out);
+            match (code.is_some(), before) {
                 (true, true) => "store.updated-code",
                 (true, false) => "store.installed-code",
                 (false, true) => "store.updated",

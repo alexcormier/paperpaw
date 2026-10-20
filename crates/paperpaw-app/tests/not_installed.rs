@@ -5,7 +5,7 @@
 // Tests panic on purpose when something is wrong.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use paperpaw_core::{CodeLoader, Kernel};
+use paperpaw_core::{CodeFile, CodeLoader, Kernel};
 use paperpaw_platform::{
     DeviceInfo, DisplayInfo, InputCaps, Instant, MemoryClass, PixelFormat, Rotation,
 };
@@ -36,7 +36,11 @@ const DEVICE: DeviceInfo = DeviceInfo {
 struct NoCode;
 
 impl CodeLoader for NoCode {
-    fn load(&mut self, _: &dyn Storage, _: &str) -> Result<Box<dyn Plugin>, PluginProblem> {
+    fn load(
+        &mut self,
+        _: &dyn Storage,
+        _: &CodeFile<'_>,
+    ) -> Result<Box<dyn Plugin>, PluginProblem> {
         Err(PluginProblem::Unsupported)
     }
 }

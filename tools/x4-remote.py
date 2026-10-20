@@ -15,6 +15,8 @@ Usage:
   python tools/x4-remote.py --pull .paperpaw/plugins/stats stats/   (a folder off it)
   python tools/x4-remote.py --ls books   --cat paperpaw.ini   --rm updates/old.bin
   python tools/x4-remote.py --mkdir books/new   --mv books/a.epub books/b.epub
+  python tools/x4-remote.py --trust-code hello   (one's own build of a code plugin,
+      copied into plugins/hello by hand, named as installed: only code installed runs)
   python tools/x4-remote.py --info     (version, plugins, native code, the screens open, the time)
   python tools/x4-remote.py --crashes  (the crash file, its calls named from the
       firmware's symbols: the build that crashed must be the one built here)
@@ -180,15 +182,9 @@ class X4:
         """Copies the file `local` to `path` on the X4's card, and checks it
         there by its MD5."""
         data = Path(local).read_bytes()
-        self.ask(f"put {len(data)} {path}", "READY")
         started = time.monotonic()
-        for at in range(0, len(data), 512):
-            self.port.write(b"data " + data[at : at + 512].hex().encode() + b"\n")
-        self.expect(f"put {path}", "OK")
+        self.write(path, data)
         seconds = time.monotonic() - started
-        there = self.ask(f"md5 {path}", "MD5")[-1].split()
-        if there[1] != hashlib.md5(data).hexdigest() or int(there[2]) != len(data):
-            sys.exit(f"{path}: arrived changed (MD5 {there[1]}, {there[2]} bytes)")
         print(f"{path}: {len(data) // 1000} KB in {seconds:.1f} s, checked")
 
     def get(self, path, local):
@@ -196,6 +192,37 @@ class X4:
         data = self.read(path)
         Path(local).write_bytes(data)
         print(f"{path}: {len(data)} bytes to {local}")
+
+    def trust_code(self, folder):
+        """Names the code in plugins/<folder> as installed, as the store and
+        the web flasher do (.paperpaw/plugin-code.txt): PaperPaw runs only
+        code installed, and this is for one's own build copied there by
+        hand. Its header's SHA-256 is what is kept, by the plugin's id (its
+        plugin.ini's, else the folder's name)."""
+        head = self.read(f"plugins/{folder}/code.ppn")[:80]
+        if len(head) < 80 or head[:4] != b"PPNP":
+            sys.exit(f"plugins/{folder}/code.ppn: not a plugin file")
+        ini = self.read(f"plugins/{folder}/plugin.ini").decode("utf-8", "replace")
+        ids = re.findall(r"(?m)^\s*id\s*=\s*(\S+)", ini)
+        plugin = ids[0] if ids else folder
+        path = ".paperpaw/plugin-code.txt"
+        kept = ""
+        if self.ask(f"stat {path}", "STAT")[-1].split()[1] == "f":
+            kept = self.read(path).decode()
+        lines = [line for line in kept.splitlines() if line.split("\t")[0] != plugin]
+        lines.append(f"{plugin}\t{head[48:80].hex()}")
+        self.write(path, "".join(f"{line}\n" for line in lines).encode())
+        print(f"plugins/{folder}/code.ppn: named as installed for {plugin} ({head[48:56].hex()}...)")
+
+    def write(self, path, data):
+        """Writes `data` to `path` on the X4's card, checked by its MD5."""
+        self.ask(f"put {len(data)} {path}", "READY")
+        for at in range(0, len(data), 512):
+            self.port.write(b"data " + data[at : at + 512].hex().encode() + b"\n")
+        self.expect(f"put {path}", "OK")
+        there = self.ask(f"md5 {path}", "MD5")[-1].split()
+        if there[1] != hashlib.md5(data).hexdigest() or int(there[2]) != len(data):
+            sys.exit(f"{path}: arrived changed (MD5 {there[1]}, {there[2]} bytes)")
 
     def read(self, path):
         """The bytes of the file `path` on the X4's card."""
@@ -624,6 +651,13 @@ def main():
     parser.add_argument("--rm", action="append", default=[], metavar="PATH")
     parser.add_argument("--mkdir", action="append", default=[], metavar="PATH")
     parser.add_argument("--mv", nargs=2, action="append", default=[], metavar=("FROM", "TO"))
+    parser.add_argument(
+        "--trust-code",
+        action="append",
+        default=[],
+        metavar="FOLDER",
+        help="name the code in plugins/FOLDER as installed (one's own build copied by hand)",
+    )
     parser.add_argument("--info", action="store_true", help="version, plugins, native code, screens, time")
     parser.add_argument("--crashes", action="store_true", help="the crash file, its calls named")
     parser.add_argument(
@@ -668,6 +702,8 @@ def main():
         run(x4, f"cat:{path}")
     for path in args.rm:
         run(x4, f"rm:{path}")
+    for folder in args.trust_code:
+        x4.trust_code(folder)
     if args.wifi_connect:
         password = getpass.getpass(f"Password for {args.wifi_connect} (empty if open): ")
         hexed = password.encode().hex() or "-"

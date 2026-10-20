@@ -200,6 +200,11 @@ and the plugin manager says why.
   (Ed25519, in their own CI). A device remembers the author's key at the
   first install and refuses, without a clear warning, an update signed
   by another, so a taken-over server cannot swap a known plugin quietly.
+  It also names the file installed by its digest (in `.paperpaw`, out of
+  the Wi-Fi transfer's reach) and loads only that file, so one put into
+  a plugin's folder otherwise (over the transfer, on the card) does not
+  run in its place: the plugin manager says it was not installed, or was
+  changed, and to install it again.
   A plugin's manifest declares what it uses (storage, network,
   secrets, other plugins' data), shown before installing; natively that
   is a promise checked by review, not a fence. A sandbox would not
@@ -262,6 +267,16 @@ What the spike left open, as the implementation found it (2026-10-20):
   built against the same SDK features and NDK target as the app. `plugin!`
   builds a library the system loads already (the test above loads one),
   its table set by the shell.
+- **Only the file installed runs.** The store and the firmware
+  installing the bundle name a code plugin's file by its header's
+  SHA-256 (`native::remember_code`, `.paperpaw/plugin-code.txt`); the
+  kernel hands it to the shell's loader (`CodeFile`), which loads only a
+  file with that header, its content checked against it where it is
+  placed. A file never installed is refused (`PluginProblem::NotInstalled`)
+  rather than confirmed on the device: copying a file by hand is an
+  author's way, who names it over USB (`x4-remote.py --trust-code`).
+  The loader is told the plugin's id from its `plugin.ini`, so safe mode
+  and a crash name it by that, in whatever folder it is.
 - **Author signatures** are a trailer in the `.ppn` itself
   (`paperpaw_native::signature`), so a file carries its signature
   wherever it goes; the store and the firmware installing the web

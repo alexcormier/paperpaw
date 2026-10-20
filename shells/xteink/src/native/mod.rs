@@ -29,7 +29,7 @@ use core::cell::RefCell;
 
 use critical_section::Mutex;
 use log::{info, warn};
-use paperpaw_core::CodeLoader;
+use paperpaw_core::{CodeFile, CodeLoader};
 use paperpaw_native::{CODE_OFFSET, Chip, Entry, HEADER_LEN, Header, Problem};
 use paperpaw_platform::Storage;
 use paperpaw_sdk::native::{FINGERPRINT, TOOLCHAIN};
@@ -43,7 +43,7 @@ const CHIP: Chip = Chip::Esp32S3;
 
 /// A plugin's image, where it runs.
 struct Image {
-    /// The plugin's id (its folder's name).
+    /// The plugin's id, as its `plugin.ini` says.
     id: String,
     /// The instruction address of the image's first byte.
     code_base: u32,
@@ -166,8 +166,9 @@ impl Loader {
     fn load_file(
         &mut self,
         storage: &dyn Storage,
-        path: &str,
+        code: &CodeFile<'_>,
     ) -> Result<Box<dyn Plugin>, PluginProblem> {
+        let path = code.path;
         let heap = esp_alloc::HEAP.used();
         let internal = internal_free();
         let started = crate::micros();
@@ -180,6 +181,12 @@ impl Loader {
                 header.chip, header.fingerprint
             );
             return Err(PluginProblem::OtherBuild);
+        }
+        // The file installed, its content checked against its header
+        // where it is placed: not one put in its folder since.
+        if header.sha256 != code.sha256 {
+            warn!("native: {path} is not the file installed");
+            return Err(PluginProblem::Changed);
         }
         // Signed by its author or not: the store and the bundle checked
         // the signature when they installed it.
@@ -195,13 +202,9 @@ impl Loader {
         if entry.fingerprint != FINGERPRINT.0 {
             return Err(PluginProblem::Damaged);
         }
-        let id = path
-            .rsplit('/')
-            .nth(1)
-            .map_or_else(String::new, String::from);
         critical_section::with(|cs| {
             IMAGES.borrow_ref_mut(cs).push(Image {
-                id,
+                id: String::from(code.id.as_str()),
                 code_base: base + CODE_OFFSET,
                 len: header.image_len,
                 took: None,
@@ -234,11 +237,11 @@ impl CodeLoader for Loader {
     fn load(
         &mut self,
         storage: &dyn Storage,
-        path: &str,
+        code: &CodeFile<'_>,
     ) -> Result<Box<dyn Plugin>, PluginProblem> {
-        let id = path.rsplit('/').nth(1).unwrap_or(path);
-        crate::safe_mode::loading(id);
-        self.load_file(storage, path)
+        // By its id, as safe mode switches it off.
+        crate::safe_mode::loading(code.id.as_str());
+        self.load_file(storage, code)
     }
 
     fn finish(&mut self, _storage: &dyn Storage) {

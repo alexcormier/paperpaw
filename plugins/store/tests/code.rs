@@ -16,7 +16,7 @@ use paperpaw_native::signature::{public_key, sign};
 use paperpaw_native::{Chip, Header, LINK_BASE};
 use paperpaw_plugin_store::OPEN;
 use paperpaw_sdk::builtin::actions;
-use paperpaw_sdk::native::{Fingerprint, Native, known_author};
+use paperpaw_sdk::native::{Fingerprint, Native, installed_code, known_author};
 use paperpaw_sdk::{PluginKind, Storage, Version};
 
 const PAGE: &str = "https://paperpaw.org/api/v1/plugins/clock.json?device=x4&lang=en";
@@ -177,6 +177,8 @@ fn a_code_plugin_is_installed_and_starts_after_a_restart() {
     // Its author remembered for its updates.
     let storage = &shopping.storage;
     assert_eq!(known_author(storage, "clock"), Some(public_key(&AUTHOR)));
+    // Its code named as installed: only that file runs.
+    assert_eq!(installed_code(storage, "clock"), Some(digest(&code)));
     let shown = shopping.shown();
     assert!(shown.contains("Restart now"), "{shown}");
     assert!(
@@ -230,6 +232,12 @@ fn an_update_by_another_author_waits_for_the_readers_word() {
     assert_eq!(installed(&shopping), Some(Version::new(1, 1, 0)));
     let storage = &shopping.storage;
     assert_eq!(known_author(storage, "clock"), Some(public_key(&OTHER)));
+    assert_eq!(installed_code(storage, "clock"), Some(digest(&other)));
+}
+
+/// The SHA-256 a plugin file's header carries.
+fn digest(file: &[u8]) -> [u8; 32] {
+    file[48..80].try_into().unwrap()
 }
 
 /// The clock's first install with `code`: not installed, the reader told
@@ -244,6 +252,7 @@ fn refused(code: &[u8], why: &str) {
         "{why}"
     );
     assert_eq!(known_author(&shopping.storage, "clock"), None, "{why}");
+    assert_eq!(installed_code(&shopping.storage, "clock"), None, "{why}");
     // Said in the notice over the page, its lines joined.
     let shown = shopping.shown().replace(" | ", " ");
     assert!(shown.contains(why), "{why}: {shown}");

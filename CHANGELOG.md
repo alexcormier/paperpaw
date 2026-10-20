@@ -18,7 +18,12 @@ change the plugin SDK.
   sent with the update check). Plugins the web flasher writes behind the
   firmware are installed at the first start, their authors' keys
   remembered as the store does; code signed by another author than the
-  version installed is not, and the plugin manager says so. Safe mode:
+  version installed is not, and the plugin manager says so. Only code
+  installed runs: the store and the web flasher's install name a file
+  by its digest (kept in `.paperpaw`), and one put into a plugin's
+  folder otherwise, over the Wi-Fi transfer or on the card, is not
+  loaded (`tools/x4-remote.py --trust-code` names an author's own build
+  over USB). Safe mode:
   after two starts that did not get to their first frame, or with *Back*
   (X4) or *Home* (X4 Pro) held at power-on, PaperPaw starts without code
   plugins and switches off the one that crashed; the plugin manager says why a code
@@ -26,13 +31,17 @@ change the plugin SDK.
   file, with a CI job for a plugin's own repository.
 - SDK: `native` (the fingerprint, `plugin!`, `Env::native`,
   `check_file`, `Native::not_installed`: plugins a shell did not
-  install at the start, and why), `PluginInfo::kind` and
+  install at the start, and why; `remember_code` and `installed_code`:
+  the code installed, by its digest), `PluginProblem::NotInstalled` and
+  `Changed`, `PluginInfo::kind` and
   `PluginInfo::problem`;
   `Registrar::publish` publishes a service with its type's name, so
   plugins built apart find it (`Registrar::add_service` is deprecated);
   a float in an event's parameters is read without `core`'s large exact
   parser (16 KB less in a native plugin that takes reading events).
-- Kernel: `KernelBuilder::code_plugins`, `safe_mode` and
+- Kernel: `KernelBuilder::code_plugins` with the shell's `CodeLoader`
+  (which loads a `CodeFile`: the plugin's id from its `plugin.ini`, its
+  path, the digest installed), `safe_mode` and
   `install_plugin` (plugins a shell put in folders, installed before
   plugins load); `Kernel::describe` describes a notice showing.
 - Dictionary: a damaged dictionary is no longer indexed again with

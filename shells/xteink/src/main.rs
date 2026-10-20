@@ -348,7 +348,7 @@ impl paperpaw_core::CodeLoader for NoCode {
     fn load(
         &mut self,
         _: &dyn Storage,
-        _: &str,
+        _: &paperpaw_core::CodeFile<'_>,
     ) -> Result<Box<dyn paperpaw_sdk::Plugin>, paperpaw_sdk::PluginProblem> {
         Err(paperpaw_sdk::PluginProblem::SafeMode)
     }

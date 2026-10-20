@@ -48,16 +48,25 @@ impl Refusal {
 /// What to do with a plugin all of whose files are here.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Verdict {
-    /// Install it; for a code plugin, with its author's key to remember.
+    /// Install it; for a code plugin, with its author's key and its
+    /// code's digest to remember.
     Install {
-        author: Option<[u8; 32]>,
+        code: Option<Code>,
     },
-    /// Its code is signed by `author`, another than the author of the
-    /// version installed before: only if the reader says so.
+    /// Its code is signed by another author than the version installed
+    /// before: only if the reader says so.
     OtherAuthor {
-        author: [u8; 32],
+        code: Code,
     },
     Refused(Refusal),
+}
+
+/// A code plugin's code checked: its author's key, and its file's digest
+/// (its header's SHA-256), which only the file installed has.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Code {
+    pub(crate) author: [u8; 32],
+    pub(crate) sha256: [u8; 32],
 }
 
 /// The key the library names for `plugin`'s author, kept from when its
@@ -107,7 +116,7 @@ pub(crate) fn verdict(env: &Env<'_>, plugin: &str, folder: &str) -> Verdict {
         .map(|name| format!("{folder}/{name}"))
         .find(|path| storage.exists(path));
     let Some(code) = code else {
-        return Verdict::Install { author: None };
+        return Verdict::Install { code: None };
     };
     let Some(native) = env.native.filter(|native| code.ends_with(&*native.file)) else {
         return Verdict::Refused(Refusal::Unsupported);
@@ -123,26 +132,32 @@ pub(crate) fn verdict(env: &Env<'_>, plugin: &str, folder: &str) -> Verdict {
         return Verdict::Refused(Refusal::Unsigned);
     };
     let key = signature.key;
+    let code = Code {
+        author: key,
+        sha256: header.sha256,
+    };
     match native::author(storage, plugin, &key) {
-        Author::Known => Verdict::Install { author: Some(key) },
-        Author::Other => Verdict::OtherAuthor { author: key },
+        Author::Known => Verdict::Install { code: Some(code) },
+        Author::Other => Verdict::OtherAuthor { code },
         Author::New if expected(storage, plugin) == Some(key) => {
-            Verdict::Install { author: Some(key) }
+            Verdict::Install { code: Some(code) }
         }
         Author::New => Verdict::Refused(Refusal::NotTheAuthor),
     }
 }
 
-/// Installs the complete job's plugin, remembering its author's key; for
-/// one signed by another author, after the reader said to.
+/// Installs the complete job's plugin, remembering its author's key and
+/// naming its code as installed; for one signed by another author, after
+/// the reader said to.
 pub(crate) fn install(
     env: &Env<'_>,
-    author: Option<[u8; 32]>,
+    code: Option<Code>,
     out: &mut Vec<Command>,
 ) -> Option<Progress> {
     let progress = INSTALLER.progress(env.storage)?;
-    if let Some(key) = author {
-        native::remember_author(env.storage, &progress.plugin, &key);
+    if let Some(code) = code {
+        native::remember_author(env.storage, &progress.plugin, &code.author);
+        native::remember_code(env.storage, &progress.plugin, &code.sha256);
     }
     let _ = env.storage.remove(&expected_path());
     INSTALLER.install(env, out)
@@ -154,7 +169,7 @@ pub(crate) fn install_anyway(env: &Env<'_>, out: &mut Vec<Command>) -> Option<Pr
     let progress = INSTALLER.progress(env.storage)?;
     let folder = INSTALLER.folder(env.storage)?;
     match verdict(env, &progress.plugin, &folder) {
-        Verdict::OtherAuthor { author } => install(env, Some(author), out),
+        Verdict::OtherAuthor { code } => install(env, Some(code), out),
         _ => None,
     }
 }

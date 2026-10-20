@@ -5,8 +5,9 @@
 //! its author's signature, for the kernel to install before it loads
 //! plugins (`KernelBuilder::install_plugin`), so they run at this start.
 //! The author's key is remembered at a plugin's first install
-//! (`native::remember_author`); code signed by another author than the
-//! version installed before is not installed, and the plugin manager says
+//! (`native::remember_author`), and the code installed by its digest
+//! (`native::remember_code`: only that file runs); code signed by another
+//! author than the version installed before is not installed, and the plugin manager says
 //! so (`Native::not_installed`): the reader decides in the store, warned.
 //! Once they are all on the card, the bundle's first sector is erased
 //! (on the X4 its code plugins go there).
@@ -87,8 +88,10 @@ pub fn stage(flash: &Flash, storage: &dyn Storage) -> Option<Staged> {
         at: behind.start,
     };
     let mut staged = Staged::default();
-    // The authors' keys of the plugins installed, kept once all are.
+    // The authors' keys and the code of the plugins installed, kept once
+    // all are.
     let mut authors: Vec<(&str, [u8; 32])> = Vec::new();
+    let mut codes: Vec<(&str, [u8; 32])> = Vec::new();
     for plugin in &bundle.plugins {
         // The bundle's names are those of plugins (`Bundle::read`).
         let Ok(id) = Id::parse(&plugin.id) else {
@@ -105,8 +108,10 @@ pub fn stage(flash: &Flash, storage: &dyn Storage) -> Option<Staged> {
             return None;
         }
         match check(storage, &plugin.id, &folder) {
-            Ok(author) => {
-                authors.extend(author.map(|key| (plugin.id.as_str(), key)));
+            Ok(checked) => {
+                let name = plugin.id.as_str();
+                authors.extend(checked.author.map(|key| (name, key)));
+                codes.extend(checked.sha256.map(|sha256| (name, sha256)));
                 staged.installs.push((id, folder));
             }
             Err(reason) => {
@@ -119,6 +124,11 @@ pub fn stage(flash: &Flash, storage: &dyn Storage) -> Option<Staged> {
     for (plugin, key) in authors {
         if !native::remember_author(storage, plugin, &key) {
             warn!("bundle: {plugin}: its author's key not kept");
+        }
+    }
+    for (plugin, sha256) in codes {
+        if !native::remember_code(storage, plugin, &sha256) {
+            warn!("bundle: {plugin}: its code not named as installed");
         }
     }
     erase(&mut flash, behind.start);
@@ -183,34 +193,47 @@ fn copy_file(
     Ok(())
 }
 
+/// What a plugin checked to install brings to remember: its author's key
+/// at its first install, and its code's digest.
+#[derive(Default)]
+struct Checked {
+    author: Option<[u8; 32]>,
+    sha256: Option<[u8; 32]>,
+}
+
 /// Whether `plugin`, copied into `folder`, is installed: a data plugin
 /// is; a code plugin when its code is a plugin file whose author's
 /// signature holds, by the author of the version installed before if
-/// there was one. `Ok` with its author's key to remember at its first
-/// install.
-fn check(
-    storage: &dyn Storage,
-    plugin: &str,
-    folder: &str,
-) -> Result<Option<[u8; 32]>, NotInstalledReason> {
+/// there was one.
+fn check(storage: &dyn Storage, plugin: &str, folder: &str) -> Result<Checked, NotInstalledReason> {
     let code = format!("{folder}/code.ppn");
     if !storage.exists(&code) {
-        return Ok(None);
+        return Ok(Checked::default());
     }
-    let (_, signature) = native::check_file(storage, &code).map_err(|problem| {
+    let (header, signature) = native::check_file(storage, &code).map_err(|problem| {
         warn!("bundle: {plugin}: {problem}");
         NotInstalledReason::Damaged
     })?;
+    let sha256 = Some(header.sha256);
     let Some(signature) = signature else {
         // Not signed: one's own build, unless a signed one was installed.
         return match native::known_author(storage, plugin) {
             Some(_) => Err(NotInstalledReason::OtherAuthor),
-            None => Ok(None),
+            None => Ok(Checked {
+                author: None,
+                sha256,
+            }),
         };
     };
     match native::author(storage, plugin, &signature.key) {
-        Author::Known => Ok(None),
-        Author::New => Ok(Some(signature.key)),
+        Author::Known => Ok(Checked {
+            author: None,
+            sha256,
+        }),
+        Author::New => Ok(Checked {
+            author: Some(signature.key),
+            sha256,
+        }),
         Author::Other => Err(NotInstalledReason::OtherAuthor),
     }
 }

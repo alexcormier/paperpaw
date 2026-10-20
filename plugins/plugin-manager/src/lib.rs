@@ -353,6 +353,8 @@ fn problem_key(problem: PluginProblem) -> &'static str {
         PluginProblem::Unsupported => "plugin-manager.code.unsupported",
         PluginProblem::SafeMode => "plugin-manager.code.safe-mode",
         PluginProblem::Crashed => "plugin-manager.code.crashed",
+        PluginProblem::NotInstalled => "plugin-manager.code.not-installed",
+        PluginProblem::Changed => "plugin-manager.code.changed",
         _ => "plugin-manager.failed",
     }
 }

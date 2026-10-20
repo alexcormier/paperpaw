@@ -145,7 +145,41 @@ pub fn author(storage: &dyn Storage, plugin: &str, key: &[u8; 32]) -> Author {
 /// The key of the author of `plugin`'s code, as remembered at its first
 /// install ([`remember_author`]).
 pub fn known_author(storage: &dyn Storage, plugin: &str) -> Option<[u8; 32]> {
-    let text = crate::read_file(storage, AUTHORS, 64 * 1024).ok()?;
+    entry(storage, AUTHORS, plugin)
+}
+
+/// Remembers `key` as the author of `plugin`'s code, in place of one
+/// known before: at its first install, and when the reader installed an
+/// update by another; `false` if it could not be kept.
+pub fn remember_author(storage: &dyn Storage, plugin: &str, key: &[u8; 32]) -> bool {
+    keep_entry(storage, AUTHORS, plugin, key)
+}
+
+/// Where the code plugins' files are named as they were installed, by the
+/// SHA-256 their headers carry (`Header::sha256`, which holds for all of
+/// the file but its signature): beside the authors' keys, where neither
+/// the Wi-Fi transfer nor plugins' own folders reach.
+const INSTALLED: &str = crate::data_path!("plugin-code.txt");
+
+/// The code of `plugin` as installed ([`remember_code`]): the SHA-256 of
+/// its file's header. The kernel loads a code plugin's file only when its
+/// header says the same, so that a file put into a plugin's folder
+/// otherwise (copied there by hand, or over the Wi-Fi transfer) does not
+/// run in its place.
+pub fn installed_code(storage: &dyn Storage, plugin: &str) -> Option<[u8; 32]> {
+    entry(storage, INSTALLED, plugin)
+}
+
+/// Names the code of `plugin` as installed, by its header's SHA-256, in
+/// place of the version before: every installer does, once it checked the
+/// file ([`check_file`]) and its author; `false` if it could not be kept.
+pub fn remember_code(storage: &dyn Storage, plugin: &str, sha256: &[u8; 32]) -> bool {
+    keep_entry(storage, INSTALLED, plugin, sha256)
+}
+
+/// The 32 bytes kept for `plugin` in `file`, a line `<plugin>\t<hex>` each.
+fn entry(storage: &dyn Storage, file: &str, plugin: &str) -> Option<[u8; 32]> {
+    let text = crate::read_file(storage, file, 64 * 1024).ok()?;
     let text = core::str::from_utf8(&text).ok()?;
     let hex = text
         .lines()
@@ -153,11 +187,9 @@ pub fn known_author(storage: &dyn Storage, plugin: &str) -> Option<[u8; 32]> {
     paperpaw_digest::hex::decode(hex.trim())?.try_into().ok()
 }
 
-/// Remembers `key` as the author of `plugin`'s code, in place of one
-/// known before: at its first install, and when the reader installed an
-/// update by another; `false` if it could not be kept.
-pub fn remember_author(storage: &dyn Storage, plugin: &str, key: &[u8; 32]) -> bool {
-    let kept = crate::read_file(storage, AUTHORS, 64 * 1024).unwrap_or_default();
+/// Keeps `value` for `plugin` in `file`, in place of what was kept.
+fn keep_entry(storage: &dyn Storage, file: &str, plugin: &str, value: &[u8; 32]) -> bool {
+    let kept = crate::read_file(storage, file, 64 * 1024).unwrap_or_default();
     let kept = core::str::from_utf8(&kept).unwrap_or_default();
     let mut text: String = kept
         .lines()
@@ -166,10 +198,10 @@ pub fn remember_author(storage: &dyn Storage, plugin: &str, key: &[u8; 32]) -> b
         .collect();
     text.push_str(&alloc::format!(
         "{plugin}\t{}\n",
-        paperpaw_digest::hex::encode(key)
+        paperpaw_digest::hex::encode(value)
     ));
     let _ = storage.create_dir(crate::data::DIR);
-    storage.write(AUTHORS, text.as_bytes()).is_ok()
+    storage.write(file, text.as_bytes()).is_ok()
 }
 
 /// Fills `buf` from `path` at `at`.
@@ -503,6 +535,19 @@ mod tests {
     use alloc::string::ToString;
 
     use super::*;
+
+    #[test]
+    fn code_is_named_as_installed() {
+        let storage = crate::MemoryStorage::new();
+        assert_eq!(installed_code(&storage, "clock"), None);
+        assert!(remember_code(&storage, "clock", &[1; 32]));
+        assert!(remember_author(&storage, "clock", &[2; 32]));
+        assert!(remember_code(&storage, "clock", &[3; 32]));
+        assert_eq!(installed_code(&storage, "clock"), Some([3; 32]));
+        // Kept apart from the authors.
+        assert_eq!(known_author(&storage, "clock"), Some([2; 32]));
+        assert_eq!(installed_code(&storage, "clock-face"), None);
+    }
 
     #[test]
     fn authors_are_known_by_plugin() {

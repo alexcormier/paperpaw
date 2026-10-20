@@ -29,15 +29,33 @@ use crate::{Kernel, WarningSource};
 /// What loads the code of code plugins: the shell's, which knows where it
 /// can run.
 pub trait CodeLoader {
-    /// Loads the code in the file at `path` (a plugin folder's
-    /// [`Native::file`]) and makes its plugin, or says why it cannot. Called
-    /// at the start, once for every code plugin switched on, in the order
-    /// of their ids.
-    fn load(&mut self, storage: &dyn Storage, path: &str)
-    -> Result<Box<dyn Plugin>, PluginProblem>;
+    /// Loads the code of the plugin `code.id` and makes its plugin, or
+    /// says why it cannot. Called at the start, once for every code plugin
+    /// switched on, in the order of their ids. Only the file installed may
+    /// run: one whose header's SHA-256 is not `code.sha256` (changed since
+    /// it was installed) is [`PluginProblem::Changed`], and its content
+    /// must hold to its header.
+    fn load(
+        &mut self,
+        storage: &dyn Storage,
+        code: &CodeFile<'_>,
+    ) -> Result<Box<dyn Plugin>, PluginProblem>;
 
     /// Every code plugin of this start is loaded.
     fn finish(&mut self, _storage: &dyn Storage) {}
+}
+
+/// A code plugin's file to load ([`CodeLoader::load`]).
+#[derive(Debug, Clone, Copy)]
+pub struct CodeFile<'a> {
+    /// The plugin's id, as its `plugin.ini` says: what a crash in its
+    /// code is told by.
+    pub id: &'a Id,
+    /// The file: its folder's [`Native::file`].
+    pub path: &'a str,
+    /// The SHA-256 its header carried when it was installed
+    /// ([`paperpaw_sdk::native::installed_code`]).
+    pub sha256: [u8; 32],
 }
 
 /// How the kernel loads code plugins at this start.
@@ -108,7 +126,21 @@ impl Kernel {
                 continue;
             }
             let path = native.path(plugin.folder());
-            let loaded = loader.load(storage.as_ref(), &path).and_then(|code| {
+            // Only code installed runs: not a file put there otherwise.
+            let Some(sha256) = paperpaw_sdk::native::installed_code(storage.as_ref(), id.as_str())
+            else {
+                let message = format!("{path}: never installed; not loaded");
+                self.warn(WarningSource::Plugin(id.clone()), None, message);
+                let problem = PluginProblem::NotInstalled;
+                self.list_code_plugin(&plugin, disabled, PluginState::Failed, problem);
+                continue;
+            };
+            let file = CodeFile {
+                id: &id,
+                path: &path,
+                sha256,
+            };
+            let loaded = loader.load(storage.as_ref(), &file).and_then(|code| {
                 if code.manifest().id == id {
                     Ok(code)
                 } else {
@@ -252,13 +284,24 @@ mod tests {
     #[derive(Clone, Default)]
     struct Loader {
         asked: Rc<RefCell<Vec<String>>>,
+        /// The ids it was told, with the paths asked.
+        ids: Rc<RefCell<Vec<String>>>,
         finished: Rc<RefCell<bool>>,
         answers: Vec<(&'static str, Result<&'static str, PluginProblem>)>,
     }
 
     impl CodeLoader for Loader {
-        fn load(&mut self, _: &dyn Storage, path: &str) -> Result<Box<dyn Plugin>, PluginProblem> {
+        fn load(
+            &mut self,
+            _: &dyn Storage,
+            code: &CodeFile<'_>,
+        ) -> Result<Box<dyn Plugin>, PluginProblem> {
+            let path = code.path;
             self.asked.borrow_mut().push(String::from(path));
+            self.ids.borrow_mut().push(String::from(code.id.as_str()));
+            if code.sha256 != installed(code.id.as_str()) {
+                return Err(PluginProblem::Changed);
+            }
             let answer = self
                 .answers
                 .iter()
@@ -276,8 +319,25 @@ mod tests {
         }
     }
 
+    /// The digest a test plugin's code was installed with.
+    fn installed(id: &str) -> [u8; 32] {
+        [id.len() as u8; 32]
+    }
+
+    /// The storage's code plugins named as installed.
+    fn named_installed(storage: MemoryStorage, ids: &[&str]) -> MemoryStorage {
+        for id in ids {
+            assert!(paperpaw_sdk::native::remember_code(
+                &storage,
+                id,
+                &installed(id)
+            ));
+        }
+        storage
+    }
+
     fn storage() -> MemoryStorage {
-        MemoryStorage::new()
+        let storage = MemoryStorage::new()
             .with("plugins/zeta/plugin.ini", "[plugin]\nname = Zeta\n")
             .with("plugins/zeta/code.ppn", "PPNP")
             .with("plugins/hello/plugin.ini", "[plugin]\nname = Hello\n")
@@ -286,7 +346,8 @@ mod tests {
                 "plugins/hello/i18n/en.ini",
                 "[meta]\nlanguage = en\nname = English\nplural = one-other\n\n[messages]\nhello.greeting = Hi\n",
             )
-            .with("plugins/theme/plugin.ini", "[plugin]\nname = Theme\n")
+            .with("plugins/theme/plugin.ini", "[plugin]\nname = Theme\n");
+        named_installed(storage, &["hello", "zeta"])
     }
 
     fn loader() -> Loader {
@@ -381,6 +442,61 @@ mod tests {
     }
 
     #[test]
+    fn only_code_installed_runs() {
+        let loader = loader();
+        let storage = storage()
+            .with("plugins/copied/plugin.ini", "[plugin]\nname = Copied\n")
+            .with("plugins/copied/code.ppn", "PPNP");
+        // Hello's file is not the one installed.
+        assert!(paperpaw_sdk::native::remember_code(
+            &storage, "hello", &[9; 32]
+        ));
+        let kernel = Kernel::builder(DEVICE)
+            .storage(storage)
+            .code_plugins(Native::new("code.ppn"), Box::new(loader.clone()))
+            .build()
+            .unwrap();
+        // Never installed: its code is not even read.
+        assert!(!loader.asked.borrow().iter().any(|p| p.contains("copied")));
+        let copied = info(&kernel, "copied");
+        assert_eq!(
+            (copied.state, copied.problem),
+            (PluginState::Failed, Some(PluginProblem::NotInstalled))
+        );
+        assert!(copied.enabled, "it runs once installed");
+        let hello = info(&kernel, "hello");
+        assert_eq!(
+            (hello.state, hello.problem),
+            (PluginState::Failed, Some(PluginProblem::Changed))
+        );
+        assert_eq!(info(&kernel, "zeta").state, PluginState::Running);
+    }
+
+    #[test]
+    fn code_is_loaded_by_its_plugins_id_in_any_folder() {
+        let loader = Loader {
+            answers: alloc::vec![("plugins/my-clock/code.ppn", Ok("clock"))],
+            ..Loader::default()
+        };
+        let storage = MemoryStorage::new()
+            .with(
+                "plugins/my-clock/plugin.ini",
+                "[plugin]\nid = clock\nname = Clock\n",
+            )
+            .with("plugins/my-clock/code.ppn", "PPNP");
+        let storage = named_installed(storage, &["clock"]);
+        let kernel = Kernel::builder(DEVICE)
+            .storage(storage)
+            .code_plugins(Native::new("code.ppn"), Box::new(loader.clone()))
+            .build()
+            .unwrap();
+        // Told by its id, what safe mode and a crash name it by.
+        assert_eq!(*loader.ids.borrow(), ["clock"]);
+        assert_eq!(*loader.asked.borrow(), ["plugins/my-clock/code.ppn"]);
+        assert_eq!(info(&kernel, "clock").state, PluginState::Running);
+    }
+
+    #[test]
     fn safe_mode_switches_off_the_plugin_the_crash_was_in() {
         let loader = loader();
         let mut safe_mode = SafeMode::new(SafeModeReason::FailedStarts);
@@ -468,6 +584,8 @@ mod tests {
             )
             .with("plugins/.hello.part/code.ppn", "PPNP")
             .with("plugins/.other.part/plugin.ini", "[plugin]\nid = zeta\n");
+        // As the shell's installer names it.
+        let storage = named_installed(storage, &["hello"]);
         let mut kernel = Kernel::builder(DEVICE)
             .storage(storage)
             .code_plugins(Native::new("code.ppn"), Box::new(loader.clone()))
