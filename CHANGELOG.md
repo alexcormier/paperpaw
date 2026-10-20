@@ -351,12 +351,17 @@ change the plugin SDK.
   back to where it began keeps the value, also where steps are finer
   than pixels; a touch whose end got lost no longer holds a slider or a
   row's grip.
-- A kept thumbnail whose header claims a picture larger than its file
-  takes no memory for it (a file of 17 bytes could ask for 8 MB). Empty
+- A kept thumbnail whose header claims a picture larger than the box it
+  was made for takes no memory for it (a file of 17 bytes could ask for
+  8 MB). Empty
   screens in narrow areas leave out the paw (or the icon) that would
   not fit.
 - SDK: `Settings::define` and `define_fixed` refuse a setting past the
-  32,768th of its kind instead of mixing it up with another.
+  32,768th of its kind instead of mixing it up with another; changing a
+  spec kept in the program with no place left for its copy says
+  `SettingError::Full`, and `Settings::set_choices` says whether it
+  did. `Thumbnail::kept` takes the box the thumbnail was made for and
+  reads no header claiming more.
 - Headers translate their page number; on and off in setting rows are
   the kernel's words (`core.on`, `core.off`), also where the settings
   plugin is switched off.
@@ -364,11 +369,16 @@ change the plugin SDK.
   `ListView::set_len` (the focus kept in a shorter list).
   `Slider::stepped` goes to the next step a drag gives;
   `ui::next_value` steps from a value not among the options to the
-  first (or last) option and stays within a number's range at its ends. Fields set past what the constructors
-  allow no longer bring a list down (`ListView::row` 0, more columns
-  than fit, a `Slider` with `max` below `min`), nor do `Rows::new` with
-  marks and heights of different lengths. Steppers measure the room of
-  their value by its width.
+  first (or last) option and stays within a number's range at its
+  ends. Fields set past what the constructors allow no longer bring a
+  list down (`ListView::row` 0, more columns than fit, a `Slider` with
+  `max` below `min`), nor do `Rows::new` with marks and heights of
+  different lengths. Steppers measure the room of their value by its
+  width.
+- Headers: the back arrow's ink begins at the content's margin, where
+  list icons begin, and the title where labels after icons do; the next
+  page's arrow ends at the right margin (on the Boox the arrow sat 8 px
+  left of the icons).
 - SDK: helpers that plugins wrote each for themselves, now in one place.
   `Storage::ignores_case` says whether a storage takes `Books` for
   `books` (memory cards, Windows and macOS disks do), and

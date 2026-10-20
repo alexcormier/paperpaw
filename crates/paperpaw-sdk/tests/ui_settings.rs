@@ -39,8 +39,6 @@ plural = one-other
 t.unit.px.one = {count} pixel
 t.unit.px.other = {count} pixels
 t.look.bold = Bold
-settings.on = On
-settings.off = Off
 t.tap = Tap a rule to pause it
 t.tap.buttons = Select a rule to pause it
 ";
@@ -182,16 +180,16 @@ fn a_choice_holding_a_value_it_does_not_offer_steps_to_one_it_does() {
 /// first).
 #[test]
 fn from_a_value_not_offered_the_steps_begin_at_the_ends() {
-    let (mut h, [_, _, look, ..]) = harness(Device::TOUCH);
-    h.settings
-        .set("t.look", SettingValue::Text(Cow::Borrowed("t.look.gone")))
-        .unwrap();
+    let (h, [_, _, look, ..]) = harness(Device::TOUCH);
+    // Holding "t.look.plain", now offering the pair alone.
+    let mut spec = look.clone();
+    spec.kind = paperpaw_sdk::SettingKind::Choice(Choices::Fixed(&PAIRS));
     let text = |v: Option<SettingValue>| match v {
         Some(SettingValue::Text(t)) => t.to_string(),
         other => panic!("{other:?}"),
     };
-    assert_eq!(text(ui::next_value(&h.env(), &look, 1)), LOOKS[0]);
-    assert_eq!(text(ui::next_value(&h.env(), &look, -1)), LOOKS[2]);
+    assert_eq!(text(ui::next_value(&h.env(), &spec, 1)), PAIRS[0]);
+    assert_eq!(text(ui::next_value(&h.env(), &spec, -1)), PAIRS[1]);
 }
 
 /// A number at the end of the widest range, stepped by a large step:
