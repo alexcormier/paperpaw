@@ -261,14 +261,22 @@ impl Screen for Choice {
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         if *action == actions::CONFIRM {
+            // Nothing to choose: closed at once.
+            if self.options.is_empty() {
+                self.choose(0, cx);
+                return Handled::Yes;
+            }
             match self.list.confirm() {
                 Some(index) => self.choose(index, cx),
                 None => self.moved(ListChange::Focus, cx),
             }
             return Handled::Yes;
         }
-        match self.list.navigate(action, self.options.len()) {
-            Some(change) => {
+        // The page buttons step too, as the other direction buttons: on the
+        // X4 they are the ones beside the screen.
+        match ui::list_step(action, 1) {
+            Some(delta) => {
+                let change = self.list.move_focus(delta, self.options.len());
                 self.moved(change, cx);
                 Handled::Yes
             }

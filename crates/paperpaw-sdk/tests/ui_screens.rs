@@ -181,7 +181,6 @@ fn a_long_title_takes_up_to_three_lines_and_the_options_stay_below_it() {
 /// More options than the screen holds (a plugin offering many): every
 /// option is still to be reached, on the screen.
 #[test]
-#[ignore = "bug: Choice lays all options out in one list taller than the screen; those below are off it"]
 fn more_options_than_fit_stay_on_the_screen() {
     let h = Harness::new(Device::TOUCH);
     let options: Vec<String> = (0..30).map(|n| format!("option{n}")).collect();
@@ -324,7 +323,6 @@ fn shown_items_are_reordered_by_their_grip() {
 /// updated) are part of the setting: changing the others keeps them, so
 /// they are back in their place when the plugin is.
 #[test]
-#[ignore = "bug: ItemsScreen writes back only the items there are now, dropping those of absent plugins"]
 fn items_of_a_plugin_not_there_now_are_kept() {
     let h = status_harness(Device::BUTTONS, "t.page, gone.clock, t.time");
     let mut screen = items_screen(&h);
@@ -333,6 +331,57 @@ fn items_of_a_plugin_not_there_now_are_kept() {
     let (_, commands) = run(&h, |cx| screen.on_action(&actions::CONFIRM, cx));
     let value = written(&commands).unwrap();
     assert!(value.contains("gone.clock"), "{value}");
+}
+
+/// With buttons alone (the X4), shown items are moved as by their grip:
+/// *Menu* takes the focused one along, the direction buttons move it a
+/// place, *Confirm* puts it down; then the buttons move the focus again.
+#[test]
+fn shown_items_are_reordered_by_buttons_alone() {
+    let h = status_harness(Device::BUTTONS, "t.page, t.time, t.battery");
+    let mut screen = items_screen(&h);
+    let env = h.env();
+    assert_eq!(
+        screen.hint(&actions::MENU, &env),
+        paperpaw_sdk::Hint::Text("core.move".into())
+    );
+    run(&h, |cx| screen.on_action(&actions::MENU, cx));
+    assert_eq!(
+        screen.hint(&actions::CONFIRM, &env),
+        paperpaw_sdk::Hint::Text("core.grid.done".into())
+    );
+    let (_, commands) = run(&h, |cx| screen.on_action(&actions::DOWN, cx));
+    assert_eq!(
+        written(&commands).as_deref(),
+        Some("t.time, t.page, t.battery")
+    );
+    // Back puts it down too and does not leave the screen.
+    let (handled, commands) = run(&h, |cx| screen.on_action(&actions::BACK, cx));
+    assert_eq!(handled, Handled::Yes);
+    assert!(!commands.contains(&Command::Back));
+    // The buttons move the focus again: Confirm hides the next item.
+    run(&h, |cx| screen.on_action(&actions::DOWN, cx));
+    let (_, commands) = run(&h, |cx| screen.on_action(&actions::CONFIRM, cx));
+    assert!(written(&commands).is_some());
+}
+
+/// On a touch screen the focus shows only once a button moved it: a
+/// first *Confirm* shows it instead of choosing a row nobody saw.
+#[test]
+fn a_first_confirm_on_a_touch_screen_shows_the_focus() {
+    let h = Harness::new(Device::TOUCH);
+    let mut screen = Choice::new(&h.env(), &opened(&["open", "delete"]));
+    let (_, commands) = run(&h, |cx| screen.on_action(&actions::CONFIRM, cx));
+    assert_eq!(picked(&commands), None);
+    let (_, commands) = run(&h, |cx| screen.on_action(&actions::CONFIRM, cx));
+    assert_eq!(picked(&commands).as_deref(), Some("open"));
+
+    let h = status_harness(Device::TOUCH, "t.page");
+    let mut screen = items_screen(&h);
+    let (_, commands) = run(&h, |cx| screen.on_action(&actions::CONFIRM, cx));
+    assert_eq!(written(&commands), None);
+    let (_, commands) = run(&h, |cx| screen.on_action(&actions::CONFIRM, cx));
+    assert_eq!(written(&commands).as_deref(), Some(""));
 }
 
 #[test]
