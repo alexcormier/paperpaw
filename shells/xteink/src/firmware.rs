@@ -34,10 +34,6 @@ const IDLE_MS: u64 = 30;
 /// How long after the last work what was written is written back to the
 /// card (not at once: a download writes in many pieces).
 const SYNC_MS: u64 = 2_000;
-/// An update on trial is taken as good once it ran this long (its start
-/// and the book it opens at once behind it), or when it goes to sleep or
-/// restarts by itself.
-const TRIAL_MS: u64 = 30_000;
 
 /// The X4's firmware: the kernel, the parts it drives, and where the main
 /// loop is.
@@ -102,10 +98,11 @@ impl Firmware {
         }
     }
 
-    /// An update on trial works: it is kept (see [`TRIAL_MS`]).
-    fn confirm(&mut self) {
+    /// The X4 ends cleanly (sleeps or restarts): an update on trial goes
+    /// on with its trial at the next start (see `ota`).
+    fn pause_trial(&mut self) {
         if let Some(ota) = &mut self.ota {
-            ota.confirm();
+            ota.pause_trial(now().0);
         }
     }
 
@@ -116,8 +113,8 @@ impl Firmware {
     }
 
     fn step(&mut self) {
-        if now().0 >= TRIAL_MS {
-            self.confirm();
+        if let Some(ota) = &mut self.ota {
+            ota.check_trial(now().0);
         }
         let installing = self.installing();
         if self.state.sleep && !installing {
@@ -213,11 +210,11 @@ impl Firmware {
     }
 
     /// Restarts the X4 once what plugins keep is saved and all written
-    /// is on the card (the kernel's suspend writes it back).
+    /// is on the card (the kernel's stop writes it back): no sleep.
     fn restart(&mut self) -> ! {
         info!("restarting");
-        self.confirm();
-        let _ = self.kernel.suspend(now());
+        self.pause_trial();
+        let _ = self.kernel.stop(now());
         esp_hal::system::software_reset();
     }
 
@@ -398,7 +395,7 @@ impl Firmware {
         // A press over USB that put it to sleep is let go first.
         #[cfg(feature = "remote")]
         self.release_held();
-        self.confirm();
+        self.pause_trial();
         let effects = self.kernel.suspend(now());
         self.apply(effects);
         let _ = self.panel.sleep();
@@ -456,6 +453,9 @@ impl Firmware {
         }
         info!("awake");
         self.state.sleep = false;
+        if let Some(ota) = &mut self.ota {
+            ota.resume_trial(now().0);
+        }
         let effects = self.kernel.resume(now());
         self.apply(effects);
         true
@@ -811,8 +811,9 @@ impl Firmware {
             }
             Command::Restart => {
                 // What plugins keep, saved and on the card first.
+                self.pause_trial();
                 let at = self.kernel_now();
-                let _ = self.kernel.suspend(at);
+                let _ = self.kernel.stop(at);
                 remote::ok();
                 esp_hal::system::software_reset();
             }

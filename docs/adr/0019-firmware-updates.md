@@ -26,11 +26,16 @@ may leave a device that does not start.
   data, so the firmware flashed is the one that starts.
 - **The firmware undoes a failed update itself** (`shells/xteink/src/ota.rs`).
   A new image's first start marks it on trial, before the board is set
-  up; running for half a minute, or going to sleep or restarting by
-  itself, marks it good. An image found on trial at a start (it never got
-  so far, e.g. it panicked or hung until the watchdog ended it) is marked
-  bad and the device restarts; the bootloader skips it, and the firmware
-  before it takes its place back and says so.
+  up; running for half a minute in all marks it good. Going to sleep or
+  restarting before marks it new again with the time it ran (in the OTA
+  data entry's label, which the bootloader does not read), so the next
+  start, on the X4 also a wake from sleep, goes on with the trial. An
+  image found on trial at a start (its last run ended otherwise, e.g. it
+  panicked or hung until the watchdog ended it) is marked bad and the
+  device restarts; the bootloader skips it, and the firmware before it
+  takes its place back and says so. These marks go to the running
+  image's entry, also when an update was chosen meanwhile; choosing
+  writes the other entry whole, so a power cut keeps the choice before.
 - **Signed update files** (`paperpaw-update`): the app image followed by
   a trailer with its length, the signer's Ed25519 public key and the
   signature over both. The X4 checks the signature while it writes the

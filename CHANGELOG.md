@@ -1368,10 +1368,13 @@ change the plugin SDK.
   `Signer::Trusted` are gone (none was released).
 - X4 updates: an update that fails early in its start is undone too. It
   goes on trial before the board is set up, and is taken as good after
-  half a minute or when it goes to sleep or restarts (it was at its
-  first frame, so one that crashed opening the last book stayed). The
-  start is watched from its first moment; a power cut while an update is
-  chosen no longer starts it without a trial.
+  half a minute of running in all (it was at its first frame, so one
+  that crashed opening the last book stayed); going to sleep or
+  restarting before keeps it on trial at the next start, so one that
+  crashes after a wake is undone as well. The start is watched from its
+  first moment; a power cut while an update is chosen no longer starts
+  it without a trial, and the image running is marked as good also when
+  an update was chosen meanwhile (that one was marked instead).
 - X4: what was written is on the card before every restart, also one a
   plugin asks for (a plugin switched just before was lost), and at most
   2 s after work, however often work comes.
