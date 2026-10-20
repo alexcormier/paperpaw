@@ -36,7 +36,8 @@ use crate::annotations::{self, Annotation, Kind, Mark};
 use crate::index::PageIndex;
 use crate::selection::{self, Item, Mode, Selection};
 use crate::settings::{
-    FONT_SIZE, FONT_WEIGHT, HYPHENATE, INDENT, JUSTIFY, LINE_SPACING, MARGIN, WORD_SPACING,
+    FONT_SIZE, FONT_WEIGHT, HYPHENATE, INDENT, JUSTIFY, LINE_SPACING, MARGIN, MARGIN_ENDS,
+    PARAGRAPH_SPACING, WORD_SPACING,
 };
 use crate::status;
 use crate::{PLUGIN, state_path};

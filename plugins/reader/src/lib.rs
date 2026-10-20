@@ -105,13 +105,20 @@ pub mod settings {
     pub const SMOOTH_TEXT: Setting<bool> = Setting::new("reader.smooth-text");
     /// Space between words in percent of the font's.
     pub const WORD_SPACING: Setting<i64> = Setting::new("reader.word-spacing");
-    /// Distance between baselines in percent of the font size.
+    /// Distance between baselines in percent of the font size, at least
+    /// the font's own; below 100 that much of the font's own.
     pub const LINE_SPACING: Setting<i64> = Setting::new("reader.line-spacing");
-    /// Page margins in millimetres.
+    /// Page margins in millimetres, at the sides (and at the top and
+    /// bottom while [`MARGIN_ENDS`] follows them).
     pub const MARGIN: Setting<i64> = Setting::new("reader.margin");
+    /// Margins at the top and bottom in millimetres; as [`MARGIN`] until
+    /// set.
+    pub const MARGIN_ENDS: Setting<i64> = Setting::new("reader.margin-ends");
     pub const JUSTIFY: Setting<bool> = Setting::new("reader.justify");
-    /// Indent first lines instead of spacing paragraphs apart.
+    /// Indent the first lines of paragraphs.
     pub const INDENT: Setting<bool> = Setting::new("reader.indent");
+    /// Space between paragraphs.
+    pub const PARAGRAPH_SPACING: Setting<bool> = Setting::new("reader.paragraph-spacing");
     /// Reopen the last book at start-up.
     pub const OPEN_LAST: Setting<bool> = Setting::new("reader.open-last");
     /// Notes shown over the page ([`FOOTNOTES_POPUP`]) or jumped to
@@ -238,6 +245,11 @@ mod extras {
         .unit("core.unit.mm")
         .section(PAGE)
         .slider();
+    pub(crate) static MARGIN_ENDS: SettingExtra = SettingExtra::new()
+        .unit("core.unit.mm")
+        .section(PAGE)
+        .slider()
+        .follows("reader.margin");
     pub(crate) static IN_PAGE: SettingExtra = SettingExtra::new().section(PAGE);
     pub(crate) static IN_BEHAVIOUR: SettingExtra = SettingExtra::new().section(BEHAVIOUR);
     pub(crate) static AUTO_TURN: SettingExtra = SettingExtra::new()
@@ -254,11 +266,11 @@ mod extras {
 
 /// The reading settings: the page and its type (each book may have its
 /// own), what the reader does, and reading aloud.
-static SETTINGS: [SettingSpec; 18] = [
+static SETTINGS: [SettingSpec; 20] = [
     SettingSpec::fixed_number(
         settings::LINE_SPACING.static_str(),
         "reader.setting.line-spacing",
-        100,
+        80,
         250,
         135,
         groups::READING,
@@ -307,6 +319,18 @@ static SETTINGS: [SettingSpec; 18] = [
     .with_extra(&extras::MARGIN)
     .scoped()
     .described("reader.setting.margin.help"),
+    SettingSpec::fixed_number(
+        settings::MARGIN_ENDS.static_str(),
+        "reader.setting.margin-ends",
+        0,
+        30,
+        4,
+        groups::READING,
+    )
+    .with_extra(&extras::MARGIN_ENDS)
+    .advanced()
+    .scoped()
+    .described("reader.setting.margin-ends.help"),
     SettingSpec::fixed_switch(
         settings::JUSTIFY.static_str(),
         "reader.setting.justify",
@@ -340,10 +364,18 @@ static SETTINGS: [SettingSpec; 18] = [
         true,
         groups::READING,
     )
-    .advanced()
     .scoped()
     .with_extra(&extras::IN_PAGE)
     .described("reader.setting.indent.help"),
+    SettingSpec::fixed_switch(
+        settings::PARAGRAPH_SPACING.static_str(),
+        "reader.setting.paragraph-spacing",
+        false,
+        groups::READING,
+    )
+    .scoped()
+    .with_extra(&extras::IN_PAGE)
+    .described("reader.setting.paragraph-spacing.help"),
     SettingSpec::fixed_switch(
         settings::OPEN_LAST.static_str(),
         "reader.setting.open-last",
@@ -602,11 +634,13 @@ impl Plugin for Reader {
         // A short menu; settings in it show their state and change in
         // place.
         let entries = [
+            // First, focused as the menu opens: with buttons, the font and
+            // layout are two presses away.
+            (MENU, actions::QUICK_SETTINGS, 5),
             (MENU, actions::TOC, 10),
             (MENU, actions::SEARCH, 20),
             (MENU, actions::READ_ALOUD, 30),
             (MENU, actions::ANNOTATIONS, 40),
-            (MENU, actions::QUICK_SETTINGS, 50),
             (MENU, core_settings::NIGHT_MODE.into(), 60),
             // Beside the night mode, to be found; held Select and the
             // corner are quicker.

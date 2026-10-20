@@ -640,3 +640,36 @@ fn swapped_page_buttons_turn_the_other_way_while_reading() {
     press(&mut reading, "page-back");
     assert_eq!(at(&reading), third);
 }
+
+/// Where the sixth page begins with the settings `sets` (pages of
+/// running text: the first ones end where the book's parts do).
+fn sixth_page(sets: &[(&str, &str)]) -> (u32, u32) {
+    let mut reading = Reading::new(Shared::default());
+    for (id, value) in sets {
+        set(&mut reading, id, value);
+    }
+    reading.open();
+    for _ in 0..5 {
+        reading.run(core_actions::NEXT_PAGE);
+    }
+    reading.kept()
+}
+
+#[test]
+fn the_page_holds_what_its_type_and_margins_leave_room_for() {
+    let standard = sixth_page(&[]);
+    // Margins at the top and bottom of their own: more lines, or fewer.
+    assert!(sixth_page(&[("reader.margin-ends", "0")]) > standard);
+    assert!(sixth_page(&[("reader.margin-ends", "20")]) < standard);
+    // Following the sides until set: larger sides, fewer lines too.
+    assert!(sixth_page(&[("reader.margin", "20")]) < sixth_page(&[("reader.margin-ends", "20")]));
+    // Space between paragraphs, apart from the indents.
+    assert!(sixth_page(&[("reader.paragraph-spacing", "on")]) < standard);
+    let flat = sixth_page(&[("reader.indent", "off")]);
+    assert!(sixth_page(&[("reader.indent", "off"), ("reader.paragraph-spacing", "on")]) < flat);
+    // Lines closer than the font sets them.
+    assert!(
+        sixth_page(&[("reader.line-spacing", "80")])
+            > sixth_page(&[("reader.line-spacing", "100")])
+    );
+}
