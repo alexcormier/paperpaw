@@ -1,6 +1,6 @@
 //! A footnote over the page (an overlay): the note's text, *Close* and
 //! *Go to the note*. Opened when a link that looks like a note mark
-//! ("1", "[2]", "*") is followed and the setting `reader.footnotes` says
+//! ("1", "[2]", "*") is followed and the setting `core.footnotes` says
 //! so; parameters `text`, `path` (the book) and `href` (the link).
 
 use alloc::string::{String, ToString};

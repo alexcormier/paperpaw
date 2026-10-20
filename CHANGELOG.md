@@ -6,6 +6,13 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: the type of book pages is standard, registered by the kernel as
+  the font size is: `settings::FONT_WEIGHT`, `WORD_SPACING`,
+  `LINE_SPACING`, `MARGIN`, `MARGIN_ENDS`, `JUSTIFY`, `HYPHENATE`,
+  `INDENT`, `PARAGRAPH_SPACING`, `PUBLISHER_STYLES` and `FOOTNOTES`
+  (`core.*`, were `reader.*`), so a reader of one's own reads them and
+  profiles, rules and themes set them for every reader. What was set
+  under the old ids is kept.
 - SDK: `pattern`, a small part of regular expressions (classes, word
   edges, repeats, alternatives, groups, any case) without a library and
   with bounded work; `decorations::PatternDecorator` marks the words

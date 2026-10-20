@@ -857,6 +857,38 @@ pub mod settings {
     pub const FONT_SIZE: Setting<i64> = Setting::new("core.font-size");
     /// The value of [`READING_FONT`] for the plugins' choice.
     pub const DEFAULT_FONT: &str = "core.font.default";
+    /// Darker text: glyphs widened by up to this many steps (0 to 4). The
+    /// standard type of book pages, as [`FONT_SIZE`]: the kernel
+    /// registers them, each book may have its own ([`SCOPE_ONLY`]), every
+    /// reader reads them.
+    pub const FONT_WEIGHT: Setting<i64> = Setting::new("core.font-weight");
+    /// Space between words in percent of the font's (50 to 200).
+    pub const WORD_SPACING: Setting<i64> = Setting::new("core.word-spacing");
+    /// Distance between baselines in percent of the font size, at least
+    /// the font's own; below 100 that much of the font's own (80 to 250).
+    pub const LINE_SPACING: Setting<i64> = Setting::new("core.line-spacing");
+    /// Page margins in millimetres, at the sides (and at the top and
+    /// bottom while [`MARGIN_ENDS`] follows them).
+    pub const MARGIN: Setting<i64> = Setting::new("core.margin");
+    /// Margins at the top and bottom in millimetres; as [`MARGIN`] until
+    /// set.
+    pub const MARGIN_ENDS: Setting<i64> = Setting::new("core.margin-ends");
+    /// Lines of paragraphs as wide as the page.
+    pub const JUSTIFY: Setting<bool> = Setting::new("core.justify");
+    /// Words broken at line ends, in the book's language.
+    pub const HYPHENATE: Setting<bool> = Setting::new("core.hyphenate");
+    /// The first lines of paragraphs indented.
+    pub const INDENT: Setting<bool> = Setting::new("core.indent");
+    /// Space between paragraphs.
+    pub const PARAGRAPH_SPACING: Setting<bool> = Setting::new("core.paragraph-spacing");
+    /// The book's own styles (an EPUB's CSS), see
+    /// [`OpenOptions::publisher_styles`](crate::OpenOptions).
+    pub const PUBLISHER_STYLES: Setting<bool> = Setting::new("core.publisher-styles");
+    /// Notes shown over the page ([`FOOTNOTES_POPUP`]) or gone to
+    /// ([`FOOTNOTES_JUMP`]) when their mark is followed.
+    pub const FOOTNOTES: Setting<Text> = Setting::new("core.footnotes");
+    pub const FOOTNOTES_POPUP: &str = "core.footnotes.popup";
+    pub const FOOTNOTES_JUMP: &str = "core.footnotes.jump";
     /// The font of the status lines while reading
     /// ([`fonts::STATUS`](super::fonts::STATUS)): [`STATUS_FONT_UI`],
     /// [`STATUS_FONT_BOOK`] or a font family's name.

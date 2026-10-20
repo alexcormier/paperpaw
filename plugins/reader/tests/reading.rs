@@ -749,18 +749,17 @@ fn sixth_page(sets: &[(&str, &str)]) -> (u32, u32) {
 fn the_page_holds_what_its_type_and_margins_leave_room_for() {
     let standard = sixth_page(&[]);
     // Margins at the top and bottom of their own: more lines, or fewer.
-    assert!(sixth_page(&[("reader.margin-ends", "0")]) > standard);
-    assert!(sixth_page(&[("reader.margin-ends", "20")]) < standard);
+    assert!(sixth_page(&[("core.margin-ends", "0")]) > standard);
+    assert!(sixth_page(&[("core.margin-ends", "20")]) < standard);
     // Following the sides until set: larger sides, fewer lines too.
-    assert!(sixth_page(&[("reader.margin", "20")]) < sixth_page(&[("reader.margin-ends", "20")]));
+    assert!(sixth_page(&[("core.margin", "20")]) < sixth_page(&[("core.margin-ends", "20")]));
     // Space between paragraphs, apart from the indents.
-    assert!(sixth_page(&[("reader.paragraph-spacing", "on")]) < standard);
-    let flat = sixth_page(&[("reader.indent", "off")]);
-    assert!(sixth_page(&[("reader.indent", "off"), ("reader.paragraph-spacing", "on")]) < flat);
+    assert!(sixth_page(&[("core.paragraph-spacing", "on")]) < standard);
+    let flat = sixth_page(&[("core.indent", "off")]);
+    assert!(sixth_page(&[("core.indent", "off"), ("core.paragraph-spacing", "on")]) < flat);
     // Lines closer than the font sets them.
     assert!(
-        sixth_page(&[("reader.line-spacing", "80")])
-            > sixth_page(&[("reader.line-spacing", "100")])
+        sixth_page(&[("core.line-spacing", "80")]) > sixth_page(&[("core.line-spacing", "100")])
     );
 }
 
@@ -1004,7 +1003,7 @@ fn search_and_contents_read_the_book_as_the_page_shows_it() {
     let mut reading = Reading::with_book(storage.clone(), EPUB, epub);
     // Without the book's own styles: its chapters converted into a cache
     // of their own.
-    set(&mut reading, "reader.publisher-styles", "off");
+    set(&mut reading, "core.publisher-styles", "off");
     reading.open();
     reading.run(actions::TOC);
     reading.run(core_actions::BACK);

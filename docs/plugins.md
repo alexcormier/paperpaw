@@ -491,7 +491,8 @@ to `core.reader`) replaces the shipped one in full.
 | Text chosen, and the action chosen for it | `menus::SELECTION`, `events::TEXT_CHOSEN` | add an action to the menu, hear the event |
 | Notes exported as Markdown | `events::NOTES_EXPORTED` | for notes apps and syncs |
 | The reader's menus | `menus::READER`, `READER_MORE`, `READER_PANEL` | add entries there |
-| Font size | `settings::FONT_SIZE` | the kernel's setting, which readers read |
+| The type of pages | `settings::FONT_SIZE`, `FONT_WEIGHT`, `WORD_SPACING`, `LINE_SPACING`, `MARGIN`, `MARGIN_ENDS`, `JUSTIFY`, `HYPHENATE`, `INDENT`, `PARAGRAPH_SPACING`, `PUBLISHER_STYLES`, `FOOTNOTES` | the kernel's settings (each book may have its own), which readers read |
+| The page's words | `events::PAGE_WORDS_WANTED`, `reading::PageWords` | readers answer `reading::ask_page_words` |
 | Status lines' settings | `groups::STATUS_LINES` | the group readers put them in |
 | Reading aloud's settings | `setting_sections::ALOUD` | the section readers and shells put them in |
 | Key bindings while reading | the layer `[keymap.core.reader]` | the slot's layer, whichever screen fills it |

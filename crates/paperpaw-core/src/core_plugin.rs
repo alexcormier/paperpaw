@@ -490,6 +490,30 @@ static FONT_PT: SettingExtra = SettingExtra::new()
     .section(setting_sections::FONT)
     .unit("core.unit.pt")
     .slider();
+static WEIGHT: SettingExtra = SettingExtra::new()
+    .unit("core.unit.weight")
+    .section(setting_sections::FONT);
+static WORDS: SettingExtra = SettingExtra::new()
+    .unit("core.unit.percent")
+    .step(10)
+    .section(setting_sections::FONT)
+    .slider();
+static LINES: SettingExtra = SettingExtra::new()
+    .unit("core.unit.percent")
+    .step(5)
+    .section(setting_sections::PAGE)
+    .slider();
+static MARGINS: SettingExtra = SettingExtra::new()
+    .unit("core.unit.mm")
+    .section(setting_sections::PAGE)
+    .slider();
+static MARGINS_ENDS: SettingExtra = SettingExtra::new()
+    .unit("core.unit.mm")
+    .section(setting_sections::PAGE)
+    .slider()
+    .follows(settings::MARGIN.static_str());
+static IN_PAGE: SettingExtra = SettingExtra::new().section(setting_sections::PAGE);
+static IN_BEHAVIOUR: SettingExtra = SettingExtra::new().section(setting_sections::BEHAVIOUR);
 
 /// The language, night mode, speech and the edges for swipes.
 static GENERAL: [SettingSpec; 8] = [
@@ -861,7 +885,7 @@ fn register_colors(r: &mut Registrar) -> Result<(), RegisterError> {
 /// The reading font, and whether a book's settings are its own. The
 /// status lines' font: the menus', the book's or one of its own (the
 /// families are offered once all fonts are known).
-static READING: [SettingSpec; 4] = [
+static READING: [SettingSpec; 15] = [
     SettingSpec::fixed_choice(
         settings::STATUS_FONT.static_str(),
         "core.setting.status-font",
@@ -891,6 +915,117 @@ static READING: [SettingSpec; 4] = [
     .with_extra(&FONT_PT)
     .scoped()
     .described("core.setting.font-size.help"),
+    SettingSpec::fixed_number(
+        settings::LINE_SPACING.static_str(),
+        "core.setting.line-spacing",
+        80,
+        250,
+        135,
+        groups::READING,
+    )
+    .with_extra(&LINES)
+    .scoped()
+    .described("core.setting.line-spacing.help"),
+    SettingSpec::fixed_number(
+        settings::FONT_WEIGHT.static_str(),
+        "core.setting.font-weight",
+        0,
+        4,
+        0,
+        groups::READING,
+    )
+    .with_extra(&WEIGHT)
+    .scoped()
+    .described("core.setting.font-weight.help"),
+    SettingSpec::fixed_number(
+        settings::WORD_SPACING.static_str(),
+        "core.setting.word-spacing",
+        50,
+        200,
+        100,
+        groups::READING,
+    )
+    .with_extra(&WORDS)
+    .scoped()
+    .described("core.setting.word-spacing.help"),
+    SettingSpec::fixed_number(
+        settings::MARGIN.static_str(),
+        "core.setting.margin",
+        0,
+        30,
+        4,
+        groups::READING,
+    )
+    .with_extra(&MARGINS)
+    .scoped()
+    .described("core.setting.margin.help"),
+    SettingSpec::fixed_number(
+        settings::MARGIN_ENDS.static_str(),
+        "core.setting.margin-ends",
+        0,
+        30,
+        4,
+        groups::READING,
+    )
+    .with_extra(&MARGINS_ENDS)
+    .advanced()
+    .scoped()
+    .described("core.setting.margin-ends.help"),
+    SettingSpec::fixed_switch(
+        settings::JUSTIFY.static_str(),
+        "core.setting.justify",
+        true,
+        groups::READING,
+    )
+    .scoped()
+    .with_extra(&IN_PAGE)
+    .described("core.setting.justify.help"),
+    SettingSpec::fixed_switch(
+        settings::HYPHENATE.static_str(),
+        "core.setting.hyphenate",
+        true,
+        groups::READING,
+    )
+    .scoped()
+    .with_extra(&IN_PAGE)
+    .described("core.setting.hyphenate.help"),
+    SettingSpec::fixed_switch(
+        settings::PUBLISHER_STYLES.static_str(),
+        "core.setting.publisher-styles",
+        true,
+        groups::READING,
+    )
+    .scoped()
+    .with_extra(&IN_PAGE)
+    .described("core.setting.publisher-styles.help"),
+    SettingSpec::fixed_switch(
+        settings::INDENT.static_str(),
+        "core.setting.indent",
+        true,
+        groups::READING,
+    )
+    .scoped()
+    .with_extra(&IN_PAGE)
+    .described("core.setting.indent.help"),
+    SettingSpec::fixed_switch(
+        settings::PARAGRAPH_SPACING.static_str(),
+        "core.setting.paragraph-spacing",
+        false,
+        groups::READING,
+    )
+    .scoped()
+    .with_extra(&IN_PAGE)
+    .described("core.setting.paragraph-spacing.help"),
+    SettingSpec::fixed_choice(
+        settings::FOOTNOTES.static_str(),
+        "core.setting.footnotes",
+        &[settings::FOOTNOTES_POPUP, settings::FOOTNOTES_JUMP],
+        settings::FOOTNOTES_POPUP,
+        groups::READING,
+    )
+    .advanced()
+    .with_extra(&IN_BEHAVIOUR)
+    .described("core.setting.footnotes.help"),
     SettingSpec::fixed_switch(
         settings::SCOPE_ONLY.static_str(),
         "core.setting.scope-only",

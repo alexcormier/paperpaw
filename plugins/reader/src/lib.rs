@@ -96,41 +96,19 @@ pub mod settings {
 
     use paperpaw_sdk::setting::{Setting, Text};
 
-    /// Font size in points: the standard one, registered by the kernel.
-    pub use paperpaw_sdk::builtin::settings::FONT_SIZE;
-    /// Darker text: glyphs widened by up to this many steps.
-    pub const FONT_WEIGHT: Setting<i64> = Setting::new("reader.font-weight");
+    /// The standard type of book pages, registered by the kernel (each
+    /// book may have its own).
+    pub use paperpaw_sdk::builtin::settings::{
+        FONT_SIZE, FONT_WEIGHT, FOOTNOTES, FOOTNOTES_JUMP, FOOTNOTES_POPUP, HYPHENATE, INDENT,
+        JUSTIFY, LINE_SPACING, MARGIN, MARGIN_ENDS, PARAGRAPH_SPACING, PUBLISHER_STYLES,
+        WORD_SPACING,
+    };
     /// Book pages with smooth letters, their edges in grays, where the
     /// panel shows black and white but can show grays with a refresh of
     /// its own (the X4): slower and costing more battery.
     pub const SMOOTH_TEXT: Setting<bool> = Setting::new("reader.smooth-text");
-    /// Space between words in percent of the font's.
-    pub const WORD_SPACING: Setting<i64> = Setting::new("reader.word-spacing");
-    /// Distance between baselines in percent of the font size, at least
-    /// the font's own; below 100 that much of the font's own.
-    pub const LINE_SPACING: Setting<i64> = Setting::new("reader.line-spacing");
-    /// Page margins in millimetres, at the sides (and at the top and
-    /// bottom while [`MARGIN_ENDS`] follows them).
-    pub const MARGIN: Setting<i64> = Setting::new("reader.margin");
-    /// Margins at the top and bottom in millimetres; as [`MARGIN`] until
-    /// set.
-    pub const MARGIN_ENDS: Setting<i64> = Setting::new("reader.margin-ends");
-    pub const JUSTIFY: Setting<bool> = Setting::new("reader.justify");
-    /// Indent the first lines of paragraphs.
-    pub const INDENT: Setting<bool> = Setting::new("reader.indent");
-    /// Space between paragraphs.
-    pub const PARAGRAPH_SPACING: Setting<bool> = Setting::new("reader.paragraph-spacing");
     /// Reopen the last book at start-up.
     pub const OPEN_LAST: Setting<bool> = Setting::new("reader.open-last");
-    /// Notes shown over the page ([`FOOTNOTES_POPUP`]) or jumped to
-    /// ([`FOOTNOTES_JUMP`]).
-    pub const FOOTNOTES: Setting<Text> = Setting::new("reader.footnotes");
-    pub const FOOTNOTES_POPUP: &str = "reader.footnotes.popup";
-    pub const FOOTNOTES_JUMP: &str = "reader.footnotes.jump";
-    /// Hyphenate words at line ends, in the book's language.
-    pub const HYPHENATE: Setting<bool> = Setting::new("reader.hyphenate");
-    /// Apply the book's own styles (an EPUB's CSS).
-    pub const PUBLISHER_STYLES: Setting<bool> = Setting::new("reader.publisher-styles");
     /// A tap on the top right corner sets or removes a bookmark.
     pub const CORNER_BOOKMARK: Setting<bool> = Setting::new("reader.corner-bookmark");
     /// Holding a page button goes a chapter on or back; off, the page
@@ -229,31 +207,9 @@ pub struct Reader;
 /// eye with sliders.
 mod extras {
     use paperpaw_sdk::SettingExtra;
-    use paperpaw_sdk::builtin::setting_sections::{ALOUD, BEHAVIOUR, FONT, PAGE};
+    use paperpaw_sdk::builtin::setting_sections::{ALOUD, BEHAVIOUR, FONT};
 
-    pub(crate) static LINE_SPACING: SettingExtra = SettingExtra::new()
-        .unit("core.unit.percent")
-        .step(5)
-        .section(PAGE)
-        .slider();
-    pub(crate) static WEIGHT: SettingExtra =
-        SettingExtra::new().unit("reader.unit.weight").section(FONT);
     pub(crate) static IN_FONT: SettingExtra = SettingExtra::new().section(FONT);
-    pub(crate) static WORD_SPACING: SettingExtra = SettingExtra::new()
-        .unit("core.unit.percent")
-        .step(10)
-        .section(FONT)
-        .slider();
-    pub(crate) static MARGIN: SettingExtra = SettingExtra::new()
-        .unit("core.unit.mm")
-        .section(PAGE)
-        .slider();
-    pub(crate) static MARGIN_ENDS: SettingExtra = SettingExtra::new()
-        .unit("core.unit.mm")
-        .section(PAGE)
-        .slider()
-        .follows("reader.margin");
-    pub(crate) static IN_PAGE: SettingExtra = SettingExtra::new().section(PAGE);
     pub(crate) static IN_BEHAVIOUR: SettingExtra = SettingExtra::new().section(BEHAVIOUR);
     pub(crate) static AUTO_TURN: SettingExtra = SettingExtra::new()
         .unit("core.unit.seconds")
@@ -267,31 +223,9 @@ mod extras {
     pub(crate) static IN_ALOUD: SettingExtra = SettingExtra::new().section(ALOUD);
 }
 
-/// The reading settings: the page and its type (each book may have its
-/// own), what the reader does, and reading aloud.
-static SETTINGS: [SettingSpec; 20] = [
-    SettingSpec::fixed_number(
-        settings::LINE_SPACING.static_str(),
-        "reader.setting.line-spacing",
-        80,
-        250,
-        135,
-        groups::READING,
-    )
-    .with_extra(&extras::LINE_SPACING)
-    .scoped()
-    .described("reader.setting.line-spacing.help"),
-    SettingSpec::fixed_number(
-        settings::FONT_WEIGHT.static_str(),
-        "reader.setting.font-weight",
-        0,
-        4,
-        0,
-        groups::READING,
-    )
-    .with_extra(&extras::WEIGHT)
-    .scoped()
-    .described("reader.setting.font-weight.help"),
+/// The reader's own settings: smooth letters, what it does, and reading
+/// aloud (the type of pages is the kernel's, see `settings`).
+static SETTINGS: [SettingSpec; 9] = [
     SettingSpec::fixed_switch(
         settings::SMOOTH_TEXT.static_str(),
         "reader.setting.smooth-text",
@@ -300,85 +234,6 @@ static SETTINGS: [SettingSpec; 20] = [
     )
     .with_extra(&extras::IN_FONT)
     .described("reader.setting.smooth-text.help"),
-    SettingSpec::fixed_number(
-        settings::WORD_SPACING.static_str(),
-        "reader.setting.word-spacing",
-        50,
-        200,
-        100,
-        groups::READING,
-    )
-    .with_extra(&extras::WORD_SPACING)
-    .scoped()
-    .described("reader.setting.word-spacing.help"),
-    SettingSpec::fixed_number(
-        settings::MARGIN.static_str(),
-        "reader.setting.margin",
-        0,
-        30,
-        4,
-        groups::READING,
-    )
-    .with_extra(&extras::MARGIN)
-    .scoped()
-    .described("reader.setting.margin.help"),
-    SettingSpec::fixed_number(
-        settings::MARGIN_ENDS.static_str(),
-        "reader.setting.margin-ends",
-        0,
-        30,
-        4,
-        groups::READING,
-    )
-    .with_extra(&extras::MARGIN_ENDS)
-    .advanced()
-    .scoped()
-    .described("reader.setting.margin-ends.help"),
-    SettingSpec::fixed_switch(
-        settings::JUSTIFY.static_str(),
-        "reader.setting.justify",
-        true,
-        groups::READING,
-    )
-    .scoped()
-    .with_extra(&extras::IN_PAGE)
-    .described("reader.setting.justify.help"),
-    SettingSpec::fixed_switch(
-        settings::HYPHENATE.static_str(),
-        "reader.setting.hyphenate",
-        true,
-        groups::READING,
-    )
-    .scoped()
-    .with_extra(&extras::IN_PAGE)
-    .described("reader.setting.hyphenate.help"),
-    SettingSpec::fixed_switch(
-        settings::PUBLISHER_STYLES.static_str(),
-        "reader.setting.publisher-styles",
-        true,
-        groups::READING,
-    )
-    .scoped()
-    .with_extra(&extras::IN_PAGE)
-    .described("reader.setting.publisher-styles.help"),
-    SettingSpec::fixed_switch(
-        settings::INDENT.static_str(),
-        "reader.setting.indent",
-        true,
-        groups::READING,
-    )
-    .scoped()
-    .with_extra(&extras::IN_PAGE)
-    .described("reader.setting.indent.help"),
-    SettingSpec::fixed_switch(
-        settings::PARAGRAPH_SPACING.static_str(),
-        "reader.setting.paragraph-spacing",
-        false,
-        groups::READING,
-    )
-    .scoped()
-    .with_extra(&extras::IN_PAGE)
-    .described("reader.setting.paragraph-spacing.help"),
     SettingSpec::fixed_switch(
         settings::OPEN_LAST.static_str(),
         "reader.setting.open-last",
@@ -388,16 +243,6 @@ static SETTINGS: [SettingSpec; 20] = [
     .advanced()
     .with_extra(&extras::IN_BEHAVIOUR)
     .described("reader.setting.open-last.help"),
-    SettingSpec::fixed_choice(
-        settings::FOOTNOTES.static_str(),
-        "reader.setting.footnotes",
-        &[settings::FOOTNOTES_POPUP, settings::FOOTNOTES_JUMP],
-        settings::FOOTNOTES_POPUP,
-        groups::READING,
-    )
-    .advanced()
-    .with_extra(&extras::IN_BEHAVIOUR)
-    .described("reader.setting.footnotes.help"),
     SettingSpec::fixed_switch(
         settings::CORNER_BOOKMARK.static_str(),
         "reader.setting.corner-bookmark",

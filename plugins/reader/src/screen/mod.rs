@@ -51,6 +51,21 @@ use self::typography::*;
 pub(crate) use self::words::WordBox;
 use self::words::*;
 
+/// The kernel's settings of the type of book pages: a change lays the
+/// book out anew (the font and the book's own styles open it again).
+const TYPE_SETTINGS: [&str; 10] = [
+    FONT_SIZE.static_str(),
+    FONT_WEIGHT.static_str(),
+    WORD_SPACING.static_str(),
+    LINE_SPACING.static_str(),
+    MARGIN.static_str(),
+    MARGIN_ENDS.static_str(),
+    JUSTIFY.static_str(),
+    HYPHENATE.static_str(),
+    INDENT.static_str(),
+    PARAGRAPH_SPACING.static_str(),
+];
+
 /// Pages laid out per background step; small enough to keep input snappy.
 const PAGES_PER_STEP: usize = 8;
 
@@ -927,10 +942,11 @@ impl ReaderScreen {
         // Which setting changed, if one did.
         let changed = events::SETTING_CHANGED.read(event, params).map(|c| c.id);
         let id = changed.as_ref().map_or("", Id::as_str);
-        // The kernel's settings the page's type depends on: the font and
-        // its size (the reader's own all begin with `reader.`).
-        let font_changed = id == paperpaw_sdk::builtin::settings::READING_FONT.as_str()
-            || id == FONT_SIZE.as_str();
+        // The kernel's settings the page's type depends on (the reader's
+        // own all begin with `reader.`).
+        let font_changed = TYPE_SETTINGS.contains(&id)
+            || id == paperpaw_sdk::builtin::settings::READING_FONT.as_str()
+            || id == crate::settings::PUBLISHER_STYLES.as_str();
         // How marks look, or what decorators mark (a switch, their data):
         // the page drawn again as it is laid out.
         if changed.is_some()
