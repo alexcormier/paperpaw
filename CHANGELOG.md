@@ -6,6 +6,13 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: semantic icons (`icons::BACK`, `PREV`, `NEXT`, `HOLD`, `BUSY`,
+  `SHIFT`, `DELETE`, `SPACE`) take the icon a plugin names for them with
+  `add_icon`, so a theme changes the headers' arrows, the hints' marks
+  and the keyboard's keys; without one they look as before.
+  `ui::draw_arrow`, `ui::draw_icon_at` and `ui::has_icon` draw and ask
+  for them. An icon named `U+F8000` is that code point, for icons of
+  one's own. `ui::HOLD_ICON` is gone (`icons::HOLD`).
 - SDK: the interface's grays have roles (`ui::Ink`: text, notes,
   muted, faint, disabled, rules, lines, cards, …), `UiStyle::ink` gives
   each, from the palette a theme sets in `core.ui-palette` (e.g.

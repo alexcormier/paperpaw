@@ -192,9 +192,9 @@ impl Header {
         // Everything centred in the band by its ink: the arrows by their
         // drawing, each text by its letters.
         let band = style.header_band(self.area);
-        let arrow = |canvas: &mut Canvas<'_>, x: i32, left: bool, color: Color| {
+        let arrow = |canvas: &mut Canvas<'_>, x: i32, icon: &str, left: bool, color: Color| {
             let (_, y) = center(band);
-            draw_chevron(canvas, style, x, y, left, color);
+            draw_arrow(canvas, env, style, (x, y), icon, left, color);
         };
         let t = parts.title;
         let margin = style.margin as f32;
@@ -214,14 +214,20 @@ impl Header {
         let baseline = |size: f32, text: &str| ink_baseline(&font, band, size, text);
         let (back_x, prev_x, next_x) = parts.arrows;
         if parts.back.is_some() {
-            arrow(canvas, back_x, true, ink);
+            arrow(canvas, back_x, crate::icons::BACK, true, ink);
         }
         if let (Some((_, at, _)), Some(page), Some(text)) = (parts.pager, page, &label) {
             if self.arrows {
                 // At the first or last page, the arrow is gray.
                 let color = |end: bool| if end { style.ink(Ink::Disabled) } else { ink };
-                arrow(canvas, prev_x, true, color(page.0 == 0));
-                arrow(canvas, next_x, false, color(page.0 + 1 >= page.1));
+                arrow(canvas, prev_x, crate::icons::PREV, true, color(page.0 == 0));
+                arrow(
+                    canvas,
+                    next_x,
+                    crate::icons::NEXT,
+                    false,
+                    color(page.0 + 1 >= page.1),
+                );
             }
             let x = f32::from(at.x);
             let y = baseline(style.small, text);
@@ -365,15 +371,19 @@ impl Pager {
                 }
             };
             let x = i32::from(a.x);
-            draw_chevron(canvas, style, x + side, y, true, dim(page.0 == 0));
-            draw_chevron(
+            let prev = (x + side, y);
+            draw_arrow(
                 canvas,
+                env,
                 style,
-                x + side * 3,
-                y,
-                false,
-                dim(page.0 + 1 >= page.1),
+                prev,
+                crate::icons::PREV,
+                true,
+                dim(page.0 == 0),
             );
+            let next = (x + side * 3, y);
+            let last = dim(page.0 + 1 >= page.1);
+            draw_arrow(canvas, env, style, next, crate::icons::NEXT, false, last);
         }
     }
 
@@ -396,6 +406,24 @@ pub(super) fn center(area: Rect) -> (i32, i32) {
         i32::from(area.x) + i32::from(area.width) / 2,
         i32::from(area.y) + i32::from(area.height) / 2,
     )
+}
+
+/// The arrow of semantic icon `icon` ([`icons::BACK`](crate::icons::BACK),
+/// [`PREV`](crate::icons::PREV), [`NEXT`](crate::icons::NEXT)) centred
+/// at `at`: the icon a theme gave it, as tall as titles, else a chevron
+/// pointing left or right ([`draw_chevron`]).
+pub fn draw_arrow(
+    canvas: &mut Canvas<'_>,
+    env: &Env<'_>,
+    style: &UiStyle,
+    at: (i32, i32),
+    icon: &str,
+    left: bool,
+    color: Color,
+) {
+    if !draw_icon_at(canvas, env, icon, style.title, at, color) {
+        draw_chevron(canvas, style, at.0, at.1, left, color);
+    }
 }
 
 /// An arrow head pointing left or right, centred at `(x, y)` and as tall

@@ -17,10 +17,6 @@ pub fn button_hints_height(env: &Env<'_>) -> u16 {
 /// button under it does, centred in an equal share of the width, as the
 /// buttons lie. The hint of the button `pressed` is drawn inverted, as a
 /// sign that its press is being worked on.
-/// The mark beside a button's label in the row of hints where holding
-/// the button does something too ([`draw_button_hints`]).
-pub const HOLD_ICON: &str = "hand-click";
-
 /// PaperPaw's paw: on empty screens ([`draw_empty`]) and as the busy
 /// mark, also in the hint of a button whose press is being worked on.
 pub const PAW_ICON: &str = "paw";
@@ -92,7 +88,11 @@ pub fn draw_button_hints(
         let busy = pressed == Some(i as usize);
         let hold = (busy || held.get(i as usize).copied().unwrap_or(false))
             && matches!(hint, Hint::Text(_) | Hint::Icon(_));
-        let sign = if busy { PAW_ICON } else { HOLD_ICON };
+        let sign = if busy {
+            crate::icons::BUSY
+        } else {
+            crate::icons::HOLD
+        };
         // Smaller than the label, close to it, the cell's margins halved:
         // the label keeps its room (German words are long).
         let mark_size = style.small * 0.8;

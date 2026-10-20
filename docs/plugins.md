@@ -452,7 +452,7 @@ artifact, also when a check failed.
 | Screens | `add_screen` | Full screens and overlays (menus, dialogs, panels) |
 | Slots | `add_slot`, `bind_slot` | Roles a screen fills: home, reader, library, menu, settings, keyboard, dictionary, … |
 | Menu entries and sections | `add_menu_entry`, `add_menu_section` | Actions, settings and submenus in any menu |
-| Icons | `add_icon` | The icon of an action, setting group or menu |
+| Icons | `add_icon` | The icon of an action, setting group or menu; of a semantic icon (`icons::BACK`, `NEXT`, `SHIFT`, …) for a theme; `U+F8000` names a code point of one's own |
 | Settings and groups | `add_setting`, `add_setting_group` | Shown and saved by the kernel |
 | Setting defaults | `set_setting_default` | New defaults for other plugins' settings (themes) |
 | Event handlers | `subscribe` | React to events |

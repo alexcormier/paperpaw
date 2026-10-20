@@ -814,6 +814,15 @@ impl KeyboardScreen {
             i32::from(r.x) + i32::from(r.width) / 2,
             i32::from(r.y) + i32::from(r.height) / 2,
         );
+        // The icon a theme gave the key, else drawn here.
+        let icon = match key {
+            Key::Shift => paperpaw_sdk::icons::SHIFT,
+            Key::Delete => paperpaw_sdk::icons::DELETE,
+            _ => paperpaw_sdk::icons::SPACE,
+        };
+        if ui::draw_icon_at(canvas, env, icon, style.text, (cx, cy), ink) {
+            return;
+        }
         match key {
             Key::Shift => arrow_up(canvas, cx, cy, size, ink),
             Key::Delete => arrow_left(canvas, cx, cy, size, ink),

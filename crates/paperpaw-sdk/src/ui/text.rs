@@ -44,11 +44,51 @@ pub fn icon_ink(env: &Env<'_>, name: &str, size: f32) -> Option<(i32, i32)> {
 }
 
 /// The icon font and the character of icon `name`, where it has a drawing
-/// (its own, or an icon pack's).
+/// (its own, or an icon pack's). A semantic icon
+/// ([`icons::BACK`](crate::icons::BACK) and the others) is the icon a
+/// plugin named for it, else its default.
 pub(super) fn icon<'f>(env: &Env<'f>, name: &str) -> Option<(FontHandle<'f>, char)> {
+    let name = if name.starts_with("core.icon.") {
+        env.menus
+            .icon(name)
+            .or_else(|| crate::icons::default_of(name))?
+    } else {
+        name
+    };
     let font = env.fonts.bound(crate::builtin::fonts::ICONS.as_str())?;
     let ch = crate::icons::char(name)?;
     font.has_char(ch).then_some((font, ch))
+}
+
+/// Whether icon `name` has a drawing here (see [`draw_icon`]), e.g. a
+/// semantic icon a theme gave one.
+pub fn has_icon(env: &Env<'_>, name: &str) -> bool {
+    icon(env, name).is_some()
+}
+
+/// Draws icon `name` `size` pixels high with its ink centred at
+/// `(x, y)`; `false`, drawing nothing, where it has no drawing.
+pub fn draw_icon_at(
+    canvas: &mut Canvas<'_>,
+    env: &Env<'_>,
+    name: &str,
+    size: f32,
+    (x, y): (i32, i32),
+    color: Color,
+) -> bool {
+    let Some((first, last)) = icon_ink(env, name, size) else {
+        return false;
+    };
+    let height = (size * 2.0) as u16;
+    let area = Rect::new(
+        0,
+        (y - i32::from(height) / 2).max(0) as u16,
+        u16::MAX,
+        height,
+    );
+    let start = x as f32 - (first + last) as f32 / 2.0;
+    draw_icon(canvas, env, name, size, start, area, color);
+    true
 }
 
 /// The height of a section's heading in a list (see [`Rows`]): small

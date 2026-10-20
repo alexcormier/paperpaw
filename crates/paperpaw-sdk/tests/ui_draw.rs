@@ -828,3 +828,46 @@ fn the_palette_sets_the_grays_the_parts_draw_in() {
     assert_eq!(style.size(TextRole::Body), style.text);
     assert_eq!(style.size(TextRole::Headline), style.title * 1.6);
 }
+
+/// Semantic icons: what they say has the drawing a theme names for it,
+/// else its default, else the arrow drawn here.
+#[test]
+fn a_theme_gives_the_arrows_and_marks_icons_of_its_own() {
+    use paperpaw_sdk::{Color, Id, icons};
+    let mut h = Harness::new(Device::TOUCH);
+    {
+        let env = h.env();
+        // Holding has its hand by default; the arrows are drawn.
+        assert!(ui::has_icon(&env, icons::HOLD));
+        assert!(!ui::has_icon(&env, icons::NEXT));
+    }
+    let arrow = |h: &Harness| {
+        let env = h.env();
+        let style = UiStyle::new(&env);
+        let mut drawn = frame(200, 200);
+        ui::draw_arrow(
+            &mut drawn.canvas(),
+            &env,
+            &style,
+            (100, 100),
+            icons::NEXT,
+            false,
+            Color::BLACK,
+        );
+        let view = drawn.view();
+        (0..200u16)
+            .flat_map(|y| (0..200u16).map(move |x| (x, y)))
+            .filter(|&(x, y)| view.pixel(x, y) != support::PAPER)
+            .collect::<Vec<_>>()
+    };
+    let chevron = arrow(&h);
+    assert!(!chevron.is_empty());
+    h.menus.set_icon(
+        Id::new_static(icons::NEXT),
+        std::borrow::Cow::Borrowed("search"),
+    );
+    assert!(ui::has_icon(&h.env(), icons::NEXT));
+    let icon = arrow(&h);
+    assert!(!icon.is_empty());
+    assert_ne!(icon, chevron);
+}
