@@ -585,7 +585,12 @@ pub const NEW_DAYS: u32 = 30;
 /// Whether `book` counts as new: added in the last [`NEW_DAYS`] days and
 /// never opened (no progress); `opened` says whether it was opened.
 pub fn is_new(env: &Env<'_>, book: &Book, opened: bool) -> bool {
-    match (book.added, today(env)) {
+    is_new_on(book, opened, today(env))
+}
+
+/// [`is_new`] on the day `today` (none where the date is not known).
+pub fn is_new_on(book: &Book, opened: bool, today: Option<u32>) -> bool {
+    match (book.added, today) {
         (Some(added), Some(today)) => {
             !opened && book.progress.is_none() && today.saturating_sub(added) <= NEW_DAYS
         }
@@ -767,6 +772,27 @@ mod tests {
     use super::*;
     use crate::MemoryStorage;
     use crate::memory_storage::Unreadable;
+
+    #[test]
+    fn new_books_are_added_lately_and_never_opened() {
+        let book = Book {
+            added: Some(100),
+            ..Book::default()
+        };
+        assert!(is_new_on(&book, false, Some(100 + NEW_DAYS)));
+        assert!(!is_new_on(&book, false, Some(101 + NEW_DAYS)), "too old");
+        assert!(!is_new_on(&book, true, Some(100)), "opened");
+        let begun = Book {
+            progress: Some(0),
+            ..book.clone()
+        };
+        assert!(!is_new_on(&begun, false, Some(100)), "begun");
+        assert!(!is_new_on(&book, false, None), "no date");
+        assert!(
+            !is_new_on(&Book::default(), false, Some(100)),
+            "never dated"
+        );
+    }
 
     #[test]
     fn details_belong_to_one_file_version() {

@@ -899,6 +899,8 @@ impl Screen for ListScreen {
                 self.walk = None;
                 self.walked = true;
                 crate::shelves::made(&env);
+                // The old index goes first: never two at once.
+                self.index = Index::default();
                 self.index = Index::build(env.storage);
                 let focus = self.focus;
                 self.refilter(&env);

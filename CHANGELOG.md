@@ -6,6 +6,30 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- The library anew, as a calm list: the book being read first as a card
+  (one press or tap to go on reading), then every book with its cover,
+  its title on up to two lines, its author and how far it is read (a
+  bar and the percentage, a check once finished, New for a book added
+  in the last 30 days and never opened). What is shown is chosen above
+  the books, from one row on small screens (All books, Reading, Unread,
+  Finished, Next in your series, Shelves, Find a book) and from pills
+  on larger ones. Folders no longer come first: they are collections
+  on the shelves, with favourites, authors and series. A series lists
+  its books by number with the next one marked; Next in your series
+  lists the next book of every series begun. Find picks a book by a
+  letter of its title or its author's surname, without a keyboard.
+  Buttons work as in every list: left and right move a book, the page
+  buttons turn a page. A book's sheet (hold it, or the menu button)
+  shows it with its cover and progress: go on reading, its series,
+  finished or unread, favourite, information, archive. The library's
+  menu holds only the library's things.
+- Library: books as covers (Show books as: Covers) in a grid from
+  margin to margin, how far each is read on its cover, the books of a
+  series as one stack with their count.
+- Library: on the X4 and the X4 Pro more room: fewer rows a page, one
+  line of details under a title, the filters behind one row.
+- SDK: `library::Book::added` (the day the library first read a book),
+  `library::{today, is_new, is_new_on, NEW_DAYS}`.
 - A new look, rounder and friendlier: soft corners, pills for buttons,
   switches, chips and the highlight, plain headers (the title on the
   page, a little larger, no bar or line), faint lines between rows from

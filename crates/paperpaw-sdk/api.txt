@@ -1098,6 +1098,7 @@ impl core::fmt::Debug for paperpaw_sdk::library::listing::Listing<'_>
 pub fn paperpaw_sdk::library::listing::Listing<'_>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub const paperpaw_sdk::library::listing::UNRANKED: u32
 pub struct paperpaw_sdk::library::Book
+pub paperpaw_sdk::library::Book::added: core::option::Option<u32>
 pub paperpaw_sdk::library::Book::author: core::option::Option<alloc::string::String>
 pub paperpaw_sdk::library::Book::cover: core::option::Option<paperpaw_document::ImageRef>
 pub paperpaw_sdk::library::Book::fields: alloc::vec::Vec<(alloc::string::String, alloc::string::String)>
@@ -1125,6 +1126,7 @@ pub paperpaw_sdk::library::Provided::tags: alloc::vec::Vec<alloc::string::String
 pub paperpaw_sdk::library::Provided::title: core::option::Option<alloc::string::String>
 pub const paperpaw_sdk::library::DIR: &str
 pub const paperpaw_sdk::library::FOLDER: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
+pub const paperpaw_sdk::library::NEW_DAYS: u32
 pub fn paperpaw_sdk::library::book(&dyn paperpaw_platform::storage::Storage, &str) -> core::option::Option<paperpaw_sdk::library::Book>
 pub fn paperpaw_sdk::library::book_keys(&dyn paperpaw_platform::storage::Storage, &paperpaw_sdk::Formats) -> alloc::vec::Vec<u64>
 pub fn paperpaw_sdk::library::book_sized(&dyn paperpaw_platform::storage::Storage, &str, u64) -> core::option::Option<paperpaw_sdk::library::Book>
@@ -1137,6 +1139,8 @@ pub fn paperpaw_sdk::library::favourites(&dyn paperpaw_platform::storage::Storag
 pub fn paperpaw_sdk::library::folder<'e>(&paperpaw_sdk::Env<'e>) -> &'e str
 pub fn paperpaw_sdk::library::index(&paperpaw_sdk::Env<'_>, &str) -> paperpaw_sdk::library::Book
 pub fn paperpaw_sdk::library::indexed(&paperpaw_sdk::Env<'_>, &str) -> paperpaw_sdk::library::Book
+pub fn paperpaw_sdk::library::is_new(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::library::Book, bool) -> bool
+pub fn paperpaw_sdk::library::is_new_on(&paperpaw_sdk::library::Book, bool, core::option::Option<u32>) -> bool
 pub fn paperpaw_sdk::library::key(&str) -> alloc::string::String
 pub fn paperpaw_sdk::library::move_data(&dyn paperpaw_platform::storage::Storage, &[paperpaw_sdk::library::BookData], &str, &str)
 pub fn paperpaw_sdk::library::moved(&dyn paperpaw_platform::storage::Storage, &str, &str)
@@ -1151,6 +1155,7 @@ pub fn paperpaw_sdk::library::set_favourite(&dyn paperpaw_platform::storage::Sto
 pub fn paperpaw_sdk::library::set_field(&dyn paperpaw_platform::storage::Storage, &str, &str, &str)
 pub fn paperpaw_sdk::library::set_finished(&dyn paperpaw_platform::storage::Storage, &str, bool)
 pub fn paperpaw_sdk::library::take_over_old(&dyn paperpaw_platform::storage::Storage)
+pub fn paperpaw_sdk::library::today(&paperpaw_sdk::Env<'_>) -> core::option::Option<u32>
 pub mod paperpaw_sdk::logo
 pub enum paperpaw_sdk::logo::Logo
 pub paperpaw_sdk::logo::Logo::Drawn

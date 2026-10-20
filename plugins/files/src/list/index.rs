@@ -197,6 +197,22 @@ pub(crate) fn scan(storage: &dyn Storage, f: &mut dyn FnMut(u32, Line)) {
     }
 }
 
+/// How many lines the catalog has, counted without reading them.
+fn lines(storage: &dyn Storage) -> usize {
+    let path = catalog_path();
+    let mut buf = [0u8; 1024];
+    let (mut offset, mut lines, mut last) = (0u64, 0, b'\n');
+    while let Ok(n) = storage.read_at(&path, offset, &mut buf) {
+        if n == 0 {
+            break;
+        }
+        offset += n as u64;
+        lines += buf[..n].iter().filter(|&&b| b == b'\n').count();
+        last = buf[n - 1];
+    }
+    lines + usize::from(last != b'\n')
+}
+
 /// The line of the catalog starting at `offset`.
 pub(crate) fn read_line(storage: &dyn Storage, offset: u32) -> Option<Line> {
     let path = catalog_path();
@@ -313,7 +329,9 @@ impl Index {
             .iter()
             .map(|p| hash(p))
             .collect();
-        let mut items = Vec::new();
+        // As many as there are lines: a list grown by doubling would hold
+        // twice that for a moment (40 KB for 1000 books on the X4).
+        let mut items = Vec::with_capacity(lines(storage).min(MAX_BOOKS));
         let mut series: Vec<String> = Vec::new();
         scan(storage, &mut |offset, line| {
             if items.len() >= MAX_BOOKS {
@@ -535,6 +553,72 @@ mod tests {
         assert_eq!(line.series, "Tales");
         assert_eq!(line.number, "2");
         assert!(Line::parse("").is_none());
+    }
+
+    #[test]
+    fn series_numbers() {
+        assert_eq!(number("2"), 20);
+        assert_eq!(number(" 2.5 "), 25);
+        assert_eq!(number("11"), 110);
+        assert_eq!(number(""), u16::MAX);
+        assert_eq!(number("II"), u16::MAX);
+    }
+
+    /// An item of series `series` numbered `n`, read `progress` percent,
+    /// `recent` among the books read last.
+    fn item(series: u16, n: u16, progress: u8, recent: u8) -> Item {
+        Item {
+            offset: u32::from(series) * 100 + u32::from(n),
+            hash: 0,
+            key: [b'a' + n as u8, 0, 0, 0],
+            initials: *b"AA",
+            progress,
+            recent,
+            series,
+            number: n * 10,
+        }
+    }
+
+    #[test]
+    fn the_next_book_of_each_series_begun() {
+        let index = Index {
+            items: alloc::vec![
+                // Series 0: 1 finished, 2 being read, 3 and 4 unread.
+                item(0, 4, 0, NEVER),
+                item(0, 1, 100, 3),
+                item(0, 3, 0, NEVER),
+                item(0, 2, 42, 0),
+                // Series 1: never begun.
+                item(1, 1, 0, NEVER),
+                // Series 2: all read.
+                item(2, 1, 100, 5),
+                // No series.
+                item(NO_SERIES, 1, 0, NEVER),
+            ],
+            series: alloc::vec!["A".into(), "B".into(), "C".into()],
+            pending: Vec::new(),
+        };
+        assert_eq!(index.order(Filter::Next, true), [2]);
+    }
+
+    #[test]
+    fn series_stack_but_books_being_read_stay_apart() {
+        let index = Index {
+            items: alloc::vec![
+                item(0, 2, 42, 0),
+                item(0, 1, 100, 1),
+                item(NO_SERIES, 1, 0, NEVER),
+                item(0, 3, 0, NEVER),
+                item(1, 1, 0, NEVER),
+                item(1, 2, 0, NEVER),
+            ],
+            series: alloc::vec!["A".into(), "B".into()],
+            pending: Vec::new(),
+        };
+        let order = [0, 1, 2, 3, 4, 5];
+        let (entries, counts) = index.stacked(&order);
+        assert_eq!(entries, [0, 1, 2, 4]);
+        assert_eq!(counts, [1, 2, 1, 2]);
     }
 
     #[test]

@@ -199,6 +199,49 @@ fn the_focus_stays_on_its_book() {
     );
 }
 
+/// Buttons work as in every list: left and right move a book, page
+/// buttons turn a page, and before the first book is the row that
+/// chooses what is shown, which confirm opens.
+#[test]
+fn buttons_work_as_in_every_list() {
+    let (mut kernel, _) = library(
+        card(30),
+        "[files]
+sort = files.sort.name
+",
+    );
+    assert!(focused(&mut kernel).contains("book 00"));
+    action(&mut kernel, "core.right");
+    assert!(focused(&mut kernel).contains("book 01"));
+    // A page on: its first book.
+    action(&mut kernel, "core.left");
+    action(&mut kernel, "core.next-page");
+    let shown = focused(&mut kernel);
+    assert!(
+        !shown.contains("book 00") && shown.contains("book 0"),
+        "{shown}"
+    );
+    action(&mut kernel, "core.prev-page");
+    assert!(focused(&mut kernel).contains("book 00"));
+    // Before the first book: what is shown, opening the choice of it.
+    action(&mut kernel, "core.left");
+    assert_eq!(focused(&mut kernel), "All books");
+    action(&mut kernel, "core.confirm");
+    assert_eq!(
+        kernel.active_screen().map(|id| id.as_str()),
+        Some("files.list.show")
+    );
+    // Unread: no book was opened.
+    action(&mut kernel, "core.down");
+    action(&mut kernel, "core.down");
+    action(&mut kernel, "core.confirm");
+    let shown = focused(&mut kernel);
+    assert!(shown.contains("book 00"), "{shown}");
+    kernel.render(&mut |_, _| {});
+    let parts = kernel.describe();
+    assert!(parts.iter().any(|p| p.label == "Unread"), "{parts:?}");
+}
+
 /// The folder chooser opens in the folder the setting names (a folder,
 /// not a file).
 #[test]

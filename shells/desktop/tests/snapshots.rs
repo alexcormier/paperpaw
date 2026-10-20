@@ -302,6 +302,40 @@ const CASES: &[Case] = &[
         script: "",
         colour: 1_000,
     },
+    // The library: the book being read as a card, then the books; as
+    // covers; what to show, chosen from the row above the books.
+    Case {
+        name: "x4-library",
+        profile: "xteink-x4",
+        book: Some("books/alice-in-wonderland.epub"),
+        sets: &[],
+        script: "page-forward,page-forward,run:core.library,wait:1000",
+        colour: 0,
+    },
+    Case {
+        name: "x4-library-covers",
+        profile: "xteink-x4",
+        book: Some("books/alice-in-wonderland.epub"),
+        sets: &["files.view=files.view.covers"],
+        script: "page-forward,page-forward,run:core.library,wait:1000",
+        colour: 0,
+    },
+    Case {
+        name: "x4-pro-library-show",
+        profile: "xteink-x4-pro",
+        book: None,
+        sets: &[],
+        script: "run:core.library,wait:1000,tap-on:All books,wait:300",
+        colour: 0,
+    },
+    Case {
+        name: "boox-library",
+        profile: "boox-go-7",
+        book: Some("books/alice-in-wonderland.epub"),
+        sets: &[],
+        script: "page-forward,page-forward,run:core.library,wait:1000",
+        colour: 0,
+    },
 ];
 
 /// Pixels whose gray differs by more than this count as different.
