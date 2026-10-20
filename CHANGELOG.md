@@ -6,6 +6,13 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Store: a plugin of the library with the id of a plugin built into
+  PaperPaw, or of the other kind (data for code, code for data), is
+  neither listed nor installed (*... cannot replace*), so a library can
+  no longer take the place of, say, the fonts or Wi-Fi. A plugin's page
+  is fetched into a file of its own and taken only if it is that
+  plugin's, and it keeps the query of the library's address (a key a
+  library of one's own asks for).
 - Plugin manager: a plugin installed or removed while its list is open
   (from the store opened from it, say) shows there at once; the list
   was the one of when it opened.
