@@ -239,13 +239,26 @@ impl StatusLine<'_> {
         context: &Params,
     ) {
         let (area, size, percent) = (self.area, self.size, self.percent);
-        let gap = size;
         let values = |list: &str| -> Vec<StatusValue> {
             item_ids(list)
                 .filter_map(|id| env.status_items.value(id, env, context))
                 .collect()
         };
         let [left, center, right] = self.lists.map(values);
+        // A gap as wide as the text is high; narrower, down to 40 %, where
+        // the items would not fit whole with it (wide margins, large text).
+        let parts = [&left, &center, &right];
+        let inked: f32 = parts
+            .iter()
+            .flat_map(|p| p.iter())
+            .map(|v| value_width(env, font, size, v, percent))
+            .sum();
+        let gaps = parts.iter().map(|p| p.len()).sum::<usize>().saturating_sub(1);
+        let gap = if gaps == 0 {
+            size
+        } else {
+            ((f32::from(area.width) - inked) / gaps as f32).clamp(size * 0.4, size)
+        };
         let width = |values: &[StatusValue]| -> f32 {
             values
                 .iter()

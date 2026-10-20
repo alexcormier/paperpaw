@@ -542,7 +542,6 @@ mod tests {
         separators: crate::ui::Separators::Line,
         plain_header: false,
         cards: false,
-        paw: false,
         grays: 2,
         finger: 0,
     };

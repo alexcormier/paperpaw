@@ -6,24 +6,42 @@ change the plugin SDK.
 
 ## [Unreleased]
 
-- Appearance (experiment, branch claude/ui-design-ideas-32dbed): new
-  settings for whole design directions as theme data plugins: shapes
-  (boxes or pills), the highlight (dark bar, frame, light bar, frame
-  and mark), lines between rows (lines, faint, none), plain headers,
-  lists in rounded cards, the paw motif, the size of header titles, and
-  soft corners. Four sample themes: Soft paper, Pebble, Paw, Calm ink.
-  SDK: `UiStyle::{pill, focus, separators, plain_header, cards, paw,
-  grays, head}`, `UiStyle::radius`, `focus_ink`, `focus_paper`,
-  `focus_faint`, `dark_focus`, `ui::draw_separator`, `ui::Focus`,
-  `ui::Separators`.
+- A new look, rounder and friendlier: soft corners, pills for buttons,
+  switches, chips and the highlight, plain headers (the title on the
+  page, a little larger, no bar or line), faint lines between rows from
+  where their text starts, margins of 4 mm. Rows with
+  a note keep smaller corners, so the highlight never comes near their
+  text; the home screen's grid, its frames and the focus are round too.
+  A paw: beside the icon of empty screens (empty shelves of the library
+  now show an icon and a title too), as the busy mark, and on the X4 in
+  the hint of the button whose press is being worked on.
+- Appearance settings: the text size and contrast for everyone; with
+  advanced settings the header (plain, light, dark), corners (square,
+  slightly rounded, round, soft; round and soft make pills), the
+  highlight (dark bar, frame, light bar), lines between rows (faint,
+  lines, none), lists on cards, the size of headers' titles, margins,
+  rows and lines. Pebble, a theme for touch screens with lists on
+  rounded cards and a light highlight, comes switched off in the plugin
+  manager; `samples/plugins` has two more themes, Paw and Calm ink. The
+  classic look is the Airy sample's light headers and small corners.
 - Library: with round or soft corners, covers have rounded corners too,
-  at most as round as a book's, and so do the boxes of books without a
-  cover, which were round as pills with soft corners. The grid of covers keeps its covers clear of a framed
-  focus, its focus a box; titles on a light focus stay black. Empty
-  shelves (Favourites, Tags, Series, a search) show an icon with their
-  message. With the paw motif, empty screens show a small paw beside
-  their icon and the busy mark is a paw. SDK: `Thumbnail::draw_round`;
-  graphics: `Canvas::fill_corners`, `round::corner_inset`.
+  at most as round as a book's. The grid of covers keeps its covers
+  clear of a framed focus, its focus a box; titles on a light focus
+  stay black.
+- Status lines: where their items would not fit whole (wide margins,
+  large text), the gaps between them narrow first, so the quick panel's
+  date is no longer shortened.
+- Setup: its margins are the menus' and a gap, no longer twice the
+  menus', so wide margins leave its choices room.
+- SDK: `UiStyle::{pill, focus, separators, plain_header, cards, grays,
+  head}`, `UiStyle::radius`, `focus_ink`, `focus_paper`, `focus_faint`,
+  `dark_focus`, `ui::draw_separator`, `ui::Focus`, `ui::Separators`,
+  `ui::PAW_ICON`, `Thumbnail::draw_round`; settings `core.ui-focus`,
+  `core.ui-separators`, `core.ui-groups`, `core.ui-title`,
+  `core.header.plain`, `core.corners.soft`; graphics:
+  `Canvas::fill_corners`, `round::corner_inset`. Plugins draw what is on
+  a focused row in `focus_ink` rather than white, so every highlight
+  works.
 - Quick panel and reader's panel: on touch screens their sliders (the
   front light and its colour, the text size, spacing and margins) are as
   on the settings pages, across the screen with their title and value

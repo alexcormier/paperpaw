@@ -74,7 +74,8 @@ pub struct UiStyle {
     /// Gray text is drawn black (see [`UiStyle::faint`]).
     pub strong: bool,
     /// Buttons, switches, the focus and other small shapes as pills,
-    /// their ends round (see [`UiStyle::radius`]); else with [`corner`].
+    /// their ends round (see [`UiStyle::radius`]), with round or soft
+    /// corners; else with [`corner`].
     ///
     /// [`corner`]: UiStyle::corner
     pub pill: bool,
@@ -86,8 +87,6 @@ pub struct UiStyle {
     pub plain_header: bool,
     /// The entries of a list's sections on rounded cards.
     pub cards: bool,
-    /// PaperPaw's paw where a screen is empty or busy.
-    pub paw: bool,
     /// The grays the panel shows (2 for black and white alone).
     pub grays: u16,
     /// The least size of what a finger sets or presses, about 7 mm, on
@@ -105,8 +104,6 @@ pub enum Focus {
     /// A light gray bar, what is on it black; a frame on panels of black
     /// and white alone.
     Soft,
-    /// A thin round frame and a mark at its start, what is in it black.
-    Marker,
 }
 
 /// The lines between rows ([`draw_separator`]).
@@ -154,11 +151,10 @@ impl UiStyle {
                 _ => 0,
             },
             strong: s.text(settings::UI_CONTRAST.as_str()) == settings::CONTRAST_STRONG,
-            pill: s.text(settings::UI_SHAPE.as_str()) == settings::SHAPE_PILL,
+            pill: settings::CORNERS[2..].contains(&s.text(settings::UI_CORNERS.as_str())),
             focus: match s.text(settings::UI_FOCUS.as_str()) {
                 settings::FOCUS_RING => Focus::Ring,
                 settings::FOCUS_SOFT => Focus::Soft,
-                settings::FOCUS_MARKER => Focus::Marker,
                 _ => Focus::Fill,
             },
             separators: match s.text(settings::UI_SEPARATORS.as_str()) {
@@ -168,7 +164,6 @@ impl UiStyle {
             },
             plain_header: s.text(settings::UI_HEADER.as_str()) == settings::HEADER_PLAIN,
             cards: s.text(settings::UI_GROUPS.as_str()) == settings::GROUPS_CARDS,
-            paw: s.text(settings::UI_MOTIF.as_str()) == settings::MOTIF_PAW,
             grays: env.device.display.format.gray_levels().unwrap_or(256),
             finger: if env.device.input.touch { m.mm(7) } else { 0 },
         }
@@ -176,11 +171,14 @@ impl UiStyle {
 
     /// The radius of the corners of a shape `height` pixels high: half
     /// its height for pills, else the style's corners.
-    /// Taller shapes (a row with a note, a cover) keep the corners, so
-    /// the round ends never cut into what is in them.
+    /// Taller shapes (a row with a note) keep the corners, at most half a
+    /// margin round: the room between their edge and their text, so the
+    /// curve never comes near what is in them.
     pub fn radius(&self, height: u32) -> u32 {
         if self.pill && height <= self.row * 5 / 4 {
             height / 2
+        } else if height > self.row * 5 / 4 {
+            self.corner.min(self.margin / 2)
         } else {
             self.corner
         }
@@ -1040,6 +1038,10 @@ pub fn button_hints_height(env: &Env<'_>) -> u16 {
 /// the button does something too ([`draw_button_hints`]).
 pub const HOLD_ICON: &str = "hand-click";
 
+/// PaperPaw's paw: on empty screens ([`draw_empty`]) and as the busy
+/// mark, also in the hint of a button whose press is being worked on.
+pub const PAW_ICON: &str = "paw";
+
 pub fn draw_button_hints(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
@@ -1096,15 +1098,18 @@ pub fn draw_button_hints(
             Color::BLACK
         };
         // Holding the button does something too: a small hand beside its
-        // label, the two together in the middle.
-        let hold = held.get(i as usize).copied().unwrap_or(false)
+        // label, the two together in the middle; while its press is being
+        // worked on, the paw in its place.
+        let busy = pressed == Some(i as usize);
+        let hold = (busy || held.get(i as usize).copied().unwrap_or(false))
             && matches!(hint, Hint::Text(_) | Hint::Icon(_));
+        let sign = if busy { PAW_ICON } else { HOLD_ICON };
         // Smaller than the label, close to it, the cell's margins halved:
         // the label keeps its room (German words are long).
         let mark_size = style.small * 0.8;
         let mark = if hold {
             room += style.gap as f32;
-            icon_width(env, HOLD_ICON, mark_size) + style.gap as f32 / 4.0
+            icon_width(env, sign, mark_size) + style.gap as f32 / 4.0
         } else {
             0.0
         };
@@ -1126,7 +1131,7 @@ pub fn draw_button_hints(
         };
         if hold {
             let x = end + style.gap as f32 / 4.0;
-            draw_icon(canvas, env, HOLD_ICON, mark_size, x, cell, ink);
+            draw_icon(canvas, env, sign, mark_size, x, cell, ink);
         }
     }
 }
@@ -1161,21 +1166,6 @@ pub fn draw_focus(canvas: &mut Canvas<'_>, style: &UiStyle, rect: Rect) {
             canvas.fill_round(r, radius, Color::gray(gray));
         }
         Focus::Soft => canvas.stroke_round(r, ring, radius, Color::BLACK),
-        Focus::Marker => {
-            canvas.stroke_round(r, style.line.max(1), radius, Color::BLACK);
-            // A short pill at the start, in the middle of the room between
-            // the frame and the text.
-            let width = (style.line * 2).max(3) as u16;
-            let height = r.height / 2;
-            let room = rect.x + style.margin as u16 - r.x;
-            let mark = Rect::new(
-                r.x + room.saturating_sub(width) / 2,
-                r.y + (r.height - height) / 2,
-                width,
-                height,
-            );
-            canvas.fill_round(mark, u32::from(width) / 2, Color::BLACK);
-        }
     }
 }
 
@@ -1272,19 +1262,17 @@ pub fn draw_empty(
             at,
             style.faint(120),
         );
-        // With the paw motif, a small paw beside the icon, as if it had
-        // just walked past; the icon stays in the middle.
-        if style.paw {
-            let size = icon_size * 0.4;
-            let below = Rect::new(
-                area.x,
-                (y + icon_size - size) as u16,
-                area.width,
-                size as u16,
-            );
-            let x = centre(w) + w + gap / 2.0;
-            draw_icon(canvas, env, "paw", size, x, below, style.faint(120));
-        }
+        // A small paw beside the icon, as if it had just walked past;
+        // the icon stays in the middle.
+        let size = icon_size * 0.4;
+        let below = Rect::new(
+            area.x,
+            (y + icon_size - size) as u16,
+            area.width,
+            size as u16,
+        );
+        let x = centre(w) + w + gap / 2.0;
+        draw_icon(canvas, env, PAW_ICON, size, x, below, style.faint(120));
         y += icon_room;
     }
     if !title.is_empty() {

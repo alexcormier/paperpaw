@@ -320,7 +320,6 @@ pub(super) fn card_style() -> UiStyle {
         separators: crate::ui::Separators::None,
         plain_header: false,
         cards: true,
-        paw: false,
         grays: 2,
         finger: 0,
     }

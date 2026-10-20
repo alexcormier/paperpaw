@@ -709,16 +709,10 @@ fn cell_side(style: &UiStyle, width: u16) -> u16 {
 }
 
 /// The style the grid's focus is drawn with: around a cover and its
-/// title, a box with the style's corners, not a pill; a frame without
-/// the mark that starts a row.
+/// title, a box with the style's corners, not a pill.
 fn grid_style(style: &UiStyle) -> UiStyle {
-    let focus = match style.focus {
-        Focus::Marker => Focus::Ring,
-        focus => focus,
-    };
     UiStyle {
         pill: false,
-        focus,
         ..*style
     }
 }

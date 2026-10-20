@@ -769,25 +769,20 @@ pub mod settings {
     /// Corners of highlights, buttons and boxes: one of [`CORNERS`].
     pub const UI_CORNERS: Setting<Text> = Setting::new("core.ui-corners");
     /// The values of [`UI_CORNERS`]: square, slightly rounded, round,
-    /// soft (rounder still).
+    /// soft (rounder still). With round and soft ones, small shapes
+    /// (buttons, switches, the focus) are pills.
     pub const CORNERS: [&str; 4] = [
         "core.corners.square",
         "core.corners.small",
         "core.corners.round",
         "core.corners.soft",
     ];
-    /// Small shapes (buttons, switches, the focus) boxes with the
-    /// corners ([`SHAPE_BOX`]) or pills ([`SHAPE_PILL`]).
-    pub const UI_SHAPE: Setting<Text> = Setting::new("core.ui-shape");
-    pub const SHAPE_BOX: &str = "core.shape.box";
-    pub const SHAPE_PILL: &str = "core.shape.pill";
-    /// How the focus is drawn: a dark bar, a frame, a light bar, a frame
-    /// with a mark.
+    /// How the focus is drawn: a dark bar, a frame, a light bar (a frame
+    /// on panels of black and white alone).
     pub const UI_FOCUS: Setting<Text> = Setting::new("core.ui-focus");
     pub const FOCUS_FILL: &str = "core.focus.fill";
     pub const FOCUS_RING: &str = "core.focus.ring";
     pub const FOCUS_SOFT: &str = "core.focus.soft";
-    pub const FOCUS_MARKER: &str = "core.focus.marker";
     /// The lines between rows: light, faint from the text, none.
     pub const UI_SEPARATORS: Setting<Text> = Setting::new("core.ui-separators");
     pub const SEPARATORS_LINE: &str = "core.separators.line";
@@ -797,11 +792,7 @@ pub mod settings {
     pub const UI_GROUPS: Setting<Text> = Setting::new("core.ui-groups");
     pub const GROUPS_PLAIN: &str = "core.groups.plain";
     pub const GROUPS_CARDS: &str = "core.groups.cards";
-    /// PaperPaw's paw on empty and busy screens, or none.
-    pub const UI_MOTIF: Setting<Text> = Setting::new("core.ui-motif");
-    pub const MOTIF_NONE: &str = "core.motif.none";
-    pub const MOTIF_PAW: &str = "core.motif.paw";
-    /// Size of titles, in percent of the text's.
+    /// Size of headers' titles, in percent of the text's.
     pub const UI_TITLE: Id = Id::new_static("core.ui-title");
     /// Gray text such as hints and notes: as it is, or black for strong
     /// contrast ([`CONTRAST_STRONG`]), e.g. on screens with few grays.

@@ -225,7 +225,9 @@ impl Guide {
         let style = &self.style;
         let display = env.device.display;
         let (w, h) = (display.width, display.height);
-        let margin = style.margin as u16 * 2;
+        // A little more room than menus have, but not twice theirs, which
+        // left wide margins too little width.
+        let margin = (style.margin + style.gap) as u16;
         let gap = style.gap as u16;
         let width = w.saturating_sub(2 * margin);
         // The text flows: the question, its explanation right below, the
