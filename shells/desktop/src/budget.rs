@@ -288,3 +288,6 @@ impl std::fmt::Display for Stats {
         write!(f, " (peak {:.1} KiB)", kib(self.peak))
     }
 }
+
+#[cfg(test)]
+mod accounting_tests;

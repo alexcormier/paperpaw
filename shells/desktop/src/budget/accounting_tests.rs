@@ -1,0 +1,206 @@
+//! The budget allocator's accounting, with the allocator itself (it is
+//! the global allocator of this binary, so of its tests too): what is
+//! charged and credited back, what is refused, which budget holds, and
+//! how the numbers are shown.
+//!
+//! The counters are global; the tests that read them take [`LOCK`] so
+//! they do not see each other's allocations. Other tests allocate
+//! untracked, which the counters leave alone.
+
+use std::alloc::Layout;
+use std::sync::{Mutex, MutexGuard};
+
+use super::*;
+
+static LOCK: Mutex<()> = Mutex::new(());
+
+/// The counters to themselves, the budget lifted, as no profile set one.
+fn alone() -> MutexGuard<'static, ()> {
+    let guard = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    OVERRIDDEN.store(false, Ordering::Relaxed);
+    set_limit(None);
+    guard
+}
+
+fn live() -> usize {
+    stats().live
+}
+
+#[test]
+fn tracked_allocations_are_charged_with_a_header_and_credited_back() {
+    let _alone = alone();
+    let before = live();
+    let buffer = track(|| Vec::<u8>::with_capacity(1000));
+    assert_eq!(live(), before + 1000 + HEADER);
+    assert!(stats().peak >= before + 1000 + HEADER);
+    // Freed outside the kernel's calls: still credited back.
+    drop(buffer);
+    assert_eq!(live(), before);
+}
+
+#[test]
+fn untracked_memory_is_neither_charged_nor_credited() {
+    let _alone = alone();
+    let before = live();
+    // The shell's own memory, freed by the kernel (e.g. a request's body
+    // handed over): the count does not drop below what is charged.
+    let shells = vec![0_u8; 4096];
+    assert_eq!(live(), before);
+    track(|| drop(shells));
+    assert_eq!(live(), before);
+}
+
+#[test]
+fn a_tracked_allocation_past_the_budget_is_refused_and_counted() {
+    let _alone = alone();
+    let before = stats();
+    set_limit(Some(before.live + 2048));
+    let refused = track(|| Vec::<u8>::new().try_reserve_exact(4096));
+    let fits = track(|| Vec::<u8>::new().try_reserve_exact(512));
+    let after = stats();
+    set_limit(None);
+    assert!(refused.is_err(), "4 KiB past a 2 KiB budget");
+    assert!(fits.is_ok(), "512 bytes within it");
+    assert_eq!(after.failed, before.failed + 1);
+    // Nothing charged for what was refused, the small one freed again.
+    assert_eq!(after.live, before.live);
+    assert_eq!(after.limit, Some(before.live + 2048));
+}
+
+#[test]
+fn untracked_allocations_are_never_refused() {
+    let _alone = alone();
+    set_limit(Some(live()));
+    // The emulator's window and pictures are not the device's heap.
+    let window = vec![0_u8; 64 * 1024];
+    set_limit(None);
+    assert_eq!(window.len(), 64 * 1024);
+}
+
+#[test]
+fn a_budget_given_on_the_command_line_wins_over_the_profiles() {
+    let _alone = alone();
+    override_limit(Some(300 * 1024));
+    set_limit(Some(256 * 1024));
+    assert_eq!(stats().limit, Some(300 * 1024), "the profile's left aside");
+    override_limit(None);
+    set_limit(Some(256 * 1024));
+    assert_eq!(stats().limit, None, "`none` lifts it for the whole run");
+    OVERRIDDEN.store(false, Ordering::Relaxed);
+    set_limit(Some(256 * 1024));
+    assert_eq!(stats().limit, Some(256 * 1024));
+    set_limit(None);
+    assert_eq!(stats().limit, None);
+}
+
+#[test]
+fn tracking_ends_with_the_call_even_nested_or_after_a_panic() {
+    // The panic's message is allocated tracked.
+    let _alone = alone();
+    assert!(!tracking());
+    track(|| {
+        assert!(tracking());
+        track(|| assert!(tracking()));
+        assert!(tracking(), "still inside the outer call");
+    });
+    assert!(!tracking());
+    let caught = std::panic::catch_unwind(|| track(|| panic!("a plugin's panic")));
+    assert!(caught.is_err());
+    assert!(!tracking(), "restored while unwinding");
+}
+
+#[test]
+fn allocations_of_any_alignment_keep_their_mark_apart() {
+    for align in [1, 2, 8, 16, 32, 64, 4096] {
+        for size in [0, 1, 15, 16, 100] {
+            let layout = Layout::from_size_align(size, align).unwrap();
+            let (whole, offset) = outer(layout);
+            assert!(offset >= 16 && offset % align == 0, "{layout:?}");
+            assert_eq!(whole.size(), size + offset);
+            assert_eq!(whole.align(), align);
+        }
+    }
+    // Through the allocator, tracked: aligned, writable, freed whole.
+    let _alone = alone();
+    let before = live();
+    track(|| {
+        let layout = Layout::from_size_align(100, 4096).unwrap();
+        // SAFETY: a non-zero size; freed with the same layout below.
+        unsafe {
+            let ptr = std::alloc::alloc(layout);
+            assert!(!ptr.is_null());
+            assert_eq!(ptr as usize % 4096, 0);
+            ptr.write_bytes(0xAB, 100);
+            assert_eq!(ptr.sub(1).read(), CHARGED);
+            std::alloc::dealloc(ptr, layout);
+        }
+    });
+    assert_eq!(live(), before);
+}
+
+#[test]
+fn growing_and_shrinking_a_tracked_buffer_keeps_the_count_exact() {
+    let _alone = alone();
+    let before = live();
+    let mut buffer = track(|| {
+        let mut buffer = Vec::<u8>::with_capacity(16);
+        buffer.extend(std::iter::repeat_n(7, 10_000));
+        buffer.shrink_to_fit();
+        buffer
+    });
+    assert_eq!(live(), before + buffer.capacity() + HEADER);
+    // Grown outside the kernel's calls: the new memory is the shell's.
+    buffer.reserve(100_000);
+    assert_eq!(live(), before);
+}
+
+#[test]
+fn the_profile_records_live_allocations_by_site_until_freed() {
+    let _alone = alone();
+    PROFILE.store(true, Ordering::Relaxed);
+    let buffer = track(|| Vec::<u8>::with_capacity(4321));
+    let recorded = |sites: &Mutex<Option<HashMap<usize, (usize, Backtrace)>>>| {
+        sites
+            .lock()
+            .unwrap()
+            .as_ref()
+            .and_then(|s| s.get(&(buffer.as_ptr() as usize)).map(|(size, _)| *size))
+    };
+    assert_eq!(recorded(&SITES), Some(4321));
+    let at = buffer.as_ptr() as usize;
+    drop(buffer);
+    let gone = SITES
+        .lock()
+        .unwrap()
+        .as_ref()
+        .is_none_or(|s| !s.contains_key(&at));
+    PROFILE.store(false, Ordering::Relaxed);
+    assert!(gone, "forgotten when freed");
+    // The report takes what is recorded.
+    report(2);
+    assert!(SITES.lock().unwrap().is_none());
+}
+
+#[test]
+fn a_site_leaves_out_the_budgets_own_frames() {
+    // Only this module's frames are PaperPaw's here, and the budget's
+    // bookkeeping is never where memory is used.
+    let backtrace = Backtrace::force_capture();
+    assert_eq!(site_of(&backtrace, 2), "(outside PaperPaw code)");
+}
+
+#[test]
+fn stats_show_the_heap_in_kib_with_the_budget_where_there_is_one() {
+    let with = Stats {
+        live: 1536,
+        peak: 2048,
+        limit: Some(256 * 1024),
+        failed: 0,
+    };
+    assert_eq!(with.to_string(), "heap 1.5 KiB / 256 KiB (peak 2.0 KiB)");
+    let without = Stats {
+        limit: None,
+        ..with
+    };
+    assert_eq!(without.to_string(), "heap 1.5 KiB (peak 2.0 KiB)");
+}
