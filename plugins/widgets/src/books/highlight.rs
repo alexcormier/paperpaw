@@ -2,6 +2,7 @@
 //! or from all, another each day (or each time it shows): the text in
 //! quotes, the book's title below. A tap opens the book at its place.
 
+use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::format;
 use alloc::rc::Rc;
@@ -15,12 +16,14 @@ use paperpaw_sdk::document::Locator;
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::library;
 use paperpaw_sdk::ui::UiStyle;
-use paperpaw_sdk::widgets::{self, Align, Frame, Look, Size, Widget, WidgetSpec, WidgetTarget};
+use paperpaw_sdk::widgets::{
+    self, Align, Frame, Look, Size, Widget, WidgetSpec, WidgetTarget, Wrapped,
+};
 use paperpaw_sdk::{Arg, Canvas, Env, Id, Rect, RegisterError, Registrar, Storage};
 
 use super::{
-    Generation, add_settings, chosen, draw_line, draw_message, each_book, frame_height, mix, open,
-    path_hash, today,
+    Generation, add_settings, below_caption, chosen, draw_line, draw_message, each_book,
+    frame_height, mix, open, path_hash, today,
 };
 use paperpaw_sdk::SettingSpec;
 
@@ -107,6 +110,8 @@ pub(crate) fn register(r: &mut Registrar, generation: &Generation) -> Result<(),
                 shows: shows.clone(),
                 generation: generation.clone(),
                 quote: None,
+                area: None,
+                laid: None,
             })
         })
         .category(widgets::categories::WORDS),
@@ -218,9 +223,19 @@ struct HighlightWidget {
     shows: Rc<Cell<u64>>,
     generation: Generation,
     quote: Option<Quote>,
+    /// Where it is drawn, once placed, and the highlight laid out there.
+    area: Option<Rect>,
+    laid: Option<Laid>,
 }
 
 impl HighlightWidget {
+    fn lay_out(&mut self, env: &Env<'_>) {
+        self.laid = match (self.area, &self.quote) {
+            (Some(area), Some(quote)) => lay_out(env, area, quote),
+            _ => None,
+        };
+    }
+
     fn choose(&self, env: &Env<'_>) -> Option<Quote> {
         let id = WIDGET;
         let source = chosen(env, id, "source").to_string();
@@ -261,7 +276,17 @@ impl Widget for HighlightWidget {
         let quote = self.choose(env);
         let changed = quote != self.quote;
         self.quote = quote;
+        if changed {
+            self.lay_out(env);
+        }
         changed
+    }
+
+    fn place(&mut self, env: &Env<'_>, area: Rect) {
+        if self.area != Some(area) {
+            self.area = Some(area);
+            self.lay_out(env);
+        }
     }
 
     fn live(&self) -> bool {
@@ -278,10 +303,19 @@ impl Widget for HighlightWidget {
 
     fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         let look = widgets::draw_frame(canvas, env, WIDGET, area);
-        match &self.quote {
-            Some(quote) => draw(canvas, env, &look, quote),
-            None => draw_message(canvas, env, &look, "widgets.highlight.none"),
-        }
+        let Some(quote) = &self.quote else {
+            draw_message(canvas, env, &look, "widgets.highlight.none");
+            return;
+        };
+        // Laid out when placed; drawn elsewhere, laid out for that.
+        let laid = match &self.laid {
+            Some(laid) if self.area == Some(area) => Cow::Borrowed(laid),
+            _ => match lay_out(env, area, quote) {
+                Some(laid) => Cow::Owned(laid),
+                None => return,
+            },
+        };
+        draw(canvas, env, &look, quote, &laid);
     }
 
     fn targets(&self, _: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
@@ -316,21 +350,33 @@ fn fitting_size(env: &Env<'_>, text: &str, width: u16, height: u16, largest: f32
     fits(style.small).then_some(style.small)
 }
 
-fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, quote: &Quote) {
+/// A highlight laid out in a widget's area, drawn as it is in every band.
+#[derive(Debug, Clone, PartialEq)]
+struct Laid {
+    /// The mark, the text, the note and the book together, in the middle.
+    block: Rect,
+    /// A large opening mark above the text, in the upper part of its
+    /// line: half a line high.
+    marks: bool,
+    mark_h: u16,
+    text: Wrapped,
+    text_h: u16,
+    /// The note below the text, if shown.
+    note: bool,
+    /// The book (and its author) below, if shown.
+    source: Option<String>,
+}
+
+/// `quote` laid out in widget area `area`, below the caption: where the
+/// text does not fit, the mark goes first, then the note, then the book;
+/// what is left is shortened.
+fn lay_out(env: &Env<'_>, area: Rect, quote: &Quote) -> Option<Laid> {
     let style = UiStyle::new(env);
-    let Some(font) = style.font(env) else {
-        return;
-    };
+    let font = style.font(env)?;
     let id = WIDGET;
-    let align = widgets::align(env, id);
     let gap = style.gap as u16;
-    let mut area = super::caption(
-        canvas,
-        env,
-        id,
-        look,
-        env.i18n.tr("widgets.highlight.caption"),
-    );
+    let look = widgets::look::look(env, id, area);
+    let area = below_caption(env, id, &look);
     // Below: the book (and the note), small.
     let source = {
         let title = widgets::shows(env, id, "title");
@@ -348,13 +394,9 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, quote: &Quote) {
     let mut marks = widgets::shows(env, id, "marks");
     let mark_size = style.title * 2.0;
     let wanted = widgets::size(env, id);
-    // Where the text does not fit, the mark goes first, then the note,
-    // then the book; what is left is shortened.
     let (size, text, mark_h, below) = loop {
         let below = u16::from(with_source) * small + u16::from(note) * small;
         let below = if below > 0 { below + gap / 2 } else { 0 };
-        // The mark's ink is in the upper part of its line: half a line
-        // is enough room for it.
         let mark_h = if marks {
             widgets::line_height(env, mark_size) / 2
         } else {
@@ -395,24 +437,53 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, quote: &Quote) {
     let lines = font.wrap(size, &text, f32::from(area.width)).len() as u16;
     let text_h = (lines * widgets::line_height(env, size)).min(room);
     let total = (mark_h + text_h + below).min(area.height);
-    area = Rect::new(
+    let block = Rect::new(
         area.x,
         area.y + (area.height - total) / 2,
         area.width,
         total,
     );
-    if marks {
+    Some(Laid {
+        block,
+        marks,
+        mark_h,
+        text: Wrapped::new(env, &text, size, block.width, text_h),
+        text_h,
+        note,
+        source: with_source.then_some(source),
+    })
+}
+
+fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, quote: &Quote, laid: &Laid) {
+    let style = UiStyle::new(env);
+    let Some(font) = style.font(env) else {
+        return;
+    };
+    let id = WIDGET;
+    let align = widgets::align(env, id);
+    let gap = style.gap as u16;
+    super::caption(
+        canvas,
+        env,
+        id,
+        look,
+        env.i18n.tr("widgets.highlight.caption"),
+    );
+    let area = laid.block;
+    let small = widgets::line_height(env, style.small);
+    if laid.marks {
         let mark = "\u{201c}";
+        let mark_size = style.title * 2.0;
         let w = font.measure(mark_size, mark);
         let x = align.x(area, w);
         let metrics = font.line_metrics(mark_size);
-        let baseline = i32::from(area.y) + metrics.ascent as i32 - (mark_h / 4) as i32;
+        let baseline = i32::from(area.y) + metrics.ascent as i32 - (laid.mark_h / 4) as i32;
         font.draw(canvas, mark_size, x, baseline, mark, look.faint);
     }
-    let text_area = Rect::new(area.x, area.y + mark_h, area.width, text_h);
-    widgets::draw_wrapped(canvas, env, text_area, align, size, &text, look.ink);
-    let mut y = area.y + mark_h + text_h + gap / 2;
-    if note {
+    let text_area = Rect::new(area.x, area.y + laid.mark_h, area.width, laid.text_h);
+    laid.text.draw(canvas, env, text_area, align, look.ink);
+    let mut y = area.y + laid.mark_h + laid.text_h + gap / 2;
+    if laid.note {
         let row = Rect::new(area.x, y, area.width, small);
         y += draw_line(
             canvas,
@@ -425,7 +496,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, quote: &Quote) {
             look.ink,
         );
     }
-    if with_source {
+    if let Some(source) = &laid.source {
         let row = Rect::new(area.x, y, area.width, small);
         draw_line(
             canvas,
@@ -434,7 +505,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, quote: &Quote) {
             style.small,
             row,
             align,
-            &source,
+            source,
             look.faint,
         );
     }

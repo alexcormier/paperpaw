@@ -44,6 +44,8 @@ pub enum Role {
     Button,
     /// A switch in a row.
     Switch,
+    /// A number set by moving a knob along a track; its text is the value.
+    Slider,
     /// Text.
     Text,
 }

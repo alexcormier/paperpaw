@@ -1,7 +1,7 @@
 # 0023. The plugin store
 
 - Status: Accepted
-- Date: 2026-10-19
+- Date: 2026-10-19, the lists for each device 2026-10-20
 
 ## Context
 
@@ -21,65 +21,79 @@ download written as it arrives, nothing unpacked in memory.
 
 ## Decision
 
-- **One list for the device and the website.** `plugins.json` stays
-  format 1 and grows only by fields, which readers that do not know
-  them pass over:
+- **A list made for each device.** `GET /api/v1/plugins.json` without
+  parameters stays format 1, the whole library for the website and
+  other readers. With them, `?device=<x4|x4-pro|android>&lang=<xx>`, it
+  is format 2: only the plugins for that device, already in the order
+  to show them (by the website's groups, then by name in that
+  language), each with what a list needs and no files:
 
   ```json
-  {"format": 1, "plugins": [{
-    "id": "airy-theme", "name": "Airy",
-    "summary": "Light headers, wide margins, roomy rows and rounded corners.",
-    "i18n": {"de": {"name": "Luftig", "summary": "…"}},
-    "kind": "data", "group": "look", "tags": ["theme"],
-    "author": "…", "licence": "Apache-2.0", "source": "https://…",
-    "devices": ["android", "x4", "x4-pro"],
-    "built_in": false, "off_by_default": false,
-    "latest": {
-      "version": "1.0.0", "sdk": "0.4", "formats": 1, "date": "2026-10-19",
-      "url": "/plugins/airy-theme/airy-theme-1.0.0.zip",
-      "size": 2345, "sha256": "…",
-      "files": [
-        {"path": "plugin.ini", "url": "/api/v1/plugins/airy-theme/1.0.0/plugin.ini",
-         "size": 412, "sha1": "…"},
-        {"path": "i18n/de.ini", "url": "…", "size": 230, "sha1": "…"}
-      ]}}]}
+  {"format": 2, "plugins": [{
+    "id": "airy-theme", "name": "Luftig", "summary": "…",
+    "group": "look", "author": "…", "licence": "Apache-2.0",
+    "kind": "data",
+    "latest": {"version": "1.0.0", "sdk": "0.4", "formats": 1, "size": 2345}}]}
   ```
 
-  - `i18n`: the name and summary in other languages, from an optional
-    `[i18n.<lang>]` table of the catalogue entry; English otherwise.
-  - `devices`: `android`, `x4` and `x4-pro` (the X4 Pro is a device of
-    its own); every device when the entry names none.
+  - `name`, `summary`: in the language asked for (from an optional
+    `[i18n.<lang>]` table of the catalogue entry), English otherwise.
+  - `group`: one of `reading`, `formats`, `library`, `sync`, `home`,
+    `look`, `system`, in that order.
+  - `kind`: `data` or `code`; `built_in` where true.
   - `latest.formats`: the data format the plugin says in its
     `plugin.ini` (`formats = 1`, ADR 0020's data formats), read by the
-    server from the package.
-  - `latest.files`: every file of a data plugin's package, its path in
-    the plugin's folder, an address relative to the list's, its size and
-    SHA-1. The server serves them out of the package it already holds
-    (`GET /api/v1/plugins/{id}/{version}/{*path}`), so a device needs
-    no unpacking. A `plugin.ini` is always among them.
-- **The device's store** is a plugin (`store`), the same for X4 and X4
-  Pro, by buttons and by touch. It lists the data plugins fit for this
-  device (its `DeviceInfo::id`: `xteink-x4` is `x4`, `xteink-x4-pro` is
-  `x4-pro`), made for an SDK this one reads and a data format it knows,
-  by group as the website shows them, with fonts as one more entry that
-  opens the fonts browser. A plugin's page tells what it is, who made
-  it, its licence and size, and installs, updates or removes it.
-  Built-in plugins and plugins with code are not listed yet.
-- **Installing is a building block of the SDK**, not of one plugin: the
-  download into `plugins/.<id>.part`, file after file, each checked by
-  size and SHA-1, what is left kept on the card so it goes on after the
-  screen is closed, then the folder renamed and loaded. The fonts browser
-  moves onto it.
+    server from the package. `latest.size`: the bytes a device
+    downloads (its files together). `latest` is left out (or `null`)
+    where no package is ready.
+- **A page for each plugin**: `GET /api/v1/plugins/{id}.json`, with the
+  same parameters, is `{"format": 2, "plugin": {…}}`: the fields of the
+  list and `latest.files`, every file of a data plugin's package, its
+  path in the plugin's folder (plain names and `/`, none starting with a
+  dot), an address relative to this page, its size and SHA-1. The server
+  serves them out of the package it already holds
+  (`GET /api/v1/plugins/{id}/{version}/{*path}`), so a device needs no
+  unpacking. A `plugin.ini` is always among them. Plugins with code get
+  `latest.builds` there later.
+- **The device's store** is a plugin (`store`, *More plugins*), the same
+  on every device, by buttons and by touch. The shell says what plugin
+  libraries call its device (`KernelBuilder::catalog_device`, read as
+  `Env::catalog_device`: `x4`, `x4-pro`, `android`); a device without
+  one is told that there is nothing for it. The store lists the data
+  plugins made for an SDK this one reads and a data format it knows, by
+  group, with *Search* (by name and summary) above them and fonts as
+  one more entry that opens the fonts browser. It keeps the list as an
+  index on the storage (a line for each plugin and where each line
+  begins); in memory are only the runs of plugins of one group and the
+  page shown (`ui::Sections`), so the list may grow without limit. A
+  plugin's page fetches the plugin's own page for its files, tells what
+  it is, who made it, its licence and size, and installs, updates or
+  removes it. Built-in plugins and plugins with code are not listed
+  yet.
+- **Installing is a building block of the SDK** (`install`), not of one
+  plugin: the download into `plugins/.<id>.part`, file after file, each
+  checked by size and SHA-1, what is left kept on the card so it goes on
+  after the screen is closed, each job told apart from the ones before
+  so that late answers are passed over. Then the kernel installs it
+  (`Command::InstallPlugin`): in place of every version of that plugin
+  on the storage, loaded, switched off or refused at start, in the
+  folder named as it; a plugin switched off stays off, and what was
+  chosen from the version before (its font for reading) stays chosen.
+  The fonts browser uses it too.
 - **The list's address** is a setting for developers (`store.catalog`,
   `https://paperpaw.org/api/v1/plugins.json` unless set), as the fonts
-  browser's is.
+  browser's is; a plugin's page is `plugins/<id>.json` beside it.
 
 ## Consequences
 
 - One catalogue entry makes a plugin appear on the website and on every
   device it fits; authors change nothing to reach the X4.
+- The website sorts and filters, so a device does neither: it reads the
+  list as it streams, whatever its length, and fetches files only for
+  the plugin it installs.
 - The server keeps every file of a package by its SHA-1 as well as the
   ZIP's SHA-256; a package checked once is served both ways.
 - Plugins with code need a firmware built with them (O6's second half,
-  a build service): they get fields of their own then, and devices that
-  do not know those fields keep passing over them.
+  a build service): they get fields of their own then (`latest.builds`
+  on a plugin's page), and devices that do not know those fields keep
+  passing over them.

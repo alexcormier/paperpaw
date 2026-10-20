@@ -6,6 +6,97 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Joplin (PLANNING C15, S1): a book's highlights and notes, once
+  exported, become a note in Joplin, one per book, in a notebook named
+  in the settings. Exporting again updates the note, also where it was
+  moved to in Joplin; a note whose text was edited in Joplin stays, and
+  a new one is made beside it. The notes go where Joplin synchronises
+  to (Joplin Cloud, Joplin Server, or a WebDAV folder such as
+  Nextcloud), so they reach Joplin on every device with no computer
+  running. *Joplin* in the tools sets it up, each row with what it is
+  for; the password is kept with the passwords and keys. What cannot be
+  sent waits and goes with the next export, by the action *Send to
+  Joplin* (also for rules), or when Wi-Fi comes back; no connection, a
+  wrong password or address, Joplin's end-to-end encryption and a sync
+  target in another version of Joplin's format than PaperPaw writes (no
+  notes are sent then) are said plainly. While an older Joplin holds an
+  exclusive lock on the target to upgrade it, the notes wait; PaperPaw
+  takes no lock of its own, as Joplin 3.7 takes none. Notes are read
+  and written in pieces and sent from a file, Joplin's answers saved to
+  files of which only the end is read: the X4's heap peaks no higher
+  for it. Shipped switched off.
+- SDK: `files::for_each_line` reads a text file line by line as it
+  streams from the storage, so lists of any length take little memory;
+  `LocalTime::to_seconds` is the way back from
+  `LocalTime::from_seconds`; `web::http_date` reads the dates servers
+  send (`Last-Modified`, WebDAV's `getlastmodified`).
+- Settings: a live preview above the reading settings (PLANNING §6.7):
+  two short paragraphs set exactly as book pages are (the same layout
+  engine, type, margins at the sides, justification, indents and
+  hyphenation, in the interface's language), following each value at
+  once while a slider moves or the buttons change it, before it is
+  kept. In the emulator's X4 profile an update takes a third to a half
+  of the time one book page takes to lay out, and about 3 KB of the
+  heap; only the preview and the row changed are drawn again, with a
+  quick refresh, and the full picture with its grays comes once the
+  value is chosen.
+  SDK: a widget can preview a group of settings instead of being one
+  for screens (`WidgetSpec::previews`, `Widgets::preview`); settings
+  pages show it above the group, and `Widgets::iter` leaves such
+  widgets out.
+- Settings: on touch screens, numbers better set by eye are sliders on
+  the settings pages (PLANNING §6.7): the text size, word and line
+  spacing, the margins, the speed of reading aloud, the interface's
+  size, row height and margins, the frontlight; with buttons alone they
+  keep their compact rows with `−` and `+`. A number changed with the buttons now
+  shows each value at once without keeping it; *Select* keeps it,
+  *Back* goes back to the value before, and the row of hints says so
+  (`−`, `+`, *Keep*, *Cancel*). By touch, a slider's knob follows the
+  finger and the value is kept where it is lifted; `−` and `+` change it
+  a step at once, as before. The reader's panel shows its sliders'
+  values, and gives them `−` and `+` alone where the screen is too
+  narrow for a track (the X4 Pro).
+- SDK: sliders as a building block for any plugin (`ui::slider`:
+  `Slider`, `SliderDrag`, `SliderFocus`, `SliderParts`, `SliderStep`,
+  `SliderView`, `band`, `band_height`, `key_step`, `marked`, `parts`,
+  `row_height`, `shows`; what a slider draws goes in a `SliderView`, so
+  it can grow without breaking plugins): a track filled up to the value with a knob
+  there, between a `−` and a `+` flush with the margins, the title and
+  the value with its unit above it as in other rows. By touch a finger
+  takes the knob along in the slider's steps and lifting it chooses the
+  value, with the buttons left and right move it a step; `shows` says
+  whether a setting gets one here (a touch screen). Screen readers
+  hear it as `semantics::Role::Slider`. The panel's sliders (the
+  frontlight) are drawn with it and keep to their steps. The help texts
+  of the margins and the word spacing say more plainly what they do, and
+  a test checks that every slider shows its unit.
+- Screens draw without reading the card (PLANNING §12.3, B3). The X4
+  draws a frame in five bands, and what a screen read or worked out as it
+  drew, it did five times over, and again for every frame. Covers on the
+  home screen, in the book widgets, on the book information and in OPDS
+  catalogs are made small once and drawn from memory (the home screen
+  read its cover's 65 KB from the card in every frame); the highlight,
+  note, quote and word of the day widgets lay their text out where they
+  are placed; the menu editor's lists are made when the menus change (a
+  frame 30 times faster), and so are which profiles are in use; weather
+  now lays itself out where placed, the keyboard's field and the
+  translation's heading are measured once; the logo widget and the
+  words marked in books read nothing while drawing. Screens below a full screen let go of what
+  they keep to draw, so a book opened from the home screen has more
+  memory, and a screen on top only for a moment (the home screen below a
+  menu that opens another screen) reads nothing. A test opens every
+  screen of the standard app as on an X4 and fails where drawing reads
+  the card; the guide says the rule.
+  SDK: `Widget::place` (where a widget is drawn, before it is),
+  `widgets::Wrapped` (a text broken into lines once, drawn as often as
+  needed), `Screen::on_hide`, `GridView::release`; `Screen::on_show`
+  comes once the commands of a call are done. A decorator's signature is
+  asked as pages are drawn: it says it from memory. Kernel:
+  `Kernel::open_screen`, `Kernel::known_screens`.
+- Emulator: `--trace` prints what drawing each frame asks of the
+  storage, band by band, how long it took and what was asked before it;
+  scripts open any screen with its parameters (`open:`) and draw the
+  screen again (`redraw`).
 - X4: downloads into a file (updates, books, fonts) no longer run out of
   memory half way: pieces of an answer gathered before writing them to
   the card grew without bound when the connection handed over a lot at
@@ -16,19 +107,33 @@ change the plugin SDK.
   plugin manager, PLANNING O6, ADR 0023): the data plugins of
   paperpaw.org's plugin library made for this device, PaperPaw version
   and data format, by group as on the website, named and described in
-  the language shown, with *Fonts* opening the fonts browser. A plugin's
-  page tells what it does, who made it, its licence, version and size,
-  and installs, updates or removes it; downloads go on when the page is
-  closed. The list is read as it streams and kept on the card; the
-  setting *Plugin library* (developers) names another one.
+  the language shown, with *Search* (by name and what a plugin does)
+  and *Fonts*, which opens the fonts browser. A plugin's page tells what
+  it does, who made it, its licence, version and size, and installs,
+  updates or removes it; downloads go on when the page is closed. The
+  library sends a list made for the device
+  (`plugins.json?device=…&lang=…`, format 2), which the store reads as it
+  streams into an index on the card: however many plugins it lists,
+  only a page of them is in memory (a list of 1001 plugins takes about
+  3 KB on the X4). A plugin's files come with its own page
+  (`plugins/<id>.json`). The setting *Plugin library* (developers) names
+  another library.
   SDK: `install` (`Installer`, `Package`, `PackageFile`, `Progress`,
-  `Received`, `device_name`, `fits`, `is_plugin_name`, `is_safe_path`,
-  `MAX_FILES`): installing data plugins from the internet, file by
-  file, each checked, the job kept on the storage, the version before
-  replaced once all is there; the fonts browser uses it too.
-  `DATA_FORMATS`: the data plugins' formats this PaperPaw reads. The
-  plugin manager lists the actions of the menu `plugin-manager.more`
-  above the plugins.
+  `Received`, `fits`, `is_plugin_name`, `is_safe_path`, `MAX_FILES`):
+  installing data plugins from the internet, file by file, each
+  checked, the job kept on the storage, answers to jobs stopped passed
+  over; the fonts browser uses it too. `Command::InstallPlugin`: a data
+  plugin downloaded takes the place of every version of it on the
+  storage (loaded, switched off or refused at start), stays off where
+  it was switched off, and keeps what was chosen from it (updating the
+  font one reads with keeps it). `KernelBuilder::catalog_device` and
+  `Env::catalog_device`: what plugin libraries call the device (`x4`,
+  `x4-pro`, `android`; the shells say it). `ui::Sections`: entries under
+  the headings of their sections on pages, in memory that does not grow
+  with the entries. `Plugins::owner`: the plugin that added an action,
+  a screen or a setting. `DATA_FORMATS`: the data plugins' formats this
+  PaperPaw reads. The plugin manager lists the actions of the menu
+  `plugin-manager.more` above the plugins.
 - X4: removing or copying a large folder (e.g. one with many books, or
   their caches) no longer starts the device again half way: work on the
   card keeps the watchdogs from taking it for hung (it took 20 s before

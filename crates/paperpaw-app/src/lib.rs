@@ -68,6 +68,7 @@ pub fn install(builder: KernelBuilder, fonts: Fonts) -> KernelBuilder {
         .plugin(paperpaw_plugin_widgets::Widgets)
         .plugin_off(paperpaw_plugin_browser::Browser)
         .plugin_off(paperpaw_plugin_readwise::Readwise)
+        .plugin_off(paperpaw_plugin_joplin::Joplin)
         .plugin_off(paperpaw_plugin_wallabag::Wallabag)
         .plugin(paperpaw_plugin_keyboard::Keyboard)
         .plugin(paperpaw_plugin_settings::SettingsPlugin)

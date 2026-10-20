@@ -76,6 +76,7 @@ pub(crate) fn register(r: &mut Registrar, state: &Shared) -> Result<(), Register
             Box::new(Now {
                 shown: Shown::read(env, &state),
                 state: state.clone(),
+                placed: None,
             })
         })
         .category(widgets::categories::WORLD),
@@ -86,6 +87,35 @@ pub(crate) fn register(r: &mut Registrar, state: &Shared) -> Result<(), Register
 struct Now {
     state: Shared,
     shown: Shown,
+    /// Where it is drawn, once placed, and what it shows laid out there.
+    placed: Option<(Rect, Option<Laid>)>,
+}
+
+/// The temperature and the lines laid out in a widget's area, drawn as
+/// they are in every band.
+struct Laid {
+    temperature: String,
+    plan: Plan,
+}
+
+/// What `shown` shows laid out in widget area `area`: where the symbol
+/// goes, how large the temperature is, which lines fit; `None` while
+/// there is no weather to show.
+fn lay_out(env: &Env<'_>, area: Rect, shown: &Shown) -> Option<Laid> {
+    let weather = shown.weather.as_ref()?;
+    let current = weather.current?;
+    let today = weather.days_from(shown.today).first().copied();
+    let font = UiStyle::new(env).font(env)?;
+    let area = widgets::look::look(env, ID.as_str(), area).area;
+    let unit = crate::temperature_unit(env);
+    let temperature = data::degrees_text(
+        unit,
+        current.temperature,
+        widgets::shows(env, ID.as_str(), "unit"),
+    );
+    let all = lines(env, shown, current, today);
+    let plan = plan(env, &font, area, &temperature, &all);
+    Some(Laid { temperature, plan })
 }
 
 impl Widget for Now {
@@ -93,7 +123,16 @@ impl Widget for Now {
         let shown = Shown::read(env, &self.state);
         let changed = shown != self.shown;
         self.shown = shown;
+        if changed && let Some((area, laid)) = &mut self.placed {
+            *laid = lay_out(env, *area, &self.shown);
+        }
         changed
+    }
+
+    fn place(&mut self, env: &Env<'_>, area: Rect) {
+        if self.placed.as_ref().is_none_or(|(at, _)| *at != area) {
+            self.placed = Some((area, lay_out(env, area, &self.shown)));
+        }
     }
 
     fn height(&self, env: &Env<'_>, _: u16) -> u16 {
@@ -106,16 +145,23 @@ impl Widget for Now {
 
     fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         let look = widgets::draw_frame(canvas, env, ID.as_str(), area);
-        match (
-            &self.shown.weather,
-            self.shown.weather.as_ref().and_then(|w| w.current),
-        ) {
-            (Some(weather), Some(current)) => {
-                let today = weather.days_from(self.shown.today).first().copied();
-                draw_now(canvas, env, &look, &self.shown, current, today);
-            }
-            _ => draw::draw_waiting(canvas, env, ID.as_str(), &look, &self.shown),
-        }
+        let Some(current) = self.shown.weather.as_ref().and_then(|w| w.current) else {
+            draw::draw_waiting(canvas, env, ID.as_str(), &look, &self.shown);
+            return;
+        };
+        // Laid out when placed; drawn elsewhere, laid out for that.
+        let made;
+        let laid = match &self.placed {
+            Some((at, Some(laid))) if *at == area => laid,
+            _ => match lay_out(env, area, &self.shown) {
+                Some(laid) => {
+                    made = laid;
+                    &made
+                }
+                None => return,
+            },
+        };
+        draw_now(canvas, env, &look, current, laid);
     }
 
     fn targets(&self, _: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
@@ -539,9 +585,8 @@ fn draw_now(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
     look: &widgets::Look,
-    shown: &Shown,
     current: Current,
-    today: Option<Day>,
+    laid: &Laid,
 ) {
     let style = UiStyle::new(env);
     let Some(font) = style.font(env) else {
@@ -549,14 +594,7 @@ fn draw_now(
     };
     let area = look.area;
     let gap = style.gap as u16;
-    let unit = crate::temperature_unit(env);
-    let temperature = data::degrees_text(
-        unit,
-        current.temperature,
-        widgets::shows(env, ID.as_str(), "unit"),
-    );
-    let all = lines(env, shown, current, today);
-    let plan = plan(env, &font, area, &temperature, &all);
+    let (temperature, plan) = (&laid.temperature, &laid.plan);
     let align = widgets::align(env, ID.as_str());
     let symbol_style = draw::style(env, ID.as_str());
     let (_, symbol) = data::condition(current.code);
@@ -568,7 +606,7 @@ fn draw_now(
     } else {
         (0, 0)
     };
-    let temperature_width = font.measure(plan.size, &temperature) + f32::from(inline + inline_gap);
+    let temperature_width = font.measure(plan.size, temperature) + f32::from(inline + inline_gap);
     let mut rows: Vec<(u16, f32, Option<&Line>)> = Vec::new();
     if let Some(caption) = &plan.caption {
         rows.push((
@@ -649,7 +687,7 @@ fn draw_now(
                     symbol::draw(canvas, at, symbol, current.day, symbol_style, look.ink);
                 }
                 let x = x + f32::from(inline + inline_gap);
-                draw_digits(canvas, &font, plan.size, x, row, &temperature, look.ink);
+                draw_digits(canvas, &font, plan.size, x, row, temperature, look.ink);
             }
         }
         y += height;

@@ -515,6 +515,14 @@ impl Screen for Dashboard {
         self.grid.draw(canvas, env);
     }
 
+    /// Hidden by a book or another screen: the widgets go with what they
+    /// keep (covers made small), made anew when it shows again (or is
+    /// drawn below an overlay left open).
+    fn on_hide(&mut self) {
+        self.grid.release();
+        self.stale = true;
+    }
+
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
         // The reader may have changed the recent books meanwhile.
         let env = *cx.env();

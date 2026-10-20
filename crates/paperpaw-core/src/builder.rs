@@ -28,6 +28,7 @@ pub struct KernelBuilder {
     setting_defaults: Vec<(String, String)>,
     plugin_dirs: Vec<String>,
     font_dirs: Vec<String>,
+    catalog_device: Option<&'static str>,
 }
 
 impl fmt::Debug for KernelBuilder {
@@ -127,6 +128,14 @@ impl KernelBuilder {
     /// subfolder each. Without any, `plugins` is used.
     pub fn plugin_dir(mut self, dir: impl Into<String>) -> Self {
         self.plugin_dirs.push(dir.into());
+        self
+    }
+
+    /// What plugin libraries call this kind of device, e.g. `x4`, `x4-pro`
+    /// or `android` for paperpaw.org's (ADR 0023): its plugin store then
+    /// offers what is made for it. Without, none is offered.
+    pub fn catalog_device(mut self, name: &'static str) -> Self {
+        self.catalog_device = Some(name);
         self
     }
 
@@ -355,6 +364,8 @@ impl KernelBuilder {
                 screens: Vec::new(),
                 font_dirs: Vec::new(),
                 data_folders: Vec::new(),
+                plugin_dirs: Vec::new(),
+                catalog_device: self.catalog_device,
                 secrets: Default::default(),
                 storage,
                 recall,
@@ -401,6 +412,7 @@ impl KernelBuilder {
             registry: Registry::default(),
             subscriptions: Vec::new(),
             screen_timer: None,
+            show_pending: false,
             notice: None,
             scheduled: Vec::new(),
             stack: Vec::new(),
@@ -499,6 +511,7 @@ impl Kernel {
             }
         }
         self.add_code_plugins(with_code, &disabled, code);
+        self.shared.plugin_dirs = dirs;
         if !font_dirs.is_empty()
             && let Some(plugin) = data_plugin::font_folder(self.shared.storage.as_ref(), &font_dirs)
         {
@@ -632,6 +645,7 @@ impl Kernel {
             setting_defaults: Vec::new(),
             plugin_dirs: Vec::new(),
             font_dirs: Vec::new(),
+            catalog_device: None,
         }
     }
 }

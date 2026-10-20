@@ -24,7 +24,7 @@ use paperpaw_sdk::{
 };
 
 use super::{
-    Book, Lines, add_settings, current, draw_bar, draw_cover, draw_message, frame_height,
+    Book, Covers, Lines, add_settings, current, draw_bar, draw_cover, draw_message, frame_height,
     percent_text, text_size,
 };
 use crate::PLUGIN;
@@ -252,6 +252,8 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
             Box::new(Reading {
                 recorder: recorder.clone(),
                 shown: None,
+                area: None,
+                covers: Covers::default(),
             })
         })
         .category(widgets::categories::BOOKS),
@@ -262,6 +264,22 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
 struct Reading {
     recorder: Shared,
     shown: Option<(Book, Position)>,
+    /// Where it is drawn, once placed.
+    area: Option<Rect>,
+    covers: Covers,
+}
+
+impl Reading {
+    /// The cover shown, made small for where it goes.
+    fn make_covers(&mut self, env: &Env<'_>) {
+        self.covers = match (self.area, &self.shown) {
+            (Some(area), Some((book, _))) => {
+                let area = widgets::look::look(env, WIDGET, area).area;
+                Covers::make(env, cover_at(env, area, book).map(|at| (book, at)))
+            }
+            _ => Covers::default(),
+        };
+    }
 }
 
 impl Widget for Reading {
@@ -278,7 +296,17 @@ impl Widget for Reading {
         });
         let changed = shown != self.shown;
         self.shown = shown;
+        if changed {
+            self.make_covers(env);
+        }
         changed
+    }
+
+    fn place(&mut self, env: &Env<'_>, area: Rect) {
+        if self.area != Some(area) {
+            self.area = Some(area);
+            self.make_covers(env);
+        }
     }
 
     fn live(&self) -> bool {
@@ -296,7 +324,7 @@ impl Widget for Reading {
     fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         let look = widgets::draw_frame(canvas, env, WIDGET, area);
         match &self.shown {
-            Some((book, position)) => draw(canvas, env, &look, book, position),
+            Some((book, position)) => draw(canvas, env, &look, book, position, &self.covers),
             None => draw_message(canvas, env, &look, "widgets.books.nothing-read"),
         }
     }
@@ -437,25 +465,40 @@ const DROPPED: [Part; 7] = [
     Part::Pages,
 ];
 
-fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, book: &Book, position: &Position) {
+/// Where the cover goes in `area` (inside the frame): on the left, where
+/// shown and there is room for the text beside it.
+fn cover_at(env: &Env<'_>, area: Rect, book: &Book) -> Option<Rect> {
+    let style = UiStyle::new(env);
+    let (w, h) = super::cover_size(book, area.width / 3, area.height);
+    let text_room = area.width.saturating_sub(w + style.gap as u16);
+    (widgets::shows(env, WIDGET, "cover") && f32::from(text_room) >= style.small * 7.0)
+        .then(|| Rect::new(area.x, area.y + (area.height - h) / 2, w, h))
+}
+
+fn draw(
+    canvas: &mut Canvas<'_>,
+    env: &Env<'_>,
+    look: &Look,
+    book: &Book,
+    position: &Position,
+    covers: &Covers,
+) {
     let style = UiStyle::new(env);
     let gap = style.gap as u16;
     let id = WIDGET;
     let area = look.area;
-    // The cover on the left, where shown and there is room for the text.
-    let (w, h) = super::cover_size(book, area.width / 3, area.height);
-    let text_room = area.width.saturating_sub(w + gap);
-    let rest = if widgets::shows(env, id, "cover") && f32::from(text_room) >= style.small * 7.0 {
-        let at = Rect::new(area.x, area.y + (area.height - h) / 2, w, h);
-        draw_cover(canvas, env, look, at, book);
-        Rect::new(
-            area.x + area.width - text_room,
-            area.y,
-            text_room,
-            area.height,
-        )
-    } else {
-        area
+    let rest = match cover_at(env, area, book) {
+        Some(at) => {
+            draw_cover(canvas, env, look, at, book, covers);
+            let text_room = area.width.saturating_sub(at.width + gap);
+            Rect::new(
+                area.x + area.width - text_room,
+                area.y,
+                text_room,
+                area.height,
+            )
+        }
+        None => area,
     };
     let timed = widgets::shows(env, id, "left");
     let left = position.left().filter(|_| timed).map(|s| left_text(env, s));

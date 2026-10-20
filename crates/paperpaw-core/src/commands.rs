@@ -120,7 +120,16 @@ impl Kernel {
     pub(crate) fn run_commands(&mut self) {
         for _ in 0..MAX_COMMAND_ROUNDS {
             if self.output.commands.is_empty() {
-                return;
+                // All done: the screen on top now is told it shows, if it
+                // changed; what that asks for runs too.
+                if !mem::take(&mut self.show_pending) {
+                    return;
+                }
+                self.with_top(|screen, cx| {
+                    screen.on_show(cx);
+                    Handled::Yes
+                });
+                continue;
             }
             for command in mem::take(&mut self.output.commands) {
                 self.apply(command);
@@ -152,6 +161,7 @@ impl Kernel {
             Command::Restart => self.restart = true,
             Command::LoadPlugin(folder) => self.load_plugin(&folder),
             Command::RemovePlugin(id) => self.remove_plugin(&id),
+            Command::InstallPlugin(id, folder) => self.install_plugin(&id, &folder),
             Command::Sleep => self.sleep = self.shared.caps.sleep,
             command @ (Command::SetSetting(..)
             | Command::ResetSetting(_)

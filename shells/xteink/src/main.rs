@@ -343,7 +343,9 @@ fn kernel(storage: Box<dyn Storage>, ota: Option<&ota::Ota>, code: CodePlugins) 
         .sleep(true);
     // The X4's row of hints under the screen; the X4 Pro is touched.
     #[cfg(feature = "x4")]
-    let builder = builder.button_row(&buttons::ROW);
+    let builder = builder.button_row(&buttons::ROW).catalog_device("x4");
+    #[cfg(feature = "x4-pro")]
+    let builder = builder.catalog_device("x4-pro");
     let builder = builder
         // A full refresh takes 3.5 s on its panel: screens change fast.
         .setting_default(&settings::FLASH_SCREENS, false)

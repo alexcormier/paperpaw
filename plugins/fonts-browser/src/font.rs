@@ -8,6 +8,7 @@ use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::{actions, events, params, settings};
 use paperpaw_sdk::event::Event;
+use paperpaw_sdk::install::Progress;
 use paperpaw_sdk::ui::choice::{self, Picked};
 use paperpaw_sdk::ui::{self, ListView, UiStyle};
 use paperpaw_sdk::{
@@ -16,7 +17,7 @@ use paperpaw_sdk::{
 };
 
 use crate::catalog::{self, Font};
-use crate::install::{self, DOWNLOADED};
+use crate::install::{self, DOWNLOADED, INSTALLER};
 use crate::samples::{self, SAMPLE, Samples};
 use crate::{CHOICE, list};
 
@@ -46,6 +47,9 @@ pub(crate) struct FontScreen {
     status: Rect,
     font: Option<Font>,
     samples: Samples,
+    /// The download going on, kept here: drawing reads nothing from the
+    /// storage.
+    job: Option<Progress>,
 }
 
 impl FontScreen {
@@ -83,6 +87,7 @@ impl FontScreen {
             status,
             font,
             samples,
+            job: INSTALLER.progress(env.storage),
             style,
             header,
         }
@@ -92,7 +97,7 @@ impl FontScreen {
         let Some(font) = &self.font else {
             return Vec::new();
         };
-        let installing = install::current(env.storage).is_some_and(|j| j.plugin == font.plugin());
+        let installing = self.job.as_ref().is_some_and(|j| j.plugin == font.plugin());
         if installing {
             return alloc::vec![Row::Stop];
         }
@@ -144,11 +149,13 @@ impl FontScreen {
                 for command in out {
                     cx.command(command);
                 }
+                self.job = INSTALLER.progress(env.storage);
                 self.list.focus = 0;
                 self.redraw(cx);
             }
             Some(Row::Stop) => {
-                install::cancel(env.storage);
+                INSTALLER.cancel(env.storage);
+                self.job = None;
                 self.redraw(cx);
             }
             Some(Row::Read) => {
@@ -182,7 +189,7 @@ impl FontScreen {
     }
 
     /// A row's name and what it says at its end.
-    fn row_text(env: &Env<'_>, font: &Font, row: Row) -> (String, String) {
+    fn row_text(env: &Env<'_>, job: Option<&Progress>, font: &Font, row: Row) -> (String, String) {
         let name = Arg::Str(&font.name);
         let decimal = env.i18n.tr("fonts-browser.decimal");
         let chosen = |setting: &str| {
@@ -198,7 +205,7 @@ impl FontScreen {
                 files::size(font.size(env), decimal),
             ),
             Row::Stop => {
-                let job = install::current(env.storage).unwrap_or_default();
+                let job = job.cloned().unwrap_or_default();
                 (
                     env.i18n.tr("fonts-browser.stop").to_string(),
                     format!("{} / {}", job.done, job.total),
@@ -303,12 +310,13 @@ impl Screen for FontScreen {
                 );
             }
         }
+        let job = self.job.as_ref();
         self.list.draw(
             canvas,
             &style,
             rows.len(),
             |canvas, index, rect, focused| {
-                let (name, value) = FontScreen::row_text(env, font, rows[index]);
+                let (name, value) = FontScreen::row_text(env, job, font, rows[index]);
                 ui::draw_value_row(canvas, env, &style, rect, focused, &name, &value);
             },
         );
@@ -320,6 +328,7 @@ impl Screen for FontScreen {
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
+        self.job = INSTALLER.progress(cx.env().storage);
         self.want_sample(cx);
     }
 
@@ -374,6 +383,7 @@ impl Screen for FontScreen {
             || *event == events::PLUGINS_CHANGED
             || *event == events::SETTING_CHANGED
         {
+            self.job = INSTALLER.progress(cx.env().storage);
             let len = self.rows(cx.env()).len();
             self.list.focus = self.list.focus.min(len.saturating_sub(1));
             self.redraw(cx);

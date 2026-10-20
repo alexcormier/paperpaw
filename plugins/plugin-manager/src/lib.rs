@@ -359,12 +359,11 @@ impl Screen for PluginList {
         self.list
             .draw(canvas, &style, len, |canvas, index, rect, focused| {
                 if let Some(action) = more.get(index) {
-                    // Named by its action, told by its plugin.
+                    // Named by its action, told by the plugin that added it.
                     let name = env.actions.get(action.as_str()).map_or("", |a| &a.title);
-                    let owner = action.as_str().split('.').next().unwrap_or_default();
                     let note = env
                         .plugins
-                        .get(owner)
+                        .owner(action)
                         .map_or("", |p| p.description(env.i18n));
                     let name = env.i18n.tr(name);
                     ui::draw_noted_row(canvas, env, &style, rect, focused, name, "›", note);

@@ -245,6 +245,46 @@ pub(crate) fn load_folder(storage: &dyn Storage, path: &str) -> Result<DataPlugi
     load(storage, path, name)
 }
 
+/// The plugin in folder `path`, its id `name` unless its `plugin.ini`
+/// names one (for a folder named otherwise, e.g. one downloaded into).
+pub(crate) fn load_folder_as(
+    storage: &dyn Storage,
+    path: &str,
+    name: &str,
+) -> Result<DataPlugin, String> {
+    load(storage, path.trim_end_matches('/'), name)
+}
+
+/// The id of the plugin in folder `path` as its `plugin.ini` says it
+/// (`name` where it says none), whether or not it could be loaded.
+pub(crate) fn folder_plugin_id(storage: &dyn Storage, path: &str, name: &str) -> Option<String> {
+    let source = read(storage, &format!("{path}/plugin.ini"), MAX_MANIFEST)?;
+    let named = paperpaw_config::parse(&source)
+        .filter_map(Result::ok)
+        .find(|entry| entry.section == "plugin" && entry.key == "id")
+        .map(|entry| entry.value.as_str().trim().to_string());
+    Some(named.unwrap_or_else(|| name.to_string()))
+}
+
+/// The folders in `dir` holding the plugin `id` (by their `plugin.ini`, or
+/// by their name where it names no id), loadable or not.
+pub(crate) fn folders_of(storage: &dyn Storage, dir: &str, id: &str) -> Vec<String> {
+    let mut names: Vec<String> = Vec::new();
+    let _ = storage.list(dir, &mut |entry| {
+        if entry.is_dir && !entry.name.starts_with('.') {
+            names.push(entry.name.to_string());
+        }
+    });
+    names
+        .into_iter()
+        .filter(|name| {
+            let path = format!("{dir}/{name}");
+            folder_plugin_id(storage, &path, name).as_deref() == Some(id)
+        })
+        .map(|name| format!("{dir}/{name}"))
+        .collect()
+}
+
 /// The plugin in folder `path`.
 fn load(storage: &dyn Storage, path: &str, folder: &str) -> Result<DataPlugin, String> {
     let manifest = read(storage, &format!("{path}/plugin.ini"), MAX_MANIFEST)

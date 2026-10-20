@@ -1188,6 +1188,7 @@ dependencies = [
  "paperpaw-plugin-format-xtc",
  "paperpaw-plugin-home",
  "paperpaw-plugin-hyphenation",
+ "paperpaw-plugin-joplin",
  "paperpaw-plugin-keyboard",
  "paperpaw-plugin-keys",
  "paperpaw-plugin-koreader",
@@ -1489,6 +1490,19 @@ dependencies = [
  "paperpaw-hyphen",
  "paperpaw-i18n",
  "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-plugin-joplin"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-core",
+ "paperpaw-digest",
+ "paperpaw-i18n",
+ "paperpaw-json",
+ "paperpaw-platform",
+ "paperpaw-sdk",
+ "paperpaw-xml",
 ]
 
 [[package]]

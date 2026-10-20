@@ -160,6 +160,25 @@ impl Device {
         self.execute(effects);
     }
 
+    /// Opens a screen as a plugin would (scripts' `open:`).
+    pub fn open_screen(
+        &mut self,
+        screen: paperpaw_core::sdk::Id,
+        params: paperpaw_core::sdk::Params,
+    ) {
+        let now = self.now();
+        let effects = budget::track(|| self.kernel.open_screen(now, screen, params));
+        self.execute(effects);
+    }
+
+    /// Draws the whole screen again, nothing on it changed (scripts'
+    /// `redraw`).
+    pub fn draw_again(&mut self) {
+        let now = self.now();
+        let effects = budget::track(|| self.kernel.draw_again(now));
+        self.execute(effects);
+    }
+
     pub fn input(&mut self, event: InputEvent) {
         let now = self.now();
         if self.asleep {
@@ -257,7 +276,19 @@ impl Device {
         }
         if let Some((region, mode)) = effects.refresh() {
             let (kernel, controller) = (&mut self.kernel, &mut self.controller);
-            budget::track(|| kernel.render(&mut |top, rows| controller.write_rows(top, rows)));
+            let mut frame = crate::trace::Frame::start();
+            budget::track(|| {
+                kernel.render(&mut |top, rows| {
+                    controller.write_rows(top, rows);
+                    if let Some(frame) = &mut frame {
+                        frame.band();
+                    }
+                });
+            });
+            if let Some(frame) = frame {
+                let screen = self.kernel.active_screen().map(ToString::to_string);
+                frame.done(screen.as_deref().unwrap_or_default());
+            }
             self.panel.refresh(self.controller.view(), region, mode);
         }
         self.wake_at = effects.wake_at();
@@ -415,7 +446,7 @@ fn build_kernel(
         let mut device = turned(profile.device, rotation);
         device.input.keys = profile.buttons;
         let mut builder = Kernel::builder(device)
-            .storage(storage)
+            .storage(crate::trace::Traced(storage))
             .clock(micros)
             .glyph_cache(profile.glyph_cache)
             .network(true)
@@ -437,6 +468,9 @@ fn build_kernel(
             builder = builder.frame_rows(rows);
         }
         builder = builder.row_align(profile.row_align);
+        if let Some(name) = profile.catalog_device {
+            builder = builder.catalog_device(name);
+        }
         for (id, value) in profile.settings {
             builder = builder.setting_default_text(id, value);
         }

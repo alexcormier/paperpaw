@@ -182,6 +182,14 @@ pub trait Screen {
         let _ = (event, params, cx);
     }
 
+    /// Called when a full screen opens above it, which hides it until
+    /// that one closes: a moment to let go of what it keeps only to draw
+    /// itself, e.g. pictures made small, so that the screen above has the
+    /// memory. It makes it again when it shows: in
+    /// [`on_show`](Self::on_show) where it is on top again, or when it is
+    /// drawn below an overlay left open above it.
+    fn on_hide(&mut self) {}
+
     /// Called once when the screen is closed (gone back from, or replaced
     /// in its slot), before it is dropped: a moment to say so, e.g. the
     /// reader emits that the book was closed.

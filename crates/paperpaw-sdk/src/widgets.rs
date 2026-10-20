@@ -32,6 +32,13 @@
 //! Widgets share a look the reader shapes for each ([`Frame`], [`Size`],
 //! [`draw_caption`], see [`look`]), and say which kind they are
 //! ([`categories`]), so that screens offering many of them group them.
+//!
+//! A widget may instead preview a group of settings
+//! ([`WidgetSpec::previews`]), e.g. a sample of text laid out as the
+//! reading settings say: settings pages show it above the group's
+//! settings, and while a value is being chosen it shows that one
+//! ([`Command::PreviewSettings`](crate::Command::PreviewSettings)). It is
+//! not offered among the widgets for other screens.
 
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
@@ -50,7 +57,7 @@ pub mod grid;
 pub mod look;
 
 pub use look::{
-    Frame, Look, Size, caption_height, choice, draw_caption, draw_frame, draw_message,
+    Frame, Look, Size, Wrapped, caption_height, choice, draw_caption, draw_frame, draw_message,
     draw_wrapped, frame, frame_setting, frame_spec, line_height, part_setting, part_spec,
     setting_id, shows, size, size_setting, size_spec,
 };
@@ -121,6 +128,18 @@ pub trait Widget {
         self.height(env, width)
     }
 
+    /// Where it is drawn from now on, before it is drawn there: screens
+    /// that show it call this once they placed it, and again when its
+    /// place changes. A widget that makes something for the size it is
+    /// drawn at, such as a cover made small
+    /// ([`Thumbnail`](crate::ui::Thumbnail), drawn in every band without
+    /// reading the picture again), makes it here, and anew in
+    /// [`update`](Self::update) when what it shows changed. Most widgets
+    /// need nothing of it.
+    fn place(&mut self, env: &Env<'_>, area: Rect) {
+        let _ = (env, area);
+    }
+
     /// Draws it into `area` (cleared before), from what it read.
     fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect);
 
@@ -153,6 +172,9 @@ pub struct WidgetSpec {
     /// Which kind it is, one of [`categories`] (or a translation key of
     /// a plugin's own).
     pub category: Cow<'static, str>,
+    /// The group of settings it previews, if it is made for that (see
+    /// [`WidgetSpec::previews`]).
+    pub previews: Option<Id>,
 }
 
 impl WidgetSpec {
@@ -167,6 +189,20 @@ impl WidgetSpec {
             title: title.into(),
             factory: Box::new(factory),
             category: Cow::Borrowed(categories::OTHER),
+            previews: None,
+        }
+    }
+
+    /// Made to preview the settings of `group` (see the [module
+    /// documentation](self)): what it shows follows their values, those
+    /// shown while one is chosen included. Settings pages show it above
+    /// the group's settings, as wide as the screen; it is not offered
+    /// among the widgets for other screens. Of several for one group, the
+    /// one added last is shown.
+    pub fn previews(self, group: Id) -> Self {
+        Self {
+            previews: Some(group),
+            ..self
         }
     }
 
@@ -193,6 +229,7 @@ impl fmt::Debug for WidgetSpec {
             .field("id", &self.id)
             .field("title", &self.title)
             .field("category", &self.category)
+            .field("previews", &self.previews)
             .finish_non_exhaustive()
     }
 }
@@ -297,9 +334,23 @@ impl Widgets {
         self.widgets.iter().find(|w| w.id.as_str() == id)
     }
 
-    /// Every widget: its id and the translation key of its name.
+    /// Every widget for screens to show: its id and the translation key
+    /// of its name (not those that preview settings).
     pub fn iter(&self) -> impl Iterator<Item = (&Id, &str)> {
-        self.widgets.iter().map(|w| (&w.id, w.title.as_ref()))
+        self.widgets
+            .iter()
+            .filter(|w| w.previews.is_none())
+            .map(|w| (&w.id, w.title.as_ref()))
+    }
+
+    /// The widget that previews the settings of `group`, if one does
+    /// ([`WidgetSpec::previews`]); made with [`Widgets::make`].
+    pub fn preview(&self, group: &str) -> Option<&Id> {
+        self.widgets
+            .iter()
+            .rev()
+            .find(|w| w.previews.as_ref().is_some_and(|g| g.as_str() == group))
+            .map(|w| &w.id)
     }
 
     /// The kind of widget `id`, one of [`categories`] (or a plugin's own).
@@ -380,6 +431,13 @@ impl Widget for Placed {
 
     fn min_height(&self, env: &Env<'_>, width: u16) -> u16 {
         self.with(env, || self.inner.min_height(env, width))
+    }
+
+    fn place(&mut self, env: &Env<'_>, area: Rect) {
+        let placement = core::mem::take(&mut self.placement);
+        env.settings
+            .with_placement(Some(&placement), || self.inner.place(env, area));
+        self.placement = placement;
     }
 
     fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
@@ -534,6 +592,38 @@ mod tests {
         assert_eq!(fill_height(1000, 1200, 1), 0);
         assert_eq!(fill_height(1000, 400, 0), 0);
         assert!(repeatable(FILL) && repeatable(SPACE) && !repeatable("home.clock"));
+    }
+
+    #[test]
+    fn previews_go_with_their_group_only() {
+        fn nothing(_: &Env<'_>, _: u16) -> u16 {
+            0
+        }
+        fn draw(_: &mut Canvas<'_>, _: &Env<'_>, _: Rect) {}
+        let drawn = Drawn::new(nothing, draw);
+        let reading = Id::new_static("core.group.reading");
+        let mut widgets = Widgets::new();
+        widgets.add(WidgetSpec::drawn(
+            Id::new_static("a.clock"),
+            "a.clock",
+            drawn,
+        ));
+        widgets.add(
+            WidgetSpec::drawn(Id::new_static("a.sample"), "a.sample", drawn)
+                .previews(reading.clone()),
+        );
+        widgets.add(
+            WidgetSpec::drawn(Id::new_static("b.sample"), "b.sample", drawn).previews(reading),
+        );
+        // Not offered for screens; the one added last previews.
+        let offered: Vec<&str> = widgets.iter().map(|(id, _)| id.as_str()).collect();
+        assert_eq!(offered, ["a.clock"]);
+        assert_eq!(
+            widgets.preview("core.group.reading").map(Id::as_str),
+            Some("b.sample")
+        );
+        assert_eq!(widgets.preview("core.group.display"), None);
+        assert!(widgets.has("a.sample"));
     }
 
     #[test]

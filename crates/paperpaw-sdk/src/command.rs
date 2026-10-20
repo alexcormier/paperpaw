@@ -240,6 +240,18 @@ pub enum Command {
     /// [`PLUGINS_CHANGED`](crate::builtin::events::PLUGINS_CHANGED)
     /// follows. Plugins with code are not removed this way.
     RemovePlugin(Id),
+    /// Installs the data plugin `Id` downloaded into this folder (one
+    /// PaperPaw does not load, e.g. `plugins/.airy.part`, see
+    /// [`install`](crate::install)): it takes the place of every version
+    /// of that plugin on the storage (loaded, switched off or refused at
+    /// start), becomes the folder named as it beside the one it was
+    /// downloaded into, and is loaded at once. A plugin switched off stays
+    /// off; what was chosen from the version before (e.g. its font for
+    /// reading) stays chosen where the new one offers it too. The event
+    /// [`PLUGINS_CHANGED`](crate::builtin::events::PLUGINS_CHANGED)
+    /// follows. A folder that holds another plugin, or none that loads,
+    /// is deleted with a warning, and the version before stays.
+    InstallPlugin(Id, String),
     /// Makes an HTTP request (see [`HttpRequest`]); the answer comes as
     /// the request's reply event. Check [`Capabilities::network`](crate::Capabilities) first.
     Http(HttpRequest),

@@ -21,8 +21,8 @@ use paperpaw_sdk::{Arg, Canvas, Command, Env, Id, Rect, RegisterError, Registrar
 
 use super::series::{Member, members};
 use super::{
-    Book, Generation, Lines, add_settings, catalog_stamp, chosen, cover_size, current, draw_cover,
-    draw_message, each_book, frame_height, mix, path_hash, text_size, today,
+    Book, Covers, Generation, Lines, add_settings, catalog_stamp, chosen, cover_size, current,
+    draw_cover, draw_message, each_book, frame_height, mix, path_hash, text_size, today,
 };
 use crate::PLUGIN;
 use paperpaw_sdk::SettingSpec;
@@ -77,6 +77,8 @@ pub(crate) fn register(r: &mut Registrar, generation: &Generation) -> Result<(),
                 kept: kept.clone(),
                 generation: generation.clone(),
                 book: None,
+                area: None,
+                covers: Covers::default(),
             })
         })
         .category(widgets::categories::BOOKS),
@@ -259,9 +261,24 @@ struct Next {
     kept: Kept,
     generation: Generation,
     book: Option<Book>,
+    /// Where it is drawn, once placed.
+    area: Option<Rect>,
+    covers: Covers,
 }
 
 impl Next {
+    /// The cover shown, made small for where it goes.
+    fn make_covers(&mut self, env: &Env<'_>) {
+        self.covers = match (self.area, &self.book) {
+            (Some(area), Some(book)) => {
+                let look = widgets::look::look(env, WIDGET, area);
+                let at = layout(env, &look, book).cover;
+                Covers::make(env, at.map(|at| (book, at)))
+            }
+            _ => Covers::default(),
+        };
+    }
+
     fn choose(&self, env: &Env<'_>) -> Option<String> {
         let pick = chosen(env, WIDGET, "pick").to_string();
         let current = current(env.storage);
@@ -295,7 +312,17 @@ impl Widget for Next {
         let book = self.choose(env).and_then(|p| Book::of(env.storage, &p));
         let changed = book != self.book;
         self.book = book;
+        if changed {
+            self.make_covers(env);
+        }
         changed
+    }
+
+    fn place(&mut self, env: &Env<'_>, area: Rect) {
+        if self.area != Some(area) {
+            self.area = Some(area);
+            self.make_covers(env);
+        }
     }
 
     fn live(&self) -> bool {
@@ -313,7 +340,7 @@ impl Widget for Next {
     fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         let look = widgets::draw_frame(canvas, env, WIDGET, area);
         match &self.book {
-            Some(book) => draw(canvas, env, &look, book),
+            Some(book) => draw(canvas, env, &look, book, &self.covers),
             None => draw_message(canvas, env, &look, "widgets.next.none"),
         }
     }
@@ -342,7 +369,20 @@ fn series_text(env: &Env<'_>, book: &Book) -> String {
     }
 }
 
-fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, book: &Book) {
+/// Where the cover and the text go.
+struct Layout<'b> {
+    /// The cover, if shown.
+    cover: Option<Rect>,
+    lines: Lines<'b>,
+    /// Where the text goes, if anywhere.
+    text: Option<Rect>,
+}
+
+/// The cover and the text of `book` in `look`'s area: without the cover,
+/// the text alone; where wide enough, the cover on the left and the text
+/// beside it; else the cover above and the text below (what fits in
+/// half), or the cover alone.
+fn layout<'b>(env: &Env<'b>, look: &Look, book: &'b Book) -> Layout<'b> {
     let style = UiStyle::new(env);
     let id = WIDGET;
     let gap = style.gap as u16;
@@ -361,19 +401,27 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, book: &Book) {
         lines.add(style.small, series_text(env, book), look.faint);
     }
     if !widgets::shows(env, id, "cover") {
-        lines.draw(canvas, env, area, align);
-        return;
+        return Layout {
+            cover: None,
+            lines,
+            text: Some(area),
+        };
     }
     let (w, h) = cover_size(book, area.width * 2 / 5, area.height);
     let text_room = f32::from(area.width.saturating_sub(w + gap));
     if area.width >= area.height && text_room >= style.small * 7.0 {
         // Wide: the cover on the left, the text beside it.
-        let at = Rect::new(area.x, area.y + (area.height - h) / 2, w, h);
-        draw_cover(canvas, env, look, at, book);
         let shift = (w + gap).min(area.width);
-        let rest = Rect::new(area.x + shift, area.y, area.width - shift, area.height);
-        lines.draw(canvas, env, rest, align);
-        return;
+        return Layout {
+            cover: Some(Rect::new(area.x, area.y + (area.height - h) / 2, w, h)),
+            lines,
+            text: Some(Rect::new(
+                area.x + shift,
+                area.y,
+                area.width - shift,
+                area.height,
+            )),
+        };
     }
     // High: the cover above, the text below it (what fits in half).
     let half = (area.height / 2).saturating_sub(gap / 2);
@@ -392,10 +440,23 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, book: &Book) {
     let (w, h) = cover_size(book, area.width, room);
     let total = if with_text { h + gap / 2 + text_h } else { h };
     let top = area.y + (area.height - total.min(area.height)) / 2;
-    let at = Rect::new(super::place_x(area, w, align), top, w, h);
-    draw_cover(canvas, env, look, at, book);
-    if with_text {
-        let text = Rect::new(area.x, top + h + gap / 2, area.width, text_h);
-        lines.draw(canvas, env, text, align);
+    Layout {
+        cover: Some(Rect::new(super::place_x(area, w, align), top, w, h)),
+        lines,
+        text: with_text.then(|| Rect::new(area.x, top + h + gap / 2, area.width, text_h)),
+    }
+}
+
+fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, book: &Book, covers: &Covers) {
+    let Layout {
+        cover,
+        mut lines,
+        text,
+    } = layout(env, look, book);
+    if let Some(at) = cover {
+        draw_cover(canvas, env, look, at, book, covers);
+    }
+    if let Some(text) = text {
+        lines.draw(canvas, env, text, widgets::align(env, WIDGET));
     }
 }
