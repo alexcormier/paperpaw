@@ -1616,8 +1616,10 @@ dependencies = [
  "paperpaw-i18n",
  "paperpaw-json",
  "paperpaw-platform",
+ "paperpaw-plugin-fonts-default",
  "paperpaw-sdk",
  "paperpaw-xml",
+ "proptest",
 ]
 
 [[package]]

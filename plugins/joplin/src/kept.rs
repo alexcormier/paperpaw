@@ -212,3 +212,6 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+mod roundtrip_tests;
