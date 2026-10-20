@@ -305,7 +305,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         return;
     }
     let (moon_x, text_room) = if beside {
-        let rest = area.width - side - gap;
+        let rest = area.width.saturating_sub(side + gap);
         match align {
             Align::Right => (
                 area.x + area.width - side,
