@@ -4,9 +4,7 @@
 //! in their order, filter signatures, hyphenation by language with its
 //! fallbacks, services by type, and formats by extension.
 
-#![allow(clippy::unwrap_used, clippy::expect_used)]
-// The services registered the old way are still checked until they go.
-#![allow(deprecated)] // Tests panic on purpose when something is wrong.
+#![allow(clippy::unwrap_used, clippy::expect_used)] // Tests panic on purpose when something is wrong.
 
 mod common;
 
@@ -21,7 +19,7 @@ use paperpaw_sdk::filters::{
     TextFilterSpec, TextFilters,
 };
 use paperpaw_sdk::presets::Preset;
-use paperpaw_sdk::services::Services;
+use paperpaw_sdk::services::{Service, Services};
 use paperpaw_sdk::{
     ActionSpec, ButtonState, Command, Contribution, Event, FormatSpec, Formats, Hyphenation,
     HyphenationSpec, Id, InputEvent, Manifest, Params, Priority, Rect, RefreshMode, RegisterError,
@@ -177,8 +175,7 @@ fn every_kind_of_contribution_says_what_it_is() {
     r.contribute(Id::new_static("other.point"), Cow::Borrowed("text"))
         .unwrap();
     r.add_translations(Cow::Borrowed("")).unwrap();
-    r.add_service(Id::new_static("demo.count"), Box::new(1u8))
-        .unwrap();
+    r.publish(Id::new_static("demo.count"), 1u8).unwrap();
     r.subscribe(Id::new_static("core.book-opened"), Box::new(|_, _, _| {}))
         .unwrap();
     let kinds: Vec<&str> = r.contributions().iter().map(Contribution::kind).collect();
@@ -212,7 +209,7 @@ fn every_kind_of_contribution_says_what_it_is() {
     assert!(format!("{:?}", r.contributions()[0]).contains("demo.slot"));
     // A service of another namespace is refused.
     assert!(matches!(
-        r.add_service(Id::new_static("other.count"), Box::new(1u8)),
+        r.publish(Id::new_static("other.count"), 1u8),
         Err(RegisterError::Namespace { .. })
     ));
     assert_eq!(r.plugin(), &Id::new_static("demo"));
@@ -444,9 +441,9 @@ fn later_hyphenation_of_a_language_wins() {
 #[test]
 fn services_are_found_by_id_and_type_and_the_first_wins() {
     let mut services = Services::new();
-    services.add(Id::new_static("a.count"), Box::new(1u32));
-    services.add(Id::new_static("a.count"), Box::new(2u32));
-    services.add(Id::new_static("a.name"), Box::new(String::from("x")));
+    services.insert(Id::new_static("a.count"), Service::new(1u32));
+    services.insert(Id::new_static("a.count"), Service::new(2u32));
+    services.insert(Id::new_static("a.name"), Service::new(String::from("x")));
     assert_eq!(services.get::<u32>("a.count"), Some(&1));
     assert_eq!(
         services.get::<String>("a.name").map(String::as_str),
