@@ -256,10 +256,12 @@ What is known of books is a service, not a screen's: `library` has a
 book's details (title, author, series, tags, cover, progress, and
 fields plugins add with `library::set_field`), the books read last and
 the favourites, so any plugin can show or use them. Views of many books
-show covers made small and kept on the storage (`library::cover`, a few
-kilobytes each, not the picture) and take a book's details with the
-size a listing told (`library::listing`, `library::book_sized`): on a
-card, each file looked up again is a search through its folder.
+read the catalog rather than each book (below, "What every library
+offers"), show covers made small and kept on the storage
+(`library::cover_variant`, a few kilobytes each, not the picture, one
+for each size a view shows) and take a book's details with the size a
+listing told (`library::listing`, `library::book_sized`): on a card,
+each file looked up again is a search through its folder.
 
 The bookmarks and highlights of books are shared: `annotations` reads
 and keeps them, and whoever changes them emits
@@ -471,6 +473,8 @@ artifact, also when a check failed.
 | Contributions | `contribute` | Additions to a point another plugin defined |
 | Translations | `add_translations` | Catalogs for any language |
 | Book data | `add_book_data` | Where the plugin keeps something for each book (named by `library::key`): moved and removed with the book, cleaned up when it is gone |
+| Book fields | `add_book_field` | A value kept with books (`library::set_field`), shown on their information page and, where `in_catalog`, kept in the catalog to filter by |
+| Book badges | `add_book_badge` | A few letters or an icon on books' rows in views of the library |
 
 Slots are how a plugin replaces another: bind your screen to
 `core.home` and it is the home screen; the user's
@@ -499,6 +503,33 @@ to `core.reader`) replaces the shipped one in full.
 A reader in turn sends the reading events (`BOOK_OPENED`, `PAGE_TURNED`,
 `BOOK_CLOSED`, `BOOK_FINISHED`), takes `GOTO`, and offers its actions
 in these menus.
+
+### What every library offers
+
+A view of the library of one's own (bound to `core.library`) is as
+fast as the shipped one, on the X4 too, as both ask the same service
+and read the same catalog; plugins that add to the library add to
+every view of it.
+
+| What | Standard | |
+|---|---|---|
+| The library to ask | `library::service(env)` (`trait Library`) | a book's details, the catalog's state, queries, the index of all books, finished and favourite; a plugin may publish its own as `library::service::SERVICE` |
+| Every book, without reading each | `library::catalog` | one line a book: author, title, series, number, tags, how far read, favourite, opened, added, fields; read in pieces (`each`, `each_at`, `read_at`) |
+| Books found, a page at a time | `catalog::Query`, `query`, `found` | by how far read, words, author, series, tag, folder, added since; sorted by title, author, series or added |
+| All books to sort and filter in memory | `library::index::Index` | 24 bytes a book (2000 at most on the X4: 48 KB), kept in a file while a book is open (`save`, `load`), status changes taken with `refresh` |
+| The catalog made anew | the kernel, as work in the background | after the start, after `BOOK_ADDED`, `BOOK_REMOVED`, `BOOK_MOVED`, `LIBRARY_CHANGED`, a new library folder, or `library::request_catalog()`; then `events::CATALOG_CHANGED` |
+| Something of one book changed | `events::BOOK_CHANGED` (`library::changed_book`, bits of `library::what`) | finished, a favourite, read further, details, cover, a field |
+| A book came | `events::BOOK_ADDED` (`library::added(path, source)`) | transfers, syncs and downloads send it |
+| What can be done with a book | `menus::BOOK`, `events::BOOK_CHOSEN` | add an action to the menu, hear which book it was chosen for |
+| A book's information | `slots::BOOK_INFO` | lists the fields of `add_book_field` |
+
+How far a book is read and whether it is a favourite change while the
+catalog stands: the kernel notes such changes beside it (when a book is
+opened, closed or finished, and through the service's setters), so a
+view knows them at once without a new catalog and without reading each
+book. A view keeps nothing of the catalog but its index; a page's books
+are read by where their lines start (`Index::record`), their badges
+asked then (`library::service::badges`), never while drawing.
 
 ### Services and points of your own
 

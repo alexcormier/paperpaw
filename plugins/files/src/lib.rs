@@ -130,16 +130,10 @@ impl Plugin for Files {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        // When the shelves' catalog was made, for the screens and the
-        // handlers below.
-        let catalog = shelves::CatalogMade::default();
         r.add_screen(ScreenSpec::new(
             SCREEN,
             "files.title",
-            Box::new({
-                let catalog = catalog.clone();
-                move |env, params| list::screen(env, params, catalog.clone())
-            }),
+            Box::new(list::screen),
         ))?;
         list::register(r)?;
         r.add_screen(ScreenSpec::new(
@@ -155,10 +149,7 @@ impl Plugin for Files {
         r.add_screen(ScreenSpec::new(
             SHELF_SCREEN,
             "files.title",
-            Box::new({
-                let catalog = catalog.clone();
-                move |env, params| Box::new(shelves::ShelfScreen::new(env, params, catalog.clone()))
-            }),
+            Box::new(|env, params| Box::new(shelves::ShelfScreen::new(env, params))),
         ))?;
         for (action, mode, title, icon) in [
             (BY_AUTHOR, shelves::MODE_AUTHORS, "files.by-author", "user"),
@@ -213,18 +204,6 @@ impl Plugin for Files {
         ] {
             r.add_icon(setting, Cow::Borrowed(icon))?;
         }
-        // The catalog of the shelves is made anew when they show next.
-        let made = catalog.clone();
-        r.on(events::LIBRARY_CHANGED, move |_, _, _| made.outdated())?;
-        let made = catalog.clone();
-        r.on(events::BOOK_MOVED, move |_, _, _| made.outdated())?;
-        let made = catalog.clone();
-        r.on(events::BOOK_REMOVED, move |_, _, _| made.outdated())?;
-        r.on(events::SETTING_CHANGED, move |_, changed, _| {
-            if changed.id == *ROOT.id() {
-                catalog.outdated();
-            }
-        })?;
         r.on(SEARCH_ENTERED, |_, typed, out| {
             let text = typed.text.trim();
             if !text.is_empty() {

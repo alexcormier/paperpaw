@@ -47,10 +47,13 @@ pub(crate) use crate::{frame_height, today};
 pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     r.add_translations(Cow::Borrowed(include_str!("../i18n/books.en.ini")))?;
     r.add_translations(Cow::Borrowed(include_str!("../i18n/books.de.ini")))?;
-    // What was read of the catalog is read again once books came, went
-    // or moved.
+    // What was read of the catalog is read again once it was made anew
+    // (books came, went or moved), a book changed (finished, a favourite)
+    // or its annotations did.
     let generation = Generation::default();
     for event in [
+        events::CATALOG_CHANGED.id(),
+        events::BOOK_CHANGED.id(),
         events::LIBRARY_CHANGED.id(),
         events::BOOK_MOVED.id(),
         events::BOOK_REMOVED.id(),
@@ -158,20 +161,18 @@ pub(crate) fn current(storage: &dyn Storage) -> Option<Book> {
 /// Books looked at, at most, to find one there.
 const MAX_LOOKED_AT: usize = 8;
 
-/// The catalog's file.
-fn catalog_file() -> String {
-    format!("{}/catalog.txt", library::DIR)
-}
-
 /// Whether the library made its catalog (with the books' series and
-/// authors), which views of the library make.
+/// authors), which the kernel makes.
 pub(crate) fn has_catalog(storage: &dyn Storage) -> bool {
-    storage.exists(&catalog_file())
+    matches!(catalog::state(storage), catalog::State::Ready { .. })
 }
 
-/// What tells the catalog changed: its size.
+/// What tells the catalog changed, or the status of a book in it.
 pub(crate) fn catalog_stamp(storage: &dyn Storage) -> u64 {
-    storage.size(&catalog_file()).unwrap_or(0)
+    match catalog::state(storage) {
+        catalog::State::Ready { stamp } => stamp,
+        _ => 0,
+    }
 }
 
 /// Calls `f` with every book of the library: from the catalog where
@@ -188,21 +189,12 @@ pub(crate) fn each_book(env: &Env<'_>, f: &mut dyn FnMut(catalog::Record)) {
 }
 
 /// A number of a series as a number to sort by: `2`, `2.5`, `10`
-/// (in thousandths; books without one last).
+/// (in thousandths, [`catalog::series_order`]; books without one last).
 pub(crate) fn series_rank(number: &str) -> u64 {
-    let number = number.trim();
-    let (whole, part) = number.split_once(['.', ',']).unwrap_or((number, ""));
-    let Ok(whole) = whole.parse::<u64>() else {
-        return u64::MAX;
-    };
-    let mut thousandths = 0;
-    for (i, digit) in part.bytes().take(3).enumerate() {
-        if !digit.is_ascii_digit() {
-            break;
-        }
-        thousandths += u64::from(digit - b'0') * [100, 10, 1][i];
+    match catalog::series_order(number) {
+        u32::MAX => u64::MAX,
+        order => u64::from(order),
     }
-    whole.saturating_mul(1000).saturating_add(thousandths)
 }
 
 // ---- Days and chance -----------------------------------------------------------

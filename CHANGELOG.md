@@ -6,6 +6,39 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Library: the kernel makes the catalog of books in the background: at
+  once when books came, went or moved, another library folder was chosen
+  or a view asks, and at a calm moment (within a minute) after the
+  start, after a long sleep and while a sync brings books one after the
+  other; views of the library no longer make it themselves, and show at
+  once what changed (a book finished, a favourite) without reading each
+  book. Books Calibre, the transfer page or Wallabag delete are removed
+  from the library with what plugins keep for them; books they bring are
+  announced. Book information is read out (its rows were drawn only).
+- Library: badges plugins add show on the books' rows, the fields they
+  keep show on a book's information, and actions they add to the book
+  menu show on its sheet. Each size of cover (row, card, covers) is kept
+  apart, so switching views no longer makes covers anew.
+- SDK: the library as a service (`library::service`, `trait Library`,
+  replaceable as `library::service::SERVICE`), with the catalog's state
+  (`catalog::state`, `catalog::generation`), queries (`catalog::Query`,
+  `query`, `found`) and the index of every book the calm list uses
+  (`library::index::Index`, 24 bytes a book, kept in a file while a book
+  is open). New: `events::BOOK_ADDED`, `BOOK_CHANGED` (bits of
+  `library::what`), `BOOK_CHOSEN`, `CATALOG_CHANGED`, `CATALOG_WANTED`;
+  `library::{added, changed_book, request_catalog, note_status,
+  cover_variant}`; `menus::BOOK`; `Registrar::add_book_field`
+  (`library::BookField`) and `add_book_badge` (`library::BookBadge`,
+  `Badge`), listed in `Env::book_fields` and `Env::book_badges`;
+  `catalog::series_order` reads `2,5` as `2.5`; `Formats::is_empty`.
+- SDK, breaking: the catalog is of format 2 (status, added, fields; a
+  header with its generation; format 1 is still read) and `Record` has
+  `status`, `added` and fields; status changes are noted beside it
+  (`catalog::note`, folded in with `catalog::fold`). The catalog's
+  `Walk` is the kernel's work: views listen to `CATALOG_CHANGED` and ask
+  with `library::request_catalog` instead of walking. `Env` and
+  `EnvParts` have `book_fields` and `book_badges`.
+
 - Restarting no longer counts as going to sleep: after plugins were
   switched or an update installed, rules for "on sleep", sync on sleep,
   work waiting for sleep and the sleep counters no longer take the

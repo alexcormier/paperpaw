@@ -157,6 +157,8 @@ pub(crate) struct Staging {
     pub(crate) works: Vec<paperpaw_sdk::work::WorkSpec>,
     pub(crate) stylesheets: Vec<Cow<'static, str>>,
     pub(crate) book_data: Vec<paperpaw_sdk::library::BookData>,
+    pub(crate) book_fields: Vec<paperpaw_sdk::library::BookField>,
+    pub(crate) book_badges: Vec<paperpaw_sdk::library::BookBadge>,
     pub(crate) services: Vec<(Id, paperpaw_sdk::services::Service)>,
     pub(crate) contributions: Vec<(Id, Cow<'static, str>)>,
 }
@@ -249,6 +251,8 @@ pub(crate) fn stage(
             }
             Contribution::Stylesheet(css) => staging.stylesheets.push(css),
             Contribution::BookData(data) => staging.book_data.push(data),
+            Contribution::BookField(field) => staging.book_fields.push(*field),
+            Contribution::BookBadge(badge) => staging.book_badges.push(*badge),
             Contribution::Font(font) => staging.fonts.push(*font),
             Contribution::FontFile { id, path, .. } => staging.font_files.push((id, path)),
             Contribution::FontExtension {

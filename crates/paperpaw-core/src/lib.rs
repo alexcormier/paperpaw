@@ -1038,6 +1038,9 @@ struct Shared {
     stylesheets: Vec<Cow<'static, str>>,
     /// Folders of what plugins keep for each book.
     book_data: Vec<paperpaw_sdk::library::BookData>,
+    /// Fields kept with books, badges on their rows, from every plugin.
+    book_fields: Vec<paperpaw_sdk::library::BookField>,
+    book_badges: Vec<paperpaw_sdk::library::BookBadge>,
     /// What the device and its shell can do.
     caps: Capabilities,
     /// Wi-Fi, where PaperPaw manages it (see [`KernelBuilder::wifi`]).
@@ -1113,6 +1116,8 @@ impl Shared {
             decorators: &self.decorators,
             stylesheets: &self.stylesheets,
             book_data: &self.book_data,
+            book_fields: &self.book_fields,
+            book_badges: &self.book_badges,
             caps: self.caps,
             wifi: self.wifi.as_ref(),
             firmware: self.firmware.as_ref(),

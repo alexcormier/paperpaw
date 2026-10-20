@@ -22,10 +22,14 @@
 //! "Find"); hold a book for its actions; tap the title for the library's
 //! menu.
 //!
-//! What is known of each book to filter and sort is kept small
-//! ([`index`]), and in a file while a book covers the library; a page's
-//! books are read, and their words made ready, when it is shown, never
-//! while drawing.
+//! The books come from the library service ([`library::service`]), so a
+//! plugin's library shows here as the kernel's does: what is known of
+//! each book to filter and sort is its index ([`index`]), kept in a file
+//! while a book covers the library; a page's books are read, with the
+//! badges plugins put on them, and their words made ready, when it is
+//! shown, never while drawing. The kernel makes the catalog anew; the
+//! list follows it ([`events::CATALOG_CHANGED`]) and the changes of single
+//! books ([`events::BOOK_CHANGED`]).
 
 mod find;
 mod grid;
@@ -42,7 +46,7 @@ use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::{actions, events, params, slots};
 use paperpaw_sdk::event::Event;
-use paperpaw_sdk::library::{self, catalog::Walk};
+use paperpaw_sdk::library::{self, catalog::State};
 use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
@@ -50,7 +54,7 @@ use paperpaw_sdk::{
     RegisterError, Registrar, Screen, ScreenSpec,
 };
 
-use index::{Filter, Index, NEVER, has_catalog, hash, read_line};
+use index::{Filter, Index, NEVER, cap, hash};
 use rows::{Loaded, Sizes};
 
 /// Finds a book by a letter ([`find`]).
@@ -76,13 +80,8 @@ const SHOW_FILTERS: [Filter; 6] = [
     Filter::Next,
     Filter::Shelves,
 ];
-/// Steps of reading books' progress and of making the catalog, apart.
-const STEP_MS: u64 = 20;
-/// Books whose progress is read in one step.
-const STEP_BOOKS: usize = 8;
-/// Books read last whose progress is read again when the library shows
-/// again: what a reading may have changed.
-const RECENT_AGAIN: u8 = 3;
+/// Where the index is kept while a book covers the library.
+const KEPT: &str = ".paperpaw/plugins/files/index.bin";
 
 /// Registers the list's screens and actions.
 pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
@@ -118,12 +117,21 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
 }
 
 /// The library screen.
-pub(crate) fn screen(
-    env: &Env<'_>,
-    _params: &Params,
-    catalog: crate::shelves::CatalogMade,
-) -> Box<dyn Screen> {
-    Box::new(ListScreen::new(env, catalog))
+pub(crate) fn screen(env: &Env<'_>, _params: &Params) -> Box<dyn Screen> {
+    Box::new(ListScreen::new(env))
+}
+
+/// The index of every book, from the library service.
+fn make_index(env: &Env<'_>) -> Index {
+    library::service(env).index(env, cap(env.device.memory), &archive(env))
+}
+
+/// Whether the catalog is still to be made (none yet).
+fn collecting(env: &Env<'_>) -> bool {
+    matches!(
+        library::service(env).catalog_state(env),
+        State::Missing | State::Building
+    )
 }
 
 /// The archive folder, as the setting names it: its books are on the
@@ -149,18 +157,6 @@ fn offer(path: &str, cx: &mut Cx<'_, '_>) {
         SHEET,
         Params::new().with(params::PATH, path.to_string()),
     ));
-}
-
-/// A book changed on its sheet (finished, favourite): the library reads
-/// it again when it shows.
-const TOUCHED: Event<paperpaw_sdk::ui::choice::Picked> = Event::new("files.list.touched");
-
-/// The command that says the book at `path` changed on its sheet.
-fn touched(path: &str) -> Command {
-    TOUCHED.emit(paperpaw_sdk::ui::choice::Picked::new(
-        path.to_string(),
-        String::new(),
-    ))
 }
 
 /// Opens the book at `path` in the reader.
@@ -298,15 +294,13 @@ impl Layout {
 
 /// The library; see the [module documentation](self).
 struct ListScreen {
-    /// When the catalog was made, shared with the shelves.
-    catalog: crate::shelves::CatalogMade,
     layout: Layout,
     root: String,
     /// The archive folder, whose books are on the shelves only.
     archive: String,
     index: Index,
-    /// The catalog being made anew.
-    walk: Option<Walk>,
+    /// No catalog yet: the kernel is making the first.
+    collecting: bool,
     filter: Filter,
     by_recent: bool,
     /// The books shown, as indices of the index's items.
@@ -341,22 +335,19 @@ struct ListScreen {
     /// While covered: the book the focus was on, to find again; the
     /// index is kept in a file.
     kept_focus: Option<u32>,
-    /// Books changed on their sheets since it showed (hashed).
-    touched: Vec<u32>,
     covered: bool,
     /// Just opened: the first `on_show` need not load again.
     fresh: bool,
 }
 
 impl ListScreen {
-    fn new(env: &Env<'_>, catalog: crate::shelves::CatalogMade) -> Self {
+    fn new(env: &Env<'_>) -> Self {
         let mut screen = Self {
-            catalog,
             layout: Layout::new(env),
             root: library::folder(env).to_string(),
             archive: archive(env),
-            index: Index::build(env.storage, Index::cap(env.device.memory), &archive(env)),
-            walk: None,
+            index: make_index(env),
+            collecting: collecting(env),
             filter: Filter::All,
             by_recent: env.settings.read(&crate::SORT) != crate::SORT_NAME,
             order: Vec::new(),
@@ -375,7 +366,6 @@ impl ListScreen {
             find: None,
             gone: Vec::new(),
             kept_focus: None,
-            touched: Vec::new(),
             covered: false,
             fresh: true,
         };
@@ -412,7 +402,7 @@ impl ListScreen {
             self.card = false;
         } else {
             self.shelves = Vec::new();
-            self.order = self.index.order(self.filter, self.by_recent);
+            self.order = self.filter.order(&self.index, self.by_recent);
             if !self.gone.is_empty() {
                 let (items, gone) = (&self.index.items, &self.gone);
                 self.order
@@ -484,13 +474,10 @@ impl ListScreen {
         } else {
             env.i18n.plural("files.books", self.len() as i64, &[])
         };
-        (self.empty_title, self.empty_text) = if let Some(walk) = &self.walk
-            && self.index.items.is_empty()
-        {
-            let found = walk.found() as i64;
+        (self.empty_title, self.empty_text) = if self.collecting && self.index.items.is_empty() {
             (
                 String::new(),
-                env.i18n.plural("files.collecting", found, &[]),
+                env.i18n.tr("files.list.collecting").to_string(),
             )
         } else if self.index.items.is_empty() && self.index.archived > 0 {
             (
@@ -528,11 +515,8 @@ impl ListScreen {
         } else {
             format!("{}/", self.root)
         };
-        let items = &self.index.items;
-        index::scan(env.storage, &mut |offset, line| {
-            let finished = items
-                .binary_search_by_key(&offset, |i| i.offset)
-                .is_ok_and(|at| items[at].progress == 100);
+        library::catalog::each(env.storage, &mut |line| {
+            let finished = line.reading() == library::catalog::Reading::Finished;
             if !authors.contains(&line.author) {
                 authors.push(line.author.clone());
             }
@@ -557,7 +541,7 @@ impl ListScreen {
         });
         series.sort_by_key(|r| r.name.to_lowercase());
         folders.sort_by_key(|r| r.name.to_lowercase());
-        let next = self.index.order(Filter::Next, false).len();
+        let next = Filter::Next.order(&self.index, false).len();
         let mut shelves = Vec::new();
         if next > 0 {
             shelves.push(ShelfRow::new(true, shelf::Kind::Series, "", next, 0));
@@ -700,18 +684,21 @@ impl ListScreen {
         let (style, sizes) = (&self.layout.style, &self.layout.sizes);
         let width = self.layout.area.width;
         let mut loaded = Vec::new();
+        let service = library::service(env);
         for index in self.page_range(page) {
-            let item = self.index.items[usize::from(self.order[index])];
-            let Some(line) = read_line(env.storage, item.offset) else {
+            let item = usize::from(self.order[index]);
+            let Some(record) = service.record(env, &self.index, item) else {
                 continue;
             };
             let card = self.card && index == 0;
-            let cover = match self.covers() {
-                _ if card => sizes.card_cover,
-                Some(g) => g.cover,
-                None => sizes.cover,
+            // Each size of cover kept apart: the card's, the grid's, the
+            // rows'.
+            let (cover, variant) = match self.covers() {
+                _ if card => (sizes.card_cover, "card"),
+                Some(g) => (g.cover, "grid"),
+                None => (sizes.cover, ""),
             };
-            let mut book = Loaded::load(env, line, item.recent != NEVER, cover, card);
+            let mut book = Loaded::load(env, record, cover, variant);
             match self.covers() {
                 _ if card => rows::prepare_card(env, style, sizes, width, &mut book),
                 Some(g) => {
@@ -723,7 +710,6 @@ impl ListScreen {
                     rows::prepare_row(env, style, sizes, width, &mut book, note, false);
                 }
             }
-            self.index.set_progress(item.hash, book.progress);
             loaded.push(book);
         }
         self.loaded = loaded;
@@ -845,12 +831,10 @@ impl ListScreen {
         // Gone without a word (deleted on a computer, say): left out, and
         // the catalog made anew.
         self.gone.push(hash(&path));
-        self.catalog.outdated();
-        self.walk = Some(Walk::start(env.storage, &self.root));
+        cx.command(library::request_catalog());
         self.refilter_in_place(&env);
         cx.command(Command::Notify(env.i18n.tr("files.list.gone").to_string()));
         cx.request_redraw();
-        cx.wake_at(env.now);
     }
 
     /// Offers what can be done with book `index`; `false` for a shelf.
@@ -923,13 +907,12 @@ impl ListScreen {
     }
 
     /// The catalog was made anew: the index from it, the place kept.
-    fn walked(&mut self, env: &Env<'_>) {
-        self.walk = None;
-        self.catalog.made(env);
+    fn rebuild(&mut self, env: &Env<'_>) {
+        self.collecting = collecting(env);
         let keep = self.focused_book();
         // The old index goes first: never two at once.
         self.index = Index::default();
-        self.index = Index::build(env.storage, Index::cap(env.device.memory), &archive(env));
+        self.index = make_index(env);
         self.gone.clear();
         self.refilter_keeping(env, keep, true);
     }
@@ -1021,7 +1004,7 @@ impl Screen for ListScreen {
         }
         if len == 0 {
             let area = layout.area;
-            if self.walk.is_some() && !has_books {
+            if self.collecting && !has_books {
                 ui::draw_message(canvas, env, &style, area, &self.empty_text);
             } else {
                 let (title, text) = (&self.empty_title, &self.empty_text);
@@ -1066,43 +1049,24 @@ impl Screen for ListScreen {
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
         if core::mem::take(&mut self.fresh) {
-            if !has_catalog(env.storage) {
-                // No catalog yet: made first, then shown.
-                self.walk = Some(Walk::start(env.storage, &self.root));
-                self.word(&env);
+            if library::service(&env).catalog_state(&env) == State::Missing {
+                // No catalog yet: the kernel makes it, then it shows.
+                cx.command(library::request_catalog());
             }
         } else if core::mem::take(&mut self.covered) {
             // Back from a book or a screen over the whole library: the
-            // index as it was kept, then what may have changed read again
-            // (the books read last, those changed on their sheets).
-            let cap = Index::cap(env.device.memory);
-            let archive = archive(&env);
-            self.index = Index::load(env.storage, &archive)
-                .unwrap_or_else(|| Index::build(env.storage, cap, &archive));
-            self.index.rerank(env.storage);
-            let touched = core::mem::take(&mut self.touched);
-            self.index.read_some_again(RECENT_AGAIN, &touched);
+            // index as it was kept (else made anew), then what changed
+            // meanwhile: the books read last, the status of those read.
+            self.archive = archive(&env);
+            self.index =
+                Index::load(env.storage, KEPT, &self.archive).unwrap_or_else(|| make_index(&env));
+            self.index.refresh(env.storage);
+            self.collecting = collecting(&env);
             let keep = self.kept_focus.take();
             self.refilter_keeping(&env, keep, true);
             cx.request_redraw();
-        } else {
-            // An overlay (a sheet, a choice) went: what it changed.
-            let touched = core::mem::take(&mut self.touched);
-            if !touched.is_empty() {
-                self.index.read_some_again(0, &touched);
-                self.refilter_in_place(&env);
-                cx.request_redraw();
-            }
         }
-        if self.walk.is_some() && !self.catalog.is_outdated(&env) && has_catalog(env.storage) {
-            // Another view of the library made the catalog meanwhile.
-            self.walked(&env);
-            cx.request_redraw();
-        } else if self.walk.is_none() && self.catalog.is_outdated(&env) && has_catalog(env.storage)
-        {
-            // Books came, went or moved since the catalog was made.
-            self.walk = Some(Walk::start(env.storage, &self.root));
-        }
+        // The index kept once it is settled.
         cx.wake_at(env.now);
     }
 
@@ -1122,42 +1086,13 @@ impl Screen for ListScreen {
         self.index = Index::default();
     }
 
-    /// Makes the catalog anew or reads books' progress, a step at a time.
+    /// Keeps the index in a file, to be read again instead of made anew
+    /// when the library shows after a book.
     fn on_timer(&mut self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        if self.covered {
-            return;
-        }
-        if let Some(walk) = &mut self.walk {
-            if walk.step(&env) {
-                self.walked(&env);
-                cx.request_redraw();
-                cx.request_refresh(RefreshMode::Partial);
-            } else if self.index.items.is_empty() {
-                // "Collecting the books" counts up.
-                self.word(&env);
-                cx.request_redraw_area(self.layout.area);
-                cx.request_refresh(RefreshMode::Fast);
-            }
-            cx.wake_at(env.now.add_millis(STEP_MS));
-            return;
-        }
-        if self.index.unknown() > 0 {
-            let stacks = self.layout.grid.is_some() && self.filter == Filter::All;
-            if self.index.step(env.storage, STEP_BOOKS) && (self.filter != Filter::All || stacks) {
-                // Every book's progress known: the filter (or which books
-                // are stacked) is right now.
-                self.refilter_in_place(&env);
-                cx.request_redraw();
-                cx.request_refresh(RefreshMode::Partial);
-            }
-            cx.wake_at(env.now.add_millis(STEP_MS));
-            return;
-        }
-        if self.index.dirty {
-            // Settled: kept in a file, to be read again instead of made
-            // anew when the library shows after a book.
-            self.index.dirty = !self.index.save(env.storage, &archive(&env));
+        if !self.covered && self.index.dirty {
+            let _ = env.storage.create_dir(".paperpaw/plugins/files");
+            self.index.dirty = !self.index.save(env.storage, KEPT, &self.archive);
         }
     }
 
@@ -1264,11 +1199,35 @@ impl Screen for ListScreen {
             }
             return;
         }
-        if let Some(changed) = TOUCHED.read(event, params) {
-            self.touched.push(hash(&changed.path));
+        let env = *cx.env();
+        if *event == events::CATALOG_CHANGED {
+            // Made anew (books came, went or moved): the index from it,
+            // or, while covered, when it shows (the one kept is of the old
+            // catalog).
+            if self.covered {
+                self.gone.clear();
+                self.collecting = false;
+            } else {
+                self.rebuild(&env);
+                cx.request_redraw();
+                cx.request_refresh(RefreshMode::Partial);
+                cx.wake_at(env.now);
+            }
             return;
         }
-        let env = *cx.env();
+        if events::BOOK_CHANGED.read(event, params).is_some() {
+            // Finished, a favourite, read further (on its sheet, say): how
+            // the books are known anew from the status logged, its page
+            // read again. While covered, done when it shows.
+            if !self.covered {
+                self.index.refresh(env.storage);
+                self.loaded_page = None;
+                self.refilter_in_place(&env);
+                cx.request_redraw();
+                cx.wake_at(env.now);
+            }
+            return;
+        }
         let gone = if let Some(moved) = events::BOOK_MOVED.read(event, params) {
             Some(moved.from)
         } else {
@@ -1278,26 +1237,25 @@ impl Screen for ListScreen {
         };
         if let Some(path) = gone {
             // Moved (to the archive, say) or removed: not shown where it
-            // was; the catalog is made anew when the library shows.
+            // was until the kernel made the catalog anew.
             self.gone.push(hash(&path));
             if !self.covered {
-                self.walk = Some(Walk::start(env.storage, &self.root));
                 self.refilter_in_place(&env);
                 cx.request_redraw();
-                cx.wake_at(env.now);
-            }
-        } else if *event == events::LIBRARY_CHANGED {
-            // Books came or went: the catalog anew.
-            self.walk = Some(Walk::start(env.storage, &self.root));
-            if !self.covered {
-                cx.wake_at(env.now);
             }
         } else if *event == events::SETTING_CHANGED {
             let root = library::folder(&env);
             if root != self.root {
-                *self = Self::new(&env, self.catalog.clone());
-                self.fresh = false;
-                self.walk = Some(Walk::start(env.storage, &self.root));
+                // Another library folder: the kernel makes its catalog;
+                // while covered, the index is made when it shows.
+                if self.covered {
+                    self.root = root.to_string();
+                    self.gone.clear();
+                    self.kept_focus = None;
+                } else {
+                    *self = Self::new(&env);
+                    self.fresh = false;
+                }
             } else if !self.covered {
                 // The view, the order, the size of the interface: laid out
                 // anew, the focus on its book; another archive folder: the
@@ -1306,9 +1264,8 @@ impl Screen for ListScreen {
                 self.layout = Layout::new(&env);
                 if archive(&env) != self.archive {
                     self.archive = archive(&env);
-                    let cap = Index::cap(env.device.memory);
                     self.index = Index::default();
-                    self.index = Index::build(env.storage, cap, &self.archive);
+                    self.index = make_index(&env);
                 }
                 self.refilter_in_place(&env);
             } else {

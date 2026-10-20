@@ -306,26 +306,187 @@ fn add_handled<const N: usize>(
     Ok(())
 }
 
+/// The work that makes the library's catalog anew ([`library::catalog`]).
+const CATALOG_WORK: Id = Id::new_static("core.catalog");
+/// How old a catalog is taken as it is when the device wakes, in
+/// milliseconds: books copied meanwhile without a word (a computer, a
+/// phone's own file manager) are found after that.
+const CATALOG_AGE_MS: u64 = 30 * 60 * 1000;
+
+/// The making of the catalog, shared by the kernel's handlers and its
+/// job.
+#[derive(Default)]
+struct Catalog {
+    /// The walk under way.
+    walk: core::cell::RefCell<Option<paperpaw_sdk::library::catalog::Walk>>,
+    /// Asked for again since the walk began: it starts anew.
+    restart: core::cell::Cell<bool>,
+    /// Asked for at once, not yet made.
+    urgent: core::cell::Cell<bool>,
+    /// When it was made last (milliseconds since start, plus one; 0 not
+    /// yet).
+    made: core::cell::Cell<u64>,
+}
+
+impl Catalog {
+    /// Asks for the catalog to be made anew: `now` (asked for, another
+    /// library folder, books came or went), else at a calm moment
+    /// (no input for a while, a book closed, the device plugged in;
+    /// within a minute at the latest), so that books coming one after the
+    /// other (from Calibre, say) are walked once, and never while the
+    /// device goes to sleep or opens a book; a walk under way starts
+    /// again. A calm request does not put off one at once.
+    fn want(&self, now: bool, out: &mut Vec<Command>) {
+        use paperpaw_sdk::work::{Moments, Work};
+        self.restart.set(true);
+        self.urgent.set(self.urgent.get() || now);
+        let calm = Moments::IDLE | Moments::BOOK_CLOSED | Moments::CHARGING;
+        let work = Work::new(CATALOG_WORK).at_moments(calm);
+        let within = if self.urgent.get() { 0 } else { 60 };
+        out.push(Command::Work(
+            work.within(core::time::Duration::from_secs(within)),
+        ));
+    }
+
+    /// One step of the walk; `true` when the catalog is made.
+    fn step(&self, env: &Env<'_>) -> bool {
+        let mut walk = self.walk.borrow_mut();
+        if self.restart.replace(false) || walk.is_none() {
+            *walk = Some(paperpaw_sdk::library::catalog::Walk::start(
+                env.storage,
+                library::folder(env),
+            ));
+        }
+        if !walk.as_mut().is_some_and(|w| w.step(env)) {
+            return false;
+        }
+        *walk = None;
+        self.urgent.set(false);
+        self.made.set(env.now.millis().saturating_add(1));
+        true
+    }
+
+    /// Whether it is older than [`CATALOG_AGE_MS`], or not made yet.
+    fn old(&self, env: &Env<'_>) -> bool {
+        let made = self.made.get();
+        made == 0 || env.now.millis().saturating_sub(made - 1) >= CATALOG_AGE_MS
+    }
+}
+
 /// The library service and what plugins keep for books, which follow
 /// the books.
 fn register_library(r: &mut Registrar) -> Result<(), RegisterError> {
+    use alloc::rc::Rc;
+    use paperpaw_sdk::work::{Step, WorkSpec};
+
+    // The catalog, made anew as a job: a few books a step, after the
+    // frame and while no input waits; views hear CATALOG_CHANGED.
+    let catalog = Rc::new(Catalog::default());
+    {
+        let catalog = Rc::clone(&catalog);
+        r.add_work(WorkSpec::new(
+            CATALOG_WORK,
+            "core.work.catalog",
+            move |env, _, out| {
+                if !catalog.step(env) {
+                    return Step::Continue;
+                }
+                out.push(events::CATALOG_CHANGED.emit(()));
+                Step::Done
+            },
+        ))?;
+    }
+    // Made after the start (books may have come over USB meanwhile), on
+    // waking after a while, and after a book came (one of many, often),
+    // at a calm moment; at once when asked, when books came or went, or
+    // for another library folder.
+    // Without a format nothing is a book.
+    {
+        let catalog = Rc::clone(&catalog);
+        r.on(events::STARTED, move |env, _, out| {
+            if !env.formats.is_empty() {
+                catalog.want(false, out);
+            }
+        })?;
+    }
+    {
+        let catalog = Rc::clone(&catalog);
+        r.on(events::RESUME, move |env, _, out| {
+            if !env.formats.is_empty() && catalog.old(env) {
+                catalog.want(false, out);
+            }
+        })?;
+    }
+    for event in [events::LIBRARY_CHANGED, events::CATALOG_WANTED] {
+        let catalog = Rc::clone(&catalog);
+        r.on(event, move |_, _, out| catalog.want(true, out))?;
+    }
+    {
+        let catalog = Rc::clone(&catalog);
+        r.on(events::BOOK_ADDED, move |_, _, out| {
+            catalog.want(false, out)
+        })?;
+    }
+    {
+        let catalog = Rc::clone(&catalog);
+        r.on(events::SETTING_CHANGED, move |_, changed, out| {
+            if changed.id == *library::FOLDER.id() {
+                catalog.want(true, out);
+            }
+        })?;
+    }
+    // A field kept in the catalog changed: in it at a calm moment (the
+    // book's details have it at once).
+    {
+        let catalog = Rc::clone(&catalog);
+        r.on(events::BOOK_CHANGED, move |env, changed, out| {
+            let kept = env.book_fields.iter().any(|f| f.in_catalog);
+            if changed.what & library::what::FIELDS != 0 && kept {
+                catalog.want(false, out);
+            }
+        })?;
+    }
     // The library service follows the reading, whichever plugins
-    // show it.
-    r.on(events::BOOK_OPENED, |env, reading, _| {
+    // show it: how far a book is read, in its details and, when it is
+    // opened, closed or finished, beside the catalog.
+    r.on(events::BOOK_OPENED, |env, reading, out| {
         library::record(env, reading, true);
+        out.push(library::changed_book(
+            &reading.path,
+            library::what::PROGRESS,
+        ));
     })?;
     r.on(events::PAGE_TURNED, |env, reading, _| {
         library::record(env, reading, false);
     })?;
-    // What plugins keep for a book follows it: moved, removed.
-    r.on(events::BOOK_MOVED, |env, moved, _| {
-        library::moved(env.storage, &moved.from, &moved.path);
-        library::move_data(env.storage, env.book_data, &moved.from, &moved.path);
-    })?;
-    r.on(events::BOOK_REMOVED, |env, removed, _| {
-        library::removed(env.storage, &removed.path);
-        library::remove_data(env.storage, env.book_data, &removed.path);
-    })?;
+    for event in [events::BOOK_CLOSED, events::BOOK_FINISHED] {
+        r.on(event, |env, reading, out| {
+            library::record(env, reading, false);
+            library::note_status(env.storage, &reading.path);
+            out.push(library::changed_book(
+                &reading.path,
+                library::what::PROGRESS,
+            ));
+        })?;
+    }
+    // What plugins keep for a book follows it: moved, removed; the
+    // catalog is made anew at once (the book is not where views show it).
+    {
+        let catalog = Rc::clone(&catalog);
+        r.on(events::BOOK_MOVED, move |env, moved, out| {
+            library::moved(env.storage, &moved.from, &moved.path);
+            library::move_data(env.storage, env.book_data, &moved.from, &moved.path);
+            catalog.want(true, out);
+        })?;
+    }
+    {
+        let catalog = Rc::clone(&catalog);
+        r.on(events::BOOK_REMOVED, move |env, removed, out| {
+            library::removed(env.storage, &removed.path);
+            library::remove_data(env.storage, env.book_data, &removed.path);
+            catalog.want(true, out);
+        })?;
+    }
     // The notes of books are the kernel's.
     r.add_book_data(paperpaw_sdk::data_path!("annotations"), "")?;
     r.add_book_data(alloc::format!("{}/books", library::DIR), "")?;

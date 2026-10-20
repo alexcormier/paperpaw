@@ -19,7 +19,28 @@
 //! read a book at a time.
 
 pub mod catalog;
+pub mod index;
 pub mod listing;
+pub mod service;
+
+pub use service::{Badge, BookBadge, BookField, Library, service};
+
+/// What changed of a book ([`events::BookChanged::what`](crate::builtin::events::BookChanged)):
+/// bits, any together.
+pub mod what {
+    /// Its title, author, series, tags (read from the book, or provided).
+    pub const DETAILS: u32 = 1;
+    /// How far it is read.
+    pub const PROGRESS: u32 = 1 << 1;
+    /// Its cover.
+    pub const COVER: u32 = 1 << 2;
+    /// Whether it is a favourite.
+    pub const FAVOURITE: u32 = 1 << 3;
+    /// Marked finished or unread.
+    pub const STATUS: u32 = 1 << 4;
+    /// A plugin's field.
+    pub const FIELDS: u32 = 1 << 5;
+}
 
 use alloc::borrow::Cow;
 use alloc::format;
@@ -411,6 +432,13 @@ fn cover_file(path: &str) -> String {
     format!("{DIR}/covers/{}.thumb", key(path))
 }
 
+fn cover_variant_file(path: &str, variant: &str) -> String {
+    if variant.is_empty() {
+        return cover_file(path);
+    }
+    format!("{DIR}/covers/{}.{variant}.thumb", key(path))
+}
+
 /// The cover of `book` (the one at `path`) made small to fit `width` ×
 /// `height`, as a panel of `format` shows it: kept in the library
 /// (`covers/<hash>.thumb`), so views of many books (a list, a grid) read a
@@ -424,13 +452,28 @@ pub fn cover(
     height: u16,
     format: paperpaw_platform::PixelFormat,
 ) -> Option<crate::ui::Thumbnail> {
+    cover_variant(storage, path, book, width, height, format, "")
+}
+
+/// [`cover`] kept apart for each `variant` (e.g. `row`, `card`, `grid`):
+/// a view that shows a book's cover at several sizes keeps each, instead
+/// of one size made anew over the other. Moved and removed with the book.
+pub fn cover_variant(
+    storage: &dyn Storage,
+    path: &str,
+    book: &Book,
+    width: u16,
+    height: u16,
+    format: paperpaw_platform::PixelFormat,
+    variant: &str,
+) -> Option<crate::ui::Thumbnail> {
     let image = book.cover.as_ref()?;
     let (w, h) = crate::ui::fit_image(image, width, height);
     let stamp = fnv1a64(format!(
         "{} {} {}x{} {w}x{h} {format:?}",
         book.size, image.path, image.width, image.height
     ));
-    let file = cover_file(path);
+    let file = cover_variant_file(path, variant);
     if let Some(thumb) = crate::ui::Thumbnail::kept(storage, &file, stamp, (w, h)) {
         return Some(thumb);
     }
@@ -773,6 +816,27 @@ pub fn record(env: &Env<'_>, reading: &crate::builtin::events::Reading, opened: 
     if changed {
         save(storage, path, &book);
     }
+    // Opened: the catalog knows it at once (a page turned does not write
+    // there; the book's closing does, [`note_status`]).
+    if opened {
+        note_status(storage, path);
+    }
+}
+
+/// Notes the status of the book at `path` (how far it is read, whether it
+/// is a favourite, whether it was opened) beside the catalog
+/// ([`catalog::note`]), so views of the library show it without reading
+/// each book's details. The kernel calls it when a book is opened,
+/// closed or finished; [`set_finished`] and [`set_favourite`] call it.
+pub fn note_status(storage: &dyn Storage, path: &str) {
+    let progress = book(storage, path).and_then(|b| b.progress);
+    let favourite = favourites(storage).iter().any(|p| p == path);
+    let opened = opened_books(storage).iter().any(|p| p == path);
+    catalog::note(
+        storage,
+        path,
+        catalog::Status::new(progress, favourite, opened),
+    );
 }
 
 /// Moves what the library knows of a book from `from` to `to`: its
@@ -815,6 +879,7 @@ pub fn set_finished(storage: &dyn Storage, path: &str, finished: bool) {
     };
     book.progress = finished.then_some(100);
     save(storage, path, &book);
+    note_status(storage, path);
 }
 
 /// Paths of the books opened last, most recent first (also of books no
@@ -836,6 +901,7 @@ pub fn set_favourite(storage: &dyn Storage, path: &str, favourite: bool) {
             list.insert(0, path.to_string());
         }
     });
+    note_status(storage, path);
 }
 
 /// Takes over what the library plugin kept before the library was a
@@ -857,6 +923,34 @@ pub fn take_over_old(storage: &dyn Storage) {
 /// it ([`events::LIBRARY_CHANGED`](crate::builtin::events::LIBRARY_CHANGED)).
 pub fn changed() -> crate::Command {
     crate::builtin::events::LIBRARY_CHANGED.emit(())
+}
+
+/// The command that tells everyone something of the book at `path`
+/// changed: `what`, bits of [`what`]
+/// ([`events::BOOK_CHANGED`](crate::builtin::events::BOOK_CHANGED)).
+pub fn changed_book(path: &str, what: u32) -> crate::Command {
+    crate::builtin::events::BOOK_CHANGED.emit(crate::builtin::events::BookChanged {
+        path: path.to_string(),
+        what,
+    })
+}
+
+/// The command that tells everyone the book at `path` came into the
+/// library, brought by the plugin `source`
+/// ([`events::BOOK_ADDED`](crate::builtin::events::BOOK_ADDED)).
+pub fn added(path: &str, source: &str) -> crate::Command {
+    crate::builtin::events::BOOK_ADDED.emit(crate::builtin::events::BookAdded {
+        path: path.to_string(),
+        source: source.to_string(),
+    })
+}
+
+/// The command that asks the kernel to make the catalog anew, in the
+/// background ([`events::CATALOG_WANTED`](crate::builtin::events::CATALOG_WANTED));
+/// [`events::CATALOG_CHANGED`](crate::builtin::events::CATALOG_CHANGED)
+/// follows.
+pub fn request_catalog() -> crate::Command {
+    crate::builtin::events::CATALOG_WANTED.emit(())
 }
 
 #[cfg(test)]

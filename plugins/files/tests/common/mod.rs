@@ -238,6 +238,19 @@ impl Screen for Keyboard {
     }
 }
 
+/// A plugin a test adds, as the builder takes it.
+struct Boxed(Box<dyn Plugin>);
+
+impl Plugin for Boxed {
+    fn manifest(&self) -> Manifest {
+        self.0.manifest()
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        self.0.register(r)
+    }
+}
+
 /// The standard app with the test keyboard, over a storage the test keeps.
 pub struct App {
     pub kernel: Kernel,
@@ -250,17 +263,24 @@ pub struct App {
 impl App {
     /// The app on `device` over `storage`, started.
     pub fn new(device: DeviceInfo, storage: Shared) -> Self {
-        Self::at(device, storage, 0)
+        Self::at(device, storage, 0, None)
     }
 
-    fn at(device: DeviceInfo, storage: Shared, now: u64) -> Self {
+    /// The app with `plugin` too.
+    pub fn with(device: DeviceInfo, storage: Shared, plugin: impl Plugin + 'static) -> Self {
+        Self::at(device, storage, 0, Some(Box::new(plugin)))
+    }
+
+    fn at(device: DeviceInfo, storage: Shared, now: u64, plugin: Option<Box<dyn Plugin>>) -> Self {
         TYPED.with(|typed| typed.borrow_mut().clear());
         ASKED.with(|asked| asked.borrow_mut().clear());
         let builder = Kernel::builder(device).storage(storage.clone());
-        let mut kernel = paperpaw_app::install(builder, paperpaw_app::Fonts::Packs)
-            .plugin(TestKeyboard)
-            .build()
-            .unwrap();
+        let mut builder =
+            paperpaw_app::install(builder, paperpaw_app::Fonts::Packs).plugin(TestKeyboard);
+        if let Some(plugin) = plugin {
+            builder = builder.plugin(Boxed(plugin));
+        }
+        let mut kernel = builder.build().unwrap();
         let effects = kernel.start(Instant(now));
         let display = device.display;
         let mut app = Self {
@@ -279,7 +299,7 @@ impl App {
         let storage = self.storage.clone();
         let now = self.now + 1000;
         drop(self);
-        Self::at(device, storage, now)
+        Self::at(device, storage, now, None)
     }
 
     /// Lets timers run until nothing is due within a second.

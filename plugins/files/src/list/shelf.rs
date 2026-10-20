@@ -2,27 +2,27 @@
 //! next book to read marked and focused), a folder, the favourites, the
 //! books under a letter, or what a search found.
 //!
-//! The books are found in one pass over the catalog when the list opens;
-//! only where their lines start is kept (and for a series how far each is
-//! read). A page's books are read when it is shown.
+//! The books are found in one pass over the catalog when the list opens
+//! (how far each is read, and which are favourites, are in it); only
+//! where their lines start is kept. A page's books are read when it is
+//! shown.
 
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use paperpaw_sdk::builtin::{actions, params};
-use paperpaw_sdk::library;
+use paperpaw_sdk::builtin::{actions, events, params};
+use paperpaw_sdk::library::catalog;
 use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::{
-    Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, Screen,
+    Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, RefreshMode,
+    Screen,
 };
 
-use super::index::{self, hash, letter, read_line, sort_key, surname};
+use super::index::{letter, sort_key, surname};
 use super::rows::{self, Loaded, Sizes};
 
 /// The parameter naming the series, folder, letter or search words.
 const NAME: &str = "name";
-/// Books of a series whose progress is read when it opens, at most.
-const MAX_SERIES: usize = 200;
 
 /// What a list of books holds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -83,10 +83,10 @@ pub(crate) fn open(kind: Kind, name: &str) -> Command {
 #[derive(Debug, Clone, Copy)]
 struct Entry {
     offset: u32,
-    key: [u8; super::index::KEY],
-    /// Its number in a series.
-    number: f32,
-    /// How far it is read (series only, else as its page read it).
+    key: [u8; paperpaw_sdk::library::index::KEY],
+    /// Its number in a series ([`catalog::series_order`]).
+    number: u32,
+    /// How far it is read.
     progress: u8,
 }
 
@@ -99,8 +99,6 @@ pub(crate) struct ShelfScreen {
     entries: Vec<Entry>,
     /// The series' next book to read.
     next: Option<usize>,
-    /// Hashes of the books opened last (others are new).
-    opened: Vec<u32>,
     /// The line below the header: how many books, how many finished.
     summary: Rect,
     /// The words of the header and of that line, written when the list
@@ -129,15 +127,10 @@ impl ShelfScreen {
         );
         let top = summary.y + summary.height;
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
-        let opened = library::opened_books(env.storage)
-            .iter()
-            .map(|p| hash(p))
-            .collect();
         let mut screen = Self {
             list: ListView::new(area, u32::from(sizes.row)).focus_on_keys(env),
             entries: find(env, kind, &name),
             next: None,
-            opened,
             summary,
             title_text: String::new(),
             summary_text: String::new(),
@@ -199,11 +192,10 @@ impl ShelfScreen {
             .skip(page * rows)
             .take(rows)
         {
-            let Some(line) = read_line(env.storage, entry.offset) else {
+            let Some(record) = catalog::read_at(env.storage, u64::from(entry.offset)) else {
                 continue;
             };
-            let opened = self.opened.contains(&hash(&line.path));
-            let mut book = Loaded::load(env, line, opened, self.sizes.cover, false);
+            let mut book = Loaded::load(env, record, self.sizes.cover, "");
             entry.progress = book.progress;
             // A series by numbers; elsewhere the author.
             let note = if series {
@@ -244,6 +236,19 @@ impl ShelfScreen {
         }
     }
 
+    /// Finds its books anew (their states, where their lines are), the
+    /// focus kept at its place.
+    fn find_again(&mut self, env: &Env<'_>) {
+        let focus = self.list.focus();
+        self.entries = find(env, self.kind, &self.name);
+        self.mark_next();
+        self.list
+            .set_focus(focus.min(self.entries.len().saturating_sub(1)));
+        self.loaded_page = None;
+        self.load_page(env);
+        self.word(env);
+    }
+
     fn open_book(&mut self, index: usize, cx: &mut Cx<'_, '_>) {
         if let Some(book) = self.book(index) {
             let path = book.path.clone();
@@ -256,14 +261,6 @@ impl ShelfScreen {
 /// number, the others by title.
 fn find(env: &Env<'_>, kind: Kind, name: &str) -> Vec<Entry> {
     let storage = env.storage;
-    let favourites: Vec<u32> = if kind == Kind::Favourites {
-        library::favourites(storage)
-            .iter()
-            .map(|p| hash(p))
-            .collect()
-    } else {
-        Vec::new()
-    };
     let folder = alloc::format!("{name}/");
     let words: Vec<String> = name
         .to_lowercase()
@@ -272,13 +269,13 @@ fn find(env: &Env<'_>, kind: Kind, name: &str) -> Vec<Entry> {
         .collect();
     let wanted = name.bytes().next().unwrap_or(b'#');
     let mut entries = Vec::new();
-    index::scan(storage, &mut |offset, line| {
+    catalog::each_at(storage, &mut |offset, line| {
         let found = match kind {
             Kind::Series => line.series == name,
             Kind::Folder => line.path.starts_with(&folder),
-            Kind::Favourites => favourites.contains(&hash(&line.path)),
+            Kind::Favourites => line.status.favourite,
             Kind::Author => line.author == name,
-            Kind::Tag => line.tags.split('\u{1f}').any(|t| t == name),
+            Kind::Tag => line.tags().any(|t| t == name),
             Kind::Letter => {
                 let title = sort_key(&line.title)[0];
                 let title = if title.is_ascii_lowercase() {
@@ -303,23 +300,17 @@ fn find(env: &Env<'_>, kind: Kind, name: &str) -> Vec<Entry> {
             }
             Kind::Authors => false,
         };
-        if found {
+        if found && let Ok(offset) = u32::try_from(offset) {
             entries.push(Entry {
                 offset,
                 key: sort_key(&line.title),
-                number: line.number.parse().unwrap_or(f32::MAX),
-                progress: 0,
+                number: catalog::series_order(&line.number),
+                progress: line.status.progress.unwrap_or(0),
             });
         }
     });
     if kind == Kind::Series {
-        entries.sort_by(|a, b| a.number.total_cmp(&b.number).then(a.key.cmp(&b.key)));
-        for entry in entries.iter_mut().take(MAX_SERIES) {
-            entry.progress = read_line(storage, entry.offset)
-                .and_then(|line| library::book(storage, &line.path))
-                .and_then(|book| book.progress)
-                .unwrap_or(0);
-        }
+        entries.sort_by_key(|e| (e.number, e.key, e.offset));
     } else {
         entries.sort_by_key(|e| (e.key, e.offset));
     }
@@ -388,15 +379,18 @@ impl Screen for ShelfScreen {
         // Back from a book or its actions: states and the next may have
         // changed.
         let env = *cx.env();
-        let focus = self.list.focus();
-        self.entries = find(&env, self.kind, &self.name);
-        self.mark_next();
-        self.list
-            .set_focus(focus.min(self.entries.len().saturating_sub(1)));
-        self.loaded_page = None;
-        self.load_page(&env);
-        self.word(&env);
+        self.find_again(&env);
         cx.request_redraw();
+    }
+
+    fn on_event(&mut self, event: &Id, _: &Params, cx: &mut Cx<'_, '_>) {
+        // A new catalog: its books where their lines are now.
+        if *event == events::CATALOG_CHANGED {
+            let env = *cx.env();
+            self.find_again(&env);
+            cx.request_redraw();
+            cx.request_refresh(RefreshMode::Partial);
+        }
     }
 
     fn on_hide(&mut self) {

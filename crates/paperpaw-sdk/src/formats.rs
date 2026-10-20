@@ -199,6 +199,12 @@ impl Formats {
         Ok(())
     }
 
+    /// Whether no format was added: nothing can be opened, nor be a
+    /// book.
+    pub fn is_empty(&self) -> bool {
+        self.specs.is_empty()
+    }
+
     pub fn contains(&self, id: &str) -> bool {
         self.specs.iter().any(|s| s.id.as_str() == id)
     }

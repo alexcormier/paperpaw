@@ -318,6 +318,8 @@ impl Kernel {
             .extend(staging.stylesheets.iter().map(|_| plugin.clone()));
         self.shared.stylesheets.append(&mut staging.stylesheets);
         self.shared.book_data.append(&mut staging.book_data);
+        self.shared.book_fields.append(&mut staging.book_fields);
+        self.shared.book_badges.append(&mut staging.book_badges);
         for (id, service) in staging.services.drain(..) {
             self.shared.services.insert(id, service);
         }
