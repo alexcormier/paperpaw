@@ -36,6 +36,65 @@ change the plugin SDK.
   fingertip high on touch screens, `SliderDrag::on_pointer` takes the
   slider's band, the style and its value and moves the knob relative to
   where the finger came down, `Slider::knob_x` says where the knob is.
+- Memory card: a file renamed to another case of its name (`book.epub`
+  to `Book.epub`) is no longer removed, and a folder is no longer moved
+  into itself by another case of its name. A file open under one
+  spelling of its path and written anew or removed under another is no
+  longer read from, or written back over, clusters given to other
+  files. Changes reach the card in the order they were made, each one
+  when it is done (appends still when written back): cut off by an
+  empty battery, the card holds a file's old content or its new one,
+  whole, but for short moments the FAT library leaves open (a file
+  removed has its clusters freed before its name is gone; a file moved
+  to another folder is at neither place for a moment). A damaged folder
+  whose clusters run in a loop is no longer read for ever.
+- Going back to an older update no longer lets it write over the
+  library's files a newer PaperPaw wrote: annotations, the books opened
+  last, the favourites and a book's details are read through
+  `data::Format::FIRST` and left as they are when they say a later
+  version. SDK: `data::Format::FIRST`, and `StorageError` from
+  `data::Error`.
+- Emulator and Android: a file written whole is on the disk before it
+  replaces the old one, so a power cut leaves the old or the new, and
+  files of one name with other extensions (`a.x`, `a.y`) no longer
+  share one temporary file.
+- SDK: `Id::unplaced` gives an id without its placement
+  (`widgets.clock@2.face` to `widgets.clock.face`) as an id; `placed`,
+  which did the same under a name that said the opposite, stays until
+  plugins have moved. `Id::placement` of a placed id is another
+  placement of the same (`widgets.clock@2` and 3 make `widgets.clock@3`),
+  not an invalid `widgets.clock@2@3`.
+- Storage: paths with control characters, a dot or space at the end of
+  a name, or a name Windows keeps for a device (`CON`, `nul.txt`,
+  `COM1`) are refused on every storage, as FAT and Windows take them for
+  another entry or a device. Names made from the web
+  (`web::clean_name`) leave those out, `_CON.txt` for `CON.txt`, and are
+  cut as FAT counts their length. `web::host` leaves out a user and
+  password written before the host.
+- Passwords and Wi-Fi: a network whose name holds a tab or a line break
+  is joined again by its name (it was kept with a space for them).
+  Passwords are left out where secrets and Wi-Fi commands are printed
+  for debugging.
+- Time zones: a rule of your own (`core.time-zone-rule`) may name the
+  days summer time starts and ends by the day of the year (`J60`, `59`)
+  as POSIX allows, not only by week and weekday; one that is not a rule
+  falls back to the zone chosen from the list instead of the system's
+  (UTC on the X4).
+- Library: searching a large library no longer runs the X4 out of
+  memory. A search holds the first 200 books by title (it held up to
+  2,000, unsorted until all were found); `catalog::search_after` pages
+  through the rest and `catalog::page` and `catalog::count` page any
+  view of the catalog the same way, a page in memory at a time.
+- SDK: `library::clean_up_unused` removes what is kept for books no
+  longer on the storage without touching what any book there needs:
+  the data of files of formats switched off stays, and so does the data
+  of a book opened by another spelling of its folder (a card's `Books`
+  read as the library folder `books`). Where a folder cannot be listed,
+  nothing is removed.
+- Library: a folder that has become empty no longer stops the library
+  in the emulator (a page of an empty listing was counted below zero).
+- Data files: a file marked `# format 0` is left as it is instead of
+  stopping PaperPaw; versions start at 1.
 - SDK: helpers that plugins wrote each for themselves, now in one place.
   `Storage::ignores_case` says whether a storage takes `Books` for
   `books` (memory cards, Windows and macOS disks do), and

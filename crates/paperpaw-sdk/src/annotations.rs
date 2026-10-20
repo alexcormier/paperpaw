@@ -107,18 +107,31 @@ pub fn marks(storage: &dyn Storage, book: &str) -> Vec<Mark> {
 }
 
 /// What `parse` makes of each line of the book's file, as it streams; a
-/// missing file has none.
+/// missing file has none. A file a newer PaperPaw marked with a later
+/// version ([`data::Format`](crate::data::Format)) is
+/// [`StorageError::InvalidData`]: not read, not written over.
 fn each<T>(
     storage: &dyn Storage,
     book: &str,
     parse: impl Fn(&str) -> Option<T>,
 ) -> Result<Vec<T>, StorageError> {
     let mut all = Vec::new();
+    let mut first = true;
+    let mut newer = false;
     let read = files::for_each_line(storage, &file(book), &mut |line| {
+        if core::mem::take(&mut first) && line.starts_with(crate::data::MARK) {
+            newer = crate::data::Format::version_of(line) != 1;
+            return if newer {
+                ControlFlow::Break(())
+            } else {
+                ControlFlow::Continue(())
+            };
+        }
         all.extend(parse(line));
         ControlFlow::Continue(())
     });
     match read {
+        _ if newer => Err(StorageError::InvalidData),
         Ok(()) | Err(StorageError::NotFound) => Ok(all),
         Err(e) => Err(e),
     }
@@ -366,6 +379,14 @@ mod tests {
         assert!(!remove(&storage, book, |_| true));
         assert!(!set_note(&storage, book, Locator::new(1, 10), "x", 0));
         assert_eq!(storage.0.get(&file(book)), Some(before));
+        // Written by a newer PaperPaw: left as it is.
+        let newer = MemoryStorage::new().with(&file(book), "# format 2\nh\t1\t2\t1\t3\t0\tx\t");
+        assert!(!add(&newer, book, highlight(1, 2, "x")));
+        assert!(load(&newer, book).is_empty());
+        assert_eq!(
+            load_for_update(&newer, book),
+            Err(StorageError::InvalidData)
+        );
         // Too large to be changed whole.
         let big = MemoryStorage::new().with(&file(book), alloc::vec![b'\n'; (1 << 20) + 1]);
         assert!(!add(&big, book, highlight(1, 2, "x")));
