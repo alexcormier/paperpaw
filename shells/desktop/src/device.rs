@@ -134,7 +134,7 @@ impl Device {
             panel: Panel::new(display.width, display.height, display.color),
             wake_at: None,
             http: crate::http::Http::new(),
-            servers: paperpaw_serve::Servers::new(|| {}),
+            servers: servers(),
             sockets: paperpaw_serve::Sockets::new(|| {}),
             wifi: crate::wifi::Wifi::default(),
             speech: std::collections::VecDeque::new(),
@@ -494,7 +494,7 @@ impl Device {
         // requests' answers would otherwise reach the new kernel's (they
         // count from 1 again).
         self.http = crate::http::Http::new();
-        self.servers = paperpaw_serve::Servers::new(|| {});
+        self.servers = servers();
         self.sockets = paperpaw_serve::Sockets::new(|| {});
         self.wifi = crate::wifi::Wifi::default();
         self.speech.clear();
@@ -635,6 +635,13 @@ fn micros() -> u64 {
         .get_or_init(std::time::Instant::now)
         .elapsed()
         .as_micros() as u64
+}
+
+/// Plugins' servers, on this computer only: the emulator is for trying
+/// and testing, and so asks no firewall for the network; a browser on the
+/// same computer reaches them at 127.0.0.1.
+fn servers() -> paperpaw_serve::Servers {
+    paperpaw_serve::Servers::new(|| {}).listening_on(std::net::Ipv4Addr::LOCALHOST.into())
 }
 
 #[cfg(test)]

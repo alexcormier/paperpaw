@@ -227,7 +227,14 @@ impl Sockets {
                 let _ = events.send(event);
                 wake();
             };
-            if let Ok(udp) = UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0))
+            // Sent from the loopback address where it goes there (tests),
+            // so that no firewall is asked for the network.
+            let from = if to.is_loopback() {
+                Ipv4Addr::LOCALHOST
+            } else {
+                Ipv4Addr::UNSPECIFIED
+            };
+            if let Ok(udp) = UdpSocket::bind((from, 0))
                 && udp.set_broadcast(true).is_ok()
             {
                 for port in ports {
