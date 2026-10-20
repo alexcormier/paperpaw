@@ -46,6 +46,21 @@ change the plugin SDK.
   `Canvas::fill_corners`, `round::corner_inset`. Plugins draw what is on
   a focused row in `focus_ink` rather than white, so every highlight
   works.
+- Home screen widgets fit their place in every size, on the X4, the X4
+  Pro and large screens alike: text that must stay on one line (times,
+  dates, numbers, titles) is made smaller before it is shortened, longer
+  text breaks between words and never inside one, and a part that does
+  not fit (a caption, a note, a cover too small to tell) is left out
+  whole rather than cut or drawn over its neighbours. Sizes are found as
+  the font draws them, so the font packs of the X4s fit as well. Fixed
+  on the way: the continue card ran out of its frame in low cells, the
+  world clock's places overlapped, the status widget's battery ran past
+  a small cell, the streak's second line was cut, the calendar's digits
+  ran together, the year's note fell below its cell. Each widget has a
+  spacing setting (automatic, none, small, normal, large; per
+  placement): automatically, widgets without a frame line up with the
+  page's margins as before, and framed ones keep a gap inside their
+  frame.
 - SDK, widgets: a spacing setting for widgets (`widgets::Padding`,
   `padding_spec`, `padding_setting`, `padding`; automatic, none, small,
   normal, large), which `look` and `draw_frame` keep. Text that fits

@@ -473,7 +473,9 @@ fn draw_clock(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     let area = look.area;
     let width = f32::from(area.width);
     let clock = time::clock_text(env).unwrap_or_else(|| String::from("--:--"));
-    let gap = (style.gap / 2) as i32;
+    // A gap from ink to ink: the date's small letters need the room a
+    // gap between lines of text has, or they cling to the digits.
+    let gap = style.gap as i32;
     // The date below where it fits whole (in short words where the full
     // ones do not), small; the time in the rest.
     let mut date = if env.settings.read(&CLOCK_DATE) {

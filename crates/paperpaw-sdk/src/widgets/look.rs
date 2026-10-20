@@ -150,8 +150,9 @@ pub const PADDINGS: [&str; 5] = [
 /// content never touches it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Padding {
-    /// As suits the frame: [`Small`](Padding::Small) without one, so
-    /// that text keeps clear of the neighbours, and
+    /// As suits the frame: [`None`](Padding::None) without one, so that
+    /// what the widget shows lines up with the page's margins and the
+    /// widgets beside it (the grid keeps a gap between them), and
     /// [`Normal`](Padding::Normal) inside one.
     Auto,
     None,
@@ -181,7 +182,7 @@ impl Padding {
     pub fn pixels(self, style: &UiStyle, frame: Frame) -> u16 {
         let gap = style.gap;
         let step = match self {
-            Padding::Auto if frame == Frame::None => gap / 2,
+            Padding::Auto if frame == Frame::None => 0,
             Padding::Auto | Padding::Normal => gap,
             Padding::None => 0,
             Padding::Small => gap / 2,
@@ -629,7 +630,8 @@ impl Wrapped {
             .enumerate()
             .map(|(n, range)| {
                 if cut && n + 1 == count {
-                    let rest = text[range.start..].trim_end();
+                    // The rest on one line: its breaks as spaces.
+                    let rest = text[range.start..].trim_end().replace('\n', " ");
                     ui::fit(&font, size, &format!("{rest} …"), width)
                 } else {
                     ui::fit(&font, size, text[range].trim_end(), width)
@@ -643,14 +645,7 @@ impl Wrapped {
     /// down to `min` at which it fits `height` pixels whole, no word
     /// wider than a line; at `min` as [`new`](Self::new) where it does
     /// not.
-    pub fn fitting(
-        env: &Env<'_>,
-        text: &str,
-        max: f32,
-        min: f32,
-        width: u16,
-        height: u16,
-    ) -> Self {
+    pub fn fitting(env: &Env<'_>, text: &str, max: f32, min: f32, width: u16, height: u16) -> Self {
         let Some(font) = UiStyle::new(env).font(env) else {
             return Self::new(env, text, max, width, height);
         };
@@ -783,9 +778,10 @@ mod tests {
             grays: 2,
             finger: 0,
         };
-        // Without a frame, automatic is small; inside one, normal, as
-        // frames always had it.
-        assert_eq!(Padding::Auto.pixels(&style, Frame::None), 8);
+        // Without a frame, automatic is none: lined up with the margins;
+        // inside one, normal, as frames always had it.
+        assert_eq!(Padding::Auto.pixels(&style, Frame::None), 0);
+        assert_eq!(Padding::Small.pixels(&style, Frame::None), 8);
         assert_eq!(Padding::Auto.pixels(&style, Frame::Line), 20);
         assert_eq!(Padding::Normal.pixels(&style, Frame::Card), 20);
         // None leaves the frame's line alone, nothing more.
@@ -802,10 +798,21 @@ mod tests {
     fn largest_size_is_one_that_fits() {
         // A font of three sizes: what is asked for is drawn at the
         // nearest below, so a step down may change nothing.
-        let drawn = |size: f32| [36.0, 28.0, 20.0].into_iter().find(|s| *s <= size).unwrap_or(20.0);
+        let drawn = |size: f32| {
+            [36.0, 28.0, 20.0]
+                .into_iter()
+                .find(|s| *s <= size)
+                .unwrap_or(20.0)
+        };
         let width = |size: f32| drawn(size) * 4.0;
-        assert_eq!(largest_size(48.0, 20.0, |s| width(s) <= 150.0).map(drawn), Some(36.0));
-        assert_eq!(largest_size(48.0, 20.0, |s| width(s) <= 120.0).map(drawn), Some(28.0));
+        assert_eq!(
+            largest_size(48.0, 20.0, |s| width(s) <= 150.0).map(drawn),
+            Some(36.0)
+        );
+        assert_eq!(
+            largest_size(48.0, 20.0, |s| width(s) <= 120.0).map(drawn),
+            Some(28.0)
+        );
         assert_eq!(largest_size(48.0, 20.0, |s| width(s) <= 79.0), None);
         // Never larger than asked, never below the least.
         assert_eq!(largest_size(30.0, 20.0, |_| true), Some(30.0));

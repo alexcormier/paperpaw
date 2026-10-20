@@ -463,15 +463,6 @@ fn share(room: u16, gap: u16, n: u16) -> u16 {
     room.saturating_sub(gap.saturating_mul(n.saturating_sub(1))) / n.max(1)
 }
 
-/// How many of `n` parts fit side by side in `room` pixels with `gap`
-/// between them, each `least` pixels at least: all where they do, else
-/// as many as do, one at least.
-fn fitting(room: u16, gap: u16, least: u16, n: usize) -> usize {
-    let each = u32::from(least.max(1)) + u32::from(gap);
-    let fit = (u32::from(room) + u32::from(gap)) / each;
-    n.min(fit as usize).max(1)
-}
-
 /// The height of a line of text `size` pixels large, as a float.
 fn line(font: &FontHandle<'_>, size: f32) -> f32 {
     font.line_metrics(size).line_height

@@ -59,8 +59,8 @@ pub mod look;
 pub use look::{
     Frame, Look, Padding, Size, Wrapped, caption_height, choice, draw_caption, draw_frame,
     draw_line, draw_message, draw_wrapped, fit_line, frame, frame_setting, frame_spec,
-    ink_baseline, largest_size, line_height, padding, padding_setting, padding_spec,
-    part_setting, part_spec, setting_id, shows, size, size_setting, size_spec,
+    ink_baseline, largest_size, line_height, padding, padding_setting, padding_spec, part_setting,
+    part_spec, setting_id, shows, size, size_setting, size_spec,
 };
 
 /// The kinds of widgets ([`WidgetSpec::category`]), each the translation
