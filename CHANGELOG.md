@@ -12,6 +12,18 @@ change the plugin SDK.
   names its own firmware in its image (`paperpaw-xteink-pro`,
   `paperpaw-xteink-classic`; the X4's stays `paperpaw-xteink`), as the
   two share the chip but not the board. SDK: `firmware::CHIP_ESP32_S3`.
+- Releases carry the firmware of the X4 Pro and the X4 Classic as they
+  do the X4's: `paperpaw-x4-pro-<version>.bin` for the whole flash with
+  its signature file (`.bin.sig`), the signed update
+  (`-update.bin`), the plugins built in (`-plugins.txt`) and checksums,
+  and the same for `paperpaw-x4-classic`; a release fails if an update
+  is not for its device's chip. CI lints and builds all three. The
+  firmware's toolchains are pinned, as native code plugins need the
+  same compiler (ADR 0024): Rust 1.99.0 for the X4
+  (`shells/xteink/rust-toolchain.toml`), espup's `esp` toolchain
+  1.97.0.0 with the Xtensa GCC 14.2.0 for the ESP32-S3 devices
+  (`shells/xteink/versions.env`). The firmware is a workspace of its
+  own, so it also builds in a checkout inside another one.
 - Joplin (PLANNING C15, S1): a book's highlights and notes, once
   exported, become a note in Joplin, one per book, in a notebook named
   in the settings. Exporting again updates the note, also where it was
