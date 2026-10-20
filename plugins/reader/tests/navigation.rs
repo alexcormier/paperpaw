@@ -580,3 +580,69 @@ fn the_list_of_marks_leads_to_them_and_exports_them() {
     assert!(text.contains("## Highlights"), "{text}");
     assert!(text.contains("## Bookmarks"), "{text}");
 }
+
+/// The text at `at` in the EPUB `path` on `storage`, converted with the
+/// book's styles or without.
+fn epub_text_at(storage: &Shared, path: &str, styles: bool, at: (u32, u32), n: usize) -> String {
+    use paperpaw_sdk::document::Document;
+    let book = paperpaw_plugin_format_epub::EpubDocument::open_with(storage, path, styles).unwrap();
+    let block = book
+        .block_at(storage, Locator::new(at.0, at.1))
+        .unwrap()
+        .expect("a block there");
+    block.text[block.text_index(at.1)..]
+        .chars()
+        .take(n)
+        .collect()
+}
+
+/// Its own styles give a book style runs its conversion without them
+/// lacks, so the same text is at other places there: the reader keeps
+/// the place on its text when they are switched, with the book open or
+/// closed.
+#[test]
+fn the_place_stays_on_its_text_when_the_books_styles_switch() {
+    let body: String = (0..300)
+        .map(|n| {
+            format!(
+                "<p>Paragraph {n} has <span style=\"font-weight: bold\">some words in bold</span> \
+                 and <span style=\"font-style: italic\">a few in italics</span> among the others.</p>"
+            )
+        })
+        .collect();
+    let epub = epub(&[("one.xhtml", body)], &[]);
+    let path = "books/styled.epub";
+    let storage = Shared::default();
+    let mut reading = Reading::new(BUTTONS, storage.clone(), path, &epub, "");
+    reading.open();
+    for _ in 0..20 {
+        reading.run(actions::NEXT_PAGE);
+    }
+    let place = reading.kept();
+    let text = epub_text_at(&storage, path, true, place, 20);
+    for (styles, open) in [("off", true), ("on", false)] {
+        if !open {
+            reading.press(actions::BACK);
+        }
+        reading.now += 10;
+        let effects = reading
+            .kernel
+            .set_setting(
+                paperpaw_sdk::Instant(reading.now),
+                "reader.publisher-styles",
+                styles,
+            )
+            .unwrap();
+        reading.settle(effects);
+        if !open {
+            reading.open();
+        }
+        let at = reading.kept();
+        // From the start of the line the text is in, laid out anew.
+        let shown = epub_text_at(&storage, path, styles == "on", at, 90);
+        assert!(
+            shown.contains(&text),
+            "{text:?} at {place:?}, then {shown:?} at {at:?} with styles {styles}"
+        );
+    }
+}

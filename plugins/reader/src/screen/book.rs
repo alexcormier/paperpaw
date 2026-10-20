@@ -63,6 +63,11 @@ pub(super) struct Book {
     pub(super) unsaved: bool,
     /// Whether it could not be written once (and the reader was told).
     pub(super) save_failed: bool,
+    /// The conversion of the book its positions are in (see
+    /// [`conversion`]), and whether `progress.ini` holds the position's
+    /// XPointer too, to find it in another.
+    pub(super) conversion: u64,
+    pub(super) pointed: bool,
     pub(super) index: Option<PageIndex>,
     /// Where background pagination continues.
     pub(super) indexing: Option<Locator>,
@@ -117,17 +122,49 @@ pub(super) enum Target {
     Mark(usize),
 }
 
-/// The position kept in a book's `progress.ini`.
-pub(super) fn position_in(text: &str) -> Option<Locator> {
+/// The position kept in a book's `progress.ini`: where, in which
+/// conversion of the book (see [`conversion`]), and as an XPointer where
+/// it was kept with one (both added after version 1).
+pub(super) struct Kept {
+    pub(super) at: Locator,
+    pub(super) conversion: Option<u64>,
+    pub(super) xpointer: Option<String>,
+}
+
+/// The position kept in a book's `progress.ini` (see [`Kept`]).
+pub(super) fn kept_in(text: &str) -> Option<Kept> {
     let (mut section, mut offset) = (None, None);
+    let (mut conversion, mut xpointer) = (None, None);
     for entry in paperpaw_sdk::config::parse(text).filter_map(Result::ok) {
         match (entry.section, entry.key) {
             ("progress", "section") => section = entry.value.as_u32(),
             ("progress", "offset") => offset = entry.value.as_u32(),
+            ("progress", "conversion") => {
+                conversion = u64::from_str_radix(&entry.value.as_str(), 16).ok();
+            }
+            ("progress", "xpointer") => xpointer = Some(entry.value.as_str().to_string()),
             _ => {}
         }
     }
-    Some(Locator::new(section?, offset?))
+    Some(Kept {
+        at: Locator::new(section?, offset?),
+        conversion,
+        xpointer,
+    })
+}
+
+/// Which conversion of a book the reader's options make: positions are
+/// those of one conversion (an EPUB's with its own styles holds style
+/// runs the one without them lacks, so its text is at other places).
+pub(super) fn conversion(env: &Env<'_>) -> u64 {
+    let styles = env
+        .settings
+        .bool(crate::settings::PUBLISHER_STYLES.as_str());
+    env.stylesheets
+        .iter()
+        .fold(fnv1a64([u8::from(styles)]), |hash, sheet| {
+            hash.rotate_left(5) ^ fnv1a64(sheet.as_bytes())
+        })
 }
 
 /// Remembers `path` as the book read last (reopened at start-up).
@@ -195,6 +232,8 @@ impl Book {
             saved_at: None,
             unsaved: false,
             save_failed: false,
+            conversion: conversion(env),
+            pointed: true,
             dir,
             title,
             document,
@@ -221,9 +260,10 @@ impl Book {
         // Kept with another layout maybe: from the start of its line.
         // Where the book cannot be shown there (it changed, say), from its
         // start.
-        let start = book
-            .saved_position(env)
-            .map_or(Locator::START, |at| book.line_start(env, at));
+        let saved = book.saved_position(env);
+        let start = saved.map_or(Locator::START, |(at, _)| book.line_start(env, at));
+        // Found in another conversion: kept anew as one of this one.
+        book.unsaved = saved.is_some_and(|(_, found)| found);
         book.page = match book.layout(env, start) {
             Ok(page) if !page.is_past_end() => page,
             _ if start != Locator::START => book.layout(env, Locator::START).map_err(error)?,
@@ -434,9 +474,18 @@ impl Book {
         format!("{}/progress.ini", self.dir)
     }
 
-    pub(super) fn saved_position(&self, env: &Env<'_>) -> Option<Locator> {
+    /// The position kept, and whether it was found by its XPointer: kept
+    /// in another conversion of the book (its own styles switched since).
+    pub(super) fn saved_position(&self, env: &Env<'_>) -> Option<(Locator, bool)> {
         let data = paperpaw_sdk::read_file(env.storage, &self.progress_path(), 4096).ok()?;
-        position_in(core::str::from_utf8(&data).ok()?)
+        let kept = kept_in(core::str::from_utf8(&data).ok()?)?;
+        let found = match (kept.conversion, &kept.xpointer) {
+            (Some(conversion), Some(xpointer)) if conversion != self.conversion => {
+                self.document.locate_xpointer(env.storage, xpointer)
+            }
+            _ => None,
+        };
+        Some(found.map_or((kept.at, false), |at| (at, true)))
     }
 
     pub(super) fn percent(&self) -> f32 {
@@ -452,35 +501,48 @@ impl Book {
             .is_some_and(|at| now.since(at) < SAVE_EVERY_MS);
         self.unsaved = recent;
         if !recent {
-            self.save_position(cx);
+            self.save_position(cx, false);
         }
         recent
     }
 
-    /// Writes the position if it waits; `force` also before its time.
+    /// Writes the position if it waits; `force` also before its time, and
+    /// with its XPointer (the book is closed, the device goes to sleep).
     pub(super) fn save_due(&mut self, cx: &mut Cx<'_, '_>, force: bool) {
         let now = cx.env().now;
         let due = self
             .saved_at
             .is_none_or(|at| now.since(at) >= SAVE_EVERY_MS);
-        if self.unsaved && (force || due) {
+        if (self.unsaved || force && !self.pointed) && (force || due) {
             self.unsaved = false;
-            self.save_position(cx);
+            self.save_position(cx, force);
         }
     }
 
-    /// Writes the position; where the storage refuses, says so once a
-    /// book (not at every page).
-    pub(super) fn save_position(&mut self, cx: &mut Cx<'_, '_>) {
+    /// Writes the position, with its XPointer if `pointed` (finding it
+    /// takes a while on the X4, so not at every page); where the storage
+    /// refuses, says so once a book (not at every page).
+    pub(super) fn save_position(&mut self, cx: &mut Cx<'_, '_>, pointed: bool) {
         let env = *cx.env();
         self.saved_at = Some(env.now);
         let start = self.page.start;
-        let text = format!(
-            "[progress]\nsection = {}\noffset = {}\npercent = {:.1}\n",
+        let mut text = format!(
+            "[progress]\nsection = {}\noffset = {}\npercent = {:.1}\nconversion = {:016x}\n",
             start.section,
             start.offset,
-            self.percent()
+            self.percent(),
+            self.conversion,
         );
+        let xpointer = pointed
+            .then(|| self.document.xpointer(env.storage, start))
+            .flatten();
+        if let Some(xpointer) = xpointer {
+            text.push_str(&format!(
+                "xpointer = {}\n",
+                paperpaw_sdk::config::quote(&xpointer)
+            ));
+        }
+        self.pointed = pointed;
         let saved = env.storage.write(&self.progress_path(), text.as_bytes());
         if saved.is_err() && !self.save_failed {
             self.save_failed = true;
