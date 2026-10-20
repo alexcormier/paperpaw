@@ -93,8 +93,20 @@ fn shown(kernel: &mut Kernel) -> String {
     labels.join("\n")
 }
 
+/// The tests' turns with the library: when its catalog was made is kept
+/// for the whole program, as on a device, so tests that make or read it
+/// take turns rather than run beside each other.
+static TURN: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// Waits for this test's turn with the library.
+fn turn() -> std::sync::MutexGuard<'static, ()> {
+    TURN.lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 #[test]
 fn the_catalog_is_made_once_and_after_changes() {
+    let _turn = turn();
     let storage = Rc::new((0..40).fold(MemoryStorage::new(), |card, i| {
         card.with(&format!("books/book {i:02}.txt"), "Some text.")
     }));

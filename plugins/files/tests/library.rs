@@ -140,8 +140,20 @@ fn action(kernel: &mut Kernel, id: &'static str) {
 /// Covered by a book (here its information, also a full screen), the
 /// library reads nothing when books come or settings change: once, when
 /// it shows again.
+/// The tests' turns with the library: when its catalog was made is kept
+/// for the whole program, as on a device, so tests that make or read it
+/// take turns rather than run beside each other.
+static TURN: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// Waits for this test's turn with the library.
+fn turn() -> std::sync::MutexGuard<'static, ()> {
+    TURN.lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 #[test]
 fn hidden_it_reads_nothing_until_it_shows() {
+    let _turn = turn();
     let (mut kernel, listings) = library(card(5), "");
     let info = Params::new().with(params::PATH, "books/book 01.txt");
     let effects = kernel.open_screen(Instant(0), paperpaw_plugin_files::INFO_SCREEN, info);
@@ -169,6 +181,7 @@ fn hidden_it_reads_nothing_until_it_shows() {
 /// marking a book finished on its sheet keeps the focus on it.
 #[test]
 fn the_focus_stays_on_its_book() {
+    let _turn = turn();
     // The order as it comes: by recent reading.
     let (mut kernel, _) = library(card(30), "");
     for _ in 0..13 {
@@ -205,6 +218,7 @@ fn the_focus_stays_on_its_book() {
 /// chooses what is shown, which confirm opens.
 #[test]
 fn buttons_work_as_in_every_list() {
+    let _turn = turn();
     let (mut kernel, _) = library(
         card(30),
         "[files]
@@ -247,6 +261,7 @@ sort = files.sort.name
 /// not a file).
 #[test]
 fn the_folder_chooser_starts_in_the_folder_set() {
+    let _turn = turn();
     let storage = card(2)
         .with("books/Fantasy/a.txt", "A")
         .with("books/Fantasy/Old/b.txt", "B");

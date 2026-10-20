@@ -363,7 +363,9 @@ const CASES: &[Case] = &[
         profile: "xteink-x4",
         book: None,
         sets: &[],
-        script: "run:about.open,wait:300",
+        // Long enough for its pages to be counted (on the X4 with rests
+        // between), so the status line shows the page, not a percentage.
+        script: "run:about.open,wait:40000",
         colour: 0,
     },
     Case {

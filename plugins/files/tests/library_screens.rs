@@ -143,6 +143,7 @@ fn open(app: &mut App, label: &str) {
 
 #[test]
 fn an_empty_library_says_where_books_come_from() {
+    let _turn = turn();
     for device in DEVICES {
         let mut app = library(device, "", &[]);
         assert!(app.shows("No books here yet"), "{}", app.described());
@@ -160,6 +161,7 @@ fn an_empty_library_says_where_books_come_from() {
 /// library showed again).
 #[test]
 fn an_empty_library_shows_again_after_its_menu_closes() {
+    let _turn = turn();
     for device in DEVICES {
         let mut app = library(device, "", &[]);
         app.run(actions::MENU);
@@ -172,6 +174,7 @@ fn an_empty_library_shows_again_after_its_menu_closes() {
 
 #[test]
 fn a_library_folder_that_is_missing_shows_as_empty() {
+    let _turn = turn();
     for device in DEVICES {
         let mut app = library(device, "[files]\nroot = nowhere/at/all\n", &many(3));
         assert!(app.shows("No books here yet"), "{}", app.described());
@@ -181,6 +184,7 @@ fn a_library_folder_that_is_missing_shows_as_empty() {
 
 #[test]
 fn every_one_of_many_books_is_reached_by_buttons_and_by_touch() {
+    let _turn = turn();
     let books = many(57);
     let names: Vec<String> = (1..=57).map(|n| format!("Book {n:02}")).collect();
     for device in DEVICES {
@@ -193,6 +197,7 @@ fn every_one_of_many_books_is_reached_by_buttons_and_by_touch() {
 
 #[test]
 fn page_buttons_turn_whole_pages_and_come_back() {
+    let _turn = turn();
     let mut app = library(X4, "[files]\nsort = files.sort.name\n", &many(57));
     let first_page = rows(&mut app);
     assert!(first_page.len() > 2 && first_page.len() < 57);
@@ -208,6 +213,7 @@ fn page_buttons_turn_whole_pages_and_come_back() {
 
 #[test]
 fn the_grid_of_covers_reaches_every_book_too() {
+    let _turn = turn();
     let books = many(23);
     let names: Vec<String> = (1..=23).map(|n| format!("Book {n:02}")).collect();
     for device in DEVICES {
@@ -227,6 +233,7 @@ fn the_grid_of_covers_reaches_every_book_too() {
 
 #[test]
 fn books_in_folders_are_listed_and_their_folders_are_collections() {
+    let _turn = turn();
     let files = vec![
         ("books/Zeta.txt".to_string(), TEXT.to_vec()),
         ("books/Alpha/Beta/Gamma/Deep.txt".to_string(), TEXT.to_vec()),
@@ -258,6 +265,7 @@ fn books_in_folders_are_listed_and_their_folders_are_collections() {
 
 #[test]
 fn books_with_odd_names_show_and_open() {
+    let _turn = turn();
     let long = "L".repeat(180);
     let files = vec![
         ("books/Ünïcödé 日本語 📚.txt".to_string(), TEXT.to_vec()),
@@ -312,6 +320,7 @@ fn books_with_odd_names_show_and_open() {
 
 #[test]
 fn the_order_by_title_ignores_case_and_folders() {
+    let _turn = turn();
     let files = vec![
         ("books/banana.txt".to_string(), TEXT.to_vec()),
         ("books/Apple.txt".to_string(), TEXT.to_vec()),
@@ -327,6 +336,7 @@ fn the_order_by_title_ignores_case_and_folders() {
 
 #[test]
 fn recently_read_books_come_first_in_the_order_they_were_read() {
+    let _turn = turn();
     let files = many(5);
     for device in DEVICES {
         let touch = device.input.touch;
@@ -356,6 +366,7 @@ fn recently_read_books_come_first_in_the_order_they_were_read() {
 
 #[test]
 fn the_row_above_the_books_chooses_what_shows_and_the_title_opens_the_menu() {
+    let _turn = turn();
     // Buttons: up from the first book reaches the row above the books.
     let mut app = library(X4, "", &many(3));
     app.run(actions::UP);
@@ -383,6 +394,7 @@ fn the_row_above_the_books_chooses_what_shows_and_the_title_opens_the_menu() {
 
 #[test]
 fn a_book_removed_while_the_list_shows_goes_from_it() {
+    let _turn = turn();
     for device in DEVICES {
         let mut app = library(device, "[files]\nsort = files.sort.name\n", &many(4));
         assert_eq!(rows(&mut app).len(), 4);
@@ -398,6 +410,7 @@ fn a_book_removed_while_the_list_shows_goes_from_it() {
 
 #[test]
 fn opening_a_book_removed_unannounced_does_not_break_the_library() {
+    let _turn = turn();
     for device in DEVICES {
         let mut app = library(device, "[files]\nsort = files.sort.name\n", &many(2));
         assert_eq!(rows(&mut app), ["Book 01", "Book 02"]);
@@ -418,6 +431,7 @@ fn opening_a_book_removed_unannounced_does_not_break_the_library() {
 /// library kept its focus).
 #[test]
 fn every_book_of_the_whole_library_folder_removed_leaves_it_empty() {
+    let _turn = turn();
     let mut app = library(TOUCH, "", &many(3));
     for n in 1..=3 {
         app.storage
@@ -471,6 +485,7 @@ fn choose(app: &mut App, option: &str) {
 
 #[test]
 fn favourites_are_kept_and_shown_on_their_shelf() {
+    let _turn = turn();
     for device in DEVICES {
         let mut app = library(device, "[files]\nsort = files.sort.name\n", &many(3));
         sheet_of(&mut app, "Book 02");
@@ -493,6 +508,7 @@ fn favourites_are_kept_and_shown_on_their_shelf() {
 
 #[test]
 fn a_finished_book_moves_to_the_archive_folder_with_its_name_kept_free() {
+    let _turn = turn();
     let mut files = many(2);
     // A book of the same name is in the archive already.
     files.push(("books/Archive/Book 01.txt".to_string(), b"old".to_vec()));
@@ -526,6 +542,7 @@ fn a_finished_book_moves_to_the_archive_folder_with_its_name_kept_free() {
 
 #[test]
 fn a_book_in_the_archive_is_not_offered_to_be_archived_again() {
+    let _turn = turn();
     let files = vec![("books/Archive/Done.txt".to_string(), TEXT.to_vec())];
     let mut app = library(TOUCH, "", &files);
     // Every book in the archive: the list says where they are.
@@ -538,6 +555,7 @@ fn a_book_in_the_archive_is_not_offered_to_be_archived_again() {
 
 #[test]
 fn book_information_opens_from_the_sheet() {
+    let _turn = turn();
     for device in DEVICES {
         let mut app = library(device, "", &many(1));
         sheet_of(&mut app, "Book 01");
@@ -551,6 +569,7 @@ fn book_information_opens_from_the_sheet() {
 
 #[test]
 fn searching_finds_books_by_their_title() {
+    let _turn = turn();
     for device in DEVICES {
         let files = vec![
             ("books/Moby Dick.txt".to_string(), TEXT.to_vec()),
@@ -567,6 +586,7 @@ fn searching_finds_books_by_their_title() {
 
 #[test]
 fn an_empty_search_opens_nothing() {
+    let _turn = turn();
     let mut app = library(X4, "", &many(1));
     app.will_type("   ");
     app.run(Id::new_static("files.search"));
@@ -575,6 +595,7 @@ fn an_empty_search_opens_nothing() {
 
 #[test]
 fn many_books_in_many_folders_show_at_once_and_their_folders_on_the_shelves() {
+    let _turn = turn();
     // 400 books in 20 folders: the first page shows books at once.
     let files: Vec<(String, Vec<u8>)> = (0..400)
         .map(|n| {
