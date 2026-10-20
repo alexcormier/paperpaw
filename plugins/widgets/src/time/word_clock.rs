@@ -17,7 +17,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use paperpaw_sdk::time;
-use paperpaw_sdk::widgets::{self, Align, Drawn, Frame, Size};
+use paperpaw_sdk::widgets::{self, Align, Drawn, Frame, Padding, Size};
 use paperpaw_sdk::{
     Arg, Canvas, Color, Env, FontHandle, Id, Point, Rect, RegisterError, Registrar, Translator,
 };
@@ -51,9 +51,10 @@ const LEADS: [&str; 3] = [
 const KEY: &str = "widgets.word-clock";
 
 /// Its settings, kept in the program.
-static SETTINGS: [SettingSpec; 8] = [
+static SETTINGS: [SettingSpec; 9] = [
     widgets::align_spec("widgets.word-clock.align", ID, Align::Left),
     widgets::frame_spec("widgets.word-clock.frame", ID, Frame::None),
+    widgets::padding_spec("widgets.word-clock.padding", ID, Padding::Auto),
     SettingSpec::fixed_choice(
         "widgets.word-clock.style",
         "widgets.setting.style",
@@ -242,12 +243,17 @@ fn draw_text(
     let mut area = look.area;
     let align = widgets::align(env, ID.as_str());
     let (lead, rest) = text(env, hour, minute);
-    if let Some(lead) = lead {
-        area = widgets::draw_caption(canvas, env, ID.as_str(), look, &lead);
-    }
     // Room for the dots below.
     let dot = (style.small * 0.22).max(2.0) as u32;
     let dots_band = if past.is_some() { (dot * 6) as u16 } else { 0 };
+    // The caption above, where it leaves a line of the small size.
+    let least = line(font, style.small) as u16;
+    let caption = widgets::caption_height(env);
+    if let Some(lead) = lead
+        && area.height >= caption + least + dots_band
+    {
+        area = widgets::draw_caption(canvas, env, ID.as_str(), look, &lead);
+    }
     let room = Rect::new(
         area.x,
         area.y,
@@ -256,18 +262,32 @@ fn draw_text(
     );
     let size = match widgets::size(env, ID.as_str()) {
         Size::Fit => largest(font, &rest, room, style.small, f32::from(room.height)),
-        size => size.text(&style) * 1.2,
+        size => largest(font, &rest, room, style.small, size.text(&style) * 1.2),
     };
-    let lines = balanced(font, size, &rest, f32::from(room.width));
     let height = line(font, size);
+    let mut lines = balanced(font, size, &rest, f32::from(room.width));
+    // Where not even the small size fits: as many lines as there is room
+    // for, the last one ending in "…".
+    let most = ((f32::from(room.height) / height) as usize).max(1);
+    if lines.len() > most {
+        let rest = lines[most - 1..].join(" ");
+        lines.truncate(most - 1);
+        lines.push(paperpaw_sdk::ui::fit(
+            font,
+            size,
+            &format!("{rest} …"),
+            f32::from(room.width),
+        ));
+    }
     let total = height * lines.len() as f32;
     let top = f32::from(room.y) + (f32::from(room.height) - total).max(0.0) / 2.0;
     let metrics = font.line_metrics(size);
     for (n, text) in lines.iter().enumerate() {
         let y = top + height * n as f32;
         let baseline = y + (height + metrics.ascent - metrics.descent) / 2.0;
-        let x = align.x(room, font.measure(size, text));
-        font.draw(canvas, size, x, baseline as i32, text, look.ink);
+        let shown = paperpaw_sdk::ui::fit(font, size, text, f32::from(room.width));
+        let x = align.x(room, font.measure(size, &shown));
+        font.draw(canvas, size, x, baseline as i32, &shown, look.ink);
     }
     canvas.describe(
         paperpaw_sdk::semantics::Role::Text,
@@ -294,56 +314,62 @@ fn draw_text(
 }
 
 /// The largest size, from `least` to `most`, at which `text` fits `room`
-/// broken into lines.
+/// broken into lines between words (no word wider than a line), as it
+/// is drawn; `least` where none does.
 pub(super) fn largest(font: &FontHandle<'_>, text: &str, room: Rect, least: f32, most: f32) -> f32 {
+    let width = f32::from(room.width);
     let fits = |size: f32| {
-        let lines = font.wrap(size, text, f32::from(room.width));
-        let widest = lines
-            .iter()
-            .map(|r| font.measure(size, text[r.clone()].trim_end()))
-            .fold(0.0, f32::max);
-        line(font, size) * lines.len() as f32 <= f32::from(room.height)
-            && widest <= f32::from(room.width)
+        words_in_lines(font, size, text, width)
+            .is_some_and(|lines| line(font, size) * lines.len() as f32 <= f32::from(room.height))
     };
-    let (mut low, mut high) = (least, most.max(least));
-    if fits(high) {
-        return high;
-    }
-    for _ in 0..10 {
-        let mid = (low + high) / 2.0;
-        if fits(mid) {
-            low = mid;
-        } else {
-            high = mid;
-        }
-    }
-    low
+    widgets::largest_size(most.max(least), least, fits).unwrap_or(least)
 }
 
-/// `text` broken into as many lines as `width` needs at `size`, the
-/// lines as even as can be (not one long and one short).
+/// The lines `text` breaks into at `size` in `width` pixels, between
+/// words only; `None` where a word alone is wider.
+fn words_in_lines(font: &FontHandle<'_>, size: f32, text: &str, width: f32) -> Option<Vec<String>> {
+    let mut lines: Vec<String> = Vec::new();
+    for word in text.split_whitespace() {
+        if font.measure(size, word) > width {
+            return None;
+        }
+        match lines.last_mut() {
+            Some(last) if font.measure(size, &format!("{last} {word}")) <= width => {
+                last.push(' ');
+                last.push_str(word);
+            }
+            _ => lines.push(String::from(word)),
+        }
+    }
+    Some(lines)
+}
+
+/// `text` broken into as many lines as `width` needs at `size`, between
+/// words only, the lines as even as can be (not one long and one short).
+/// A word wider than a line has a line to itself.
 pub(super) fn balanced(font: &FontHandle<'_>, size: f32, text: &str, width: f32) -> Vec<String> {
-    let lines = |width: f32| -> Vec<String> {
-        font.wrap(size, text, width)
-            .into_iter()
-            .map(|r| String::from(text[r].trim()))
-            .collect()
+    let lines = |width: f32| -> Option<Vec<String>> { words_in_lines(font, size, text, width) };
+    let Some(first) = lines(width) else {
+        return text.split_whitespace().map(String::from).collect();
     };
-    let count = lines(width).len();
+    let count = first.len();
     if count <= 1 {
-        return lines(width);
+        return first;
     }
     // The narrowest width that needs no more lines.
     let (mut low, mut high) = (width / count as f32, width);
+    let mut best = first;
     for _ in 0..8 {
         let mid = (low + high) / 2.0;
-        if lines(mid).len() > count {
-            low = mid;
-        } else {
-            high = mid;
+        match lines(mid) {
+            Some(narrow) if narrow.len() <= count => {
+                high = mid;
+                best = narrow;
+            }
+            _ => low = mid,
         }
     }
-    lines(high)
+    best
 }
 
 /// The grid's rows, from the translations.
@@ -514,10 +540,70 @@ fn halve(canvas: &mut Canvas<'_>, area: Rect, paper: Color) {
     );
 }
 
+/// Draws widget `id` in each of a few small places, with its default
+/// settings, and says whether any dot outside its place changed.
+#[cfg(test)]
+pub(super) fn drawn_outside(id: &str) -> Option<Rect> {
+    use paperpaw_graphics::Framebuffer;
+    use paperpaw_sdk::PixelFormat;
+
+    let h = crate::harness::Harness::new(paperpaw_sdk::MemoryStorage::new());
+    let env = h.env();
+    let display = crate::harness::DEVICE.display;
+    let mut fb = Framebuffer::new(display.width, display.height, PixelFormat::Gray4).unwrap();
+    let places = [
+        Rect::new(100, 100, 50, 50),
+        Rect::new(100, 100, 80, 50),
+        Rect::new(100, 100, 90, 60),
+        Rect::new(100, 100, 60, 200),
+        Rect::new(100, 100, 200, 60),
+        Rect::new(100, 100, 300, 120),
+    ];
+    for area in places {
+        let all = fb.bounds();
+        fb.canvas().fill(all, Color::WHITE);
+        let mut widget = env.widgets.make(id, &env).unwrap();
+        widget.place(&env, area);
+        widget.draw(&mut fb.canvas(), &env, area);
+        let view = fb.view();
+        for y in 0..display.height {
+            for x in 0..display.width {
+                let inside = x >= area.x
+                    && x < area.x + area.width
+                    && y >= area.y
+                    && y < area.y + area.height;
+                if !inside && view.pixel(x, y) != Color::WHITE {
+                    return Some(area);
+                }
+            }
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use paperpaw_i18n::Catalog;
+
+    #[test]
+    fn words_are_never_split_and_nothing_is_drawn_outside() {
+        let h = crate::harness::Harness::new(paperpaw_sdk::MemoryStorage::new());
+        let env = h.env();
+        let font = paperpaw_sdk::ui::UiStyle::new(&env).font(&env).unwrap();
+        let text = "It is quarter to eleven";
+        for width in [30.0, 60.0, 90.0, 140.0, 400.0] {
+            for size in [20.0, 28.0, 36.0] {
+                let lines = balanced(&font, size, text, width);
+                assert_eq!(lines.join(" "), text, "{width} at {size}");
+            }
+        }
+        // In a narrow, high place: as large as fits without a word cut.
+        let room = Rect::new(0, 0, 70, 400);
+        let size = largest(&font, text, room, 10.0, 400.0);
+        assert!(font.measure(size, "quarter") <= 70.0, "{size}");
+        assert_eq!(drawn_outside(ID.as_str()), None);
+    }
 
     fn translator(language: &str) -> Translator {
         let mut t = Translator::new();

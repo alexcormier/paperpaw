@@ -8,7 +8,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use paperpaw_sdk::time::{self, LocalTime};
-use paperpaw_sdk::widgets::{self, Align, Drawn, Frame};
+use paperpaw_sdk::widgets::{self, Align, Drawn, Frame, Padding};
 use paperpaw_sdk::{Canvas, Color, Env, Id, Point, Rect, RegisterError, Registrar};
 
 use paperpaw_sdk::SettingSpec;
@@ -27,9 +27,10 @@ const LOOKS: [&str; 3] = [
 const GROUPS: [&str; 2] = ["widgets.tiles.digits", "widgets.tiles.pairs"];
 
 /// Its settings, kept in the program.
-static SETTINGS: [SettingSpec; 8] = [
+static SETTINGS: [SettingSpec; 9] = [
     widgets::align_spec("widgets.tile-clock.align", ID, Align::Center),
     widgets::frame_spec("widgets.tile-clock.frame", ID, Frame::None),
+    widgets::padding_spec("widgets.tile-clock.padding", ID, Padding::Auto),
     SettingSpec::fixed_choice(
         "widgets.tile-clock.tiles",
         "widgets.setting.tiles",
@@ -121,7 +122,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     let (hours, minutes) = tiles(&now, twelve, pairs);
     let colon = widgets::shows(env, ID.as_str(), "colon");
     let small = line(&font, style.small);
-    let date = widgets::shows(env, ID.as_str(), "date")
+    let mut date = widgets::shows(env, ID.as_str(), "date")
         .then(|| super::date_text(env, ID.as_str(), now.year, now.month, now.day, false));
     let meridiem = twelve.then(|| {
         let key = if now.hour < 12 {
@@ -135,12 +136,6 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
                 .trim(),
         )
     });
-    let below = if date.is_some() || meridiem.is_some() {
-        small + style.gap as f32 / 2.0
-    } else {
-        0.0
-    };
-
     // Each tile `w` wide (pairs wider), `w * 1.4` high; tiles of a group
     // apart by a small gap, the groups by a larger one.
     let tile_w = |text: &str| if text.chars().count() > 1 { 1.55 } else { 1.0 };
@@ -148,15 +143,44 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     let gap = 0.08;
     let group_gap = if colon { 0.42 } else { 0.24 };
     let gaps = gap * (hours.len() + minutes.len() - 2) as f32 + group_gap;
-    let room_h = (f32::from(area.height) - below).max(0.0);
-    let mut w = (f32::from(area.width) / (units + gaps)).min(room_h / 1.4);
+    let tile = |below: f32| {
+        let room_h = (f32::from(area.height) - below).max(0.0);
+        let w = (f32::from(area.width) / (units + gaps)).min(room_h / 1.4);
+        // Fonts of fixed sizes have a largest: the tiles no larger than
+        // its digits fill well.
+        let digits = super::cap_height(&font, w * 1.4 * 0.66);
+        w.min(digits / 0.48 / 1.4)
+    };
+    // The line below (the date, "AM" or "PM") where it fits whole under
+    // the tiles and leaves them two thirds of the height; the date is
+    // left out first.
+    let line_below = small + style.gap as f32 / 2.0;
+    let meridiem_width = |m: &Option<String>| {
+        m.as_ref()
+            .map_or(0.0, |m| font.measure(style.small, m) + style.gap as f32)
+    };
+    let room_below = |date: &Option<String>, meridiem: &Option<String>| {
+        let total = tile(line_below) * (units + gaps);
+        let date_width = date.as_ref().map_or(0.0, |d| font.measure(style.small, d));
+        line_below * 3.0 <= f32::from(area.height)
+            && date_width + meridiem_width(meridiem) <= total + 0.5
+    };
+    let mut meridiem = meridiem;
+    if date.is_some() && !room_below(&date, &meridiem) {
+        date = None;
+    }
+    if meridiem.is_some() && !room_below(&date, &meridiem) {
+        meridiem = None;
+    }
+    let below = if date.is_some() || meridiem.is_some() {
+        line_below
+    } else {
+        0.0
+    };
+    let w = tile(below);
     if w < 6.0 {
         return;
     }
-    // Fonts of fixed sizes have a largest: the tiles no larger than its
-    // digits fill well.
-    let digits = super::cap_height(&font, w * 1.4 * 0.66);
-    w = w.min(digits / 0.48 / 1.4);
     let h = w * 1.4;
     let total = w * (units + gaps);
     let align = widgets::align(env, ID.as_str());
@@ -205,7 +229,9 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
                     look.paper
                 }
             };
-            let digit_size = super::fit_size(&font, size, text, width * 0.86);
+            let digit_size =
+                widgets::largest_size(size, 1.0, |s| font.measure(s, text) <= width * 0.86)
+                    .unwrap_or(1.0);
             let cx = x + width / 2.0;
             let cy = top + h / 2.0;
             super::draw_centred(canvas, &font, digit_size, cx, cy, text, digits);
@@ -244,9 +270,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         total as u16,
         small as u16,
     );
-    let meridiem_width = meridiem
-        .as_ref()
-        .map_or(0.0, |m| font.measure(style.small, m) + style.gap as f32);
+    let meridiem_width = meridiem_width(&meridiem);
     if let Some(m) = &meridiem {
         super::label(canvas, &font, style.small, Align::Right, row, m, look.faint);
     }
@@ -269,6 +293,11 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_tiles_stay_in_their_place() {
+        assert_eq!(super::super::word_clock::drawn_outside(ID.as_str()), None);
+    }
 
     fn at(hour: u8, minute: u8) -> LocalTime {
         LocalTime {
