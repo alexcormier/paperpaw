@@ -24,6 +24,12 @@ pub enum StorageError {
     Full,
     /// Any other I/O failure.
     Io,
+    /// The file is larger than the reader takes (e.g. a whole file read
+    /// into memory).
+    TooLarge,
+    /// The file is there but does not hold what was asked for, e.g. text
+    /// that is not UTF-8.
+    InvalidData,
 }
 
 impl fmt::Display for StorageError {
@@ -34,6 +40,8 @@ impl fmt::Display for StorageError {
             StorageError::Unsupported => "not supported",
             StorageError::Full => "storage full",
             StorageError::Io => "input/output error",
+            StorageError::TooLarge => "file too large",
+            StorageError::InvalidData => "invalid data",
         })
     }
 }
@@ -107,6 +115,13 @@ pub trait Storage {
     fn remove_dir_all(&self, path: &str) -> Result<(), StorageError> {
         let _ = path;
         Err(StorageError::Unsupported)
+    }
+
+    /// Whether names that differ only in case name the same entry, as on
+    /// FAT (memory cards), NTFS and APFS: `Books/A.epub` is
+    /// `books/a.epub` there. Storages that wrap another say what it says.
+    fn ignores_case(&self) -> bool {
+        false
     }
 
     /// Calls `with` with the file's path in the device's own file system,
@@ -259,17 +274,49 @@ impl<B: Storage, M: Storage> Storage for Mounted<B, M> {
         let base = self.base.sync();
         self.mounted.sync().and(base)
     }
+
+    /// Where either ignores case: a path is taken for another more often
+    /// then, never less.
+    fn ignores_case(&self) -> bool {
+        self.base.ignores_case() || self.mounted.ignores_case()
+    }
 }
 
 /// Whether `path` is a valid virtual file path: relative, `/`-separated,
-/// without empty, `.` or `..` segments and without backslashes, colons or
-/// NUL bytes.
+/// without empty, `.` or `..` segments, without backslashes, colons or
+/// control characters, and without names FAT and Windows take for
+/// another (a dot or space at the end, which they drop) or for a device
+/// ([`is_reserved_name`]). Every storage refuses other paths, so a path
+/// means the same entry on each.
 pub fn is_valid_path(path: &str) -> bool {
     !path.is_empty()
-        && !path.contains(['\\', '\0', ':'])
-        && path
-            .split('/')
-            .all(|segment| !segment.is_empty() && segment != "." && segment != "..")
+        && !path.contains(['\\', ':'])
+        && !path.chars().any(char::is_control)
+        && path.split('/').all(|segment| {
+            !segment.is_empty()
+                && segment != "."
+                && segment != ".."
+                && !segment.ends_with(['.', ' '])
+                && !is_reserved_name(segment)
+        })
+}
+
+/// Whether Windows takes file `name` for a device, whatever follows its
+/// first dot: `CON`, `PRN`, `AUX`, `NUL`, `COM0` to `COM9`, `LPT0` to
+/// `LPT9`, in any case (`nul.txt`, `Com1.tar.gz`).
+pub fn is_reserved_name(name: &str) -> bool {
+    let stem = name.split('.').next().unwrap_or(name).trim_end_matches(' ');
+    let Some(word) = stem.get(..3) else {
+        return false;
+    };
+    let is = |words: &[&str]| words.iter().any(|w| word.eq_ignore_ascii_case(w));
+    let mut rest = stem[3..].chars();
+    match (rest.next(), rest.next()) {
+        (None, _) => is(&["CON", "PRN", "AUX", "NUL"]),
+        // Windows counts superscript digits too: `COM¹`.
+        (Some('0'..='9' | '\u{b9}' | '\u{b2}' | '\u{b3}'), None) => is(&["COM", "LPT"]),
+        _ => false,
+    }
 }
 
 #[cfg(test)]
@@ -345,9 +392,38 @@ mod tests {
             assert!(is_valid_path(ok), "{ok}");
         }
         for bad in [
-            "", "/abs", "a//b", "a/../b", "..", "a/./b", "c:\\x", "a\\b", "x/",
+            "",
+            "/abs",
+            "a//b",
+            "a/../b",
+            "..",
+            "a/./b",
+            "c:\\x",
+            "a\\b",
+            "x/",
+            "a\0b",
+            "a\tb",
+            "a\nb/c",
+            "books.",
+            "books /a",
+            ".paperpaw./x",
+            "CON",
+            "books/nul.txt",
+            "Com1.tar.gz",
+            "lpt9",
+            "aux .txt",
+            "COM\u{b9}",
         ] {
-            assert!(!is_valid_path(bad), "{bad}");
+            assert!(!is_valid_path(bad), "{bad:?}");
+        }
+        for ok in [
+            "Console.txt",
+            "con-tour.txt",
+            "COM10",
+            "Aux armes.epub",
+            ".x",
+        ] {
+            assert!(is_valid_path(ok), "{ok}");
         }
     }
 }

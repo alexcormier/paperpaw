@@ -6,6 +6,8 @@ use alloc::string::{String, ToString};
 use paperpaw_sdk::time::{self, LocalTime};
 use paperpaw_sdk::{Arg, Env};
 
+use crate::store::Day;
+
 const DAY: i64 = 86_400;
 
 /// The local day (days since 1970) of a moment in Unix seconds.
@@ -22,6 +24,17 @@ pub(crate) fn today(env: &Env<'_>) -> Option<i32> {
 /// The date of a local day.
 pub(crate) fn date_of(day: i32) -> LocalTime {
     LocalTime::from_seconds(i64::from(day) * DAY)
+}
+
+/// The first day of the month of `day`.
+pub(crate) fn month_start(day: i32) -> i32 {
+    day - i32::from(date_of(day).day) + 1
+}
+
+/// Seconds read on `day`, from the days read (in order).
+pub(crate) fn seconds_on(days: &[Day], day: i32) -> u32 {
+    days.binary_search_by_key(&day, |d| d.day)
+        .map_or(0, |i| days[i].seconds)
 }
 
 /// The Unix second around which local day `day` starts (exact up to the

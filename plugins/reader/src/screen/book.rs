@@ -52,6 +52,8 @@ pub(super) struct Book {
     pub(super) language: String,
     pub(super) typography: Typography,
     pub(super) page: Page,
+    /// The starts of the pages turned forward to this one, one after
+    /// another (none before a jump).
     pub(super) history: Vec<Locator>,
     /// When the position was written last, and whether the page shown has
     /// changed since.
@@ -72,6 +74,8 @@ pub(super) struct Book {
     /// chapter starts, the index's pages then, and the page (found once
     /// a chapter, not every page turned).
     pub(super) chapter_end: core::cell::Cell<Option<(Locator, u32, u32)>>,
+    /// The same for the page the chapter begins on.
+    pub(super) chapter_first: core::cell::Cell<Option<(Locator, u32, u32)>>,
     /// The book's own fonts, if used.
     pub(super) embedded: Option<Embedded>,
     /// The links on the page.
@@ -190,6 +194,7 @@ impl Book {
             found: None,
             chapter: None,
             chapter_end: core::cell::Cell::new(None),
+            chapter_first: core::cell::Cell::new(None),
             embedded: None,
             links: Vec::new(),
             returns: Vec::new(),
@@ -278,6 +283,25 @@ impl Book {
         Some(last.saturating_sub(page))
     }
 
+    /// The page (from 0) the chapter begins on, where the chapter is
+    /// known and the pages are counted.
+    pub(super) fn chapter_first(&self, env: &Env<'_>) -> Option<u32> {
+        let index = self.index.as_ref().filter(|i| i.is_complete())?;
+        let (start, _, title) = self.chapter.as_ref()?;
+        if title.is_empty() {
+            return None;
+        }
+        if let Some((at, pages, first)) = self.chapter_first.get()
+            && at == *start
+            && pages == index.pages()
+        {
+            return Some(first);
+        }
+        let (first, _) = index.locate(env.storage, *start)?;
+        self.chapter_first.set(Some((*start, index.pages(), first)));
+        Some(first)
+    }
+
     pub(super) fn open_index(&self, env: &Env<'_>) -> PageIndex {
         PageIndex::open(
             env.storage,
@@ -302,6 +326,7 @@ impl Book {
         self.history.clear();
         self.index = Some(self.open_index(env));
         self.chapter_end.set(None);
+        self.chapter_first.set(None);
         self.indexing = None;
     }
 
@@ -459,15 +484,21 @@ impl Book {
             return false;
         }
         self.found = None;
-        if forward {
+        // The pages turned one after another, to turn back the same way;
+        // after a jump the page before is the index's, not the page left.
+        if forward && page.start == self.page.end {
             if self.history.len() == HISTORY {
                 self.history.remove(0);
             }
             self.history.push(self.page.start);
+        } else if page.end != self.page.start {
+            self.history.clear();
         }
         self.page = page;
         self.prepare_images(&env);
         self.update_chapter(&env);
+        // Found now, so the status lines read nothing while drawn.
+        self.chapter_first(&env);
         self.update_links(&env);
         if self.position_changed(&env) {
             cx.wake_at(env.now.add_millis(SAVE_EVERY_MS));
@@ -738,29 +769,25 @@ impl Book {
                 Some(self.locator_at(fraction))
             }
             "chapter" => {
-                // Where the top-level entries begin, exactly (their anchors).
+                // Where the entries begin, exactly (their anchors): the
+                // chapters the status lines name, also those in parts.
                 let storage = env.storage;
                 let mut starts: Vec<Locator> = (0..self.document.toc_len(storage).min(2000))
-                    .filter(|&i| {
-                        self.document
-                            .toc_entry(storage, i)
-                            .is_some_and(|e| e.level == 0)
-                    })
                     .filter_map(|i| self.document.toc_target(storage, i))
                     .collect();
                 starts.sort();
                 starts.dedup();
                 let here = self.page.start;
-                let current = starts.iter().rposition(|&s| s <= here);
-                let target = match (value < 0, current) {
-                    // Back: to the start of this chapter, or the one before.
-                    (true, Some(i)) if starts[i] < here => Some(i),
-                    (true, Some(i)) => i.checked_sub(1),
-                    (true, None) => None,
-                    (false, Some(i)) => Some(i + 1),
-                    (false, None) => Some(0),
-                };
-                target.and_then(|i| starts.get(i).copied())
+                if value > 0 {
+                    // On: the first chapter that begins on a later page.
+                    return starts.into_iter().find(|&s| s >= self.page.end);
+                }
+                // Back: to the start of this chapter, or the one before.
+                let current = starts.iter().rposition(|&s| s <= here)?;
+                match starts[current] < here {
+                    true => Some(starts[current]),
+                    false => current.checked_sub(1).map(|i| starts[i]),
+                }
             }
             _ => None,
         }

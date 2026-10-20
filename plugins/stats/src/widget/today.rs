@@ -11,8 +11,9 @@ use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::widgets::{self, Align, Frame, Size, Widget, WidgetSpec, WidgetTarget};
 use paperpaw_sdk::{Arg, Canvas, Env, Id, Rect, RegisterError, Registrar, SettingSpec};
 
-use super::{caption_room, frame_height, goal, line, seconds_on, shade};
-use crate::{fmt, overview, totals};
+use super::{caption_room, frame_height, goal, line, shade};
+use crate::fmt::{self, seconds_on};
+use crate::{overview, totals};
 
 pub(crate) const TODAY: Id = Id::new_static(NAME);
 /// Its id, as text.

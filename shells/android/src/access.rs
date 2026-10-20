@@ -4,7 +4,8 @@
 //!
 //! Android 11 and later need "All files access" for that
 //! (`MANAGE_EXTERNAL_STORAGE`, granted on a system settings page); older
-//! versions need the storage permission. PaperPaw never asks on its own: the
+//! versions need the storage permissions, to read and to write (downloads,
+//! uploads, renaming and deleting books). PaperPaw never asks on its own: the
 //! home screen offers it, and the app restarts with the shared storage when
 //! the user comes back with access granted.
 
@@ -17,7 +18,14 @@ use jni::{JNIEnv, JavaVM};
 /// Android 11, from which "All files access" replaces the storage
 /// permission.
 const ANDROID_11: i32 = 30;
-const READ_STORAGE: &str = "android.permission.READ_EXTERNAL_STORAGE";
+/// The storage permissions before Android 11: reading alone would leave
+/// the library read-only.
+const STORAGE: [&str; 2] = [
+    "android.permission.READ_EXTERNAL_STORAGE",
+    "android.permission.WRITE_EXTERNAL_STORAGE",
+];
+/// `PackageManager.PERMISSION_GRANTED`.
+const GRANTED: i32 = 0;
 
 /// Runs `f` with the JNI environment and the activity, clearing any Java
 /// exception it leaves; `None` on failure. Local references `f` creates
@@ -63,19 +71,21 @@ fn sdk_int(env: &mut JNIEnv<'_>) -> jni::errors::Result<i32> {
         .i()
 }
 
-/// Whether PaperPaw may read the shared storage.
+/// Whether PaperPaw may read and write the shared storage.
 pub fn granted(app: &AndroidApp) -> bool {
     with_activity(app, |env, activity| {
         if sdk_int(env)? >= ANDROID_11 {
-            env.call_static_method(
-                "android/os/Environment",
-                "isExternalStorageManager",
-                "()Z",
-                &[],
-            )?
-            .z()
-        } else {
-            let permission = env.new_string(READ_STORAGE)?;
+            return env
+                .call_static_method(
+                    "android/os/Environment",
+                    "isExternalStorageManager",
+                    "()Z",
+                    &[],
+                )?
+                .z();
+        }
+        for name in STORAGE {
+            let permission = env.new_string(name)?;
             let result = env
                 .call_method(
                     activity,
@@ -84,8 +94,11 @@ pub fn granted(app: &AndroidApp) -> bool {
                     &[JValue::Object(&permission)],
                 )?
                 .i()?;
-            Ok(result == 0)
+            if result != GRANTED {
+                return Ok(false);
+            }
         }
+        Ok(true)
     })
     .unwrap_or(false)
 }
@@ -145,14 +158,17 @@ pub fn removable_dirs(app: &AndroidApp) -> Vec<PathBuf> {
 }
 
 /// Asks the user for access: opens the "All files access" page for
-/// PaperPaw (Android 11+) or shows the permission dialog.
+/// PaperPaw (Android 11+) or shows the dialog for both storage
+/// permissions.
 pub fn request(app: &AndroidApp) {
     let opened = with_activity(app, |env, activity| {
         if sdk_int(env)? < ANDROID_11 {
             let class = env.find_class("java/lang/String")?;
-            let permissions = env.new_object_array(1, class, JObject::null())?;
-            let permission = env.new_string(READ_STORAGE)?;
-            env.set_object_array_element(&permissions, 0, permission)?;
+            let permissions = env.new_object_array(STORAGE.len() as i32, class, JObject::null())?;
+            for (at, name) in (0..).zip(STORAGE) {
+                let permission = env.new_string(name)?;
+                env.set_object_array_element(&permissions, at, permission)?;
+            }
             env.call_method(
                 activity,
                 "requestPermissions",

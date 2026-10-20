@@ -26,7 +26,7 @@ use paperpaw_sdk::{
 };
 
 use crate::rule::{self, Condition, EVERY_DAY, Effect, Rule, Trigger, WEEKDAYS, WEEKENDS};
-use crate::{CHOICE, PICK_SCREEN, effect_text, trigger_text, when_text};
+use crate::{CHOICE, PICK_SCREEN, Shared, effect_text, trigger_text, when_text};
 
 /// Replies: a trigger, a time, an effect, an action or switch picked, a
 /// rule's option.
@@ -123,13 +123,17 @@ pub(crate) struct RulesScreen {
     list: ListView,
     /// The line at the bottom.
     status: Rect,
+    state: Shared,
     rules: Vec<Rule>,
+    /// Whether the rules could be read: if not, nothing is saved over
+    /// them.
+    readable: bool,
     draft: Draft,
     message: Option<String>,
 }
 
 impl RulesScreen {
-    pub(crate) fn new(env: &Env<'_>) -> Self {
+    pub(crate) fn new(env: &Env<'_>, state: Shared) -> Self {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
         let display = env.device.display;
@@ -142,14 +146,28 @@ impl RulesScreen {
             display.width,
             display.height.saturating_sub(top + line),
         );
-        Self {
+        let mut screen = Self {
             list: ListView::new(area, style.noted_row()).focus_on_keys(env),
             status,
-            rules: rule::load(env.storage),
+            state,
+            rules: Vec::new(),
+            readable: true,
             draft: Draft::default(),
             message: None,
             style,
             header,
+        };
+        screen.reload(env);
+        screen
+    }
+
+    /// The rules as kept; where they cannot be read, none, and a word why.
+    fn reload(&mut self, env: &Env<'_>) {
+        let loaded = self.state.store.get(env.storage);
+        self.readable = loaded.is_some();
+        self.rules = loaded.unwrap_or_default();
+        if !self.readable {
+            self.message = Some(env.i18n.tr("rules.unreadable").to_string());
         }
     }
 
@@ -164,12 +182,25 @@ impl RulesScreen {
         cx.request_refresh(RefreshMode::Fast);
     }
 
-    /// Keeps the rules and sets the timer again.
-    fn save(&self, cx: &mut Cx<'_, '_>) {
+    /// Keeps the rules and sets the timers again. Not kept (the card
+    /// could not be written, or the rules could not be read), the list
+    /// goes back to what the card has, and says why.
+    fn save(&mut self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        rule::save(env.storage, &self.rules);
+        let saved = self.readable
+            && self
+                .state
+                .store
+                .save(env.storage, self.rules.clone())
+                .is_ok();
+        if !saved {
+            self.reload(&env);
+            if self.readable {
+                self.message = Some(env.i18n.tr("rules.not-saved").to_string());
+            }
+        }
         let mut out = Vec::new();
-        crate::schedule(&env, &mut out);
+        crate::schedule(&env, &self.state.store, &mut out);
         for command in out {
             cx.command(command);
         }
@@ -216,26 +247,17 @@ impl RulesScreen {
 
     /// Adds the rule drafted, doing `effect`.
     fn finish(&mut self, effect: Effect, cx: &mut Cx<'_, '_>) {
-        let env = *cx.env();
         let Some(trigger) = self.draft.trigger.clone() else {
             return;
         };
         self.draft = Draft::default();
-        let mut out = Vec::new();
-        crate::add(
-            &env,
-            Rule {
-                trigger,
-                effect,
-                on: true,
-                condition: Condition::Always,
-            },
-            &mut out,
-        );
-        for command in out {
-            cx.command(command);
-        }
-        self.rules = rule::load(env.storage);
+        self.rules.push(Rule {
+            trigger,
+            effect,
+            on: true,
+            condition: Condition::Always,
+        });
+        self.save(cx);
         self.list.focus = self.rules.len().saturating_sub(1);
         self.redraw(cx);
     }
@@ -332,7 +354,8 @@ impl Screen for RulesScreen {
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
-        self.rules = rule::load(cx.env().storage);
+        let env = *cx.env();
+        self.reload(&env);
         self.redraw(cx);
     }
 

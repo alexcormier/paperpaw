@@ -36,8 +36,9 @@ use crate::secrets::{SecretChange, Secrets};
 /// before it fails, on a device that manages Wi-Fi.
 pub const NETWORK_WAIT_MS: u64 = 30_000;
 
-/// What the shell is told to do with the radio.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// What the shell is told to do with the radio. Printed for debugging
+/// without the password.
+#[derive(Clone, PartialEq, Eq)]
 pub enum WifiCommand {
     /// Switches the radio on (not joining anything yet).
     On,
@@ -51,6 +52,22 @@ pub enum WifiCommand {
     Join { ssid: String, password: String },
     /// Leaves the network, keeping the radio on.
     Leave,
+}
+
+impl core::fmt::Debug for WifiCommand {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            WifiCommand::On => f.write_str("On"),
+            WifiCommand::Off => f.write_str("Off"),
+            WifiCommand::Scan => f.write_str("Scan"),
+            WifiCommand::Join { ssid, .. } => f
+                .debug_struct("Join")
+                .field("ssid", ssid)
+                .field("password", &"…")
+                .finish(),
+            WifiCommand::Leave => f.write_str("Leave"),
+        }
+    }
 }
 
 /// Where the radio is.
@@ -219,6 +236,15 @@ mod tests {
         );
         secrets.apply(forget("Cafe"));
         assert_eq!(known(&secrets).len(), 1);
+        // Kept and read back as named, tabs and all.
+        secrets.apply(keep("Odd\tName", "pw"));
+        let read = Secrets::decode(&secrets.encode());
+        assert!(known(&read).contains(&(String::from("Odd\tName"), String::from("pw"))));
+        let join = WifiCommand::Join {
+            ssid: String::from("n"),
+            password: String::from("s3cr3t"),
+        };
+        assert!(!alloc::format!("{join:?}").contains("s3cr3t"));
     }
 
     #[test]

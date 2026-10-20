@@ -10,6 +10,8 @@ pub(crate) struct KeySources {
     /// Every key map source, to rebuild the key map when the preset changes.
     pub(crate) sources: Vec<(Origin, Cow<'static, str>)>,
     pub(crate) presets: Vec<(Id, Cow<'static, str>)>,
+    /// Plugins' key maps that apply while a switch (the id) is on.
+    pub(crate) when: Vec<(Id, Cow<'static, str>)>,
 }
 
 impl Kernel {
@@ -209,6 +211,8 @@ impl Kernel {
             self.keys.sources.push((Origin::Plugin, source));
         }
         self.keys.presets.append(&mut staging.keymap_presets);
+        // Loaded once the settings are known (`rebuild_keymap`).
+        self.keys.when.append(&mut staging.keymaps_when);
         for catalog in staging.catalogs.drain(..) {
             self.shared.translator.add(catalog);
         }
@@ -312,10 +316,11 @@ impl Kernel {
         Ok(())
     }
 
-    /// Actions bound by any key map preset, for validation.
+    /// Actions bound by any key map preset or key map for a switch, for
+    /// validation.
     pub(crate) fn preset_actions(&self) -> Vec<Id> {
         let mut all = Keymap::default();
-        for (_, source) in &self.keys.presets {
+        for (_, source) in self.keys.presets.iter().chain(&self.keys.when) {
             all.load(source, Origin::Preset, true);
         }
         all.actions().cloned().collect()
@@ -339,6 +344,12 @@ impl Kernel {
         }
         for (origin, source) in &self.keys.sources {
             keymap.load(source, *origin, *origin != Origin::User);
+        }
+        // After the plugins' other bindings, which they then override.
+        for (setting, source) in &self.keys.when {
+            if self.shared.settings.bool(setting.as_str()) {
+                keymap.load(source, Origin::Plugin, true);
+            }
         }
         keymap.shrink_to_fit();
         self.shared.keymap = keymap;
@@ -614,6 +625,7 @@ impl Kernel {
         self.registry.shrink_to_fit();
         self.keys.sources.shrink_to_fit();
         self.keys.presets.shrink_to_fit();
+        self.keys.when.shrink_to_fit();
         self.subscriptions.shrink_to_fit();
         self.shared.plugins.shrink_to_fit();
         self.warnings.shrink_to_fit();

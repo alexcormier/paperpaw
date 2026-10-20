@@ -56,21 +56,24 @@ static SETTINGS: [SettingSpec; 8] = [
         &GOALS,
         GOALS[2],
         YEAR,
-    ),
+    )
+    .described("stats.setting.books-goal.help"),
     SettingSpec::fixed_choice(
         "stats.widget.year.style",
         "stats.setting.year-style",
         &STYLES,
         STYLES[0],
         YEAR,
-    ),
+    )
+    .described("stats.setting.year-style.help"),
     widgets::part_spec(
         "stats.widget.year.caption",
         YEAR,
         "stats.part.caption",
         true,
     ),
-    widgets::part_spec("stats.widget.year.plan", YEAR, "stats.part.plan", true),
+    widgets::part_spec("stats.widget.year.plan", YEAR, "stats.part.plan", true)
+        .described("stats.part.plan.help"),
     widgets::part_spec("stats.widget.year.last", YEAR, "stats.part.last-book", true),
 ];
 

@@ -15,6 +15,8 @@ pub struct DirStorage {
     root: PathBuf,
     /// The file read last, kept open for sequential reads.
     open: RefCell<Option<(String, File)>>,
+    /// The file system takes names in any case for the same entry.
+    ignores_case: bool,
 }
 
 impl DirStorage {
@@ -27,6 +29,7 @@ impl DirStorage {
         let root = root.into();
         fs::create_dir_all(&root)?;
         Ok(Self {
+            ignores_case: ignores_case(&root),
             root,
             open: RefCell::new(None),
         })
@@ -69,6 +72,18 @@ fn error(e: io::Error) -> StorageError {
     }
 }
 
+/// Puts the folder of `path` on the disk, so a file renamed into it is
+/// there after a power cut; where folders cannot be opened (Windows),
+/// the system does it.
+fn sync_dir(path: &Path) {
+    #[cfg(unix)]
+    if let Some(dir) = path.parent() {
+        let _ = File::open(dir).and_then(|dir| dir.sync_all());
+    }
+    #[cfg(not(unix))]
+    let _ = path;
+}
+
 fn create_parent(path: &Path) -> Result<(), StorageError> {
     match path.parent() {
         Some(parent) => fs::create_dir_all(parent).map_err(error),
@@ -98,6 +113,49 @@ fn is_own_name(dir: &Path, part: &str) -> bool {
                     .is_some_and(|name| name.eq_ignore_ascii_case(part))
             })
         })
+}
+
+/// Whether the file system at `root` takes a name in another case for the
+/// same entry (NTFS, APFS, FAT; not ext4): asked of the root or the
+/// nearest folder above it whose name has letters, in the other case.
+fn ignores_case(root: &Path) -> bool {
+    let probe = root.ancestors().find_map(|dir| {
+        let name = dir.file_name()?.to_str()?;
+        let other: String = name
+            .chars()
+            .map(|c| {
+                if c.is_lowercase() {
+                    c.to_ascii_uppercase()
+                } else {
+                    c.to_ascii_lowercase()
+                }
+            })
+            .collect();
+        (other != name).then(|| (dir, dir.with_file_name(other)))
+    });
+    match probe {
+        Some((dir, other)) => same_entry(dir, &other),
+        None => cfg!(any(windows, target_os = "macos")),
+    }
+}
+
+/// Whether paths `a` and `b` lead to the same entry.
+#[cfg(unix)]
+fn same_entry(a: &Path, b: &Path) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    match (fs::metadata(a), fs::metadata(b)) {
+        (Ok(a), Ok(b)) => a.dev() == b.dev() && a.ino() == b.ino(),
+        _ => false,
+    }
+}
+
+/// Whether paths `a` and `b` lead to the same entry.
+#[cfg(not(unix))]
+fn same_entry(a: &Path, b: &Path) -> bool {
+    match (fs::canonicalize(a), fs::canonicalize(b)) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => false,
+    }
 }
 
 impl Storage for DirStorage {
@@ -136,10 +194,23 @@ impl Storage for DirStorage {
         let target = self.resolve(path)?;
         self.forget(path);
         create_parent(&target)?;
-        // Write a temporary file and rename it: never a half-written file.
-        let temp = target.with_extension("paperpaw-tmp");
-        fs::write(&temp, data).map_err(error)?;
-        fs::rename(&temp, &target).map_err(error)
+        // Write a temporary file beside it, on the disk before it is
+        // renamed over the file: never a half-written file, also after a
+        // power cut. Named after the whole name, so `a.x` and `a.y` do
+        // not share one.
+        let mut temp = target.clone().into_os_string();
+        temp.push(".paperpaw-tmp");
+        let temp = PathBuf::from(temp);
+        let written = File::create(&temp).and_then(|mut file| {
+            file.write_all(data)?;
+            file.sync_all()
+        });
+        if let Err(e) = written.and_then(|()| fs::rename(&temp, &target)) {
+            let _ = fs::remove_file(&temp);
+            return Err(error(e));
+        }
+        sync_dir(&target);
+        Ok(())
     }
 
     fn append(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
@@ -213,6 +284,10 @@ impl Storage for DirStorage {
         }
     }
 
+    fn ignores_case(&self) -> bool {
+        self.ignores_case
+    }
+
     fn local_path(&self, path: &str, with: &mut dyn FnMut(&str)) {
         if let Some(real) = self.resolve(path).ok().as_deref().and_then(Path::to_str) {
             with(real);
@@ -223,6 +298,26 @@ impl Storage for DirStorage {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Files of one name with other extensions are written apart, and
+    /// nothing is left beside them.
+    #[test]
+    fn written_whole_by_their_own_temporary_files() {
+        let root = std::env::temp_dir().join(format!("paperpaw-temp-{}", std::process::id()));
+        let storage = DirStorage::new(&root).unwrap();
+        storage.write("a.x", b"x").unwrap();
+        // The temporary file of `a.y` was `a.paperpaw-tmp`, as `a.x`'s.
+        fs::write(root.join("a.paperpaw-tmp"), b"someone's").unwrap();
+        storage.write("a.y", b"y").unwrap();
+        assert_eq!(fs::read(root.join("a.paperpaw-tmp")).unwrap(), b"someone's");
+        let mut names = Vec::new();
+        storage
+            .list("", &mut |e| names.push(e.name.to_string()))
+            .unwrap();
+        names.sort();
+        assert_eq!(names, ["a.paperpaw-tmp", "a.x", "a.y"]);
+        fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn round_trips_files_below_the_root() {
@@ -242,6 +337,17 @@ mod tests {
         assert_eq!(storage.size("../outside"), Err(StorageError::InvalidPath));
         storage.remove("a/b.txt").unwrap();
         assert_eq!(storage.size("a/b.txt"), Err(StorageError::NotFound));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    /// Whether the storage ignores case is asked of the file system.
+    #[test]
+    fn knows_whether_case_counts() {
+        let root = std::env::temp_dir().join(format!("paperpaw-case-{}", std::process::id()));
+        let storage = DirStorage::new(&root).unwrap();
+        storage.write("Mixed.txt", b"x").unwrap();
+        let other = storage.resolve("mixed.txt").map(|p| p.exists());
+        assert_eq!(storage.ignores_case(), other == Ok(true));
         fs::remove_dir_all(root).unwrap();
     }
 

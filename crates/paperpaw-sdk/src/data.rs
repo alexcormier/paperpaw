@@ -79,7 +79,23 @@ pub enum Error {
     Storage(StorageError),
 }
 
+impl From<Error> for StorageError {
+    /// A file written by a newer PaperPaw, or not as its format says, is
+    /// [`StorageError::InvalidData`]: not read, not written over.
+    fn from(e: Error) -> Self {
+        match e {
+            Error::Storage(e) => e,
+            Error::Newer(_) | Error::Unreadable => StorageError::InvalidData,
+        }
+    }
+}
+
 impl Format {
+    /// The first version of a format: files as they were before versions
+    /// came, without a first line. Reading through it refuses files a
+    /// newer PaperPaw marked with a later version.
+    pub const FIRST: Format = Format::new(1, &[]);
+
     /// Format `version` with the steps from version 1 to it.
     pub const fn new(version: u32, upgrades: &'static [Upgrade]) -> Self {
         assert!(
@@ -89,7 +105,8 @@ impl Format {
         Self { version, upgrades }
     }
 
-    /// The version of a file's `text` (see the [module documentation](self)).
+    /// The version of a file's `text` (see the [module documentation](self)):
+    /// 0 where its mark says so (`# format 0`), which no format reads.
     pub fn version_of(text: &str) -> u32 {
         text.lines()
             .next()
@@ -106,6 +123,9 @@ impl Format {
         if version > self.version {
             return Err(Error::Newer(version));
         }
+        if version == 0 {
+            return Err(Error::Unreadable);
+        }
         let body = if version > 1 {
             text.split_once('\n').map_or("", |(_, rest)| rest)
         } else {
@@ -120,19 +140,22 @@ impl Format {
         Ok(body)
     }
 
-    /// The file at `path` in this version (see [`Format::read`]);
-    /// `Ok(None)` if there is none. Files larger than `limit` are refused.
+    /// The file at `path` in this version (see [`Format::read`]), a
+    /// UTF-8 byte order mark left out; `Ok(None)` if there is none. Files
+    /// larger than `limit` are refused. An error means the file is there
+    /// but could not be read: it is not to be written over.
     pub fn load(
         &self,
         storage: &dyn Storage,
         path: &str,
         limit: usize,
     ) -> Result<Option<String>, Error> {
-        if !storage.exists(path) {
-            return Ok(None);
-        }
-        let data = crate::read_file(storage, path, limit).map_err(Error::Storage)?;
-        let text = String::from_utf8(data).map_err(|_| Error::Unreadable)?;
+        let text = match crate::files::load_text_for_update(storage, path, limit) {
+            Ok(Some(text)) => text,
+            Ok(None) => return Ok(None),
+            Err(StorageError::InvalidData) => return Err(Error::Unreadable),
+            Err(e) => return Err(Error::Storage(e)),
+        };
         Ok(Some(self.read(&text)?.into_owned()))
     }
 
@@ -209,6 +232,8 @@ mod tests {
         assert_eq!(FORMAT.read("# format 4\nx\n"), Err(Error::Newer(4)));
         // A comment that is no mark is version 1.
         assert_eq!(Format::version_of("# my colours\ncolour = red"), 1);
+        // Versions start at 1.
+        assert_eq!(FORMAT.read("# format 0\nx\n"), Err(Error::Unreadable));
     }
 
     #[test]
@@ -228,6 +253,23 @@ mod tests {
         assert_eq!(FORMAT.save(&storage, "new.ini", "x"), Err(Error::Newer(9)));
         assert_eq!(FORMAT.load(&storage, "new.ini", 1024), Err(Error::Newer(9)));
         assert_eq!(FORMAT.load(&storage, "none.ini", 1024), Ok(None));
+        // There but not readable: not taken for missing.
+        let failing = crate::memory_storage::Unreadable(MemoryStorage::new().with("a.ini", "x"));
+        assert_eq!(
+            FORMAT.load(&failing, "a.ini", 1024),
+            Err(Error::Storage(StorageError::Io))
+        );
+        let ansi = MemoryStorage::new().with("c.ini", b"colour = r\xF6d\n".to_vec());
+        assert_eq!(FORMAT.load(&ansi, "c.ini", 1024), Err(Error::Unreadable));
+        assert_eq!(
+            StorageError::from(Error::Newer(2)),
+            StorageError::InvalidData
+        );
+        let bom = MemoryStorage::new().with("d.ini", "\u{feff}# format 3\n[look]\n");
+        assert_eq!(
+            FORMAT.load(&bom, "d.ini", 1024).unwrap().unwrap(),
+            "[look]\n"
+        );
         // Version 1 is written as before versions came.
         let v1 = Format::new(1, &[]);
         v1.save(&storage, "b.txt", "a\nb\n").unwrap();

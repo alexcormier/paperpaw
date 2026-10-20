@@ -11,13 +11,6 @@ pub(super) const COVER: Event<HttpReply> = Event::new("opds.cover");
 /// Parameter: the entry a cover belongs to.
 pub(super) const ENTRY: &str = "entry";
 
-pub(super) fn cover_download_path() -> String {
-    format!(
-        "{}/cover.tmp",
-        paperpaw_sdk::Env::plugin_dir(PLUGIN.as_str())
-    )
-}
-
 /// Where the cover from `url` is kept, decoded.
 pub(super) fn cover_path(url: &str) -> String {
     format!(
@@ -81,7 +74,7 @@ impl BrowseScreen {
             cx.command(Command::Http(request(
                 &self.catalog,
                 &url,
-                cover_download_path(),
+                self.temp.next("tmp"),
                 &COVER,
                 params,
             )));
@@ -92,7 +85,7 @@ impl BrowseScreen {
     }
 
     /// A cover arrived: decoded and kept, then the next one.
-    pub(super) fn cover_loaded(&mut self, reply: &HttpReply, cx: &mut Cx<'_, '_>) {
+    pub(super) fn cover_loaded(&mut self, reply: &HttpReply, file: &str, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
         let i = reply
             .context
@@ -103,7 +96,6 @@ impl BrowseScreen {
             return;
         };
         self.fetching = None;
-        let tmp = cover_download_path();
         let side = self.style.noted_row();
         let image = (200..300)
             .contains(&reply.status)
@@ -111,14 +103,13 @@ impl BrowseScreen {
                 let color = env.device.display.format.is_color();
                 paperpaw_sdk::image::picture_from_file(
                     env.storage,
-                    &tmp,
+                    file,
                     &cover_path(&url),
                     paperpaw_sdk::image::Fit::side(side),
                     color,
                 )
             })
             .flatten();
-        let _ = env.storage.remove(&tmp);
         match image.and_then(|image| self.small_cover(&env, &image)) {
             Some(small) => {
                 self.covers[i] = Some(small);

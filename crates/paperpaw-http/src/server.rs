@@ -6,7 +6,7 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use crate::{Error, has_break};
+use crate::{Error, is_header};
 
 /// The longest request head taken.
 pub const MAX_REQUEST_HEAD: usize = 8 * 1024;
@@ -70,14 +70,15 @@ pub fn parse_request(data: &[u8]) -> Result<Option<(RequestHead, usize)>, Error>
 }
 
 /// The bytes of an answer's head, for a body of `length` bytes; the
-/// connection closes after it. Headers with line breaks are left out.
+/// connection closes after it. Headers that are not well formed (e.g.
+/// with line breaks) are left out.
 pub fn response_head(
     status: u16,
     content_type: &str,
     headers: &[(String, String)],
     length: u64,
 ) -> Vec<u8> {
-    let content_type = if has_break(content_type) {
+    let content_type = if !is_header("Content-Type", content_type) {
         "application/octet-stream"
     } else {
         content_type
@@ -87,7 +88,7 @@ pub fn response_head(
         reason(status)
     );
     for (name, value) in headers {
-        if !has_break(name) && !has_break(value) {
+        if is_header(name, value) {
             head.push_str(&format!("{name}: {value}\r\n"));
         }
     }

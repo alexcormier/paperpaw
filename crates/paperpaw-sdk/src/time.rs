@@ -73,7 +73,7 @@ impl LocalTime {
             hour: (rest / 3600) as u8,
             minute: (rest / 60 % 60) as u8,
             second: (rest % 60) as u8,
-            weekday: (days + 4).rem_euclid(7) as u8,
+            weekday: weekday_of(days),
         }
     }
 
@@ -103,19 +103,30 @@ struct Summer {
     end: Rule,
 }
 
-/// `Mm.w.d/time`: weekday `d` (0 = Sunday) of week `w` (5 = the last) of
-/// month `m`, at `time` seconds local time.
+/// When summer time starts or ends: a day of the year, at `time` seconds
+/// local time.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Rule {
-    month: u8,
-    week: u8,
-    weekday: u8,
+    day: Day,
     time: i32,
 }
 
+/// A day of the year as POSIX `TZ` rules name it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Day {
+    /// `Mm.w.d`: weekday `d` (0 = Sunday) of week `w` (5 = the last) of
+    /// month `m`.
+    Weekday { month: u8, week: u8, weekday: u8 },
+    /// `Jn`: day `n` from 1 to 365, 29 February not counted.
+    Julian(u16),
+    /// `n`: day `n` from 0 to 365, 29 February counted.
+    Ordinal(u16),
+}
+
 impl TimeZone {
-    /// Parses a POSIX `TZ` rule such as `CET-1CEST,M3.5.0,M10.5.0/3`.
-    /// Only `Mm.w.d` dates are supported, as used by every common zone.
+    /// Parses a POSIX `TZ` rule such as `CET-1CEST,M3.5.0,M10.5.0/3`,
+    /// with dates of every kind POSIX has (`Mm.w.d`, `Jn`, `n`); `None`
+    /// for one that is not such a rule.
     pub fn parse(rule: &str) -> Option<TimeZone> {
         let mut p = Parser(rule.trim().as_bytes());
         p.name()?;
@@ -168,13 +179,26 @@ impl TimeZone {
 impl Rule {
     /// When the rule applies in `year`, in seconds since 1970 local time.
     fn local_seconds(&self, year: i32) -> i64 {
-        let first = days_from_civil(year, self.month, 1);
-        let first_weekday = (first + 4).rem_euclid(7) as u8;
-        let mut day = 1 + (self.weekday + 7 - first_weekday) % 7 + (self.week - 1) * 7;
-        while day > days_in_month(year, self.month) {
-            day -= 7;
-        }
-        (first + i64::from(day) - 1) * 86_400 + i64::from(self.time)
+        let days = match self.day {
+            Day::Weekday {
+                month,
+                week,
+                weekday,
+            } => {
+                let first = days_from_civil(year, month, 1);
+                let mut day = 1 + (weekday + 7 - weekday_of(first)) % 7 + (week - 1) * 7;
+                while day > days_in_month(year, month) {
+                    day -= 7;
+                }
+                first + i64::from(day) - 1
+            }
+            Day::Julian(n) => {
+                let leap_day = is_leap(year) && n >= 60;
+                days_from_civil(year, 1, 1) + i64::from(n) - 1 + i64::from(leap_day)
+            }
+            Day::Ordinal(n) => days_from_civil(year, 1, 1) + i64::from(n),
+        };
+        days * 86_400 + i64::from(self.time)
     }
 }
 
@@ -244,35 +268,54 @@ impl Parser<'_> {
         Some(sign * seconds)
     }
 
-    /// `Mm.w.d[/time]`.
+    /// `Mm.w.d`, `Jn` or `n`, then `[/time]`.
     fn rule(&mut self) -> Option<Rule> {
-        self.expect(b'M')?;
-        let month = self.number()?;
-        self.expect(b'.')?;
-        let week = self.number()?;
-        self.expect(b'.')?;
-        let weekday = self.number()?;
+        let day = match self.peek()? {
+            b'M' => {
+                self.0 = &self.0[1..];
+                let month = self.number()?;
+                self.expect(b'.')?;
+                let week = self.number()?;
+                self.expect(b'.')?;
+                let weekday = self.number()?;
+                let valid = (1..=12).contains(&month) && (1..=5).contains(&week) && weekday <= 6;
+                valid.then_some(Day::Weekday {
+                    month: month as u8,
+                    week: week as u8,
+                    weekday: weekday as u8,
+                })?
+            }
+            b'J' => {
+                self.0 = &self.0[1..];
+                let n = self.number()?;
+                (1..=365).contains(&n).then_some(Day::Julian(n as u16))?
+            }
+            _ => {
+                let n = self.number()?;
+                (0..=365).contains(&n).then_some(Day::Ordinal(n as u16))?
+            }
+        };
         let time = if self.peek() == Some(b'/') {
             self.0 = &self.0[1..];
             self.offset()?
         } else {
             7200
         };
-        let valid = (1..=12).contains(&month) && (1..=5).contains(&week) && weekday <= 6;
-        valid.then_some(Rule {
-            month: month as u8,
-            week: week as u8,
-            weekday: weekday as u8,
-            time,
-        })
+        Some(Rule { day, time })
     }
 }
 
-fn is_leap(year: i32) -> bool {
+// The calendar: days and weeks of the proleptic Gregorian calendar in
+// whole numbers, for plugins that count days (statistics, calendars,
+// forecasts).
+
+/// Whether `year` has a 29 February.
+pub fn is_leap(year: i32) -> bool {
     year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)
 }
 
-fn days_in_month(year: i32, month: u8) -> u8 {
+/// The days of `month` (1 to 12) of `year`.
+pub fn days_in_month(year: i32, month: u8) -> u8 {
     match month {
         2 if is_leap(year) => 29,
         2 => 28,
@@ -281,8 +324,13 @@ fn days_in_month(year: i32, month: u8) -> u8 {
     }
 }
 
-/// Days since 1970-01-01 of a date (proleptic Gregorian calendar).
-fn days_from_civil(year: i32, month: u8, day: u8) -> i64 {
+/// The days of `year`: 365 or 366.
+pub fn days_in_year(year: i32) -> u16 {
+    if is_leap(year) { 366 } else { 365 }
+}
+
+/// Days since 1970-01-01 of a date (negative before it).
+pub fn days_from_civil(year: i32, month: u8, day: u8) -> i64 {
     let y = i64::from(year) - i64::from(month <= 2);
     let era = y.div_euclid(400);
     let yoe = y - era * 400;
@@ -292,7 +340,9 @@ fn days_from_civil(year: i32, month: u8, day: u8) -> i64 {
     era * 146_097 + doe - 719_468
 }
 
-fn civil_from_days(days: i64) -> (i32, u8, u8) {
+/// The date `days` after 1970-01-01 (before it where negative): year,
+/// month (1 to 12), day (1 to 31).
+pub fn civil_from_days(days: i64) -> (i32, u8, u8) {
     let z = days + 719_468;
     let era = z.div_euclid(146_097);
     let doe = z - era * 146_097;
@@ -305,11 +355,51 @@ fn civil_from_days(days: i64) -> (i32, u8, u8) {
     (year, month, day)
 }
 
-/// The time zone chosen in the settings; `None` for the system's.
+/// The weekday of the day `days` after 1970-01-01: 0 (Sunday) to 6
+/// (Saturday).
+pub fn weekday_of(days: i64) -> u8 {
+    (days + 4).rem_euclid(7) as u8
+}
+
+/// The weekday of a date: 0 (Sunday) to 6 (Saturday).
+pub fn weekday(year: i32, month: u8, day: u8) -> u8 {
+    weekday_of(days_from_civil(year, month, day))
+}
+
+/// The day of the year of a date: 1 to 366.
+pub fn day_of_year(year: i32, month: u8, day: u8) -> u16 {
+    (days_from_civil(year, month, day) - days_from_civil(year, 1, 1) + 1) as u16
+}
+
+/// The number of the week of a date as ISO 8601 counts (weeks from
+/// Monday, the first holding the year's first Thursday): 1 to 53.
+pub fn iso_week(year: i32, month: u8, day: u8) -> u8 {
+    let monday_based = (i64::from(weekday(year, month, day)) + 6) % 7 + 1;
+    let weeks_in = |y: i32| {
+        let first = weekday(y, 1, 1);
+        if first == 4 || (first == 3 && is_leap(y)) {
+            53
+        } else {
+            52
+        }
+    };
+    let week = (i64::from(day_of_year(year, month, day)) - monday_based + 10) / 7;
+    if week < 1 {
+        weeks_in(year - 1)
+    } else if week > i64::from(weeks_in(year)) {
+        1
+    } else {
+        week as u8
+    }
+}
+
+/// The time zone chosen in the settings; `None` for the system's. A rule
+/// that is not one ([`TimeZone::parse`]) counts as none: the zone chosen
+/// from the list then.
 fn chosen_zone(env: &Env<'_>) -> Option<TimeZone> {
     let rule = env.settings.read(&settings::TIME_ZONE_RULE).trim();
-    if !rule.is_empty() {
-        return TimeZone::parse(rule);
+    if let Some(zone) = TimeZone::parse(rule) {
+        return Some(zone);
     }
     let zone = env.settings.read(&settings::TIME_ZONE);
     TIME_ZONES
@@ -337,6 +427,9 @@ pub fn unix_seconds(env: &Env<'_>) -> Option<i64> {
 
 /// `unix` seconds since 1970 (UTC) as local seconds since 1970, in the
 /// chosen time zone (or the system's); see [`LocalTime::from_seconds`].
+/// A chosen zone gives the offset of that time, summer or not. The
+/// system's zone is known by its offset now only: a time in another
+/// season is off by the hour summer time adds.
 pub fn local_seconds(env: &Env<'_>, unix: i64) -> i64 {
     let offset = match chosen_zone(env) {
         Some(zone) => i64::from(zone.offset_at(unix)),
@@ -360,28 +453,37 @@ pub fn next_minute(env: &Env<'_>) -> Option<Instant> {
     Some(env.now.add_millis((60_000 - ms.rem_euclid(60_000)) as u64))
 }
 
-/// The time as the user wants to see it: `14:05` or `2:05 PM`
-/// (setting `core.clock-format`).
+/// The time now as the user wants to see it: `14:05` or `2:05 PM`
+/// (setting `core.clock-format`), if the device knows the time.
 pub fn clock_text(env: &Env<'_>) -> Option<String> {
     let t = local_time(env)?;
-    if env.settings.read(&settings::CLOCK_FORMAT) == CLOCK_12H {
-        let hour = match t.hour % 12 {
-            0 => 12,
-            h => h,
-        };
-        let key = if t.hour < 12 {
-            "core.clock.am"
-        } else {
-            "core.clock.pm"
-        };
-        let time = format!("{hour}:{:02}", t.minute);
-        Some(
-            env.i18n
-                .format(key, &[("time", paperpaw_i18n::Arg::Str(&time))]),
-        )
-    } else {
-        Some(format!("{:02}:{:02}", t.hour, t.minute))
+    Some(clock_of(env, t.hour, t.minute))
+}
+
+/// Whether the user wants times on a twelve-hour clock (setting
+/// `core.clock-format`).
+pub fn twelve_hours(env: &Env<'_>) -> bool {
+    env.settings.read(&settings::CLOCK_FORMAT) == CLOCK_12H
+}
+
+/// A time of day (`hour` 0 to 23) as the user wants to see it: `14:05`
+/// or `2:05 PM` ([`twelve_hours`]).
+pub fn clock_of(env: &Env<'_>, hour: u8, minute: u8) -> String {
+    if !twelve_hours(env) {
+        return format!("{hour:02}:{minute:02}");
     }
+    let key = if hour < 12 {
+        "core.clock.am"
+    } else {
+        "core.clock.pm"
+    };
+    let shown = match hour % 12 {
+        0 => 12,
+        h => h,
+    };
+    let time = format!("{shown}:{minute:02}");
+    env.i18n
+        .format(key, &[("time", paperpaw_i18n::Arg::Str(&time))])
 }
 
 /// Today in words, e.g. "Thursday, 15 October", if the device knows the
@@ -411,7 +513,6 @@ fn dated(env: &Env<'_>, key: &str, kind: &str) -> Option<String> {
     ))
 }
 
-/// The values of `core.clock-format`.
 /// The values of the first day of the week
 /// ([`WEEK_START`](crate::builtin::settings::WEEK_START)): as the
 /// language has it, Monday, Sunday.
@@ -428,6 +529,9 @@ pub fn week_start(env: &Env<'_>) -> u8 {
     }
 }
 
+/// The values of `core.clock-format`
+/// ([`CLOCK_FORMAT`](crate::builtin::settings::CLOCK_FORMAT)): 24 hours,
+/// 12 hours.
 pub const CLOCK_24H: &str = "core.clock.24h";
 pub const CLOCK_12H: &str = "core.clock.12h";
 
@@ -457,6 +561,28 @@ mod tests {
     }
 
     #[test]
+    fn days_and_weeks_of_the_calendar() {
+        // Wednesday, 14 October 2026.
+        assert_eq!(weekday(2026, 10, 14), 3);
+        assert_eq!(weekday_of(0), 4);
+        assert_eq!(day_of_year(2026, 10, 14), 287);
+        assert_eq!(day_of_year(2024, 12, 31), 366);
+        assert_eq!(days_in_year(2024), 366);
+        assert_eq!(days_in_year(2100), 365);
+        assert_eq!(days_in_year(2000), 366);
+        assert_eq!(days_in_month(2028, 2), 29);
+        assert_eq!(days_in_month(2026, 2), 28);
+        assert_eq!(iso_week(2026, 10, 14), 42);
+        // 1 January 2027 is a Friday: still week 53 of 2026.
+        assert_eq!(iso_week(2027, 1, 1), 53);
+        assert_eq!(iso_week(2027, 1, 4), 1);
+        // 29 December 2025 (a Monday) is in week 1 of 2026.
+        assert_eq!(iso_week(2025, 12, 29), 1);
+        assert_eq!(iso_week(2024, 12, 30), 1);
+        assert_eq!(iso_week(2021, 1, 3), 53);
+    }
+
+    #[test]
     fn summer_time_in_berlin() {
         let berlin = TimeZone::parse("CET-1CEST,M3.5.0,M10.5.0/3").unwrap();
         // 2026: summer time from 29 March 01:00 UTC to 25 October 01:00 UTC.
@@ -472,6 +598,17 @@ mod tests {
         let sydney = TimeZone::parse("AEST-10AEDT,M10.1.0,M4.1.0/3").unwrap();
         assert_eq!(sydney.offset_at(utc(2026, 1, 10, 0)), 11 * 3600);
         assert_eq!(sydney.offset_at(utc(2026, 7, 10, 0)), 10 * 3600);
+        // Days of the year: J60 is 1 March in every year, 59 is 1 March
+        // in a leap year only.
+        let julian = TimeZone::parse("XST0XDT,J60/0,J300/0").unwrap();
+        assert_eq!(julian.offset_at(utc(2024, 2, 29, 12)), 0);
+        assert_eq!(julian.offset_at(utc(2024, 3, 1, 1)), 3600);
+        let ordinal = TimeZone::parse("XST0XDT,59/0,300/0").unwrap();
+        assert_eq!(ordinal.offset_at(utc(2024, 2, 29, 12)), 3600);
+        assert_eq!(ordinal.offset_at(utc(2026, 2, 28, 12)), 0);
+        assert_eq!(ordinal.offset_at(utc(2026, 3, 1, 1)), 3600);
+        assert!(TimeZone::parse("XST0XDT,J0,J300").is_none());
+        assert!(TimeZone::parse("XST0XDT,366,J300").is_none());
         let india = TimeZone::parse("IST-5:30").unwrap();
         assert_eq!(india.offset_at(0), 5 * 3600 + 1800);
         let sao_paulo = TimeZone::parse("<-03>3").unwrap();

@@ -15,8 +15,8 @@ const NAMED: &[(&str, char)] = &[
     ("thinsp", '\u{2009}'),
     ("zwnj", '\u{200c}'),
     ("zwj", '\u{200d}'),
-    ("ndash", '–'),
-    ("mdash", '—'),
+    ("ndash", '\u{2013}'),
+    ("mdash", '\u{2014}'),
     ("lsquo", '‘'),
     ("rsquo", '’'),
     ("sbquo", '‚'),
@@ -94,9 +94,12 @@ pub fn decode(text: &str) -> Cow<'_, str> {
     while let Some(amp) = rest.find('&') {
         out.push_str(&rest[..amp]);
         let tail = &rest[amp..];
+        // Only the next few bytes can end a reference: a text full of `&`
+        // is not searched to its end for each of them.
         let decoded = tail[1..]
-            .find(';')
-            .filter(|&end| end <= 32)
+            .bytes()
+            .take(33)
+            .position(|b| b == b';')
             .and_then(|end| resolve(&tail[1..1 + end]).map(|c| (c, end + 2)));
         match decoded {
             Some((c, len)) => {
@@ -134,7 +137,10 @@ mod tests {
     #[test]
     fn decodes_named_and_numeric_references() {
         assert_eq!(decode("a &amp; b"), "a & b");
-        assert_eq!(decode("&#8220;Hi&#x201D; &mdash; &auml;"), "“Hi” — ä");
+        assert_eq!(
+            decode("&#8220;Hi&#x201D; &mdash; &auml;"),
+            "“Hi” \u{2014} ä"
+        );
         assert_eq!(decode("&unknown; & &#xZZ; &;"), "&unknown; & &#xZZ; &;");
         assert!(matches!(decode("plain"), Cow::Borrowed(_)));
     }

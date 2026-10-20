@@ -7,7 +7,10 @@
 //! longer ones count as *Longest page* (2 min), so a book left open does
 //! not count as read. Books are recognised by KOReader's fingerprint of
 //! the file (a partial MD5). Reading pauses while the app is in the
-//! background. See `store` for the files.
+//! background and ends when the book is closed. Stays are timed on the
+//! device's monotonic clock and dated by the wall clock: read before the
+//! device knows the time (an X4 until Wi-Fi sets its clock), they wait
+//! in memory and are recorded once it does. See `store` for the files.
 //!
 //! The statistics are shared with KOReader's: through the cloud folder
 //! KOReader syncs them to (WebDAV), and by taking over those of KOReader
@@ -33,6 +36,9 @@ mod sync;
 mod totals;
 mod widget;
 
+#[cfg(test)]
+mod testing;
+
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::rc::Rc;
@@ -42,9 +48,10 @@ use core::cell::RefCell;
 
 use paperpaw_digest::md5;
 use paperpaw_sdk::builtin::{events, menus, params};
+use paperpaw_sdk::document::Locator;
 use paperpaw_sdk::{
-    ActionSpec, Command, Env, Id, Manifest, MenuEntry, Params, Plugin, RegisterError, Registrar,
-    SDK_VERSION, ScreenSpec, SettingGroupSpec, SettingSpec, Version, time,
+    ActionSpec, Command, Env, Id, Instant, Manifest, MenuEntry, Params, Plugin, RegisterError,
+    Registrar, SDK_VERSION, ScreenSpec, SettingGroupSpec, SettingSpec, StorageError, Version, time,
 };
 
 use paperpaw_sdk::setting::Setting;
@@ -66,20 +73,48 @@ const CALENDAR: Id = Id::new_static("stats.calendar");
 const BOOKS: Id = Id::new_static("stats.books");
 const BOOK: Id = Id::new_static("stats.book");
 
+/// Most stays kept while the device does not know the time (about
+/// 4 KiB): an hour or two of reading.
+const UNDATED: usize = 128;
+
 /// The book being read and the page it is on.
 #[derive(Debug, Clone)]
 struct Session {
-    book: u16,
-    path: String,
+    /// Its id in `books.ini`; `None` until the device knows the time (a
+    /// book is added with when it was opened).
+    book: Option<u16>,
+    path: Rc<str>,
     page: u32,
     pages: u32,
-    /// When reading the page began (Unix seconds); `None` while paused.
-    since: Option<i64>,
+    /// Where the page begins: pages counted by the progress may share a
+    /// number (see [`page_of`]).
+    at: Locator,
+    /// When reading the page began; `None` while paused.
+    since: Option<Instant>,
+}
+
+/// A stay on a page, timed on the monotonic clock: dated once the device
+/// knows the time.
+#[derive(Debug, Clone)]
+struct Stay {
+    path: Rc<str>,
+    page: u32,
+    pages: u32,
+    start: Instant,
+    /// Seconds, as counted (see [`counted`]).
+    duration: u16,
 }
 
 #[derive(Debug, Default)]
 struct State {
     session: Option<Session>,
+    /// Stays read while the device did not know the time (or not written
+    /// yet), oldest first, at most [`UNDATED`]; gone if the device is
+    /// switched off before.
+    undated: Vec<Stay>,
+    /// Writing the statistics failed (e.g. the card is full): `Some(false)`
+    /// until that was said, `Some(true)` after; `None` while writing works.
+    write_failed: Option<bool>,
 }
 
 type Shared = Rc<RefCell<State>>;
@@ -108,8 +143,33 @@ fn counted(seconds: i64, min: i64, max: i64) -> u16 {
 }
 
 impl State {
-    /// Records the stay on the current page until `now`.
-    fn finish_page(&mut self, env: &Env<'_>, now: i64) {
+    /// What `result` of writing the statistics holds; `None` where it
+    /// failed, which is said once (see [`State::tell`]).
+    fn wrote<T>(&mut self, result: Result<T, StorageError>) -> Option<T> {
+        match result {
+            Ok(value) => {
+                self.write_failed = None;
+                Some(value)
+            }
+            Err(_) => {
+                self.write_failed.get_or_insert(false);
+                None
+            }
+        }
+    }
+
+    /// Says that the statistics could not be saved, once until writing
+    /// works again.
+    fn tell(&mut self, env: &Env<'_>, out: &mut Vec<Command>) {
+        if self.write_failed == Some(false) {
+            out.push(Command::Notify(env.i18n.tr("stats.not-saved").to_string()));
+            self.write_failed = Some(true);
+        }
+    }
+
+    /// Ends the stay on the current page now: recorded, or kept until the
+    /// device knows the time.
+    fn finish_page(&mut self, env: &Env<'_>) {
         let Some(session) = &mut self.session else {
             return;
         };
@@ -118,132 +178,229 @@ impl State {
         };
         let min = env.settings.read(&MIN_SECONDS);
         let max = env.settings.read(&MAX_SECONDS);
-        let duration = counted(now - since, min, max);
-        if duration > 0 && since > 0 {
-            store::append(
-                env.storage,
-                PageStat {
-                    book: session.book,
-                    page: session.page,
-                    start: since as u32,
-                    duration,
-                    pages: session.pages,
-                },
-            );
+        let seconds = i64::try_from(env.now.since(since) / 1000).unwrap_or(i64::MAX);
+        let duration = counted(seconds, min, max);
+        if duration == 0 || !enabled(env) {
+            return;
+        }
+        if self.undated.len() < UNDATED && self.undated.try_reserve(1).is_ok() {
+            self.undated.push(Stay {
+                path: session.path.clone(),
+                page: session.page,
+                pages: session.pages,
+                start: since,
+                duration,
+            });
+        }
+        self.date(env);
+    }
+
+    /// Once the device knows the time: records the stays kept until then,
+    /// and adds the book being read to the books if it is not yet.
+    fn date(&mut self, env: &Env<'_>) {
+        let Some(clock) = env.status.clock else {
+            return;
+        };
+        if self.undated.is_empty() && self.session.as_ref().is_none_or(|s| s.book.is_some()) {
+            return;
+        }
+        let unix = |at: Instant| clock.unix_millis_at(at).div_euclid(1000);
+        // Each book's id, looked up (or the book added) once.
+        let mut ids: Vec<(Rc<str>, Option<u16>)> = Vec::new();
+        if let Some(Session {
+            path,
+            book: Some(book),
+            ..
+        }) = &self.session
+        {
+            ids.push((path.clone(), Some(*book)));
+        }
+        let mut stays = core::mem::take(&mut self.undated).into_iter();
+        while let Some(stay) = stays.next() {
+            let start = unix(stay.start);
+            let book = match ids.iter().find(|(path, _)| *path == stay.path) {
+                Some(&(_, id)) => id,
+                None => {
+                    let id = register_book(env, &stay.path, start, stay.pages);
+                    ids.push((stay.path.clone(), id));
+                    id
+                }
+            };
+            if let (Some(book), Ok(start @ 1..)) = (book, u32::try_from(start)) {
+                let stat = PageStat {
+                    book,
+                    page: stay.page,
+                    start,
+                    duration: stay.duration,
+                    pages: stay.pages,
+                };
+                if self.wrote(store::append(env.storage, stat)).is_none() {
+                    // Kept to be written with the next page.
+                    self.undated.push(stay);
+                    self.undated.extend(stays);
+                    break;
+                }
+            }
+        }
+        if let Some(session) = &mut self.session
+            && session.book.is_none()
+        {
+            session.book = match ids.iter().find(|(path, _)| *path == session.path) {
+                Some(&(_, id)) => id,
+                None => register_book(env, &session.path, unix(env.now), session.pages),
+            };
+            // A book that cannot be read is not recorded.
+            if session.book.is_none() {
+                self.session = None;
+            }
         }
     }
 
-    /// The reader shows `page` of `pages`.
-    fn turn(&mut self, env: &Env<'_>, now: i64, (page, pages): (u32, u32)) {
-        let changed = self
+    /// The reader shows the page of `reading`.
+    fn turn(&mut self, env: &Env<'_>, reading: &events::Reading) {
+        let ((page, pages), at) = (page_of(reading), reading.at());
+        let unchanged = self
             .session
             .as_ref()
-            .is_some_and(|s| (s.page, s.pages) != (page, pages) || s.since.is_none());
-        if !changed {
+            .is_none_or(|s| (s.page, s.pages, s.at) == (page, pages, at) && s.since.is_some());
+        if unchanged {
             return;
         }
-        self.finish_page(env, now);
+        self.finish_page(env);
         let Some(session) = &mut self.session else {
             return;
         };
         // The reader has counted the pages (or counted anew).
-        if pages != session.pages && pages != 1000 {
-            let mut books = store::books(env.storage);
-            if let Some(book) = books.iter_mut().find(|b| b.id == session.book) {
-                book.pages = pages;
-                store::save_books(env.storage, &books);
-            }
-        }
+        let counted = session
+            .book
+            .filter(|_| pages != session.pages && pages != 1000);
         session.page = page;
         session.pages = pages;
-        session.since = Some(now);
+        session.at = at;
+        session.since = Some(env.now);
+        if let Some(id) = counted {
+            let result = store::update_books(env.storage, |books| {
+                match books.iter_mut().find(|b| b.id == id) {
+                    Some(book) => {
+                        book.pages = pages;
+                        true
+                    }
+                    None => false,
+                }
+            });
+            self.wrote(result);
+        }
     }
 
     /// A book is shown: the same one again (after a menu), or another.
-    fn open(&mut self, env: &Env<'_>, now: i64, reading: &events::Reading) {
-        let (path, at) = (reading.path.as_str(), page_of(reading));
-        if self.session.as_ref().is_some_and(|s| s.path == path) {
-            return self.turn(env, now, at);
+    fn open(&mut self, env: &Env<'_>, reading: &events::Reading) {
+        if self
+            .session
+            .as_ref()
+            .is_some_and(|s| *s.path == *reading.path)
+        {
+            return self.turn(env, reading);
         }
-        self.finish_page(env, now);
-        self.session = register_book(env, path, now, at.1).map(|book| Session {
-            book,
-            path: path.to_string(),
-            page: at.0,
-            pages: at.1,
-            since: Some(now),
+        self.finish_page(env);
+        let (page, pages) = page_of(reading);
+        self.session = Some(Session {
+            book: None,
+            path: Rc::from(reading.path.as_str()),
+            page,
+            pages,
+            at: reading.at(),
+            since: Some(env.now),
         });
+        self.date(env);
+    }
+
+    /// The book at `path` was closed: its page ends, and nothing is read
+    /// until a book is shown again.
+    fn close(&mut self, env: &Env<'_>, path: &str) {
+        if self.session.as_ref().is_some_and(|s| *s.path == *path) {
+            self.finish_page(env);
+            self.session = None;
+        }
     }
 }
 
 /// The book at `path` in `books.ini`, added if new: recognised by its
-/// fingerprint, with title and authors as KOReader takes them.
+/// fingerprint, with title and authors as KOReader takes them. `None`
+/// where `books.ini` cannot be read or written: it then stays as it was,
+/// and nothing is recorded for the book.
 fn register_book(env: &Env<'_>, path: &str, now: i64, pages: u32) -> Option<u16> {
     let md5 = md5::partial(env.storage, path)?;
-    let mut books = store::books(env.storage);
-    let at = match books.iter().position(|b| b.md5 == md5) {
-        Some(at) => at,
-        None => {
-            let id = books.iter().map(|b| b.id).max().unwrap_or(0) + 1;
-            let document = env.formats.open(env.storage, path).ok();
-            let metadata = document.as_ref().map(|d| d.metadata().clone());
-            let file = path.rsplit('/').next().unwrap_or(path);
-            let stem = file.rsplit_once('.').map_or(file, |(stem, _)| stem);
-            let (title, authors, language) = match metadata {
-                Some(m) => (
-                    m.title.unwrap_or_else(|| stem.to_string()),
-                    m.authors.join("\n"),
-                    m.language.unwrap_or_default(),
-                ),
-                None => (stem.to_string(), String::new(), String::new()),
-            };
-            let na = |text: String| {
-                if text.is_empty() {
-                    String::from("N/A")
-                } else {
-                    text
-                }
-            };
-            books.push(Book {
-                id,
-                title,
-                authors: na(authors),
-                md5,
-                pages: 0,
-                language: na(language),
-                series: String::from("N/A"),
-                last_open: 0,
-                path: String::new(),
-                finished: 0,
-            });
-            books.len() - 1
+    let mut id = None;
+    store::update_books(env.storage, |books| {
+        let at = match books.iter().position(|b| b.md5 == md5) {
+            Some(at) => at,
+            None => {
+                let Ok(new) = store::new_id(env.storage, books) else {
+                    return false;
+                };
+                let document = env.formats.open(env.storage, path).ok();
+                let metadata = document.as_ref().map(|d| d.metadata().clone());
+                let file = path.rsplit('/').next().unwrap_or(path);
+                let stem = file.rsplit_once('.').map_or(file, |(stem, _)| stem);
+                let (title, authors, language) = match metadata {
+                    Some(m) => (
+                        m.title.unwrap_or_else(|| stem.to_string()),
+                        m.authors.join("\n"),
+                        m.language.unwrap_or_default(),
+                    ),
+                    None => (stem.to_string(), String::new(), String::new()),
+                };
+                let na = |text: String| {
+                    if text.is_empty() {
+                        String::from("N/A")
+                    } else {
+                        text
+                    }
+                };
+                books.push(Book {
+                    id: new,
+                    title,
+                    authors: na(authors),
+                    md5,
+                    pages: 0,
+                    language: na(language),
+                    series: String::from("N/A"),
+                    last_open: 0,
+                    path: String::new(),
+                    finished: 0,
+                });
+                books.len() - 1
+            }
+        };
+        let book = &mut books[at];
+        book.last_open = now;
+        book.path = path.to_string();
+        // Counted pages, not the per-mille stand-in.
+        if pages != 1000 || book.pages == 0 {
+            book.pages = pages;
         }
-    };
-    let book = &mut books[at];
-    book.last_open = now;
-    book.path = path.to_string();
-    // Counted pages, not the per-mille stand-in.
-    if pages != 1000 || book.pages == 0 {
-        book.pages = pages;
-    }
-    let id = book.id;
-    store::save_books(env.storage, &books);
-    Some(id)
+        id = Some(book.id);
+        true
+    })
+    .ok()?;
+    id
 }
 
 /// The book at `path` was read to the end `now`: kept as when it was
 /// finished, unless it was finished earlier the same year (its last page
 /// reached again), so that a book read again in a later year counts then
-/// too.
+/// too. Where `books.ini` cannot be read or written, it stays as it was.
 fn mark_finished(env: &Env<'_>, path: &str, now: i64) {
-    let mut books = store::books(env.storage);
     let year = |unix: i64| fmt::date_of(fmt::day_of(env, unix.max(0) as u32)).year;
-    if let Some(book) = books.iter_mut().find(|b| b.path == path)
-        && (book.finished <= 0 || year(book.finished) != year(now))
-    {
-        book.finished = now;
-        store::save_books(env.storage, &books);
-    }
+    let _ = store::update_books(env.storage, |books| {
+        match books.iter_mut().find(|b| b.path == path) {
+            Some(book) if book.finished <= 0 || year(book.finished) != year(now) => {
+                book.finished = now;
+                true
+            }
+            _ => false,
+        }
+    });
 }
 
 /// The settings kept in the program (see [`SettingSpec::fixed`]).
@@ -313,32 +470,44 @@ impl Plugin for Stats {
 
         // Recording.
         let s = state.clone();
-        r.on(events::BOOK_OPENED, move |env, reading, _| {
-            if let Some(now) = time::unix_seconds(env).filter(|_| enabled(env)) {
-                s.borrow_mut().open(env, now, reading);
+        r.on(events::BOOK_OPENED, move |env, reading, out| {
+            let mut state = s.borrow_mut();
+            if enabled(env) {
+                state.open(env, reading);
             }
+            state.tell(env, out);
         })?;
         let s = state.clone();
-        r.on(events::PAGE_TURNED, move |env, reading, _| {
+        r.on(events::PAGE_TURNED, move |env, reading, out| {
             let mut state = s.borrow_mut();
             let same = state
                 .session
                 .as_ref()
-                .is_some_and(|session| reading.path == session.path);
-            if let (Some(now), true) = (time::unix_seconds(env), same && enabled(env)) {
-                state.turn(env, now, page_of(reading));
+                .is_some_and(|session| *session.path == *reading.path);
+            if same && enabled(env) {
+                state.turn(env, reading);
             }
+            state.tell(env, out);
         })?;
-        r.on(events::BOOK_MOVED, |env, moved, _| {
-            let mut books = store::books(env.storage);
-            let mut changed = false;
-            for book in books.iter_mut().filter(|b| b.path == moved.from) {
-                book.path = moved.path.clone();
-                changed = true;
-            }
-            if changed {
-                store::save_books(env.storage, &books);
-            }
+        let s = state.clone();
+        r.on(events::BOOK_CLOSED, move |env, reading, out| {
+            let mut state = s.borrow_mut();
+            state.close(env, &reading.path);
+            state.tell(env, out);
+        })?;
+        let s = state.clone();
+        r.on(events::BOOK_MOVED, move |env, moved, out| {
+            let result = store::update_books(env.storage, |books| {
+                let mut changed = false;
+                for book in books.iter_mut().filter(|b| b.path == moved.from) {
+                    book.path = moved.path.clone();
+                    changed = true;
+                }
+                changed
+            });
+            let mut state = s.borrow_mut();
+            state.wrote(result);
+            state.tell(env, out);
         })?;
         r.on(events::BOOK_FINISHED, |env, reading, _| {
             if let Some(now) = time::unix_seconds(env).filter(|_| enabled(env)) {
@@ -347,16 +516,22 @@ impl Plugin for Stats {
         })?;
         let s = state.clone();
         r.on(events::SUSPEND, move |env, _, _| {
-            if let Some(now) = time::unix_seconds(env) {
-                s.borrow_mut().finish_page(env, now);
-            }
+            s.borrow_mut().finish_page(env);
         })?;
+        // Only a book still open goes on being read.
         let s = state.clone();
         r.on(events::RESUME, move |env, _, _| {
-            let mut state = s.borrow_mut();
-            if let (Some(session), Some(now)) = (&mut state.session, time::unix_seconds(env)) {
-                session.since.get_or_insert(now);
+            if let Some(session) = &mut s.borrow_mut().session {
+                session.since.get_or_insert(env.now);
             }
+        })?;
+        // The time became known (or was set anew): what was read before
+        // is recorded.
+        let s = state.clone();
+        r.on(events::STATUS_CHANGED, move |env, _, out| {
+            let mut state = s.borrow_mut();
+            state.date(env);
+            state.tell(env, out);
         })?;
 
         // Sharing with KOReader.
@@ -387,14 +562,15 @@ impl Plugin for Stats {
         r.add_action(ActionSpec::new(OPEN, "stats.title").handler(
             move |env: &Env<'_>, out: &mut Vec<Command>| {
                 // Recorded so far, so the views include the current page.
-                if let Some(now) = time::unix_seconds(env) {
-                    let mut state = s.borrow_mut();
-                    state.finish_page(env, now);
-                    if let Some(session) = &mut state.session {
-                        session.since = Some(now);
-                    }
+                let mut state = s.borrow_mut();
+                let reading = state.session.as_ref().is_some_and(|s| s.since.is_some());
+                state.finish_page(env);
+                if let Some(session) = &mut state.session
+                    && reading
+                {
+                    session.since = Some(env.now);
                 }
-                let current = s.borrow().session.as_ref().map(|session| session.book);
+                let current = state.session.as_ref().and_then(|session| session.book);
                 let params = match current {
                     Some(book) => Params::new().with(params::ID, alloc::format!("{book}")),
                     None => Params::new(),

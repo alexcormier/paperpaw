@@ -20,7 +20,8 @@
 //! padded = "  quoted values keep spaces, and support \"escapes\"\n"
 //! ```
 //!
-//! - Keys and section names consist of ASCII letters, digits, `_`, `-` and `.`.
+//! - Keys and section names consist of ASCII letters, digits, `_`, `-`, `.`
+//!   and `@`.
 //! - Unquoted values are taken literally (trimmed). There are no inline
 //!   comments, so values may contain `#` and `;`.
 //! - Quoted values support the escapes `\\`, `\"`, `\n`, `\t` and `\u{…}`.
@@ -31,7 +32,9 @@
 extern crate alloc;
 
 use alloc::borrow::Cow;
+use alloc::collections::BTreeMap;
 use alloc::string::String;
+use alloc::vec::Vec;
 use core::fmt;
 
 /// Parses `source` into an iterator of entries.
@@ -265,7 +268,7 @@ fn parse_unicode_escape(s: &str) -> Option<(char, usize)> {
     let body = s.strip_prefix('{')?;
     let end = body.find('}')?;
     let hex = &body[..end];
-    if hex.is_empty() || hex.len() > 6 {
+    if hex.is_empty() || hex.len() > 6 || !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
         return None;
     }
     let code = u32::from_str_radix(hex, 16).ok()?;
@@ -278,61 +281,149 @@ fn parse_unicode_escape(s: &str) -> Option<(char, usize)> {
 /// order and formatting: an existing entry's line is replaced (the last
 /// one, if the key is there more than once: it is the one read), a new
 /// entry goes after the section's last entry, and a missing section is
-/// appended. Values that need it are quoted and escaped.
+/// appended. Entries of section `""` go before the first section header.
+/// Values that need it are quoted and escaped.
+///
+/// A key or section name that [`parse`] would reject leaves `source` as it
+/// is. For more than a few keys, [`set_all`] edits the file only once.
 pub fn set(source: &str, section: &str, key: &str, value: &str) -> String {
-    let line = alloc::format!("{key} = {}", quote(value));
-    let lines: alloc::vec::Vec<&str> = source.lines().collect();
+    set_all(source, [(section, key, value)])
+}
+
+/// Returns `source` with each `(section, key, value)` of `entries` set, as
+/// calls of [`set`] one after another would, in a single pass over the file.
+pub fn set_all<S, K, V>(source: &str, entries: impl IntoIterator<Item = (S, K, V)>) -> String
+where
+    S: AsRef<str>,
+    K: AsRef<str>,
+    V: AsRef<str>,
+{
+    let entries: Vec<(S, K, V)> = entries.into_iter().collect();
+
+    // The new lines: one per key, in the order the keys first come, with
+    // the last value given.
+    let mut texts: Vec<String> = Vec::new();
+    let mut keys: Vec<(&str, &str)> = Vec::new();
+    let mut index: BTreeMap<(&str, &str), usize> = BTreeMap::new();
+    for (section, key, value) in &entries {
+        let (section, key) = (section.as_ref(), key.as_ref());
+        if !(section.is_empty() || is_identifier(section)) || !is_identifier(key) {
+            continue;
+        }
+        let text = alloc::format!("{key} = {}", quote(value.as_ref()));
+        if let Some(&t) = index.get(&(section, key)) {
+            texts[t] = text;
+        } else {
+            index.insert((section, key), texts.len());
+            texts.push(text);
+            keys.push((section, key));
+        }
+    }
+    if texts.is_empty() {
+        return String::from(source);
+    }
+
+    // Where `set` would put the next entry of each of these sections
+    // (before which line: after its last entry, else after its header),
+    // and the line of each key (the last one, as it is the one read).
+    let mut anchors: BTreeMap<&str, (Option<usize>, Option<usize>)> = keys
+        .iter()
+        .map(|&(section, _)| (section, (None, None)))
+        .collect();
+    let mut line_of: Vec<Option<usize>> = alloc::vec![None; texts.len()];
     let mut current = "";
-    let mut section_found = false;
-    let mut last_entry_of_section: Option<usize> = None;
-    let mut header_of_section: Option<usize> = None;
-    let mut entry: Option<usize> = None;
-    for (i, raw) in lines.iter().enumerate() {
+    let mut line_count = 0;
+    for (i, raw) in source.lines().enumerate() {
+        line_count = i + 1;
         let text = raw.trim();
         if let Some(name) = text.strip_prefix('[').and_then(|t| t.strip_suffix(']')) {
             current = name.trim();
-            if current == section {
-                section_found = true;
-                header_of_section = Some(i);
+            if let Some((after_header, _)) = anchors.get_mut(current) {
+                *after_header = Some(i + 1);
             }
             continue;
         }
-        if current != section || text.is_empty() || text.starts_with(['#', ';']) {
+        if text.is_empty() || text.starts_with(['#', ';']) {
             continue;
         }
-        if let Some((k, _)) = text.split_once('=') {
-            if k.trim() == key {
-                entry = Some(i);
-            }
-            last_entry_of_section = Some(i);
+        let (Some((key, _)), Some((_, after_entry))) =
+            (text.split_once('='), anchors.get_mut(current))
+        else {
+            continue;
+        };
+        *after_entry = Some(i + 1);
+        if let Some(&t) = index.get(&(current, key.trim())) {
+            line_of[t] = Some(i);
         }
     }
-    if let Some(i) = entry {
-        let mut out = alloc::vec::Vec::from(&lines[..]);
-        out[i] = &line;
-        return join(&out);
+
+    // Each new line goes in place of a line, before a line, or into a
+    // section appended at the end.
+    let mut replaced: BTreeMap<usize, usize> = BTreeMap::new();
+    let mut inserted: Vec<(usize, usize)> = Vec::new();
+    let mut appended: BTreeMap<&str, Vec<usize>> = BTreeMap::new();
+    for (t, &(section, _)) in keys.iter().enumerate() {
+        let (after_header, after_entry) = anchors[section];
+        if let Some(line) = line_of[t] {
+            replaced.insert(line, t);
+        } else if let Some(at) = after_entry
+            .or(after_header)
+            .or(section.is_empty().then_some(0))
+        {
+            inserted.push((at, t));
+        } else {
+            appended.entry(section).or_default().push(t);
+        }
     }
-    if section_found {
-        let at = last_entry_of_section.or(header_of_section).unwrap_or(0) + 1;
-        let mut out = alloc::vec::Vec::from(&lines[..]);
-        out.insert(at, &line);
-        return join(&out);
+    // In the order `set` would append them.
+    let mut appended: Vec<(&str, Vec<usize>)> = appended.into_iter().collect();
+    appended.sort_by_key(|(_, lines)| lines[0]);
+
+    let mut out = if replaced.is_empty() && inserted.is_empty() {
+        String::from(source)
+    } else {
+        // Stable, so lines inserted at the same place keep their order.
+        inserted.sort_by_key(|&(at, _)| at);
+        let mut inserted = inserted.iter().peekable();
+        let mut insert_before = |i: usize, out: &mut String| {
+            while let Some(&(_, t)) = inserted.next_if(|&&(at, _)| at == i) {
+                out.push_str(&texts[t]);
+                out.push('\n');
+            }
+        };
+        let mut out = String::with_capacity(source.len() + 64);
+        for (i, raw) in source.lines().enumerate() {
+            insert_before(i, &mut out);
+            out.push_str(replaced.get(&i).map_or(raw, |&t| &texts[t]));
+            out.push('\n');
+        }
+        insert_before(line_count, &mut out);
+        out
+    };
+    for (section, lines) in appended {
+        if !out.is_empty() && !out.ends_with('\n') {
+            out.push('\n');
+        }
+        // A blank line before it, unless the file was empty when `set`
+        // would have appended it (lines placed earlier made it longer).
+        if !source.is_empty() || lines[0] > 0 {
+            out.push('\n');
+        }
+        out.push('[');
+        out.push_str(section);
+        out.push_str("]\n");
+        for t in lines {
+            out.push_str(&texts[t]);
+            out.push('\n');
+        }
     }
-    let mut out = String::from(source);
-    if !out.is_empty() && !out.ends_with('\n') {
-        out.push('\n');
-    }
-    if !out.is_empty() {
-        out.push('\n');
-    }
-    out.push_str(&alloc::format!("[{section}]\n{line}\n"));
     out
 }
 
 /// Returns `source` without `key` in `section`; the rest stays as it is.
 pub fn remove(source: &str, section: &str, key: &str) -> String {
     let mut current = "";
-    let mut out: alloc::vec::Vec<&str> = alloc::vec::Vec::new();
+    let mut out: Vec<&str> = Vec::new();
     let mut removed = false;
     for raw in source.lines() {
         let text = raw.trim();
@@ -390,7 +481,6 @@ mod tests {
     extern crate std;
 
     use super::*;
-    use alloc::vec::Vec;
 
     fn entries(source: &str) -> Vec<Entry<'_>> {
         parse(source).collect::<Result<_, _>>().unwrap()
@@ -500,5 +590,93 @@ a = 1
         // The result parses back to the new values.
         let entry = parse(&appended).last().unwrap().unwrap();
         assert_eq!(entry.value.as_str(), " my books ");
+    }
+
+    #[test]
+    fn set_before_the_first_section() {
+        let source = "# My settings\n[core]\nlanguage = en\n";
+        let changed = set(source, "", "theme", "dark");
+        assert_eq!(
+            changed,
+            "theme = dark\n# My settings\n[core]\nlanguage = en\n"
+        );
+        let changed = set(&changed, "", "night", "on");
+        assert_eq!(
+            changed,
+            "theme = dark\nnight = on\n# My settings\n[core]\nlanguage = en\n"
+        );
+        let parsed = entries(&changed);
+        assert_eq!((parsed[1].section, parsed[1].key), ("", "night"));
+        assert_eq!(set("", "", "a", "b"), "a = b\n");
+    }
+
+    #[test]
+    fn set_refuses_what_parse_would_reject() {
+        let source = "[core]\nlanguage = en\n";
+        for (section, key) in [
+            ("core", "a = b"),
+            ("core", "a\nb"),
+            ("core", "[x]"),
+            ("core", ""),
+            ("core", " padded"),
+            ("x]\n[y", "a"),
+            ("x=y", "a"),
+            ("a b", "a"),
+        ] {
+            assert_eq!(
+                set(source, section, key, "1"),
+                source,
+                "{section:?} {key:?}"
+            );
+        }
+        // Values are quoted, so they cannot add lines of their own.
+        let changed = set(source, "core", "a", "1\n[evil]\nb = 2\r\n");
+        let parsed = entries(&changed);
+        assert_eq!(parsed.len(), 2);
+        assert_eq!(parsed[1].value.as_str(), "1\n[evil]\nb = 2\n");
+        // `@` is allowed, as in the parser.
+        let changed = set(source, "clock@2", "face", "round");
+        assert_eq!(entries(&changed)[1].section, "clock@2");
+    }
+
+    #[test]
+    fn set_all_is_set_one_after_another() {
+        let sources = [
+            "",
+            "\n",
+            "top = 1\n",
+            "# My settings\n[core]\nlanguage = en  \n\n# reading\n[reader]\nfont-size = 11",
+            "[core]\nlanguage = en\n[reader]\nx = 1\n[core]\nlanguage = fr\n",
+            "[core]\r\n\r\n[empty]\r\n",
+        ];
+        let edits = [
+            ("core", "language", "de"),
+            ("files", "root", " my books "),
+            ("", "theme", "dark"),
+            ("core", "night-mode", "on"),
+            ("files", "sort", "name"),
+            ("empty", "a", "1"),
+            ("", "top", "2"),
+            ("core", "language", "it"),
+            ("core", "bad key", "x"),
+            ("new", "a", "1"),
+            ("reader", "x", "2"),
+        ];
+        for source in sources {
+            for n in 0..=edits.len() {
+                let mut one_by_one = String::from(source);
+                for (section, key, value) in &edits[..n] {
+                    one_by_one = set(&one_by_one, section, key, value);
+                }
+                assert_eq!(set_all(source, edits[..n].iter().copied()), one_by_one);
+            }
+        }
+    }
+
+    #[test]
+    fn unicode_escapes_take_hex_digits_only() {
+        let error = |source| parse(source).find_map(Result::err).map(|e| e.kind);
+        assert_eq!(error(r#"a = "\u{+41}""#), Some(ErrorKind::InvalidEscape));
+        assert_eq!(error(r#"a = "\u{41}""#), None);
     }
 }
