@@ -348,3 +348,159 @@ fn a_search_in_the_background_offers_what_it_finds_once() {
     device.answer(&call, 200, offer(5000).as_bytes());
     assert!(!device.shown().contains("is available"));
 }
+
+/// Loads no code: the test looks at what is fetched, not at what runs.
+struct NoCode;
+
+impl paperpaw_core::CodeLoader for NoCode {
+    fn load(
+        &mut self,
+        _: &dyn Storage,
+        _: &paperpaw_core::CodeFile<'_>,
+    ) -> Result<Box<dyn paperpaw_sdk::Plugin>, paperpaw_sdk::PluginProblem> {
+        Err(paperpaw_sdk::PluginProblem::Unsupported)
+    }
+}
+
+/// The statistics plugin built into the running firmware (by its id).
+struct BuiltInStats;
+
+impl paperpaw_sdk::Plugin for BuiltInStats {
+    fn manifest(&self) -> paperpaw_sdk::Manifest {
+        paperpaw_sdk::Manifest {
+            id: Id::new_static("stats"),
+            name: "Statistics".into(),
+            description: "Reading statistics.".into(),
+            version: paperpaw_sdk::Version::new(0, 4, 0),
+            sdk: paperpaw_sdk::SDK_VERSION,
+        }
+    }
+
+    fn register(&self, _: &mut paperpaw_sdk::Registrar) -> Result<(), paperpaw_sdk::RegisterError> {
+        Ok(())
+    }
+}
+
+/// The author key of the plugin files.
+const AUTHOR: [u8; 32] = [7; 32];
+
+/// A plugin file built for the next firmware, signed by [`AUTHOR`].
+fn code_file() -> Vec<u8> {
+    use paperpaw_sdk::native::{Chip, Header, signature};
+    let mut header = Header {
+        chip: Chip::from_id(5).unwrap(),
+        fingerprint: 0x5eed,
+        base: 0x3c00_0000,
+        image_len: 128,
+        code_at: 64,
+        entry: 0,
+        api: 16,
+        relocs: 0,
+        align: 16,
+        sha256: [0; 32],
+    };
+    let image = [0u8; 128];
+    let mut digest = header.digest();
+    digest.update(&image);
+    header.sha256 = digest.finish();
+    let mut file = header.to_bytes().to_vec();
+    file.extend_from_slice(&image);
+    let trailer = signature::sign(&file, &AUTHOR);
+    file.extend_from_slice(&trailer.to_bytes());
+    file
+}
+
+const PLUGIN_INI: &str = "[plugin]\nid = stats\nname = Statistics\nversion = 0.5.0\n";
+
+/// The server's answer naming PaperPaw 0.5.0, which has the statistics
+/// as a file instead of built in.
+fn offer_with_code(size: usize, code: &[u8]) -> String {
+    format!(
+        r#"{{"version": "0.5.0", "url": "/api/v1/updates/paperpaw-x4-0.5.0-update.bin",
+            "size": {size}, "plugins": ["chess-for-paperpaw 1.1.0"],
+            "code": [{{"id": "stats", "name": "Statistics", "version": "0.5.0",
+              "author_key": "{author}",
+              "files": [
+                {{"path": "plugin.ini", "url": "https://p.org/stats/plugin.ini",
+                  "size": {ini_size}, "sha1": "{ini_sha1}"}},
+                {{"path": "code.ppn", "url": "https://p.org/stats/x4/code.ppn",
+                  "size": {code_size}, "sha256": "{code_sha256}"}}]}}]}}"#,
+        author =
+            paperpaw_digest::hex::encode(&paperpaw_sdk::native::signature::public_key(&AUTHOR)),
+        ini_size = PLUGIN_INI.len(),
+        ini_sha1 = paperpaw_digest::sha1::hex(PLUGIN_INI.as_bytes()),
+        code_size = code.len(),
+        code_sha256 = paperpaw_digest::sha256::hex(code),
+    )
+}
+
+#[test]
+fn plugins_that_become_files_are_fetched_before_the_update() {
+    let storage = Shared::default();
+    let firmware = Firmware {
+        version: "0.4.0".into(),
+        project: PROJECT.into(),
+        chip: CHIP,
+        keys: vec![paperpaw_update::public_key(&SEED)],
+        room: 1_000_000,
+        plugins: Plugins::new(RUNNING),
+        ..Firmware::default()
+    };
+    let mut kernel = Kernel::builder(DEVICE)
+        .storage(storage.clone())
+        .network(true)
+        .firmware(firmware)
+        .code_plugins(
+            paperpaw_sdk::native::Native::new("code.ppn"),
+            Box::new(NoCode),
+        )
+        .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
+        .plugin(BuiltInStats)
+        .plugin(Update)
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    let mut device = Device {
+        kernel,
+        storage,
+        now: 0,
+    };
+    device.run(OPEN);
+    device.run(actions::CONFIRM);
+    let call = device.request();
+    let file = update_file("0.5.0", &[("chess-for-paperpaw", "1.1.0")]);
+    let code = code_file();
+    device.answer(&call, 200, offer_with_code(file.len(), &code).as_bytes());
+    let shown = device.shown();
+    // The statistics come back as a file: not named as left out.
+    assert!(shown.contains("PaperPaw 0.5.0 is available"), "{shown}");
+    assert!(!shown.contains("cannot come along"), "{shown}");
+
+    device.run(actions::CONFIRM);
+    let call = device.request();
+    device.answer(&call, 200, &file);
+    // Then the plugin's files, one after another; the update waits.
+    let call = device.request();
+    assert_eq!(call.url, "https://p.org/stats/plugin.ini");
+    assert!(device.shown().contains("Downloading PaperPaw 0.5.0"));
+    device.answer(&call, 200, PLUGIN_INI.as_bytes());
+    let call = device.request();
+    assert_eq!(call.url, "https://p.org/stats/x4/code.ppn");
+    device.answer(&call, 200, &code);
+
+    // Where the updated firmware installs it, its code named as fetched.
+    let storage = &device.storage;
+    assert!(storage.exists("plugins/.stats.next/plugin.ini"));
+    assert!(storage.exists("plugins/.stats.next/code.ppn"));
+    let header =
+        paperpaw_sdk::native::read_header(storage, "plugins/.stats.next/code.ppn").unwrap();
+    assert_eq!(
+        paperpaw_sdk::native::fetched_code(storage, "stats"),
+        Some(header.sha256)
+    );
+    // Not as the code installed now.
+    assert!(paperpaw_sdk::native::installed_code(storage, "stats").is_none());
+    let shown = device.shown();
+    assert!(shown.contains("Install"), "{shown}");
+    assert!(!shown.contains("cannot come along"), "{shown}");
+}

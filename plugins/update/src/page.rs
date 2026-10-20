@@ -136,12 +136,17 @@ impl UpdatePage {
             FirmwareState::Installed => return View::Installed,
             FirmwareState::Idle | FirmwareState::Failed(_) => {}
         }
+        // Downloaded, its code plugins still coming.
+        if let Some(version) = crate::fetch::fetching(env.storage) {
+            return View::Downloading(version);
+        }
         let card = found::find(env.storage, firmware);
         if let Ok(update) = card {
             let signer = update.signer(firmware, &trusted_keys(env.storage));
             let leaves = update
                 .leaves_out(firmware)
                 .into_iter()
+                .filter(|c| !crate::fetch::comes_back(env.storage, &[], c))
                 .map(String::from)
                 .collect();
             return View::Ready {
@@ -152,7 +157,7 @@ impl UpdatePage {
         }
         if let Some(offer) = online::offer(env.storage, firmware) {
             let leaves = offer
-                .leaves_out(firmware)
+                .leaves_out(env.storage, firmware)
                 .into_iter()
                 .map(String::from)
                 .collect();
@@ -700,7 +705,9 @@ impl Screen for UpdatePage {
             }
             return;
         }
-        if online::DOWNLOADED.read(event, params).is_some() {
+        if online::DOWNLOADED.read(event, params).is_some()
+            || crate::fetch::FETCHED.read(event, params).is_some()
+        {
             if matches!(self.view, View::Downloading(_)) {
                 self.view = self.look(&env);
                 self.focus = 0;

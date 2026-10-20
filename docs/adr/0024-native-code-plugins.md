@@ -170,9 +170,16 @@ and the plugin manager says why.
   installed and the version each was built for; the server says which
   have builds for the new firmware; before anything is installed the
   device names those that would stop working (*Update anyway*, *Not
-  now*). After the update the store fetches the new builds and switches
-  those plugins on again; their settings and data on the card were never
-  touched. The Android app does the same when it is updated.
+  now*). The server's answer lists, with each update, the builds for it
+  of the code plugins the device has and of plugins built in now that the
+  update has as files instead (`code`: id, version, author's key, files);
+  once the update is downloaded, the device fetches them, checks each
+  author, and puts them into `plugins/.<id>.next`, their code named as
+  fetched (`native::remember_fetched`); the updated firmware installs
+  those built for it at its first start, before plugins are found, so
+  they run at once and offline. Their settings and data on the card were
+  never touched. A plugin that could not be fetched comes from the store
+  after the update. The Android app does the same when it is updated.
 - **The web flasher** writes the firmware and, behind its image in the
   same app partition, a bundle of the chosen builds with their folders'
   files, which the firmware installs onto the card at its first start.

@@ -303,6 +303,16 @@ impl KernelBuilder {
         let built_in: Vec<Id> = core::iter::once(CORE)
             .chain(self.plugins.iter().map(|plugin| plugin.manifest().id))
             .collect();
+        // Code plugins fetched for this firmware before it was installed
+        // take their places now (ADR 0024), unless this start goes
+        // without code plugins.
+        if let Some(code) = &self.code
+            && self.safe_mode.is_none()
+        {
+            let storage = kernel.shared.storage.clone();
+            self.staged
+                .extend(crate::code_plugin::fetched(storage.as_ref(), &code.native));
+        }
         kernel.install_staged(mem::take(&mut self.staged), &dirs, &built_in);
         kernel.add_plugins(
             mem::take(&mut self.plugins),

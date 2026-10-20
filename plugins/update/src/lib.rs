@@ -4,7 +4,9 @@
 //! it (see `paperpaw_sdk::firmware`). An update found at start is offered
 //! once; after the restart the plugin says how it went and removes the
 //! file. The page also asks the update server for a newer firmware and
-//! downloads it into `updates` ([`online`]).
+//! downloads it into `updates` ([`online`]), and then the code plugins
+//! built for it (`fetch`), which the updated firmware installs at its
+//! first start.
 //!
 //! Updates signed by PaperPaw install at once; one's own builds, signed
 //! with one's own key, after the reader chose to trust that key. An
@@ -15,6 +17,7 @@
 
 extern crate alloc;
 
+mod fetch;
 mod found;
 pub mod online;
 mod page;
@@ -143,6 +146,7 @@ impl Plugin for Update {
         // Answers and downloads go on while the page is closed.
         r.on(online::CHECKED, online::checked)?;
         r.on(online::DOWNLOADED, online::downloaded)?;
+        r.on(fetch::FETCHED, fetch::received)?;
         // In the device's part of the settings, before *About*.
         r.add_menu_entry(MenuEntry {
             menu: menus::SETTINGS,

@@ -26,6 +26,39 @@ use paperpaw_sdk::{
 use crate::data_plugin::DataPlugin;
 use crate::{Kernel, WarningSource};
 
+/// The code plugins fetched for a firmware update that fit this one
+/// ([`native::fetched_folder`](paperpaw_sdk::native::fetched_folder)):
+/// their folders, to install before the plugins are found, their code
+/// named as installed. Those built for another firmware wait (the update
+/// may come yet, or went back); a folder whose code the update plugin did
+/// not fetch ([`native::remember_fetched`](paperpaw_sdk::native::remember_fetched))
+/// is not taken.
+pub(crate) fn fetched(storage: &dyn Storage, native: &Native) -> Vec<(Id, String)> {
+    let mut found = Vec::new();
+    let _ = storage.list(paperpaw_sdk::builtin::PLUGIN_DIR, &mut |entry| {
+        if entry.is_dir
+            && let Some(id) = paperpaw_sdk::native::fetched_plugin(entry.name)
+            && let Ok(id) = Id::parse(id)
+        {
+            found.push(id);
+        }
+    });
+    found
+        .into_iter()
+        .filter_map(|id| {
+            let folder = paperpaw_sdk::native::fetched_folder(id.as_str());
+            let header = paperpaw_sdk::native::read_header(storage, &native.path(&folder)).ok()?;
+            let fetched = paperpaw_sdk::native::fetched_code(storage, id.as_str());
+            // Only what the update plugin fetched, and once it is named as
+            // installed, the code before no longer runs.
+            (header.fingerprint == native.fingerprint.0
+                && fetched == Some(header.sha256)
+                && paperpaw_sdk::native::remember_code(storage, id.as_str(), &header.sha256))
+            .then_some((id, folder))
+        })
+        .collect()
+}
+
 /// What loads the code of code plugins: the shell's, which knows where it
 /// can run.
 pub trait CodeLoader {
@@ -645,5 +678,123 @@ version = 2.0.0
         assert!(storage.exists("plugins/hello/plugin.ini"));
         assert!(!storage.exists("plugins/.hello.part/code.ppn"));
         assert!(!storage.exists("plugins/.hello.old/code.ppn"));
+    }
+
+    /// The file of a code plugin with `fingerprint`, whose header's
+    /// SHA-256 is `sha256` (the test loader checks only that).
+    fn code_file(fingerprint: u64, sha256: [u8; 32]) -> alloc::vec::Vec<u8> {
+        let header = paperpaw_sdk::native::Header {
+            chip: paperpaw_sdk::native::Chip::from_id(5).unwrap(),
+            fingerprint,
+            base: 0x3c00_0000,
+            image_len: 128,
+            code_at: 64,
+            entry: 0,
+            api: 16,
+            relocs: 0,
+            align: 16,
+            sha256,
+        };
+        let mut file = header.to_bytes().to_vec();
+        file.extend_from_slice(&[0; 128]);
+        file
+    }
+
+    /// A storage with `stats` fetched for a firmware update: its folder,
+    /// its code built for `fingerprint`, named as fetched if `named`.
+    fn fetched(fingerprint: u64, named: bool) -> MemoryStorage {
+        let storage = storage()
+            .with(
+                "plugins/.stats.next/plugin.ini",
+                "[plugin]\nid = stats\nname = Statistics\nversion = 0.5.0\n",
+            )
+            .with(".paperpaw/plugins/stats/statistics.sqlite3", "kept");
+        storage
+            .write(
+                "plugins/.stats.next/code.ppn",
+                &code_file(fingerprint, installed("stats")),
+            )
+            .unwrap();
+        if named {
+            assert!(paperpaw_sdk::native::remember_fetched(
+                &storage,
+                "stats",
+                &installed("stats")
+            ));
+        }
+        storage
+    }
+
+    fn kernel_on(storage: MemoryStorage, loader: &Loader, config: &str) -> Kernel {
+        Kernel::builder(DEVICE)
+            .storage(storage)
+            .user_config(config)
+            .code_plugins(Native::new("code.ppn"), Box::new(loader.clone()))
+            .build()
+            .unwrap()
+    }
+
+    fn stats_loader() -> Loader {
+        let mut loader = loader();
+        loader.answers.push(("plugins/stats/code.ppn", Ok("stats")));
+        loader
+    }
+
+    #[test]
+    fn code_fetched_for_this_firmware_is_installed_at_its_start() {
+        let fingerprint = Native::new("code.ppn").fingerprint.0;
+        let storage = fetched(fingerprint, true);
+        let loader = stats_loader();
+        let kernel = kernel_on(storage, &loader, "");
+        let storage = kernel.storage();
+        assert_eq!(info(&kernel, "stats").state, PluginState::Running);
+        assert_eq!(info(&kernel, "stats").kind, PluginKind::Code);
+        assert!(
+            loader
+                .asked
+                .borrow()
+                .iter()
+                .any(|p| p == "plugins/stats/code.ppn")
+        );
+        assert!(!storage.exists("plugins/.stats.next/code.ppn"));
+        // Its data and settings belong to its id: they stay.
+        assert!(storage.exists(".paperpaw/plugins/stats/statistics.sqlite3"));
+    }
+
+    #[test]
+    fn code_fetched_for_another_firmware_waits() {
+        let fingerprint = Native::new("code.ppn").fingerprint.0 ^ 1;
+        let storage = fetched(fingerprint, true);
+        let loader = stats_loader();
+        let kernel = kernel_on(storage, &loader, "");
+        let storage = kernel.storage();
+        assert!(kernel.plugins().get("stats").is_none());
+        assert!(storage.exists("plugins/.stats.next/code.ppn"));
+    }
+
+    #[test]
+    fn a_folder_the_update_did_not_fetch_is_not_taken() {
+        // Put there otherwise (e.g. over the Wi-Fi transfer).
+        let fingerprint = Native::new("code.ppn").fingerprint.0;
+        let storage = fetched(fingerprint, false);
+        let loader = stats_loader();
+        let kernel = kernel_on(storage, &loader, "");
+        assert!(kernel.plugins().get("stats").is_none());
+        let storage = kernel.storage();
+        assert!(paperpaw_sdk::native::installed_code(storage, "stats").is_none());
+    }
+
+    #[test]
+    fn safe_mode_leaves_code_fetched_where_it_is() {
+        let fingerprint = Native::new("code.ppn").fingerprint.0;
+        let storage = fetched(fingerprint, true);
+        let loader = stats_loader();
+        let kernel = Kernel::builder(DEVICE)
+            .storage(storage)
+            .code_plugins(Native::new("code.ppn"), Box::new(loader.clone()))
+            .safe_mode(SafeMode::new(SafeModeReason::KeyHeld))
+            .build()
+            .unwrap();
+        assert!(kernel.storage().exists("plugins/.stats.next/code.ppn"));
     }
 }
