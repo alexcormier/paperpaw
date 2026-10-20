@@ -793,7 +793,10 @@ mod tests {
         ] {
             let storage = MemoryStorage::new().with("b/t.xtc", data);
             let Ok(doc) = XtcDocument::open(&storage, "b/t.xtc") else {
-                assert_ne!(what, "page", "the index entry of one page is read with it");
+                assert_ne!(
+                    what, "page",
+                    "one broken page stopped the book from opening"
+                );
                 continue;
             };
             assert_eq!(what, "page", "{what} past the end opened");
@@ -801,6 +804,75 @@ mod tests {
             assert!(first.image.is_none());
             let second = doc.block_at(&storage, Locator::new(1, 0)).unwrap().unwrap();
             assert!(second.image.is_some());
+        }
+    }
+
+    /// Damaged books must fail cleanly: no panic, no endless decoding, no
+    /// page larger on the card than the book could describe. Bytes of a
+    /// valid book are changed at random (deterministically, so a failure
+    /// can be reproduced from its seed), mostly in its structures.
+    #[test]
+    fn damaged_books_fail_cleanly() {
+        struct Rng(u64);
+        impl Rng {
+            fn next(&mut self) -> u64 {
+                self.0 ^= self.0 >> 12;
+                self.0 ^= self.0 << 25;
+                self.0 ^= self.0 >> 27;
+                self.0.wrapping_mul(0x2545_f491_4f6c_dd1d)
+            }
+
+            fn below(&mut self, n: usize) -> usize {
+                (self.next() % n.max(1) as u64) as usize
+            }
+        }
+
+        let xth = page(XTH, 24, 20, &[0x5a; 2 * 24 * 3]);
+        let good = book(&[
+            page(XTG, 16, 4, &[0xa5; 8]),
+            xth.clone(),
+            page(XTG, 9, 3, &[0x0f; 6]),
+            xth,
+        ]);
+        // Header, metadata, chapters and index, then the pages.
+        let structures = u64_at(&good, 32) as usize;
+        for seed in 1..=2000u64 {
+            let mut rng = Rng(seed.wrapping_mul(0x9e37_79b9_7f4a_7c15));
+            let mut data = good.clone();
+            for _ in 0..1 + rng.below(4) {
+                let at = match rng.below(4) {
+                    0 => rng.below(data.len()),
+                    _ => rng.below(structures),
+                };
+                data[at] = match rng.below(3) {
+                    0 => data[at] ^ 1 << rng.below(8),
+                    1 => [0x00, 0xff, 0x7f, 0x80][rng.below(4)],
+                    _ => rng.next() as u8,
+                };
+            }
+            if rng.below(8) == 0 {
+                data.truncate(rng.below(data.len()));
+            }
+            let storage = MemoryStorage::new().with("b/t.xtc", data.clone());
+            let Ok(doc) = XtcDocument::open(&storage, "b/t.xtc") else {
+                continue;
+            };
+            for p in 0..doc.sections() {
+                let block = doc.block_at(&storage, Locator::new(p, 0)).unwrap();
+                if let Some(image) = block.and_then(|b| b.image) {
+                    // Every pixel comes from at least one bit of the book.
+                    let pixels = u64::from(image.width) * u64::from(image.height);
+                    assert!(pixels <= 8 * data.len() as u64, "seed {seed}: page {p}");
+                }
+            }
+            for i in 0..doc.toc_len(&storage) {
+                let entry = doc.toc_entry(&storage, i);
+                assert!(
+                    entry.is_none_or(|e| e.at.section < doc.sections()),
+                    "seed {seed}"
+                );
+            }
+            let _ = doc.cover(&storage);
         }
     }
 }
