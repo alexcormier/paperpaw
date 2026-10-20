@@ -33,7 +33,9 @@ impl ColorFile {
         }
         let width = u32::from_le_bytes([header[4], header[5], header[6], header[7]]);
         let height = u32::from_le_bytes([header[8], header[9], header[10], header[11]]);
-        let expected = HEADER + u64::from(width) * u64::from(height) * 3;
+        let expected = (u64::from(width) * u64::from(height))
+            .checked_mul(3)?
+            .checked_add(HEADER)?;
         (width > 0 && height > 0 && storage.size(path).ok()? == expected).then(|| ColorFile {
             path: String::from(path),
             width,
@@ -234,5 +236,17 @@ mod tests {
         assert_eq!(row, [7, 7, 7, 8, 8, 8]);
         // A gray file is not a colour one.
         assert!(crate::GrayFile::open(&storage, "c.rgb").is_none());
+    }
+
+    #[test]
+    fn sizes_past_any_file_are_refused() {
+        // Width and height whose bytes do not fit 64 bits.
+        let storage = OneFile::default();
+        let mut header = MAGIC.to_vec();
+        header.extend_from_slice(&u32::MAX.to_le_bytes());
+        header.extend_from_slice(&u32::MAX.to_le_bytes());
+        storage.write("c.rgb", &header).unwrap();
+        assert!(ColorFile::open(&storage, "c.rgb").is_none());
+        assert!(crate::ImageFile::open(&storage, "c.rgb").is_none());
     }
 }

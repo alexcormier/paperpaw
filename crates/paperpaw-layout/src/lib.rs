@@ -15,6 +15,7 @@
 
 extern crate alloc;
 
+use alloc::borrow::Cow;
 use alloc::string::String;
 use alloc::vec::Vec;
 
@@ -29,6 +30,9 @@ use paperpaw_text::wrap_lines_hyphenated;
 const MAX_JUSTIFY_GAP: f32 = 0.6;
 /// Extra space above a heading, relative to a body line.
 const HEADING_SPACE: f32 = 0.6;
+/// The least height of a line, in pixels, so a page holds a bounded
+/// number of them whatever a [`Typesetter`] says.
+const MIN_LINE_HEIGHT: f32 = 1.0;
 
 /// How text is set: its character style and whether it is body text or a
 /// heading.
@@ -327,21 +331,28 @@ pub fn layout_page(
     };
     let mut at = start;
     let mut y = 0.0f32;
-    let (_, body_line) = typesetter.line(Face::default());
+    let body_line = typesetter.line(Face::default()).1.max(MIN_LINE_HEIGHT);
 
     loop {
         let Some(block) = document.block_at(storage, at)? else {
             // End of the section: chapters start on a new page.
-            if at.section + 1 < document.sections() && page.is_past_end() {
-                at = Locator::new(at.section + 1, 0);
-                page.start = at;
-                continue;
-            }
-            if at.section + 1 < document.sections() {
-                at = Locator::new(at.section + 1, 0);
+            let next = at
+                .section
+                .checked_add(1)
+                .filter(|&n| n < document.sections());
+            if let Some(next) = next {
+                at = Locator::new(next, 0);
+                if page.is_past_end() {
+                    page.start = at;
+                    continue;
+                }
             }
             break;
         };
+        // Every block takes the layout further, or it would never end.
+        if block.end <= at.offset {
+            return Err(malformed());
+        }
         let from = if at.offset > block.start {
             block.text_index(at.offset)
         } else {
@@ -353,6 +364,11 @@ pub fn layout_page(
         if block.kind == BlockKind::Image
             && let Some(image) = &block.image
         {
+            // A picture without size has nothing to show (and no scale).
+            if image.width == 0 || image.height == 0 {
+                at = Locator::new(at.section, block.end);
+                continue;
+            }
             // Scaled to fit the content box, keeping its proportions.
             let scale = (width / image.width as f32).min(height / image.height as f32);
             let (w, h) = (image.width as f32 * scale, image.height as f32 * scale);
@@ -362,8 +378,7 @@ pub fn layout_page(
                 style.paragraph_spacing.max(body_line * 0.5)
             };
             if !page.is_past_end() && y + spacing + h > height {
-                page.end = Locator::new(at.section, block.start);
-                return Ok(page);
+                return ended(page, Locator::new(at.section, block.start));
             }
             if page.is_past_end() {
                 page.start = Locator::new(at.section, block.start);
@@ -382,6 +397,7 @@ pub fn layout_page(
         }
         let (heading, base) = block_face(&block);
         let (ascent, line_height) = typesetter.line(base);
+        let line_height = line_height.max(MIN_LINE_HEIGHT);
         // The book's ems are those of the block's text.
         let em = style.em * f32::from(block.size.unwrap_or(100)) / 100.0;
         let lines_before = page.lines.len();
@@ -419,8 +435,8 @@ pub fn layout_page(
         for (n, line) in lines.iter().enumerate() {
             let fits = y + line_height <= height;
             if !fits && !page.is_past_end() {
-                page.end = Locator::new(at.section, block.source_offset(from + line.range.start));
-                return Ok(page);
+                let end = block.source_offset(from + line.range.start);
+                return ended(page, Locator::new(at.section, end));
             }
             let first_x = if n == 0 { indent } else { 0.0 };
             let available = if n == 0 { width - indent } else { width };
@@ -461,13 +477,26 @@ pub fn layout_page(
         // A heading needs at least one line of what follows on its page.
         if heading > 0 && had_content && y + body_line > height {
             page.lines.truncate(lines_before);
-            page.end = Locator::new(at.section, block.source_offset(from));
-            return Ok(page);
+            return ended(page, Locator::new(at.section, block.source_offset(from)));
         }
         at = Locator::new(at.section, block.end);
     }
     page.end = at;
     Ok(page)
+}
+
+/// `page`, ending at `end`. A page that ends where it starts, or before,
+/// would be shown again and again.
+fn ended(mut page: Page, end: Locator) -> Result<Page, DocumentError> {
+    if end <= page.start {
+        return Err(malformed());
+    }
+    page.end = end;
+    Ok(page)
+}
+
+fn malformed() -> DocumentError {
+    DocumentError::Malformed(Cow::Borrowed("a block that does not advance"))
 }
 
 #[cfg(test)]
@@ -782,6 +811,154 @@ aa bb cc dd
         // ">xy" is 3 units in a 10-unit line, centred and not indented.
         assert_eq!(page.lines[1].x, 3.5);
         assert_eq!(page.lines[1].baseline, 20.0 + 8.0);
+    }
+
+    /// A document whose blocks come from a function, for documents that
+    /// break the rules. Fails the test when laid out without end.
+    struct Blocks<F> {
+        block_at: F,
+        calls: core::cell::Cell<u32>,
+        metadata: Metadata,
+    }
+
+    impl<F: Fn(Locator) -> Option<Block>> Blocks<F> {
+        fn new(block_at: F) -> Self {
+            Self {
+                block_at,
+                calls: core::cell::Cell::new(0),
+                metadata: Metadata::default(),
+            }
+        }
+    }
+
+    impl<F: Fn(Locator) -> Option<Block>> Document for Blocks<F> {
+        fn metadata(&self) -> &Metadata {
+            &self.metadata
+        }
+
+        fn sections(&self) -> u32 {
+            1
+        }
+
+        fn section_len(&self, _: u32) -> u32 {
+            u32::MAX
+        }
+
+        fn block_at(&self, _: &dyn Storage, at: Locator) -> Result<Option<Block>, DocumentError> {
+            self.calls.set(self.calls.get() + 1);
+            assert!(self.calls.get() < 10_000, "the layout does not end");
+            Ok((self.block_at)(at))
+        }
+    }
+
+    fn block(text: &str, start: u32, end: u32) -> Block {
+        Block {
+            kind: BlockKind::Paragraph,
+            continues: false,
+            start,
+            end,
+            text: String::from(text),
+            map: OffsetMap::IDENTITY,
+            runs: Vec::new(),
+            align: Align::Auto,
+            indent: None,
+            space: None,
+            size: None,
+            image: None,
+        }
+    }
+
+    /// Lines without height, as from a broken font.
+    struct Flat;
+
+    impl Typesetter for Flat {
+        fn advance(&self, _: Face, _: char) -> f32 {
+            1.0
+        }
+
+        fn line(&self, _: Face) -> (f32, f32) {
+            (0.0, 0.0)
+        }
+    }
+
+    fn layout_with(
+        doc: &dyn Document,
+        typesetter: &dyn Typesetter,
+        start: Locator,
+        height: f32,
+    ) -> Result<Page, DocumentError> {
+        let storage = paperpaw_document::NoStorage;
+        let cx = LayoutContext {
+            document: doc,
+            storage: &storage,
+            width: 10.0,
+            style: &STYLE,
+            typesetter,
+            hyphenate: None,
+        };
+        layout_page(&cx, start, height)
+    }
+
+    #[test]
+    fn blocks_that_do_not_go_on_are_malformed() {
+        // Each block ends where it was asked for, or before.
+        for back in [0, 1] {
+            let doc = Blocks::new(|at: Locator| Some(block("", 0, at.offset.saturating_sub(back))));
+            for typesetter in [&Units as &dyn Typesetter, &Flat] {
+                let page = layout_with(&doc, typesetter, Locator::new(0, 1), 100.0);
+                assert!(matches!(page, Err(DocumentError::Malformed(_))));
+            }
+        }
+        // A page with lines that ends where it starts would come again and
+        // again.
+        let mut map = OffsetMap::default();
+        map.checkpoint(10, 0);
+        let doc = Blocks::new(move |_| {
+            Some(Block {
+                map: map.clone(),
+                ..block("aaaa bbbb cccc", 100, 200)
+            })
+        });
+        let page = layout_with(&doc, &Units, Locator::new(0, 100), 10.0);
+        assert!(matches!(page, Err(DocumentError::Malformed(_))));
+    }
+
+    #[test]
+    fn pictures_without_size_are_left_out() {
+        let doc = Blocks::new(|at: Locator| match at.offset {
+            0..10 => Some(Block {
+                kind: BlockKind::Image,
+                image: Some(ImageRef {
+                    path: String::from("a.gray"),
+                    width: 0,
+                    height: 0,
+                }),
+                ..block("", 0, 10)
+            }),
+            10..20 => Some(block("aa", 10, 20)),
+            _ => None,
+        });
+        let page = layout_with(&doc, &Units, Locator::START, 100.0).unwrap();
+        assert!(page.images.is_empty());
+        assert_eq!(texts(&page), vec!["aa"]);
+        assert_eq!(page.lines[0].baseline, 8.0);
+    }
+
+    #[test]
+    fn lines_without_height_still_fill_pages() {
+        let doc = Blocks::new(|at: Locator| {
+            (at.offset < 5000).then(|| block("a", at.offset, at.offset + 1))
+        });
+        let page = layout_with(&doc, &Flat, Locator::START, 100.0).unwrap();
+        assert!(page.lines.len() <= 100, "{} lines", page.lines.len());
+        assert!(page.end > page.start);
+    }
+
+    #[test]
+    fn the_last_section_number_does_not_overflow() {
+        let doc = Text::new("x\n");
+        let page = layout_with(&doc, &Units, Locator::new(u32::MAX, 0), 100.0).unwrap();
+        assert_eq!(texts(&page), vec!["x"]);
     }
 
     #[test]
