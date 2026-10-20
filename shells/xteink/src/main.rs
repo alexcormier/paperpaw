@@ -48,6 +48,7 @@ mod input;
 #[cfg(feature = "x4-pro")]
 mod light;
 mod link;
+mod native;
 mod net;
 mod network;
 mod ota;
@@ -56,6 +57,7 @@ mod probe;
 #[cfg(feature = "remote")]
 mod remote;
 mod roots;
+mod safe_mode;
 mod serve;
 mod sockets;
 mod stack;
@@ -250,7 +252,11 @@ fn main() -> ! {
     }
     // Before anything else: an update on trial that failed is undone here
     // (a restart into the firmware before it).
-    let ota = ota::Ota::start(board.flash);
+    // One handle on the flash, for updates and native plugins.
+    let flash: ota::Flash = alloc::rc::Rc::new(core::cell::RefCell::new(
+        esp_bootloader_esp_idf::partitions::FlashStorage::new(board.flash),
+    ));
+    let ota = ota::Ota::start(flash.clone());
 
     let storage = card::mount(board.card);
     // For bug reports: on the card, and said over USB.
@@ -291,7 +297,10 @@ fn main() -> ! {
     if let Some(unix_ms) = board.clock_ms {
         clock::set(now(), unix_ms);
     }
-    let kernel = kernel(storage, ota.as_ref());
+    // Plugins the web flasher wrote behind the image, onto the card first.
+    let staged = native::bundle::stage(&flash, storage.as_ref()).unwrap_or_default();
+    let code = code_plugins(ota.as_ref(), &flash);
+    let kernel = kernel(storage, ota.as_ref(), code, staged);
     // Light sleeps while idle on battery, the deep one at the end.
     power::init(LowPower::new(board.low_power));
     Firmware {
@@ -312,12 +321,74 @@ fn main() -> ! {
     .run()
 }
 
+/// How this start treats code plugins (ADR 0024).
+enum CodePlugins {
+    Load(native::Loader),
+    /// Safe mode: none loaded.
+    SafeMode(paperpaw_sdk::native::SafeMode),
+    /// None this start: an update is on trial, which must show it starts
+    /// by itself.
+    None,
+}
+
+/// What this firmware loads, as plugins see it ([`paperpaw_sdk::Env`]),
+/// with the plugins of the web flasher not installed.
+fn native(
+    not_installed: alloc::vec::Vec<paperpaw_sdk::native::NotInstalled>,
+) -> paperpaw_sdk::native::Native {
+    let mut native = paperpaw_sdk::native::Native::new("code.ppn");
+    native.not_installed = not_installed;
+    native
+}
+
+/// Loads nothing: in safe mode the kernel asks for no code.
+struct NoCode;
+
+impl paperpaw_core::CodeLoader for NoCode {
+    fn load(
+        &mut self,
+        _: &dyn Storage,
+        _: &paperpaw_core::CodeFile<'_>,
+    ) -> Result<Box<dyn paperpaw_sdk::Plugin>, paperpaw_sdk::PluginProblem> {
+        Err(paperpaw_sdk::PluginProblem::SafeMode)
+    }
+}
+
+/// Whether code plugins are loaded at this start, after the key for safe
+/// mode was looked for and the failed starts counted.
+fn code_plugins(ota: Option<&ota::Ota>, flash: &ota::Flash) -> CodePlugins {
+    if ota.is_some_and(ota::Ota::on_trial) {
+        info!("native: an update on trial starts without code plugins");
+        return CodePlugins::None;
+    }
+    if let Some(safe_mode) = safe_mode::check(input::held(safe_mode::KEY)) {
+        warn!(
+            "native: safe mode ({:?}), without code plugins",
+            safe_mode.reason
+        );
+        return CodePlugins::SafeMode(safe_mode);
+    }
+    #[cfg(feature = "esp32s3")]
+    let place = {
+        let _ = flash;
+        native::Place::default()
+    };
+    #[cfg(feature = "x4")]
+    let place = native::Place::new(flash.clone());
+    CodePlugins::Load(native::Loader::new(place))
+}
+
 /// The kernel with the standard app, as the X4 wants it.
 #[expect(
     clippy::expect_used,
     reason = "the plugins are built in: a kernel that cannot be built is a bug to see at once"
 )]
-fn kernel(storage: Box<dyn Storage>, ota: Option<&ota::Ota>) -> Kernel {
+fn kernel(
+    storage: Box<dyn Storage>,
+    ota: Option<&ota::Ota>,
+    code: CodePlugins,
+    staged: native::bundle::Staged,
+) -> Kernel {
     #[cfg(feature = "remote")]
     let storage: Box<dyn Storage> = Box::new(traced::Traced(storage));
     let builder = Kernel::builder(DEVICE)
@@ -359,6 +430,21 @@ fn kernel(storage: Box<dyn Storage>, ota: Option<&ota::Ota>) -> Kernel {
         Some(ota) => builder.firmware(ota.firmware()),
         None => builder,
     };
+    let builder = match code {
+        CodePlugins::Load(loader) => {
+            builder.code_plugins(native(staged.not_installed), Box::new(loader))
+        }
+        CodePlugins::SafeMode(safe_mode) => builder
+            .code_plugins(native(staged.not_installed), Box::new(NoCode))
+            .safe_mode(safe_mode),
+        CodePlugins::None => builder,
+    };
+    let builder = staged
+        .installs
+        .into_iter()
+        .fold(builder, |builder, (id, folder)| {
+            builder.install_plugin(id, folder)
+        });
     let builder = paperpaw_app::install(builder, paperpaw_app::Fonts::Packs).plugin(device::X4);
     let mut kernel = builder.build().expect("kernel");
     for warning in kernel.take_warnings() {

@@ -1,0 +1,8 @@
+Heading "Clock"
+Text "This update of Clock is signed by someone other than the author of the version you have. It may not come from them."
+Text "Install it only if you trust where it comes from. If you are not sure, keep the version you have."
+Row "Not now" (focused)
+Row "Install anyway"
+Text "Clock: the update is signed by"
+Text "someone else. Open its page to"
+Text "decide."

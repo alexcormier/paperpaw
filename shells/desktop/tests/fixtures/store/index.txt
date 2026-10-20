@@ -1,5 +1,5 @@
-0	1140	side-keys	1.0.0	PaperPaw	MIT	Side keys turn pages	The keys on the side turn pages in books; the front keys move in menus.
-4	1784	reading-nook	1.2.0	PaperPaw	Apache-2.0	Reading nook	A home screen for reading: the book you read, its progress and the clock.
-5	1214	airy-theme	1.0.0	Someone	Apache-2.0	Airy	Light headers, wide margins, roomy rows and rounded corners.
-5	1821	large-print	1.0.0	PaperPaw	Apache-2.0	Large print	Bigger text in books and menus: a larger interface, a larger font and more space between lines.
-6	2613	esperanto	1.0.0	Community	Apache-2.0	Esperanto	PaperPaw in Esperanto: menus, settings and messages.
+0	1140	0	side-keys	1.0.0	0.4	PaperPaw	MIT	Side keys turn pages	The keys on the side turn pages in books; the front keys move in menus.
+4	1784	0	reading-nook	1.2.0	0.4	PaperPaw	Apache-2.0	Reading nook	A home screen for reading: the book you read, its progress and the clock.
+5	1214	0	airy-theme	1.0.0	0.4	Someone	Apache-2.0	Airy	Light headers, wide margins, roomy rows and rounded corners.
+5	1821	0	large-print	1.0.0	0.4	PaperPaw	Apache-2.0	Large print	Bigger text in books and menus: a larger interface, a larger font and more space between lines.
+6	2613	0	esperanto	1.0.0	0.4	Community	Apache-2.0	Esperanto	PaperPaw in Esperanto: menus, settings and messages.

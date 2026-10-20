@@ -85,6 +85,8 @@ const PROFILE_SPARE: usize = 64 * 1024;
 /// until first read).
 static MILLIVOLTS: AtomicU32 = AtomicU32::new(0);
 static PERCENT: AtomicU32 = AtomicU32::new(0);
+/// When the readings began (ms since the start).
+static STARTED: AtomicU32 = AtomicU32::new(0);
 /// The power button is down now (not debounced).
 static POWER_DOWN: AtomicBool = AtomicBool::new(false);
 /// Readings so far, and the last ones of the two ladders, to look into.
@@ -181,6 +183,7 @@ fn sample() {
 
 /// Starts reading in the timer's interrupt.
 pub fn start(mut sampler: Sampler) {
+    STARTED.store(millis() as u32, Ordering::Relaxed);
     sampler.read();
     let _ = sampler.timer.start(Duration::from_millis(SAMPLE_MS));
     sampler.timer.listen();
@@ -261,6 +264,23 @@ pub fn stats() -> (u32, u16, u16) {
         (levels >> 16) as u16,
         levels as u16,
     )
+}
+
+/// Whether `button` is held now (the X4 Pro's home key as one), once the
+/// readings since the start had time to settle: for keys held at
+/// power-on.
+pub fn held(button: &str) -> bool {
+    // A few readings past the debouncing.
+    let settled = paperpaw_x4::buttons::DEBOUNCE_MS + 4 * SAMPLE_MS + 2 * SAMPLE_MS;
+    while millis() < STARTED.load(Ordering::Relaxed) as u64 + settled {
+        core::hint::spin_loop();
+    }
+    critical_section::with(|cs| {
+        SAMPLER.borrow_ref(cs).as_ref().is_some_and(|s| {
+            s.debouncer.is_down(button)
+                || (button == paperpaw_platform::buttons::HOME && s.keys.home_down())
+        })
+    })
 }
 
 /// Whether the power button is down now.

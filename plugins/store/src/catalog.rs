@@ -12,6 +12,11 @@
 //!   "latest": {"version": "1.0.0", "sdk": "0.4", "formats": 1, "size": 2345}}]}
 //! ```
 //!
+//! A code plugin is `"kind": "code"`, with `latest.builds` (each a
+//! `device`, the `abi` it was built for, `url`, `size`, `sha256`) and the
+//! `author_key` its author signs with; it is listed where a build fits
+//! this device and PaperPaw.
+//!
 //! The plugins that fit go to an index on the storage: a line each, and
 //! where each line begins (4 bytes each). In memory are only the runs of
 //! plugins of one group, so the list may grow without limit. A plugin's
@@ -23,7 +28,8 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use paperpaw_json::stream::{Event, read_file};
-use paperpaw_sdk::install::{self, MAX_FILES, Package, PackageFile};
+use paperpaw_sdk::install::{self, Digest, MAX_FILES, Package, PackageFile};
+use paperpaw_sdk::native::Fingerprint;
 use paperpaw_sdk::web::{encode, join_url};
 use paperpaw_sdk::{Env, Storage, Version};
 
@@ -58,7 +64,29 @@ pub(crate) fn group(name: &str) -> usize {
         .unwrap_or(GROUPS.len() - 1)
 }
 
-/// A data plugin the library offers for this device.
+/// What the store installs for: the device as plugin libraries call it,
+/// and, where PaperPaw loads code plugins, the build they must be made
+/// for and the name their code gets.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Device<'a> {
+    pub name: &'a str,
+    pub fingerprint: Option<Fingerprint>,
+    pub code_file: &'a str,
+}
+
+impl<'a> Device<'a> {
+    /// This device, if plugin libraries know it.
+    pub(crate) fn of(env: &Env<'a>) -> Option<Device<'a>> {
+        Some(Device {
+            name: env.catalog_device?,
+            fingerprint: env.native.map(|native| native.fingerprint),
+            code_file: env.native.map_or("", |native| &native.file),
+        })
+    }
+}
+
+/// A plugin the library offers for this device: a data plugin, or a code
+/// plugin with a build for this PaperPaw.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct Entry {
     pub id: String,
@@ -70,14 +98,21 @@ pub(crate) struct Entry {
     pub author: String,
     pub licence: String,
     pub version: String,
-    /// Bytes to download.
+    /// The PaperPaw (its SDK) it is made for, e.g. `0.4`.
+    pub sdk: String,
+    /// It has code, which runs with full access to the device.
+    pub code: bool,
+    /// Bytes to download, its code with them.
     pub size: u64,
 }
 
 impl Entry {
-    /// The version installed, if it is.
+    /// The version installed, if it is (a code plugin's update waiting for
+    /// the restart counts).
     pub(crate) fn installed(&self, env: &Env<'_>) -> Option<Version> {
-        env.plugins.get(&self.id).map(|info| info.manifest.version)
+        env.plugins
+            .get(&self.id)
+            .map(|info| info.update.unwrap_or(info.manifest.version))
     }
 
     /// Whether a newer version than the one installed is offered.
@@ -92,11 +127,13 @@ impl Entry {
     fn line(&self) -> String {
         let clean = |s: &str| s.replace(['\t', '\n', '\r'], " ");
         format!(
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
             self.group,
             self.size,
+            u8::from(self.code),
             clean(&self.id),
             clean(&self.version),
+            clean(&self.sdk),
             clean(&self.author),
             clean(&self.licence),
             clean(&self.name),
@@ -105,18 +142,30 @@ impl Entry {
     }
 
     fn parse(line: &str) -> Option<Entry> {
-        let mut f = line.splitn(8, '\t');
+        let mut f = line.splitn(10, '\t');
         Some(Entry {
             group: f.next()?.parse().ok()?,
             size: f.next()?.parse().ok()?,
+            code: f.next()? == "1",
             id: f.next()?.to_string(),
             version: f.next()?.to_string(),
+            sdk: f.next()?.to_string(),
             author: f.next()?.to_string(),
             licence: f.next()?.to_string(),
             name: f.next()?.to_string(),
             summary: f.next()?.to_string(),
         })
     }
+}
+
+/// A build of a code plugin, as `latest.builds` lists them.
+#[derive(Debug, Clone, Default)]
+struct Build {
+    device: String,
+    abi: String,
+    url: String,
+    size: u64,
+    sha256: String,
 }
 
 /// What is known of the plugin being read.
@@ -128,12 +177,16 @@ struct Item {
     /// `devices`, where the library names them: any, and this one.
     devices: bool,
     device: bool,
-    sdk: String,
     formats: u32,
+    /// The key its author signs its code with, as the library says.
+    author_key: String,
     /// The files read so far (a plugin's page only), and the one being
     /// read.
     files: Vec<PackageFile>,
     file: PackageFile,
+    /// The build being read, and the one for this device and PaperPaw.
+    build: Build,
+    code: Option<PackageFile>,
 }
 
 impl Item {
@@ -144,20 +197,25 @@ impl Item {
         }
     }
 
-    /// Whether this device can install it.
+    /// Whether this device can install it: a data plugin, or one with code
+    /// built for it.
     fn fits(&self) -> bool {
         let entry = &self.entry;
-        self.kind == "data"
-            && !self.built_in
+        let kind = match self.kind.as_str() {
+            "data" => true,
+            "code" => self.code.is_some(),
+            _ => false,
+        };
+        kind && !self.built_in
             && (!self.devices || self.device)
             && install::is_plugin_name(&entry.id)
             && !entry.name.is_empty()
             && Version::parse(&entry.version).is_some()
-            && install::fits(&self.sdk, self.formats)
+            && install::fits(&entry.sdk, self.formats)
     }
 
     /// Takes what `key` (the path below the plugin) says.
-    fn read(&mut self, key: &[String], value: &str, device: &str) {
+    fn read(&mut self, key: &[String], value: &str, device: &Device<'_>) {
         let entry = &mut self.entry;
         match key {
             [key] => match key.as_str() {
@@ -169,15 +227,16 @@ impl Item {
                 "group" => entry.group = group(value),
                 "kind" => self.kind = cut(value, MAX_NAME),
                 "built_in" => self.built_in = value == "true",
+                "author_key" => self.author_key = cut(value, MAX_NAME),
                 _ => {}
             },
             [devices, at] if devices == "devices" && at == "[]" => {
                 self.devices = true;
-                self.device |= value == device;
+                self.device |= value == device.name;
             }
             [latest, key] if latest == "latest" => match key.as_str() {
                 "version" => entry.version = cut(value, MAX_NAME),
-                "sdk" => self.sdk = cut(value, MAX_NAME),
+                "sdk" => entry.sdk = cut(value, MAX_NAME),
                 "formats" => self.formats = value.parse().unwrap_or(u32::MAX),
                 "size" => entry.size = value.parse().unwrap_or(0),
                 _ => {}
@@ -188,7 +247,18 @@ impl Item {
                     "path" => file.path = value.to_string(),
                     "url" => file.url = value.to_string(),
                     "size" => file.size = value.parse().unwrap_or(0),
-                    "sha1" => file.sha1 = value.to_ascii_lowercase(),
+                    "sha1" => file.digest = Digest::Sha1(value.to_ascii_lowercase()),
+                    _ => {}
+                }
+            }
+            [latest, builds, at, key] if latest == "latest" && builds == "builds" && at == "[]" => {
+                let build = &mut self.build;
+                match key.as_str() {
+                    "device" => build.device = cut(value, MAX_NAME),
+                    "abi" => build.abi = cut(value, MAX_NAME),
+                    "url" => build.url = value.to_string(),
+                    "size" => build.size = value.parse().unwrap_or(0),
+                    "sha256" => build.sha256 = value.to_ascii_lowercase(),
                     _ => {}
                 }
             }
@@ -204,6 +274,48 @@ impl Item {
             self.files.push(file);
         }
     }
+
+    /// A build of `latest.builds` was read whole: kept as the plugin's
+    /// code if it is for this device and PaperPaw.
+    fn build_done(&mut self, device: &Device<'_>) {
+        let build = core::mem::take(&mut self.build);
+        let fits = build.device == device.name
+            && !device.code_file.is_empty()
+            && device
+                .fingerprint
+                .is_some_and(|f| Fingerprint::parse(&build.abi) == Some(f));
+        if fits && self.code.is_none() {
+            self.code = Some(PackageFile {
+                path: device.code_file.to_string(),
+                url: build.url,
+                size: build.size,
+                digest: Digest::Sha256(build.sha256),
+            });
+        }
+    }
+
+    /// The plugin as listed: its code's size counted in.
+    fn finish(mut self) -> Entry {
+        if let Some(code) = &self.code {
+            self.entry.code = true;
+            self.entry.size = self.entry.size.saturating_add(code.size);
+        }
+        self.entry
+    }
+}
+
+/// An Ed25519 public key written as 64 hex digits.
+fn key(hex: &str) -> Option<[u8; 32]> {
+    let hex = hex.trim().as_bytes();
+    if hex.len() != 64 {
+        return None;
+    }
+    let digit = |b: u8| char::from(b).to_digit(16);
+    let mut key = [0u8; 32];
+    for (byte, pair) in key.iter_mut().zip(hex.chunks(2)) {
+        *byte = u8::try_from(digit(pair[0])? * 16 + digit(pair[1])?).ok()?;
+    }
+    Some(key)
 }
 
 /// Cuts `text` to at most `max` bytes, at a character's end.
@@ -220,12 +332,17 @@ fn is_file(path: &[String]) -> bool {
     matches!(path, [latest, files, at] if latest == "latest" && files == "files" && at == "[]")
 }
 
-/// Reads the list at `path` for the device `device`, handing each plugin
-/// that fits to `found`. `false` if it is no list this plugin reads.
+/// Whether `path` (below a plugin) is that of a build of `latest.builds`.
+fn is_build(path: &[String]) -> bool {
+    matches!(path, [latest, builds, at] if latest == "latest" && builds == "builds" && at == "[]")
+}
+
+/// Reads the list at `path` for `device`, handing each plugin that fits to
+/// `found`. `false` if it is no list this plugin reads.
 fn read_list(
     storage: &dyn Storage,
     path: &str,
-    device: &str,
+    device: &Device<'_>,
     found: &mut dyn FnMut(Entry),
 ) -> bool {
     let mut format = None;
@@ -235,7 +352,14 @@ fn read_list(
         Event::Open([list, at]) if list == "plugins" && at == "[]" => item = Some(Item::new()),
         Event::Close([list, at]) if list == "plugins" && at == "[]" => {
             if let Some(done) = item.take().filter(Item::fits) {
-                found(done.entry);
+                found(done.finish());
+            }
+        }
+        Event::Close([list, at, rest @ ..])
+            if list == "plugins" && at == "[]" && is_build(rest) =>
+        {
+            if let Some(item) = item.as_mut() {
+                item.build_done(device);
             }
         }
         Event::Value([list, at, rest @ ..], value) if list == "plugins" && at == "[]" => {
@@ -248,21 +372,34 @@ fn read_list(
     format == Some(FORMAT)
 }
 
+/// A plugin as its page at the library gives it: what it is, its files
+/// to install (a code plugin's code among them, as [`Device::code_file`]),
+/// and the key its author signs its code with.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Plugin {
+    pub entry: Entry,
+    pub package: Package,
+    pub author_key: Option<[u8; 32]>,
+}
+
 /// Reads a plugin's page at `path` (`{"format": 2, "plugin": {…}}`): the
-/// plugin if it fits this device, with its files, their addresses
-/// relative to `base` (the page's).
+/// plugin if it fits `device`, with its files, their addresses relative to
+/// `base` (the page's).
 fn read_plugin(
     storage: &dyn Storage,
     path: &str,
-    device: &str,
+    device: &Device<'_>,
     base: &str,
-) -> Option<(Entry, Package)> {
+) -> Option<Plugin> {
     let mut format = None;
     let mut item = Item::new();
     read_file(storage, path, &mut |event| match event {
         Event::Value([key], value) if key == "format" => format = value.parse::<u32>().ok(),
         Event::Close([plugin, rest @ ..]) if plugin == "plugin" && is_file(rest) => {
             item.file_done();
+        }
+        Event::Close([plugin, rest @ ..]) if plugin == "plugin" && is_build(rest) => {
+            item.build_done(device);
         }
         Event::Value([plugin, rest @ ..], value) if plugin == "plugin" => {
             item.read(rest, value, device);
@@ -272,19 +409,26 @@ fn read_plugin(
     if format != Some(FORMAT) || !item.fits() {
         return None;
     }
-    let files = core::mem::take(&mut item.files)
-        .into_iter()
-        .map(|mut file| {
-            file.url = join_url(base, &file.url);
-            file
-        })
-        .collect();
+    let mut files = core::mem::take(&mut item.files);
+    files.extend(item.code.clone());
+    for file in &mut files {
+        file.url = join_url(base, &file.url);
+    }
+    let author_key = key(&item.author_key);
+    let code = item.code.is_some();
+    let entry = item.finish();
     let package = Package {
-        plugin: item.entry.id.clone(),
-        name: item.entry.name.clone(),
+        plugin: entry.id.clone(),
+        name: entry.name.clone(),
         files,
     };
-    package.is_valid().then_some((item.entry, package))
+    // A code plugin names the key its author signs with.
+    let whole = package.is_valid() && (!code || author_key.is_some());
+    whole.then_some(Plugin {
+        entry,
+        package,
+        author_key,
+    })
 }
 
 /// A file of the store: the list fetched, the index and where its lines
@@ -319,7 +463,7 @@ fn hits_path() -> String {
 
 /// The first line of an index's head: its format, then the runs of
 /// plugins of one group (`group:count`), in order.
-const HEADER: &str = "store-index 2";
+const HEADER: &str = "store-index 3";
 
 /// The address of the list at `list` for `device` in `language`.
 pub(crate) fn list_url(list: &str, device: &str, language: &str) -> String {
@@ -346,7 +490,7 @@ fn build(
     storage: &dyn Storage,
     json: &str,
     [index, offsets, head]: [&str; 3],
-    device: &str,
+    device: &Device<'_>,
 ) -> bool {
     let mut runs: Vec<(usize, u32)> = Vec::new();
     let mut lines = String::new();
@@ -498,7 +642,7 @@ pub(crate) fn hit(storage: &dyn Storage, n: usize) -> Option<usize> {
 
 /// Takes the list fetched to `fetched`: its index, kept for the next
 /// visits. `None` (and the file gone) if it is no list this plugin reads.
-pub(crate) fn take(storage: &dyn Storage, fetched: &str, device: &str) -> Option<Index> {
+pub(crate) fn take(storage: &dyn Storage, fetched: &str, device: &Device<'_>) -> Option<Index> {
     let fresh = [index_path(), offsets_path(), head_path()].map(|path| format!("{path}.part"));
     let built = build(storage, fetched, [&fresh[0], &fresh[1], &fresh[2]], device);
     let _ = storage.remove(fetched);
@@ -520,14 +664,14 @@ pub(crate) fn take(storage: &dyn Storage, fetched: &str, device: &str) -> Option
     Index::kept(storage)
 }
 
-/// The plugin of the page fetched to `fetched` from `address`, and its
+/// The plugin of the page fetched to `fetched` from `address`, with its
 /// files to install.
 pub(crate) fn plugin(
     storage: &dyn Storage,
     fetched: &str,
     address: &str,
-    device: &str,
-) -> Option<(Entry, Package)> {
+    device: &Device<'_>,
+) -> Option<Plugin> {
     let read = read_plugin(storage, fetched, device, address);
     let _ = storage.remove(fetched);
     read
@@ -538,8 +682,16 @@ mod tests {
     use super::*;
     use paperpaw_sdk::MemoryStorage;
 
-    const SHA: &str = "0123456789abcdef0123456789abcdef01234567";
+    const SHA1: &str = "0123456789abcdef0123456789abcdef01234567";
+    const SHA256: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    const KEY: &str = "1111111111111111111111111111111111111111111111111111111111111111";
     const FILES: [&str; 3] = ["i.txt", "i.bin", "i.head"];
+    /// The X4 running a PaperPaw that loads code plugins of this build.
+    const X4: Device<'static> = Device {
+        name: "x4",
+        fingerprint: Some(Fingerprint(0x0123_4567_89ab_cdef)),
+        code_file: "code.ppn",
+    };
 
     fn plugin(id: &str, group: &str, extra: &str) -> String {
         format!(
@@ -547,6 +699,23 @@ mod tests {
   "kind": "data", "author": "A", "licence": "MIT", {extra}
   "latest": {{"version": "1.0.0", "sdk": "0.4", "formats": 1, "size": 30}}}}"#
         )
+    }
+
+    /// A build for `device` and `abi`.
+    fn build_of(device: &str, abi: &str) -> String {
+        format!(
+            r#"{{"device": "{device}", "abi": "{abi}", "url": "/b/{device}.ppn", "size": 70000, "sha256": "{SHA256}"}}"#
+        )
+    }
+
+    /// A code plugin with `builds`.
+    fn code(id: &str, builds: &[String]) -> String {
+        plugin(id, "reading", &format!(r#""author_key": "{KEY}","#))
+            .replace(r#""kind": "data""#, r#""kind": "code""#)
+            .replace(
+                r#""size": 30}"#,
+                &format!(r#""size": 30, "builds": [{}]}}"#, builds.join(",")),
+            )
     }
 
     fn list(plugins: &[String]) -> MemoryStorage {
@@ -560,20 +729,30 @@ mod tests {
         Entry::parse(&line_at(storage, "i.txt", offset).unwrap()).unwrap()
     }
 
-    /// The plugins of the list through the index, in its order, and its
-    /// runs of groups.
-    fn entries(storage: &MemoryStorage) -> (Vec<Entry>, Vec<(usize, usize)>) {
-        assert!(build(storage, "p.json", FILES, "x4"));
+    /// The plugins of the list for `device` through the index, in its
+    /// order, and its runs of groups.
+    fn entries_for(
+        storage: &MemoryStorage,
+        device: &Device<'_>,
+    ) -> (Vec<Entry>, Vec<(usize, usize)>) {
+        assert!(build(storage, "p.json", FILES, device));
         let index = Index::open(storage, "i.head").unwrap();
         let entries = (0..index.len()).map(|n| entry(storage, n)).collect();
         (entries, index.runs)
+    }
+
+    fn entries(storage: &MemoryStorage) -> (Vec<Entry>, Vec<(usize, usize)>) {
+        entries_for(storage, &X4)
+    }
+
+    fn ids(entries: &[Entry]) -> Vec<&str> {
+        entries.iter().map(|e| e.id.as_str()).collect()
     }
 
     #[test]
     fn only_what_fits_is_listed_in_its_order() {
         let storage = list(&[
             plugin("plain", "reading", ""),
-            plugin("code", "reading", "").replace(r#""kind": "data""#, r#""kind": "code""#),
             plugin("built", "reading", r#""built_in": true,"#),
             plugin("later", "look", "").replace(r#""formats": 1"#, r#""formats": 2"#),
             plugin("next-sdk", "look", "").replace(r#""sdk": "0.4""#, r#""sdk": "0.9""#),
@@ -583,12 +762,41 @@ mod tests {
             plugin("odd", "elsewhere", ""),
         ]);
         let (entries, runs) = entries(&storage);
-        let ids: Vec<&str> = entries.iter().map(|e| e.id.as_str()).collect();
-        assert_eq!(ids, ["plain", "theme", "odd"]);
+        assert_eq!(ids(&entries), ["plain", "theme", "odd"]);
         // Groups as they come, an unknown one under `system`.
         assert_eq!(runs, [(0, 1), (5, 1), (6, 1)]);
         assert_eq!(entries[0].summary, "Does plain.");
-        assert_eq!(entries[0].size, 30);
+        assert_eq!((entries[0].size, entries[0].code), (30, false));
+    }
+
+    #[test]
+    fn code_plugins_are_listed_where_a_build_fits() {
+        let fits = build_of("x4", "0123456789abcdef");
+        let storage = list(&[
+            code(
+                "clock",
+                &[build_of("x4-pro", "0123456789abcdef"), fits.clone()],
+            ),
+            code("other-build", &[build_of("x4", "fedcba9876543210")]),
+            code("pro-only", &[build_of("x4-pro", "0123456789abcdef")]),
+            code("no-builds", &[]),
+        ]);
+        let (entries, _) = entries(&storage);
+        assert_eq!(ids(&entries), ["clock"]);
+        // Its code counted in, and what it is made for.
+        let clock = &entries[0];
+        assert_eq!(
+            (clock.code, clock.size, clock.sdk.as_str()),
+            (true, 70_030, "0.4")
+        );
+        // A PaperPaw that loads no code plugins lists none.
+        let without = Device {
+            fingerprint: None,
+            code_file: "",
+            ..X4
+        };
+        let storage = list(&[code("clock", &[fits])]);
+        assert!(entries_for(&storage, &without).0.is_empty());
     }
 
     #[test]
@@ -605,32 +813,43 @@ mod tests {
     #[test]
     fn other_lists_are_not_read() {
         let storage = MemoryStorage::new().with("p.json", r#"{"format": 1, "plugins": []}"#);
-        assert!(!build(&storage, "p.json", FILES, "x4"));
-        assert!(!build(&storage, "missing.json", FILES, "x4"));
+        assert!(!build(&storage, "p.json", FILES, &X4));
+        assert!(!build(&storage, "missing.json", FILES, &X4));
         assert!(!storage.exists("i.txt"));
         assert!(Index::open(&storage, "i.head").is_none());
     }
 
     fn page(files: &str) -> MemoryStorage {
+        page_of(files, "data", "")
+    }
+
+    fn page_of(files: &str, kind: &str, more: &str) -> MemoryStorage {
         let text = format!(
             r#"{{"format": 2, "plugin": {{"id": "airy", "name": "Airy", "summary": "Roomy.",
-  "group": "look", "kind": "data", "author": "A", "licence": "MIT",
-  "latest": {{"version": "1.0.0", "sdk": "0.4", "formats": 1, "size": 20, "files": [{files}]}}}}}}"#
+  "group": "look", "kind": "{kind}", "author": "A", "licence": "MIT", {more}
+  "latest": {{"version": "1.0.0", "sdk": "0.4", "formats": 1, "size": 20, "files": [{files}]{}}}}}}}"#,
+            if kind == "code" {
+                format!(r#", "builds": [{}]"#, build_of("x4", "0123456789abcdef"))
+            } else {
+                String::new()
+            }
         );
         MemoryStorage::new().with("a.json", text)
     }
 
     fn file(path: &str) -> String {
         format!(
-            r#"{{"path": "{path}", "url": "/api/v1/plugins/airy/1.0.0/{path}", "size": 10, "sha1": "{SHA}"}}"#
+            r#"{{"path": "{path}", "url": "/api/v1/plugins/airy/1.0.0/{path}", "size": 10, "sha1": "{SHA1}"}}"#
         )
     }
+
+    const BASE: &str = "https://paperpaw.org/api/v1/plugins/airy.json?device=x4&lang=en";
 
     #[test]
     fn a_plugins_files_come_with_its_page() {
         let storage = page(&format!("{},{}", file("i18n/de.ini"), file("plugin.ini")));
-        let base = "https://paperpaw.org/api/v1/plugins/airy.json?device=x4&lang=en";
-        let (entry, package) = read_plugin(&storage, "a.json", "x4", base).unwrap();
+        let plugin = read_plugin(&storage, "a.json", &X4, BASE).unwrap();
+        let (entry, package) = (&plugin.entry, &plugin.package);
         assert_eq!((entry.id.as_str(), entry.name.as_str()), ("airy", "Airy"));
         assert_eq!(package.plugin, "airy");
         let urls: Vec<&str> = package.files.iter().map(|f| f.url.as_str()).collect();
@@ -641,25 +860,42 @@ mod tests {
                 "https://paperpaw.org/api/v1/plugins/airy/1.0.0/plugin.ini"
             ]
         );
+        assert_eq!(plugin.author_key, None);
+    }
+
+    #[test]
+    fn a_code_plugins_page_brings_its_code_and_its_authors_key() {
+        let author = format!(r#""author_key": "{KEY}","#);
+        let storage = page_of(&file("plugin.ini"), "code", &author);
+        let plugin = read_plugin(&storage, "a.json", &X4, BASE).unwrap();
+        let code = plugin.package.files.last().unwrap();
+        assert_eq!(code.path, "code.ppn");
+        assert_eq!(code.url, "https://paperpaw.org/b/x4.ppn");
+        assert_eq!(code.digest, Digest::Sha256(SHA256.into()));
+        assert_eq!(plugin.author_key, Some([0x11; 32]));
+        assert!(plugin.entry.code);
+        // Without the author's key, a code plugin is not offered.
+        let storage = page_of(&file("plugin.ini"), "code", "");
+        assert!(read_plugin(&storage, "a.json", &X4, BASE).is_none());
     }
 
     #[test]
     fn unsafe_files_are_refused() {
         for bad in ["../evil.ini", "/abs.ini", "a/../../b", ".hidden/x"] {
             let storage = page(&format!("{},{}", file("plugin.ini"), file(bad)));
-            let read = read_plugin(&storage, "a.json", "x4", "https://x/");
+            let read = read_plugin(&storage, "a.json", &X4, "https://x/");
             assert!(read.is_none(), "{bad}");
         }
-        let short = file("plugin.ini").replace(SHA, "abc");
-        assert!(read_plugin(&page(&short), "a.json", "x4", "https://x/").is_none());
+        let short = file("plugin.ini").replace(SHA1, "abc");
+        assert!(read_plugin(&page(&short), "a.json", &X4, "https://x/").is_none());
         // No plugin.ini.
-        assert!(read_plugin(&page(&file("theme.ini")), "a.json", "x4", "https://x/").is_none());
+        assert!(read_plugin(&page(&file("theme.ini")), "a.json", &X4, "https://x/").is_none());
         // More files than a package may have.
         let many: Vec<String> = (0..=MAX_FILES)
             .map(|n| file(&format!("f{n}.ini")))
             .chain([file("plugin.ini")])
             .collect();
-        assert!(read_plugin(&page(&many.join(",")), "a.json", "x4", "https://x/").is_none());
+        assert!(read_plugin(&page(&many.join(",")), "a.json", &X4, "https://x/").is_none());
     }
 
     #[test]
@@ -686,7 +922,7 @@ mod tests {
             plugin("dark", "look", "").replace("Does dark.", "Night colours for AIRY rooms."),
             plugin("keys", "system", ""),
         ]);
-        let index = take(&storage, "p.json", "x4").unwrap();
+        let index = take(&storage, "p.json", &X4).unwrap();
         assert!(!storage.exists("p.json"));
         assert_eq!(index.search(&storage, " Airy "), 2);
         assert_eq!((hit(&storage, 0), hit(&storage, 1)), (Some(0), Some(1)));
@@ -696,8 +932,15 @@ mod tests {
         // A list fetched anew: the hits of the one before go.
         index.search(&storage, "keys");
         let storage = storage.with("p.json", r#"{"format": 2, "plugins": []}"#);
-        let index = take(&storage, "p.json", "x4").unwrap();
+        let index = take(&storage, "p.json", &X4).unwrap();
         assert_eq!(index.len(), 0);
         assert_eq!(hit(&storage, 0), None);
+    }
+
+    #[test]
+    fn keys_are_read_from_hex() {
+        assert_eq!(key(KEY), Some([0x11; 32]));
+        assert_eq!(key("11"), None);
+        assert_eq!(key(&"zz".repeat(32)), None);
     }
 }
