@@ -52,6 +52,8 @@ const HTTP_KEYS: &[&str] = &[
     http_params::ETAG,
     http_params::CONTENT_TYPE,
     http_params::FINAL_URL,
+    paperpaw_sdk::work::params::REFUSED,
+    paperpaw_sdk::work::params::RETRY,
 ];
 
 proptest! {
@@ -113,7 +115,11 @@ proptest! {
         final_url in proptest::option::of("https://[a-z./]{0,12}"),
         context in context(HTTP_KEYS),
     ) {
-        let reply = HttpReply { status, body, etag, content_type, final_url, context };
+        let mut reply = HttpReply::failed(body, context);
+        reply.status = status;
+        reply.etag = etag;
+        reply.content_type = content_type;
+        reply.final_url = final_url;
         let back = HttpReply::from_params(&reply.to_params()).unwrap();
         prop_assert_eq!(back.ok(), (200..300).contains(&status));
         prop_assert_eq!(back, reply);

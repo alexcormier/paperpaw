@@ -290,10 +290,9 @@ fn a_download_onto_a_full_card_fails_and_keeps_the_old_file() {
     harness.run(
         &mut kernel,
         10,
-        [Command::Http(HttpRequest {
-            save_to: Some(String::from("books/a.epub")),
-            ..HttpRequest::new("GET", "http://example.org/a.epub", REPLY)
-        })],
+        [Command::Http(
+            HttpRequest::get("http://example.org/a.epub", REPLY).save_to("books/a.epub"),
+        )],
     );
     let id = kernel
         .take_io()

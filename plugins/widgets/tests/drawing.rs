@@ -329,6 +329,7 @@ impl Harness {
             caps: self.caps(),
             wifi: None,
             firmware: None,
+            native: None,
             clipboard: false,
             slots: &[],
             screens: &[],

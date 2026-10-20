@@ -547,6 +547,7 @@ fn register_errors_say_what_is_wrong() {
         description: Cow::Borrowed(""),
         version: Version::new(1, 0, 0),
         sdk: paperpaw_sdk::SDK_VERSION,
+        uses: paperpaw_sdk::Uses::NOTHING,
     };
     assert_eq!(manifest.clone(), manifest);
 }
