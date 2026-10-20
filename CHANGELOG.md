@@ -6,6 +6,12 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Reading profiles: a name in use (whatever its case) is refused when a
+  profile is saved or renamed, where two profiles could share one and
+  *Next profile* then went back and forth between them; renaming the
+  profile applied last keeps it the last, so *Next profile* goes on from
+  it. Where the profiles cannot be read, the list says so and saves
+  nothing over them, and a profile not saved says so too.
 - Battery use: its page turns pages (page buttons, up and down, the
   arrows in the header) where the recent times awake do not fit, where
   those below the bottom could not be seen. The log goes to the card
