@@ -18,6 +18,7 @@ fatfs = { git = "https://github.com/rafalh/rust-fatfs", rev = "2aefc2a027ce94ed0
 
 [dev-dependencies]
 fatfs = { git = "https://github.com/rafalh/rust-fatfs", rev = "2aefc2a027ce94ed0671752814dac203f0450e11", default-features = false, features = ["alloc", "lfn", "unicode", "std"] }
+proptest.workspace = true
 
 [lints]
 workspace = true

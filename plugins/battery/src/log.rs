@@ -485,3 +485,6 @@ mod tests {
         assert_eq!(session.last.unix, Some(1_791_967_321));
     }
 }
+
+#[cfg(test)]
+mod hostile_tests;

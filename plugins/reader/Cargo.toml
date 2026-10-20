@@ -21,6 +21,8 @@ paperpaw-platform.workspace = true
 paperpaw-plugin-format-epub.workspace = true
 paperpaw-plugin-format-txt.workspace = true
 paperpaw-plugin-fonts-default = { workspace = true, features = ["packs"] }
+paperpaw-zip = { workspace = true, features = ["testing"] }
+proptest.workspace = true
 
 [lints]
 workspace = true
