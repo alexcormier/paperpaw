@@ -5,7 +5,7 @@ use paperpaw_platform::{DirEntry, Storage, StorageError};
 use paperpaw_sdk::MemoryStorage;
 
 /// A storage that takes names in another case for the same, as FAT does.
-struct Fat(MemoryStorage);
+pub(super) struct Fat(pub(super) MemoryStorage);
 
 impl Storage for Fat {
     fn read_at(&self, path: &str, offset: u64, buf: &mut [u8]) -> Result<usize, StorageError> {
