@@ -51,15 +51,17 @@ installed, as the store and the web flasher do, here over USB
 
 ## Publishing
 
-Files the plugin library can verify against their source come from the
-CI job: it builds them in the paths of GitHub's runners, where the
-library rebuilds them. Push a tag `v` + `plugin.ini`'s version, with
+`build.sh` builds the files as the plugin library rebuilds them to
+compare, with the paths written as the same in any folder (the
+source's top as `/plugin`, Cargo's home as `/cargo`, the X4 Pro's
+toolchain as `/rust`). The CI job runs it: push a tag `v` +
+`plugin.ini`'s version, with
 the author's key as the repository's secret `PAPERPAW_PLUGIN_KEY`; the
 tag's release then holds the folder as ZIPs (with `store/` for the
 upload form, without for the catalogue), a signed file for each reader,
-their SHA-256 sums and the catalogue's `[[versions]]`. To try the same
-on one's own computer, with both toolchains and `paperpaw-sign` of the
-release:
+their SHA-256 sums and the catalogue's `[[versions]]`. The same on
+one's own computer (Linux or macOS), with both toolchains and
+`paperpaw-sign` of the release:
 
 ```sh
 . ~/export-esp.sh

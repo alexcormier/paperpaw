@@ -9,14 +9,18 @@
 #
 # The library rebuilds each file from its source with the sample's
 # aliases (`cargo x4`, `cargo +esp x4pro`, with --locked) and compares.
-# Paths end up in a build, and the rebuild works in the paths of GitHub's
-# runners, so only files built by the CI job (.github/workflows/build.yml)
-# match their source; builds made elsewhere are for trying.
+# Paths end up in a build (in panic messages), so they are written as the
+# same on every computer, in whatever folder: the source's top (the
+# repository) as /plugin, Cargo's home as /cargo, and the X4 Pro's
+# toolchain (whose core and alloc are built with the plugin) as /rust.
+# The rebuild does the same.
 #
-# Needs: the X4's Rust from rust-toolchain.toml, espup's `esp` toolchain
-# with its environment (`. ~/export-esp.sh`), paperpaw-sign of the
-# PaperPaw release built for, and zip. Never set RUSTFLAGS: it would
-# replace .cargo/config.toml's flags, which link the plugin.
+# Needs: Linux or macOS (on Windows, paths in the code keep their `\`,
+# so a build there matches only other builds on Windows), the X4's Rust
+# from rust-toolchain.toml, espup's `esp` toolchain with its environment
+# (`. ~/export-esp.sh`), paperpaw-sign of the PaperPaw release built for,
+# and zip. Never set RUSTFLAGS: it would replace .cargo/config.toml's
+# flags, which link the plugin.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -36,8 +40,27 @@ id=$(ini id)
 version=$(ini version)
 [[ -n "$id" && -n "$version" ]] || { echo "plugin/plugin.ini names no id or version" >&2; exit 1; }
 
-cargo x4 --locked
-cargo +esp x4pro --locked
+# The paths remapped, added to .cargo/config.toml's flags for a target.
+top=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+cargo_home=${CARGO_HOME:-$HOME/.cargo}
+sysroot=$(rustc +esp --print sysroot)
+if command -v cygpath >/dev/null; then
+    # Git Bash on Windows: the paths as the compiler sees them (C:/...).
+    top=$(cygpath -m "$top")
+    cargo_home=$(cygpath -m "$cargo_home")
+    sysroot=$(cygpath -m "$sysroot")
+fi
+remap() {
+    local target=$1
+    shift
+    local flags="'--remap-path-prefix=$top=/plugin', '--remap-path-prefix=$cargo_home=/cargo'"
+    for extra in "$@"; do flags+=", '$extra'"; done
+    printf 'target.%s.rustflags = [%s]' "$target" "$flags"
+}
+
+cargo x4 --locked --config "$(remap riscv32imc-unknown-none-elf)"
+cargo +esp x4pro --locked --config "$(remap xtensa-esp32s3-none-elf \
+    "--remap-path-prefix=$sysroot=/rust")"
 
 rm -rf dist
 mkdir dist
