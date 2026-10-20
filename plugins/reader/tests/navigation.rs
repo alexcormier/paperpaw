@@ -177,7 +177,7 @@ fn a_search_finds_the_word_and_its_page_and_back_returns() {
     let shown = reading.described();
     assert!(shown.contains("1 hit"), "{shown}");
     // The row with the text around the hit, and how far into the book.
-    assert!(shown.contains("word250x3"), "{shown}");
+    assert!(shown.contains("word250x4"), "{shown}");
     assert!(shown.contains("82 %"), "{shown}");
     reading.press(actions::CONFIRM);
     assert_eq!(reading.screen(), "reader.screen");
@@ -202,11 +202,9 @@ fn a_search_finds_the_word_and_its_page_and_back_returns() {
     assert_eq!(asked.get(params::TEXT), Some("zEBRA"));
 }
 
-/// On a narrow screen (the X4's 480 pixels) the row of a hit shows the
-/// 24 characters before it and is cut at its end: the word found is not
-/// in it.
+/// On a narrow screen (the X4's 480 pixels) the row of a hit begins
+/// late enough for the word found to be in it.
 #[test]
-#[ignore = "bug: a search hit's row is cut before the hit on narrow screens (the context before it fills the row)"]
 fn a_search_hit_shows_the_word_found() {
     let mut reading = zebra();
     reading.press(reader::SEARCH);
@@ -439,8 +437,8 @@ fn skimming_ended_where_it_is_keeps_the_way_back() {
     reading.press(actions::RIGHT);
     reading.press(actions::RIGHT);
     let there = reading.shown().at();
-    // Confirm on *Where I was* (focused first) stays here.
-    assert_eq!(focused(&mut reading), "Where I was");
+    // No button has the focus at first: Confirm stays here.
+    assert_eq!(focused(&mut reading), "");
     reading.press(actions::CONFIRM);
     assert_eq!(reading.screen(), "reader.screen");
     assert_eq!(reading.shown().at(), there);
@@ -531,7 +529,7 @@ fn the_list_of_marks_leads_to_them_and_exports_them() {
     reading.press(reader::ANNOTATIONS);
     let shown = reading.described();
     // (Its title is cut on a screen this narrow.)
-    assert!(shown.contains("No bookmarks or highlig"), "{shown}");
+    assert!(shown.contains("No bookmarks or highl"), "{shown}");
     assert!(shown.contains("Select text to highlight"), "{shown}");
     reading.press(actions::BACK);
     // A highlight on the first page, a bookmark two pages on.
