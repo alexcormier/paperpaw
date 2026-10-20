@@ -124,6 +124,52 @@ pub(crate) fn places(
         .collect()
 }
 
+/// Each row of `places` packed by the widths its books' covers really
+/// take (a cover of another shape is narrower than its place), a gap
+/// between them, the row in `area` as `align` says: covers of any shape
+/// stand evenly. Each label stays under its cover.
+pub(crate) fn pack(
+    env: &Env<'_>,
+    places: &mut [Place],
+    books: &[Shelved],
+    area: Rect,
+    align: Align,
+) {
+    let gap = UiStyle::new(env).gap as u16;
+    let right = area.x + area.width;
+    let count = places.len().min(books.len());
+    let mut start = 0;
+    while start < count {
+        let y = places[start].cover.y;
+        let end = start
+            + places[start..count]
+                .iter()
+                .take_while(|p| p.cover.y == y)
+                .count();
+        let row = &mut places[start..end];
+        if row.iter().any(|p| p.cover.width == 0) {
+            // Labels alone: as placed.
+            start = end;
+            continue;
+        }
+        let widths: Vec<u16> = row
+            .iter()
+            .zip(&books[start..end])
+            .map(|(p, b)| cover_size(&b.book, p.cover.width, p.cover.height).0)
+            .collect();
+        let total = widths.iter().sum::<u16>() + gap * (widths.len() as u16 - 1);
+        let mut x = super::place_x(area, total.min(area.width), align);
+        for (place, w) in row.iter_mut().zip(widths) {
+            place.cover = Rect::new(x, place.cover.y, w, place.cover.height);
+            let label_x = x.saturating_sub(gap / 2).max(area.x);
+            let label_w = (x + w + gap / 2).min(right).saturating_sub(label_x);
+            place.label = Rect::new(label_x, place.label.y, label_w, place.label.height);
+            x += w + gap;
+        }
+        start = end;
+    }
+}
+
 /// Draws the caption `text` of widget `id` just above the covers in
 /// `places` (where it shows: `rest` is the area below it), so that the
 /// two stay together.

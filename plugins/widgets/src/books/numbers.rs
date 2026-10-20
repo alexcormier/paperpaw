@@ -326,76 +326,68 @@ fn lay_out(env: &Env<'_>, area: Rect, numbers: &Numbers) -> Option<Laid> {
         other => other.text(&style) * 1.4,
     };
     let mut best: Option<(f32, Laid)> = None;
-    for shown in (1..=count).rev() {
-        let widest_label = parts[..shown]
-            .iter()
-            .map(|(_, l)| font.measure(style.small, l))
-            .fold(0.0, f32::max);
-        let widest = parts[..shown]
-            .iter()
-            .map(|(p, _)| numbers.of(p).to_string())
-            .max_by_key(String::len)
-            .unwrap_or_default();
-        let mut columns_tried = Vec::with_capacity(3);
-        for columns in [shown, shown.div_ceil(2), 1] {
-            let columns = columns as u16;
-            if columns_tried.contains(&columns) {
+    let shown = count;
+    let widest_label = parts
+        .iter()
+        .map(|(_, l)| font.measure(style.small, l))
+        .fold(0.0, f32::max);
+    let widest = parts
+        .iter()
+        .map(|(p, _)| numbers.of(p).to_string())
+        .max_by_key(String::len)
+        .unwrap_or_default();
+    let mut columns_tried = Vec::with_capacity(3);
+    for columns in [shown, shown.div_ceil(2), 1] {
+        let columns = columns as u16;
+        if columns_tried.contains(&columns) {
+            continue;
+        }
+        columns_tried.push(columns);
+        let column = area.width / columns;
+        // The names whole, a little room between neighbours, else
+        // shortened: that counts against it, the more the shorter.
+        let between = if columns > 1 { gap / 2 } else { 0 };
+        let room = f32::from(column.saturating_sub(between));
+        let names = if widest_label <= room {
+            1.0
+        } else {
+            0.5 * room / widest_label.max(1.0)
+        };
+        let rows = (shown as u16).div_ceil(columns);
+        for bar in [wanted_bar, false] {
+            let fixed = if bar { bar_room } else { 0 } + gap * (rows - 1);
+            let row = area.height.saturating_sub(fixed) / rows;
+            let size = widgets::largest_size(max, style.small, |s| {
+                // A pixel or two to spare: the ink is measured from the
+                // ascent here, as drawn there.
+                digits_height(&font, s, digits) + gap / 2 + names_h + 2 <= row
+                    && font.measure(s, &widest) <= f32::from(column) * 0.8
+            });
+            let Some(size) = size else {
                 continue;
+            };
+            // Names shortened cost much, the bar a little.
+            let mut score = size * names;
+            if bar != wanted_bar {
+                score *= 0.9;
             }
-            columns_tried.push(columns);
-            let column = area.width / columns;
-            // The names whole, a little room between neighbours.
-            let between = if columns > 1 { gap / 2 } else { 0 };
-            if widest_label > f32::from(column.saturating_sub(between)) {
-                continue;
-            }
-            let rows = (shown as u16).div_ceil(columns);
-            for bar in [wanted_bar, false] {
-                let fixed = if bar { bar_room } else { 0 } + gap * (rows - 1);
-                let row = area.height.saturating_sub(fixed) / rows;
-                let size = widgets::largest_size(max, style.small, |s| {
-                    // A pixel or two to spare: the ink is measured
-                    // from the ascent here, as drawn there.
-                    digits_height(&font, s, digits) + gap / 2 + names_h + 2 <= row
-                        && font.measure(s, &widest) <= f32::from(column) * 0.8
-                });
-                let Some(size) = size else {
-                    continue;
+            if best.is_none_or(|(b, _)| score > b) {
+                let laid = Laid {
+                    shown,
+                    columns,
+                    size,
+                    bar,
+                    beside: false,
                 };
-                // Each one left out costs much, the bar a little.
-                let mut score = size;
-                for _ in shown..count {
-                    score *= 0.5;
-                }
-                if bar != wanted_bar {
-                    score *= 0.9;
-                }
-                if best.is_none_or(|(b, _)| score > b) {
-                    let laid = Laid {
-                        shown,
-                        columns,
-                        size,
-                        bar,
-                        beside: false,
-                    };
-                    best = Some((score, laid));
-                }
+                best = Some((score, laid));
             }
         }
     }
     if let Some((_, laid)) = best {
         return Some(laid);
     }
-    // No number fits above its name: each beside it on a line, as many as
-    // fit whole.
-    let fits = |shown: usize| {
-        let column = area.width / shown as u16;
-        parts[..shown].iter().all(|(p, label)| {
-            let text = alloc::format!("{} {label}", numbers.of(p));
-            font.measure(style.small, &text) + f32::from(gap / 2) <= f32::from(column)
-        })
-    };
-    let shown = (1..=count).rev().find(|&n| fits(n)).unwrap_or(1);
+    // No number fits above its name: each beside it on a line (or the
+    // number alone where the name does not fit).
     Some(Laid {
         shown,
         columns: shown as u16,
@@ -430,18 +422,22 @@ fn draw(
             let number = numbers.of(part).to_string();
             let text = alloc::format!("{number} {label}");
             if font.measure(style.small, &text) > f32::from(cell.width) {
-                // Not even one with its name: the number alone.
+                // Not even one with its name: the number alone, smaller
+                // where it must be, nothing where even that is too wide.
                 let small = style.small;
-                widgets::draw_line(
-                    canvas,
-                    env,
-                    cell,
-                    Align::Center,
-                    small,
-                    small,
-                    &number,
-                    look.ink,
-                );
+                let least = small * 0.5;
+                if font.measure(least, &number) <= f32::from(cell.width) {
+                    widgets::draw_line(
+                        canvas,
+                        env,
+                        cell,
+                        Align::Center,
+                        small,
+                        least,
+                        &number,
+                        look.ink,
+                    );
+                }
                 continue;
             }
             let x = Align::Center.x(cell, font.measure(style.small, &text));
@@ -477,9 +473,16 @@ fn draw(
         canvas.describe(Role::Text, &said, cell, false, None);
         let x = Align::Center.x(cell, font.measure(size, &number));
         font.draw(canvas, size, x, i32::from(y) - digits.0, &number, look.ink);
-        let x = Align::Center.x(cell, font.measure(style.small, label));
-        let baseline = i32::from(y + digits_h + gap / 2) - names_top;
-        font.draw(canvas, style.small, x, baseline, label, look.faint);
+        // The name in its column, a little room from its neighbours.
+        let between = if laid.columns > 1 { gap / 2 } else { 0 };
+        let room = f32::from(column.saturating_sub(between));
+        let label = paperpaw_sdk::ui::fit(&font, style.small, label, room);
+        let label_w = font.measure(style.small, &label);
+        if label_w <= f32::from(column) {
+            let x = Align::Center.x(cell, label_w);
+            let baseline = i32::from(y + digits_h + gap / 2) - names_top;
+            font.draw(canvas, style.small, x, baseline, &label, look.faint);
+        }
     }
     if laid.bar {
         let inset = column / 6;

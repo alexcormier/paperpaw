@@ -347,6 +347,8 @@ impl Series {
         let at = books.iter().position(|b| b.book.path == self.shown.current);
         let around = chosen(env, WIDGET, "start") != STARTS[1];
         let shown = window(books.len(), places.len(), at, around);
+        let mut places = places;
+        shelf::pack(env, &mut places, &books[shown.clone()], area, align);
         (places, &books[shown])
     }
 
@@ -384,11 +386,10 @@ impl Series {
         }
     }
 
-    /// The area below the caption, where it shows whole.
+    /// The area below the caption.
     fn content(&self, env: &Env<'_>, look: &Look) -> Rect {
         if widgets::shows(env, WIDGET, "caption")
             && look.area.height >= 3 * widgets::caption_height(env)
-            && super::caption_fits(env, &self.caption(env), look.area.width)
         {
             super::below(look.area, widgets::caption_height(env))
         } else {

@@ -359,23 +359,11 @@ struct Laid {
     source: Option<String>,
 }
 
-/// Whether `wrapped` shows all of `text`: every word, none shortened.
-fn whole(wrapped: &Wrapped, text: &str) -> bool {
-    let words = |text: &str| text.split_whitespace().count();
-    let lines = wrapped.lines();
-    let shown: usize = lines.iter().map(|l| words(l)).sum();
-    let cut = lines
-        .iter()
-        .any(|l| l.ends_with('…') && !text.trim_end().ends_with('…'));
-    shown == words(text) && !cut
-}
-
 /// `quote` laid out in widget area `area`, below the caption: where the
 /// text does not fit whole, the mark goes first, then the note, then the
 /// book; what is left is shortened, broken between words only.
 fn lay_out(env: &Env<'_>, area: Rect, quote: &Quote) -> Option<Laid> {
     let style = UiStyle::new(env);
-    let font = style.font(env)?;
     let id = WIDGET;
     let gap = style.gap as u16;
     let look = widgets::look::look(env, id, area);
@@ -418,7 +406,7 @@ fn lay_out(env: &Env<'_>, area: Rect, quote: &Quote) -> Option<Laid> {
         };
         let room = area.height.saturating_sub(below + mark_h);
         let wrapped = Wrapped::fitting(env, &text, max, min, area.width, room);
-        if whole(&wrapped, &text) {
+        if wrapped.whole() {
             let lines = wrapped.lines().to_vec();
             break (text, lines, wrapped.size(), mark_h, below);
         }
@@ -429,12 +417,10 @@ fn lay_out(env: &Env<'_>, area: Rect, quote: &Quote) -> Option<Laid> {
         } else if with_source {
             with_source = false;
         } else {
-            // As much as fits, a word too long shortened and the rest
-            // left out.
-            let most = usize::from(room / widgets::line_height(env, min).max(1)).max(1);
-            let width = f32::from(area.width);
-            let lines = super::title_lines(&font, min, &text, width, most, true);
-            break (text, lines, min, mark_h, below);
+            // As much as fits, ending in "…" (a word too long shortened,
+            // the rest left out).
+            let wrapped = Wrapped::new(env, &text, min, area.width, room);
+            break (text, wrapped.lines().to_vec(), min, mark_h, below);
         }
     };
     let room = area.height.saturating_sub(below + mark_h);
