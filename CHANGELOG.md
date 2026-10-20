@@ -6,6 +6,12 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Emulator: closing the window lets plugins save and send what is
+  pending, as the device does before it sleeps. An emulated device
+  asleep no longer keeps a processor core busy. A restart forgets the
+  old kernel's requests, servers, speech and Wi-Fi, whose answers
+  reached the new kernel's requests before; the pretend radio reports
+  in the order of time (joining no longer waits for a scan).
 - `paperpaw-sign key` makes the key file readable by its owner alone
   (mode 0600 on Linux and macOS) and checks that none is there in the
   same step as making it.

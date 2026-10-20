@@ -1,6 +1,6 @@
 //! The emulated device: kernel + panel + clock, independent of any window.
 
-use std::time::Instant as StdInstant;
+use std::time::{Duration, Instant as StdInstant};
 
 use paperpaw_core::{Effects, Io, Kernel, KernelError, SpeechCall};
 use paperpaw_graphics::Framebuffer;
@@ -13,6 +13,10 @@ use crate::budget;
 use crate::panel::Panel;
 use crate::profiles::Profile;
 use paperpaw_fs::DirStorage;
+
+/// How long closing the window waits for answers to what plugins sent as
+/// they saved (e.g. reading progress).
+const SHUT_DOWN_WAIT: Duration = Duration::from_secs(5);
 
 /// A running device. All kernel calls go through here, so they are
 /// counted against the profile's heap budget.
@@ -38,12 +42,12 @@ pub struct Device {
     pub sockets: paperpaw_serve::Sockets,
     /// The pretend radio, where the profile's device manages Wi-Fi.
     wifi: crate::wifi::Wifi,
-    /// The texts being spoken (emulated), in order: number and when each
-    /// ends.
     /// Sleeping (see `Effects::sleep`): only the power button wakes it.
     asleep: bool,
     /// How the screen is turned (see `Kernel::rotation`).
     rotation: Rotation,
+    /// The texts being spoken (emulated), in order: number and when each
+    /// ends.
     speech: std::collections::VecDeque<(u32, Instant)>,
 }
 
@@ -231,8 +235,12 @@ impl Device {
     }
 
     /// When something is due next: a wake-up the kernel asked for, the end
-    /// of speech.
+    /// of speech, the pretend radio. Nothing while asleep: only the power
+    /// button wakes the device then.
     pub fn next_wake(&self) -> Option<Instant> {
+        if self.asleep {
+            return None;
+        }
         let speech = self.speech.front().map(|&(_, end)| end);
         [self.wake_at, speech, self.wifi.next_due()]
             .into_iter()
@@ -261,6 +269,27 @@ impl Device {
         }
         if self.wake_at.is_some_and(|at| at <= now) {
             let effects = budget::track(|| self.kernel.tick(now));
+            self.execute(effects);
+        }
+    }
+
+    /// Before the window closes: plugins save and send what is pending, as
+    /// when the device goes to sleep, and answers to what they sent are
+    /// waited for a little.
+    pub fn shut_down(&mut self) {
+        if !self.asleep {
+            let now = self.now();
+            let effects = budget::track(|| self.kernel.suspend(now));
+            self.execute(effects);
+        }
+        let end = StdInstant::now() + SHUT_DOWN_WAIT;
+        while self.http.in_flight > 0 {
+            let left = end.saturating_duration_since(StdInstant::now());
+            let Some(response) = self.http.next(Some(left)).filter(|_| !left.is_zero()) else {
+                break;
+            };
+            let now = self.now();
+            let effects = budget::track(|| self.kernel.http_response(now, response));
             self.execute(effects);
         }
     }
@@ -384,6 +413,14 @@ impl Device {
             Ok(storage) => storage,
             Err(e) => return eprintln!("restart: {}: {e}", self.root.display()),
         };
+        // As after a reboot, what the old kernel asked for is gone: its
+        // requests' answers would otherwise reach the new kernel's (they
+        // count from 1 again).
+        self.http = crate::http::Http::new();
+        self.servers = paperpaw_serve::Servers::new(|| {});
+        self.sockets = paperpaw_serve::Sockets::new(|| {});
+        self.wifi = crate::wifi::Wifi::default();
+        self.speech.clear();
         // The old kernel goes first, as on the device: a minimal one (one
         // frame row, no plugins) holds its place meanwhile.
         let profile = self.profile;
@@ -504,4 +541,58 @@ fn micros() -> u64 {
         .get_or_init(std::time::Instant::now)
         .elapsed()
         .as_micros() as u64
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use paperpaw_core::WifiCommand;
+
+    /// The heap budget counts every thread's kernel: one device at a time.
+    static ONE_AT_A_TIME: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    fn device(name: &str) -> (Device, std::path::PathBuf) {
+        let root =
+            std::env::temp_dir().join(format!("paperpaw-device-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let storage = DirStorage::new(&root).unwrap();
+        let profile = crate::profiles::find("xteink-x4").unwrap();
+        let mut device = Device::new(profile, None, storage, true).unwrap();
+        device.start();
+        (device, root)
+    }
+
+    #[test]
+    fn asleep_nothing_is_due() {
+        let _one = ONE_AT_A_TIME
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let (mut device, root) = device("asleep");
+        device.wake_at = Some(Instant(0));
+        device.asleep = true;
+        // A wake-up the kernel asked for before would be due at once, for
+        // ever: the window's loop would spin.
+        assert_eq!(device.next_wake(), None);
+        device.asleep = false;
+        assert_eq!(device.next_wake(), Some(Instant(0)));
+        drop(device);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn a_restart_forgets_what_the_old_kernel_asked_for() {
+        let _one = ONE_AT_A_TIME
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let (mut device, root) = device("restart");
+        let now = device.now();
+        device.speech.push_back((1, now.add_millis(10_000)));
+        device.wifi.apply(WifiCommand::On, now);
+        device.restart();
+        assert!(device.speech.is_empty());
+        // The new kernel's radio starts off: nothing of the old is due.
+        assert_eq!(device.wifi.next_due(), None);
+        drop(device);
+        let _ = std::fs::remove_dir_all(root);
+    }
 }
