@@ -10,19 +10,23 @@
 //! plugin, which another can replace).
 //!
 //! Update files are signed (the format is `paperpaw-update`'s, its parts
-//! are here too). The shell installs only those signed with one of
-//! [`Firmware::keys`] (PaperPaw's) or a key listed in [`TRUSTED_KEYS`],
-//! which a plugin adds once the reader chose to trust it (their own
-//! builds). It writes the new firmware beside the running one and starts
-//! it at the next start; if the new one does not start cleanly, the old
-//! one comes back ([`Firmware::undone`]). Books, settings and plugins on
-//! the card stay as they are.
+//! are here too). The shell installs those signed with one of
+//! [`Firmware::keys`] (PaperPaw's); one signed with another key (the
+//! reader's own builds) only with that key in the command, which the
+//! reader accepted for this install, shown its fingerprint; and one not
+//! newer than the running firmware only when the reader chose it
+//! ([`Update::may_install`]). Nothing on the card makes a key trusted or
+//! an older firmware welcome, so a card changed by someone else cannot
+//! install firmware unasked. The shell writes the new firmware beside the
+//! running one and starts it at the next start; if the new one does not
+//! start cleanly, the old one comes back ([`Firmware::undone`]). Books,
+//! settings and plugins on the card stay as they are.
 
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::cmp::Ordering;
 
-use paperpaw_platform::{Storage, StorageError};
+use paperpaw_platform::Storage;
 pub use paperpaw_update::{
     APP_HEAD_LEN, AppInfo, CHIP_ESP32_C3, CHIP_ESP32_S3, Check, PLUGINS_AT, PLUGINS_HEAD_LEN,
     PluginCrate, Plugins, Problem, TRAILER_LEN, Trailer, fingerprint, key_hex, parse_key,
@@ -30,16 +34,24 @@ pub use paperpaw_update::{
 
 /// The folder on the card where update files are looked for.
 pub const UPDATE_DIR: &str = "updates";
-/// The keys the reader chose to trust besides PaperPaw's: one per line,
-/// as 64 hexadecimal digits.
-pub const TRUSTED_KEYS: &str = crate::data_path!("firmware-keys.txt");
 
 /// What the shell is told to do.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FirmwareCommand {
-    /// Installs the update file at this storage path: checks it, writes
-    /// it beside the running firmware and makes it the one to start next.
-    Install { path: String },
+    /// Installs the update file at this storage path: checks it
+    /// ([`Update::may_install`]), writes it beside the running firmware
+    /// and makes it the one to start next.
+    Install {
+        path: String,
+        /// The key of an update not signed by PaperPaw, which the reader
+        /// accepted for this install, shown its fingerprint; without it
+        /// such an update is [`InstallFailure::Untrusted`].
+        key: Option<[u8; 32]>,
+        /// The reader chose an update not newer than the running firmware
+        /// (an older one, or the same again); without it such an update
+        /// is [`InstallFailure::NotNewer`].
+        older: bool,
+    },
     /// Restarts the device, e.g. into the new firmware once
     /// [`FirmwareState::Installed`]. What plugins keep is saved first.
     Restart,
@@ -72,8 +84,12 @@ pub enum InstallFailure {
     OtherDevice,
     /// It is larger than the room for firmware.
     TooLarge,
-    /// It is signed with a key that is not trusted here.
+    /// It is signed with a key that is not PaperPaw's, and the reader did
+    /// not accept it.
     Untrusted,
+    /// It is not newer than the running firmware, and the reader did not
+    /// choose it.
+    NotNewer,
     /// It was changed or damaged: its signature does not hold.
     Damaged,
     /// Writing it failed.
@@ -118,9 +134,8 @@ pub struct Firmware {
 pub enum Signer {
     /// PaperPaw ([`Firmware::keys`]).
     PaperPaw,
-    /// A key the reader chose to trust ([`TRUSTED_KEYS`]).
-    Trusted,
-    /// A key not known here.
+    /// Another key, e.g. the reader's own for their builds: installed only
+    /// when the reader accepts it, shown its fingerprint, at each install.
     Unknown,
 }
 
@@ -178,15 +193,38 @@ impl Update {
     }
 
     /// Who signed it, as far as this device knows.
-    pub fn signer(&self, firmware: &Firmware, trusted: &[[u8; 32]]) -> Signer {
-        let key = &self.trailer.key;
-        if firmware.keys.contains(key) {
+    pub fn signer(&self, firmware: &Firmware) -> Signer {
+        if firmware.keys.contains(&self.trailer.key) {
             Signer::PaperPaw
-        } else if trusted.contains(key) {
-            Signer::Trusted
         } else {
             Signer::Unknown
         }
+    }
+
+    /// Whether it is newer than the running firmware.
+    pub fn is_newer(&self, firmware: &Firmware) -> bool {
+        compare_versions(&self.info.version, &firmware.version).is_gt()
+    }
+
+    /// Whether it may be installed as [`FirmwareCommand::Install`] asks,
+    /// with the `key` the reader accepted and whether they chose an
+    /// `older` one: it must be for this device and have room, be signed
+    /// by PaperPaw or with `key`, and be newer unless `older`. Its
+    /// signature is checked as it is written.
+    pub fn may_install(
+        &self,
+        firmware: &Firmware,
+        key: Option<&[u8; 32]>,
+        older: bool,
+    ) -> Result<(), InstallFailure> {
+        self.fits(firmware)?;
+        if self.signer(firmware) == Signer::Unknown && key != Some(&self.trailer.key) {
+            return Err(InstallFailure::Untrusted);
+        }
+        if !older && !self.is_newer(firmware) {
+            return Err(InstallFailure::NotNewer);
+        }
+        Ok(())
     }
 }
 
@@ -210,31 +248,6 @@ fn read_exact(
         Ok(n) if n == buf.len() => Ok(()),
         _ => Err(InstallFailure::Unreadable),
     }
-}
-
-/// The keys the reader chose to trust ([`TRUSTED_KEYS`]).
-pub fn trusted_keys(storage: &dyn Storage) -> Vec<[u8; 32]> {
-    let Ok(size) = storage.size(TRUSTED_KEYS) else {
-        return Vec::new();
-    };
-    let mut text = alloc::vec![0; size.min(64 * 1024) as usize];
-    let n = storage.read_at(TRUSTED_KEYS, 0, &mut text).unwrap_or(0);
-    core::str::from_utf8(&text[..n])
-        .unwrap_or_default()
-        .lines()
-        .filter_map(parse_key)
-        .collect()
-}
-
-/// Trusts `key` from now on (see [`TRUSTED_KEYS`]).
-pub fn trust(storage: &dyn Storage, key: &[u8; 32]) -> Result<(), StorageError> {
-    if trusted_keys(storage).contains(key) {
-        return Ok(());
-    }
-    let _ = storage.create_dir(crate::data::DIR);
-    let mut line = key_hex(key);
-    line.push('\n');
-    storage.append(TRUSTED_KEYS, line.as_bytes())
 }
 
 /// Compares versions such as `0.4.0` and `0.10.1` number by number; a
@@ -338,7 +351,7 @@ mod tests {
         let a = Update::read(&storage, "updates/a.bin").unwrap();
         assert_eq!(a.info.version, "0.4.0");
         assert_eq!(a.fits(&fw), Ok(()));
-        assert_eq!(a.signer(&fw, &[]), Signer::Unknown);
+        assert_eq!(a.signer(&fw), Signer::Unknown);
         let b = Update::read(&storage, "updates/b.bin").unwrap();
         assert_eq!(b.fits(&fw), Err(InstallFailure::OtherDevice));
         let c = Update::read(&storage, "updates/c.bin").unwrap();
@@ -351,13 +364,39 @@ mod tests {
             Update::read(&storage, "updates/none.bin"),
             Err(InstallFailure::Unreadable)
         );
+    }
 
-        // Trusted once, known from then on.
-        trust(&storage, &a.trailer.key).unwrap();
-        trust(&storage, &a.trailer.key).unwrap();
-        let trusted = trusted_keys(&storage);
-        assert_eq!(trusted.len(), 1);
-        assert_eq!(a.signer(&fw, &trusted), Signer::Trusted);
+    #[test]
+    fn only_what_the_reader_accepted_is_installed() {
+        let paperpaw = [1; 32];
+        let storage = MemoryStorage::new()
+            .with("updates/own.bin", file(b"paperpaw-xteink", 4000, &SEED))
+            .with(
+                "updates/paperpaw.bin",
+                file(b"paperpaw-xteink", 4000, &paperpaw),
+            );
+        let fw = firmware();
+        let own = Update::read(&storage, "updates/own.bin").unwrap();
+        let release = Update::read(&storage, "updates/paperpaw.bin").unwrap();
+        // PaperPaw's, newer: at once.
+        assert_eq!(release.signer(&fw), Signer::PaperPaw);
+        assert_eq!(release.may_install(&fw, None, false), Ok(()));
+        // Another key: only the one the reader accepted.
+        let untrusted = Err(InstallFailure::Untrusted);
+        assert_eq!(own.may_install(&fw, None, false), untrusted);
+        assert_eq!(own.may_install(&fw, Some(&[7; 32]), false), untrusted);
+        assert_eq!(own.may_install(&fw, Some(&own.trailer.key), false), Ok(()));
+        // The same version again, or an older one: only when chosen.
+        for running in ["0.4.0", "0.5.0"] {
+            let fw = Firmware {
+                version: running.into(),
+                ..firmware()
+            };
+            assert!(!release.is_newer(&fw));
+            let not_newer = Err(InstallFailure::NotNewer);
+            assert_eq!(release.may_install(&fw, None, false), not_newer);
+            assert_eq!(release.may_install(&fw, None, true), Ok(()));
+        }
     }
 
     #[test]
@@ -403,15 +442,5 @@ mod tests {
             compare_versions("0.5.0-rc.007", "0.5.0-rc.7"),
             Ordering::Equal
         );
-    }
-
-    /// What version 1 wrote stays readable (see `docs/data-files.md`).
-    #[test]
-    fn trusted_keys_of_version_1_are_read() {
-        let storage = MemoryStorage::new().with(
-            TRUSTED_KEYS,
-            include_str!("../testdata/firmware-keys.txt.v1"),
-        );
-        assert_eq!(trusted_keys(&storage), [[0x12; 32], [0xAB; 32]]);
     }
 }

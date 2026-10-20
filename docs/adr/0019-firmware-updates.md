@@ -25,17 +25,24 @@ may leave a device that does not start.
   from then on updates come without a cable. `cargo run` erases the OTA
   data, so the firmware flashed is the one that starts.
 - **The firmware undoes a failed update itself** (`shells/xteink/src/ota.rs`).
-  A new image's first start marks it on trial, its first frame shown
-  marks it good. An image found on trial at a start (it never got to its
-  first frame, e.g. it panicked) is marked bad and the device restarts;
-  the bootloader skips it, and the firmware before it takes its place
-  back and says so.
+  A new image's first start marks it on trial, before the board is set
+  up; running for half a minute, or going to sleep or restarting by
+  itself, marks it good. An image found on trial at a start (it never got
+  so far, e.g. it panicked or hung until the watchdog ended it) is marked
+  bad and the device restarts; the bootloader skips it, and the firmware
+  before it takes its place back and says so.
 - **Signed update files** (`paperpaw-update`): the app image followed by
   a trailer with its length, the signer's Ed25519 public key and the
   signature over both. The X4 checks the signature while it writes the
-  image, a piece at a time, and chooses the new image only if it holds.
+  image, a piece at a time, and chooses the new image only if it holds;
+  the image's first word, without which the bootloader starts nothing
+  there, is written only then. An update installed and not started yet
+  is given up before another is written, so nothing is ever written into
+  the partition chosen to start.
   It installs images signed with PaperPaw's key, built in, or with a key
-  the reader chose to trust (their own builds), listed on the card.
+  the reader accepts at that install, shown its fingerprint (their own
+  builds); one not newer than the running firmware only when the reader
+  chooses it, told it is older. Nothing on the card trusts a key.
   `paperpaw-sign` makes keys, signs images and shows what a file holds;
   releases are signed with a key kept as a secret of the repository.
   The whole flash image the web flasher writes is signed with the same
@@ -53,11 +60,11 @@ may leave a device that does not start.
 - An update from the card takes about 45 s on the X4, its signature
   checked on the way; a damaged or changed file is refused before it is
   chosen.
-- An image that does not get to its first frame comes back by itself:
+- An image that does not start cleanly comes back by itself:
   tried on the X4 with an image that panics at start.
-- Trusted keys are on the card: who can change the card could add one.
-  So can anyone with the device and a USB cable, who can flash it
-  anyway.
+- Who can change the card cannot make a key trusted nor bring back an
+  older firmware unasked; the reader is asked each time. Anyone with the
+  device and a USB cable can flash it anyway.
 - Devices flashed before the two partitions came need the web flasher
   once more; until then the update page is not offered.
 - Updates over the network (from paperpaw.org, O3 to O6 in the

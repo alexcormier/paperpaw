@@ -129,6 +129,10 @@ const FRAME_ROWS: u16 = 192;
 /// (the longest work, a book's first opening, takes some 5 s): by the
 /// RTC's watchdog (counting in light sleep too), and the timer group's.
 const WATCHDOG_S: (u64, u64) = (20, 30);
+/// Until then, from the first moment, the X4 starts again if its start
+/// hangs for this long: room for a display that does not answer (each
+/// wait for it ends in an error after 10 s).
+const START_WATCHDOG_S: u64 = 60;
 
 #[cfg(feature = "x4")]
 const DEVICE: DeviceInfo = DeviceInfo {
@@ -229,6 +233,8 @@ fn now() -> Instant {
 fn main() -> ! {
     stack::paint();
     let p = esp_hal::init(esp_hal::Config::default().with_cpu_clock(CpuClock::max()));
+    // `init` stopped the watchdogs: a start that hangs begins again.
+    power::watch_start(START_WATCHDOG_S);
     // The PSRAM of the ESP32-S3 devices first, so PaperPaw's memory comes
     // from there and the chip's own stays for the radio and DMA, which
     // need it.
@@ -241,7 +247,6 @@ fn main() -> ! {
     // The heap before the board: the board keeps its bus there.
     esp_alloc::heap_allocator!(size: HEAP_SIZE);
     esp_alloc::heap_allocator!(#[esp_hal::ram(reclaimed)] size: RECLAIMED_SIZE);
-    let board = Board::take(p);
     esp_println::logger::init_logger_from_env();
     power::note_start();
     let panicked = crash::take_last();
@@ -250,13 +255,17 @@ fn main() -> ! {
     if let Some(message) = &panicked {
         warn!("the last run panicked: {message}");
     }
-    // Before anything else: an update on trial that failed is undone here
-    // (a restart into the firmware before it).
-    // One handle on the flash, for updates and native plugins.
+    // Before anything that could fail or hang, the board too: an update
+    // on trial that failed is undone here (a restart into the firmware
+    // before it). One handle on the flash, for updates and native
+    // plugins.
+    // SAFETY: only taken here; the board does not use it.
+    let flash = unsafe { esp_hal::peripherals::FLASH::steal() };
     let flash: ota::Flash = alloc::rc::Rc::new(core::cell::RefCell::new(
-        esp_bootloader_esp_idf::partitions::FlashStorage::new(board.flash),
+        esp_bootloader_esp_idf::partitions::FlashStorage::new(flash),
     ));
     let ota = ota::Ota::start(flash.clone());
+    let board = Board::take(p);
 
     let storage = card::mount(board.card);
     // For bug reports: on the card, and said over USB.

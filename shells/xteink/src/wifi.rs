@@ -147,12 +147,16 @@ impl Radio {
         self.on.is_some()
     }
 
-    /// The network, once there is an address.
+    /// The network while the radio is on, with an address or without one
+    /// (not yet, or no longer), so that what was opened on it can be let
+    /// go once the address is gone.
     pub fn net(&mut self) -> Option<&mut Net> {
-        self.on
-            .as_mut()
-            .map(|on| &mut on.net)
-            .filter(|net| net.address().is_some())
+        self.on.as_mut().map(|on| &mut on.net)
+    }
+
+    /// The network, once there is an address.
+    pub fn online(&mut self) -> Option<&mut Net> {
+        self.net().filter(|net| net.address().is_some())
     }
 
     /// Does what the kernel asked (now, or once the task going on is

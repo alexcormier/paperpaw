@@ -8,6 +8,7 @@
 
 use alloc::string::String;
 use alloc::vec::Vec;
+use core::net::SocketAddr;
 
 use paperpaw_core::{
     Effects, HttpCall, Kernel, ServerCall, ServerEvent, SocketCall, SocketEvent, WifiCommand,
@@ -51,6 +52,7 @@ enum Sync {
     },
     Asking {
         socket: SocketHandle,
+        asked: sntp::Asked,
         until: u64,
     },
 }
@@ -181,11 +183,12 @@ impl Network {
     }
 
     /// Plugins' servers and sockets: what the kernel asked, then a step
-    /// for each. Without a network they fail (what was open is gone).
+    /// for each. Without a network they fail (what was open is let go).
     fn serve(&mut self, kernel: &mut Kernel, now: Instant, effects: &mut Vec<Effects>) {
-        let Some(net) = self.radio.net() else {
-            effects.extend(self.servers.lost(kernel, now));
-            effects.extend(self.sockets.lost(kernel, now));
+        let Some(net) = self.radio.online() else {
+            let mut net = self.radio.net();
+            effects.extend(self.servers.lost(net.as_deref_mut(), kernel, now));
+            effects.extend(self.sockets.lost(net, kernel, now));
             for call in core::mem::take(&mut self.server_calls) {
                 if let ServerCall::Listen { server, .. } = call {
                     let failed = ServerEvent::Failed {
@@ -224,9 +227,16 @@ impl Network {
     /// the radio is online; a step at a time, never waiting.
     fn sync_clock(&mut self, now: Instant) {
         let ms = now.0;
-        let Some(net) = self.radio.net() else {
-            // Offline: whatever went on is gone with the network.
-            self.sync = Sync::Idle { not_before: 0 };
+        let Some(net) = self.radio.online() else {
+            // Offline: whatever went on is let go.
+            let sync = core::mem::replace(&mut self.sync, Sync::Idle { not_before: 0 });
+            if let Some(net) = self.radio.net() {
+                match sync {
+                    Sync::Idle { .. } => {}
+                    Sync::Resolving { query, .. } => net.forget(query),
+                    Sync::Asking { socket, .. } => net.release_udp(socket),
+                }
+            }
             self.sync_failed = false;
             return;
         };
@@ -253,11 +263,16 @@ impl Network {
                 }
                 None => Sync::Resolving { query, until },
             },
-            Sync::Asking { socket, until } => {
+            Sync::Asking {
+                socket,
+                asked,
+                until,
+            } => {
                 let udp = net.udp(socket);
                 let mut time = None;
-                while let Ok((data, _)) = udp.recv() {
-                    time = time.or(sntp::answer(data));
+                while let Ok((data, meta)) = udp.recv() {
+                    let from = SocketAddr::new(meta.endpoint.addr.into(), meta.endpoint.port);
+                    time = time.or(asked.answer(data, from));
                 }
                 if let Some(unix_ms) = time {
                     net.release_udp(socket);
@@ -270,7 +285,11 @@ impl Network {
                     net.release_udp(socket);
                     self.sync_failed(ms)
                 } else {
-                    Sync::Asking { socket, until }
+                    Sync::Asking {
+                        socket,
+                        asked,
+                        until,
+                    }
                 }
             }
         };
@@ -363,16 +382,22 @@ impl Network {
     }
 }
 
-/// Sends an SNTP request to `address`.
+/// Sends an SNTP request to `address`, with a random number its answer
+/// must give back.
 fn ask(net: &mut Net, address: smoltcp::wire::IpAddress, ms: u64) -> Sync {
     let Ok(socket) = net.open_udp(2, 2 * sntp::MESSAGE) else {
         return Sync::Idle {
             not_before: ms + RETRY_MS,
         };
     };
+    let rng = esp_hal::rng::Rng::new();
+    let asked = sntp::Asked {
+        server: SocketAddr::new(address.into(), sntp::PORT),
+        nonce: u64::from(rng.random()) << 32 | u64::from(rng.random()),
+    };
     if net
         .udp(socket)
-        .send_slice(&sntp::request(), (address, sntp::PORT))
+        .send_slice(&asked.request(), (address, sntp::PORT))
         .is_err()
     {
         net.release_udp(socket);
@@ -382,6 +407,7 @@ fn ask(net: &mut Net, address: smoltcp::wire::IpAddress, ms: u64) -> Sync {
     }
     Sync::Asking {
         socket,
+        asked,
         until: ms + ASK_MS,
     }
 }

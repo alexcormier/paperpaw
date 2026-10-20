@@ -5,9 +5,10 @@
 //! sleep cuts the link to the computer (its log, remote control).
 //!
 //! Two watchdogs start the X4 again if the firmware stops coming by: the
-//! RTC's, which counts on in light sleep too, and a timer group's.
+//! RTC's, which counts on in light sleep too, and a timer group's. Long
+//! work on the card keeps them fed for a while (see [`working`]).
 
-use core::cell::RefCell;
+use core::cell::{Cell, RefCell};
 use core::sync::atomic::{AtomicBool, Ordering};
 
 use critical_section::Mutex;
@@ -164,6 +165,24 @@ type TimerWatchdog = esp_hal::timer::timg::Wdt<esp_hal::peripherals::TIMG1<'stat
 static WATCHDOGS: Mutex<RefCell<Option<(esp_hal::rtc_cntl::Rtc<'static>, TimerWatchdog)>>> =
     Mutex::new(RefCell::new(None));
 
+/// Starts the X4 again if its start hangs (a part that never answers)
+/// for `rtc_s` seconds, rather than keep it on: the RTC's watchdog, armed
+/// before the board is set up; [`watch`] takes it over.
+pub fn watch_start(rtc_s: u64) {
+    // SAFETY: only the RTC's watchdog is used, and only until the board
+    // hands the RTC to `watch`, which sets it up again.
+    let rtc_timer = unsafe { esp_hal::peripherals::RTC_TIMER::steal() };
+    arm(&mut esp_hal::rtc_cntl::Rtc::new(rtc_timer).rwdt, rtc_s);
+}
+
+/// Sets the RTC's watchdog to reset the X4 after `seconds`.
+fn arm(rwdt: &mut esp_hal::rtc_cntl::Rwdt, seconds: u64) {
+    use esp_hal::rtc_cntl::{RwdtStage, RwdtStageAction};
+    rwdt.set_stage_action(RwdtStage::Stage0, RwdtStageAction::ResetSystem);
+    rwdt.set_timeout(RwdtStage::Stage0, Duration::from_secs(seconds));
+    rwdt.enable();
+}
+
 /// Starts the X4 again if the firmware does not come by: after `rtc_s`
 /// seconds by the RTC's watchdog, which counts on in light sleep (a sleep
 /// that does not end), after `timer_s` seconds by the timer group's. Hung,
@@ -173,12 +192,7 @@ pub fn watch(
     mut wdt: TimerWatchdog,
     (rtc_s, timer_s): (u64, u64),
 ) {
-    use esp_hal::rtc_cntl::{RwdtStage, RwdtStageAction};
-    rtc.rwdt
-        .set_stage_action(RwdtStage::Stage0, RwdtStageAction::ResetSystem);
-    rtc.rwdt
-        .set_timeout(RwdtStage::Stage0, Duration::from_secs(rtc_s));
-    rtc.rwdt.enable();
+    arm(&mut rtc.rwdt, rtc_s);
     // It counts on in light sleep too (esp-hal pauses it there): a sleep
     // that does not end is what it is for.
     let regs = esp_hal::peripherals::LPWR::regs();
@@ -192,17 +206,46 @@ pub fn watch(
         Duration::from_secs(timer_s),
     );
     wdt.enable();
-    critical_section::with(|cs| WATCHDOGS.replace(cs, Some((rtc, wdt))));
+    critical_section::with(|cs| {
+        CAME_BY.borrow(cs).set(Instant::now());
+        WATCHDOGS.replace(cs, Some((rtc, wdt)));
+    });
 }
 
-/// Tells the watchdogs the firmware is alive.
+/// How long work in one step of the main loop may keep the watchdogs fed
+/// (see [`working`]): removing a large folder takes minutes (the books'
+/// caches over one; x4-remote waits 15 for it). A loop that never ends
+/// (e.g. on a FAT chain that leads back into itself) is caught after it.
+const WORK_S: u64 = 15 * 60;
+
+/// When the main loop last came by (see [`feed`]).
+static CAME_BY: Mutex<Cell<Instant>> = Mutex::new(Cell::new(Instant::EPOCH));
+
+/// Tells the watchdogs the firmware is alive: the main loop came by.
 pub fn feed() {
     critical_section::with(|cs| {
-        if let Some((rtc, wdt)) = WATCHDOGS.borrow_ref_mut(cs).as_mut() {
-            rtc.rwdt.feed();
-            wdt.feed();
+        CAME_BY.borrow(cs).set(Instant::now());
+        feed_watchdogs(cs);
+    });
+}
+
+/// Tells the watchdogs long work goes on (a block of the card read or
+/// written), for at most [`WORK_S`] after the main loop last came by:
+/// legitimate work (a folder removed or copied, a large file written)
+/// does not look hung, a loop that never ends still does.
+pub fn working() {
+    critical_section::with(|cs| {
+        if CAME_BY.borrow(cs).get().elapsed() < Duration::from_secs(WORK_S) {
+            feed_watchdogs(cs);
         }
     });
+}
+
+fn feed_watchdogs(cs: critical_section::CriticalSection<'_>) {
+    if let Some((rtc, wdt)) = WATCHDOGS.borrow_ref_mut(cs).as_mut() {
+        rtc.rwdt.feed();
+        wdt.feed();
+    }
 }
 
 #[cfg(feature = "remote")]

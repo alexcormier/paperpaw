@@ -7,7 +7,8 @@
 //! A file on the card no newer than the version running says so, is
 //! installed only as going back (or installing again), and gives way to
 //! a newer update the server named. An update that leaves out plugins
-//! built in now says which.
+//! built in now says which; one not signed by PaperPaw shows its key,
+//! which the reader accepts at each install.
 //!
 //! Buttons: up and down (or left and right) move between the buttons,
 //! *Select* chooses, *Back* closes (not while installing). Touch: tap.
@@ -19,7 +20,6 @@ use core::cmp::Ordering;
 use paperpaw_sdk::builtin::{actions, events};
 use paperpaw_sdk::firmware::{
     FirmwareCommand, FirmwareState, InstallFailure, Signer, Update, compare_versions, fingerprint,
-    trust, trusted_keys,
 };
 use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::ui::{self, UiStyle};
@@ -108,6 +108,7 @@ fn reason(failure: InstallFailure) -> &'static str {
         InstallFailure::OtherDevice => "update.reason.other-device",
         InstallFailure::TooLarge => "update.reason.too-large",
         InstallFailure::Untrusted => "update.reason.untrusted",
+        InstallFailure::NotNewer => "update.reason.not-newer",
         InstallFailure::Damaged => "update.reason.damaged",
         InstallFailure::Write => "update.reason.write",
     }
@@ -149,7 +150,7 @@ impl UpdatePage {
             // A newer update online comes before going back or installing
             // the same again.
             (Ok(update), offer) if offer.is_none() || age(&update).is_gt() => {
-                let signer = update.signer(firmware, &trusted_keys(env.storage));
+                let signer = update.signer(firmware);
                 let leaves = update
                     .leaves_out(firmware)
                     .into_iter()
@@ -312,7 +313,8 @@ impl UpdatePage {
                 age,
             } => {
                 let version = Arg::Str(&update.info.version);
-                let (title, help) = if *signer == Signer::Unknown {
+                let current = &[("current", Arg::Str(current))];
+                let (title, mut help) = if *signer == Signer::Unknown {
                     // Its groups kept together on one line.
                     let key = fingerprint(&update.trailer.key).replace(' ', "\u{a0}");
                     (
@@ -325,11 +327,12 @@ impl UpdatePage {
                         Ordering::Equal => ("update.same.title", "update.same.help"),
                         Ordering::Less => ("update.older.title", "update.older.help"),
                     };
-                    (
-                        with(title, &[("version", version)]),
-                        with(help, &[("current", Arg::Str(current))]),
-                    )
+                    (with(title, &[("version", version)]), with(help, current))
                 };
+                if *signer == Signer::Unknown && !age.is_gt() {
+                    help.push(' ');
+                    help.push_str(&with("update.older.note", current));
+                }
                 (title, self.with_leaves(env, help, leaves))
             }
             View::Checking => (
@@ -453,15 +456,22 @@ impl UpdatePage {
                 self.redraw(cx, RefreshMode::Partial);
             }
             Button::Install => {
-                let View::Ready { update, signer, .. } = &self.view else {
+                let View::Ready {
+                    update,
+                    signer,
+                    age,
+                    ..
+                } = &self.view
+                else {
                     return;
                 };
-                if *signer == Signer::Unknown {
-                    let _ = trust(env.storage, &update.trailer.key);
-                }
                 write_pair(env.storage, INSTALLING, &update.path, &update.info.version);
+                // What the reader saw and chose: the key shown, a version
+                // not newer said to be so.
                 cx.command(Command::Firmware(FirmwareCommand::Install {
                     path: update.path.clone(),
+                    key: (*signer == Signer::Unknown).then_some(update.trailer.key),
+                    older: !age.is_gt(),
                 }));
                 self.view = View::Installing {
                     done: 0,
@@ -532,8 +542,8 @@ impl UpdatePage {
     }
 }
 
-/// Draws `text` left-aligned in `area`, wrapped, at most `max` lines;
-/// returns the height used.
+/// Draws `text` left-aligned in `area`, wrapped, at most `max` lines and
+/// as many as `area` holds; returns the height used.
 #[allow(clippy::too_many_arguments)]
 fn paragraph(
     canvas: &mut Canvas<'_>,
@@ -549,6 +559,7 @@ fn paragraph(
         return 0;
     };
     let height = font.line_metrics(size).line_height as u16;
+    let max = max.min(usize::from(area.height / height.max(1)));
     let lines = font.wrap(size, text, f32::from(area.width));
     let used = height * lines.len().min(max) as u16;
     canvas.describe(
@@ -602,12 +613,13 @@ impl Screen for UpdatePage {
             3,
             Color::BLACK,
         ) + gap;
-        let area = Rect::new(
-            margin,
-            y,
-            width,
-            env.device.display.height.saturating_sub(y),
-        );
+        let buttons = self.buttons(env);
+        let rects = self.button_rects(env, buttons.len());
+        // The words keep clear of the buttons.
+        let bottom = rects
+            .first()
+            .map_or(env.device.display.height, |r| r.y.saturating_sub(gap));
+        let area = Rect::new(margin, y, width, bottom.saturating_sub(y));
         y += paragraph(
             canvas,
             env,
@@ -622,12 +634,7 @@ impl Screen for UpdatePage {
             let bar = Rect::new(margin, y, width, gap * 3);
             self.draw_progress(canvas, env, bar, done, total);
         }
-        let buttons = self.buttons(env);
-        for (i, (button, rect)) in buttons
-            .iter()
-            .zip(self.button_rects(env, buttons.len()))
-            .enumerate()
-        {
+        for (i, (button, rect)) in buttons.iter().zip(rects).enumerate() {
             let label = self.label(env, *button);
             let focused = self.shown && self.focus == i;
             ui::draw_button(canvas, env, &style, rect, label, i == 0, focused);

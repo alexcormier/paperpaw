@@ -2585,7 +2585,7 @@ version = "0.4.0-dev"
 
 [[package]]
 name = "paperpaw-xteink"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "critical-section",
  "embassy-net-driver",
@@ -2609,7 +2609,6 @@ dependencies = [
  "paperpaw-http",
  "paperpaw-native",
  "paperpaw-platform",
- "paperpaw-plugin-reader",
  "paperpaw-plugin-wifi",
  "paperpaw-sdk",
  "paperpaw-update",

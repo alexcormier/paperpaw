@@ -1,7 +1,9 @@
 [package]
 name = "paperpaw-xteink"
 description = "PaperPaw's firmware for the Xteink X4 (ESP32-C3), X4 Pro and X4 Classic (ESP32-S3)"
-version = "0.1.0"
+# No version of its own: the firmware is PaperPaw's, whose version (the
+# workspace's) `build.rs` gives it. Its Rust is the pinned one of
+# `rust-toolchain.toml` and `versions.env`, not the workspace's.
 edition = "2024"
 rust-version = "1.95"
 license = "Apache-2.0"
@@ -70,8 +72,7 @@ paperpaw-http = { path = "../../crates/paperpaw-http" }
 paperpaw-digest = { path = "../../crates/paperpaw-digest" }
 # Native code plugins' files (`src/native`).
 paperpaw-native = { path = "../../crates/paperpaw-native" }
-# Their settings' ids, for the X4's defaults.
-paperpaw-plugin-reader = { path = "../../plugins/reader" }
+# Its settings' ids, for the X4's defaults.
 paperpaw-plugin-wifi = { path = "../../plugins/wifi" }
 esp-hal = { version = "1.2", features = ["unstable"] }
 esp-alloc = "0.11"

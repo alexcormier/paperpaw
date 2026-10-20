@@ -233,6 +233,10 @@ impl Call {
         if now > self.deadline {
             return Some(Err("timed out"));
         }
+        if net.address().is_none() && !matches!(self.phase, Phase::Waiting) {
+            // The address went: what was open on it is gone.
+            return Some(Err("no network"));
+        }
         match self.phase {
             Phase::Waiting => self.start(net, storage, may_open, now),
             Phase::Resolving(query, port) => {

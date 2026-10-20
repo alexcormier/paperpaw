@@ -1298,7 +1298,15 @@ change the plugin SDK.
 - X4: removing or copying a large folder (e.g. one with many books, or
   their caches) no longer starts the device again half way: work on the
   card keeps the watchdogs from taking it for hung (it took 20 s before
-  they did, removing the books' caches over a minute).
+  they did, removing the books' caches over a minute). It does so for at
+  most 15 minutes in one step of the firmware's loop: work on the card
+  that never ends (e.g. on a damaged FAT) still starts the X4 again
+  rather than keep it on until its battery is empty.
+- X4 Pro and X4 Classic: the fuel gauge is read and the clock chip set
+  by the firmware's loop, no longer in the interrupt that reads the
+  buttons, where each I²C reading held off every other interrupt (the
+  radio's too) for a millisecond or two. On every X4 the battery is read
+  when its status is due (once a minute), no longer every second.
 - X4: more memory left while the radio is on (on USB power it stays on
   by default, and a book opening then came close to the heap's end): the
   radio keeps 5 receive buffers instead of 10 and takes at most 16 more
@@ -1313,6 +1321,57 @@ change the plugin SDK.
   `heap` says the most the heap held since start, the log says the heap
   after every frame, and failed requests are logged with their host
   (`wifi:status`, `wifi:scan`, `http:get:` as script steps).
+- X4: losing the network's address (as on every joining again) lets go
+  of what was open on it: plugins' servers no longer keep listening and
+  holding their memory (some 12 KB a connection), nor requests theirs
+  (some 17 KB), and name lookups no longer pile up (after four, every
+  lookup said "no such host" until the radio went off). Requests made
+  while a network is being joined wait for its address, as they were
+  meant to, instead of failing at once.
+- X4: the clock takes the time only from the server asked and only its
+  answer to that request (the random number sent with it given back), no
+  longer any answer that comes. `paperpaw-x4`: `sntp::Asked` (its
+  `request` and `answer`) in place of `sntp::request` and `sntp::answer`.
+- X4: two clients sending or reading a byte now and then no longer hold
+  a plugin's server for good: a request's body and its answer must move
+  16 KB every 30 s (as a request's head must come whole in 30 s), while
+  a large upload or download that moves takes as long as it needs.
+- X4 updates: an update whose signature does not hold can never start.
+  A second install before restarting wrote into the partition the first
+  update had chosen, so a file under PaperPaw's key with a wrong
+  signature started at the next restart. An update installed and not
+  started yet is now given up before another is written, and an image's
+  first word, without which the bootloader starts nothing, is written
+  only once its signature held.
+- X4 updates: firmware signed with another key than PaperPaw's (one's
+  own builds) installs only when the reader accepts that key, shown by
+  its fingerprint, at each install; nothing on the card trusts a key any
+  more, so `.paperpaw/firmware-keys.txt` is no longer read and can go.
+  The shell installs an older firmware, or the same again, only when
+  the reader chose it on the update page. SDK:
+  `FirmwareCommand::Install` has `key` and `older`,
+  `Update::may_install` is the shell's check,
+  `Update::is_newer`, `InstallFailure::NotNewer`; `Update::signer`
+  takes no list of keys; `TRUSTED_KEYS`, `trust`, `trusted_keys` and
+  `Signer::Trusted` are gone (none was released).
+- X4 updates: an update that fails early in its start is undone too. It
+  goes on trial before the board is set up, and is taken as good after
+  half a minute or when it goes to sleep or restarts (it was at its
+  first frame, so one that crashed opening the last book stayed). The
+  start is watched from its first moment; a power cut while an update is
+  chosen no longer starts it without a trial.
+- X4: what was written is on the card before every restart, also one a
+  plugin asks for (a plugin switched just before was lost), and at most
+  2 s after work, however often work comes.
+- X4: put to sleep on USB power and then unplugged, it sleeps as on
+  battery, where it stayed awake and drained the battery.
+- X4: a display whose busy line sticks ends in an error after 10 s,
+  where the watchdog started the X4 again and again; a long panic
+  message is kept for `crashes.txt`, no longer lost when a character was
+  cut in two; the remote control over USB (test builds) refuses lines
+  too long rather than carry them out cut.
+- `paperpaw-update`: `Plugins::record` gives `None` for a list longer
+  than readers take, and the firmware's build stops there.
 - The X4's remote control over USB (test builds) does much more, for
   developing on the device: the card (`ls`, `stat`, `md5`, `rm` also of
   folders, `mkdir`, `mv`, `sync`; `tools/x4-remote.py` pushes and pulls

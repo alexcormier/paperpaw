@@ -34,6 +34,10 @@ const IDLE_MS: u64 = 30;
 /// How long after the last work what was written is written back to the
 /// card (not at once: a download writes in many pieces).
 const SYNC_MS: u64 = 2_000;
+/// An update on trial is taken as good once it ran this long (its start
+/// and the book it opens at once behind it), or when it goes to sleep or
+/// restarts by itself.
+const TRIAL_MS: u64 = 30_000;
 
 /// The X4's firmware: the kernel, the parts it drives, and where the main
 /// loop is.
@@ -79,9 +83,10 @@ pub struct State {
     /// gray test over USB): the next change is shown with the whole screen
     /// drawn again.
     gray_shown: bool,
-    /// When the kernel last worked, if what it wrote may not be on the
-    /// card yet: written back [`SYNC_MS`] after, so nothing is lost when
-    /// the X4 is cut off (reset, flashed, an empty battery).
+    /// When the kernel first worked since the card was last written back,
+    /// if what it wrote may not be on the card yet: written back
+    /// [`SYNC_MS`] after, so nothing is lost when the X4 is cut off
+    /// (reset, flashed, an empty battery).
     unsynced: Option<u64>,
 }
 
@@ -90,14 +95,17 @@ impl Firmware {
     pub fn run(mut self) -> ! {
         let effects = self.kernel.start(now());
         self.apply(effects);
-        // Its first frame is shown: an update on trial started cleanly,
-        // and so did its code plugins.
-        if let Some(ota) = &mut self.ota {
-            ota.confirm();
-        }
+        // Its first frame is shown: its code plugins started cleanly.
         crate::safe_mode::started();
         loop {
             self.step();
+        }
+    }
+
+    /// An update on trial works: it is kept (see [`TRIAL_MS`]).
+    fn confirm(&mut self) {
+        if let Some(ota) = &mut self.ota {
+            ota.confirm();
         }
     }
 
@@ -108,6 +116,9 @@ impl Firmware {
     }
 
     fn step(&mut self) {
+        if now().0 >= TRIAL_MS {
+            self.confirm();
+        }
         let installing = self.installing();
         if self.state.sleep && !installing {
             return self.sleep();
@@ -189,22 +200,25 @@ impl Firmware {
     /// An update or a restart the kernel asked for.
     fn firmware(&mut self, command: FirmwareCommand) {
         match command {
-            FirmwareCommand::Install { path } => {
+            FirmwareCommand::Install { path, key, older } => {
                 let state = match &mut self.ota {
-                    Some(ota) => ota.begin(self.kernel.storage(), &path),
+                    Some(ota) => ota.begin(self.kernel.storage(), &path, key.as_ref(), older),
                     None => FirmwareState::Failed(InstallFailure::Write),
                 };
                 let effects = self.kernel.firmware_state(now(), state);
                 self.apply(effects);
             }
-            FirmwareCommand::Restart => {
-                // What plugins keep is saved first.
-                info!("restarting");
-                let effects = self.kernel.suspend(now());
-                self.apply(effects);
-                esp_hal::system::software_reset();
-            }
+            FirmwareCommand::Restart => self.restart(),
         }
+    }
+
+    /// Restarts the X4 once what plugins keep is saved and all written
+    /// is on the card (the kernel's suspend writes it back).
+    fn restart(&mut self) -> ! {
+        info!("restarting");
+        self.confirm();
+        let _ = self.kernel.suspend(now());
+        esp_hal::system::software_reset();
     }
 
     /// How an update goes.
@@ -384,6 +398,7 @@ impl Firmware {
         // A press over USB that put it to sleep is let go first.
         #[cfg(feature = "remote")]
         self.release_held();
+        self.confirm();
         let effects = self.kernel.suspend(now());
         self.apply(effects);
         let _ = self.panel.sleep();
@@ -394,8 +409,8 @@ impl Firmware {
         info!("sleeping");
         // Released first: held, the button would wake it at once.
         self.wait_for_power_release();
-        if self.usb_power.is_high() {
-            return self.sleep_on_usb();
+        if self.usb_power.is_high() && self.sleep_on_usb() {
+            return;
         }
         let mut power = input::stop().expect("the power button");
         // The ESP32-S3 devices hold their latch through resets: let go
@@ -416,8 +431,9 @@ impl Firmware {
     }
 
     /// Asleep on USB power: the sleep screen shows until the power button,
-    /// or `press power` over USB, wakes it.
-    fn sleep_on_usb(&mut self) {
+    /// or `press power` over USB, wakes it (`true`), or until the USB
+    /// power is gone (`false`): then it sleeps as on battery.
+    fn sleep_on_usb(&mut self) -> bool {
         loop {
             self.delay.delay_millis(POLL_MS as u32);
             power::feed();
@@ -427,6 +443,10 @@ impl Firmware {
             #[cfg(feature = "remote")]
             if self.remote_while_asleep() {
                 break;
+            }
+            if self.usb_power.is_low() {
+                info!("off USB: sleeping as on battery");
+                return false;
             }
         }
         self.wait_for_power_release();
@@ -438,15 +458,18 @@ impl Firmware {
         self.state.sleep = false;
         let effects = self.kernel.resume(now());
         self.apply(effects);
+        true
     }
 
     /// Carries out what the kernel asks: shows what changed, notes when to
     /// wake it, restarts, notes whether to sleep.
     pub fn apply(&mut self, mut effects: Effects) {
-        self.state.unsynced = Some(now().0);
+        // From the first work not written back: work coming again and
+        // again does not put it off.
+        self.state.unsynced.get_or_insert(now().0);
         loop {
             if effects.restart() {
-                esp_hal::system::software_reset();
+                self.restart();
             }
             // Turned (the setting): the same screens, made anew for the
             // turned size and drawn whole, instead of what was asked.
@@ -809,7 +832,7 @@ impl Firmware {
                 );
                 info!("{button} pressed: {} ms", now().since(started));
                 self.apply(effects);
-                self.state.held = Some((button, Instant(now().0 + ms)));
+                self.state.held = Some((button, Instant(now().0.saturating_add(ms))));
             }
             // Only asking: answered by `remote`.
             _ => {}

@@ -165,11 +165,6 @@ impl Debouncer {
     pub fn is_down(&self, button: &str) -> bool {
         self.state.is_down(button)
     }
-
-    /// Whether any button counts as down, e.g. to keep reading often.
-    pub fn any_down(&self) -> bool {
-        self.state.0 != 0 || self.reading.0 != 0
-    }
 }
 
 #[cfg(test)]
