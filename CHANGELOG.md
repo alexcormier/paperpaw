@@ -21,6 +21,16 @@ change the plugin SDK.
   built with `--cfg paperpaw_plugin` as the sample is.
 - Files, widgets and vocabulary keep no writable statics, so they pack
   as plugin files.
+- First-run setup: after Wi-Fi, "Add more" offers four plugins most
+  readers add (reading statistics, home widgets, Calibre, KOReader sync),
+  all off; those chosen are installed in the background from the store
+  (switched on where they are built in) and said once when done. The
+  store's queue installs plugins not there yet too.
+- Releases publish PaperPaw's own store plugins as files for every
+  device (tools/plugin-files), signed with the first-party plugin key,
+  with their folders and their entries for the plugin library; CI builds
+  them for every device. Their version is the release's
+  (`paperpaw_sdk::package_version!`).
 
 - Store: easier to find one's way in a library of thousands of
   plugins. The start lists Search, the plugins installed (with how many
