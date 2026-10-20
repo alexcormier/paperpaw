@@ -6,6 +6,9 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Plugin manager: a plugin installed or removed while its list is open
+  (from the store opened from it, say) shows there at once; the list
+  was the one of when it opened.
 - Update: an update file on the card no newer than the version running
   says so (*an older version*, *again*) and installs as *Install older
   version* or *Install again*, with *Search online* beside it; a newer
