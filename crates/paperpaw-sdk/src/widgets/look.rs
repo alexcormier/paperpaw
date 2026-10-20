@@ -602,42 +602,50 @@ pub struct Wrapped {
     size: f32,
     /// The lines, the last one shortened with "…" where there is more.
     lines: Vec<String>,
+    /// Whether the lines hold all of the text.
+    whole: bool,
 }
 
 impl Wrapped {
     /// `text` `size` pixels large in lines `width` pixels wide, broken
-    /// between words, as many as fit `height` pixels (at least one). A
-    /// word wider than a line is shortened with "…", as is the last line
-    /// where there is more.
+    /// between words, as many as fit `height` pixels (at least one). Where
+    /// there is more, or a word is wider than a line, the text ends there
+    /// in "…": never a shortened word with more text after it.
     pub fn new(env: &Env<'_>, text: &str, size: f32, width: u16, height: u16) -> Self {
         let mut wrapped = Self {
             text: String::from(text),
             size,
             lines: Vec::new(),
+            whole: true,
         };
         let Some(font) = UiStyle::new(env).font(env) else {
             return wrapped;
         };
         let width = f32::from(width);
         let line = f32::from(line_height(env, size)).max(1.0);
-        let (mut ranges, _) = break_words(&font, size, text, width);
+        let (ranges, _) = break_words(&font, size, text, width);
         let fits = ((f32::from(height) / line) as usize).max(1);
-        let cut = ranges.len() > fits;
-        ranges.truncate(fits);
         let count = ranges.len();
-        wrapped.lines = ranges
-            .into_iter()
-            .enumerate()
-            .map(|(n, range)| {
-                if cut && n + 1 == count {
-                    // The rest on one line: its breaks as spaces.
-                    let rest = text[range.start..].trim_end().replace('\n', " ");
-                    ui::fit(&font, size, &format!("{rest} …"), width)
-                } else {
-                    ui::fit(&font, size, text[range].trim_end(), width)
-                }
-            })
-            .collect();
+        for (n, range) in ranges.into_iter().enumerate() {
+            let own = text[range.clone()].trim_end();
+            if n + 1 == fits && n + 1 < count {
+                // The last line there is room for: the rest on it, its
+                // breaks as spaces.
+                let rest = text[range.start..].trim_end().replace('\n', " ");
+                wrapped
+                    .lines
+                    .push(ui::fit(&font, size, &format!("{rest} …"), width));
+                wrapped.whole = false;
+                break;
+            }
+            let shown = ui::fit(&font, size, own, width);
+            let shortened = shown != own;
+            wrapped.lines.push(shown);
+            if shortened {
+                wrapped.whole = false;
+                break;
+            }
+        }
         wrapped
     }
 
@@ -661,6 +669,12 @@ impl Wrapped {
     /// The size its lines are drawn at.
     pub fn size(&self) -> f32 {
         self.size
+    }
+
+    /// Whether its lines show all of the text, nothing shortened or left
+    /// out: a widget may then rather show something shorter.
+    pub fn whole(&self) -> bool {
+        self.whole
     }
 
     /// Its lines as drawn.

@@ -204,7 +204,7 @@ change the plugin SDK.
   its place: `fit_line` and `draw_line` (one line, smaller down to a
   least size, then shortened, centred by its ink), `largest_size`
   (measured as drawn, so fonts of a few sizes fit too),
-  `ink_baseline`, `Wrapped::fitting`, `Wrapped::{size, lines}`.
+  `ink_baseline`, `Wrapped::fitting`, `Wrapped::{size, lines, whole}`.
   `Wrapped`, `draw_wrapped` and `draw_message` break text between
   words only, never inside one, and make it smaller, down to the small
   size, before they cut it.

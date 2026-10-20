@@ -2141,6 +2141,7 @@ pub fn paperpaw_sdk::widgets::look::Wrapped::height(&self, &paperpaw_sdk::Env<'_
 pub fn paperpaw_sdk::widgets::look::Wrapped::lines(&self) -> &[alloc::string::String]
 pub fn paperpaw_sdk::widgets::look::Wrapped::new(&paperpaw_sdk::Env<'_>, &str, f32, u16, u16) -> Self
 pub fn paperpaw_sdk::widgets::look::Wrapped::size(&self) -> f32
+pub fn paperpaw_sdk::widgets::look::Wrapped::whole(&self) -> bool
 pub const paperpaw_sdk::widgets::look::FRAMES: [&str; 4]
 pub const paperpaw_sdk::widgets::look::PADDINGS: [&str; 5]
 pub const paperpaw_sdk::widgets::look::SIZES: [&str; 4]
@@ -2254,6 +2255,7 @@ pub fn paperpaw_sdk::widgets::look::Wrapped::height(&self, &paperpaw_sdk::Env<'_
 pub fn paperpaw_sdk::widgets::look::Wrapped::lines(&self) -> &[alloc::string::String]
 pub fn paperpaw_sdk::widgets::look::Wrapped::new(&paperpaw_sdk::Env<'_>, &str, f32, u16, u16) -> Self
 pub fn paperpaw_sdk::widgets::look::Wrapped::size(&self) -> f32
+pub fn paperpaw_sdk::widgets::look::Wrapped::whole(&self) -> bool
 pub const paperpaw_sdk::widgets::ALIGNMENTS: [&str; 3]
 pub const paperpaw_sdk::widgets::FILL: &str
 pub const paperpaw_sdk::widgets::SPACE: &str
