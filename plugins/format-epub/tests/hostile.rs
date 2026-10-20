@@ -773,3 +773,17 @@ fn the_contents_of_a_fictionbook_are_kept_on_the_card() {
     let block = again.block_at(&card, entry.at).unwrap().unwrap();
     assert!(block.text.starts_with("4999 A long title"));
 }
+
+#[test]
+fn markdown_of_one_long_line_or_endless_brackets_takes_little() {
+    let mut md = "word ".repeat(40_000);
+    md.push_str(&"[".repeat(50_000));
+    md.push_str("](x)");
+    let card = Card::new("notes.md", md.into_bytes());
+    let (read, heap) = peak(|| {
+        let doc = MarkdownDocument::open(&card, "notes.md", true).unwrap();
+        read_all(&doc, &card)
+    });
+    assert!(heap < PLAIN_PEAK, "{heap} bytes at once");
+    assert!(read.words >= 40_000);
+}
