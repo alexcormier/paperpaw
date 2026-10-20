@@ -1,7 +1,9 @@
-//! Updates one after another: *Update all* keeps the plugins to update in
-//! a queue on the storage. Each one's page at the library (with its files)
-//! is fetched when its turn comes, and its download starts once the one
-//! before is done; screens may come and go meanwhile.
+//! Installs and updates one after another: *Update all* and the
+//! first-run setup's offer (`setup`) keep the plugins in a queue on the
+//! storage. Each one's page at the library (with its files) is fetched
+//! when its turn comes, and its download starts once the one before is
+//! done; screens may come and go meanwhile. The setup's queue is quiet:
+//! what became of each is kept, and said once when the queue is done.
 
 use alloc::format;
 use alloc::string::{String, ToString};
@@ -10,7 +12,7 @@ use alloc::vec::Vec;
 use paperpaw_sdk::builtin::params;
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::HttpReply;
-use paperpaw_sdk::{Command, Env, HttpRequest, Params, install};
+use paperpaw_sdk::{Arg, Command, Env, HttpRequest, Params, install};
 
 use crate::catalog::{self, Device};
 use crate::{CATALOG, INSTALLER, PLUGIN, failed, trust};
@@ -29,6 +31,67 @@ fn waiting(env: &Env<'_>) -> Vec<String> {
         .and_then(|bytes| String::from_utf8(bytes).ok())
         .map(|text| text.lines().map(ToString::to_string).collect())
         .unwrap_or_default()
+}
+
+/// Where a quiet queue keeps what became of each plugin: `+<name>`
+/// installed, `-<name>` not.
+fn quiet_path() -> String {
+    format!("{}/queue-quiet.txt", Env::plugin_dir(PLUGIN.as_str()))
+}
+
+/// Whether the queue is quiet: each plugin installed is not said on its
+/// own.
+pub(crate) fn quiet(env: &Env<'_>) -> bool {
+    env.storage.exists(&quiet_path())
+}
+
+/// Keeps, for a quiet queue, that plugin `name` was installed (`done`) or
+/// not.
+pub(crate) fn note(env: &Env<'_>, name: &str, done: bool) {
+    let line = format!(
+        "{}{}\n",
+        if done { '+' } else { '-' },
+        name.replace('\n', " ")
+    );
+    let _ = env.storage.append(&quiet_path(), line.as_bytes());
+}
+
+/// Plugin `id`'s name where the page with its name did not come: the
+/// setup's own for the plugins it offers, else its id.
+fn name_of(env: &Env<'_>, id: &str) -> String {
+    env.i18n
+        .get(&format!("store.offer.{id}"))
+        .map_or_else(|| id.to_string(), ToString::to_string)
+}
+
+/// Says, once a quiet queue is done, what it installed and what not.
+fn said(env: &Env<'_>, out: &mut Vec<Command>) {
+    let Some(text) = paperpaw_sdk::read_file(env.storage, &quiet_path(), 16 * 1024)
+        .ok()
+        .and_then(|bytes| String::from_utf8(bytes).ok())
+    else {
+        return;
+    };
+    let _ = env.storage.remove(&quiet_path());
+    let names = |mark: char| {
+        text.lines()
+            .filter_map(|line| line.strip_prefix(mark))
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    let (done, not) = (names('+'), names('-'));
+    if !done.is_empty() {
+        out.push(Command::Notify(
+            env.i18n
+                .format("store.offer.done", &[("names", Arg::Str(&done))]),
+        ));
+    }
+    if !not.is_empty() {
+        out.push(Command::Notify(
+            env.i18n
+                .format("store.offer.not-done", &[("names", Arg::Str(&not))]),
+        ));
+    }
 }
 
 fn keep(env: &Env<'_>, ids: &[String]) {
@@ -55,9 +118,19 @@ pub(crate) fn add(env: &Env<'_>, ids: &[String], out: &mut Vec<Command>) {
     next(env, out);
 }
 
+/// Puts `ids` in a quiet queue (see [`quiet`]): the first-run setup's.
+pub(crate) fn add_quietly(env: &Env<'_>, ids: &[String], out: &mut Vec<Command>) {
+    let _ = env.storage.create_dir(&Env::plugin_dir(PLUGIN.as_str()));
+    if !quiet(env) {
+        let _ = env.storage.write(&quiet_path(), b"");
+    }
+    add(env, ids, out);
+}
+
 /// Forgets the queue: at the start, nothing is downloaded unasked.
 pub(crate) fn clear(env: &Env<'_>) {
     keep(env, &[]);
+    let _ = env.storage.remove(&quiet_path());
 }
 
 /// The address of plugin `id`'s page at the library.
@@ -73,7 +146,11 @@ pub(crate) fn next(env: &Env<'_>, out: &mut Vec<Command>) {
         return;
     }
     let Some(device) = Device::of(env).filter(|_| env.caps.network) else {
-        return keep(env, &[]);
+        for id in waiting(env) {
+            note(env, &name_of(env, &id), false);
+        }
+        keep(env, &[]);
+        return said(env, out);
     };
     let mut all = waiting(env);
     while !all.is_empty() {
@@ -90,6 +167,7 @@ pub(crate) fn next(env: &Env<'_>, out: &mut Vec<Command>) {
         return;
     }
     keep(env, &[]);
+    said(env, out);
 }
 
 /// The page of the plugin whose turn it is came: its download starts, or
@@ -108,16 +186,29 @@ pub(crate) fn fetched(env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) 
                 .unwrap_or_else(|| page_url(env, &device, &id));
             catalog::plugin(env.storage, &fetched, &address, &device)
         })
-        .filter(|plugin| plugin.entry.id == id && plugin.entry.newer(env));
+        // Not installed yet, or newer than the one installed.
+        .filter(|plugin| {
+            plugin.entry.id == id
+                && (plugin.entry.installed(env).is_none() || plugin.entry.newer(env))
+        });
     let _ = env.storage.remove(&fetched);
     match plugin {
         Some(plugin) => {
             trust::expect(env.storage, &plugin.entry.id, plugin.author_key.as_ref());
             if !INSTALLER.start(env, &plugin.package, out) {
-                out.push(failed(env, &plugin.entry.name));
+                if quiet(env) {
+                    note(env, &plugin.entry.name, false);
+                } else {
+                    out.push(failed(env, &plugin.entry.name));
+                }
                 next(env, out);
             }
         }
-        None => next(env, out),
+        None => {
+            if quiet(env) {
+                note(env, &name_of(env, &id), false);
+            }
+            next(env, out);
+        }
     }
 }
