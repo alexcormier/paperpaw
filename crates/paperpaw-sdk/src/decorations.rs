@@ -589,16 +589,16 @@ pub fn draw_behind(
     // edge of its mark.
     let pad = env.metrics.tenth_mm(5).max(1) as i32;
     for b in boxes {
-        canvas.fill_shaded(
-            Rect::new(
-                (i32::from(b.x) - pad).max(0) as u16,
-                b.y,
-                (u32::from(b.width) + 2 * pad as u32).min(u32::from(u16::MAX)) as u16,
-                b.height,
-            ),
-            tone.color(),
-        );
+        canvas.fill_shaded(padded(*b, pad), tone.color());
     }
+}
+
+/// `b` widened by `pad` on either side, cut at the left edge of the canvas
+/// (and the largest width a `Rect` holds) without moving its right side.
+fn padded(b: Rect, pad: i32) -> Rect {
+    let left = (i32::from(b.x) - pad).max(0);
+    let right = (i32::from(b.x) + i32::from(b.width) + pad).min(i32::from(u16::MAX));
+    Rect::new(left as u16, b.y, (right - left).max(0) as u16, b.height)
 }
 
 /// What is drawn over the text of `boxes` (one per line): the line under
@@ -877,19 +877,28 @@ impl Decorators {
     /// are on and their signatures. Readers ask them again when it
     /// changes.
     pub fn signature(&self, env: &Env<'_>) -> u64 {
-        let mut bytes = Vec::new();
-        for decorator in &self.list {
+        // FNV-1a as `paperpaw_digest::fnv1a64` computes it, fed piece by
+        // piece: readers ask on every band, so nothing is allocated.
+        const OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
+        const PRIME: u64 = 0x0000_0100_0000_01b3;
+        let feed = |hash: u64, bytes: &[u8]| {
+            bytes
+                .iter()
+                .fold(hash, |h, &b| (h ^ u64::from(b)).wrapping_mul(PRIME))
+        };
+        self.list.iter().fold(OFFSET, |hash, decorator| {
             let on = decorator
                 .switch
                 .as_ref()
                 .is_none_or(|s| env.settings.bool(s.as_str()));
-            bytes.extend_from_slice(decorator.id.as_str().as_bytes());
-            bytes.push(u8::from(on));
+            let hash = feed(hash, decorator.id.as_str().as_bytes());
+            let hash = feed(hash, &[u8::from(on)]);
             if on {
-                bytes.extend_from_slice(&(decorator.signature)(env).to_le_bytes());
+                feed(hash, &(decorator.signature)(env).to_le_bytes())
+            } else {
+                hash
             }
-        }
-        paperpaw_digest::fnv1a64(&bytes)
+        })
     }
 
     /// The marks of `page` from every decorator that is on, by order.
@@ -915,6 +924,17 @@ impl Decorators {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn backgrounds_keep_their_padding_at_the_edges() {
+        // Inside: as wide as the word and a padding on either side.
+        assert_eq!(padded(Rect::new(10, 5, 20, 8), 3), Rect::new(7, 5, 26, 8));
+        // At the left edge: cut there, the right side where it belongs.
+        assert_eq!(padded(Rect::new(1, 5, 20, 8), 3), Rect::new(0, 5, 24, 8));
+        // At the end of what a `Rect` holds: no wrap.
+        let far = padded(Rect::new(u16::MAX - 4, 0, 4, 8), 3);
+        assert_eq!(far.x + far.width, u16::MAX);
+    }
 
     #[test]
     fn tones_and_lines_by_their_ids() {

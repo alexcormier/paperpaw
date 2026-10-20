@@ -730,6 +730,7 @@ static DEVICE: [SettingSpec; 9] = [
         groups::DISPLAY,
     )
     .with_extra(&PAGES)
+    .scoped()
     .described("core.setting.full-refresh-interval.help"),
     SettingSpec::fixed_switch(
         settings::FLASH_SCREENS.static_str(),

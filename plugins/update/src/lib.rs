@@ -72,9 +72,11 @@ pub(crate) fn write_pair(storage: &dyn Storage, name: &str, first: &str, second:
     let _ = storage.write(&file(name), format!("{first}\n{second}\n").as_bytes());
 }
 
-/// At start: how the update installed before went, and an update to offer.
+/// At start: how the update installed before went, and an update to
+/// offer. A download the restart cut off is let go.
 fn started(env: &Env<'_>, firmware: &Firmware, out: &mut Vec<Command>) {
     let storage = env.storage;
+    online::clear_download(storage);
     if let Some((path, version)) = read_pair(storage, INSTALLING) {
         let _ = storage.remove(&file(INSTALLING));
         if !firmware.undone && version == firmware.version {

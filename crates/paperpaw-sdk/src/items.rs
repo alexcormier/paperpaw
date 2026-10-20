@@ -5,7 +5,10 @@
 //! one as the setting's editor ([`SettingSpec::editor`](crate::SettingSpec)):
 //! it lists the items shown, in their order, then the others; tapping one
 //! shows or hides it (a newly shown one goes last), and shown items are
-//! moved by dragging their grip.
+//! moved by dragging their grip. With buttons, *Menu* (a long press of
+//! *Confirm*) takes the focused shown item along: the direction and page
+//! buttons move it a place, *Confirm* or *Back* put it down. Items of
+//! plugins not there now stay in the setting where they were.
 
 use alloc::borrow::Cow;
 use alloc::format;
@@ -32,6 +35,8 @@ pub struct ItemsScreen {
     header: ui::Header,
     list: ListView,
     reorder: Reorder,
+    /// The focused shown item is being moved by the buttons.
+    moving: bool,
 }
 
 impl ItemsScreen {
@@ -60,6 +65,7 @@ impl ItemsScreen {
             items,
             list: ListView::new(area, style.row).focus_on_keys(env),
             reorder: Reorder::default(),
+            moving: false,
             style,
             header,
         }
@@ -89,11 +95,26 @@ impl ItemsScreen {
         order
     }
 
-    fn keep(&self, chosen: &[&str], cx: &mut Cx<'_, '_>) {
+    /// Keeps `chosen`, the items shown here in their new order. Items of
+    /// the setting not listed here (of plugins not there now) keep their
+    /// places among them.
+    fn keep(&self, env: &Env<'_>, chosen: &[&str], cx: &mut Cx<'_, '_>) {
         if let Some(setting) = &self.setting {
+            let known = |c: &str| self.items.iter().any(|(id, _)| id.as_str() == c);
+            let mut chosen_left = chosen.iter();
+            let mut all: Vec<&str> = item_ids(env.settings.text(setting.as_str()))
+                .filter_map(|c| {
+                    if known(c) {
+                        chosen_left.next().copied()
+                    } else {
+                        Some(c)
+                    }
+                })
+                .collect();
+            all.extend(chosen_left);
             cx.command(Command::SetSetting(
                 setting.clone(),
-                SettingValue::Text(Cow::Owned(chosen.join(", "))),
+                SettingValue::Text(Cow::Owned(all.join(", "))),
             ));
         }
         cx.request_redraw();
@@ -112,7 +133,31 @@ impl ItemsScreen {
             }
             None => chosen.push(id.as_str()),
         }
-        self.keep(&chosen, cx);
+        self.keep(&env, &chosen, cx);
+    }
+
+    /// Moves the shown item with the focus `delta` places, within the shown
+    /// ones (the buttons' way of moving it).
+    fn shift(&mut self, delta: isize, cx: &mut Cx<'_, '_>) {
+        let env = *cx.env();
+        let mut chosen = self.chosen(&env);
+        let from = self.list.focus;
+        let to = from
+            .saturating_add_signed(delta)
+            .min(chosen.len().saturating_sub(1));
+        if from >= chosen.len() || to == from {
+            return;
+        }
+        ui::reorder::moved(&mut chosen, from, to);
+        self.list.focus = to;
+        self.keep(&env, &chosen, cx);
+    }
+
+    /// Whether the buttons can take the focused item along: the focus
+    /// shows on a shown item, and another is shown to move it past.
+    fn can_move(&self, env: &Env<'_>) -> bool {
+        let shown = self.chosen(env).len();
+        self.list.shown && self.list.focus < shown && shown > 1
     }
 }
 
@@ -168,6 +213,33 @@ impl Screen for ItemsScreen {
                 );
             });
         self.reorder.draw(canvas, &style, &self.list);
+        if self.moving {
+            // The item the buttons move: a frame inside its focus, in the
+            // focus's own ink (white on a dark bar, dark in a ring or on a
+            // light bar), so it looks taken up, not only focused.
+            let slot = self.list.focus % self.list.rows();
+            let row = self.list.row_rect(slot);
+            let inset = (style.line * 3) as u16;
+            let frame = Rect::new(
+                row.x + inset,
+                row.y + inset,
+                row.width.saturating_sub(2 * inset),
+                row.height.saturating_sub(2 * inset),
+            );
+            let r = style.radius(u32::from(frame.height));
+            canvas.stroke_round(frame, style.line * 2, r, style.focus_ink(true));
+        }
+    }
+
+    fn hint(&self, action: &Id, env: &Env<'_>) -> crate::Hint {
+        let done = || crate::Hint::Text(env.i18n.tr("core.grid.done").to_string());
+        match action {
+            a if self.moving && [actions::CONFIRM, actions::BACK].contains(a) => done(),
+            a if *a == actions::MENU && !self.moving && self.can_move(env) => {
+                crate::Hint::Text(env.i18n.tr("core.move").to_string())
+            }
+            _ => crate::Hint::Default,
+        }
     }
 
     fn on_pointer(&mut self, event: &PointerEvent, cx: &mut Cx<'_, '_>) -> Handled {
@@ -176,11 +248,13 @@ impl Screen for ItemsScreen {
         let Some(step) = self.reorder.on_pointer(event, &self.list, chosen.len()) else {
             return Handled::No;
         };
+        // A finger takes over from the buttons.
+        self.moving = false;
         match step {
             ReorderStep::Dropped { from, to } if from != to => {
                 ui::reorder::moved(&mut chosen, from, to);
                 self.list.focus = to;
-                self.keep(&chosen, cx);
+                self.keep(&env, &chosen, cx);
             }
             ReorderStep::Same => {}
             _ => {
@@ -192,34 +266,47 @@ impl Screen for ItemsScreen {
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
-        let len = self.items.len();
-        let rows = self.list.rows() as isize;
+        let env = *cx.env();
         let a = action;
-        let delta = if [actions::UP, actions::LEFT, actions::PREVIOUS].contains(a) {
-            -1
-        } else if [actions::DOWN, actions::RIGHT, actions::NEXT].contains(a) {
-            1
-        } else if *a == actions::NEXT_PAGE {
-            rows
-        } else if *a == actions::PREV_PAGE {
-            -rows
-        } else if *a == actions::CONFIRM {
-            self.toggle(self.list.focus, cx);
+        if self.moving {
+            if let Some(delta) = ui::list_step(a, 1) {
+                self.shift(delta, cx);
+            } else if [actions::CONFIRM, actions::BACK, actions::MENU].contains(a) {
+                self.moving = false;
+                cx.request_redraw();
+                cx.request_refresh(RefreshMode::Fast);
+            } else {
+                return Handled::No;
+            }
             return Handled::Yes;
-        } else {
-            return Handled::No;
-        };
-        if self.list.move_focus(delta, len) != ListChange::None {
+        }
+        if *a == actions::MENU && self.can_move(&env) {
+            self.moving = true;
             cx.request_redraw();
             cx.request_refresh(RefreshMode::Fast);
+            return Handled::Yes;
         }
-        Handled::Yes
+        if *a == actions::CONFIRM {
+            match self.list.confirm() {
+                Some(row) => self.toggle(row, cx),
+                None => self.list.request(ListChange::Focus, cx),
+            }
+            return Handled::Yes;
+        }
+        match self.list.navigate(a, self.items.len()) {
+            Some(change) => {
+                change.request(cx);
+                Handled::Yes
+            }
+            None => Handled::No,
+        }
     }
 
     fn on_gesture(&mut self, gesture: Gesture, cx: &mut Cx<'_, '_>) -> Handled {
         if gesture.kind != GestureKind::Tap {
             return Handled::No;
         }
+        self.moving = false;
         let paging = self.list.paging(self.items.len());
         let tapped = self
             .header

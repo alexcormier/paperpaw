@@ -1825,6 +1825,7 @@ pub paperpaw_sdk::ui::ListView::shown: bool
 impl paperpaw_sdk::ui::ListView
 pub fn paperpaw_sdk::ui::ListView::column_count(&self) -> usize
 pub fn paperpaw_sdk::ui::ListView::columns(self, u32) -> Self
+pub fn paperpaw_sdk::ui::ListView::confirm(&mut self) -> core::option::Option<usize>
 pub fn paperpaw_sdk::ui::ListView::draw(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::ui::UiStyle, usize, impl core::ops::function::FnMut(&mut paperpaw_graphics::canvas::Canvas<'_>, usize, paperpaw_platform::geometry::Rect, bool))
 pub fn paperpaw_sdk::ui::ListView::focus_on_keys(self, &paperpaw_sdk::Env<'_>) -> Self
 pub fn paperpaw_sdk::ui::ListView::hit(&self, paperpaw_platform::geometry::Point, usize) -> core::option::Option<usize>
@@ -1837,6 +1838,7 @@ pub fn paperpaw_sdk::ui::ListView::paging(&self, usize) -> core::option::Option<
 pub fn paperpaw_sdk::ui::ListView::request(&self, paperpaw_sdk::ui::ListChange, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::ui::ListView::row_rect(&self, usize) -> paperpaw_platform::geometry::Rect
 pub fn paperpaw_sdk::ui::ListView::rows(&self) -> usize
+pub fn paperpaw_sdk::ui::ListView::set_len(&mut self, usize)
 pub struct paperpaw_sdk::ui::Pager
 pub paperpaw_sdk::ui::Pager::area: paperpaw_platform::geometry::Rect
 impl paperpaw_sdk::ui::Pager
@@ -1929,7 +1931,7 @@ pub fn paperpaw_sdk::ui::Thumbnail::draw(&self, &mut paperpaw_graphics::canvas::
 pub fn paperpaw_sdk::ui::Thumbnail::draw_round(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, u16, u16, u32)
 pub fn paperpaw_sdk::ui::Thumbnail::height(&self) -> u16
 pub fn paperpaw_sdk::ui::Thumbnail::keep(&self, &dyn paperpaw_platform::storage::Storage, &str, u64) -> bool
-pub fn paperpaw_sdk::ui::Thumbnail::kept(&dyn paperpaw_platform::storage::Storage, &str, u64) -> core::option::Option<Self>
+pub fn paperpaw_sdk::ui::Thumbnail::kept(&dyn paperpaw_platform::storage::Storage, &str, u64, (u16, u16)) -> core::option::Option<Self>
 pub fn paperpaw_sdk::ui::Thumbnail::new(&dyn paperpaw_platform::storage::Storage, &paperpaw_document::ImageRef, u16, u16, paperpaw_platform::pixel::PixelFormat) -> core::option::Option<Self>
 pub fn paperpaw_sdk::ui::Thumbnail::width(&self) -> u16
 pub struct paperpaw_sdk::ui::UiStyle
@@ -2765,6 +2767,7 @@ impl paperpaw_sdk::event::EventData for paperpaw_sdk::replies::ServerNotice
 pub fn paperpaw_sdk::replies::ServerNotice::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::replies::ServerNotice::to_params(&self) -> paperpaw_sdk::Params
 #[non_exhaustive] pub enum paperpaw_sdk::SettingError
+pub paperpaw_sdk::SettingError::Full
 pub paperpaw_sdk::SettingError::InvalidValue
 pub paperpaw_sdk::SettingError::Unknown
 impl core::error::Error for paperpaw_sdk::SettingError
@@ -3444,7 +3447,7 @@ pub fn paperpaw_sdk::Settings::reset(&mut self, &str) -> core::result::Result<()
 pub fn paperpaw_sdk::Settings::scope(&self) -> core::option::Option<&paperpaw_sdk::collections::VecMap<paperpaw_sdk::Id, paperpaw_sdk::SettingValue>>
 pub fn paperpaw_sdk::Settings::scoped_value(&self, &str) -> core::option::Option<&paperpaw_sdk::SettingValue>
 pub fn paperpaw_sdk::Settings::set(&mut self, &str, paperpaw_sdk::SettingValue) -> core::result::Result<(), paperpaw_sdk::SettingError>
-pub fn paperpaw_sdk::Settings::set_choices(&mut self, &str, impl core::convert::Into<paperpaw_sdk::Choices>)
+pub fn paperpaw_sdk::Settings::set_choices(&mut self, &str, impl core::convert::Into<paperpaw_sdk::Choices>) -> bool
 pub fn paperpaw_sdk::Settings::set_default_from_text(&mut self, &str, &str) -> core::result::Result<(), paperpaw_sdk::SettingError>
 pub fn paperpaw_sdk::Settings::set_from_text(&mut self, &str, &str) -> core::result::Result<(), paperpaw_sdk::SettingError>
 pub fn paperpaw_sdk::Settings::set_in_scope(&mut self, &str, paperpaw_sdk::SettingValue) -> core::result::Result<(), paperpaw_sdk::SettingError>

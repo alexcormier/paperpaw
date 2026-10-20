@@ -183,3 +183,25 @@ fn a_plugin_updated_or_removed_takes_its_styles_and_bindings_along() {
     kernel.finish();
     assert!(kernel.shared.stylesheets.is_empty());
 }
+
+/// A theme's defaults win over the device's: a data plugin for larger
+/// print enlarges the interface also where the device's own default is
+/// small (the X4's). What the user chose still wins over both.
+#[test]
+fn a_themes_defaults_win_over_the_devices() {
+    let storage = MemoryStorage::new()
+        .with("plugins/large/plugin.ini", "[plugin]\nname = Large print\n")
+        .with(
+            "plugins/large/settings.ini",
+            "[core]\nui-size = 14\nfont-size = 16\n",
+        );
+    let kernel = Kernel::builder(DEVICE)
+        .storage(storage)
+        .setting_default(&settings::UI_SIZE, 9)
+        .setting_default(&settings::FONT_SIZE, 9)
+        .user_config("[core]\nfont-size = 12\n")
+        .build()
+        .unwrap();
+    assert_eq!(kernel.settings().int("core.ui-size"), 14);
+    assert_eq!(kernel.settings().int("core.font-size"), 12, "the user's");
+}

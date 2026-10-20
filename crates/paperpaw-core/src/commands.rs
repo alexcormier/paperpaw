@@ -72,6 +72,8 @@ impl Kernel {
             };
             let env = self.shared.env(self.now);
             let refresh = self.shared.refresh_filters.apply(&env, refresh, screen);
+            // Counted as done, after the filters.
+            self.frame.refresh.done(refresh.mode);
             effects.refresh = Some((refresh.region, refresh.mode));
             effects.grays = grays;
             self.shared.usage.refreshed(refresh.mode, refresh.region);

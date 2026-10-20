@@ -21,7 +21,11 @@
 //! where each line begins (4 bytes each). In memory are only the runs of
 //! plugins of one group, so the list may grow without limit. A plugin's
 //! page asks for it with its files (`plugins/<id>.json`, the same fields
-//! and `latest.files`), read when it comes.
+//! and `latest.files`, with the list's own query), read when it comes.
+//!
+//! A plugin of the library is passed over where the device has a plugin
+//! of that id it cannot take the place of ([`may_install`]): one built
+//! in, or one of the other kind.
 
 use alloc::format;
 use alloc::string::{String, ToString};
@@ -31,7 +35,7 @@ use paperpaw_json::stream::{Event, read_file};
 use paperpaw_sdk::install::{self, Digest, MAX_FILES, Package, PackageFile};
 use paperpaw_sdk::native::Fingerprint;
 use paperpaw_sdk::web::{encode, join_url};
-use paperpaw_sdk::{Env, Storage, Version};
+use paperpaw_sdk::{Env, PluginKind, Plugins, Storage, Version};
 
 use crate::PLUGIN;
 
@@ -65,13 +69,14 @@ pub(crate) fn group(name: &str) -> usize {
 }
 
 /// What the store installs for: the device as plugin libraries call it,
-/// and, where PaperPaw loads code plugins, the build they must be made
-/// for and the name their code gets.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// where PaperPaw loads code plugins the build they must be made for and
+/// the name their code gets, and the plugins it has.
+#[derive(Debug, Clone, Copy)]
 pub(crate) struct Device<'a> {
     pub name: &'a str,
     pub fingerprint: Option<Fingerprint>,
     pub code_file: &'a str,
+    pub plugins: Option<&'a Plugins>,
 }
 
 impl<'a> Device<'a> {
@@ -81,8 +86,21 @@ impl<'a> Device<'a> {
             name: env.catalog_device?,
             fingerprint: env.native.map(|native| native.fingerprint),
             code_file: env.native.map_or("", |native| &native.file),
+            plugins: Some(env.plugins),
         })
     }
+}
+
+/// Whether a plugin `id` of the library, with code or without, may take
+/// the place of what `plugins` has of that id: nothing, or a plugin of
+/// the same kind installed before. A built-in plugin comes only with the
+/// firmware, and one kind does not replace the other.
+pub(crate) fn may_install(plugins: &Plugins, id: &str, code: bool) -> bool {
+    plugins.get(id).is_none_or(|info| match info.kind {
+        PluginKind::BuiltIn => false,
+        PluginKind::Data => !code,
+        PluginKind::Code => code,
+    })
 }
 
 /// A plugin the library offers for this device: a data plugin, or a code
@@ -198,15 +216,19 @@ impl Item {
     }
 
     /// Whether this device can install it: a data plugin, or one with code
-    /// built for it.
-    fn fits(&self) -> bool {
+    /// built for it, that takes the place of none of its own.
+    fn fits(&self, device: &Device<'_>) -> bool {
         let entry = &self.entry;
         let kind = match self.kind.as_str() {
             "data" => true,
             "code" => self.code.is_some(),
             _ => false,
         };
+        let code = self.code.is_some();
         kind && !self.built_in
+            && device
+                .plugins
+                .is_none_or(|plugins| may_install(plugins, &entry.id, code))
             && (!self.devices || self.device)
             && install::is_plugin_name(&entry.id)
             && !entry.name.is_empty()
@@ -351,7 +373,7 @@ fn read_list(
         Event::Value([key], value) if key == "format" => format = value.parse::<u32>().ok(),
         Event::Open([list, at]) if list == "plugins" && at == "[]" => item = Some(Item::new()),
         Event::Close([list, at]) if list == "plugins" && at == "[]" => {
-            if let Some(done) = item.take().filter(Item::fits) {
+            if let Some(done) = item.take().filter(|item| item.fits(device)) {
                 found(done.finish());
             }
         }
@@ -406,7 +428,7 @@ fn read_plugin(
         }
         _ => {}
     });
-    if format != Some(FORMAT) || !item.fits() {
+    if format != Some(FORMAT) || !item.fits(device) {
         return None;
     }
     let mut files = core::mem::take(&mut item.files);
@@ -441,8 +463,10 @@ pub(crate) fn list_part() -> String {
     file("list.part")
 }
 
-pub(crate) fn plugin_part() -> String {
-    file("plugin.part")
+/// Where plugin `id`'s page is fetched to: a file of its own, so that
+/// pages fetched at once do not write into each other.
+pub(crate) fn plugin_part(id: &str) -> String {
+    file(&format!("plugin-{id}.part"))
 }
 
 fn index_path() -> String {
@@ -476,10 +500,16 @@ pub(crate) fn list_url(list: &str, device: &str, language: &str) -> String {
 }
 
 /// The address of plugin `id`'s page, beside the list at `list` (the
-/// setting's, without the device and the language), for `device` in
-/// `language`.
+/// setting's, without the device and the language) and with its query
+/// (a library may want a key there), for `device` in `language`.
 pub(crate) fn plugin_url(list: &str, device: &str, language: &str, id: &str) -> String {
-    let page = join_url(list, &format!("plugins/{}.json", encode(id)));
+    let list = list.split('#').next().unwrap_or(list);
+    let (address, query) = list.split_once('?').unwrap_or((list, ""));
+    let mut page = join_url(address, &format!("plugins/{}.json", encode(id)));
+    if !query.is_empty() {
+        page.push('?');
+        page.push_str(query);
+    }
     list_url(&page, device, language)
 }
 
@@ -691,6 +721,7 @@ mod tests {
         name: "x4",
         fingerprint: Some(Fingerprint(0x0123_4567_89ab_cdef)),
         code_file: "code.ppn",
+        plugins: None,
     };
 
     fn plugin(id: &str, group: &str, extra: &str) -> String {
@@ -912,6 +943,11 @@ mod tests {
         assert_eq!(
             plugin_url(list, "x4", "en", "airy"),
             "https://paperpaw.org/api/v1/plugins/airy.json?device=x4&lang=en"
+        );
+        // A library's key goes with its pages.
+        assert_eq!(
+            plugin_url("https://x/lib/p.json?key=1#top", "x4", "en", "airy"),
+            "https://x/lib/plugins/airy.json?key=1&device=x4&lang=en"
         );
     }
 

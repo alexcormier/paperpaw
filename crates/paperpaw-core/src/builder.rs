@@ -660,8 +660,15 @@ impl Kernel {
             .set_choices(core_settings::STATUS_FONT.as_str(), status);
     }
 
-    /// Defaults from plugins (e.g. themes), then the device's.
+    /// The device's defaults, then the plugins' (e.g. themes), which win:
+    /// a theme installed for larger print enlarges it on a device whose
+    /// own default is small too.
     pub(crate) fn apply_defaults(&mut self, device: &[(String, String)]) {
+        for (id, value) in device {
+            if let Err(error) = self.shared.settings.set_default_from_text(id, value) {
+                self.warn_runtime(format!("device default `{id}`: {error}"));
+            }
+        }
         for (plugin, id, value) in mem::take(&mut self.plugin_defaults) {
             if let Err(error) = self
                 .shared
@@ -673,11 +680,6 @@ impl Kernel {
                     None,
                     format!("default for `{id}`: {error}"),
                 );
-            }
-        }
-        for (id, value) in device {
-            if let Err(error) = self.shared.settings.set_default_from_text(id, value) {
-                self.warn_runtime(format!("device default `{id}`: {error}"));
             }
         }
     }
