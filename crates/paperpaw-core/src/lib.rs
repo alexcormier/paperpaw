@@ -768,11 +768,13 @@ impl Kernel {
         use paperpaw_sdk::secrets::{self, Secrets};
         let storage = self.shared.storage.clone();
         let read =
-            paperpaw_sdk::files::load_text_for_update(storage.as_ref(), secrets::FILE, MAX_SECRETS);
-        if let Ok(text) = &read
+            paperpaw_sdk::files::load_for_update(storage.as_ref(), secrets::FILE, MAX_SECRETS);
+        if let Ok(data) = &read
             && self.secrets_unreadable
         {
-            self.shared.secrets = Secrets::decode(text.as_deref().unwrap_or_default());
+            // Damaged text keeps what can be read: values are in hex.
+            let text = String::from_utf8_lossy(data.as_deref().unwrap_or_default());
+            self.shared.secrets = Secrets::decode(&text);
             self.secrets_unreadable = false;
         }
         self.shared.secrets.apply(change);

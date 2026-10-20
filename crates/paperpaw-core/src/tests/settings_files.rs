@@ -224,11 +224,12 @@ fn a_books_settings_keep_what_else_they_hold() {
     assert!(saved.contains("size = 3"), "{saved}");
 }
 
-/// The passwords and keys file that cannot be read is not written over.
+/// The passwords and keys file that cannot be read (here too large) is
+/// not written over.
 #[test]
 fn passwords_that_cannot_be_read_are_left_as_they_are() {
     use paperpaw_sdk::secrets::{FILE, SecretChange};
-    let source = b"wifi.home\tHome\t\xFF\xFE\n".to_vec();
+    let source = b"#".repeat(70 * 1024);
     let mut kernel = kernel_with(MemoryStorage::new().with(FILE, source.clone()));
     assert!(
         kernel

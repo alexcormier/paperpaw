@@ -487,8 +487,12 @@ impl Kernel {
     fn read_secrets(&mut self) {
         use paperpaw_sdk::secrets::{FILE, Secrets};
         let storage = self.shared.storage.as_ref();
-        match paperpaw_sdk::files::load_text_for_update(storage, FILE, MAX_SECRETS) {
-            Ok(text) => self.shared.secrets = Secrets::decode(&text.unwrap_or_default()),
+        // Damaged text keeps what can be read: values are written in hex.
+        match paperpaw_sdk::files::load_for_update(storage, FILE, MAX_SECRETS) {
+            Ok(data) => {
+                let text = String::from_utf8_lossy(data.as_deref().unwrap_or_default());
+                self.shared.secrets = Secrets::decode(&text);
+            }
             Err(error) => {
                 self.secrets_unreadable = true;
                 self.warn_runtime(format!(
