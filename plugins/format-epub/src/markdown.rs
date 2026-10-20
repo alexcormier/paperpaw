@@ -209,6 +209,11 @@ struct State {
     item: bool,
     quote: bool,
     code: bool,
+    /// The line read last ended in two spaces: a break after it.
+    br: bool,
+    /// The line read last was cut short (see [`MAX_LINE`]): this one is
+    /// the rest of it.
+    cut: bool,
     /// From the HTML's folder to the Markdown file's (see [`inline`]).
     pictures: String,
 }
@@ -237,9 +242,28 @@ impl State {
     }
 }
 
-/// Turns one line into HTML.
-fn line(raw: &str, state: &mut State, out: &mut String) {
-    let line = raw.trim_end();
+/// Turns one line into HTML; `cut` if it goes on in the next (a line
+/// longer than [`MAX_LINE`]).
+fn line(raw: &str, state: &mut State, out: &mut String, cut: bool) {
+    let br = core::mem::replace(&mut state.br, !cut && raw.ends_with("  "));
+    if core::mem::replace(&mut state.cut, cut) {
+        // The rest of a line cut short: more of the block it began, as
+        // written (its white space was not trimmed at the cut).
+        if state.code {
+            escape(raw, out);
+            if !cut {
+                out.push('\n');
+            }
+            return;
+        }
+        if !state.paragraph && !state.item {
+            out.push_str("<p>");
+            state.paragraph = true;
+        }
+        inline(raw, &state.pictures, out);
+        return;
+    }
+    let line = if cut { raw } else { raw.trim_end() };
     let trimmed = line.trim_start();
     if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
         if state.code {
@@ -254,7 +278,9 @@ fn line(raw: &str, state: &mut State, out: &mut String) {
     }
     if state.code {
         escape(line, out);
-        out.push('\n');
+        if !cut {
+            out.push('\n');
+        }
         return;
     }
     if trimmed.is_empty() {
@@ -328,8 +354,8 @@ fn line(raw: &str, state: &mut State, out: &mut String) {
         }
     }
     if state.paragraph {
-        // Two spaces at the end break the line.
-        out.push_str(if raw.ends_with("  ") { "<br/>" } else { " " });
+        // Two spaces at the end of the line before break the line.
+        out.push_str(if br { "<br/>" } else { " " });
     } else {
         out.push_str("<p>");
         state.paragraph = true;
@@ -337,8 +363,9 @@ fn line(raw: &str, state: &mut State, out: &mut String) {
     inline(text, &state.pictures, out);
 }
 
-/// Longer lines are read as lines of this length, cut where a character
-/// ends: a file without line breaks is read a piece at a time too.
+/// Longer lines are read in pieces of at most this length, cut after a
+/// space, or else where a character ends: a file without line breaks is
+/// read a piece at a time too.
 const MAX_LINE: usize = 8 * 1024;
 
 /// Writes the HTML for the Markdown file at `path` to `to`, a few lines
@@ -365,14 +392,25 @@ fn convert(storage: &dyn Storage, path: &str, to: &str) -> Result<(), DocumentEr
         at += n as u64;
         pending.extend_from_slice(&chunk[..n]);
         loop {
-            let (end, next) = match pending[searched..].iter().position(|&b| b == b'\n') {
-                Some(end) => (searched + end, searched + end + 1),
+            let (end, next, cut) = match pending[searched..].iter().position(|&b| b == b'\n') {
+                Some(end) => (searched + end, searched + end + 1, false),
                 None if pending.len() > MAX_LINE => {
-                    let mut cut = MAX_LINE;
-                    while cut > 1 && pending[cut] & 0xc0 == 0x80 {
-                        cut -= 1;
-                    }
-                    (cut, cut)
+                    // After the last space of the second half, so words
+                    // and most markup stay whole.
+                    let cut = match pending[MAX_LINE / 2..MAX_LINE]
+                        .iter()
+                        .rposition(|&b| b == b' ' || b == b'\t')
+                    {
+                        Some(space) => MAX_LINE / 2 + space + 1,
+                        None => {
+                            let mut cut = MAX_LINE;
+                            while cut > 1 && pending[cut] & 0xc0 == 0x80 {
+                                cut -= 1;
+                            }
+                            cut
+                        }
+                    };
+                    (cut, cut, true)
                 }
                 None => {
                     searched = pending.len();
@@ -380,7 +418,12 @@ fn convert(storage: &dyn Storage, path: &str, to: &str) -> Result<(), DocumentEr
                 }
             };
             let text = String::from_utf8_lossy(&pending[..end]);
-            line(text.trim_end_matches('\r'), &mut state, &mut out);
+            let text = if cut {
+                &text
+            } else {
+                text.trim_end_matches('\r')
+            };
+            line(text, &mut state, &mut out, cut);
             pending.drain(..next);
             searched = 0;
             if out.len() > 2048 {
@@ -390,7 +433,7 @@ fn convert(storage: &dyn Storage, path: &str, to: &str) -> Result<(), DocumentEr
         if n == 0 {
             if !pending.is_empty() {
                 let text = String::from_utf8_lossy(&pending).to_string();
-                line(&text, &mut state, &mut out);
+                line(&text, &mut state, &mut out, false);
             }
             break;
         }
@@ -463,7 +506,7 @@ mod tests {
         let mut state = State::default();
         let mut out = String::new();
         for l in md.lines() {
-            line(l, &mut state, &mut out);
+            line(l, &mut state, &mut out, false);
         }
         state.close_blocks(&mut out);
         out
@@ -522,6 +565,7 @@ mod tests {
             "![A cat](cat.png) ![Root](/pics/b.png)",
             &mut state,
             &mut out,
+            false,
         );
         assert_eq!(
             out,

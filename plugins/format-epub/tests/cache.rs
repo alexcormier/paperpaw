@@ -72,7 +72,6 @@ fn a_book_changed_in_size_is_converted_anew() {
 }
 
 #[test]
-#[ignore = "bug: the EPUB cache is stamped with the book's size only, not its start (docs/data-files.md)"]
 fn a_book_changed_but_not_in_size_is_converted_anew() {
     // Stored, so equal text lengths give equal file sizes; a typo fixed
     // in a book's new edition does the same.
@@ -137,7 +136,6 @@ fn positions_outside_the_book_find_nothing() {
 }
 
 #[test]
-#[ignore = "bug: links and xpointer index the spine without checking the section"]
 fn links_and_xpointers_of_sections_past_the_end_find_nothing() {
     // A position kept from an earlier edition of the book with more
     // chapters, or a caller's slip: `chapter()` indexes the spine.
@@ -158,7 +156,9 @@ fn positions_survive_switching_the_books_styles() {
     // The reader opens the book again where it was when publisher styles
     // are switched (reader `screen/mod.rs`), with the same locator; the
     // conversion with styles stores style runs the one without lacks, so
-    // offsets differ.
+    // offsets differ (and text hidden by the book's styles is shown
+    // without them). The reader can carry the position as an XPointer
+    // instead (see the next test).
     let body: String = (0..30)
         .map(|i| format!("<p class=\"bold\">Paragraph number {i}.</p>"))
         .collect();
@@ -171,6 +171,27 @@ fn positions_survive_switching_the_books_styles() {
         let at = Locator::new(0, block.start);
         let other = plain.block_at(&storage, at).unwrap().unwrap();
         assert_eq!(other.text, block.text, "at {at:?}");
+    }
+}
+
+/// What the reader can do instead of the above: carry the position over
+/// as an XPointer, which does not depend on the conversion.
+#[test]
+fn positions_go_across_the_books_styles_as_xpointers() {
+    let body: String = (0..30)
+        .map(|i| format!("<p class=\"bold\">Paragraph number {i}.</p>"))
+        .collect();
+    let epub = book_with(&[body], ".bold { font-weight: bold }", &[], false);
+    let storage = MemoryStorage::new().with(PATH, epub);
+    let styled = EpubDocument::open_with(&storage, PATH, true).unwrap();
+    let plain = EpubDocument::open_with(&storage, PATH, false).unwrap();
+    for (_, block) in blocks(&styled, &storage) {
+        let xpointer = styled
+            .xpointer(&storage, Locator::new(0, block.start))
+            .unwrap();
+        let at = plain.locate_xpointer(&storage, &xpointer).unwrap();
+        let other = plain.block_at(&storage, at).unwrap().unwrap();
+        assert_eq!(other.text, block.text, "{xpointer}");
     }
 }
 
@@ -258,7 +279,6 @@ proptest! {
 /// `toc.dat` changed, its first entry now leading to a third chapter of
 /// two, at an anchor.
 #[test]
-#[ignore = "bug: a contents entry of a damaged cache leading past the last chapter panics (document.rs chapter())"]
 fn contents_damaged_to_lead_past_the_last_chapter_find_nothing() {
     let epub = book(&chapters()[..2], &[]);
     let storage = MemoryStorage::new().with(PATH, epub);
