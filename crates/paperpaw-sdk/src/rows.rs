@@ -306,6 +306,7 @@ pub(super) fn card_style() -> UiStyle {
         text: 20.0,
         small: 15.0,
         title: 23.0,
+        head: 23.0,
         row: 20,
         header: 24,
         margin: 12,

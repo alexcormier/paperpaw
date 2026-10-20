@@ -6,10 +6,19 @@ change the plugin SDK.
 
 ## [Unreleased]
 
-- Library: covers have rounded corners as the interface's corners are
-  (none where they are square), at most as round as a book's, and so do
-  the boxes of books without a cover, which were round as pills with
-  soft corners. The grid of covers keeps its covers clear of a framed
+- Appearance (experiment, branch claude/ui-design-ideas-32dbed): new
+  settings for whole design directions as theme data plugins: shapes
+  (boxes or pills), the highlight (dark bar, frame, light bar, frame
+  and mark), lines between rows (lines, faint, none), plain headers,
+  lists in rounded cards, the paw motif, the size of header titles, and
+  soft corners. Four sample themes: Soft paper, Pebble, Paw, Calm ink.
+  SDK: `UiStyle::{pill, focus, separators, plain_header, cards, paw,
+  grays, head}`, `UiStyle::radius`, `focus_ink`, `focus_paper`,
+  `focus_faint`, `dark_focus`, `ui::draw_separator`, `ui::Focus`,
+  `ui::Separators`.
+- Library: with round or soft corners, covers have rounded corners too,
+  at most as round as a book's, and so do the boxes of books without a
+  cover, which were round as pills with soft corners. The grid of covers keeps its covers clear of a framed
   focus, its focus a box; titles on a light focus stay black. Empty
   shelves (Favourites, Tags, Series, a search) show an icon with their
   message. With the paw motif, empty screens show a small paw beside

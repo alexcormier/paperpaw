@@ -729,6 +729,16 @@ pub(crate) fn cover_radius(style: &UiStyle, area: Rect) -> u32 {
     style.corner.min(u32::from(area.width.min(area.height)) / 8)
 }
 
+/// The corners of covers' pictures: as [`cover_radius`] where corners
+/// are round (at least the gap), square for smaller ones, as before.
+pub(crate) fn picture_radius(style: &UiStyle, area: Rect) -> u32 {
+    if style.corner >= style.gap {
+        cover_radius(style, area)
+    } else {
+        0
+    }
+}
+
 /// What a cover drawn from its picture has its corners filled with, on a
 /// row or cell `focused` or not: the paper behind it; none on a light
 /// gray focus, where it stays square.
@@ -795,7 +805,7 @@ fn draw_row(
         (Some(small), _) => {
             let x = thumb.x + thumb.width.saturating_sub(small.width()) / 2;
             let y = thumb.y + thumb.height.saturating_sub(small.height()) / 2;
-            small.draw_round(canvas, x, y, radius);
+            small.draw_round(canvas, x, y, picture_radius(style, thumb));
         }
         (None, Some(cover)) => {
             let (w, h) = ui::fit_image(cover, thumb.width, thumb.height);
@@ -899,7 +909,7 @@ fn draw_cell(
         // On the line its title starts, at the bottom of its place.
         (Some(small), _) => {
             let y = cover.y + cover.height.saturating_sub(small.height());
-            small.draw_round(canvas, cover.x, y, radius);
+            small.draw_round(canvas, cover.x, y, picture_radius(style, cover));
         }
         (None, Some(image)) => {
             let (w, h) = ui::fit_image(image, cover.width, cover.height);
