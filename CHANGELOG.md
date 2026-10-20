@@ -6,6 +6,38 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Books: no book can crash the X4 or exhaust its memory any more. A
+  picture's long alternative text in CJK script crashed the EPUB
+  converter, and with the last book reopened at start, possibly at
+  every start. Converting a chapter now takes bounded memory however
+  its markup is made (deeply nested or unclosed elements, many text
+  nodes, pictures, names, links), and what it writes is bounded by its
+  size; a chapter that cannot be converted is not tried again until the
+  book is opened again. What is read of an EPUB's package, a
+  FictionBook's description and a comic's page list is bounded too;
+  KOReader positions, anchors and printed page numbers are found a line
+  at a time and in few reads; a cut or damaged cache is converted again.
+- Books: a book replaced by another of its name, even of the same size,
+  is read anew, without the pictures and chapters of the old one;
+  chapters converted with stylesheets one no longer has go.
+- EPUB: stylesheets in Latin-1 keep their rules; quoted strings and
+  comments in stylesheets no longer end a rule. Pictures that cannot be
+  decoded are shown as their alternative text and not decoded again on
+  every page.
+- FictionBook: the contents are kept on the card and lead to their
+  titles also after self-closing sections; named styles (`<style>`)
+  keep their words; a missing or broken cover is not looked for again
+  each time the library shows the book.
+- Comic books: the first pages are kept (5,000 at most), where pages at
+  the end were kept before, and the page list is made once.
+- Markdown: files of very long lines or many brackets open quickly in
+  little memory.
+- Plain text books read UTF-16 files and keep stray Latin-1 letters in
+  otherwise UTF-8 text, pages of blank lines no longer end a book
+  early, and paging reads far less from the card.
+- XTC books with damaged or oversized pages fail cleanly instead of
+  crashing the X4 or filling the card, gray pages open much faster, and
+  long chapter lists take little memory.
 - Dictionary: a damaged dictionary is no longer indexed again with
   every word looked up (each time reading its whole index): it is
   left out until its files change. The prepared indexes of
