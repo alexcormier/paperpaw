@@ -6,6 +6,14 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Rules: a rule can apply when the battery reaches a level (80 %, 90 %,
+  full or another), once each time it gets there and not again while
+  the level wavers around it; with *Only if … While charging* it says
+  when to unplug, for devices that cannot stop charging by themselves
+  (PLANNING D8). On the X4 the level comes from the battery's voltage,
+  which reads high while charging, and the choice of level says so; the
+  X4 Pro's fuel gauge reports it directly. In the rules file the
+  trigger is `battery-at 80`.
 - Joplin (PLANNING C15, S1): a book's highlights and notes, once
   exported, become a note in Joplin, one per book, in a notebook named
   in the settings. Exporting again updates the note, also where it was

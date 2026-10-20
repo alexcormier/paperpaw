@@ -39,6 +39,9 @@ pub(crate) enum Trigger {
     Sleep,
     /// The battery's charge fell below this percentage.
     BatteryBelow(u8),
+    /// The battery's charge rose to this percentage or above: once, not
+    /// again until it fell clearly below ([`Levels`]).
+    BatteryAtLeast(u8),
     /// Charging began, or ended.
     Charging,
     Unplugged,
@@ -145,8 +148,8 @@ pub(crate) fn between(minute: u16, from: u16, to: u16) -> bool {
 impl Trigger {
     /// As written in the file: `start`, `time 22:00`, `time 07:00 62`,
     /// `every 30`, `book`, `book-closed`, `book-finished`, `resume`,
-    /// `sleep`, `battery-below 20`, `charging`, `unplugged`,
-    /// `switch-on <id>`, `switch-off <id>`.
+    /// `sleep`, `battery-below 20`, `battery-at 80`, `charging`,
+    /// `unplugged`, `switch-on <id>`, `switch-off <id>`.
     fn text(&self) -> String {
         match self {
             Trigger::Start => String::from("start"),
@@ -161,6 +164,7 @@ impl Trigger {
             Trigger::Resume => String::from("resume"),
             Trigger::Sleep => String::from("sleep"),
             Trigger::BatteryBelow(percent) => format!("battery-below {percent}"),
+            Trigger::BatteryAtLeast(percent) => format!("battery-at {percent}"),
             Trigger::Charging => String::from("charging"),
             Trigger::Unplugged => String::from("unplugged"),
             Trigger::SwitchOn(id) => format!("switch-on {id}"),
@@ -193,15 +197,53 @@ impl Trigger {
                 }
             }
             "every" => Trigger::Every(rest.parse::<u16>().ok().filter(|&m| m > 0)?),
-            "battery-below" => Trigger::BatteryBelow(
-                rest.parse::<u8>()
-                    .ok()
-                    .filter(|&p| (1..=100).contains(&p))?,
-            ),
+            "battery-below" => Trigger::BatteryBelow(parse_percent(rest)?),
+            "battery-at" => Trigger::BatteryAtLeast(parse_percent(rest)?),
             "switch-on" => Trigger::SwitchOn(Id::parse(rest).ok()?),
             "switch-off" => Trigger::SwitchOff(Id::parse(rest).ok()?),
             _ => return None,
         })
+    }
+}
+
+/// A battery level from 1 to 100 %, as in `80` or `80 %`.
+pub(crate) fn parse_percent(text: &str) -> Option<u8> {
+    text.trim()
+        .trim_end_matches('%')
+        .trim()
+        .parse::<u8>()
+        .ok()
+        .filter(|p| (1..=100).contains(p))
+}
+
+/// How far the battery has to fall below a level reached before reaching
+/// it counts again, in points: the X4 estimates its level from the
+/// battery's voltage, which wavers by a point or two between readings.
+pub(crate) const REARM: u8 = 2;
+
+/// Battery levels (bit `n` for `n` %): those reached and not fallen
+/// clearly below since, or those reached just now.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) struct Levels(u128);
+
+impl Levels {
+    /// The levels up to `percent`, as reached by a battery at `percent`.
+    pub(crate) fn up_to(percent: u8) -> Self {
+        Levels(u128::MAX >> (127 - u32::from(percent.min(127))))
+    }
+
+    pub(crate) fn contains(self, percent: u8) -> bool {
+        percent < 128 && self.0 & (1 << percent) != 0
+    }
+
+    /// The battery is at `percent` now: the levels it reached just now.
+    /// Those it fell more than [`REARM`] points below count as not
+    /// reached any more.
+    pub(crate) fn reach(&mut self, percent: u8) -> Levels {
+        let now = Levels::up_to(percent).0;
+        let new = now & !self.0;
+        self.0 = (self.0 | now) & Levels::up_to(percent.saturating_add(REARM)).0;
+        Levels(new)
     }
 }
 
@@ -316,6 +358,7 @@ mod tests {
             Trigger::Resume,
             Trigger::Sleep,
             Trigger::BatteryBelow(20),
+            Trigger::BatteryAtLeast(80),
             Trigger::Charging,
             Trigger::Unplugged,
             Trigger::SwitchOn(night.clone()),
@@ -357,6 +400,11 @@ mod tests {
             })
         );
         assert_eq!(Trigger::parse("battery-below 0"), None);
+        assert_eq!(Trigger::parse("battery-at 101"), None);
+        assert_eq!(
+            Trigger::parse("battery-at 80 %"),
+            Some(Trigger::BatteryAtLeast(80))
+        );
         assert_eq!(Trigger::parse("every 0"), None);
         assert_eq!(Trigger::parse("time 22:00 0"), None);
         // Written before conditions and messages: always; tabs in a
@@ -400,13 +448,34 @@ mod tests {
         assert_eq!(minutes_until(1320, 1320), 24 * 60, "just done: tomorrow");
     }
 
+    #[test]
+    fn levels_reached() {
+        let mut levels = Levels::up_to(75);
+        assert!(levels.contains(75) && !levels.contains(76));
+        // Rising: each level once.
+        let new = levels.reach(81);
+        assert!((76..=81).all(|p| new.contains(p)));
+        assert!(!new.contains(75) && !new.contains(82));
+        assert_eq!(levels.reach(81), Levels::default());
+        // Wavering a little: not again.
+        assert_eq!(levels.reach(79), Levels::default());
+        assert_eq!(levels.reach(81), Levels::default());
+        // Clearly below, then up again: once more.
+        assert_eq!(levels.reach(77), Levels::default());
+        assert!(levels.reach(80).contains(80));
+        assert!(Levels::up_to(100).contains(100));
+        assert!(Levels::up_to(0).contains(0) && !Levels::up_to(0).contains(1));
+        assert_eq!(parse_percent(" 80 % "), Some(80));
+        assert_eq!(parse_percent("0"), None);
+    }
+
     /// What version 1 wrote stays readable (see `docs/data-files.md`).
     #[test]
     fn rules_of_version_1_are_read() {
         let storage = MemoryStorage::new().with(&path(), include_str!("../testdata/rules.txt.v1"));
         let rules = load(&storage);
         let night = Id::new_static("core.night-mode");
-        assert_eq!(rules.len(), 4);
+        assert_eq!(rules.len(), 5);
         assert_eq!(
             rules[0].trigger,
             Trigger::Time {
@@ -441,5 +510,12 @@ mod tests {
                 to: 17 * 60
             }
         );
+        assert_eq!(rules[4].trigger, Trigger::BatteryAtLeast(80));
+        assert_eq!(
+            rules[4].effect,
+            Effect::Message(String::from("Unplug now to spare the battery"))
+        );
+        assert!(!rules[4].on);
+        assert_eq!(rules[4].condition, Condition::Charging);
     }
 }
