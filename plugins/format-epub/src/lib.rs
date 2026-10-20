@@ -749,6 +749,32 @@ mod tests {
         assert_eq!(doc.prepare_image(&storage, &decoded), None);
     }
 
+    /// An alternative text of three-byte characters longer than a record
+    /// holds, so the record's limit falls inside a character.
+    #[test]
+    fn long_alternative_texts_are_cut_between_characters() {
+        let alt = "日".repeat(1320);
+        let ch2 = alloc::format!(
+            "<html><body><img src=\"../images/missing.png\" alt=\"{alt}\"/>\
+             <img src=\"../images/dot.png\" alt=\"{alt}\"/><p>Danach</p></body></html>"
+        );
+        let storage = epub(ch2);
+        let doc = EpubDocument::open(&storage, "books/test.epub").unwrap();
+        let found = blocks(&storage, &doc, 1);
+        let kinds: Vec<BlockKind> = found.iter().map(|(kind, _)| *kind).collect();
+        assert_eq!(
+            kinds,
+            [BlockKind::Paragraph, BlockKind::Image, BlockKind::Paragraph]
+        );
+        // The missing picture's alternative text, cut where a character
+        // ends, as is the shown one's.
+        for (_, text) in &found[..2] {
+            assert!(text.len() > 3000 && text.len() < 4000, "{}", text.len());
+            assert!(text.chars().all(|c| c == '日'));
+        }
+        assert_eq!(found[2].1, "Danach");
+    }
+
     #[test]
     fn decodes_images_into_the_cache() {
         let ch2 = String::from(

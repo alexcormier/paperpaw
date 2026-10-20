@@ -435,9 +435,10 @@ impl Converter<'_> {
         self.kind = BlockKind::Image;
         self.text.push_str(&cache);
         self.text.push('\t');
-        self.text.push_str(&clean_alt(alt));
-        let len = self.text.len().min(LIMIT);
-        self.write_record(BlockKind::Image, len);
+        // As much of the alternative text as the record has room for.
+        let room = LIMIT.saturating_sub(self.text.len());
+        self.text.push_str(&clean_alt(alt, room));
+        self.write_record(BlockKind::Image, self.text.len());
         self.text.clear();
         self.runs.clear();
         self.origins.clear();
@@ -1386,15 +1387,24 @@ pub(crate) fn convert(
     Ok(length)
 }
 
-/// Collapses whitespace in alternative text.
-fn clean_alt(alt: &str) -> String {
+/// Alternative text with its whitespace collapsed, cut to at most `max`
+/// bytes where a character ends.
+fn clean_alt(alt: &str, max: usize) -> String {
     let mut out = String::new();
     for word in alt.split_whitespace() {
         if !out.is_empty() {
             out.push(' ');
         }
         out.push_str(word);
+        if out.len() >= max {
+            break;
+        }
     }
+    let mut end = out.len().min(max);
+    while !out.is_char_boundary(end) {
+        end -= 1;
+    }
+    out.truncate(out[..end].trim_end().len());
     out
 }
 

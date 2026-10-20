@@ -903,6 +903,31 @@ mod tests {
         assert_eq!(texts(&doc, &storage)[4].1, "Some text and a note1.");
     }
 
+    /// Pictures' long multibyte alternative texts: cut where a character
+    /// ends, not inside one, wherever the limit falls in them.
+    #[test]
+    fn long_alternative_texts_do_not_break_the_book() {
+        let mut images = String::new();
+        for shift in 0..3 {
+            let alt = alloc::format!("{}{}", "a".repeat(shift), "語".repeat(1340));
+            images.push_str(&alloc::format!("<image l:href=\"#none\" alt=\"{alt}\"/>"));
+        }
+        let book = alloc::format!(
+            "<?xml version=\"1.0\" encoding=\"utf-8\"?><FictionBook \
+             xmlns:l=\"http://www.w3.org/1999/xlink\"><body><section>\
+             {images}<p>After</p></section></body></FictionBook>"
+        );
+        let storage = MemoryStorage::new().with("a.fb2", book.into_bytes());
+        let doc = Fb2Document::open(&storage, "a.fb2", true).unwrap();
+        let blocks = texts(&doc, &storage);
+        assert_eq!(blocks.len(), 4);
+        for (_, text) in &blocks[..3] {
+            assert!(text.len() > 3000 && text.len() < 4000, "{}", text.len());
+            assert!(text.chars().all(|c| c == 'a' || c == '語'));
+        }
+        assert_eq!(blocks[3].1, "After");
+    }
+
     #[test]
     fn base64_is_decoded_in_pieces() {
         let mut out = Vec::new();
