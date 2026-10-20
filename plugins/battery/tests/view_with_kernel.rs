@@ -187,7 +187,6 @@ fn one_reading_shows_the_charge_and_too_little_for_the_rest() {
 /// The voltage is shown with two decimals, rounded; from x.995 V on the
 /// rounding carries into the hundredths and the volts are not raised.
 #[test]
-#[ignore = "bug: 3999 mV shows as 3.100 V (the rounding does not carry into the volts)"]
 fn the_voltage_rounds_up_into_the_next_volt() {
     let mut device = Device::new(MemoryStorage::new(), "");
     device.measure(87, 3999, false);
@@ -258,14 +257,13 @@ fn every_line_of_the_view_can_be_seen() {
 }
 
 /// The hours left at this pace show whole beside their title on the X4's
-/// screen.
+/// screen (they were cut to "about 16 h aw..." while they said "awake").
 #[test]
-#[ignore = "bug: on the X4 the hours left are cut to \"about 16 h aw…\" beside \"Left at this pace\""]
 fn the_hours_left_are_shown_whole() {
     let mut device = Device::new(an_hour(), "");
     device.measure(80, 3950, false);
     let seen = every_page(&mut device);
-    assert!(has(&seen, "about 16 h awake"), "{seen:?}");
+    assert!(seen.iter().any(|r| r.ends_with("about 16 h")), "{seen:?}");
 }
 
 #[test]

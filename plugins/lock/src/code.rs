@@ -41,10 +41,17 @@ pub(crate) fn active(env: &Env<'_>) -> Option<String> {
     kept_kind(env).filter(|kept| kind != "off" && kept == kind)
 }
 
-/// The kind of the code kept, if one is.
+/// The kind of the code kept, if one is whole (kind, salt and hash): a
+/// damaged one locks nothing, as no code could open it.
 pub(crate) fn kept_kind(env: &Env<'_>) -> Option<String> {
     let stored = env.secrets.get(SECRET)?;
-    let (kind, _) = stored.split_once(':')?;
+    let mut parts = stored.splitn(3, ':');
+    let (Some(kind), Some(salt), Some(hashed)) = (parts.next(), parts.next(), parts.next()) else {
+        return None;
+    };
+    if salt.is_empty() || hashed.is_empty() {
+        return None;
+    }
     crate::KINDS
         .contains(&kind)
         .then(|| kind.to_string())
