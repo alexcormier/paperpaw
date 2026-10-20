@@ -24,7 +24,8 @@ change the plugin SDK.
   three and one), so the X4 Pro's quick panel fits on one page; the
   quick panel may cover up to 95 % of the screen, as phones' quick
   settings do. With the buttons, a slider is chosen and then moved as on
-  the settings pages. With buttons alone (the X4) the panels are as
+  the settings pages. A focused row that opens a list (*Font*) is drawn
+  as other rows are, its name no longer cut at the left. With buttons alone (the X4) the panels are as
   before. The home screen no longer builds its widgets anew while a
   value is shown above it, which read the card on every step. On Boox
   devices the light follows a slider while it moves. The emulator has

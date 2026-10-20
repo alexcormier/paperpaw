@@ -283,6 +283,17 @@ const CASES: &[Case] = &[
         script: "run:core.quick-panel,wait:300,down:1000:565,move:950:570,move:800:575,up:800:575,wait:300",
         colour: 0,
     },
+    // The reader's panel on the X4, the row that opens the fonts focused:
+    // its whole name and value on the focus bar, aligned with the rows
+    // below.
+    Case {
+        name: "x4-reader-panel",
+        profile: "xteink-x4",
+        book: Some("books/alice-in-wonderland.epub"),
+        sets: &[],
+        script: "run:reader.quick-settings,wait:300,right,wait:200",
+        colour: 0,
+    },
     Case {
         name: "kobo-colour-cover",
         profile: "kobo-libra-colour",
