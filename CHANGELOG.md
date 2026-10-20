@@ -6,6 +6,34 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Widgets: no widget panics where it has little room any more: the
+  year so far with lines of 0.8 mm or more (on every draw, so a home
+  screen showing it restarted the X4), the year ring, the two-month
+  calendar, the world clock and the battery ring in small cells. A
+  test draws every widget of the pack in each of its styles and pairs
+  of its settings in tiny and narrow cells with the thickest lines.
+  Until the clock is set, the time widgets say so instead of drawing an
+  empty frame or a face without hands. The countdown no longer reads
+  "12-280" as 24 December.
+- Widgets: the to-do list is written back only once it was read: a list
+  that cannot be read (another encoding, too large, the card failing)
+  is left as it is, and the widget and the list say so; items past the
+  hundredth are kept; a failed save is reported. Items move down as
+  well as up. A quote, picture or highlight set to change "each time it
+  shows" counts its showings in memory instead of writing on every
+  making of the widget, so it no longer moves on with unrelated
+  changes. "Next up: the newest" finds new books in a library of any
+  size (a set of 8 KiB, `seen.bits`, in place of the first 4,096
+  books' hashes); a long series is counted whole and kept round the
+  book being read. Settings that need it are explained.
+- Home screen: a UI margin of 0 no longer breaks the grid (a panic in
+  debug builds, taps missing their cells in release). Pages are kept by
+  their own setting: editing page 3 from the settings while page 2 is
+  empty edits page 3, and *Add a page* adds one that shows until it is
+  removed. The layout chooser fits screens without touch and offers
+  only layouts whose widgets and tools are there. Widgets are made once
+  as the screen shows and anew only for changes of the home screen, the
+  look or their own settings; other changes have them read anew.
 - Rules: a rule can apply when the battery reaches a level (80 %, 90 %,
   full or another), once each time it gets there and not again while
   the level wavers around it; with *Only if … While charging* it says
