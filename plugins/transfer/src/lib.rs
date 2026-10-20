@@ -4,8 +4,10 @@
 //! cable or app needed.
 //!
 //! The screen shows the page's address as text and as a QR code. The
-//! address carries a key made anew each time, so others in the network
-//! cannot get at the files. Closing the screen ends the transfer.
+//! address carries a key drawn anew each time from the platform's random
+//! source, so others in the network cannot get at the files; a few wrong
+//! keys, and no request is answered for a while (see `access`). Closing
+//! the screen ends the transfer.
 //!
 //! The same way, the plugin lets one type text on a phone for the
 //! keyboard (slot `core.remote-keyboard`, see `phone`).
@@ -14,6 +16,7 @@
 
 extern crate alloc;
 
+mod access;
 mod phone;
 mod web;
 
@@ -33,6 +36,8 @@ use paperpaw_sdk::{
     MenuEntry, Params, Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION,
     Screen, ScreenSpec, Version,
 };
+
+use crate::access::Guard;
 
 pub const PLUGIN: Id = Id::new_static("transfer");
 /// Opens the transfer screen.
@@ -115,8 +120,8 @@ struct TransferScreen {
     style: UiStyle,
     header: ui::Header,
     state: State,
-    /// Part of the address, made anew for every transfer.
-    key: String,
+    /// The key in the address, drawn once the server runs.
+    guard: Option<Guard>,
     /// The web page with its texts.
     page: String,
     /// What happened last.
@@ -131,7 +136,7 @@ impl TransferScreen {
             header: ui::Header::new(env, &style, true),
             style,
             state: State::Starting,
-            key: key(env),
+            guard: None,
             page: page(env),
             last: None,
             started: false,
@@ -154,9 +159,19 @@ impl TransferScreen {
         let env = *cx.env();
         match notice {
             ServerNotice::Started { address, .. } => {
-                let url = format!("http://{address}/?k={}", self.key);
-                let qr = QrCode::new(url.as_bytes());
-                self.state = State::Serving { url, qr };
+                // Drawn now: on the X4, the radio makes it fully random.
+                self.state = match access::key(&env.random) {
+                    Some(key) => {
+                        let url = format!("http://{address}/?k={key}");
+                        self.guard = Some(Guard::new(key));
+                        let qr = QrCode::new(url.as_bytes());
+                        State::Serving { url, qr }
+                    }
+                    None => {
+                        cx.command(Command::StopServing(SERVER));
+                        State::Failed(no_random(&env))
+                    }
+                };
                 self.redraw(cx);
             }
             ServerNotice::Failed { reason, .. } => {
@@ -180,13 +195,17 @@ impl TransferScreen {
                 body_file,
                 ..
             } => {
+                let Some(guard) = &mut self.guard else {
+                    return;
+                };
                 let request = web::Request {
                     number: request,
                     method: &method,
                     target: &target,
                     body_file: body_file.as_deref(),
+                    at: env.now,
                 };
-                let (response, done) = web::answer(env.storage, &self.key, &self.page, request);
+                let (response, done) = web::answer(env.storage, guard, &self.page, request);
                 cx.command(Command::Respond(response));
                 if let Some(done) = done {
                     if !matches!(done, web::Done::Sent(_) | web::Done::NotReceived(_)) {
@@ -210,22 +229,10 @@ impl TransferScreen {
     }
 }
 
-/// A key for this transfer: hard to guess for others in the network,
-/// short enough to type.
-pub(crate) fn key(env: &Env<'_>) -> String {
-    let mut hash = paperpaw_digest::md5::Md5::new();
-    hash.update(env.device.id.as_bytes());
-    hash.update(&env.now.0.to_le_bytes());
-    if let Some(seconds) = paperpaw_sdk::time::unix_seconds(env) {
-        hash.update(&seconds.to_le_bytes());
-    }
-    hash.update(&env.status.battery.map_or(0, |b| b.percent).to_le_bytes());
-    // Where memory is differs from run to run on most systems.
-    let probe = Box::new(0u8);
-    hash.update(&(&raw const *probe as usize).to_le_bytes());
-    let mut key = hash.hex();
-    key.truncate(8);
-    key
+/// What the screen says where no key can be drawn: the platform has no
+/// source of random numbers, and nothing is served.
+pub(crate) fn no_random(env: &Env<'_>) -> String {
+    env.i18n.tr("transfer.no-random").into()
 }
 
 /// The web page, with its texts in the device's language.
@@ -424,6 +431,11 @@ impl Screen for TransferScreen {
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
         if !self.started {
             self.started = true;
+            if !cx.env().random.available() {
+                self.state = State::Failed(no_random(cx.env()));
+                self.redraw(cx);
+                return;
+            }
             cx.command(Command::Serve {
                 server: SERVER,
                 port: PORT,

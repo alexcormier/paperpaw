@@ -391,7 +391,9 @@ impl Fetch {
     }
 }
 
-/// The unread articles in the list Wallabag sent: ids and titles.
+/// The unread articles in the list Wallabag sent: ids and titles. Ids
+/// are numbers in Wallabag; others are left out, as they go into the
+/// list of articles and into names of files.
 fn unread(storage: &dyn paperpaw_sdk::Storage) -> Vec<(String, String)> {
     let mut items: Vec<(String, String)> = Vec::new();
     let item = ["_embedded", "items", "[]"];
@@ -408,9 +410,14 @@ fn unread(storage: &dyn paperpaw_sdk::Storage) -> Vec<(String, String)> {
         }
         _ => {}
     });
-    items.retain(|(id, _)| !id.is_empty());
+    items.retain(|(id, _)| is_id(id));
     items.truncate(MAX_ARTICLES);
     items
+}
+
+/// Whether `id` is an id as Wallabag gives them: a number.
+fn is_id(id: &str) -> bool {
+    (1..=20).contains(&id.len()) && id.bytes().all(|b| b.is_ascii_digit())
 }
 
 /// Removes an article's book and what is noted about it.
@@ -763,6 +770,23 @@ mod tests {
                 (String::from("7"), String::from("Slow \"news\"")),
                 (String::from("9"), String::from("Second")),
             ]
+        );
+    }
+
+    /// A hostile server's ids do not plant lines in the list of articles
+    /// (which would remove any file at the next sync).
+    #[test]
+    fn ids_are_numbers() {
+        let list = r#"{"_embedded": {"items": [
+            {"id": "x\t.paperpaw/secrets.txt\ny", "title": "Planted"},
+            {"id": "../../x", "title": "Out"},
+            {"id": "", "title": "None"},
+            {"id": 12, "title": "Fine"}
+        ]}}"#;
+        let storage = paperpaw_sdk::MemoryStorage::new().with(&data("entries.json"), list);
+        assert_eq!(
+            unread(&storage),
+            [(String::from("12"), String::from("Fine"))]
         );
     }
 

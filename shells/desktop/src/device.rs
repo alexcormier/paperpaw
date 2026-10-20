@@ -448,6 +448,7 @@ fn build_kernel(
         let mut builder = Kernel::builder(device)
             .storage(crate::trace::Traced(storage))
             .clock(micros)
+            .random(random)
             .glyph_cache(profile.glyph_cache)
             .network(true)
             .wifi(profile.wifi)
@@ -489,6 +490,11 @@ fn turned(mut device: DeviceInfo, rotation: Rotation) -> DeviceInfo {
         (display.width, display.height) = (display.height, display.width);
     }
     device
+}
+
+/// Random bytes from the operating system.
+fn random(buf: &mut [u8]) -> bool {
+    getrandom::fill(buf).is_ok()
 }
 
 /// Microseconds since start, for measuring what plugins take.

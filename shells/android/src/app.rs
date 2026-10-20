@@ -402,6 +402,7 @@ fn start_kernel(
     };
     let mut builder = Kernel::builder(device)
         .clock(micros)
+        .random(random)
         .plugin_dir("plugins")
         .network(true)
         .catalog_device("android")
@@ -720,6 +721,11 @@ impl Storage for Volumes {
     fn sync(&self) -> Result<(), StorageError> {
         self.0.sync()
     }
+}
+
+/// Random bytes from the operating system.
+fn random(buf: &mut [u8]) -> bool {
+    getrandom::fill(buf).is_ok()
 }
 
 /// Microseconds since start, for measuring what plugins take.

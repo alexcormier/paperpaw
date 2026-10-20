@@ -32,6 +32,30 @@ change the plugin SDK.
   1.97.0.0 with the Xtensa GCC 14.2.0 for the ESP32-S3 devices
   (`shells/xteink/versions.env`). The firmware is a workspace of its
   own, so it also builds in a checkout inside another one.
+- Security: PaperPaw's own data (`.paperpaw`: passwords, trusted
+  firmware keys, settings) can no longer be reached by another spelling
+  of its name. On the X4's card a name stands for an entry by its long
+  name alone, by its short name only where it has no long one, so
+  `PAPERP~1` reaches nothing; the storage of the emulator and Android
+  takes no short name the system keeps for another (NTFS and FAT keep
+  them) and, on Windows, no name with a dot or space at the end.
+- Security: the Wi-Fi transfer finds every path a browser sends part by
+  part in the folders' listings: only entries listed by exactly that
+  name, nothing hidden, by any spelling (case, short names, dots or
+  spaces at the end). Its key, and the remote keyboard's, is drawn from
+  the platform's random source (65 bits, 13 letters and digits) once the
+  server runs; after five wrong keys no request is answered for a
+  minute. Tests send every hostile path we know of to every request, on
+  a card, in memory and on a storage as lax as Windows.
+- Security: Calibre's paths to books and Wallabag's ids of articles are
+  taken only as plain names: a peer posing as Calibre cannot write into
+  `.paperpaw` (e.g. trust a firmware key of its own), a hostile Wallabag
+  server cannot have a file deleted.
+- SDK: `Env::random` gives random bytes from the platform's source
+  (`random::Random`: `fill`, `token`), filled by each shell with
+  `KernelBuilder::random` (the system's on Android and desktops, the
+  chip's on the X4); `files::is_plain_name` and `files::plain_path`
+  check names and paths that come from outside.
 - Joplin (PLANNING C15, S1): a book's highlights and notes, once
   exported, become a note in Joplin, one per book, in a notebook named
   in the settings. Exporting again updates the note, also where it was
