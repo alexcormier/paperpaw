@@ -108,6 +108,28 @@ fn books_are_identified_by_koreaders_partial_md5() {
 }
 
 #[test]
+fn offline_holds_the_progress_back_and_sends_it_once_allowed() {
+    let mut sync = with_books();
+    opened(&mut sync, BOOK, 10.0);
+    assert!(sync.set("power.mode", "power.mode.offline").is_empty());
+    sync.later(120_000);
+    // Nothing goes out: not while reading, not for another book.
+    assert!(sync.turn(BOOK, 20.0).is_empty());
+    assert!(sync.open(OTHER, 5.0).is_empty());
+    assert!(sync.reading(events::BOOK_CLOSED, OTHER, 6.0).is_empty());
+    // Back to Normal: the book switched from, then the open one's latest
+    // fetched, its own progress waiting for that answer.
+    let calls = sync.set("power.mode", "power.mode.normal");
+    let digest = |path| paperpaw_digest::md5::partial(&sync.storage, path).unwrap();
+    let (book, other) = (digest(BOOK), digest(OTHER));
+    assert!(body(sending(&calls)).contains(&book), "{calls:?}");
+    assert!(fetch(&calls).url.ends_with(&other));
+    let get = fetch(&calls).clone();
+    let after = sync.answer(&get, 200, "{}");
+    assert!(body(sending(&after)).contains(&other), "{after:?}");
+}
+
+#[test]
 fn a_book_that_cannot_be_read_is_not_synced() {
     let mut sync = Sync::with_id();
     assert!(sync.open("books/gone.epub", 10.0).is_empty());

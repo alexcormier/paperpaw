@@ -174,6 +174,7 @@ impl Sync {
             .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
             .plugin(TxtFormat)
             .plugin(Kosync)
+            .plugin(paperpaw_plugin_power::Power)
             .plugin(Listener(Rc::clone(&gone)))
             .build()
             .unwrap();
@@ -247,6 +248,13 @@ impl Sync {
                 ..HttpResponse::default()
             },
         );
+        self.calls()
+    }
+
+    /// Sets a setting as the reader would, e.g. the power mode.
+    pub fn set(&mut self, id: &str, value: &str) -> Vec<HttpCall> {
+        let now = self.later(100);
+        self.kernel.set_setting(now, id, value).unwrap();
         self.calls()
     }
 

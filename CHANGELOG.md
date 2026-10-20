@@ -53,6 +53,12 @@ change the plugin SDK.
   background work. A mode's values lie over the reader's own and go
   when it ends. The modes are presets (`core.power-mode`), worn with
   `Command::Wear`; `Kernel::power` tells shells the level.
+- Progress sync (kosync) by the power mode: silently, when a book opens
+  or closes, on waking and before sleep, as before; while reading with
+  the radio off, the progress goes out when the radio is on anyway, at
+  the latest after 30 minutes (two hours in Saving). Offline sends and
+  fetches nothing; once allowed again, the books switched from go out,
+  then the open one's latest is fetched before its own is sent.
 - SDK, HTTP: `HttpRequest` is made with `HttpRequest::get` or `new` and
   methods (`header`, `body`, `body_from`, `save_to`, `with`), no longer
   field by field (`#[non_exhaustive]`). A request may set a `timeout`
