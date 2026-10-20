@@ -1326,6 +1326,9 @@ dependencies = [
 [[package]]
 name = "paperpaw-http"
 version = "0.4.0-dev"
+dependencies = [
+ "proptest",
+]
 
 [[package]]
 name = "paperpaw-hyphen"
@@ -1364,6 +1367,9 @@ dependencies = [
 [[package]]
 name = "paperpaw-platform"
 version = "0.4.0-dev"
+dependencies = [
+ "proptest",
+]
 
 [[package]]
 name = "paperpaw-plugin-about"
