@@ -676,6 +676,9 @@ struct Specs {
 
 /// Marks a place in [`Specs::fixed`].
 const FIXED: u16 = 1 << 15;
+/// Specs of each kind (made at run time, kept in the program) a place of
+/// 15 bits holds: plenty, and two bytes a place on small devices.
+const PLACES: usize = FIXED as usize;
 
 impl Specs {
     fn at(&self, place: u16) -> &SettingSpec {
@@ -703,6 +706,9 @@ impl Specs {
         let place = self.by_id[at];
         let place = if place & FIXED == 0 {
             place
+        } else if self.owned.len() >= PLACES {
+            // No place left for a copy: kept as it is.
+            return None;
         } else {
             let copy = self.fixed[usize::from(place & !FIXED)].clone();
             let owned = self.owned.len() as u16;
@@ -725,25 +731,35 @@ impl Specs {
         self.order.push(place);
     }
 
-    /// Adds `spec`, whose id is not there yet.
-    fn insert(&mut self, spec: SettingSpec) {
+    /// Adds `spec`, whose id is not there yet; `false` when no place is
+    /// left.
+    fn insert(&mut self, spec: SettingSpec) -> bool {
         if self.find(spec.id.as_str()).is_ok() {
-            return;
+            return true;
+        }
+        if self.owned.len() >= PLACES {
+            return false;
         }
         let place = self.owned.len() as u16;
         let id = spec.id.clone();
         self.owned.push(spec);
         self.index(id.as_str(), place);
+        true
     }
 
-    /// Adds the fixed `spec`, whose id is not there yet.
-    fn insert_fixed(&mut self, spec: &'static SettingSpec) {
+    /// Adds the fixed `spec`, whose id is not there yet; `false` when no
+    /// place is left.
+    fn insert_fixed(&mut self, spec: &'static SettingSpec) -> bool {
         if self.find(spec.id.as_str()).is_ok() {
-            return;
+            return true;
+        }
+        if self.fixed.len() >= PLACES {
+            return false;
         }
         let place = self.fixed.len() as u16 | FIXED;
         self.fixed.push(spec);
         self.index(spec.id.as_str(), place);
+        true
     }
 
     fn iter(&self) -> impl Iterator<Item = &SettingSpec> {
@@ -879,7 +895,11 @@ impl Settings {
                 message: Cow::Borrowed("default value does not match the setting kind"),
             });
         }
-        self.specs.insert(spec);
+        if !self.specs.insert(spec) {
+            return Err(RegisterError::Invalid {
+                message: Cow::Borrowed("no place left for another setting"),
+            });
+        }
         Ok(())
     }
 
@@ -896,7 +916,11 @@ impl Settings {
                 message: Cow::Borrowed("default value does not match the setting kind"),
             });
         }
-        self.specs.insert_fixed(spec);
+        if !self.specs.insert_fixed(spec) {
+            return Err(RegisterError::Invalid {
+                message: Cow::Borrowed("no place left for another setting"),
+            });
+        }
         Ok(())
     }
 
