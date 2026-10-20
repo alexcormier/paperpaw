@@ -2,8 +2,8 @@
 //! kernel: it shows every gray level of the panel, exercises button and
 //! touch focus navigation, and demonstrates partial versus full refreshes.
 //!
-//! Page buttons turn its test pages (as many as the developer setting
-//! *Number of test pages* says); a held *Select* or a held finger starts
+//! Page buttons turn its test pages (as many as the setting *Number of
+//! test pages* says); a held *Select* or a held finger starts
 //! it over.
 //!
 //! It binds itself to the home slot with the lowest regular priority, so it
@@ -40,14 +40,14 @@ pub const PAGES: Setting<i64> = Setting::new("diagnostics.pages");
 #[derive(Debug, Default)]
 pub struct Diagnostics;
 
-/// How many pages the test turns: for developers, with the screen.
+/// How many pages the test turns.
 static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_number(
     PAGES.static_str(),
     "diagnostics.setting.pages",
     1,
     10_000,
     20,
-    groups::DEVELOPER,
+    groups::SYSTEM,
 )
 .advanced()
 .described("diagnostics.setting.pages.help")];
