@@ -6,6 +6,9 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: `firmware::compare_versions` orders pre-releases as SemVer does,
+  numbered parts as numbers (`0.5.0-rc.9` before `0.5.0-rc.10`), so an
+  update between numbered pre-releases is offered.
 - Fonts browser: lighter on the X4. Only the files this device installs
   are kept of the catalog, a font's page gets its font from the list
   instead of reading the catalog again, and the samples held share 48 KB

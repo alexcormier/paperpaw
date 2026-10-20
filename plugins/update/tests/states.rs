@@ -754,7 +754,6 @@ fn releases_come_after_their_pre_releases() {
 }
 
 #[test]
-#[ignore = "bug: pre-release numbers compare as text, so 0.5.0-rc.10 counts as older than 0.5.0-rc.9 (SemVer compares them as numbers)"]
 fn pre_release_numbers_compare_as_numbers() {
     assert!(offered("0.5.0-rc.9", "0.5.0-rc.10"));
     assert!(offered("0.5.0-beta.2", "0.5.0-beta.11"));
