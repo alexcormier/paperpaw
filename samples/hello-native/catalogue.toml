@@ -1,52 +1,48 @@
-# The plugin's entry in the plugin library, as a pull request adds it to
-# the paperpaw.org repository as catalogue/<id>.toml (here hello.toml).
-# The upload form asks for the same things. Every field is checked, and
-# a field the catalogue does not know is refused: add none of your own.
-# Replace every value in capitals; docs/plugins.md, "Publishing", says
-# what each field takes.
+# The plugin's entry in the plugin library for the pull request way: the
+# file catalogue/<id>.toml (here hello.toml) in the paperpaw.org
+# repository. The upload form needs no such file: it reads
+# plugin/store/store.ini. Every field is checked, and one the catalogue
+# does not know is refused: add none of your own. Replace every value in
+# capitals; https://paperpaw.org/authors#pull-request says what each field takes.
 
-# The plugin's id: the file's name, plugin.ini's id and the plugin's own.
+# The plugin's id: the file's name and plugin.ini's id.
 id = "hello"
 name = "Hello"
-# One sentence, at most 160 characters, shown in lists.
+# One sentence, at most 160 characters.
 summary = "A sample plugin to start from: an action, a screen, a setting."
-# More, on the plugin's page (optional).
-description = "Shows a greeting and counts the books opened since the start. A sample to start a plugin of one's own from."
+description = "Shows a greeting and counts the books opened since the start."
 kind = "code"
 author = "YOUR NAME"
-# Optional: your page.
-author_url = "https://YOUR.PAGE"
-# The public key `paperpaw-sign key` printed (64 lower-case hexadecimal
-# digits; `paperpaw-sign plugin <file>.ppn` shows it in brackets after
-# "signer:"). Never the secret key file's contents.
+# The public key: the 64 digits in brackets on the signer line of
+# `paperpaw-sign plugin dist/hello-0.1.0-x4.ppn`. Never the key file.
 author_key = "YOUR PUBLIC KEY"
-# An SPDX identifier.
 licence = "Apache-2.0"
-# The source, an https address anyone can open.
+# Where the source lives, shown as the plugin's home.
 source = "https://github.com/YOUR-NAME/YOUR-REPOSITORY"
-# The plugin's library crate (`name` in its Cargo.toml).
-crate = "paperpaw-sample-hello"
-# One of: reading, formats, library, sync, home, look, system.
 group = "system"
-# Up to five, lower-case letters, digits and hyphens.
 tags = ["sample"]
-# The devices it has builds for.
+# Every reader it has a build for, and no other.
 devices = ["x4", "x4-pro"]
 
-# Its name and summary in other languages (optional).
 [i18n.de]
 name = "Hallo"
 summary = "Ein Beispiel-Plugin für den Anfang: eine Aktion, ein Bildschirm, eine Einstellung."
 
 # One [[versions]] for each release: the CI job writes it for a tag
 # (dist/catalogue-versions.toml, attached to the release). Newer
-# versions are added; older ones stay.
+# versions are added below; older ones stay.
 [[versions]]
 version = "0.1.0"
 sdk = "0.5"
 date = "YYYY-MM-DD"
+# The folder without store/ and without code.ppn, as a ZIP elsewhere.
 url = "https://github.com/YOUR-NAME/YOUR-REPOSITORY/releases/download/v0.1.0/hello-0.1.0.zip"
 sha256 = "SHA-256 OF THE ZIP, FROM SHA256SUMS"
+
+[versions.source]
+repository = "https://github.com/YOUR-NAME/YOUR-REPOSITORY"
+revision = "v0.1.0"
+bin = "hello"
 
 [[versions.builds]]
 device = "x4"

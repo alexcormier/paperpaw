@@ -241,10 +241,13 @@ report the numbers; never claim a speed-up from reading code alone.
 
 When the user wants the plugin in the store (on paperpaw.org and in
 every device's *More plugins*), follow
-[`publishing.md`](publishing.md) in this folder, step by step: what to
-submit, the author's signing key, reproducible builds of code plugins,
-the catalogue entry, the upload form or a pull request, updates, every
-check's message with its fix, and a final checklist. Its rules for the
+[`publishing.md`](publishing.md) in this folder, step by step, with the
+site's guide for authors (<https://paperpaw.org/authors>) as the
+reference for the site's names: what to upload (the folder with
+`store/store.ini`, a code plugin's signed builds and source), the
+author's signing key, builds the site can rebuild to compare, the
+upload form or a catalogue pull request, updates, every check code with
+its fix, and a final checklist. Its rules for the
 assistant come first: the secret key is never shown, copied or
 committed, nothing is uploaded, pushed or submitted without the user's
 yes, and no field or address is invented.

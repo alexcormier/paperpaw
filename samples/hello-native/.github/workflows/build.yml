@@ -1,9 +1,11 @@
 # A CI job for a native PaperPaw plugin's own repository (copy this
 # folder's files to start one): on every tag it builds the plugin for the
 # Xteink X4 and the X4 Pro with ./build.sh, packs both files and signs
-# them with the author's key, and attaches them, the plugin's folder as a
-# ZIP, their SHA-256 sums and a catalogue snippet to the tag's release for
-# the plugin library. Nothing here runs in PaperPaw's own repository.
+# them with the author's key, and attaches them, the plugin's folder as
+# ZIPs, their SHA-256 sums and a catalogue snippet to the tag's release
+# for the plugin library. The library rebuilds the files in the paths of
+# GitHub's runners, so files built here can be verified against their
+# source. Nothing here runs in PaperPaw's own repository.
 #
 # The author's key: `paperpaw-sign key author.key` once, outside the
 # repository, then its contents as the repository's secret
@@ -31,6 +33,8 @@ env:
   RUST_X4: "1.99.0"
   RUST_X4_PRO: "1.97.0.0"
   ESP_GCC: "14.2.0_20241119"
+  # The plugin's binary crate, as in Cargo.toml.
+  PLUGIN: hello
 
 jobs:
   build:
@@ -89,6 +93,11 @@ jobs:
             echo "date = \"$(date -u +%Y-%m-%d)\""
             echo "url = \"$base/$id-$version.zip\""
             echo "sha256 = \"$(sum "$id-$version.zip")\""
+            echo
+            echo "[versions.source]"
+            echo "repository = \"https://github.com/$GITHUB_REPOSITORY\""
+            echo "revision = \"$GITHUB_REF_NAME\""
+            echo "bin = \"$PLUGIN\""
             for device in x4 x4-pro; do
               file="$id-$version-$device.ppn"
               echo

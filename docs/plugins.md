@@ -735,10 +735,10 @@ points of your own](#services-and-points-of-your-own)).
 ### Publishing a code plugin
 
 The plugin library (paperpaw.org) lists a code plugin with its folder
-and a build per device (`x4`, `x4-pro`), each a signed `.ppn` with the
-fingerprint it was built for, the author's key, and its source, which
-the library rebuilds. The sample's `build.sh` builds, packs and signs
-both files reproducibly, and its CI job
+and a build per reader (`x4`, `x4-pro`, `x4-classic`), each a signed
+`.ppn` with the fingerprint it was built for, the author's key, and its
+source, which the library rebuilds to compare. The sample's `build.sh`
+builds, packs and signs both files, and its CI job
 (`samples/hello-native/.github/workflows/build.yml`, for a plugin's own
 repository) runs it on every tag, with the author's key kept as a
 secret of the repository. [Publishing](#publishing) says how.
@@ -856,40 +856,62 @@ five: large print, three themes (airy, paw, calm ink) and a layout
 ## Publishing
 
 The plugin library on paperpaw.org is what the website lists and every
-device's store (*More plugins*) installs from (ADR 0023). A plugin gets
-there in one of two ways, both checked by the same checker:
+reader's store (*More plugins*) installs from (ADR 0023). A plugin gets
+there in one of two ways, both through the same checks:
 
-- **The upload form** on paperpaw.org, the usual way: sign in with a
-  link sent by e-mail, upload the files, read the instant checks and the
-  preview of the plugin's page, and submit it to the moderation queue.
+- **The upload form** at <https://paperpaw.org/submit>, the main way:
+  sign in with a link sent by e-mail, upload the plugin's folder as a
+  ZIP (and a code plugin's builds), read the checks, complete the entry,
+  look at the preview, and send it to the moderators.
 - **A pull request** to the paperpaw.org repository that adds
-  `catalogue/<id>.toml`, with the files hosted elsewhere (`url` and
-  `sha256`).
+  `catalogue/<id>.toml`, for developers.
 
-An update is a new version, the same way. Every version is in a public
-version log, and readers see on the website and on the device whether
-a plugin has code, who made it, its source, and for code plugins
-whether the library's rebuild matched its files: *Verified: matches its
-source* or *Not rebuilt*.
-
-The skill's
+An update is a new version with a higher number, the same way. The
+site's guide for authors, <https://paperpaw.org/authors>, has every
+field, check and limit; the skill's
 [`publishing.md`](../.claude/skills/paperpaw-plugin-development/publishing.md)
-walks through every step, with the commands, every check's message and
-its fix, and a checklist; an AI assistant helping an author follows it.
-In brief:
+walks an AI assistant helping an author through every step. In brief:
 
-### What is submitted
+### What is uploaded
 
-- **A data plugin**: its folder as a ZIP, `plugin.ini` at the top, its
-  `id` that of the catalogue and its `version` the one published. Only
-  `.ini`, `.css`, `.ttf`, `.otf`, `.ttc`, `.ppfp`, `.txt`, `.md` and
-  `.png` files, at most 64, their paths of letters, digits, `.`, `_`
-  and `-` (none starting with a dot), at most 100 bytes each; at most 20
-  MB zipped and 40 MB unpacked.
-- **A code plugin**: the same ZIP of its folder (without code, at most
-  63 files), a signed `.ppn` for each device it runs on (`x4`,
-  `x4-pro`), and its source, readable: a link to a fixed commit or tag,
-  or a source ZIP.
+The plugin's folder as a ZIP, `plugin.ini` at its top (or inside one
+folder at its top), its `id` and `version` the ones published. Outside
+`store/` only `.ini`, `.css`, `.ttf`, `.otf`, `.ttc`, `.ppfp`, `.txt`,
+`.md` and `.png` files, at most 64 (63 for a code plugin), their paths
+of letters, digits, `.`, `_` and `-`, none starting with a dot, at most
+100 bytes; at most 20 MB zipped, 40 MB unpacked.
+
+A folder `store/` in it is for the store only, and is taken out of what
+readers install: `store/store.ini` gives the summary, description,
+group, tags, licence, source, SDK and translations, and names the
+screenshots beside it.
+
+```ini
+[store]
+summary = A large clock on the home screen, with the date below it.
+group = home
+tags = clock, widget
+licence = MIT
+source = https://codeberg.org/your-name/clock
+sdk = 0.5
+
+[source]
+repository = https://codeberg.org/your-name/clock
+revision = v1.0.0
+
+[screenshots]
+home.png = The home screen with the clock widget, on an Xteink X4.
+```
+
+It is PaperPaw's INI: a comment is a line of its own, never after a
+value.
+
+A code plugin adds one signed `.ppn` per reader (the form's fields
+`build-x4`, `build-x4-pro`, `build-x4-classic`) and the exact source of
+those builds: `[source]` names a public repository on `github.com`,
+`codeberg.org` or `gitlab.com` and the tag or commit built (with `path`
+and `bin` when the crate is not at the top or the binary not named as
+its package), or the source goes up as a ZIP (`source-zip`).
 
 ### The author's key
 
@@ -900,72 +922,56 @@ own, made once:
 paperpaw-sign key ~/.paperpaw/author.key     # prints the public key, 64 hexadecimal digits
 ```
 
-The public key is the catalogue's `author_key`. The file is the secret
-key: keep it outside every repository and back it up; never commit or
-share it. In CI it is a secret of the repository
-(`PAPERPAW_PLUGIN_KEY` in the sample's job). Devices remember the key at
-the first install and warn every reader when an update is signed by
-another, so it stays the same for every version; a lost or leaked key
-is replaced in the open, in the catalogue entry, and readers are warned
-once.
+The file is the secret key: keep it outside every repository, keep a
+copy apart, never commit or share it. In CI it is a secret of the
+repository (`PAPERPAW_PLUGIN_KEY` in the sample's job); the site's page
+<https://paperpaw.org/authors/sign> also signs in the browser, the key
+never leaving the computer. The store reads the public key from the
+builds: all of them are signed by one key, and every update by the same
+one. Readers remember it at the first install and are warned when an
+update is signed by another; a lost key is changed only in the open,
+through the site's contact address.
 
-### Reproducible builds
+### Builds that match their source
 
-The library rebuilds a code plugin's source with the toolchain its
-fingerprint names and compares the files. They match only when the build
-gives the same bytes on any computer:
+The site keeps each code plugin's source, shows it file by file, and
+rebuilds each build in a container with the toolchain its fingerprint
+names, with the sample's aliases (`cargo x4`, `cargo +esp x4pro`,
+`--locked`). It compares the result byte for byte with the build
+without its signature, and the plugin's page says *Verified: matches its
+source*, *Not rebuilt* or *Rebuilt, but does not match its source*. The
+rebuild runs in the paths of GitHub's runners, and paths end up in a
+build, so:
 
-- the SDK of a PaperPaw release and that release's compilers, pinned
-  (`rust-toolchain.toml` for the X4, espup's version for the X4 Pro, as
-  the release's `shells/xteink/rust-toolchain.toml` and `versions.env`
-  name them);
-- `Cargo.lock` committed and the build `--locked`; dependencies by
-  version or by a fixed commit;
-- built on Linux, with the paths of the repository, Cargo's home and the
-  X4 Pro's `core` remapped (`--remap-path-prefix`, as the sample's
-  `build.sh` does; never `RUSTFLAGS`, which would replace the flags that
-  link the plugin);
-- nothing of the moment or the computer in the code: no time, date,
-  user or random value written by a build script;
-- built from the tagged commit, with no changes beside it.
+- build with the sample's CI job
+  (`samples/hello-native/.github/workflows/build.yml`) from a pushed
+  tag;
+- commit `Cargo.lock`;
+- keep the release's compilers pinned (`rust-toolchain.toml`, the job's
+  `RUST_X4`, `RUST_X4_PRO`, `ESP_GCC`) and its SDK
+  (`paperpaw-sdk = "0.5"`);
+- never set `RUSTFLAGS`, which would replace the flags that link the
+  plugin;
+- put nothing of the moment or the computer into the code (a build
+  script writing the time, a user name, a random value);
+- name dependencies by version or a fixed commit, never a branch.
 
-Building twice, in two folders with two Cargo homes, and comparing the
-files with `cmp` shows whether it holds.
+The sample's `build.sh`, which the job runs, builds both readers, packs
+and signs the files, and zips the folder, with and without `store/`; the
+job attaches them to the tag's release with their SHA-256 and the
+catalogue's `[[versions]]` for them.
 
-### The catalogue entry
+### By pull request
 
-`catalogue/<id>.toml`, or the same fields in the form. A field the
-catalogue does not know is refused.
-
-```toml
-id = "my-theme"
-name = "My theme"
-summary = "Dark headers and square corners."     # one sentence, at most 160 characters
-kind = "data"                                    # or "code"
-author = "Jane Doe"
-licence = "Apache-2.0"                           # SPDX
-source = "https://github.com/jane/my-theme"
-group = "look"     # reading, formats, library, sync, home, look or system
-tags = ["theme"]   # up to five
-
-[i18n.de]
-name = "Mein Thema"
-summary = "Dunkle Kopfzeilen und eckige Ecken."
-
-[[versions]]
-version = "1.0.0"
-sdk = "0.5"
-date = "2026-10-20"
-url = "https://github.com/jane/my-theme/releases/download/v1.0.0/my-theme-1.0.0.zip"
-sha256 = "<the ZIP's SHA-256>"
-```
-
-A code plugin adds `author_key`, `crate` (its library crate), `devices`
-and, in each version, a `[[versions.builds]]` per device with `device`,
-`abi` (the file's fingerprint, which `paperpaw-sign plugin` prints),
-`url` and `sha256`; `samples/hello-native/catalogue.toml` is one to
-fill in, and the sample's CI job writes the versions' part for each
-tag.
+`catalogue/<id>.toml` holds what `store.ini` would, and `author`,
+`kind` and the versions; the folder lies at `catalogue/packages/<id>/`
+(without `store/`) or elsewhere as a ZIP (`url`, `sha256`). A code
+plugin adds `author_key`, `devices` (every reader with a build), and in
+each version `[versions.source]` and a `[[versions.builds]]` per reader
+with its `device`, its fingerprint as `abi` (which `paperpaw-sign
+plugin` prints), and its file. `samples/hello-native/catalogue.toml` is
+one to fill in; `paperpaw-website check` in a clone of the paperpaw.org
+repository runs the site's checks on it.
 
 [`Plugin`]: ../crates/paperpaw-sdk/src/plugin.rs
 [`Registrar`]: ../crates/paperpaw-sdk/src/plugin.rs

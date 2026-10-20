@@ -13,9 +13,10 @@ from:
 | `.cargo/config.toml` | how a plugin is linked, for both chips, and the aliases `x4` and `x4pro` |
 | `rust-toolchain.toml` | the compiler for the X4 (the X4 Pro's comes from espup) |
 | `plugin/plugin.ini` | the plugin's folder, to which `code.ppn` is added |
-| `build.sh` | builds both files reproducibly, packs and signs them, zips the folder, into `dist/` |
+| `plugin/store/store.ini` | what the plugin store shows of it, for the upload form; readers never install `store/` |
+| `build.sh` | builds both files, packs and signs them, zips the folder, into `dist/` |
 | `.github/workflows/build.yml` | a CI job for a plugin's repository: `build.sh` on every tag, its files as a release |
-| `catalogue.toml` | the plugin's entry in the plugin library, to fill in |
+| `catalogue.toml` | the plugin's entry for a pull request to the plugin library |
 | `.gitignore` | keeps `target/`, `dist/` and any `*.key` out of the repository |
 | `examples/second.rs` | a second plugin, to try several at once |
 | `examples/crash.rs` | a plugin that panics at every start, to try safe mode |
@@ -50,18 +51,23 @@ installed, as the store and the web flasher do, here over USB
 
 ## Publishing
 
-On Linux, with both toolchains and `paperpaw-sign` of the release:
+Files the plugin library can verify against their source come from the
+CI job: it builds them in the paths of GitHub's runners, where the
+library rebuilds them. Push a tag `v` + `plugin.ini`'s version, with
+the author's key as the repository's secret `PAPERPAW_PLUGIN_KEY`; the
+tag's release then holds the folder as ZIPs (with `store/` for the
+upload form, without for the catalogue), a signed file for each reader,
+their SHA-256 sums and the catalogue's `[[versions]]`. To try the same
+on one's own computer, with both toolchains and `paperpaw-sign` of the
+release:
 
 ```sh
 . ~/export-esp.sh
 ./build.sh --key ~/.paperpaw/author.key
 ```
 
-`dist/` then holds the folder as a ZIP, a signed file for each device,
-their SHA-256 sums, and prints each file's fingerprint; the CI job does
-the same for a tag and writes the catalogue's `[[versions]]` beside
-them. [Publishing](../../docs/plugins.md#publishing) says what to
-submit, and how to check that the build is reproducible.
+[Publishing](../../docs/plugins.md#publishing) and the site's guide,
+<https://paperpaw.org/authors>, say what to submit and how.
 
 ## Size
 
