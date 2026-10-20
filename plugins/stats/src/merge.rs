@@ -634,3 +634,6 @@ mod tests {
         std::fs::write(output, storage.get("out.db").unwrap()).unwrap();
     }
 }
+
+#[cfg(test)]
+mod props_tests;
