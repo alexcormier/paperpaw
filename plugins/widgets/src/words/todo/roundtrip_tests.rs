@@ -53,9 +53,6 @@ proptest! {
     ) {
         let items: Vec<Item> = items
             .into_iter()
-            // An open item's text starting with "x " reads as one done:
-            // see the bug test below.
-            .filter(|(text, done)| *done || !text.starts_with("x "))
             .map(|(text, done)| Item { text, done: done.then_some(TODAY) })
             .collect();
         let storage = MemoryStorage::new();
@@ -180,10 +177,10 @@ fn huge_years_in_dates_do_not_panic() {
     }
 }
 
-/// An open item whose text begins with "x " ("x-ray at 3") is written as
-/// it is, and read back as one done long ago, so it is lost.
+/// An open item whose text begins with "x " ("x-ray at 3") is kept with
+/// a date in front, so that it is not read back as one done long ago
+/// (and lost).
 #[test]
-#[ignore = "bug: an open item beginning with \"x \" is read back as done and lost"]
 fn open_items_beginning_with_x_are_kept() {
     let storage = MemoryStorage::new();
     let items = [Item {
@@ -192,6 +189,30 @@ fn open_items_beginning_with_x_are_kept() {
     }];
     save(&storage, &list(&items)).unwrap();
     assert_eq!(load(&storage, TODAY).unwrap().items, items);
+}
+
+/// Dates before the "x " are kept too, and the date in front is the only
+/// change to the file; a date before an open item that would not read as
+/// done is part of its text, as before.
+#[test]
+fn open_items_with_dates_before_an_x_are_kept() {
+    let items: Vec<Item> = ["2026-10-14 x ray", "2026-10-14  2026-10-15 x y", "x"]
+        .into_iter()
+        .map(|text| Item {
+            text: String::from(text),
+            done: None,
+        })
+        .collect();
+    let storage = MemoryStorage::new();
+    save(&storage, &list(&items)).unwrap();
+    assert_eq!(load(&storage, TODAY).unwrap().items, items);
+    let text = "2026-10-14 Call Anna
+1970-01-01 x ray
+";
+    let items = parse(text, TODAY).items;
+    assert_eq!(items[0].text, "2026-10-14 Call Anna");
+    assert_eq!(items[1].text, "x ray");
+    assert_eq!(format(&list(&items)), text);
 }
 
 #[test]
