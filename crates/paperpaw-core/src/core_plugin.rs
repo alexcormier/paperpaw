@@ -205,16 +205,17 @@ fn register_device_actions(r: &mut Registrar) -> Result<(), RegisterError> {
             actions::CLEAN_UP,
             "core.action.clean-up",
             Box::new(|env: &Env<'_>, out: &mut Vec<Command>| {
-                // What is kept for books no longer on the storage.
-                let books = library::book_keys(env.storage, env.formats);
-                let keep = |key: &str| {
-                    u64::from_str_radix(key, 16).is_ok_and(|k| books.binary_search(&k).is_ok())
+                // What is kept for files no longer on the storage: of any
+                // format, by any spelling; nothing where a folder could not
+                // be read.
+                let library = library::folder(env);
+                let text = match library::clean_up_unused(env.storage, env.book_data, library) {
+                    Ok(removed) => env.i18n.format(
+                        "core.cleaned-up",
+                        &[("count", paperpaw_sdk::Arg::Int(i64::from(removed)))],
+                    ),
+                    Err(_) => String::from(env.i18n.tr("core.clean-up-failed")),
                 };
-                let removed = library::clean_up(env.storage, env.book_data, &keep);
-                let text = env.i18n.format(
-                    "core.cleaned-up",
-                    &[("count", paperpaw_sdk::Arg::Int(i64::from(removed)))],
-                );
                 out.push(Command::Notify(text));
             }),
         ),
@@ -728,6 +729,7 @@ static DEVICE: [SettingSpec; 9] = [
         groups::DISPLAY,
     )
     .with_extra(&PAGES)
+    .scoped()
     .described("core.setting.full-refresh-interval.help"),
     SettingSpec::fixed_switch(
         settings::FLASH_SCREENS.static_str(),
@@ -1228,5 +1230,19 @@ mod tests {
         let de = Catalog::parse(include_str!("../i18n/de.ini")).unwrap();
         let issues = check::compare(&en, &de);
         assert!(issues.is_empty(), "{issues:?}");
+    }
+
+    /// Every plugin writes numbers with the language's decimal mark
+    /// (`paperpaw_sdk::numbers`), which the kernel's catalogs name.
+    #[test]
+    fn languages_name_their_decimal_mark() {
+        use paperpaw_sdk::numbers::DECIMAL_MARK;
+        for (source, mark) in [
+            (include_str!("../i18n/en.ini"), "."),
+            (include_str!("../i18n/de.ini"), ","),
+        ] {
+            let catalog = Catalog::parse(source).unwrap();
+            assert_eq!(catalog.get(DECIMAL_MARK), Some(mark));
+        }
     }
 }

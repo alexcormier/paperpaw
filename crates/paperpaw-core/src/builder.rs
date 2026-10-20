@@ -17,6 +17,10 @@ pub struct KernelBuilder {
     /// of buttons come from their own settings at the end.
     caps: Capabilities,
     firmware: Option<Firmware>,
+    code: Option<crate::code_plugin::CodePlugins>,
+    safe_mode: Option<paperpaw_sdk::native::SafeMode>,
+    /// Plugins the shell put into folders, to install before plugins load.
+    staged: Vec<(Id, String)>,
     button_row: &'static [&'static str],
     frame_rows: Option<u16>,
     row_align: u16,
@@ -80,8 +84,6 @@ impl KernelBuilder {
         self
     }
 
-    /// A monotonic clock in microseconds, for measuring the time each
-    /// plugin's code takes ([`paperpaw_sdk::usage::PluginUsage`]).
     /// Shows a mark at once when an input opens or closes a screen that
     /// took long the last time (or was not opened yet), before the work:
     /// the pressed button's hint inverted, or a sign in the corner. For
@@ -93,6 +95,8 @@ impl KernelBuilder {
         self
     }
 
+    /// A monotonic clock in microseconds, for measuring the time each
+    /// plugin's code takes ([`paperpaw_sdk::usage::PluginUsage`]).
     pub fn clock(mut self, clock: fn() -> u64) -> Self {
         self.clock = Some(clock);
         self
@@ -156,6 +160,40 @@ impl KernelBuilder {
         self
     }
 
+    /// PaperPaw loads native code plugins (see
+    /// [`paperpaw_sdk::native`]): `loader` loads the code of each switched
+    /// on at the start, files fit for `native` (which plugins see as
+    /// [`Env::native`](paperpaw_sdk::Env)).
+    pub fn code_plugins(mut self, native: Native, loader: Box<dyn CodeLoader>) -> Self {
+        self.code = Some(crate::code_plugin::CodePlugins {
+            native,
+            loader,
+            safe_mode: None,
+        });
+        self
+    }
+
+    /// This start goes without code plugins (safe mode): the shell found
+    /// that the last ones did not get to their first frame, or the reader
+    /// held the key for it. See [`paperpaw_sdk::native::SafeMode`]; the
+    /// kernel fills in what it switched off.
+    pub fn safe_mode(mut self, safe_mode: SafeMode) -> Self {
+        self.safe_mode = Some(safe_mode);
+        self
+    }
+
+    /// Installs the plugin `id` the shell put into `folder` (a folder of
+    /// the plugin folder PaperPaw does not load, e.g. `plugins/.hello.part`:
+    /// a plugin the web flasher wrote with the firmware) before plugins
+    /// are found, so it loads at this start: in place of every version of
+    /// it, as [`Command::InstallPlugin`](paperpaw_sdk::Command::InstallPlugin)
+    /// installs one while PaperPaw runs. One that is not what it says is
+    /// refused, with a warning, and its folder removed.
+    pub fn install_plugin(mut self, id: Id, folder: impl Into<String>) -> Self {
+        self.staged.push((id, folder.into()));
+        self
+    }
+
     /// PaperPaw is the device's firmware and updates it (the shell answers
     /// [`Io::Firmware`] and reports with
     /// [`Kernel::firmware_state`]). See [`paperpaw_sdk::firmware`].
@@ -202,10 +240,6 @@ impl KernelBuilder {
         self
     }
 
-    /// The shell shows black and white in the colours of the settings
-    /// [`settings::TEXT_COLOR`](paperpaw_sdk::builtin::settings::TEXT_COLOR)
-    /// and [`settings::PAPER_COLOR`](paperpaw_sdk::builtin::settings::PAPER_COLOR)
-    /// (see [`Kernel::colors`]); without, they are not offered.
     /// The buttons that lie in a row below the screen, left to right, each
     /// under an equal share of its width (e.g. the X4's four): a row of
     /// hints above them shows what they do
@@ -215,6 +249,10 @@ impl KernelBuilder {
         self
     }
 
+    /// The shell shows black and white in the colours of the settings
+    /// [`settings::TEXT_COLOR`](paperpaw_sdk::builtin::settings::TEXT_COLOR)
+    /// and [`settings::PAPER_COLOR`](paperpaw_sdk::builtin::settings::PAPER_COLOR)
+    /// (see [`Kernel::colors`]); without, they are not offered.
     pub fn colors(mut self, available: bool) -> Self {
         self.caps.colors = available;
         self
@@ -251,26 +289,46 @@ impl KernelBuilder {
         kernel.read_secrets();
         paperpaw_sdk::library::take_over_old(kernel.shared.storage.as_ref());
         // The configuration file on the device, then the shell's overrides.
-        let stored = read_config(kernel.shared.storage.as_ref());
+        let stored = kernel.read_stored_config();
         let user_config = self.user_config.take();
         let configs: Vec<&str> = [stored.as_deref(), user_config.as_deref()]
             .into_iter()
             .flatten()
             .collect();
+        let dirs = if self.plugin_dirs.is_empty() {
+            alloc::vec![String::from(paperpaw_sdk::builtin::PLUGIN_DIR)]
+        } else {
+            mem::take(&mut self.plugin_dirs)
+        };
+        let built_in: Vec<Id> = core::iter::once(CORE)
+            .chain(self.plugins.iter().map(|plugin| plugin.manifest().id))
+            .collect();
+        kernel.install_staged(mem::take(&mut self.staged), &dirs, &built_in);
         kernel.add_plugins(
             mem::take(&mut self.plugins),
             mem::take(&mut self.off),
-            mem::take(&mut self.plugin_dirs),
+            dirs,
             mem::take(&mut self.font_dirs),
             &configs,
+            self.code
+                .take()
+                .map(|code| crate::code_plugin::CodePlugins {
+                    safe_mode: self.safe_mode.take(),
+                    ..code
+                }),
         );
         if let Some(source) = self.device_keymap.take() {
             kernel.load_device_keymap(source);
         }
         kernel.offer_choices();
         kernel.apply_defaults(&self.setting_defaults);
-        for source in &configs {
+        if let Some(source) = &stored {
             kernel.apply_user_config(source);
+            kernel.keys.user.clone_from(source);
+        }
+        if let Some(source) = &user_config {
+            kernel.apply_user_config(source);
+            kernel.keys.shell.clone_from(source);
         }
         kernel.set_menu_titles();
         kernel.apply_reading_font();
@@ -293,13 +351,15 @@ impl KernelBuilder {
         let meter = meter::Meter::new(self.clock);
         // What a call reads, kept for the rest of it (more where memory is
         // plentiful).
-        let recall = alloc::rc::Rc::new(recall::Recall::new(match self.device.memory {
+        let inner = self.storage.take().unwrap_or_else(|| Box::new(NoStorage));
+        let budget = match self.device.memory {
             paperpaw_platform::MemoryClass::Small => 16 * 1024,
             paperpaw_platform::MemoryClass::Large => 256 * 1024,
-        }));
+        };
+        let recall = alloc::rc::Rc::new(recall::Recall::new(budget, inner.ignores_case()));
         let storage: alloc::rc::Rc<dyn Storage> = alloc::rc::Rc::new(meter::Metered {
             inner: Box::new(recall::Recalled {
-                inner: self.storage.take().unwrap_or_else(|| Box::new(NoStorage)),
+                inner,
                 recall: recall.clone(),
             }),
             meter: meter.clone(),
@@ -337,6 +397,7 @@ impl KernelBuilder {
                 caps,
                 wifi: caps.wifi.then(paperpaw_sdk::wifi::Wifi::default),
                 firmware: self.firmware.take(),
+                native: None,
                 clipboard: String::new(),
                 system_clipboard: false,
                 slots: Vec::new(),
@@ -386,13 +447,14 @@ impl KernelBuilder {
                 firmware_calls: Vec::new(),
                 network_waiting: None,
                 network_busy: false,
+                focus_spoken: false,
             },
             keys: plugins::KeySources::default(),
+            stylesheet_owners: Vec::new(),
             timing: drawing::Timing::default(),
             framebuffer,
             registry: Registry::default(),
             subscriptions: Vec::new(),
-            screen_timer: None,
             show_pending: false,
             notice: None,
             scheduled: Vec::new(),
@@ -409,6 +471,9 @@ impl KernelBuilder {
             scope: None,
             screens_changed: false,
             preview_owner: None,
+            next_serial: 0,
+            config_unreadable: false,
+            secrets_unreadable: false,
             plugin_defaults: Vec::new(),
             now: Instant::default(),
         })
@@ -417,15 +482,40 @@ impl KernelBuilder {
 
 /// The steps of [`KernelBuilder::build`].
 impl Kernel {
-    /// Passwords and keys, as kept on the storage.
+    /// Passwords and keys, as kept on the storage. A file that is there
+    /// but cannot be read is said and not written over.
     fn read_secrets(&mut self) {
-        if let Ok(data) = paperpaw_sdk::read_file(
-            self.shared.storage.as_ref(),
-            paperpaw_sdk::secrets::FILE,
-            64 * 1024,
-        ) {
-            let text = String::from_utf8_lossy(&data);
-            self.shared.secrets = paperpaw_sdk::secrets::Secrets::decode(&text);
+        use paperpaw_sdk::secrets::{FILE, Secrets};
+        let storage = self.shared.storage.as_ref();
+        // Damaged text keeps what can be read: values are written in hex.
+        match paperpaw_sdk::files::load_for_update(storage, FILE, MAX_SECRETS) {
+            Ok(data) => {
+                let text = String::from_utf8_lossy(data.as_deref().unwrap_or_default());
+                self.shared.secrets = Secrets::decode(&text);
+            }
+            Err(error) => {
+                self.secrets_unreadable = true;
+                self.warn_runtime(format!(
+                    "{FILE} cannot be read ({error}): passwords and keys are not used or saved"
+                ));
+            }
+        }
+    }
+
+    /// `paperpaw.ini` on the storage, if there is one; one that is there
+    /// but cannot be read is said, at once and to the user once the first
+    /// screen shows, and is not written over.
+    fn read_stored_config(&mut self) -> Option<String> {
+        match read_config(self.shared.storage.as_ref()) {
+            Ok(source) => source,
+            Err(error) => {
+                self.config_unreadable = true;
+                let message = format!(
+                    "{CONFIG_FILE} cannot be read ({error}): started with the defaults, the file left as it is"
+                );
+                self.warn(WarningSource::UserConfig, None, message);
+                None
+            }
         }
     }
 
@@ -439,6 +529,7 @@ impl Kernel {
         plugin_dirs: Vec<String>,
         font_dirs: Vec<String>,
         configs: &[&str],
+        code: Option<crate::code_plugin::CodePlugins>,
     ) {
         self.shared.menus.set_capabilities(self.shared.caps);
         // Colour screens open documents with colour pictures (ADR 0015).
@@ -467,21 +558,45 @@ impl Kernel {
         } else {
             plugin_dirs
         };
+        let storage = self.shared.storage.clone();
+        let mut with_code = Vec::new();
         for dir in &dirs {
             let mut problems = Vec::new();
-            let found = data_plugin::discover(self.shared.storage.as_ref(), dir, &mut |problem| {
+            let folders = data_plugin::folders(storage.as_ref(), dir, &mut |problem| {
                 problems.push(problem);
             });
             for problem in problems {
                 self.warn_runtime(problem);
             }
-            for plugin in found {
-                self.add_plugin(&plugin, &disabled);
+            // One at a time: loaded, registered, its files let go.
+            for folder in folders {
+                let plugin = match data_plugin::load_folder(storage.as_ref(), &folder) {
+                    Ok(plugin) => plugin,
+                    Err(problem) => {
+                        self.warn_runtime(problem);
+                        continue;
+                    }
+                };
+                if disabled
+                    .iter()
+                    .any(|id| id == plugin.manifest().id.as_str())
+                {
+                    plugin.keep_listing_only();
+                }
                 self.shared
                     .data_folders
                     .push((plugin.manifest().id, plugin.folder().to_string()));
+                if plugin.has_code() {
+                    with_code.push(plugin);
+                    continue;
+                }
+                self.add_plugin(&plugin, &disabled);
+                if let Some(info) = self.shared.plugins.get_mut(plugin.manifest().id.as_str()) {
+                    info.kind = paperpaw_sdk::PluginKind::Data;
+                }
             }
         }
+        self.add_code_plugins(with_code, &disabled, code);
         self.shared.plugin_dirs = dirs;
         if !font_dirs.is_empty()
             && let Some(plugin) = data_plugin::font_folder(self.shared.storage.as_ref(), &font_dirs)
@@ -501,7 +616,7 @@ impl Kernel {
                 problem.message.into_owned(),
             );
         }
-        self.keys.sources.push((Origin::Device, source));
+        self.keys.device = source;
     }
 
     /// The choices of settings that plugins add to: key map presets and
@@ -540,8 +655,15 @@ impl Kernel {
             .set_choices(core_settings::STATUS_FONT.as_str(), status);
     }
 
-    /// Defaults from plugins (e.g. themes), then the device's.
+    /// The device's defaults, then the plugins' (e.g. themes), which win:
+    /// a theme installed for larger print enlarges it on a device whose
+    /// own default is small too.
     pub(crate) fn apply_defaults(&mut self, device: &[(String, String)]) {
+        for (id, value) in device {
+            if let Err(error) = self.shared.settings.set_default_from_text(id, value) {
+                self.warn_runtime(format!("device default `{id}`: {error}"));
+            }
+        }
         for (plugin, id, value) in mem::take(&mut self.plugin_defaults) {
             if let Err(error) = self
                 .shared
@@ -553,11 +675,6 @@ impl Kernel {
                     None,
                     format!("default for `{id}`: {error}"),
                 );
-            }
-        }
-        for (id, value) in device {
-            if let Err(error) = self.shared.settings.set_default_from_text(id, value) {
-                self.warn_runtime(format!("device default `{id}`: {error}"));
             }
         }
     }
@@ -605,6 +722,9 @@ impl Kernel {
             glyph_cache: DEFAULT_GLYPH_CACHE,
             caps: Capabilities::default(),
             firmware: None,
+            code: None,
+            safe_mode: None,
+            staged: Vec::new(),
             button_row: &[],
             frame_rows: None,
             row_align: 1,

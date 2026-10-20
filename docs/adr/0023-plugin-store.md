@@ -80,6 +80,24 @@ download written as it arrives, nothing unpacked in memory.
   folder named as it; a plugin switched off stays off, and what was
   chosen from the version before (its font for reading) stays chosen.
   The fonts browser uses it too.
+- **Code plugins** (ADR 0024) are listed where a build fits: the list
+  and a plugin's page give them `"kind": "code"`, the `author_key` their
+  author signs with (Ed25519, 64 hex digits) and `latest.builds`, each a
+  `device`, the `abi` it was built for (the firmware's fingerprint),
+  `url`, `size` and `sha256`. The store takes the build for its device
+  and fingerprint (`Env::native`) and installs it with the folder's files
+  as its code (`code.ppn`), checked by its SHA-256. Before the plugin is
+  installed its code is checked whole (`native::check_file`: header,
+  digest, the author's signature): made for this firmware, and signed.
+  At the first install the key must be the one the library names, and
+  it is remembered for the plugin (`native::remember_author`); an update
+  signed by another waits, with a warning in plain words, until the
+  reader installs it anyway or not. Before the first code plugin the
+  store says once what code plugins are (full access to the device,
+  safe mode when one goes wrong), and a plugin's page says it is one
+  and which PaperPaw it is made for. Code plugins start at the next
+  start: the store offers *Restart now*, and a code plugin updated while
+  it runs keeps running until then (`PluginInfo::update`).
 - **The list's address** is a setting for developers (`store.catalog`,
   `https://paperpaw.org/api/v1/plugins.json` unless set), as the fonts
   browser's is; a plugin's page is `plugins/<id>.json` beside it.
@@ -93,7 +111,8 @@ download written as it arrives, nothing unpacked in memory.
   the plugin it installs.
 - The server keeps every file of a package by its SHA-1 as well as the
   ZIP's SHA-256; a package checked once is served both ways.
-- Plugins with code need a firmware built with them (O6's second half,
-  a build service): they get fields of their own then (`latest.builds`
-  on a plugin's page), and devices that do not know those fields keep
-  passing over them.
+- Code plugins reach the X4 and the X4 Pro without a firmware build
+  (ADR 0024); a list without builds for a device's fingerprint shows it
+  none, and devices that load no code plugins pass over them.
+- A server taken over cannot quietly swap a code plugin someone has: its
+  author's key is known on the device.

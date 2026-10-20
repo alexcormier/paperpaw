@@ -198,6 +198,8 @@ pub enum Command {
     Sync,
     Version,
     Plugins,
+    /// Where native code plugins lie, and why not.
+    Native,
     /// The actions whose ids begin with this.
     Actions(String),
     /// The settings whose ids begin with this, with their values.
@@ -301,6 +303,7 @@ pub fn parse(line: &str) -> Option<Command> {
         "sync" => Command::Sync,
         "version" => Command::Version,
         "plugins" => Command::Plugins,
+        "native" => Command::Native,
         "screens" => Command::Screens,
         "usage" => Command::Usage,
         "restart" => Command::Restart,

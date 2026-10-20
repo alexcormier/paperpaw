@@ -260,6 +260,7 @@ impl Harness {
             caps,
             wifi: None,
             firmware: None,
+            native: None,
             clipboard: false,
             slots: &[],
             screens: &[],

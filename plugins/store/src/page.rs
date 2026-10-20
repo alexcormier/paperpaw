@@ -1,15 +1,23 @@
 //! A plugin's page: what it does, who made it, its licence, version and
-//! size, and what can be done with it: install it, stop installing it,
-//! update or remove it. What the list says shows at once; the plugin's
-//! own page at the library, with its files, is fetched as the page opens.
+//! size, for a code plugin that it is one and which PaperPaw it is made
+//! for, and what can be done with it: install it, stop installing it,
+//! update or remove it, restart where it waits for that. What the list
+//! says shows at once; the plugin's own page at the library, with its
+//! files, is fetched as the page opens.
+//!
+//! Before the first code plugin the page says once what code plugins are
+//! (full access to the device, safe mode when one goes wrong). An update
+//! signed by another author than the version before waits here, with a
+//! warning, until the reader installs it anyway or not.
 
+use alloc::boxed::Box;
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::{actions, events, params};
 use paperpaw_sdk::event::Event;
-use paperpaw_sdk::install::{Package, Progress};
+use paperpaw_sdk::install::{self, Progress};
 use paperpaw_sdk::replies::HttpReply;
 use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::ui::choice::{self, Picked};
@@ -19,9 +27,9 @@ use paperpaw_sdk::{
     Rect, RefreshMode, Screen, files,
 };
 
-use crate::catalog::{self, Entry, Index};
+use crate::catalog::{self, Device, Entry, Index, Plugin};
 use crate::list::ENTRY;
-use crate::{CATALOG, CHOICE, DOWNLOADED, INSTALLER, failed};
+use crate::{CATALOG, CHOICE, DOWNLOADED, INSTALLER, failed, trust};
 
 /// The answer to *Remove?*.
 const REMOVE: Event<Picked> = Event::new("store.remove");
@@ -29,7 +37,7 @@ const REMOVE: Event<Picked> = Event::new("store.remove");
 const DETAILS: Event<HttpReply> = Event::new("store.details");
 
 /// Lines of the summary at most.
-const SUMMARY_LINES: usize = 6;
+const SUMMARY_LINES: usize = 8;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Row {
@@ -37,6 +45,24 @@ enum Row {
     Stop,
     Update,
     Remove,
+    Restart,
+    /// The notice before the first code plugin: understood, install.
+    Understood,
+    /// Not now, after the notice or the warning.
+    Cancel,
+    /// The update signed by another author: install it anyway.
+    Anyway,
+}
+
+/// What the page shows above its rows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Shown {
+    /// The plugin: what it does, the facts.
+    Plugin,
+    /// The notice before the first code plugin.
+    Notice,
+    /// The warning about an update signed by another author.
+    OtherAuthor,
 }
 
 /// The plugin's files, from its page at the library.
@@ -46,7 +72,7 @@ enum Details {
     None,
     /// Asked for, at this address.
     Asked(String),
-    Here(Package),
+    Here(Box<Plugin>),
     /// Not to be had.
     Failed,
 }
@@ -63,7 +89,9 @@ pub(crate) struct PageScreen {
     details: Details,
     /// *Install* or *Update* was chosen before the files were known.
     waiting: bool,
-    /// The download going on.
+    /// The notice before the first code plugin is shown.
+    notice: bool,
+    /// The download going on, or the job waiting for the reader's word.
     job: Option<Progress>,
 }
 
@@ -93,9 +121,28 @@ impl PageScreen {
             plugin,
             details: Details::None,
             waiting: false,
+            notice: false,
             job: INSTALLER.progress(env.storage),
             style,
             header,
+        }
+    }
+
+    /// The job of this plugin, if one goes on.
+    fn own_job(&self) -> Option<&Progress> {
+        self.job.as_ref().filter(|job| job.plugin == self.id)
+    }
+
+    /// What the page shows above its rows.
+    fn shown(&self) -> Shown {
+        if self.notice {
+            Shown::Notice
+        } else if self.own_job().is_some_and(|job| job.done >= job.total) {
+            // All here and checked, and not installed: it waits for the
+            // reader's word on another author.
+            Shown::OtherAuthor
+        } else {
+            Shown::Plugin
         }
     }
 
@@ -103,17 +150,33 @@ impl PageScreen {
         let Some(plugin) = &self.plugin else {
             return Vec::new();
         };
-        if self.job.as_ref().is_some_and(|j| j.plugin == plugin.id) {
+        match self.shown() {
+            Shown::Notice => return alloc::vec![Row::Understood, Row::Cancel],
+            Shown::OtherAuthor => return alloc::vec![Row::Cancel, Row::Anyway],
+            Shown::Plugin => {}
+        }
+        if self.own_job().is_some() {
             return alloc::vec![Row::Stop];
         }
-        if plugin.installed(env).is_none() {
+        let Some(info) = env.plugins.get(&plugin.id) else {
             return alloc::vec![Row::Install];
+        };
+        // Not this one to install over, update or remove.
+        if !catalog::may_install(env.plugins, &plugin.id, plugin.code) {
+            return Vec::new();
         }
+        // A restart first where one is waited for; a code plugin removed
+        // runs on until then, and offers nothing else.
         let mut rows = Vec::new();
-        if plugin.newer(env) {
-            rows.push(Row::Update);
+        if info.restart_needed() {
+            rows.push(Row::Restart);
         }
-        rows.push(Row::Remove);
+        if info.enabled {
+            if plugin.newer(env) {
+                rows.push(Row::Update);
+            }
+            rows.push(Row::Remove);
+        }
         rows
     }
 
@@ -125,14 +188,17 @@ impl PageScreen {
     /// Asks the library for the plugin's page.
     fn fetch(&mut self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        let Some(device) = env.catalog_device.filter(|_| env.caps.network) else {
+        let Some(device) =
+            Device::of(&env).filter(|_| env.caps.network && install::is_plugin_name(&self.id))
+        else {
             self.details = Details::Failed;
             return;
         };
         let list = env.settings.read(&CATALOG);
-        let url = catalog::plugin_url(list.trim(), device, env.i18n.language(), &self.id);
+        let language = env.i18n.language();
+        let url = catalog::plugin_url(list.trim(), device.name, language, &self.id);
         let mut request = HttpRequest::new("GET", &url, DETAILS);
-        request.save_to = Some(catalog::plugin_part());
+        request.save_to = Some(catalog::plugin_part(&self.id));
         request.params = Params::new().with(params::ID, self.id.clone());
         cx.command(Command::Http(request));
         self.details = Details::Asked(url);
@@ -144,17 +210,17 @@ impl PageScreen {
             return;
         };
         let address = reply.final_url.clone().unwrap_or_else(|| url.clone());
-        let device = env.catalog_device.unwrap_or_default();
-        let fetched = catalog::plugin_part();
-        let read = (200..300)
-            .contains(&reply.status)
-            .then(|| catalog::plugin(env.storage, &fetched, &address, device))
-            .flatten();
+        let fetched = catalog::plugin_part(&self.id);
+        let read = Device::of(&env)
+            .filter(|_| (200..300).contains(&reply.status))
+            .and_then(|device| catalog::plugin(env.storage, &fetched, &address, &device))
+            // The page asked for, not another one's.
+            .filter(|plugin| plugin.entry.id == self.id);
         let _ = env.storage.remove(&fetched);
         match read {
-            Some((plugin, package)) => {
-                self.plugin = Some(plugin);
-                self.details = Details::Here(package);
+            Some(plugin) => {
+                self.plugin = Some(plugin.entry.clone());
+                self.details = Details::Here(Box::new(plugin));
                 if core::mem::take(&mut self.waiting) {
                     self.install(cx);
                 }
@@ -171,7 +237,8 @@ impl PageScreen {
     }
 
     /// Installs the plugin (or its newer version), once its files are
-    /// known.
+    /// known and, before the first code plugin, the reader was told what
+    /// code plugins are.
     fn install(&mut self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
         let name = self.plugin.as_ref().map_or("", |p| p.name.as_str());
@@ -186,10 +253,17 @@ impl PageScreen {
                 .format("store.busy", &[("name", Arg::Str(&other.name))]);
             return cx.command(Command::Notify(text));
         }
+        let code = self.plugin.as_ref().is_some_and(|p| p.code);
+        if code && !trust::told(env.storage) {
+            self.notice = true;
+            self.list.focus = 0;
+            return self.redraw(cx);
+        }
         match &self.details {
-            Details::Here(package) => {
+            Details::Here(plugin) => {
                 let mut out = Vec::new();
-                if !INSTALLER.start(&env, package, &mut out) {
+                trust::expect(env.storage, &plugin.entry.id, plugin.author_key.as_ref());
+                if !INSTALLER.start(&env, &plugin.package, &mut out) {
                     out.push(failed(&env, name));
                 }
                 for command in out {
@@ -217,12 +291,40 @@ impl PageScreen {
         };
         match self.rows(&env).get(index).copied() {
             Some(Row::Install | Row::Update) => self.install(cx),
+            Some(Row::Understood) => {
+                trust::tell(env.storage);
+                self.notice = false;
+                self.install(cx);
+            }
+            Some(Row::Cancel) => {
+                if self.shown() == Shown::OtherAuthor {
+                    INSTALLER.cancel(env.storage);
+                    self.job = None;
+                }
+                self.notice = false;
+                self.list.focus = 0;
+                self.redraw(cx);
+            }
+            Some(Row::Anyway) => {
+                let mut out = Vec::new();
+                if trust::install_anyway(&env, &mut out).is_none() {
+                    INSTALLER.cancel(env.storage);
+                    out.push(failed(&env, &plugin.name));
+                }
+                for command in out {
+                    cx.command(command);
+                }
+                self.job = INSTALLER.progress(env.storage);
+                self.list.focus = 0;
+                self.redraw(cx);
+            }
             Some(Row::Stop) => {
                 INSTALLER.cancel(env.storage);
                 self.job = None;
                 self.list.focus = 0;
                 self.redraw(cx);
             }
+            Some(Row::Restart) => cx.command(Command::Restart),
             Some(Row::Remove) => {
                 let title = env
                     .i18n
@@ -262,40 +364,62 @@ impl PageScreen {
             }
             Row::Update => (tr("store.update"), plugin.version.clone()),
             Row::Remove => (tr("store.remove"), String::new()),
+            Row::Restart => (tr("store.restart"), String::new()),
+            Row::Understood => (tr("store.code.understood"), String::new()),
+            Row::Cancel => (tr("store.not-now"), String::new()),
+            Row::Anyway => (tr("store.other-author.anyway"), String::new()),
         }
     }
 
-    /// The facts below the summary: by whom, under which licence, which
-    /// version and how large, which version is here.
-    fn facts(env: &Env<'_>, plugin: &Entry) -> Vec<String> {
-        let i18n = env.i18n;
-        let mut facts = Vec::new();
-        let mut first = Vec::new();
-        if !plugin.author.is_empty() {
-            first.push(i18n.format("store.by", &[("author", Arg::Str(&plugin.author))]));
+    /// What the page says above its rows: what the plugin does and the
+    /// facts in small print, or the notice, or the warning.
+    fn texts(&self, env: &Env<'_>, plugin: &Entry) -> (String, Vec<String>) {
+        let name = [("name", Arg::Str(&plugin.name))];
+        match self.shown() {
+            Shown::Notice => (env.i18n.tr("store.code.notice").to_string(), Vec::new()),
+            Shown::OtherAuthor => (
+                env.i18n.format("store.other-author", &name),
+                alloc::vec![env.i18n.tr("store.other-author.help").to_string()],
+            ),
+            Shown::Plugin => (plugin.summary.clone(), facts(env, plugin)),
         }
-        if !plugin.licence.is_empty() {
-            first.push(i18n.format("store.licence", &[("licence", Arg::Str(&plugin.licence))]));
-        }
-        if !first.is_empty() {
-            facts.push(first.join(" · "));
-        }
-        let size = files::size(plugin.size, i18n.tr("store.decimal"));
-        facts.push(i18n.format(
-            "store.version",
-            &[
-                ("version", Arg::Str(&plugin.version)),
-                ("size", Arg::Str(&size)),
-            ],
-        ));
-        if let Some(installed) = plugin.installed(env) {
-            facts.push(i18n.format(
-                "store.installed-version",
-                &[("version", Arg::Str(&installed.to_string()))],
-            ));
-        }
-        facts
     }
+}
+
+/// The facts below the summary: by whom, under which licence, which
+/// version and how large, which version is here; for a code plugin, that
+/// it is one and which PaperPaw it is made for.
+fn facts(env: &Env<'_>, plugin: &Entry) -> Vec<String> {
+    let i18n = env.i18n;
+    let mut facts = Vec::new();
+    let mut first = Vec::new();
+    if !plugin.author.is_empty() {
+        first.push(i18n.format("store.by", &[("author", Arg::Str(&plugin.author))]));
+    }
+    if !plugin.licence.is_empty() {
+        first.push(i18n.format("store.licence", &[("licence", Arg::Str(&plugin.licence))]));
+    }
+    if !first.is_empty() {
+        facts.push(first.join(" · "));
+    }
+    let size = files::size(plugin.size, i18n.tr("store.decimal"));
+    facts.push(i18n.format(
+        "store.version",
+        &[
+            ("version", Arg::Str(&plugin.version)),
+            ("size", Arg::Str(&size)),
+        ],
+    ));
+    if plugin.code {
+        facts.push(i18n.format("store.code", &[("sdk", Arg::Str(&plugin.sdk))]));
+    }
+    if let Some(installed) = plugin.installed(env) {
+        facts.push(i18n.format(
+            "store.installed-version",
+            &[("version", Arg::Str(&installed.to_string()))],
+        ));
+    }
+    facts
 }
 
 impl Screen for PageScreen {
@@ -333,8 +457,8 @@ impl Screen for PageScreen {
         let Some(font) = style.font(env) else {
             return;
         };
-        // What it does, then the facts in small print, then what can be
-        // done, each right below the other.
+        // What it does (or the notice, the warning), then the facts in
+        // small print, then what can be done, each right below the other.
         let margin = style.margin as f32;
         let width = f32::from(self.list.area.width) - 2.0 * margin;
         let mut y = f32::from(self.top);
@@ -360,16 +484,11 @@ impl Screen for PageScreen {
                 *y += metrics.line_height;
             }
         };
-        paragraph(
-            &mut y,
-            &plugin.summary,
-            style.text,
-            Color::BLACK,
-            SUMMARY_LINES,
-        );
+        let (text, facts) = self.texts(env, plugin);
+        paragraph(&mut y, &text, style.text, Color::BLACK, SUMMARY_LINES);
         y += style.gap as f32;
-        for fact in PageScreen::facts(env, plugin) {
-            paragraph(&mut y, &fact, style.small, style.faint(80), 2);
+        for fact in facts {
+            paragraph(&mut y, &fact, style.small, style.faint(80), 3);
         }
         let gap = style.gap as u16;
         self.list.area.y = y as u16 + gap;
@@ -388,12 +507,15 @@ impl Screen for PageScreen {
             },
         );
         canvas.fill(self.status, Color::WHITE);
-        let note = match &self.job {
-            Some(job) if job.plugin == plugin.id => env.i18n.tr("store.downloading").to_string(),
-            Some(job) => env
+        let note = match (&self.job, rows.first()) {
+            (Some(job), Some(Row::Stop)) if job.plugin == plugin.id => {
+                env.i18n.tr("store.downloading").to_string()
+            }
+            (Some(job), _) if job.plugin != plugin.id => env
                 .i18n
                 .format("store.busy", &[("name", Arg::Str(&job.name))]),
-            None => String::new(),
+            (_, Some(Row::Restart)) => env.i18n.tr("store.restart.help").to_string(),
+            _ => String::new(),
         };
         if !note.is_empty() {
             ui::draw_note_line(canvas, env, &style, self.status, &note);
@@ -413,6 +535,10 @@ impl Screen for PageScreen {
             self.list.request(change, cx);
         } else if *action == actions::CONFIRM {
             self.activate(self.list.focus, cx);
+        } else if *action == actions::BACK && self.notice {
+            // Back from the notice to the plugin.
+            self.notice = false;
+            self.redraw(cx);
         } else {
             return Handled::No;
         }

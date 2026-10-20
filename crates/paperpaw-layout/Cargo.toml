@@ -15,5 +15,8 @@ keywords = ["e-reader", "layout", "pagination"]
 paperpaw-document.workspace = true
 paperpaw-text.workspace = true
 
+[dev-dependencies]
+proptest.workspace = true
+
 [lints]
 workspace = true

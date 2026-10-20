@@ -13,5 +13,8 @@ keywords = ["e-reader", "e-ink", "epaper"]
 
 [dependencies]
 
+[dev-dependencies]
+proptest.workspace = true
+
 [lints]
 workspace = true

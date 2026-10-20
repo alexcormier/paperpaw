@@ -1,13 +1,13 @@
 //! What plugins offer each other: services, and points to contribute to.
 //!
 //! **Services.** A plugin publishes a value under an id in its namespace
-//! ([`Registrar::add_service`](crate::Registrar::add_service)); others find
-//! it with [`Services::get`] by that id and its type. The type comes from
+//! ([`Registrar::publish`](crate::Registrar::publish)); others find it
+//! with [`Services::get`] by that id and its type. The type comes from
 //! the publishing plugin's crate, usually a trait object, so others depend
 //! on what it promises, not on how it does it:
 //!
 //! ```
-//! # use paperpaw_sdk::services::Services;
+//! # use paperpaw_sdk::services::{Service, Services};
 //! # use paperpaw_sdk::Id;
 //! # extern crate alloc;
 //! # use alloc::boxed::Box;
@@ -25,9 +25,9 @@
 //! }
 //!
 //! // `register` of the publishing plugin:
-//! // r.add_service(WEATHER, Box::new(Box::new(Sunny) as Box<dyn Weather>))?;
+//! // r.publish(WEATHER, Box::new(Sunny) as Box<dyn Weather>)?;
 //! # let mut services = Services::new();
-//! # services.add(WEATHER, Box::new(Box::new(Sunny) as Box<dyn Weather>));
+//! # services.insert(WEATHER, Service::new(Box::new(Sunny) as Box<dyn Weather>));
 //!
 //! // Any plugin, with an `Env`: `env.services.get::<…>(…)`.
 //! let weather = services.get::<Box<dyn Weather>>(WEATHER.as_str());
@@ -38,6 +38,13 @@
 //! that changes keeps its state in a `Cell` or `RefCell`. One that is
 //! missing (the plugin is switched off) is `None`: plugins that use
 //! another's service do without it.
+//!
+//! A service is found by its type's name as well as by its `TypeId`: a
+//! native code plugin (see [`native`](crate::native)) is built apart from
+//! the firmware, and the same type has another `TypeId` in each build
+//! (cargo's settings for a build are part of it). The name is the same
+//! where the fingerprint is, so a service whose type changes takes a new
+//! id (`weather.forecast-2`), as the type's name would not tell.
 //!
 //! **Points to contribute to.** A plugin names a point (an id in its
 //! namespace) and documents what a contribution there is, e.g. a line
@@ -50,15 +57,65 @@
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use core::any::Any;
+use core::any::{Any, type_name};
 use core::fmt;
 
 use crate::Id;
 
+/// A service's value, with the name of its type when it was published
+/// with [`Registrar::publish`](crate::Registrar::publish).
+pub struct Service {
+    value: Box<dyn Any>,
+    type_name: Option<&'static str>,
+}
+
+impl Service {
+    /// `value`, found by its type's `TypeId` and name.
+    pub fn new<T: Any>(value: T) -> Self {
+        Self {
+            value: Box::new(value),
+            type_name: Some(type_name::<T>()),
+        }
+    }
+
+    /// A boxed value of a type not known here, found by its `TypeId` only
+    /// (so not by native code plugins built apart).
+    pub fn any(value: Box<dyn Any>) -> Self {
+        Self {
+            value,
+            type_name: None,
+        }
+    }
+
+    /// The value, if it is a `T`.
+    fn get<T: Any>(&self) -> Option<&T> {
+        if let Some(value) = self.value.downcast_ref::<T>() {
+            return Some(value);
+        }
+        if self.type_name != Some(type_name::<T>()) {
+            return None;
+        }
+        let value: *const dyn Any = &*self.value;
+        // SAFETY: the value is of a type of this name: of `T`, as built by
+        // the same compiler from the same source (a native plugin's
+        // fingerprint says so), only in another build, which gives it
+        // another `TypeId`.
+        Some(unsafe { &*value.cast::<T>() })
+    }
+}
+
+impl fmt::Debug for Service {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Service")
+            .field("type_name", &self.type_name)
+            .finish_non_exhaustive()
+    }
+}
+
 /// Every service and contribution; see the [module documentation](self).
 #[derive(Default)]
 pub struct Services {
-    services: Vec<(Id, Box<dyn Any>)>,
+    services: Vec<(Id, Service)>,
     /// Point, plugin, contribution.
     contributions: Vec<(Id, Id, Cow<'static, str>)>,
 }
@@ -68,9 +125,16 @@ impl Services {
         Self::default()
     }
 
-    /// Publishes `service` as `id` (kernel; plugins use
-    /// [`Registrar::add_service`](crate::Registrar::add_service)).
+    /// Publishes `service` as `id`, found by its `TypeId` only (see
+    /// [`Service::any`]).
+    #[deprecated(since = "0.4.0", note = "use `Services::insert` with a `Service`")]
     pub fn add(&mut self, id: Id, service: Box<dyn Any>) {
+        self.insert(id, Service::any(service));
+    }
+
+    /// Publishes `service` as `id` (kernel; plugins use
+    /// [`Registrar::publish`](crate::Registrar::publish)).
+    pub fn insert(&mut self, id: Id, service: Service) {
         self.services.push((id, service));
     }
 
@@ -90,7 +154,7 @@ impl Services {
         self.services
             .iter()
             .find(|(s, _)| s.as_str() == id)
-            .and_then(|(_, service)| service.downcast_ref::<T>())
+            .and_then(|(_, service)| service.get::<T>())
     }
 
     /// Whether service `id` is published.
@@ -127,11 +191,13 @@ mod tests {
     #[test]
     fn services_by_id_and_type() {
         let mut services = Services::new();
-        services.add(Id::new_static("a.count"), Box::new(3u32));
+        services.insert(Id::new_static("a.count"), Service::new(3u32));
         assert_eq!(services.get::<u32>("a.count"), Some(&3));
         assert_eq!(services.get::<i64>("a.count"), None, "another type");
         assert_eq!(services.get::<u32>("b.count"), None);
         assert!(services.has("a.count"));
+        services.insert(Id::new_static("a.any"), Service::any(Box::new(5u8)));
+        assert_eq!(services.get::<u8>("a.any"), Some(&5), "by its TypeId");
 
         let point = Id::new_static("a.shapes");
         services.contribute(point.clone(), Id::new_static("b"), Cow::Borrowed("circle"));
@@ -146,5 +212,24 @@ mod tests {
             .map(|(plugin, text)| (plugin.as_str(), text))
             .collect();
         assert_eq!(shapes, [("b", "circle"), ("c", "square")]);
+    }
+
+    /// The same type built apart from the publisher: the same name and
+    /// layout, another `TypeId`.
+    #[test]
+    fn services_built_apart_are_found_by_their_type_name() {
+        #[derive(Debug, PartialEq)]
+        #[repr(C)]
+        struct Forecast(u32);
+        #[repr(C)]
+        struct BuiltApart(u32);
+        let mut services = Services::new();
+        let apart = Service {
+            value: Box::new(BuiltApart(7)),
+            type_name: Some(type_name::<Forecast>()),
+        };
+        services.insert(Id::new_static("w.forecast"), apart);
+        assert_eq!(services.get::<Forecast>("w.forecast"), Some(&Forecast(7)));
+        assert_eq!(services.get::<u32>("w.forecast"), None);
     }
 }

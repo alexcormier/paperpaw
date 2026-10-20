@@ -158,3 +158,6 @@ mod tests {
         assert_eq!(reopened.pages(), 3);
     }
 }
+
+#[cfg(test)]
+mod robustness_tests;

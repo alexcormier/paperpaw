@@ -10,7 +10,12 @@
 //!   the bar at the bottom then offers *Restart now*. The bar is always
 //!   there (with a hint before), so nothing moves when it changes.
 //! - Below each name: what happens to the plugin (if anything), its
-//!   description and version, readable without tapping it.
+//!   description and version, readable without tapping it. Plugins with
+//!   native code (ADR 0024) say so, and why one does not run (built for
+//!   another PaperPaw, switched off by safe mode, …).
+//! - After a start in safe mode (without code plugins), a notice says why
+//!   and which plugin was loaded last; the plugins it switched off are
+//!   switched on again here, one at a time.
 //!
 //! - Above the plugins: where more come from, e.g. the store
 //!   ([`MORE`]): a row each, which opens it.
@@ -24,16 +29,16 @@ extern crate alloc;
 
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
-use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use paperpaw_sdk::builtin::{CORE_PLUGIN, actions, menus};
+use paperpaw_sdk::builtin::{CORE_PLUGIN, actions, events, menus};
+use paperpaw_sdk::native::{NotInstalled, NotInstalledReason, SafeMode, SafeModeReason};
 use paperpaw_sdk::ui::{self, ListView, UiStyle};
 use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
-    MenuEntry, Params, Plugin, PluginInfo, PluginState, Rect, RefreshMode, RegisterError,
-    Registrar, SDK_VERSION, Screen, ScreenSpec, Version,
+    MenuEntry, Params, Plugin, PluginInfo, PluginKind, PluginProblem, PluginState, Rect,
+    RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen, ScreenSpec, Version,
 };
 
 pub const PLUGIN: Id = Id::new_static("plugin-manager");
@@ -77,6 +82,19 @@ impl Plugin for PluginManager {
             order: 220,
         })?;
         r.add_icon(OPEN, Cow::Borrowed("puzzle"))?;
+        r.on(events::STARTED, |env, _, out| {
+            let Some(native) = env.native else {
+                return;
+            };
+            // One notice shows at a time: safe mode's, the more
+            // important, last.
+            if let Some(notice) = not_installed_notice(env, &native.not_installed) {
+                out.push(Command::Notify(notice));
+            }
+            if let Some(safe_mode) = &native.safe_mode {
+                out.push(Command::Notify(safe_mode_notice(env, safe_mode)));
+            }
+        })?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())
@@ -112,32 +130,46 @@ impl PluginList {
         let header = ui::Header::new(env, &style, true);
         let top = header.area.height + style.gap as u16;
         let bar_height = style.row as u16 + style.gap as u16;
-        let bar = Rect::new(0, display.height - bar_height, display.width, bar_height);
+        let bar = Rect::new(
+            0,
+            display.height.saturating_sub(bar_height),
+            display.width,
+            bar_height,
+        );
         let height = display.height.saturating_sub(top + bar_height);
         let area = Rect::new(0, top, display.width, height);
         let list = ListView::new(area, style.noted_row()).focus_on_keys(env);
-        let mut plugins: Vec<&PluginInfo> = env.plugins.iter().collect();
-        plugins.sort_by_key(|p| {
-            (
-                p.manifest.id != CORE_PLUGIN,
-                p.name(env.i18n).to_lowercase(),
-            )
-        });
-        Self {
-            more: env
-                .menus
-                .items(MORE.as_str())
-                .into_iter()
-                .filter(|item| !item.section && env.actions.contains(item.id.as_str()))
-                .map(|item| item.id.clone())
-                .collect(),
-            plugins: plugins.iter().map(|p| p.manifest.id.clone()).collect(),
+        let mut manager = Self {
+            more: Vec::new(),
+            plugins: Vec::new(),
             style,
             header,
             list,
             bar,
             focus: Focus::List,
-        }
+        };
+        manager.read_rows(env);
+        manager
+    }
+
+    /// The rows as they are now: plugins come and go while the manager is
+    /// open (e.g. installed from a store opened from it).
+    fn read_rows(&mut self, env: &Env<'_>) {
+        self.more = env
+            .menus
+            .items(MORE.as_str())
+            .into_iter()
+            .filter(|item| !item.section && env.actions.contains(item.id.as_str()))
+            .map(|item| item.id.clone())
+            .collect();
+        let mut plugins: Vec<&PluginInfo> = env.plugins.iter().collect();
+        plugins.sort_by_cached_key(|p| {
+            (
+                p.manifest.id != CORE_PLUGIN,
+                p.name(env.i18n).to_lowercase(),
+            )
+        });
+        self.plugins = plugins.iter().map(|p| p.manifest.id.clone()).collect();
     }
 
     /// The *Restart now* button, while a change waits for a restart.
@@ -219,6 +251,13 @@ fn details(env: &Env<'_>, info: &PluginInfo) -> String {
     );
     let note = if info.manifest.id == CORE_PLUGIN {
         None
+    } else if let Some(problem) = info.problem {
+        // Switched off by safe mode, or only held back at this start.
+        let key = match problem {
+            PluginProblem::SafeMode if !info.enabled => "plugin-manager.code.safe-mode-off",
+            _ => problem_key(problem),
+        };
+        Some(i18n.tr(key).to_string())
     } else if info.manifest.id == PLUGIN && info.required_for.is_empty() {
         Some(i18n.tr("plugin-manager.self").to_string())
     } else if !info.required_for.is_empty() {
@@ -230,6 +269,11 @@ fn details(env: &Env<'_>, info: &PluginInfo) -> String {
         Some(i18n.format(
             "plugin-manager.needed-for",
             &[("what", Arg::Str(&what.join(", ")))],
+        ))
+    } else if let Some(update) = info.update {
+        Some(i18n.format(
+            "plugin-manager.updates-after-restart",
+            &[("version", Arg::Str(&update.to_string()))],
         ))
     } else if info.restart_needed() {
         Some(
@@ -246,9 +290,86 @@ fn details(env: &Env<'_>, info: &PluginInfo) -> String {
         None
     };
     let description = info.description(i18n);
-    match note {
-        Some(note) => format!("{note} {description} {version}"),
-        None => format!("{description} {version}"),
+    let code = if info.kind == PluginKind::Code {
+        i18n.tr("plugin-manager.code")
+    } else {
+        ""
+    };
+    [
+        note.as_deref().unwrap_or_default(),
+        description,
+        code,
+        &version,
+    ]
+    .into_iter()
+    .filter(|part| !part.is_empty())
+    .collect::<Vec<_>>()
+    .join(" ")
+}
+
+/// What a start in safe mode says: why, the plugin loaded last, what it
+/// switched off.
+fn safe_mode_notice(env: &Env<'_>, safe_mode: &SafeMode) -> String {
+    let i18n = env.i18n;
+    let name = |id: &str| {
+        env.plugins
+            .get(id)
+            .map_or_else(|| String::from(id), |p| String::from(p.name(i18n)))
+    };
+    // Short: a notice has a few lines. The plugin manager says the rest.
+    match (safe_mode.reason, &safe_mode.crashed, &safe_mode.last_loaded) {
+        (SafeModeReason::KeyHeld, ..) => String::from(i18n.tr("plugin-manager.safe-mode.key")),
+        (_, Some(id), _) => i18n.format(
+            "plugin-manager.safe-mode.crashed",
+            &[("name", Arg::Str(&name(id)))],
+        ),
+        (_, None, Some(id)) => i18n.format(
+            "plugin-manager.safe-mode.last",
+            &[("name", Arg::Str(&name(id)))],
+        ),
+        (_, None, None) => String::from(i18n.tr("plugin-manager.safe-mode.failed")),
+    }
+}
+
+/// What is said of the plugins the shell did not install at the start:
+/// their names (those of the versions installed, or their ids), and why.
+fn not_installed_notice(env: &Env<'_>, not_installed: &[NotInstalled]) -> Option<String> {
+    let name = |n: &NotInstalled| {
+        let id = n.plugin.as_str();
+        env.plugins
+            .get(id)
+            .map_or_else(|| String::from(id), |p| String::from(p.name(env.i18n)))
+    };
+    let (key, names) = match not_installed {
+        [] => return None,
+        [one] => (
+            match one.reason {
+                NotInstalledReason::OtherAuthor => "plugin-manager.not-installed.other-author",
+                _ => "plugin-manager.not-installed.damaged",
+            },
+            name(one),
+        ),
+        several => (
+            "plugin-manager.not-installed.several",
+            several.iter().map(name).collect::<Vec<_>>().join(", "),
+        ),
+    };
+    Some(env.i18n.format(key, &[("name", Arg::Str(&names))]))
+}
+
+/// Why a code plugin does not run, as said below its name.
+fn problem_key(problem: PluginProblem) -> &'static str {
+    match problem {
+        PluginProblem::OtherBuild => "plugin-manager.code.other-build",
+        PluginProblem::Damaged => "plugin-manager.code.damaged",
+        PluginProblem::Mismatch => "plugin-manager.code.mismatch",
+        PluginProblem::NoRoom => "plugin-manager.code.no-room",
+        PluginProblem::Unsupported => "plugin-manager.code.unsupported",
+        PluginProblem::SafeMode => "plugin-manager.code.safe-mode",
+        PluginProblem::Crashed => "plugin-manager.code.crashed",
+        PluginProblem::NotInstalled => "plugin-manager.code.not-installed",
+        PluginProblem::Changed => "plugin-manager.code.changed",
+        _ => "plugin-manager.failed",
     }
 }
 
@@ -333,6 +454,20 @@ impl Screen for PluginList {
                 ui::tr_input(env, key),
                 style.faint(60),
             );
+        }
+    }
+
+    fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
+        let env = *cx.env();
+        self.read_rows(&env);
+    }
+
+    fn on_event(&mut self, event: &Id, _: &Params, cx: &mut Cx<'_, '_>) {
+        if *event == events::PLUGINS_CHANGED {
+            let env = *cx.env();
+            self.read_rows(&env);
+            cx.request_redraw();
+            cx.request_refresh(RefreshMode::Partial);
         }
     }
 

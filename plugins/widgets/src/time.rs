@@ -598,3 +598,6 @@ fn ui<'a>(env: &Env<'a>) -> (UiStyle, Option<FontHandle<'a>>) {
     let font = style.font(env);
     (style, font)
 }
+
+#[cfg(test)]
+mod logic_tests;

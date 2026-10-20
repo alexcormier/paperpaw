@@ -1,14 +1,16 @@
-//! The plugin store: the data plugins of a plugin library (paperpaw.org's
-//! by default) for this device, by group as the website shows them, with
-//! a search, each with a page to install, update or remove it (ADR 0023).
+//! The plugin store: the plugins of a plugin library (paperpaw.org's by
+//! default) for this device, by group as the website shows them, with a
+//! search, each with a page to install, update or remove it (ADR 0023).
 //! Fonts are one more entry, which opens the fonts browser where it is
 //! installed.
 //!
 //! The list is read as it streams into an index kept on the storage, so
 //! it may be as long as it likes; a plugin's files go straight to the
 //! storage, one after another, each checked ([`paperpaw_sdk::install`]).
-//! Built-in plugins and plugins with code are not listed: those come with
-//! the firmware.
+//! Plugins with code are listed where PaperPaw loads them and a build
+//! fits; their code is checked whole and signed by its author (`trust`,
+//! ADR 0024). Built-in plugins are not listed, nor a plugin that would
+//! take the place of one: those come with the firmware.
 
 #![no_std]
 
@@ -18,6 +20,7 @@ mod catalog;
 mod list;
 mod page;
 mod search;
+mod trust;
 
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
@@ -33,6 +36,7 @@ use paperpaw_sdk::{
     ActionSpec, Arg, Command, Env, Id, Manifest, MenuEntry, Params, Plugin, RegisterError,
     Registrar, SDK_VERSION, ScreenSpec, SettingSpec, Version,
 };
+use trust::Verdict;
 
 pub const PLUGIN: Id = Id::new_static("store");
 /// Opens the store.
@@ -128,22 +132,38 @@ impl Plugin for Store {
     }
 }
 
-/// A file arrived (or did not): said once the plugin is installed, or
-/// could not be.
+/// A file arrived (or did not): once all are here, the plugin installed
+/// if it may be (see [`trust`]), and said.
 fn received(env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
-    match INSTALLER.received(env, reply, out) {
-        Received::Installed(done) => {
-            let key = if env.plugins.get(&done.plugin).is_some() {
-                "store.updated"
-            } else {
-                "store.installed"
-            };
-            let text = env.i18n.format(key, &[("name", Arg::Str(&done.name))]);
-            out.push(Command::Notify(text));
+    let done = match INSTALLER.received(env, reply, out) {
+        Received::Complete(done) => done,
+        Received::Failed(job) => return out.push(failed(env, &job.name)),
+        Received::Next(_) | Received::Other => return,
+    };
+    let name = [("name", Arg::Str(&done.name))];
+    let folder = INSTALLER.folder(env.storage).unwrap_or_default();
+    let key = match trust::verdict(env, &done.plugin, &folder) {
+        Verdict::Install { code } => {
+            let before = env.plugins.get(&done.plugin).is_some();
+            if trust::install(env, code, out).is_none() {
+                INSTALLER.cancel(env.storage);
+                return out.push(failed(env, &done.name));
+            }
+            match (code.is_some(), before) {
+                (true, true) => "store.updated-code",
+                (true, false) => "store.installed-code",
+                (false, true) => "store.updated",
+                (false, false) => "store.installed",
+            }
         }
-        Received::Failed(job) => out.push(failed(env, &job.name)),
-        Received::Next(_) | Received::Other => {}
-    }
+        // It waits on its page for the reader's word.
+        Verdict::OtherAuthor { .. } => "store.other-author.notice",
+        Verdict::Refused(refusal) => {
+            INSTALLER.cancel(env.storage);
+            refusal.key()
+        }
+    };
+    out.push(Command::Notify(env.i18n.format(key, &name)));
 }
 
 fn failed(env: &Env<'_>, name: &str) -> Command {
