@@ -1,5 +1,7 @@
 //! Settings in menus with the real kernel, by the buttons of an X4: the
-//! reader's bar opens a setting's own editor and a number's settings page.
+//! reader's bar opens a setting's own editor and a number's settings page,
+//! and choices of many open the settings plugin's list, or step on where
+//! there is none, in the bar, the list and the panel alike.
 
 // Tests panic on purpose when something is wrong.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
@@ -57,6 +59,7 @@ const CHOICES: Id = Id::new_static("probe.choices");
 
 const MENU_SCREEN: Id = Id::new_static("menu.list");
 const SETTINGS_SCREEN: Id = Id::new_static("settings.list");
+const CHOOSE_SCREEN: Id = Id::new_static("settings.choose");
 
 const OPTIONS: &[&str] = &["probe.a", "probe.b", "probe.c"];
 
@@ -180,6 +183,10 @@ impl Test {
     fn active(&self) -> Option<&Id> {
         self.kernel.active_screen()
     }
+
+    fn many(&self) -> &str {
+        self.kernel.settings().text(MANY.as_str())
+    }
 }
 
 #[test]
@@ -199,4 +206,52 @@ fn the_bar_opens_the_settings_of_a_number() {
     test.press("down");
     test.press("confirm");
     assert_eq!(test.active(), Some(&SETTINGS_SCREEN));
+}
+
+/// Where a choice of many is chosen: the bar (its second entry), the
+/// list and the panel.
+const PLACES: [(Id, Id, Option<&str>, usize); 3] = [
+    (slots::MENU, BAR_MENU, Some("bar"), 1),
+    (slots::MENU, CHOICES, None, 0),
+    (slots::PANEL, CHOICES, None, 0),
+];
+
+/// Opens [`MANY`] where `place` says and chooses it `times` times.
+fn choose(with_settings: bool, place: &(Id, Id, Option<&str>, usize), times: usize) -> Test {
+    let (slot, menu, mode, downs) = place;
+    let mut test = Test::new(with_settings);
+    test.open(slot.clone(), menu, *mode);
+    for _ in 0..*downs {
+        test.press("down");
+    }
+    for _ in 0..times {
+        test.press("confirm");
+    }
+    test
+}
+
+#[test]
+fn choices_open_the_settings_list_where_there_is_one() {
+    for place in &PLACES {
+        let test = choose(true, place, 1);
+        assert_eq!(test.active(), Some(&CHOOSE_SCREEN), "{place:?}");
+        assert_eq!(test.many(), OPTIONS[0], "{place:?}");
+    }
+}
+
+#[test]
+fn choices_step_on_without_the_settings_plugin() {
+    // Every place that fails, with what it chose.
+    let mut wrong = Vec::new();
+    for place in &PLACES {
+        let shown = choose(false, place, 0).active().cloned();
+        for (times, option) in [(1, OPTIONS[1]), (2, OPTIONS[2])] {
+            let test = choose(false, place, times);
+            // The menu stays open, with the next value.
+            if test.many() != option || test.active() != shown.as_ref() {
+                wrong.push((place.0.clone(), place.2, times, test.many().to_string()));
+            }
+        }
+    }
+    assert!(wrong.is_empty(), "{wrong:?}");
 }

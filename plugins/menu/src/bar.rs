@@ -27,7 +27,7 @@ use paperpaw_sdk::{
     Screen, SettingKind, SettingValue,
 };
 
-use crate::{CHOOSE_SCREEN, DEPTH, SCREEN, is_menu};
+use crate::{DEPTH, SCREEN, choose, is_menu};
 
 /// The bar's font: the reading status lines' (it opens over a book), as
 /// `core.status-font` chooses.
@@ -246,12 +246,7 @@ impl BarScreen {
                     cx.request_refresh(RefreshMode::Fast);
                 }
             }
-            SettingKind::Choice(_) | SettingKind::Language => {
-                cx.command(Command::OpenScreen(
-                    CHOOSE_SCREEN,
-                    Params::new().with("id", id.as_str().to_string()),
-                ));
-            }
+            SettingKind::Choice(_) | SettingKind::Language => choose(&env, spec, cx),
             // Numbers and text have no room here: their settings page.
             _ => {
                 let group = env.settings.group_of(spec);
