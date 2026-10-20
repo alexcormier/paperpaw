@@ -116,7 +116,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         return;
     };
     let area = look.area;
-    let twelve = super::twelve_hours(env);
+    let twelve = paperpaw_sdk::time::twelve_hours(env);
     let pairs = chosen_name(env, ID.as_str(), "group") == "pairs";
     let (hours, minutes) = tiles(&now, twelve, pairs);
     let colon = widgets::shows(env, ID.as_str(), "colon");

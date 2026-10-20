@@ -20,7 +20,7 @@ use paperpaw_sdk::builtin::actions;
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::setting::{Setting, Text};
-use paperpaw_sdk::time::LocalTime;
+use paperpaw_sdk::time;
 use paperpaw_sdk::ui::choice::{self, Choice};
 use paperpaw_sdk::ui::{self, ListView, UiStyle};
 use paperpaw_sdk::widgets::{self, Align, Frame, Look, Size, Widget, WidgetSpec, WidgetTarget};
@@ -167,29 +167,20 @@ struct Item {
     done: Option<i64>,
 }
 
-/// Days since 1970 of a date (the proleptic Gregorian calendar).
-fn days_of(year: i64, month: u32, day: u32) -> i64 {
-    let year = if month <= 2 { year - 1 } else { year };
-    let era = year.div_euclid(400);
-    let of_era = year - era * 400;
-    let of_year = (153 * i64::from((month + 9) % 12) + 2) / 5 + i64::from(day) - 1;
-    let of_era_days = of_era * 365 + of_era / 4 - of_era / 100 + of_year;
-    era * 146_097 + of_era_days - 719_468
-}
-
 /// `2026-10-19` of a day since 1970.
 fn date_of(day: i64) -> String {
-    let date = LocalTime::from_seconds(day * 86_400);
-    format!("{:04}-{:02}-{:02}", date.year, date.month, date.day)
+    let (year, month, day) = time::civil_from_days(day);
+    format!("{year:04}-{month:02}-{day:02}")
 }
 
 /// The day since 1970 of `2026-10-19`.
 fn day_of(date: &str) -> Option<i64> {
     let mut parts = date.splitn(3, '-');
-    let year = parts.next()?.parse::<i64>().ok()?;
-    let month = parts.next()?.parse::<u32>().ok()?;
-    let day = parts.next()?.parse::<u32>().ok()?;
-    ((1..=12).contains(&month) && (1..=31).contains(&day)).then(|| days_of(year, month, day))
+    let year = parts.next()?.parse::<i32>().ok()?;
+    let month = parts.next()?.parse::<u8>().ok()?;
+    let day = parts.next()?.parse::<u8>().ok()?;
+    ((1..=12).contains(&month) && (1..=31).contains(&day))
+        .then(|| time::days_from_civil(year, month, day))
 }
 
 /// The list as kept: its first items, and the lines after them as they
@@ -908,9 +899,9 @@ mod tests {
 
     #[test]
     fn days_and_dates_agree() {
-        assert_eq!(days_of(1970, 1, 1), 0);
-        assert_eq!(days_of(2000, 3, 1), 11_017);
-        let day = days_of(2026, 10, 19);
+        assert_eq!(time::days_from_civil(1970, 1, 1), 0);
+        assert_eq!(time::days_from_civil(2000, 3, 1), 11_017);
+        let day = time::days_from_civil(2026, 10, 19);
         assert_eq!(date_of(day), "2026-10-19");
         assert_eq!(day_of("2026-10-19"), Some(day));
         assert_eq!(
@@ -924,7 +915,7 @@ mod tests {
     #[test]
     fn the_list_is_kept() {
         let storage = MemoryStorage::new();
-        let today = days_of(2026, 10, 19);
+        let today = time::days_from_civil(2026, 10, 19);
         let items = [
             Item {
                 text: String::from("Return the library book"),
@@ -960,7 +951,7 @@ mod tests {
     /// What version 1 wrote stays readable (see `docs/data-files.md`).
     #[test]
     fn the_list_of_version_1_is_read() {
-        let today = days_of(2026, 10, 19);
+        let today = time::days_from_civil(2026, 10, 19);
         let items = parse(include_str!("../../testdata/todo.txt.v1"), today).items;
         let texts: Vec<&str> = items.iter().map(|i| i.text.as_str()).collect();
         assert_eq!(texts, ["Buy bread", "Water the plants", "Read chapter 3"]);

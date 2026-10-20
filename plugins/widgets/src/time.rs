@@ -233,25 +233,7 @@ fn date_text(
 /// The time `t` as the reader wants to see it: `14:05` or `2:05 PM`
 /// (setting `core.clock-format`).
 fn clock_text(env: &Env<'_>, t: &LocalTime) -> String {
-    let (hour, minute) = (t.hour, t.minute);
-    if twelve_hours(env) {
-        let key = if hour < 12 {
-            "core.clock.am"
-        } else {
-            "core.clock.pm"
-        };
-        let time = format!("{}:{minute:02}", twelve(hour));
-        env.i18n.format(key, &[("time", Arg::Str(&time))])
-    } else {
-        format!("{hour:02}:{minute:02}")
-    }
-}
-
-/// Whether the reader wants the time in twelve hours.
-fn twelve_hours(env: &Env<'_>) -> bool {
-    env.settings
-        .read(&paperpaw_sdk::builtin::settings::CLOCK_FORMAT)
-        == time::CLOCK_12H
+    time::clock_of(env, t.hour, t.minute)
 }
 
 /// `hour` (0 to 23) on a twelve-hour clock: 1 to 12.
