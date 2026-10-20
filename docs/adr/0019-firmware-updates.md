@@ -33,7 +33,11 @@ may leave a device that does not start.
 - **Signed update files** (`paperpaw-update`): the app image followed by
   a trailer with its length, the signer's Ed25519 public key and the
   signature over both. The X4 checks the signature while it writes the
-  image, a piece at a time, and chooses the new image only if it holds.
+  image, a piece at a time, and chooses the new image only if it holds;
+  the image's first word, without which the bootloader starts nothing
+  there, is written only then. An update installed and not started yet
+  is given up before another is written, so nothing is ever written into
+  the partition chosen to start.
   It installs images signed with PaperPaw's key, built in, or with a key
   the reader chose to trust (their own builds), listed on the card.
   `paperpaw-sign` makes keys, signs images and shows what a file holds;

@@ -13,7 +13,11 @@
 //! Only update files signed with a key built in here (PaperPaw's) or one
 //! the reader trusts (`paperpaw_sdk::firmware`) are installed; the
 //! signature is checked while the image is written, and the new firmware
-//! chosen only if it holds.
+//! chosen only if it holds. Its first word is written only then: until
+//! it is, the partition holds no image the bootloader would start, even
+//! if it tried that partition. An update installed and not started yet
+//! is given up before another is written, which would otherwise go into
+//! the partition chosen to start.
 
 use alloc::boxed::Box;
 use alloc::string::String;
@@ -21,13 +25,15 @@ use alloc::string::String;
 use esp_bootloader_esp_idf::ota::OtaImageState;
 use esp_bootloader_esp_idf::ota_updater::OtaUpdater;
 use esp_bootloader_esp_idf::partitions::{
-    self, AppPartitionSubType, FlashStorage, PARTITION_TABLE_MAX_LEN, PartitionType,
+    self, AppPartitionSubType, DataPartitionSubType, FlashStorage, PARTITION_TABLE_MAX_LEN,
+    PartitionType,
 };
 use log::{info, warn};
 use paperpaw_platform::Storage;
 use paperpaw_sdk::firmware::{
     Check, Firmware, FirmwareState, InstallFailure, Plugins, Signer, Update, trusted_keys,
 };
+use paperpaw_x4::ota_data;
 
 // The plugin crates built in (`PLUGINS`), written by `build.rs`.
 include!(concat!(env!("OUT_DIR"), "/plugins.rs"));
@@ -63,6 +69,10 @@ const BLOCK: u32 = 64 * 1024;
 const PIECE: usize = 4096;
 /// Written per [`Ota::step`]: the main loop goes on in between.
 const STEP: u32 = BLOCK;
+/// The image's first bytes, a flash word: its magic byte, which makes it
+/// an image to the bootloader, is in them. Written last, once the
+/// signature held.
+const HEAD: usize = 4;
 
 /// An install going on.
 struct Install {
@@ -75,6 +85,8 @@ struct Install {
     offset: u32,
     check: Check,
     buf: Box<[u8; PIECE]>,
+    /// The image's first word, kept back until the signature held.
+    head: [u8; HEAD],
     /// The last twentieth of the image said to be written.
     said: u32,
 }
@@ -90,6 +102,8 @@ pub struct Ota {
     trial: bool,
     /// An update did not start cleanly, and this firmware came back.
     undone: bool,
+    /// The app partition running.
+    running: Option<AppPartitionSubType>,
     /// The partition an update goes to, and its size.
     room: u32,
     install: Option<Install>,
@@ -106,7 +120,10 @@ impl Ota {
             .and_then(|pt| pt.booted_partition())
             .ok()
             .flatten()
-            .map(|p| p.partition_type());
+            .and_then(|p| match p.partition_type() {
+                PartitionType::App(running) => Some(running),
+                _ => None,
+            });
         let mut updater = match OtaUpdater::new(&mut flash, &mut table) {
             Ok(updater) => updater,
             Err(e) => {
@@ -122,21 +139,17 @@ impl Ota {
         match (booted, selected) {
             // The one chosen did not start (marked bad here at the last
             // start, or not startable): this one takes its place back.
-            (Some(PartitionType::App(running)), Some(chosen))
-                if chosen != running && chosen != AppPartitionSubType::Factory =>
-            {
+            (Some(running), Some(chosen)) if chosen_other(chosen, running) => {
                 warn!("OTA: the update did not start, {running:?} is back");
                 undone = true;
-                let restored = updater
-                    .ota_data()
-                    .and_then(|mut data| data.set_current_app_partition(running))
-                    .and_then(|()| updater.set_current_ota_state(OtaImageState::Valid));
-                if let Err(e) = restored {
+                if let Err(e) = choose(&mut updater, running) {
                     warn!("OTA: {e:?}");
                 }
             }
             _ => match state {
-                Some(OtaImageState::New) => {
+                // Undefined: chosen, and the power cut before its state
+                // was written (see `paperpaw_x4::ota_data`).
+                Some(OtaImageState::New | OtaImageState::Undefined) => {
                     info!("OTA: first start of an update, on trial");
                     trial = updater
                         .set_current_ota_state(OtaImageState::PendingVerify)
@@ -161,6 +174,7 @@ impl Ota {
             table,
             trial,
             undone,
+            running: booted,
             room,
             install: None,
         })
@@ -234,11 +248,25 @@ impl Ota {
         }
         let check = Check::new(&update.trailer)?;
         let mut flash = self.flash.borrow_mut();
-        let slot = OtaUpdater::new(&mut flash, &mut self.table)
-            .and_then(|mut updater| updater.next_partition().map(|(_, slot)| slot))
+        let mut updater =
+            OtaUpdater::new(&mut flash, &mut self.table).map_err(|_| InstallFailure::Write)?;
+        // An update installed and not started yet: given up, or the next
+        // partition would be the one it chose.
+        if let Some(running) = self.running
+            && let Ok(chosen) = updater.selected_partition()
+            && chosen_other(chosen, running)
+        {
+            info!("OTA: the update installed before is given up");
+            choose(&mut updater, running).map_err(|_| InstallFailure::Write)?;
+        }
+        let slot = updater
+            .next_partition()
+            .map(|(_, slot)| slot)
             .map_err(|_| InstallFailure::Write)?;
-        let mut table = [0u8; PARTITION_TABLE_MAX_LEN];
-        let offset = partitions::read_partition_table(&mut flash, &mut table)
+        if Some(slot) == self.running {
+            return Err(InstallFailure::Write);
+        }
+        let offset = partitions::read_partition_table(&mut flash, &mut self.table[..])
             .and_then(|pt| pt.find_partition(PartitionType::App(slot)))
             .ok()
             .flatten()
@@ -251,6 +279,7 @@ impl Ota {
             offset,
             check,
             buf: Box::new([0; PIECE]),
+            head: [0xFF; HEAD],
             said: 0,
         })
     }
@@ -299,6 +328,12 @@ impl Ota {
                 _ => return Err(InstallFailure::Unreadable),
             }
             install.check.absorb(piece);
+            // The first word kept back, the flash left erased there.
+            if install.done == 0 {
+                let head = HEAD.min(len);
+                install.head[..head].copy_from_slice(&install.buf[..head]);
+                install.buf[..head].fill(0xFF);
+            }
             // Written in words: the last piece filled up as erased flash.
             let words = len.div_ceil(4) * 4;
             install.buf[len..words].fill(0xFF);
@@ -311,18 +346,25 @@ impl Ota {
         Ok(())
     }
 
-    /// All written: the new firmware is chosen if its signature holds.
-    fn finish(&mut self, install: Install) -> FirmwareState {
+    /// All written: the new firmware is made whole and chosen if its
+    /// signature holds.
+    fn finish(&mut self, mut install: Install) -> FirmwareState {
         if let Err(e) = install.check.finish() {
             warn!("OTA: {}: {e}", install.path);
             return FirmwareState::Failed(e.into());
         }
-        let chosen = OtaUpdater::new(&mut self.flash.borrow_mut(), &mut self.table).and_then(
-            |mut updater| {
-                updater.activate_next_partition()?;
-                updater.set_current_ota_state(OtaImageState::New)
-            },
-        );
+        // From the buffer: the flash writes words from memory aligned so.
+        install.buf[..HEAD].copy_from_slice(&install.head);
+        let mut flash = self.flash.borrow_mut();
+        if let Err(e) = flash.write_nor(install.offset, &install.buf[..HEAD]) {
+            warn!("OTA: {e:?}");
+            return FirmwareState::Failed(InstallFailure::Write);
+        }
+        let chosen = mark_next_new(&mut flash, &mut self.table).and_then(|()| {
+            let mut updater = OtaUpdater::new(&mut flash, &mut self.table)?;
+            updater.activate_next_partition()?;
+            updater.set_current_ota_state(OtaImageState::New)
+        });
         match chosen {
             Ok(()) => {
                 info!("OTA: {} installed, started at the next start", install.path);
@@ -334,4 +376,41 @@ impl Ota {
             }
         }
     }
+}
+
+/// Whether the OTA data chose another app partition than the one running
+/// (not the factory one, which it names when it never chose).
+fn chosen_other(chosen: AppPartitionSubType, running: AppPartitionSubType) -> bool {
+    chosen != running && chosen != AppPartitionSubType::Factory
+}
+
+/// Chooses `slot`, the one running, to start, as good.
+fn choose(
+    updater: &mut OtaUpdater<'_, '_>,
+    slot: AppPartitionSubType,
+) -> Result<(), partitions::Error> {
+    updater.ota_data()?.set_current_app_partition(slot)?;
+    updater.set_current_ota_state(OtaImageState::Valid)
+}
+
+/// Marks the entry of the OTA data that choosing the next partition
+/// writes as holding a new image, before it is chosen (see
+/// `paperpaw_x4::ota_data`).
+fn mark_next_new(
+    flash: &mut FlashStorage<'static>,
+    table: &mut [u8; PARTITION_TABLE_MAX_LEN],
+) -> Result<(), partitions::Error> {
+    let entry = partitions::read_partition_table(flash, &mut table[..])?
+        .find_partition(PartitionType::Data(DataPartitionSubType::Ota))?
+        .ok_or(partitions::Error::Invalid)?;
+    let mut region = entry.as_flash_region(flash);
+    let mut entries = [[0; ota_data::ENTRY_LEN]; 2];
+    for (entry, at) in entries.iter_mut().zip(ota_data::ENTRIES) {
+        region.read(at, entry)?;
+    }
+    if let Some(next) = ota_data::next_entry(&entries) {
+        ota_data::mark_new(&mut entries[next]);
+        region.write(ota_data::ENTRIES[next], &entries[next])?;
+    }
+    Ok(())
 }
