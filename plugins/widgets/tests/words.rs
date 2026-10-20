@@ -263,3 +263,25 @@ fn a_list_that_cannot_be_read_is_left_as_it_is() {
     let kept = paperpaw_sdk::read_file(&home.storage, TODO, 1024).unwrap();
     assert_eq!(kept, ansi);
 }
+
+/// Made to be shown (to measure it, place it, show it anew after a
+/// change), a quote or picture that changes each time it shows writes
+/// nothing to the card.
+#[test]
+fn widgets_that_change_as_they_show_write_nothing_as_they_are_made() {
+    let mut home = Home::new(
+        "widgets.quote 0/0 4x2, widgets.picture 0/2 4x2",
+        &[
+            ("widgets.quote.change", "widgets.change.shown"),
+            ("widgets.picture.change", "widgets.change.shown"),
+            ("widgets.quote.size", "core.size.small"),
+        ],
+    );
+    home.shown();
+    home.set("widgets.picture.caption", "true");
+    home.shown();
+    for kept in ["quote.txt", "picture.txt"] {
+        let path = format!(".paperpaw/plugins/widgets/{kept}");
+        assert!(!home.storage.exists(&path), "{path}");
+    }
+}

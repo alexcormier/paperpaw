@@ -2,10 +2,12 @@
 //! each day, in the reader's language, from those PaperPaw brings (in
 //! `data/quotes.<language>.txt`) and the reader's own (`quotes.txt` in
 //! the plugin's folder, a quote per line: `text | author`). A tap shows
-//! the next one.
+//! the next one; set to change each time it shows, the showings are
+//! counted in memory ([`Showings`]).
 
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
+use alloc::rc::Rc;
 use alloc::string::String;
 use alloc::vec::Vec;
 
@@ -17,6 +19,7 @@ use paperpaw_sdk::{Canvas, Env, Id, Rect, RegisterError, Registrar, SettingSpec}
 
 use super::text::{self, FACES};
 use super::{Turns, changed, changes, data, each_line, frame_height, of_the_day, today};
+use crate::showings::Showings;
 
 pub(super) const ID: Id = Id::new_static("widgets.quote");
 /// Whose quotes: one of [`SOURCES`].
@@ -115,13 +118,15 @@ pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
         Turns::turn(env.storage, &turns_file(), today(env), daily(env));
         changed(out, &ID);
     })?;
+    let shown = Rc::new(Showings::default());
     r.add_widget(
-        WidgetSpec::new(ID, "widgets.quote", |env| {
-            // Another quote each time it shows: made anew each time.
-            if !daily(env) {
-                Turns::turn(env.storage, &turns_file(), today(env), false);
-            }
-            Box::new(QuoteWidget::default())
+        WidgetSpec::new(ID, "widgets.quote", move |env| {
+            // Another quote each time it shows: made as it shows.
+            let showing = if daily(env) { 0 } else { shown.show(env.now) };
+            Box::new(QuoteWidget {
+                showing,
+                ..QuoteWidget::default()
+            })
         })
         .category(widgets::categories::WORDS),
     )
@@ -210,11 +215,14 @@ fn quote_at(
     found
 }
 
-/// Today's quote, turned on as often as tapped.
-fn quote_of_the_day(env: &Env<'_>, day: i64) -> Option<Quote> {
+/// Today's quote, turned on as often as tapped (and, where another
+/// shows each time, as often as shown: `showing`).
+fn quote_of_the_day(env: &Env<'_>, day: i64, showing: u32) -> Option<Quote> {
     let source = env.settings.read(&SOURCE);
     let daily = daily(env);
-    let turns = Turns::load(env.storage, &turns_file()).on(day, daily);
+    let turns = Turns::load(env.storage, &turns_file())
+        .on(day, daily)
+        .wrapping_add(showing);
     let shipped = (source != SOURCES[1]).then(|| shipped(env.i18n.language()));
     let own = own_file();
     let own = (source != SOURCES[0]).then_some(own.as_str());
@@ -227,6 +235,8 @@ fn quote_of_the_day(env: &Env<'_>, day: i64) -> Option<Quote> {
 /// The quote of the day, read when updated.
 #[derive(Default)]
 struct QuoteWidget {
+    /// The showing it was made for, where another shows each time.
+    showing: u32,
     quote: Option<Quote>,
     /// The day and the changes it was read at.
     read: Option<(i64, u32)>,
@@ -328,7 +338,7 @@ impl Widget for QuoteWidget {
             return false;
         }
         self.read = read;
-        let quote = quote_of_the_day(env, day);
+        let quote = quote_of_the_day(env, day, self.showing);
         let changed = quote != self.quote;
         self.quote = quote;
         if changed {

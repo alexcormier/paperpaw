@@ -13,6 +13,7 @@
 extern crate alloc;
 
 mod books;
+mod showings;
 mod time;
 mod words;
 

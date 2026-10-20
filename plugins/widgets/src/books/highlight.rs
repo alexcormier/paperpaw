@@ -8,7 +8,7 @@ use alloc::format;
 use alloc::rc::Rc;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
-use core::cell::{Cell, RefCell};
+use core::cell::RefCell;
 
 use paperpaw_sdk::annotations::{self, Kind};
 use paperpaw_sdk::builtin::events::{self, Goto};
@@ -25,6 +25,7 @@ use super::{
     Generation, add_settings, below_caption, chosen, draw_line, draw_message, each_book,
     frame_height, mix, open, path_hash, today,
 };
+use crate::showings::Showings;
 use paperpaw_sdk::SettingSpec;
 
 pub(crate) const ID: Id = Id::new_static(WIDGET);
@@ -101,13 +102,16 @@ pub(crate) fn register(r: &mut Registrar, generation: &Generation) -> Result<(),
     })?;
     add_settings(r, &ID, "widgets.highlight", &SETTINGS)?;
     let kept: Kept = Rc::default();
-    let shows = Rc::new(Cell::new(0u64));
+    let shown = Rc::new(Showings::default());
     let generation = generation.clone();
     r.add_widget(
-        WidgetSpec::new(ID, "widgets.highlight", move |_| {
+        WidgetSpec::new(ID, "widgets.highlight", move |env| {
+            // Another each time it shows: made as it shows.
+            let showing =
+                (chosen(env, WIDGET, "change") == CHANGES[1]).then(|| shown.show(env.now));
             Box::new(HighlightWidget {
                 kept: kept.clone(),
-                shows: shows.clone(),
+                showing,
                 generation: generation.clone(),
                 quote: None,
                 area: None,
@@ -219,8 +223,8 @@ fn highlights_of(storage: &dyn Storage, path: &str) -> Vec<Found> {
 
 struct HighlightWidget {
     kept: Kept,
-    /// Times it was shown, for one each time.
-    shows: Rc<Cell<u64>>,
+    /// The showing it was made for, where another shows each time.
+    showing: Option<u32>,
     generation: Generation,
     quote: Option<Quote>,
     /// Where it is drawn, once placed, and the highlight laid out there.
@@ -239,11 +243,13 @@ impl HighlightWidget {
     fn choose(&self, env: &Env<'_>) -> Option<Quote> {
         let id = WIDGET;
         let source = chosen(env, id, "source").to_string();
-        let seed = if chosen(env, id, "change") == CHANGES[1] {
-            self.shows.set(self.shows.get().wrapping_add(1));
-            self.shows.get() ^ env.now.millis()
-        } else {
-            today(env) as u64
+        // Read anew (after events, a book closed), it shows the same
+        // until it shows again.
+        let seed = match self.showing {
+            Some(showing) if chosen(env, id, "change") == CHANGES[1] => {
+                (today(env) as u64).rotate_left(32) ^ u64::from(showing)
+            }
+            _ => today(env) as u64,
         };
         let key = (source.clone(), seed, self.generation.get());
         if let Some((k, quote)) = self.kept.borrow().as_ref()

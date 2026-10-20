@@ -476,6 +476,55 @@ fn a_highlight_a_day() {
     assert!(highlight::pick(&[], 1, &mut |p| found(p)).is_none());
 }
 
+/// Set to change each time it shows, a highlight read anew while it
+/// shows (after events, each time a book closes) stays the one shown.
+#[test]
+fn a_highlight_each_time_it_shows_stays_while_it_shows() {
+    let storage = library();
+    // Highlights in three books, to have others to change to.
+    for (path, n) in [
+        ("books/a.epub", 1),
+        ("books/b.epub", 2),
+        ("books/s1.epub", 3),
+    ] {
+        paperpaw_sdk::annotations::add(
+            &storage,
+            path,
+            paperpaw_sdk::annotations::Annotation {
+                mark: paperpaw_sdk::annotations::Mark {
+                    kind: paperpaw_sdk::annotations::Kind::Highlight,
+                    start: Locator::new(n, 0),
+                    end: Locator::new(n, 20),
+                    noted: false,
+                },
+                percent: 10,
+                created: 0,
+                updated: 0,
+                text: alloc::format!("Highlight number {n}"),
+                note: String::new(),
+            },
+        );
+    }
+    let mut h = Harness::new(storage);
+    h.set(
+        "widgets.highlight.change",
+        SettingValue::Text(Cow::Borrowed("widgets.highlight.shown")),
+    );
+    h.set(
+        "widgets.highlight.source",
+        SettingValue::Text(Cow::Borrowed("widgets.highlight.all")),
+    );
+    let env = h.env();
+    let mut widget = env.widgets.make("widgets.highlight", &env).unwrap();
+    let area = Rect::new(0, 0, 400, 200);
+    widget.place(&env, area);
+    let first = pixels(&env, &*widget, area);
+    for _ in 0..12 {
+        assert!(!widget.update(&env), "changed as it was read anew");
+    }
+    assert!(pixels(&env, &*widget, area) == first);
+}
+
 #[test]
 fn the_library_counted() {
     let numbers = Numbers::count(
