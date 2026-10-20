@@ -131,6 +131,24 @@ fn same_name(stored: impl Iterator<Item = char>, name: &str) -> bool {
         .eq(name.chars().flat_map(char::to_uppercase))
 }
 
+/// Whether `path` is folder `dir` or lies in it, at any depth, to FAT:
+/// name by name, without regard to case.
+fn is_within(path: &str, dir: &str) -> bool {
+    let mut parts = path.split('/');
+    dir.split('/')
+        .all(|d| parts.next().is_some_and(|p| same_name(p.chars(), d)))
+}
+
+/// Whether paths `a` and `b` name the same entry to FAT: name by name,
+/// without regard to case. Quick where both are ASCII, as most are.
+fn same_path(a: &str, b: &str) -> bool {
+    if a.is_ascii() && b.is_ascii() {
+        a.eq_ignore_ascii_case(b)
+    } else {
+        a.split('/').count() == b.split('/').count() && is_within(a, b)
+    }
+}
+
 /// Whether `entry`'s long name is `name`; `None` where it has none.
 fn long_name_is<IO: ReadWriteSeek + 'static>(entry: &FatEntry<IO>, name: &str) -> Option<bool> {
     let units = entry.long_file_name_as_ucs2_units()?;
@@ -311,6 +329,24 @@ fn rename_in<IO: ReadWriteSeek + 'static>(
     }
 }
 
+/// A name in `dir` beside `name` that nothing has, for a moment.
+fn free_name<IO: ReadWriteSeek + 'static>(
+    dir: &FatDir<IO>,
+    name: &str,
+) -> Result<String, StorageError> {
+    for n in 0..8 {
+        let temp = format!("{name}.{n}.tmp");
+        if let Lookup {
+            entry: None,
+            others: false,
+        } = lookup(dir, &temp, true)?
+        {
+            return Ok(temp);
+        }
+    }
+    Err(StorageError::InvalidPath)
+}
+
 impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
     pub fn new(fs: &'static FileSystem<IO>) -> Self {
         Self {
@@ -349,7 +385,7 @@ impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
         }
         {
             let mut folders = self.folders.borrow_mut();
-            if let Some(i) = folders.iter().position(|(p, _)| p == path) {
+            if let Some(i) = folders.iter().position(|(p, _)| same_path(p, path)) {
                 // The latest last.
                 let folder = folders.remove(i);
                 let dir = folder.1.clone();
@@ -368,13 +404,13 @@ impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
         Ok(dir)
     }
 
-    /// Forgets the folders kept at `path` or below it (removed, renamed).
+    /// Forgets the folders kept at `path` or below it (removed, renamed),
+    /// by any case of its names.
     fn forget(&self, path: &str) {
         let path = path.trim_matches('/');
-        let below = format!("{path}/");
         self.folders
             .borrow_mut()
-            .retain(|(p, _)| p != path && !p.starts_with(&below));
+            .retain(|(p, _)| !is_within(p, path));
     }
 
     /// Runs `f` with `path` open (created first with its folders if
@@ -386,7 +422,14 @@ impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
         f: impl FnOnce(&mut Open<IO>) -> Result<T, StorageError>,
     ) -> Result<T, StorageError> {
         let mut open = self.open.borrow_mut();
-        match open.iter().position(|o| o.path == path) {
+        // Spelt as it was opened first: a book is read 4 bytes at a time,
+        // many times a page. Then in any case, as FAT names it: one file
+        // is open once.
+        let kept = open
+            .iter()
+            .position(|o| o.path == path)
+            .or_else(|| open.iter().position(|o| same_path(&o.path, path)));
+        match kept {
             // The latest last.
             Some(i) => {
                 let file = open.remove(i);
@@ -418,13 +461,12 @@ impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
         }
     }
 
-    /// Closes the open files at `path` (or below it), writing back what
-    /// was appended to them.
+    /// Closes the open files at `path` (or below it), by any case of its
+    /// names, writing back what was appended to them.
     fn close(&self, path: &str) -> Result<(), StorageError> {
-        let below = format!("{path}/");
         let mut result = Ok(());
         self.open.borrow_mut().retain_mut(|o| {
-            let keep = o.path != path && !o.path.starts_with(&below);
+            let keep = !is_within(&o.path, path);
             if !keep && let Err(e) = o.flush() {
                 result = Err(e);
             }
@@ -540,8 +582,15 @@ impl<IO: ReadWriteSeek + 'static> Storage for FatStorage<IO> {
     fn rename(&self, from: &str, to: &str) -> Result<(), StorageError> {
         check(from)?;
         check(to)?;
-        if from == to {
+        // The same entry (FAT names it without regard to case): its name
+        // spelt anew, if at all.
+        let same = same_path(from, to);
+        if same && name(from) == name(to) {
             return Ok(());
+        }
+        // Not into itself: it would be cut off from the root.
+        if !same && is_within(to, from) {
+            return Err(StorageError::InvalidPath);
         }
         // Nothing to move (a file or a folder): what is at `to` stays.
         if !self.is_there(from) {
@@ -551,6 +600,14 @@ impl<IO: ReadWriteSeek + 'static> Storage for FatStorage<IO> {
         self.close(to)?;
         self.forget(from);
         self.forget(to);
+        if same {
+            // rust-fatfs takes a move to its own entry for nothing to do:
+            // it goes through a name of the moment.
+            let dir = self.dir(parent(from))?;
+            let temp = free_name(&dir, name(from))?;
+            rename_in(&dir, name(from), &dir, &temp)?;
+            return rename_in(&dir, &temp, &dir, name(to));
+        }
         self.create_dir(parent(to))?;
         let (dir, to_dir) = (self.dir(parent(from))?, self.dir(parent(to))?);
         // A file there is replaced.
@@ -707,6 +764,95 @@ mod tests {
             Err(StorageError::NotFound)
         );
         assert_eq!(s.size("notes/kept.txt"), Ok(10));
+    }
+
+    fn entry(name: &str, is_dir: bool, size: u64) -> (String, bool, u64) {
+        (String::from(name), is_dir, size)
+    }
+
+    /// Moved to another case of its own name, a file or a folder stays,
+    /// spelt as asked.
+    #[test]
+    fn a_rename_to_another_case_keeps_it() {
+        let s = storage();
+        s.write("Books/book.epub", b"a book").unwrap();
+        s.rename("Books/book.epub", "books/Book.epub").unwrap();
+        assert_eq!(names(&s, "Books"), [entry("Book.epub", false, 6)]);
+        assert_eq!(s.size("Books/Book.epub"), Ok(6));
+        // Its folder alone in another case: nothing to do.
+        s.rename("BOOKS/Book.epub", "books/Book.epub").unwrap();
+        assert_eq!(names(&s, "Books"), [entry("Book.epub", false, 6)]);
+        // A folder, with all in it.
+        s.rename("Books", "BOOKS").unwrap();
+        assert_eq!(names(&s, ""), [entry("BOOKS", true, 0)]);
+        assert_eq!(s.size("BOOKS/Book.epub"), Ok(6));
+        // Exactly as it is: nothing to do.
+        s.rename("BOOKS", "BOOKS").unwrap();
+        assert_eq!(names(&s, ""), [entry("BOOKS", true, 0)]);
+    }
+
+    /// A folder is not moved into itself (it would be cut off from the
+    /// root), by any case of its name.
+    #[test]
+    fn a_folder_is_not_moved_into_itself() {
+        let s = storage();
+        s.write("Books/a.txt", b"a").unwrap();
+        for to in ["Books/x", "books/x", "BOOKS/x/y"] {
+            assert_eq!(s.rename("Books", to), Err(StorageError::InvalidPath));
+        }
+        assert_eq!(names(&s, ""), [entry("Books", true, 0)]);
+        assert_eq!(names(&s, "Books"), [entry("a.txt", false, 1)]);
+        // A name that only begins as it does is another folder.
+        s.rename("Books", "Books2/x").unwrap();
+        assert_eq!(s.size("books2/X/a.txt"), Ok(1));
+    }
+
+    /// A file open under one case of its path, written anew or removed
+    /// under another, is not read or written where it was: those
+    /// clusters are free, or another file's.
+    #[test]
+    fn open_files_and_kept_folders_follow_any_case() {
+        let s = storage();
+        s.write("Books/x.epub", &[1; 5000]).unwrap();
+        let mut buf = [0u8; 4];
+        assert_eq!(s.read_at("Books/x.epub", 0, &mut buf), Ok(4));
+        s.write("books/X.epub", &[2; 3000]).unwrap();
+        assert_eq!(s.size("Books/x.epub"), Ok(3000));
+        assert_eq!(s.read_at("Books/x.epub", 0, &mut buf), Ok(4));
+        assert_eq!(buf, [2; 4]);
+        // Appended to, removed under another case, its clusters given to
+        // another file: not written back over them.
+        s.append("Books/x.epub", &[3; 100]).unwrap();
+        s.remove("BOOKS/x.EPUB").unwrap();
+        s.write("Books/other.bin", &[4; 8000]).unwrap();
+        s.sync().unwrap();
+        assert_eq!(names(&s, "Books"), [entry("other.bin", false, 8000)]);
+        let mut other = vec![0u8; 8000];
+        assert_eq!(s.read_at("Books/other.bin", 0, &mut other), Ok(8000));
+        assert!(other.iter().all(|&b| b == 4));
+        // A kept folder, removed and made again under another case.
+        s.write("A/b/one.txt", b"1").unwrap();
+        assert_eq!(s.size("A/b/one.txt"), Ok(1));
+        s.remove_dir_all("a/B").unwrap();
+        assert_eq!(s.size("A/b/one.txt"), Err(StorageError::NotFound));
+        s.write("a/b/two.txt", b"22").unwrap();
+        assert_eq!(s.size("A/b/two.txt"), Ok(2));
+        // Moved under another case.
+        s.rename("a/B", "a/c").unwrap();
+        assert_eq!(s.size("A/b/two.txt"), Err(StorageError::NotFound));
+        assert_eq!(s.size("A/C/two.txt"), Ok(2));
+    }
+
+    #[test]
+    fn paths_compared_as_fat_does() {
+        assert!(same_path("Books/x.epub", "books/X.EPUB"));
+        assert!(same_path("B\u{fc}cher/a", "B\u{dc}CHER/A"));
+        assert!(!same_path("Books/x.epub", "Books/x.epu"));
+        assert!(!same_path("B\u{fc}cher/a", "B\u{fc}cher/a/b"));
+        assert!(is_within("Books/Sub/x.txt", "books/sub"));
+        assert!(is_within("books/sub", "Books/Sub"));
+        assert!(!is_within("books/subway", "books/sub"));
+        assert!(!is_within("books", "books/sub"));
     }
 
     #[test]
