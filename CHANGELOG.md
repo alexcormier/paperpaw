@@ -6,6 +6,9 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: a menu the user redefined shows the entries plugins contribute
+  after it was made, beside their neighbours: `Menus::customize` takes
+  the entries known then (kernel), `Menus::known_ids` gives them.
 - SDK: `Services::ids` and `Services::points` list the services
   published and the points contributed to; `Services::add` (deprecated)
   is gone.

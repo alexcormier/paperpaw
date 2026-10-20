@@ -393,7 +393,7 @@ impl Kernel {
             .as_ref()
             .map(|ids| ids.iter().map(Id::as_str).collect::<Vec<_>>().join(", "));
         match entries {
-            Some(ids) => self.shared.menus.customize(menu.clone(), ids),
+            Some(ids) => self.shared.menus.customize(menu.clone(), ids, None),
             None => self.shared.menus.reset(menu.as_str()),
         }
         // New entries need their labels.

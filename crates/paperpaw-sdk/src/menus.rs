@@ -131,6 +131,9 @@ pub struct Menus {
     entries: Vec<MenuEntry>,
     /// Menus redefined by the user (`[menus] reader.menu = a, b, c`).
     custom: VecMap<Id, Vec<Id>>,
+    /// For a menu redefined, the entries plugins contributed when it was:
+    /// those contributed since are new and shown too.
+    known: VecMap<Id, Vec<Id>>,
     titles: VecMap<Id, Cow<'static, str>>,
     icons: VecMap<Id, Cow<'static, str>>,
     sections: Vec<Id>,
@@ -155,6 +158,7 @@ impl Menus {
         for menu in self.custom.values_mut() {
             menu.shrink_to_fit();
         }
+        self.known.shrink_to_fit();
         self.titles.shrink_to_fit();
         self.icons.shrink_to_fit();
         self.sections.shrink_to_fit();
@@ -214,10 +218,18 @@ impl Menus {
         self.entries.push(entry);
     }
 
-    /// Replaces a menu's entries with exactly `actions`, in this order.
+    /// Replaces a menu's entries with `actions`, in this order. `known`
+    /// are the entries plugins contributed when the user made it (see
+    /// [`Menus::known_ids`]): entries contributed since are new and shown
+    /// after their neighbour; without it (a definition saved before
+    /// PaperPaw kept them) every entry counts as known.
     #[cfg(any(test, feature = "kernel"))]
     #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
-    pub fn customize(&mut self, menu: Id, actions: Vec<Id>) {
+    pub fn customize(&mut self, menu: Id, actions: Vec<Id>, known: Option<Vec<Id>>) {
+        match known {
+            Some(known) => self.known.insert(menu.clone(), known),
+            None => self.known.remove(menu.as_str()),
+        };
         self.custom.insert(menu, actions);
     }
 
@@ -226,6 +238,20 @@ impl Menus {
     #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn reset(&mut self, menu: &str) {
         self.custom.remove(menu);
+        self.known.remove(menu);
+    }
+
+    /// The entries plugins contribute to `menu` now, also those not
+    /// offered on this device: what to keep beside a user's definition as
+    /// known, so that entries contributed later show in it.
+    pub fn known_ids(&self, menu: &str) -> Vec<&Id> {
+        let mut entries: Vec<&MenuEntry> = self
+            .entries
+            .iter()
+            .filter(|e| e.menu.as_str() == menu)
+            .collect();
+        entries.sort_by_key(|e| e.order);
+        entries.into_iter().map(|e| &e.item).collect()
     }
 
     /// Whether the user redefined `menu`.
@@ -261,13 +287,35 @@ impl Menus {
     /// The ids of `menu`'s entries as shown, including entries without a
     /// label.
     pub fn ids(&self, menu: &str) -> Vec<&Id> {
-        match self.custom.get(menu) {
-            Some(ids) => ids
+        let Some(custom) = self.custom.get(menu) else {
+            return self.default_ids(menu);
+        };
+        let mut ids: Vec<&Id> = custom
+            .iter()
+            .filter(|id| self.offered(id.as_str(), true))
+            .collect();
+        let Some(known) = self.known.get(menu) else {
+            return ids;
+        };
+        // Entries contributed since the user made the menu: after the
+        // entry before them in the order plugins give, where the user
+        // kept it; else before the one after them; else last.
+        let defaults = self.default_ids(menu);
+        for (at, new) in defaults.iter().enumerate() {
+            if known.contains(new) || ids.contains(new) {
+                continue;
+            }
+            let before = defaults[..at]
                 .iter()
-                .filter(|id| self.offered(id.as_str(), true))
-                .collect(),
-            None => self.default_ids(menu),
+                .rev()
+                .find_map(|d| ids.iter().position(|i| i == d));
+            let after = defaults[at + 1..]
+                .iter()
+                .find_map(|d| ids.iter().position(|i| i == d));
+            let place = before.map(|b| b + 1).or(after).unwrap_or(ids.len());
+            ids.insert(place, new);
         }
+        ids
     }
 
     /// Registers the label of an action or setting.
@@ -372,7 +420,11 @@ mod tests {
         }
         assert_eq!(titles(&menus), ["First", "Second"]);
 
-        menus.customize(Id::new_static("a.menu"), vec![Id::new_static("a.second")]);
+        menus.customize(
+            Id::new_static("a.menu"),
+            vec![Id::new_static("a.second")],
+            None,
+        );
         assert_eq!(titles(&menus), ["Second"]);
         assert!(menus.items("other").is_empty());
 
@@ -405,6 +457,7 @@ mod tests {
         menus.customize(
             Id::new_static("a.menu"),
             alloc::vec![Id::new_static("a.links"), Id::new_static("a.second")],
+            None,
         );
         assert_eq!(titles(&menus), ["Links"]);
 

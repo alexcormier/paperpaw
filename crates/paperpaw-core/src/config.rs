@@ -402,7 +402,7 @@ impl Kernel {
                         .map(Id::parse)
                         .collect();
                     match (Id::parse(entry.key), actions) {
-                        (Ok(menu), Ok(actions)) => self.shared.menus.customize(menu, actions),
+                        (Ok(menu), Ok(actions)) => self.shared.menus.customize(menu, actions, None),
                         _ => self.warn(WarningSource::UserConfig, line, "invalid menu".into()),
                     }
                 }

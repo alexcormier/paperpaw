@@ -3434,6 +3434,7 @@ pub fn paperpaw_sdk::Menus::ids(&self, &str) -> alloc::vec::Vec<&paperpaw_sdk::I
 pub fn paperpaw_sdk::Menus::is_customized(&self, &str) -> bool
 pub fn paperpaw_sdk::Menus::is_section(&self, &str) -> bool
 pub fn paperpaw_sdk::Menus::items(&self, &str) -> alloc::vec::Vec<paperpaw_sdk::MenuItem<'_>>
+pub fn paperpaw_sdk::Menus::known_ids(&self, &str) -> alloc::vec::Vec<&paperpaw_sdk::Id>
 pub fn paperpaw_sdk::Menus::menu_ids(&self) -> alloc::vec::Vec<&paperpaw_sdk::Id>
 pub fn paperpaw_sdk::Menus::new() -> Self
 pub fn paperpaw_sdk::Menus::order_of(&self, &str, &str) -> core::option::Option<i16>
