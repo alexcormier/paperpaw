@@ -60,7 +60,7 @@ pub enum Tone {
 
 impl Tone {
     /// Every tone, in the order settings offer them.
-    pub const ALL: [Tone; 11] = [
+    pub const ALL: &'static [Tone] = &[
         Tone::LightGray,
         Tone::Gray,
         Tone::DarkGray,
@@ -111,7 +111,7 @@ impl Tone {
 
     /// The tone of a setting's value.
     pub fn from_id(id: &str) -> Option<Tone> {
-        Tone::ALL.into_iter().find(|tone| tone.id() == id)
+        Tone::ALL.iter().copied().find(|tone| tone.id() == id)
     }
 }
 
@@ -128,7 +128,7 @@ pub enum LineKind {
 
 impl LineKind {
     /// Every kind, in the order settings offer them.
-    pub const ALL: [LineKind; 5] = [
+    pub const ALL: &'static [LineKind] = &[
         LineKind::Solid,
         LineKind::Dotted,
         LineKind::Dashed,
@@ -148,7 +148,7 @@ impl LineKind {
     }
 
     pub fn from_id(id: &str) -> Option<LineKind> {
-        LineKind::ALL.into_iter().find(|kind| kind.id() == id)
+        LineKind::ALL.iter().copied().find(|kind| kind.id() == id)
     }
 }
 
@@ -926,6 +926,27 @@ mod tests {
     use super::*;
 
     #[test]
+    fn lists_of_every_kind_are_slices() {
+        // Slices, not arrays of a fixed length: a kind more is no break.
+        use crate::builtin::{setting_sections, settings};
+        let tones: &'static [Tone] = Tone::ALL;
+        let lines: &'static [LineKind] = LineKind::ALL;
+        let names: [&'static [&str]; 9] = [
+            crate::widgets::categories::ALL,
+            crate::widgets::SPACE_SIZES,
+            crate::widgets::ALIGNMENTS,
+            settings::MONO_TEXT_LEVELS,
+            settings::ROTATIONS,
+            settings::TEXT_COLORS,
+            settings::PAPER_COLORS,
+            settings::CORNERS,
+            setting_sections::ORDER,
+        ];
+        assert!(!tones.is_empty() && !lines.is_empty());
+        assert!(names.iter().all(|list| !list.is_empty()));
+    }
+
+    #[test]
     fn backgrounds_keep_their_padding_at_the_edges() {
         // Inside: as wide as the word and a padding on either side.
         assert_eq!(padded(Rect::new(10, 5, 20, 8), 3), Rect::new(7, 5, 26, 8));
@@ -938,10 +959,10 @@ mod tests {
 
     #[test]
     fn tones_and_lines_by_their_ids() {
-        for tone in Tone::ALL {
+        for &tone in Tone::ALL {
             assert_eq!(Tone::from_id(tone.id()), Some(tone));
         }
-        for kind in LineKind::ALL {
+        for &kind in LineKind::ALL {
             assert_eq!(LineKind::from_id(kind.id()), Some(kind));
         }
         assert_eq!(Tone::from_id(NONE), None);

@@ -527,7 +527,7 @@ impl SettingSpec {
         )
     }
 
-    /// A language, one of the installed translations' (or `auto`).
+    /// A language: the tag of one of the installed translations.
     pub fn language(
         setting: &Setting<Text>,
         title: impl Into<Cow<'static, str>>,
