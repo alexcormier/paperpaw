@@ -6,6 +6,9 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- `paperpaw-sign key` makes the key file readable by its owner alone
+  (mode 0600 on Linux and macOS) and checks that none is there in the
+  same step as making it.
 - Android: a PDF page that fails no longer makes every later page of the
   book fail. In the background or with the screen off, PaperPaw neither
   runs timers (unless it reads aloud) nor draws. A restart while reading
