@@ -28,13 +28,11 @@ impl BookList {
         let display = env.device.display;
         let top = header.area.height + style.gap as u16;
         let area = Rect::new(0, top, display.width, display.height - top);
-        let seconds = totals::seconds_per_book(env.storage);
-        let mut books: Vec<(Book, u64)> = store::books(env.storage)
+        let books = store::books(env.storage);
+        let seconds = totals::seconds_per_book(env.storage, &books);
+        let mut books: Vec<(Book, u64)> = books
             .into_iter()
-            .map(|b| {
-                let s = seconds.get(usize::from(b.id)).copied().unwrap_or(0);
-                (b, s)
-            })
+            .zip(seconds)
             .filter(|(_, s)| *s > 0)
             .collect();
         books.sort_by_key(|(b, _)| core::cmp::Reverse(b.last_open));

@@ -9,8 +9,8 @@ use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::widgets::{self, Align, Frame, Look, Widget, WidgetSpec, WidgetTarget};
 use paperpaw_sdk::{Arg, Canvas, Env, Id, Rect, RegisterError, Registrar, SettingSpec};
 
-use super::{caption_room, chosen, frame_height, goal, line, seconds_on, shade};
-use crate::fmt;
+use super::{caption_room, chosen, frame_height, goal, line, shade};
+use crate::fmt::{self, seconds_on};
 
 pub(super) const WEEK: Id = Id::new_static(NAME);
 /// Its id, as text.
@@ -36,14 +36,16 @@ static SETTINGS: [SettingSpec; 8] = [
         &PERIODS,
         PERIODS[0],
         WEEK,
-    ),
+    )
+    .described("stats.setting.period.help"),
     SettingSpec::fixed_choice(
         "stats.widget.week.shape",
         "stats.setting.bars",
         &SHAPES,
         SHAPES[0],
         WEEK,
-    ),
+    )
+    .described("stats.setting.bars.help"),
     widgets::part_spec(
         "stats.widget.week.caption",
         WEEK,

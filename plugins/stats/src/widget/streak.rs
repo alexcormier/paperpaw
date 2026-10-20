@@ -37,21 +37,24 @@ static SETTINGS: [SettingSpec; 10] = [
         &COUNTS,
         COUNTS[0],
         STREAK,
-    ),
+    )
+    .described("stats.setting.counts.help"),
     SettingSpec::fixed_choice(
         "stats.widget.streak.style",
         "stats.setting.marks",
         &MARKS,
         MARKS[1],
         STREAK,
-    ),
+    )
+    .described("stats.setting.marks.help"),
     SettingSpec::fixed_choice(
         "stats.widget.streak.days",
         "stats.setting.days",
         &DAYS,
         DAYS[0],
         STREAK,
-    ),
+    )
+    .described("stats.setting.days.help"),
     widgets::part_spec(
         "stats.widget.streak.caption",
         STREAK,
@@ -69,7 +72,8 @@ static SETTINGS: [SettingSpec; 10] = [
         STREAK,
         "stats.part.marks",
         true,
-    ),
+    )
+    .described("stats.part.marks.help"),
     widgets::part_spec(
         "stats.widget.streak.weekdays",
         STREAK,
@@ -123,7 +127,7 @@ fn shown(env: &Env<'_>) -> Option<Shown> {
     let marks = (today - count + 1..=today)
         .map(|day| Mark {
             weekday: fmt::date_of(day).weekday,
-            counts: super::seconds_on(&days, day) >= least,
+            counts: fmt::seconds_on(&days, day) >= least,
             today: day == today,
         })
         .collect();

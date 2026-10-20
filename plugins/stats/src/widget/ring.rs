@@ -45,14 +45,16 @@ static SETTINGS: [SettingSpec; 8] = [
         &STYLES,
         STYLES[0],
         RING,
-    ),
+    )
+    .described("stats.setting.ring.help"),
     SettingSpec::fixed_choice(
         "stats.widget.goal.line",
         "stats.setting.line",
         &LINES,
         LINES[1],
         RING,
-    ),
+    )
+    .described("stats.setting.line.help"),
     widgets::part_spec(
         "stats.widget.goal.caption",
         RING,
@@ -65,7 +67,8 @@ static SETTINGS: [SettingSpec; 8] = [
         RING,
         "stats.part.streak-left",
         true,
-    ),
+    )
+    .described("stats.part.streak-left.help"),
 ];
 
 pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
@@ -100,7 +103,7 @@ impl Widget for Ring {
         let numbers = super::days(env).map(|(today, days)| {
             let least = goal(env).map_or(1, |g| g.min(u64::from(u32::MAX)) as u32);
             Numbers {
-                today: u64::from(super::seconds_on(&days, today)),
+                today: u64::from(fmt::seconds_on(&days, today)),
                 streak: totals::streaks(&days, today, least).current,
             }
         });
