@@ -109,6 +109,8 @@ pub enum MenuNeed {
     /// ([`Capabilities::black_and_white`](crate::Capabilities)), hidden
     /// elsewhere.
     BlackAndWhite,
+    /// A front light PaperPaw sets ([`Capabilities::frontlight`](crate::Capabilities)).
+    Frontlight,
 }
 
 impl MenuNeed {
@@ -126,6 +128,7 @@ impl MenuNeed {
             MenuNeed::BlackAndWhite => caps.black_and_white,
             MenuNeed::NoTouch => !caps.touch,
             MenuNeed::Touch => caps.touch,
+            MenuNeed::Frontlight => caps.frontlight,
         }
     }
 }
@@ -217,6 +220,7 @@ impl Menus {
             Some(MenuNeed::BlackAndWhite) => caps.black_and_white,
             Some(MenuNeed::NoTouch) => listed || !caps.touch,
             Some(MenuNeed::Touch) => caps.touch,
+            Some(MenuNeed::Frontlight) => caps.frontlight,
             None => true,
         }
     }

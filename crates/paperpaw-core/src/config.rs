@@ -378,7 +378,7 @@ impl Kernel {
             let value = entry.value.as_str();
             match entry.section {
                 "plugins" => {}
-                section if section.starts_with("keymap.") => {}
+                section if section.starts_with("keymap.") || section.starts_with("zones.") => {}
                 "fonts" => match (Id::parse(entry.key), Id::parse(&value)) {
                     (Ok(role), Ok(font)) if self.shared.fonts.contains(font.as_str()) => {
                         self.shared.fonts.bind_user(role, font);

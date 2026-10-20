@@ -711,7 +711,7 @@ fn register_look_settings(r: &mut Registrar) -> Result<(), RegisterError> {
 
 /// Buttons, the panel's refresh, sleep, rotation, notices and long
 /// presses.
-static DEVICE: [SettingSpec; 9] = [
+static DEVICE: [SettingSpec; 14] = [
     SettingSpec::fixed_choice(
         settings::KEYMAP_PRESET.static_str(),
         "core.setting.keymap-preset",
@@ -794,6 +794,59 @@ static DEVICE: [SettingSpec; 9] = [
     .advanced()
     .with_extra(&MS)
     .described("core.setting.long-press-ms.help"),
+    SettingSpec::fixed_number(
+        settings::DOUBLE_TAP_MS.static_str(),
+        "core.setting.double-tap-ms",
+        150,
+        1000,
+        300,
+        groups::CONTROLS,
+    )
+    .advanced()
+    .with_extra(&MS)
+    .described("core.setting.double-tap-ms.help"),
+    SettingSpec::fixed_number(
+        settings::TAP_SLOP.static_str(),
+        "core.setting.tap-slop",
+        1,
+        20,
+        3,
+        groups::CONTROLS,
+    )
+    .advanced()
+    .with_extra(&MM)
+    .described("core.setting.tap-slop.help"),
+    SettingSpec::fixed_number(
+        settings::SWIPE_DISTANCE.static_str(),
+        "core.setting.swipe-distance",
+        2,
+        50,
+        8,
+        groups::CONTROLS,
+    )
+    .advanced()
+    .with_extra(&MM)
+    .described("core.setting.swipe-distance.help"),
+    SettingSpec::fixed_number(
+        settings::FRONTLIGHT.static_str(),
+        "core.setting.frontlight",
+        0,
+        100,
+        0,
+        groups::DISPLAY,
+    )
+    .with_extra(&PERCENT_5)
+    .described("core.setting.frontlight.help"),
+    SettingSpec::fixed_number(
+        settings::FRONTLIGHT_WARMTH.static_str(),
+        "core.setting.frontlight-warmth",
+        0,
+        100,
+        50,
+        groups::DISPLAY,
+    )
+    .with_extra(&PERCENT_5)
+    .described("core.setting.frontlight-warmth.help"),
 ];
 
 fn register_device_settings(r: &mut Registrar) -> Result<(), RegisterError> {
@@ -801,8 +854,17 @@ fn register_device_settings(r: &mut Registrar) -> Result<(), RegisterError> {
     r.set_menu_need(settings::SLEEP_AFTER, paperpaw_sdk::MenuNeed::Sleep)?;
     r.set_menu_need(settings::ROTATION, paperpaw_sdk::MenuNeed::Rotation)?;
     r.set_menu_need(settings::BUTTON_HINTS, paperpaw_sdk::MenuNeed::ButtonRow)?;
-    for edge in [settings::EDGE_ENDS, settings::EDGE_SIDES] {
-        r.set_menu_need(edge, paperpaw_sdk::MenuNeed::Touch)?;
+    let touch = [
+        settings::EDGE_ENDS,
+        settings::EDGE_SIDES,
+        settings::TAP_SLOP,
+        settings::SWIPE_DISTANCE,
+    ];
+    for setting in touch {
+        r.set_menu_need(setting, paperpaw_sdk::MenuNeed::Touch)?;
+    }
+    for light in [settings::FRONTLIGHT, settings::FRONTLIGHT_WARMTH] {
+        r.set_menu_need(light, paperpaw_sdk::MenuNeed::Frontlight)?;
     }
     Ok(())
 }

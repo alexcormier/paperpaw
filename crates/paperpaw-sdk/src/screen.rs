@@ -243,6 +243,17 @@ pub trait Screen {
         false
     }
 
+    /// Whether the screen takes double taps: a second tap close to the
+    /// first in time and place comes as [`GestureKind::DoubleTap`]
+    /// (as a tap where it answers [`Handled::No`]). By default it comes
+    /// as a tap, so that screens that take any gesture on a button do not
+    /// lose quick taps.
+    ///
+    /// [`GestureKind::DoubleTap`]: crate::GestureKind::DoubleTap
+    fn takes_double_taps(&self) -> bool {
+        false
+    }
+
     /// Whether the screen guards the device now, as a lock screen does
     /// while it is locked. Until it no longer does, nothing shows above
     /// it but the screens it opens itself (its keyboard) and those they

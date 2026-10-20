@@ -489,15 +489,34 @@ impl Kernel {
             let env = self.shared.env(now);
             self.shared.input_filters.apply(&env, &event)
         };
-        match verdict {
-            InputVerdict::Pass => {}
+        let event = match verdict {
             InputVerdict::Take => return self.finish(),
             InputVerdict::Run(action) => {
                 self.dispatch(action);
                 self.run_commands();
                 return self.finish();
             }
-        }
+            InputVerdict::Cancel => {
+                self.cancel_input(&event);
+                self.run_commands();
+                return self.finish();
+            }
+            InputVerdict::Replace(other) => other,
+            _ => event,
+        };
+        self.shared.last_input = match event {
+            InputEvent::Button { .. } => paperpaw_sdk::keys::InputMode::Buttons,
+            InputEvent::Pointer(p)
+                if matches!(
+                    p.tool,
+                    paperpaw_platform::PointerTool::Pen | paperpaw_platform::PointerTool::Eraser
+                ) =>
+            {
+                paperpaw_sdk::keys::InputMode::Pen
+            }
+            InputEvent::Pointer(_) => paperpaw_sdk::keys::InputMode::Touch,
+            _ => self.shared.last_input,
+        };
         match event {
             InputEvent::Button { name, state } => {
                 // Without a long press to tell apart, at once.
@@ -740,6 +759,17 @@ impl Kernel {
             self.shared.reader = true;
             self.recognized(recognized);
         }
+        if self
+            .input
+            .pending
+            .as_ref()
+            .is_some_and(|(_, until)| *until <= now)
+        {
+            // No second press or tap came: the first is single.
+            self.shared.reader = true;
+            self.route_key_pending();
+        }
+        self.tick_recognizers();
         if let Some(top) = self.stack.last_mut()
             && top.timer.is_some_and(|at| at <= now)
         {
@@ -1082,6 +1112,11 @@ struct Shared {
     /// The system's clipboard has text (see
     /// [`Kernel::set_clipboard_available`]).
     system_clipboard: bool,
+    /// What the reader used last ([`Env::last_input`]).
+    last_input: paperpaw_sdk::keys::InputMode,
+    /// The inputs plugins added, those the device can make
+    /// ([`Env::inputs`]).
+    inputs: Vec<paperpaw_sdk::keys::InputSpec>,
     /// The open screens as plugins see them ([`Env::stack`]), kept in
     /// step with the kernel's stack.
     stack: Vec<paperpaw_sdk::StackEntry>,
@@ -1147,6 +1182,8 @@ impl Shared {
             reader: self.reader,
             clipboard: self.system_clipboard || !self.clipboard.is_empty(),
             screen_maker: Some(&self.registry),
+            last_input: self.last_input,
+            inputs: &self.inputs,
             content: self.content,
             stack: &self.stack,
             slots: &self.slots,

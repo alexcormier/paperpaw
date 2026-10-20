@@ -114,8 +114,10 @@ impl TextFilters {
     }
 }
 
-/// What an input filter does with an input.
+/// What an input filter does with an input. Filters see what is shown
+/// in [`Env::stack`](crate::Env::stack).
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum InputVerdict {
     /// On to the next filter, then the screens and the key maps.
     Pass,
@@ -123,6 +125,13 @@ pub enum InputVerdict {
     Take,
     /// Taken, and this action runs instead.
     Run(Id),
+    /// Taken, and what was begun with it forgotten: the finger or button
+    /// is no longer followed (no long press comes of it, the screen that
+    /// took the finger lets it go), as if it had not come down.
+    Cancel,
+    /// This input in its place, for the filters after it and everything
+    /// else (another button, a finger moved).
+    Replace(InputEvent),
 }
 
 /// Looks at an input before anything else does.
@@ -182,11 +191,19 @@ impl InputFilters {
 
     /// What the first filter that does not pass it does with `event`.
     pub fn apply(&self, env: &Env<'_>, event: &InputEvent) -> InputVerdict {
-        self.filters
-            .iter()
-            .map(|filter| (filter.filter)(env, event))
-            .find(|verdict| *verdict != InputVerdict::Pass)
-            .unwrap_or(InputVerdict::Pass)
+        let mut seen = *event;
+        for filter in &self.filters {
+            match (filter.filter)(env, &seen) {
+                InputVerdict::Pass => {}
+                InputVerdict::Replace(other) => seen = other,
+                verdict => return verdict,
+            }
+        }
+        if seen == *event {
+            InputVerdict::Pass
+        } else {
+            InputVerdict::Replace(seen)
+        }
     }
 }
 

@@ -86,7 +86,18 @@ impl Kernel {
                 .meter
                 .refreshed(top, refresh.mode, refresh.region);
         }
-        let input = self.input.recognizer.next_deadline(&self.thresholds());
+        let input = [
+            self.input.recognizer.next_deadline(&self.thresholds()),
+            self.input.pending.as_ref().map(|(_, until)| *until),
+            self.input
+                .recognizers
+                .iter()
+                .filter_map(|r| r.recognizer.next_tick())
+                .min(),
+        ]
+        .into_iter()
+        .flatten()
+        .min();
         let notice = self.notice.as_ref().map(|(_, until)| *until);
         let work = self.works.next_wake(&self.base_power(), self.last_activity);
         // After a screenshot is drawn, a message says where it went.
@@ -174,6 +185,11 @@ impl Kernel {
             Command::BackTo(id) => self.back_to(&id),
             Command::BindSlot(slot, screen) => self.bind_slot(slot, screen),
             Command::SwitchTask(task) => self.switch_task(task),
+            Command::Input(name) => match InputKey::parse(&name) {
+                Some(key) => self.route_key(key),
+                None => self.warn_runtime(format!("unknown input `{name}`")),
+            },
+            Command::SetKeyLayer(layer) => self.input.key_layer = layer,
             Command::OpenScreen(screen, params) => self.open(screen, None, &params),
             // Not past a screen that guards the device, but from it.
             Command::Back if self.held_by_guard() => {}

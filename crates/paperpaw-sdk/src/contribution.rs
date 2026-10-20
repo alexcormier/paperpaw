@@ -134,6 +134,10 @@ pub enum Contribution {
     RefreshFilter(RefreshFilterSpec),
     /// A bar along an edge of the screen (see [`chrome`](crate::chrome)).
     Chrome(Box<crate::chrome::ChromeSpec>),
+    /// A named input (see [`keys::InputSpec`](crate::keys::InputSpec)).
+    Input(crate::keys::InputSpec),
+    /// A recognizer of gestures (see [`keys::GestureSpec`](crate::keys::GestureSpec)).
+    Gesture(Box<crate::keys::GestureSpec>),
     /// A job: work done in steps (see [`work`](crate::work)).
     Work(Box<crate::work::WorkSpec>),
     Widget(Box<WidgetSpec>),
@@ -202,6 +206,8 @@ impl Contribution {
             Contribution::InputFilter(_) => "input-filter",
             Contribution::RefreshFilter(_) => "refresh-filter",
             Contribution::Chrome(_) => "chrome",
+            Contribution::Input(_) => "input",
+            Contribution::Gesture(_) => "gesture",
             Contribution::Work(_) => "work",
             Contribution::Widget(_) => "widget",
             Contribution::SetupStep(_) => "setup-step",
@@ -238,6 +244,8 @@ impl Contribution {
             Contribution::InputFilter(f) => &f.id,
             Contribution::RefreshFilter(f) => &f.id,
             Contribution::Chrome(c) => &c.id,
+            Contribution::Input(i) => &i.id,
+            Contribution::Gesture(g) => &g.id,
             Contribution::Work(w) => &w.id,
             Contribution::Widget(w) => &w.id,
             Contribution::SetupStep(s) => &s.id,
@@ -618,6 +626,19 @@ impl Registrar {
     /// [`filters`](crate::filters)).
     pub fn add_refresh_filter(&mut self, filter: RefreshFilterSpec) -> Result<(), RegisterError> {
         self.add(Contribution::RefreshFilter(filter))
+    }
+
+    /// Adds an input of one's own, `input.<id>`, bound in key maps as any
+    /// other and raised with [`Command::Input`](crate::Command::Input)
+    /// (see [`keys::InputSpec`](crate::keys::InputSpec)).
+    pub fn add_input(&mut self, input: crate::keys::InputSpec) -> Result<(), RegisterError> {
+        self.add(Contribution::Input(input))
+    }
+
+    /// Adds a recognizer of gestures of one's own, `gesture.<id>` in key
+    /// maps (see [`keys::GestureSpec`](crate::keys::GestureSpec)).
+    pub fn add_gesture(&mut self, gesture: crate::keys::GestureSpec) -> Result<(), RegisterError> {
+        self.add(Contribution::Gesture(Box::new(gesture)))
     }
 
     /// Adds a bar that stays along an edge of the screen across the

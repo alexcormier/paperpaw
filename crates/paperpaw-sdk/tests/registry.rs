@@ -279,6 +279,32 @@ fn input_filters_take_what_the_first_one_does_not_pass() {
         InputVerdict::Run(Id::new_static("f.action"))
     );
     assert_eq!(filters.apply(&env, &button("other")), InputVerdict::Pass);
+    // A filter put first replaces an input: the filters after it see
+    // the other one, and what comes out is the other one.
+    let mut filters = InputFilters::new();
+    filters.add(make("f.swap", |e| match e {
+        InputEvent::Button { name: "swap", .. } => InputVerdict::Replace(InputEvent::Button {
+            name: "run",
+            state: ButtonState::Pressed,
+        }),
+        InputEvent::Button { name: "calm", .. } => InputVerdict::Replace(InputEvent::Button {
+            name: "quiet",
+            state: ButtonState::Pressed,
+        }),
+        _ => InputVerdict::Pass,
+    }));
+    filters.add(make("f.run", |e| match e {
+        InputEvent::Button { name: "run", .. } => InputVerdict::Run(Id::new_static("f.action")),
+        _ => InputVerdict::Pass,
+    }));
+    assert_eq!(
+        filters.apply(&env, &button("swap")),
+        InputVerdict::Run(Id::new_static("f.action"))
+    );
+    assert_eq!(
+        filters.apply(&env, &button("calm")),
+        InputVerdict::Replace(button("quiet"))
+    );
 }
 
 #[test]

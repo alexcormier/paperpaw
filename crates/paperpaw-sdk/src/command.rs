@@ -338,6 +338,15 @@ pub enum Command {
     /// and these params, else in place of what the slot shows (one
     /// launcher of several, chosen once).
     OpenInSlot(Id, Id, Params),
+    /// Raises the input `.0` as written in key maps (`button.menu`,
+    /// `double-tap.center`, a plugin's `input.<id>`): it runs what the
+    /// layers shown bind it to, as if it had come (switch access, chords
+    /// of one's own).
+    Input(String),
+    /// Puts the key map layer `.0` in front of the screen's slot and the
+    /// global layer, e.g. a book's own bindings (`[keymap.<layer>]`);
+    /// `None` takes it away.
+    SetKeyLayer(Option<Id>),
     /// Shows task `.0`, a tab of tabs: the screens open now are kept as
     /// the task shown before (by their ids and params; dropped from memory
     /// and made anew when it is shown again), and those of task `.0` open

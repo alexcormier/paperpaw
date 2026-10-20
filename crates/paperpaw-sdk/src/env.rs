@@ -48,6 +48,9 @@ pub struct Capabilities {
     pub button_row: bool,
     /// The system has a clipboard of its own, shared with other apps.
     pub system_clipboard: bool,
+    /// A front light PaperPaw sets
+    /// ([`settings::FRONTLIGHT`](crate::builtin::settings::FRONTLIGHT)).
+    pub frontlight: bool,
     /// The panel shows black and white alone (no grays), e.g. the X4.
     pub black_and_white: bool,
 }
@@ -132,6 +135,12 @@ pub struct Env<'a> {
     /// the system has a clipboard, in another app; read it with
     /// [`Command::ReadClipboard`](crate::Command::ReadClipboard).
     pub clipboard: bool,
+    /// What the reader used last: buttons, a finger or a pen, e.g. to
+    /// show a focus only after buttons were used, also on touch devices.
+    pub last_input: crate::keys::InputMode,
+    /// The inputs plugins added ([`keys::InputSpec`](crate::keys::InputSpec)),
+    /// to bind like any other.
+    pub inputs: &'a [crate::keys::InputSpec],
     /// Makes the screens plugins added, for [`Env::make_screen`]: the
     /// kernel's.
     #[doc(hidden)]
@@ -249,6 +258,12 @@ pub struct EnvParts<'a> {
     /// the system has a clipboard, in another app; read it with
     /// [`Command::ReadClipboard`](crate::Command::ReadClipboard).
     pub clipboard: bool,
+    /// What the reader used last: buttons, a finger or a pen, e.g. to
+    /// show a focus only after buttons were used, also on touch devices.
+    pub last_input: crate::keys::InputMode,
+    /// The inputs plugins added ([`keys::InputSpec`](crate::keys::InputSpec)),
+    /// to bind like any other.
+    pub inputs: &'a [crate::keys::InputSpec],
     /// Makes the screens plugins added, for [`Env::make_screen`]: the
     /// kernel's.
     #[doc(hidden)]
@@ -321,6 +336,8 @@ impl<'a> From<EnvParts<'a>> for Env<'a> {
             work: p.work,
             reader: p.reader,
             clipboard: p.clipboard,
+            last_input: p.last_input,
+            inputs: p.inputs,
             screen_maker: p.screen_maker,
             content: p.content,
             stack: p.stack,

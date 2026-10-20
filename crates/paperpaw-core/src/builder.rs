@@ -160,6 +160,15 @@ impl KernelBuilder {
         self
     }
 
+    /// The shell sets the device's front light as the settings
+    /// [`settings::FRONTLIGHT`](core_settings::FRONTLIGHT) and
+    /// [`settings::FRONTLIGHT_WARMTH`](core_settings::FRONTLIGHT_WARMTH)
+    /// say; without, they are not offered.
+    pub fn frontlight(mut self, settable: bool) -> Self {
+        self.caps.frontlight = settable;
+        self
+    }
+
     /// PaperPaw loads native code plugins (see
     /// [`paperpaw_sdk::native`]): `loader` loads the code of each switched
     /// on at the start, files fit for `native` (which plugins see as
@@ -419,6 +428,8 @@ impl KernelBuilder {
                 reader: false,
                 clipboard: String::new(),
                 system_clipboard: false,
+                last_input: paperpaw_sdk::keys::InputMode::default(),
+                inputs: Vec::new(),
                 stack: Vec::new(),
                 content: Rect::new(0, 0, display.width, display.height),
                 slots: Vec::new(),
@@ -457,6 +468,10 @@ impl KernelBuilder {
                 dropped_buttons: Vec::new(),
                 dropped_pointers: Vec::new(),
                 swapped: Vec::new(),
+                pending: None,
+                last_tap: None,
+                recognizers: Vec::new(),
+                key_layer: None,
             },
             io: network::IoState {
                 http: io::http::Http::for_memory(self.device.memory),

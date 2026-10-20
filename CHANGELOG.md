@@ -6,6 +6,29 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: inputs of more kinds (gap E1). Key maps bind `double.<button>`
+  (pressed twice), `double-tap.<zone>`, `tap2` (two fingers),
+  `pinch.<out|in>`, a layer's own zones (`[zones.<layer>] <name> =
+  <left> <top> <width> <height>` in percent, tapped as `tap.<name>`),
+  plugins' `input.<id>` (`Registrar::add_input`, `keys::InputSpec`,
+  listed in `Env::inputs` where the device can make them) and
+  `gesture.<id>` (`Registrar::add_gesture`, a `keys::GestureRecognizer`
+  that sees every finger). A press or tap waits for a second only where
+  something is bound to the double one, so pages still turn as fast as
+  they are tapped. Screens get `GestureKind::DoubleTap` (as a tap where
+  they decline it; only to screens that say `Screen::takes_double_taps`)
+  and `GestureKind::TwoFingerTap`. `Command::Input`
+  raises an input by its name; `Command::SetKeyLayer` puts a layer in
+  front of the slot's (a book's own bindings). Input filters may
+  `InputVerdict::Cancel` an input (what began with it is forgotten) or
+  `InputVerdict::Replace` it; `InputVerdict` is now non-exhaustive.
+  `Env::last_input` says whether buttons, a finger or a pen came last.
+  `keys::inputs` lists every input a device makes, with `keys::ZONES`,
+  `SWIPES`, `EDGES`, `PINCHES` and `POLICIES`. New settings
+  `core.double-tap-ms`, `core.tap-slop`, `core.swipe-distance`, and
+  `core.frontlight` with `core.frontlight-warmth` where the shell sets
+  the light (`KernelBuilder::frontlight`, `Capabilities::frontlight`,
+  `MenuNeed::Frontlight`).
 - SDK: screens hosted in a screen of one's own, tasks with their own way
   back (gap A1, second part). `Env::make_screen` makes any screen plugins
   added, to host it in a part of a screen (tabs, a split view);

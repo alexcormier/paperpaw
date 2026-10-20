@@ -3243,6 +3243,7 @@ mod frames;
 mod guard;
 mod hosting;
 mod input;
+mod input_kinds;
 mod kernel_calls;
 mod plugins_loaded;
 mod screen_life;

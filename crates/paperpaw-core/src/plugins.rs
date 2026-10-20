@@ -342,6 +342,18 @@ impl Kernel {
         for chrome in staging.chromes.drain(..) {
             self.add_chrome(chrome);
         }
+        let caps = self.shared.caps;
+        let inputs = staging.inputs.drain(..);
+        let made = inputs.filter(|input| input.need.is_none_or(|need| need.met(caps)));
+        self.shared.inputs.extend(made);
+        // Recognizers are made once, their makers dropped.
+        for spec in staging.gestures.drain(..) {
+            let recognizer = (spec.factory)();
+            let id = spec.id;
+            self.input
+                .recognizers
+                .push(gestures::PluginRecognizer { id, recognizer });
+        }
         for spec in staging.works.drain(..) {
             self.works.add_spec(spec);
         }
@@ -797,6 +809,7 @@ impl Kernel {
         shared.text_filters.shrink_to_fit();
         shared.decorators.shrink_to_fit();
         shared.input_filters.shrink_to_fit();
+        shared.inputs.shrink_to_fit();
         shared.refresh_filters.shrink_to_fit();
         shared.stylesheets.shrink_to_fit();
         shared.translator.shrink_to_fit();
