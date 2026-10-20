@@ -273,6 +273,25 @@ fn a_refused_schema_leaves_no_part_file() {
     assert_eq!(storage.paths(), Vec::<String>::new());
 }
 
+/// A card that fills up while the database is put together (its pages
+/// were written): the error comes back, the database there before is
+/// left as it was and no part of the new one or its pages remain.
+#[test]
+fn a_write_that_fails_part_way_leaves_the_old_database() {
+    let storage = Memory::default();
+    storage.put("db", b"the database before".to_vec());
+    let mut writer = Writer::new(&storage, "db");
+    let rows = (1..=100).map(|i| (i, encode_record(&[Value::Int(i)])));
+    let root = writer.table(rows).unwrap();
+    storage.full.set(true);
+    assert_eq!(
+        writer.finish(&[table_entry("t", &["a"], root)], 1),
+        Err(Error::Storage(StorageError::Full))
+    );
+    assert_eq!(storage.paths(), ["db"]);
+    assert_eq!(storage.get("db").unwrap(), b"the database before");
+}
+
 /// A card that fills up while the pages are written: the error comes
 /// back, no database and no temporary file are left.
 #[test]

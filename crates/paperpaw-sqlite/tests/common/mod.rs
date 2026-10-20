@@ -95,6 +95,13 @@ impl Storage for Memory {
         self.files.borrow_mut().remove(path);
         Ok(())
     }
+
+    fn rename(&self, from: &str, to: &str) -> Result<(), StorageError> {
+        let mut files = self.files.borrow_mut();
+        let data = files.remove(from).ok_or(StorageError::NotFound)?;
+        files.insert(to.to_string(), data);
+        Ok(())
+    }
 }
 
 /// The page size the writer uses.

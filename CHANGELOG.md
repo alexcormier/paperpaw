@@ -6,6 +6,15 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Reading statistics: a stay cut off by a power cut no longer garbles
+  the stays recorded after it, day totals no longer overflow on huge
+  merged logs, and one stay dated far ahead (a clock wrong once) no
+  longer hides the calendar day's books and pages.
+- Fonts: a character a font lacks is drawn as one of nearly the same
+  look before falling back to `?`: the non-breaking hyphen as a hyphen,
+  the long s as s, rare punctuation as its common cousin.
+- Statistics files: a database written for KOReader that fails part way
+  (a full card) leaves the one there before as it was.
 - Emulator: `--free-space <bytes>` makes the emulated storage say it has
   that much free, whatever the computer's disk has, so screenshots of the
   store look the same everywhere (the snapshot tests use it).

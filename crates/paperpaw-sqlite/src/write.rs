@@ -13,7 +13,7 @@ use alloc::string::{String, ToString};
 use alloc::vec;
 use alloc::vec::Vec;
 
-use paperpaw_platform::Storage;
+use paperpaw_platform::{Storage, StorageError};
 
 use crate::record::{Value, encode_record};
 use crate::{
@@ -373,18 +373,44 @@ impl<'s> Writer<'s> {
         header[60..64].copy_from_slice(&be(user_version));
         header[92..96].copy_from_slice(&be(1)); // version valid for
         header[96..100].copy_from_slice(&be(SQLITE_VERSION));
-        self.storage.write(&self.path, &first)?;
+        // Put together beside the file, then moved over it: a write that
+        // fails part way leaves the file there as it was.
+        let new = format!("{}.new", self.path);
+        let written = self
+            .assemble(&new, &first)
+            .map_err(Error::from)
+            .and_then(|()| {
+                match self.storage.rename(&new, &self.path) {
+                    // Storages that cannot move files: copied over it, and
+                    // removed again where that fails, so no part of a
+                    // database is left there.
+                    Err(StorageError::Unsupported) => {
+                        let copied = self.assemble(&self.path, &first);
+                        if copied.is_err() {
+                            let _ = self.storage.remove(&self.path);
+                        }
+                        copied.map_err(Error::from)
+                    }
+                    moved => moved.map_err(Error::from),
+                }
+            });
+        let _ = self.storage.remove(&new);
+        written
+    }
+
+    /// Writes page 1 (`first`) and the pages built after it to `path`.
+    fn assemble(&self, path: &str, first: &[u8]) -> Result<(), StorageError> {
+        self.storage.write(path, first)?;
         let mut chunk = vec![0u8; PAGE * 8];
         let mut at = 0u64;
         loop {
             let n = self.storage.read_at(&self.part, at, &mut chunk)?;
             if n == 0 {
-                break;
+                return Ok(());
             }
-            self.storage.append(&self.path, &chunk[..n])?;
+            self.storage.append(path, &chunk[..n])?;
             at += n as u64;
         }
-        Ok(())
     }
 }
 
