@@ -30,6 +30,7 @@ paperpaw-text = { workspace = true, features = ["outline"] }
 
 [dev-dependencies]
 paperpaw-i18n.workspace = true
+paperpaw-text.workspace = true
 
 [lints]
 workspace = true
