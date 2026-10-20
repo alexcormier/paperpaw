@@ -12,7 +12,7 @@ use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::ui::UiStyle;
-use paperpaw_sdk::widgets::{self, Align, Frame, Size, Widget, WidgetSpec, WidgetTarget};
+use paperpaw_sdk::widgets::{self, Align, Frame, Padding, Size, Widget, WidgetSpec, WidgetTarget};
 use paperpaw_sdk::{
     Canvas, Command, Env, Id, Rect, RegisterError, Registrar, SettingSpec, SettingValue,
 };
@@ -31,7 +31,7 @@ const FACE: Setting<Text> = Setting::new("widgets.note.face");
 const TYPED: Event<Typed> = Event::new("widgets.note.typed");
 
 /// The note's settings, kept in the program.
-static SETTINGS: [SettingSpec; 6] = [
+static SETTINGS: [SettingSpec; 7] = [
     SettingSpec::fixed_text("widgets.note.text", "widgets.note.setting.text", "", ID)
         .described("widgets.note.setting.text.help"),
     SettingSpec::fixed_text(
@@ -51,6 +51,7 @@ static SETTINGS: [SettingSpec; 6] = [
     widgets::size_spec("widgets.note.size", ID, Size::Fit, true),
     widgets::align_spec("widgets.note.align", ID, Align::Center),
     widgets::frame_spec("widgets.note.frame", ID, Frame::None),
+    widgets::padding_spec("widgets.note.padding", ID, Padding::Auto),
 ];
 
 pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
@@ -112,14 +113,20 @@ fn lay_out(env: &Env<'_>, area: Rect) -> Option<Laid> {
     let width = f32::from(area.width);
     let size = match widgets::size(env, ID.as_str()) {
         Size::Fit => text::largest(style.small, style.title * 1.8, |size| {
-            let lines = text::count_lines(&font, size, note, width) as f32;
-            lines * text::line_height(&font, size) <= f32::from(area.height)
+            // Broken between words only, every word whole on a line.
+            let (lines, too_wide) = text::count_lines(&font, size, note, width);
+            !too_wide && lines as f32 * text::line_height(&font, size) <= f32::from(area.height)
         }),
         size => size.text(&style),
     };
     let line = text::line_height(&font, size);
-    let fits = ((f32::from(area.height) / line) as usize).max(1);
-    let lines = text::lines(&font, size, note, width, fits);
+    // As many lines as fit; none where not even one has room.
+    let fits = (f32::from(area.height) / line) as usize;
+    let lines = if fits == 0 {
+        Vec::new()
+    } else {
+        text::lines(&font, size, note, width, fits)
+    };
     let total = (line * lines.len() as f32) as u16;
     Some(Laid {
         heading,
@@ -157,7 +164,9 @@ impl Widget for Note {
         let size = widgets::size(env, ID.as_str()).text(&style);
         let lines = text::font(env, env.settings.read(&FACE)).map_or(1, |font| {
             let width = f32::from(width.saturating_sub(frame_height(env, ID.as_str())));
-            text::count_lines(&font, size, env.settings.read(&TEXT), width).clamp(1, 4)
+            text::count_lines(&font, size, env.settings.read(&TEXT), width)
+                .0
+                .clamp(1, 4)
         });
         let heading = heading_height(env);
         widgets::line_height(env, size) * lines as u16 + heading + frame_height(env, ID.as_str())

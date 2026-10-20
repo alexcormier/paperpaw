@@ -13,7 +13,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use paperpaw_sdk::ui::{self, UiStyle};
-use paperpaw_sdk::widgets::{self, Align, Frame, Size, Widget, WidgetSpec, WidgetTarget};
+use paperpaw_sdk::widgets::{self, Align, Frame, Padding, Size, Widget, WidgetSpec, WidgetTarget};
 use paperpaw_sdk::{Arg, Canvas, Env, FontHandle, Id, Rect, RegisterError, Registrar, SettingSpec};
 
 use crate::data::{self, Current, Day};
@@ -36,8 +36,9 @@ const PLACINGS: [&str; 3] = [
     "weather.placing.above",
 ];
 /// Its settings, kept in the program: its look, its symbol, its parts.
-static SETTINGS: [SettingSpec; 16] = [
+static SETTINGS: [SettingSpec; 17] = [
     widgets::frame_spec("weather.now.frame", ID, Frame::None),
+    widgets::padding_spec("weather.now.padding", ID, Padding::Auto),
     widgets::size_spec("weather.now.size", ID, Size::Fit, true),
     widgets::align_spec("weather.now.align", ID, Align::Center),
     SettingSpec::fixed_choice(
@@ -146,7 +147,7 @@ impl Widget for Now {
     fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         let look = widgets::draw_frame(canvas, env, ID.as_str(), area);
         let Some(current) = self.shown.weather.as_ref().and_then(|w| w.current) else {
-            draw::draw_waiting(canvas, env, ID.as_str(), &look, &self.shown);
+            draw::draw_waiting(canvas, env, ID.as_str(), (&look, area), &self.shown);
             return;
         };
         // Laid out when placed; drawn elsewhere, laid out for that.
@@ -324,7 +325,10 @@ fn packed(font: &FontHandle<'_>, lines: &[Line], least: u8, width: f32) -> Vec<L
         if line.rank == 5 && font.measure(line.size, &line.text) > width {
             line.size = small;
         }
-        out.push(line);
+        // A line that does not fit even so is left out whole.
+        if font.measure(line.size, &line.text) <= width {
+            out.push(line);
+        }
     }
     out
 }
@@ -460,7 +464,17 @@ fn plan(env: &Env<'_>, font: &FontHandle<'_>, area: Rect, temperature: &str, all
         } else {
             least * 0.95
         };
-        if (plan.size >= enough && plan.wide_enough) || temperature_size(env, &style).is_some() {
+        // A large symbol at least a line of text high, else not so.
+        let seen = match placing {
+            Placing::Beside | Placing::Above => {
+                plan.symbol.width >= widgets::line_height(env, style.text)
+            }
+            _ => true,
+        };
+        if seen
+            && ((plan.size >= enough && plan.wide_enough)
+                || temperature_size(env, &style).is_some())
+        {
             return plan;
         }
         last = Some(plan);
@@ -598,6 +612,7 @@ fn draw_now(
     let align = widgets::align(env, ID.as_str());
     let symbol_style = draw::style(env, ID.as_str());
     let (_, symbol) = data::condition(current.code);
+    let mark = (symbol, current.day);
     let color = |line: &Line| if line.faint { look.faint } else { look.ink };
 
     // The rows of text, from the top.
@@ -634,29 +649,40 @@ fn draw_now(
     // text starts at one edge.
     let (text, group_x) = match plan.placing {
         Placing::Beside => {
-            let group = f32::from(plan.symbol.width + gap) + widest;
-            let x = align.x(area, group);
-            let shift = x as u16 - area.x;
+            // Placed by the symbol's ink, not its square.
+            let side = plan.symbol.width;
+            let (ink_x, ink_y, ink_w, ink_h) = draw::ink_of(symbol, current.day, side);
+            let group = f32::from(ink_w + gap) + widest;
+            let x = align.x(area, group) as i32;
+            let y = i32::from(area.y) + (i32::from(area.height) - i32::from(ink_h)) / 2;
             let at = Rect::new(
-                plan.symbol.x + shift,
-                plan.symbol.y,
-                plan.symbol.width,
-                plan.symbol.height,
+                (x - ink_x).max(0) as u16,
+                (y - ink_y).max(0) as u16,
+                side,
+                side,
             );
             symbol::draw(canvas, at, symbol, current.day, symbol_style, look.ink);
-            let text_x = at.x + at.width + gap;
+            let text_x = x as u16 + ink_w + gap;
             (
                 Rect::new(text_x, plan.text.y, draw::ceil(widest), plan.text.height),
                 Some(f32::from(text_x)),
             )
         }
         Placing::Above => {
-            let total = plan.symbol.height + gap + total;
+            // Placed by the symbol's ink, not its square.
+            let side = plan.symbol.width;
+            let (ink_x, ink_y, ink_w, ink_h) = draw::ink_of(symbol, current.day, side);
+            let total = ink_h + gap + total;
             let top = area.y + area.height.saturating_sub(total) / 2;
-            let x = align.x(area, f32::from(plan.symbol.width)) as u16;
-            let at = Rect::new(x, top, plan.symbol.width, plan.symbol.height);
+            let x = align.x(area, f32::from(ink_w)) as i32;
+            let at = Rect::new(
+                (x - ink_x).max(0) as u16,
+                (i32::from(top) - ink_y).max(0) as u16,
+                side,
+                side,
+            );
             symbol::draw(canvas, at, symbol, current.day, symbol_style, look.ink);
-            let below = top + plan.symbol.height + gap;
+            let below = top + ink_h + gap;
             (
                 Rect::new(
                     area.x,
@@ -684,7 +710,7 @@ fn draw_now(
                 if inline > 0 {
                     let top = row.y + row.height.saturating_sub(inline) / 2;
                     let at = Rect::new(x as u16, top, inline, inline);
-                    symbol::draw(canvas, at, symbol, current.day, symbol_style, look.ink);
+                    draw::draw_symbol(canvas, at, mark, symbol_style, look.ink);
                 }
                 let x = x + f32::from(inline + inline_gap);
                 draw_digits(canvas, &font, plan.size, x, row, temperature, look.ink);

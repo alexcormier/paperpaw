@@ -145,3 +145,86 @@ fn time_widgets_say_when_the_time_is_not_known() {
         }
     }
 }
+
+/// The time and words widgets draw inside the place they are given, in
+/// cells as small as the X4's and as narrow as a column, also with a
+/// note, to-dos and a quote to show: nothing reaches past its edges.
+#[test]
+fn time_and_words_widgets_keep_inside_their_cell() {
+    let mut h = Harness::new(library());
+    h.set(
+        "widgets.note.text",
+        SettingValue::Text(Cow::Borrowed(
+            "Remember: the library closes early on Fridays.",
+        )),
+    );
+    let ids = [
+        "widgets.calendar",
+        "widgets.year-progress",
+        "widgets.countdown",
+        "widgets.moon",
+        "widgets.day",
+        "widgets.greeting",
+        "widgets.logo",
+        "widgets.note",
+        "widgets.picture",
+        "widgets.quote",
+        "widgets.todo",
+    ];
+    let areas = [
+        Rect::new(40, 40, 90, 67),
+        Rect::new(40, 40, 197, 67),
+        Rect::new(40, 40, 90, 151),
+        Rect::new(40, 40, 197, 151),
+        Rect::new(40, 40, 411, 67),
+        Rect::new(40, 40, 30, 30),
+    ];
+    let env = h.env();
+    for id in ids {
+        for area in areas {
+            let mut fb = Framebuffer::new(
+                DEVICE.display.width,
+                DEVICE.display.height,
+                PixelFormat::Gray4,
+            )
+            .unwrap();
+            let mut widget = env.widgets.make(id, &env).unwrap();
+            widget.place(&env, area);
+            let _ = widget.update(&env);
+            {
+                let mut canvas = fb.canvas();
+                canvas.clear(paperpaw_sdk::Color::WHITE);
+                widget.draw(&mut canvas, &env, area);
+            }
+            let view = fb.view();
+            for y in 0..DEVICE.display.height {
+                for x in 0..DEVICE.display.width {
+                    let inside = x >= area.x
+                        && x < area.x + area.width
+                        && y >= area.y
+                        && y < area.y + area.height;
+                    if !inside {
+                        assert_eq!(view.pixel(x, y).luma(), 255, "{id} in {area:?} at {x},{y}");
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Text is broken between words only: the lines together say the text,
+/// word for word, and a word wider than a line is told, not split.
+#[test]
+fn lines_break_between_words_only() {
+    let h = Harness::new(library());
+    let env = h.env();
+    let font = paperpaw_sdk::ui::UiStyle::new(&env).font(&env).unwrap();
+    let text = "Remember: the library closes early on Fridays.";
+    for width in [60.0, 120.0, 400.0] {
+        let (lines, _) = crate::time::break_words(&font, 20.0, text, width);
+        assert_eq!(lines.join(" "), text, "{width}");
+    }
+    let (lines, too_wide) = crate::time::break_words(&font, 20.0, text, 30.0);
+    assert!(too_wide);
+    assert!(lines.contains(&String::from("Remember:")), "{lines:?}");
+}

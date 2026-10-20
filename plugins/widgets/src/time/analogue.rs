@@ -6,7 +6,7 @@ use alloc::format;
 
 use paperpaw_sdk::round::point_at;
 use paperpaw_sdk::time::{self, LocalTime};
-use paperpaw_sdk::widgets::{self, Align, Drawn, Frame};
+use paperpaw_sdk::widgets::{self, Align, Drawn, Frame, Padding};
 use paperpaw_sdk::{Canvas, Color, Env, Id, Point, Rect, RegisterError, Registrar};
 
 use paperpaw_sdk::SettingSpec;
@@ -40,9 +40,10 @@ const DATES: [&str; 3] = [
 ];
 
 /// Its settings, kept in the program.
-static SETTINGS: [SettingSpec; 8] = [
+static SETTINGS: [SettingSpec; 9] = [
     widgets::align_spec("widgets.analogue-clock.align", ID, Align::Center),
     widgets::frame_spec("widgets.analogue-clock.frame", ID, Frame::None),
+    widgets::padding_spec("widgets.analogue-clock.padding", ID, Padding::Auto),
     SettingSpec::fixed_choice(
         "widgets.analogue-clock.face",
         "widgets.setting.face",
@@ -118,9 +119,15 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     }
     let date = chosen_name(env, ID.as_str(), "date");
     let date_text = now.map(|t| super::date_text(env, ID.as_str(), t.year, t.month, t.day, false));
-    // The date below takes a line; the face the rest, round.
+    // The date below takes a line, where it fits whole and leaves the
+    // face two thirds of the height at least; the face the rest, round.
     let below = match (&font, date, &date_text) {
-        (Some(font), "below", Some(_)) => line(font, style.small) as u16 + style.gap as u16 / 2,
+        (Some(font), "below", Some(text))
+            if font.measure(style.small, text) <= f32::from(area.width) =>
+        {
+            let below = line(font, style.small) as u16 + style.gap as u16 / 2;
+            if below * 3 <= area.height { below } else { 0 }
+        }
         _ => 0,
     };
     let room = area.height.saturating_sub(below).min(area.width);
@@ -221,21 +228,12 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         draw_hands(canvas, env, center, r, &now, ink);
     }
 
-    // The date below.
-    if let (Some(font), "below", Some(text)) = (&font, date, &date_text) {
-        let row = Rect::new(
-            area.x,
-            (top + 2 * r) as u16 + style.gap as u16 / 2,
-            area.width,
-            line(font, style.small) as u16,
-        );
-        let x = align.x(area, f32::from(room)) + f32::from(room) / 2.0;
-        let shown = paperpaw_sdk::ui::fit(font, style.small, text, f32::from(area.width));
-        let width = font.measure(style.small, &shown);
-        let x = (x - width / 2.0)
-            .max(f32::from(area.x))
-            .min(f32::from(area.x) + f32::from(area.width) - width);
-        paperpaw_sdk::ui::draw_label(canvas, font, style.small, x, row, &shown, look.faint);
+    // The date below, placed as the face is (it fits whole: see above).
+    if let (true, Some(text)) = (below > 0, &date_text) {
+        let gap = style.gap as u16 / 2;
+        let row = Rect::new(area.x, (top + 2 * r) as u16 + gap, area.width, below - gap);
+        let small = style.small;
+        widgets::draw_line(canvas, env, row, align, small, small, text, look.faint);
     }
 }
 
@@ -325,6 +323,11 @@ pub(super) fn draw_capsule(canvas: &mut Canvas<'_>, a: Point, b: Point, width: u
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_face_stays_in_its_place() {
+        assert_eq!(super::super::word_clock::drawn_outside(ID.as_str()), None);
+    }
 
     #[test]
     fn hands_point_where_a_clock_shows() {

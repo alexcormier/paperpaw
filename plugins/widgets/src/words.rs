@@ -22,7 +22,6 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::sync::atomic::{AtomicU32, Ordering};
 
-use paperpaw_sdk::ui::UiStyle;
 use paperpaw_sdk::widgets;
 use paperpaw_sdk::{Canvas, Command, Env, Id, RegisterError, Registrar, Storage};
 
@@ -131,21 +130,14 @@ impl Turns {
 }
 
 /// Draws `text` in the middle of `look`'s area, e.g. how to add what
-/// a widget would show: in the body size where it fits, else small.
+/// a widget would show: in the body size where it fits, else smaller
+/// down to the small size, broken between words only
+/// ([`widgets::draw_message`]).
+/// Nothing where not even a line has room.
 fn draw_empty(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &widgets::Look, text: &str) {
-    let style = UiStyle::new(env);
-    let area = look.area;
-    let fits = style.font(env).is_some_and(|font| {
-        // In `usize`: thousands of lines must not overflow.
-        let lines = font.wrap(style.text, text, f32::from(area.width)).len();
-        let line = usize::from(widgets::line_height(env, style.text));
-        lines.saturating_mul(line) <= usize::from(area.height)
-    });
-    if fits {
+    let small = paperpaw_sdk::ui::UiStyle::new(env).small;
+    if widgets::line_height(env, small) <= look.area.height {
         widgets::draw_message(canvas, env, look, text);
-    } else {
-        let center = widgets::Align::Center;
-        widgets::draw_wrapped(canvas, env, area, center, style.small, text, look.ink);
     }
 }
 

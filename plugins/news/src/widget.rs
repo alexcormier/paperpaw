@@ -14,7 +14,9 @@ use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::{params, slots};
 use paperpaw_sdk::ui::{self, UiStyle};
-use paperpaw_sdk::widgets::{self, Align, Frame, Look, Size, Widget, WidgetSpec, WidgetTarget};
+use paperpaw_sdk::widgets::{
+    self, Align, Frame, Look, Padding, Size, Widget, WidgetSpec, WidgetTarget, Wrapped,
+};
 use paperpaw_sdk::{
     Canvas, Color, Command, Env, FontHandle, Id, Params, Rect, RegisterError, Registrar,
     SettingSpec,
@@ -39,8 +41,9 @@ const LINES: [&str; 2] = ["news.lines.1", "news.lines.2"];
 
 /// Its settings, kept in the program: its look, its choices and
 /// switches for its parts.
-static SETTINGS: [SettingSpec; 8] = [
+static SETTINGS: [SettingSpec; 9] = [
     widgets::frame_spec("news.widget.headlines.frame", HEADLINES, Frame::None),
+    widgets::padding_spec("news.widget.headlines.padding", HEADLINES, Padding::Auto),
     widgets::size_spec("news.widget.headlines.size", HEADLINES, Size::Small, false),
     widgets::align_spec("news.widget.headlines.align", HEADLINES, Align::Left),
     SettingSpec::fixed_choice(
@@ -119,6 +122,53 @@ fn source(book: &str) -> &str {
 pub(crate) struct Headlines {
     /// Each one's title and its book.
     shown: Vec<(String, String)>,
+    /// Where it is drawn, once placed, and what it says there without
+    /// headlines.
+    area: Option<Rect>,
+    empty: Option<Wrapped>,
+}
+
+impl Headlines {
+    /// Lays out what it says without headlines, for where it is placed.
+    fn lay_out(&mut self, env: &Env<'_>) {
+        self.empty = match self.area {
+            Some(area) if self.shown.is_empty() => Some(empty(env, area)),
+            _ => None,
+        };
+    }
+}
+
+/// What the widget says without headlines in `area`: how to add feeds
+/// and fetch them, or where that does not fit whole, the shorter "Add
+/// feeds under News in the menu".
+fn empty(env: &Env<'_>, area: Rect) -> Wrapped {
+    let style = UiStyle::new(env);
+    let (width, height) = message_room(env, area);
+    // The sentence inside the spacing, the short form where it does not
+    // fit whole.
+    let inner = widgets::look::look(env, NAME, area).area.height;
+    let long = env.i18n.tr("news.widget.empty");
+    let wrapped = Wrapped::fitting(env, long, style.text, style.small, width, inner);
+    if wrapped.whole() {
+        return wrapped;
+    }
+    let short = env.i18n.tr("news.widget.empty.short");
+    Wrapped::fitting(env, short, style.text, style.small, width, height)
+}
+
+/// The room for a short message in `area` (the widget's place): as wide
+/// as its spacing leaves, and as high as half of it, as the lines' own
+/// room above and below the letters keeps them clear of the edges (two
+/// lines fit a low place then).
+fn message_room(env: &Env<'_>, area: Rect) -> (u16, u16) {
+    let inner = widgets::look::look(env, NAME, area).area;
+    (inner.width, (inner.height + area.height) / 2)
+}
+
+/// Where a message goes in `area`: inside the spacing across, the whole
+/// place from top to bottom (its lines in the middle of it).
+fn message_area(look: &Look, area: Rect) -> Rect {
+    Rect::new(look.area.x, area.y, look.area.width, area.height)
 }
 
 impl Widget for Headlines {
@@ -126,7 +176,17 @@ impl Widget for Headlines {
         let shown = headlines(env, count(env));
         let changed = shown != self.shown;
         self.shown = shown;
+        if changed {
+            self.lay_out(env);
+        }
         changed
+    }
+
+    fn place(&mut self, env: &Env<'_>, area: Rect) {
+        if self.area != Some(area) {
+            self.area = Some(area);
+            self.lay_out(env);
+        }
     }
 
     fn live(&self) -> bool {
@@ -145,14 +205,20 @@ impl Widget for Headlines {
     fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         let look = widgets::draw_frame(canvas, env, NAME, area);
         if self.shown.is_empty() {
-            widgets::draw_message(canvas, env, &look, env.i18n.tr("news.widget.empty"));
+            // Laid out when placed; drawn elsewhere, laid out for that.
+            let laid = match &self.empty {
+                Some(laid) if self.area == Some(area) => alloc::borrow::Cow::Borrowed(laid),
+                _ => alloc::borrow::Cow::Owned(empty(env, area)),
+            };
+            let at = message_area(&look, area);
+            laid.draw(canvas, env, at, Align::Center, look.ink);
             return;
         }
         let rows = rows(env, &look, self.shown.len());
         let caption = env.i18n.tr("news.title");
-        if widgets::shows(env, NAME, "caption") {
+        if let Some(top) = rows.0 {
             let at = Look {
-                area: Rect::new(look.area.x, rows.0, look.area.width, look.area.height),
+                area: Rect::new(look.area.x, top, look.area.width, look.area.height),
                 ..look
             };
             widgets::draw_caption(canvas, env, NAME, &at, caption);
@@ -227,24 +293,35 @@ fn row_height(env: &Env<'_>, font: &FontHandle<'_>, style: &UiStyle) -> u16 {
     text + source + room
 }
 
-/// Where the caption starts and the rows of as many of `count`
-/// headlines as fit in `look`'s area, together in the middle.
-fn rows(env: &Env<'_>, look: &Look, count: usize) -> (u16, Vec<Rect>) {
+/// Where the caption starts (if it shows) and the rows of as many of
+/// `count` headlines as fit in `look`'s area, together in the middle. The
+/// caption is left out where it is too wide or leaves no room for a
+/// headline; a single headline takes what there is where its row is
+/// higher.
+fn rows(env: &Env<'_>, look: &Look, count: usize) -> (Option<u16>, Vec<Rect>) {
     let style = UiStyle::new(env);
     let Some(font) = style.font(env) else {
-        return (look.area.y, Vec::new());
+        return (None, Vec::new());
     };
     let area = look.area;
-    let caption = caption_room(env);
     let row = row_height(env, &font, &style).max(1);
+    // The caption where it fits whole, with room for a headline below.
+    let caption = caption_room(env);
+    let fits = font.measure(style.small, env.i18n.tr("news.title")) <= f32::from(area.width);
+    let caption = if fits && caption + row <= area.height {
+        caption
+    } else {
+        0
+    };
     let fit = usize::from(area.height.saturating_sub(caption) / row);
     let n = count.min(fit).max(1);
+    let row = row.min(area.height);
     let total = (caption + row * n as u16).min(area.height);
     let top = area.y + (area.height - total) / 2;
     let rows = (0..n)
         .map(|i| Rect::new(area.x, top + caption + row * i as u16, area.width, row))
         .collect();
-    (top, rows)
+    ((caption > 0).then_some(top), rows)
 }
 
 /// A headline in its row: a rule above it (but for the first) if rules

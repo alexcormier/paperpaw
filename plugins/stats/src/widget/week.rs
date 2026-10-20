@@ -6,7 +6,7 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 
 use paperpaw_sdk::ui::{self, UiStyle};
-use paperpaw_sdk::widgets::{self, Align, Frame, Look, Widget, WidgetSpec, WidgetTarget};
+use paperpaw_sdk::widgets::{self, Align, Frame, Look, Padding, Widget, WidgetSpec, WidgetTarget};
 use paperpaw_sdk::{Arg, Canvas, Env, Id, Rect, RegisterError, Registrar, SettingSpec};
 
 use super::{caption_room, chosen, frame_height, goal, line, shade};
@@ -27,8 +27,9 @@ const SHAPES: [&str; 2] = ["stats.shape.round", "stats.shape.square"];
 
 /// Its settings, kept in the program: its look, its choices and
 /// switches for its parts.
-static SETTINGS: [SettingSpec; 8] = [
+static SETTINGS: [SettingSpec; 9] = [
     widgets::frame_spec("stats.widget.week.frame", WEEK, Frame::None),
+    widgets::padding_spec("stats.widget.week.padding", WEEK, Padding::Auto),
     widgets::align_spec("stats.widget.week.align", WEEK, Align::Left),
     SettingSpec::fixed_choice(
         "stats.widget.week.period",
@@ -166,10 +167,15 @@ fn labels_height(env: &Env<'_>, font: &paperpaw_sdk::FontHandle<'_>, style: &UiS
     }
 }
 
+/// The time read in `days`: "3 h 20 min".
+fn total(env: &Env<'_>, days: &[Shown]) -> alloc::string::String {
+    let total: u64 = days.iter().map(|d| u64::from(d.seconds)).sum();
+    fmt::duration(env, total)
+}
+
 /// "Last 7 days: 3 h 20 min" or "This week: 2 h 05 min".
 fn label(env: &Env<'_>, days: &[Shown]) -> alloc::string::String {
-    let total: u64 = days.iter().map(|d| u64::from(d.seconds)).sum();
-    let time = fmt::duration(env, total);
+    let time = total(env, days);
     if days.iter().any(|d| d.to_come) || chosen(env, NAME, "period") == PERIODS[1] {
         env.i18n
             .format("stats.widget.this-week", &[("time", Arg::Str(&time))])
@@ -193,8 +199,11 @@ fn draw_week(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, days: &[Shown]
         return;
     };
     let id = NAME;
-    let area = super::below_caption(env, id, look.area);
-    let area = super::captioned(canvas, env, id, look, &label(env, days), area.height);
+    // The caption, or where it is too long the time alone.
+    let (full, time) = (label(env, days), total(env, days));
+    let caption = super::caption(env, id, look.area, &[&full, &time]);
+    let area = super::below_caption(env, caption, look.area);
+    let area = super::captioned(canvas, env, id, look, caption, area.height);
     let small = line(&font, style.small);
     let labels = labels_height(env, &font, &style);
     // Where the bars would be low, the weekdays go.
@@ -235,6 +244,12 @@ fn draw_week(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, days: &[Shown]
         (0..7).all(|w| font.measure(style.small, super::initial(env, w)) * 1.6 <= narrowest as f32);
     let first_day = fmt::week_start(env);
     let base = i32::from(chart.y + chart.height);
+    let few_grays = env
+        .device
+        .display
+        .format
+        .gray_levels()
+        .is_some_and(|g| g <= 4);
     for (i, day) in days.iter().enumerate() {
         let (left, column) = column_of(i as u32);
         let cx = i32::from(area.x) + (left + column / 2) as i32;
@@ -256,10 +271,22 @@ fn draw_week(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, days: &[Shown]
                 canvas.fill_round_shaded(bar, radius.min(h / 4), color);
             }
         } else if !day.to_come {
-            // A day without reading: a light stub on the base.
-            let h = (thin * 2).max(3);
-            let stub = Rect::new(bx as u16, (base - h as i32) as u16, bar_w as u16, h as u16);
-            canvas.fill_round_shaded(stub, radius.min(h / 2), shade(look, 1));
+            // A day without reading: a light stub on the base; where the
+            // panel has few grays a thin line in the faint colour, since
+            // a light shade there is only a few scattered dots.
+            if few_grays {
+                let stub = Rect::new(
+                    bx as u16,
+                    (base - thin as i32) as u16,
+                    bar_w as u16,
+                    thin as u16,
+                );
+                canvas.fill(stub, look.faint);
+            } else {
+                let h = (thin * 2).max(3);
+                let stub = Rect::new(bx as u16, (base - h as i32) as u16, bar_w as u16, h as u16);
+                canvas.fill_round_shaded(stub, radius.min(h / 2), shade(look, 1));
+            }
         }
         if labels > 0 && (every || day.today || day.weekday == first_day) {
             let name = if two {
@@ -268,6 +295,10 @@ fn draw_week(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, days: &[Shown]
                 super::initial(env, day.weekday)
             };
             let w = font.measure(style.small, name);
+            // Under its bar, but inside the area (the first and last
+            // columns' names may be wider than half a column).
+            let right = f32::from(area.x + area.width) - w;
+            let at = (cx as f32 - w / 2.0).min(right).max(f32::from(area.x));
             let row = Rect::new(
                 area.x,
                 chart.y + chart.height + labels - small,
@@ -279,19 +310,11 @@ fn draw_week(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, days: &[Shown]
             } else {
                 look.faint
             };
-            ui::draw_label(
-                canvas,
-                &font,
-                style.small,
-                cx as f32 - w / 2.0,
-                row,
-                name,
-                color,
-            );
+            ui::draw_label(canvas, &font, style.small, at, row, name, color);
             if day.today && mark_today {
                 // Underlined: seen also where faint text is drawn black.
                 let y = i32::from(row.y + row.height) - thin as i32;
-                canvas.fill_rect(cx - (w / 2.0) as i32, y, w as u32, thin, look.ink);
+                canvas.fill_rect(at as i32, y, w as u32, thin, look.ink);
             }
         }
     }
