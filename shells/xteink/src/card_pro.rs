@@ -13,6 +13,7 @@ use esp_hal::dma::aligned::{DmaAlignedMut, InternalMemory};
 use esp_hal::sdmmc::{
     BusWidth, CommandFlags, Config, ResponseLen, SdHostController, Slot, SlotConfig,
 };
+use esp_hal::time::{Duration, Instant};
 use log::{info, warn};
 use paperpaw_fat::{BLOCK, Blocks, DiskError};
 use paperpaw_platform::{NoStorage, Storage};
@@ -24,6 +25,11 @@ const START_HZ: u32 = 400_000;
 const RUN_HZ: u32 = 20_000_000;
 /// Blocks moved at once through the buffer.
 const AT_ONCE: usize = 16;
+/// How long a card may take to write blocks (the SD specification allows
+/// SDXC cards 500 ms), with room.
+const WRITE_MS: u64 = 1000;
+/// Between polls of a card that is still writing, in microseconds.
+const POLL_US: u32 = 20;
 
 /// The buffer the SD host's DMA moves blocks through: in the chip's RAM
 /// (a static, never on the heap, which reaches into PSRAM).
@@ -80,6 +86,7 @@ struct Card {
     /// Addressed by block (SDHC, SDXC), else by byte.
     by_block: bool,
     blocks: u32,
+    delay: Delay,
 }
 
 const NONE: CommandFlags = CommandFlags {
@@ -146,6 +153,7 @@ impl Card {
             rca,
             by_block,
             blocks,
+            delay,
         })
     }
 
@@ -159,7 +167,8 @@ impl Card {
 
     /// Waits until the card is ready for the next transfer (after a write).
     fn ready(&mut self) -> Result<(), DiskError> {
-        for _ in 0..10_000 {
+        let since = Instant::now();
+        loop {
             let r = self
                 .slot
                 .command_blocking(13, self.rca, ResponseLen::Short, true, NONE)
@@ -168,8 +177,11 @@ impl Card {
             if r[0] & 0x100 != 0 && (r[0] >> 9) & 0xF == 4 {
                 return Ok(());
             }
+            if since.elapsed() > Duration::from_millis(WRITE_MS) {
+                return Err(DiskError);
+            }
+            self.delay.delay_micros(POLL_US);
         }
-        Err(DiskError)
     }
 }
 
