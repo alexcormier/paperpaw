@@ -41,22 +41,23 @@ proptest! {
         }
     }
 
-    /// Labels and ids with tabs and line breaks stay on their line: those
-    /// characters become spaces, and every secret is read back.
+    /// Labels and ids with tabs, line breaks and backslashes stay on
+    /// their line and come back as they are: every secret is read back.
     #[test]
-    fn labels_with_tabs_stay_on_their_line(
-        entries in proptest::collection::vec(("[a-z]{1,4}[\t\n\r a-z]{0,6}", ".{0,12}", "\\PC{0,12}"), 1..6)
+    fn labels_with_tabs_stay_on_their_line_and_come_back(
+        entries in proptest::collection::vec(("[a-z]{1,4}[\t\n\r\\\\ a-z]{0,6}", ".{0,12}", "\\PC{0,12}"), 1..6)
     ) {
         let mut secrets = Secrets::default();
         for (id, label, value) in &entries {
             secrets.apply(SecretChange::keep(id, label, value));
         }
-        let read = Secrets::decode(&secrets.encode());
+        let text = secrets.encode();
+        prop_assert_eq!(text.lines().count(), secrets.iter().count());
+        let read = Secrets::decode(&text);
         prop_assert_eq!(read.iter().count(), secrets.iter().count());
-        let clean = |s: &str| s.replace(['\t', '\n', '\r'], " ");
         for (kept, back) in secrets.iter().zip(read.iter()) {
-            prop_assert_eq!(&back.id, &clean(&kept.id));
-            prop_assert_eq!(&back.label, &clean(&kept.label));
+            prop_assert_eq!(&back.id, &kept.id);
+            prop_assert_eq!(&back.label, &kept.label);
             prop_assert_eq!(&back.value, &kept.value);
             prop_assert_eq!(back.changeable, kept.changeable);
         }
@@ -226,11 +227,9 @@ fn unknown_join_failures_are_other() {
     assert_eq!(wifi::WifiState::On.ssid(), None);
 }
 
-/// A network whose name holds a tab (names are any 32 bytes) is kept
-/// under another id once the file is read again: its password is not
-/// found by its name.
+/// A network whose name holds a tab (names are any 32 bytes) keeps its
+/// id once the file is read again: its password is found by its name.
 #[test]
-#[ignore = "bug: a Wi-Fi network name with a tab or line break loses its password after a restart"]
 fn a_network_name_with_a_tab_keeps_its_password() {
     let mut secrets = Secrets::default();
     secrets.apply(wifi::keep("Cafe\tGuest", "pw"));

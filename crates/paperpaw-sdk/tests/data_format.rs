@@ -156,11 +156,10 @@ fn a_format_without_its_upgrades_is_refused() {
 }
 
 /// A file whose first line says version 0 (`# format 0`, e.g. written by
-/// hand or damaged) makes any format's `read` index its upgrades at
-/// `0 - 1`: a panic instead of an error or version 1.
+/// hand or damaged) is read by no format, without a panic (its upgrades
+/// are not indexed at `0 - 1`).
 #[test]
-#[ignore = "bug: data::Format::read panics on a file marked `# format 0`"]
 fn a_file_of_version_0_does_not_panic() {
-    let _ = FORMAT.read("# format 0\nx");
-    let _ = PLAIN.read("# format 0\nx");
+    assert_eq!(FORMAT.read("# format 0\nx"), Err(Error::Unreadable));
+    assert_eq!(PLAIN.read("# format 0\nx"), Err(Error::Unreadable));
 }

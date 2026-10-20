@@ -125,10 +125,11 @@ fn ids_order_and_compare_by_text() {
 }
 
 #[test]
-fn placing_twice_is_no_id() {
-    // A placement of a placement is not an id: `placement` takes ids
-    // that are not placed yet.
+fn placing_twice_replaces_the_placement() {
+    // A placement of a placed id is another placement of the same, and
+    // still a valid id.
     let placed = Id::new_static("widgets.clock").placement(2).placement(3);
-    assert_eq!(placed.as_str(), "widgets.clock@2@3");
-    assert!(Id::parse(placed.as_str()).is_err());
+    assert_eq!(placed.as_str(), "widgets.clock@3");
+    assert_eq!(Id::parse(placed.as_str()).unwrap(), placed);
+    assert_eq!(placed.unplaced().unwrap().as_str(), "widgets.clock");
 }

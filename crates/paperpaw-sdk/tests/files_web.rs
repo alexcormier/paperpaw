@@ -371,11 +371,9 @@ fn base64_and_basic_authorisation_as_rfc_4648_has_them() {
     );
 }
 
-/// Copying a file onto itself empties it: the copy is begun by making
-/// the target empty, which is the source. A move onto itself on a
-/// storage that cannot rename (copy, then delete) loses the file.
+/// Copying a file onto itself keeps it: the copy is not begun by making
+/// the target, which is the source, empty.
 #[test]
-#[ignore = "bug: files::copy of a file onto itself empties it"]
 fn copying_a_file_onto_itself_keeps_it() {
     let storage = MemoryStorage::new().with("a.txt", "keep me");
     let _ = files::copy(&storage, "a.txt", "a.txt");

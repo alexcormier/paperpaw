@@ -195,12 +195,28 @@ fn summer_time_in_both_hemispheres() {
 #[test]
 fn rules_as_posix_writes_them() {
     let offset = |rule: &str| TimeZone::parse(rule).map(|z| z.offset_at(0));
+    let utc = |y, m, d, h, min| at(y, m, d, h, min, 0);
     assert_eq!(offset("UTC0"), Some(0));
     assert_eq!(offset("  UTC0  "), Some(0));
     assert_eq!(offset("<+0330>-3:30"), Some(3 * 3600 + 1800));
     assert_eq!(offset("<-0930>9:30"), Some(-(9 * 3600 + 1800)));
     assert_eq!(offset("XXX-5:45:30"), Some(5 * 3600 + 45 * 60 + 30));
     assert_eq!(offset("XXX+5"), Some(-5 * 3600));
+    // Dates as Julian days (`Jn`, 1 to 365, 29 February not counted) and
+    // as days from 0 (`n`, 0 to 365, 29 February counted): 1 March and
+    // 27 October in 2026, at 2:00.
+    let julian = TimeZone::parse("EST5EDT,J60,J300").unwrap();
+    let days = TimeZone::parse("EST5EDT,59,299").unwrap();
+    for zone in [&julian, &days] {
+        assert_eq!(zone.offset_at(utc(2026, 3, 1, 6, 59)), -5 * HOUR as i32);
+        assert_eq!(zone.offset_at(utc(2026, 3, 1, 7, 0)), -4 * HOUR as i32);
+        assert_eq!(zone.offset_at(utc(2026, 10, 27, 5, 59)), -4 * HOUR as i32);
+        assert_eq!(zone.offset_at(utc(2026, 10, 27, 6, 0)), -5 * HOUR as i32);
+    }
+    // In a leap year day 59 is 29 February, Julian day 60 still 1 March.
+    assert_eq!(days.offset_at(utc(2028, 2, 29, 7, 0)), -4 * HOUR as i32);
+    assert_eq!(julian.offset_at(utc(2028, 2, 29, 7, 0)), -5 * HOUR as i32);
+    assert_eq!(julian.offset_at(utc(2028, 3, 1, 7, 0)), -4 * HOUR as i32);
     // Summer time with its own offset, given at another hour.
     let zone = TimeZone::parse("CET-1CEST-3,M3.5.0/-1,M10.5.0/25").unwrap();
     assert_eq!(zone.offset_at(at(2026, 7, 1, 0, 0, 0)), 3 * 3600);
@@ -211,7 +227,8 @@ fn rules_as_posix_writes_them() {
         "<+03",
         "EST5EDT",
         "EST5EDT,M3.2.0",
-        "EST5EDT,J60,J300",
+        "EST5EDT,J0,J300",
+        "EST5EDT,J60,366",
         "EST5EDT,M13.1.0,M11.1.0",
         "EST5EDT,M0.1.0,M11.1.0",
         "EST5EDT,M3.6.0,M11.1.0",
@@ -347,9 +364,10 @@ fn the_chosen_zone_wins_over_the_system() {
     // A rule of one's own wins over the list.
     set(&mut h, &settings::TIME_ZONE_RULE, "  <-01>1  ");
     assert_eq!(time::clock_text(&h.env()).as_deref(), Some("11:00"));
-    // A rule that is no rule: the system's zone, not a wrong one.
+    // A rule that is no rule: the zone chosen from the list, not the
+    // system's.
     set(&mut h, &settings::TIME_ZONE_RULE, "nonsense");
-    assert_eq!(time::clock_text(&h.env()).as_deref(), Some("12:00"));
+    assert_eq!(time::clock_text(&h.env()).as_deref(), Some("17:30"));
     // An unknown zone in the list: the system's.
     set(&mut h, &settings::TIME_ZONE_RULE, "");
     set(&mut h, &settings::TIME_ZONE, "core.tz.atlantis");

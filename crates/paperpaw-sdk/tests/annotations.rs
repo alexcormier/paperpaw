@@ -237,17 +237,45 @@ fn invalid_utf8_and_windows_line_ends_are_tolerated() {
     assert_eq!(all[1].note, "");
 }
 
+/// A huge note is cut (ending in `…`) so its line stays within what the
+/// file is read by, and the annotations after it are still read.
 #[test]
-fn a_huge_line_is_read_and_a_huge_note_saved_whole() {
+fn a_huge_note_is_cut_and_the_next_annotation_still_read() {
     let note = "n".repeat(100_000);
     let storage = MemoryStorage::new();
-    annotations::add(
+    assert!(annotations::add(
         &storage,
         BOOK,
         annotation(Kind::Highlight, (0, 0), (0, 5), "t", &note),
-    );
+    ));
+    assert!(annotations::add(
+        &storage,
+        BOOK,
+        annotation(Kind::Highlight, (1, 0), (1, 5), "u", "short"),
+    ));
     let all = annotations::load(&storage, BOOK);
-    assert_eq!(all[0].note.len(), 100_000);
+    assert_eq!(all.len(), 2);
+    assert!(all[0].note.len() <= 3 * 1024, "{}", all[0].note.len());
+    assert!(all[0].note.starts_with("nnn") && all[0].note.ends_with('…'));
+    assert_eq!((all[1].text.as_str(), all[1].note.as_str()), ("u", "short"));
+}
+
+/// A line far longer than any PaperPaw writes is read (cut) without
+/// panics, and the line after it is read whole.
+#[test]
+fn a_huge_line_is_read_and_the_next_line_still_read() {
+    let text = format!(
+        "h\t1\t0\t1\t5\t3\t1\t2\ttext\t{}\nb\t2\t0\t2\t0\t9\t1\t2\tafter\t\n",
+        "n".repeat(100_000)
+    );
+    let all = annotations::load(&with_file(text.as_bytes()), BOOK);
+    assert_eq!(all.len(), 2);
+    assert_eq!(all[0].text, "text");
+    assert!(all[0].note.starts_with("nnn") && all[0].note.len() < 100_000);
+    assert_eq!(
+        (all[1].mark.kind, all[1].text.as_str()),
+        (Kind::Bookmark, "after")
+    );
 }
 
 #[test]
@@ -357,24 +385,24 @@ fn the_change_event_names_the_book() {
     assert_eq!(read.path, "books/x.epub");
 }
 
-/// Annotations kept beyond what `load` reads (1 MiB, e.g. a reference
-/// book with thousands of noted highlights) are read as none, and the next
-/// one added replaces them all.
+/// Annotations kept beyond what is changed whole (1 MiB, e.g. a
+/// reference book with thousands of noted highlights) are not written
+/// over by the next one added: the addition is refused and the file left
+/// as it is.
 #[test]
-#[ignore = "bug: annotations::add over a file larger than MAX_FILE overwrites every annotation"]
 fn an_oversized_file_is_not_overwritten_by_add() {
     let line = format!("h\t1\t0\t1\t5\t3\t1\t2\ttext\t{}\n", "n".repeat(1000));
     let big = line.repeat(1100);
     assert!(big.len() > 1 << 20);
     let storage = with_file(big.as_bytes());
-    annotations::add(
+    assert!(!annotations::add(
         &storage,
         BOOK,
         annotation(Kind::Bookmark, (9, 0), (9, 0), "new", ""),
-    );
+    ));
     let kept = storage.get(&annotations::file(BOOK)).unwrap();
     assert!(
-        kept.len() > big.len(),
+        kept == big.as_bytes(),
         "the annotations kept before are gone"
     );
 }
