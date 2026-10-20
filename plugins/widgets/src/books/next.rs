@@ -16,13 +16,16 @@ use core::cell::RefCell;
 use paperpaw_sdk::builtin::actions;
 use paperpaw_sdk::library;
 use paperpaw_sdk::ui::UiStyle;
-use paperpaw_sdk::widgets::{self, Align, Frame, Look, Size, Widget, WidgetSpec, WidgetTarget};
+use paperpaw_sdk::widgets::{
+    self, Align, Frame, Look, Padding, Size, Widget, WidgetSpec, WidgetTarget,
+};
 use paperpaw_sdk::{Arg, Canvas, Command, Env, Id, Rect, RegisterError, Registrar, Storage};
 
 use super::series::{Member, members};
 use super::{
-    Book, Covers, Generation, Lines, add_settings, catalog_stamp, chosen, cover_size, current,
-    draw_cover, draw_message, each_book, frame_height, mix, path_hash, text_size, today,
+    Book, Covers, Generation, Lines, Role, add_settings, catalog_stamp, chosen, cover_size,
+    current, draw_cover, draw_message, each_book, frame_height, least_cover_width, mix, path_hash,
+    text_size, today,
 };
 use crate::PLUGIN;
 use paperpaw_sdk::SettingSpec;
@@ -46,9 +49,10 @@ const SEEN_PLACES: u64 = 5;
 const MAX_NEWEST: usize = 16;
 
 /// Its settings, kept in the program.
-static SETTINGS: [SettingSpec; 8] = [
+static SETTINGS: [SettingSpec; 9] = [
     widgets::align_spec("widgets.next.align", ID, Align::Left),
     widgets::frame_spec("widgets.next.frame", ID, Frame::None),
+    widgets::padding_spec("widgets.next.padding", ID, Padding::Auto),
     widgets::size_spec("widgets.next.size", ID, Size::Medium, false),
     SettingSpec::fixed_choice(
         "widgets.next.pick",
@@ -415,14 +419,24 @@ fn layout<'b>(env: &Env<'b>, look: &Look, book: &'b Book) -> Layout<'b> {
     let mut lines = Lines::new();
     let caption = widgets::shows(env, id, "caption");
     if caption {
-        lines.add(style.small, env.i18n.tr("widgets.next.caption"), look.faint);
+        lines.add(
+            Role::Caption,
+            style.small,
+            env.i18n.tr("widgets.next.caption"),
+            look.faint,
+        );
     }
-    lines.add(text_size(env, id), book.title.as_str(), look.ink);
+    lines.add(
+        Role::Title,
+        text_size(env, id),
+        book.title.as_str(),
+        look.ink,
+    );
     if widgets::shows(env, id, "author") {
-        lines.add(style.small, book.author.as_str(), look.faint);
+        lines.add(Role::Note, style.small, book.author.as_str(), look.faint);
     }
     if widgets::shows(env, id, "series") {
-        lines.add(style.small, series_text(env, book), look.faint);
+        lines.add(Role::Note, style.small, series_text(env, book), look.faint);
     }
     if !widgets::shows(env, id, "cover") {
         return Layout {
@@ -449,25 +463,24 @@ fn layout<'b>(env: &Env<'b>, look: &Look, book: &'b Book) -> Layout<'b> {
     }
     // High: the cover above, the text below it (what fits in half).
     let half = (area.height / 2).saturating_sub(gap / 2);
-    if caption && lines.height(env) > half {
-        // The title rather than the caption.
-        lines.lines.remove(0);
-    }
-    lines.fit(env, half);
+    lines.fit(env, area.width, half);
     let text_h = lines.height(env);
     let room = area.height.saturating_sub(text_h + gap / 2);
-    let (with_text, room) = if room >= area.height / 3 {
-        (true, room)
-    } else {
-        (false, area.height)
-    };
+    // A cover too small to tell is left out rather than the text.
+    if room < area.height / 3 || room < least_cover_width(env) * 3 / 2 {
+        return Layout {
+            cover: None,
+            lines,
+            text: Some(area),
+        };
+    }
     let (w, h) = cover_size(book, area.width, room);
-    let total = if with_text { h + gap / 2 + text_h } else { h };
+    let total = h + gap / 2 + text_h;
     let top = area.y + (area.height - total.min(area.height)) / 2;
     Layout {
         cover: Some(Rect::new(super::place_x(area, w, align), top, w, h)),
         lines,
-        text: with_text.then(|| Rect::new(area.x, top + h + gap / 2, area.width, text_h)),
+        text: Some(Rect::new(area.x, top + h + gap / 2, area.width, text_h)),
     }
 }
 

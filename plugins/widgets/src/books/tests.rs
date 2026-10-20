@@ -23,8 +23,9 @@ use paperpaw_sdk::{
 use super::highlight::{self, Found};
 use super::next;
 use super::numbers::Numbers;
-use super::reading::{Position, chapter_left_text, left_text, wrap_words};
+use super::reading::{Position, chapter_left_text, left_text};
 use super::series::{self, Member};
+use super::wrap_words;
 use crate::harness::{DEVICE, Harness, pixels};
 
 /// A cover: a decoded picture (`PPGI`, its width and height, rows of
@@ -778,10 +779,11 @@ fn long_titles_in_lines_as_even_as_can_be() {
         wrap(3, width("Adventures in")),
         ["Alice's", "Adventures in", "Wonderland"]
     );
-    assert_eq!(
-        wrap(2, width("Adventures in")),
-        ["Alice's", "Adventures in Wonderland"]
-    );
+    // Where it needs more lines than there are, or a word is wider than
+    // a line: on one line, shortened where it is drawn, never a line too
+    // wide nor a word broken.
+    assert_eq!(wrap(2, width("Adventures in")), [title]);
+    assert_eq!(wrap(3, width("Adventures") - 1), [title]);
 }
 
 #[test]
@@ -840,6 +842,94 @@ fn settings_that_need_it_are_explained() {
             let spec = h.settings.spec(id).unwrap();
             let help = spec.description.as_deref().unwrap_or_default();
             assert!(h.i18n.get(help).is_some(), "{language}: {id}");
+        }
+    }
+}
+
+/// In small places as on a page of small cells, each book widget draws
+/// inside its place only, in every style.
+#[test]
+fn widgets_keep_inside_small_places() {
+    let mut h = Harness::new(library());
+    let styles = STYLES
+        .iter()
+        .map(|&(id, key, value)| (id, Some((key, value))));
+    for (id, style) in IDS.iter().map(|&id| (id, None)).chain(styles) {
+        if let Some((key, value)) = style {
+            let value = SettingValue::Text(Cow::Borrowed(value));
+            h.set(&alloc::format!("{id}.{key}"), value);
+        }
+        for (w, h_) in [
+            (90, 67),
+            (197, 67),
+            (411, 67),
+            (90, 153),
+            (197, 153),
+            (74, 300),
+        ] {
+            let area = Rect::new(30, 30, w, h_);
+            let env = h.env();
+            let widget = env.widgets.make(id, &env).unwrap();
+            let mut fb = Framebuffer::new(
+                DEVICE.display.width,
+                DEVICE.display.height,
+                PixelFormat::Gray4,
+            )
+            .unwrap();
+            {
+                let mut canvas = fb.canvas();
+                canvas.clear(Color::WHITE);
+                widget.draw(&mut canvas, &env, area);
+            }
+            let view = fb.view();
+            for y in 0..DEVICE.display.height {
+                for x in 0..DEVICE.display.width {
+                    let inside = x >= area.x
+                        && x < area.x + area.width
+                        && y >= area.y
+                        && y < area.y + area.height;
+                    assert!(
+                        inside || view.pixel(x, y).luma() >= 128,
+                        "{id} {style:?} {area:?}: ink at {x},{y}"
+                    );
+                }
+            }
+        }
+    }
+}
+
+/// Lines break a title between words only: each line is whole words of
+/// it, or ends shortened.
+#[test]
+fn titles_break_between_words_only() {
+    use super::{Lines, Role};
+    let h = Harness::new(MemoryStorage::new());
+    let env = h.env();
+    let style = paperpaw_sdk::ui::UiStyle::new(&env);
+    let title = "Alice's Adventures in Wonderland, an Unexpectedly Long Title";
+    let words: Vec<&str> = title.split_whitespace().collect();
+    for width in [40u16, 60, 90, 120, 180, 260, 400] {
+        for height in [30u16, 60, 120, 240] {
+            let mut lines = Lines::new();
+            lines.add(Role::Caption, style.small, "Next up", Color::BLACK);
+            lines.add(Role::Title, style.title, title, Color::BLACK);
+            lines.add(Role::Note, style.small, "Ann Author", Color::BLACK);
+            lines.fit(&env, width, height);
+            let font = style.font(&env).unwrap();
+            for line in &lines.lines {
+                let text = line.text.as_ref();
+                assert!(
+                    font.measure(line.size, text) <= f32::from(width) + 1.0,
+                    "{width}x{height}: {text:?} too wide"
+                );
+                if line.role == Role::Title && !text.ends_with('…') {
+                    for word in text.split_whitespace() {
+                        assert!(words.contains(&word), "{width}x{height}: {text:?}");
+                    }
+                }
+            }
+            // The title stays, and the caption goes before it.
+            assert!(lines.lines.iter().any(|l| l.role == Role::Title));
         }
     }
 }

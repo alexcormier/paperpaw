@@ -7,7 +7,9 @@ use alloc::vec::Vec;
 
 use paperpaw_sdk::library;
 use paperpaw_sdk::ui::UiStyle;
-use paperpaw_sdk::widgets::{self, Align, Frame, Look, Size, Widget, WidgetSpec, WidgetTarget};
+use paperpaw_sdk::widgets::{
+    self, Align, Frame, Look, Padding, Size, Widget, WidgetSpec, WidgetTarget,
+};
 use paperpaw_sdk::{Canvas, Env, Id, Rect, RegisterError, Registrar};
 
 use super::shelf::{self, Place, Shelved};
@@ -21,9 +23,10 @@ const WIDGET: &str = "widgets.favourites";
 pub(crate) const LAYOUTS: [&str; 2] = ["widgets.books.layout.row", "widgets.books.layout.grid"];
 
 /// Its settings, kept in the program.
-static SETTINGS: [SettingSpec; 9] = [
+static SETTINGS: [SettingSpec; 10] = [
     widgets::align_spec("widgets.favourites.align", ID, Align::Center),
     widgets::frame_spec("widgets.favourites.frame", ID, Frame::None),
+    widgets::padding_spec("widgets.favourites.padding", ID, Padding::Auto),
     widgets::size_spec("widgets.favourites.size", ID, Size::Medium, false),
     SettingSpec::fixed_choice(
         "widgets.favourites.layout",
@@ -116,6 +119,7 @@ impl Favourites {
     fn content(env: &Env<'_>, look: &Look) -> Rect {
         if widgets::shows(env, WIDGET, "caption")
             && look.area.height >= 3 * widgets::caption_height(env)
+            && super::caption_fits(env, env.i18n.tr("widgets.favourites"), look.area.width)
         {
             super::below(look.area, widgets::caption_height(env))
         } else {
