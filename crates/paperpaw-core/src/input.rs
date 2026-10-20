@@ -179,8 +179,7 @@ impl Recognizer {
     /// Fires long presses that are due at `now`.
     pub(crate) fn tick(&mut self, now: Instant, thresholds: &Thresholds) -> Vec<Recognized> {
         let mut fired = Vec::new();
-        // Two fingers down: no long press, maybe a pinch.
-        let together = self.pointers.len() > 1;
+        let together = self.together();
         for button in &mut self.buttons {
             if !button.long_fired && now.since(button.since) >= thresholds.long_press_ms {
                 button.long_fired = true;
@@ -191,11 +190,7 @@ impl Recognizer {
             }
         }
         for pointer in &mut self.pointers {
-            if !pointer.long_fired
-                && !pointer.moved
-                && !together
-                && now.since(pointer.since) >= thresholds.long_press_ms
-            {
+            if pointer.waits(together) && now.since(pointer.since) >= thresholds.long_press_ms {
                 pointer.long_fired = true;
                 fired.push(Recognized::Gesture(Gesture {
                     kind: GestureKind::LongPress,
@@ -208,8 +203,10 @@ impl Recognizer {
         fired
     }
 
-    /// When the next long press could fire, if any.
+    /// When the next long press could fire, if any: as [`Self::tick`]
+    /// fires them, so that a time asked for is never one already past.
     pub(crate) fn next_deadline(&self, thresholds: &Thresholds) -> Option<Instant> {
+        let together = self.together();
         let buttons = self
             .buttons
             .iter()
@@ -218,12 +215,25 @@ impl Recognizer {
         let pointers = self
             .pointers
             .iter()
-            .filter(|p| !p.long_fired && !p.moved)
+            .filter(|p| p.waits(together))
             .map(|p| p.since);
         buttons
             .chain(pointers)
             .min()
             .map(|since| since.add_millis(thresholds.long_press_ms))
+    }
+
+    /// Two fingers down: no long press, maybe a pinch.
+    fn together(&self) -> bool {
+        self.pointers.len() > 1
+    }
+}
+
+impl TrackedPointer {
+    /// Whether it may still become a long press: held still, alone, and
+    /// not part of two fingers before.
+    fn waits(&self, together: bool) -> bool {
+        !self.long_fired && !self.moved && !self.paired && !together
     }
 }
 

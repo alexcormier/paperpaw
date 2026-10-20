@@ -150,3 +150,26 @@ fn any_order_of_presses_leaves_the_buttons_working() {
         assert!(kernel.input.dropped_buttons.is_empty());
     }
 }
+
+#[test]
+fn two_fingers_resting_wake_the_shell_no_more() {
+    let log = log();
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(TestPlugin::new("a", &log))
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    render(&mut kernel);
+    // Two fingers down and held: no long press, so nothing to wake for.
+    finger(&mut kernel, 1000, 0, PointerPhase::Down, (30, 45));
+    finger(&mut kernel, 1010, 1, PointerPhase::Down, (60, 45));
+    for at in [1600, 2000, 5000] {
+        let wake = kernel.tick(Instant(at)).wake_at();
+        assert!(wake.is_none_or(|w| w > Instant(at)), "{wake:?} at {at}");
+    }
+    // One lifted, the other rests on: still no long press of it.
+    finger(&mut kernel, 5100, 1, PointerPhase::Up, (60, 45));
+    kernel.tick(Instant(6000));
+    assert!(!kernel.settings().read(&settings::NIGHT_MODE));
+    assert!(nothing_held(&kernel));
+}
