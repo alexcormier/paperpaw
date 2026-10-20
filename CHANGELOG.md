@@ -6,6 +6,12 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Going back to an older update no longer lets it write over the
+  library's files a newer PaperPaw wrote: annotations, the books opened
+  last, the favourites and a book's details are read through
+  `data::Format::FIRST` and left as they are when they say a later
+  version. SDK: `data::Format::FIRST`, and `StorageError` from
+  `data::Error`.
 - Emulator and Android: a file written whole is on the disk before it
   replaces the old one, so a power cut leaves the old or the new, and
   files of one name with other extensions (`a.x`, `a.y`) no longer

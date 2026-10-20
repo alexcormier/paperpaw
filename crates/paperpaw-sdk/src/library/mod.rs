@@ -387,10 +387,11 @@ fn favourites_file() -> String {
 }
 
 /// The lines of a list file of at most `max` paths; none where there is
-/// no such file, an error where it could not be read (so it is not
-/// written over).
+/// no such file, an error where it could not be read or a newer PaperPaw
+/// wrote it ([`data::Format`](crate::data::Format)), so it is not written
+/// over.
 fn read_list(storage: &dyn Storage, path: &str, max: usize) -> Result<Vec<String>, StorageError> {
-    let text = crate::files::load_text_for_update(storage, path, max * 512)?;
+    let text = crate::data::Format::FIRST.load(storage, path, max * 512)?;
     Ok(text
         .as_deref()
         .unwrap_or_default()
@@ -425,7 +426,9 @@ pub fn book(storage: &dyn Storage, path: &str) -> Option<Book> {
 /// ([`listing::Entry::size`]): the file is not looked up again (on a card,
 /// a search through its folder).
 pub fn book_sized(storage: &dyn Storage, path: &str, size: u64) -> Option<Book> {
-    let source = crate::files::read_text(storage, &book_file(path), MAX_DETAILS).ok()?;
+    let source = crate::data::Format::FIRST
+        .load(storage, &book_file(path), MAX_DETAILS)
+        .ok()??;
     let book = parse_details(&source);
     (book.size == size).then_some(book)
 }
@@ -436,7 +439,8 @@ pub fn book_sized(storage: &dyn Storage, path: &str, size: u64) -> Option<Book> 
 /// not written over.
 fn book_for_update(storage: &dyn Storage, path: &str) -> Result<Book, StorageError> {
     let size = storage.size(path).unwrap_or_default();
-    let known = crate::files::load_text_for_update(storage, &book_file(path), MAX_DETAILS)?
+    let known = crate::data::Format::FIRST
+        .load(storage, &book_file(path), MAX_DETAILS)?
         .map(|source| parse_details(&source))
         .filter(|book| book.size == size);
     Ok(known.unwrap_or_else(|| Book {
@@ -1099,6 +1103,25 @@ books/b.txt",
         assert_eq!(
             storage.get(&favourites_file()).as_deref(),
             Some(&b"b\xFCcher/a.epub"[..])
+        );
+        // Written by a newer PaperPaw (after going back to an older
+        // update): left as it is.
+        let newer = "# format 2\nbooks/a.epub";
+        let storage = MemoryStorage::new().with(&favourites_file(), newer);
+        set_favourite(&storage, "c.epub", true);
+        assert_eq!(
+            storage.get(&favourites_file()).as_deref(),
+            Some(newer.as_bytes())
+        );
+        let storage = MemoryStorage::new()
+            .with("books/a.txt", "hello")
+            .with(&book_file("books/a.txt"), "# format 2\n[book]\nsize = 5\n");
+        set_finished(&storage, "books/a.txt", true);
+        assert!(
+            storage
+                .get(&book_file("books/a.txt"))
+                .unwrap()
+                .starts_with(b"# format 2")
         );
         // A byte order mark first, as Notepad writes: read past.
         let storage = MemoryStorage::new().with(&favourites_file(), "\u{feff}a.epub\r\nb.epub");

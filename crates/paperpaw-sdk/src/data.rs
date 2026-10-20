@@ -79,7 +79,23 @@ pub enum Error {
     Storage(StorageError),
 }
 
+impl From<Error> for StorageError {
+    /// A file written by a newer PaperPaw, or not as its format says, is
+    /// [`StorageError::InvalidData`]: not read, not written over.
+    fn from(e: Error) -> Self {
+        match e {
+            Error::Storage(e) => e,
+            Error::Newer(_) | Error::Unreadable => StorageError::InvalidData,
+        }
+    }
+}
+
 impl Format {
+    /// The first version of a format: files as they were before versions
+    /// came, without a first line. Reading through it refuses files a
+    /// newer PaperPaw marked with a later version.
+    pub const FIRST: Format = Format::new(1, &[]);
+
     /// Format `version` with the steps from version 1 to it.
     pub const fn new(version: u32, upgrades: &'static [Upgrade]) -> Self {
         assert!(
@@ -245,6 +261,10 @@ mod tests {
         );
         let ansi = MemoryStorage::new().with("c.ini", b"colour = r\xF6d\n".to_vec());
         assert_eq!(FORMAT.load(&ansi, "c.ini", 1024), Err(Error::Unreadable));
+        assert_eq!(
+            StorageError::from(Error::Newer(2)),
+            StorageError::InvalidData
+        );
         let bom = MemoryStorage::new().with("d.ini", "\u{feff}# format 3\n[look]\n");
         assert_eq!(
             FORMAT.load(&bom, "d.ini", 1024).unwrap().unwrap(),
