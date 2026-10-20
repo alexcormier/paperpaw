@@ -6,6 +6,10 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Menu editor: a menu is no longer offered for one of its own submenus
+  (the main menu inside the tools), a circle that hid both menus from
+  the editor; menus caught in one all the same are listed, and *Reset
+  all* resets every changed menu, listed or not.
 - Rules: those that repeat every so many minutes run without a clock
   too (they count from the start); a time of day is waited for again
   when the clock becomes known, is set or moves to another time zone,
