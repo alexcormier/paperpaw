@@ -648,6 +648,9 @@ impl Document for Fb2Document {
             return Ok(None);
         };
         let base = format!("{}/cover-{}", self.paths.dir, self.cover_fit.long);
+        if crate::pictures::failed(storage, &base) {
+            return Ok(None);
+        }
         let cache = crate::pictures::file(&base, self.color);
         decode_binaries(
             storage,
@@ -657,7 +660,14 @@ impl Document for Fb2Document {
             &self.paths.dir,
             self.color,
         )?;
-        Ok(crate::pictures::open(storage, &base, self.color))
+        let cover = crate::pictures::open(storage, &base, self.color);
+        if cover.is_none() {
+            // Not in the book, or not decodable: the whole book is not read
+            // through again for it each time it is listed.
+            let missing = DocumentError::Malformed(alloc::borrow::Cow::Borrowed("cover"));
+            crate::pictures::note_failure(storage, &base, &missing);
+        }
+        Ok(cover)
     }
 
     fn links(&self, storage: &dyn Storage, section: u32, from: u32, to: u32) -> Vec<Link> {

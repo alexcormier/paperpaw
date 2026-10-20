@@ -14,7 +14,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use paperpaw_sdk::Storage;
-use paperpaw_sdk::document::ImageRef;
+use paperpaw_sdk::document::{DocumentError, ImageRef};
 use paperpaw_sdk::image::ImageFile;
 
 /// The cache file of picture `base` in colour or gray.
@@ -22,15 +22,38 @@ pub(crate) fn file(base: &str, color: bool) -> String {
     format!("{base}.{}", if color { "rgb" } else { "gray" })
 }
 
-/// The decoded picture `base`, the kind wanted first, else the other.
+/// The decoded picture `base`, the kind wanted first, else the other; a
+/// picture of no size is none.
 pub(crate) fn open(storage: &dyn Storage, base: &str, color: bool) -> Option<ImageRef> {
     [color, !color].into_iter().find_map(|color| {
-        ImageFile::open(storage, &file(base, color)).map(|image| ImageRef {
-            path: image.path,
-            width: image.width,
-            height: image.height,
-        })
+        ImageFile::open(storage, &file(base, color))
+            .filter(|image| image.width > 0 && image.height > 0)
+            .map(|image| ImageRef {
+                path: image.path,
+                width: image.width,
+                height: image.height,
+            })
     })
+}
+
+/// The mark of picture `base` that could not be decoded.
+fn mark(base: &str) -> String {
+    format!("{base}.bad")
+}
+
+/// Whether picture `base` was found not to be decodable: it is not tried
+/// again each time its page shows (decoding a large one takes seconds on
+/// small devices), until its book's cache goes.
+pub(crate) fn failed(storage: &dyn Storage, base: &str) -> bool {
+    storage.exists(&mark(base))
+}
+
+/// Notes that picture `base` cannot be decoded, where `error` says the
+/// picture is at fault: short memory or a storage error may pass.
+pub(crate) fn note_failure(storage: &dyn Storage, base: &str, error: &DocumentError) {
+    if matches!(error, DocumentError::Malformed(_)) {
+        let _ = storage.write(&mark(base), &[]);
+    }
 }
 
 /// The list of pictures noted in cache folder `dir`.
@@ -109,9 +132,12 @@ fn parse(line: &str, name: &str) -> Option<((u32, u32), String)> {
 }
 
 /// Picture `base`: decoded, else as noted, to be decoded in the kind
-/// wanted.
+/// wanted, unless it was found not to be decodable.
 pub(crate) fn open_or_noted(storage: &dyn Storage, base: &str, color: bool) -> Option<ImageRef> {
     open(storage, base, color).or_else(|| {
+        if failed(storage, base) {
+            return None;
+        }
         let ((width, height), _) = noted(storage, base)?;
         Some(ImageRef {
             path: file(base, color),

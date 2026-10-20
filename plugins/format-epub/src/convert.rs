@@ -1872,7 +1872,12 @@ fn decode_source(
 }
 
 fn image_error(e: paperpaw_sdk::image::ImageError) -> DocumentError {
-    DocumentError::Malformed(alloc::borrow::Cow::Owned(alloc::format!("{e}")))
+    use paperpaw_sdk::image::ImageError;
+    match e {
+        ImageError::Io => DocumentError::Storage(paperpaw_sdk::StorageError::Io),
+        ImageError::OutOfMemory => DocumentError::OutOfMemory,
+        e => DocumentError::Malformed(alloc::borrow::Cow::Owned(alloc::format!("{e}"))),
+    }
 }
 
 #[cfg(test)]

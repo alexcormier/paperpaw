@@ -513,6 +513,9 @@ impl Document for EpubDocument {
         }
         let base = image.path.rsplit_once('.')?.0;
         let (dir, _) = base.rsplit_once('/')?;
+        if crate::pictures::failed(storage, base) {
+            return None;
+        }
         let (_, source) = crate::pictures::noted(storage, base)?;
         let file = crate::pictures::file(base, self.color);
         convert::decode_image(
@@ -524,6 +527,7 @@ impl Document for EpubDocument {
             self.image_fit,
             self.color,
         )
+        .inspect_err(|e| crate::pictures::note_failure(storage, base, e))
         .ok()?;
         crate::pictures::open(storage, base, self.color)
     }
@@ -534,6 +538,9 @@ impl Document for EpubDocument {
         };
         // Named by its size: decoded anew for a screen that shows it larger.
         let base = alloc::format!("{}/cover-{}", self.cache, self.cover_fit.long);
+        if crate::pictures::failed(storage, &base) {
+            return Ok(None);
+        }
         if !crate::pictures::has(storage, &base, self.color) {
             convert::decode_image(
                 storage,
@@ -543,7 +550,8 @@ impl Document for EpubDocument {
                 &self.cache,
                 self.cover_fit,
                 self.color,
-            )?;
+            )
+            .inspect_err(|e| crate::pictures::note_failure(storage, &base, e))?;
         }
         Ok(crate::pictures::open(storage, &base, self.color))
     }

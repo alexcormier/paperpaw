@@ -661,3 +661,93 @@ fn a_package_of_endless_metadata_is_read_once_in_bounded_memory() {
     assert_eq!(card.writes.get(), writes, "the package was read again");
     assert_eq!(again.metadata(), metadata);
 }
+
+/// A PNG whose header says its size, `width` by `height`, and whose data
+/// is missing.
+fn broken_png(width: u32, height: u32) -> Vec<u8> {
+    let mut png = b"\x89PNG\r\n\x1a\n\0\0\0\x0dIHDR".to_vec();
+    png.extend_from_slice(&width.to_be_bytes());
+    png.extend_from_slice(&height.to_be_bytes());
+    png.extend_from_slice(&[8, 0, 0, 0, 0, 0, 0, 0, 0]);
+    png.resize(200, 0);
+    png
+}
+
+#[test]
+fn a_picture_that_cannot_be_decoded_is_tried_once() {
+    let chapter = "<html><body><img src=\"bad.png\" alt=\"Broken\"/></body></html>";
+    let card = Card::new(
+        "book.epub",
+        epub_with(chapter, &[("OEBPS/bad.png", &broken_png(300, 200))]),
+    );
+    let doc = EpubDocument::open(&card, "book.epub").unwrap();
+    let block = doc.block_at(&card, Locator::START).unwrap().unwrap();
+    let image = block.image.expect("laid out at its size");
+    assert_eq!(doc.prepare_image(&card, &image), None);
+    let reads = card.reads_of("book.epub");
+    for _ in 0..5 {
+        assert_eq!(doc.prepare_image(&card, &image), None);
+    }
+    assert_eq!(card.reads_of("book.epub"), reads, "decoded again");
+    // Its alternative text from now on.
+    let doc = EpubDocument::open(&card, "book.epub").unwrap();
+    let block = doc.block_at(&card, Locator::START).unwrap().unwrap();
+    assert_eq!((block.image, block.text.as_str()), (None, "Broken"));
+}
+
+#[test]
+fn a_picture_of_no_size_is_not_laid_out() {
+    let chapter = "<html><body><img src=\"none.png\" alt=\"None\"/></body></html>";
+    let card = Card::new(
+        "book.epub",
+        epub_with(chapter, &[("OEBPS/none.png", &broken_png(0, 0))]),
+    );
+    let doc = EpubDocument::open(&card, "book.epub").unwrap();
+    let block = doc.block_at(&card, Locator::START).unwrap().unwrap();
+    assert_eq!((block.image, block.text.as_str()), (None, "None"));
+}
+
+#[test]
+fn a_comic_page_or_cover_that_cannot_be_decoded_is_tried_once() {
+    let zip = ZipBuilder::new()
+        .stored("1.jpg", b"\xff\xd8\xff\xe0 not really a picture".to_vec())
+        .build();
+    let card = Card::new("book.cbz", zip);
+    let doc = paperpaw_plugin_format_epub::CbzDocument::open(&card, "book.cbz").unwrap();
+    assert!(
+        doc.block_at(&card, Locator::START)
+            .unwrap()
+            .unwrap()
+            .image
+            .is_none()
+    );
+    let reads = card.reads_of("book.cbz");
+    for _ in 0..5 {
+        assert!(
+            doc.block_at(&card, Locator::START)
+                .unwrap()
+                .unwrap()
+                .image
+                .is_none()
+        );
+        assert!(doc.cover(&card).unwrap().is_none());
+    }
+    // The cover once more, as it is its own picture.
+    let once = card.reads_of("book.cbz") - reads;
+    assert!(doc.cover(&card).unwrap().is_none());
+    assert_eq!(card.reads_of("book.cbz") - reads, once, "decoded again");
+
+    let book = "<?xml version=\"1.0\" encoding=\"utf-8\"?><FictionBook \
+        xmlns:l=\"http://www.w3.org/1999/xlink\"><description><title-info>\
+        <coverpage><image l:href=\"#c\"/></coverpage></title-info></description>\
+        <body><section><p>Text.</p></section></body>\
+        <binary id=\"c\" content-type=\"image/png\">iVBORw0KGgo=</binary></FictionBook>";
+    let card = Card::new("book.fb2", book.as_bytes().to_vec());
+    let doc = Fb2Document::open(&card, "book.fb2", true).unwrap();
+    assert!(doc.cover(&card).unwrap().is_none());
+    let reads = card.reads_of("book.fb2");
+    for _ in 0..5 {
+        assert!(doc.cover(&card).unwrap().is_none());
+    }
+    assert_eq!(card.reads_of("book.fb2"), reads, "read through again");
+}

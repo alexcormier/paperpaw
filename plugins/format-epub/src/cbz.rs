@@ -157,6 +157,9 @@ impl CbzDocument {
         fit: Fit,
     ) -> Option<ImageRef> {
         if !crate::pictures::has(storage, base, self.color) {
+            if crate::pictures::failed(storage, base) {
+                return None;
+            }
             let name = self.pages.get(index)?;
             let file = crate::pictures::file(base, self.color);
             convert::decode_image(
@@ -168,6 +171,7 @@ impl CbzDocument {
                 fit,
                 self.color,
             )
+            .inspect_err(|e| crate::pictures::note_failure(storage, base, e))
             .ok()?;
         }
         crate::pictures::open(storage, base, self.color)
