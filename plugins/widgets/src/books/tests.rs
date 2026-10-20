@@ -445,12 +445,68 @@ fn chance_picks_another_book_each_day() {
 
 #[test]
 fn new_books_are_those_not_seen() {
-    let books = vec![(1, "one".to_string()), (5, "five".to_string())];
-    // The first time, none is new.
-    assert!(next::new_books(None, &books, Vec::new()).is_empty());
-    let seen = [1, 2, 3];
-    let newest = next::new_books(Some(&seen), &books, vec!["older".to_string()]);
+    let mut seen = next::Seen::new();
+    for hash in [1, 2, 3] {
+        seen.add(hash);
+    }
+    assert!(seen.has(2) && !seen.has(5));
+    let newest = next::new_books(vec!["five".to_string()], vec!["older".to_string()]);
     assert_eq!(newest, ["five", "older"]);
+    // Ten thousand seen: few others count as seen.
+    let mut seen = next::Seen::new();
+    for n in 0..10_000u64 {
+        seen.add(super::mix(n));
+    }
+    assert!((0..10_000u64).all(|n| seen.has(super::mix(n))));
+    let wrong = (10_000..20_000u64)
+        .filter(|&n| seen.has(super::mix(n)))
+        .count();
+    assert!(wrong < 1000, "{wrong}");
+}
+
+/// In a large library, a book added after thousands of others is found
+/// new, and what is kept stays small.
+#[test]
+fn new_books_in_a_large_library() {
+    let books = |count: usize| -> Vec<catalog::Record> {
+        (0..count)
+            .map(|n| {
+                let path = alloc::format!("books/{n:05}.epub");
+                catalog::Record::of(&path, &library::Book::default())
+            })
+            .collect()
+    };
+    let storage = MemoryStorage::new();
+    catalog::write(&storage, &books(5000));
+    let mut h = Harness::new(storage);
+    h.set(
+        "widgets.next.pick",
+        SettingValue::Text(Cow::Borrowed("widgets.next.newest")),
+    );
+    let pick = |h: &Harness| {
+        let env = h.env();
+        let widget = env.widgets.make("widgets.next", &env).unwrap();
+        let mut described = Vec::new();
+        let mut fb = Framebuffer::new(480, 800, PixelFormat::Gray4).unwrap();
+        widget.draw(
+            &mut fb.canvas().describing(&mut described),
+            &env,
+            Rect::new(0, 0, 460, 300),
+        );
+        described
+            .into_iter()
+            .map(|d| d.label)
+            .collect::<Vec<_>>()
+            .join(" ")
+    };
+    // The first look: all seen.
+    pick(&h);
+    catalog::write(&h.storage, &books(5001));
+    paperpaw_sdk::Storage::write(&h.storage, "books/05000.epub", b"a book").unwrap();
+    let shown = pick(&h);
+    assert!(shown.contains("05000"), "{shown}");
+    let kept = paperpaw_sdk::Storage::size(&h.storage, ".paperpaw/plugins/widgets/seen.bits");
+    assert_eq!(kept, Ok(8 * 1024));
 }
 
 #[test]
