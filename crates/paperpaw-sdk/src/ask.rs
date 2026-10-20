@@ -68,6 +68,14 @@ impl TextQuestion {
         self
     }
 
+    /// Answers on each change too, with [`Typed::typing`] set, e.g. for a
+    /// list that filters as the reader types; the last answer, when the
+    /// reader is done, has it unset.
+    pub fn live(mut self) -> Self {
+        self.params.set(params::LIVE, "1");
+        self
+    }
+
     /// Passes `value` along: it comes back in the answer's context.
     pub fn with(mut self, key: impl Into<Cow<'static, str>>, value: impl Into<String>) -> Self {
         self.params.set(key, value);

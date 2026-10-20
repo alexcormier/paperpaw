@@ -212,6 +212,7 @@ fn without_a_key_it_is_asked_for_and_kept_veiled() {
     panel.send(
         "translate.key-entered",
         Typed {
+            typing: false,
             text: String::from("  secret-key:fx  "),
             context: Params::new(),
         },
@@ -244,6 +245,7 @@ fn an_empty_key_is_not_kept() {
     panel.send(
         "translate.key-entered",
         Typed {
+            typing: false,
             text: String::from("   "),
             context: Params::new(),
         },

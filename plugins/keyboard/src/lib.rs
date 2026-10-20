@@ -474,7 +474,7 @@ impl KeyboardScreen {
             self.shift = false;
             self.redraw(cx, self.keys);
         }
-        self.redraw(cx, self.field);
+        self.changed(cx);
     }
 
     fn press(&mut self, key: Key, cx: &mut Cx<'_, '_>) {
@@ -487,7 +487,9 @@ impl KeyboardScreen {
             }
             Key::Space => return self.insert(" ", cx),
             Key::Delete => {
-                self.text.pop();
+                if self.text.pop().is_some() {
+                    return self.changed(cx);
+                }
             }
             Key::Shift => {
                 self.shift = !self.shift;
@@ -572,16 +574,30 @@ impl KeyboardScreen {
         }
     }
 
+    /// Shows the changed text, and sends it where asked on each change.
+    fn changed(&mut self, cx: &mut Cx<'_, '_>) {
+        self.redraw(cx, self.field);
+        if self.params.get(params::LIVE).is_some() {
+            self.answer(self.text.clone(), true, cx);
+        }
+    }
+
     /// Closes the keyboard and sends the text.
     fn finish(&mut self, cx: &mut Cx<'_, '_>) {
         cx.command(Command::Back);
+        let text = core::mem::take(&mut self.text);
+        self.answer(text, false, cx);
+    }
+
+    fn answer(&self, text: String, typing: bool, cx: &mut Cx<'_, '_>) {
         if let Some(reply) = self
             .params
             .get(params::REPLY)
             .and_then(|r| Id::parse(r).ok())
         {
             let typed = Typed {
-                text: core::mem::take(&mut self.text),
+                text,
+                typing,
                 context: self.params.clone(),
             };
             cx.command(Command::Emit(reply, typed.to_params()));
@@ -987,7 +1003,7 @@ impl Screen for KeyboardScreen {
                 if row != PASTE_ROW && self.rows[row][index].0 == Key::Delete =>
             {
                 self.text.clear();
-                self.redraw(cx, self.field);
+                self.changed(cx);
             }
             // A long press on a letter shows its variants.
             (GestureKind::LongPress, Some((row, index))) if row != PASTE_ROW => {

@@ -228,6 +228,7 @@ impl Screen for Keyboard {
         if let Some(reply) = reply {
             let typed = Typed {
                 text,
+                typing: false,
                 context: self.params.clone(),
             };
             cx.command(Command::Emit(

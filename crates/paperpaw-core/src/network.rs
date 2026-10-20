@@ -220,6 +220,7 @@ impl Kernel {
     pub(crate) fn reply_clipboard(&mut self, reply: Id, params: Params) {
         let typed = paperpaw_sdk::Typed {
             text: self.shared.clipboard.clone(),
+            typing: false,
             context: params,
         };
         self.output

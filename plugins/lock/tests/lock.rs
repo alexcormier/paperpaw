@@ -266,6 +266,7 @@ impl Test {
     fn typed(&mut self, text: &str) {
         let at = self.at();
         let typed = Typed {
+            typing: false,
             text: text.to_string(),
             context: Params::new(),
         };

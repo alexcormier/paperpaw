@@ -333,6 +333,7 @@ fn searches_by_template_encode_the_words() {
     h.send(
         "opds.terms",
         Typed {
+            typing: false,
             text: String::from("  Jane & \"Austen\"/../ ü  "),
             context: Params::new(),
         },
@@ -346,6 +347,7 @@ fn searches_by_template_encode_the_words() {
     h.send(
         "opds.terms",
         Typed {
+            typing: false,
             text: String::from("   "),
             context: Params::new(),
         },
@@ -371,6 +373,7 @@ fn searches_by_description_first_ask_where_to_search() {
     h.send(
         "opds.terms",
         Typed {
+            typing: false,
             text: String::from("Kafka"),
             context: Params::new(),
         },

@@ -69,6 +69,7 @@ impl paperpaw_sdk::ask::TextQuestion
 pub fn paperpaw_sdk::ask::TextQuestion::command(self) -> paperpaw_sdk::Command
 pub fn paperpaw_sdk::ask::TextQuestion::context(self, &paperpaw_sdk::Params) -> Self
 pub fn paperpaw_sdk::ask::TextQuestion::initial(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn paperpaw_sdk::ask::TextQuestion::live(self) -> Self
 pub fn paperpaw_sdk::ask::TextQuestion::number(self) -> Self
 pub fn paperpaw_sdk::ask::TextQuestion::password(self) -> Self
 pub fn paperpaw_sdk::ask::TextQuestion::remote_command(self) -> paperpaw_sdk::Command
@@ -324,10 +325,12 @@ pub const paperpaw_sdk::builtin::menus::SETTINGS: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::menus::TOOLS: paperpaw_sdk::Id
 pub mod paperpaw_sdk::builtin::params
 pub const paperpaw_sdk::builtin::params::ACTION: &str
+pub const paperpaw_sdk::builtin::params::FOCUS: &str
 pub const paperpaw_sdk::builtin::params::FROM: &str
 pub const paperpaw_sdk::builtin::params::HIDE: &str
 pub const paperpaw_sdk::builtin::params::ID: &str
 pub const paperpaw_sdk::builtin::params::LANGUAGE: &str
+pub const paperpaw_sdk::builtin::params::LIVE: &str
 pub const paperpaw_sdk::builtin::params::MENU: &str
 pub const paperpaw_sdk::builtin::params::MODE: &str
 pub const paperpaw_sdk::builtin::params::OFFSET: &str
@@ -340,6 +343,7 @@ pub const paperpaw_sdk::builtin::params::REPLY: &str
 pub const paperpaw_sdk::builtin::params::SECTION: &str
 pub const paperpaw_sdk::builtin::params::TEXT: &str
 pub const paperpaw_sdk::builtin::params::TITLE: &str
+pub const paperpaw_sdk::builtin::params::TYPING: &str
 pub const paperpaw_sdk::builtin::params::URL: &str
 pub const paperpaw_sdk::builtin::params::WORD: &str
 pub mod paperpaw_sdk::builtin::roles
@@ -1541,6 +1545,7 @@ pub fn paperpaw_sdk::replies::HttpReply::to_params(&self) -> paperpaw_sdk::Param
 pub struct paperpaw_sdk::replies::Typed
 pub paperpaw_sdk::replies::Typed::context: paperpaw_sdk::Params
 pub paperpaw_sdk::replies::Typed::text: alloc::string::String
+pub paperpaw_sdk::replies::Typed::typing: bool
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::replies::Typed
 pub fn paperpaw_sdk::replies::Typed::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::replies::Typed::to_params(&self) -> paperpaw_sdk::Params
@@ -3747,6 +3752,7 @@ pub fn paperpaw_sdk::status::StatusLineSpec::fmt(&self, &mut core::fmt::Formatte
 pub struct paperpaw_sdk::Typed
 pub paperpaw_sdk::Typed::context: paperpaw_sdk::Params
 pub paperpaw_sdk::Typed::text: alloc::string::String
+pub paperpaw_sdk::Typed::typing: bool
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::replies::Typed
 pub fn paperpaw_sdk::replies::Typed::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::replies::Typed::to_params(&self) -> paperpaw_sdk::Params

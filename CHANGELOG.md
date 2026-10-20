@@ -6,6 +6,11 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: `ask::text(..).live()` asks for answers on each change too (a
+  list that filters as one types), each with `Typed::typing` set; the
+  keyboard gives them. `params::FOCUS` opens slot `core.settings` on a
+  setting's page with the focus on it. New: `params::LIVE`,
+  `params::TYPING`; `Typed` has the field `typing`.
 - SDK: a menu the user redefined shows the entries plugins contribute
   after it was made, beside their neighbours: `Menus::customize` takes
   the entries known then (kernel), `Menus::known_ids` gives them.

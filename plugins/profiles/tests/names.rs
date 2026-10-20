@@ -65,6 +65,7 @@ impl Test {
     /// The keyboard's answer to `event`, for the profile at `path`.
     fn typed(&mut self, event: &str, text: &str, path: &str) {
         let typed = Typed {
+            typing: false,
             text: text.to_string(),
             context: Params::new().with("path", path.to_string()),
         };

@@ -21,6 +21,7 @@ use paperpaw_sdk::{Id, Instant, Params};
 
 fn typed(text: &str) -> Typed {
     Typed {
+        typing: false,
         text: String::from(text),
         context: Params::new(),
     }
@@ -29,6 +30,7 @@ fn typed(text: &str) -> Typed {
 /// What the keyboard answers for a field of the details.
 fn field(key: &'static str, text: &str) -> Typed {
     Typed {
+        typing: false,
         text: String::from(text),
         context: Params::new().with("field", key),
     }

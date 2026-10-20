@@ -378,3 +378,17 @@ fn everything_reset_keeps_the_language() {
         assert_eq!(settings.text("core.language"), "de");
     }
 }
+
+#[test]
+fn the_settings_open_on_a_setting_focused() {
+    let mut app = settings(X4, "");
+    app.open_slot(
+        slots::SETTINGS,
+        Params::new().with(params::FOCUS, "core.font-size"),
+    );
+    assert!(
+        app.focused().unwrap().starts_with("Font size"),
+        "{}",
+        app.described()
+    );
+}

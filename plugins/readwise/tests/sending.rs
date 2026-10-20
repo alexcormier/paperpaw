@@ -179,6 +179,7 @@ fn the_token_is_asked_for_once_kept_veiled_and_sent() {
     h.send(
         "readwise.token-entered",
         Typed {
+            typing: false,
             text: String::from("  t0k-en  "),
             context: Params::new().with(params::PATH, NOTES),
         },
@@ -210,6 +211,7 @@ fn an_empty_token_is_not_kept() {
     h.send(
         "readwise.token-entered",
         Typed {
+            typing: false,
             text: String::from("   "),
             context: Params::new().with(params::PATH, NOTES),
         },

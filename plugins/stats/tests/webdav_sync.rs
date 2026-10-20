@@ -420,6 +420,7 @@ fn the_folder_user_and_password_are_entered_on_the_page() {
     app.open("stats.sync", Params::new());
     let typed = |text: &str| {
         Typed {
+            typing: false,
             text: text.to_string(),
             context: Params::new(),
         }

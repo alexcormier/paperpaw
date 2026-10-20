@@ -201,6 +201,7 @@ fn another_level_on_the_keyboard() {
     test.pick("rules.level-chosen", "", "other");
     let typed = |text: &str| {
         Typed {
+            typing: false,
             text: text.to_string(),
             context: Params::new(),
         }

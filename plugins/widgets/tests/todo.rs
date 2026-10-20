@@ -137,6 +137,7 @@ impl List {
     /// An item typed on the screen, as the text input answers.
     fn add(&mut self, text: &str) {
         let typed = Typed {
+            typing: false,
             text: text.to_string(),
             context: Params::new(),
         };
@@ -146,6 +147,7 @@ impl List {
     /// Item `index`'s text typed anew.
     fn edit(&mut self, index: usize, text: &str) {
         let typed = Typed {
+            typing: false,
             text: text.to_string(),
             context: Params::new().with("index", index.to_string()),
         };

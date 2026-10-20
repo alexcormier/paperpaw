@@ -77,6 +77,7 @@ fn typed(length: usize) -> String {
     // Typed on a phone (or pasted): it takes the field's place.
     let text = Typed {
         text: "x".repeat(length),
+        typing: false,
         context: Params::new(),
     };
     kernel.send_event(

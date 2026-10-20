@@ -84,8 +84,9 @@ const CHOICE: Id = Id::new_static("settings.choice");
 const CHOSEN: Event<choice::Picked> = Event::new("settings.chosen");
 
 const ID: &str = "id";
-/// A setting to focus on its group's page (parameter of [`GROUP_SCREEN`]).
-const FOCUS: &str = "focus";
+/// A setting to focus on its group's page (parameter of [`SCREEN`] and
+/// [`GROUP_SCREEN`]).
+const FOCUS: &str = paperpaw_sdk::builtin::params::FOCUS;
 
 /// The settings plugin.
 #[derive(Debug, Default)]
@@ -111,12 +112,22 @@ impl Plugin for SettingsPlugin {
         r.add_screen(ScreenSpec::new(
             SCREEN,
             "settings.title",
-            Box::new(
-                |env, params| match params.get(ID).and_then(|id| Id::parse(id).ok()) {
-                    Some(group) => Box::new(GroupPage::new(env, group)) as Box<dyn Screen>,
+            Box::new(|env, params| {
+                let group = params.get(ID).and_then(|id| Id::parse(id).ok());
+                // A setting to focus: on its page, unless a group is named.
+                let focus = params.get(FOCUS).and_then(|id| env.settings.spec(id));
+                let group = group.or_else(|| focus.map(|spec| env.settings.group_of(spec)));
+                match group {
+                    Some(group) => {
+                        let mut page = GroupPage::new(env, group);
+                        if let Some(spec) = focus {
+                            page.focus_on(env, spec.id.as_str());
+                        }
+                        Box::new(page) as Box<dyn Screen>
+                    }
                     None => Box::new(GroupList::new(env)),
-                },
-            ),
+                }
+            }),
         ))?;
         r.add_screen(ScreenSpec::new(
             GROUP_SCREEN,

@@ -124,6 +124,7 @@ impl PhoneScreen {
                 {
                     cx.command(Command::Back);
                     let typed = Typed {
+                        typing: false,
                         text,
                         context: self.params.clone(),
                     };

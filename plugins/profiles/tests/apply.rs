@@ -226,6 +226,7 @@ impl Device {
     /// Text typed for the question `event`, about profile `index`.
     fn answer(&mut self, event: &'static str, text: &str, index: usize) {
         let typed = Typed {
+            typing: false,
             text: text.to_string(),
             context: Params::new().with(params::PATH, index.to_string()),
         };

@@ -226,6 +226,7 @@ fn a_rules_file_that_cannot_be_read_is_not_saved_over() {
         picked("message"),
     );
     let typed = paperpaw_sdk::replies::Typed {
+        typing: false,
         text: "Hello".to_string(),
         context: Params::new(),
     };

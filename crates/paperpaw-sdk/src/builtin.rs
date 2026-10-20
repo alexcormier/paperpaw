@@ -77,7 +77,9 @@ pub mod slots {
     pub const MENU: Id = Id::new_static("core.menu");
     /// Shows and edits settings; with the parameter
     /// [`ID`](super::params::ID), the settings of that group, e.g. a
-    /// widget's own (see [`widgets`](crate::widgets)).
+    /// widget's own (see [`widgets`](crate::widgets)); with
+    /// [`FOCUS`](super::params::FOCUS), the page of that setting with
+    /// the focus on it.
     pub const SETTINGS: Id = Id::new_static("core.settings");
     /// The first-run setup (see [`setup`](crate::setup)): shown once on
     /// the first start, and again when asked.
@@ -104,8 +106,10 @@ pub mod slots {
     /// [`REPLY`](super::params::REPLY). When the text is confirmed the
     /// screen closes and emits the event named by `reply` with all of its
     /// parameters, `text` set to what was entered, so the asking plugin
-    /// can pass along anything it needs to know (e.g. which setting). Bind
-    /// another screen here for a different keyboard, handwriting or voice.
+    /// can pass along anything it needs to know (e.g. which setting). With
+    /// [`LIVE`](super::params::LIVE) it emits it on each change too, with
+    /// [`TYPING`](super::params::TYPING) set. Bind another screen here for
+    /// a different keyboard, handwriting or voice.
     pub const KEYBOARD: Id = Id::new_static("core.keyboard");
     /// Asks for text typed on another device, e.g. a phone that opens an
     /// address shown as a QR code: handy for passwords and keys. Same
@@ -231,6 +235,15 @@ pub mod params {
     pub const MODE: &str = "mode";
     /// The event a screen emits with its result, e.g. the keyboard's text.
     pub const REPLY: &str = "reply";
+    /// What a screen shows focused first, e.g. a setting in
+    /// [`slots::SETTINGS`](super::slots::SETTINGS).
+    pub const FOCUS: &str = "focus";
+    /// Set (to `1`) when a question is answered on each change too, e.g.
+    /// the keyboard's ([`ask::TextQuestion::live`](crate::ask::TextQuestion::live)).
+    pub const LIVE: &str = "live";
+    /// Set (to `1`) on an answer given while the reader still types
+    /// ([`Typed::typing`](crate::replies::Typed::typing)).
+    pub const TYPING: &str = "typing";
     /// Why something failed, e.g. joining a network
     /// ([`events::WIFI_FAILED`](super::events::WIFI_FAILED)).
     pub const REASON: &str = "reason";

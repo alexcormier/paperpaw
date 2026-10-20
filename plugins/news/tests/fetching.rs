@@ -303,6 +303,7 @@ fn atom(title: &str, entries: &[&str]) -> String {
 
 fn typed(text: &str) -> Typed {
     Typed {
+        typing: false,
         text: String::from(text),
         context: Params::new(),
     }

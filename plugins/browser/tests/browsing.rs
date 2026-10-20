@@ -176,6 +176,7 @@ impl Harness {
             "browser.address",
             Typed {
                 text: String::from(text),
+                typing: false,
                 context: Params::new(),
             },
         );
@@ -283,6 +284,7 @@ fn typed_words_are_searched_and_addresses_loaded() {
         "browser.address",
         Typed {
             text: String::from("   "),
+            typing: false,
             context: Params::new(),
         },
     );
@@ -570,6 +572,7 @@ fn without_a_network_nothing_is_asked() {
         "browser.address",
         Typed {
             text: String::from("a.example"),
+            typing: false,
             context: Params::new(),
         },
     );

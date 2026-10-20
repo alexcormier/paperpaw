@@ -227,6 +227,7 @@ impl Screen for Keyboard {
             .and_then(|r| Id::parse(r).ok());
         if let Some(reply) = reply {
             let typed = Typed {
+                typing: false,
                 text,
                 context: self.params.clone(),
             };
