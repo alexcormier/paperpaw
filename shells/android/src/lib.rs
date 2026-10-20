@@ -16,6 +16,7 @@
 
 pub mod keys;
 pub mod pixels;
+pub mod private;
 
 #[cfg(target_os = "android")]
 mod access;

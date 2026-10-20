@@ -8,14 +8,18 @@
     android:versionName="0.4.0-dev">
 
     <!-- The shared Books folder: "All files access" from Android 11 on, the
-         storage permission before. Asked for only when the user chooses
-         "Use the Books folder" on the home screen. -->
+         storage permissions before (reading and writing, for downloads,
+         uploads, renaming and deleting). Asked for only when the user
+         chooses "Allow access to your books" on the home screen. -->
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
     <!-- Plugins that sync (e.g. reading progress with KOReader). -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="29" />
 
     <!-- Reading aloud: the system's speech engines must be visible. -->
     <queries>
@@ -25,14 +29,16 @@
     </queries>
 
     <!-- extractNativeLibs false: the library is stored in the APK, aligned,
-         and runs from there. usesCleartextTraffic: self-hosted sync servers often answer over
-         plain http in the home network. -->
+         and runs from there. allowBackup false: the data folder holds
+         passwords and caches, which do not belong in backups (and exceed
+         their quota). usesCleartextTraffic: self-hosted sync servers often
+         answer over plain http in the home network. -->
     <application
         android:label="PaperPaw"
         android:icon="@mipmap/ic_launcher"
         android:hasCode="true"
         android:extractNativeLibs="false"
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:requestLegacyExternalStorage="true"
         android:usesCleartextTraffic="true">
 

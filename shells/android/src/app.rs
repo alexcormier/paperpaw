@@ -23,6 +23,7 @@ use paperpaw_sdk::library;
 use crate::epd::Epd;
 use crate::lights::Lights;
 use crate::plugin::{AndroidPlugin, Frontlight};
+use crate::private::Private;
 use crate::{access, keys, pixels, status};
 
 /// Where the device's shared storage appears in PaperPaw's storage.
@@ -339,9 +340,10 @@ fn start_kernel(
         },
         memory: paperpaw_platform::MemoryClass::Large,
     };
+    let internal = app.internal_data_path();
     let root = app
         .external_data_path()
-        .or_else(|| app.internal_data_path())
+        .or_else(|| internal.clone())
         .unwrap_or_else(|| PathBuf::from("."));
     install_samples(app, &root);
     let storage = match DirStorage::new(&root) {
@@ -351,6 +353,20 @@ fn start_kernel(
             return None;
         }
     };
+    // The passwords where only PaperPaw reads them (see `private`).
+    let storage = Volumes(
+        match internal
+            .filter(|internal| *internal != root)
+            .map(DirStorage::new)
+        {
+            Some(Ok(private)) => Box::new(Private::new(storage, private)),
+            Some(Err(e)) => {
+                log::warn!("private folder: {e}");
+                Box::new(storage)
+            }
+            None => Box::new(storage),
+        },
+    );
     // The shared storage as `storage`, if the user allowed access; the
     // library is then its `Books` folder unless the user chose another.
     let shared = access::granted(app)
@@ -670,7 +686,8 @@ fn input(event: &AndroidInput<'_>) -> Option<Vec<InputEvent>> {
     }
 }
 
-/// Storage with any number of mount points (one per SD card).
+/// Storage with mount points that vary (the private folder, one per SD
+/// card).
 struct Volumes(Box<dyn Storage>);
 
 impl Storage for Volumes {

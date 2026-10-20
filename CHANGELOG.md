@@ -6,6 +6,14 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Android 8 to 10: PaperPaw asks for the permission to write the shared
+  storage besides the one to read it, so downloads, uploads through
+  Transfer, renaming and deleting books work there; who allowed reading
+  only is offered access again on the home screen. Passwords and keys
+  (`.paperpaw/secrets.txt`) are kept in the app's private folder, which
+  no other app reads (up to Android 9 apps with the storage permission
+  read the app's shared folder); a file kept there before moves at the
+  first start. The app is left out of Android's backups.
 - Rules: a rule can apply when the battery reaches a level (80 %, 90 %,
   full or another), once each time it gets there and not again while
   the level wavers around it; with *Only if … While charging* it says
