@@ -614,7 +614,7 @@ impl Screen for LockScreen {
                         let x = f32::from(row.x + row.width)
                             - style.margin as f32
                             - ui::icon_width(env, "check", size);
-                        let ink = if focused { Color::WHITE } else { Color::BLACK };
+                        let ink = style.focus_ink(focused);
                         ui::draw_icon(canvas, env, "check", size, x, row, ink);
                     }
                 });

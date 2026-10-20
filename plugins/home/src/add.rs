@@ -377,7 +377,7 @@ impl AddScreen {
         let room = ui::icon_room(env, &style, true);
         self.list
             .draw(canvas, &style, len, |canvas, index, rect, focused| {
-                let ink = if focused { Color::WHITE } else { Color::BLACK };
+                let ink = style.focus_ink(focused);
                 let (icon, title, value) = match &rows[index] {
                     Row::Kind(kind, count) => (
                         Some(kind_icon(kind)),
