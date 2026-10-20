@@ -20,6 +20,12 @@ change the plugin SDK.
   them does (`Screen::outside`: close, ignore, pass through), let input
   they do not take pass to the screen below (`Screen::passes_through`)
   and say their own row of hints (`Screen::hints`).
+- A row's title and value keep a margin between them, not two: on a
+  screen as narrow as the X4's both stay whole where they fit (Joplin's
+  "Synchronised with, Joplin Cloud" lost the end of both).
+- List icons are centred by their drawing in their column, so icons
+  with more room on one side line up with the others. SDK:
+  `FontHandle::ink_across`, `ui::icon_ink`.
 - Restarting no longer counts as going to sleep: after plugins were
   switched or an update installed, rules for "on sleep", sync on sleep,
   work waiting for sleep and the sleep counters no longer take the

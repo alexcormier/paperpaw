@@ -798,6 +798,32 @@ impl<'a> FontHandle<'a> {
         ink
     }
 
+    /// Where the ink of `text` at `size` begins and ends across, from the
+    /// pen's start, in pixels (counting pixels at least half covered, as
+    /// [`FontHandle::ink`] does): what centres it by its ink rather than by
+    /// its advance (e.g. an icon in its column). `None` for text without
+    /// ink.
+    pub fn ink_across(&self, size: f32, text: &str) -> Option<(i32, i32)> {
+        let mut cache = self.cache.borrow_mut();
+        let mut ink: Option<(i32, i32)> = None;
+        let mut pen = 0.0f32;
+        for ch in text.chars() {
+            let (font, index) = self.pick(ch);
+            let glyph = cache.glyph(index, font, ch, size);
+            let inked = |x: u16| (0..glyph.height).any(|y| glyph.coverage(x, y) >= 128);
+            if let (Some(first), Some(last)) = (
+                (0..glyph.width).find(|x| inked(*x)),
+                (0..glyph.width).rev().find(|x| inked(*x)),
+            ) {
+                let at = (pen + 0.5) as i32 + i32::from(glyph.left);
+                let (left, right) = (at + i32::from(first), at + i32::from(last) + 1);
+                ink = Some(ink.map_or((left, right), |(l, r)| (l.min(left), r.max(right))));
+            }
+            pen += glyph.advance;
+        }
+        ink
+    }
+
     /// Breaks `text` into lines that fit `max_width`.
     pub fn wrap(&self, size: f32, text: &str, max_width: f32) -> Vec<Range<usize>> {
         paperpaw_text::wrap(text, max_width, |s| self.measure(size, s))
