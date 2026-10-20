@@ -112,6 +112,34 @@ fn an_answer_that_is_not_utf8_reaches_the_plugin_as_text() {
 }
 
 #[test]
+fn shells_with_memory_to_spare_load_a_file_to_send_whole() {
+    let harness = Harness::new();
+    let mut kernel = kernel(&harness, |b| b.network(true));
+    let data: Vec<u8> = (0..=255).cycle().take(70_000).collect();
+    kernel.storage().write("up.bin", &data).unwrap();
+    kernel.storage().write("empty.bin", b"").unwrap();
+    let put = |path: &str| {
+        Command::Http(HttpRequest {
+            body_from: Some(String::from(path)),
+            ..HttpRequest::new("PUT", "http://example.org/up", REPLY)
+        })
+    };
+    harness.run(&mut kernel, 10, [put("up.bin"), put("empty.bin")]);
+    let mut calls = http_calls(&mut kernel);
+    assert_eq!(calls.len(), 2);
+    calls[0].load_body(kernel.storage()).unwrap();
+    assert_eq!(calls[0].body.as_deref(), Some(&data[..]));
+    assert_eq!(calls[0].body_from, None);
+    calls[1].load_body(kernel.storage()).unwrap();
+    assert_eq!(calls[1].body.as_deref(), Some(&[][..]));
+    // Gone since it was asked for: an error, for the shell to answer.
+    let mut call = calls[0].clone();
+    call.body_from = Some(String::from("up.bin"));
+    kernel.storage().remove("up.bin").unwrap();
+    assert!(call.load_body(kernel.storage()).is_err());
+}
+
+#[test]
 fn a_failed_download_writes_nothing_where_the_file_was_to_go() {
     let harness = Harness::new();
     let mut kernel = kernel(&harness, |b| b.network(true));
@@ -345,6 +373,29 @@ fn a_request_answered_twice_is_passed_on_twice_but_its_body_goes_once() {
         .filter(|io| matches!(io, Io::Server(ServerCall::Respond { request: 7, .. })))
         .count();
     assert_eq!(responds, 2);
+}
+
+#[test]
+fn an_answer_from_a_file_that_is_not_there_is_not_found() {
+    let harness = Harness::new();
+    let mut kernel = kernel(&harness, |b| b.network(true));
+    harness.run(&mut kernel, 10, [serve()]);
+    let number = listening(&mut kernel);
+    kernel.server_event(Instant(20), request(number, 3, "/missing", false));
+    let mut response = ServerResponse::new(3, 200, "application/epub+zip", Vec::new());
+    response.body_from = Some(String::from("books/gone.epub"));
+    harness.run(&mut kernel, 21, [Command::Respond(response)]);
+    let answers: Vec<(u16, Vec<u8>, bool)> = kernel
+        .take_io()
+        .into_iter()
+        .filter_map(|io| match io {
+            Io::Server(ServerCall::Respond {
+                status, body, file, ..
+            }) => Some((status, body, file.is_some())),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(answers, [(404, b"not found".to_vec(), false)]);
 }
 
 /// A shell that reports a request twice (or reuses its number) must not
