@@ -291,11 +291,11 @@ pub fn read_theirs(
     Ok(read_items(storage, &path, limit)?.map(|items| Theirs { items, pending }))
 }
 
-/// The annotations here of the book at `book`. [`annotations::load`]
-/// gives none for a file it cannot read, so a file that is there but gave
-/// none is taken as one that cannot be read.
+/// The annotations here of the book at `book`. Lines not understood are
+/// left out, so a file that is there but gave none is taken as one that
+/// cannot be read too.
 fn load_ours(storage: &dyn Storage, book: &str) -> Result<Vec<Annotation>, Unreadable> {
-    let ours = annotations::load(storage, book);
+    let ours = annotations::load_for_update(storage, book).map_err(|_| Unreadable)?;
     let gone = matches!(
         storage.size(&annotations::file(book)),
         Ok(0) | Err(StorageError::NotFound)
@@ -609,8 +609,10 @@ pub fn exchange(x: &Exchange<'_>, book: &str, theirs: Theirs) -> Result<bool, Un
             kept.push(a);
         }
     }
-    if ours_changed {
-        annotations::save(storage, book, &kept);
+    // Not kept here, what came from KOReader must not count as known:
+    // the next exchange would take it for removed here.
+    if ours_changed && !annotations::save(storage, book, &kept) {
+        return Err(Unreadable);
     }
     if theirs_changed {
         let at = known_time([x.now]).map(|now| lua::string(&datetime(x, now)));

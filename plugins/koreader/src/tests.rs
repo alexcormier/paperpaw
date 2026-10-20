@@ -156,6 +156,41 @@ impl Storage for Broken<'_> {
     }
 }
 
+/// A card on which the file `path` cannot be written (it is full).
+struct Unwritable<'a> {
+    storage: &'a MemoryStorage,
+    path: String,
+}
+
+impl Storage for Unwritable<'_> {
+    fn read_at(&self, path: &str, offset: u64, buf: &mut [u8]) -> Result<usize, StorageError> {
+        self.storage.read_at(path, offset, buf)
+    }
+
+    fn size(&self, path: &str) -> Result<u64, StorageError> {
+        self.storage.size(path)
+    }
+
+    fn write(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
+        if path == self.path {
+            return Err(StorageError::Full);
+        }
+        self.storage.write(path, data)
+    }
+
+    fn append(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
+        self.storage.append(path, data)
+    }
+
+    fn list(&self, dir: &str, visit: &mut dyn FnMut(DirEntry<'_>)) -> Result<(), StorageError> {
+        self.storage.list(dir, visit)
+    }
+
+    fn remove(&self, path: &str) -> Result<(), StorageError> {
+        self.storage.remove(path)
+    }
+}
+
 /// Both sides after an exchange that KOReader took over: three
 /// annotations here, four there (one not placed here).
 fn exchanged() -> MemoryStorage {
@@ -432,6 +467,24 @@ fn unreadable_files_here_change_nothing() {
         assert_eq!(state(&storage), before, "{broken}");
         assert!(!storage.exists(EXCHANGE), "{broken}");
     }
+}
+
+#[test]
+fn what_cannot_be_kept_here_is_not_known() {
+    let storage = storage();
+    let card = Unwritable {
+        storage: &storage,
+        path: annotations::file(BOOK),
+    };
+    assert_eq!(try_run(&card, NOW, MAX_FILE), Err(Unreadable));
+    assert!(!storage.exists(&known_file(BOOK)));
+    assert!(!storage.exists(EXCHANGE));
+    // With room again, KOReader's come over and stay there: they were
+    // never known, so they are not taken for removed here.
+    assert!(run(&storage, NOW + 10));
+    assert_eq!(annotations::load(&storage, BOOK).len(), 2);
+    assert!(!storage.exists(EXCHANGE));
+    assert_eq!(items(&storage, SIDECAR).len(), 3);
 }
 
 #[test]
