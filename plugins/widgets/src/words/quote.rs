@@ -20,7 +20,7 @@ use paperpaw_sdk::widgets::{self, Align, Frame, Size, Widget, WidgetSpec, Widget
 use paperpaw_sdk::{Canvas, Env, Id, Rect, RegisterError, Registrar, SettingSpec};
 
 use super::text::{self, FACES};
-use super::{Turns, changed, changes, data, frame_height, of_the_day, today};
+use super::{Changes, Turns, data, frame_height, of_the_day, today};
 use crate::showings::Showings;
 
 pub(super) const ID: Id = Id::new_static("widgets.quote");
@@ -114,13 +114,15 @@ static SETTINGS: [SettingSpec; 10] = [
     widgets::frame_spec("widgets.quote.frame", ID, Frame::None),
 ];
 
-pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
+pub(super) fn register(r: &mut Registrar, changes: &Changes) -> Result<(), RegisterError> {
     r.add_setting_group(widgets::settings_group(&ID, "widgets.quote"))?;
     r.add_settings(&SETTINGS)?;
-    r.on(NEXT, |env, _, out| {
+    let changed = changes.clone();
+    r.on(NEXT, move |env, _, out| {
         Turns::turn(env.storage, &turns_file(), today(env), daily(env));
-        changed(out, &ID);
+        changed.changed(out, &ID);
     })?;
+    let changes = changes.clone();
     let shown = Rc::new(Showings::default());
     r.add_widget(
         WidgetSpec::new(ID, "widgets.quote", move |env| {
@@ -128,6 +130,7 @@ pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
             let showing = if daily(env) { 0 } else { shown.show(env.now) };
             Box::new(QuoteWidget {
                 showing,
+                changes: changes.clone(),
                 ..QuoteWidget::default()
             })
         })
@@ -241,6 +244,7 @@ fn quote_of_the_day(env: &Env<'_>, day: i64, showing: u32) -> Option<Quote> {
 struct QuoteWidget {
     /// The showing it was made for, where another shows each time.
     showing: u32,
+    changes: Changes,
     quote: Option<Quote>,
     /// The day and the changes it was read at.
     read: Option<(i64, u32)>,
@@ -337,7 +341,7 @@ impl Widget for QuoteWidget {
         // Read each minute, but read anew only on another day or after a
         // tap.
         let day = today(env);
-        let read = Some((day, changes()));
+        let read = Some((day, self.changes.count()));
         if read == self.read {
             return false;
         }

@@ -18,9 +18,10 @@ mod todo;
 
 use alloc::borrow::Cow;
 use alloc::format;
+use alloc::rc::Rc;
 use alloc::string::String;
 use alloc::vec::Vec;
-use core::sync::atomic::{AtomicU32, Ordering};
+use core::cell::Cell;
 
 use paperpaw_sdk::ui::UiStyle;
 use paperpaw_sdk::widgets;
@@ -31,10 +32,11 @@ use crate::{frame_height, today};
 pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     r.add_translations(Cow::Borrowed(include_str!("../i18n/words.en.ini")))?;
     r.add_translations(Cow::Borrowed(include_str!("../i18n/words.de.ini")))?;
-    quote::register(r)?;
-    picture::register(r)?;
+    let changes = Changes::default();
+    quote::register(r, &changes)?;
+    picture::register(r, &changes)?;
     note::register(r)?;
-    todo::register(r)?;
+    todo::register(r, &changes)?;
     greeting::register(r)?;
     logo::register(r)?;
     Ok(())
@@ -48,21 +50,25 @@ fn data(name: &str) -> String {
     )
 }
 
-/// Counts the changes of what these widgets keep (see [`changed`]): a
-/// widget that read it at another count reads it anew.
-static CHANGES: AtomicU32 = AtomicU32::new(0);
+/// Counts the changes of what these widgets keep (see
+/// [`Changes::changed`]): a widget that read it at another count reads it
+/// anew. Shared by the handlers and the widgets (on the heap: a plugin
+/// file has no writable data of its own, ADR 0024).
+#[derive(Debug, Clone, Default)]
+struct Changes(Rc<Cell<u32>>);
 
-/// The changes so far.
-fn changes() -> u32 {
-    CHANGES.load(Ordering::Relaxed)
-}
+impl Changes {
+    /// The changes so far.
+    fn count(&self) -> u32 {
+        self.0.get()
+    }
 
-/// What widget `id` keeps changed (a quote turned, an item ticked off):
-/// the screens showing it read it anew.
-fn changed(out: &mut Vec<Command>, id: &Id) {
-    // Load and store: the device has no atomic adding, and one thread.
-    CHANGES.store(changes().wrapping_add(1), Ordering::Relaxed);
-    out.push(widgets::changed(id));
+    /// What widget `id` keeps changed (a quote turned, an item ticked
+    /// off): the screens showing it read it anew.
+    fn changed(&self, out: &mut Vec<Command>, id: &Id) {
+        self.0.set(self.0.get().wrapping_add(1));
+        out.push(widgets::changed(id));
+    }
 }
 
 /// The one of `count` things shown on `day`: each of them once before

@@ -14,9 +14,10 @@
 //! numbers. Only the names are held in memory, never the whole catalog.
 
 use alloc::format;
+use alloc::rc::Rc;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
-use core::sync::atomic::{AtomicU32, Ordering};
+use core::cell::Cell;
 
 use paperpaw_sdk::builtin::{actions, params, slots};
 use paperpaw_sdk::ui::{self, ListView, UiStyle};
@@ -72,25 +73,35 @@ const STEP_DELAY_MS: u64 = 30;
 const CATALOG_AGE: u64 = 30 * 60;
 
 /// When the catalog was made last, in seconds since PaperPaw started,
-/// plus one; 0 where it is to be made (anew) when a view shows.
-static CATALOG_MADE: AtomicU32 = AtomicU32::new(0);
+/// plus one; 0 where it is to be made (anew) when a view shows. Shared
+/// by the plugin's handlers and its screens (on the heap: a plugin file
+/// has no writable data of its own, ADR 0024).
+#[derive(Debug, Clone, Default)]
+pub(crate) struct CatalogMade(Rc<Cell<u32>>);
 
-/// The catalog is to be made anew: books came, went or moved, or the
-/// library folder changed.
-pub(crate) fn outdated() {
-    CATALOG_MADE.store(0, Ordering::Relaxed);
+impl CatalogMade {
+    /// The catalog is to be made anew: books came, went or moved, or the
+    /// library folder changed.
+    pub(crate) fn outdated(&self) {
+        self.0.set(0);
+    }
+
+    /// Whether the catalog is to be made anew before a view shows it.
+    fn is_outdated(&self, env: &Env<'_>) -> bool {
+        match self.0.get() {
+            0 => true,
+            made => u64::from(seconds(env).saturating_sub(made - 1)) >= CATALOG_AGE,
+        }
+    }
+
+    /// The catalog was made now.
+    fn made(&self, env: &Env<'_>) {
+        self.0.set(seconds(env).saturating_add(1));
+    }
 }
 
 fn seconds(env: &Env<'_>) -> u32 {
     u32::try_from(env.now.millis() / 1000).unwrap_or(u32::MAX - 1)
-}
-
-/// Whether the catalog is to be made anew before a view shows it.
-fn is_outdated(env: &Env<'_>) -> bool {
-    match CATALOG_MADE.load(Ordering::Relaxed) {
-        0 => true,
-        made => u64::from(seconds(env).saturating_sub(made - 1)) >= CATALOG_AGE,
-    }
 }
 
 /// What a book is listed under in a view: its author, its series, or
@@ -182,10 +193,11 @@ pub(crate) struct ShelfScreen {
     /// The catalog being made anew, until it is complete.
     walk: Option<Walk>,
     walked: bool,
+    catalog: CatalogMade,
 }
 
 impl ShelfScreen {
-    pub(crate) fn new(env: &Env<'_>, params: &Params) -> Self {
+    pub(crate) fn new(env: &Env<'_>, params: &Params, catalog: CatalogMade) -> Self {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
         let display = env.device.display;
@@ -212,6 +224,7 @@ impl ShelfScreen {
             names_focus: 0,
             walk: None,
             walked: false,
+            catalog,
             shelf,
             style,
             header,
@@ -366,7 +379,7 @@ impl Screen for ShelfScreen {
             return;
         }
         let env = *cx.env();
-        if self.walk.is_none() && !self.walked && is_outdated(&env) {
+        if self.walk.is_none() && !self.walked && self.catalog.is_outdated(&env) {
             self.walk = Some(Walk::start(env.storage, env.settings.read(&ROOT)));
         }
         // Also where it was on its way when another screen came on top:
@@ -392,7 +405,7 @@ impl Screen for ShelfScreen {
         // The new catalog: the lists again, keeping the place.
         self.walk = None;
         self.walked = true;
-        CATALOG_MADE.store(seconds(&env).saturating_add(1), Ordering::Relaxed);
+        self.catalog.made(&env);
         self.names = names(env.storage, self.shelf);
         if let Some((name, books)) = &mut self.chosen {
             *books = if self.shelf == Shelf::Search {

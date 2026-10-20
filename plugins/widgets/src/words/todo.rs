@@ -30,7 +30,7 @@ use paperpaw_sdk::{
     SettingSpec, Storage, StorageError,
 };
 
-use super::{changed, changes, data, frame_height, today};
+use super::{Changes, data, frame_height, today};
 
 pub(super) const ID: Id = Id::new_static("widgets.todo");
 /// Opens the list's own screen.
@@ -107,10 +107,11 @@ static SETTINGS: [SettingSpec; 7] = [
     widgets::frame_spec("widgets.todo.frame", ID, Frame::None),
 ];
 
-pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
+pub(super) fn register(r: &mut Registrar, changes: &Changes) -> Result<(), RegisterError> {
     r.add_setting_group(widgets::settings_group(&ID, "widgets.todo"))?;
     r.add_settings(&SETTINGS)?;
-    r.on(TICKED, |env, params, out| {
+    let changed = changes.clone();
+    r.on(TICKED, move |env, params, out| {
         let Some(text) = params.get(TEXT) else {
             return;
         };
@@ -134,12 +135,15 @@ pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
                 ));
             }
         }
-        changed(out, &ID);
+        changed.changed(out, &ID);
     })?;
     r.add_screen(ScreenSpec {
         id: SCREEN,
         title: Cow::Borrowed("widgets.todo"),
-        factory: Box::new(|env, _| Box::new(TodoScreen::new(env))),
+        factory: Box::new({
+            let changes = changes.clone();
+            move |env, _| Box::new(TodoScreen::new(env, changes.clone()))
+        }),
     })?;
     r.add_screen(ScreenSpec {
         id: CHOICE,
@@ -153,8 +157,16 @@ pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     ))?;
     r.add_icon(OPEN, Cow::Borrowed("list-check"))?;
     r.add_widget(
-        WidgetSpec::new(ID, "widgets.todo", |_| Box::new(TodoWidget::default()))
-            .category(widgets::categories::PERSONAL),
+        WidgetSpec::new(ID, "widgets.todo", {
+            let changes = changes.clone();
+            move |_| {
+                Box::new(TodoWidget {
+                    changes: changes.clone(),
+                    ..TodoWidget::default()
+                })
+            }
+        })
+        .category(widgets::categories::PERSONAL),
     )
 }
 
@@ -286,6 +298,7 @@ struct TodoWidget {
     read: Option<(i64, u32)>,
     /// The list could not be read.
     unreadable: bool,
+    changes: Changes,
 }
 
 impl Widget for TodoWidget {
@@ -293,7 +306,7 @@ impl Widget for TodoWidget {
         // Read each minute (a new day lets those done go), but read
         // anew only then or after a change.
         let day = today(env);
-        let read = Some((day, changes()));
+        let read = Some((day, self.changes.count()));
         if read == self.read {
             return false;
         }
@@ -577,10 +590,11 @@ struct TodoScreen {
     rest: String,
     /// The list could not be read: it is shown empty and not changed.
     unreadable: bool,
+    changes: Changes,
 }
 
 impl TodoScreen {
-    fn new(env: &Env<'_>) -> Self {
+    fn new(env: &Env<'_>, changes: Changes) -> Self {
         let style = UiStyle::new(env);
         let display = env.device.display;
         let header = ui::Header::new(env, &style, true);
@@ -596,6 +610,7 @@ impl TodoScreen {
             items,
             rest,
             unreadable,
+            changes,
         }
     }
 
@@ -616,7 +631,7 @@ impl TodoScreen {
         }
         (self.items, self.rest) = (list.items, list.rest);
         let mut out = Vec::new();
-        changed(&mut out, &ID);
+        self.changes.changed(&mut out, &ID);
         for command in out {
             cx.command(command);
         }
