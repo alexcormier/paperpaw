@@ -1038,6 +1038,7 @@ mod tests {
                 work: crate::work::WorkStates::none(),
                 reader: true,
                 clipboard: false,
+                stack: &[],
                 slots: &[],
                 screens: &[],
                 font_dirs: &[],

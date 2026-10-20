@@ -128,22 +128,30 @@ impl Services {
     /// Publishes `service` as `id`, found by its `TypeId` only (see
     /// [`Service::any`]).
     #[deprecated(since = "0.4.0", note = "use `Services::insert` with a `Service`")]
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn add(&mut self, id: Id, service: Box<dyn Any>) {
         self.insert(id, Service::any(service));
     }
 
     /// Publishes `service` as `id` (kernel; plugins use
     /// [`Registrar::publish`](crate::Registrar::publish)).
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn insert(&mut self, id: Id, service: Service) {
         self.services.push((id, service));
     }
 
     /// Adds `plugin`'s `contribution` to `point` (kernel; plugins use
     /// [`Registrar::contribute`](crate::Registrar::contribute)).
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn contribute(&mut self, point: Id, plugin: Id, contribution: Cow<'static, str>) {
         self.contributions.push((point, plugin, contribution));
     }
 
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn shrink_to_fit(&mut self) {
         self.services.shrink_to_fit();
         self.contributions.shrink_to_fit();

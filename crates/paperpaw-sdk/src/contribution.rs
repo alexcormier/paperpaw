@@ -485,7 +485,7 @@ impl Registrar {
 
     /// Adds a font pack on the storage (`.ppfp`) with characters font
     /// `extends` lacks, e.g. Cyrillic for a font made for Latin; read a
-    /// glyph at a time (see [`Fonts::add_extension`](crate::fonts::Fonts::add_extension)).
+    /// glyph at a time (see `Fonts::add_extension`).
     pub fn add_font_extension(
         &mut self,
         id: Id,

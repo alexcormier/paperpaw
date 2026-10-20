@@ -66,7 +66,7 @@ remote = [
 [dependencies]
 paperpaw-app = { path = "../../crates/paperpaw-app", default-features = false, features = ["packs"] }
 paperpaw-core = { path = "../../crates/paperpaw-core" }
-paperpaw-sdk = { path = "../../crates/paperpaw-sdk" }
+paperpaw-sdk = { path = "../../crates/paperpaw-sdk", features = ["kernel"] }
 paperpaw-platform = { path = "../../crates/paperpaw-platform" }
 paperpaw-x4 = { path = "../../crates/paperpaw-x4" }
 paperpaw-fat = { path = "../../crates/paperpaw-fat" }

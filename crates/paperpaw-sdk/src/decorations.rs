@@ -843,6 +843,8 @@ impl Decorators {
     }
 
     /// Adds `decorator` after those of a smaller or the same order.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn add(&mut self, decorator: DecoratorSpec) {
         let at = self
             .list
@@ -861,6 +863,8 @@ impl Decorators {
         self.list.iter().find(|d| d.id == *id)
     }
 
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn shrink_to_fit(&mut self) {
         self.list.shrink_to_fit();
     }

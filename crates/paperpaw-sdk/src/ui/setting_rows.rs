@@ -114,8 +114,9 @@ pub fn draw_value_row(
     let color = style.focus_ink(focused);
     let margin = style.margin as f32;
     let width = f32::from(rect.width) - 2.0 * margin;
-    let (title, value, value_width) =
-        fit_pair(&font, style.text, title, value, width, margin * 2.0);
+    // At least a margin between them: the value ends at the margin, as
+    // the title begins at it.
+    let (title, value, value_width) = fit_pair(&font, style.text, title, value, width, margin);
     let value_x = f32::from(rect.x) + f32::from(rect.width) - margin - value_width;
     draw_label(canvas, &font, style.text, value_x, rect, &value, color);
     let title_x = f32::from(rect.x) + margin;

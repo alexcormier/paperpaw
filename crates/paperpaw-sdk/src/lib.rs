@@ -24,6 +24,11 @@
 //!   the API message-based, so the same model works for sandboxed
 //!   WebAssembly plugins.
 
+#![cfg_attr(docsrs, feature(doc_cfg))]
+// Without the `kernel` feature (as plugins build it) what only the
+// kernel's methods use is left over; with it, as the kernel and CI build,
+// unused code is found as everywhere.
+#![cfg_attr(not(any(test, feature = "kernel")), allow(dead_code, unused_imports))]
 #![no_std]
 
 extern crate alloc;
@@ -102,7 +107,10 @@ pub use params::Params;
 pub use plugin::{Manifest, Plugin, Priority, RegisterError, SlotSpec, Uses};
 pub use plugins::{PluginInfo, PluginKind, PluginProblem, PluginState, Plugins, RequiredFor};
 pub use replies::{Chosen, HttpReply, ServerNotice, SocketNotice, Typed};
-pub use screen::{Cx, Handled, Hint, Hints, Output, Screen, ScreenFactory, ScreenSpec};
+pub use screen::{
+    CloseCause, Cx, Handled, Hint, Hints, Output, Outside, Screen, ScreenFactory, ScreenKey,
+    ScreenSpec, StackEntry,
+};
 pub use setting::{Setting, Text};
 pub use settings::{
     Choices, Level, SettingError, SettingExtra, SettingGroupSpec, SettingKind, SettingSpec,

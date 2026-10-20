@@ -138,6 +138,9 @@ pub struct Env<'a> {
     /// the system has a clipboard, in another app; read it with
     /// [`Command::ReadClipboard`](crate::Command::ReadClipboard).
     pub clipboard: bool,
+    /// The open screens, the one shown last (see [`StackEntry`](crate::StackEntry)):
+    /// what is shown, e.g. for a rule or a refresh filter.
+    pub stack: &'a [crate::StackEntry],
     /// The slots some screen is bound to (see [`Env::has_slot`]).
     pub slots: &'a [crate::Id],
     /// Every screen: its id and the translation key of its name, e.g. for
@@ -247,6 +250,9 @@ pub struct EnvParts<'a> {
     /// the system has a clipboard, in another app; read it with
     /// [`Command::ReadClipboard`](crate::Command::ReadClipboard).
     pub clipboard: bool,
+    /// The open screens, the one shown last (see [`StackEntry`](crate::StackEntry)):
+    /// what is shown, e.g. for a rule or a refresh filter.
+    pub stack: &'a [crate::StackEntry],
     /// The slots some screen is bound to (see [`Env::has_slot`]).
     pub slots: &'a [crate::Id],
     /// Every screen: its id and the translation key of its name, e.g. for
@@ -307,6 +313,7 @@ impl<'a> From<EnvParts<'a>> for Env<'a> {
             work: p.work,
             reader: p.reader,
             clipboard: p.clipboard,
+            stack: p.stack,
             slots: p.slots,
             screens: p.screens,
             font_dirs: p.font_dirs,
@@ -328,6 +335,11 @@ impl fmt::Debug for Env<'_> {
 }
 
 impl Env<'_> {
+    /// The screen shown on top, if any.
+    pub fn top(&self) -> Option<&crate::StackEntry> {
+        self.stack.last()
+    }
+
     /// Whether a screen is bound to `slot`, e.g. whether a browser is
     /// there to open links to the web
     /// ([`slots::BROWSER`](crate::builtin::slots::BROWSER)).

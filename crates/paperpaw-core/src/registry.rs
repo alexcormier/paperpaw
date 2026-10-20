@@ -92,6 +92,11 @@ impl Registry {
         self.user_bindings.insert(slot, screen);
     }
 
+    /// Back to what the plugins bind `slot` to.
+    pub(crate) fn unbind_user(&mut self, slot: &Id) {
+        self.user_bindings.remove(slot);
+    }
+
     pub(crate) fn user_bindings(&self) -> impl Iterator<Item = (&Id, &Id)> {
         self.user_bindings.iter()
     }

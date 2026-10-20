@@ -300,6 +300,17 @@ pub mod events {
     }
 
     crate::event_data! {
+        /// The screen now on top ([`SCREEN_SHOWN`]).
+        pub struct ScreenShown {
+            pub screen: Id,
+        }
+        optional {
+            /// The slot it was opened for.
+            pub slot: Id,
+        }
+    }
+
+    crate::event_data! {
         /// Which setting changed ([`SETTING_CHANGED`]).
         pub struct SettingChanged {
             pub id: Id,
@@ -601,6 +612,11 @@ pub mod events {
     /// [`Command::RemovePlugin`](crate::Command::RemovePlugin)): lists of
     /// plugins, fonts and presets read them anew.
     pub const PLUGINS_CHANGED: Event<()> = Event::new("core.plugins-changed");
+    /// Another screen is shown on top ([`ScreenShown`]): one opened, or
+    /// the one below a screen closed. The whole stack is in
+    /// [`Env::stack`](crate::Env::stack). For plugins that subscribe:
+    /// screens learn that they show from [`Screen::on_show`](crate::Screen::on_show).
+    pub const SCREEN_SHOWN: Event<ScreenShown> = Event::new("core.screen-shown");
     /// A menu was redefined or reset ([`MenuChanged`]).
     pub const MENU_CHANGED: Event<MenuChanged> = Event::new("core.menu-changed");
     /// The device goes to sleep or the app to the background: a moment to
