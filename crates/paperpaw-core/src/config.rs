@@ -407,7 +407,7 @@ impl Kernel {
                     }
                 }
                 "slots" => match (Id::parse(entry.key), Id::parse(&value)) {
-                    (Ok(slot), Ok(screen)) => self.registry.bind_user(slot, screen),
+                    (Ok(slot), Ok(screen)) => self.shared.registry.bind_user(slot, screen),
                     _ => self.warn(
                         WarningSource::UserConfig,
                         line,
@@ -440,10 +440,10 @@ impl Kernel {
     /// Reports references to contributions that do not exist.
     pub(crate) fn validate(&mut self) {
         let mut messages = Vec::new();
-        for (slot, screen) in self.registry.user_bindings() {
-            if !self.registry.slots.contains_key(slot) {
+        for (slot, screen) in self.shared.registry.user_bindings() {
+            if !self.shared.registry.slots.contains_key(slot) {
                 messages.push(format!("unknown slot `{slot}`"));
-            } else if !self.registry.screens.contains_key(screen) {
+            } else if !self.shared.registry.screens.contains_key(screen) {
                 messages.push(format!("unknown screen `{screen}` for slot `{slot}`"));
             }
         }

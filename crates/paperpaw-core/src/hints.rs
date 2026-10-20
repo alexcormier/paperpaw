@@ -73,7 +73,7 @@ impl Kernel {
         active
             .screen
             .hints()
-            .unwrap_or_else(|| self.registry.hints_of(&active.id))
+            .unwrap_or_else(|| self.shared.registry.hints_of(&active.id))
     }
 
     /// Shows the row for a while over a screen that has it on a press.

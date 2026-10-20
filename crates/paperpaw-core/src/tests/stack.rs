@@ -252,7 +252,7 @@ fn slots_take_a_screen_chosen() {
     kernel.apply(Command::BindSlot(slots::HOME, Some(SCREEN)));
     kernel.finish();
     assert_eq!(
-        kernel.registry.resolve_slot(slots::HOME.as_str()),
+        kernel.shared.registry.resolve_slot(slots::HOME.as_str()),
         Some(&SCREEN)
     );
     let saved = paperpaw_sdk::read_file(kernel.storage(), "paperpaw.ini", 4096).unwrap();
@@ -260,7 +260,7 @@ fn slots_take_a_screen_chosen() {
     kernel.apply(Command::BindSlot(slots::HOME, None));
     kernel.finish();
     assert_eq!(
-        kernel.registry.resolve_slot(slots::HOME.as_str()),
+        kernel.shared.registry.resolve_slot(slots::HOME.as_str()),
         Some(&HOME)
     );
     let saved = paperpaw_sdk::read_file(kernel.storage(), "paperpaw.ini", 4096).unwrap();

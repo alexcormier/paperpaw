@@ -6,6 +6,14 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: screens hosted in a screen of one's own, tasks with their own way
+  back (gap A1, second part). `Env::make_screen` makes any screen plugins
+  added, to host it in a part of a screen (tabs, a split view);
+  `host::ScreenHost` holds it there and passes drawing, input in its
+  part (in its coordinates), events, timers and its showing and closing
+  on to it. `Command::SwitchTask` shows another task, a tab of tabs:
+  the screens open are kept by their ids and params (not in memory)
+  and each task keeps its own way back.
 - SDK: bars that stay across the screens shown (gap A1, first part).
   `Registrar::add_chrome(ChromeSpec::new(id, Edge::Bottom, factory))`
   adds a bar along an edge (`size`, `shown` over which screens, `need`

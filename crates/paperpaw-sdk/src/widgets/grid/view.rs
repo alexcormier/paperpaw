@@ -1036,6 +1036,7 @@ mod tests {
                 work: crate::work::WorkStates::none(),
                 reader: true,
                 clipboard: false,
+                screen_maker: None,
                 content: paperpaw_platform::Rect::default(),
                 stack: &[],
                 slots: &[],

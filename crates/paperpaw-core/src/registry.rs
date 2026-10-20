@@ -102,6 +102,18 @@ impl Registry {
     }
 }
 
+impl paperpaw_sdk::ScreenMaker for Registry {
+    fn make(
+        &self,
+        id: &Id,
+        env: &paperpaw_sdk::Env<'_>,
+        params: &paperpaw_sdk::Params,
+    ) -> Option<alloc::boxed::Box<dyn paperpaw_sdk::Screen>> {
+        let spec = self.screens.get(id)?;
+        Some((spec.factory)(env, params))
+    }
+}
+
 /// A plugin's setting before it is defined: built at start, or kept in
 /// the program ([`SettingSpec::fixed`]).
 pub(crate) enum Staged {

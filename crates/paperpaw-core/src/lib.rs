@@ -295,6 +295,10 @@ struct ActiveScreen {
     timer: Option<Instant>,
 }
 
+/// An open screen kept while its task is not shown
+/// ([`Command::SwitchTask`]): its id, slot and params.
+type KeptScreen = (Id, Option<Id>, Params);
+
 /// A finger that came down at an edge (see [`Kernel::edge_lifted`]).
 #[derive(Debug, Clone, Copy)]
 struct EdgeTouch {
@@ -308,7 +312,6 @@ struct EdgeTouch {
 pub struct Kernel {
     shared: Shared,
     framebuffer: Framebuffer,
-    registry: Registry,
     subscriptions: Vec<(Id, Id, EventHandler)>,
     /// The screen on top changed: it is told ([`Screen::on_show`]) once
     /// the commands of the call are done, so that one shown for a moment
@@ -353,6 +356,10 @@ pub struct Kernel {
     /// The screen that asked for the values shown without being kept
     /// ([`Command::PreviewSettings`]), if any (its `serial`).
     preview_owner: Option<u32>,
+    /// The task shown ([`Command::SwitchTask`]); `None` the home slot's.
+    task: Option<Id>,
+    /// The screens of the tasks not shown, by their ids, slots and params.
+    tasks: Vec<(Id, Vec<KeptScreen>)>,
     /// The `serial` of the screen opened next.
     next_serial: u32,
     /// `paperpaw.ini` is there but could not be read at start: the user
@@ -1022,6 +1029,9 @@ impl Kernel {
 
 /// Everything plugins can read through [`Env`].
 struct Shared {
+    /// The screens and slots plugins added (in here so that a screen can
+    /// make another to host it: [`Env::make_screen`]).
+    registry: Registry,
     device: DeviceInfo,
     settings: Settings,
     translator: Translator,
@@ -1136,6 +1146,7 @@ impl Shared {
             work: &self.work_states,
             reader: self.reader,
             clipboard: self.system_clipboard || !self.clipboard.is_empty(),
+            screen_maker: Some(&self.registry),
             content: self.content,
             stack: &self.stack,
             slots: &self.slots,

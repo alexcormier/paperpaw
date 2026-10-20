@@ -154,6 +154,7 @@ impl Kernel {
         ] {
             let sole = {
                 let mut providers = self
+                    .shared
                     .registry
                     .slot_screens(&slot)
                     .map(Id::namespace)
@@ -220,7 +221,7 @@ impl Kernel {
                 id: spec.id.clone(),
             });
         }
-        staging.merge_into(&mut self.registry, &mut self.shared.actions)?;
+        staging.merge_into(&mut self.shared.registry, &mut self.shared.actions)?;
         for setting in staging.settings.drain(..) {
             // Cannot fail: checked above.
             let _ = match setting {
@@ -294,7 +295,7 @@ impl Kernel {
             self.shared.menus.set_need(item, need);
         }
         for (screen, hints) in staging.screen_hints.drain(..) {
-            self.registry.hints.insert(screen, hints);
+            self.shared.registry.hints.insert(screen, hints);
         }
         for item in staging.status_items.drain(..) {
             self.shared.status_items.add(item);
@@ -772,7 +773,7 @@ impl Kernel {
     /// Releases memory reserved while plugins registered: on small devices
     /// every kilobyte counts, and registries are not modified afterwards.
     pub(crate) fn shrink_to_fit(&mut self) {
-        self.registry.shrink_to_fit();
+        self.shared.registry.shrink_to_fit();
         self.keys.plugins.shrink_to_fit();
         self.stylesheet_owners.shrink_to_fit();
         self.keys.presets.shrink_to_fit();

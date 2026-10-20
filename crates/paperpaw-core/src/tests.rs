@@ -3241,6 +3241,7 @@ mod clean_up;
 mod declared_work;
 mod frames;
 mod guard;
+mod hosting;
 mod input;
 mod kernel_calls;
 mod plugins_loaded;

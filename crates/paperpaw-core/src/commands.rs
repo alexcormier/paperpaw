@@ -173,6 +173,7 @@ impl Kernel {
             Command::Replace(screen, params) => self.replace(screen, &params),
             Command::BackTo(id) => self.back_to(&id),
             Command::BindSlot(slot, screen) => self.bind_slot(slot, screen),
+            Command::SwitchTask(task) => self.switch_task(task),
             Command::OpenScreen(screen, params) => self.open(screen, None, &params),
             // Not past a screen that guards the device, but from it.
             Command::Back if self.held_by_guard() => {}
@@ -210,7 +211,7 @@ impl Kernel {
     /// Opens the screen bound to `slot`, or `screen` for it
     /// ([`Command::OpenInSlot`]), or shows it again where the slot is open
     /// with it and the same params (closing what is above it).
-    fn open_slot_command(&mut self, slot: Id, screen: Option<Id>, params: Params) {
+    pub(crate) fn open_slot_command(&mut self, slot: Id, screen: Option<Id>, params: Params) {
         let open = self.stack.iter().position(|s| {
             s.slot.as_ref() == Some(&slot) && screen.as_ref().is_none_or(|screen| s.id == *screen)
         });
@@ -245,7 +246,7 @@ impl Kernel {
                 self.invalidate(region);
             }
         }
-        match screen.or_else(|| self.registry.resolve_slot(slot.as_str()).cloned()) {
+        match screen.or_else(|| self.shared.registry.resolve_slot(slot.as_str()).cloned()) {
             Some(screen) => self.open(screen, Some(slot), &params),
             None => self.warn_runtime(format!("no screen for slot `{slot}`")),
         }
@@ -255,17 +256,17 @@ impl Kernel {
     /// (see [`Command::BindSlot`]): at once, and kept in `paperpaw.ini`.
     fn bind_slot(&mut self, slot: Id, screen: Option<Id>) {
         match &screen {
-            Some(screen) if !self.registry.screens.contains_key(screen) => {
+            Some(screen) if !self.shared.registry.screens.contains_key(screen) => {
                 return self.warn_runtime(format!("unknown screen `{screen}` for slot `{slot}`"));
             }
-            Some(screen) => self.registry.bind_user(slot.clone(), screen.clone()),
-            None => self.registry.unbind_user(&slot),
+            Some(screen) => self.shared.registry.bind_user(slot.clone(), screen.clone()),
+            None => self.shared.registry.unbind_user(&slot),
         }
         self.update_config(&format_args!("slot `{slot}`"), |source| match &screen {
             Some(screen) => paperpaw_config::set(source, "slots", slot.as_str(), screen.as_str()),
             None => paperpaw_config::remove(source, "slots", slot.as_str()),
         });
-        self.shared.slots = self.registry.bound_slots();
+        self.shared.slots = self.shared.registry.bound_slots();
     }
 
     /// An event to its subscribers, then to every open screen.

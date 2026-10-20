@@ -132,6 +132,10 @@ pub struct Env<'a> {
     /// the system has a clipboard, in another app; read it with
     /// [`Command::ReadClipboard`](crate::Command::ReadClipboard).
     pub clipboard: bool,
+    /// Makes the screens plugins added, for [`Env::make_screen`]: the
+    /// kernel's.
+    #[doc(hidden)]
+    pub screen_maker: Option<&'a dyn crate::ScreenMaker>,
     /// The part of the screen what is handled now is made for and drawn
     /// into, with its place on the screen: all of it but bars and the row
     /// of hints for a screen, a bar's strip for a bar. A screen draws and
@@ -245,6 +249,10 @@ pub struct EnvParts<'a> {
     /// the system has a clipboard, in another app; read it with
     /// [`Command::ReadClipboard`](crate::Command::ReadClipboard).
     pub clipboard: bool,
+    /// Makes the screens plugins added, for [`Env::make_screen`]: the
+    /// kernel's.
+    #[doc(hidden)]
+    pub screen_maker: Option<&'a dyn crate::ScreenMaker>,
     /// The part of the screen what is handled now is made for and drawn
     /// into, with its place on the screen: all of it but bars and the row
     /// of hints for a screen, a bar's strip for a bar. A screen draws and
@@ -313,6 +321,7 @@ impl<'a> From<EnvParts<'a>> for Env<'a> {
             work: p.work,
             reader: p.reader,
             clipboard: p.clipboard,
+            screen_maker: p.screen_maker,
             content: p.content,
             stack: p.stack,
             slots: p.slots,
@@ -364,6 +373,19 @@ impl<'a> Env<'a> {
 }
 
 impl Env<'_> {
+    /// Screen `id`, made with `params` for this environment, to host it in
+    /// a screen of one's own (tabs, a split view; see
+    /// [`host::ScreenHost`](crate::host::ScreenHost)): made for
+    /// [`Env::content`] as it is here, so make it with the environment
+    /// [`Env::within`] the part it gets. `None` where no plugin added it.
+    pub fn make_screen(
+        &self,
+        id: &crate::Id,
+        params: &crate::Params,
+    ) -> Option<alloc::boxed::Box<dyn crate::Screen>> {
+        self.screen_maker?.make(id, self, params)
+    }
+
     /// The screen shown on top, if any.
     pub fn top(&self) -> Option<&crate::StackEntry> {
         self.stack.last()

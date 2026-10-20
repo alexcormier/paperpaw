@@ -338,6 +338,14 @@ pub enum Command {
     /// and these params, else in place of what the slot shows (one
     /// launcher of several, chosen once).
     OpenInSlot(Id, Id, Params),
+    /// Shows task `.0`, a tab of tabs: the screens open now are kept as
+    /// the task shown before (by their ids and params; dropped from memory
+    /// and made anew when it is shown again), and those of task `.0` open
+    /// again, or the first time the screen of slot `.0` (or screen `.0`).
+    /// Each task keeps its own way back; its first screen is the first of
+    /// [`Env::stack`](crate::Env::stack). At start the task is the home
+    /// slot's.
+    SwitchTask(Id),
     /// Binds slot `.0` to screen `.1` for the user, or back to what the
     /// plugins bind it to (`None`): at once and kept in `paperpaw.ini`
     /// (`[slots]`), e.g. "use this as the home screen?".

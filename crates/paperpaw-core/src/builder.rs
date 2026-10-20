@@ -387,6 +387,7 @@ impl KernelBuilder {
         caps.button_row = !self.button_row.is_empty();
         Ok(Kernel {
             shared: Shared {
+                registry: Registry::default(),
                 meter,
                 device: self.device,
                 settings: Settings::new(),
@@ -475,7 +476,6 @@ impl KernelBuilder {
             stylesheet_owners: Vec::new(),
             timing: drawing::Timing::default(),
             framebuffer,
-            registry: Registry::default(),
             subscriptions: Vec::new(),
             show_pending: false,
             notice: None,
@@ -501,6 +501,8 @@ impl KernelBuilder {
             screens_changed: false,
             preview_owner: None,
             next_serial: 0,
+            task: None,
+            tasks: Vec::new(),
             config_unreadable: false,
             secrets_unreadable: false,
             plugin_defaults: Vec::new(),
@@ -729,8 +731,9 @@ impl Kernel {
     /// the row of hints as tall as the first screen is made for.
     fn settle(&mut self) {
         self.shrink_to_fit();
-        self.shared.slots = self.registry.bound_slots();
+        self.shared.slots = self.shared.registry.bound_slots();
         self.shared.screens = self
+            .shared
             .registry
             .screens
             .iter()

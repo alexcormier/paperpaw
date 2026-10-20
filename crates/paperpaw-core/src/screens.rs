@@ -8,7 +8,7 @@ impl Kernel {
     /// Opens screen `id` with `params` on top, for `slot` if it was bound
     /// to one.
     pub(crate) fn open(&mut self, id: Id, slot: Option<Id>, params: &Params) {
-        let Some(spec) = self.registry.screens.get(&id) else {
+        let Some(spec) = self.shared.registry.screens.get(&id) else {
             return self.warn_runtime(format!("unknown screen `{id}`"));
         };
         let serial = self.next_serial;
@@ -17,9 +17,9 @@ impl Kernel {
         let entry = paperpaw_sdk::StackEntry::new(id.clone(), slot.clone(), false, key);
         // Made once, at the size it asked for: above the row of hints, or
         // all of the screen, less the bars shown over it.
-        let mut hinted = self.registry.hints_of(&id) == Hints::Shown;
+        let mut hinted = self.shared.registry.hints_of(&id) == Hints::Shown;
         let mut area = self.layout(hinted, &entry, None);
-        set_area(&mut self.shared, area);
+        set_area(&mut self.shared.device, &mut self.shared.content, area);
         let running = self.shared.meter.enter(id.namespace());
         let mut screen = (spec.factory)(&self.shared.env(self.now), params);
         // It says otherwise of the row of hints: made again for the part
@@ -29,7 +29,7 @@ impl Kernel {
         {
             hinted = !hinted;
             area = self.layout(hinted, &entry, None);
-            set_area(&mut self.shared, area);
+            set_area(&mut self.shared.device, &mut self.shared.content, area);
             screen = (spec.factory)(&self.shared.env(self.now), params);
         }
         drop(running);
@@ -108,10 +108,15 @@ impl Kernel {
             self.held_notice = Some(text);
             return;
         }
-        let Some(id) = self.registry.resolve_slot(slots::NOTICE.as_str()).cloned() else {
+        let Some(id) = self
+            .shared
+            .registry
+            .resolve_slot(slots::NOTICE.as_str())
+            .cloned()
+        else {
             return;
         };
-        let Some(spec) = self.registry.screens.get(&id) else {
+        let Some(spec) = self.shared.registry.screens.get(&id) else {
             return;
         };
         let env = self.shared.env(self.now);
@@ -294,6 +299,51 @@ impl Kernel {
         }
     }
 
+    /// Shows task `id` (see [`Command::SwitchTask`]): the screens open
+    /// now kept as the task shown before, by ids and params, and task
+    /// `id`'s opened again (the first time its slot, or its screen). Not
+    /// past a screen that guards the device.
+    pub(crate) fn switch_task(&mut self, id: Id) {
+        let current = self.task.clone().unwrap_or(slots::HOME);
+        if id == current || self.held_by_guard() {
+            return;
+        }
+        let kept = self
+            .stack
+            .iter()
+            .map(|active| {
+                (
+                    active.id.clone(),
+                    active.slot.clone(),
+                    active.params.clone(),
+                )
+            })
+            .collect();
+        self.tasks.retain(|(task, _)| *task != current);
+        self.tasks.push((current, kept));
+        self.close_from(0);
+        self.stop_for_closed_screens();
+        let again = self
+            .tasks
+            .iter()
+            .position(|(task, _)| *task == id)
+            .map(|at| self.tasks.remove(at).1);
+        self.task = (id != slots::HOME).then(|| id.clone());
+        match again {
+            Some(screens) if !screens.is_empty() => {
+                for (screen, slot, params) in screens {
+                    self.open(screen, slot, &params);
+                }
+            }
+            _ if self.shared.registry.resolve_slot(id.as_str()).is_some() => {
+                self.open_slot_command(id, None, Params::new());
+            }
+            _ => self.open(id, None, &Params::new()),
+        }
+        let bounds = self.framebuffer.bounds();
+        self.screen_changed(bounds, false);
+    }
+
     /// Closes all screens above `index`.
     pub(crate) fn close_above(&mut self, index: usize) {
         let mut region: Option<Rect> = None;
@@ -346,7 +396,7 @@ impl Kernel {
     /// Screens are made for, and handled in, `area` now: the display as
     /// they see it is as large.
     pub(crate) fn apply_area(&mut self, area: Rect) {
-        set_area(&mut self.shared, area);
+        set_area(&mut self.shared.device, &mut self.shared.content, area);
     }
 
     /// Sizes the content for the screen on top, after screens closed; all
@@ -369,7 +419,7 @@ impl Kernel {
     pub(crate) fn remake_screens(&mut self) {
         let now = self.now;
         for i in 0..self.stack.len() {
-            if !self.registry.screens.contains_key(&self.stack[i].id) {
+            if !self.shared.registry.screens.contains_key(&self.stack[i].id) {
                 continue;
             }
             // The old one goes: told as when it closes, so it keeps what
@@ -387,7 +437,7 @@ impl Kernel {
             let env = self.shared.env(now);
             let active = &mut self.stack[i];
             active.area = area;
-            let Some(spec) = self.registry.screens.get(&active.id) else {
+            let Some(spec) = self.shared.registry.screens.get(&active.id) else {
                 continue;
             };
             let _running = self.shared.meter.enter(active.id.namespace());
@@ -505,10 +555,10 @@ impl Kernel {
 
 /// Screens are made for, and handled in, `area` now (see
 /// `Kernel::apply_area`).
-fn set_area(shared: &mut Shared, area: Rect) {
-    shared.device.display.width = area.width;
-    shared.device.display.height = area.height;
-    shared.content = area;
+fn set_area(device: &mut DeviceInfo, content: &mut Rect, area: Rect) {
+    device.display.width = area.width;
+    device.display.height = area.height;
+    *content = area;
 }
 
 /// `source` with `input` in `section` bound to `action`, or to what the

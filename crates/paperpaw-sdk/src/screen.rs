@@ -17,6 +17,14 @@ use crate::params::Params;
 /// command that opened it (e.g. the path of a book).
 pub type ScreenFactory = Box<dyn Fn(&Env<'_>, &Params) -> Box<dyn Screen>>;
 
+/// Makes the screens plugins added: what [`Env::make_screen`] asks (the
+/// kernel's, for screens that host others).
+pub trait ScreenMaker {
+    /// Screen `id` made with `params` for `env`, `None` where no plugin
+    /// added it.
+    fn make(&self, id: &Id, env: &Env<'_>, params: &Params) -> Option<Box<dyn Screen>>;
+}
+
 /// A screen contribution.
 #[non_exhaustive]
 pub struct ScreenSpec {
