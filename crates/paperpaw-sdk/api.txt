@@ -1751,10 +1751,10 @@ pub struct paperpaw_sdk::ui::sections::Section
 pub paperpaw_sdk::ui::sections::Section::count: usize
 pub paperpaw_sdk::ui::sections::Section::heading: bool
 pub struct paperpaw_sdk::ui::sections::Sections
-pub paperpaw_sdk::ui::sections::Sections::area: paperpaw_platform::geometry::Rect
-pub paperpaw_sdk::ui::sections::Sections::focus: usize
 impl paperpaw_sdk::ui::sections::Sections
+pub fn paperpaw_sdk::ui::sections::Sections::area(&self) -> paperpaw_platform::geometry::Rect
 pub fn paperpaw_sdk::ui::sections::Sections::draw(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::ui::UiStyle, bool, impl core::ops::function::FnMut(&mut paperpaw_graphics::canvas::Canvas<'_>, paperpaw_sdk::ui::sections::Item, paperpaw_platform::geometry::Rect, bool))
+pub fn paperpaw_sdk::ui::sections::Sections::focus(&self) -> usize
 pub fn paperpaw_sdk::ui::sections::Sections::focus_on(&mut self, usize) -> paperpaw_sdk::ui::ListChange
 pub fn paperpaw_sdk::ui::sections::Sections::hit(&self, paperpaw_platform::geometry::Point) -> core::option::Option<usize>
 pub fn paperpaw_sdk::ui::sections::Sections::is_empty(&self) -> bool
@@ -1765,6 +1765,7 @@ pub fn paperpaw_sdk::ui::sections::Sections::paging(&self) -> (usize, usize)
 pub fn paperpaw_sdk::ui::sections::Sections::rect_of(&self, usize) -> core::option::Option<paperpaw_platform::geometry::Rect>
 pub fn paperpaw_sdk::ui::sections::Sections::request(&self, paperpaw_sdk::ui::ListChange, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::ui::sections::Sections::section_of(&self, usize) -> core::option::Option<(usize, usize)>
+pub fn paperpaw_sdk::ui::sections::Sections::set_focus(&mut self, usize) -> paperpaw_sdk::ui::ListChange
 pub fn paperpaw_sdk::ui::sections::Sections::step(&mut self, bool) -> paperpaw_sdk::ui::ListChange
 pub fn paperpaw_sdk::ui::sections::Sections::turn(&mut self, bool) -> paperpaw_sdk::ui::ListChange
 pub fn paperpaw_sdk::ui::sections::Sections::visible(&self) -> alloc::vec::Vec<(paperpaw_sdk::ui::sections::Item, paperpaw_platform::geometry::Rect)>
@@ -1779,19 +1780,19 @@ pub paperpaw_sdk::ui::slider::SliderStep::Chosen(i64)
 pub paperpaw_sdk::ui::slider::SliderStep::Moved(i64)
 pub paperpaw_sdk::ui::slider::SliderStep::Same
 pub struct paperpaw_sdk::ui::slider::Slider
-pub paperpaw_sdk::ui::slider::Slider::max: i64
-pub paperpaw_sdk::ui::slider::Slider::min: i64
-pub paperpaw_sdk::ui::slider::Slider::step: i64
 impl paperpaw_sdk::ui::slider::Slider
 pub fn paperpaw_sdk::ui::slider::Slider::clamp(&self, i64) -> i64
 pub fn paperpaw_sdk::ui::slider::Slider::draw_band(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, &paperpaw_sdk::ui::slider::SliderView<'_>)
 pub fn paperpaw_sdk::ui::slider::Slider::draw_row(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, &paperpaw_sdk::ui::slider::SliderView<'_>)
 pub fn paperpaw_sdk::ui::slider::Slider::draw_track(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, i64, paperpaw_platform::pixel::Color)
 pub fn paperpaw_sdk::ui::slider::Slider::knob_x(&self, paperpaw_platform::geometry::Rect, i64) -> i32
+pub fn paperpaw_sdk::ui::slider::Slider::max(&self) -> i64
+pub fn paperpaw_sdk::ui::slider::Slider::min(&self) -> i64
 pub const fn paperpaw_sdk::ui::slider::Slider::new(i64, i64) -> Self
 pub fn paperpaw_sdk::ui::slider::Slider::of(&paperpaw_sdk::SettingSpec) -> core::option::Option<Self>
 pub fn paperpaw_sdk::ui::slider::Slider::share(&self, i64) -> f32
 pub const fn paperpaw_sdk::ui::slider::Slider::step(self, i64) -> Self
+pub fn paperpaw_sdk::ui::slider::Slider::step_size(&self) -> i64
 pub fn paperpaw_sdk::ui::slider::Slider::stepped(&self, i64, i64) -> i64
 pub fn paperpaw_sdk::ui::slider::Slider::value_at(&self, paperpaw_platform::geometry::Rect, i32) -> i64
 pub struct paperpaw_sdk::ui::slider::SliderDrag
@@ -1860,16 +1861,14 @@ pub fn paperpaw_sdk::ui::Header::on_page_number(&self, &paperpaw_sdk::Env<'_>, &
 pub fn paperpaw_sdk::ui::Header::on_title(&self, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Point, core::option::Option<(usize, usize)>) -> bool
 pub fn paperpaw_sdk::ui::Header::tap(&self, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Point, core::option::Option<(usize, usize)>) -> core::option::Option<paperpaw_sdk::Id>
 pub struct paperpaw_sdk::ui::ListView
-pub paperpaw_sdk::ui::ListView::active: bool
-pub paperpaw_sdk::ui::ListView::area: paperpaw_platform::geometry::Rect
-pub paperpaw_sdk::ui::ListView::focus: usize
-pub paperpaw_sdk::ui::ListView::row: u32
-pub paperpaw_sdk::ui::ListView::shown: bool
 impl paperpaw_sdk::ui::ListView
+pub fn paperpaw_sdk::ui::ListView::active(&self) -> bool
+pub fn paperpaw_sdk::ui::ListView::area(&self) -> paperpaw_platform::geometry::Rect
 pub fn paperpaw_sdk::ui::ListView::column_count(&self) -> usize
 pub fn paperpaw_sdk::ui::ListView::columns(self, u32) -> Self
 pub fn paperpaw_sdk::ui::ListView::confirm(&mut self) -> core::option::Option<usize>
 pub fn paperpaw_sdk::ui::ListView::draw(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::ui::UiStyle, usize, impl core::ops::function::FnMut(&mut paperpaw_graphics::canvas::Canvas<'_>, usize, paperpaw_platform::geometry::Rect, bool))
+pub fn paperpaw_sdk::ui::ListView::focus(&self) -> usize
 pub fn paperpaw_sdk::ui::ListView::focus_on_keys(self, &paperpaw_sdk::Env<'_>) -> Self
 pub fn paperpaw_sdk::ui::ListView::hit(&self, paperpaw_platform::geometry::Point, usize) -> core::option::Option<usize>
 pub fn paperpaw_sdk::ui::ListView::move_focus(&mut self, isize, usize) -> paperpaw_sdk::ui::ListChange
@@ -1879,9 +1878,15 @@ pub fn paperpaw_sdk::ui::ListView::page(&self) -> usize
 pub fn paperpaw_sdk::ui::ListView::pages(&self, usize) -> usize
 pub fn paperpaw_sdk::ui::ListView::paging(&self, usize) -> core::option::Option<(usize, usize)>
 pub fn paperpaw_sdk::ui::ListView::request(&self, paperpaw_sdk::ui::ListChange, &mut paperpaw_sdk::Cx<'_, '_>)
+pub fn paperpaw_sdk::ui::ListView::row(&self) -> u32
 pub fn paperpaw_sdk::ui::ListView::row_rect(&self, usize) -> paperpaw_platform::geometry::Rect
 pub fn paperpaw_sdk::ui::ListView::rows(&self) -> usize
+pub fn paperpaw_sdk::ui::ListView::set_active(&mut self, bool)
+pub fn paperpaw_sdk::ui::ListView::set_area(&mut self, paperpaw_platform::geometry::Rect)
+pub fn paperpaw_sdk::ui::ListView::set_focus(&mut self, usize) -> paperpaw_sdk::ui::ListChange
 pub fn paperpaw_sdk::ui::ListView::set_len(&mut self, usize)
+pub fn paperpaw_sdk::ui::ListView::set_shown(&mut self, bool)
+pub fn paperpaw_sdk::ui::ListView::shown(&self) -> bool
 pub struct paperpaw_sdk::ui::Pager
 pub paperpaw_sdk::ui::Pager::area: paperpaw_platform::geometry::Rect
 impl paperpaw_sdk::ui::Pager
@@ -1898,10 +1903,10 @@ pub fn paperpaw_sdk::ui::reorder::Reorder::draw_grip(&mut paperpaw_graphics::can
 pub fn paperpaw_sdk::ui::reorder::Reorder::grip(paperpaw_platform::geometry::Rect) -> paperpaw_platform::geometry::Rect
 pub fn paperpaw_sdk::ui::reorder::Reorder::on_pointer(&mut self, &paperpaw_platform::input::PointerEvent, &paperpaw_sdk::ui::ListView, usize) -> core::option::Option<paperpaw_sdk::ui::reorder::ReorderStep>
 pub struct paperpaw_sdk::ui::Rows
-pub paperpaw_sdk::ui::Rows::area: paperpaw_platform::geometry::Rect
-pub paperpaw_sdk::ui::Rows::focus: usize
 impl paperpaw_sdk::ui::Rows
+pub fn paperpaw_sdk::ui::Rows::area(&self) -> paperpaw_platform::geometry::Rect
 pub fn paperpaw_sdk::ui::Rows::draw(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::ui::UiStyle, bool, impl core::ops::function::FnMut(&mut paperpaw_graphics::canvas::Canvas<'_>, usize, paperpaw_platform::geometry::Rect, bool))
+pub fn paperpaw_sdk::ui::Rows::focus(&self) -> usize
 pub fn paperpaw_sdk::ui::Rows::hit(&self, paperpaw_platform::geometry::Point) -> core::option::Option<usize>
 pub fn paperpaw_sdk::ui::Rows::is_empty(&self) -> bool
 pub fn paperpaw_sdk::ui::Rows::is_heading(&self, usize) -> bool
@@ -1910,14 +1915,15 @@ pub fn paperpaw_sdk::ui::Rows::new(paperpaw_platform::geometry::Rect, alloc::vec
 pub fn paperpaw_sdk::ui::Rows::paging(&self) -> (usize, usize)
 pub fn paperpaw_sdk::ui::Rows::rect_of(&self, usize) -> core::option::Option<paperpaw_platform::geometry::Rect>
 pub fn paperpaw_sdk::ui::Rows::request(&self, paperpaw_sdk::ui::ListChange, &mut paperpaw_sdk::Cx<'_, '_>)
+pub fn paperpaw_sdk::ui::Rows::set_focus(&mut self, usize) -> paperpaw_sdk::ui::ListChange
 pub fn paperpaw_sdk::ui::Rows::step(&mut self, bool) -> paperpaw_sdk::ui::ListChange
 pub fn paperpaw_sdk::ui::Rows::turn(&mut self, bool) -> paperpaw_sdk::ui::ListChange
 pub fn paperpaw_sdk::ui::Rows::visible(&self) -> alloc::vec::Vec<(usize, paperpaw_platform::geometry::Rect)>
 pub struct paperpaw_sdk::ui::Sections
-pub paperpaw_sdk::ui::Sections::area: paperpaw_platform::geometry::Rect
-pub paperpaw_sdk::ui::Sections::focus: usize
 impl paperpaw_sdk::ui::sections::Sections
+pub fn paperpaw_sdk::ui::sections::Sections::area(&self) -> paperpaw_platform::geometry::Rect
 pub fn paperpaw_sdk::ui::sections::Sections::draw(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::ui::UiStyle, bool, impl core::ops::function::FnMut(&mut paperpaw_graphics::canvas::Canvas<'_>, paperpaw_sdk::ui::sections::Item, paperpaw_platform::geometry::Rect, bool))
+pub fn paperpaw_sdk::ui::sections::Sections::focus(&self) -> usize
 pub fn paperpaw_sdk::ui::sections::Sections::focus_on(&mut self, usize) -> paperpaw_sdk::ui::ListChange
 pub fn paperpaw_sdk::ui::sections::Sections::hit(&self, paperpaw_platform::geometry::Point) -> core::option::Option<usize>
 pub fn paperpaw_sdk::ui::sections::Sections::is_empty(&self) -> bool
@@ -1928,23 +1934,24 @@ pub fn paperpaw_sdk::ui::sections::Sections::paging(&self) -> (usize, usize)
 pub fn paperpaw_sdk::ui::sections::Sections::rect_of(&self, usize) -> core::option::Option<paperpaw_platform::geometry::Rect>
 pub fn paperpaw_sdk::ui::sections::Sections::request(&self, paperpaw_sdk::ui::ListChange, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::ui::sections::Sections::section_of(&self, usize) -> core::option::Option<(usize, usize)>
+pub fn paperpaw_sdk::ui::sections::Sections::set_focus(&mut self, usize) -> paperpaw_sdk::ui::ListChange
 pub fn paperpaw_sdk::ui::sections::Sections::step(&mut self, bool) -> paperpaw_sdk::ui::ListChange
 pub fn paperpaw_sdk::ui::sections::Sections::turn(&mut self, bool) -> paperpaw_sdk::ui::ListChange
 pub fn paperpaw_sdk::ui::sections::Sections::visible(&self) -> alloc::vec::Vec<(paperpaw_sdk::ui::sections::Item, paperpaw_platform::geometry::Rect)>
 pub struct paperpaw_sdk::ui::Slider
-pub paperpaw_sdk::ui::Slider::max: i64
-pub paperpaw_sdk::ui::Slider::min: i64
-pub paperpaw_sdk::ui::Slider::step: i64
 impl paperpaw_sdk::ui::slider::Slider
 pub fn paperpaw_sdk::ui::slider::Slider::clamp(&self, i64) -> i64
 pub fn paperpaw_sdk::ui::slider::Slider::draw_band(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, &paperpaw_sdk::ui::slider::SliderView<'_>)
 pub fn paperpaw_sdk::ui::slider::Slider::draw_row(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, &paperpaw_sdk::ui::slider::SliderView<'_>)
 pub fn paperpaw_sdk::ui::slider::Slider::draw_track(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, i64, paperpaw_platform::pixel::Color)
 pub fn paperpaw_sdk::ui::slider::Slider::knob_x(&self, paperpaw_platform::geometry::Rect, i64) -> i32
+pub fn paperpaw_sdk::ui::slider::Slider::max(&self) -> i64
+pub fn paperpaw_sdk::ui::slider::Slider::min(&self) -> i64
 pub const fn paperpaw_sdk::ui::slider::Slider::new(i64, i64) -> Self
 pub fn paperpaw_sdk::ui::slider::Slider::of(&paperpaw_sdk::SettingSpec) -> core::option::Option<Self>
 pub fn paperpaw_sdk::ui::slider::Slider::share(&self, i64) -> f32
 pub const fn paperpaw_sdk::ui::slider::Slider::step(self, i64) -> Self
+pub fn paperpaw_sdk::ui::slider::Slider::step_size(&self) -> i64
 pub fn paperpaw_sdk::ui::slider::Slider::stepped(&self, i64, i64) -> i64
 pub fn paperpaw_sdk::ui::slider::Slider::value_at(&self, paperpaw_platform::geometry::Rect, i32) -> i64
 pub struct paperpaw_sdk::ui::SliderDrag

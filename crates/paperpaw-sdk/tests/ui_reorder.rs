@@ -98,7 +98,7 @@ proptest! {
         let mut list = list();
         let rows = list.rows();
         let first = (page * rows).min((len - 1) / rows * rows);
-        list.focus = first;
+        list.set_focus(first);
         let on_page = (len - first).min(rows);
         let (from, to) = (first + page_from % on_page, first + page_to % on_page);
         let mut reorder = Reorder::default();
@@ -146,7 +146,7 @@ proptest! {
         let movable = movable.min(len);
         let mut list = list();
         let rows = list.rows();
-        list.focus = (page * rows).min((movable - 1) / rows * rows);
+        list.set_focus((page * rows).min((movable - 1) / rows * rows));
         let first = list.page() * rows;
         let mut reorder = Reorder::default();
         let (x, gy) = grip_of(&list, first);
@@ -243,7 +243,7 @@ fn the_bar_where_a_row_lands_is_drawn_in_the_list() {
         assert_eq!(reorder.dragging(), Some((from, to)));
         let mut frame = frame(400, 600);
         reorder.draw(&mut frame.canvas(), &STYLE, &list);
-        let a = list.area;
+        let a = list.area();
         let bound = Rect::new(a.x, a.y - half, a.width, a.height + 2 * half);
         assert_eq!(
             drawn_outside(&mut frame, bound),

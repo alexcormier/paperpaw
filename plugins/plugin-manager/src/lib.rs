@@ -391,11 +391,11 @@ impl Screen for PluginList {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let len = self.len();
-        self.list.focus = self.list.focus.min(len.saturating_sub(1));
+        self.list.set_len(len);
         if self.focus == Focus::Restart && self.restart_button(env).is_none() {
             self.focus = Focus::List;
         }
-        self.list.active = self.focus == Focus::List;
+        self.list.set_active(self.focus == Focus::List);
         self.header.draw(
             canvas,
             env,
@@ -492,7 +492,7 @@ impl Screen for PluginList {
             return Handled::Yes;
         }
         let down = [actions::DOWN, actions::RIGHT, actions::NEXT].contains(a);
-        if down && restart && self.list.focus + 1 >= len {
+        if down && restart && self.list.focus() + 1 >= len {
             self.focus = Focus::Restart;
             cx.request_redraw();
             cx.request_refresh(RefreshMode::Fast);
@@ -507,7 +507,7 @@ impl Screen for PluginList {
         } else if *a == actions::PREV_PAGE {
             -page
         } else if *a == actions::CONFIRM {
-            self.activate(&env, self.list.focus, cx);
+            self.activate(&env, self.list.focus(), cx);
             return Handled::Yes;
         } else {
             return Handled::No;
@@ -539,7 +539,7 @@ impl Screen for PluginList {
         let Some(index) = self.list.hit(gesture.start, self.len()) else {
             return Handled::No;
         };
-        self.list.focus = index;
+        self.list.set_focus(index);
         self.focus = Focus::List;
         self.activate(&env, index, cx);
         Handled::Yes

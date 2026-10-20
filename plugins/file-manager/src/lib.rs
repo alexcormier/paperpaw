@@ -201,7 +201,7 @@ impl Browser {
     /// place), else the one the focus is on.
     fn load(&mut self, env: &Env<'_>, at: Option<Entry>) {
         let rows = self.list.rows().max(1);
-        let focus = self.list.focus;
+        let focus = self.list.focus();
         let folder = self.folder(env);
         let shown = (|| {
             let len = folder.count()?;
@@ -223,13 +223,13 @@ impl Browser {
             Ok((len, first, focus, page)) => {
                 self.len = len;
                 self.first = first;
-                self.list.focus = focus;
+                self.list.set_focus(focus);
                 self.page = page;
             }
             Err(e) => {
                 self.len = 0;
                 self.first = 0;
-                self.list.focus = 0;
+                self.list.set_focus(0);
                 self.page = Vec::new();
                 self.message = Some(error(env, e));
             }
@@ -240,7 +240,7 @@ impl Browser {
     /// one before from the one held, as the buttons go.
     fn show_focus(&mut self, env: &Env<'_>) {
         let rows = self.list.rows().max(1);
-        let first = self.list.focus - self.list.focus % rows;
+        let first = self.list.focus() - self.list.focus() % rows;
         if first == self.first && !self.page.is_empty() || self.len == 0 {
             return;
         }
@@ -298,7 +298,7 @@ impl Browser {
     /// Opens folder `dir` at entry `at` (from its first without).
     fn open_at(&mut self, dir: String, at: Option<Entry>, cx: &mut Cx<'_, '_>) {
         self.dir = dir;
-        self.list.focus = 0;
+        self.list.set_focus(0);
         self.focus = Focus::List;
         let env = *cx.env();
         self.load(&env, at);
@@ -497,8 +497,8 @@ impl Browser {
         // The list and the bar below it, one round: past the last button
         // to the first entry, and back.
         self.focus = match self.focus {
-            Focus::List if delta > 0 && (len == 0 || self.list.focus + 1 >= len) => Focus::Bar(0),
-            Focus::List if delta < 0 && self.list.focus == 0 => Focus::Bar(bar - 1),
+            Focus::List if delta > 0 && (len == 0 || self.list.focus() + 1 >= len) => Focus::Bar(0),
+            Focus::List if delta < 0 && self.list.focus() == 0 => Focus::Bar(bar - 1),
             Focus::List => {
                 let change = self.list.move_focus(delta, len);
                 if change == ListChange::Page {
@@ -508,11 +508,11 @@ impl Browser {
             }
             Focus::Bar(i) if delta > 0 && i + 1 < bar => Focus::Bar(i + 1),
             Focus::Bar(_) if delta > 0 => {
-                self.list.focus = 0;
+                self.list.set_focus(0);
                 Focus::List
             }
             Focus::Bar(0) => {
-                self.list.focus = len.saturating_sub(1);
+                self.list.set_focus(len.saturating_sub(1));
                 Focus::List
             }
             Focus::Bar(i) => Focus::Bar(i - 1),
@@ -602,7 +602,7 @@ impl Screen for Browser {
                 canvas,
                 env,
                 &style,
-                self.list.area,
+                self.list.area(),
                 "folder-open",
                 "",
                 env.i18n.tr("file-manager.empty"),
@@ -612,7 +612,7 @@ impl Screen for Browser {
         let room = ui::icon_room(env, &style, true);
         let (page, first) = (&self.page, self.first);
         let active = self.focus == Focus::List;
-        self.list.active = active;
+        self.list.set_active(active);
         self.list
             .draw(canvas, &style, len, |canvas, index, rect, focused| {
                 let Some(entry) = index.checked_sub(first).and_then(|i| page.get(i)) else {
@@ -681,7 +681,7 @@ impl Screen for Browser {
             }
         } else if *a == actions::CONFIRM {
             match self.focus {
-                Focus::List => self.activate(self.list.focus, cx),
+                Focus::List => self.activate(self.list.focus(), cx),
                 Focus::Bar(i) => {
                     if let Some(button) = self.buttons().get(i).copied() {
                         self.press(button, cx);
@@ -689,7 +689,7 @@ impl Screen for Browser {
                 }
             }
         } else if *a == actions::MENU && self.focus == Focus::List {
-            self.offer(self.list.focus, cx);
+            self.offer(self.list.focus(), cx);
         } else if *a == actions::BACK {
             if !self.up(cx) {
                 cx.command(Command::Back);
@@ -730,9 +730,9 @@ impl Screen for Browser {
         let Some(index) = self.list.hit(gesture.start, self.len) else {
             return Handled::No;
         };
-        self.list.focus = index;
+        self.list.set_focus(index);
         self.focus = Focus::List;
-        cx.request_redraw_area(self.list.area);
+        cx.request_redraw_area(self.list.area());
         match gesture.kind {
             GestureKind::Tap => self.activate(index, cx),
             GestureKind::LongPress => self.offer(index, cx),

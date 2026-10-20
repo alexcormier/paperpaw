@@ -120,7 +120,7 @@ impl ListScreen {
                 let _ = files::move_to(env.storage, &fetched, &catalog::path());
                 samples::prune(&env, &self.samples, &fonts);
                 self.fonts = fonts;
-                self.list.focus = self.list.focus.min(self.fonts.len().saturating_sub(1));
+                self.list.set_len(self.fonts.len());
                 self.trouble = Trouble::None;
             }
             None => {
@@ -242,7 +242,7 @@ impl Screen for ListScreen {
                 canvas,
                 env,
                 &style,
-                self.list.area,
+                self.list.area(),
                 icon,
                 env.i18n.tr(title),
                 text,
@@ -299,7 +299,7 @@ impl Screen for ListScreen {
         if let Some(change) = self.list.navigate(action, len) {
             self.move_focus(change, cx);
         } else if *action == actions::CONFIRM {
-            self.activate(self.list.focus, cx);
+            self.activate(self.list.focus(), cx);
         } else {
             return Handled::No;
         }
@@ -319,14 +319,14 @@ impl Screen for ListScreen {
             cx.command(Command::RunAction(action));
             return Handled::Yes;
         }
-        if len == 0 && self.list.area.contains(gesture.start) {
+        if len == 0 && self.list.area().contains(gesture.start) {
             self.activate(0, cx);
             return Handled::Yes;
         }
         let Some(index) = self.list.hit(gesture.start, len) else {
             return Handled::No;
         };
-        self.list.focus = index;
+        self.list.set_focus(index);
         self.activate(index, cx);
         Handled::Yes
     }

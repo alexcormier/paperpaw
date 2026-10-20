@@ -134,8 +134,8 @@ impl Reorder {
     fn place(event: &PointerEvent, list: &ListView, movable: usize) -> usize {
         let first = list.page() * list.rows();
         let last = (first + list.rows()).min(movable).max(first + 1) - 1;
-        let y = event.point.y - i32::from(list.area.y);
-        let slot = (y.max(0) as u32 / list.row.max(1)) as usize;
+        let y = event.point.y - i32::from(list.area().y);
+        let slot = (y.max(0) as u32 / list.row().max(1)) as usize;
         (first + slot).clamp(first, last)
     }
 
@@ -246,15 +246,15 @@ mod tests {
         use paperpaw_platform::PixelFormat;
         // Two rows a page; the focus on the second page.
         let mut list = ListView::new(Rect::new(0, 0, 200, 200), 100);
-        list.focus = 2;
+        list.set_focus(2);
         let mut reorder = Reorder::default();
         reorder.on_pointer(&event(PointerPhase::Down, 150, 50), &list, 4);
         assert_eq!(reorder.dragging(), Some((2, 2)));
         // The page turned back meanwhile, by a button.
-        list.focus = 0;
+        list.set_focus(0);
         reorder.on_pointer(&event(PointerPhase::Move, 150, 150), &list, 4);
         assert_eq!(reorder.dragging(), Some((2, 1)));
-        list.focus = 2;
+        list.set_focus(2);
         let mut fb = Framebuffer::new(200, 200, PixelFormat::Gray8).unwrap();
         let mut canvas = fb.canvas();
         let style = crate::ui::UiStyle {

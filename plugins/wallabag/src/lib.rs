@@ -788,13 +788,13 @@ impl Screen for SetupScreen {
         } else if [actions::DOWN, actions::RIGHT, actions::NEXT].contains(a) {
             1
         } else if *a == actions::CONFIRM {
-            self.activate(ROWS[self.list.focus.min(ROWS.len() - 1)], cx);
+            self.activate(ROWS[self.list.focus().min(ROWS.len() - 1)], cx);
             return Handled::Yes;
         } else {
             return Handled::No;
         };
         if self.list.move_focus(delta, ROWS.len()) != ListChange::None {
-            cx.request_redraw_area(self.list.area);
+            cx.request_redraw_area(self.list.area());
             cx.request_refresh(RefreshMode::Fast);
         }
         Handled::Yes
@@ -811,8 +811,8 @@ impl Screen for SetupScreen {
         let Some(index) = self.list.hit(gesture.start, ROWS.len()) else {
             return Handled::No;
         };
-        self.list.focus = index;
-        cx.request_redraw_area(self.list.area);
+        self.list.set_focus(index);
+        cx.request_redraw_area(self.list.area());
         self.activate(ROWS[index], cx);
         Handled::Yes
     }
@@ -824,7 +824,7 @@ impl Screen for SetupScreen {
             // On to the next row.
             if let Some(row) = typed.context.get(FIELD).and_then(Row::of) {
                 let at = ROWS.iter().position(|r| *r == row).unwrap_or(0);
-                self.list.focus = (at + 1).min(ROWS.len() - 1);
+                self.list.set_focus((at + 1).min(ROWS.len() - 1));
             }
         } else {
             return;

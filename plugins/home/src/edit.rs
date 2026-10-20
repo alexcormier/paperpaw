@@ -178,11 +178,11 @@ impl EditScreen {
         match option {
             "up" if at > 0 => {
                 list.swap(at, at - 1);
-                self.list.focus = at - 1;
+                self.list.set_focus(at - 1);
             }
             "down" if at + 1 < list.len() => {
                 list.swap(at, at + 1);
-                self.list.focus = at + 1;
+                self.list.set_focus(at + 1);
             }
             "remove" => {
                 list.remove(at);
@@ -253,7 +253,7 @@ impl Screen for EditScreen {
             && from != to
         {
             ui::reorder::moved(&mut list, from, to);
-            self.list.focus = to;
+            self.list.set_focus(to);
             let commands = self.target.store(list);
             Self::run(cx, commands);
         }
@@ -271,7 +271,7 @@ impl Screen for EditScreen {
         let delta = if let Some(delta) = ui::list_step(a, rows) {
             delta
         } else if *a == actions::CONFIRM {
-            self.choose(self.list.focus, cx);
+            self.choose(self.list.focus(), cx);
             return Handled::Yes;
         } else {
             return Handled::No;
@@ -297,7 +297,7 @@ impl Screen for EditScreen {
         }
         match self.list.hit(gesture.start, len) {
             Some(index) => {
-                self.list.focus = index;
+                self.list.set_focus(index);
                 self.choose(index, cx);
                 Handled::Yes
             }
@@ -396,7 +396,7 @@ impl Screen for AddScreen {
                 canvas,
                 env,
                 &style,
-                self.list.area,
+                self.list.area(),
                 env.i18n.tr("home.edit.all-shown"),
             );
             return;
@@ -420,7 +420,7 @@ impl Screen for AddScreen {
         let delta = if let Some(delta) = ui::list_step(a, rows) {
             delta
         } else if *a == actions::CONFIRM {
-            self.add(self.list.focus, cx);
+            self.add(self.list.focus(), cx);
             return Handled::Yes;
         } else {
             return Handled::No;

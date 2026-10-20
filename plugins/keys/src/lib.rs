@@ -507,7 +507,7 @@ impl ListScreen {
         let display = env.device.display;
         let top = self.header.area.height + self.style.gap as u16;
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
-        let focus = self.rows.focus;
+        let focus = self.rows.focus();
         self.entries = rows(env, self.place().everywhere());
         let heights = self
             .entries
@@ -523,7 +523,8 @@ impl ListScreen {
             .map(|row| matches!(row, Row::Heading(_)))
             .collect();
         self.rows = Rows::new(area, heights, headings);
-        self.rows.focus = focus.min(self.entries.len().saturating_sub(1));
+        self.rows
+            .set_focus(focus.min(self.entries.len().saturating_sub(1)));
     }
 
     fn place(&self) -> &Place {
@@ -687,7 +688,7 @@ impl Screen for ListScreen {
             }
             return Handled::Yes;
         } else if *a == actions::CONFIRM {
-            self.activate(self.rows.focus, cx);
+            self.activate(self.rows.focus(), cx);
             return Handled::Yes;
         } else {
             return Handled::No;
@@ -713,7 +714,7 @@ impl Screen for ListScreen {
         }
         match self.rows.hit(gesture.start) {
             Some(index) => {
-                self.rows.focus = index;
+                self.rows.set_focus(index);
                 self.activate(index, cx);
                 Handled::Yes
             }
@@ -833,7 +834,7 @@ impl Screen for PlaceScreen {
             return Handled::Yes;
         }
         if *action == actions::CONFIRM {
-            self.choose(self.list.focus, cx);
+            self.choose(self.list.focus(), cx);
             return Handled::Yes;
         }
         Handled::No
@@ -1096,7 +1097,7 @@ impl Screen for PickScreen {
             }
             return Handled::Yes;
         } else if *a == actions::CONFIRM {
-            self.pick(self.rows.focus, cx);
+            self.pick(self.rows.focus(), cx);
             return Handled::Yes;
         } else {
             return Handled::No;
@@ -1122,7 +1123,7 @@ impl Screen for PickScreen {
         }
         match self.rows.hit(gesture.start) {
             Some(index) => {
-                self.rows.focus = index;
+                self.rows.set_focus(index);
                 self.pick(index, cx);
                 Handled::Yes
             }

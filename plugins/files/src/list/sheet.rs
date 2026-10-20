@@ -224,13 +224,13 @@ impl Screen for BookSheet {
         {
             1
         } else if *a == actions::CONFIRM {
-            self.choose(self.list.focus, cx);
+            self.choose(self.list.focus(), cx);
             return Handled::Yes;
         } else {
             return Handled::No;
         };
         if self.list.move_focus(delta, self.actions.len()) != ListChange::None {
-            cx.request_redraw_area(self.list.area);
+            cx.request_redraw_area(self.list.area());
             cx.request_refresh(RefreshMode::Fast);
         }
         Handled::Yes

@@ -180,7 +180,7 @@ impl Screen for AnnotationsScreen {
                 canvas,
                 env,
                 &style,
-                self.list.area,
+                self.list.area(),
                 "bookmarks",
                 env.i18n.tr("reader.annotations.empty.title"),
                 ui::tr_input(env, "reader.annotations.empty"),
@@ -223,7 +223,7 @@ impl Screen for AnnotationsScreen {
         let delta = if let Some(delta) = ui::list_step(a, rows) {
             delta
         } else if *a == actions::CONFIRM {
-            self.open_entry(self.list.focus, cx);
+            self.open_entry(self.list.focus(), cx);
             return Handled::Yes;
         } else {
             return Handled::No;
@@ -245,7 +245,7 @@ impl Screen for AnnotationsScreen {
         }
         match self.list.hit(gesture.start, self.len()) {
             Some(index) => {
-                self.list.focus = index;
+                self.list.set_focus(index);
                 self.open_entry(index, cx);
                 Handled::Yes
             }

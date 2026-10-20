@@ -64,7 +64,7 @@ impl Screen for BookList {
                 canvas,
                 env,
                 &style,
-                self.list.area,
+                self.list.area(),
                 env.i18n.tr("stats.no-books"),
             );
             return;
@@ -106,7 +106,7 @@ impl Screen for BookList {
         let delta = if let Some(delta) = ui::list_step(a, page) {
             delta
         } else if *a == actions::CONFIRM {
-            self.open(self.list.focus, cx);
+            self.open(self.list.focus(), cx);
             return Handled::Yes;
         } else {
             return Handled::No;
@@ -131,7 +131,7 @@ impl Screen for BookList {
         let Some(index) = self.list.hit(gesture.start, self.books.len()) else {
             return Handled::No;
         };
-        self.list.focus = index;
+        self.list.set_focus(index);
         self.open(index, cx);
         Handled::Yes
     }

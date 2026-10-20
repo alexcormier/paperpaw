@@ -340,13 +340,13 @@ impl Screen for Overview {
         } else if [actions::DOWN, actions::RIGHT, actions::NEXT].contains(a) {
             1
         } else if *a == actions::CONFIRM {
-            self.open(self.rows[self.list.focus.min(self.rows.len() - 1)], cx);
+            self.open(self.rows[self.list.focus().min(self.rows.len() - 1)], cx);
             return Handled::Yes;
         } else {
             return Handled::No;
         };
         if self.list.move_focus(delta, self.rows.len()) != ListChange::None {
-            cx.request_redraw_area(self.list.area);
+            cx.request_redraw_area(self.list.area());
             cx.request_refresh(RefreshMode::Fast);
         }
         Handled::Yes
@@ -363,8 +363,8 @@ impl Screen for Overview {
         let Some(index) = self.list.hit(gesture.start, self.rows.len()) else {
             return Handled::No;
         };
-        self.list.focus = index;
-        cx.request_redraw_area(self.list.area);
+        self.list.set_focus(index);
+        cx.request_redraw_area(self.list.area());
         self.open(self.rows[index], cx);
         Handled::Yes
     }

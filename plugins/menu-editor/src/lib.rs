@@ -263,7 +263,7 @@ impl Frame {
         }
         match step {
             ReorderStep::Dropped { from, to } if from != to => {
-                self.list.focus = to;
+                self.list.set_focus(to);
                 (Handled::Yes, Some((from, to)))
             }
             _ => (Handled::Yes, None),
@@ -294,8 +294,8 @@ impl Frame {
             return None;
         }
         let index = self.list.hit(gesture.start, len)?;
-        if index != self.list.focus {
-            self.list.focus = index;
+        if index != self.list.focus() {
+            self.list.set_focus(index);
             cx.request_redraw();
             cx.request_refresh(RefreshMode::Fast);
         }
@@ -381,7 +381,7 @@ impl MenusScreen {
                 for menu in changed_menus(&env) {
                     cx.command(Command::SetMenu(menu.clone(), None));
                 }
-                self.frame.list.focus = 0;
+                self.frame.list.set_focus(0);
             }
         }
     }
@@ -427,7 +427,7 @@ impl Screen for MenusScreen {
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         let len = self.rows.len();
         if *action == actions::CONFIRM {
-            self.choose(self.frame.list.focus, cx);
+            self.choose(self.frame.list.focus(), cx);
             return Handled::Yes;
         }
         self.frame.on_action(action, len, cx).unwrap_or(Handled::No)
@@ -509,7 +509,7 @@ impl EntriesScreen {
             cx.command(Command::OpenScreen(ADD_SCREEN, params));
         } else if let Ok(menu) = Id::parse(&self.menu) {
             cx.command(Command::SetMenu(menu, None));
-            self.frame.list.focus = 0;
+            self.frame.list.set_focus(0);
         }
     }
 }
@@ -538,7 +538,7 @@ impl Screen for EntriesScreen {
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         let len = self.rows.len();
         if *action == actions::CONFIRM {
-            self.choose(self.frame.list.focus, cx);
+            self.choose(self.frame.list.focus(), cx);
             return Handled::Yes;
         }
         self.frame.on_action(action, len, cx).unwrap_or(Handled::No)
@@ -559,11 +559,11 @@ impl Screen for EntriesScreen {
         if *event == MOVED || *event == paperpaw_sdk::builtin::events::MENU_CHANGED {
             // The focus follows a moved entry.
             if let Some(focus) = params.get(INDEX).and_then(|i| i.parse().ok()) {
-                self.frame.list.focus = focus;
+                self.frame.list.set_focus(focus);
             }
             self.read(cx.env());
             let len = self.rows.len();
-            self.frame.list.focus = self.frame.list.focus.min(len - 1);
+            self.frame.list.set_len(len);
             cx.request_redraw();
             cx.request_refresh(RefreshMode::Fast);
         }
@@ -696,7 +696,7 @@ impl Screen for EntryScreen {
         );
         if self.refused {
             let message = env.i18n.tr("menu-editor.locked");
-            ui::draw_message(canvas, env, &style, self.list.area, message);
+            ui::draw_message(canvas, env, &style, self.list.area(), message);
             return;
         }
         self.list.draw(
@@ -714,7 +714,7 @@ impl Screen for EntryScreen {
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         let a = action;
         if *a == actions::CONFIRM {
-            self.choose(self.list.focus, cx);
+            self.choose(self.list.focus(), cx);
             return Handled::Yes;
         }
         let delta = if [
@@ -752,7 +752,7 @@ impl Screen for EntryScreen {
         if self.refused {
             cx.command(Command::Back);
         } else if let Some(index) = self.list.hit(gesture.start, OPTIONS.len()) {
-            self.list.focus = index;
+            self.list.set_focus(index);
             self.choose(index, cx);
         }
         Handled::Yes
@@ -830,7 +830,7 @@ impl Screen for AddScreen {
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         let len = self.candidates.len();
         if *action == actions::CONFIRM {
-            self.choose(self.frame.list.focus, cx);
+            self.choose(self.frame.list.focus(), cx);
             return Handled::Yes;
         }
         self.frame.on_action(action, len, cx).unwrap_or(Handled::No)

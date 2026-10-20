@@ -50,11 +50,11 @@ use crate::{Canvas, Color, Env, PointerEvent, PointerPhase, Rect};
 /// A number from `min` to `max` in steps of `step`, set with a slider.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Slider {
-    pub min: i64,
+    min: i64,
     /// At least `min`.
-    pub max: i64,
+    max: i64,
     /// At least 1.
-    pub step: i64,
+    step: i64,
 }
 
 /// How a slider shows the focus (see [`Slider::draw_row`]).
@@ -140,6 +140,21 @@ impl Slider {
             step: if step < 1 { 1 } else { step },
             ..self
         }
+    }
+
+    /// The lowest value.
+    pub fn min(&self) -> i64 {
+        self.min
+    }
+
+    /// The highest value, at least [`Slider::min`].
+    pub fn max(&self) -> i64 {
+        self.max
+    }
+
+    /// How far a step goes, at least 1.
+    pub fn step_size(&self) -> i64 {
+        self.step
     }
 
     /// The slider of a number setting: its range and step; `None` for

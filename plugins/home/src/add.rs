@@ -292,7 +292,7 @@ impl AddScreen {
     fn gallery_page(&self) -> usize {
         self.gallery
             .iter()
-            .find(|p| p.row == self.list.focus)
+            .find(|p| p.row == self.list.focus())
             .map_or(0, |p| p.page)
     }
 
@@ -428,8 +428,8 @@ impl AddScreen {
             return;
         };
         let page = self.gallery_page();
-        let focus = self.list.focus;
-        let shown = self.list.shown;
+        let focus = self.list.focus();
+        let shown = self.list.shown();
         for preview in self.gallery.iter().filter(|p| p.page == page) {
             let Some(Row::Add(What::Widget(_), title)) = self.rows.get(preview.row) else {
                 continue;
@@ -492,7 +492,7 @@ impl Screen for AddScreen {
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         let len = self.rows.len();
         if *action == actions::CONFIRM {
-            self.choose(self.list.focus, cx);
+            self.choose(self.list.focus(), cx);
             return Handled::Yes;
         }
         if self.is_gallery() {
@@ -507,12 +507,12 @@ impl Screen for AddScreen {
                 self.gallery
                     .iter()
                     .find(|p| p.page == to)
-                    .map_or(self.list.focus, |p| p.row)
+                    .map_or(self.list.focus(), |p| p.row)
             } else {
-                ui::step_focus(self.list.focus, delta, len)
+                ui::step_focus(self.list.focus(), delta, len)
             };
-            self.list.focus = focus;
-            self.list.shown = true;
+            self.list.set_focus(focus);
+            self.list.set_shown(true);
             self.make_page(cx.env());
             cx.request_redraw();
             return Handled::Yes;
@@ -553,7 +553,7 @@ impl Screen for AddScreen {
         };
         match hit {
             Some(index) => {
-                self.list.focus = index;
+                self.list.set_focus(index);
                 self.choose(index, cx);
                 Handled::Yes
             }

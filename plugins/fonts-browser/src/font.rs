@@ -150,7 +150,7 @@ impl FontScreen {
                     cx.command(command);
                 }
                 self.job = INSTALLER.progress(env.storage);
-                self.list.focus = 0;
+                self.list.set_focus(0);
                 self.redraw(cx);
             }
             Some(Row::Stop) => {
@@ -250,7 +250,7 @@ impl Screen for FontScreen {
                 canvas,
                 env,
                 &style,
-                self.list.area,
+                self.list.area(),
                 "typography",
                 env.i18n.tr("fonts-browser.gone"),
                 env.i18n.tr("fonts-browser.gone.help"),
@@ -288,8 +288,8 @@ impl Screen for FontScreen {
         // what can be done.
         let gap = style.gap as u16;
         self.info.y = bottom + gap;
-        self.list.area.y = self.info.y + self.info.height + gap;
-        self.list.area.height = self.status.y.saturating_sub(self.list.area.y);
+        self.list.area().y = self.info.y + self.info.height + gap;
+        self.list.area().height = self.status.y.saturating_sub(self.list.area().y);
         if let Some(ui_font) = style.font(env) {
             let line = style.small * 1.4;
             let ascent = ui_font.line_metrics(style.small).ascent;
@@ -337,7 +337,7 @@ impl Screen for FontScreen {
         if let Some(change) = self.list.navigate(action, len) {
             self.list.request(change, cx);
         } else if *action == actions::CONFIRM {
-            self.activate(self.list.focus, cx);
+            self.activate(self.list.focus(), cx);
         } else {
             return Handled::No;
         }
@@ -360,7 +360,7 @@ impl Screen for FontScreen {
         let Some(index) = self.list.hit(gesture.start, len) else {
             return Handled::No;
         };
-        self.list.focus = index;
+        self.list.set_focus(index);
         self.activate(index, cx);
         Handled::Yes
     }
@@ -375,7 +375,7 @@ impl Screen for FontScreen {
                 && let Ok(plugin) = Id::parse(&picked.path)
             {
                 cx.command(Command::RemovePlugin(plugin));
-                self.list.focus = 0;
+                self.list.set_focus(0);
             }
         } else if DOWNLOADED.read(event, params).is_some()
             || *event == events::PLUGINS_CHANGED
@@ -383,7 +383,7 @@ impl Screen for FontScreen {
         {
             self.job = INSTALLER.progress(cx.env().storage);
             let len = self.rows(cx.env()).len();
-            self.list.focus = self.list.focus.min(len.saturating_sub(1));
+            self.list.set_len(len);
             self.redraw(cx);
         }
     }

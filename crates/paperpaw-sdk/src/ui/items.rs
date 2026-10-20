@@ -141,7 +141,7 @@ impl ItemsScreen {
     fn shift(&mut self, delta: isize, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
         let mut chosen = self.chosen(&env);
-        let from = self.list.focus;
+        let from = self.list.focus();
         let to = from
             .saturating_add_signed(delta)
             .min(chosen.len().saturating_sub(1));
@@ -149,7 +149,7 @@ impl ItemsScreen {
             return;
         }
         ui::reorder::moved(&mut chosen, from, to);
-        self.list.focus = to;
+        self.list.set_focus(to);
         self.keep(&env, &chosen, cx);
     }
 
@@ -157,7 +157,7 @@ impl ItemsScreen {
     /// shows on a shown item, and another is shown to move it past.
     fn can_move(&self, env: &Env<'_>) -> bool {
         let shown = self.chosen(env).len();
-        self.list.shown && self.list.focus < shown && shown > 1
+        self.list.shown() && self.list.focus() < shown && shown > 1
     }
 }
 
@@ -217,7 +217,7 @@ impl Screen for ItemsScreen {
             // The item the buttons move: a frame inside its focus, in the
             // focus's own ink (white on a dark bar, dark in a ring or on a
             // light bar), so it looks taken up, not only focused.
-            let slot = self.list.focus % self.list.rows();
+            let slot = self.list.focus() % self.list.rows();
             let row = self.list.row_rect(slot);
             let inset = (style.line * 3) as u16;
             let frame = Rect::new(
@@ -253,7 +253,7 @@ impl Screen for ItemsScreen {
         match step {
             ReorderStep::Dropped { from, to } if from != to => {
                 ui::reorder::moved(&mut chosen, from, to);
-                self.list.focus = to;
+                self.list.set_focus(to);
                 self.keep(&env, &chosen, cx);
             }
             ReorderStep::Same => {}
@@ -317,7 +317,7 @@ impl Screen for ItemsScreen {
         }
         match self.list.hit(gesture.start, self.items.len()) {
             Some(index) => {
-                self.list.focus = index;
+                self.list.set_focus(index);
                 self.toggle(index, cx);
                 Handled::Yes
             }

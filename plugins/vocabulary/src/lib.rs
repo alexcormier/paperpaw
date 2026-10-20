@@ -244,8 +244,8 @@ impl WordsScreen {
         self.read_after = self.changes.count();
         self.count = store::count(env.storage);
         let len = self.len();
-        if self.list.focus >= len {
-            self.list.focus = len.saturating_sub(1);
+        if self.list.focus() >= len {
+            self.list.set_focus(len.saturating_sub(1));
         }
         self.load_page(env);
     }
@@ -359,7 +359,7 @@ impl Screen for WordsScreen {
                 canvas,
                 env,
                 &style,
-                self.list.area,
+                self.list.area(),
                 "vocabulary",
                 env.i18n.tr("vocabulary.empty.title"),
                 env.i18n.tr("vocabulary.empty"),
@@ -404,10 +404,10 @@ impl Screen for WordsScreen {
         let delta = if let Some(delta) = ui::list_step(a, rows) {
             delta
         } else if *a == actions::CONFIRM {
-            self.open(self.list.focus, cx);
+            self.open(self.list.focus(), cx);
             return Handled::Yes;
         } else if *a == actions::MENU {
-            self.offer(self.list.focus, cx);
+            self.offer(self.list.focus(), cx);
             return Handled::Yes;
         } else {
             return Handled::No;
@@ -430,7 +430,7 @@ impl Screen for WordsScreen {
         let Some(row) = self.list.hit(gesture.start, len) else {
             return Handled::No;
         };
-        self.list.focus = row;
+        self.list.set_focus(row);
         match gesture.kind {
             GestureKind::Tap => self.open(row, cx),
             GestureKind::LongPress => self.offer(row, cx),

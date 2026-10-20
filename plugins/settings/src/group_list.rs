@@ -162,7 +162,7 @@ impl GroupList {
     /// Makes the list anew (language, UI size or the advanced switch may
     /// have changed), keeping its focus.
     fn rebuild(&mut self, env: &Env<'_>) {
-        let (focus, keys) = (self.rows.focus, self.keys);
+        let (focus, keys) = (self.rows.focus(), self.keys);
         *self = Self::new(env);
         self.keys = keys;
         refocus(&mut self.rows, focus);
@@ -235,7 +235,7 @@ impl Screen for GroupList {
         if let Some(change) = navigate_rows(&mut self.rows, &mut self.keys, action) {
             change.request(cx);
         } else if *action == actions::CONFIRM {
-            self.choose(self.rows.focus, cx);
+            self.choose(self.rows.focus(), cx);
         } else {
             return Handled::No;
         }
@@ -255,7 +255,7 @@ impl Screen for GroupList {
         }
         match self.rows.hit(gesture.start) {
             Some(index) => {
-                self.rows.focus = index;
+                self.rows.set_focus(index);
                 self.keys = !cx.env().device.input.touch;
                 self.choose(index, cx);
                 Handled::Yes

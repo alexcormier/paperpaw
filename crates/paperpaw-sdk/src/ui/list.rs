@@ -48,15 +48,16 @@ pub fn list_step(action: &crate::Id, page: isize) -> Option<isize> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ListView {
     /// Where the rows are drawn.
-    pub area: Rect,
-    pub row: u32,
-    pub focus: usize,
+    area: Rect,
+    /// The height of a row, at least 1.
+    row: u32,
+    focus: usize,
     /// Whether the focused row is highlighted; off while the focus is on
     /// another element of the screen.
-    pub active: bool,
+    active: bool,
     /// Whether the focus shows at all: on touch screens only once a
     /// button moved it (see [`ListView::focus_on_keys`]), as in menus.
-    pub shown: bool,
+    shown: bool,
     /// Items side by side in a row (a grid, e.g. of covers); 1 for a list.
     columns: u32,
     /// The item focused before the focus last moved.
@@ -74,6 +75,63 @@ impl ListView {
             columns: 1,
             before: 0,
         }
+    }
+
+    /// Where the rows are drawn.
+    pub fn area(&self) -> Rect {
+        self.area
+    }
+
+    /// Draws the rows in `area` from now on (e.g. after the screen was
+    /// laid out anew).
+    pub fn set_area(&mut self, area: Rect) {
+        self.area = area;
+    }
+
+    /// The height of a row.
+    pub fn row(&self) -> u32 {
+        self.row
+    }
+
+    /// The item with the focus.
+    pub fn focus(&self) -> usize {
+        self.focus
+    }
+
+    /// Puts the focus on item `index` (see [`ListView::set_len`] to keep
+    /// it among the items there are); what that changed on the screen.
+    pub fn set_focus(&mut self, index: usize) -> ListChange {
+        if index == self.focus {
+            return ListChange::None;
+        }
+        let page = self.page();
+        self.before = self.focus;
+        self.focus = index;
+        if self.page() == page {
+            ListChange::Focus
+        } else {
+            ListChange::Page
+        }
+    }
+
+    /// Whether the focused row is highlighted; off while the focus is on
+    /// another element of the screen.
+    pub fn active(&self) -> bool {
+        self.active
+    }
+
+    pub fn set_active(&mut self, active: bool) {
+        self.active = active;
+    }
+
+    /// Whether the focus shows at all: on touch screens only once a
+    /// button moved it (see [`ListView::focus_on_keys`]).
+    pub fn shown(&self) -> bool {
+        self.shown
+    }
+
+    pub fn set_shown(&mut self, shown: bool) {
+        self.shown = shown;
     }
 
     /// Asks for what `change` needs, for screens where the focus changes

@@ -132,7 +132,7 @@ impl ListScreen {
 
     /// Counts the plugins anew, and the entries with them.
     fn count(&mut self, env: &Env<'_>) {
-        let focus = self.list.focus;
+        let focus = self.list.focus();
         self.room = crate::room::Room::of(env, None).short(env);
         let mut counts = Counts::default();
         if let Some(index) = &self.index {
@@ -418,7 +418,7 @@ impl Screen for ListScreen {
             let focus = if self.list.is_empty() {
                 usize::MAX
             } else {
-                self.list.focus
+                self.list.focus()
             };
             self.activate(focus, cx);
             return Handled::Yes;
@@ -450,7 +450,7 @@ impl Screen for ListScreen {
         let Some(entry) = self.list.hit(gesture.start) else {
             return Handled::No;
         };
-        self.list.focus = entry;
+        self.list.set_focus(entry);
         self.activate(entry, cx);
         Handled::Yes
     }

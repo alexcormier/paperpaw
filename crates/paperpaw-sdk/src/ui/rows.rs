@@ -13,18 +13,28 @@ use crate::{Canvas, Point, Rect};
 
 #[derive(Debug)]
 pub struct Rows {
-    pub area: Rect,
+    area: Rect,
     heights: Vec<u16>,
     headings: Vec<bool>,
     /// The rows of each page, and the heading repeated at its top.
     pages: Vec<(Option<usize>, Range<usize>)>,
     /// The focused row; never a heading while there are entries.
-    pub focus: usize,
+    focus: usize,
     /// The row focused before the focus last moved.
     before: usize,
 }
 
 impl Rows {
+    /// Where the rows are drawn.
+    pub fn area(&self) -> Rect {
+        self.area
+    }
+
+    /// The row with the focus.
+    pub fn focus(&self) -> usize {
+        self.focus
+    }
+
     /// Rows of `heights` in `area`; `headings` marks the headings (rows
     /// it does not reach are entries, marks past the rows are left out).
     pub fn new(area: Rect, heights: Vec<u16>, mut headings: Vec<bool>) -> Self {
@@ -182,7 +192,8 @@ impl Rows {
             .map(|(i, _)| i)
     }
 
-    fn set_focus(&mut self, focus: usize) -> ListChange {
+    /// Puts the focus on row `focus`; what that changed on the screen.
+    pub fn set_focus(&mut self, focus: usize) -> ListChange {
         if focus == self.focus {
             return ListChange::None;
         }

@@ -342,7 +342,7 @@ impl Screen for WifiPage {
     }
 
     fn hint(&self, action: &Id, env: &Env<'_>) -> Hint {
-        let row = Self::rows(env).into_iter().nth(self.list.focus);
+        let row = Self::rows(env).into_iter().nth(self.list.focus());
         let saved = |network: &WifiNetwork| {
             wifi::known(env.secrets)
                 .iter()
@@ -363,9 +363,9 @@ impl Screen for WifiPage {
         let delta = if let Some(delta) = ui::list_step(a, rows) {
             delta
         } else if *a == actions::CONFIRM {
-            self.activate(self.list.focus, cx);
+            self.activate(self.list.focus(), cx);
             return Handled::Yes;
-        } else if *a == actions::MENU && self.forget(self.list.focus, cx) {
+        } else if *a == actions::MENU && self.forget(self.list.focus(), cx) {
             return Handled::Yes;
         } else {
             return Handled::No;
@@ -390,7 +390,7 @@ impl Screen for WifiPage {
         let Some(index) = self.list.hit(gesture.start, len) else {
             return Handled::No;
         };
-        self.list.focus = index;
+        self.list.set_focus(index);
         match gesture.kind {
             GestureKind::Tap => {
                 self.activate(index, cx);

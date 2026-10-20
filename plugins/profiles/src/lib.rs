@@ -258,7 +258,8 @@ impl ListScreen {
         let loaded = profile::load(env.storage);
         self.readable = loaded.is_some();
         self.profiles = loaded.unwrap_or_default();
-        self.list.focus = self.list.focus.min(self.profiles.len());
+        self.list
+            .set_focus(self.list.focus().min(self.profiles.len()));
         false
     }
 
@@ -327,11 +328,11 @@ impl Screen for ListScreen {
         );
         if self.profiles.is_empty() {
             // Below the row that saves one: what profiles are for.
-            let top = self.list.area.y + self.list.row as u16;
+            let top = self.list.area().y + self.list.row() as u16;
             let area = Rect::new(
                 0,
                 top,
-                self.list.area.width,
+                self.list.area().width,
                 self.status.y.saturating_sub(top),
             );
             ui::draw_empty(
@@ -360,9 +361,9 @@ impl Screen for ListScreen {
         if let Some(delta) = ui::list_step(a, self.list.rows() as isize) {
             self.move_focus(delta, cx);
         } else if *a == actions::CONFIRM {
-            self.activate(self.list.focus, cx);
+            self.activate(self.list.focus(), cx);
         } else if *a == actions::MENU {
-            self.offer(self.list.focus, cx);
+            self.offer(self.list.focus(), cx);
         } else if *a == actions::BACK {
             cx.command(Command::Back);
         } else {
@@ -385,7 +386,7 @@ impl Screen for ListScreen {
         let Some(index) = self.list.hit(gesture.start, len) else {
             return Handled::No;
         };
-        self.list.focus = index;
+        self.list.set_focus(index);
         match gesture.kind {
             GestureKind::Tap => self.activate(index, cx),
             GestureKind::LongPress => self.offer(index, cx),
@@ -415,7 +416,7 @@ impl Screen for ListScreen {
             });
             if self.save(cx) {
                 profile::set_last(env.storage, &name);
-                self.list.focus = self.profiles.len() - 1;
+                self.list.set_focus(self.profiles.len() - 1);
                 cx.command(Command::Notify(
                     env.i18n
                         .format("profiles.saved", &[("name", Arg::Str(&name))]),
@@ -457,7 +458,7 @@ impl Screen for ListScreen {
                 "remove" => {
                     self.profiles.remove(i);
                     self.save(cx);
-                    self.list.focus = self.list.focus.min(self.rows().len() - 1);
+                    self.list.set_len(self.rows().len());
                     self.redraw(cx);
                 }
                 _ => {}

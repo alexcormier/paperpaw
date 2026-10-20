@@ -460,7 +460,7 @@ impl BrowserScreen {
                 cx.request_refresh(RefreshMode::Partial);
             }
             _ => {
-                cx.request_redraw_area(self.list.area);
+                cx.request_redraw_area(self.list.area());
                 cx.request_refresh(RefreshMode::Fast);
             }
         }
@@ -571,9 +571,9 @@ impl Screen for BrowserScreen {
         if let Some(delta) = ui::list_step(a, self.list.rows() as isize) {
             self.move_focus(delta, cx);
         } else if *a == actions::CONFIRM {
-            self.activate(self.list.focus, cx);
+            self.activate(self.list.focus(), cx);
         } else if *a == actions::MENU {
-            self.offer(self.list.focus, cx);
+            self.offer(self.list.focus(), cx);
         } else if *a == actions::BACK {
             cx.command(Command::Back);
         } else {
@@ -596,8 +596,8 @@ impl Screen for BrowserScreen {
         let Some(index) = self.list.hit(gesture.start, len) else {
             return Handled::No;
         };
-        self.list.focus = index;
-        cx.request_redraw_area(self.list.area);
+        self.list.set_focus(index);
+        cx.request_redraw_area(self.list.area());
         match gesture.kind {
             GestureKind::Tap => self.activate(index, cx),
             GestureKind::LongPress => self.offer(index, cx),

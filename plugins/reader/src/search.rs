@@ -100,7 +100,7 @@ impl SearchScreen {
         let font = self.style.font(env);
         // The row's title: the list's width less the margins and the gap
         // kept before a value.
-        let width = f32::from(self.list.area.width) - 4.0 * self.style.margin as f32;
+        let width = f32::from(self.list.area().width) - 4.0 * self.style.margin as f32;
         // The text as the page shows it (see `paperpaw_sdk::filters`).
         let filtered = crate::screen::Filtered {
             document: document.as_ref(),
@@ -322,7 +322,7 @@ impl Screen for SearchScreen {
                 env.i18n
                     .format("reader.search.none", &[("query", Arg::Str(&self.query))])
             };
-            ui::draw_message(canvas, env, &style, self.list.area, &message);
+            ui::draw_message(canvas, env, &style, self.list.area(), &message);
             return;
         }
         let hits = &self.hits;
@@ -348,14 +348,14 @@ impl Screen for SearchScreen {
         let env = *cx.env();
         let visible = self.step(&env);
         if visible {
-            cx.request_redraw_area(self.list.area);
+            cx.request_redraw_area(self.list.area());
         }
         let percent = self.percent() / 10 * 10;
         if self.next.is_none() || percent != self.shown_percent {
             self.shown_percent = percent;
             cx.request_redraw_area(self.header.area);
             if self.hits.is_empty() {
-                cx.request_redraw_area(self.list.area);
+                cx.request_redraw_area(self.list.area());
             }
         }
         cx.request_refresh(RefreshMode::Fast);
@@ -371,7 +371,7 @@ impl Screen for SearchScreen {
         let delta = if let Some(delta) = ui::list_step(a, rows) {
             delta
         } else if *a == actions::CONFIRM {
-            self.open_hit(self.list.focus, cx);
+            self.open_hit(self.list.focus(), cx);
             return Handled::Yes;
         } else {
             return Handled::No;
@@ -395,7 +395,7 @@ impl Screen for SearchScreen {
         }
         match self.list.hit(gesture.start, self.hits.len()) {
             Some(index) => {
-                self.list.focus = index;
+                self.list.set_focus(index);
                 self.open_hit(index, cx);
                 Handled::Yes
             }

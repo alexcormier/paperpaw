@@ -168,7 +168,7 @@ impl Screen for SearchScreen {
         );
         if len == 0 {
             let none = env.i18n.tr("settings.search.none");
-            ui::draw_message(canvas, env, &style, self.list.area, none);
+            ui::draw_message(canvas, env, &style, self.list.area(), none);
             return;
         }
         let hits = &self.hits;
@@ -187,7 +187,7 @@ impl Screen for SearchScreen {
             return Handled::Yes;
         }
         if *action == actions::CONFIRM {
-            self.choose(self.list.focus, cx);
+            self.choose(self.list.focus(), cx);
             return Handled::Yes;
         }
         Handled::No
@@ -207,7 +207,7 @@ impl Screen for SearchScreen {
         }
         match self.list.hit(gesture.start, self.hits.len()) {
             Some(index) => {
-                self.list.focus = index;
+                self.list.set_focus(index);
                 self.choose(index, cx);
                 Handled::Yes
             }

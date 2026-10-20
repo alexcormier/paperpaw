@@ -121,7 +121,7 @@ impl Screen for ChooseScreen {
         let delta = if let Some(delta) = ui::list_step(a, rows) {
             delta
         } else if *a == actions::CONFIRM {
-            self.toggle(self.list.focus, cx);
+            self.toggle(self.list.focus(), cx);
             return Handled::Yes;
         } else {
             return Handled::No;
@@ -147,7 +147,7 @@ impl Screen for ChooseScreen {
         let Some(index) = self.list.hit(gesture.start, len) else {
             return Handled::No;
         };
-        self.list.focus = index;
+        self.list.set_focus(index);
         self.toggle(index, cx);
         Handled::Yes
     }

@@ -695,7 +695,7 @@ impl TodoScreen {
         for command in out {
             cx.command(command);
         }
-        self.list.focus = self.list.focus.min(self.len() - 1);
+        self.list.set_focus(self.list.focus().min(self.len() - 1));
         cx.request_redraw();
         cx.request_refresh(RefreshMode::Partial);
     }
@@ -841,10 +841,10 @@ impl Screen for TodoScreen {
         let delta = if let Some(delta) = ui::list_step(action, rows) {
             delta
         } else if *action == actions::CONFIRM {
-            self.open(self.list.focus, cx);
+            self.open(self.list.focus(), cx);
             return Handled::Yes;
         } else if *action == actions::MENU {
-            self.offer(self.list.focus, cx);
+            self.offer(self.list.focus(), cx);
             return Handled::Yes;
         } else {
             return Handled::No;
@@ -868,7 +868,7 @@ impl Screen for TodoScreen {
         let Some(row) = self.list.hit(gesture.start, len) else {
             return Handled::No;
         };
-        self.list.focus = row;
+        self.list.set_focus(row);
         match gesture.kind {
             GestureKind::Tap => self.open(row, cx),
             GestureKind::LongPress => self.offer(row, cx),
@@ -894,7 +894,7 @@ impl Screen for TodoScreen {
             }
             self.items.push(Item { text, done: None });
             // The new item in sight.
-            self.list.focus = self.items.len();
+            self.list.set_focus(self.items.len());
             self.changed(cx);
         } else if let Some(typed) = EDITED.read(event, params) {
             let index = typed
@@ -927,12 +927,12 @@ impl Screen for TodoScreen {
                 }
                 "up" if index > 0 => {
                     self.items.swap(index, index - 1);
-                    self.list.focus = index;
+                    self.list.set_focus(index);
                     self.changed(cx);
                 }
                 "down" if index + 1 < self.items.len() => {
                     self.items.swap(index, index + 1);
-                    self.list.focus = index + 2;
+                    self.list.set_focus(index + 2);
                     self.changed(cx);
                 }
                 "remove" => {

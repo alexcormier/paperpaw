@@ -191,10 +191,10 @@ impl Screen for OfferScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let len = self.rows.len();
-        self.list.focus = self.list.focus.min(len.saturating_sub(1));
+        self.list.set_len(len);
         let button = self.button(env);
         self.on_button &= button.is_some();
-        self.list.active = !self.on_button;
+        self.list.set_active(!self.on_button);
         self.header.draw(
             canvas,
             env,
@@ -257,7 +257,7 @@ impl Screen for OfferScreen {
             }
             return Handled::Yes;
         }
-        if forward && self.list.focus + 1 >= len && self.button(&env).is_some() {
+        if forward && self.list.focus() + 1 >= len && self.button(&env).is_some() {
             self.on_button = true;
             Self::redraw(cx);
             return Handled::Yes;
@@ -267,7 +267,7 @@ impl Screen for OfferScreen {
         } else if forward {
             1
         } else if *a == actions::CONFIRM {
-            self.toggle(self.list.focus, cx);
+            self.toggle(self.list.focus(), cx);
             return Handled::Yes;
         } else {
             return Handled::No;
@@ -293,7 +293,7 @@ impl Screen for OfferScreen {
         let Some(index) = self.list.hit(gesture.start, self.rows.len()) else {
             return Handled::No;
         };
-        self.list.focus = index;
+        self.list.set_focus(index);
         self.on_button = false;
         self.toggle(index, cx);
         Handled::Yes

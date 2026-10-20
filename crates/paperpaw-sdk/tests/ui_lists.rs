@@ -138,7 +138,7 @@ proptest! {
         (mut list, len) in list_strategy(),
         focus in 0usize..80,
     ) {
-        list.focus = focus.min(len.saturating_sub(1));
+        list.set_focus(focus.min(len.saturating_sub(1)));
         let first = list.page() * list.rows();
         let shown: Vec<(usize, Rect)> = (first..len)
             .take(list.rows())
@@ -146,7 +146,7 @@ proptest! {
             .map(|(slot, index)| (index, list.row_rect(slot)))
             .collect();
         for (n, &(index, rect)) in shown.iter().enumerate() {
-            prop_assert!(inside(rect, list.area), "{rect:?} in {:?}", list.area);
+            prop_assert!(inside(rect, list.area()), "{rect:?} in {:?}", list.area());
             for point in probes(rect) {
                 prop_assert_eq!(list.hit(point, len), Some(index), "{:?}", point);
             }
@@ -155,7 +155,7 @@ proptest! {
             }
         }
         // Outside the area: nothing.
-        let a = list.area;
+        let a = list.area();
         for point in [
             Point::new(i32::from(a.x) - 1, i32::from(a.y)),
             Point::new(i32::from(a.x), i32::from(a.y) - 1),
@@ -167,7 +167,7 @@ proptest! {
         // Below the last item of a page that is not full: nothing.
         if shown.len() < list.rows() && list.column_count() == 1 {
             let below = list.row_rect(shown.len());
-            if inside(below, list.area) {
+            if inside(below, list.area()) {
                 prop_assert_eq!(list.hit(middle(below), len), None);
             }
         }
@@ -190,16 +190,16 @@ proptest! {
             actions::PREV_PAGE,
         ];
         for m in moves {
-            let before = (list.focus, list.page());
+            let before = (list.focus(), list.page());
             let change = list.navigate(&buttons[m], len).unwrap();
             if len == 0 {
                 prop_assert_eq!(change, ListChange::None);
                 continue;
             }
-            prop_assert!(list.focus < len);
+            prop_assert!(list.focus() < len);
             let delta = list_step(&buttons[m], list.rows() as isize).unwrap();
-            prop_assert_eq!(list.focus, step_focus(before.0, delta, len));
-            let expected = if list.focus == before.0 {
+            prop_assert_eq!(list.focus(), step_focus(before.0, delta, len));
+            let expected = if list.focus() == before.0 {
                 ListChange::None
             } else if list.page() == before.1 {
                 ListChange::Focus
@@ -207,7 +207,7 @@ proptest! {
                 ListChange::Page
             };
             prop_assert_eq!(change, expected);
-            prop_assert_eq!(list.page(), list.focus / list.rows());
+            prop_assert_eq!(list.page(), list.focus() / list.rows());
             prop_assert!(list.page() < list.pages(len));
         }
     }
@@ -219,19 +219,19 @@ proptest! {
         (mut list, len) in list_strategy(),
         focus in 0usize..80,
     ) {
-        list.focus = focus.min(len.saturating_sub(1));
+        list.set_focus(focus.min(len.saturating_sub(1)));
         let mut frame = frame(560, 1000);
         let mut focused_rows = Vec::new();
         list.draw(&mut frame.canvas(), &STYLE, len, |_, index, rect, focused| {
-            assert!(inside(rect, list.area));
+            assert!(inside(rect, list.area()));
             if focused {
                 focused_rows.push((index, rect));
             }
         });
-        prop_assert_eq!(drawn_outside(&mut frame, list.area), None);
+        prop_assert_eq!(drawn_outside(&mut frame, list.area()), None);
         if len > 0 {
             prop_assert_eq!(focused_rows.len(), 1);
-            prop_assert_eq!(focused_rows[0].0, list.focus);
+            prop_assert_eq!(focused_rows[0].0, list.focus());
         } else {
             prop_assert!(focused_rows.is_empty());
         }
@@ -246,7 +246,7 @@ fn an_empty_list_has_one_page_and_nothing_to_focus_or_hit() {
     for delta in [-1, 1, -6, 6] {
         assert_eq!(list.move_focus(delta, 0), ListChange::None);
     }
-    assert_eq!(list.focus, 0);
+    assert_eq!(list.focus(), 0);
     assert_eq!(list.hit(Point::new(10, 10), 0), None);
     let mut rows = 0;
     list.draw(&mut frame(400, 300).canvas(), &STYLE, 0, |_, _, _, _| {
@@ -260,20 +260,20 @@ fn a_hidden_focus_shows_on_the_first_step_and_stays_hidden_while_paging() {
     let h = Harness::new(Device::TOUCH);
     let env = h.env();
     let mut list = ListView::new(Rect::new(0, 0, 400, 300), 100).focus_on_keys(&env);
-    assert!(!list.shown, "touch screens hide it at first");
+    assert!(!list.shown(), "touch screens hide it at first");
     // Paging (a swipe, a tap on an arrow) keeps it hidden.
     assert_eq!(list.move_focus(3, 10), ListChange::Page);
-    assert_eq!(list.focus, 3);
-    assert!(!list.shown);
+    assert_eq!(list.focus(), 3);
+    assert!(!list.shown());
     // The first step shows where it is, without moving it.
     assert_eq!(list.move_focus(1, 10), ListChange::Focus);
-    assert!(list.shown);
-    assert_eq!(list.focus, 3);
+    assert!(list.shown());
+    assert_eq!(list.focus(), 3);
     assert_eq!(list.move_focus(1, 10), ListChange::Focus);
-    assert_eq!(list.focus, 4);
+    assert_eq!(list.focus(), 4);
     // A hidden focus is not drawn.
     let mut hidden = ListView::new(Rect::new(0, 0, 400, 300), 100).focus_on_keys(&env);
-    hidden.focus = 1;
+    hidden.set_focus(1);
     let mut focused = 0;
     hidden.draw(&mut frame(400, 300).canvas(), &STYLE, 3, |_, _, _, f| {
         focused += usize::from(f)
@@ -283,7 +283,7 @@ fn a_hidden_focus_shows_on_the_first_step_and_stays_hidden_while_paging() {
     // Without touch it shows from the start.
     let x4 = Harness::new(Device::BUTTONS);
     let list = ListView::new(Rect::new(0, 0, 400, 300), 100).focus_on_keys(&x4.env());
-    assert!(list.shown);
+    assert!(list.shown());
 }
 
 #[test]
@@ -392,12 +392,12 @@ proptest! {
             prop_assert_eq!(rows.step(forward), ListChange::None);
             return Ok(());
         }
-        prop_assert_eq!(rows.focus, entries[0]);
-        let mut visited = vec![rows.focus];
+        prop_assert_eq!(rows.focus(), entries[0]);
+        let mut visited = vec![rows.focus()];
         for _ in 0..entries.len() {
             let page = rows.paging().0;
             let change = rows.step(forward);
-            prop_assert!(!headings[rows.focus]);
+            prop_assert!(!headings[rows.focus()]);
             let expected = if entries.len() == 1 {
                 ListChange::None
             } else if rows.paging().0 == page {
@@ -406,7 +406,7 @@ proptest! {
                 ListChange::Page
             };
             prop_assert_eq!(change, expected);
-            visited.push(rows.focus);
+            visited.push(rows.focus());
         }
         prop_assert_eq!(visited.first(), visited.last(), "back where it began");
         visited.pop();
@@ -430,7 +430,7 @@ proptest! {
         }
         let visible = rows.visible();
         if headings.iter().any(|h| !h) {
-            prop_assert!(visible.iter().any(|(i, _)| *i == rows.focus), "the focus shows");
+            prop_assert!(visible.iter().any(|(i, _)| *i == rows.focus()), "the focus shows");
         }
         for (index, rect) in visible {
             let expected = (!headings[index]).then_some(index);
@@ -462,7 +462,7 @@ proptest! {
         });
         prop_assert_eq!(drawn_outside(&mut frame, ROWS_AREA), None);
         if headings.iter().any(|h| !h) {
-            prop_assert_eq!(focused, vec![rows.focus]);
+            prop_assert_eq!(focused, vec![rows.focus()]);
         }
     }
 }
@@ -557,7 +557,7 @@ proptest! {
             if list.turn(true) == ListChange::None {
                 break;
             }
-            prop_assert_eq!(list.focus, entries.end, "turned to the first entry");
+            prop_assert_eq!(list.focus(), entries.end, "turned to the first entry");
         }
         prop_assert_eq!(next, len, "the last page ends the list");
         prop_assert_eq!(list.paging(), (pages - 1, pages));
@@ -585,13 +585,13 @@ proptest! {
         }
         for n in 1..=len {
             list.step(true);
-            prop_assert_eq!(list.focus, n % len);
-            prop_assert!(list.page_entries().contains(&list.focus), "the focus shows");
+            prop_assert_eq!(list.focus(), n % len);
+            prop_assert!(list.page_entries().contains(&list.focus()), "the focus shows");
         }
         list.step(false);
-        prop_assert_eq!(list.focus, len - 1);
+        prop_assert_eq!(list.focus(), len - 1);
         list.focus_on(len + far);
-        prop_assert_eq!(list.focus, len - 1);
+        prop_assert_eq!(list.focus(), len - 1);
     }
 
     /// The same list as [`Rows`] and as [`Sections`] (both documented to
@@ -658,7 +658,7 @@ proptest! {
         });
         prop_assert_eq!(drawn_outside(&mut frame, area), None);
         if !list.is_empty() {
-            prop_assert_eq!(focused, vec![Item::Entry(list.focus)]);
+            prop_assert_eq!(focused, vec![Item::Entry(list.focus())]);
         }
     }
 }
@@ -675,13 +675,13 @@ fn a_long_list_turns_to_its_last_page_and_back_to_its_first() {
     ];
     let mut list = Sections::new(Rect::new(0, 0, 300, 400), 20, 50, sections);
     list.focus_on(usize::MAX);
-    assert_eq!(list.focus, 6_999);
+    assert_eq!(list.focus(), 6_999);
     let (page, pages) = list.paging();
     assert_eq!(page + 1, pages);
     assert_eq!(list.page_entries().end, 7_000);
     assert_eq!(list.turn(true), ListChange::None);
     list.step(true);
-    assert_eq!(list.focus, 0, "on from the last: the first");
+    assert_eq!(list.focus(), 0, "on from the last: the first");
     assert_eq!(list.paging().0, 0);
 }
 

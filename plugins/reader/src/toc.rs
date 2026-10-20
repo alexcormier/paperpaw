@@ -157,7 +157,7 @@ impl TocScreen {
             list: ListView::new(area, style.row).focus_on_keys(env),
         };
         if let Some(current) = locator_of(params) {
-            screen.list.focus = screen.current(env, current);
+            screen.list.set_focus(screen.current(env, current));
         }
         screen.load_page(env);
         screen
@@ -296,7 +296,7 @@ impl Screen for TocScreen {
         if found.len() > self.len {
             self.len = found.len();
             self.headings = Some(found);
-            self.list.focus = 0;
+            self.list.set_focus(0);
             self.load_page(&env);
         }
         cx.request_redraw();
@@ -320,7 +320,7 @@ impl Screen for TocScreen {
             } else {
                 "reader.no-toc"
             };
-            ui::draw_message(canvas, env, &style, self.list.area, env.i18n.tr(message));
+            ui::draw_message(canvas, env, &style, self.list.area(), env.i18n.tr(message));
             return;
         }
         let Some(font) = style.font(env) else {
@@ -357,7 +357,7 @@ impl Screen for TocScreen {
             let change = self.list.move_focus(-rows, len);
             self.moved(change, cx);
         } else if *a == actions::CONFIRM {
-            self.choose(self.list.focus, cx);
+            self.choose(self.list.focus(), cx);
         } else {
             return Handled::No;
         }

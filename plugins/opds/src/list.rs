@@ -193,7 +193,7 @@ impl ListScreen {
                     return;
                 }
                 let len = self.rows().len();
-                self.list.focus = self.list.focus.min(len - 1);
+                self.list.set_len(len);
                 self.redraw(cx);
             }
             _ => {}
@@ -218,7 +218,7 @@ impl ListScreen {
             ListChange::None => {}
             ListChange::Page => self.redraw(cx),
             ListChange::Focus => {
-                cx.request_redraw_area(self.list.area);
+                cx.request_redraw_area(self.list.area());
                 cx.request_refresh(RefreshMode::Fast);
             }
         }
@@ -324,7 +324,7 @@ impl Screen for ListScreen {
         self.unreadable = loaded.is_err();
         self.catalogs = loaded.unwrap_or_default();
         let len = self.rows().len();
-        self.list.focus = self.list.focus.min(len - 1);
+        self.list.set_len(len);
         self.redraw(cx);
     }
 
@@ -333,9 +333,9 @@ impl Screen for ListScreen {
         if let Some(delta) = ui::list_step(a, self.list.rows() as isize) {
             self.move_focus(delta, cx);
         } else if *a == actions::CONFIRM {
-            self.activate(self.list.focus, cx);
+            self.activate(self.list.focus(), cx);
         } else if *a == actions::MENU {
-            self.offer(self.list.focus, cx);
+            self.offer(self.list.focus(), cx);
         } else if *a == actions::BACK {
             cx.command(Command::Back);
         } else {
@@ -358,7 +358,7 @@ impl Screen for ListScreen {
         let Some(index) = self.list.hit(gesture.start, len) else {
             return Handled::No;
         };
-        self.list.focus = index;
+        self.list.set_focus(index);
         self.message = None;
         match gesture.kind {
             GestureKind::Tap => self.activate(index, cx),

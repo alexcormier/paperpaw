@@ -461,7 +461,7 @@ impl Screen for MenuScreen {
                 canvas,
                 env,
                 &style,
-                self.rows.area,
+                self.rows.area(),
                 env.i18n.tr("menu.empty"),
             );
             return;
@@ -487,7 +487,7 @@ impl Screen for MenuScreen {
             let env = *cx.env();
             let spec = self
                 .items
-                .get(self.rows.focus)
+                .get(self.rows.focus())
                 .and_then(|item| Self::setting(&env, &item.id));
             let decrease = [
                 actions::LEFT,
@@ -544,7 +544,7 @@ impl Screen for MenuScreen {
             let change = self.rows.turn(false);
             self.rows.request(change, cx);
         } else if *a == actions::CONFIRM {
-            self.run(self.rows.focus, cx);
+            self.run(self.rows.focus(), cx);
         } else if *a == actions::MENU {
             // The menu button toggles the menu.
             cx.command(Command::Back);
@@ -572,7 +572,7 @@ impl Screen for MenuScreen {
             Self::setting(&env, &item.id).filter(|s| matches!(s.kind, SettingKind::Int { .. }))
         });
         let Some(spec) = number else {
-            self.rows.focus = index;
+            self.rows.set_focus(index);
             self.editing = false;
             self.run(index, cx);
             return Handled::Yes;
@@ -580,8 +580,8 @@ impl Screen for MenuScreen {
         // On touch screens − and + are always there and act at once;
         // with buttons the first tap selects a number.
         let touch = env.device.input.touch;
-        if !touch && (index != self.rows.focus || !self.keys) {
-            self.rows.focus = index;
+        if !touch && (index != self.rows.focus() || !self.keys) {
+            self.rows.set_focus(index);
             self.keys = true;
             self.editing = false;
             cx.request_redraw();
@@ -599,7 +599,7 @@ impl Screen for MenuScreen {
         );
         let value = ui::setting_value(&env, spec);
         if touch {
-            self.rows.focus = index;
+            self.rows.set_focus(index);
             self.editing = false;
         }
         if let Some((minus, plus)) = ui::stepper(&env, &self.style, rect, &value) {

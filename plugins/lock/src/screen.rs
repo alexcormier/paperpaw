@@ -316,8 +316,8 @@ impl LockScreen {
         let row = self.style.row as u16;
         let area = Rect::new(0, l.list_top, l.dots.width, row * KINDS.len() as u16);
         let mut list = ui::ListView::new(area, u32::from(row));
-        list.focus = self.focus;
-        list.shown = self.shown;
+        list.set_focus(self.focus);
+        list.set_shown(self.shown);
         list
     }
 

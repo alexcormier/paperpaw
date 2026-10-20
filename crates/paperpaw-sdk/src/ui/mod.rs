@@ -88,43 +88,43 @@ pub(crate) mod tests {
         assert_eq!(list.move_focus(2, 7), ListChange::Page);
         assert_eq!(list.page(), 1);
         assert_eq!(list.move_focus(100, 7), ListChange::Page);
-        assert_eq!(list.focus, 6);
+        assert_eq!(list.focus(), 6);
         // Page 2 shows only index 6.
         assert_eq!(list.hit(Point::new(10, 150), 7), Some(6));
         assert_eq!(list.hit(Point::new(10, 250), 7), None);
         assert_eq!(list.hit(Point::new(10, 50), 7), None);
         // One step past either end goes round; a page stops at the end.
         assert_eq!(list.move_focus(1, 7), ListChange::Page);
-        assert_eq!(list.focus, 0);
+        assert_eq!(list.focus(), 0);
         assert_eq!(list.move_focus(-3, 7), ListChange::None);
         assert_eq!(list.move_focus(-1, 7), ListChange::Page);
-        assert_eq!(list.focus, 6);
+        assert_eq!(list.focus(), 6);
         assert_eq!(list.move_focus(1, 0), ListChange::None);
     }
 
     #[test]
     fn a_hidden_focus_is_shown_before_a_button_chooses() {
         let mut list = ListView::new(Rect::new(0, 0, 200, 300), 100);
-        list.shown = false;
-        list.focus = 2;
+        list.set_shown(false);
+        list.set_focus(2);
         // The first press shows the focus; the second chooses.
         assert_eq!(list.confirm(), None);
-        assert!(list.shown);
+        assert!(list.shown());
         assert_eq!(list.confirm(), Some(2));
         // Shorter lists keep the focus on their last item.
         list.set_len(2);
-        assert_eq!(list.focus, 1);
+        assert_eq!(list.focus(), 1);
         list.set_len(5);
-        assert_eq!(list.focus, 1);
+        assert_eq!(list.focus(), 1);
         list.set_len(0);
-        assert_eq!(list.focus, 0);
+        assert_eq!(list.focus(), 0);
     }
 
     #[test]
-    fn lists_with_fields_set_wrong_do_not_panic() {
-        // Rows 0 high, set through the field after `new`.
-        let mut list = ListView::new(Rect::new(0, 0, 200, 300), 100);
-        list.row = 0;
+    fn lists_with_sizes_out_of_range_do_not_panic() {
+        // Rows asked 0 high are 1 high.
+        let list = ListView::new(Rect::new(0, 0, 200, 300), 0);
+        assert_eq!(list.row(), 1);
         assert_eq!(list.rows(), 300);
         assert_eq!(list.hit(Point::new(10, 2), 5), Some(2));
         assert_eq!(list.hit(Point::new(10, 10), 5), None);

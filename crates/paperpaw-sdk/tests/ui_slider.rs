@@ -51,8 +51,8 @@ fn slider_strategy() -> impl Strategy<Value = Slider> {
 /// Whether `value` is one a slider offers: on a step from its least, or
 /// its greatest.
 fn offered(slider: &Slider, value: i64) -> bool {
-    (slider.min..=slider.max).contains(&value)
-        && (value == slider.max || (value - slider.min) % slider.step == 0)
+    (slider.min()..=slider.max()).contains(&value)
+        && (value == slider.max() || (value - slider.min()) % slider.step_size() == 0)
 }
 
 /// The size of the knob on `track`, as [`Slider::draw_track`] draws it:
@@ -66,8 +66,8 @@ fn knob_size(track: Rect) -> u16 {
 /// place of its own.
 fn coarse(slider: &Slider, track: Rect) -> bool {
     let room = i64::from(track.width.saturating_sub(knob_size(track)));
-    let range = slider.max - slider.min;
-    range % slider.step == 0 && room >= 2 * (range / slider.step)
+    let range = slider.max() - slider.min();
+    range % slider.step_size() == 0 && room >= 2 * (range / slider.step_size())
 }
 
 proptest! {
@@ -111,7 +111,7 @@ proptest! {
         let width = (steps as u16).saturating_mul(2).max(50).saturating_add(knob);
         let track = Rect::new(30, 0, width, height);
         prop_assert!(coarse(&slider, track));
-        let value = slider.stepped(slider.min, n % (steps + 1));
+        let value = slider.stepped(slider.min(), n % (steps + 1));
         let x = slider.knob_x(track, value);
         prop_assert_eq!(slider.value_at(track, x), value, "at {}", x);
     }
@@ -132,12 +132,12 @@ proptest! {
         let track = parts(&STYLE, band).track;
         // A value the slider offers (one off its steps comes back on
         // them).
-        let value = slider.min + (slider.clamp(value) - slider.min) / slider.step * slider.step;
+        let value = slider.min() + (slider.clamp(value) - slider.min()) / slider.step_size() * slider.step_size();
         // Where the knob may be: its middle from one end of the track to
         // the other, and as near a finger's place as half a step.
-        let (left, right) = (slider.knob_x(track, slider.min), slider.knob_x(track, slider.max));
-        let half_step = (right - left) as f32 * slider.step as f32
-            / (slider.max - slider.min).max(1) as f32
+        let (left, right) = (slider.knob_x(track, slider.min()), slider.knob_x(track, slider.max()));
+        let half_step = (right - left) as f32 * slider.step_size() as f32
+            / (slider.max() - slider.min()).max(1) as f32
             / 2.0;
         let mut drag = SliderDrag::default();
         // Down anywhere in the band: taken, nothing to draw yet.
@@ -157,7 +157,7 @@ proptest! {
                     let off = (slider.knob_x(track, shown) - finger).abs() as f32;
                     // Where the range is not whole steps, its last step
                     // may be longer or shorter than the others.
-                    let last = (right - slider.knob_x(track, slider.stepped(slider.max, -1))) as f32;
+                    let last = (right - slider.knob_x(track, slider.stepped(slider.max(), -1))) as f32;
                     prop_assert!(
                         off <= half_step.max(last / 2.0) + 1.0,
                         "knob {} px from the finger", off
@@ -192,13 +192,13 @@ proptest! {
         for up in presses {
             let action = if up { actions::RIGHT } else { actions::LEFT };
             let next = slider.stepped(value, key_step(&action).unwrap());
-            prop_assert!((slider.min..=slider.max).contains(&next));
-            let past = (slider.max - slider.min) % slider.step;
-            let expected = if !up && value == slider.max && past != 0 {
-                slider.max - past
+            prop_assert!((slider.min()..=slider.max()).contains(&next));
+            let past = (slider.max() - slider.min()) % slider.step_size();
+            let expected = if !up && value == slider.max() && past != 0 {
+                slider.max() - past
             } else {
-                (value + if up { slider.step } else { -slider.step })
-                    .clamp(slider.min, slider.max)
+                (value + if up { slider.step_size() } else { -slider.step_size() })
+                    .clamp(slider.min(), slider.max())
             };
             prop_assert_eq!(next, expected);
             value = next;
@@ -303,7 +303,7 @@ fn the_widest_range_does_not_bring_it_down() {
     let share = slider.share(0);
     assert!((0.0..=1.0).contains(&share));
     let value = slider.value_at(track, 100);
-    assert!((slider.min..=slider.max).contains(&value));
+    assert!((slider.min()..=slider.max()).contains(&value));
     slider.draw_track(&mut frame(200, 20).canvas(), &STYLE, track, 0, Color::BLACK);
 }
 
@@ -311,12 +311,12 @@ fn the_widest_range_does_not_bring_it_down() {
 fn wrong_ranges_and_steps_are_made_right() {
     // The greatest below the least: a single value.
     let slider = Slider::new(10, -10);
-    assert_eq!((slider.min, slider.max), (10, 10));
+    assert_eq!((slider.min(), slider.max()), (10, 10));
     assert_eq!(slider.value_at(Rect::new(0, 0, 100, 20), 90), 10);
     assert_eq!(slider.share(10), 0.0);
     // No step, or one backwards: a step of one.
-    assert_eq!(Slider::new(0, 9).step(0).step, 1);
-    assert_eq!(Slider::new(0, 9).step(-5).step, 1);
+    assert_eq!(Slider::new(0, 9).step(0).step_size(), 1);
+    assert_eq!(Slider::new(0, 9).step(-5).step_size(), 1);
     // Huge steps stay in the range.
     let big = Slider::new(0, 100).step(i64::MAX);
     assert_eq!(big.stepped(0, 1), 100);

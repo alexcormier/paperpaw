@@ -537,13 +537,13 @@ impl Screen for SyncScreen {
         } else if [actions::DOWN, actions::RIGHT, actions::NEXT].contains(a) {
             1
         } else if *a == actions::CONFIRM {
-            self.activate(self.rows[self.list.focus.min(self.rows.len() - 1)], cx);
+            self.activate(self.rows[self.list.focus().min(self.rows.len() - 1)], cx);
             return Handled::Yes;
         } else {
             return Handled::No;
         };
         if self.list.move_focus(delta, self.rows.len()) != ListChange::None {
-            cx.request_redraw_area(self.list.area);
+            cx.request_redraw_area(self.list.area());
             cx.request_refresh(RefreshMode::Fast);
         }
         Handled::Yes
@@ -560,8 +560,8 @@ impl Screen for SyncScreen {
         let Some(index) = self.list.hit(gesture.start, self.rows.len()) else {
             return Handled::No;
         };
-        self.list.focus = index;
-        cx.request_redraw_area(self.list.area);
+        self.list.set_focus(index);
+        cx.request_redraw_area(self.list.area());
         self.activate(self.rows[index], cx);
         Handled::Yes
     }
@@ -569,16 +569,16 @@ impl Screen for SyncScreen {
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
         if let Some(typed) = URL_ENTERED.read(event, params) {
             cx.command(Command::set(&URL, Cow::Owned(folder(&typed.text))));
-            self.list.focus = 1;
+            self.list.set_focus(1);
         } else if let Some(typed) = USER_ENTERED.read(event, params) {
             cx.command(Command::set(
                 &USER,
                 Cow::Owned(typed.text.trim().to_string()),
             ));
-            self.list.focus = 2;
+            self.list.set_focus(2);
         } else if let Some(typed) = PASSWORD_ENTERED.read(event, params) {
             cx.command(save_password(&typed.text));
-            self.list.focus = 3;
+            self.list.set_focus(3);
         } else if let Some(finished) = DONE.read(event, params) {
             return self.show(finished.text, cx);
         } else {

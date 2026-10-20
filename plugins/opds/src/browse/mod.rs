@@ -218,7 +218,7 @@ impl BrowseScreen {
         self.covers = alloc::vec![None; self.feed.entries.len()];
         self.fetching = None;
         self.failed.clear();
-        self.list.focus = 0;
+        self.list.set_focus(0);
         self.message = None;
         self.redraw(cx);
         self.next_cover(cx);
@@ -302,7 +302,7 @@ impl BrowseScreen {
                 self.next_cover(cx);
             }
             ListChange::Focus => {
-                cx.request_redraw_area(self.list.area);
+                cx.request_redraw_area(self.list.area());
                 cx.request_refresh(RefreshMode::Fast);
             }
         }
@@ -411,7 +411,7 @@ impl Screen for BrowseScreen {
         if let Some(delta) = ui::list_step(a, self.list.rows() as isize) {
             self.move_focus(delta, cx);
         } else if *a == actions::CONFIRM {
-            self.activate(self.list.focus, cx);
+            self.activate(self.list.focus(), cx);
         } else if *a == actions::BACK {
             self.back(cx);
         } else {
@@ -436,7 +436,7 @@ impl Screen for BrowseScreen {
         let Some(index) = self.list.hit(gesture.start, len) else {
             return Handled::No;
         };
-        self.list.focus = index;
+        self.list.set_focus(index);
         self.activate(index, cx);
         Handled::Yes
     }

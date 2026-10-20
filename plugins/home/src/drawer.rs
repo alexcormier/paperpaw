@@ -71,7 +71,7 @@ impl Screen for DrawerScreen {
         let first = list.page() * list.rows();
         for (slot, index) in (first..len).take(list.rows()).enumerate() {
             let rect = list.row_rect(slot);
-            let focused = list.shown && index == list.focus;
+            let focused = list.shown() && index == list.focus();
             canvas.describe(
                 paperpaw_sdk::semantics::Role::Button,
                 "",
@@ -103,7 +103,7 @@ impl Screen for DrawerScreen {
         } else if *a == actions::PREV_PAGE {
             -(self.list.rows() as isize)
         } else if *a == actions::CONFIRM {
-            self.run(self.list.focus, cx);
+            self.run(self.list.focus(), cx);
             return Handled::Yes;
         } else {
             return Handled::No;

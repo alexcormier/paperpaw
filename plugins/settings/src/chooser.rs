@@ -30,11 +30,13 @@ impl Chooser {
         };
         chooser.read(env, id);
         let current = env.settings.text(id);
-        chooser.list.focus = chooser
-            .options
-            .iter()
-            .position(|(v, _)| v == current)
-            .unwrap_or(0);
+        chooser.list.set_focus(
+            chooser
+                .options
+                .iter()
+                .position(|(v, _)| v == current)
+                .unwrap_or(0),
+        );
         chooser
     }
 
@@ -140,7 +142,7 @@ impl Screen for Chooser {
         if let Some(change) = self.list.navigate(action, len) {
             change.request(cx);
         } else if *action == actions::CONFIRM {
-            self.choose(self.list.focus, cx);
+            self.choose(self.list.focus(), cx);
         } else {
             return Handled::No;
         }

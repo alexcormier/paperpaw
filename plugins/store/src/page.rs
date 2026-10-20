@@ -313,7 +313,7 @@ impl PageScreen {
         let code = self.plugin.as_ref().is_some_and(|p| p.code);
         if code && !trust::told(env.storage) {
             self.notice = true;
-            self.list.focus = 0;
+            self.list.set_focus(0);
             return self.redraw(cx);
         }
         match &self.details {
@@ -327,7 +327,7 @@ impl PageScreen {
                     cx.command(command);
                 }
                 self.job = INSTALLER.progress(env.storage);
-                self.list.focus = 0;
+                self.list.set_focus(0);
                 self.redraw(cx);
             }
             Details::Failed => cx.command(failed(&env, name)),
@@ -371,7 +371,7 @@ impl PageScreen {
                     self.job = INSTALLER.progress(env.storage);
                 }
                 self.notice = false;
-                self.list.focus = 0;
+                self.list.set_focus(0);
                 self.redraw(cx);
             }
             Some(Row::Anyway) => {
@@ -385,7 +385,7 @@ impl PageScreen {
                     cx.command(command);
                 }
                 self.job = INSTALLER.progress(env.storage);
-                self.list.focus = 0;
+                self.list.set_focus(0);
                 self.redraw(cx);
             }
             Some(Row::Stop) => {
@@ -397,7 +397,7 @@ impl PageScreen {
                     cx.command(command);
                 }
                 self.job = INSTALLER.progress(env.storage);
-                self.list.focus = 0;
+                self.list.set_focus(0);
                 self.redraw(cx);
             }
             Some(Row::Restart) => cx.command(Command::Restart),
@@ -596,7 +596,7 @@ impl Screen for PageScreen {
             let area = Rect::new(
                 0,
                 self.top,
-                self.list.area.width,
+                self.list.area().width,
                 self.status.y.saturating_sub(self.top),
             );
             let text = if text.is_empty() {
@@ -613,7 +613,7 @@ impl Screen for PageScreen {
         // What it does (or the notice, the warning), then the facts in
         // small print, then what can be done, each right below the other.
         let margin = style.margin as f32;
-        let width = f32::from(self.list.area.width) - 2.0 * margin;
+        let width = f32::from(self.list.area().width) - 2.0 * margin;
         let mut y = f32::from(self.top);
         let paragraph = |canvas: &mut Canvas<'_>,
                          y: &mut f32,
@@ -661,15 +661,15 @@ impl Screen for PageScreen {
         let icon_size = style.small * ui::ICON_SCALE;
         let line = font.line_metrics(style.small).line_height;
         for (icon, fact) in facts {
-            let first = Rect::new(0, y as u16, self.list.area.width, line as u16);
+            let first = Rect::new(0, y as u16, self.list.area().width, line as u16);
             let ink = style.faint(80);
             ui::draw_icon(canvas, env, icon, icon_size, margin, first, ink);
             paragraph(canvas, &mut y, &fact, style.small, ink, 3, room);
             y += style.gap as f32 / 3.0;
         }
         let gap = style.gap as u16;
-        self.list.area.y = y as u16 + gap;
-        self.list.area.height = self.status.y.saturating_sub(self.list.area.y);
+        self.list.area().y = y as u16 + gap;
+        self.list.area().height = self.status.y.saturating_sub(self.list.area().y);
         let texts: Vec<(String, String)> = rows
             .iter()
             .map(|&row| self.row_text(env, plugin, row))
@@ -713,7 +713,7 @@ impl Screen for PageScreen {
         if let Some(change) = self.list.navigate(action, len) {
             self.list.request(change, cx);
         } else if *action == actions::CONFIRM {
-            self.activate(self.list.focus, cx);
+            self.activate(self.list.focus(), cx);
         } else if *action == actions::BACK && self.notice {
             // Back from the notice to the plugin.
             self.notice = false;
@@ -740,7 +740,7 @@ impl Screen for PageScreen {
         let Some(index) = self.list.hit(gesture.start, len) else {
             return Handled::No;
         };
-        self.list.focus = index;
+        self.list.set_focus(index);
         self.activate(index, cx);
         Handled::Yes
     }
@@ -766,7 +766,7 @@ impl Screen for PageScreen {
                     cx.command(command);
                 }
                 self.job = INSTALLER.progress(env.storage);
-                self.list.focus = 0;
+                self.list.set_focus(0);
             }
         } else if DOWNLOADED.read(event, params).is_some() || *event == events::PLUGINS_CHANGED {
             let env = *cx.env();
@@ -775,7 +775,7 @@ impl Screen for PageScreen {
                 self.room = Room::of(&env, Some(&self.id));
             }
             let len = self.rows(cx.env()).len();
-            self.list.focus = self.list.focus.min(len.saturating_sub(1));
+            self.list.set_len(len);
             self.redraw(cx);
         }
     }

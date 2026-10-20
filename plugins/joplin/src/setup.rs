@@ -186,7 +186,7 @@ impl SetupScreen {
 
     fn focused(&self) -> Row {
         let rows = self.rows();
-        rows[self.list.focus.min(rows.len() - 1)]
+        rows[self.list.focus().min(rows.len() - 1)]
     }
 
     fn activate(&mut self, row: Row, cx: &mut Cx<'_, '_>) {
@@ -286,7 +286,7 @@ impl Screen for SetupScreen {
         let Some(index) = self.list.hit(gesture.start, self.rows().len()) else {
             return Handled::No;
         };
-        self.list.focus = index;
+        self.list.set_focus(index);
         cx.request_redraw();
         self.activate(self.rows()[index], cx);
         Handled::Yes
@@ -306,11 +306,11 @@ impl Screen for SetupScreen {
             if let Some(row) = typed.context.get(FIELD).and_then(Row::of_field) {
                 let rows = self.rows();
                 let at = rows.iter().position(|r| *r == row).unwrap_or(0);
-                self.list.focus = (at + 1).min(rows.len() - 1);
+                self.list.set_focus((at + 1).min(rows.len() - 1));
             }
         } else if event == events::SETTING_CHANGED.id() {
             self.service = Service::of(&env);
-            self.list.focus = self.list.focus.min(self.rows().len() - 1);
+            self.list.set_len(self.rows().len());
         } else {
             return;
         }

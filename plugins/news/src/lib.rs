@@ -575,8 +575,8 @@ impl Screen for FeedsScreen {
                 ui::draw_noted_row(canvas, env, &style, rect, focused, &title, value, &note);
             });
         if feeds.is_empty() {
-            let area = self.list.area;
-            let top = area.y + self.list.row as u16;
+            let area = self.list.area();
+            let top = area.y + self.list.row() as u16;
             let below = Rect::new(
                 area.x,
                 top,
@@ -602,10 +602,10 @@ impl Screen for FeedsScreen {
         let delta = if let Some(delta) = ui::list_step(a, rows) {
             delta
         } else if *a == actions::CONFIRM {
-            self.open(self.list.focus, cx);
+            self.open(self.list.focus(), cx);
             return Handled::Yes;
         } else if *a == actions::MENU {
-            self.offer(self.list.focus, cx);
+            self.offer(self.list.focus(), cx);
             return Handled::Yes;
         } else {
             return Handled::No;
@@ -629,7 +629,7 @@ impl Screen for FeedsScreen {
         let Some(row) = self.list.hit(gesture.start, len) else {
             return Handled::No;
         };
-        self.list.focus = row;
+        self.list.set_focus(row);
         match gesture.kind {
             GestureKind::Tap => self.open(row, cx),
             GestureKind::LongPress => self.offer(row, cx),
@@ -681,7 +681,7 @@ impl Screen for FeedsScreen {
                     let folder = folder(&env);
                     let _ = env.storage.remove(&feed.book(&folder));
                     retire_old_book(env.storage, &folder, &self.feeds, &feed);
-                    self.list.focus = self.list.focus.min(self.len() - 1);
+                    self.list.set_len(self.len());
                     self.redraw(cx);
                 }
                 _ => {}

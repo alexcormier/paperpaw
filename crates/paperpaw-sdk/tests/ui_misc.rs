@@ -110,7 +110,7 @@ fn a_drawn_list_tells_its_rows_and_their_texts() {
         ("Language", "English"),
     ];
     let mut list = ListView::new(Rect::new(0, 100, 480, 600), style.row);
-    list.focus = 1;
+    list.set_focus(1);
     let (described, _) = describe(480, 800, |canvas| {
         list.draw(canvas, &style, rows.len(), |canvas, i, rect, focused| {
             ui::draw_value_row(canvas, &env, &style, rect, focused, rows[i].0, rows[i].1);

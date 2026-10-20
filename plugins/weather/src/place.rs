@@ -146,7 +146,7 @@ impl PlaceScreen {
             _ => String::new(),
         };
         (self.places, self.search) = outcome(reply, name);
-        self.list.focus = usize::from(!self.places.is_empty());
+        self.list.set_focus(usize::from(!self.places.is_empty()));
     }
 }
 
@@ -210,7 +210,7 @@ impl Screen for PlaceScreen {
         let delta = if let Some(delta) = ui::list_step(action, rows) {
             delta
         } else if *action == actions::CONFIRM {
-            self.open(self.list.focus, cx);
+            self.open(self.list.focus(), cx);
             return Handled::Yes;
         } else {
             return Handled::No;
@@ -234,7 +234,7 @@ impl Screen for PlaceScreen {
         let Some(row) = self.list.hit(gesture.start, len) else {
             return Handled::No;
         };
-        self.list.focus = row;
+        self.list.set_focus(row);
         if gesture.kind == GestureKind::Tap {
             self.open(row, cx);
             return Handled::Yes;
@@ -250,7 +250,7 @@ impl Screen for PlaceScreen {
                 return;
             }
             self.places.clear();
-            self.list.focus = 0;
+            self.list.set_focus(0);
             if !env.caps.network {
                 self.search = Search::NoNetwork;
             } else {

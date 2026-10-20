@@ -323,7 +323,7 @@ impl Screen for ViewScreen {
                 canvas,
                 env,
                 &style,
-                self.list.area,
+                self.list.area(),
                 icon,
                 env.i18n.tr(title),
                 if text.is_empty() {
@@ -395,7 +395,7 @@ impl Screen for ViewScreen {
         if let Some(change) = self.list.navigate(action, len) {
             self.changed(change, cx);
         } else if *action == actions::CONFIRM {
-            self.activate(self.list.focus, cx);
+            self.activate(self.list.focus(), cx);
         } else if *action == actions::MENU && self.list.pages(len) > 1 {
             // A long press of Select: go to a page.
             self.ask_page(cx);
@@ -437,7 +437,7 @@ impl Screen for ViewScreen {
         let Some(row) = self.list.hit(gesture.start, len) else {
             return Handled::No;
         };
-        self.list.focus = row;
+        self.list.set_focus(row);
         self.activate(row, cx);
         Handled::Yes
     }
@@ -446,14 +446,14 @@ impl Screen for ViewScreen {
         let env = *cx.env();
         if let Some(picked) = SORTED.read(event, params) {
             self.order = Order::of(&picked.option);
-            self.list.focus = 0;
+            self.list.set_focus(0);
             self.pick(&env);
             self.redraw(cx);
         } else if let Some(typed) = JUMPED.read(event, params) {
             let len = self.len();
             if let Ok(page) = typed.text.trim().parse::<usize>() {
                 let page = page.clamp(1, self.list.pages(len)) - 1;
-                self.list.focus = page * self.list.rows();
+                self.list.set_focus(page * self.list.rows());
                 self.read_page(&env);
                 self.redraw(cx);
             }
@@ -463,7 +463,7 @@ impl Screen for ViewScreen {
             // What is installed and has updates changed.
             if *event == events::PLUGINS_CHANGED && self.view == View::Installed {
                 self.pick(&env);
-                self.list.focus = self.list.focus.min(self.len().saturating_sub(1));
+                self.list.set_len(self.len());
             }
             self.redraw(cx);
         }

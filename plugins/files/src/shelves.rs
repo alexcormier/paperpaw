@@ -197,7 +197,7 @@ impl Screen for ShelfScreen {
         self.header
             .draw(canvas, env, &style, title, None, self.list.paging(len));
         if len == 0 {
-            let area = self.list.area;
+            let area = self.list.area();
             // An empty view says what would be in it.
             let (icon, text) = match &self.walk {
                 Some(walk) => {
@@ -259,7 +259,7 @@ impl Screen for ShelfScreen {
         self.walked = true;
         self.catalog.made(&env);
         self.names = names(env.storage, self.shelf);
-        self.list.focus = self.list.focus.min(self.names.len().saturating_sub(1));
+        self.list.set_len(self.names.len());
         self.redraw(cx);
     }
 
@@ -269,7 +269,7 @@ impl Screen for ShelfScreen {
         let delta = if let Some(delta) = ui::list_step(a, rows) {
             delta
         } else if *a == actions::CONFIRM {
-            self.activate(self.list.focus, cx);
+            self.activate(self.list.focus(), cx);
             return Handled::Yes;
         } else {
             return Handled::No;
@@ -294,7 +294,7 @@ impl Screen for ShelfScreen {
         }
         match self.list.hit(gesture.start, len) {
             Some(index) => {
-                self.list.focus = index;
+                self.list.set_focus(index);
                 self.activate(index, cx);
                 Handled::Yes
             }

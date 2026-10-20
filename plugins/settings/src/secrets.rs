@@ -75,7 +75,7 @@ impl Screen for SecretList {
         self.header
             .draw(canvas, env, &style, title, None, self.list.paging(len));
         if len == 0 {
-            let area = self.list.area;
+            let area = self.list.area();
             ui::draw_message(
                 canvas,
                 env,
@@ -100,7 +100,7 @@ impl Screen for SecretList {
             return Handled::Yes;
         }
         if *action == actions::CONFIRM {
-            self.open(self.list.focus, cx);
+            self.open(self.list.focus(), cx);
             return Handled::Yes;
         }
         Handled::No
@@ -121,7 +121,7 @@ impl Screen for SecretList {
         }
         match self.list.hit(gesture.start, len) {
             Some(index) => {
-                self.list.focus = index;
+                self.list.set_focus(index);
                 self.open(index, cx);
                 Handled::Yes
             }
@@ -214,7 +214,7 @@ impl Screen for SecretPage {
             return Handled::Yes;
         }
         if *action == actions::CONFIRM {
-            self.choose(self.list.focus, cx);
+            self.choose(self.list.focus(), cx);
             return Handled::Yes;
         }
         Handled::No
@@ -234,7 +234,7 @@ impl Screen for SecretPage {
         }
         match self.list.hit(gesture.start, self.choices.len()) {
             Some(index) => {
-                self.list.focus = index;
+                self.list.set_focus(index);
                 self.choose(index, cx);
                 Handled::Yes
             }

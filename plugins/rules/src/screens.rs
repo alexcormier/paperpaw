@@ -258,7 +258,7 @@ impl RulesScreen {
             condition: Condition::Always,
         });
         self.save(cx);
-        self.list.focus = self.rules.len().saturating_sub(1);
+        self.list.set_focus(self.rules.len().saturating_sub(1));
         self.redraw(cx);
     }
 
@@ -325,11 +325,11 @@ impl Screen for RulesScreen {
         );
         if self.rules.is_empty() {
             // Below the row that adds one: what rules are for.
-            let top = self.list.area.y + self.list.row as u16;
+            let top = self.list.area().y + self.list.row() as u16;
             let area = Rect::new(
                 0,
                 top,
-                self.list.area.width,
+                self.list.area().width,
                 self.status.y.saturating_sub(top),
             );
             ui::draw_empty(
@@ -364,9 +364,9 @@ impl Screen for RulesScreen {
         if let Some(delta) = ui::list_step(a, self.list.rows() as isize) {
             self.move_focus(delta, cx);
         } else if *a == actions::CONFIRM {
-            self.activate(self.list.focus, cx);
+            self.activate(self.list.focus(), cx);
         } else if *a == actions::MENU {
-            self.offer(self.list.focus, cx);
+            self.offer(self.list.focus(), cx);
         } else if *a == actions::BACK {
             cx.command(Command::Back);
         } else {
@@ -389,7 +389,7 @@ impl Screen for RulesScreen {
         let Some(index) = self.list.hit(gesture.start, len) else {
             return Handled::No;
         };
-        self.list.focus = index;
+        self.list.set_focus(index);
         self.message = None;
         match gesture.kind {
             GestureKind::Tap => self.activate(index, cx),
@@ -679,7 +679,7 @@ impl RulesScreen {
         {
             self.rules.remove(i);
             self.save(cx);
-            self.list.focus = self.list.focus.min(self.rows().len() - 1);
+            self.list.set_len(self.rows().len());
             self.redraw(cx);
         }
     }
@@ -854,7 +854,7 @@ impl Screen for PickScreen {
         let delta = if let Some(delta) = ui::list_step(a, rows) {
             delta
         } else if *a == actions::CONFIRM {
-            self.pick(self.list.focus, cx);
+            self.pick(self.list.focus(), cx);
             return Handled::Yes;
         } else {
             return Handled::No;
@@ -878,7 +878,7 @@ impl Screen for PickScreen {
         }
         match self.list.hit(gesture.start, len) {
             Some(index) => {
-                self.list.focus = index;
+                self.list.set_focus(index);
                 self.pick(index, cx);
                 Handled::Yes
             }

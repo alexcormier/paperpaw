@@ -189,7 +189,7 @@ impl AccountScreen {
             }
             Row::SignOut => {
                 self.sign_out(cx);
-                self.list.focus = 0;
+                self.list.set_focus(0);
                 let message = self.state_message(&env);
                 self.show(cx, message);
             }
@@ -230,7 +230,7 @@ impl Screen for AccountScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let rows = self.rows();
-        self.list.focus = self.list.focus.min(rows.len() - 1);
+        self.list.set_len(rows.len());
         let title = env.i18n.tr("kosync.group");
         self.header.draw(canvas, env, &style, title, None, None);
         let i18n = env.i18n;
@@ -270,7 +270,7 @@ impl Screen for AccountScreen {
             1
         } else if *a == actions::CONFIRM {
             if !self.busy {
-                self.activate(rows[self.list.focus.min(rows.len() - 1)], cx);
+                self.activate(rows[self.list.focus().min(rows.len() - 1)], cx);
             }
             return Handled::Yes;
         } else {
@@ -292,8 +292,8 @@ impl Screen for AccountScreen {
         let Some(index) = self.list.hit(gesture.start, rows.len()) else {
             return Handled::No;
         };
-        if index != self.list.focus {
-            self.list.focus = index;
+        if index != self.list.focus() {
+            self.list.set_focus(index);
             cx.request_redraw();
             cx.request_refresh(RefreshMode::Fast);
         }
@@ -321,14 +321,14 @@ impl Screen for AccountScreen {
                 self.message = cx.env().i18n.format(key, &args);
             }
             // Next: the user name.
-            self.list.focus = 1;
+            self.list.set_focus(1);
         } else if let Some(typed) = USER_ENTERED.read(event, params) {
             self.user = typed.text.trim().to_string();
             // Next: the password.
-            self.list.focus = 2;
+            self.list.set_focus(2);
         } else if let Some(typed) = PASSWORD_ENTERED.read(event, params) {
             self.key = (!typed.text.is_empty()).then(|| md5::of(&typed.text));
-            self.list.focus = 3;
+            self.list.set_focus(3);
         } else if let Some(reply) = AUTHORIZED.read(event, params) {
             return self.answered(false, &reply.status.to_string(), cx);
         } else if let Some(reply) = CREATED.read(event, params) {

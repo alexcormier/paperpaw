@@ -116,7 +116,7 @@ impl FolderChooser {
         self.pending = Some(pending);
         self.len = 0;
         self.page.clear();
-        self.list.focus = 0;
+        self.list.set_focus(0);
         cx.request_redraw();
         cx.request_refresh(RefreshMode::Fast);
         let now = cx.env().now;
@@ -146,7 +146,7 @@ impl FolderChooser {
     fn load(&mut self, env: &Env<'_>) {
         let len = self.listing(env).count();
         self.len = len;
-        self.list.focus = 0;
+        self.list.set_focus(0);
         self.load_page(env);
     }
 
@@ -234,7 +234,8 @@ impl FolderChooser {
                     (listing.count(), listing.rank(&child))
                 };
                 self.len = len;
-                self.list.focus = (self.fixed() + rank).min(self.len().saturating_sub(1));
+                self.list
+                    .set_focus((self.fixed() + rank).min(self.len().saturating_sub(1)));
                 self.load_page(env);
             }
             None => {}
@@ -276,7 +277,7 @@ impl Screen for FolderChooser {
         if self.pending.is_some() {
             self.header.draw(canvas, env, &style, &title, None, None);
             let text = env.i18n.tr("files.choose.opening");
-            ui::draw_message(canvas, env, &style, self.list.area, text);
+            ui::draw_message(canvas, env, &style, self.list.area(), text);
             return;
         }
         self.header
@@ -360,7 +361,7 @@ impl Screen for FolderChooser {
             let change = self.list.move_focus(delta, len);
             self.moved(change, cx);
         } else if *a == actions::CONFIRM {
-            self.activate(self.list.focus, cx);
+            self.activate(self.list.focus(), cx);
         } else if *a == actions::BACK {
             // Back goes up first; at the top it closes the chooser.
             if !self.up(cx) {
@@ -390,7 +391,7 @@ impl Screen for FolderChooser {
         }
         match self.list.hit(gesture.start, self.len()) {
             Some(index) => {
-                self.list.focus = index;
+                self.list.set_focus(index);
                 self.activate(index, cx);
                 Handled::Yes
             }

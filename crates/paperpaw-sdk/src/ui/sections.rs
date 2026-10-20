@@ -39,17 +39,27 @@ struct Start {
 /// The list; see the [module documentation](self).
 #[derive(Debug)]
 pub struct Sections {
-    pub area: Rect,
+    area: Rect,
     heading: u16,
     row: u16,
     sections: Vec<Section>,
     /// The focused entry.
-    pub focus: usize,
+    focus: usize,
     /// The entry focused before the focus last moved.
     before: usize,
 }
 
 impl Sections {
+    /// Where the rows are drawn.
+    pub fn area(&self) -> Rect {
+        self.area
+    }
+
+    /// The row with the focus.
+    pub fn focus(&self) -> usize {
+        self.focus
+    }
+
     /// `sections` in `area`, their headings `heading` high, their entries
     /// `row`. Sections without entries are not shown.
     pub fn new(area: Rect, heading: u16, row: u16, sections: Vec<Section>) -> Self {
@@ -271,7 +281,8 @@ impl Sections {
         cx.request_refresh(crate::RefreshMode::Fast);
     }
 
-    fn set_focus(&mut self, focus: usize) -> ListChange {
+    /// Puts the focus on entry `focus`; what that changed on the screen.
+    pub fn set_focus(&mut self, focus: usize) -> ListChange {
         if focus == self.focus {
             return ListChange::None;
         }

@@ -276,7 +276,7 @@ impl Screen for Choice {
         // buttons beside the screen are the page buttons) the page buttons
         // step a row as the others do; a swipe on a touch screen, the
         // focus hidden, turns a page.
-        let page = if self.list.shown {
+        let page = if self.list.shown() {
             1
         } else {
             self.list.rows() as isize
@@ -307,7 +307,7 @@ impl Screen for Choice {
                 page.saturating_sub(1) * rows
             };
             if to < self.options.len() && to / rows != page {
-                self.list.focus = to;
+                self.list.set_focus(to);
                 self.moved(ListChange::Page, cx);
             }
         }

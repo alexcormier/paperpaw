@@ -19,8 +19,8 @@ pub(super) fn refocus(rows: &mut ui::Rows, focus: usize) {
     if rows.is_empty() {
         return;
     }
-    rows.focus = focus.min(rows.len() - 1);
-    if rows.is_heading(rows.focus) && rows.step(true) == ListChange::None {
+    rows.set_focus(focus.min(rows.len() - 1));
+    if rows.is_heading(rows.focus()) && rows.step(true) == ListChange::None {
         rows.step(false);
     }
 }
@@ -255,7 +255,7 @@ impl GroupPage {
     /// Makes the page anew for the settings now, keeping its focus and a
     /// number being changed.
     fn rebuild(&mut self, env: &Env<'_>) {
-        let focus = self.rows.focus;
+        let focus = self.rows.focus();
         let (keys, drag, dragged) = (self.keys, self.drag, self.dragged);
         let editing = self.editing.take();
         *self = Self::new(env, self.group.clone());
@@ -273,7 +273,7 @@ impl GroupPage {
             .iter()
             .position(|e| matches!(e, Row::Setting(spec) if spec.id.as_str() == id));
         if let Some(at) = at {
-            self.rows.focus = at;
+            self.rows.set_focus(at);
             self.keys = true;
         }
     }
@@ -295,7 +295,7 @@ impl GroupPage {
     }
 
     pub(super) fn focused(&self) -> Option<&SettingSpec> {
-        self.spec(self.rows.focus)
+        self.spec(self.rows.focus())
     }
 
     /// Changes a number by `step` at once (a tap on its − or +), or
@@ -382,7 +382,7 @@ impl GroupPage {
 
     /// What confirming (or tapping) the focused setting does.
     pub(super) fn activate(&mut self, env: &Env<'_>, cx: &mut Cx<'_, '_>) {
-        if matches!(self.entries.get(self.rows.focus), Some(Row::Reset)) {
+        if matches!(self.entries.get(self.rows.focus()), Some(Row::Reset)) {
             cx.command(ask_reset(env, Some((&self.group, &self.title))));
             return;
         }
@@ -558,7 +558,7 @@ impl Screen for GroupPage {
         if is_number && env.device.input.touch {
             // − and + are always there: a tap on one changes the number,
             // elsewhere on the row nothing happens.
-            self.rows.focus = index;
+            self.rows.set_focus(index);
             self.keys = false;
             self.leave_editing(&env, cx);
             let Some(rect) = self.rows.rect_of(index) else {
@@ -580,8 +580,8 @@ impl Screen for GroupPage {
         if is_number {
             // The first tap selects a number; then its − and + buttons
             // change it, so a value never changes by accident.
-            if index != self.rows.focus || !self.keys {
-                self.rows.focus = index;
+            if index != self.rows.focus() || !self.keys {
+                self.rows.set_focus(index);
                 self.keys = true;
                 self.leave_editing(&env, cx);
                 cx.request_redraw();
@@ -604,8 +604,8 @@ impl Screen for GroupPage {
         }
         // Anything else acts at once; the focus hides again.
         let keys = !env.device.input.touch;
-        if index != self.rows.focus || keys != self.keys {
-            self.rows.focus = index;
+        if index != self.rows.focus() || keys != self.keys {
+            self.rows.set_focus(index);
             self.keys = keys;
             self.leave_editing(&env, cx);
             cx.request_redraw();
@@ -646,7 +646,7 @@ impl Screen for GroupPage {
                 let before = env.settings.int(id.as_str());
                 self.dragged = Some((index, before));
                 // The focus hides, as after other taps.
-                self.rows.focus = index;
+                self.rows.set_focus(index);
                 self.keys = false;
                 self.leave_editing(&env, cx);
                 cx.request_redraw();
@@ -733,7 +733,7 @@ impl Screen for GroupPage {
         } else if *event == events::PREVIEW_CHANGED {
             // A value being chosen, shown: its row and what it does.
             let env = *cx.env();
-            let index = self.dragged.map_or(self.rows.focus, |(index, _)| index);
+            let index = self.dragged.map_or(self.rows.focus(), |(index, _)| index);
             self.redraw_row(index, cx);
             if let Some(preview) = self.preview.as_mut()
                 && preview.update(&env)

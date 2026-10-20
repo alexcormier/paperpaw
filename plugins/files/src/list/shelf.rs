@@ -151,7 +151,7 @@ impl ShelfScreen {
             header,
         };
         screen.mark_next();
-        screen.list.focus = screen.next.unwrap_or(0);
+        screen.list.set_focus(screen.next.unwrap_or(0));
         screen.load_page(env);
         screen.word(env);
         screen
@@ -190,7 +190,7 @@ impl ShelfScreen {
         self.loaded = Vec::new();
         let rows = self.list.rows();
         let series = self.kind == Kind::Series;
-        let width = self.list.area.width;
+        let width = self.list.area().width;
         let mut loaded = Vec::new();
         for (n, entry) in self
             .entries
@@ -353,7 +353,7 @@ impl Screen for ShelfScreen {
                 ),
                 _ => ("books", "", env.i18n.tr("files.search.none")),
             };
-            ui::draw_empty(canvas, env, &style, self.list.area, icon, title, text);
+            ui::draw_empty(canvas, env, &style, self.list.area(), icon, title, text);
             return;
         }
         // Each book a row that says itself (its title first), so drawn
@@ -365,7 +365,7 @@ impl Screen for ShelfScreen {
             if canvas.clip().intersection(&rect).is_none() {
                 continue;
             }
-            let focused = self.list.active && self.list.shown && index == self.list.focus;
+            let focused = self.list.active() && self.list.shown() && index == self.list.focus();
             if focused {
                 ui::draw_focus(canvas, &style, rect);
             } else {
@@ -388,10 +388,11 @@ impl Screen for ShelfScreen {
         // Back from a book or its actions: states and the next may have
         // changed.
         let env = *cx.env();
-        let focus = self.list.focus;
+        let focus = self.list.focus();
         self.entries = find(&env, self.kind, &self.name);
         self.mark_next();
-        self.list.focus = focus.min(self.entries.len().saturating_sub(1));
+        self.list
+            .set_focus(focus.min(self.entries.len().saturating_sub(1)));
         self.loaded_page = None;
         self.load_page(&env);
         self.word(&env);
@@ -413,9 +414,9 @@ impl Screen for ShelfScreen {
             }
             self.list.request(change, cx);
         } else if *a == actions::CONFIRM {
-            self.open_book(self.list.focus, cx);
+            self.open_book(self.list.focus(), cx);
         } else if *a == actions::MENU {
-            if let Some(book) = self.book(self.list.focus) {
+            if let Some(book) = self.book(self.list.focus()) {
                 let path = book.path.clone();
                 super::offer(&path, cx);
             }
@@ -450,7 +451,7 @@ impl Screen for ShelfScreen {
                 }
                 match hit {
                     Some(index) => {
-                        self.list.focus = index;
+                        self.list.set_focus(index);
                         self.open_book(index, cx);
                         Handled::Yes
                     }

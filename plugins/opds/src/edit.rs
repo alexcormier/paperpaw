@@ -234,7 +234,7 @@ impl Screen for EditScreen {
         } else if [actions::DOWN, actions::RIGHT, actions::NEXT].contains(a) {
             self.move_focus(1, cx);
         } else if *a == actions::CONFIRM {
-            self.activate(self.list.focus, cx);
+            self.activate(self.list.focus(), cx);
         } else if *a == actions::BACK {
             cx.command(Command::Back);
         } else {
@@ -258,7 +258,7 @@ impl Screen for EditScreen {
         let Some(index) = self.list.hit(gesture.start, FIELDS.len()) else {
             return Handled::No;
         };
-        self.list.focus = index;
+        self.list.set_focus(index);
         self.activate(index, cx);
         Handled::Yes
     }
