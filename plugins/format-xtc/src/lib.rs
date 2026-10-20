@@ -12,7 +12,7 @@
 //!
 //! Each page is a section of one image block, decoded into the gray cache
 //! when it is first shown. Pages are decoded in bands of rows, so a page
-//! never needs more than a few kilobytes, also on the X4. Offsets and
+//! never needs more than about 20 kilobytes, also on the X4. Offsets and
 //! sizes from the file are checked against it before they are used, so a
 //! damaged or hostile file fails cleanly instead of filling memory or the
 //! card.
@@ -35,7 +35,8 @@ use paperpaw_sdk::document::{
 };
 use paperpaw_sdk::image::{GrayFile, GrayWriter, ImageError, ImageSink};
 use paperpaw_sdk::{
-    Env, FormatSpec, Id, Manifest, Plugin, RegisterError, Registrar, SDK_VERSION, Storage, Version,
+    Env, FormatSpec, Id, Manifest, Plugin, RegisterError, Registrar, SDK_VERSION, Storage,
+    StorageError, Version,
 };
 
 pub const PLUGIN: Id = Id::new_static("format-xtc");
@@ -50,8 +51,10 @@ const METADATA: u64 = 256;
 const CHAPTER: u64 = 96;
 const INDEX_ENTRY: u64 = 16;
 const PAGE_HEADER: u64 = 22;
-/// Rows of a gray page decoded at a time.
-const BAND: u32 = 32;
+/// Bytes of a gray page (XTH) held at a time: as many rows of both planes
+/// as fit, so the planes, read once for each band of rows, are read only
+/// a few times for a whole page (6 times for a screen of the X4).
+const BAND_BYTES: usize = 16 * 1024;
 /// Bytes read from storage at a time.
 const WINDOW: usize = 4096;
 /// Chapters kept at most.
@@ -263,24 +266,25 @@ impl XtcDocument {
         })
     }
 
-    /// Page `page` as a gray picture in the cache, decoded if needed.
+    /// Page `page` as a gray picture in the cache, decoded if needed. A
+    /// page that cannot be decoded is marked, so it is not decoded again
+    /// each time it is shown (until the book changes, and its cache with
+    /// it).
     fn page(&self, storage: &dyn Storage, page: u32) -> Result<ImageRef, DocumentError> {
         let cache = format!("{}/p{page}.gray", self.cache);
         if GrayFile::open(storage, &cache).is_none() {
-            let at = self
-                .index
-                .checked_add(u64::from(page) * INDEX_ENTRY)
-                .ok_or(malformed("page index past the end"))?;
-            let mut entry = [0u8; INDEX_ENTRY as usize];
-            read_exact(storage, &self.path, at, &mut entry)?;
-            let offset = u64_at(&entry, 0);
-            let mut writer = GrayWriter::new(storage, &cache);
-            let result = decode_page(storage, &self.path, self.size, offset, &mut writer)
-                .and_then(|()| writer.finish().map_err(image_error));
-            if result.is_err() {
-                let _ = storage.remove(&cache);
+            let broken = format!("{}/p{page}.broken", self.cache);
+            if storage.exists(&broken) {
+                return Err(malformed("page cannot be decoded"));
             }
-            result?;
+            if let Err(error) = self.decode(storage, page, &cache) {
+                let _ = storage.remove(&cache);
+                // Short memory or a full card may pass; damage stays.
+                if matches!(error, DocumentError::Malformed(_)) {
+                    let _ = storage.write(&broken, b"");
+                }
+                return Err(error);
+            }
         }
         let file = GrayFile::open(storage, &cache).ok_or(malformed("page"))?;
         Ok(ImageRef {
@@ -289,10 +293,28 @@ impl XtcDocument {
             height: file.height,
         })
     }
+
+    /// Decodes page `page` into the gray picture at `cache`.
+    fn decode(&self, storage: &dyn Storage, page: u32, cache: &str) -> Result<(), DocumentError> {
+        let at = self
+            .index
+            .checked_add(u64::from(page) * INDEX_ENTRY)
+            .ok_or(malformed("page index past the end"))?;
+        let mut entry = [0u8; INDEX_ENTRY as usize];
+        read_exact(storage, &self.path, at, &mut entry)?;
+        let offset = u64_at(&entry, 0);
+        let mut writer = GrayWriter::new(storage, cache);
+        decode_page(storage, &self.path, self.size, offset, &mut writer)?;
+        writer.finish().map_err(image_error)
+    }
 }
 
 fn image_error(e: ImageError) -> DocumentError {
-    DocumentError::Malformed(Cow::Owned(format!("{e}")))
+    match e {
+        ImageError::Io => DocumentError::Storage(StorageError::Io),
+        ImageError::OutOfMemory => DocumentError::OutOfMemory,
+        e => DocumentError::Malformed(Cow::Owned(format!("{e}"))),
+    }
 }
 
 /// Decodes the page picture at `offset` of `path` (`file_size` bytes long)
@@ -352,32 +374,35 @@ fn decode_page(
         return Ok(());
     }
     // Two bit planes; in each, columns from the right, eight rows a byte.
-    let mut band = zeroed((BAND * width) as usize)?;
-    let mut y0 = 0;
-    while y0 < height {
-        let rows = BAND.min(height - y0);
-        band[..(rows * width) as usize].fill(0);
-        for (p, shift) in [(0u64, 1u8), (1, 0)] {
-            for x in 0..width {
-                let base = data + p * plane + u64::from(width - 1 - x) * column;
-                for y in y0..y0 + rows {
-                    let byte = window.byte(base + u64::from(y / 8))?;
-                    let bit = byte >> (7 - (y % 8)) & 1;
-                    band[((y - y0) * width + x) as usize] |= bit << shift;
-                }
+    // A band holds some of those bytes of every column in both planes,
+    // read in the order of the file, so the window only moves forward.
+    let (width, height) = (width as usize, height as usize);
+    let groups = height.div_ceil(8);
+    let per_band = (BAND_BYTES / (2 * width)).clamp(1, groups);
+    let mut band = zeroed(2 * width * per_band)?;
+    let mut g0 = 0;
+    while g0 < groups {
+        let n = per_band.min(groups - g0);
+        // Chunk `p * width + c`: plane `p`, the file's column `c`.
+        for (i, chunk) in band.chunks_exact_mut(per_band).enumerate() {
+            let (p, c) = ((i / width) as u64, (i % width) as u64);
+            let base = data + p * plane + c * column + g0 as u64;
+            for (j, byte) in chunk[..n].iter_mut().enumerate() {
+                *byte = window.byte(base + j as u64)?;
             }
         }
-        for r in 0..rows {
-            for (out, &raw) in row
-                .iter_mut()
-                .zip(&band[(r * width) as usize..((r + 1) * width) as usize])
-            {
+        for y in g0 * 8..((g0 + n) * 8).min(height) {
+            let (j, shift) = (y / 8 - g0, 7 - y % 8);
+            for (x, out) in row.iter_mut().enumerate() {
+                let c = width - 1 - x;
+                let high = band[c * per_band + j] >> shift & 1;
+                let low = band[(width + c) * per_band + j] >> shift & 1;
                 // 00 white, 01 dark gray, 10 light gray, 11 black.
-                *out = [255, 85, 170, 0][usize::from(raw & 3)];
+                *out = [255, 85, 170, 0][usize::from(high << 1 | low)];
             }
             sink.row(&row).map_err(image_error)?;
         }
-        y0 += rows;
+        g0 += n;
     }
     Ok(())
 }
@@ -662,6 +687,58 @@ mod tests {
                 .unwrap()
                 .is_none()
         );
+    }
+
+    #[test]
+    fn column_pages_are_read_a_few_times_only() {
+        // An X4 screen of four grays, in a pattern that tells pixels apart.
+        let (width, height) = (480u32, 800u32);
+        let column = height.div_ceil(8);
+        let planes: Vec<u8> = (0..2 * width * column)
+            .map(|i| (i.wrapping_mul(2_654_435_761) >> 13) as u8)
+            .collect();
+        let gray = |x: u32, y: u32| {
+            let bit = |p: u32| {
+                let byte = planes[(p * width * column + (width - 1 - x) * column + y / 8) as usize];
+                byte >> (7 - y % 8) & 1
+            };
+            [255, 85, 170, 0][usize::from(bit(0) << 1 | bit(1))]
+        };
+        let xth = page(XTH, width as u16, height as u16, &planes);
+        let storage = Counting::new(MemoryStorage::new().with("b/t.xtc", book(&[xth])));
+        let doc = XtcDocument::open(&storage, "b/t.xtc").unwrap();
+        storage.take();
+        let block = doc.block_at(&storage, Locator::new(0, 0)).unwrap().unwrap();
+        let (_, bytes) = storage.take();
+        assert!(bytes < 8 * planes.len(), "{bytes} bytes read");
+        let rows = rows(&storage, &block.image.unwrap());
+        for (y, row) in rows.iter().enumerate() {
+            for (x, &value) in row.iter().enumerate() {
+                assert_eq!(value, gray(x as u32, y as u32), "({x}, {y})");
+            }
+        }
+    }
+
+    #[test]
+    fn broken_pages_are_not_decoded_again() {
+        let broken = page(b"XTZ\0", 8, 1, &[0]);
+        let storage = Counting::new(MemoryStorage::new().with("b/t.xtc", book(&[broken])));
+        let doc = XtcDocument::open(&storage, "b/t.xtc").unwrap();
+        for view in 0..3 {
+            storage.take();
+            let block = doc.block_at(&storage, Locator::new(0, 0)).unwrap().unwrap();
+            assert!(block.image.is_none());
+            let (reads, _) = storage.take();
+            assert_eq!(reads > 0, view == 0, "view {view}: {reads} reads");
+        }
+        // Until the book changes.
+        let mut data = storage.inner.get("b/t.xtc").unwrap();
+        data.push(0);
+        storage.inner.write("b/t.xtc", &data).unwrap();
+        let doc = XtcDocument::open(&storage, "b/t.xtc").unwrap();
+        storage.take();
+        doc.block_at(&storage, Locator::new(0, 0)).unwrap().unwrap();
+        assert!(storage.take().0 > 0);
     }
 
     #[test]
