@@ -6,6 +6,35 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Store: easier to find one's way in a library of thousands of
+  plugins. The start lists Search, the plugins installed (with how many
+  have an update), the newest, and the groups with how many plugins
+  each has; a group's list can be sorted by name, newest first or most
+  recently updated first, and a long list goes to a page asked for (a
+  long press of Select; on touch screens a tap on the page number or a
+  long press on the arrows beside it). Rows are denser
+  (name, size or an installed or update mark, one line of what it does):
+  five a page on the X4 instead of three. *Update all* among the
+  installed plugins updates them one after another. A plugin's page
+  says whether it is a code plugin (full access to the device) or data
+  only, whether its build was checked against its source, since when
+  its author publishes and how many plugins they have, how much room it
+  needs and how much is left, and how much memory it takes where its
+  author measured it; its screenshots (on the X4 only those small enough
+  to decode) and its source as a QR code are a tap away. A code plugin
+  that does not fit in the room left for code plugins is not offered,
+  or refused once downloaded.
+- SDK: `Storage::free_space` says how many bytes a storage has free
+  where it can tell (memory cards by their own count, the desktop and
+  Android by the file system); storages that wrap another forward it.
+  `native::CodeRoom`, `native::code_room` and `native::keep_code_room`
+  say how much room code plugins have and take (the X4's flash region,
+  the X4 Pro's PSRAM), as the shell found it at the start;
+  `native::installed_code_need` and `native::read_header` measure the
+  code installed. `ui::draw_qr` draws a QR code (`paperpaw_sdk::qr`),
+  `Header::on_page_number` tells a tap on a header's page number, and
+  `UiStyle::noted_row_of` is the height of a row with a note of so many
+  lines.
 - Themes: a theme's defaults (a data plugin's `settings.ini`, or the
   Pebble theme switched on) win over the device's own: a large-print
   theme now enlarges the interface on the X4 too, whose own default is

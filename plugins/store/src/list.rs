@@ -1,30 +1,31 @@
-//! The plugins of the library for this device, under the headings of
-//! their groups, each with what it does and whether it is here; *Search*
-//! above them, *Fonts* first with the looks. Choosing one shows its page.
-//! The list kept from the last visit shows at once, while a fresh one is
-//! fetched.
+//! The store's start: *Search*, the plugins installed (with how many
+//! have an update), the newest, then the groups with how many plugins
+//! each has. Each opens a list of its own ([`crate::view`]); *Fonts* is
+//! in the list of looks. The list
+//! kept from the last visit shows at once, while a fresh one is fetched.
 //!
-//! However long the list, the screen keeps only the runs of plugins of one
-//! group and the plugins of the page shown, read from the index on the
-//! storage when the page changes (never while drawing).
+//! However long the list, the screen keeps only how many plugins each
+//! group has; what is installed is counted in one pass through the index
+//! on the storage when the list or the plugins change (never while
+//! drawing).
 
 use alloc::format;
-use alloc::string::{String, ToString};
+use alloc::string::ToString;
 use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::{actions, events, params};
 use paperpaw_sdk::event::Event;
-use paperpaw_sdk::install::Progress;
 use paperpaw_sdk::replies::{HttpReply, Typed};
 use paperpaw_sdk::ui::sections::{Item, Section};
-use paperpaw_sdk::ui::{self, ListChange, Sections, UiStyle};
+use paperpaw_sdk::ui::{self, Sections, UiStyle};
 use paperpaw_sdk::{
-    Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Hint, HttpRequest, Id, Params,
-    Rect, RefreshMode, Screen, ask, files,
+    Command, Cx, Env, Gesture, GestureKind, Handled, Hint, HttpRequest, Id, Params, Rect,
+    RefreshMode, Screen, ask,
 };
 
 use crate::catalog::{self, Entry, GROUPS, Index};
-use crate::{CATALOG, DOWNLOADED, FONTS, INSTALLER, PAGE_SCREEN, SEARCH_SCREEN};
+use crate::view::View;
+use crate::{CATALOG, PAGE_SCREEN, VIEW_SCREEN, rows};
 
 /// The answer with the list.
 const LOADED: Event<HttpReply> = Event::new("store.loaded");
@@ -32,11 +33,6 @@ const LOADED: Event<HttpReply> = Event::new("store.loaded");
 const SEARCHED: Event<Typed> = Event::new("store.searched");
 /// Parameter of a plugin's page: its place in the index.
 pub(crate) const ENTRY: &str = "entry";
-
-/// The group *Fonts* goes with.
-fn fonts_group() -> usize {
-    catalog::group("look")
-}
 
 /// Why there is no list to show.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -47,40 +43,60 @@ enum Trouble {
     Failed,
 }
 
-/// What an entry of the list is.
+/// What an entry of the start is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Row {
     Search,
-    Fonts,
-    /// Plugin `n` of the index.
-    Plugin(usize),
+    Installed,
+    New,
+    Group(usize),
 }
 
-/// A section of plugins of one group: the first of them in the index,
-/// how many, and whether *Fonts* comes before them.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct Part {
-    group: usize,
-    first: usize,
-    count: usize,
-    fonts: bool,
+impl Row {
+    fn icon(self) -> &'static str {
+        match self {
+            Row::Search => "search",
+            Row::Installed => "circle-check",
+            Row::New => "sparkles",
+            Row::Group(g) => GROUP_ICONS[g],
+        }
+    }
+}
+
+/// The icons of the groups, as [`GROUPS`].
+const GROUP_ICONS: [&str; 7] = [
+    "book",
+    "file-text",
+    "books",
+    "refresh",
+    "home",
+    "palette",
+    "settings",
+];
+
+/// How many plugins the start counts: per group, installed, with an
+/// update.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct Counts {
+    groups: [usize; GROUPS.len()],
+    installed: usize,
+    updates: usize,
 }
 
 pub(crate) struct ListScreen {
     style: UiStyle,
     header: ui::Header,
-    /// Where the list goes, and the line at the bottom.
     area: Rect,
-    status: Rect,
     /// The list read; `None` until one was.
     index: Option<Index>,
-    /// The sections after *Search*.
-    parts: Vec<Part>,
+    counts: Counts,
+    /// The free space, said beside the title (read with the counts, never
+    /// while drawing).
+    room: Option<alloc::string::String>,
+    /// The entries, in order: those of the first section, then the groups.
+    rows: Vec<Row>,
+    first: usize,
     list: Sections,
-    /// The plugins of the page shown.
-    page: Vec<(usize, Entry)>,
-    /// The download going on.
-    job: Option<Progress>,
     trouble: Trouble,
     /// The focus is shown: always with buttons only, on touch screens
     /// once a button moved it.
@@ -95,113 +111,75 @@ impl ListScreen {
         let header = ui::Header::new(env, &style, true);
         let display = env.device.display;
         let top = header.area.height + style.gap as u16;
-        let line = (style.row as u16) * 3 / 2;
-        let status = Rect::new(0, display.height - line, display.width, line);
-        let area = Rect::new(
-            0,
-            top,
-            display.width,
-            display.height.saturating_sub(top + line),
-        );
+        let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
         let mut screen = Self {
             area,
-            status,
             index: env.catalog_device.and_then(|_| Index::kept(env.storage)),
-            parts: Vec::new(),
+            counts: Counts::default(),
+            room: None,
+            rows: Vec::new(),
+            first: 0,
             list: Sections::new(area, 0, 1, Vec::new()),
-            page: Vec::new(),
-            job: INSTALLER.progress(env.storage),
             trouble: Trouble::None,
             keys: !env.device.input.touch,
             asked: false,
             style,
             header,
         };
-        screen.arrange(env);
+        screen.count(env);
         screen
     }
 
-    /// The sections anew from the index, the focus kept where it was.
-    fn arrange(&mut self, env: &Env<'_>) {
+    /// Counts the plugins anew, and the entries with them.
+    fn count(&mut self, env: &Env<'_>) {
         let focus = self.list.focus;
-        self.parts.clear();
-        let Some(index) = &self.index else {
+        self.room = crate::room::Room::of(env, None).short(env);
+        let mut counts = Counts::default();
+        if let Some(index) = &self.index {
+            for &(group, count) in index.runs() {
+                counts.groups[group] += count;
+            }
+            index.scan(env.storage, &mut |_, entry: Entry| {
+                if entry.installed(env).is_some() {
+                    counts.installed += 1;
+                    counts.updates += usize::from(entry.newer(env));
+                }
+            });
+        }
+        self.counts = counts;
+        self.rows.clear();
+        if self.index.is_none() {
             self.list = Sections::new(self.area, 0, 1, Vec::new());
-            self.page.clear();
             return;
-        };
-        let mut fonts = env.actions.contains(FONTS.as_str());
-        let mut first = 0;
-        for &(group, count) in index.runs() {
-            if fonts && group > fonts_group() {
-                self.parts.push(Part {
-                    group: fonts_group(),
-                    first,
-                    count: 0,
-                    fonts: true,
-                });
-                fonts = false;
+        }
+        self.rows.push(Row::Search);
+        if counts.installed > 0 {
+            self.rows.push(Row::Installed);
+        }
+        self.rows.push(Row::New);
+        self.first = self.rows.len();
+        // The looks also without plugins of their own: *Fonts* is there.
+        let fonts = env.actions.contains(crate::FONTS.as_str());
+        for (group, &count) in counts.groups.iter().enumerate() {
+            if count > 0 || (fonts && GROUPS[group] == "look") {
+                self.rows.push(Row::Group(group));
             }
-            let with_fonts = fonts && group == fonts_group();
-            fonts &= !with_fonts;
-            self.parts.push(Part {
-                group,
-                first,
-                count,
-                fonts: with_fonts,
-            });
-            first += count;
         }
-        if fonts {
-            self.parts.push(Part {
-                group: fonts_group(),
-                first,
-                count: 0,
-                fonts: true,
-            });
-        }
-        let sections = core::iter::once(Section {
-            heading: false,
-            count: 1,
-        })
-        .chain(self.parts.iter().map(|part| Section {
-            heading: true,
-            count: part.count + usize::from(part.fonts),
-        }))
-        .collect();
+        let sections = alloc::vec![
+            Section {
+                heading: false,
+                count: self.first,
+            },
+            // No heading: the icons tell the groups apart, and so the
+            // start fits on one page of the X4.
+            Section {
+                heading: false,
+                count: self.rows.len() - self.first,
+            },
+        ];
         let heading = ui::heading_height(env, &self.style);
-        let row = self.style.noted_row() as u16;
-        self.list = Sections::new(self.area, heading, row, sections);
+        self.list = Sections::new(self.area, heading, self.style.row as u16, sections);
         self.list.focus_on(focus);
-        self.read_page(env);
-    }
-
-    /// What entry `entry` of the list is.
-    fn row(&self, entry: usize) -> Option<Row> {
-        let (section, at) = self.list.section_of(entry)?;
-        let Some(part) = section.checked_sub(1).and_then(|n| self.parts.get(n)) else {
-            return Some(Row::Search);
-        };
-        match (part.fonts, at) {
-            (true, 0) => Some(Row::Fonts),
-            (true, at) => Some(Row::Plugin(part.first + at - 1)),
-            (false, at) => Some(Row::Plugin(part.first + at)),
-        }
-    }
-
-    /// The plugins of the page shown, read from the index.
-    fn read_page(&mut self, env: &Env<'_>) {
-        self.page.clear();
-        let Some(index) = &self.index else {
-            return;
-        };
-        for entry in self.list.page_entries() {
-            if let Some(Row::Plugin(n)) = self.row(entry)
-                && let Some(plugin) = index.entry(env.storage, n)
-            {
-                self.page.push((n, plugin));
-            }
-        }
     }
 
     fn redraw(&self, cx: &mut Cx<'_, '_>) {
@@ -240,7 +218,16 @@ impl ListScreen {
             Some(index) => {
                 self.index = Some(index);
                 self.trouble = Trouble::None;
-                self.arrange(&env);
+                self.count(&env);
+            }
+            // Another screen of the store took the same answer first (the
+            // store opened twice): its index is the fresh one.
+            None if (200..300).contains(&reply.status) && !env.storage.exists(&fetched) => {
+                if let Some(index) = Index::kept(env.storage) {
+                    self.index = Some(index);
+                    self.trouble = Trouble::None;
+                    self.count(&env);
+                }
             }
             None => {
                 let _ = env.storage.remove(&fetched);
@@ -259,17 +246,15 @@ impl ListScreen {
     }
 
     fn activate(&mut self, entry: usize, cx: &mut Cx<'_, '_>) {
-        match self.row(entry) {
+        let env = *cx.env();
+        let open = |view: View| Command::OpenScreen(VIEW_SCREEN, view.params());
+        match self.rows.get(entry).copied() {
             Some(Row::Search) => {
-                let env = *cx.env();
                 cx.command(ask::text(env.i18n.tr("store.search"), &SEARCHED).command());
             }
-            Some(Row::Fonts) => cx.command(Command::RunAction(FONTS)),
-            Some(Row::Plugin(n)) => {
-                if let Some((_, plugin)) = self.page.iter().find(|(m, _)| *m == n) {
-                    cx.command(open_page(n, plugin));
-                }
-            }
+            Some(Row::Installed) => cx.command(open(View::Installed)),
+            Some(Row::New) => cx.command(open(View::New)),
+            Some(Row::Group(group)) => cx.command(open(View::Group(group))),
             None => {
                 if self.retry() {
                     self.fetch(cx);
@@ -284,17 +269,21 @@ impl ListScreen {
         self.list.is_empty() && matches!(self.trouble, Trouble::Offline | Trouble::Failed)
     }
 
+    /// The page and the number of pages, where there is more than one.
     fn paging(&self) -> Option<(usize, usize)> {
-        Some(self.list.paging())
+        let paging = self.list.paging();
+        (paging.1 > 1).then_some(paging)
     }
 
-    /// Asks for what `change` needs, the page read first where it turned.
-    fn changed(&mut self, change: ListChange, cx: &mut Cx<'_, '_>) {
-        if change == ListChange::Page {
-            let env = *cx.env();
-            self.read_page(&env);
+    /// What entry `row` says at its end.
+    fn value(&self, row: Row) -> alloc::string::String {
+        match row {
+            Row::Installed => self.counts.installed.to_string(),
+            // The looks without plugins: only the fonts are there.
+            Row::Group(group) if self.counts.groups[group] == 0 => "›".to_string(),
+            Row::Group(group) => self.counts.groups[group].to_string(),
+            Row::Search | Row::New => "›".to_string(),
         }
-        self.list.request(change, cx);
     }
 }
 
@@ -308,61 +297,23 @@ pub(crate) fn open_page(n: usize, plugin: &Entry) -> Command {
     )
 }
 
-/// What the row of `plugin` says at its end: how far its download is,
-/// whether it waits for the reader or a restart, whether it is here, or
-/// its size.
-pub(crate) fn state(env: &Env<'_>, job: Option<&Progress>, plugin: &Entry) -> String {
-    if let Some(job) = job.filter(|j| j.plugin == plugin.id) {
-        if job.done >= job.total {
-            return env.i18n.tr("store.state.waiting").to_string();
-        }
-        return format!("{} / {}", job.done, job.total);
-    }
-    let restart = env
-        .plugins
-        .get(&plugin.id)
-        .is_some_and(paperpaw_sdk::PluginInfo::restart_needed);
-    let key = if restart {
-        "store.state.restart"
-    } else if plugin.newer(env) {
-        "store.state.update"
-    } else if plugin.installed(env).is_some() {
-        "store.state.installed"
-    } else {
-        return files::size(plugin.size, env.i18n.tr("store.decimal"));
-    };
-    env.i18n.tr(key).to_string()
-}
-
-/// Draws the row of `plugin`: its name, its state, what it does.
-pub(crate) fn draw_plugin(
-    canvas: &mut Canvas<'_>,
-    env: &Env<'_>,
-    style: &UiStyle,
-    rect: Rect,
-    focused: bool,
-    plugin: &Entry,
-    job: Option<&Progress>,
-) {
-    let state = state(env, job, plugin);
-    ui::draw_noted_row(
-        canvas,
-        env,
-        style,
-        rect,
-        focused,
-        &plugin.name,
-        &state,
-        &plugin.summary,
-    );
+/// The name of group `group`.
+pub(crate) fn group_name(env: &Env<'_>, group: usize) -> alloc::string::String {
+    let key = format!("store.group.{}", GROUPS[group]);
+    env.i18n.tr(&key).to_string()
 }
 
 impl Screen for ListScreen {
-    fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
+    fn draw(&mut self, canvas: &mut paperpaw_sdk::Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let title = env.i18n.tr("store.title");
+        // The room left for plugins, beside the title.
+        let note = self
+            .room
+            .as_deref()
+            .filter(|_| self.index.is_some() && self.paging().is_none());
         self.header
-            .draw(canvas, env, &style, title, None, self.paging());
+            .draw(canvas, env, &style, title, note, self.paging());
         if self.list.is_empty() {
             let (icon, title, text) = match self.trouble {
                 _ if env.catalog_device.is_none() => {
@@ -377,46 +328,49 @@ impl Screen for ListScreen {
             } else {
                 ui::tr_input(env, text)
             };
-            let area = Rect::new(
-                0,
-                self.area.y,
-                self.area.width,
-                self.area.height + self.status.height,
+            ui::draw_empty(
+                canvas,
+                env,
+                &style,
+                self.area,
+                icon,
+                env.i18n.tr(title),
+                text,
             );
-            ui::draw_empty(canvas, env, &style, area, icon, env.i18n.tr(title), text);
             return;
         }
-        let job = self.job.as_ref();
+        let room = ui::icon_room(env, &style, true);
         self.list
             .draw(canvas, &style, self.keys, |canvas, item, rect, focused| {
                 let entry = match item {
-                    Item::Heading(section) => {
-                        let group = section
-                            .checked_sub(1)
-                            .and_then(|n| self.parts.get(n))
-                            .map_or(0, |part| part.group);
-                        let key = format!("store.group.{}", GROUPS[group]);
-                        return ui::draw_heading(canvas, env, &style, rect, env.i18n.tr(&key));
-                    }
+                    Item::Heading(_) => return,
                     Item::Entry(entry) => entry,
                 };
-                let (name, value, note) = match self.row(entry) {
-                    Some(Row::Search) => ("store.search", "", "store.search.summary"),
-                    Some(Row::Fonts) => ("store.fonts", "›", "store.fonts.summary"),
-                    Some(Row::Plugin(n)) => {
-                        if let Some((_, plugin)) = self.page.iter().find(|(m, _)| *m == n) {
-                            draw_plugin(canvas, env, &style, rect, focused, plugin, job);
-                        }
-                        return;
-                    }
-                    None => return,
+                let Some(&row) = self.rows.get(entry) else {
+                    return;
                 };
-                let (name, note) = (env.i18n.tr(name), env.i18n.tr(note));
-                ui::draw_noted_row(canvas, env, &style, rect, focused, name, value, note);
+                let ink = style.focus_ink(focused);
+                let rest =
+                    ui::draw_row_icon(canvas, env, &style, rect, room, Some(row.icon()), ink);
+                let name = match row {
+                    Row::Search => env.i18n.tr("store.search"),
+                    Row::Installed => env.i18n.tr("store.installed-list"),
+                    Row::New => env.i18n.tr("store.new"),
+                    Row::Group(group) => &group_name(env, group),
+                };
+                if row == Row::Installed && self.counts.updates > 0 {
+                    // How many have an update, marked as in their rows.
+                    let count = self.counts.updates as i64;
+                    let text = env.i18n.plural("store.updates-count", count, &[]);
+                    let right = f32::from(rect.x + rect.width) - style.margin as f32;
+                    let band = rest;
+                    rows::draw_pill(canvas, env, &style, band, right, &text, focused);
+                    ui::draw_value_row(canvas, env, &style, rest, focused, name, "");
+                    return;
+                }
+                let value = self.value(row);
+                ui::draw_value_row(canvas, env, &style, rest, focused, name, &value);
             });
-        canvas.fill(self.status, Color::WHITE);
-        let note = ui::tr_input(env, "store.hint");
-        ui::draw_note_line(canvas, env, &style, self.status, note);
     }
 
     fn hint(&self, action: &Id, env: &Env<'_>) -> Hint {
@@ -428,10 +382,6 @@ impl Screen for ListScreen {
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
-        // Back from a plugin's page: what changed there shows.
-        let env = *cx.env();
-        self.job = INSTALLER.progress(env.storage);
-        self.read_page(&env);
         if !self.asked {
             self.asked = true;
             self.fetch(cx);
@@ -467,7 +417,7 @@ impl Screen for ListScreen {
         } else {
             return Handled::No;
         };
-        self.changed(change, cx);
+        self.list.request(change, cx);
         Handled::Yes
     }
 
@@ -503,14 +453,13 @@ impl Screen for ListScreen {
         } else if let Some(typed) = SEARCHED.read(event, params) {
             let text = typed.text.trim();
             if !text.is_empty() {
-                cx.command(Command::OpenScreen(
-                    SEARCH_SCREEN,
-                    Params::new().with(params::TEXT, text.to_string()),
-                ));
+                let view = View::Search(text.to_string());
+                cx.command(Command::OpenScreen(VIEW_SCREEN, view.params()));
             }
-        } else if DOWNLOADED.read(event, params).is_some() || *event == events::PLUGINS_CHANGED {
-            // Progress, or a plugin installed or removed.
-            self.job = INSTALLER.progress(cx.env().storage);
+        } else if *event == events::PLUGINS_CHANGED {
+            // A plugin installed, updated or removed: counted anew.
+            let env = *cx.env();
+            self.count(&env);
             self.redraw(cx);
         }
     }

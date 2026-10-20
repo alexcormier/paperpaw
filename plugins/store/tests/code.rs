@@ -11,7 +11,7 @@
 
 mod common;
 
-use common::{LIST, Shopping};
+use common::{LIST, Shared, Shopping};
 use paperpaw_native::signature::{public_key, sign};
 use paperpaw_native::{Chip, Header, LINK_BASE};
 use paperpaw_plugin_store::OPEN;
@@ -113,10 +113,10 @@ fn store(version: &str) -> Shopping {
     Shopping::on(Some("x4"), Some(native()), &list(version))
 }
 
-/// The clock's page opened from the list (after *Search*).
+/// The clock's page opened from its group's list.
 fn open_clock(shopping: &mut Shopping, version: &str, code: &[u8]) {
-    shopping.run(actions::DOWN);
-    shopping.run(actions::CONFIRM);
+    shopping.choose("Reading");
+    shopping.choose("Clock");
     shopping.serve(PAGE, page(version, code).as_bytes());
 }
 
@@ -132,7 +132,7 @@ fn first_install(shopping: &mut Shopping, version: &str, code: &[u8]) {
     open_clock(shopping, version, code);
     let shown = shopping.shown();
     assert!(
-        shown.contains("Code plugin for PaperPaw 0.4. It runs with full access to this device."),
+        shown.contains("Code plugin for PaperPaw 0.4: runs with full access to this device."),
         "{shown}"
     );
     // *Install*: first what code plugins are.
@@ -279,4 +279,61 @@ fn without_code_plugins_none_is_listed() {
     let mut shopping = Shopping::on(Some("x4"), None, &list("1.0.0"));
     let shown = shopping.shown();
     assert!(!shown.contains("Clock"), "{shown}");
+}
+
+/// A storage where code plugins have `total` bytes, in pages of 4 KiB,
+/// and another code plugin takes one page.
+fn with_room(total: u64) -> Shared {
+    let storage = Shared::default();
+    let room = format!(
+        "{total} 4096 4096 83 1 0
+"
+    );
+    storage
+        .write(".paperpaw/code-room.txt", room.as_bytes())
+        .unwrap();
+    let other = ppn(BUILD, Some(&OTHER));
+    storage.write("plugins/other/code.ppn", &other).unwrap();
+    storage
+}
+
+#[test]
+fn code_that_does_not_fit_is_not_offered() {
+    let mut shopping = Shopping::with(Some("x4"), Some(native()), &list("1.0.0"), with_room(8192));
+    shopping.choose("Reading");
+    shopping.choose("Clock");
+    // The library says its code takes two pages; one is left.
+    let code = ppn(BUILD, Some(&AUTHOR));
+    let body = page("1.0.0", &code).replace(
+        r#""device": "x4", "abi""#,
+        r#""device": "x4", "image_len": 8192, "abi""#,
+    );
+    shopping.serve(PAGE, body.as_bytes());
+    let shown = shopping.shown();
+    assert!(
+        shown.contains("Needs 8.0 KB for its code, only 4.0 KB left."),
+        "{shown}"
+    );
+    assert!(shown.contains("Not enough room"), "{shown}");
+    assert!(!shown.contains("Install"), "{shown}");
+    // Where the library does not say, it is offered with what is left.
+    shopping.run(actions::BACK);
+    shopping.choose("Clock");
+    shopping.serve(PAGE, page("1.0.0", &code).as_bytes());
+    let shown = shopping.shown();
+    assert!(shown.contains("4.0 KB left for code plugins"), "{shown}");
+    assert!(shown.contains("Install"), "{shown}");
+}
+
+#[test]
+fn code_that_does_not_fit_is_refused_once_here() {
+    let mut shopping = Shopping::with(Some("x4"), Some(native()), &list("1.0.0"), with_room(4096));
+    first_install(&mut shopping, "1.0.0", &ppn(BUILD, Some(&AUTHOR)));
+    assert_eq!(installed(&shopping), None);
+    assert!(!shopping.storage.exists("plugins/clock/code.ppn"));
+    let shown = shopping.shown().replace(" | ", " ");
+    assert!(
+        shown.contains("not enough room left for code plugins"),
+        "{shown}"
+    );
 }
