@@ -1157,12 +1157,13 @@ pub fn draw_focus(canvas: &mut Canvas<'_>, style: &UiStyle, rect: Rect) {
         Focus::Soft => canvas.stroke_round(r, ring, radius, Color::BLACK),
         Focus::Marker => {
             canvas.stroke_round(r, style.line.max(1), radius, Color::BLACK);
-            // A short pill at the start, between the frame and the text.
-            let width = (style.margin / 4).max(3) as u16;
+            // A short pill at the start, in the middle of the room between
+            // the frame and the text.
+            let width = (style.line * 2).max(3) as u16;
             let height = r.height / 2;
-            let room = (style.margin / 2) as u16;
+            let room = rect.x + style.margin as u16 - r.x;
             let mark = Rect::new(
-                r.x + room.saturating_sub(width) / 2 + width / 2,
+                r.x + room.saturating_sub(width) / 2,
                 r.y + (r.height - height) / 2,
                 width,
                 height,
