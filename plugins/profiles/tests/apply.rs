@@ -374,7 +374,7 @@ fn updating_and_removing_a_profile() {
     device.add();
     device.set(NIGHT, "on");
     device.hold("Profile 1");
-    device.tap("Save the current settings in it");
+    device.tap("Save the current settings");
     assert_eq!(device.on_top(), Some("profiles.list"));
     let saved = device.read("profiles.ini").unwrap();
     let first = saved.split("[profile.2]").next().unwrap();
