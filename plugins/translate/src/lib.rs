@@ -582,3 +582,6 @@ mod tests {
         assert!(issues.is_empty(), "{issues:?}");
     }
 }
+
+#[cfg(test)]
+mod answer_tests;

@@ -199,6 +199,10 @@ impl Storage for Metered {
         self.inner.remove_dir_all(path)
     }
 
+    fn ignores_case(&self) -> bool {
+        self.inner.ignores_case()
+    }
+
     fn local_path(&self, path: &str, with: &mut dyn FnMut(&str)) {
         self.inner.local_path(path, with);
     }

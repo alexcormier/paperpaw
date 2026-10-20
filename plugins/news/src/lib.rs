@@ -815,3 +815,6 @@ mod tests {
         assert_eq!(load(&MemoryStorage::new()), Ok(Vec::new()));
     }
 }
+
+#[cfg(test)]
+mod feeds_tests;

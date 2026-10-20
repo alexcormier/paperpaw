@@ -19,6 +19,7 @@ miniz_oxide = { version = "0.8", default-features = false, features = ["with-all
 paperpaw-fs.workspace = true
 paperpaw-sdk.workspace = true
 miniz_oxide = { version = "0.8", features = ["with-alloc"] }
+proptest.workspace = true
 
 [lints]
 workspace = true

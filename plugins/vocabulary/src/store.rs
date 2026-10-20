@@ -601,3 +601,6 @@ mod tests {
         assert_eq!(words[1].sentence, "");
     }
 }
+
+#[cfg(test)]
+mod format_tests;

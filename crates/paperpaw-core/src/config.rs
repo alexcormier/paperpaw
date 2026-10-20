@@ -4,9 +4,23 @@
 #[allow(unused_imports)]
 use super::*;
 
+/// Largest `paperpaw.ini` read.
+const MAX_CONFIG: usize = 64 * 1024;
+/// Largest settings file of a book read (see [`Command::SetScope`]).
+const MAX_SCOPE: usize = 16 * 1024;
+
+/// The active settings scope: a book's own settings.
+#[derive(Debug)]
+pub(crate) struct Scope {
+    /// Its file.
+    pub(crate) path: String,
+    /// The screen that set it (see `ActiveScreen::serial`).
+    pub(crate) owner: Option<u32>,
+    /// Its file is there but could not be read: it is not written over.
+    pub(crate) unreadable: bool,
+}
+
 impl Kernel {
-    /// Writes a changed setting to the configuration file on the device,
-    /// keeping the rest of the file as it is.
     /// Forgets a setting's value (see [`Command::ResetSetting`]): from the
     /// active scope, or from the configuration file.
     pub(crate) fn reset_setting(&mut self, id: &Id) {
@@ -21,13 +35,9 @@ impl Kernel {
             return;
         }
         if let Some((section, key)) = id.as_str().split_once('.') {
-            let storage = self.shared.storage.as_ref();
-            if let Some(source) = read_config(storage) {
-                let updated = paperpaw_config::remove(&source, section, key);
-                if updated != source && storage.write(CONFIG_FILE, updated.as_bytes()).is_err() {
-                    self.warn_runtime(format!("could not save `{id}` to {CONFIG_FILE}"));
-                }
-            }
+            self.update_config(&format_args!("`{id}`"), |source| {
+                paperpaw_config::remove(source, section, key)
+            });
         }
         self.setting_changed(id);
         self.output
@@ -35,6 +45,8 @@ impl Kernel {
             .push(events::SETTING_CHANGED.emit(events::SettingChanged { id: id.clone() }));
     }
 
+    /// Writes a changed setting to the configuration file on the device,
+    /// keeping the rest of the file as it is.
     pub(crate) fn persist_setting(&mut self, id: &Id) {
         let Some(value) = self.shared.settings.global(id.as_str()) else {
             return;
@@ -75,20 +87,30 @@ impl Kernel {
     /// Activates the scope stored at `path` for the top screen, or ends
     /// the scope (see [`Command::SetScope`]).
     pub(crate) fn set_scope(&mut self, path: Option<String>) {
-        if path == self.scope.as_ref().map(|(p, _)| p.clone()) {
+        if path.as_deref() == self.scope.as_ref().map(|scope| scope.path.as_str()) {
             // Same scope (e.g. the reader shown again): keep it.
-            if let Some((_, owner)) = &mut self.scope {
-                *owner = self.stack.last().map(screen_key);
+            let top = self.stack.last().map(|top| top.serial);
+            if let Some(scope) = &mut self.scope {
+                scope.owner = top;
             }
             return;
         }
         let before = self.scoped_values();
-        let values = path.as_deref().map(|path| {
+        let read = path.as_deref().map(|path| {
             let storage = self.shared.storage.as_ref();
-            let text = paperpaw_sdk::read_file(storage, path, 16 * 1024)
-                .ok()
-                .and_then(|data| String::from_utf8(data).ok())
-                .unwrap_or_default();
+            paperpaw_sdk::files::load_text_for_update(storage, path, MAX_SCOPE)
+        });
+        let unreadable = match (&path, &read) {
+            (Some(path), Some(Err(error))) => {
+                self.warn_runtime(format!(
+                    "{path} cannot be read ({error}): its settings are not used or saved"
+                ));
+                true
+            }
+            _ => false,
+        };
+        let values = read.map(|text| {
+            let text = text.ok().flatten().unwrap_or_default();
             let mut values = paperpaw_sdk::collections::VecMap::new();
             for entry in paperpaw_config::parse(&text).filter_map(Result::ok) {
                 let id = format!("{}.{}", entry.section, entry.key);
@@ -107,7 +129,12 @@ impl Kernel {
             values
         });
         self.shared.settings.set_scope(values);
-        self.scope = path.map(|path| (path, self.stack.last().map(screen_key)));
+        let owner = self.stack.last().map(|top| top.serial);
+        self.scope = path.map(|path| Scope {
+            path,
+            owner,
+            unreadable,
+        });
         self.announce_scope_changes(before);
     }
 
@@ -127,33 +154,67 @@ impl Kernel {
         }
     }
 
-    /// Writes the active scope's values to its file (removed when empty).
+    /// Writes the active scope's values to its file (removed when nothing
+    /// is left in it), keeping what else it holds (e.g. settings of a
+    /// plugin switched off); not over a file that could not be read.
     pub(crate) fn save_scope(&mut self) {
-        let (Some((path, _)), Some(values)) = (&self.scope, self.shared.settings.scope()) else {
+        let (Some(scope), Some(values)) = (&self.scope, self.shared.settings.scope()) else {
             return;
         };
         let storage = self.shared.storage.as_ref();
-        if values.is_empty() {
-            let _ = storage.remove(path);
+        let path = scope.path.clone();
+        let source = if scope.unreadable {
+            Err(StorageError::InvalidData)
+        } else {
+            paperpaw_sdk::files::load_text_for_update(storage, &path, MAX_SCOPE)
+        };
+        let source = match source {
+            Ok(source) => source.unwrap_or_default(),
+            Err(error) => {
+                return self.warn_runtime(format!(
+                    "{path} cannot be read ({error}): settings not saved to it"
+                ));
+            }
+        };
+        let set = values.iter().filter_map(|(id, value)| {
+            let (section, key) = id.as_str().split_once('.')?;
+            Some((section, key, value.to_config_text()))
+        });
+        let mut text = paperpaw_config::set_all(&source, set);
+        // Scoped settings no longer set in it: their own values are gone.
+        let settings = &self.shared.settings;
+        let gone: Vec<(String, String)> = paperpaw_config::parse(&source)
+            .filter_map(Result::ok)
+            .filter(|entry| {
+                let id = format!("{}.{}", entry.section, entry.key);
+                settings.spec(&id).is_some_and(|spec| spec.scoped)
+                    && values.get(id.as_str()).is_none()
+            })
+            .map(|entry| (entry.section.to_string(), entry.key.to_string()))
+            .collect();
+        for (section, key) in gone {
+            text = paperpaw_config::remove(&text, &section, &key);
+        }
+        if text == source {
             return;
         }
-        let mut text = String::new();
-        for (id, value) in values.iter() {
-            if let Some((section, key)) = id.as_str().split_once('.') {
-                text = paperpaw_config::set(&text, section, key, &value.to_config_text());
-            }
-        }
-        if storage.write(path, text.as_bytes()).is_err() {
+        let empty = paperpaw_config::parse(&text).next().is_none();
+        let saved = if empty {
+            storage.remove(&path)
+        } else {
+            storage.write(&path, text.as_bytes())
+        };
+        if saved.is_err() {
             self.warn_runtime(format!("could not save settings to {path}"));
         }
     }
 
     /// Ends the scope when the screen that set it is gone.
     pub(crate) fn check_scope_owner(&mut self) {
-        let Some((_, owner)) = &self.scope else {
+        let Some(scope) = &self.scope else {
             return;
         };
-        let alive = self.stack.iter().any(|s| Some(screen_key(s)) == *owner);
+        let alive = self.stack.iter().any(|s| Some(s.serial) == scope.owner);
         if !alive {
             self.set_scope(None);
         }
@@ -173,7 +234,7 @@ impl Kernel {
         self.preview_owner = if ending {
             None
         } else {
-            self.stack.last().map(screen_key)
+            self.stack.last().map(|top| top.serial)
         };
         self.output.commands.push(events::PREVIEW_CHANGED.emit(()));
     }
@@ -184,19 +245,55 @@ impl Kernel {
         let Some(owner) = self.preview_owner else {
             return;
         };
-        if !self.stack.iter().any(|s| screen_key(s) == owner) {
+        if !self.stack.iter().any(|s| s.serial == owner) {
             self.preview_settings(Vec::new());
         }
     }
 
     /// Sets `key` in `section` of the configuration file on the device.
     pub(crate) fn save_config(&mut self, section: &str, key: &str, value: &str) {
+        self.update_config(&format_args!("`{section}.{key}`"), |source| {
+            paperpaw_config::set(source, section, key, value)
+        });
+    }
+
+    /// Changes the configuration file on the device with `change`, from
+    /// its text (empty where there is none) to the text written; `what`
+    /// names the change where it could not be saved. A file that is there
+    /// but could not be read is left as it is: written from nothing, all
+    /// else in it would be lost. The user is told then.
+    pub(crate) fn update_config(
+        &mut self,
+        what: &dyn fmt::Display,
+        change: impl FnOnce(&str) -> String,
+    ) {
         let storage = self.shared.storage.as_ref();
-        let source = read_config(storage).unwrap_or_default();
-        let updated = paperpaw_config::set(&source, section, key, value);
-        if storage.write(CONFIG_FILE, updated.as_bytes()).is_err() {
-            self.warn_runtime(format!("could not save `{section}.{key}` to {CONFIG_FILE}"));
+        let source = match read_config(storage) {
+            Ok(source) => source.unwrap_or_default(),
+            Err(error) => return self.config_unreadable(what, error),
+        };
+        let updated = change(&source);
+        if updated != source && storage.write(CONFIG_FILE, updated.as_bytes()).is_err() {
+            self.warn_runtime(format!("could not save {what} to {CONFIG_FILE}"));
         }
+    }
+
+    /// Says that the configuration file could not be read, so `what` was
+    /// not saved to it: in a warning, and to the user.
+    fn config_unreadable(&mut self, what: &dyn fmt::Display, error: StorageError) {
+        self.warn_runtime(format!(
+            "{CONFIG_FILE} cannot be read ({error}): {what} not saved, the file left as it is"
+        ));
+        let text = self.config_notice();
+        self.output.commands.push(Command::Notify(text));
+    }
+
+    /// What tells the user that the configuration file could not be read.
+    pub(crate) fn config_notice(&self) -> String {
+        let file = paperpaw_sdk::Arg::Str(CONFIG_FILE);
+        self.shared
+            .translator
+            .format("core.config-unreadable", &[("file", file)])
     }
 
     /// Switches a plugin for the next start (see [`Command::SetPluginEnabled`]).
@@ -240,10 +337,12 @@ impl Kernel {
         if *id == core_settings::READING_FONT {
             self.apply_reading_font();
         }
-        // Its size follows the interface's.
+        // Its size follows the interface's. A shell that turns the screen
+        // resizes the kernel for it (see `Kernel::rotation`), which makes
+        // the screens anew once, for the row too.
         if *id == core_settings::BUTTON_HINTS
             || *id == core_settings::UI_SIZE
-            || *id == core_settings::ROTATION
+            || (*id == core_settings::ROTATION && !self.shared.caps.rotation)
         {
             self.apply_hint_height();
         }
@@ -328,9 +427,7 @@ impl Kernel {
                 }
             }
         }
-        self.keys
-            .sources
-            .push((Origin::User, Cow::Owned(source.to_string())));
+        // Kept apart (see `KeySources::user`).
         for problem in self.shared.keymap.load(source, Origin::User, false) {
             self.warn(
                 WarningSource::UserConfig,
@@ -379,10 +476,11 @@ impl Kernel {
     }
 }
 
-/// The configuration file on the device, if any.
-pub(crate) fn read_config(storage: &dyn Storage) -> Option<String> {
-    let data = paperpaw_sdk::read_file(storage, CONFIG_FILE, 64 * 1024).ok()?;
-    String::from_utf8(data).ok()
+/// The configuration file on the device: `None` where there is none, an
+/// error where it is there but cannot be read (not UTF-8, too large, a
+/// failing card). A byte order mark at its start is left out.
+pub(crate) fn read_config(storage: &dyn Storage) -> Result<Option<String>, StorageError> {
+    paperpaw_sdk::files::load_text_for_update(storage, CONFIG_FILE, MAX_CONFIG)
 }
 
 /// Plugin ids switched on (`on`) or off in the `[plugins]` section of a

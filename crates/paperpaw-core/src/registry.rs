@@ -43,9 +43,6 @@ impl Registry {
         self.user_bindings.shrink_to_fit();
     }
 
-    /// The screen bound to `slot`: the user's choice if that screen exists,
-    /// otherwise the candidate with the highest priority (the later
-    /// registration wins a tie).
     /// When `screen` shows the row of hints.
     pub(crate) fn hints_of(&self, screen: &Id) -> paperpaw_sdk::Hints {
         self.hints.get(screen).copied().unwrap_or_default()
@@ -67,6 +64,9 @@ impl Registry {
         slots
     }
 
+    /// The screen bound to `slot`: the user's choice if that screen exists,
+    /// otherwise the candidate with the highest priority (the later
+    /// registration wins a tie).
     pub(crate) fn resolve_slot(&self, slot: &str) -> Option<&Id> {
         if let Some(screen) = self.user_bindings.get(slot)
             && self.screens.contains_key(screen)

@@ -23,6 +23,10 @@ default = []
 # font packs generated with `paperpaw-fontgen`.
 outline = ["dep:skrifa"]
 
+[dev-dependencies]
+paperpaw-hyphen.workspace = true
+proptest.workspace = true
+
 [lints]
 workspace = true
 
