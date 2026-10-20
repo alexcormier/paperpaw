@@ -33,9 +33,11 @@ proptest! {
         prop_assert_eq!(read.get(&id), Some(value.as_str()));
         prop_assert_eq!(&read, &secrets);
         prop_assert_eq!(text.lines().count(), 1);
-        // Not readable at a glance (where it could not be hexadecimal).
+        // Not readable at a glance in its field (where it could not be
+        // hexadecimal).
+        let field = text.trim_end().rsplit('\t').next().unwrap_or_default();
         if value.chars().count() >= 4 && value.chars().any(|c| !c.is_ascii_alphanumeric()) {
-            prop_assert!(!text.contains(&value));
+            prop_assert!(!field.contains(&value));
         }
     }
 
