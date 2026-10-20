@@ -6,6 +6,11 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Storage: whether names in another case are the same file (as on the
+  memory card) reaches plugins through the kernel's own layers; it read
+  "no" everywhere before. Where they are other files (a Linux disk), the
+  kernel no longer takes `A.txt` for `a.txt` in what it remembers of a
+  call's reads.
 - Wi-Fi: once work that waited for a network fails because none came
   (away from every known network), nothing wants the radio any more,
   so it may go off: before, it stayed wanted and the Wi-Fi plugin

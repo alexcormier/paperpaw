@@ -293,13 +293,15 @@ impl KernelBuilder {
         let meter = meter::Meter::new(self.clock);
         // What a call reads, kept for the rest of it (more where memory is
         // plentiful).
-        let recall = alloc::rc::Rc::new(recall::Recall::new(match self.device.memory {
+        let inner = self.storage.take().unwrap_or_else(|| Box::new(NoStorage));
+        let budget = match self.device.memory {
             paperpaw_platform::MemoryClass::Small => 16 * 1024,
             paperpaw_platform::MemoryClass::Large => 256 * 1024,
-        }));
+        };
+        let recall = alloc::rc::Rc::new(recall::Recall::new(budget, inner.ignores_case()));
         let storage: alloc::rc::Rc<dyn Storage> = alloc::rc::Rc::new(meter::Metered {
             inner: Box::new(recall::Recalled {
-                inner: self.storage.take().unwrap_or_else(|| Box::new(NoStorage)),
+                inner,
                 recall: recall.clone(),
             }),
             meter: meter.clone(),
