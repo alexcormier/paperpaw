@@ -220,7 +220,6 @@ fn values_of_the_wrong_kind_or_range_are_not_taken_as_they_are() {
 }
 
 #[test]
-#[ignore = "bug: a day's date that cannot be read shifts the days after it onto the values of the day before"]
 fn days_keep_their_own_values_when_a_date_is_unreadable() {
     let body = br#"{"daily": {"time": ["2026-10-14", "not a date", "2026-10-16"],
         "weather_code": [1, 2, 3], "temperature_2m_max": [10, 20, 30],
@@ -264,7 +263,6 @@ fn the_days_asked_for_are_all_read() {
 }
 
 #[test]
-#[ignore = "bug: an answer with more than 16 days loses all of them (the cap on dates stops the other columns)"]
 fn more_days_than_asked_for_are_cut_not_lost() {
     let weather = parse_forecast(days_answer(40).as_bytes(), "1,2", 0);
     assert_eq!(weather.map(|w| w.days.len()), Some(DAYS));
@@ -378,7 +376,6 @@ fn units_at_everyday_extremes() {
 }
 
 #[test]
-#[ignore = "bug: wind speeds from the server overflow i32 when converted to mph or knots"]
 fn the_largest_wind_speed_an_answer_holds_converts() {
     // Six digits are what `tenths` takes from an answer.
     let tenths = tenths("999999.9").unwrap();
@@ -389,7 +386,6 @@ fn the_largest_wind_speed_an_answer_holds_converts() {
 }
 
 #[test]
-#[ignore = "bug: temperatures and winds at the limits of a kept file overflow i32 when shown"]
 fn the_largest_values_of_a_kept_file_convert() {
     let weather = Weather::from_text(&format!(
         "weather 1\nfetched 1\ncoordinates 1,2\nnow {} - - 2 {} 1\n",
