@@ -107,7 +107,7 @@ impl Kernel {
 
     /// How the screen shown takes gestures (`gestures.policy`).
     pub(crate) fn policy(&self) -> keymap::Policy {
-        keymap::Policy::of(self.resolve(&InputKey::Policy).as_ref())
+        keymap::Policy::of(self.resolve(&InputKey::Policy))
     }
 
     /// The edge a finger coming down at `point` may swipe in from: one
@@ -148,7 +148,7 @@ impl Kernel {
         };
         let bound = self
             .resolve(&InputKey::Edge(side))
-            .is_some_and(|action| action != paperpaw_sdk::builtin::actions::NOTHING);
+            .is_some_and(|action| *action != paperpaw_sdk::builtin::actions::NOTHING);
         bound.then_some(side)
     }
 
@@ -261,24 +261,28 @@ impl Kernel {
     /// Resolves an input through the key map layers of the active screen,
     /// its slot and the global layer.
     pub(crate) fn route_key(&mut self, key: InputKey) {
-        if let Some(action) = self.resolve(&key) {
+        if let Some(action) = self.resolve(&key).cloned() {
             self.dispatch(action);
         }
     }
 
     /// What `key` is bound to in the key map layers of the active screen,
     /// its slot and the global layer.
-    pub(crate) fn resolve(&self, key: &InputKey) -> Option<Id> {
-        let top = self.stack.last();
-        let mut layers: Vec<&str> = Vec::with_capacity(3);
-        if let Some(top) = top {
-            layers.push(top.id.as_str());
+    /// It runs many times in each call (the row of hints asks for every
+    /// button in it), so it allocates nothing.
+    pub(crate) fn resolve(&self, key: &InputKey) -> Option<&Id> {
+        let mut layers = [GLOBAL_KEYMAP_LAYER; 3];
+        let mut count = 0;
+        if let Some(top) = self.stack.last() {
+            layers[0] = top.id.as_str();
+            count = 1;
             if let Some(slot) = &top.slot {
-                layers.push(slot.as_str());
+                layers[1] = slot.as_str();
+                count = 2;
             }
         }
-        layers.push(GLOBAL_KEYMAP_LAYER);
-        self.shared.keymap.resolve(&layers, key).cloned()
+        // The global layer last, already in place.
+        self.shared.keymap.resolve(&layers[..=count], key)
     }
 
     pub(crate) fn dispatch(&mut self, action: Id) {
