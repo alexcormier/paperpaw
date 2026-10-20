@@ -4,7 +4,8 @@
 //!   three dots (drawn with a finger, or chosen dot by dot with the
 //!   buttons and *OK*), a password on the keyboard.
 //! - Unlocking (parameter `mode` = `unlock`) takes every input until the
-//!   code is right, and opens again if something closes it.
+//!   code is right (but sleep, refresh and night mode), and opens again if
+//!   something closes it.
 //! - Setting up (as the setting's editor): the code in use first, then the
 //!   kind, then the new code twice.
 
@@ -18,11 +19,11 @@ use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
-    Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Instant, Metrics,
-    Params, Point, PointerEvent, PointerPhase, Rect, RefreshMode, Screen,
+    Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Metrics, Params,
+    Point, PointerEvent, PointerPhase, Rect, RefreshMode, Screen,
 };
 
-use crate::{KIND, KIND_PREFIX, KINDS, Locked, SCREEN, code};
+use crate::{KIND, KIND_PREFIX, KINDS, SCREEN, Shared, code, keep_tries};
 
 /// Parameter: what the screen is for; [`UNLOCK`] to unlock, else setting
 /// up.
@@ -34,8 +35,15 @@ const TYPED: Event<Typed> = Event::new("lock.typed");
 /// The shortest code.
 const MIN_LENGTH: usize = 4;
 /// Wrong tries before the next one waits, and how long.
-const TRIES: u8 = 5;
-const WAIT_MS: u64 = 30_000;
+pub(crate) const TRIES: u8 = 5;
+pub(crate) const WAIT_MS: u64 = 30_000;
+/// What passes the lock: a locked device still sleeps, and its screen
+/// can be refreshed and turned dark.
+const PASSING: [Id; 3] = [
+    actions::SLEEP,
+    actions::REFRESH_SCREEN,
+    actions::TOGGLE_NIGHT_MODE,
+];
 /// The keypad of a PIN, row by row.
 const KEYS: [&str; 12] = [
     "1", "2", "3", "4", "5", "6", "7", "8", "9", DELETE, "0", "OK",
@@ -57,15 +65,13 @@ enum Step {
 }
 
 pub(crate) struct LockScreen {
-    locked: Locked,
+    state: Shared,
     step: Step,
     /// What is entered: `pin`, `pattern` or `password`.
     kind: String,
     /// The digits of a PIN, or the dots of a pattern (`0` to `8`).
     entered: String,
     message: Option<String>,
-    failures: u8,
-    wait_until: Option<Instant>,
     /// The key or dot chosen with the buttons (the pattern's *OK* is 9).
     focus: usize,
     shown: bool,
@@ -204,7 +210,7 @@ impl Layout {
 }
 
 impl LockScreen {
-    pub(crate) fn new(env: &Env<'_>, params: &Params, locked: Locked) -> Self {
+    pub(crate) fn new(env: &Env<'_>, params: &Params, state: Shared) -> Self {
         let style = UiStyle::new(env);
         let active = code::active(env);
         let step = if params.get(MODE) == Some(UNLOCK) {
@@ -216,14 +222,12 @@ impl LockScreen {
         };
         let header = step != Step::Unlock;
         Self {
-            locked,
+            state,
             header: ui::Header::new(env, &style, header),
             step,
             kind: active.unwrap_or_else(|| String::from("pin")),
             entered: String::new(),
             message: None,
-            failures: 0,
-            wait_until: None,
             focus: 0,
             shown: !env.device.input.touch,
             finger: None,
@@ -239,7 +243,50 @@ impl LockScreen {
     }
 
     fn waiting(&self, env: &Env<'_>) -> bool {
-        self.wait_until.is_some_and(|until| env.now < until)
+        self.state
+            .wait_until
+            .get()
+            .is_some_and(|until| env.now < until)
+    }
+
+    /// A wrong code: counted, and after [`TRIES`] the next one waits.
+    fn failed(&mut self, cx: &mut Cx<'_, '_>) {
+        let env = *cx.env();
+        let tries = self.state.failures.get().saturating_add(1).min(TRIES);
+        self.state.failures.set(tries);
+        if tries >= TRIES {
+            let until = env.now.add_millis(WAIT_MS);
+            self.state.wait_until.set(Some(until));
+            cx.wake_at(until);
+        }
+        keep_tries(env.storage, tries);
+        self.message = Some(env.i18n.tr("lock.wrong").to_string());
+    }
+
+    /// The right code: the tries forgotten.
+    fn succeeded(&self, env: &Env<'_>) {
+        self.state.wait_until.set(None);
+        if self.state.failures.replace(0) > 0 {
+            keep_tries(env.storage, 0);
+        }
+    }
+
+    /// Unlocked: the screen closes.
+    fn unlock(&mut self, cx: &mut Cx<'_, '_>) {
+        self.state.locked.set(false);
+        self.succeeded(cx.env());
+        cx.command(Command::Back);
+    }
+
+    /// Unlocking with no code kept any more (it was removed elsewhere):
+    /// there is nothing to ask for, so the device can be used.
+    fn released(&mut self, cx: &mut Cx<'_, '_>) -> bool {
+        let locked = self.step == Step::Unlock && self.state.locked.get();
+        if !locked || code::active(cx.env()).is_some() {
+            return false;
+        }
+        self.unlock(cx);
+        true
     }
 
     /// Asks for the password on the keyboard.
@@ -318,20 +365,16 @@ impl LockScreen {
         self.finger = None;
         match self.step.clone() {
             Step::Unlock | Step::Verify => {
+                if self.released(cx) {
+                    return;
+                }
                 if !code::check(&env, &entered) {
-                    self.failures += 1;
-                    if self.failures >= TRIES {
-                        self.failures = 0;
-                        let until = env.now.add_millis(WAIT_MS);
-                        self.wait_until = Some(until);
-                        cx.wake_at(until);
-                    }
-                    self.message = Some(env.i18n.tr("lock.wrong").to_string());
+                    self.failed(cx);
                 } else if self.step == Step::Unlock {
-                    self.locked.set(false);
-                    cx.command(Command::Back);
+                    self.unlock(cx);
                     return;
                 } else {
+                    self.succeeded(&env);
                     self.step = Step::Choose;
                     self.focus = 0;
                     self.message = None;
@@ -562,10 +605,15 @@ fn ring(canvas: &mut Canvas<'_>, at: Point, r: i32, width: u32) {
 }
 
 impl Screen for LockScreen {
-    /// Unlocking, *Back* takes the last digit or dot away.
+    /// Unlocking, *Back* takes the last digit or dot away; a password is
+    /// typed on the keyboard, which has a *Back* of its own.
     fn hint(&self, action: &Id, env: &Env<'_>) -> paperpaw_sdk::Hint {
         if self.step == Step::Unlock && *action == actions::BACK {
-            paperpaw_sdk::Hint::Text(env.i18n.tr("lock.delete").to_string())
+            if self.kind == "password" {
+                paperpaw_sdk::Hint::Hidden
+            } else {
+                paperpaw_sdk::Hint::Text(env.i18n.tr("lock.delete").to_string())
+            }
         } else {
             paperpaw_sdk::Hint::Default
         }
@@ -582,7 +630,7 @@ impl Screen for LockScreen {
             self.header.draw(canvas, env, &style, title, None, None);
         }
         let message = if self.waiting(env) {
-            let seconds = self.wait_until.map_or(0, |until| {
+            let seconds = self.state.wait_until.get().map_or(0, |until| {
                 until.millis().saturating_sub(env.now.millis()) / 1000 + 1
             });
             Some(
@@ -645,6 +693,19 @@ impl Screen for LockScreen {
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
+        // Unlocked while something was above it (its keyboard): it goes.
+        if self.step == Step::Unlock && !self.state.locked.get() {
+            cx.command(Command::Back);
+            return;
+        }
+        if self.released(cx) {
+            return;
+        }
+        // A wait begun before this screen was made (turned, reopened,
+        // started anew) ends on time here too.
+        if let Some(until) = self.state.wait_until.get() {
+            cx.wake_at(until);
+        }
         if self.step != Step::Choose && self.kind == "password" && !self.asked {
             self.ask_password(cx);
         }
@@ -652,7 +713,7 @@ impl Screen for LockScreen {
 
     /// Something closed the lock screen while locked: it opens again.
     fn on_close(&mut self, cx: &mut Cx<'_, '_>) {
-        if self.step == Step::Unlock && self.locked.get() {
+        if self.step == Step::Unlock && self.state.locked.get() {
             cx.command(Command::OpenScreen(
                 SCREEN,
                 Params::new().with(MODE, UNLOCK),
@@ -662,8 +723,10 @@ impl Screen for LockScreen {
 
     fn on_timer(&mut self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        if self.wait_until.is_some() && !self.waiting(&env) {
-            self.wait_until = None;
+        if self.state.wait_until.get().is_some() && !self.waiting(&env) {
+            self.state.wait_until.set(None);
+            self.state.failures.set(0);
+            keep_tries(env.storage, 0);
             self.message = None;
             self.redraw(cx);
         }
@@ -671,6 +734,12 @@ impl Screen for LockScreen {
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         let env = *cx.env();
+        if PASSING.contains(action) {
+            return Handled::No;
+        }
+        if self.released(cx) {
+            return Handled::Yes;
+        }
         if *action == actions::BACK {
             if self.step != Step::Unlock {
                 cx.command(Command::Back);
@@ -704,6 +773,9 @@ impl Screen for LockScreen {
             } else if *a == actions::CONFIRM && self.shown {
                 self.choose_kind(kinds[self.focus], cx);
                 return Handled::Yes;
+            } else if *a != actions::CONFIRM {
+                // Setting up locks nothing: *Home* and the rest still work.
+                return Handled::No;
             }
             self.shown = true;
             self.redraw(cx);
@@ -728,9 +800,11 @@ impl Screen for LockScreen {
                 self.redraw(cx);
             }
             return Handled::Yes;
-        } else {
+        } else if self.step == Step::Unlock {
             // Locked, every other action is the lock's too.
             return Handled::Yes;
+        } else {
+            return Handled::No;
         };
         if !self.shown {
             self.shown = true;
@@ -743,6 +817,9 @@ impl Screen for LockScreen {
 
     fn on_gesture(&mut self, gesture: Gesture, cx: &mut Cx<'_, '_>) -> Handled {
         let env = *cx.env();
+        if self.released(cx) {
+            return Handled::Yes;
+        }
         if gesture.kind != GestureKind::Tap || self.waiting(&env) {
             return Handled::Yes;
         }
@@ -828,6 +905,9 @@ impl Screen for LockScreen {
     }
 
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
+        if self.released(cx) {
+            return;
+        }
         if let Some(typed) = TYPED.read(event, params) {
             let text = typed.text;
             self.submit(text, cx);

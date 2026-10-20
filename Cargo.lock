@@ -1362,6 +1362,10 @@ dependencies = [
 name = "paperpaw-plugin-battery"
 version = "0.4.0-dev"
 dependencies = [
+ "paperpaw-core",
+ "paperpaw-i18n",
+ "paperpaw-platform",
+ "paperpaw-plugin-fonts-default",
  "paperpaw-sdk",
 ]
 
@@ -1391,7 +1395,10 @@ dependencies = [
 name = "paperpaw-plugin-diagnostics"
 version = "0.4.0-dev"
 dependencies = [
+ "paperpaw-core",
  "paperpaw-i18n",
+ "paperpaw-platform",
+ "paperpaw-plugin-fonts-default",
  "paperpaw-sdk",
 ]
 
@@ -1506,7 +1513,9 @@ dependencies = [
 name = "paperpaw-plugin-keyboard"
 version = "0.4.0-dev"
 dependencies = [
+ "paperpaw-core",
  "paperpaw-i18n",
+ "paperpaw-platform",
  "paperpaw-sdk",
 ]
 
@@ -1514,7 +1523,10 @@ dependencies = [
 name = "paperpaw-plugin-keys"
 version = "0.4.0-dev"
 dependencies = [
+ "paperpaw-core",
  "paperpaw-i18n",
+ "paperpaw-platform",
+ "paperpaw-plugin-fonts-default",
  "paperpaw-sdk",
 ]
 
@@ -1543,8 +1555,13 @@ dependencies = [
 name = "paperpaw-plugin-lock"
 version = "0.4.0-dev"
 dependencies = [
+ "paperpaw-core",
  "paperpaw-digest",
  "paperpaw-i18n",
+ "paperpaw-platform",
+ "paperpaw-plugin-fonts-default",
+ "paperpaw-plugin-keyboard",
+ "paperpaw-plugin-sleep",
  "paperpaw-sdk",
 ]
 
@@ -1560,7 +1577,10 @@ dependencies = [
 name = "paperpaw-plugin-menu-editor"
 version = "0.4.0-dev"
 dependencies = [
+ "paperpaw-core",
  "paperpaw-i18n",
+ "paperpaw-platform",
+ "paperpaw-plugin-fonts-default",
  "paperpaw-sdk",
 ]
 
@@ -1602,7 +1622,9 @@ dependencies = [
 name = "paperpaw-plugin-profiles"
 version = "0.4.0-dev"
 dependencies = [
+ "paperpaw-core",
  "paperpaw-i18n",
+ "paperpaw-platform",
  "paperpaw-sdk",
 ]
 
@@ -1653,7 +1675,9 @@ dependencies = [
 name = "paperpaw-plugin-setup"
 version = "0.4.0-dev"
 dependencies = [
+ "paperpaw-core",
  "paperpaw-i18n",
+ "paperpaw-platform",
  "paperpaw-sdk",
 ]
 

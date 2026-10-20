@@ -38,9 +38,17 @@ pub(crate) fn hash(salt: &str, code: &str) -> String {
 pub(crate) fn active(env: &Env<'_>) -> Option<String> {
     let setting = env.settings.read(&KIND);
     let kind = setting.strip_prefix(KIND_PREFIX).unwrap_or(setting);
+    kept_kind(env).filter(|kept| kind != "off" && kept == kind)
+}
+
+/// The kind of the code kept, if one is.
+pub(crate) fn kept_kind(env: &Env<'_>) -> Option<String> {
     let stored = env.secrets.get(SECRET)?;
-    let (stored_kind, _) = stored.split_once(':')?;
-    (kind != "off" && stored_kind == kind).then(|| kind.to_string())
+    let (kind, _) = stored.split_once(':')?;
+    crate::KINDS
+        .contains(&kind)
+        .then(|| kind.to_string())
+        .filter(|kind| kind != "off")
 }
 
 /// Whether `code` is the code in use.

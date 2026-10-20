@@ -21,6 +21,9 @@ pub(crate) struct ChooseScreen {
     style: UiStyle,
     header: ui::Header,
     list: ListView,
+    /// The rows ([`ids`]), found once: whether the fonts draw a layout
+    /// takes a look at every letter.
+    rows: Vec<&'static str>,
 }
 
 /// The rows: *Automatic*, then the built-in layouts the fonts can draw.
@@ -53,12 +56,13 @@ impl ChooseScreen {
             list: ListView::new(area, style.row).focus_on_keys(env),
             style,
             header,
+            rows: ids(env).collect(),
         }
     }
 
     fn toggle(&mut self, index: usize, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        let Some(id) = ids(&env).nth(index) else {
+        let Some(&id) = self.rows.get(index) else {
             return;
         };
         let mut chosen = chosen(&env);
@@ -88,12 +92,12 @@ impl ChooseScreen {
 impl Screen for ChooseScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
-        let len = ids(env).count();
+        let len = self.rows.len();
         let title = env.i18n.tr("keyboard.setting.layouts");
         self.header
             .draw(canvas, env, &style, title, None, self.list.paging(len));
         let chosen = chosen(env);
-        let rows: Vec<&str> = ids(env).collect();
+        let rows = &self.rows;
         self.list
             .draw(canvas, &style, len, |canvas, index, rect, focused| {
                 let id = rows[index];
@@ -101,17 +105,17 @@ impl Screen for ChooseScreen {
                 // Chosen layouts carry their place in switching: "On (2)".
                 let value = match on {
                     Some(at) if chosen.len() > 1 => {
-                        format!("{} ({})", env.i18n.tr("settings.on"), at + 1)
+                        format!("{} ({})", env.i18n.tr("keyboard.on"), at + 1)
                     }
-                    Some(_) => env.i18n.tr("settings.on").to_string(),
-                    None => env.i18n.tr("settings.off").to_string(),
+                    Some(_) => env.i18n.tr("keyboard.on").to_string(),
+                    None => env.i18n.tr("keyboard.off").to_string(),
                 };
                 ui::draw_value_row(canvas, env, &style, rect, focused, env.i18n.tr(id), &value);
             });
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
-        let len = ids(cx.env()).count();
+        let len = self.rows.len();
         let rows = self.list.rows() as isize;
         let a = action;
         let delta = if let Some(delta) = ui::list_step(a, rows) {
@@ -131,7 +135,7 @@ impl Screen for ChooseScreen {
         if gesture.kind != GestureKind::Tap {
             return Handled::No;
         }
-        let len = ids(cx.env()).count();
+        let len = self.rows.len();
         let paging = self.list.paging(len);
         if let Some(action) = self
             .header

@@ -242,6 +242,70 @@ change the plugin SDK.
   open networks are joined only when chosen on the Wi-Fi page and are no
   longer saved, and an open network named as a saved secured one is not
   joined either.
+- Diagnostics: the page shown stays within the test pages when they
+  are made fewer (it showed "Page 11 of 3" and drew past its bar), a
+  held finger starts the screen over as a held *Select* does, its page
+  is told to screen readers.
+- Reading profiles: a name in use (whatever its case) is refused when a
+  profile is saved or renamed, where two profiles could share one and
+  *Next profile* then went back and forth between them; renaming the
+  profile applied last keeps it the last, so *Next profile* goes on from
+  it. Where the profiles cannot be read, the list says so and saves
+  nothing over them, and a profile not saved says so too.
+- Battery use: its page turns pages (page buttons, up and down, the
+  arrows in the header) where the recent times awake do not fit, where
+  those below the bottom could not be seen. The log goes to the card
+  every ten minutes and at sleep instead of every minute, sparing the
+  card. A full log that cannot become the old one starts anew instead
+  of growing without end. "1 refresh" in the singular.
+- Setup: *Back* on the first page asks whether to skip the setup, going
+  on first, where a stray press ended it for good; the *Skip setup*
+  button still skips at once. Without the settings plugin a choice of
+  many (the time zone) steps to the next option instead of doing
+  nothing.
+- Keyboard: it takes up to 2,000 characters, where long web addresses
+  and keys were cut at 200 without a word; text past the limit is cut
+  and the keyboard says so. The list of layouts finds the layouts the
+  fonts draw once, not at every frame, and says *On* and *Off* with
+  words of its own, also without the settings plugin.
+- Menu editor: a menu is no longer offered for one of its own submenus
+  (the main menu inside the tools), a circle that hid both menus from
+  the editor; menus caught in one all the same are listed, and *Reset
+  all* resets every changed menu, listed or not.
+- Rules: those that repeat every so many minutes run without a clock
+  too (they count from the start); a time of day is waited for again
+  when the clock becomes known, is set or moves to another time zone,
+  where before it waited for the next wake. Rules that undo each other
+  through the settings they change stop after four in a row, where they
+  ran on until the kernel cut them off, writing the settings each time.
+  The rules are read once and kept, not on every event; where the file
+  cannot be read, none apply and the list says so instead of saving
+  over it, and a rule not saved (card full) says so too.
+- Buttons and gestures: where there are buttons only (the X4), a change
+  that leaves no button to select, to go back or to move on or back
+  with, everywhere or in one place (also the lock screen), is refused
+  with a word why; before, binding *Select* to *Nothing* left the device
+  unusable for good. *Reset buttons and gestures*, the last row, takes
+  every change back (*Reset all settings* leaves key bindings as they
+  are). Screens of the same name (a tool's list and its editor) are each
+  offered as a place, told apart by their id; before, only one was.
+- Screen lock: a locked device goes to sleep again, by the power button
+  and by itself; refreshing the screen and night mode pass the lock
+  too, nothing else does. Unlocking after the device woke with the sleep
+  screen on no longer leaves the sleep screen above everything, taking
+  every button (only a restart helped): it closes once the lock does,
+  and asleep it lets *Sleep* and *Home* through. While a password is
+  typed on the keyboard, a swipe in from an edge or a button opens
+  nothing over it, so the quick panel no longer gets past a password
+  lock on touch screens. The wait after five wrong tries holds when the
+  screen is turned and when PaperPaw starts anew (the count is kept in
+  `.paperpaw/plugins/lock/tries.txt`). The kind of lock changed
+  elsewhere than on its own page (a plain list of choices, *Reset all
+  settings*) goes back to the kind whose code is kept; with its code
+  removed while locked, the lock lets the device be used instead of
+  asking for a code it cannot check. *Back* shows no "Delete" over a
+  password, and the help says that on the X4 on battery every wake is a
+  start.
 - Rules: a rule can apply when the battery reaches a level (80 %, 90 %,
   full or another), once each time it gets there and not again while
   the level wavers around it; with *Only if … While charging* it says
