@@ -791,6 +791,9 @@ change the plugin SDK.
   `max` below `min`), nor do `Rows::new` with marks and heights of
   different lengths. Steppers measure the room of their value by its
   width.
+- Section headings in lists end at the right margin, shortened with
+  "…" where too long, as the rows' titles do (a long one reached a pixel
+  past its row).
 - Headers: the back arrow's ink begins at the content's margin, where
   list icons begin, and the title where labels after icons do; the next
   page's arrow ends at the right margin (on the Boox the arrow sat 8 px

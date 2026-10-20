@@ -348,7 +348,8 @@ pub fn heading_height(env: &Env<'_>, style: &UiStyle) -> u16 {
 }
 
 /// Draws a section's heading in `rect`: small and gray, low in its room,
-/// so it reads as belonging to the entries below.
+/// so it reads as belonging to the entries below; between the margins, a
+/// long one shortened with "…" as the rows' titles are.
 pub fn draw_heading(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
@@ -366,9 +367,26 @@ pub fn draw_heading(
         rect.width,
         line,
     );
-    let x = f32::from(rect.x) + style.margin as f32;
     canvas.describe(Role::Heading, text, area, false, None);
-    draw_label(canvas, &font, style.small, x, area, text, style.faint(90));
+    // Ending at the right margin, where the rows' values end: what a last
+    // letter reaches past its width stays in the row.
+    let margin = style.margin as u16;
+    let text_area = Rect::new(
+        area.x,
+        area.y,
+        area.width.saturating_sub(margin),
+        area.height,
+    );
+    let x = f32::from(rect.x) + style.margin as f32;
+    draw_label(
+        canvas,
+        &font,
+        style.small,
+        x,
+        text_area,
+        text,
+        style.faint(90),
+    );
 }
 
 /// The switch of an on/off setting at the right end of `row`.
