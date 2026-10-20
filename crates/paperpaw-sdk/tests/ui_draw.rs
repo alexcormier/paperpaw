@@ -256,6 +256,34 @@ fn buttons_draw_inside_their_frame_and_tell_what_they_are() {
     }
 }
 
+/// A section's heading too long for its row ends, shortened, at the
+/// right margin as the rows' values do: its last letter's ink stays in
+/// the row (it reached a pixel past it, 413 in a row 413 wide).
+#[test]
+fn a_long_heading_ends_at_the_right_margin() {
+    for device in [Device::BUTTONS, Device::TOUCH] {
+        let h = Harness::new(device);
+        let env = h.env();
+        let style = UiStyle::new(&env);
+        let row = Rect::new(0, 0, 413, style.row as u16);
+        let mut frame = frame(480, 800);
+        ui::draw_heading(
+            &mut frame.canvas(),
+            &env,
+            &style,
+            row,
+            "ßPö vßnäAAä üßääüWüßä Sßäük",
+        );
+        assert_eq!(drawn_outside(&mut frame, row), None);
+        let view = frame.view();
+        let last = (0..480u16)
+            .rev()
+            .find(|&x| (row.y..row.y + row.height).any(|y| view.pixel(x, y) != support::PAPER))
+            .unwrap();
+        assert!(last < 413 - style.margin as u16 + 2, "ends at {last}");
+    }
+}
+
 // ---- Header and pager --------------------------------------------------
 
 /// Points across the whole header, every 4 pixels.
@@ -469,7 +497,6 @@ proptest! {
     /// area at any size from a line of text up, however long the text.
     /// (In less, a message shows its first line all the same.)
     #[test]
-    #[ignore = "bug: an empty screen 100 px wide draws its icon and paw past its area (ui::draw_empty, since the new look)"]
     fn texts_in_areas_draw_inside_them(
         x in 0u16..100,
         y in 0u16..400,
