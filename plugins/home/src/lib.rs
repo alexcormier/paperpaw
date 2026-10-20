@@ -55,7 +55,8 @@ use paperpaw_sdk::builtin::{actions, events, params, slots};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::ui::choice::{self, Choice};
 use paperpaw_sdk::ui::{self, UiStyle};
-use paperpaw_sdk::widgets::grid::{self, Geometry, GridResponse, GridView, Item};
+use paperpaw_sdk::widgets;
+use paperpaw_sdk::widgets::grid::{self, Geometry, GridResponse, GridView, Item, What};
 use paperpaw_sdk::{
     Canvas, Color, Command, Cx, Env, Gesture, Handled, Hint, Id, Manifest, MenuEntry, Params,
     Plugin, PointerEvent, Priority, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION,
@@ -215,6 +216,8 @@ struct Dashboard {
     missing: Vec<String>,
     /// How many of the recent books the page's widgets show.
     books: usize,
+    /// The widgets on the page, by their ids (`home.recent@1`).
+    shown: Vec<String>,
     /// Choosing a layout: each shown here, a sheet below (see `layouts`).
     chooser: Option<layouts::Chooser>,
     /// What the page shows changed (a setting, the library): laid out
@@ -249,7 +252,7 @@ fn frame_of(env: &Env<'_>, footer_height: u16) -> (Option<Rect>, Geometry, Rect)
     let gap = style.gap as u16;
     let footer = Rect::new(
         0,
-        display.height - footer_height,
+        display.height.saturating_sub(footer_height),
         display.width,
         footer_height,
     );
@@ -265,10 +268,14 @@ fn frame_of(env: &Env<'_>, footer_height: u16) -> (Option<Rect>, Geometry, Rect)
         top += height;
         r
     });
+    // Half a gap wider than the margins on either side, as the grid
+    // leaves half a gap round its cells: they line up with the margins.
+    // A margin narrower than that is as wide as that, inside the screen.
+    let outer = margin.max(gap / 2);
     let area = Rect::new(
-        margin - gap / 2,
+        outer - gap / 2,
         top,
-        display.width.saturating_sub(2 * margin) + gap,
+        display.width.saturating_sub(2 * outer) + gap,
         footer.y.saturating_sub(top),
     );
     let columns = env
@@ -283,16 +290,22 @@ fn frame_of(env: &Env<'_>, footer_height: u16) -> (Option<Rect>, Geometry, Rect)
 }
 
 impl Dashboard {
+    /// The home screen, laid out when it shows (or is drawn first).
     fn new(env: &Env<'_>, params: &Params) -> Self {
-        // Opened to edit a page (from its setting).
-        let editing = params.get(params::ID).and_then(pages::page_of).or_else(|| {
-            // Opened by *Edit home screen*.
-            (params.get(params::MODE) == Some("edit")).then_some(0)
+        // Opened to edit a page (from its setting): that page, where it
+        // shows.
+        let page_set = params.get(params::ID).and_then(pages::slot_of).map(|slot| {
+            pages::pages(env)
+                .iter()
+                .position(|p| p.slot == slot)
+                .unwrap_or(0)
         });
+        // Opened by *Edit home screen*.
+        let editing = page_set.or_else(|| (params.get(params::MODE) == Some("edit")).then_some(0));
         let mut grid = GridView::new(env, CHOICE, CHOSEN);
         grid.set_editing(editing.is_some());
         let (status, _, footer) = frame(env, None);
-        let mut dashboard = Self {
+        Self {
             style: UiStyle::new(env),
             page: editing.unwrap_or(0),
             pages: 1,
@@ -303,18 +316,16 @@ impl Dashboard {
             plus: Rect::default(),
             missing: Vec::new(),
             books: 0,
+            shown: Vec::new(),
             chooser: None,
-            stale: false,
-        };
-        dashboard.layout(env);
-        dashboard
+            stale: true,
+        }
     }
 
     /// The home screen choosing a layout.
     fn chooser(env: &Env<'_>) -> Self {
         let mut dashboard = Self::new(env, &Params::new());
         dashboard.chooser = Some(layouts::Chooser::new(env));
-        dashboard.layout(env);
         dashboard
     }
 
@@ -327,7 +338,14 @@ impl Dashboard {
         let pages = pages::pages(env);
         self.pages = pages.len();
         self.page = self.page.min(self.pages - 1);
-        let mut items = pages::expand(env, &pages[self.page]);
+        let mut items = pages::expand(env, &pages[self.page].items);
+        self.shown = items
+            .iter()
+            .filter_map(|item| match &item.what {
+                What::Widget(id) => Some(id.clone()),
+                _ => None,
+            })
+            .collect();
         if sheet.is_some() {
             // Placed as on the home screen, then shown in the lower
             // preview cell for cell.
@@ -406,7 +424,7 @@ impl Dashboard {
     fn respond(&mut self, response: GridResponse, cx: &mut Cx<'_, '_>) -> Handled {
         let handled = response.handled();
         match response {
-            GridResponse::Changed(items) => self.store(items, cx),
+            GridResponse::Changed(items) => self.store(&items, cx),
             GridResponse::Editing(_) => self.relayout(cx),
             GridResponse::Button(PENCIL) => self.set_editing(!self.grid.editing(), cx),
             GridResponse::Button(ADD) => cx.command(Command::OpenScreen(
@@ -438,15 +456,28 @@ impl Dashboard {
     }
 
     /// Keeps the page as `items`.
-    fn store(&self, items: Vec<Item>, cx: &mut Cx<'_, '_>) {
+    fn store(&self, items: &[Item], cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        let mut pages = pages::pages(&env);
-        if let Some(page) = pages.get_mut(self.page) {
-            *page = items;
+        if let Some(page) = pages::pages(&env).get(self.page) {
+            cx.command(pages::store(page.slot, items));
         }
-        for command in pages::store(&pages) {
-            cx.command(command);
-        }
+    }
+
+    /// Whether a change of setting `id` changes how the page is made: the
+    /// home screen's own settings, the look of all (`core.`), and those
+    /// of the widgets on the page. What other settings change, the
+    /// widgets read anew without being made anew.
+    fn remakes(&self, id: &str) -> bool {
+        let of = |widget: &str| {
+            id.strip_prefix(widget)
+                .is_some_and(|rest| rest.starts_with('.'))
+        };
+        of("home")
+            || of("core")
+            || self
+                .shown
+                .iter()
+                .any(|widget| of(widget) || of(widgets::base(widget)))
     }
 
     fn draw_footer(&self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
@@ -533,10 +564,16 @@ impl Screen for Dashboard {
             // The first time on a touch screen: how the gestures go.
             cx.command(Command::OpenScreen(TIPS_SCREEN, Params::new()));
         }
-        // Each time it shows, the page as it is; the focus where wanted.
+        // Each time it shows, the page as it is: made anew after it was
+        // hidden (its widgets went) or changed, else what they show read
+        // again. The focus where wanted.
         self.grid
             .set_focus_shown(!env.device.input.touch && env.settings.read(&blocks::FOCUS_AT_ONCE));
-        self.layout(&env);
+        if self.stale {
+            self.layout(&env);
+        } else {
+            self.grid.update_widgets(&env, cx);
+        }
         cx.request_redraw();
         // The covers not known yet are looked up first, one a tick.
         self.missing = blocks::missing_covers(&env, self.books);
@@ -578,17 +615,28 @@ impl Screen for Dashboard {
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
         let response = self.grid.on_event(event, params, cx);
         let env = *cx.env();
+        let setting = events::SETTING_CHANGED.read(event, params);
         if response != GridResponse::Ignored {
             self.respond(response, cx);
-        } else if *event == events::SETTING_CHANGED
-            || *event == events::LIBRARY_CHANGED
-            || *event == events::BOOK_MOVED
-            || layouts::shows_anew(event)
+        } else if layouts::shows_anew(event)
+            || (self.chooser.is_some() && setting.is_some())
+            || setting
+                .as_ref()
+                .is_some_and(|changed| self.remakes(changed.id.as_str()))
         {
             // The widgets made anew, what they show read again.
             self.mark_stale(cx);
             if self.chooser.is_some() {
                 cx.request_refresh(RefreshMode::Partial);
+            }
+        } else if setting.is_some()
+            || *event == events::LIBRARY_CHANGED
+            || *event == events::BOOK_MOVED
+        {
+            // What the widgets show read again, where they are made (when
+            // hidden, they are made anew as it shows).
+            if !self.stale && self.grid.update_widgets(&env, cx) {
+                cx.request_refresh(RefreshMode::Fast);
             }
         } else if let Some(changed) = events::WIDGET_CHANGED.read(event, params) {
             if self.grid.update_widget(changed.id.as_str(), &env, cx) {
