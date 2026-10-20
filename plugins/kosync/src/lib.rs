@@ -252,7 +252,7 @@ impl State {
             return;
         }
         for position in core::mem::take(&mut self.unsent) {
-            self.send(env, out, position, false);
+            self.transmit(env, out, position, false);
         }
         // The latest first: what this device sends waits for it (`Hold`).
         if let Some(path) = self.current.as_ref().map(|c| c.path.clone()) {
@@ -312,12 +312,18 @@ impl State {
         if !force && self.sent.as_ref() == Some(&position) {
             return;
         }
-        self.send(env, out, position, true);
+        self.transmit(env, out, position, true);
     }
 
-    /// Sends `position`; `current` when it is the open book's, which is
-    /// then known as sent.
-    fn send(&mut self, env: &Env<'_>, out: &mut Vec<Command>, position: Position, current: bool) {
+    /// Puts `position` to the server; `tracked` when it is to be known as
+    /// the position sent last.
+    fn transmit(
+        &mut self,
+        env: &Env<'_>,
+        out: &mut Vec<Command>,
+        position: Position,
+        tracked: bool,
+    ) {
         // Not worth opening the book for.
         if !self.signed_in(env) {
             return;
@@ -343,7 +349,7 @@ impl State {
         let target = "/syncs/progress";
         if let Some(command) = self.request(env, "PUT", target, Some(body), &PUSHED, params) {
             out.push(command);
-            if current {
+            if tracked {
                 self.sent = Some(position);
                 self.last_push = Some(env.now);
             }
