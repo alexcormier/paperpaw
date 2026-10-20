@@ -212,3 +212,23 @@ fn timers_come_to_the_screen_that_asked() {
     kernel.tick(Instant(60));
     assert_eq!(*log.borrow(), ["reader timer"]);
 }
+
+/// Values shown without being kept (a setting tried in a menu) last
+/// while the screen that asked shows, also made anew, and end with it.
+#[test]
+fn values_tried_end_with_the_screen_that_tried_them() {
+    let log = log();
+    let mut kernel = book_kernel(&log);
+    kernel.open_screen(Instant(1), MENU, Params::new());
+    let tried = alloc::vec![(
+        Id::new_static("core.night-mode"),
+        Some(SettingValue::Bool(true))
+    )];
+    kernel.apply(Command::PreviewSettings(tried));
+    kernel.finish();
+    assert!(kernel.settings().bool("core.night-mode"));
+    kernel.resize(Instant(2), 80, 90);
+    assert!(kernel.settings().bool("core.night-mode"), "still tried");
+    kernel.run_action(Instant(3), actions::BACK);
+    assert!(!kernel.settings().bool("core.night-mode"));
+}
