@@ -32,8 +32,6 @@ pub struct Ui {
     pub finger: u16,
     /// Width of lines (`UiStyle::line`).
     pub line: u16,
-    /// Radius of the corners of buttons and boxes (`UiStyle::corner`).
-    pub corner: u16,
 }
 
 impl Ui {
@@ -281,6 +279,36 @@ impl Ink {
         }
     }
 
+    /// Leaves out ink connected to the area's edges: the frame of a
+    /// button around a label (its round corners too), what reaches in
+    /// from outside.
+    pub fn clear_edges(&mut self) {
+        let (w, h) = (self.w(), usize::from(self.area.height));
+        let mut stack: Vec<(usize, usize)> = Vec::new();
+        for x in 0..w {
+            stack.push((x, 0));
+            stack.push((x, h.saturating_sub(1)));
+        }
+        for y in 0..h {
+            stack.push((0, y));
+            stack.push((w.saturating_sub(1), y));
+        }
+        while let Some((x, y)) = stack.pop() {
+            if !self.at(x, y) {
+                continue;
+            }
+            self.cells[y * w + x] = false;
+            if x > 0 {
+                stack.push((x - 1, y));
+            }
+            if y > 0 {
+                stack.push((x, y - 1));
+            }
+            stack.push((x + 1, y));
+            stack.push((x, y + 1));
+        }
+    }
+
     /// Keeps the ink in `rows` only (as [`Ink::lines`] gives them).
     pub fn keep_rows(&mut self, rows: &[(usize, usize)]) {
         let w = self.w();
@@ -462,7 +490,6 @@ mod tests {
             margin: 26,
             finger: 0,
             line: 2,
-            corner: 0,
         }
     }
 }

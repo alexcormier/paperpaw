@@ -321,7 +321,6 @@ fn ui(session: &Session, variant: &Variant) -> Ui {
         margin: 0,
         finger: 0,
         line: 1,
-        corner: 0,
     };
     let margin = settings.int(core_settings::UI_MARGIN.as_str()).clamp(0, 15) as u32;
     ui.margin = if margin == 0 {
@@ -330,14 +329,6 @@ fn ui(session: &Session, variant: &Variant) -> Ui {
         ui.tenth_mm(margin * 10)
     };
     ui.line = ui.tenth_mm(settings.int(core_settings::UI_LINES.as_str()).clamp(1, 10) as u32);
-    ui.corner = match core_settings::CORNERS
-        .iter()
-        .position(|c| *c == settings.text(core_settings::UI_CORNERS.as_str()))
-    {
-        Some(1) => ui.tenth_mm(8),
-        Some(2) => ui.tenth_mm(20),
-        _ => 0,
-    };
     if variant.has_touch() {
         ui.finger = ui.tenth_mm(70);
     }

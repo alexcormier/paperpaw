@@ -250,6 +250,11 @@ pub fn wrap(scene: &Scene<'_>) -> Vec<Issue> {
         if d.role == Role::Text && label.contains(char::is_whitespace) {
             continue;
         }
+        // A button's label: looked at with its button, inside its frame.
+        let start = Point::new(i32::from(d.area.x), i32::from(d.area.y));
+        if d.role == Role::Text && scene.parts(&[Role::Button]).any(|b| b.area.contains(start)) {
+            continue;
+        }
         let Some(visible) = scene.visible(d) else {
             continue;
         };
@@ -257,14 +262,17 @@ pub fn wrap(scene: &Scene<'_>) -> Vec<Issue> {
             continue;
         };
         if d.role == Role::Button {
-            region = region.inset(inset.max(scene.ui.corner), inset);
+            region = region.inset(inset, inset);
         }
         if region.is_empty() {
             continue;
         }
         // Lines of text lie a leading apart; a thin line drawn through
         // the letters (a flip clock's tiles) is no break.
-        let ink = text_ink(scene, d, region, INK);
+        let mut ink = text_ink(scene, d, region, INK);
+        if d.role == Role::Button {
+            ink.clear_edges();
+        }
         let tallest = ink.lines(2).iter().map(|l| l.1).max().unwrap_or(0);
         let lines = ink.lines((tallest / 6).max(3));
         if lines.len() >= 2 {
@@ -840,8 +848,9 @@ pub fn ink_centre(scene: &Scene<'_>) -> Vec<Issue> {
             })
             .collect();
         // Only a label or a drawing of its own: cards with several texts
-        // are laid out otherwise.
-        if texts.len() > 1 {
+        // are laid out otherwise; a label reaching out below the button
+        // is found by `overlap`.
+        if texts.len() > 1 || texts.iter().any(|t| t.area.bottom() > b.area.bottom()) {
             continue;
         }
         // Up and down by ink only for drawings and signs (+, −, arrows):
@@ -851,10 +860,12 @@ pub fn ink_centre(scene: &Scene<'_>) -> Vec<Issue> {
             matches!((chars.next(), chars.next()), (Some(c), None)
                 if !c.is_alphanumeric() && !".,;:'\"!?_`".contains(c))
         };
-        let corner = scene.ui.corner.min(b.area.height / 2);
-        let across = b.area.inset(inset.max(corner), inset);
+        // Inside its frame, round corners and all.
+        let across = b.area.inset(inset, inset);
         let background = scene.background(across);
-        let Some(ink) = scene.ink(across, background).bounds() else {
+        let mut inner = scene.ink(across, background);
+        inner.clear_edges();
+        let Some(ink) = inner.bounds() else {
             continue;
         };
         // A drawing of its own (a word for its name, no text drawn): an
@@ -883,7 +894,9 @@ pub fn ink_centre(scene: &Scene<'_>) -> Vec<Issue> {
                 b.area.width * 3 / 5,
                 b.area.height.saturating_sub(2 * inset),
             );
-            if let Some(ink) = scene.ink(middle, background).bounds()
+            let mut inner = scene.ink(middle, background);
+            inner.clear_edges();
+            if let Some(ink) = inner.bounds()
                 && let Some(dy) = off_centre(
                     (u32::from(b.area.y), b.area.bottom()),
                     (u32::from(ink.y), ink.bottom()),
@@ -1120,7 +1133,6 @@ mod tests {
             margin: 26,
             finger: 0,
             line: 2,
-            corner: 0,
         }
     }
 
