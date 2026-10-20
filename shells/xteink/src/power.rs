@@ -165,6 +165,24 @@ type TimerWatchdog = esp_hal::timer::timg::Wdt<esp_hal::peripherals::TIMG1<'stat
 static WATCHDOGS: Mutex<RefCell<Option<(esp_hal::rtc_cntl::Rtc<'static>, TimerWatchdog)>>> =
     Mutex::new(RefCell::new(None));
 
+/// Starts the X4 again if its start hangs (a part that never answers)
+/// for `rtc_s` seconds, rather than keep it on: the RTC's watchdog, armed
+/// before the board is set up; [`watch`] takes it over.
+pub fn watch_start(rtc_s: u64) {
+    // SAFETY: only the RTC's watchdog is used, and only until the board
+    // hands the RTC to `watch`, which sets it up again.
+    let rtc_timer = unsafe { esp_hal::peripherals::RTC_TIMER::steal() };
+    arm(&mut esp_hal::rtc_cntl::Rtc::new(rtc_timer).rwdt, rtc_s);
+}
+
+/// Sets the RTC's watchdog to reset the X4 after `seconds`.
+fn arm(rwdt: &mut esp_hal::rtc_cntl::Rwdt, seconds: u64) {
+    use esp_hal::rtc_cntl::{RwdtStage, RwdtStageAction};
+    rwdt.set_stage_action(RwdtStage::Stage0, RwdtStageAction::ResetSystem);
+    rwdt.set_timeout(RwdtStage::Stage0, Duration::from_secs(seconds));
+    rwdt.enable();
+}
+
 /// Starts the X4 again if the firmware does not come by: after `rtc_s`
 /// seconds by the RTC's watchdog, which counts on in light sleep (a sleep
 /// that does not end), after `timer_s` seconds by the timer group's. Hung,
@@ -174,12 +192,7 @@ pub fn watch(
     mut wdt: TimerWatchdog,
     (rtc_s, timer_s): (u64, u64),
 ) {
-    use esp_hal::rtc_cntl::{RwdtStage, RwdtStageAction};
-    rtc.rwdt
-        .set_stage_action(RwdtStage::Stage0, RwdtStageAction::ResetSystem);
-    rtc.rwdt
-        .set_timeout(RwdtStage::Stage0, Duration::from_secs(rtc_s));
-    rtc.rwdt.enable();
+    arm(&mut rtc.rwdt, rtc_s);
     // It counts on in light sleep too (esp-hal pauses it there): a sleep
     // that does not end is what it is for.
     let regs = esp_hal::peripherals::LPWR::regs();

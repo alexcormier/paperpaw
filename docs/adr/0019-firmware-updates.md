@@ -25,11 +25,12 @@ may leave a device that does not start.
   from then on updates come without a cable. `cargo run` erases the OTA
   data, so the firmware flashed is the one that starts.
 - **The firmware undoes a failed update itself** (`shells/xteink/src/ota.rs`).
-  A new image's first start marks it on trial, its first frame shown
-  marks it good. An image found on trial at a start (it never got to its
-  first frame, e.g. it panicked) is marked bad and the device restarts;
-  the bootloader skips it, and the firmware before it takes its place
-  back and says so.
+  A new image's first start marks it on trial, before the board is set
+  up; running for half a minute, or going to sleep or restarting by
+  itself, marks it good. An image found on trial at a start (it never got
+  so far, e.g. it panicked or hung until the watchdog ended it) is marked
+  bad and the device restarts; the bootloader skips it, and the firmware
+  before it takes its place back and says so.
 - **Signed update files** (`paperpaw-update`): the app image followed by
   a trailer with its length, the signer's Ed25519 public key and the
   signature over both. The X4 checks the signature while it writes the

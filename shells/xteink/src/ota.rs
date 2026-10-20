@@ -5,10 +5,12 @@
 //!
 //! The bootloader espflash brings does not undo updates itself, so the
 //! firmware does: a new firmware's first start marks it as on trial
-//! (`PendingVerify`) and its first frame shown as good (`Valid`). Found on
-//! trial at a start (the last start ended before its first frame, e.g. in
-//! a panic), it is marked bad and the device restarts into the firmware
-//! before it, which says so ([`Ota::undone`]) and takes its place back.
+//! (`PendingVerify`), before anything else could fail, and the main loop
+//! marks it as good (`Valid`) once it ran half a minute or went to sleep
+//! or restarted by itself. Found on trial at a start (the last start
+//! ended before, e.g. in a panic or a hang the watchdog ended), it is
+//! marked bad and the device restarts into the firmware before it, which
+//! says so ([`Ota::undone`]) and takes its place back.
 //!
 //! Only update files signed with a key built in here (PaperPaw's) or one
 //! the reader trusts (`paperpaw_sdk::firmware`) are installed; the
@@ -156,7 +158,7 @@ impl Ota {
                         .is_ok();
                 }
                 Some(OtaImageState::PendingVerify) => {
-                    // Started before and never got to its first frame.
+                    // Started before and never ran long enough.
                     warn!("OTA: the update failed on trial: back to the one before");
                     let _ = updater.set_current_ota_state(OtaImageState::Invalid);
                     esp_hal::system::software_reset();
@@ -185,7 +187,7 @@ impl Ota {
         self.trial
     }
 
-    /// The running firmware got to its first frame: no longer on trial.
+    /// The running firmware works: no longer on trial.
     pub fn confirm(&mut self) {
         if !self.trial {
             return;
