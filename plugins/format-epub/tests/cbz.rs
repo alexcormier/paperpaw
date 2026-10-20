@@ -11,7 +11,7 @@ use common::Recording;
 use paperpaw_plugin_format_epub::CbzDocument;
 use paperpaw_sdk::MemoryStorage;
 use paperpaw_sdk::document::{BlockKind, Document, DocumentError, Locator};
-use paperpaw_sdk::zip::testing::ZipBuilder;
+use paperpaw_zip::testing::ZipBuilder;
 use proptest::prelude::*;
 
 const PNG: &[u8] = include_bytes!("../../../crates/paperpaw-image/tests/data/gray.png");

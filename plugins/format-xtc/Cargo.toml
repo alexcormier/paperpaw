@@ -11,7 +11,6 @@ authors.workspace = true
 categories = ["no-std", "multimedia::images"]
 
 [dependencies]
-paperpaw-digest.workspace = true
 paperpaw-sdk.workspace = true
 
 [dev-dependencies]

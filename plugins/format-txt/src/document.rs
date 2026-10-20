@@ -511,7 +511,7 @@ fn utf8_copy(
         size.saturating_sub(UTF16_PIECE),
         size,
     )?);
-    let stamp = format!("{size} {:016x}\n", paperpaw_digest::fnv1a64(&ends));
+    let stamp = format!("{size} {:016x}\n", paperpaw_sdk::digest::fnv1a64(&ends));
     drop(ends);
     if read_file(storage, &stamp_path, 64).ok().as_deref() == Some(stamp.as_bytes())
         && storage.exists(&copy)

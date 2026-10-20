@@ -15,7 +15,7 @@ use paperpaw_plugin_format_epub::EpubDocument;
 use paperpaw_sdk::MemoryStorage;
 use paperpaw_sdk::document::{Document, Locator};
 use paperpaw_sdk::zip::ZipArchive;
-use paperpaw_sdk::zip::testing::ZipBuilder;
+use paperpaw_zip::testing::ZipBuilder;
 
 const BOOKS: [&[u8]; 2] = [
     include_bytes!("../../../samples/library/books/alice-in-wonderland.epub"),

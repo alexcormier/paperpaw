@@ -11,7 +11,7 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use paperpaw_json::stream::{Event, Parser};
+use paperpaw_sdk::json::stream::{Event, Parser};
 use paperpaw_sdk::web::encode;
 
 /// Days of the forecast asked for and kept.

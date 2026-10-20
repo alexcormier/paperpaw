@@ -23,8 +23,8 @@ use alloc::borrow::Cow;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use paperpaw_digest::fnv1a64;
 use paperpaw_sdk::Storage;
+use paperpaw_sdk::digest::fnv1a64;
 use paperpaw_sdk::document::{DocumentError, Metadata};
 use paperpaw_sdk::xml::{Token, Tokenizer, decode, local_name};
 use paperpaw_sdk::zip::ZipArchive;

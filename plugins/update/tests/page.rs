@@ -612,12 +612,13 @@ fn offer_with_code(size: usize, code: &[u8]) -> String {
                   "size": {ini_size}, "sha1": "{ini_sha1}"}},
                 {{"path": "code.ppn", "url": "https://p.org/stats/x4/code.ppn",
                   "size": {code_size}, "sha256": "{code_sha256}"}}]}}]}}"#,
-        author =
-            paperpaw_digest::hex::encode(&paperpaw_sdk::native::signature::public_key(&AUTHOR)),
+        author = paperpaw_sdk::digest::hex::encode(&paperpaw_sdk::native::signature::public_key(
+            &AUTHOR
+        )),
         ini_size = PLUGIN_INI.len(),
-        ini_sha1 = paperpaw_digest::sha1::hex(PLUGIN_INI.as_bytes()),
+        ini_sha1 = paperpaw_sdk::digest::sha1::hex(PLUGIN_INI.as_bytes()),
         code_size = code.len(),
-        code_sha256 = paperpaw_digest::sha256::hex(code),
+        code_sha256 = paperpaw_sdk::digest::sha256::hex(code),
     )
 }
 

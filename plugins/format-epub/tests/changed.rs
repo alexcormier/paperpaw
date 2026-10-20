@@ -6,8 +6,8 @@
 
 use paperpaw_plugin_format_epub::{EpubDocument, Fb2Document, HtmlDocument, MarkdownDocument};
 use paperpaw_sdk::document::{BlockKind, Document, Locator};
-use paperpaw_sdk::zip::testing::ZipBuilder;
 use paperpaw_sdk::{MemoryStorage, OpenOptions, Storage};
+use paperpaw_zip::testing::ZipBuilder;
 
 const CONTAINER: &str = r#"<?xml version="1.0"?>
 <container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">

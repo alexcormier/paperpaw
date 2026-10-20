@@ -361,7 +361,7 @@ fn sends_a_new_note_then_updates_it() {
     assert!(t.answer(&calls[0], 204, "").is_empty());
     // What was sent is known by its text.
     let text = &update[..update.find("\n\nid: ").unwrap()];
-    let md5 = paperpaw_digest::md5::of(text);
+    let md5 = paperpaw_sdk::digest::md5::of(text);
     assert_eq!(t.file("sent.txt"), format!("{ALICE}\t{id}\t{md5}\n"));
 }
 

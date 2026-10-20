@@ -129,7 +129,9 @@ pub use status::{
 /// The human-editable config format (see `paperpaw-config`), for plugins
 /// that store their own data as text files.
 pub mod config {
-    pub use paperpaw_config::*;
+    pub use paperpaw_config::{
+        Entry, ErrorKind, ParseError, Parser, Value, parse, quote, remove, set, set_all,
+    };
 }
 
 /// QR codes, e.g. of an address to open on a phone (see `paperpaw-qr`;
@@ -140,23 +142,35 @@ pub mod qr {
 
 /// The format-independent document model (see `paperpaw-document`).
 pub mod document {
-    pub use paperpaw_document::*;
+    pub use paperpaw_document::{
+        Align, Block, BlockKind, Document, DocumentError, EmbeddedFont, ImageRef, Link, Locator,
+        MAX_FAMILIES, Metadata, OffsetMap, Run, TextStyle, TocEntry, is_external,
+    };
 }
 
-/// Page layout engine (see `paperpaw-layout`), usable by any reader plugin.
+/// Page layout engine (see `paperpaw-layout`), usable by any reader
+/// plugin. Unstable until 1.0: it still changes as readers need it, so it
+/// comes only with the `unstable` feature.
+#[cfg(feature = "unstable")]
 pub mod layout {
-    pub use paperpaw_layout::*;
+    pub use paperpaw_layout::{
+        Face, Hyphenate, LayoutContext, LineRun, Page, PageImage, PageLine, Style, Typesetter,
+        VERSION, layout_page, line_start,
+    };
 }
 
 /// Streaming XML/XHTML tokenizer (see `paperpaw-xml`) for format plugins.
 pub mod xml {
-    pub use paperpaw_xml::*;
+    pub use paperpaw_xml::{Attrs, Token, Tokenizer, decode, escape, local_name};
 }
 
 /// Streaming JPEG, PNG and GIF decoding to gray or colour (see
 /// `paperpaw-image`).
 pub mod image {
-    pub use paperpaw_image::*;
+    pub use paperpaw_image::{
+        ColorFile, ColorWriter, Downscaler, Fit, Format, GrayFile, GrayWriter, ImageError,
+        ImageFile, ImageSink, PngWriter, Source, decode, dimensions, luma,
+    };
 
     use crate::document::ImageRef;
     use paperpaw_platform::Storage;
@@ -235,11 +249,27 @@ pub mod text {
 
 /// Hyphenation with compiled patterns (see `paperpaw-hyphen`).
 pub mod hyphen {
-    pub use paperpaw_hyphen::*;
+    pub use paperpaw_hyphen::{BLOCK, InvalidPatterns, Patterns, compile};
 }
 
 /// Streaming ZIP reader (see `paperpaw-zip`) for ZIP-based formats.
+/// Unstable until 1.0, so it comes only with the `unstable` feature.
+#[cfg(feature = "unstable")]
 pub mod zip {
-    pub use paperpaw_zip::*;
+    pub use paperpaw_zip::{Entry, EntryReader, Method, ZipArchive, ZipError};
+}
+
+/// JSON reading and writing without building a tree (see
+/// `paperpaw-json`), e.g. for web services.
+pub mod json {
+    pub use paperpaw_json::{
+        Value, number, object, raw_member, stream, string, string_array, text, unquote,
+    };
+}
+
+/// Hashes and hex (see `paperpaw-digest`): FNV-1a for names of files kept
+/// per book, MD5, SHA-1 and SHA-256 for what services and files ask.
+pub mod digest {
+    pub use paperpaw_digest::{fnv1a64, hex, md5, sha1, sha256};
 }
 pub use paperpaw_text::{Font, FontError, LineMetrics};

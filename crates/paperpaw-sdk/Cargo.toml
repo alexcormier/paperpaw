@@ -25,6 +25,7 @@ paperpaw-hyphen.workspace = true
 paperpaw-image.workspace = true
 paperpaw-update.workspace = true
 paperpaw-digest.workspace = true
+paperpaw-json.workspace = true
 paperpaw-qr.workspace = true
 # Native code plugins' files and the table plugins are given (`native`).
 paperpaw-native.workspace = true
@@ -36,6 +37,9 @@ paperpaw-text = { workspace = true, features = ["outline"] }
 
 [features]
 default = []
+# Building blocks still changing before 1.0 (`layout`, `zip`): a plugin
+# that uses them names this feature and follows their changes.
+unstable = []
 # Scalable OpenType/TrueType fonts (see paperpaw-text).
 outline = ["paperpaw-text/outline"]
 

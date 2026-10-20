@@ -1,0 +1,25 @@
+pub mod paperpaw_json
+pub mod paperpaw_json::stream
+pub enum paperpaw_json::stream::Event<'a>
+pub paperpaw_json::stream::Event::Close(&'a [alloc::string::String])
+pub paperpaw_json::stream::Event::Open(&'a [alloc::string::String])
+pub paperpaw_json::stream::Event::Value(&'a [alloc::string::String], &'a str)
+pub struct paperpaw_json::stream::Parser
+impl paperpaw_json::stream::Parser
+pub fn paperpaw_json::stream::Parser::feed(&mut self, &[u8], &mut dyn core::ops::function::FnMut(paperpaw_json::stream::Event<'_>))
+pub fn paperpaw_json::stream::Parser::finish(&mut self, &mut dyn core::ops::function::FnMut(paperpaw_json::stream::Event<'_>))
+pub const paperpaw_json::stream::MAX_DEPTH: usize
+pub const paperpaw_json::stream::MAX_STRING: usize
+pub fn paperpaw_json::stream::read_file(&dyn paperpaw_platform::storage::Storage, &str, &mut dyn core::ops::function::FnMut(paperpaw_json::stream::Event<'_>))
+pub type paperpaw_json::stream::Path = alloc::vec::Vec<alloc::string::String>
+pub enum paperpaw_json::Value
+pub paperpaw_json::Value::Num(f64)
+pub paperpaw_json::Value::Other
+pub paperpaw_json::Value::Str(alloc::string::String)
+pub fn paperpaw_json::number(&[(alloc::string::String, paperpaw_json::Value)], &str) -> core::option::Option<f64>
+pub fn paperpaw_json::object(&str) -> alloc::vec::Vec<(alloc::string::String, paperpaw_json::Value)>
+pub fn paperpaw_json::raw_member<'a>(&'a str, &str) -> core::option::Option<&'a str>
+pub fn paperpaw_json::string(&str) -> alloc::string::String
+pub fn paperpaw_json::string_array(&str) -> alloc::vec::Vec<alloc::string::String>
+pub fn paperpaw_json::text<'a>(&'a [(alloc::string::String, paperpaw_json::Value)], &str) -> core::option::Option<&'a str>
+pub fn paperpaw_json::unquote(&str) -> core::option::Option<alloc::string::String>

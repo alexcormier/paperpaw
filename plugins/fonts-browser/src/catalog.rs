@@ -19,7 +19,7 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use paperpaw_json::stream::{Event, read_file};
+use paperpaw_sdk::json::stream::{Event, read_file};
 use paperpaw_sdk::web::join_url;
 use paperpaw_sdk::{Env, MemoryClass, Storage, Version};
 

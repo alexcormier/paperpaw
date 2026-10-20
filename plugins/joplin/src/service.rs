@@ -113,8 +113,8 @@ pub fn sign_in(base: &str, email: &str, password: &str, reply: &Event<HttpReply>
     ));
     request.body = Some(format!(
         "{{\"email\":{},\"password\":{}}}",
-        paperpaw_json::string(email),
-        paperpaw_json::string(password)
+        paperpaw_sdk::json::string(email),
+        paperpaw_sdk::json::string(password)
     ));
     request
 }

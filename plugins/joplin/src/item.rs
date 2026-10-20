@@ -9,7 +9,7 @@
 use alloc::format;
 use alloc::string::{String, ToString};
 
-use paperpaw_digest::md5::Md5;
+use paperpaw_sdk::digest::md5::Md5;
 use paperpaw_sdk::time::LocalTime;
 use paperpaw_sdk::{Storage, StorageError};
 
@@ -339,7 +339,7 @@ mod tests {
         assert_eq!(read, Props { text_end, ..props });
         assert_eq!(
             text_hash(&storage, "n.md", text_end).unwrap(),
-            paperpaw_digest::md5::of(&format!("Long\n\n{body}"))
+            paperpaw_sdk::digest::md5::of(&format!("Long\n\n{body}"))
         );
         assert_eq!(read_props(&storage, "none.md"), Err(StorageError::NotFound));
     }
@@ -386,7 +386,7 @@ mod tests {
             text_hash(&storage, "item.md", props.text_end).unwrap(),
             hash
         );
-        assert_eq!(hash, paperpaw_digest::md5::of("Alice"));
+        assert_eq!(hash, paperpaw_sdk::digest::md5::of("Alice"));
     }
 
     #[test]

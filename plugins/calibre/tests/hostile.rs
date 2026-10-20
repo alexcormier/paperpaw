@@ -259,7 +259,7 @@ impl Session {
             r#"{{"lpath": {lpath}, "length": {}, "thisBook": 0, "totalBooks": 1,
                 "metadata": {{"lpath": {lpath}, "uuid": "u-1", "title": "T"}}}}"#,
             bytes.len(),
-            lpath = paperpaw_json::string(lpath),
+            lpath = paperpaw_sdk::json::string(lpath),
         );
         self.wire.extend_from_slice(&frame(op::SEND_BOOK, &message));
         self.wire.extend_from_slice(bytes);
@@ -576,7 +576,7 @@ fn the_password_is_asked_for_kept_and_answers_the_challenge() {
         r#"{"passwordChallenge": "1234567890", "validExtensions": []}"#,
     );
     let answers = s.answers();
-    let expected = paperpaw_digest::sha1::hex("pässword1234567890".as_bytes());
+    let expected = paperpaw_sdk::digest::sha1::hex("pässword1234567890".as_bytes());
     assert_eq!(
         protocol::text(&answers[0].args, "passwordHash"),
         Some(expected)

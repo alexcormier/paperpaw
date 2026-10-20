@@ -7,9 +7,9 @@
 
 use std::cell::{Cell, RefCell};
 
-use paperpaw_sdk::document::{Block, DirEntry, Document, Locator};
-use paperpaw_sdk::zip::testing::ZipBuilder;
-use paperpaw_sdk::{MemoryStorage, Storage, StorageError};
+use paperpaw_sdk::document::{Block, Document, Locator};
+use paperpaw_sdk::{DirEntry, MemoryStorage, Storage, StorageError};
+use paperpaw_zip::testing::ZipBuilder;
 use proptest::test_runner::Config as ProptestConfig;
 
 /// `cases` cases, or as many as `PROPTEST_CASES` says, for longer runs.

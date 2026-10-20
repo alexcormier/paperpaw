@@ -30,7 +30,7 @@ fn png() -> Vec<u8> {
 }
 
 fn cover_file(url: &str) -> String {
-    format!("{DIR}/covers/{}.gray", paperpaw_digest::md5::of(url))
+    format!("{DIR}/covers/{}.gray", paperpaw_sdk::digest::md5::of(url))
 }
 
 /// A feed of lists with covers at `/c/<n>.png`.

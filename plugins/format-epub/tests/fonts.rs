@@ -72,7 +72,7 @@ fn font_book(
 /// `data` obfuscated as IDPF says, with key `identifier`.
 fn idpf(data: &[u8], identifier: &str) -> Vec<u8> {
     let id: String = identifier.chars().filter(|c| !c.is_whitespace()).collect();
-    let mut sha = paperpaw_digest::sha1::Sha1::new();
+    let mut sha = paperpaw_sdk::digest::sha1::Sha1::new();
     sha.update(id.as_bytes());
     let key = sha.finish();
     data.iter()

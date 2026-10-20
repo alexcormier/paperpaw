@@ -477,7 +477,16 @@ pub fn paperpaw_sdk::collections::VecMap<K, V>::from_iter<I: core::iter::traits:
 impl<K: core::fmt::Debug, V: core::fmt::Debug> core::fmt::Debug for paperpaw_sdk::collections::VecMap<K, V>
 pub fn paperpaw_sdk::collections::VecMap<K, V>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub mod paperpaw_sdk::config
-pub use paperpaw_sdk::config::<<paperpaw_config::*>>
+pub use paperpaw_sdk::config::Entry
+pub use paperpaw_sdk::config::ErrorKind
+pub use paperpaw_sdk::config::ParseError
+pub use paperpaw_sdk::config::Parser
+pub use paperpaw_sdk::config::Value
+pub use paperpaw_sdk::config::parse
+pub use paperpaw_sdk::config::quote
+pub use paperpaw_sdk::config::remove
+pub use paperpaw_sdk::config::set
+pub use paperpaw_sdk::config::set_all
 pub mod paperpaw_sdk::contribution
 #[non_exhaustive] pub enum paperpaw_sdk::contribution::Contribution
 pub paperpaw_sdk::contribution::Contribution::Action(paperpaw_sdk::ActionSpec)
@@ -734,8 +743,29 @@ pub fn paperpaw_sdk::decorations::draw_over(&mut paperpaw_graphics::canvas::Canv
 pub fn paperpaw_sdk::decorations::join_boxes(impl core::iter::traits::collect::IntoIterator<Item = (usize, paperpaw_platform::geometry::Rect)>) -> alloc::vec::Vec<paperpaw_platform::geometry::Rect>
 pub type paperpaw_sdk::decorations::DecorateFn = alloc::boxed::Box<dyn core::ops::function::Fn(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::decorations::PageText<'_>) -> alloc::vec::Vec<paperpaw_sdk::decorations::Decorated>>
 pub type paperpaw_sdk::decorations::DecoratorSignatureFn = alloc::boxed::Box<dyn core::ops::function::Fn(&paperpaw_sdk::Env<'_>) -> u64>
+pub mod paperpaw_sdk::digest
+pub use paperpaw_sdk::digest::fnv1a64
+pub use paperpaw_sdk::digest::hex
+pub use paperpaw_sdk::digest::md5
+pub use paperpaw_sdk::digest::sha1
+pub use paperpaw_sdk::digest::sha256
 pub mod paperpaw_sdk::document
-pub use paperpaw_sdk::document::<<paperpaw_document::*>>
+pub use paperpaw_sdk::document::Align
+pub use paperpaw_sdk::document::Block
+pub use paperpaw_sdk::document::BlockKind
+pub use paperpaw_sdk::document::Document
+pub use paperpaw_sdk::document::DocumentError
+pub use paperpaw_sdk::document::EmbeddedFont
+pub use paperpaw_sdk::document::ImageRef
+pub use paperpaw_sdk::document::Link
+pub use paperpaw_sdk::document::Locator
+pub use paperpaw_sdk::document::MAX_FAMILIES
+pub use paperpaw_sdk::document::Metadata
+pub use paperpaw_sdk::document::OffsetMap
+pub use paperpaw_sdk::document::Run
+pub use paperpaw_sdk::document::TextStyle
+pub use paperpaw_sdk::document::TocEntry
+pub use paperpaw_sdk::document::is_external
 pub mod paperpaw_sdk::event
 pub struct paperpaw_sdk::event::Event<P: paperpaw_sdk::event::EventData>
 impl<P: paperpaw_sdk::event::EventData> paperpaw_sdk::event::Event<P>
@@ -1050,12 +1080,29 @@ pub const paperpaw_sdk::http_params::FINAL_URL: &str
 pub const paperpaw_sdk::http_params::HEADER: &str
 pub const paperpaw_sdk::http_params::STATUS: &str
 pub mod paperpaw_sdk::hyphen
-pub use paperpaw_sdk::hyphen::<<paperpaw_hyphen::*>>
+pub use paperpaw_sdk::hyphen::BLOCK
+pub use paperpaw_sdk::hyphen::InvalidPatterns
+pub use paperpaw_sdk::hyphen::Patterns
+pub use paperpaw_sdk::hyphen::compile
 pub mod paperpaw_sdk::icons
 pub fn paperpaw_sdk::icons::char(&str) -> core::option::Option<char>
 pub fn paperpaw_sdk::icons::names() -> impl core::iter::traits::iterator::Iterator<Item = &'static str>
 pub mod paperpaw_sdk::image
-pub use paperpaw_sdk::image::<<paperpaw_image::*>>
+pub use paperpaw_sdk::image::ColorFile
+pub use paperpaw_sdk::image::ColorWriter
+pub use paperpaw_sdk::image::Downscaler
+pub use paperpaw_sdk::image::Fit
+pub use paperpaw_sdk::image::Format
+pub use paperpaw_sdk::image::GrayFile
+pub use paperpaw_sdk::image::GrayWriter
+pub use paperpaw_sdk::image::ImageError
+pub use paperpaw_sdk::image::ImageFile
+pub use paperpaw_sdk::image::ImageSink
+pub use paperpaw_sdk::image::PngWriter
+pub use paperpaw_sdk::image::Source
+pub use paperpaw_sdk::image::decode
+pub use paperpaw_sdk::image::dimensions
+pub use paperpaw_sdk::image::luma
 pub fn paperpaw_sdk::image::gray_from_file(&dyn paperpaw_platform::storage::Storage, &str, &str, paperpaw_image::Fit) -> core::option::Option<paperpaw_document::ImageRef>
 pub fn paperpaw_sdk::image::picture_from_file(&dyn paperpaw_platform::storage::Storage, &str, &str, paperpaw_image::Fit, bool) -> core::option::Option<paperpaw_document::ImageRef>
 pub mod paperpaw_sdk::install
@@ -1110,11 +1157,19 @@ pub const paperpaw_sdk::install::MAX_FILES: usize
 pub fn paperpaw_sdk::install::fits(&str, u32) -> bool
 pub fn paperpaw_sdk::install::is_plugin_name(&str) -> bool
 pub fn paperpaw_sdk::install::is_safe_path(&str) -> bool
+pub mod paperpaw_sdk::json
+pub use paperpaw_sdk::json::Value
+pub use paperpaw_sdk::json::number
+pub use paperpaw_sdk::json::object
+pub use paperpaw_sdk::json::raw_member
+pub use paperpaw_sdk::json::stream
+pub use paperpaw_sdk::json::string
+pub use paperpaw_sdk::json::string_array
+pub use paperpaw_sdk::json::text
+pub use paperpaw_sdk::json::unquote
 pub mod paperpaw_sdk::keys
 pub trait paperpaw_sdk::keys::KeyBindings
 pub fn paperpaw_sdk::keys::KeyBindings::bound(&self, &[&str], &str) -> core::option::Option<paperpaw_sdk::Id>
-pub mod paperpaw_sdk::layout
-pub use paperpaw_sdk::layout::<<paperpaw_layout::*>>
 pub mod paperpaw_sdk::library
 pub mod paperpaw_sdk::library::catalog
 pub struct paperpaw_sdk::library::catalog::Record
@@ -2683,9 +2738,12 @@ pub const paperpaw_sdk::work::RETRY_MOST: core::time::Duration
 pub fn paperpaw_sdk::work::backoff(u32, u8) -> core::time::Duration
 pub type paperpaw_sdk::work::StepFn = alloc::boxed::Box<dyn core::ops::function::Fn(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::Params, &mut alloc::vec::Vec<paperpaw_sdk::Command>) -> paperpaw_sdk::work::Step>
 pub mod paperpaw_sdk::xml
-pub use paperpaw_sdk::xml::<<paperpaw_xml::*>>
-pub mod paperpaw_sdk::zip
-pub use paperpaw_sdk::zip::<<paperpaw_zip::*>>
+pub use paperpaw_sdk::xml::Attrs
+pub use paperpaw_sdk::xml::Token
+pub use paperpaw_sdk::xml::Tokenizer
+pub use paperpaw_sdk::xml::decode
+pub use paperpaw_sdk::xml::escape
+pub use paperpaw_sdk::xml::local_name
 pub macro paperpaw_sdk::data_path!
 pub macro paperpaw_sdk::event_data!
 pub macro paperpaw_sdk::package_version!

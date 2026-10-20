@@ -21,8 +21,8 @@ use paperpaw_sdk::{
     Screen,
 };
 
-use paperpaw_digest::md5;
-use paperpaw_json as json;
+use paperpaw_sdk::digest::md5;
+use paperpaw_sdk::json;
 
 use crate::{
     ACCOUNT_CHANGED, SERVER, USER, normalize_server, save_key, server, server_label, server_request,

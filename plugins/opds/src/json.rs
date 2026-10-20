@@ -11,8 +11,8 @@
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use paperpaw_json::stream::{self, Event};
 use paperpaw_sdk::Storage;
+use paperpaw_sdk::json::stream::{self, Event};
 use paperpaw_sdk::web::join_url;
 
 use crate::feed::{Book, Entry, Feed, MAX_AUTHORS, MAX_BOOKS, MAX_ENTRIES, Search};

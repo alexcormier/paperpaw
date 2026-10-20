@@ -46,8 +46,8 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::cell::RefCell;
 
-use paperpaw_digest::md5;
 use paperpaw_sdk::builtin::{events, menus, params};
+use paperpaw_sdk::digest::md5;
 use paperpaw_sdk::document::Locator;
 use paperpaw_sdk::{
     ActionSpec, Command, Env, Id, Instant, Manifest, MenuEntry, Params, Plugin, RegisterError,

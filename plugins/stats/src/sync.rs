@@ -167,7 +167,7 @@ fn last_upload(env: &Env<'_>) -> String {
         folder(env.settings.read(&URL)),
         env.settings.read(&USER)
     );
-    let key = paperpaw_digest::fnv1a64(target);
+    let key = paperpaw_sdk::digest::fnv1a64(target);
     file(&format!("{FILE}.{key:016x}.sync"))
 }
 

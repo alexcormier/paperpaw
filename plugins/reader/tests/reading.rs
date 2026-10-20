@@ -241,7 +241,7 @@ impl Reading {
         self.settle(effects);
         let dir = format!(
             ".paperpaw/plugins/reader/books/{:016x}",
-            paperpaw_digest::fnv1a64(self.book)
+            paperpaw_sdk::digest::fnv1a64(self.book)
         );
         let Some(data) = self.storage.0.get(&format!("{dir}/progress.ini")) else {
             return (0, 0);
@@ -804,7 +804,7 @@ fn page_starts_of(text: &str, pages: usize) -> (Shared, Vec<(u32, u32)>) {
 fn reopened_with_a_short_index(storage: &Shared) -> Reading {
     let dir = format!(
         ".paperpaw/plugins/reader/books/{:016x}",
-        paperpaw_digest::fnv1a64(BOOK)
+        paperpaw_sdk::digest::fnv1a64(BOOK)
     );
     let mut indexes = Vec::new();
     storage
@@ -875,7 +875,7 @@ fn a_position_that_cannot_be_laid_out_opens_the_book_at_its_start() {
     reading.run(core_actions::BACK);
     let dir = format!(
         ".paperpaw/plugins/reader/books/{:016x}",
-        paperpaw_digest::fnv1a64(EPUB)
+        paperpaw_sdk::digest::fnv1a64(EPUB)
     );
     storage
         .write(
@@ -894,7 +894,7 @@ fn a_position_that_cannot_be_laid_out_opens_the_book_at_its_start() {
 fn indexes(storage: &Shared, book: &str) -> Vec<String> {
     let dir = format!(
         ".paperpaw/plugins/reader/books/{:016x}",
-        paperpaw_digest::fnv1a64(book)
+        paperpaw_sdk::digest::fnv1a64(book)
     );
     let mut found = Vec::new();
     let _ = storage.list(&dir, &mut |entry| {
@@ -1107,7 +1107,7 @@ fn small_devices_count_pages_with_rests_between() {
     let index = indexes(&storage, BOOK).pop().expect("an index");
     let dir = format!(
         ".paperpaw/plugins/reader/books/{:016x}",
-        paperpaw_digest::fnv1a64(BOOK)
+        paperpaw_sdk::digest::fnv1a64(BOOK)
     );
     let pages = storage.size(&format!("{dir}/{index}")).unwrap() / 8;
     // A page and a rest as long, not a page every two milliseconds.
@@ -1335,7 +1335,7 @@ fn a_page_back_after_returning_from_a_jump_is_the_page_before() {
 fn reopened_at(storage: &Shared, at: (u32, u32)) -> Reading {
     let dir = format!(
         ".paperpaw/plugins/reader/books/{:016x}",
-        paperpaw_digest::fnv1a64(BOOK)
+        paperpaw_sdk::digest::fnv1a64(BOOK)
     );
     let progress = format!("[progress]\nsection = {}\noffset = {}\n", at.0, at.1);
     storage

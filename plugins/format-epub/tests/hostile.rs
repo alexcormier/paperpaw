@@ -12,8 +12,8 @@ use std::collections::BTreeMap;
 
 use paperpaw_plugin_format_epub::{EpubDocument, Fb2Document, HtmlDocument, MarkdownDocument};
 use paperpaw_sdk::document::{Align, Document, Locator};
-use paperpaw_sdk::zip::testing::ZipBuilder;
 use paperpaw_sdk::{DirEntry, MemoryStorage, Storage, StorageError};
+use paperpaw_zip::testing::ZipBuilder;
 
 /// The system's allocator, counting what this thread holds.
 struct Counting;

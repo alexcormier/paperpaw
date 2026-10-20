@@ -74,10 +74,13 @@ jobs:
             fi
           done
           cargo semver-checks "${packages[@]}"
-      - name: The SDK's public API is crates/paperpaw-sdk/api.txt
+      - name: The SDK's public API, and that of the crates it passes on, is each crate's api.txt
         run: |
-          cargo "+$NIGHTLY" public-api -p paperpaw-sdk -sss > api.txt
-          diff -u crates/paperpaw-sdk/api.txt api.txt
+          for crate in paperpaw-sdk paperpaw-config paperpaw-document paperpaw-layout \
+            paperpaw-xml paperpaw-image paperpaw-hyphen paperpaw-zip paperpaw-json paperpaw-digest; do
+            cargo "+$NIGHTLY" public-api -p "$crate" -sss > api.txt
+            diff -u "crates/$crate/api.txt" api.txt
+          done
 
   embedded:
     name: no_std targets

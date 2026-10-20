@@ -16,7 +16,7 @@ pub(super) fn cover_path(url: &str) -> String {
     format!(
         "{}/covers/{}.gray",
         paperpaw_sdk::Env::plugin_dir(PLUGIN.as_str()),
-        paperpaw_digest::md5::of(url)
+        paperpaw_sdk::digest::md5::of(url)
     )
 }
 

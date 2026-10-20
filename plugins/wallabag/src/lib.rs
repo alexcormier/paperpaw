@@ -12,7 +12,7 @@
 //! `paperpaw_sdk::secrets`).
 //!
 //! The list of articles is read as it streams from storage (see
-//! `paperpaw_json::stream`) and each book is written straight to
+//! `paperpaw_sdk::json::stream`) and each book is written straight to
 //! storage, so this works on small devices too. Shipped switched off:
 //! switch it on in the plugins.
 
@@ -28,10 +28,10 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::cell::RefCell;
 
-use paperpaw_json as json;
-use paperpaw_json::stream::{self, Event as Json};
 use paperpaw_sdk::builtin::{actions, events, groups, menus, params};
 use paperpaw_sdk::event::Event;
+use paperpaw_sdk::json;
+use paperpaw_sdk::json::stream::{self, Event as Json};
 use paperpaw_sdk::replies::{HttpReply, Typed};
 use paperpaw_sdk::secrets::SecretChange;
 use paperpaw_sdk::setting::{Setting, Text};

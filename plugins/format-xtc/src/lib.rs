@@ -28,7 +28,7 @@ use alloc::string::{String, ToString};
 use alloc::vec;
 use alloc::vec::Vec;
 
-use paperpaw_digest::fnv1a64;
+use paperpaw_sdk::digest::fnv1a64;
 use paperpaw_sdk::document::{
     Align, Block, BlockKind, Document, DocumentError, ImageRef, Locator, Metadata, OffsetMap,
     TocEntry,

@@ -255,7 +255,7 @@ pub(crate) fn fingerprint(
     let head = read_full(storage, path, 0, head)?;
     let tail = read_full(storage, path, size.saturating_sub(ENDS as u64), tail)?;
     ends.copy_within(ENDS..ENDS + tail, head);
-    let hash = paperpaw_digest::fnv1a64(&ends[..head + tail]);
+    let hash = paperpaw_sdk::digest::fnv1a64(&ends[..head + tail]);
     Ok(alloc::format!("{size} {hash:016x}"))
 }
 
@@ -296,7 +296,7 @@ mod tests {
     use paperpaw_i18n::{Catalog, check};
     use paperpaw_sdk::MemoryStorage;
     use paperpaw_sdk::document::{Align, BlockKind, Locator, TextStyle};
-    use paperpaw_sdk::zip::testing::ZipBuilder;
+    use paperpaw_zip::testing::ZipBuilder;
 
     #[test]
     fn translations_are_complete() {

@@ -10,8 +10,8 @@ use std::cell::Cell;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use paperpaw_plugin_format_xtc::XtcDocument;
-use paperpaw_sdk::document::{BlockKind, DirEntry, Document, Locator};
-use paperpaw_sdk::{MemoryStorage, Storage, StorageError};
+use paperpaw_sdk::document::{BlockKind, Document, Locator};
+use paperpaw_sdk::{DirEntry, MemoryStorage, Storage, StorageError};
 use proptest::prelude::*;
 
 const HEADER: usize = 48;

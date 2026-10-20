@@ -49,7 +49,7 @@ fn lines(h: &Harness) -> Vec<Vec<String>> {
 }
 
 fn secret_id(url: &str) -> String {
-    format!("opds.{}", &paperpaw_digest::md5::of(url)[..16])
+    format!("opds.{}", &paperpaw_sdk::digest::md5::of(url)[..16])
 }
 
 #[test]

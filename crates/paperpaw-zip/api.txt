@@ -1,0 +1,41 @@
+pub mod paperpaw_zip
+pub enum paperpaw_zip::Method
+pub paperpaw_zip::Method::Deflate
+pub paperpaw_zip::Method::Stored
+#[non_exhaustive] pub enum paperpaw_zip::ZipError
+pub paperpaw_zip::ZipError::Invalid(&'static str)
+pub paperpaw_zip::ZipError::OutOfMemory
+pub paperpaw_zip::ZipError::Storage(paperpaw_platform::storage::StorageError)
+pub paperpaw_zip::ZipError::TooLarge
+pub paperpaw_zip::ZipError::Unsupported(&'static str)
+impl core::convert::From<paperpaw_platform::storage::StorageError> for paperpaw_zip::ZipError
+pub fn paperpaw_zip::ZipError::from(paperpaw_platform::storage::StorageError) -> Self
+impl core::error::Error for paperpaw_zip::ZipError
+impl core::fmt::Display for paperpaw_zip::ZipError
+pub fn paperpaw_zip::ZipError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct paperpaw_zip::Entry
+pub paperpaw_zip::Entry::compressed_size: u32
+pub paperpaw_zip::Entry::method: paperpaw_zip::Method
+pub paperpaw_zip::Entry::name: alloc::string::String
+pub paperpaw_zip::Entry::size: u32
+impl paperpaw_zip::Entry
+pub fn paperpaw_zip::Entry::record(&self) -> u32
+pub struct paperpaw_zip::EntryReader<'a>
+impl paperpaw_zip::EntryReader<'_>
+pub fn paperpaw_zip::EntryReader<'_>::chunk(&mut self, &dyn paperpaw_platform::storage::Storage) -> core::result::Result<&[u8], paperpaw_zip::ZipError>
+pub fn paperpaw_zip::EntryReader<'_>::read(&mut self, &dyn paperpaw_platform::storage::Storage, &mut [u8]) -> core::result::Result<usize, paperpaw_zip::ZipError>
+impl core::fmt::Debug for paperpaw_zip::EntryReader<'_>
+pub fn paperpaw_zip::EntryReader<'_>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct paperpaw_zip::ZipArchive
+impl paperpaw_zip::ZipArchive
+pub fn paperpaw_zip::ZipArchive::entries<'a>(&'a self, &'a dyn paperpaw_platform::storage::Storage) -> impl core::iter::traits::iterator::Iterator<Item = core::result::Result<paperpaw_zip::Entry, paperpaw_zip::ZipError>> + 'a
+pub fn paperpaw_zip::ZipArchive::entry(&self, &dyn paperpaw_platform::storage::Storage, &str) -> core::result::Result<core::option::Option<paperpaw_zip::Entry>, paperpaw_zip::ZipError>
+pub fn paperpaw_zip::ZipArchive::entry_by_record(&self, &dyn paperpaw_platform::storage::Storage, u32) -> core::result::Result<paperpaw_zip::Entry, paperpaw_zip::ZipError>
+pub fn paperpaw_zip::ZipArchive::is_empty(&self) -> bool
+pub fn paperpaw_zip::ZipArchive::len(&self) -> usize
+pub fn paperpaw_zip::ZipArchive::open(&dyn paperpaw_platform::storage::Storage, &str) -> core::result::Result<paperpaw_zip::ZipArchive, paperpaw_zip::ZipError>
+pub fn paperpaw_zip::ZipArchive::path(&self) -> &str
+pub fn paperpaw_zip::ZipArchive::read(&self, &dyn paperpaw_platform::storage::Storage, &paperpaw_zip::Entry, usize) -> core::result::Result<alloc::vec::Vec<u8>, paperpaw_zip::ZipError>
+pub fn paperpaw_zip::ZipArchive::reader(&self, &dyn paperpaw_platform::storage::Storage, &paperpaw_zip::Entry) -> core::result::Result<paperpaw_zip::EntryReader<'_>, paperpaw_zip::ZipError>
+pub fn paperpaw_zip::ZipArchive::stored_range(&self, &dyn paperpaw_platform::storage::Storage, &paperpaw_zip::Entry) -> core::result::Result<core::option::Option<(u64, u64)>, paperpaw_zip::ZipError>
+pub fn paperpaw_zip::ZipArchive::stream(&self, &dyn paperpaw_platform::storage::Storage, &paperpaw_zip::Entry, &mut dyn core::ops::function::FnMut(&[u8]) -> bool) -> core::result::Result<(), paperpaw_zip::ZipError>

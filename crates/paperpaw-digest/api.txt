@@ -1,0 +1,37 @@
+pub mod paperpaw_digest
+pub mod paperpaw_digest::hex
+pub fn paperpaw_digest::hex::decode(&str) -> core::option::Option<alloc::vec::Vec<u8>>
+pub fn paperpaw_digest::hex::encode(&[u8]) -> alloc::string::String
+pub fn paperpaw_digest::hex::push(&mut alloc::string::String, u8)
+pub mod paperpaw_digest::md5
+pub struct paperpaw_digest::md5::Md5
+impl paperpaw_digest::md5::Md5
+pub fn paperpaw_digest::md5::Md5::hex(self) -> alloc::string::String
+pub fn paperpaw_digest::md5::Md5::new() -> Self
+pub fn paperpaw_digest::md5::Md5::update(&mut self, &[u8])
+impl core::default::Default for paperpaw_digest::md5::Md5
+pub fn paperpaw_digest::md5::Md5::default() -> Self
+pub fn paperpaw_digest::md5::of(&str) -> alloc::string::String
+pub fn paperpaw_digest::md5::partial(&dyn paperpaw_platform::storage::Storage, &str) -> core::option::Option<alloc::string::String>
+pub mod paperpaw_digest::sha1
+pub struct paperpaw_digest::sha1::Sha1
+impl paperpaw_digest::sha1::Sha1
+pub fn paperpaw_digest::sha1::Sha1::finish(self) -> [u8; 20]
+pub fn paperpaw_digest::sha1::Sha1::hex(self) -> alloc::string::String
+pub fn paperpaw_digest::sha1::Sha1::new() -> Self
+pub fn paperpaw_digest::sha1::Sha1::update(&mut self, &[u8])
+impl core::default::Default for paperpaw_digest::sha1::Sha1
+pub fn paperpaw_digest::sha1::Sha1::default() -> Self
+pub fn paperpaw_digest::sha1::hex(&[u8]) -> alloc::string::String
+pub mod paperpaw_digest::sha256
+pub struct paperpaw_digest::sha256::Sha256
+impl paperpaw_digest::sha256::Sha256
+pub fn paperpaw_digest::sha256::Sha256::finish(self) -> [u8; 32]
+pub fn paperpaw_digest::sha256::Sha256::hex(self) -> alloc::string::String
+pub const fn paperpaw_digest::sha256::Sha256::new() -> Self
+pub fn paperpaw_digest::sha256::Sha256::update(&mut self, &[u8])
+impl core::default::Default for paperpaw_digest::sha256::Sha256
+pub fn paperpaw_digest::sha256::Sha256::default() -> Self
+pub fn paperpaw_digest::sha256::digest(&[u8]) -> [u8; 32]
+pub fn paperpaw_digest::sha256::hex(&[u8]) -> alloc::string::String
+pub fn paperpaw_digest::fnv1a64(impl core::convert::AsRef<[u8]>) -> u64

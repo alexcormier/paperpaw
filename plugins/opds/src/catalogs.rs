@@ -70,7 +70,7 @@ const SECRETS: &str = "opds.";
 
 /// The id of the password of the catalog at `url`.
 fn secret_id(url: &str) -> String {
-    let digest = paperpaw_digest::md5::of(url);
+    let digest = paperpaw_sdk::digest::md5::of(url);
     format!("{SECRETS}{}", &digest[..16])
 }
 

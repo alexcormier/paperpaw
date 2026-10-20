@@ -11,7 +11,6 @@ authors.workspace = true
 categories = ["no-std"]
 
 [dependencies]
-paperpaw-json.workspace = true
 paperpaw-sdk.workspace = true
 
 [dev-dependencies]

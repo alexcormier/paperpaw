@@ -3,7 +3,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::cell::Cell;
 
-use paperpaw_digest::fnv1a64;
+use paperpaw_sdk::digest::fnv1a64;
 use paperpaw_sdk::document::{
     Block, Document, DocumentError, EmbeddedFont, ImageRef, Link, Locator, Metadata, TocEntry,
 };

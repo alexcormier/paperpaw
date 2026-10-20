@@ -22,9 +22,9 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use paperpaw_json as json;
 use paperpaw_sdk::builtin::{actions, groups, params, slots};
 use paperpaw_sdk::event::Event;
+use paperpaw_sdk::json;
 use paperpaw_sdk::replies::{HttpReply, Typed};
 use paperpaw_sdk::secrets::SecretChange;
 use paperpaw_sdk::setting::{Setting, Text};

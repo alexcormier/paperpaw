@@ -30,10 +30,10 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use paperpaw_json::stream::{Event as JsonEvent, Parser};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::firmware::{Firmware, compare_versions};
 use paperpaw_sdk::install::{Digest, Installer, Package, PackageFile, Received};
+use paperpaw_sdk::json::stream::{Event as JsonEvent, Parser};
 use paperpaw_sdk::native::{self, Author};
 use paperpaw_sdk::replies::HttpReply;
 use paperpaw_sdk::{Arg, Command, Env, PluginKind, Storage};
@@ -460,7 +460,7 @@ fn author_named(env: &Env<'_>, plugin: &str, key: &[u8; 32]) -> bool {
     parts.next() == Some(plugin)
         && parts
             .next()
-            .is_some_and(|named| paperpaw_digest::hex::encode(key).eq_ignore_ascii_case(named))
+            .is_some_and(|named| paperpaw_sdk::digest::hex::encode(key).eq_ignore_ascii_case(named))
 }
 
 #[cfg(test)]

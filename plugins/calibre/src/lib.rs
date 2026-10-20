@@ -31,9 +31,9 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use paperpaw_json as json;
 use paperpaw_sdk::builtin::{actions, groups, menus};
 use paperpaw_sdk::event::Event;
+use paperpaw_sdk::json;
 use paperpaw_sdk::replies::{SocketNotice, Typed};
 use paperpaw_sdk::secrets::SecretChange;
 use paperpaw_sdk::ui::{self, UiStyle};
@@ -457,7 +457,7 @@ impl CalibreScreen {
                             .remove(&paperpaw_sdk::files::join(library_folder(&env), &path));
                     }
                     let uuid = library::forget(env.storage, &lpath).unwrap_or_default();
-                    let reply = format!("{{\"uuid\": {}}}", paperpaw_json::string(&uuid));
+                    let reply = format!("{{\"uuid\": {}}}", paperpaw_sdk::json::string(&uuid));
                     self.send(op::OK, &reply, cx);
                 }
                 cx.command(paperpaw_sdk::library::changed());

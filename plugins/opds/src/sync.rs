@@ -19,7 +19,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::ops::ControlFlow;
 
-use paperpaw_digest::md5;
+use paperpaw_sdk::digest::md5;
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::HttpReply;
 use paperpaw_sdk::web::{clean_name, file_name};

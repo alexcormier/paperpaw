@@ -28,8 +28,8 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use paperpaw_json::stream::{self, Event as Json};
 use paperpaw_sdk::event::Event;
+use paperpaw_sdk::json::stream::{self, Event as Json};
 use paperpaw_sdk::replies::HttpReply;
 use paperpaw_sdk::{Arg, Command, Env, HttpRequest, Params, StorageError};
 
@@ -293,8 +293,8 @@ impl Run {
         }
         match reply.status {
             200..=299 => {
-                let body = paperpaw_json::object(&reply.body);
-                match paperpaw_json::text(&body, "id") {
+                let body = paperpaw_sdk::json::object(&reply.body);
+                match paperpaw_sdk::json::text(&body, "id") {
                     Some(id) if !id.is_empty() => {
                         self.session = Some(id.to_string());
                         self.sign_in_or_check(env, out);

@@ -8,7 +8,7 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use paperpaw_digest::md5::Md5;
+use paperpaw_sdk::digest::md5::Md5;
 use paperpaw_sdk::{Env, Storage};
 
 use crate::PLUGIN;
@@ -149,7 +149,7 @@ mod tests {
             format!(
                 "{}/{}.json",
                 folder(),
-                paperpaw_digest::md5::of("Ann/A.epub")
+                paperpaw_sdk::digest::md5::of("Ann/A.epub")
             )
         );
         assert_eq!(forget(&storage, "Ann/A.epub").as_deref(), Some("u-a"));

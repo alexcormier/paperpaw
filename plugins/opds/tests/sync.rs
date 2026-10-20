@@ -33,7 +33,7 @@ fn record_path() -> String {
     format!(
         "{}/synced/{}.txt",
         plugin_dir(),
-        paperpaw_digest::md5::of(SHELF)
+        paperpaw_sdk::digest::md5::of(SHELF)
     )
 }
 

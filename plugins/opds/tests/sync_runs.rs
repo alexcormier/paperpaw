@@ -31,7 +31,7 @@ fn one_catalog() -> Shared {
 
 /// The ids the sync remembers for `url`.
 fn remembered(storage: &Shared, url: &str) -> Vec<String> {
-    let path = format!("{DIR}/synced/{}.txt", paperpaw_digest::md5::of(url));
+    let path = format!("{DIR}/synced/{}.txt", paperpaw_sdk::digest::md5::of(url));
     storage
         .text(&path)
         .unwrap_or_default()
@@ -449,7 +449,7 @@ fn passwords_of_old_lists_move_to_the_secrets_and_go_with_requests() {
     assert!(!list.contains("s3cr3t-pw"), "{list}");
     assert!(list.contains("reader"), "{list}");
     // Kept with the other secrets, veiled.
-    let id = format!("opds.{}", &paperpaw_digest::md5::of(SHELF)[..16]);
+    let id = format!("opds.{}", &paperpaw_sdk::digest::md5::of(SHELF)[..16]);
     assert_eq!(h.kernel.secrets().get(&id), Some("s3cr3t-pw"));
     let file = h.storage.text(FILE).unwrap();
     assert!(!file.contains("s3cr3t-pw"), "{file}");

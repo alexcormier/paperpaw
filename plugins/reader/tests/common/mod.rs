@@ -590,7 +590,7 @@ pub fn reading_of(params: &Params) -> events::Reading {
 pub fn paperpaw_plugin_reader_dir(path: &str) -> String {
     format!(
         ".paperpaw/plugins/reader/books/{:016x}",
-        paperpaw_digest::fnv1a64(path)
+        paperpaw_sdk::digest::fnv1a64(path)
     )
 }
 

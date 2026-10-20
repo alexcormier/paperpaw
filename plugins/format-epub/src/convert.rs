@@ -206,7 +206,7 @@ pub(crate) fn decode_kind(kind: u8, level: u8) -> BlockKind {
 /// The cache name of the image at `archive_path`, without its kind (see
 /// `pictures`).
 pub(crate) fn image_path(dir: &str, archive_path: &str) -> String {
-    let hash = paperpaw_digest::fnv1a64(archive_path);
+    let hash = paperpaw_sdk::digest::fnv1a64(archive_path);
     alloc::format!("{dir}/img-{hash:016x}")
 }
 
@@ -519,7 +519,7 @@ impl Converter<'_> {
         if self.full || path.chars().any(char::is_control) {
             return;
         }
-        let hash = paperpaw_digest::fnv1a64(&path);
+        let hash = paperpaw_sdk::digest::fnv1a64(&path);
         match self.seen.binary_search(&hash) {
             Ok(_) => return,
             Err(at) if self.seen.len() < MAX_SEEN_PICTURES => self.seen.insert(at, hash),
@@ -700,7 +700,7 @@ impl Converter<'_> {
             return;
         }
         // Its number among its parent's children of the same name.
-        let hash = paperpaw_digest::fnv1a64(&tag);
+        let hash = paperpaw_sdk::digest::fnv1a64(&tag);
         let index = match self.stack.last_mut() {
             Some(parent) => {
                 parent.nodes += 1;

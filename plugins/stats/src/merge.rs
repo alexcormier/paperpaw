@@ -29,7 +29,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 use core::fmt;
 
-use paperpaw_digest::{hex, md5::Md5};
+use paperpaw_sdk::digest::{hex, md5::Md5};
 use paperpaw_sdk::{Storage, StorageError};
 use paperpaw_sqlite::{Database, Error};
 

@@ -100,7 +100,7 @@ fn books_are_identified_by_koreaders_partial_md5() {
             "{size} bytes"
         );
         assert_eq!(
-            paperpaw_digest::md5::partial(&sync.storage, &path).as_deref(),
+            paperpaw_sdk::digest::md5::partial(&sync.storage, &path).as_deref(),
             Some(digest),
             "{size} bytes"
         );
@@ -120,7 +120,7 @@ fn offline_holds_the_progress_back_and_sends_it_once_allowed() {
     // Back to Normal: the book switched from, then the open one's latest
     // fetched, its own progress waiting for that answer.
     let calls = sync.set("power.mode", "power.mode.normal");
-    let digest = |path| paperpaw_digest::md5::partial(&sync.storage, path).unwrap();
+    let digest = |path| paperpaw_sdk::digest::md5::partial(&sync.storage, path).unwrap();
     let (book, other) = (digest(BOOK), digest(OTHER));
     assert!(body(sending(&calls)).contains(&book), "{calls:?}");
     assert!(fetch(&calls).url.ends_with(&other));
@@ -392,7 +392,7 @@ fn an_answer_for_a_book_left_meanwhile_is_ignored() {
 #[test]
 fn a_position_held_for_a_fetch_still_goes_after_another_book_is_opened() {
     let mut sync = with_books();
-    let digest = paperpaw_digest::md5::partial(&sync.storage, BOOK).unwrap();
+    let digest = paperpaw_sdk::digest::md5::partial(&sync.storage, BOOK).unwrap();
     let calls = sync.open(BOOK, 10.0);
     let first = fetch(&calls).clone();
     assert!(sync.turn(BOOK, 30.0).is_empty(), "held until the answer");
@@ -408,8 +408,8 @@ fn a_position_held_for_a_fetch_still_goes_after_another_book_is_opened() {
         .iter()
         .filter(|c| c.method == "PUT")
         .filter_map(|c| {
-            let sent = paperpaw_json::object(&body(c));
-            paperpaw_json::text(&sent, "document").map(str::to_string)
+            let sent = paperpaw_sdk::json::object(&body(c));
+            paperpaw_sdk::json::text(&sent, "document").map(str::to_string)
         })
         .collect();
     assert!(sent.contains(&digest), "{calls:?}");
@@ -462,24 +462,27 @@ fn failures_of_a_sync_asked_for_are_said() {
 fn the_progress_goes_at_most_once_a_minute_and_again_after_a_failure() {
     let mut sync = Sync::with_id();
     sync.storage.write("books/b.pdf", &generated(3000)).unwrap();
-    let digest = paperpaw_digest::md5::partial(&sync.storage, "books/b.pdf").unwrap();
+    let digest = paperpaw_sdk::digest::md5::partial(&sync.storage, "books/b.pdf").unwrap();
     opened(&mut sync, "books/b.pdf", 10.0);
     let calls = sync.turn("books/b.pdf", 25.0);
     let call = sending(&calls).clone();
     assert_eq!(call.url, "https://sync.koreader.rocks/syncs/progress");
     assert_eq!(header(&call, "x-auth-key"), Some(KEY));
-    let sent = paperpaw_json::object(&body(&call));
+    let sent = paperpaw_sdk::json::object(&body(&call));
     assert_eq!(
-        paperpaw_json::text(&sent, "document"),
+        paperpaw_sdk::json::text(&sent, "document"),
         Some(digest.as_str())
     );
-    assert_eq!(paperpaw_json::number(&sent, "percentage"), Some(0.25));
-    assert_eq!(paperpaw_json::text(&sent, "progress"), Some(""));
+    assert_eq!(paperpaw_sdk::json::number(&sent, "percentage"), Some(0.25));
+    assert_eq!(paperpaw_sdk::json::text(&sent, "progress"), Some(""));
     assert_eq!(
-        paperpaw_json::text(&sent, "device"),
+        paperpaw_sdk::json::text(&sent, "device"),
         Some("PaperPaw (Test device)")
     );
-    assert_eq!(paperpaw_json::text(&sent, "device_id"), Some(DEVICE_ID));
+    assert_eq!(
+        paperpaw_sdk::json::text(&sent, "device_id"),
+        Some(DEVICE_ID)
+    );
     sync.answer(&call, 200, "{}");
 
     // Within the minute: kept back.
@@ -507,8 +510,8 @@ fn closing_and_sleeping_send_what_was_not_sent() {
     let now = sync.later(100);
     sync.kernel.suspend(now);
     let calls = sync.calls();
-    let sent = paperpaw_json::object(&body(sending(&calls)));
-    assert_eq!(paperpaw_json::number(&sent, "percentage"), Some(0.21));
+    let sent = paperpaw_sdk::json::object(&body(sending(&calls)));
+    assert_eq!(paperpaw_sdk::json::number(&sent, "percentage"), Some(0.21));
     // Nothing new: closing sends nothing more.
     assert!(
         sync.reading(events::BOOK_CLOSED, "books/b.pdf", 21.0)
@@ -523,8 +526,10 @@ fn the_device_id_is_made_once_and_kept() {
     let mut sync = Sync::on(storage.clone(), Options::default());
     opened(&mut sync, "books/b.pdf", 10.0);
     let calls = sync.turn("books/b.pdf", 20.0);
-    let sent = paperpaw_json::object(&body(sending(&calls)));
-    let id = paperpaw_json::text(&sent, "device_id").unwrap().to_string();
+    let sent = paperpaw_sdk::json::object(&body(sending(&calls)));
+    let id = paperpaw_sdk::json::text(&sent, "device_id")
+        .unwrap()
+        .to_string();
     assert_eq!(id.len(), 32);
     assert!(
         id.chars()
@@ -539,8 +544,11 @@ fn the_device_id_is_made_once_and_kept() {
     let mut sync = Sync::on(storage, Options::default());
     opened(&mut sync, "books/b.pdf", 10.0);
     let calls = sync.turn("books/b.pdf", 30.0);
-    let sent = paperpaw_json::object(&body(sending(&calls)));
-    assert_eq!(paperpaw_json::text(&sent, "device_id"), Some(id.as_str()));
+    let sent = paperpaw_sdk::json::object(&body(sending(&calls)));
+    assert_eq!(
+        paperpaw_sdk::json::text(&sent, "device_id"),
+        Some(id.as_str())
+    );
 }
 
 #[test]
@@ -608,7 +616,7 @@ proptest! {
         let id = if here { DEVICE_ID } else { "KOBO" };
         let answer = format!(
             r#"{{"percentage": {percentage:?}, "device": {}, "device_id": "{id}"}}"#,
-            paperpaw_json::string(&device)
+            paperpaw_sdk::json::string(&device)
         );
         sync.answer(fetch(&calls), 200, &answer);
         let local = f64::from(10.0f32) / 100.0;

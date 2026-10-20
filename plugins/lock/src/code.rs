@@ -5,7 +5,7 @@
 use alloc::format;
 use alloc::string::{String, ToString};
 
-use paperpaw_digest::sha1::Sha1;
+use paperpaw_sdk::digest::sha1::Sha1;
 use paperpaw_sdk::secrets::SecretChange;
 use paperpaw_sdk::{Command, Env};
 
@@ -30,7 +30,7 @@ pub(crate) fn hash(salt: &str, code: &str) -> String {
         sha.update(&digest);
         digest = sha.finish();
     }
-    paperpaw_digest::sha1::hex(&digest)
+    paperpaw_sdk::digest::sha1::hex(&digest)
 }
 
 /// The kind of the lock in use (`pin`, `pattern`, `password`): one whose

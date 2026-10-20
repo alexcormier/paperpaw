@@ -362,7 +362,7 @@ impl Document for CbzDocument {
 mod tests {
     use super::*;
     use paperpaw_sdk::MemoryStorage;
-    use paperpaw_sdk::zip::testing::ZipBuilder;
+    use paperpaw_zip::testing::ZipBuilder;
 
     #[test]
     fn pages_in_natural_order() {

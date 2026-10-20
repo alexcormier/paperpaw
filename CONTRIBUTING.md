@@ -50,6 +50,9 @@ These keep PaperPaw small, portable and extensible. Reviews check them.
    a change to its public API comes with `crates/paperpaw-sdk/api.txt`
    brought up to date
    (`cargo +nightly-2026-10-17 public-api -p paperpaw-sdk -sss > crates/paperpaw-sdk/api.txt`),
+   and so does a change to a crate it passes on (config, document,
+   layout, xml, image, hyphen, zip, json, digest: each its own
+   `api.txt`),
    and what goes is `#[deprecated]` first.
 
 Significant decisions are recorded as [Architecture Decision Records](docs/adr/).

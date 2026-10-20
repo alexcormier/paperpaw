@@ -32,9 +32,9 @@ use alloc::rc::Rc;
 use alloc::string::String;
 use core::cell::RefCell;
 
-use paperpaw_json as json;
 use paperpaw_sdk::builtin::events;
 use paperpaw_sdk::event::Event;
+use paperpaw_sdk::json;
 use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::secrets::SecretChange;
 use paperpaw_sdk::{Command, Id, Manifest, Plugin, RegisterError, Registrar};

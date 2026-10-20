@@ -68,7 +68,7 @@ fn everything(storage: &Shared) -> String {
 
 #[test]
 fn signing_in_keeps_only_the_md5_of_the_password() {
-    let key = paperpaw_digest::md5::of(PASSWORD);
+    let key = paperpaw_sdk::digest::md5::of(PASSWORD);
     let mut sync = signed_out();
     typed(&mut sync, "user", "  alice ");
     typed(&mut sync, "password", PASSWORD);
@@ -130,9 +130,9 @@ fn creating_an_account_sends_valid_json_for_any_name() {
     assert_eq!(call.method, "POST");
     assert_eq!(call.url, "https://sync.koreader.rocks/users/create");
     assert_eq!(header(call, "x-auth-key"), None);
-    let sent = paperpaw_json::object(&body(call));
-    assert_eq!(paperpaw_json::text(&sent, "username"), Some(name));
-    assert_eq!(paperpaw_json::text(&sent, "password"), Some(KEY));
+    let sent = paperpaw_sdk::json::object(&body(call));
+    assert_eq!(paperpaw_sdk::json::text(&sent, "username"), Some(name));
+    assert_eq!(paperpaw_sdk::json::text(&sent, "password"), Some(KEY));
 
     // The name is taken: said, and tried again with another.
     sync.answer(

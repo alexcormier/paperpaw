@@ -16,9 +16,9 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use paperpaw_digest::fnv1a64;
 use paperpaw_sdk::ask;
 use paperpaw_sdk::builtin::{actions, events, fonts, params, slots};
+use paperpaw_sdk::digest::fnv1a64;
 use paperpaw_sdk::document::{Document, DocumentError, Link, Locator};
 use paperpaw_sdk::event::EventData;
 use paperpaw_sdk::layout::{

@@ -22,8 +22,8 @@
 
 use alloc::string::String;
 
-use paperpaw_json::stream::{self, Event as Json};
 use paperpaw_sdk::event::Event;
+use paperpaw_sdk::json::stream::{self, Event as Json};
 use paperpaw_sdk::replies::HttpReply;
 use paperpaw_sdk::{HttpRequest, Storage, files};
 use paperpaw_xml::{Token, Tokenizer, local_name};

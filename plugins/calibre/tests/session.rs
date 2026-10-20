@@ -497,7 +497,7 @@ fn the_book_list_goes_in_parts() {
             format!(r#"{{"lpath": "{lpath}", "uuid": "u{i}", "comments": "{description}"}}"#);
         let record = format!(
             ".paperpaw/plugins/calibre/books/{}.json",
-            paperpaw_digest::md5::of(&lpath)
+            paperpaw_sdk::digest::md5::of(&lpath)
         );
         storage.write(&record, metadata.as_bytes()).unwrap();
     }

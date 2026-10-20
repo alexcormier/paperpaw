@@ -24,8 +24,8 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use paperpaw_digest::fnv1a64;
 use paperpaw_sdk::builtin::{actions, groups, params, slots};
+use paperpaw_sdk::digest::fnv1a64;
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{

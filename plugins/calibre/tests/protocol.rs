@@ -248,7 +248,7 @@ proptest! {
     ) {
         let args: Vec<(u8, String)> = messages
             .iter()
-            .map(|(op, s)| (*op, format!("{{\"k\": {}}}", paperpaw_json::string(s))))
+            .map(|(op, s)| (*op, format!("{{\"k\": {}}}", paperpaw_sdk::json::string(s))))
             .collect();
         let borrowed: Vec<(u8, &str)> = args.iter().map(|(o, a)| (*o, a.as_str())).collect();
         let got = read_all(&wire(&borrowed), chunk).unwrap();

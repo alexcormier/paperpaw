@@ -12,12 +12,12 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use paperpaw_core::{HttpCall, HttpResponse, Io, Kernel};
-use paperpaw_json::stream::{Event as Json, Parser};
 use paperpaw_platform::Rotation;
 use paperpaw_plugin_readwise::{Highlight, Parser as Notes, Readwise, SECRET};
 use paperpaw_sdk::builtin::events::NotesExported;
 use paperpaw_sdk::builtin::{params, slots};
 use paperpaw_sdk::event::EventData;
+use paperpaw_sdk::json::stream::{Event as Json, Parser};
 use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::secrets::{FILE, SecretChange, Secrets};
 use paperpaw_sdk::{

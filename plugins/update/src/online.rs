@@ -90,9 +90,13 @@ pub(crate) struct Offer {
 impl Offer {
     /// The answer's `body`, if it names an update newer than `firmware`.
     pub(crate) fn from_answer(body: &str, firmware: &Firmware) -> Option<Self> {
-        let members = paperpaw_json::object(body);
-        let version = paperpaw_json::text(&members, "version")?.trim().to_string();
-        let url = paperpaw_json::text(&members, "url")?.trim().to_string();
+        let members = paperpaw_sdk::json::object(body);
+        let version = paperpaw_sdk::json::text(&members, "version")?
+            .trim()
+            .to_string();
+        let url = paperpaw_sdk::json::text(&members, "url")?
+            .trim()
+            .to_string();
         if !is_version(&version)
             || url.is_empty()
             || !compare_versions(&version, &firmware.version).is_gt()
@@ -101,8 +105,8 @@ impl Offer {
         }
         let lines = |key: &str| {
             let mut text = String::new();
-            for line in paperpaw_json::raw_member(body, key)
-                .map(paperpaw_json::string_array)
+            for line in paperpaw_sdk::json::raw_member(body, key)
+                .map(paperpaw_sdk::json::string_array)
                 .unwrap_or_default()
             {
                 text.push_str(line.trim());
@@ -113,7 +117,7 @@ impl Offer {
         Some(Self {
             version,
             url,
-            size: paperpaw_json::number(&members, "size").map_or(0, |n| n.max(0.0) as u64),
+            size: paperpaw_sdk::json::number(&members, "size").map_or(0, |n| n.max(0.0) as u64),
             plugins: Plugins::new(lines("plugins")),
             missing: lines("missing"),
             builds: fetch::parse(body),
@@ -250,19 +254,19 @@ fn question(firmware: &Firmware, native: Option<&Native>, code: &[(&str, String)
     let plugins: Vec<String> = firmware
         .plugins
         .iter()
-        .map(|c| paperpaw_json::string(&format!("{} {}", c.name, c.version)))
+        .map(|c| paperpaw_sdk::json::string(&format!("{} {}", c.name, c.version)))
         .collect();
     let mut body = format!(
         "{{\"project\":{},\"chip\":{},\"version\":{},\"plugins\":[{}]",
-        paperpaw_json::string(&firmware.project),
+        paperpaw_sdk::json::string(&firmware.project),
         firmware.chip,
-        paperpaw_json::string(&firmware.version),
+        paperpaw_sdk::json::string(&firmware.version),
         plugins.join(",")
     );
     if let Some(native) = native {
         let code: Vec<String> = code
             .iter()
-            .map(|(id, version)| paperpaw_json::string(&format!("{id} {version}")))
+            .map(|(id, version)| paperpaw_sdk::json::string(&format!("{id} {version}")))
             .collect();
         body.push_str(&format!(
             ",\"abi\":\"{}\",\"code\":[{}]",

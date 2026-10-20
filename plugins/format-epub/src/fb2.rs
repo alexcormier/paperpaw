@@ -1025,7 +1025,7 @@ mod tests {
 
     #[test]
     fn zipped_books_open_too() {
-        use paperpaw_sdk::zip::testing::ZipBuilder;
+        use paperpaw_zip::testing::ZipBuilder;
         let zip = ZipBuilder::new()
             .deflated("book.fb2", BOOK.as_bytes())
             .build();

@@ -32,7 +32,7 @@ extern crate alloc;
 mod account;
 mod confirm;
 
-use paperpaw_digest::md5;
+use paperpaw_sdk::digest::md5;
 
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
@@ -42,10 +42,10 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::cell::RefCell;
 
-use paperpaw_json as json;
 use paperpaw_sdk::builtin::{events, params};
 use paperpaw_sdk::document::Locator;
 use paperpaw_sdk::event::Event;
+use paperpaw_sdk::json;
 use paperpaw_sdk::replies::HttpReply;
 use paperpaw_sdk::secrets::SecretChange;
 use paperpaw_sdk::setting::{Setting, Text};
