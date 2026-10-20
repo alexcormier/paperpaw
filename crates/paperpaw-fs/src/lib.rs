@@ -17,6 +17,8 @@ pub struct DirStorage {
     open: RefCell<Option<(String, File)>>,
     /// The file system takes names in any case for the same entry.
     ignores_case: bool,
+    /// What it says it has free instead of the file system's, where set.
+    free: Option<u64>,
 }
 
 impl DirStorage {
@@ -32,7 +34,15 @@ impl DirStorage {
             ignores_case: ignores_case(&root),
             root,
             open: RefCell::new(None),
+            free: None,
         })
+    }
+
+    /// The same, saying it has `bytes` free whatever the file system has:
+    /// an emulated device's card, the same on every computer.
+    pub fn with_free_space(mut self, bytes: u64) -> Self {
+        self.free = Some(bytes);
+        self
     }
 
     /// The folder `dir`, the root itself for `""` (to list or make it).
@@ -300,7 +310,7 @@ impl Storage for DirStorage {
     }
 
     fn free_space(&self) -> Option<u64> {
-        free_space(&self.root)
+        self.free.or_else(|| free_space(&self.root))
     }
 
     fn local_path(&self, path: &str, with: &mut dyn FnMut(&str)) {
@@ -390,6 +400,9 @@ mod tests {
         let storage = DirStorage::new(&root).unwrap();
         let free = storage.free_space().unwrap();
         assert!(free > 0);
+        // Or as much as it is told to say.
+        let storage = DirStorage::new(&root).unwrap().with_free_space(1234);
+        assert_eq!(storage.free_space(), Some(1234));
         fs::remove_dir_all(root).unwrap();
     }
 

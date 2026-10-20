@@ -224,8 +224,8 @@ const CASES: &[Case] = &[
         colour: 0,
     },
     // The plugin store on the X4, its list kept from before (the library
-    // asked for does not answer): search, then the plugins for the X4 by
-    // group.
+    // asked for does not answer): search, the newest, then the groups with
+    // how many plugins for the X4 each has.
     Case {
         name: "x4-store",
         profile: "xteink-x4",
@@ -655,6 +655,8 @@ fn draw(case: &Case) -> (u32, u32, Vec<u8>, usize) {
     }
     // The hint on gestures would cover every first home screen.
     command.args(["--set", "home.gesture-tips=false"]);
+    // A card of the same free space on every computer.
+    command.args(["--free-space", "7400000000"]);
     for set in case.sets {
         command.args(["--set", set]);
     }

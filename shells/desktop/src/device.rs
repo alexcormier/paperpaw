@@ -14,6 +14,25 @@ use crate::panel::Panel;
 use crate::profiles::Profile;
 use paperpaw_fs::DirStorage;
 
+/// What the emulated device's storage says it has free (`--free-space`),
+/// where set: screenshots that look the same on every computer.
+static FREE_SPACE: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
+
+/// Makes the storage say it has `bytes` free, whatever the computer's
+/// disk has.
+pub fn set_free_space(bytes: u64) {
+    let _ = FREE_SPACE.set(bytes);
+}
+
+/// The emulated device's storage in the folder `root`.
+pub fn library(root: &std::path::Path) -> std::io::Result<DirStorage> {
+    let storage = DirStorage::new(root)?;
+    Ok(match FREE_SPACE.get() {
+        Some(&bytes) => storage.with_free_space(bytes),
+        None => storage,
+    })
+}
+
 /// How long closing the window waits for answers to what plugins sent as
 /// they saved (e.g. reading progress).
 const SHUT_DOWN_WAIT: Duration = Duration::from_secs(5);
@@ -97,7 +116,7 @@ impl Device {
         // Turned by the settings: built again for the turned size.
         let rotation = kernel.rotation();
         if rotation != Rotation::Deg0
-            && let Ok(storage) = DirStorage::new(&root)
+            && let Ok(storage) = library(&root)
         {
             drop(kernel);
             kernel = build_kernel(profile, user_config.as_deref(), storage, rotation, add)?;
@@ -467,7 +486,7 @@ impl Device {
 
     /// Builds a new kernel, as the device would after a reboot.
     fn restart(&mut self) {
-        let storage = match DirStorage::new(&self.root) {
+        let storage = match library(&self.root) {
             Ok(storage) => storage,
             Err(e) => return eprintln!("restart: {}: {e}", self.root.display()),
         };
