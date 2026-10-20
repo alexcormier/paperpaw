@@ -133,16 +133,19 @@ fn count(f: impl FnOnce(&mut Counts)) {
 /// Notes a call while a frame is recorded.
 fn note(op: &'static str, path: &str, bytes: u64) {
     if let Some(band) = BAND.with(Cell::get) {
-        CALLS.with(|calls| {
-            let mut calls = calls.borrow_mut();
-            if calls.len() < MAX_CALLS {
-                calls.push(Call {
-                    band,
-                    op,
-                    path: path.to_string(),
-                    bytes,
-                });
-            }
+        // The trace's own memory is not the kernel's.
+        crate::budget::untracked(|| {
+            CALLS.with(|calls| {
+                let mut calls = calls.borrow_mut();
+                if calls.len() < MAX_CALLS {
+                    calls.push(Call {
+                        band,
+                        op,
+                        path: path.to_string(),
+                        bytes,
+                    });
+                }
+            });
         });
     }
 }
@@ -183,7 +186,8 @@ impl Frame {
     /// A band was drawn.
     pub fn band(&mut self) {
         let counts = now();
-        self.bands.push(counts.since(&self.band).calls());
+        let calls = counts.since(&self.band).calls();
+        crate::budget::untracked(|| self.bands.push(calls));
         self.band = counts;
         if RECORDING.with(Cell::get) {
             BAND.with(|band| band.set(Some(self.bands.len())));
