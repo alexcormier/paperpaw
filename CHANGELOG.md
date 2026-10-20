@@ -410,6 +410,16 @@ change the plugin SDK.
   placement): automatically, widgets without a frame line up with the
   page's margins as before, and framed ones keep a gap inside their
   frame.
+- Home screen and widgets, as `paperpaw-dev` found them: with buttons
+  alone, the tool the focus is on is told by its name (screen readers
+  and checks follow it); a tool's name too long for its tile is made a
+  little smaller, then put on two lines where the tile is high enough;
+  every setting of a widget explains itself (frame, size, alignment and
+  the parts shown in the SDK, the rest in the widgets); the streak keeps
+  its marks inside a wide row; shortened texts in small cells give way
+  to shorter forms (the countdown's "days", the year's "Day 287", a
+  quote's author by the last name), titles grow smaller before they are
+  shortened, and covers without a picture show whole words only.
 - Home screen tools: an icon and its name are placed by their ink as
   one group, half a gap apart, so that on the X4s the name no longer
   sits as near the tool below as its own icon.

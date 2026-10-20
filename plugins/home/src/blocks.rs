@@ -90,6 +90,7 @@ const fn status_part(id: &'static str, title: &'static str, default: &'static st
         Id::new_static(STATUS),
     )
     .with_extra(&STATUS_ITEMS)
+    .described("home.status.part.help")
 }
 
 /// Recent books shown as covers at most.
@@ -103,7 +104,8 @@ static RECENT_SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_number(
     MAX_COVERS as i64,
     6,
     Id::new_static(RECENT),
-)];
+)
+.described("home.setting.recent-count.help")];
 
 /// The widgets' settings: where each sits, its frame, size and parts.
 static SETTINGS: [SettingSpec; 21] = {
