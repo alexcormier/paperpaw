@@ -82,8 +82,9 @@ impl Plugins {
         core::str::from_utf8(text).ok()
     }
 
-    /// The list's bytes, head and text, for `crates`.
-    pub fn record<'a>(crates: impl IntoIterator<Item = PluginCrate<'a>>) -> Vec<u8> {
+    /// The list's bytes, head and text, for `crates`; `None` if the text
+    /// is longer than [`PLUGINS_MAX_LEN`], which readers refuse.
+    pub fn record<'a>(crates: impl IntoIterator<Item = PluginCrate<'a>>) -> Option<Vec<u8>> {
         let mut text = String::new();
         for c in crates {
             text.push_str(c.name);
@@ -91,12 +92,15 @@ impl Plugins {
             text.push_str(c.version);
             text.push('\n');
         }
+        if text.len() > PLUGINS_MAX_LEN {
+            return None;
+        }
         let mut bytes = Vec::with_capacity(PLUGINS_HEAD_LEN + text.len());
         bytes.extend_from_slice(&PLUGINS_MAGIC);
         bytes.extend_from_slice(&PLUGINS_FORMAT.to_le_bytes());
-        bytes.extend_from_slice(&(text.len().min(usize::from(u16::MAX)) as u16).to_le_bytes());
+        bytes.extend_from_slice(&u16::try_from(text.len()).ok()?.to_le_bytes());
         bytes.extend_from_slice(text.as_bytes());
-        bytes
+        Some(bytes)
     }
 
     /// The text, one `name version` a line.
@@ -154,7 +158,7 @@ mod tests {
 
     #[test]
     fn a_list_reads_back() {
-        let mut bytes = Plugins::record(crates());
+        let mut bytes = Plugins::record(crates()).unwrap();
         assert_eq!(&bytes[..8], b"PPlugins");
         bytes.extend_from_slice(b"what follows in the image");
         let list = Plugins::read(&bytes).unwrap();
@@ -171,12 +175,29 @@ mod tests {
     fn older_images_have_none() {
         assert_eq!(Plugins::read(&[0; 64]), None);
         assert_eq!(Plugins::read(b"PPlugins"), None);
-        let mut newer = Plugins::record(crates());
+        let mut newer = Plugins::record(crates()).unwrap();
         newer[8] = 2;
         assert_eq!(Plugins::read(&newer), None);
-        let mut cut = Plugins::record(crates());
+        let mut cut = Plugins::record(crates()).unwrap();
         cut.truncate(20);
         assert_eq!(Plugins::read(&cut), None);
+    }
+
+    #[test]
+    fn a_list_too_long_to_read_is_not_written() {
+        let name = std::format!("paperpaw-plugin-{}", "x".repeat(100));
+        let many = || {
+            core::iter::repeat_n(
+                PluginCrate {
+                    name: &name,
+                    version: "0.4.0",
+                },
+                200,
+            )
+        };
+        assert_eq!(Plugins::record(many()), None);
+        let fits = Plugins::record(many().take(100)).unwrap();
+        assert_eq!(Plugins::read(&fits).unwrap().iter().count(), 100);
     }
 
     #[test]
