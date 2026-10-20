@@ -610,6 +610,9 @@ struct CardParts {
     title: widgets::Wrapped,
     /// The percentage and the bar below.
     progress: bool,
+    /// Between the rows: half a gap, or none where that keeps the
+    /// caption.
+    gap: u16,
 }
 
 impl CardParts {
@@ -644,17 +647,21 @@ impl CardParts {
             }
         }
         let small = line_height(env, style.small);
-        let half = gap / 2;
         let line = line_height(env, style.text);
+        let caption = env.i18n.tr("home.continue");
+        let caption_fits = style
+            .font(env)
+            .is_some_and(|font| font.measure(style.small, caption) <= f32::from(text.width));
+        // Half a gap between the rows; none where only that keeps all
+        // three (the small rows have room above their letters anyway).
+        let all = |gap: u16| caption_fits && line + 2 * (gap + small) <= text.height;
+        let half = if all(gap / 2) || !all(0) { gap / 2 } else { 0 };
+        parts.gap = half;
         let mut room = text.height;
         parts.progress = env.settings.read(&CARD_PROGRESS) && room >= line + half + small;
         if parts.progress {
             room -= half + small;
         }
-        let caption = env.i18n.tr("home.continue");
-        let caption_fits = style
-            .font(env)
-            .is_some_and(|font| font.measure(style.small, caption) <= f32::from(text.width));
         parts.caption = caption_fits && room >= line + half + small;
         if parts.caption {
             room -= half + small;
@@ -675,7 +682,7 @@ impl CardParts {
     /// The height its column of text takes.
     fn height(&self, env: &Env<'_>) -> u16 {
         let style = UiStyle::new(env);
-        let small = line_height(env, style.small) + style.gap as u16 / 2;
+        let small = line_height(env, style.small) + self.gap;
         self.title.height(env)
             + if self.caption { small } else { 0 }
             + if self.progress { small } else { 0 }
@@ -786,7 +793,7 @@ fn draw_card(
     };
     // The lines of text, together in the middle.
     let label_h = line_height(env, style.small);
-    let gap = style.gap as u16 / 2;
+    let gap = parts.gap;
     let mut y = centred(r, parts.height(env));
     let align = widgets::align(env, CONTINUE);
     let row = |y: u16, h: u16| Rect::new(r.x, y, r.width, h);
@@ -865,9 +872,11 @@ struct ShelfParts {
 
 impl ShelfParts {
     /// The parts of a shelf of `books` in `area` (inside its spacing):
-    /// covers 3:4 as large as the columns and the height allow; where
-    /// they would be smaller than two lines of text, the heading is left
-    /// out, then the titles.
+    /// covers 3:4 as large as the columns and the height allow, the
+    /// heading above and the titles below; where the covers would be
+    /// smaller than two lines of text, the titles alone (shown even when
+    /// set off, as something must say which books they are), with the
+    /// heading where there is room for it.
     fn of(env: &Env<'_>, area: Rect, books: &[Book]) -> Self {
         if books.is_empty() {
             return Self::default();
@@ -887,17 +896,22 @@ impl ShelfParts {
             heading = 0;
         }
         let least = 2 * label;
-        if area.height.saturating_sub(heading + title) < least {
-            heading = 0;
-        }
-        if area.height.saturating_sub(heading + title) < least {
-            title = 0;
+        let covers = area.height.saturating_sub(heading + title) >= least;
+        if !covers {
+            title = label;
+            if area.height < heading + title {
+                heading = 0;
+            }
         }
         let room = area.height.saturating_sub(heading + title);
         // Covers 3:4, as wide as the columns or as high as the room allows.
         let column = area.width / columns;
-        let w = column.saturating_sub(gap).min(room * 3 / 4);
-        let h = w * 4 / 3;
+        let (w, h) = if covers {
+            let w = column.saturating_sub(gap).min(room * 3 / 4);
+            (w, w * 4 / 3)
+        } else {
+            (column.saturating_sub(gap), 0)
+        };
         let total = heading + h + title;
         let top = area.y + area.height.saturating_sub(total) / 2;
         let left = area.x + area.width.saturating_sub(column * columns) / 2;
@@ -929,13 +943,14 @@ impl Shelf {
         self.covers = shown
             .clone()
             .map(|((place, _), book)| {
-                let image = book.cover.as_ref()?;
+                let image = book.cover.as_ref().filter(|_| place.height > 0)?;
                 small_cover(env, image, fitted(image, *place, 0.5, 1.0))
             })
             .collect();
         self.names = shown
             .map(|((place, _), book)| match book.cover {
                 Some(_) => Vec::new(),
+                None if place.height == 0 => Vec::new(),
                 None => placeholder_lines(env, *place, &book.book.title),
             })
             .collect();
@@ -1084,6 +1099,8 @@ fn draw_shelf(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, shelf: &Shelf)
         shelf.parts.places.iter().zip(books).enumerate()
     {
         match image {
+            // Covers too small to tell: the titles alone.
+            _ if cover.height == 0 => {}
             // In the middle of its place, at the bottom.
             Some(image) => {
                 let at = fitted(image, *cover, 0.5, 1.0);
