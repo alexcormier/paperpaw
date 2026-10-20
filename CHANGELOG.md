@@ -6,6 +6,10 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Reader: switching a book's own styles ("Publisher's formatting") keeps
+  the place on the same text, with the book open or closed; before, the
+  place moved, as the book converted without its styles has its text
+  elsewhere.
 - Security: while the device is locked, nothing shows above the lock
   screen but what it opens itself (its keyboard for a password) and the
   sleep screen it lets pass. A screen a rule, a timer or a plugin opens
