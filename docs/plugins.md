@@ -510,7 +510,16 @@ book through the plugins' text filters), `PageIndex` (the starts of its
 pages, kept on the device), and with the feature `unstable` (as the
 layout, until 1.0) `PageType` (the page's box and type from the standard
 settings, its layout key), `ReadingFaces` (the faces with the book's own
-fonts and small capitals), `word_boxes`, `draw_lines` and `draw_image`.
+fonts and small capitals), `word_boxes`, `draw_lines` and `draw_image`;
+`reading::note_text` is the text a footnote shows. The layout keeps at
+least `Style::widows` lines of a paragraph at the top of a page and
+`orphans` at the bottom (`Style::lines_kept`, 1 by default), and
+`layout::wrap_lines_hyphenated` breaks lines of one's own as pages do.
+
+A text filter that needs to know where a block is, or leaves blocks out
+(a web page's adverts, printed page numbers in a book), is a block
+filter: `TextFilterSpec::block` gets a `FilterContext` (the book, its
+language, the place) and answers `Verdict::Keep` or `Verdict::Drop`.
 
 ### Services and points of your own
 

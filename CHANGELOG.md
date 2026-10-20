@@ -6,6 +6,16 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: block filters (`TextFilterSpec::block`) know where a block is
+  (`FilterContext`: the book, its language, the place) and may leave it
+  out (`Verdict::Drop`): the reader lays out, searches and shows notes
+  without it.
+- SDK: `reading::note_text`, the text a footnote shows;
+  `layout::{Line, wrap_lines, wrap_lines_hyphenated}` (feature
+  `unstable`).
+- Layout: `Style::widows` and `Style::orphans` (`Style::lines_kept`):
+  the fewest lines of a paragraph left alone at the top or bottom of a
+  page; 1 by default, as before.
 - SDK: `reading` holds the reader's building blocks for readers of
   one's own: `FilteredDocument`, `PageIndex`, and with the feature
   `unstable` `PageType`, `ReadingFaces`, `EmbeddedFonts`, `StatusRoom`,

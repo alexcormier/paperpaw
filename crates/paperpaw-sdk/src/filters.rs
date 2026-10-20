@@ -18,7 +18,11 @@
 //! [`Registrar::add_text_filter`](crate::Registrar::add_text_filter); a
 //! filter decides from the settings whether it does anything. Its
 //! signature tells readers when its effect changed, so pages are laid out
-//! anew (and kept apart from pages laid out without it).
+//! anew (and kept apart from pages laid out without it). A block filter
+//! ([`TextFilterSpec::block`]) also knows where the block is (the book,
+//! its language, the place: [`FilterContext`]) and may leave the block
+//! out ([`Verdict::Drop`]), e.g. a web page's adverts or a book's
+//! printed page numbers.
 
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
@@ -26,7 +30,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt;
 
-use crate::document::Block;
+use crate::document::{Block, Locator};
 use crate::env::Env;
 use crate::id::Id;
 use crate::{InputEvent, Rect, RefreshMode};
@@ -35,6 +39,36 @@ use crate::{InputEvent, Rect, RefreshMode};
 pub type TextFilterFn = Box<dyn Fn(&Env<'_>, &mut Block)>;
 /// What a filter does now, as text: empty while it does nothing.
 pub type TextFilterSignatureFn = Box<dyn Fn(&Env<'_>) -> String>;
+/// Changes a block before it is laid out, knowing where it is, and says
+/// whether it stays.
+pub type BlockFilterFn = Box<dyn Fn(&Env<'_>, &FilterContext<'_>, &mut Block) -> Verdict>;
+
+/// Where a block a filter gets is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct FilterContext<'a> {
+    /// The book (empty where it is not known).
+    pub path: &'a str,
+    /// Its language, e.g. `de` (empty where unknown).
+    pub language: &'a str,
+    /// Where the block starts.
+    pub at: Locator,
+}
+
+impl<'a> FilterContext<'a> {
+    pub fn new(path: &'a str, language: &'a str, at: Locator) -> Self {
+        Self { path, language, at }
+    }
+}
+
+/// Whether a block stays ([`BlockFilterFn`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum Verdict {
+    Keep,
+    /// Left out of the layout (and of what is searched).
+    Drop,
+}
 
 /// A text filter contribution.
 #[non_exhaustive]
@@ -44,6 +78,8 @@ pub struct TextFilterSpec {
     pub title: Cow<'static, str>,
     pub filter: TextFilterFn,
     pub signature: TextFilterSignatureFn,
+    /// A block filter, run after `filter` (see [`TextFilterSpec::block`]).
+    pub block: Option<BlockFilterFn>,
 }
 
 impl TextFilterSpec {
@@ -59,6 +95,20 @@ impl TextFilterSpec {
             title: title.into(),
             filter,
             signature,
+            block: None,
+        }
+    }
+
+    /// A filter that knows where each block is and may leave it out.
+    pub fn block(
+        id: Id,
+        title: impl Into<Cow<'static, str>>,
+        filter: BlockFilterFn,
+        signature: TextFilterSignatureFn,
+    ) -> Self {
+        Self {
+            block: Some(filter),
+            ..Self::new(id, title, Box::new(|_, _| {}), signature)
         }
     }
 }
@@ -95,11 +145,25 @@ impl TextFilters {
         self.filters.shrink_to_fit();
     }
 
-    /// Runs every filter that does something on `block`.
+    /// Runs every filter that does something on `block` (block filters
+    /// with no place known, their verdicts not asked).
     pub fn apply(&self, env: &Env<'_>, block: &mut Block) {
+        let nowhere = FilterContext::new("", "", Locator::START);
+        let _ = self.apply_in(env, &nowhere, block);
+    }
+
+    /// Runs every filter on `block`, which is at `cx`: whether it stays.
+    /// A block left out goes to no filter after.
+    pub fn apply_in(&self, env: &Env<'_>, cx: &FilterContext<'_>, block: &mut Block) -> Verdict {
         for filter in &self.filters {
             (filter.filter)(env, block);
+            if let Some(block_filter) = &filter.block
+                && block_filter(env, cx, block) == Verdict::Drop
+            {
+                return Verdict::Drop;
+            }
         }
+        Verdict::Keep
     }
 
     /// What the filters do now together; empty if none does anything.

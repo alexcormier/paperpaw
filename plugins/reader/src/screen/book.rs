@@ -376,7 +376,8 @@ impl Book {
                 patterns.hyphenate(word, out);
             }
         };
-        let filtered = FilteredDocument::new(self.document.as_ref(), env);
+        let filtered =
+            FilteredDocument::new(self.document.as_ref(), env).in_book(&self.path, &self.language);
         let cx = LayoutContext::new(&filtered, env.storage, t.width, &t.style, &faces)
             .hyphenate(patterns.is_some().then_some(&hyphenate as Hyphenate<'_>));
         Some(f(&cx))
@@ -707,34 +708,10 @@ impl Book {
     /// block there and the ones after it, up to a heading or a few hundred
     /// characters.
     pub(super) fn note_text(&self, env: &Env<'_>, href: &str) -> Option<String> {
-        let mut at = self.document.link_target(env.storage, href)?;
-        let mut text = String::new();
         // As the page shows it.
-        let filtered = FilteredDocument::new(self.document.as_ref(), env);
-        for _ in 0..4 {
-            let Ok(Some(block)) = filtered.block_at(env.storage, at) else {
-                break;
-            };
-            if matches!(block.kind, paperpaw_sdk::document::BlockKind::Heading(_))
-                && !text.is_empty()
-            {
-                break;
-            }
-            let part = block.text.trim();
-            if !part.is_empty() {
-                if !text.is_empty() {
-                    text.push(' ');
-                }
-                text.push_str(part);
-            }
-            // A note that is only its number goes on in the next block.
-            if text.chars().count() > 300 || text.chars().count() > 12 && block.end > block.start {
-                break;
-            }
-            at = Locator::new(at.section, block.end);
-        }
-        let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
-        (!text.is_empty()).then_some(text)
+        let filtered =
+            FilteredDocument::new(self.document.as_ref(), env).in_book(&self.path, &self.language);
+        paperpaw_sdk::reading::note_text(&filtered, env.storage, href)
     }
 
     /// The link `word` is part of, if any.

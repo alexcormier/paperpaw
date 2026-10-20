@@ -7,21 +7,41 @@ use alloc::vec::Vec;
 use crate::document::{
     Block, Document, DocumentError, EmbeddedFont, ImageRef, Link, Locator, Metadata, TocEntry,
 };
+use crate::filters::{FilterContext, Verdict};
 use crate::{Env, Storage};
 
 /// `document` with the plugins' text filters applied to its blocks, as a
 /// reader lays it out and searches it: a reader that reads the document
-/// itself ignores every filter (replaced words, word beginnings in bold).
-/// Everything else is the document's own.
+/// itself ignores every filter (replaced words, word beginnings in bold,
+/// blocks left out). Everything else is the document's own.
 #[derive(Clone, Copy)]
 pub struct FilteredDocument<'d, 'e> {
     pub document: &'d dyn Document,
     pub env: &'d Env<'e>,
+    /// The book and its language, told to block filters.
+    pub path: &'d str,
+    pub language: &'d str,
 }
+
+/// Blocks a filter may leave out in a row before the rest of the section
+/// is taken as left out too (a guard against a filter that drops all).
+const MOST_DROPPED: usize = 10_000;
 
 impl<'d, 'e> FilteredDocument<'d, 'e> {
     pub fn new(document: &'d dyn Document, env: &'d Env<'e>) -> Self {
-        Self { document, env }
+        Self {
+            document,
+            env,
+            path: "",
+            language: "",
+        }
+    }
+
+    /// The same, telling block filters the book at `path` in `language`.
+    pub fn in_book(mut self, path: &'d str, language: &'d str) -> Self {
+        self.path = path;
+        self.language = language;
+        self
     }
 }
 
@@ -52,12 +72,26 @@ impl Document for FilteredDocument<'_, '_> {
         self.document.section_len(section)
     }
 
+    /// The block at `at` through the filters; a block left out gives the
+    /// next one that is not.
     fn block_at(&self, storage: &dyn Storage, at: Locator) -> Result<Option<Block>, DocumentError> {
-        let mut block = self.document.block_at(storage, at)?;
-        if let Some(block) = &mut block {
-            self.env.text_filters.apply(self.env, block);
+        let mut at = at;
+        for _ in 0..MOST_DROPPED {
+            let Some(mut block) = self.document.block_at(storage, at)? else {
+                return Ok(None);
+            };
+            let start = Locator::new(at.section, block.start.max(at.offset));
+            let cx = FilterContext::new(self.path, self.language, start);
+            if self.env.text_filters.apply_in(self.env, &cx, &mut block) == Verdict::Keep {
+                return Ok(Some(block));
+            }
+            // On after it, where the next block begins.
+            if block.end <= at.offset {
+                return Ok(None);
+            }
+            at = Locator::new(at.section, block.end);
         }
-        Ok(block)
+        Ok(None)
     }
 
     fn toc_len(&self, storage: &dyn Storage) -> u32 {

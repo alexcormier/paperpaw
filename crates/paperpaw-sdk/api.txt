@@ -1049,6 +1049,15 @@ pub enum paperpaw_sdk::filters::InputVerdict
 pub paperpaw_sdk::filters::InputVerdict::Pass
 pub paperpaw_sdk::filters::InputVerdict::Run(paperpaw_sdk::Id)
 pub paperpaw_sdk::filters::InputVerdict::Take
+#[non_exhaustive] pub enum paperpaw_sdk::filters::Verdict
+pub paperpaw_sdk::filters::Verdict::Drop
+pub paperpaw_sdk::filters::Verdict::Keep
+#[non_exhaustive] pub struct paperpaw_sdk::filters::FilterContext<'a>
+pub paperpaw_sdk::filters::FilterContext::at: paperpaw_document::Locator
+pub paperpaw_sdk::filters::FilterContext::language: &'a str
+pub paperpaw_sdk::filters::FilterContext::path: &'a str
+impl<'a> paperpaw_sdk::filters::FilterContext<'a>
+pub fn paperpaw_sdk::filters::FilterContext<'a>::new(&'a str, &'a str, paperpaw_document::Locator) -> Self
 #[non_exhaustive] pub struct paperpaw_sdk::filters::InputFilterSpec
 pub paperpaw_sdk::filters::InputFilterSpec::filter: paperpaw_sdk::filters::InputFilterFn
 pub paperpaw_sdk::filters::InputFilterSpec::id: paperpaw_sdk::Id
@@ -1080,19 +1089,23 @@ impl paperpaw_sdk::filters::RefreshFilters
 pub fn paperpaw_sdk::filters::RefreshFilters::apply(&self, &paperpaw_sdk::Env<'_>, paperpaw_sdk::filters::Refresh, paperpaw_platform::geometry::Rect) -> paperpaw_sdk::filters::Refresh
 pub fn paperpaw_sdk::filters::RefreshFilters::new() -> Self
 #[non_exhaustive] pub struct paperpaw_sdk::filters::TextFilterSpec
+pub paperpaw_sdk::filters::TextFilterSpec::block: core::option::Option<paperpaw_sdk::filters::BlockFilterFn>
 pub paperpaw_sdk::filters::TextFilterSpec::filter: paperpaw_sdk::filters::TextFilterFn
 pub paperpaw_sdk::filters::TextFilterSpec::id: paperpaw_sdk::Id
 pub paperpaw_sdk::filters::TextFilterSpec::signature: paperpaw_sdk::filters::TextFilterSignatureFn
 pub paperpaw_sdk::filters::TextFilterSpec::title: alloc::borrow::Cow<'static, str>
 impl paperpaw_sdk::filters::TextFilterSpec
+pub fn paperpaw_sdk::filters::TextFilterSpec::block(paperpaw_sdk::Id, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, paperpaw_sdk::filters::BlockFilterFn, paperpaw_sdk::filters::TextFilterSignatureFn) -> Self
 pub fn paperpaw_sdk::filters::TextFilterSpec::new(paperpaw_sdk::Id, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, paperpaw_sdk::filters::TextFilterFn, paperpaw_sdk::filters::TextFilterSignatureFn) -> Self
 impl core::fmt::Debug for paperpaw_sdk::filters::TextFilterSpec
 pub fn paperpaw_sdk::filters::TextFilterSpec::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct paperpaw_sdk::filters::TextFilters
 impl paperpaw_sdk::filters::TextFilters
 pub fn paperpaw_sdk::filters::TextFilters::apply(&self, &paperpaw_sdk::Env<'_>, &mut paperpaw_document::Block)
+pub fn paperpaw_sdk::filters::TextFilters::apply_in(&self, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::filters::FilterContext<'_>, &mut paperpaw_document::Block) -> paperpaw_sdk::filters::Verdict
 pub fn paperpaw_sdk::filters::TextFilters::new() -> Self
 pub fn paperpaw_sdk::filters::TextFilters::signature(&self, &paperpaw_sdk::Env<'_>) -> alloc::string::String
+pub type paperpaw_sdk::filters::BlockFilterFn = alloc::boxed::Box<dyn core::ops::function::Fn(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::filters::FilterContext<'_>, &mut paperpaw_document::Block) -> paperpaw_sdk::filters::Verdict>
 pub type paperpaw_sdk::filters::InputFilterFn = alloc::boxed::Box<dyn core::ops::function::Fn(&paperpaw_sdk::Env<'_>, &paperpaw_platform::input::InputEvent) -> paperpaw_sdk::filters::InputVerdict>
 pub type paperpaw_sdk::filters::RefreshFilterFn = alloc::boxed::Box<dyn core::ops::function::Fn(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::filters::Refresh) -> core::option::Option<paperpaw_platform::display::RefreshMode>>
 pub type paperpaw_sdk::filters::TextFilterFn = alloc::boxed::Box<dyn core::ops::function::Fn(&paperpaw_sdk::Env<'_>, &mut paperpaw_document::Block)>
@@ -1593,7 +1606,10 @@ pub mod paperpaw_sdk::reading
 pub struct paperpaw_sdk::reading::FilteredDocument<'d, 'e>
 pub paperpaw_sdk::reading::FilteredDocument::document: &'d dyn paperpaw_document::Document
 pub paperpaw_sdk::reading::FilteredDocument::env: &'d paperpaw_sdk::Env<'e>
+pub paperpaw_sdk::reading::FilteredDocument::language: &'d str
+pub paperpaw_sdk::reading::FilteredDocument::path: &'d str
 impl<'d, 'e> paperpaw_sdk::reading::FilteredDocument<'d, 'e>
+pub fn paperpaw_sdk::reading::FilteredDocument<'d, 'e>::in_book(self, &'d str, &'d str) -> Self
 pub fn paperpaw_sdk::reading::FilteredDocument<'d, 'e>::new(&'d dyn paperpaw_document::Document, &'d paperpaw_sdk::Env<'e>) -> Self
 impl core::fmt::Debug for paperpaw_sdk::reading::FilteredDocument<'_, '_>
 pub fn paperpaw_sdk::reading::FilteredDocument<'_, '_>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
@@ -1647,6 +1663,7 @@ impl paperpaw_sdk::reading::Word
 pub fn paperpaw_sdk::reading::Word::new(impl core::convert::Into<alloc::string::String>, paperpaw_document::Locator, paperpaw_document::Locator) -> Self
 pub fn paperpaw_sdk::reading::ask_page_words(&paperpaw_sdk::event::Event<paperpaw_sdk::reading::PageWords>) -> paperpaw_sdk::Command
 pub fn paperpaw_sdk::reading::conversion(&paperpaw_sdk::Env<'_>) -> u64
+pub fn paperpaw_sdk::reading::note_text(&dyn paperpaw_document::Document, &dyn paperpaw_platform::storage::Storage, &str) -> core::option::Option<alloc::string::String>
 pub fn paperpaw_sdk::reading::open_options(&paperpaw_sdk::Env<'_>) -> paperpaw_sdk::OpenOptions
 pub mod paperpaw_sdk::replies
 #[non_exhaustive] pub enum paperpaw_sdk::replies::ServerNotice

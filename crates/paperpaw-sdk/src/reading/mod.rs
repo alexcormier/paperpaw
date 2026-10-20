@@ -160,6 +160,41 @@ impl EventData for PageWords {
     }
 }
 
+/// The text at the target of link `href` of `document`, as a footnote
+/// shows it: the block there and the ones after it, up to a heading or a
+/// few hundred characters, on one line; `None` where the link leads
+/// nowhere in the book or to no text.
+pub fn note_text(
+    document: &dyn crate::document::Document,
+    storage: &dyn crate::Storage,
+    href: &str,
+) -> Option<String> {
+    let mut at = document.link_target(storage, href)?;
+    let mut text = String::new();
+    for _ in 0..4 {
+        let Ok(Some(block)) = document.block_at(storage, at) else {
+            break;
+        };
+        if matches!(block.kind, crate::document::BlockKind::Heading(_)) && !text.is_empty() {
+            break;
+        }
+        let part = block.text.trim();
+        if !part.is_empty() {
+            if !text.is_empty() {
+                text.push(' ');
+            }
+            text.push_str(part);
+        }
+        // A note that is only its number goes on in the next block.
+        if text.chars().count() > 300 || text.chars().count() > 12 && block.end > block.start {
+            break;
+        }
+        at = Locator::new(at.section, block.end);
+    }
+    let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    (!text.is_empty()).then_some(text)
+}
+
 /// How books are opened for reading: with their own styles as
 /// [`settings::PUBLISHER_STYLES`](crate::builtin::settings::PUBLISHER_STYLES)
 /// says, and the plugins' stylesheets. A plugin that opens the book a

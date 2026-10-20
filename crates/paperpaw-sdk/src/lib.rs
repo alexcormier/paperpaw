@@ -168,6 +168,9 @@ pub mod layout {
         Face, Hyphenate, LayoutContext, LineRun, Page, PageImage, PageLine, Style, Typesetter,
         VERSION, layout_page, line_start,
     };
+    /// Lines broken as the layout breaks them (see `paperpaw-text`): for
+    /// laying out text of one's own the way pages are, e.g. a note.
+    pub use paperpaw_text::{Line, wrap_lines, wrap_lines_hyphenated};
 }
 
 /// Streaming XML/XHTML tokenizer (see `paperpaw-xml`) for format plugins.
