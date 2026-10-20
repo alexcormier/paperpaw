@@ -6,6 +6,143 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Themes: a theme's defaults (a data plugin's `settings.ini`, or the
+  Pebble theme switched on) win over the device's own: a large-print
+  theme now enlarges the interface on the X4 too, whose own default is
+  small. What the user chose still wins over both.
+- Screen: a full refresh a plugin's refresh filter asks for (a flash on
+  some page turns) starts the count to the next periodic full refresh
+  anew, where it came again as soon as if there had been none. How often
+  the screen is refreshed in full may be a book's own ("Only this
+  book"), e.g. more often for a comic.
+- Plugins: a data plugin updated or removed while running takes its
+  stylesheet for books and its key bindings with it; before, the old
+  version's applied until a restart, beside the new one's.
+- Plugins: an update from the store that would not load (a translation
+  with a mistake, say) is refused before anything changes, so the
+  version before stays; before, it was removed and the new one marked
+  failed. A plugin offered under the name of one built in (such as
+  the default fonts or Wi-Fi) is refused, and installing a plugin from
+  the folder it is installed in no longer deletes it.
+- Plugins: data plugins are read one at a time at start, each let go
+  once registered, instead of all of them first; one switched off keeps
+  only its name and description in memory. A language pack beside a
+  few other data plugins no longer fills the X4's memory at every start.
+- Passwords and keys: the file that holds them is read again before
+  each change is saved. Where it cannot be read, it is left as it is and
+  the device says so; once it can be read again (corrected on a
+  computer), what it holds is used again and kept along with what was
+  entered since. Before, one failed read at start kept every later
+  password from being saved, without a word.
+- Languages: the kernel's translations name the language's decimal mark
+  (`.` in English, `,` in German), which every plugin can use for the
+  numbers it shows.
+- SDK: a time a screen asks for with `Cx::wake_at` is that screen's:
+  it comes while the screen is on top, waits while another covers it
+  (a menu, a keyboard, a quick panel) and is kept when the screen is
+  made anew for another size; before, it came to whatever screen was on
+  top and was forgotten whenever a screen opened or closed.
+  `Screen::on_close` is also called on the old screen when a screen is
+  made anew; the commands it gives then are not run.
+- Data plugins: translations named in capitals (`DE.INI`, as a memory
+  card or an old computer may name them) are read too.
+- Clean up storage: what is kept for a book still on the memory card
+  stays, also where no plugin opens its format now (switched off) and
+  whatever the case of its folder's name (`Books` or `books`); where a
+  folder cannot be read, nothing is removed and the device says so.
+  Before, notes, positions and covers of such books were deleted.
+- Plugins: a plugin being updated when the power went is no longer
+  lost: the version set aside for the install is put back at the next
+  start.
+- Plugins: a plugin (also a data plugin folder) named `plugins`,
+  `fonts`, `menus` or `slots` is refused with a warning: its settings in
+  `paperpaw.ini` would have been read as that section's entries and
+  dropped.
+- Speech: with "Say what has the focus" on, moving the focus quickly
+  says each row in place of the one before, where only the first was
+  said until it was done.
+- Screen: a menu or other screen opened again for something else (in
+  its place) no longer leaves pieces of the one before on the screen.
+  Turning the screen on the X4 makes the screens anew once, not twice,
+  and turning it half way round brings the row of button hints back
+  when it is upright again. Where memory is short when the screen is
+  turned or a picture is shown in grays, the frame is drawn in smaller
+  bands rather than not at all until a restart.
+- Buttons: a button let go no longer stays held when its press came
+  twice around a new screen showing (pressed again, or its release
+  missed): the kernel took it for held, and a long press followed by
+  itself (going home), or the next release was lost. The same goes for
+  a finger put down again.
+- Touch: two fingers resting on the screen no longer keep the device
+  awake (the kernel asked over and over to be woken for a long press
+  two fingers never make), and the finger left after lifting one of two
+  makes no long press either. A long press works at the edges of the
+  screen too, where swipes in from the edge begin: on the first line of
+  a book (to select a word) and on the keys along the edges of the
+  keyboard. Swipes in from the edges work as before.
+- Screens: a time a screen asks for is its own: it comes to that screen
+  once it is on top again, where before it came to whatever screen was
+  on top (a menu over the reader got the reader's) and was forgotten
+  whenever a screen opened or closed (the library's shelves stopped
+  being made). A screen covered by a menu, a keyboard or the quick panel
+  waits meanwhile: pages no longer turn by themselves and the clock no
+  longer refreshes below them. A screen made anew (the screen turned)
+  first keeps what it would lose, as when it closes: the reader its
+  position, which went back a few pages.
+- Settings: a `paperpaw.ini` that is there but cannot be read (saved in
+  another encoding than UTF-8, larger than 64 KiB, or a read of the
+  memory card failed) is no longer written over: PaperPaw starts with
+  the defaults, says so, and leaves the file as it is, where before the
+  next change of a setting, a key binding or a menu wrote a new file
+  with only that change and every other setting was lost. The same goes
+  for a book's own settings ("Only this book") and for the file of
+  passwords and keys. A `paperpaw.ini` saved as "UTF-8 with BOM" is read
+  whole (its first section was lost). Saving a book's own settings keeps
+  what else its file holds, such as the settings of a plugin switched
+  off.
+- Settings: "Only this book" holds while the book is open, also after
+  the screen was turned or the row of button hints changed in a menu
+  over the book; before, the next change went to every book.
+- Key bindings: binding a button in PaperPaw no longer drops the
+  emulator's own bindings from its user configuration.
+- Storage: whether names in another case are the same file (as on the
+  memory card) reaches plugins through the kernel's own layers; it read
+  "no" everywhere before. Where they are other files (a Linux disk), the
+  kernel no longer takes `A.txt` for `a.txt` in what it remembers of a
+  call's reads.
+- Wi-Fi: once work that waited for a network fails because none came
+  (away from every known network), nothing wants the radio any more,
+  so it may go off: before, it stayed wanted and the Wi-Fi plugin
+  looked for networks every few seconds until the device slept.
+- SDK: `firmware::compare_versions` orders pre-releases as SemVer does,
+  numbered parts as numbers (`0.5.0-rc.9` before `0.5.0-rc.10`), so an
+  update between numbered pre-releases is offered.
+- Fonts browser: lighter on the X4. Only the files this device installs
+  are kept of the catalog, a font's page gets its font from the list
+  instead of reading the catalog again, and the samples held share 48 KB
+  there (the fonts past it are named in the menus' font); the list lets
+  go of its samples while a font's page is open. The catalog is fetched
+  once each time the list opens, no longer on every return to it. A
+  catalog with more fonts or files than are read no longer mixes the
+  last font kept with those after it, and a download a restart cut off
+  no longer shows as going on forever.
+- Store: a plugin of the library with the id of a plugin built into
+  PaperPaw, or of the other kind (data for code, code for data), is
+  neither listed nor installed (*... cannot replace*), so a library can
+  no longer take the place of, say, the fonts or Wi-Fi. A plugin's page
+  is fetched into a file of its own and taken only if it is that
+  plugin's, and it keeps the query of the library's address (a key a
+  library of one's own asks for).
+- Plugin manager: a plugin installed or removed while its list is open
+  (from the store opened from it, say) shows there at once; the list
+  was the one of when it opened.
+- Update: an update file on the card no newer than the version running
+  says so (*an older version*, *again*) and installs as *Install older
+  version* or *Install again*, with *Search online* beside it; a newer
+  update the server names comes first. A version from the update server
+  that is no version (with `/`, say) is no offer, so it can no longer
+  name a file outside `updates`, and a download a restart cut off
+  (`updates/.download`, `.download.part`) is removed at start.
 - A new look, rounder and friendlier: soft corners, pills for buttons,
   switches, chips and the highlight, plain headers (the title on the
   page, a little larger, no bar or line), faint lines between rows from
@@ -368,6 +505,56 @@ change the plugin SDK.
   in the emulator (a page of an empty listing was counted below zero).
 - Data files: a file marked `# format 0` is left as it is instead of
   stopping PaperPaw; versions start at 1.
+- The order of a status line's items can be changed with buttons alone:
+  *Menu* (a long press of *Confirm* on the X4) takes the focused item
+  along, the direction and page buttons move it, *Confirm* or *Back*
+  put it down. Items of plugins not there now keep their places when
+  others are shown, hidden or moved.
+- The choice overlay (what to do with a file, whether to delete it)
+  puts options that do not fit on pages, with a pager below them, so
+  every option can be reached by touch. On touch screens, a button
+  pressed on such a list or on a status line's items first shows the
+  focus instead of choosing a row nobody saw.
+- Home: on a touch screen with buttons, a tap during a move by the
+  buttons (e.g. on the pencil) keeps what they moved; the second of two
+  equal items without room is no longer dropped from the page.
+- Status lines draw nothing past their area: icons, gauges and bars
+  that do not fit whole are left out, a battery without its percentage
+  where only the battery fits. A word's background at the left edge of
+  the page keeps its padding on the right.
+- Sliders: the buttons come back from an end that is no whole step to
+  the steps a drag gives (from 12 in fives to 10, not 7); a drag brought
+  back to where it began keeps the value, also where steps are finer
+  than pixels; a touch whose end got lost no longer holds a slider or a
+  row's grip.
+- A kept thumbnail whose header claims a picture larger than the box it
+  was made for takes no memory for it (a file of 17 bytes could ask for
+  8 MB). Empty
+  screens in narrow areas leave out the paw (or the icon) that would
+  not fit.
+- SDK: `Settings::define` and `define_fixed` refuse a setting past the
+  32,768th of its kind instead of mixing it up with another; changing a
+  spec kept in the program with no place left for its copy says
+  `SettingError::Full`, and `Settings::set_choices` says whether it
+  did. `Thumbnail::kept` takes the box the thumbnail was made for and
+  reads no header claiming more.
+- Headers translate their page number; on and off in setting rows are
+  the kernel's words (`core.on`, `core.off`), also where the settings
+  plugin is switched off.
+- SDK: `ListView::confirm` (the first press shows a hidden focus) and
+  `ListView::set_len` (the focus kept in a shorter list).
+  `Slider::stepped` goes to the next step a drag gives;
+  `ui::next_value` steps from a value not among the options to the
+  first (or last) option and stays within a number's range at its
+  ends. Fields set past what the constructors allow no longer bring a
+  list down (`ListView::row` 0, more columns than fit, a `Slider` with
+  `max` below `min`), nor do `Rows::new` with marks and heights of
+  different lengths. Steppers measure the room of their value by its
+  width.
+- Headers: the back arrow's ink begins at the content's margin, where
+  list icons begin, and the title where labels after icons do; the next
+  page's arrow ends at the right margin (on the Boox the arrow sat 8 px
+  left of the icons).
 - SDK: helpers that plugins wrote each for themselves, now in one place.
   `Storage::ignores_case` says whether a storage takes `Books` for
   `books` (memory cards, Windows and macOS disks do), and
@@ -664,6 +851,16 @@ change the plugin SDK.
   1.97.0.0 with the Xtensa GCC 14.2.0 for the ESP32-S3 devices
   (`shells/xteink/versions.env`). The firmware is a workspace of its
   own, so it also builds in a checkout inside another one.
+- Releases name, for each device, the fingerprint a native code plugin
+  must have to run on its firmware (`paperpaw-<device>-<version>-abi.txt`,
+  16 hexadecimal digits), for the plugin library and authors. The
+  firmware's ELF file names it, the one its loader compares, and
+  `paperpaw-sign fingerprint` reads it; a release fails if the sample
+  code plugin, built and packed as an author does, does not fit its
+  firmware. CI checks the same for the X4, X4 Pro and X4 Classic, loads
+  a plugin built in another workspace into a kernel, keeps the SDK free
+  of mutable statics, and checks that the sample and its CI template
+  name the firmware's compilers.
 - Security: PaperPaw's own data (`.paperpaw`: passwords, trusted
   firmware keys, settings) can no longer be reached by another spelling
   of its name. On the X4's card a name stands for an entry by its long

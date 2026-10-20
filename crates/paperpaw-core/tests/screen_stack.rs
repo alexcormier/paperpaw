@@ -262,7 +262,6 @@ proptest! {
 /// An overlay that says it reaches past the screen is refreshed only on
 /// the screen.
 #[test]
-#[ignore = "bug: an overlay reaching past the screen asks the shell to refresh off the screen"]
 fn an_overlay_reaching_past_the_screen_refreshes_only_the_screen() {
     let harness = Harness::new();
     let mut kernel = kernel(&harness, None);

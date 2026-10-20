@@ -239,9 +239,11 @@ pub fn trust(storage: &dyn Storage, key: &[u8; 32]) -> Result<(), StorageError> 
 
 /// Compares versions such as `0.4.0` and `0.10.1` number by number; a
 /// pre-release such as `0.4.0-dev` comes before its release, and
-/// pre-releases compare part by part as in SemVer (`rc.9` before
-/// `rc.10`, numbers before words).
+/// pre-releases are ordered as SemVer orders them (`rc.9` before
+/// `rc.10`).
 pub fn compare_versions(a: &str, b: &str) -> Ordering {
+    /// The numbers, and the pre-release if there is one; build metadata
+    /// left out.
     fn parts(v: &str) -> (Vec<u64>, Option<&str>) {
         let v = v.split('+').next().unwrap_or_default();
         let (numbers, pre) = v.split_once('-').map_or((v, None), |(n, p)| (n, Some(p)));
@@ -255,34 +257,38 @@ pub fn compare_versions(a: &str, b: &str) -> Ordering {
     a_numbers
         .cmp(&b_numbers)
         .then_with(|| match (a_pre, b_pre) {
-            // No pre-release is the release itself, after its pre-releases.
             (None, None) => Ordering::Equal,
+            // No pre-release is the release itself, after its pre-releases.
             (None, Some(_)) => Ordering::Greater,
             (Some(_), None) => Ordering::Less,
             (Some(a), Some(b)) => compare_pre_releases(a, b),
         })
 }
 
-/// SemVer's order of pre-releases: part by part, numbers by their value
-/// and before words, words as text; more parts after equal ones last.
+/// SemVer's order of pre-releases: part by part (between dots), numbers
+/// as numbers and before words, words as text; where all parts of one
+/// are those the other begins with, the shorter first.
 fn compare_pre_releases(a: &str, b: &str) -> Ordering {
+    let is_number = |part: &str| !part.is_empty() && part.bytes().all(|b| b.is_ascii_digit());
     let (mut a, mut b) = (a.split('.'), b.split('.'));
     loop {
-        match (a.next(), b.next()) {
+        let order = match (a.next(), b.next()) {
             (None, None) => return Ordering::Equal,
             (None, Some(_)) => return Ordering::Less,
             (Some(_), None) => return Ordering::Greater,
-            (Some(x), Some(y)) => {
-                let order = match (x.parse::<u64>(), y.parse::<u64>()) {
-                    (Ok(x), Ok(y)) => x.cmp(&y),
-                    (Ok(_), Err(_)) => Ordering::Less,
-                    (Err(_), Ok(_)) => Ordering::Greater,
-                    (Err(_), Err(_)) => x.cmp(y),
-                };
-                if order != Ordering::Equal {
-                    return order;
+            (Some(x), Some(y)) => match (is_number(x), is_number(y)) {
+                // Of any length: the one with more digits is larger.
+                (true, true) => {
+                    let (x, y) = (x.trim_start_matches('0'), y.trim_start_matches('0'));
+                    x.len().cmp(&y.len()).then_with(|| x.cmp(y))
                 }
-            }
+                (true, false) => Ordering::Less,
+                (false, true) => Ordering::Greater,
+                (false, false) => x.cmp(y),
+            },
+        };
+        if order != Ordering::Equal {
+            return order;
         }
     }
 }
@@ -388,6 +394,15 @@ mod tests {
         assert_eq!(compare_versions("0.4.0-dev", "0.4.0"), Ordering::Less);
         assert_eq!(compare_versions("0.4.0-dev", "0.3.0"), Ordering::Greater);
         assert_eq!(compare_versions("0.4.0+x4", "0.4.0"), Ordering::Equal);
+        assert_eq!(
+            compare_versions("0.5.0-alpha", "0.5.0-alpha.1"),
+            Ordering::Less
+        );
+        assert_eq!(compare_versions("0.5.0-2", "0.5.0-alpha"), Ordering::Less);
+        assert_eq!(
+            compare_versions("0.5.0-rc.007", "0.5.0-rc.7"),
+            Ordering::Equal
+        );
     }
 
     /// What version 1 wrote stays readable (see `docs/data-files.md`).

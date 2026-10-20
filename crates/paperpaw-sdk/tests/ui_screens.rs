@@ -181,7 +181,6 @@ fn a_long_title_takes_up_to_three_lines_and_the_options_stay_below_it() {
 /// More options than the screen holds (a plugin offering many): every
 /// option is still to be reached, on the screen.
 #[test]
-#[ignore = "bug: Choice lays all options out in one list taller than the screen; those below are off it"]
 fn more_options_than_fit_stay_on_the_screen() {
     let h = Harness::new(Device::TOUCH);
     let options: Vec<String> = (0..30).map(|n| format!("option{n}")).collect();
@@ -199,6 +198,60 @@ fn more_options_than_fit_stay_on_the_screen() {
         "rows below the screen: {:?}",
         rows.last()
     );
+}
+
+/// Thirty options on pages: by touch, the pager's right half turns to
+/// the next page and a tap picks option 29 on the last; by buttons the
+/// page buttons step a row (the X4's buttons beside the screen) and reach
+/// it too; a swipe on a touch screen (a page button, the focus hidden)
+/// turns a page.
+#[test]
+fn every_option_on_pages_is_reached_by_touch_and_by_buttons() {
+    let names: Vec<String> = (0..30).map(|n| format!("o{n}")).collect();
+    let options: Vec<&str> = names.iter().map(String::as_str).collect();
+    let rows_of = |h: &Harness, screen: &mut Choice| -> (Vec<Rect>, Option<Rect>) {
+        let (described, _) = describe(480, 800, |c| screen.draw(c, &h.env()));
+        let rows = described
+            .iter()
+            .filter(|d| d.role == paperpaw_sdk::semantics::Role::Row)
+            .map(|d| d.area)
+            .collect();
+        let pager = described
+            .iter()
+            .find(|d| d.label.contains(" / "))
+            .map(|d| d.area);
+        (rows, pager)
+    };
+    // By touch.
+    let h = Harness::new(Device::TOUCH);
+    let mut screen = Choice::new(&h.env(), &opened(&options));
+    let (rows, pager) = rows_of(&h, &mut screen);
+    let per_page = rows.len();
+    assert!(per_page < 30);
+    let pager = pager.expect("a pager below the options");
+    let pages = 30usize.div_ceil(per_page);
+    for _ in 1..pages {
+        run(&h, |cx| screen.on_gesture(tap(470, middle(pager).y), cx));
+    }
+    let (rows, _) = rows_of(&h, &mut screen);
+    let last = *rows.last().unwrap();
+    let (_, commands) = run(&h, |cx| screen.on_gesture(tap(100, middle(last).y), cx));
+    assert_eq!(picked(&commands).as_deref(), Some("o29"));
+    // A swipe turns a page while the focus is hidden.
+    let mut screen = Choice::new(&h.env(), &opened(&options));
+    run(&h, |cx| screen.on_action(&actions::NEXT_PAGE, cx));
+    let (rows, _) = rows_of(&h, &mut screen);
+    let (_, commands) = run(&h, |cx| screen.on_gesture(tap(100, middle(rows[0]).y), cx));
+    let first = format!("o{per_page}");
+    assert_eq!(picked(&commands).as_deref(), Some(first.as_str()));
+    // By buttons: the page buttons step a row, down to the last.
+    let h = Harness::new(Device::BUTTONS);
+    let mut screen = Choice::new(&h.env(), &opened(&options));
+    for _ in 0..29 {
+        run(&h, |cx| screen.on_action(&actions::NEXT_PAGE, cx));
+    }
+    let (_, commands) = run(&h, |cx| screen.on_action(&actions::CONFIRM, cx));
+    assert_eq!(picked(&commands).as_deref(), Some("o29"));
 }
 
 // ---- Choosing a status line's items -------------------------------------
@@ -324,7 +377,6 @@ fn shown_items_are_reordered_by_their_grip() {
 /// updated) are part of the setting: changing the others keeps them, so
 /// they are back in their place when the plugin is.
 #[test]
-#[ignore = "bug: ItemsScreen writes back only the items there are now, dropping those of absent plugins"]
 fn items_of_a_plugin_not_there_now_are_kept() {
     let h = status_harness(Device::BUTTONS, "t.page, gone.clock, t.time");
     let mut screen = items_screen(&h);
@@ -333,6 +385,90 @@ fn items_of_a_plugin_not_there_now_are_kept() {
     let (_, commands) = run(&h, |cx| screen.on_action(&actions::CONFIRM, cx));
     let value = written(&commands).unwrap();
     assert!(value.contains("gone.clock"), "{value}");
+}
+
+/// With buttons alone (the X4), shown items are moved as by their grip:
+/// *Menu* takes the focused one along, the direction buttons move it a
+/// place, *Confirm* puts it down; then the buttons move the focus again.
+#[test]
+fn shown_items_are_reordered_by_buttons_alone() {
+    let h = status_harness(Device::BUTTONS, "t.page, t.time, t.battery");
+    let mut screen = items_screen(&h);
+    let env = h.env();
+    assert_eq!(
+        screen.hint(&actions::MENU, &env),
+        paperpaw_sdk::Hint::Text("core.move".into())
+    );
+    run(&h, |cx| screen.on_action(&actions::MENU, cx));
+    assert_eq!(
+        screen.hint(&actions::CONFIRM, &env),
+        paperpaw_sdk::Hint::Text("core.grid.done".into())
+    );
+    let (_, commands) = run(&h, |cx| screen.on_action(&actions::DOWN, cx));
+    assert_eq!(
+        written(&commands).as_deref(),
+        Some("t.time, t.page, t.battery")
+    );
+    // Back puts it down too and does not leave the screen.
+    let (handled, commands) = run(&h, |cx| screen.on_action(&actions::BACK, cx));
+    assert_eq!(handled, Handled::Yes);
+    assert!(!commands.contains(&Command::Back));
+    // The buttons move the focus again: Confirm hides the next item.
+    run(&h, |cx| screen.on_action(&actions::DOWN, cx));
+    let (_, commands) = run(&h, |cx| screen.on_action(&actions::CONFIRM, cx));
+    assert!(written(&commands).is_some());
+}
+
+/// Menu takes an item along only where there is another shown item to
+/// move it past; its hint says so only then. While it is taken, a frame
+/// in the focus's ink inside the focused row shows it, not hidden in the
+/// focus.
+#[test]
+fn an_item_is_taken_along_only_past_another_and_shows_it() {
+    let h = status_harness(Device::BUTTONS, "t.page");
+    let mut screen = items_screen(&h);
+    let env = h.env();
+    assert_eq!(
+        screen.hint(&actions::MENU, &env),
+        paperpaw_sdk::Hint::Default
+    );
+    let (handled, _) = run(&h, |cx| screen.on_action(&actions::MENU, cx));
+    assert_eq!(handled, Handled::No, "left to the kernel's menu");
+
+    let h = status_harness(Device::BUTTONS, "t.page, t.time");
+    let mut screen = items_screen(&h);
+    let env = h.env();
+    let style = UiStyle::new(&env);
+    run(&h, |cx| screen.on_action(&actions::MENU, cx));
+    let (described, frame) = describe(480, 800, |c| screen.draw(c, &env));
+    let row = described
+        .iter()
+        .find(|d| d.role == paperpaw_sdk::semantics::Role::Row && d.focused)
+        .map(|d| d.area)
+        .expect("the focused row");
+    // The frame's top, a little inside the row, in the focus's ink.
+    let y = row.y + (style.line * 3 + style.line) as u16;
+    let x = row.x + row.width / 2;
+    assert_eq!(frame.view().pixel(x, y), style.focus_ink(true));
+}
+
+/// On a touch screen the focus shows only once a button moved it: a
+/// first *Confirm* shows it instead of choosing a row nobody saw.
+#[test]
+fn a_first_confirm_on_a_touch_screen_shows_the_focus() {
+    let h = Harness::new(Device::TOUCH);
+    let mut screen = Choice::new(&h.env(), &opened(&["open", "delete"]));
+    let (_, commands) = run(&h, |cx| screen.on_action(&actions::CONFIRM, cx));
+    assert_eq!(picked(&commands), None);
+    let (_, commands) = run(&h, |cx| screen.on_action(&actions::CONFIRM, cx));
+    assert_eq!(picked(&commands).as_deref(), Some("open"));
+
+    let h = status_harness(Device::TOUCH, "t.page");
+    let mut screen = items_screen(&h);
+    let (_, commands) = run(&h, |cx| screen.on_action(&actions::CONFIRM, cx));
+    assert_eq!(written(&commands), None);
+    let (_, commands) = run(&h, |cx| screen.on_action(&actions::CONFIRM, cx));
+    assert_eq!(written(&commands).as_deref(), Some(""));
 }
 
 #[test]

@@ -133,8 +133,8 @@ impl Kernel {
                 else {
                     return false;
                 };
-                match top.map_or(Hint::Default, |t| t.screen.hint(&action, &env)) {
-                    Hint::Default => self.default_hint(&action) != Hint::Hidden,
+                match top.map_or(Hint::Default, |t| t.screen.hint(action, &env)) {
+                    Hint::Default => self.default_hint(action) != Hint::Hidden,
                     hint => hint != Hint::Hidden,
                 }
             })
@@ -154,12 +154,12 @@ impl Kernel {
                 let Some(action) = self.resolve(&InputKey::Button(Cow::Borrowed(button))) else {
                     return Hint::Hidden;
                 };
-                match top.map_or(Hint::Default, |t| t.screen.hint(&action, &env)) {
+                match top.map_or(Hint::Default, |t| t.screen.hint(action, &env)) {
                     // Nowhere to go back to from the first screen.
-                    Hint::Default if action == actions::BACK && self.stack.len() < 2 => {
+                    Hint::Default if *action == actions::BACK && self.stack.len() < 2 => {
                         Hint::Hidden
                     }
-                    Hint::Default => self.default_hint(&action),
+                    Hint::Default => self.default_hint(action),
                     hint => hint,
                 }
             })

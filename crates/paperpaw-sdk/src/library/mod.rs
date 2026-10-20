@@ -370,7 +370,7 @@ pub fn cover(
         book.size, image.path, image.width, image.height
     ));
     let file = cover_file(path);
-    if let Some(thumb) = crate::ui::Thumbnail::kept(storage, &file, stamp) {
+    if let Some(thumb) = crate::ui::Thumbnail::kept(storage, &file, stamp, (w, h)) {
         return Some(thumb);
     }
     let thumb = crate::ui::Thumbnail::new(storage, image, w, h, format)?;

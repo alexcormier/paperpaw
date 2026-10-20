@@ -362,22 +362,30 @@ fn room_of(geometry: &Geometry, taken: &[Cells], w: u8, h: u8, least: u8) -> Opt
 /// the grid and nothing before took the cells), the others in the first
 /// free cells. Items without room are left out.
 pub fn place(env: &Env<'_>, geometry: &Geometry, items: &[Item]) -> Vec<(Item, Cells)> {
-    let mut placed: Vec<(Item, Cells)> = Vec::new();
-    let fits = |c: &Cells, placed: &[(Item, Cells)]| {
+    places(env, geometry, items)
+        .into_iter()
+        .map(|(index, c)| (items[index].clone(), c))
+        .collect()
+}
+
+/// [`place`], each item by its index in `items` (equal items apart).
+fn places(env: &Env<'_>, geometry: &Geometry, items: &[Item]) -> Vec<(usize, Cells)> {
+    let mut placed: Vec<(usize, Cells)> = Vec::new();
+    let fits = |c: &Cells, placed: &[(usize, Cells)]| {
         c.fits(geometry.columns, geometry.rows) && !placed.iter().any(|(_, p)| p.overlaps(c))
     };
     // Those with a place first, so the others do not take it.
-    for item in items {
+    for (index, item) in items.iter().enumerate() {
         if let Some(c) = item.at
             && fits(&c, &placed)
         {
-            placed.push((item.clone(), c));
+            placed.push((index, c));
         }
     }
-    for item in items.iter().filter(|i| i.at.is_none()) {
+    for (index, item) in items.iter().enumerate().filter(|(_, i)| i.at.is_none()) {
         let taken: Vec<Cells> = placed.iter().map(|(_, c)| *c).collect();
         if let Some(c) = room_for(env, geometry, &taken, &item.what) {
-            placed.push((item.clone(), c));
+            placed.push((index, c));
         }
     }
     placed

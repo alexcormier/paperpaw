@@ -8,7 +8,6 @@
 
 use alloc::format;
 use alloc::string::String;
-use alloc::vec::Vec;
 
 use crate::document::ImageRef;
 use crate::setting::{Setting, Text};
@@ -104,26 +103,40 @@ pub fn draw(canvas: &mut Canvas<'_>, area: Rect, color: Color) {
     if side < 8 {
         return;
     }
-    // Two by two samples a pixel; the pad's width per sample row, read
-    // once.
+    // Two by two samples a pixel; the pad's width for the two sample rows
+    // of the pixel row being drawn, worked out once a row (only for the
+    // rows drawn: nothing kept for the whole logo, band by band).
     let samples = side * 2;
     let to_units = |s: i64| (2 * s + 1) * UNITS * FINE / (2 * samples);
-    let pad: Vec<(i64, i64)> = (0..samples).map(|s| pad_span(to_units(s))).collect();
-    let inside = |su: i64, sv: i64| {
-        let (u, v) = (to_units(su), to_units(sv));
-        (sheet(u, v) && !paw(u, v, pad[sv as usize])) || dog_ear(u, v)
+    let row = core::cell::Cell::new(None::<(u32, [Span; 2])>);
+    let pads = |dy: u32| match row.get() {
+        Some((at, pads)) if at == dy => pads,
+        _ => {
+            let sv = i64::from(dy) * 2;
+            let pads = [pad_span(to_units(sv)), pad_span(to_units(sv + 1))];
+            row.set(Some((dy, pads)));
+            pads
+        }
     };
     let x = i32::from(area.x) + (i32::from(area.width) - side as i32) / 2;
     let y = i32::from(area.y) + (i32::from(area.height) - side as i32) / 2;
     canvas.draw_mask(x, y, side as u32, side as u32, color, |dx, dy| {
         let (su, sv) = (i64::from(dx) * 2, i64::from(dy) * 2);
+        let pads = pads(dy);
+        let inside = |a: i64, b: usize| {
+            let (u, v) = (to_units(su + a), to_units(sv + b as i64));
+            (sheet(u, v) && !paw(u, v, pads[b])) || dog_ear(u, v)
+        };
         let hits = [(0, 0), (1, 0), (0, 1), (1, 1)]
             .iter()
-            .filter(|(a, b)| inside(su + a, sv + b))
+            .filter(|&&(a, b)| inside(a, b))
             .count();
         (hits * 255 / 4) as u8
     });
 }
+
+/// Where the pad is across one sample row: from, to (in fine steps).
+type Span = (i64, i64);
 
 /// Units in the drawing's fine steps.
 const fn at(units: i64) -> i64 {
@@ -230,6 +243,33 @@ mod tests {
         assert!(!paw(at(10), at(67), pad_span(at(67))));
         assert_eq!(pad_span(at(67)), (at(28), at(64)), "36 across at most");
         assert_eq!(pad_span(at(20)), (0, 0));
+    }
+
+    #[test]
+    fn drawn_band_by_band_it_is_the_same_logo() {
+        use paperpaw_graphics::Framebuffer;
+        use paperpaw_platform::PixelFormat;
+        let area = Rect::new(4, 6, 90, 90);
+        let whole = {
+            let mut frame = Framebuffer::new(100, 100, PixelFormat::Gray8).unwrap();
+            draw(&mut frame.canvas(), area, Color::BLACK);
+            frame
+        };
+        let mut bands = Framebuffer::new(100, 100, PixelFormat::Gray8).unwrap();
+        for top in (0..100).step_by(7) {
+            let mut canvas = bands.canvas();
+            let mut band = canvas.clipped(Rect::new(0, top, 100, 7));
+            draw(&mut band, area, Color::BLACK);
+        }
+        let (a, b) = (whole.view(), bands.view());
+        let mut inked = 0;
+        for y in 0..100 {
+            for x in 0..100 {
+                assert_eq!(a.pixel(x, y), b.pixel(x, y), "at {x}, {y}");
+                inked += usize::from(a.pixel(x, y) != Color::WHITE);
+            }
+        }
+        assert!(inked > 2000, "a logo was drawn");
     }
 
     #[test]

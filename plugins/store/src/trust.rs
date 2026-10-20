@@ -30,6 +30,9 @@ pub(crate) enum Refusal {
     NotTheAuthor,
     /// This PaperPaw loads no code plugins.
     Unsupported,
+    /// The device has a plugin of its id it cannot replace: one built in,
+    /// or one of the other kind.
+    Taken,
 }
 
 impl Refusal {
@@ -41,6 +44,7 @@ impl Refusal {
             Refusal::Unsigned => "store.refused.unsigned",
             Refusal::NotTheAuthor => "store.refused.not-the-author",
             Refusal::Unsupported => "store.refused.unsupported",
+            Refusal::Taken => "store.refused.taken",
         }
     }
 }
@@ -115,6 +119,9 @@ pub(crate) fn verdict(env: &Env<'_>, plugin: &str, folder: &str) -> Verdict {
         .iter()
         .map(|name| format!("{folder}/{name}"))
         .find(|path| storage.exists(path));
+    if !crate::catalog::may_install(env.plugins, plugin, code.is_some()) {
+        return Verdict::Refused(Refusal::Taken);
+    }
     let Some(code) = code else {
         return Verdict::Install { code: None };
     };

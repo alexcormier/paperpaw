@@ -26,7 +26,7 @@ pub(crate) fn start(env: &Env<'_>, font: &Font, out: &mut Vec<Command>) {
         plugin: font.plugin(),
         name: font.name.clone(),
         files: font
-            .files(env)
+            .files
             .iter()
             .map(|f| PackageFile {
                 path: f.path.clone(),

@@ -353,7 +353,6 @@ fn widgets_without_a_place_fill_the_width_and_tools_one_cell() {
 /// not shown (`GridView::layout`), but it is taken for the one placed
 /// and dropped, so it is gone once the layout is kept.
 #[test]
-#[ignore = "bug: GridView::layout drops an unplaced item equal to one placed (repeated core.space)"]
 fn an_item_without_room_is_kept_even_when_its_twin_was_placed() {
     let h = harness(Device::TOUCH);
     let env = h.env();

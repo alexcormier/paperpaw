@@ -36,13 +36,17 @@ pub(crate) struct Recall {
     entries: RefCell<Vec<Entry>>,
     /// Bytes of file data kept at most.
     budget: usize,
+    /// Paths that differ only in case name the same file (see
+    /// [`Storage::ignores_case`]).
+    ignores_case: bool,
 }
 
 impl Recall {
-    pub fn new(budget: usize) -> Self {
+    pub fn new(budget: usize, ignores_case: bool) -> Self {
         Self {
             entries: RefCell::new(Vec::new()),
             budget,
+            ignores_case,
         }
     }
 
@@ -53,8 +57,18 @@ impl Recall {
         entries.shrink_to_fit();
     }
 
-    fn position(entries: &[Entry], path: &str) -> Option<usize> {
-        entries.iter().position(|e| same(&e.path, path))
+    fn position(&self, entries: &[Entry], path: &str) -> Option<usize> {
+        entries.iter().position(|e| self.same(&e.path, path))
+    }
+
+    /// The same file: so a write under another spelling of a path forgets
+    /// it too, where the storage takes both for one.
+    fn same(&self, a: &str, b: &str) -> bool {
+        if self.ignores_case {
+            a.eq_ignore_ascii_case(b)
+        } else {
+            a == b
+        }
     }
 
     fn kept(entries: &[Entry]) -> usize {
@@ -67,12 +81,14 @@ impl Recall {
 
     /// Forgets `path` (written, removed).
     fn forget(&self, path: &str) {
-        self.entries.borrow_mut().retain(|e| !same(&e.path, path));
+        self.entries
+            .borrow_mut()
+            .retain(|e| !self.same(&e.path, path));
     }
 
     fn remember_size(&self, path: &str, size: Result<u64, StorageError>) {
         let mut entries = self.entries.borrow_mut();
-        if entries.len() < MAX_ENTRIES && Self::position(&entries, path).is_none() {
+        if entries.len() < MAX_ENTRIES && self.position(&entries, path).is_none() {
             entries.push(Entry {
                 path: path.to_string(),
                 size,
@@ -80,12 +96,6 @@ impl Recall {
             });
         }
     }
-}
-
-/// The same file: paths compared as FAT does, ignoring ASCII case, so a
-/// write under another spelling forgets it too.
-fn same(a: &str, b: &str) -> bool {
-    a.eq_ignore_ascii_case(b)
 }
 
 /// The storage, with what is read remembered (see the module).
@@ -103,7 +113,7 @@ impl Recalled {
         }
         {
             let entries = self.recall.entries.borrow();
-            let at = Recall::position(&entries, path)?;
+            let at = self.recall.position(&entries, path)?;
             if entries[at].data.is_some() {
                 return Some(());
             }
@@ -124,7 +134,7 @@ impl Recalled {
         }
         data.truncate(at);
         let mut entries = self.recall.entries.borrow_mut();
-        let i = Recall::position(&entries, path)?;
+        let i = self.recall.position(&entries, path)?;
         entries[i].data = Some(data);
         Some(())
     }
@@ -134,8 +144,10 @@ impl Storage for Recalled {
     fn read_at(&self, path: &str, offset: u64, buf: &mut [u8]) -> Result<usize, StorageError> {
         if self.small_file(path).is_some() {
             let entries = self.recall.entries.borrow();
-            if let Some(data) =
-                Recall::position(&entries, path).and_then(|i| entries[i].data.as_ref())
+            if let Some(data) = self
+                .recall
+                .position(&entries, path)
+                .and_then(|i| entries[i].data.as_ref())
             {
                 let start = usize::try_from(offset)
                     .unwrap_or(usize::MAX)
@@ -151,7 +163,7 @@ impl Storage for Recalled {
     fn size(&self, path: &str) -> Result<u64, StorageError> {
         {
             let entries = self.recall.entries.borrow();
-            if let Some(i) = Recall::position(&entries, path) {
+            if let Some(i) = self.recall.position(&entries, path) {
                 return entries[i].size;
             }
         }
@@ -203,6 +215,10 @@ impl Storage for Recalled {
         self.inner.remove_dir_all(path)
     }
 
+    fn ignores_case(&self) -> bool {
+        self.recall.ignores_case
+    }
+
     fn local_path(&self, path: &str, with: &mut dyn FnMut(&str)) {
         self.inner.local_path(path, with);
     }
@@ -219,6 +235,7 @@ mod tests {
         inner: MemoryStorage,
         reads: Rc<Cell<usize>>,
         sizes: Rc<Cell<usize>>,
+        ignores_case: bool,
     }
 
     impl Storage for Counted {
@@ -242,9 +259,19 @@ mod tests {
         fn remove(&self, path: &str) -> Result<(), StorageError> {
             self.inner.remove(path)
         }
+        fn ignores_case(&self) -> bool {
+            self.ignores_case
+        }
     }
 
     fn storage(budget: usize) -> (Recalled, Rc<Cell<usize>>, Rc<Cell<usize>>) {
+        storage_of(budget, true)
+    }
+
+    fn storage_of(
+        budget: usize,
+        ignores_case: bool,
+    ) -> (Recalled, Rc<Cell<usize>>, Rc<Cell<usize>>) {
         let reads = Rc::new(Cell::new(0));
         let sizes = Rc::new(Cell::new(0));
         let inner = MemoryStorage::new()
@@ -255,8 +282,9 @@ mod tests {
                 inner,
                 reads: reads.clone(),
                 sizes: sizes.clone(),
+                ignores_case,
             }),
-            recall: Rc::new(Recall::new(budget)),
+            recall: Rc::new(Recall::new(budget, ignores_case)),
         };
         (recalled, reads, sizes)
     }
@@ -303,6 +331,18 @@ mod tests {
         s.recall.clear();
         read(&s, "a.txt");
         assert_eq!(reads.get(), 4);
+    }
+
+    /// Where names differ in case, so do files: one is not taken for the
+    /// other (`a.txt` and `A.txt` on a Linux disk).
+    #[test]
+    fn paths_in_another_case_are_other_files_where_the_storage_says_so() {
+        let (s, _, _) = storage_of(1024, false);
+        s.write("A.txt", b"other").unwrap();
+        assert_eq!(read(&s, "a.txt"), b"ello");
+        assert_eq!(read(&s, "A.txt"), b"ther");
+        assert!(!s.ignores_case());
+        assert!(storage_of(1024, true).0.ignores_case());
     }
 
     #[test]

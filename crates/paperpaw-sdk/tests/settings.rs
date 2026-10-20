@@ -568,13 +568,47 @@ fn vec_maps_collect_with_the_last_value_winning() {
 }
 
 /// Specs are found by places of 15 bits, the 16th marking those kept in
-/// the program: the 32,769th setting built at run time takes the place
-/// of the first kept in the program (or of none).
+/// the program: the 32,769th setting built at run time is refused instead
+/// of taking the place of the first kept in the program, and those before
+/// it are found as they were.
 #[test]
-#[ignore = "bug: Settings holds at most 32,768 specs of each kind, beyond that places overflow u16 (no error)"]
-fn more_than_32768_settings_are_kept_apart() {
+fn more_than_32768_settings_are_refused_not_mixed_up() {
     let mut s = Settings::new();
-    for i in 0..=32_768u32 {
+    let define = |s: &mut Settings, i: u32| {
+        let id = Id::parse(&format!("a.s{i}")).unwrap();
+        s.define(SettingSpec::new(
+            id,
+            "",
+            SettingKind::Bool,
+            SettingValue::Bool(false),
+        ))
+    };
+    for i in 0..32_768u32 {
+        define(&mut s, i).unwrap();
+    }
+    assert!(define(&mut s, 32_768).is_err());
+    assert!(s.spec("a.s32768").is_none());
+    for i in [0, 1, 32_767] {
+        let id = format!("a.s{i}");
+        assert_eq!(s.spec(&id).unwrap().id.as_str(), id);
+    }
+}
+
+/// A setting kept in the program is copied before it is changed; with no
+/// place left for the copy, that is said: an error that names it, and
+/// `set_choices` telling it did nothing.
+#[test]
+fn a_full_store_says_so_when_a_fixed_setting_is_changed() {
+    static LOOK: SettingSpec = SettingSpec::fixed_choice(
+        "a.look",
+        "",
+        &["a.plain", "a.bold"],
+        "a.plain",
+        groups::DISPLAY,
+    );
+    let mut s = Settings::new();
+    s.define_fixed(&LOOK).unwrap();
+    for i in 0..32_768u32 {
         let id = Id::parse(&format!("a.s{i}")).unwrap();
         s.define(SettingSpec::new(
             id,
@@ -584,5 +618,17 @@ fn more_than_32768_settings_are_kept_apart() {
         ))
         .unwrap();
     }
-    assert_eq!(s.spec("a.s32768").unwrap().id.as_str(), "a.s32768");
+    assert_eq!(
+        s.set_default_from_text("a.look", "a.bold"),
+        Err(SettingError::Full)
+    );
+    assert!(!s.set_choices("a.look", &["a.thin"][..]));
+    assert!(!s.set_choices("a.none", &["a.thin"][..]));
+    assert_eq!(
+        SettingError::Full.to_string(),
+        "no place left to change this setting"
+    );
+    // The fixed one is as it was.
+    let spec = s.spec("a.look").unwrap();
+    assert_eq!(spec.default, SettingValue::Text(Cow::Borrowed("a.plain")));
 }

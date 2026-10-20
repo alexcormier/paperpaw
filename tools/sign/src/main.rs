@@ -42,6 +42,9 @@ USAGE:
     paperpaw-sign plugins <image.bin>
         Lists the plugin crates an app image or update file has built in;
         fails if it lists none.
+    paperpaw-sign fingerprint <firmware.elf>
+        Prints the fingerprint native plugins must have to run on a
+        firmware (16 hexadecimal digits), as its ELF file names it.
     paperpaw-sign pack <plugin.elf> <plugin.ppn> [--key <secret-key-file>]
         Makes a native plugin file from a plugin linked with
         paperpaw-plugin.x and --emit-relocs, or says what keeps it from
@@ -90,6 +93,7 @@ fn run(args: Vec<String>) -> Result<(), String> {
         }
         ["check", image, signature] => firmware::check(image, signature),
         ["plugins", image] => firmware::plugins(image),
+        ["fingerprint", elf] => firmware::fingerprint(elf),
         ["pack", elf, out] => plugin::pack(elf, out, None),
         ["pack", elf, out, "--key", key] => plugin::pack(elf, out, Some(key)),
         ["plugin", file] => plugin::show(file),

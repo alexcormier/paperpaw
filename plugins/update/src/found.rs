@@ -4,8 +4,8 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use paperpaw_sdk::Storage;
 use paperpaw_sdk::firmware::{Firmware, InstallFailure, UPDATE_DIR, Update, compare_versions};
+use paperpaw_sdk::{Storage, files};
 
 /// The newest update for this device in [`UPDATE_DIR`]; without one, why
 /// the files there do not fit (or [`InstallFailure::Unreadable`] if there
@@ -13,8 +13,8 @@ use paperpaw_sdk::firmware::{Firmware, InstallFailure, UPDATE_DIR, Update, compa
 pub(crate) fn find(storage: &dyn Storage, firmware: &Firmware) -> Result<Update, InstallFailure> {
     let mut paths: Vec<String> = Vec::new();
     let _ = storage.list(UPDATE_DIR, &mut |entry| {
-        let name = entry.name.to_ascii_lowercase();
-        if !entry.is_dir && !name.starts_with('.') && name.ends_with(".bin") {
+        if !entry.is_dir && !entry.name.starts_with('.') && files::has_extension(entry.name, "bin")
+        {
             paths.push(format!("{UPDATE_DIR}/{}", entry.name));
         }
     });

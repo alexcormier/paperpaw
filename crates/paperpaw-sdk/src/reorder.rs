@@ -87,7 +87,11 @@ impl Reorder {
         movable: usize,
     ) -> Option<ReorderStep> {
         match (event.phase, self.drag) {
-            (PointerPhase::Down, None) => {
+            // The same finger coming down again starts afresh: the end of
+            // its drag got lost, which would otherwise hold the grip for
+            // good. Another finger meanwhile is not taken.
+            (PointerPhase::Down, held) if held.is_none_or(|d| d.pointer == event.id) => {
+                self.drag = None;
                 let index = list.hit(event.point, movable)?;
                 let slot = index - list.page() * list.rows();
                 if !Self::grip(list.row_rect(slot)).contains(event.point) {
@@ -131,7 +135,7 @@ impl Reorder {
         let first = list.page() * list.rows();
         let last = (first + list.rows()).min(movable).max(first + 1) - 1;
         let y = event.point.y - i32::from(list.area.y);
-        let slot = (y.max(0) as u32 / list.row) as usize;
+        let slot = (y.max(0) as u32 / list.row.max(1)) as usize;
         (first + slot).clamp(first, last)
     }
 
@@ -149,7 +153,11 @@ impl Reorder {
         if to == from {
             return;
         }
-        let r = list.row_rect(to - first);
+        // Not on this page (it was turned meanwhile): no bar.
+        let Some(slot) = to.checked_sub(first).filter(|&s| s < list.rows()) else {
+            return;
+        };
+        let r = list.row_rect(slot);
         // Below the row it passes when moving down, above it when up.
         let thick = (style.line * 4) as u16;
         let y = if to > from {
@@ -213,10 +221,48 @@ mod tests {
         assert_eq!(step, Some(ReorderStep::Dropped { from: 0, to: 3 }));
         assert_eq!(reorder.dragging(), None);
 
+        // The same finger down again over a drag whose end got lost:
+        // taken afresh; elsewhere than a grip, the drag ends.
+        reorder.on_pointer(&event(PointerPhase::Down, 950, 150), &list, 4);
+        let step = reorder.on_pointer(&event(PointerPhase::Down, 950, 350), &list, 4);
+        assert_eq!(step, Some(ReorderStep::Changed));
+        assert_eq!(reorder.dragging(), Some((2, 2)));
+        assert_eq!(
+            reorder.on_pointer(&event(PointerPhase::Down, 500, 150), &list, 4),
+            None
+        );
+        assert_eq!(reorder.dragging(), None);
+
         let mut items = alloc::vec![1, 2, 3, 4];
         moved(&mut items, 0, 3);
         assert_eq!(items, [2, 3, 4, 1]);
         moved(&mut items, 3, 1);
         assert_eq!(items, [2, 1, 3, 4]);
+    }
+
+    #[test]
+    fn a_drag_onto_another_page_draws_no_bar_off_it() {
+        use paperpaw_graphics::Framebuffer;
+        use paperpaw_platform::PixelFormat;
+        // Two rows a page; the focus on the second page.
+        let mut list = ListView::new(Rect::new(0, 0, 200, 200), 100);
+        list.focus = 2;
+        let mut reorder = Reorder::default();
+        reorder.on_pointer(&event(PointerPhase::Down, 150, 50), &list, 4);
+        assert_eq!(reorder.dragging(), Some((2, 2)));
+        // The page turned back meanwhile, by a button.
+        list.focus = 0;
+        reorder.on_pointer(&event(PointerPhase::Move, 150, 150), &list, 4);
+        assert_eq!(reorder.dragging(), Some((2, 1)));
+        list.focus = 2;
+        let mut fb = Framebuffer::new(200, 200, PixelFormat::Gray8).unwrap();
+        let mut canvas = fb.canvas();
+        let style = crate::ui::UiStyle {
+            line: 1,
+            margin: 4,
+            ..crate::ui::tests::STYLE
+        };
+        // Row 1 is on the page before: no underflow, no bar.
+        reorder.draw(&mut canvas, &style, &list);
     }
 }

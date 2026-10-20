@@ -71,6 +71,8 @@ impl Kernel {
             };
             let env = self.shared.env(self.now);
             let refresh = self.shared.refresh_filters.apply(&env, refresh, screen);
+            // Counted as done, after the filters.
+            self.frame.refresh.done(refresh.mode);
             effects.refresh = Some((refresh.region, refresh.mode));
             effects.grays = grays;
             self.shared.usage.refreshed(refresh.mode, refresh.region);
@@ -78,9 +80,6 @@ impl Kernel {
             self.shared
                 .meter
                 .refreshed(top, refresh.mode, refresh.region);
-        }
-        if let Some(at) = self.output.wake_at.take() {
-            self.screen_timer = Some(self.screen_timer.map_or(at, |t| t.min(at)));
         }
         let input = self.input.recognizer.next_deadline(&self.thresholds());
         let notice = self.notice.as_ref().map(|(_, until)| *until);
@@ -91,10 +90,12 @@ impl Kernel {
             .screenshot
             .is_some()
             .then(|| self.now.add_millis(300));
+        // Only the screen on top runs: a covered one's time waits.
+        let timer = self.stack.last().and_then(|top| top.timer);
         effects.wake_at = [
             self.hint.until,
             input,
-            self.screen_timer,
+            timer,
             notice,
             scheduled,
             self.sleep_due(),
@@ -193,9 +194,16 @@ impl Kernel {
                 return;
             }
             // The slot for something else (e.g. another book): opened anew
-            // in place of the old screen.
+            // in place of the old screen. What the closed ones covered is
+            // drawn again, also where the new one does not cover it.
+            let closed = (index..self.stack.len())
+                .map(|i| self.changed_region(i))
+                .reduce(|a, b| a.union(&b));
             self.close_from(index);
             self.stop_for_closed_screens();
+            if let Some(region) = closed {
+                self.invalidate(region);
+            }
         }
         match self.registry.resolve_slot(slot.as_str()).cloned() {
             Some(screen) => self.open(screen, Some(slot), &params),
@@ -319,8 +327,12 @@ impl Kernel {
             Command::Speak(speech) => {
                 let available = self.shared.caps.speech;
                 self.io.speech.speak(speech, available, screens, out);
+                self.io.focus_spoken = false;
             }
-            Command::StopSpeaking => self.io.speech.stop(),
+            Command::StopSpeaking => {
+                self.io.speech.stop();
+                self.io.focus_spoken = false;
+            }
             Command::Serve {
                 server,
                 port,

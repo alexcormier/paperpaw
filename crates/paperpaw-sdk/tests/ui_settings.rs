@@ -39,8 +39,6 @@ plural = one-other
 t.unit.px.one = {count} pixel
 t.unit.px.other = {count} pixels
 t.look.bold = Bold
-settings.on = On
-settings.off = Off
 t.tap = Tap a rule to pause it
 t.tap.buttons = Select a rule to pause it
 ";
@@ -175,6 +173,44 @@ fn a_choice_holding_a_value_it_does_not_offer_steps_to_one_it_does() {
         };
         assert!(PAIRS.contains(&next.as_ref()), "{next}");
     }
+}
+
+/// From a value not among the options, the first step on is the first
+/// option and the first step back the last (not the second and the
+/// first).
+#[test]
+fn from_a_value_not_offered_the_steps_begin_at_the_ends() {
+    let (h, [_, _, look, ..]) = harness(Device::TOUCH);
+    // Holding "t.look.plain", now offering the pair alone.
+    let mut spec = look.clone();
+    spec.kind = paperpaw_sdk::SettingKind::Choice(Choices::Fixed(&PAIRS));
+    let text = |v: Option<SettingValue>| match v {
+        Some(SettingValue::Text(t)) => t.to_string(),
+        other => panic!("{other:?}"),
+    };
+    assert_eq!(text(ui::next_value(&h.env(), &spec, 1)), PAIRS[0]);
+    assert_eq!(text(ui::next_value(&h.env(), &spec, -1)), PAIRS[1]);
+}
+
+/// A number at the end of the widest range, stepped by a large step:
+/// no overflow, and within the range.
+#[test]
+fn numbers_at_the_ends_of_their_range_do_not_overflow() {
+    let mut h = Harness::new(Device::TOUCH);
+    let wide = Setting::<i64>::new("t.wide");
+    let spec = SettingSpec::number(&wide, "t.wide", i64::MIN, i64::MAX, i64::MAX).step(i64::MAX);
+    h.settings.define(spec.clone()).unwrap();
+    assert_eq!(
+        ui::next_value(&h.env(), &spec, 3),
+        Some(SettingValue::Int(i64::MAX))
+    );
+    h.settings
+        .set("t.wide", SettingValue::Int(i64::MIN))
+        .unwrap();
+    assert_eq!(
+        ui::next_value(&h.env(), &spec, -3),
+        Some(SettingValue::Int(i64::MIN))
+    );
 }
 
 #[test]
