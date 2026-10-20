@@ -1048,6 +1048,10 @@ there in one of two ways, both through the same checks:
 - **A pull request** to the paperpaw.org repository that adds
   `catalogue/<id>.toml`, for developers.
 
+Before either, `paperpaw-dev check` (and `paperpaw-dev package` for a
+data plugin or a `.ppn` file) finds most of what the checks would refuse,
+and what they cannot see: see [Checking your plugin](#checking-your-plugin).
+
 An update is a new version with a higher number, the same way. The
 site's guide for authors, <https://paperpaw.org/authors>, has every
 field, check and limit; the skill's
