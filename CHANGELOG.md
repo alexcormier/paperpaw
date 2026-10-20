@@ -6,6 +6,12 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Updates on the X4 Pro and the X4 Classic: they check update files for
+  their own chip, the ESP32-S3, where they checked for the X4's: an X4
+  Pro refused its own updates and would have taken the X4's. Each also
+  names its own firmware in its image (`paperpaw-xteink-pro`,
+  `paperpaw-xteink-classic`; the X4's stays `paperpaw-xteink`), as the
+  two share the chip but not the board. SDK: `firmware::CHIP_ESP32_S3`.
 - Joplin (PLANNING C15, S1): a book's highlights and notes, once
   exported, become a note in Joplin, one per book, in a notebook named
   in the settings. Exporting again updates the note, also where it was
