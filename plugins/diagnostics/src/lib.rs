@@ -2,6 +2,10 @@
 //! kernel: it shows every gray level of the panel, exercises button and
 //! touch focus navigation, and demonstrates partial versus full refreshes.
 //!
+//! Page buttons turn its test pages (as many as the developer setting
+//! *Number of test pages* says); a held *Select* or a held finger starts
+//! it over.
+//!
 //! It binds itself to the home slot with the lowest regular priority, so it
 //! only appears until a real home screen plugin is installed, or when a
 //! user binds it explicitly:
@@ -19,6 +23,7 @@ use alloc::borrow::Cow;
 use alloc::boxed::Box;
 
 use paperpaw_sdk::builtin::{actions, fonts, groups, slots};
+use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::setting::Setting;
 use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Color, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest, Metrics,
@@ -35,14 +40,14 @@ pub const PAGES: Setting<i64> = Setting::new("diagnostics.pages");
 #[derive(Debug, Default)]
 pub struct Diagnostics;
 
-/// How many pages the test turns.
+/// How many pages the test turns: for developers, with the screen.
 static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_number(
     PAGES.static_str(),
     "diagnostics.setting.pages",
     1,
     10_000,
     20,
-    groups::SYSTEM,
+    groups::DEVELOPER,
 )
 .advanced()
 .described("diagnostics.setting.pages.help")];
@@ -158,6 +163,20 @@ impl DiagnosticsScreen {
             .clamp(1, i64::from(u32::MAX)) as u32
     }
 
+    /// The page shown: within the pages, also when they became fewer.
+    fn page(&self, pages: u32) -> u32 {
+        self.page.min(pages - 1)
+    }
+
+    /// Back to the start: the first page, nothing chosen.
+    fn reset(&mut self, cx: &mut Cx<'_, '_>) {
+        self.page = 0;
+        self.focus = 0;
+        self.checked = [false; 4];
+        cx.request_redraw();
+        cx.request_refresh(RefreshMode::Full);
+    }
+
     fn draw_box(&self, canvas: &mut Canvas<'_>, index: usize) {
         let r = self.layout.boxes[index];
         let (x, y, w, h) = (
@@ -215,10 +234,11 @@ impl DiagnosticsScreen {
         let text = env.i18n.format(
             "diagnostics.page",
             &[
-                ("page", Arg::Int(i64::from(self.page) + 1)),
+                ("page", Arg::Int(i64::from(self.page(pages)) + 1)),
                 ("pages", Arg::Int(i64::from(pages))),
             ],
         );
+        canvas.describe(Role::Text, &text, r, false, None);
         draw_label(
             &mut canvas.clipped(r),
             env,
@@ -245,7 +265,7 @@ impl DiagnosticsScreen {
         let filled = if pages <= 1 {
             inner
         } else {
-            (u64::from(inner) * u64::from(self.page) / u64::from(pages - 1)) as u32
+            (u64::from(inner) * u64::from(self.page(pages)) / u64::from(pages - 1)) as u32
         };
         canvas.fill_rect(
             x + border as i32,
@@ -346,10 +366,11 @@ impl Screen for DiagnosticsScreen {
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         let pages = Self::pages(cx.env());
         if *action == actions::NEXT_PAGE || *action == actions::PREV_PAGE {
+            let shown = self.page(pages);
             let page = if *action == actions::NEXT_PAGE {
-                (self.page + 1).min(pages - 1)
+                (shown + 1).min(pages - 1)
             } else {
-                self.page.saturating_sub(1)
+                shown.saturating_sub(1)
             };
             if page != self.page {
                 self.page = page;
@@ -361,11 +382,7 @@ impl Screen for DiagnosticsScreen {
             self.toggle(self.focus, cx);
             Handled::Yes
         } else if *action == RESET {
-            self.page = 0;
-            self.focus = 0;
-            self.checked = [false; 4];
-            cx.request_redraw();
-            cx.request_refresh(RefreshMode::Full);
+            self.reset(cx);
             Handled::Yes
         } else if let Some(focus) = self.move_focus(action) {
             if focus != self.focus {
@@ -378,6 +395,11 @@ impl Screen for DiagnosticsScreen {
     }
 
     fn on_gesture(&mut self, gesture: Gesture, cx: &mut Cx<'_, '_>) -> Handled {
+        // A held finger, as a held *Select*: start over.
+        if gesture.kind == GestureKind::LongPress {
+            self.reset(cx);
+            return Handled::Yes;
+        }
         if gesture.kind != GestureKind::Tap {
             return Handled::No;
         }

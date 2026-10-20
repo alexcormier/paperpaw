@@ -6,6 +6,11 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Diagnostics: the page shown stays within the test pages when they
+  are made fewer (it showed "Page 11 of 3" and drew past its bar), a
+  held finger starts the screen over as a held *Select* does, its page
+  is told to screen readers, and *Number of test pages* moved to the
+  developer settings.
 - Reading profiles: a name in use (whatever its case) is refused when a
   profile is saved or renamed, where two profiles could share one and
   *Next profile* then went back and forth between them; renaming the
