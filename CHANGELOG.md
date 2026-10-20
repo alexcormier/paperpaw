@@ -78,6 +78,44 @@ change the plugin SDK.
   named with two or three Chinese characters, no longer stops the
   library (the X4 restarted whenever the folder's parent or a catalog
   shelf was shown).
+- Security: a redirect no longer takes a request's credentials to
+  another server, nor any request from `https` down to plain `http`.
+  Every shell follows redirects by one rule (`paperpaw_http::follow`):
+  to another scheme, host or port only headers that never carry
+  credentials go along (`Accept`, `Range`, `User-Agent`, …; not
+  `Authorization`, cookies or a service's key headers), a body never
+  (the request fails), and from `https` to `http` not at all. Android
+  follows redirects itself for this, and now tells plugins where every
+  redirected answer came from (`final-url`), not only after a change
+  of scheme. Addresses with control characters are refused, spaces and
+  other bytes a request line cannot carry are percent-encoded, a
+  redirect's `Location` resolves as RFC 3986 says (`?query`, `../`),
+  and IPv6 hosts work (`http://[::1]:8080/`).
+- HTTP answers for a file (`save_to`): only a successful one (2xx) is
+  saved; an error's body (404, 500, also a 304) is its reason for the
+  plugin and leaves the file as it was, and the X4 replaces the old file
+  only once the new one is whole. A download longer than the limit
+  fails instead of being saved cut short. A request saving to a file
+  another is still saving to replaces that one (it fails at once,
+  "replaced by a newer request", and its late answer is passed over)
+  instead of both being mixed into the file. A body for the plugin
+  moves through the kernel without copies (it was held up to three
+  times), and the X4 sends a request's body without copying it first.
+- Sockets: text read from a socket keeps a character whole where a read
+  ends inside it (it comes with the next read), so non-ASCII text, e.g.
+  Calibre's metadata, no longer turns into replacement characters at
+  random and no longer upsets a protocol that counts bytes.
+- Plugins' servers on the emulator and Android (Wi-Fi transfer, the
+  phone keyboard) no longer let anyone in the network tie them up: a
+  request's head is read by the same parser as on the X4 (up to 8 KiB,
+  within 30 seconds in all; 431 or 400 otherwise, also for a
+  `Content-Length` that is no number), a server serves 8 connections at
+  a time and answers more with 503, an answer that comes before an
+  upload is whole (507, no room) ends it at once, and stopping a server
+  ends its connections and frees its port without polling. Request
+  bodies a crash left in `.paperpaw/tmp` are removed when the next one
+  comes.
+
 - Rules: a rule can apply when the battery reaches a level (80 %, 90 %,
   full or another), once each time it gets there and not again while
   the level wavers around it; with *Only if … While charging* it says
