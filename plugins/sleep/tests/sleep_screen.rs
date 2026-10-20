@@ -259,21 +259,24 @@ fn widgets_that_are_not_there_show_the_message() {
     assert!(device.says_sleeping());
 }
 
+/// Asleep, the screen takes every button but *Sleep* and *Home*: those
+/// pass, so that the device sleeps again or goes home.
 #[test]
-fn buttons_do_nothing_while_asleep() {
+fn buttons_do_nothing_while_asleep_but_home() {
     let mut device = Device::new(MemoryStorage::new(), "sleep.show.message");
     device.sleep();
-    for action in [
-        actions::BACK,
-        actions::CONFIRM,
-        actions::HOME,
-        actions::MENU,
-    ] {
+    for action in [actions::BACK, actions::CONFIRM, actions::MENU] {
         device.now += 100;
-        let effects = device.kernel.run_action(Instant(device.now), action);
+        let effects = device
+            .kernel
+            .run_action(Instant(device.now), action.clone());
         device.settle(effects);
-        assert_eq!(device.on_top(), Some(SCREEN));
+        assert_eq!(device.on_top(), Some(SCREEN), "{action}");
     }
+    device.now += 100;
+    let effects = device.kernel.run_action(Instant(device.now), actions::HOME);
+    device.settle(effects);
+    assert_ne!(device.on_top(), Some(SCREEN));
 }
 
 #[test]

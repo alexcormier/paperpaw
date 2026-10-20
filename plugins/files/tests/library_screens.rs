@@ -118,8 +118,9 @@ fn an_empty_library_says_where_books_come_from() {
     }
 }
 
+/// Used to panic: `Listing::page` underflowed for an empty folder (as the
+/// library showed again).
 #[test]
-#[ignore = "bug: Listing::page underflows for an empty folder (library.rs on_show)"]
 fn an_empty_library_shows_again_after_its_menu_closes() {
     for device in DEVICES {
         let mut app = library(device, "", &[]);
@@ -379,8 +380,9 @@ fn opening_a_book_removed_unannounced_does_not_break_the_library() {
     }
 }
 
+/// Used to panic: `Listing::page` underflowed for an empty folder (as the
+/// library kept its focus).
 #[test]
-#[ignore = "bug: Listing::page underflows for an empty folder (library.rs show_focus)"]
 fn every_book_of_the_whole_library_folder_removed_leaves_it_empty() {
     let mut app = library(TOUCH, "", &many(3));
     for n in 1..=3 {
@@ -393,9 +395,10 @@ fn every_book_of_the_whole_library_folder_removed_leaves_it_empty() {
         Params::new(),
     );
     assert!(app.shows("No books here yet"), "{}", app.described());
-    // Taps where the rows were do nothing.
+    // A tap where the rows were opens no book: with nothing there, a tap
+    // in the middle opens the menu, as on any screen.
     app.tap(Point::new(240, 300));
-    assert_eq!(app.screen(), "files.browser");
+    assert_eq!(app.screen(), "menu.list");
 }
 
 /// The options of the focused book: held on touch screens, the menu
@@ -512,6 +515,12 @@ fn searching_finds_books_by_their_title() {
             ("books/Dracula.txt".to_string(), TEXT.to_vec()),
         ];
         let mut app = library(device, "", &files);
+        // The catalog's freshness is known for the whole program, as on a
+        // device: the books of this library are new to it.
+        app.send(
+            paperpaw_sdk::builtin::events::LIBRARY_CHANGED,
+            Params::new(),
+        );
         app.will_type("  moby ");
         app.run(Id::new_static("files.search"));
         assert_eq!(app.screen(), "files.shelf", "{}", app.described());

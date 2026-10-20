@@ -15,7 +15,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use std::borrow::Cow;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use paperpaw_graphics::Framebuffer;
@@ -153,6 +153,8 @@ struct Harness {
     services: paperpaw_sdk::services::Services,
     secrets: paperpaw_sdk::secrets::Secrets,
     storage: MemoryStorage,
+    /// The time since start, in milliseconds.
+    now: Cell<u64>,
 }
 
 impl Harness {
@@ -192,6 +194,7 @@ impl Harness {
             services: Default::default(),
             secrets: Default::default(),
             storage,
+            now: Cell::new(1000),
         };
         // The look of the UI, as the kernel defines it.
         for (id, value) in [
@@ -298,7 +301,7 @@ impl Harness {
     fn env(&self) -> Env<'_> {
         Env::from(EnvParts {
             device: self.device,
-            now: Instant(1000),
+            now: Instant(self.now.get()),
             random: paperpaw_sdk::random::Random::NONE,
             metrics: Metrics {
                 dpi: self.device.display.dpi,
@@ -1089,7 +1092,7 @@ fn problems_of(
 }
 
 #[test]
-#[ignore = "bug: the world clock draws up to 48 px outside a 1x1 cell and 18 px below a 4x1 row"]
+#[ignore = "bug: the world clock draws up to 30 px outside a 1x1 cell, 18 px below a 4x1 row and 57 px below a low one"]
 fn the_world_clock_stays_in_one_cell_and_in_a_row() {
     let mut h = Harness::new(&GRAY, MemoryStorage::new());
     let mut problems = Problems::default();
@@ -1169,12 +1172,14 @@ fn a_quote_in_a_set_size_stays_in_one_cell() {
 #[test]
 #[ignore = "bug: some quotes set right draw 5 px past the right edge in black and white"]
 fn a_quote_set_right_stays_in_its_place_in_black_and_white() {
-    // Another quote each time it is made: every quote shipped in turn.
+    // Another quote each time it shows: every quote shipped in turn, a
+    // minute apart (made within one, it counts as the same showing).
     let mut h = Harness::new(&MONO, filled());
     h.set("widgets.quote.align", "core.align.right");
     h.set("widgets.quote.change", "widgets.change.shown");
     let mut problems = Problems::default();
     for n in 0..60 {
+        h.now.set(1000 + n * 60_000);
         problems.check(
             &h,
             "widgets.quote",
@@ -1214,7 +1219,7 @@ fn the_year_stays_in_a_low_row() {
 }
 
 #[test]
-#[ignore = "bug: the year so far in a frame draws 17 px below a 1x1 cell"]
+#[ignore = "bug: the year so far in a frame draws 15 px below a 1x1 cell"]
 fn the_year_in_a_frame_stays_in_one_cell() {
     let settings = [("widgets.year-progress.frame", "core.frame.line")];
     problems_of(
@@ -1227,8 +1232,9 @@ fn the_year_in_a_frame_stays_in_one_cell() {
     .assert_all();
 }
 
+/// The ring is left out where it has no room (its subtractions used to
+/// underflow).
 #[test]
-#[ignore = "bug: the year as a ring panics in a 1x1 cell and in the smallest (year.rs: subtractions underflow)"]
 fn the_year_as_a_ring_in_one_cell_does_not_panic() {
     let mut h = Harness::new(&GRAY, MemoryStorage::new());
     h.set("widgets.year-progress.style", "widgets.year.ring");
@@ -1245,8 +1251,9 @@ fn the_calendar_stays_in_narrow_and_low_places() {
     problems_of(&GRAY, MemoryStorage::new(), "widgets.calendar", &[], &sizes).assert_all();
 }
 
+/// Where both months have no room, this month alone shows (both used to
+/// draw 5 px outside).
 #[test]
-#[ignore = "bug: the calendar with the next month draws 5 px outside a 1x1 cell"]
 fn the_calendar_with_the_next_month_stays_in_one_cell() {
     let mut h = Harness::new(&GRAY, MemoryStorage::new());
     h.settings
@@ -1285,8 +1292,9 @@ fn a_long_folder_name_does_not_panic() {
     .assert_all();
 }
 
+/// Its parts are measured without underflow (`height - gaps` used to
+/// underflow in a frame in the smallest cell).
 #[test]
-#[ignore = "bug: the world clock in a frame panics in the smallest cell (world.rs: height - gaps underflows)"]
 fn the_world_clock_in_the_smallest_cell_with_a_frame_does_not_panic() {
     let mut h = Harness::new(&GRAY, MemoryStorage::new());
     h.set("widgets.world-clock.frame", "core.frame.line");
@@ -1319,9 +1327,8 @@ fn widgets_stay_in_the_smallest_cell() {
 /// sizes: in a place just wide enough to put the moon beside its text
 /// (half again as wide as high) but narrower than the moon and the gap
 /// after it, the text "fits" in no width at all, and the room left for
-/// it is reckoned as `area.width - side - gap`.
+/// it was reckoned as `area.width - side - gap`, which underflowed.
 #[test]
-#[ignore = "bug: the moon panics in a place wider than high but narrower than its height and gap (moon.rs: width - side - gap underflows)"]
 fn the_moon_beside_its_text_in_a_small_place_does_not_panic() {
     let h = Harness::with_fonts(&GRAY, MemoryStorage::new(), true);
     let mut problems = Problems::default();

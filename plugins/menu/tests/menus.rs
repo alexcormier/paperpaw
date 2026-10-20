@@ -379,6 +379,12 @@ fn menus_as_tiles_open_as_a_bar_with_every_entry() {
 
 // ---- The reader's menu ------------------------------------------------
 
+/// The entries of the reader's bar, in their order: *Font* first (and
+/// focused as it opens), *Bookmark* beside *Night*.
+const BAR: [&str; 8] = [
+    "Font", "Contents", "Search", "Notes", "Night", "Bookmark", "More", "Home",
+];
+
 fn reading(device: DeviceInfo) -> App {
     let mut app = App::new(device, storage(""));
     app.open_slot(slots::READER, Params::new().with(params::PATH, BOOK));
@@ -402,10 +408,7 @@ fn bar_choose(app: &mut App, label: &str) {
         app.tap_on(label);
         return;
     }
-    let entries = [
-        "Contents", "Search", "Notes", "Font", "Night", "More", "Home",
-    ];
-    let at = entries.iter().position(|e| *e == label).unwrap();
+    let at = BAR.iter().position(|e| *e == label).unwrap();
     // The focus is on the first entry.
     app.repeat(actions::RIGHT, at);
     app.run(actions::CONFIRM);
@@ -417,9 +420,7 @@ fn the_reader_menu_bar_shows_the_book_and_its_entries() {
         let mut app = reading(device);
         reader_menu(&mut app);
         let labels = app.labels();
-        for entry in [
-            "Contents", "Search", "Notes", "Font", "Night", "More", "Home",
-        ] {
+        for entry in BAR {
             assert!(labels.iter().any(|l| l == entry), "{entry}: {labels:?}");
         }
         assert!(app.shows("/"), "the page: {labels:?}");
@@ -529,6 +530,29 @@ fn the_panel_at_the_bottom_is_worked_by_touch() {
     // The first + is the font size's.
     app.tap_on("+");
     assert_eq!(app.kernel.settings().int(size), before + 1);
+    // The switches are on a later page of the panel: a tap on the right
+    // half of its pager turns to the next.
+    for _ in 0..5 {
+        if app.find("Justify text").is_some() {
+            break;
+        }
+        let pager = app
+            .parts()
+            .into_iter()
+            .find(|p| p.role == Role::Text && p.label.contains(" / "))
+            .unwrap_or_else(|| {
+                panic!(
+                    "no pager:
+{}",
+                    app.described()
+                )
+            });
+        let y = i32::from(pager.area.y) + i32::from(pager.area.height) / 2;
+        app.tap(Point::new(
+            i32::from(app.kernel.device().display.width) * 7 / 8,
+            y,
+        ));
+    }
     let justify = app.kernel.settings().bool("reader.justify");
     app.tap_on("Justify text");
     assert_eq!(app.kernel.settings().bool("reader.justify"), !justify);

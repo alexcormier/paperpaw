@@ -153,7 +153,12 @@ fn skipped_on_its_first_page_it_does_not_come_again() {
         if touch(&app) {
             press(&mut app, "Skip setup");
         } else {
+            // Back asks first: going on is the first answer, skipping the
+            // second.
             app.run(actions::BACK);
+            assert_eq!(app.screen(), "setup.choice", "{}", app.described());
+            assert!(!app.storage.exists(SETUP_DONE));
+            press(&mut app, "Skip setup");
         }
         assert_eq!(app.screen(), HOME);
         assert!(app.storage.exists(SETUP_DONE));

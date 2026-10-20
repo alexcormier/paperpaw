@@ -227,15 +227,9 @@ fn an_hour_of_reading_on_battery_gives_the_pace() {
     assert_eq!(value(&rows, "100 pages"), "5.0 %", "{rows:?}");
 }
 
-/// The view does not scroll and draws its lines until the screen ends:
-/// on a screen as large as the X4's, with a time awake going on, the
-/// hours left and the recent times awake are below the end, with no way
-/// to reach them.
-#[test]
-#[ignore = "bug: the battery view does not scroll, its last lines (hours left, recent times awake) are cut off on the X4"]
-fn every_line_of_the_view_can_be_seen() {
-    let mut device = Device::new(an_hour(), "");
-    device.measure(80, 3950, false);
+/// The view and what the buttons show of it (turning its pages) on the
+/// X4's screen, with a time awake going on.
+fn every_page(device: &mut Device) -> Vec<String> {
     let mut seen = device.view();
     for action in ["core.next-page", "core.down", "core.next"] {
         device.now += 100;
@@ -246,9 +240,32 @@ fn every_line_of_the_view_can_be_seen() {
         device.kernel.render(&mut |_, _| {});
         seen.extend(device.kernel.describe().into_iter().map(|p| p.label));
     }
-    assert!(has(&seen, "about 16 h awake"), "{seen:?}");
+    seen
+}
+
+/// Every line of the view can be reached: where they do not fit, the view
+/// is turned page by page. (It used to draw its lines until the screen
+/// ended, so the hours left and the recent times awake could not be seen
+/// on the X4.)
+#[test]
+fn every_line_of_the_view_can_be_seen() {
+    let mut device = Device::new(an_hour(), "");
+    device.measure(80, 3950, false);
+    let seen = every_page(&mut device);
+    assert!(has(&seen, "Left at this pace"), "{seen:?}");
     assert!(has(&seen, "Recent times awake"), "{seen:?}");
     assert!(has(&seen, "1 h 0 min · 100 pages"), "{seen:?}");
+}
+
+/// The hours left at this pace show whole beside their title on the X4's
+/// screen.
+#[test]
+#[ignore = "bug: on the X4 the hours left are cut to \"about 16 h aw…\" beside \"Left at this pace\""]
+fn the_hours_left_are_shown_whole() {
+    let mut device = Device::new(an_hour(), "");
+    device.measure(80, 3950, false);
+    let seen = every_page(&mut device);
+    assert!(has(&seen, "about 16 h awake"), "{seen:?}");
 }
 
 #[test]

@@ -68,7 +68,7 @@ const REMOTE_TEXT: &str = "keyboard.remote-text";
 /// Puts text on the clipboard.
 const COPY: Id = Id::new_static("listener.copy");
 /// Longest text the keyboard takes, in characters.
-const MAX_CHARS: usize = 200;
+const MAX_CHARS: usize = 2000;
 
 /// Keeps every answer.
 struct Listener(Rc<RefCell<Vec<Typed>>>);
@@ -773,24 +773,15 @@ fn layouts_are_chosen_in_order_and_automatic_stands_alone() {
         Params::new(),
     );
     typing.settle(effects);
-    // On and off as their keys: the settings plugin that words them is
-    // not here.
-    assert!(row(&mut typing, "Automatic").label.ends_with("settings.on"));
+    // On and off in the keyboard's own words, with no settings plugin here.
+    assert!(row(&mut typing, "Automatic").label.ends_with("On"));
     tap_row(&mut typing, "Deutsch");
     assert_eq!(layouts(&typing), "keyboard.layout.de");
-    assert!(
-        row(&mut typing, "Automatic")
-            .label
-            .ends_with("settings.off")
-    );
+    assert!(row(&mut typing, "Automatic").label.ends_with("Off"));
     tap_row(&mut typing, "English");
     assert_eq!(layouts(&typing), "keyboard.layout.de, keyboard.layout.en");
     // Their place in switching shows.
-    assert!(
-        row(&mut typing, "English")
-            .label
-            .ends_with("settings.on (2)")
-    );
+    assert!(row(&mut typing, "English").label.ends_with("On (2)"));
     // Off again: the other stays.
     tap_row(&mut typing, "Deutsch");
     assert_eq!(layouts(&typing), "keyboard.layout.en");

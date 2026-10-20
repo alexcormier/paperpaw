@@ -457,14 +457,16 @@ fn pages_are_added_and_removed() {
         open_add(&mut app);
         choose(&mut app, "Add a page");
         assert_eq!(app.screen(), HOME);
-        // A third page, empty: written, shown once it has something.
-        assert_eq!(page(&app, 3), "");
+        // A third page, holding a space so that it shows until removed.
+        assert_eq!(page(&app, 3), paperpaw_sdk::widgets::SPACE);
         open_add(&mut app);
         choose(&mut app, "Remove this page");
         assert_eq!(app.screen(), HOME);
-        // The first page went: the tools are the first page now.
+        // The first page went: the tools are the first page now, the page
+        // added the second.
         assert_eq!(page(&app, 1), "home.tools");
-        assert_eq!(page(&app, 2), "");
+        assert_eq!(page(&app, 2), paperpaw_sdk::widgets::SPACE);
+        assert_eq!(page(&app, 3), "");
         assert!(app.shows("Library"), "{}", app.described());
     }
 }

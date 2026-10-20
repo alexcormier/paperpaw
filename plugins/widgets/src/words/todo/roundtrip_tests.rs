@@ -166,10 +166,9 @@ fn done_items_without_a_date_go_and_empty_ones_are_none() {
     assert_eq!(items[0].done, Some(TODAY + 1));
 }
 
-/// A year too large for the reckoning of days must not panic (it
-/// overflows `i64` in `days_of`, which a debug build stops at).
+/// A year too large for the reckoning of days must not panic (it once
+/// overflowed `i64` in `days_of`, which a debug build stops at).
 #[test]
-#[ignore = "bug: a huge year in a done item's date overflows days_of (panics in debug builds)"]
 fn huge_years_in_dates_do_not_panic() {
     for line in [
         "x 9223372036854775807-01-01 never\nopen\n",

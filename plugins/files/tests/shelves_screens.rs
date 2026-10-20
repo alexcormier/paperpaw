@@ -3,13 +3,21 @@
 //! books' own details in the background, an author's books listed when
 //! chosen, books without one under "Unknown author"), the favourites,
 //! and an empty library.
+//!
+//! The catalog's freshness is known for the whole program, as on a device,
+//! where a new library means a new start. The tests here, each with a
+//! library of its own, take turns and tell the shelves their library is
+//! new (as the library does when books come or go).
 
 // Tests panic on purpose when something is wrong.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 mod common;
 
+use std::sync::{Mutex, MutexGuard, PoisonError};
+
 use common::*;
+use paperpaw_sdk::builtin::events;
 
 const SHELF: &str = "files.shelf";
 
@@ -22,6 +30,21 @@ fn gutenberg(title: &str, author: Option<&str>) -> Vec<u8> {
          Some text of the book.\r\n\r\n*** END OF THE PROJECT GUTENBERG EBOOK ***\r\n"
     )
     .into_bytes()
+}
+
+/// The tests' turns with the catalog.
+static TURN: Mutex<()> = Mutex::new(());
+
+/// Waits for this test's turn with the catalog.
+fn turn() -> MutexGuard<'static, ()> {
+    TURN.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+/// The app on `storage`, its catalog to be made anew for that library.
+fn app_on(device: DeviceInfo, storage: Shared) -> App {
+    let mut app = App::new(device, storage);
+    app.send(events::LIBRARY_CHANGED.id().clone(), Params::new());
+    app
 }
 
 fn library() -> Shared {
@@ -84,8 +107,9 @@ fn choose(app: &mut App, label: &str) {
 
 #[test]
 fn books_by_author_listed_and_opened() {
+    let _turn = turn();
     for device in DEVICES {
-        let mut app = App::new(device, library());
+        let mut app = app_on(device, library());
         app.run(actions::LIBRARY);
         app.run(Id::new_static("files.by-author"));
         assert_eq!(app.screen(), SHELF);
@@ -128,8 +152,9 @@ fn books_by_author_listed_and_opened() {
 
 #[test]
 fn the_shelves_of_an_empty_library_say_so() {
+    let _turn = turn();
     for device in DEVICES {
-        let mut app = App::new(device, Shared::memory("", &[]));
+        let mut app = app_on(device, Shared::memory("", &[]));
         for shelf in ["files.by-author", "files.by-series", "files.by-tag"] {
             app.run(Id::new_static(shelf));
             assert_eq!(app.screen(), SHELF, "{shelf}");
@@ -144,8 +169,9 @@ fn the_shelves_of_an_empty_library_say_so() {
 
 #[test]
 fn books_without_series_or_tags_say_so_on_those_shelves() {
+    let _turn = turn();
     for device in DEVICES {
-        let mut app = App::new(device, library());
+        let mut app = app_on(device, library());
         app.run(Id::new_static("files.by-series"));
         wait(&mut app);
         assert!(
@@ -166,8 +192,9 @@ fn books_without_series_or_tags_say_so_on_those_shelves() {
 
 #[test]
 fn the_shelves_menu_offers_every_shelf() {
+    let _turn = turn();
     for device in DEVICES {
-        let mut app = App::new(device, library());
+        let mut app = app_on(device, library());
         app.run(Id::new_static("files.shelves"));
         assert_eq!(app.screen(), "menu.list");
         let shown: Vec<String> = rows(&mut app);

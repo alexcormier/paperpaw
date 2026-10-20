@@ -293,22 +293,31 @@ fn a_choice_opened_for_no_setting_shows_nothing_to_choose() {
     }
 }
 
+/// Typed on the keyboard the settings page opens for a text setting
+/// (Calibre's address: the progress sync's server, checked here before, is
+/// set on its account screen now, as another server signs out).
 #[test]
 fn text_typed_for_a_setting_is_kept_trimmed() {
     for device in DEVICES {
-        let storage = Shared::memory("[settings]\nadvanced = on\n", &[]);
+        let storage = Shared::memory(
+            "[settings]
+advanced = on
+[calibre]
+address = 192.168.1.5
+",
+            &[],
+        );
         let mut app = App::new(device, storage.clone());
         app.run(actions::SETTINGS);
-        search(&mut app, "server");
-        // The progress sync's.
+        search(&mut app, "calibre address");
         let hit = rows(&mut app)
             .into_iter()
-            .find(|r| r.ends_with("Progress sync"))
+            .find(|r| r.starts_with("Calibre's address"))
             .unwrap_or_else(|| panic!("{}", app.described()));
         let hit = hit.split(", ").next().unwrap().to_string();
         choose(&mut app, &hit);
         assert_eq!(app.screen(), GROUP);
-        app.will_type("  https://sync.example.org  ");
+        app.will_type("  192.168.1.20:9090  ");
         if device.input.touch {
             choose(&mut app, &hit);
         } else {
@@ -320,17 +329,13 @@ fn text_typed_for_a_setting_is_kept_trimmed() {
         assert!(
             question
                 .get(params::TEXT)
-                .is_some_and(|t| t.starts_with("http"))
+                .is_some_and(|t| t == "192.168.1.5")
         );
         assert_eq!(
-            app.kernel.settings().text("kosync.server"),
-            "https://sync.example.org"
+            app.kernel.settings().text("calibre.address"),
+            "192.168.1.20:9090"
         );
-        assert!(
-            storage
-                .config()
-                .contains("server = https://sync.example.org")
-        );
+        assert!(storage.config().contains("address = 192.168.1.20:9090"));
     }
 }
 

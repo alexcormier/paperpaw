@@ -1,8 +1,10 @@
 //! The folder chooser (the editor of the library and archive folders)
 //! with the real kernel on a folder of the computer's file system, by
-//! buttons and by touch: going into folders and back out, choosing one
-//! (kept in `paperpaw.ini` and used by the library), and new folders
-//! whose names try to leave the folder they are made in.
+//! buttons and by touch: starting in the folder set (`books`, the
+//! library's default, where nothing else is set), going into folders and
+//! back out, choosing one (kept in `paperpaw.ini` and used by the
+//! library), and new folders whose names try to leave the folder they are
+//! made in.
 
 // Tests panic on purpose when something is wrong.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
@@ -102,8 +104,9 @@ fn choose(app: &mut App, label: &str) {
     panic!("no row {label}:\n{}", app.described());
 }
 
+/// The chooser starts in the folder set; it used to ask `Storage::exists`
+/// (files only) and so always started at the top.
 #[test]
-#[ignore = "bug: the chooser asks Storage::exists (files only) whether the folder set is there"]
 fn it_starts_in_the_folder_set() {
     let card = Card::new("start");
     for device in DEVICES {
@@ -127,10 +130,21 @@ fn folders_open_and_parent_folder_goes_up_to_the_folder_left() {
     let card = Card::new("up");
     for device in DEVICES {
         let mut app = chooser(device, card.storage(), "files.root");
+        choose(&mut app, "Parent folder");
         assert_eq!(
             rows(&mut app),
             ["Use this folder", "New folder", "books/", "Downloads/"]
         );
+        // Coming up, the folder left has the focus.
+        if !device.input.touch {
+            assert_eq!(app.focused().as_deref(), Some("books/"));
+        }
+        choose(&mut app, "Downloads/");
+        assert_eq!(
+            rows(&mut app),
+            ["Use this folder", "Parent folder", "New folder"]
+        );
+        choose(&mut app, "Parent folder");
         choose(&mut app, "books/");
         assert_eq!(
             rows(&mut app),
@@ -142,15 +156,6 @@ fn folders_open_and_parent_folder_goes_up_to_the_folder_left() {
                 "Poems/"
             ]
         );
-        choose(&mut app, "Parent folder");
-        assert_eq!(
-            rows(&mut app),
-            ["Use this folder", "New folder", "books/", "Downloads/"]
-        );
-        // Coming up, the folder left has the focus.
-        if !device.input.touch {
-            assert_eq!(app.focused().as_deref(), Some("books/"));
-        }
     }
 }
 
@@ -160,7 +165,6 @@ fn a_folder_chosen_by_buttons_or_touch_is_kept_and_the_library_shows_it() {
     for device in DEVICES {
         let storage = card.storage();
         let mut app = chooser(device, storage.clone(), "files.root");
-        choose(&mut app, "books/");
         choose(&mut app, "Novels/");
         assert_eq!(
             rows(&mut app),
@@ -188,7 +192,6 @@ fn a_folder_chosen_by_buttons_or_touch_is_kept_and_the_library_shows_it() {
 fn back_goes_up_first_and_closes_the_chooser_at_the_top() {
     let card = Card::new("back");
     let mut app = chooser(X4, card.storage(), "files.root");
-    choose(&mut app, "books/");
     choose(&mut app, "Novels/");
     choose(&mut app, "Old/");
     assert!(app.shows("books/Novels/Old"), "{}", app.described());
@@ -204,7 +207,6 @@ fn back_goes_up_first_and_closes_the_chooser_at_the_top() {
 
     // Touch: the arrow in the header does the same.
     let mut app = chooser(TOUCH, card.storage(), "files.root");
-    app.tap_on("books/");
     app.tap_back();
     assert!(app.shows("Device"), "{}", app.described());
     app.tap_back();
@@ -253,7 +255,6 @@ fn new_folder_names_cannot_leave_the_folder_or_name_none() {
     let before = storage.names("books");
     for name in ["..", "...", "/", "\\", ":", "   ", "\u{7}", "../", "./"] {
         let mut app = chooser(X4, storage.clone(), "files.root");
-        choose(&mut app, "books/");
         app.will_type(name);
         choose(&mut app, "New folder");
         assert_eq!(app.screen(), CHOOSER, "{name:?}");
@@ -268,7 +269,6 @@ fn new_folder_names_cannot_leave_the_folder_or_name_none() {
         ("tab\there", "tabhere"),
     ] {
         let mut app = chooser(X4, storage.clone(), "files.root");
-        choose(&mut app, "books/");
         app.will_type(typed);
         choose(&mut app, "New folder");
         let names = storage.names("books");
@@ -290,7 +290,6 @@ fn many_folders_are_paged_and_each_is_reached() {
     }
     for device in DEVICES {
         let mut app = chooser(device, storage.clone(), "files.root");
-        choose(&mut app, "books/");
         choose(&mut app, "Many/");
         let mut seen: Vec<String> = Vec::new();
         for _ in 0..60 {

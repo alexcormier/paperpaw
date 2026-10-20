@@ -246,11 +246,10 @@ fn the_writer_still_writes_version_1() {
     assert_eq!(again, v1.replace("\r\n", "\n"));
 }
 
-/// The list numbers words by the lines of the file, deleting by the words
-/// read: with a line before that is no word, *Delete* on a word deletes
-/// the one after it.
+/// With a line before that is no word, *Delete* on a word deletes that
+/// word. (The list used to number words by the lines of the file and
+/// delete by the words read, so it deleted the one after it.)
 #[test]
-#[ignore = "bug: remove() numbers words differently from range() when a line is unreadable"]
 fn deleting_a_word_after_an_unreadable_line_deletes_that_word() {
     let storage = MemoryStorage::new();
     let data = format!(
@@ -269,10 +268,9 @@ fn deleting_a_word_after_an_unreadable_line_deletes_that_word() {
 }
 
 /// A file edited by hand often lacks the last line break: the word added
-/// next is joined to its last line, so it is lost and that word's
-/// sentence is spoilt.
+/// next is a line of its own. (It used to be joined to the last line, so
+/// it was lost and that word's sentence spoilt.)
 #[test]
-#[ignore = "bug: add() appends to a file without a last line break, joining the new word to the last line"]
 fn a_word_added_to_a_file_without_a_last_line_break_is_its_own() {
     let storage = MemoryStorage::new();
     let last = word("last", "en").line();

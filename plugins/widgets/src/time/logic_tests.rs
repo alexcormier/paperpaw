@@ -318,10 +318,9 @@ fn countdown_dates_that_are_no_dates_are_refused() {
     }
 }
 
-/// A day of the month past 255 must not wrap round into a small one: the
-/// day is read as a `u32` and cast to `u8` before it is checked.
+/// A day of the month past 255 must not wrap round into a small one (the
+/// day was once cast to `u8` before it was checked).
 #[test]
-#[ignore = "bug: a day of 257 wraps to the 1st (countdown::parse casts before checking)"]
 fn countdown_days_past_255_do_not_wrap() {
     assert_eq!(countdown::parse("2026-12-257"), None);
     assert_eq!(countdown::parse("257.12.2026"), None);

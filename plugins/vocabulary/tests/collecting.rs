@@ -252,9 +252,11 @@ fn the_words_are_exported_for_flash_cards() {
     vocabulary.press(actions::DOWN);
     vocabulary.press(actions::CONFIRM);
     let exported = vocabulary.card.text("Notes/Vocabulary.tsv");
+    // After the lines that tell Anki how to read the rest.
     assert_eq!(
         exported,
-        "rabbit\tThe rabbit ran.\tAlice in Wonderland\nhole\tDown the hole.\tAlice in Wonderland\n"
+        "#separator:tab\n#html:false\n\
+         rabbit\tThe rabbit ran.\tAlice in Wonderland\nhole\tDown the hole.\tAlice in Wonderland\n"
     );
 }
 

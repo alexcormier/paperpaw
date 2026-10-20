@@ -327,7 +327,7 @@ fn next_profile_starts_at_the_first_when_the_last_is_gone() {
 }
 
 #[test]
-fn renaming_cleans_the_name_and_saving_a_name_again_replaces() {
+fn renaming_cleans_the_name_and_a_name_in_use_is_refused() {
     let mut device = Device::new(TOUCH);
     device.open();
     device.add();
@@ -347,17 +347,23 @@ fn renaming_cleans_the_name_and_saving_a_name_again_replaces() {
     // A rename for a profile not there: nothing.
     device.answer("profiles.renamed", "Ghost", 7);
     assert!(!device.rows().iter().any(|r| r.starts_with("Ghost")));
-    // A new profile of a name taken replaces the one of that name.
+    // A new profile of a name taken, whatever its case, is refused: the
+    // one of that name stays as it was.
     device.set(NIGHT, "on");
-    device.answer("profiles.named", "Late night reading", 0);
-    let rows = device.rows();
-    assert_eq!(
-        rows.iter().filter(|r| r.starts_with("Late night")).count(),
-        1,
-        "{rows:?}"
-    );
+    for name in ["Late night reading", "LATE NIGHT reading"] {
+        device.answer("profiles.named", name, 0);
+        let rows = device.rows();
+        assert_eq!(
+            rows.iter()
+                .filter(|r| r.to_lowercase().starts_with("late night"))
+                .count(),
+            1,
+            "{rows:?}"
+        );
+    }
+    assert_eq!(device.read("profiles.ini").unwrap(), saved);
     device.tap("Late night reading");
-    assert!(device.night());
+    assert!(!device.night());
 }
 
 #[test]
