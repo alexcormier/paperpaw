@@ -157,23 +157,23 @@ impl Slider {
         value.clamp(self.min, self.max.max(self.min))
     }
 
-    /// `value` moved by `steps` steps, within the range. The steps are
-    /// those a drag gives (`min`, `min + step` and so on, and `max`): a
-    /// value between two of them goes to the next one in that direction
-    /// first, so the buttons come back from an end that is no whole step
-    /// to the same values.
+    /// `value` moved by `steps` steps, within the range. From `max`
+    /// where the range is no whole number of steps, the first step down
+    /// goes to the last whole step (from 12 in fives to 10), as a drag
+    /// gives; elsewhere a step is `step` (as many back return to the
+    /// value).
     pub fn stepped(&self, value: i64, steps: i64) -> i64 {
-        let (min, step) = (i128::from(self.min), i128::from(self.step.max(1)));
-        let offset = i128::from(self.clamp(value)) - min;
-        let base = if steps < 0 {
-            offset.div_euclid(step) + i128::from(offset.rem_euclid(step) != 0)
+        let (min, max) = (i128::from(self.min), i128::from(self.max.max(self.min)));
+        let step = i128::from(self.step.max(1));
+        let value = i128::from(self.clamp(value));
+        let past = (max - min) % step;
+        let target = if steps < 0 && value == max && past != 0 {
+            max - past + (i128::from(steps) + 1) * step
         } else {
-            offset.div_euclid(step)
+            value + i128::from(steps) * step
         };
-        let target = min + (base + i128::from(steps)) * step;
-        let target = target.clamp(min, i128::from(self.max.max(self.min)));
         // Within the range, so within `i64`.
-        target as i64
+        target.clamp(min, max) as i64
     }
 
     /// The width of the range, without overflow at the widest.
@@ -481,8 +481,12 @@ impl SliderDrag {
         // Further than this, a finger moves the knob: as far as a tap may
         // wander (about 3 mm).
         let slop = (style.finger * 3 / 7).max(style.gap).max(1) as i32;
-        let dragged = |drag: &Drag, x: i32| {
-            slider.value_at(track, slider.knob_x(track, drag.from) + x - drag.start)
+        // Where the finger came down, the value it had: with steps finer
+        // than pixels, the knob's pixel holds several values, and the one
+        // there need not be this one.
+        let dragged = |drag: &Drag, x: i32| match x - drag.start {
+            0 => drag.from,
+            moved => slider.value_at(track, slider.knob_x(track, drag.from) + moved),
         };
         match (event.phase, self.drag) {
             // The same finger coming down again starts afresh: the end of
@@ -607,13 +611,14 @@ mod tests {
         assert_eq!(odd.stepped(0, -1), 0);
         assert_eq!(slider.stepped(135, 1), 140);
         assert_eq!(slider.stepped(135, -100), 100);
-        // Values between two steps go to the next step in that
-        // direction first: from the end 12 down to 10, as a drag gives.
+        // From the end that is no whole step, down to the last whole
+        // step: 12 to 10, as a drag gives.
         assert_eq!(odd.stepped(12, -1), 10);
         assert_eq!(odd.stepped(12, -2), 5);
-        assert_eq!(odd.stepped(7, 1), 10);
-        assert_eq!(odd.stepped(7, -1), 5);
         assert_eq!(odd.stepped(5, -1), 0);
+        // Elsewhere a step is a step, so as many back return.
+        assert_eq!(odd.stepped(7, 1), 12);
+        assert_eq!(odd.stepped(7, -1), 2);
         // Made right from wrong numbers.
         assert_eq!(Slider::new(5, 1), Slider::new(5, 5));
         // Fields set past what the constructors allow do not bring it

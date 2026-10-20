@@ -25,6 +25,7 @@ const STYLE: UiStyle = UiStyle {
     text: 20.0,
     small: 15.0,
     title: 23.0,
+    head: 23.0,
     row: 60,
     header: 64,
     margin: 12,
@@ -33,6 +34,12 @@ const STYLE: UiStyle = UiStyle {
     dark_header: false,
     corner: 6,
     strong: false,
+    pill: false,
+    focus: paperpaw_sdk::ui::Focus::Fill,
+    separators: paperpaw_sdk::ui::Separators::Line,
+    plain_header: false,
+    cards: false,
+    grays: 2,
     finger: 0,
 };
 
@@ -173,7 +180,8 @@ proptest! {
 
     /// The buttons move a value a step at a time, never out of the range;
     /// as many presses one way and back return to the value where the
-    /// range does not end between.
+    /// range does not end between. From an end that is no whole step, the
+    /// first step down goes to the last whole step, as a drag gives.
     #[test]
     fn the_buttons_step_within_the_range(
         slider in slider_strategy(),
@@ -185,8 +193,13 @@ proptest! {
             let action = if up { actions::RIGHT } else { actions::LEFT };
             let next = slider.stepped(value, key_step(&action).unwrap());
             prop_assert!((slider.min..=slider.max).contains(&next));
-            let expected = (value + if up { slider.step } else { -slider.step })
-                .clamp(slider.min, slider.max);
+            let past = (slider.max - slider.min) % slider.step;
+            let expected = if !up && value == slider.max && past != 0 {
+                slider.max - past
+            } else {
+                (value + if up { slider.step } else { -slider.step })
+                    .clamp(slider.min, slider.max)
+            };
             prop_assert_eq!(next, expected);
             value = next;
         }
@@ -244,7 +257,6 @@ proptest! {
 /// steps than the track pixels, or a last step shorter than a pixel: the
 /// knob is not moved by where its value falls between two pixels.
 #[test]
-#[ignore = "bug: a drag brought back to where it started chooses a neighbouring value where steps are finer than pixels"]
 fn a_drag_brought_back_keeps_the_value() {
     let band = Rect::new(20, 40, 360, 30);
     // Many steps on few pixels; a last step of one (672 to 673).
@@ -274,7 +286,6 @@ fn a_drag_brought_back_keeps_the_value() {
 /// the drag never offers, so the same slider sets other values by touch
 /// than by buttons.
 #[test]
-#[ignore = "bug: stepping down from an end off the steps leaves the steps (12 to 7, not 10)"]
 fn the_buttons_come_back_from_an_end_to_the_steps() {
     let slider = Slider::new(0, 12).step(5);
     assert_eq!(slider.stepped(10, 1), 12);
@@ -286,7 +297,6 @@ fn the_buttons_come_back_from_an_end_to_the_steps() {
 /// A number setting a broken plugin gives the widest range: drawing and
 /// touching its slider works out the span `max - min`, which overflows.
 #[test]
-#[ignore = "bug: share() and value_at() overflow (panic in debug) for ranges wider than i64"]
 fn the_widest_range_does_not_bring_it_down() {
     let slider = Slider::new(i64::MIN, i64::MAX);
     let track = Rect::new(0, 0, 200, 20);
