@@ -131,7 +131,11 @@ fn height(env: &Env<'_>, width: u16) -> u16 {
 fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     let look = widgets::draw_frame(canvas, env, ID.as_str(), area);
     let (style, font) = ui(env);
-    let (Some(font), Some(today)) = (font, time::local_time(env)) else {
+    let Some(today) = time::local_time(env) else {
+        super::draw_no_time(canvas, env, &look);
+        return;
+    };
+    let Some(font) = font else {
         return;
     };
     let area = look.area;

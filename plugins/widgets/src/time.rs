@@ -266,6 +266,13 @@ fn twelve(hour: u8) -> u8 {
     }
 }
 
+/// Draws in `look`'s area that the time is not known yet, in place of
+/// what a widget would show of it: on a device without a clock of its
+/// own, until Wi-Fi sets it.
+fn draw_no_time(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &widgets::Look) {
+    widgets::draw_message(canvas, env, look, env.i18n.tr("widgets.time.unknown"));
+}
+
 /// What a widget that shows the date shows: drawn again when the day
 /// changes.
 fn today_shows(env: &Env<'_>) -> String {

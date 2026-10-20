@@ -210,6 +210,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     let look = widgets::draw_frame(canvas, env, ID.as_str(), area);
     let (style, font) = ui(env);
     let (Some(unix), Some(today)) = (time::unix_seconds(env), time::local_time(env)) else {
+        super::draw_no_time(canvas, env, &look);
         return;
     };
     let moon = moon(unix * 1000);

@@ -232,6 +232,10 @@ fn height(env: &Env<'_>, _: u16) -> u16 {
 fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     let look = widgets::draw_frame(canvas, env, ID.as_str(), area);
     let (style, font) = ui(env);
+    if time::unix_seconds(env).is_none() {
+        super::draw_no_time(canvas, env, &look);
+        return;
+    }
     let Some(font) = font else {
         return;
     };

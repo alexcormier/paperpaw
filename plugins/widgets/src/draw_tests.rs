@@ -9,6 +9,7 @@ use alloc::vec::Vec;
 
 use paperpaw_graphics::Framebuffer;
 use paperpaw_sdk::builtin::settings as core_settings;
+use paperpaw_sdk::widgets::categories;
 use paperpaw_sdk::{PixelFormat, Rect, SettingKind, SettingValue};
 
 use crate::books::tests::library;
@@ -99,6 +100,48 @@ fn every_widget_draws_in_little_room_with_thick_lines() {
                 h.set(other, was);
             }
             h.set(key, before);
+        }
+    }
+}
+
+/// Before the clock is set (a plain X4 until Wi-Fi sets it), every time
+/// widget says so, in each of its styles, rather than drawing an empty
+/// frame, a face without hands or a wrong hint.
+#[test]
+fn time_widgets_say_when_the_time_is_not_known() {
+    let mut h = Harness::new(library());
+    h.status.clock = None;
+    let mut fb = Framebuffer::new(
+        DEVICE.display.width,
+        DEVICE.display.height,
+        PixelFormat::Gray4,
+    )
+    .unwrap();
+    let area = Rect::new(10, 10, 460, 300);
+    let ids: Vec<String> = h
+        .widgets
+        .iter()
+        .filter(|(id, _)| h.widgets.category(id.as_str()) == Some(categories::TIME))
+        .map(|(id, _)| String::from(id.as_str()))
+        .collect();
+    assert!(ids.len() >= 9, "{ids:?}");
+    let message = String::from(h.i18n.get("widgets.time.unknown").unwrap());
+    let says = |h: &Harness, fb: &mut Framebuffer, id: &str| {
+        let env = h.env();
+        let mut widget = env.widgets.make(id, &env).unwrap();
+        widget.place(&env, area);
+        let mut described = Vec::new();
+        widget.draw(&mut fb.canvas().describing(&mut described), &env, area);
+        let said: Vec<&str> = described.iter().map(|d| d.label.as_str()).collect();
+        said.join(" ").contains(&message)
+    };
+    for id in &ids {
+        assert!(says(&h, &mut fb, id), "{id}");
+        for (key, value) in variants(&h, id) {
+            let before = h.settings.get(&key).cloned().unwrap();
+            h.set(&key, value.clone());
+            assert!(says(&h, &mut fb, id), "{id}: {key} = {value:?}");
+            h.set(&key, before);
         }
     }
 }

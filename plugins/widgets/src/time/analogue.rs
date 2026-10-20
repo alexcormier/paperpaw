@@ -112,6 +112,10 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     let area = look.area;
     let (style, font) = ui(env);
     let now = time::local_time(env);
+    if now.is_none() {
+        super::draw_no_time(canvas, env, &look);
+        return;
+    }
     let date = chosen(env, ID.as_str(), "date");
     let date_text = now.map(|t| super::date_text(env, ID.as_str(), t.year, t.month, t.day, false));
     // The date below takes a line; the face the rest, round.
