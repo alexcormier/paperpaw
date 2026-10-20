@@ -338,71 +338,15 @@ impl Screen for ReaderScreen {
     }
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
-        let book = match &mut self.book {
-            Ok(book) => book,
-            Err(message) => return draw_message(canvas, env, message),
-        };
-        // Word boxes are measured only when something is drawn on words.
-        let has_highlights = book.marks.iter().any(|m| m.kind == Kind::Highlight);
-        let measured = has_highlights
-            || self.selection.is_some()
-            || self.linking.is_some()
-            || book.found.is_some()
-            || self.aloud.is_some()
-            || !book.links.is_empty()
-            || !env.decorators.is_empty();
-        book.update_decorations(env);
-        let Ok(book) = &self.book else {
-            return;
-        };
-        let words = if measured { book.words(env) } else { &[] };
-        // The sentence read aloud, where it is on this page.
-        let aloud = self
-            .aloud
-            .filter(|a| {
-                a.now.page == book.page.start
-                    && env.settings.read(&crate::settings::ALOUD_HIGHLIGHT)
-            })
-            .map(|a| (a.now.from, a.now.to));
-        let marks = book.page_marks(env, aloud, words);
-        marks.draw_behind(canvas, env);
-        book.draw_page(canvas, env, &marks.inks);
-        marks.draw_over(canvas, env);
-        book.draw_note_signs(canvas, env, words);
-        book.draw_back(canvas, env);
-        book.draw_status(canvas, env);
-        if book.bookmarked() {
-            book.draw_ribbon(canvas, env);
-        }
-        // A bar at the bottom hides the status line under it entirely.
-        let bar = self.linking.is_some() || self.selection.is_some_and(|s| s.mode == Mode::Bar);
-        if let Some(status) = book.typography.status.filter(|_| bar) {
-            canvas.fill(status, Color::WHITE);
-        }
-        if let Some(linking) = self.linking {
-            draw_linking(canvas, env, book, words, linking);
-        }
-        let Some(selection) = self.selection else {
-            return;
-        };
-        let (lo, hi) = selection.range();
-        let line = env.metrics.tenth_mm(4).max(2);
-        for b in selection::line_boxes(words, |i| (lo..=hi).contains(&i)) {
-            canvas.stroke_rect(
-                i32::from(b.x) - 4,
-                i32::from(b.y) - 2,
-                u32::from(b.width) + 8,
-                u32::from(b.height) + 4,
-                line,
-                Color::BLACK,
-            );
-        }
-        if selection.mode == Mode::Bar {
-            let items = self.items(env, words);
-            selection::draw_bar(canvas, env, &items, selection.focus);
+        self.draw_book(canvas, env);
+        // Kept from the first band of a frame to its last only: on the X4
+        // a page's words take some 15 KiB.
+        if let Ok(book) = &mut self.book
+            && canvas.clip().bottom() >= u32::from(env.device.display.height)
+        {
+            book.words.take();
         }
     }
-
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
         if self.preparing.is_some() {
             // Shown saying so first, then prepared.
@@ -750,6 +694,73 @@ impl Screen for ReaderScreen {
 }
 
 impl ReaderScreen {
+    /// The page, its marks and status lines, and what is chosen on it.
+    fn draw_book(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
+        let book = match &mut self.book {
+            Ok(book) => book,
+            Err(message) => return draw_message(canvas, env, message),
+        };
+        // Word boxes are measured only when something is drawn on words.
+        let has_highlights = book.marks.iter().any(|m| m.kind == Kind::Highlight);
+        let measured = has_highlights
+            || self.selection.is_some()
+            || self.linking.is_some()
+            || book.found.is_some()
+            || self.aloud.is_some()
+            || !book.links.is_empty()
+            || !env.decorators.is_empty();
+        book.update_decorations(env);
+        let Ok(book) = &self.book else {
+            return;
+        };
+        let words = if measured { book.words(env) } else { &[] };
+        // The sentence read aloud, where it is on this page.
+        let aloud = self
+            .aloud
+            .filter(|a| {
+                a.now.page == book.page.start
+                    && env.settings.read(&crate::settings::ALOUD_HIGHLIGHT)
+            })
+            .map(|a| (a.now.from, a.now.to));
+        let marks = book.page_marks(env, aloud, words);
+        marks.draw_behind(canvas, env);
+        book.draw_page(canvas, env, &marks.inks);
+        marks.draw_over(canvas, env);
+        book.draw_note_signs(canvas, env, words);
+        book.draw_back(canvas, env);
+        book.draw_status(canvas, env);
+        if book.bookmarked() {
+            book.draw_ribbon(canvas, env);
+        }
+        // A bar at the bottom hides the status line under it entirely.
+        let bar = self.linking.is_some() || self.selection.is_some_and(|s| s.mode == Mode::Bar);
+        if let Some(status) = book.typography.status.filter(|_| bar) {
+            canvas.fill(status, Color::WHITE);
+        }
+        if let Some(linking) = self.linking {
+            draw_linking(canvas, env, book, words, linking);
+        }
+        let Some(selection) = self.selection else {
+            return;
+        };
+        let (lo, hi) = selection.range();
+        let line = env.metrics.tenth_mm(4).max(2);
+        for b in selection::line_boxes(words, |i| (lo..=hi).contains(&i)) {
+            canvas.stroke_rect(
+                i32::from(b.x) - 4,
+                i32::from(b.y) - 2,
+                u32::from(b.width) + 8,
+                u32::from(b.height) + 4,
+                line,
+                Color::BLACK,
+            );
+        }
+        if selection.mode == Mode::Bar {
+            let items = self.items(env, words);
+            selection::draw_bar(canvas, env, &items, selection.focus);
+        }
+    }
+
     /// Lets go of text chosen on a page no longer shown: read aloud,
     /// skimmed or turned by itself, its words are those of another page.
     fn let_go_of_other_pages(&mut self, cx: &mut Cx<'_, '_>) {
