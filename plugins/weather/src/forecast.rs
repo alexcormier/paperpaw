@@ -11,14 +11,16 @@ use alloc::vec::Vec;
 
 use paperpaw_sdk::setting::Setting;
 use paperpaw_sdk::ui::{self, UiStyle};
-use paperpaw_sdk::widgets::{self, Align, Frame, Look, Size, Widget, WidgetSpec, WidgetTarget};
+use paperpaw_sdk::widgets::{
+    self, Align, Frame, Look, Padding, Size, Widget, WidgetSpec, WidgetTarget,
+};
 use paperpaw_sdk::{
     Arg, Canvas, Color, Env, FontHandle, Id, Rect, RegisterError, Registrar, SettingSpec,
 };
 
 use crate::data::{self, Day, Temperature};
 use crate::draw::{self, digits_height, draw_digits};
-use crate::symbol::{self, Style};
+use crate::symbol::Style;
 use crate::{Shared, Shown};
 
 pub(crate) const ID: Id = Id::new_static("weather.forecast");
@@ -39,8 +41,9 @@ const NAMES: [&str; 3] = [
     "weather.names.long",
 ];
 /// Its look, kept in the program.
-static LOOK: [SettingSpec; 3] = [
+static LOOK: [SettingSpec; 4] = [
     widgets::frame_spec("weather.forecast.frame", ID, Frame::None),
+    widgets::padding_spec("weather.forecast.padding", ID, Padding::Auto),
     widgets::size_spec("weather.forecast.size", ID, Size::Fit, true),
     widgets::align_spec("weather.forecast.align", ID, Align::Center),
 ];
@@ -135,7 +138,7 @@ impl Widget for Forecast {
             .map(|w| shown_days(env, w.days_from(self.shown.today)))
             .unwrap_or_default();
         if days.is_empty() {
-            draw::draw_waiting(canvas, env, ID.as_str(), &look, &self.shown);
+            draw::draw_waiting(canvas, env, ID.as_str(), (&look, area), &self.shown);
             return;
         }
         draw_forecast(canvas, env, &look, &self.shown, &days);
@@ -405,7 +408,7 @@ impl Context<'_, '_> {
                 let x = cell.x + (cell.width - side) / 2;
                 let (_, symbol) = data::condition(day.code);
                 let at = Rect::new(x, y, side, side);
-                symbol::draw(canvas, at, symbol, true, self.symbols, self.look.ink);
+                draw::draw_symbol(canvas, at, (symbol, true), self.symbols, self.look.ink);
                 y += side + gap;
             }
             let text = self.degrees(day.high);
@@ -462,6 +465,9 @@ impl Context<'_, '_> {
         let style = self.style;
         let font = self.font;
         let env = self.env;
+        // As many days as have rows a line of small text high.
+        let least = widgets::line_height(env, style.small).max(1);
+        let days = &days[..days.len().min(usize::from(area.height / least).max(1))];
         let count = days.len().max(1) as u16;
         let height = area.height / count;
         let gap = style.gap as u16;
@@ -472,12 +478,12 @@ impl Context<'_, '_> {
             draw::ceil(texts.map(|t| font.measure(size, t)).fold(0.0, f32::max))
         };
         let with_low = self.shows("low");
-        let side = if self.shows("symbol") {
+        let mut side = if self.shows("symbol") {
             ((f32::from(height) * 0.8) as u16).min(area.width / 6)
         } else {
             0
         };
-        let rain_w = widest(&mut rains.iter().flatten(), style.small);
+        let mut rain_w = widest(&mut rains.iter().flatten(), style.small);
         // The text as large as the rows allow, as set, and as the width
         // allows: the names shorter where they would not fit.
         let by_height = draw::digits_size(f32::from(height) * 0.55).min(style.title * 1.1);
@@ -511,11 +517,26 @@ impl Context<'_, '_> {
         let small = style.small.min(size);
         let name_w = widest(&mut names.iter(), size);
         let high_w = widest(&mut highs.iter(), size);
-        let low_w = if with_low {
+        let mut low_w = if with_low {
             widest(&mut lows.iter(), size)
         } else {
             0
         };
+        // Where the parts do not fit across, the symbol goes, then the
+        // chance of rain, then the lowest.
+        let after = |w: u16| if w > 0 { w + gap } else { 0 };
+        let needs = |side: u16, rain_w: u16, low_w: u16| {
+            name_w + gap + after(side) + after(rain_w) + after(low_w) + high_w
+        };
+        if needs(side, rain_w, low_w) > area.width {
+            side = 0;
+        }
+        if needs(side, rain_w, low_w) > area.width {
+            rain_w = 0;
+        }
+        if needs(side, rain_w, low_w) > area.width {
+            low_w = 0;
+        }
         // From the left: name, symbol, rain; from the right: highest, bar,
         // lowest.
         let mut x = area.x + name_w + gap;
@@ -530,9 +551,8 @@ impl Context<'_, '_> {
         let right = area.x + area.width;
         let high_x = right.saturating_sub(high_w);
         let room = high_x.saturating_sub(x + low_w + gap * 2);
-        let bars = self.shows("bars")
-            && self.shows("low")
-            && room >= (gap * 2).max(env.metrics.mm(6) as u16);
+        let bars =
+            self.shows("bars") && low_w > 0 && room >= (gap * 2).max(env.metrics.mm(6) as u16);
         let (bar_x, bar_w) = if bars {
             (x + low_w + gap, room)
         } else {
@@ -566,9 +586,9 @@ impl Context<'_, '_> {
             if side > 0 {
                 let at = Rect::new(symbol_x, row.y + (height - side) / 2, side, side);
                 let (_, symbol) = data::condition(day.code);
-                symbol::draw(canvas, at, symbol, true, self.symbols, self.look.ink);
+                draw::draw_symbol(canvas, at, (symbol, true), self.symbols, self.look.ink);
             }
-            if let Some(rain) = &rains[i] {
+            if let Some(rain) = rains[i].as_ref().filter(|_| rain_w > 0) {
                 let w = font.measure(small, rain);
                 let x = f32::from(rain_x + rain_w) - w;
                 ui::draw_label(canvas, font, small, x, row, rain, self.look.faint);
