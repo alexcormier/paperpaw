@@ -1,0 +1,200 @@
+//! When the radio goes on and off, with the real kernel: a plugin's
+//! request wants the network, no network joined before is in reach, and
+//! the radio does not stay on for work that has already failed.
+
+// Tests panic on purpose when something is wrong.
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
+use std::borrow::Cow;
+
+use paperpaw_core::{Io, Kernel, WifiEvent};
+use paperpaw_platform::Rotation;
+use paperpaw_plugin_wifi::Wifi;
+use paperpaw_sdk::secrets::{FILE, Secrets};
+use paperpaw_sdk::wifi::{self, JoinFailure, WifiCommand, WifiNetwork, WifiState};
+use paperpaw_sdk::{
+    Command, DeviceInfo, DisplayInfo, HttpRequest, Id, InputCaps, Instant, Manifest, MemoryClass,
+    MemoryStorage, Params, PixelFormat, Plugin, RegisterError, Registrar, SDK_VERSION, Version,
+};
+
+const DEVICE: DeviceInfo = DeviceInfo {
+    id: "test",
+    name: "Test device",
+    display: DisplayInfo {
+        width: 200,
+        height: 300,
+        dpi: 100,
+        format: PixelFormat::Gray4,
+        rotation: Rotation::Deg0,
+        color: None,
+    },
+    input: InputCaps {
+        buttons: true,
+        touch: false,
+        pen: false,
+        keys: &[],
+    },
+    memory: MemoryClass::Small,
+};
+
+/// Asked for, the probe makes a request, which wants the network.
+const FETCH: Id = Id::new_static("probe.fetch");
+const REPLY: Id = Id::new_static("probe.reply");
+
+struct Probe;
+
+impl Plugin for Probe {
+    fn manifest(&self) -> Manifest {
+        Manifest {
+            id: Id::new_static("probe"),
+            name: Cow::Borrowed("Probe"),
+            description: Cow::Borrowed(""),
+            version: Version::new(0, 1, 0),
+            sdk: SDK_VERSION,
+        }
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        r.subscribe(
+            FETCH,
+            Box::new(|_, _, out| {
+                let request = HttpRequest::new("GET", "http://example.org/", REPLY);
+                out.push(Command::Http(request));
+            }),
+        )
+    }
+}
+
+struct Test {
+    kernel: Kernel,
+    at: u64,
+}
+
+impl Test {
+    /// A device that joined `Home` before, its radio off.
+    fn new() -> Self {
+        let mut secrets = Secrets::default();
+        secrets.apply(wifi::keep("Home", "pw"));
+        let storage = MemoryStorage::new().with(FILE, secrets.encode().into_bytes());
+        let mut kernel = Kernel::builder(DEVICE)
+            .storage(storage)
+            .network(true)
+            .wifi(true)
+            .plugin(Wifi)
+            .plugin(Probe)
+            .build()
+            .unwrap();
+        kernel.start(Instant(0));
+        let mut test = Test { kernel, at: 0 };
+        test.radio();
+        test
+    }
+
+    /// `seconds` later.
+    fn later(&mut self, seconds: u64) -> Instant {
+        self.at += seconds * 1000;
+        Instant(self.at)
+    }
+
+    /// What the radio is told to do.
+    fn radio(&mut self) -> Vec<WifiCommand> {
+        let io = self.kernel.take_io().into_iter();
+        io.filter_map(|io| match io {
+            Io::Wifi(command) => Some(command),
+            _ => None,
+        })
+        .collect()
+    }
+
+    fn event(&mut self, event: WifiEvent) -> Vec<WifiCommand> {
+        let now = self.later(1);
+        self.kernel.wifi_event(now, event);
+        self.radio()
+    }
+
+    /// What the radio is told in the next `seconds`, with the kernel's
+    /// timers run each second and the radio doing as told (see
+    /// [`Test::answer`]).
+    fn wait(&mut self, seconds: u64, in_reach: &[WifiNetwork]) -> Vec<WifiCommand> {
+        let mut told = Vec::new();
+        for _ in 0..seconds {
+            let now = self.later(1);
+            self.kernel.tick(now);
+            let commands = self.radio();
+            told.extend(self.answer(commands, in_reach));
+        }
+        told
+    }
+
+    /// The radio does as told: `in_reach` is what a scan finds, and
+    /// joining fails. Returns `commands` and what the radio is told then.
+    fn answer(
+        &mut self,
+        mut commands: Vec<WifiCommand>,
+        in_reach: &[WifiNetwork],
+    ) -> Vec<WifiCommand> {
+        let mut told = Vec::new();
+        commands.reverse();
+        while let Some(command) = commands.pop() {
+            let answer = match &command {
+                WifiCommand::Scan => WifiEvent::Scanned(in_reach.to_vec()),
+                WifiCommand::Join { ssid, .. } => WifiEvent::Failed {
+                    ssid: ssid.clone(),
+                    reason: JoinFailure::Timeout,
+                },
+                WifiCommand::Off => WifiEvent::State(WifiState::Off),
+                WifiCommand::On => WifiEvent::State(WifiState::On),
+                _ => continue,
+            };
+            told.push(command);
+            let mut next = self.event(answer);
+            next.reverse();
+            commands.extend(next);
+        }
+        told
+    }
+
+    /// A plugin wants the network: the radio comes on and looks for
+    /// networks.
+    fn want(&mut self) {
+        let now = self.later(1);
+        self.kernel.send_event(now, FETCH, Params::new());
+        assert_eq!(self.radio(), [WifiCommand::On]);
+        assert_eq!(
+            self.event(WifiEvent::State(WifiState::On)),
+            [WifiCommand::Scan]
+        );
+    }
+}
+
+#[test]
+fn the_radio_goes_off_when_no_known_network_is_in_reach() {
+    let mut test = Test::new();
+    test.want();
+    // None in reach: the request fails at once.
+    assert!(test.event(WifiEvent::Scanned(Vec::new())).is_empty());
+    // Nothing waits any more: no more rounds, and the radio goes off.
+    let told = test.wait(5 * 60, &[]);
+    assert_eq!(told, [WifiCommand::Off]);
+}
+
+#[test]
+fn the_radio_goes_off_once_joining_failed_for_as_long_as_work_waits() {
+    let home = [WifiNetwork {
+        ssid: String::from("Home"),
+        signal: -50,
+        secured: true,
+    }];
+    let mut test = Test::new();
+    test.want();
+    let joins = test.event(WifiEvent::Scanned(home.to_vec()));
+    assert!(matches!(joins[..], [WifiCommand::Join { .. }]), "{joins:?}");
+    // Tried again a while, as long as the request waits; then no more,
+    // and the radio goes off.
+    let mut told = test.answer(joins, &home);
+    told.extend(test.wait(5 * 60, &home));
+    let rounds = told.iter().filter(|c| **c == WifiCommand::Scan).count();
+    assert!((1..=3).contains(&rounds), "{told:?}");
+    assert_eq!(told.last(), Some(&WifiCommand::Off), "{told:?}");
+    assert_eq!(told.iter().filter(|c| **c == WifiCommand::Off).count(), 1);
+}

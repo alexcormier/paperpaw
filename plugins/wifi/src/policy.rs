@@ -2,11 +2,16 @@
 //! apart from the page so they can be tried without a device.
 //!
 //! - The radio comes on when a plugin wants the network and the user
-//!   lets it ([`ON_DEMAND`](crate::ON_DEMAND)); then the strongest network
-//!   joined before is joined, the next one if that fails.
+//!   lets it ([`ON_DEMAND`](crate::ON_DEMAND)); then the strongest secured
+//!   network joined before is joined, the next one if that fails (open
+//!   networks only when chosen, see [`best_known`]).
 //! - A round that joins nothing is tried again a little later while the
 //!   network is still wanted or charging keeps the radio on (e.g. while a
-//!   router starts, or once a first try had no answer).
+//!   router starts, or once a first try had no answer). The network is
+//!   wanted for as long as what waits for it does: up to
+//!   [`NETWORK_WAIT_MS`] after it was asked for, and not after the plugin
+//!   said none is coming (`Command::NoNetwork`), whatever the kernel's
+//!   flag says.
 //! - It goes off a while after nothing uses the network
 //!   ([`IDLE_OFF`](crate::IDLE_OFF)), unless the user switched it on on
 //!   the page (it stays on until switched off there) or it stays on
@@ -15,7 +20,8 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use paperpaw_sdk::wifi::{WifiCommand, WifiNetwork, WifiState};
+use paperpaw_sdk::Instant;
+use paperpaw_sdk::wifi::{NETWORK_WAIT_MS, Wifi, WifiCommand, WifiNetwork, WifiState};
 
 /// What the radio is for now.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -44,9 +50,15 @@ pub struct Policy {
     pub generation: u32,
     /// Charging kept the radio on, as last seen (to act on changes only).
     pub charging_kept: bool,
+    /// When a plugin asked for the network last; `None` once the plugin
+    /// said none is coming, which fails what waited.
+    pub asked_at: Option<Instant>,
 }
 
-/// The strongest of `networks` joined before (`known`) and not tried yet.
+/// The strongest of `networks` joined before (`known`) and not tried yet,
+/// to join without asking. Only secured networks with their password:
+/// anyone can set up an open network by any name, so an open one (or an
+/// open twin of a secured one) is joined only when chosen on the page.
 pub fn best_known<'a>(
     networks: &[WifiNetwork],
     known: &'a [(String, String)],
@@ -55,11 +67,25 @@ pub fn best_known<'a>(
     // Networks come strongest first.
     networks
         .iter()
-        .filter(|n| !tried.contains(&n.ssid))
-        .find_map(|n| known.iter().find(|(ssid, _)| *ssid == n.ssid))
+        .filter(|n| n.secured && !tried.contains(&n.ssid))
+        .find_map(|n| {
+            known
+                .iter()
+                .find(|(ssid, password)| *ssid == n.ssid && !password.is_empty())
+        })
 }
 
 impl Policy {
+    /// Whether work still waits for the network at `now`: the kernel says
+    /// so, and it can still be waiting, asked for less than
+    /// [`NETWORK_WAIT_MS`] ago and not failed by the plugin.
+    pub fn still_wanted(&self, wifi: &Wifi, now: Instant) -> bool {
+        wifi.wanted
+            && self
+                .asked_at
+                .is_some_and(|at| now < at.add_millis(NETWORK_WAIT_MS))
+    }
+
     /// The network is wanted: the radio on, or networks looked for.
     pub fn wanted(&mut self, state: &WifiState, known: &[(String, String)]) -> Vec<WifiCommand> {
         self.generation = self.generation.wrapping_add(1);
@@ -236,6 +262,30 @@ mod tests {
         assert!(policy.changed(&online).is_empty());
         assert!(policy.may_go_off(false));
         assert!(!policy.may_go_off(true));
+    }
+
+    #[test]
+    fn only_secured_networks_are_joined_by_themselves() {
+        let mut policy = Policy::default();
+        let known = alloc::vec![
+            (String::from("Home"), String::from("pw")),
+            (String::from("Cafe"), String::new()),
+        ];
+        policy.wanted(&WifiState::On, &known);
+        // An open network named as a secured one joined before (a twin set
+        // up by someone else), and an open one joined before: neither.
+        let open = |ssid: &str| WifiNetwork {
+            secured: false,
+            ..net(ssid, -40)
+        };
+        assert_eq!(policy.scanned(&[open("Home"), open("Cafe")], &known), None);
+        policy.wanted(&WifiState::On, &known);
+        assert_eq!(
+            policy
+                .scanned(&[open("Cafe"), net("Home", -60)], &known)
+                .unwrap(),
+            [join("Home", "pw")]
+        );
     }
 
     #[test]

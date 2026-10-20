@@ -165,7 +165,8 @@ impl WifiPage {
                             .command(),
                     );
                 } else {
-                    policy.pending = Some((network.ssid.clone(), String::new()));
+                    // Not kept: an open network is not joined by itself
+                    // again (see `policy::best_known`).
                     for command in policy.choose(&wifi.state, &network.ssid, "") {
                         cx.command(Command::Wifi(command));
                     }

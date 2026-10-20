@@ -6,6 +6,16 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Wi-Fi: the radio goes off again once what waited for the network has
+  failed (no saved network in reach, or none joined in the time a
+  request waits). It went on looking for networks every ten seconds,
+  with a notice each time, until the device slept, as the kernel kept
+  saying that work waits.
+- Wi-Fi: only secured networks are joined by themselves, with their
+  saved password. Anyone can set up an open network with any name, so
+  open networks are joined only when chosen on the Wi-Fi page and are no
+  longer saved, and an open network named as a saved secured one is not
+  joined either.
 - Rules: a rule can apply when the battery reaches a level (80 %, 90 %,
   full or another), once each time it gets there and not again while
   the level wavers around it; with *Only if … While charging* it says
