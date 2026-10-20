@@ -311,6 +311,11 @@ impl Kernel {
                     let out = &mut self.output.commands;
                     let owner = action.namespace();
                     work::quiet(reader, top, now, from, owner, out, &mut self.works);
+                    // An action a screen guarding the device let pass (the
+                    // lock lets sleep pass): what it opens may show above.
+                    if self.guard().is_some() {
+                        self.trusted.extend(from..self.output.commands.len());
+                    }
                 }
             }
             None => self.warn_runtime(format!("unknown action `{action}`")),

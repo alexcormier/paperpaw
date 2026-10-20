@@ -6,6 +6,16 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Security: while the device is locked, nothing shows above the lock
+  screen but what it opens itself (its keyboard for a password) and the
+  sleep screen it lets pass. A screen a rule, a timer or a plugin opens
+  meanwhile waits below it, and notices wait until it is unlocked;
+  before, such a screen showed above the lock and could be used without
+  the code.
+- SDK: `Screen::guards` says that a screen guards the device, as the lock
+  screen does while locked: until it lets go, screens others open wait
+  below it, others' `Command::Back` closes nothing and notices wait.
+  Actions it lets pass, and screens it opens itself, show above it.
 - The emulator's plugin servers and the serve crate's tests listen on
   this computer only (`Servers::listening_on`), so Windows no longer
   asks to let test programs into the network after every build.

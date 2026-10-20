@@ -147,6 +147,16 @@ pub trait Screen {
         false
     }
 
+    /// Whether the screen guards the device now, as a lock screen does
+    /// while it is locked. Until it no longer does, nothing shows above
+    /// it but the screens it opens itself (its keyboard) and those they
+    /// open: screens others open meanwhile (a rule, a timer, a plugin at
+    /// start) wait below it, others' [`Command::Back`] closes nothing,
+    /// and notices wait until it lets go.
+    fn guards(&self) -> bool {
+        false
+    }
+
     /// Raw pointer samples, offered before gesture recognition and before
     /// swipes in from the edges. Returning [`Handled::Yes`] for a `Down`
     /// event captures that pointer: all its further samples go here and

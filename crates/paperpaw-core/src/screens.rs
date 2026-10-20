@@ -18,13 +18,9 @@ impl Kernel {
         let running = self.shared.meter.enter(id.namespace());
         let screen = (spec.factory)(&self.shared.env(self.now), params);
         drop(running);
-        if screen.region(&self.shared.env(self.now)).is_none() {
-            self.hide_from(self.shown_base());
-        }
-        self.screens_changed = true;
         let serial = self.next_serial;
         self.next_serial = serial.wrapping_add(1);
-        self.stack.push(ActiveScreen {
+        let active = ActiveScreen {
             id,
             serial,
             slot,
@@ -32,10 +28,44 @@ impl Kernel {
             params: params.clone(),
             screen,
             timer: None,
-        });
+        };
+        // Opened by another while a screen guards the device: it waits
+        // below the guard, hidden.
+        if let Some(guard) = self.guard().filter(|_| !self.from_guard) {
+            self.stack.insert(guard, active);
+            let _running = self.shared.meter.enter(self.stack[guard].id.namespace());
+            self.stack[guard].screen.on_hide();
+            return;
+        }
+        if active.screen.region(&self.shared.env(self.now)).is_none() {
+            self.hide_from(self.shown_base());
+        }
+        self.screens_changed = true;
+        self.stack.push(active);
         let top = self.stack.len() - 1;
         let overlay = self.overlay(top);
         self.screen_changed(self.changed_region(top), overlay.is_some());
+    }
+
+    /// The topmost screen that guards the device ([`Screen::guards`]).
+    pub(crate) fn guard(&self) -> Option<usize> {
+        self.stack.iter().rposition(|active| active.screen.guards())
+    }
+
+    /// Whether a screen guards the device and the command being carried
+    /// out is not its own (nor of a screen above it).
+    pub(crate) fn held_by_guard(&self) -> bool {
+        !self.from_guard && self.guard().is_some()
+    }
+
+    /// Shows the notice held while a screen guarded the device, once none
+    /// does.
+    pub(crate) fn release_held_notice(&mut self) {
+        if self.guard().is_none()
+            && let Some(text) = self.held_notice.take()
+        {
+            self.notify(text);
+        }
     }
 
     /// The topmost full screen: it and the overlays above it show.
@@ -58,6 +88,10 @@ impl Kernel {
     /// Shows `text` with the screen bound to the notice slot until the
     /// notice time is over.
     pub(crate) fn notify(&mut self, text: String) {
+        if self.held_by_guard() {
+            self.held_notice = Some(text);
+            return;
+        }
         let Some(id) = self.registry.resolve_slot(slots::NOTICE.as_str()).cloned() else {
             return;
         };
@@ -242,6 +276,8 @@ impl Kernel {
         f: impl FnOnce(&mut dyn Screen, &mut Cx<'_, '_>) -> Handled,
     ) -> Handled {
         let earlier = mem::take(&mut self.output.redraw);
+        let given = self.output.commands.len();
+        let trusted = self.guard().is_some_and(|guard| index >= guard);
         let Some(active) = self.stack.get_mut(index) else {
             self.output.redraw = earlier;
             return Handled::No;
@@ -251,6 +287,11 @@ impl Kernel {
         let mut cx = Cx::new(&env, &mut self.output);
         let handled = f(active.screen.as_mut(), &mut cx);
         drop(running);
+        // The commands of a guarding screen, or of one above it, open
+        // screens above it.
+        if trusted {
+            self.trusted.extend(given..self.output.commands.len());
+        }
         // A time it asked for is its own: it waits while the screen is
         // covered.
         if let Some(at) = self.output.wake_at.take() {

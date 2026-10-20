@@ -1679,6 +1679,7 @@ impl paperpaw_sdk::Screen for paperpaw_sdk::ui::choice::Choice
 pub fn paperpaw_sdk::ui::choice::Choice::dims_below(&self) -> bool
 pub fn paperpaw_sdk::ui::choice::Choice::draw(&mut self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>)
 pub fn paperpaw_sdk::ui::choice::Choice::grays(&self) -> bool
+pub fn paperpaw_sdk::ui::choice::Choice::guards(&self) -> bool
 pub fn paperpaw_sdk::ui::choice::Choice::hint(&self, &paperpaw_sdk::Id, &paperpaw_sdk::Env<'_>) -> paperpaw_sdk::Hint
 pub fn paperpaw_sdk::ui::choice::Choice::holds_edges(&self) -> bool
 pub fn paperpaw_sdk::ui::choice::Choice::on_action(&mut self, &paperpaw_sdk::Id, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
@@ -1708,6 +1709,7 @@ impl paperpaw_sdk::Screen for paperpaw_sdk::ui::items::ItemsScreen
 pub fn paperpaw_sdk::ui::items::ItemsScreen::dims_below(&self) -> bool
 pub fn paperpaw_sdk::ui::items::ItemsScreen::draw(&mut self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>)
 pub fn paperpaw_sdk::ui::items::ItemsScreen::grays(&self) -> bool
+pub fn paperpaw_sdk::ui::items::ItemsScreen::guards(&self) -> bool
 pub fn paperpaw_sdk::ui::items::ItemsScreen::hint(&self, &paperpaw_sdk::Id, &paperpaw_sdk::Env<'_>) -> paperpaw_sdk::Hint
 pub fn paperpaw_sdk::ui::items::ItemsScreen::holds_edges(&self) -> bool
 pub fn paperpaw_sdk::ui::items::ItemsScreen::on_action(&mut self, &paperpaw_sdk::Id, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
@@ -3696,6 +3698,7 @@ pub trait paperpaw_sdk::Screen
 pub fn paperpaw_sdk::Screen::dims_below(&self) -> bool
 pub fn paperpaw_sdk::Screen::draw(&mut self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>)
 pub fn paperpaw_sdk::Screen::grays(&self) -> bool
+pub fn paperpaw_sdk::Screen::guards(&self) -> bool
 pub fn paperpaw_sdk::Screen::hint(&self, &paperpaw_sdk::Id, &paperpaw_sdk::Env<'_>) -> paperpaw_sdk::Hint
 pub fn paperpaw_sdk::Screen::holds_edges(&self) -> bool
 pub fn paperpaw_sdk::Screen::on_action(&mut self, &paperpaw_sdk::Id, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
@@ -3711,6 +3714,7 @@ impl paperpaw_sdk::Screen for paperpaw_sdk::ui::choice::Choice
 pub fn paperpaw_sdk::ui::choice::Choice::dims_below(&self) -> bool
 pub fn paperpaw_sdk::ui::choice::Choice::draw(&mut self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>)
 pub fn paperpaw_sdk::ui::choice::Choice::grays(&self) -> bool
+pub fn paperpaw_sdk::ui::choice::Choice::guards(&self) -> bool
 pub fn paperpaw_sdk::ui::choice::Choice::hint(&self, &paperpaw_sdk::Id, &paperpaw_sdk::Env<'_>) -> paperpaw_sdk::Hint
 pub fn paperpaw_sdk::ui::choice::Choice::holds_edges(&self) -> bool
 pub fn paperpaw_sdk::ui::choice::Choice::on_action(&mut self, &paperpaw_sdk::Id, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
@@ -3726,6 +3730,7 @@ impl paperpaw_sdk::Screen for paperpaw_sdk::ui::items::ItemsScreen
 pub fn paperpaw_sdk::ui::items::ItemsScreen::dims_below(&self) -> bool
 pub fn paperpaw_sdk::ui::items::ItemsScreen::draw(&mut self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>)
 pub fn paperpaw_sdk::ui::items::ItemsScreen::grays(&self) -> bool
+pub fn paperpaw_sdk::ui::items::ItemsScreen::guards(&self) -> bool
 pub fn paperpaw_sdk::ui::items::ItemsScreen::hint(&self, &paperpaw_sdk::Id, &paperpaw_sdk::Env<'_>) -> paperpaw_sdk::Hint
 pub fn paperpaw_sdk::ui::items::ItemsScreen::holds_edges(&self) -> bool
 pub fn paperpaw_sdk::ui::items::ItemsScreen::on_action(&mut self, &paperpaw_sdk::Id, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
