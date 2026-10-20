@@ -6,6 +6,12 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Dictionary: a damaged dictionary is no longer indexed again with
+  every word looked up (each time reading its whole index): it is
+  left out until its files change. The prepared indexes of
+  dictionaries no longer in the folder are removed. Where a word can
+  be looked up online, the row of button hints says which button
+  does it.
 - File manager: a folder of any size is read a page at a time, as the
   library reads its folders: a folder of thousands of files no longer
   fills the X4's memory. Moving or renaming a folder tells only of the

@@ -31,7 +31,7 @@ use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
     Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest, Params,
     Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen, ScreenSpec,
-    SettingSpec, Storage, Version,
+    SettingSpec, Storage, StorageError, Version,
 };
 use paperpaw_stardict::{Builder, Dictionary};
 
@@ -91,12 +91,14 @@ impl Plugin for DictionaryPlugin {
     }
 }
 
-/// The `.ifo` files below `folder`, sorted.
-fn find_dictionaries(storage: &dyn Storage, folder: &str) -> Vec<String> {
+/// The `.ifo` files below `folder`, sorted; `Err` where `folder` itself
+/// cannot be listed (gone, or the card cannot be read).
+fn find_dictionaries(storage: &dyn Storage, folder: &str) -> Result<Vec<String>, StorageError> {
     let mut found = Vec::new();
     let mut folders = alloc::vec![(folder.to_string(), 0usize)];
+    let mut top = Ok(());
     while let Some((dir, depth)) = folders.pop() {
-        let _ = storage.list(&dir, &mut |entry| {
+        let listed = storage.list(&dir, &mut |entry| {
             if entry.name.starts_with('.') {
                 return;
             }
@@ -111,17 +113,70 @@ fn find_dictionaries(storage: &dyn Storage, folder: &str) -> Vec<String> {
                 found.push(path);
             }
         });
+        if depth == 0 {
+            top = listed;
+        }
     }
+    top?;
     found.sort_unstable();
-    found
+    Ok(found)
+}
+
+/// The folder in the plugin's own where the block indexes of the
+/// dictionary `ifo` are kept: named by a hash of its path.
+fn cache_of(ifo: &str) -> String {
+    format!("{}/{:016x}", Env::plugin_dir(PLUGIN.as_str()), fnv1a64(ifo))
+}
+
+/// What a dictionary's block indexes are made from: the sizes of the
+/// files still to be indexed. A dictionary that could not be indexed is
+/// tried again only once they change.
+fn stamp(builders: &[Builder]) -> String {
+    let sizes: Vec<String> = builders
+        .iter()
+        .map(|b| b.progress().1.to_string())
+        .collect();
+    sizes.join(" ")
+}
+
+/// The file in a dictionary's cache that says it could not be indexed,
+/// and from what ([`stamp`]).
+fn failed_file(cache: &str) -> String {
+    format!("{cache}/failed")
+}
+
+/// Whether the dictionary with cache `cache` and these builders could not
+/// be indexed before, from the same files.
+fn failed_before(storage: &dyn Storage, cache: &str, builders: &[Builder]) -> bool {
+    paperpaw_sdk::read_file(storage, &failed_file(cache), 256)
+        .is_ok_and(|kept| kept == stamp(builders).as_bytes())
+}
+
+/// The caches of dictionaries no longer in the folder go: all of them
+/// are made again from their dictionaries when wanted.
+fn forget_others(storage: &dyn Storage, found: &[String]) {
+    let dir = Env::plugin_dir(PLUGIN.as_str());
+    let kept: Vec<String> = found.iter().map(|ifo| cache_of(ifo)).collect();
+    let mut gone = Vec::new();
+    let _ = storage.list(&dir, &mut |entry| {
+        let cache = format!("{dir}/{}", entry.name);
+        let ours = entry.name.len() == 16 && entry.name.bytes().all(|b| b.is_ascii_hexdigit());
+        if entry.is_dir && ours && !kept.contains(&cache) {
+            gone.push(cache);
+        }
+    });
+    for cache in gone {
+        let _ = storage.remove_dir_all(&cache);
+    }
 }
 
 /// What the panel shows.
 #[derive(Debug)]
 enum State {
-    /// Building the dictionaries' indexes: the builders still to run, and
-    /// the bytes done and in total.
-    Preparing(Vec<Builder>, u64, u64),
+    /// Building the dictionaries' indexes: the builders still to run (with
+    /// the cache of their dictionary and its [`stamp`]), and the bytes done
+    /// and in total.
+    Preparing(Vec<(Builder, String, String)>, u64, u64),
     /// The text to show (definitions or a message).
     Ready,
 }
@@ -166,10 +221,27 @@ impl Popup {
             region: Rect::new(0, top, display.width, display.height - top),
         };
         let folder = env.settings.read(&FOLDER).trim_matches('/');
-        let cache_dir = Env::plugin_dir(PLUGIN.as_str());
-        for ifo in find_dictionaries(env.storage, folder) {
-            let cache = format!("{cache_dir}/{:016x}", fnv1a64(&ifo));
-            if let Ok(dictionary) = Dictionary::open(env.storage, &ifo, &cache) {
+        let found = find_dictionaries(env.storage, folder);
+        if let Ok(found) = &found {
+            forget_others(env.storage, found);
+        }
+        let mut builders = Vec::new();
+        for ifo in found.unwrap_or_default() {
+            let cache = cache_of(&ifo);
+            let Ok(dictionary) = Dictionary::open(env.storage, &ifo, &cache) else {
+                continue;
+            };
+            let missing = dictionary.builders(env.storage);
+            if missing.is_empty() {
+                popup.dictionaries.push(dictionary);
+            } else if !failed_before(env.storage, &cache, &missing) {
+                // Damaged ones are not read again with every word.
+                let stamp = stamp(&missing);
+                builders.extend(
+                    missing
+                        .into_iter()
+                        .map(|b| (b, cache.clone(), stamp.clone())),
+                );
                 popup.dictionaries.push(dictionary);
             }
         }
@@ -180,15 +252,10 @@ impl Popup {
             popup.set_text(env, message);
             return popup;
         }
-        let builders: Vec<Builder> = popup
-            .dictionaries
-            .iter()
-            .flat_map(|d| d.builders(env.storage))
-            .collect();
         if builders.is_empty() {
             popup.look_up(env);
         } else {
-            let total = builders.iter().map(|b| b.progress().1).sum();
+            let total = builders.iter().map(|(b, _, _)| b.progress().1).sum();
             popup.state = State::Preparing(builders, 0, total);
         }
         popup
@@ -344,10 +411,13 @@ impl Popup {
 }
 
 impl Screen for Popup {
-    /// *Select* closes it; the arrows scroll.
+    /// *Select* closes it, *Menu* looks the word up online where it can;
+    /// the arrows scroll.
     fn hint(&self, action: &Id, env: &Env<'_>) -> paperpaw_sdk::Hint {
         if *action == actions::CONFIRM {
             paperpaw_sdk::Hint::Text(env.i18n.tr("core.hint.close").to_string())
+        } else if *action == actions::MENU && self.online_area(env, "").is_some() {
+            paperpaw_sdk::Hint::Text(env.i18n.tr("dictionary.online").to_string())
         } else {
             paperpaw_sdk::Hint::Default
         }
@@ -446,19 +516,25 @@ impl Screen for Popup {
             return;
         };
         let finished = match builders.last_mut() {
-            Some(builder) => {
+            Some((builder, cache, stamp)) => {
                 let before = builder.progress().0;
                 let finished = builder.step(env.storage, STEP_BYTES);
                 *done += builder.progress().0 - before;
                 match finished {
+                    Ok(false) => false,
                     Ok(true) => {
                         builders.pop();
                         builders.is_empty()
                     }
-                    Ok(false) => false,
-                    // A damaged dictionary: skip it.
-                    Err(_) => {
-                        builders.pop();
+                    // A damaged dictionary: skipped, now and until its
+                    // files change (a card that could not be read is
+                    // tried again).
+                    Err(e) => {
+                        if matches!(e, paperpaw_stardict::Error::Malformed(_)) {
+                            let _ = env.storage.write(&failed_file(cache), stamp.as_bytes());
+                        }
+                        let cache = cache.clone();
+                        builders.retain(|(_, c, _)| *c != cache);
                         builders.is_empty()
                     }
                 }
