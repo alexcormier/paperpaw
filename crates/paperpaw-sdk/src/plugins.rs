@@ -208,12 +208,16 @@ impl Plugins {
     }
 
     /// Adds a plugin (kernel only).
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn push(&mut self, info: PluginInfo) {
         self.list.push(info);
     }
 
     /// Removes a plugin (kernel only), e.g. a data plugin removed while
     /// running.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn remove(&mut self, id: &str) -> Option<PluginInfo> {
         let index = self
             .list
@@ -223,10 +227,14 @@ impl Plugins {
     }
 
     /// Mutable access for the kernel.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn get_mut(&mut self, id: &str) -> Option<&mut PluginInfo> {
         self.list.iter_mut().find(|p| p.manifest.id.as_str() == id)
     }
 
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn shrink_to_fit(&mut self) {
         self.list.shrink_to_fit();
     }

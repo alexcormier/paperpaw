@@ -117,6 +117,8 @@ impl Secrets {
     }
 
     /// Applies `change`.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn apply(&mut self, change: SecretChange) {
         let at = self.list.iter().position(|s| s.id == change.id);
         match (change.value, at) {

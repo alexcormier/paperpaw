@@ -2104,6 +2104,7 @@ dependencies = [
  "paperpaw-native",
  "paperpaw-platform",
  "paperpaw-qr",
+ "paperpaw-sdk",
  "paperpaw-text",
  "paperpaw-update",
  "paperpaw-xml",

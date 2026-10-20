@@ -329,10 +329,14 @@ impl Widgets {
         Self::default()
     }
 
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn add(&mut self, widget: WidgetSpec) {
         self.widgets.push(widget);
     }
 
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn shrink_to_fit(&mut self) {
         self.widgets.shrink_to_fit();
     }
