@@ -17,7 +17,7 @@ use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::{actions, events, params};
 use paperpaw_sdk::event::Event;
-use paperpaw_sdk::install::Progress;
+use paperpaw_sdk::install::{self, Progress};
 use paperpaw_sdk::replies::HttpReply;
 use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::ui::choice::{self, Picked};
@@ -161,6 +161,10 @@ impl PageScreen {
         let Some(info) = env.plugins.get(&plugin.id) else {
             return alloc::vec![Row::Install];
         };
+        // Not this one to install over, update or remove.
+        if !catalog::may_install(env.plugins, &plugin.id, plugin.code) {
+            return Vec::new();
+        }
         // A restart first where one is waited for; a code plugin removed
         // runs on until then, and offers nothing else.
         let mut rows = Vec::new();
@@ -184,7 +188,9 @@ impl PageScreen {
     /// Asks the library for the plugin's page.
     fn fetch(&mut self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        let Some(device) = Device::of(&env).filter(|_| env.caps.network) else {
+        let Some(device) =
+            Device::of(&env).filter(|_| env.caps.network && install::is_plugin_name(&self.id))
+        else {
             self.details = Details::Failed;
             return;
         };
@@ -192,7 +198,7 @@ impl PageScreen {
         let language = env.i18n.language();
         let url = catalog::plugin_url(list.trim(), device.name, language, &self.id);
         let mut request = HttpRequest::new("GET", &url, DETAILS);
-        request.save_to = Some(catalog::plugin_part());
+        request.save_to = Some(catalog::plugin_part(&self.id));
         request.params = Params::new().with(params::ID, self.id.clone());
         cx.command(Command::Http(request));
         self.details = Details::Asked(url);
@@ -204,10 +210,12 @@ impl PageScreen {
             return;
         };
         let address = reply.final_url.clone().unwrap_or_else(|| url.clone());
-        let fetched = catalog::plugin_part();
+        let fetched = catalog::plugin_part(&self.id);
         let read = Device::of(&env)
             .filter(|_| (200..300).contains(&reply.status))
-            .and_then(|device| catalog::plugin(env.storage, &fetched, &address, &device));
+            .and_then(|device| catalog::plugin(env.storage, &fetched, &address, &device))
+            // The page asked for, not another one's.
+            .filter(|plugin| plugin.entry.id == self.id);
         let _ = env.storage.remove(&fetched);
         match read {
             Some(plugin) => {

@@ -114,6 +114,35 @@ change the plugin SDK.
   (away from every known network), nothing wants the radio any more,
   so it may go off: before, it stayed wanted and the Wi-Fi plugin
   looked for networks every few seconds until the device slept.
+- SDK: `firmware::compare_versions` orders pre-releases as SemVer does,
+  numbered parts as numbers (`0.5.0-rc.9` before `0.5.0-rc.10`), so an
+  update between numbered pre-releases is offered.
+- Fonts browser: lighter on the X4. Only the files this device installs
+  are kept of the catalog, a font's page gets its font from the list
+  instead of reading the catalog again, and the samples held share 48 KB
+  there (the fonts past it are named in the menus' font); the list lets
+  go of its samples while a font's page is open. The catalog is fetched
+  once each time the list opens, no longer on every return to it. A
+  catalog with more fonts or files than are read no longer mixes the
+  last font kept with those after it, and a download a restart cut off
+  no longer shows as going on forever.
+- Store: a plugin of the library with the id of a plugin built into
+  PaperPaw, or of the other kind (data for code, code for data), is
+  neither listed nor installed (*... cannot replace*), so a library can
+  no longer take the place of, say, the fonts or Wi-Fi. A plugin's page
+  is fetched into a file of its own and taken only if it is that
+  plugin's, and it keeps the query of the library's address (a key a
+  library of one's own asks for).
+- Plugin manager: a plugin installed or removed while its list is open
+  (from the store opened from it, say) shows there at once; the list
+  was the one of when it opened.
+- Update: an update file on the card no newer than the version running
+  says so (*an older version*, *again*) and installs as *Install older
+  version* or *Install again*, with *Search online* beside it; a newer
+  update the server names comes first. A version from the update server
+  that is no version (with `/`, say) is no offer, so it can no longer
+  name a file outside `updates`, and a download a restart cut off
+  (`updates/.download`, `.download.part`) is removed at start.
 - A new look, rounder and friendlier: soft corners, pills for buttons,
   switches, chips and the highlight, plain headers (the title on the
   page, a little larger, no bar or line), faint lines between rows from
