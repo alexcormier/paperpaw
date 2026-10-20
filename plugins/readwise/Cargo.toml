@@ -16,6 +16,9 @@ paperpaw-sdk.workspace = true
 
 [dev-dependencies]
 paperpaw-i18n.workspace = true
+paperpaw-core.workspace = true
+paperpaw-platform.workspace = true
+proptest.workspace = true
 
 [lints]
 workspace = true

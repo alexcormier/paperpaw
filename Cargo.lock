@@ -1725,9 +1725,12 @@ dependencies = [
 name = "paperpaw-plugin-readwise"
 version = "0.4.0-dev"
 dependencies = [
+ "paperpaw-core",
  "paperpaw-i18n",
  "paperpaw-json",
+ "paperpaw-platform",
  "paperpaw-sdk",
+ "proptest",
 ]
 
 [[package]]
@@ -1805,9 +1808,13 @@ dependencies = [
 name = "paperpaw-plugin-translate"
 version = "0.4.0-dev"
 dependencies = [
+ "paperpaw-core",
  "paperpaw-i18n",
  "paperpaw-json",
+ "paperpaw-platform",
+ "paperpaw-plugin-fonts-default",
  "paperpaw-sdk",
+ "proptest",
 ]
 
 [[package]]
@@ -1885,9 +1892,13 @@ dependencies = [
 name = "paperpaw-plugin-wikipedia"
 version = "0.4.0-dev"
 dependencies = [
+ "paperpaw-core",
  "paperpaw-i18n",
  "paperpaw-json",
+ "paperpaw-platform",
+ "paperpaw-plugin-fonts-default",
  "paperpaw-sdk",
+ "proptest",
 ]
 
 [[package]]

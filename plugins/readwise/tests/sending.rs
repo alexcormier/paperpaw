@@ -1,0 +1,372 @@
+//! Sending highlights to Readwise with the real kernel and canned
+//! answers: the token is asked for once and kept veiled with the other
+//! secrets, sent as a header, removed when Readwise refuses it; each
+//! answer is told; and the JSON sent holds every highlight exactly,
+//! whatever its text (quotes, line breaks, control characters, any
+//! Unicode), as a property test checks.
+
+// Tests panic on purpose when something is wrong.
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
+use std::borrow::Cow;
+use std::cell::RefCell;
+use std::rc::Rc;
+
+use paperpaw_core::{HttpCall, HttpResponse, Io, Kernel};
+use paperpaw_json::stream::{Event as Json, Parser};
+use paperpaw_platform::Rotation;
+use paperpaw_plugin_readwise::{Highlight, Notes, Readwise, SECRET, parse, request};
+use paperpaw_sdk::builtin::events::NotesExported;
+use paperpaw_sdk::builtin::{params, slots};
+use paperpaw_sdk::event::EventData;
+use paperpaw_sdk::replies::Typed;
+use paperpaw_sdk::secrets::{FILE, SecretChange, Secrets};
+use paperpaw_sdk::{
+    Canvas, Cx, DeviceInfo, DisplayInfo, Env, Handled, Id, InputCaps, Instant, Manifest,
+    MemoryClass, MemoryStorage, Params, PixelFormat, Plugin, Priority, RegisterError, Registrar,
+    SDK_VERSION, Screen, ScreenSpec, Version,
+};
+use proptest::prelude::*;
+
+const DEVICE: DeviceInfo = DeviceInfo {
+    id: "test",
+    name: "Test device",
+    display: DisplayInfo {
+        width: 200,
+        height: 300,
+        dpi: 100,
+        format: PixelFormat::Gray4,
+        rotation: Rotation::Deg0,
+        color: None,
+    },
+    input: InputCaps {
+        buttons: true,
+        touch: false,
+        pen: false,
+        keys: &[],
+    },
+    memory: MemoryClass::Large,
+};
+
+const NOTES: &str = "Notes/Alice.md";
+const MARKDOWN: &str = "# Alice\n\nLewis Carroll\n\n## Highlights\n\n\
+    > Curiouser and curiouser!\n>\n> 12 %\n\n> Who are you?\n>\n> 40 %\n\nA note.\n";
+
+/// Takes the place of the notice, to hear what the plugin tells.
+struct Notices(Rc<RefCell<Vec<String>>>);
+
+struct Silent;
+
+impl Screen for Silent {
+    fn draw(&mut self, _: &mut Canvas<'_>, _: &Env<'_>) {}
+
+    fn on_action(&mut self, _: &Id, _: &mut Cx<'_, '_>) -> Handled {
+        Handled::No
+    }
+}
+
+impl Plugin for Notices {
+    fn manifest(&self) -> Manifest {
+        Manifest {
+            id: Id::new_static("test-notices"),
+            name: Cow::Borrowed("Notices"),
+            description: Cow::Borrowed("Keeps the notices for the test."),
+            version: Version::new(0, 1, 0),
+            sdk: SDK_VERSION,
+        }
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        let screen = Id::new_static("test-notices.notice");
+        let heard = self.0.clone();
+        r.add_screen(ScreenSpec {
+            id: screen.clone(),
+            title: Cow::Borrowed("notice"),
+            factory: Box::new(move |_, p| {
+                heard
+                    .borrow_mut()
+                    .push(p.get(params::TEXT).unwrap_or_default().to_string());
+                Box::new(Silent)
+            }),
+        })?;
+        r.bind_slot(slots::NOTICE, screen, Priority::PREFERRED)
+    }
+}
+
+struct Harness {
+    kernel: Kernel,
+    notices: Rc<RefCell<Vec<String>>>,
+    now: u64,
+}
+
+impl Harness {
+    fn new(storage: MemoryStorage, network: bool) -> Self {
+        let notices = Rc::new(RefCell::new(Vec::new()));
+        let mut kernel = Kernel::builder(DEVICE)
+            .storage(storage)
+            .user_config("[core]\nlanguage = en\n")
+            .network(network)
+            .plugin(Readwise)
+            .plugin(Notices(notices.clone()))
+            .build()
+            .unwrap();
+        kernel.start(Instant(0));
+        Self {
+            kernel,
+            notices,
+            now: 0,
+        }
+    }
+
+    /// Notes on the card and the token kept.
+    fn with_token(token: &str) -> Self {
+        let mut secrets = Secrets::default();
+        secrets.apply(SecretChange::keep(SECRET, "", token));
+        let storage = MemoryStorage::new()
+            .with(NOTES, MARKDOWN)
+            .with(FILE, secrets.encode().into_bytes());
+        Self::new(storage, true)
+    }
+
+    fn send(&mut self, event: &'static str, data: impl EventData) {
+        self.now += 100;
+        self.kernel
+            .send_event(Instant(self.now), Id::new_static(event), data.to_params());
+    }
+
+    fn export(&mut self, path: &str) -> Vec<HttpCall> {
+        self.send(
+            "core.notes-exported",
+            NotesExported {
+                path: String::from(path),
+                title: String::from("Alice"),
+            },
+        );
+        self.requests()
+    }
+
+    fn requests(&mut self) -> Vec<HttpCall> {
+        self.kernel
+            .take_io()
+            .into_iter()
+            .filter_map(|io| match io {
+                Io::Http(call) => Some(call),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn answer(&mut self, call: &HttpCall, status: u16) {
+        self.now += 100;
+        self.kernel.http_response(
+            Instant(self.now),
+            HttpResponse {
+                id: call.id,
+                status,
+                ..HttpResponse::default()
+            },
+        );
+    }
+
+    fn told(&self) -> String {
+        self.notices.borrow().last().cloned().unwrap_or_default()
+    }
+}
+
+#[test]
+fn the_token_is_asked_for_once_kept_veiled_and_sent() {
+    let storage = MemoryStorage::new().with(NOTES, MARKDOWN);
+    let mut h = Harness::new(storage, true);
+    assert!(h.export(NOTES).is_empty());
+    assert!(h.told().contains("enter your access token"), "{}", h.told());
+    // The keyboard answers, with the notes' path passed along.
+    h.send(
+        "readwise.token-entered",
+        Typed {
+            text: String::from("  t0k-en  "),
+            context: Params::new().with(params::PATH, NOTES),
+        },
+    );
+    let calls = h.requests();
+    assert_eq!(calls.len(), 1, "{calls:?}");
+    assert_eq!(calls[0].method, "POST");
+    assert_eq!(calls[0].url, "https://readwise.io/api/v2/highlights/");
+    assert!(
+        calls[0]
+            .headers
+            .contains(&(String::from("Authorization"), String::from("Token t0k-en")))
+    );
+    assert_eq!(h.kernel.secrets().get(SECRET), Some("t0k-en"));
+    let file = paperpaw_sdk::read_file(h.kernel.storage(), FILE, 1 << 16).unwrap();
+    let file = String::from_utf8(file).unwrap();
+    assert!(!file.contains("t0k-en"), "{file}");
+    h.answer(&calls[0], 201);
+    assert_eq!(h.told(), "2 highlights sent to Readwise.");
+    // The next export needs no asking.
+    let calls = h.export(NOTES);
+    assert_eq!(calls.len(), 1);
+}
+
+#[test]
+fn an_empty_token_is_not_kept() {
+    let storage = MemoryStorage::new().with(NOTES, MARKDOWN);
+    let mut h = Harness::new(storage, true);
+    h.send(
+        "readwise.token-entered",
+        Typed {
+            text: String::from("   "),
+            context: Params::new().with(params::PATH, NOTES),
+        },
+    );
+    assert!(h.requests().is_empty());
+    assert_eq!(h.kernel.secrets().get(SECRET), None);
+}
+
+#[test]
+fn a_refused_token_is_removed_and_asked_for_again() {
+    for status in [401, 403] {
+        let mut h = Harness::with_token("old");
+        let calls = h.export(NOTES);
+        h.answer(&calls[0], status);
+        assert!(
+            h.told().contains("did not accept the token"),
+            "{}",
+            h.told()
+        );
+        assert_eq!(h.kernel.secrets().get(SECRET), None);
+        assert!(h.export(NOTES).is_empty());
+        assert!(h.told().contains("enter your access token"));
+    }
+}
+
+#[test]
+fn every_answer_is_told() {
+    for (status, said) in [
+        (200, "2 highlights sent"),
+        (0, "cannot be reached"),
+        (500, "could not be sent"),
+        (429, "could not be sent"),
+    ] {
+        let mut h = Harness::with_token("t");
+        let calls = h.export(NOTES);
+        h.answer(&calls[0], status);
+        assert!(h.told().contains(said), "{status}: {}", h.told());
+        assert_eq!(h.kernel.secrets().get(SECRET), Some("t"), "{status}");
+    }
+}
+
+#[test]
+fn notes_that_are_missing_or_empty_send_nothing() {
+    let mut secrets = Secrets::default();
+    secrets.apply(SecretChange::keep(SECRET, "", "t"));
+    let storage = MemoryStorage::new()
+        .with(FILE, secrets.encode().into_bytes())
+        .with("Notes/empty.md", "# Empty\n\n## Bookmarks\n\n- 5 %: x\n")
+        .with("Notes/binary.md", vec![0xff_u8, 0xfe, 0, 1, 2])
+        .with("Notes/huge.md", "> x\n".repeat(100_000));
+    let mut h = Harness::new(storage, true);
+    assert!(h.export("Notes/missing.md").is_empty());
+    assert!(h.told().contains("could not be sent"), "{}", h.told());
+    for path in ["Notes/empty.md", "Notes/binary.md"] {
+        assert!(h.export(path).is_empty(), "{path}");
+        assert!(h.told().contains("no highlights"), "{path}: {}", h.told());
+    }
+    // Larger than notes are: not read at all.
+    assert!(h.export("Notes/huge.md").is_empty());
+    assert!(h.told().contains("could not be sent"), "{}", h.told());
+}
+
+#[test]
+fn nothing_is_sent_without_network() {
+    let mut secrets = Secrets::default();
+    secrets.apply(SecretChange::keep(SECRET, "", "t"));
+    let storage = MemoryStorage::new()
+        .with(NOTES, MARKDOWN)
+        .with(FILE, secrets.encode().into_bytes());
+    let mut h = Harness::new(storage, false);
+    assert!(h.export(NOTES).is_empty());
+    assert!(h.told().contains("needs a network"), "{}", h.told());
+}
+
+#[test]
+fn odd_markdown_is_read_as_well_as_it_can() {
+    let notes = parse(
+        "no title line\n## Highlights\n> 99999999999999999999 %\n>   \n> -5 %\n> 50%\n\
+         \n> second\n> lines\n> 7 %\n## Highlights again\n> not read\n",
+    );
+    assert_eq!(notes.title, "");
+    assert_eq!(notes.highlights.len(), 2, "{notes:?}");
+    // Places that are no numbers are text.
+    assert_eq!(notes.highlights[0].text, "99999999999999999999 %\n-5 %");
+    assert_eq!(notes.highlights[0].percent, 50);
+    assert_eq!(notes.highlights[1].text, "second\nlines");
+    assert_eq!(notes.highlights[1].percent, 7);
+    assert_eq!(parse(""), Notes::default());
+}
+
+/// The texts, notes and places of the highlights in a body sent.
+fn sent(body: &str) -> Vec<(String, String, String)> {
+    let mut found: Vec<(String, String, String)> = Vec::new();
+    let mut parser = Parser::default();
+    parser.feed(body.as_bytes(), &mut |event| match event {
+        Json::Open(path) if path == ["highlights", "[]"] => {
+            found.push(Default::default());
+        }
+        Json::Value(path, value) if path.len() == 3 && path[..2] == ["highlights", "[]"] => {
+            if let Some(last) = found.last_mut() {
+                match path[2].as_str() {
+                    "text" => last.0 = value.to_string(),
+                    "note" => last.1 = value.to_string(),
+                    "location" => last.2 = value.to_string(),
+                    _ => {}
+                }
+            }
+        }
+        _ => {}
+    });
+    found
+}
+
+fn text() -> impl Strategy<Value = String> {
+    prop_oneof![
+        ".{1,40}",
+        "[\"\\\\\n\r\t\u{0}-\u{1f}\u{7f}\u{2028}\u{2029}a]{1,10}",
+        "[\u{10000}-\u{10ffff}]{1,4}",
+    ]
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(200))]
+
+    #[test]
+    fn the_json_sent_holds_every_highlight_exactly(
+        title in text(),
+        author in prop_oneof![Just(String::new()), text()],
+        highlights in prop::collection::vec((text(), prop_oneof![Just(String::new()), text()], 0u32..=100), 1..5),
+    ) {
+        let notes = Notes {
+            title,
+            author,
+            highlights: highlights
+                .iter()
+                .map(|(text, note, percent)| Highlight {
+                    text: text.clone(),
+                    note: note.clone(),
+                    percent: *percent,
+                })
+                .collect(),
+        };
+        let body = request(&notes, "t").body.unwrap();
+        let expected: Vec<(String, String, String)> = highlights
+            .iter()
+            .map(|(t, n, p)| (t.clone(), n.clone(), p.to_string()))
+            .collect();
+        prop_assert_eq!(sent(&body), expected);
+    }
+
+    #[test]
+    fn any_markdown_parses_without_panic(text in ".{0,400}") {
+        let notes = parse(&text);
+        prop_assert!(notes.highlights.iter().all(|h| !h.text.is_empty()));
+    }
+}
