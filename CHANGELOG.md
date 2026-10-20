@@ -6,8 +6,9 @@ change the plugin SDK.
 
 ## [Unreleased]
 
-- The emulator's plugin servers and the serve crate's tests listen on this computer only (`Servers::listening_on`), so Windows no longer asks to let test programs into the network after every build.
-
+- The emulator's plugin servers and the serve crate's tests listen on
+  this computer only (`Servers::listening_on`), so Windows no longer
+  asks to let test programs into the network after every build.
 - Emulator: `--free-space <bytes>` makes the emulated storage say it has
   that much free, whatever the computer's disk has, so screenshots of the
   store look the same everywhere (the snapshot tests use it).
