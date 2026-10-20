@@ -7,13 +7,17 @@ hardware parts are in [`paperpaw-x4`](../../crates/paperpaw-x4) and
 
 > Save the stock firmware first (below), so the X4 can always go back.
 
-It is for the X4 with an SSD1677 display controller and, built with the
-feature `x4-pro`, for the X4 Pro (ESP32-S3) with a UC8179.
+It is for the X4 and, built with the feature `x4-pro` or `x4-classic`,
+for the X4 Pro and the X4 Classic (both ESP32-S3); the display
+controller (SSD1677, UC8179 or UC8279) is found at start.
 
 ## Build
 
-The stable Rust toolchain of the repository builds it (the target
-`riscv32imc-unknown-none-elf` comes with `rust-toolchain.toml`):
+The Rust release pinned in this folder's `rust-toolchain.toml` builds
+it (rustup fetches it, with the target `riscv32imc-unknown-none-elf`):
+native code plugins run only on firmware built by the same compiler
+(ADR 0024), so each release names its toolchains; `versions.env` names
+the X4 Pro's.
 
 ```sh
 cd shells/xteink
@@ -85,10 +89,11 @@ python tools/x4-remote.py --push my-fonts .paperpaw/fonts --info
 ## The X4 Pro
 
 Its chip is an ESP32-S3 (Xtensa): install the `esp` toolchain with
-[espup](https://github.com/esp-rs/espup) (with the Xtensa GCC 14.2:
-`espup install --targets esp32s3 --crosstool-toolchain-version
-14.2.0_20241119`; newer ones reject esp-hal's linker scripts), load its
-environment (`export-esp.ps1` or `export-esp.sh`), then
+[espup](https://github.com/esp-rs/espup), in the versions of
+`versions.env` (`espup install --targets esp32s3 --toolchain-version
+1.97.0.0 --crosstool-toolchain-version 14.2.0_20241119`; newer GCCs
+reject esp-hal's linker scripts), load its environment (`export-esp.ps1`
+or `export-esp.sh`), then
 
 ```sh
 cargo +esp x4pro          # build
@@ -107,3 +112,19 @@ the SD card (SDMMC), the battery from its fuel gauge, the clock chip,
 the front light (brightness and warmth, in the quick panel), sleep, the
 network as on the X4. To come: the UC8279 of other X4 Pros, battery
 life measured.
+
+## The X4 Classic
+
+The X4 Classic ("X4 v2") is an ESP32-S3 board like the X4 Pro, with the
+X4's buttons and no touch or front light; an X4 image cannot run on it.
+With the `esp` toolchain as for the X4 Pro:
+
+```sh
+cargo +esp x4classic          # build
+cargo +esp x4classic-run      # flash and show the log
+cargo +esp x4classic-clippy   # lints
+```
+
+It answers on USB (through its pogo adapter) as the X4 Pro does, so
+check which one is connected before flashing. Its pins come from the
+FreeInk SDK's and Papyrix's notes; not yet tried on one.

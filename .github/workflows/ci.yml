@@ -101,25 +101,32 @@ jobs:
           -p paperpaw-sample-hello -p paperpaw-x4 -p paperpaw-fat
 
   firmware:
-    name: X4 firmware
+    name: Firmware (${{ matrix.device }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The X4 (ESP32-C3), the X4 Pro and the X4 Classic (ESP32-S3).
+        device: [x4, x4-pro, x4-classic]
+    env:
+      DEVICE: ${{ matrix.device }}
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: ./.github/actions/xteink-tools
         with:
-          targets: riscv32imc-unknown-none-elf
-          components: clippy
+          device: ${{ matrix.device }}
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: shells/xteink
-      - name: Lint and build for the ESP32-C3
+          key: ${{ matrix.device }}
+      - name: Lint and build
         working-directory: shells/xteink
-        # With remote control over USB, as for testing, and without, as
-        # released.
+        # Linted with remote control over USB, as for testing, and
+        # without, as released; built as released.
         run: |
-          cargo clippy --release -- -D warnings
-          cargo clippy --release --no-default-features -- -D warnings
-          cargo build --release
+          cargo +"$FIRMWARE_TOOLCHAIN" clippy $FIRMWARE_CARGO --features "$DEVICE,remote" -- -D warnings
+          cargo +"$FIRMWARE_TOOLCHAIN" clippy $FIRMWARE_CARGO --features "$DEVICE" -- -D warnings
+          cargo +"$FIRMWARE_TOOLCHAIN" build $FIRMWARE_CARGO --features "$DEVICE"
 
   architecture:
     name: Architecture rules

@@ -35,8 +35,8 @@
 //! (see [`Update::leaves_out`](paperpaw_sdk::firmware::Update)); its
 //! signature is checked then, as always.
 //!
-//! The answer is kept in [`OFFER`] until it is downloaded or no longer
-//! newer.
+//! The answer is kept in the plugin's `offer.txt` until it is downloaded
+//! or no longer newer.
 
 use alloc::format;
 use alloc::string::{String, ToString};

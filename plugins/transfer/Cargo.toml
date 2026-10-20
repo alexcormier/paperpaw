@@ -12,11 +12,12 @@ categories = ["no-std"]
 
 [dependencies]
 paperpaw-qr.workspace = true
-paperpaw-digest.workspace = true
 paperpaw-sdk.workspace = true
 
 [dev-dependencies]
 paperpaw-i18n.workspace = true
+# A FAT card for the tests of hostile paths.
+paperpaw-fat.workspace = true
 
 [lints]
 workspace = true

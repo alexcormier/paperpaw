@@ -19,6 +19,12 @@
 //! The [`FOLDERS`] folders looked up last are kept too: a file opened in
 //! one is looked up there, not by walking every folder from the root again
 //! (a book's data lies five folders deep, beside those of all other books).
+//!
+//! A name stands for an entry by its long name where it has one, by its
+//! short name only where it has none: `PAPERP~1`, the short name FAT
+//! keeps beside `.paperpaw`, does not reach PaperPaw's data. rust-fatfs
+//! takes either, so names are looked up here (`lookup`) and handed to it
+//! only where it cannot take another entry for them.
 
 #![no_std]
 
@@ -48,6 +54,7 @@ pub const OPEN_FILES: usize = 16;
 /// Folders kept (each takes about a hundred bytes).
 pub const FOLDERS: usize = 8;
 type FatDir<IO> = Dir<'static, IO, DefaultTimeProvider, LossyOemCpConverter>;
+type FatEntry<IO> = fatfs::DirEntry<'static, IO, DefaultTimeProvider, LossyOemCpConverter>;
 
 /// A file kept open.
 struct Open<IO: ReadWriteSeek + 'static> {
@@ -116,6 +123,171 @@ fn name(path: &str) -> &str {
     path.rsplit_once('/').map_or(path, |(_, name)| name)
 }
 
+/// Whether `stored` is `name` to FAT: without regard to case, compared as
+/// rust-fatfs compares names (in upper case, letter by letter).
+fn same_name(stored: impl Iterator<Item = char>, name: &str) -> bool {
+    stored
+        .flat_map(char::to_uppercase)
+        .eq(name.chars().flat_map(char::to_uppercase))
+}
+
+/// Whether `entry`'s long name is `name`; `None` where it has none.
+fn long_name_is<IO: ReadWriteSeek + 'static>(entry: &FatEntry<IO>, name: &str) -> Option<bool> {
+    let units = entry.long_file_name_as_ucs2_units()?;
+    let long =
+        char::decode_utf16(units.iter().copied()).map(|c| c.unwrap_or(char::REPLACEMENT_CHARACTER));
+    Some(same_name(long, name))
+}
+
+/// Whether `entry`'s short name is `name`, its letters read as
+/// [`LossyOemCpConverter`] reads them.
+fn short_name_is<IO: ReadWriteSeek + 'static>(entry: &FatEntry<IO>, name: &str) -> bool {
+    let short = entry.short_file_name_as_bytes().iter().map(|&b| {
+        if b.is_ascii() {
+            char::from(b)
+        } else {
+            char::REPLACEMENT_CHARACTER
+        }
+    });
+    same_name(short, name)
+}
+
+/// What a name stands for in a folder.
+struct Lookup<IO: ReadWriteSeek + 'static> {
+    /// The entry it names: by its long name, or by its short name where
+    /// it has no long one.
+    entry: Option<FatEntry<IO>>,
+    /// rust-fatfs could take another entry for the name (one whose short
+    /// name it is, as `PAPERP~1` for `.paperpaw`): the name is not handed
+    /// to rust-fatfs then.
+    others: bool,
+}
+
+/// Looks up `name` in `dir`, as PaperPaw names entries (see the [crate
+/// documentation](crate)): every entry, where the name goes to rust-fatfs
+/// after (`whole`), else up to the one it names.
+fn lookup<IO: ReadWriteSeek + 'static>(
+    dir: &FatDir<IO>,
+    name: &str,
+    whole: bool,
+) -> Result<Lookup<IO>, StorageError> {
+    let mut found = Lookup {
+        entry: None,
+        others: false,
+    };
+    for entry in dir.iter() {
+        let entry = entry.map_err(error)?;
+        let by_short = short_name_is(&entry, name);
+        let (named, other) = match long_name_is(&entry, name) {
+            Some(by_long) => (by_long, by_short),
+            None => (by_short, false),
+        };
+        if named && found.entry.is_none() {
+            found.entry = Some(entry);
+            if !whole {
+                break;
+            }
+        } else if named || other {
+            found.others = true;
+        }
+    }
+    Ok(found)
+}
+
+/// Folder `name` in `dir`.
+fn open_dir<IO: ReadWriteSeek + 'static>(
+    dir: &FatDir<IO>,
+    name: &str,
+) -> Result<FatDir<IO>, StorageError> {
+    match lookup(dir, name, false)?.entry {
+        Some(entry) if entry.is_dir() => Ok(entry.to_dir()),
+        Some(_) => Err(StorageError::InvalidPath),
+        None => Err(StorageError::NotFound),
+    }
+}
+
+/// File `name` in `dir`.
+fn open_file<IO: ReadWriteSeek + 'static>(
+    dir: &FatDir<IO>,
+    name: &str,
+) -> Result<FatFile<IO>, StorageError> {
+    match lookup(dir, name, false)?.entry {
+        Some(entry) if entry.is_file() => Ok(entry.to_file()),
+        Some(_) => Err(StorageError::InvalidPath),
+        None => Err(StorageError::NotFound),
+    }
+}
+
+/// File `name` in `dir`, made if it is not there. Not where `name` is
+/// only another entry's short name: rust-fatfs would open that entry.
+fn create_file<IO: ReadWriteSeek + 'static>(
+    dir: &FatDir<IO>,
+    name: &str,
+) -> Result<FatFile<IO>, StorageError> {
+    match lookup(dir, name, true)? {
+        Lookup {
+            entry: Some(entry), ..
+        } if entry.is_file() => Ok(entry.to_file()),
+        Lookup { entry: Some(_), .. } | Lookup { others: true, .. } => {
+            Err(StorageError::InvalidPath)
+        }
+        Lookup { .. } => dir.create_file(name).map_err(error),
+    }
+}
+
+/// Folder `name` in `dir`, made if it is not there (as [`create_file`]).
+fn create_dir_in<IO: ReadWriteSeek + 'static>(
+    dir: &FatDir<IO>,
+    name: &str,
+) -> Result<FatDir<IO>, StorageError> {
+    match lookup(dir, name, true)? {
+        Lookup {
+            entry: Some(entry), ..
+        } if entry.is_dir() => Ok(entry.to_dir()),
+        Lookup { entry: Some(_), .. } | Lookup { others: true, .. } => {
+            Err(StorageError::InvalidPath)
+        }
+        Lookup { .. } => dir.create_dir(name).map_err(error),
+    }
+}
+
+/// Removes `name` from `dir` (a file, or an empty folder); nothing to do
+/// where it is not there.
+fn remove_in<IO: ReadWriteSeek + 'static>(
+    dir: &FatDir<IO>,
+    name: &str,
+) -> Result<(), StorageError> {
+    match lookup(dir, name, true)? {
+        Lookup { entry: None, .. } => Ok(()),
+        Lookup { others: true, .. } => Err(StorageError::InvalidPath),
+        Lookup { .. } => match dir.remove(name) {
+            Ok(()) | Err(fatfs::Error::NotFound) => Ok(()),
+            Err(e) => Err(error(e)),
+        },
+    }
+}
+
+/// Moves `name` of `dir` to `to_name` in `to`, where nothing is.
+fn rename_in<IO: ReadWriteSeek + 'static>(
+    dir: &FatDir<IO>,
+    name: &str,
+    to: &FatDir<IO>,
+    to_name: &str,
+) -> Result<(), StorageError> {
+    match lookup(dir, name, true)? {
+        Lookup { entry: None, .. } => return Err(StorageError::NotFound),
+        Lookup { others: true, .. } => return Err(StorageError::InvalidPath),
+        Lookup { .. } => {}
+    }
+    match lookup(to, to_name, true)? {
+        Lookup {
+            entry: None,
+            others: false,
+        } => dir.rename(name, to, to_name).map_err(error),
+        Lookup { .. } => Err(StorageError::InvalidPath),
+    }
+}
+
 impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
     pub fn new(fs: &'static FileSystem<IO>) -> Self {
         Self {
@@ -136,14 +308,9 @@ impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
     /// Whether a file or a folder is at `path`, looked up in its folder
     /// (no file opened).
     fn is_there(&self, path: &str) -> bool {
-        let Ok(dir) = self.dir(parent(path)) else {
-            return false;
-        };
-        // As FAT compares long names: without regard to case.
-        let name = name(path).to_lowercase();
-        dir.iter()
-            .filter_map(Result::ok)
-            .any(|entry| entry.file_name().to_lowercase() == name)
+        self.dir(parent(path))
+            .and_then(|dir| lookup(&dir, name(path), false))
+            .is_ok_and(|found| found.entry.is_some())
     }
 
     fn root(&self) -> FatDir<IO> {
@@ -169,10 +336,7 @@ impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
         }
         // Looked up in its folder, kept too: the folders of many books'
         // data are not each looked up from the root.
-        let dir = self
-            .dir(parent(path))?
-            .open_dir(name(path))
-            .map_err(error)?;
+        let dir = open_dir(&self.dir(parent(path))?, name(path))?;
         let mut folders = self.folders.borrow_mut();
         if folders.len() == FOLDERS {
             folders.remove(0);
@@ -214,11 +378,10 @@ impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
                 }
                 let file = if create {
                     self.create_dir(parent(path))?;
-                    self.dir(parent(path))?.create_file(name(path))
+                    create_file(&self.dir(parent(path))?, name(path))
                 } else {
-                    self.dir(parent(path))?.open_file(name(path))
-                }
-                .map_err(error)?;
+                    open_file(&self.dir(parent(path))?, name(path))
+                }?;
                 open.push(Open {
                     path: path.to_string(),
                     file,
@@ -280,16 +443,17 @@ impl<IO: ReadWriteSeek + 'static> Storage for FatStorage<IO> {
         self.create_dir(parent(path))?;
         let dir = self.dir(parent(path))?;
         let (name, temp) = (name(path), format!("{}.tmp", name(path)));
+        // Refused before anything is written: no temporary file is left.
+        if lookup(&dir, name, true)?.others {
+            return Err(StorageError::InvalidPath);
+        }
         {
-            let mut file = dir.create_file(&temp).map_err(error)?;
+            let mut file = create_file(&dir, &temp)?;
             file.truncate().map_err(error)?;
             Self::write_all(&mut file, data)?;
         }
-        match dir.remove(name) {
-            Ok(()) | Err(fatfs::Error::NotFound) => {}
-            Err(e) => return Err(error(e)),
-        }
-        dir.rename(&temp, &dir, name).map_err(error)
+        remove_in(&dir, name)?;
+        rename_in(&dir, &temp, &dir, name)
     }
 
     fn append(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
@@ -343,9 +507,10 @@ impl<IO: ReadWriteSeek + 'static> Storage for FatStorage<IO> {
         check(path)?;
         self.close(path)?;
         self.forget(path);
-        match self.root().remove(path) {
-            Ok(()) | Err(fatfs::Error::NotFound) => Ok(()),
-            Err(e) => Err(error(e)),
+        match self.dir(parent(path)) {
+            Ok(dir) => remove_in(&dir, name(path)),
+            Err(StorageError::NotFound) => Ok(()),
+            Err(e) => Err(e),
         }
     }
 
@@ -364,13 +529,15 @@ impl<IO: ReadWriteSeek + 'static> Storage for FatStorage<IO> {
         self.forget(from);
         self.forget(to);
         self.create_dir(parent(to))?;
-        let root = self.root();
+        let (dir, to_dir) = (self.dir(parent(from))?, self.dir(parent(to))?);
         // A file there is replaced.
-        if self.size(to).is_ok() {
-            self.close(to)?;
-            root.remove(to).map_err(error)?;
+        if lookup(&to_dir, name(to), false)?
+            .entry
+            .is_some_and(|entry| entry.is_file())
+        {
+            remove_in(&to_dir, name(to))?;
         }
-        root.rename(from, &root, to).map_err(error)
+        rename_in(&dir, name(from), &to_dir, name(to))
     }
 
     fn create_dir(&self, path: &str) -> Result<(), StorageError> {
@@ -381,7 +548,7 @@ impl<IO: ReadWriteSeek + 'static> Storage for FatStorage<IO> {
         check(path)?;
         let mut dir = self.root();
         for part in path.split('/').filter(|p| !p.is_empty()) {
-            dir = dir.create_dir(part).map_err(error)?;
+            dir = create_dir_in(&dir, part)?;
         }
         Ok(())
     }
@@ -412,7 +579,7 @@ impl<IO: ReadWriteSeek + 'static> Storage for FatStorage<IO> {
             }
         }
         self.forget(path);
-        self.root().remove(path).map_err(error)
+        remove_in(&self.dir(parent(path))?, name(path))
     }
 }
 
@@ -892,5 +1059,138 @@ mod tests {
             s.read_at("../x", 0, &mut buf),
             Err(StorageError::InvalidPath)
         );
+    }
+
+    /// The short name FAT keeps beside `long` in folder `dir`.
+    fn short_name(s: &FatStorage<Disk>, dir: &str, long: &str) -> String {
+        s.dir(dir)
+            .unwrap()
+            .iter()
+            .map(Result::unwrap)
+            .find(|entry| entry.file_name() == long)
+            .unwrap()
+            .short_file_name()
+    }
+
+    /// A short name stands for nothing where its entry has a long name:
+    /// `PAPERP~1` does not reach PaperPaw's data, by any call.
+    #[test]
+    fn short_names_of_long_ones_reach_nothing() {
+        let s = storage();
+        s.write(".paperpaw/secrets.txt", b"password").unwrap();
+        s.write(".paperpaw/plugins/wifi/networks.txt", b"home")
+            .unwrap();
+        s.write("Books/A long title.epub", b"a book").unwrap();
+        assert_eq!(short_name(&s, "", ".paperpaw"), "PAPERP~1");
+        assert_eq!(short_name(&s, "Books", "A long title.epub"), "ALONGT~1.EPU");
+        let alias = "PAPERP~1/secrets.txt";
+        let mut buf = [0u8; 16];
+        // Not read, nor found at all.
+        assert_eq!(s.read_at(alias, 0, &mut buf), Err(StorageError::NotFound));
+        assert_eq!(s.size(alias), Err(StorageError::NotFound));
+        assert!(!s.exists("PAPERP~1"));
+        assert!(!s.exists("paperp~1/secrets.txt"));
+        assert_eq!(s.list("PAPERP~1", &mut |_| {}), Err(StorageError::NotFound));
+        assert_eq!(
+            s.list("PAPERP~1/plugins", &mut |_| {}),
+            Err(StorageError::NotFound)
+        );
+        assert_eq!(s.size("Books/ALONGT~1.EPU"), Err(StorageError::NotFound));
+        // Not written, appended to, made, moved or removed through it.
+        assert_eq!(s.write(alias, b"stolen"), Err(StorageError::InvalidPath));
+        assert_eq!(
+            s.append("PAPERP~1/firmware-keys.txt", b"key"),
+            Err(StorageError::InvalidPath)
+        );
+        assert_eq!(
+            s.create_dir("PAPERP~1/plugins"),
+            Err(StorageError::InvalidPath)
+        );
+        assert_eq!(s.write("PAPERP~1", b"x"), Err(StorageError::InvalidPath));
+        assert_eq!(s.create_dir("PAPERP~1"), Err(StorageError::InvalidPath));
+        assert_eq!(s.rename(alias, "stolen.txt"), Err(StorageError::NotFound));
+        assert_eq!(s.rename("PAPERP~1", "stolen"), Err(StorageError::NotFound));
+        assert_eq!(
+            s.rename("Books/A long title.epub", "PAPERP~1/a.epub"),
+            Err(StorageError::InvalidPath)
+        );
+        assert_eq!(
+            s.rename("Books/A long title.epub", "PAPERP~1"),
+            Err(StorageError::InvalidPath)
+        );
+        s.remove(alias).unwrap();
+        s.remove("PAPERP~1").unwrap();
+        s.remove_dir_all("PAPERP~1").unwrap();
+        s.remove_dir_all("PAPERP~1/plugins").unwrap();
+        // All as it was, nothing left beside.
+        assert_eq!(s.read_at(".paperpaw/secrets.txt", 0, &mut buf), Ok(8));
+        assert_eq!(&buf[..8], b"password");
+        assert_eq!(s.size(".paperpaw/plugins/wifi/networks.txt"), Ok(4));
+        assert_eq!(
+            names(&s, ".paperpaw"),
+            [
+                (String::from("plugins"), true, 0),
+                (String::from("secrets.txt"), false, 8)
+            ]
+        );
+        assert_eq!(
+            names(&s, ""),
+            [
+                (String::from(".paperpaw"), true, 0),
+                (String::from("Books"), true, 0)
+            ]
+        );
+        assert_eq!(s.size("Books/A long title.epub"), Ok(6));
+        // A long name reaches its entry, without regard to case.
+        assert_eq!(s.size(".PaperPaw/SECRETS.TXT"), Ok(8));
+        assert_eq!(s.size("books/a LONG title.epub"), Ok(6));
+    }
+
+    /// A card with `files` written, then their long names taken away, as
+    /// systems write names that fit in 8.3.
+    fn short_names_only(files: &[(&str, &[u8])]) -> FatStorage<Disk> {
+        let mut formatted = StdIoWrapper::from(Cursor::new(vec![0u8; 4 << 20]));
+        fatfs::format_volume(&mut formatted, FormatVolumeOptions::new()).unwrap();
+        let card = Cut(alloc::rc::Rc::new(RefCell::new(
+            formatted.into_inner().into_inner(),
+        )));
+        let disk = SharedDisk::new(BlockDisk::new(card.clone()).unwrap());
+        let fs = FileSystem::new(disk.clone(), FsOptions::new()).unwrap();
+        let s = FatStorage::new(Box::leak(Box::new(fs))).with_disk(disk);
+        for (path, data) in files {
+            s.write(path, data).unwrap();
+        }
+        s.sync().unwrap();
+        let mut bytes = card.0.borrow().clone();
+        // Every long name entry (attributes 0x0F, type 0, no cluster)
+        // marked removed.
+        for entry in bytes.as_chunks_mut::<32>().0 {
+            if entry[11] == 0x0F && entry[12] == 0 && entry[26..28] == [0, 0] && entry[0] != 0 {
+                entry[0] = 0xE5;
+            }
+        }
+        let fs = FileSystem::new(StdIoWrapper::from(Cursor::new(bytes)), FsOptions::new()).unwrap();
+        FatStorage::new(Box::leak(Box::new(fs)))
+    }
+
+    /// An entry with a short name alone is found by it.
+    #[test]
+    fn short_names_alone_are_names() {
+        let s = short_names_only(&[("BOOKS/README.TXT", b"read me")]);
+        assert!(
+            s.dir("BOOKS")
+                .unwrap()
+                .iter()
+                .map(Result::unwrap)
+                .all(|entry| entry.long_file_name_as_ucs2_units().is_none())
+        );
+        assert_eq!(names(&s, ""), [(String::from("BOOKS"), true, 0)]);
+        assert_eq!(s.size("BOOKS/README.TXT"), Ok(7));
+        assert_eq!(s.size("books/readme.txt"), Ok(7));
+        s.write("books/readme.txt", b"again").unwrap();
+        s.rename("Books/ReadMe.txt", "books/notes.txt").unwrap();
+        assert_eq!(names(&s, "BOOKS"), [(String::from("notes.txt"), false, 5)]);
+        s.remove("BOOKS/NOTES.TXT").unwrap();
+        assert!(names(&s, "books").is_empty());
     }
 }

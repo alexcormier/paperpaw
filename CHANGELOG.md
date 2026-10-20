@@ -31,6 +31,56 @@ change the plugin SDK.
 - Kernel: `KernelBuilder::code_plugins`, `safe_mode` and
   `install_plugin` (plugins a shell put in folders, installed before
   plugins load); `Kernel::describe` describes a notice showing.
+- Rules: a rule can apply when the battery reaches a level (80 %, 90 %,
+  full or another), once each time it gets there and not again while
+  the level wavers around it; with *Only if … While charging* it says
+  when to unplug, for devices that cannot stop charging by themselves
+  (PLANNING D8). On the X4 the level comes from the battery's voltage,
+  which reads high while charging, and the choice of level says so; the
+  X4 Pro's fuel gauge reports it directly. In the rules file the
+  trigger is `battery-at 80`.
+- Updates on the X4 Pro and the X4 Classic: they check update files for
+  their own chip, the ESP32-S3, where they checked for the X4's: an X4
+  Pro refused its own updates and would have taken the X4's. Each also
+  names its own firmware in its image (`paperpaw-xteink-pro`,
+  `paperpaw-xteink-classic`; the X4's stays `paperpaw-xteink`), as the
+  two share the chip but not the board. SDK: `firmware::CHIP_ESP32_S3`.
+- Releases carry the firmware of the X4 Pro and the X4 Classic as they
+  do the X4's: `paperpaw-x4-pro-<version>.bin` for the whole flash with
+  its signature file (`.bin.sig`), the signed update
+  (`-update.bin`), the plugins built in (`-plugins.txt`) and checksums,
+  and the same for `paperpaw-x4-classic`; a release fails if an update
+  is not for its device's chip. CI lints and builds all three. The
+  firmware's toolchains are pinned, as native code plugins need the
+  same compiler (ADR 0024): Rust 1.99.0 for the X4
+  (`shells/xteink/rust-toolchain.toml`), espup's `esp` toolchain
+  1.97.0.0 with the Xtensa GCC 14.2.0 for the ESP32-S3 devices
+  (`shells/xteink/versions.env`). The firmware is a workspace of its
+  own, so it also builds in a checkout inside another one.
+- Security: PaperPaw's own data (`.paperpaw`: passwords, trusted
+  firmware keys, settings) can no longer be reached by another spelling
+  of its name. On the X4's card a name stands for an entry by its long
+  name alone, by its short name only where it has no long one, so
+  `PAPERP~1` reaches nothing; the storage of the emulator and Android
+  takes no short name the system keeps for another (NTFS and FAT keep
+  them) and, on Windows, no name with a dot or space at the end.
+- Security: the Wi-Fi transfer finds every path a browser sends part by
+  part in the folders' listings: only entries listed by exactly that
+  name, nothing hidden, by any spelling (case, short names, dots or
+  spaces at the end). Its key, and the remote keyboard's, is drawn from
+  the platform's random source (65 bits, 13 letters and digits) once the
+  server runs; after five wrong keys no request is answered for a
+  minute. Tests send every hostile path we know of to every request, on
+  a card, in memory and on a storage as lax as Windows.
+- Security: Calibre's paths to books and Wallabag's ids of articles are
+  taken only as plain names: a peer posing as Calibre cannot write into
+  `.paperpaw` (e.g. trust a firmware key of its own), a hostile Wallabag
+  server cannot have a file deleted.
+- SDK: `Env::random` gives random bytes from the platform's source
+  (`random::Random`: `fill`, `token`), filled by each shell with
+  `KernelBuilder::random` (the system's on Android and desktops, the
+  chip's on the X4); `files::is_plain_name` and `files::plain_path`
+  check names and paths that come from outside.
 - Joplin (PLANNING C15, S1): a book's highlights and notes, once
   exported, become a note in Joplin, one per book, in a notebook named
   in the settings. Exporting again updates the note, also where it was
@@ -122,6 +172,30 @@ change the plugin SDK.
   storage, band by band, how long it took and what was asked before it;
   scripts open any screen with its parameters (`open:`) and draw the
   screen again (`redraw`).
+- The Xteink X4 Classic ("X4 v2", an ESP32-S3 board with other pins than
+  the X4's): the firmware builds for it with the feature `x4-classic`
+  (`cargo +esp x4classic`; ADR 0013). Its panel's controller (SSD1677,
+  UC8179 or UC8279) is found at start and keeps a frame in its 8 MB of
+  PSRAM, as on the X4 Pro; its seven buttons are the X4's (with the row
+  of hints below the screen), each on a pin of its own; SD card, fuel
+  gauge and clock chip as on the X4 Pro. Its pins come from the FreeInk
+  SDK's and Papyrix's notes; not yet tried on one. Device id
+  `xteink-x4-classic`, `x4-classic` for plugin libraries.
+  `paperpaw-x4`: `buttons::State::keys`, the buttons from a pin each.
+- X4 and X4 Pro: the display controller is found at start, so devices
+  from other batches show something: the first X4 Pros have an SSD1677,
+  later ones a UC8179 or a UC8279 (ADR 0013). The firmware asks the panel
+  on its lines before the SPI bus takes them, logs what it answered
+  (`display: UC8179 (FLG 13, REV 00 00 01 FF FF, BUSY high at rest),
+  driven as UC8179`) and drives it with its controller's driver; without
+  a sure answer, with the one the device always had. Not yet tried on a
+  device with another controller; on a UC8279, and on an X4 with an
+  UltraChip, grays are shown in black and white for now.
+  `paperpaw-x4`: `probe` (the controller asked), `panel` (`Panel`, the
+  driver for the controller found, `Device`), `uc8179::Display` for the
+  UC8279 too (`Chip`) and without a frame of its own (`Frame`, the bands
+  written through windows of the controller's memory); its `new` takes
+  the chip and where the frame is kept.
 - X4: downloads into a file (updates, books, fonts) no longer run out of
   memory half way: pieces of an answer gathered before writing them to
   the card grew without bound when the connection handed over a lot at

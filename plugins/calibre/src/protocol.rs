@@ -204,16 +204,15 @@ pub fn device_information(stored: Option<&str>, name: &str, version: &str) -> St
 }
 
 /// The path a book is to have below the library folder: Calibre's
-/// `lpath`, with no way out of the folder.
+/// `lpath`, with no way out of the folder and none into what is hidden
+/// there (PaperPaw's own data): plain names alone
+/// ([`files::is_plain_name`](paperpaw_sdk::files::is_plain_name)).
 pub fn safe_path(lpath: &str) -> Option<String> {
     let parts: Vec<&str> = lpath
         .split(['/', '\\'])
         .filter(|p| !p.is_empty() && *p != ".")
         .collect();
-    if parts.is_empty() || parts.iter().any(|p| *p == ".." || p.contains(':')) {
-        return None;
-    }
-    Some(parts.join("/"))
+    paperpaw_sdk::files::plain_path(&parts.join("/"))
 }
 
 /// Calibre's answer to a broadcast: the port to connect to.
@@ -327,6 +326,19 @@ mod tests {
         assert_eq!(safe_path("../etc/passwd"), None);
         assert_eq!(safe_path("C:/x.epub"), None);
         assert_eq!(safe_path(""), None);
+        // Not into PaperPaw's own data, by any spelling.
+        for hidden in [
+            ".paperpaw/firmware-keys.txt",
+            ".PaperPaw/secrets.txt",
+            "\\.paperpaw\\secrets.txt",
+            "./.paperpaw/secrets.txt",
+            ".paperpaw./secrets.txt",
+            ".paperpaw /secrets.txt",
+            "Ann/.hidden.epub",
+            "Ann./Book.epub",
+        ] {
+            assert_eq!(safe_path(hidden), None, "{hidden}");
+        }
     }
 
     #[test]

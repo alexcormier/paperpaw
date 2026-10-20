@@ -31,6 +31,7 @@ pub struct KernelBuilder {
     plugin_dirs: Vec<String>,
     font_dirs: Vec<String>,
     catalog_device: Option<&'static str>,
+    random: paperpaw_sdk::random::Random,
 }
 
 impl fmt::Debug for KernelBuilder {
@@ -138,6 +139,15 @@ impl KernelBuilder {
     /// offers what is made for it. Without, none is offered.
     pub fn catalog_device(mut self, name: &'static str) -> Self {
         self.catalog_device = Some(name);
+        self
+    }
+
+    /// The platform's source of random bytes, for keys and tokens
+    /// ([`paperpaw_sdk::random`]): `fill` fills a buffer and says whether
+    /// it could. Without, nothing that needs one works (e.g. the transfer
+    /// by browser).
+    pub fn random(mut self, fill: fn(&mut [u8]) -> bool) -> Self {
+        self.random = paperpaw_sdk::random::Random::new(fill);
         self
     }
 
@@ -387,6 +397,7 @@ impl KernelBuilder {
                 plugin_dirs: Vec::new(),
                 catalog_device: self.catalog_device,
                 secrets: Default::default(),
+                random: self.random,
                 storage,
                 recall,
                 keymap: Keymap::default(),
@@ -667,6 +678,7 @@ impl Kernel {
             plugin_dirs: Vec::new(),
             font_dirs: Vec::new(),
             catalog_device: None,
+            random: paperpaw_sdk::random::Random::NONE,
         }
     }
 }

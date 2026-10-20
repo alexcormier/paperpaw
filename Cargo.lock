@@ -1152,6 +1152,7 @@ version = "0.4.0-dev"
 dependencies = [
  "android-activity",
  "android_logger",
+ "getrandom 0.4.3",
  "jni 0.21.1",
  "log",
  "ndk",
@@ -1256,6 +1257,7 @@ name = "paperpaw-emulator"
 version = "0.4.0-dev"
 dependencies = [
  "chrono",
+ "getrandom 0.4.3",
  "paperpaw-app",
  "paperpaw-core",
  "paperpaw-fs",
@@ -1636,7 +1638,9 @@ dependencies = [
 name = "paperpaw-plugin-rules"
 version = "0.4.0-dev"
 dependencies = [
+ "paperpaw-core",
  "paperpaw-i18n",
+ "paperpaw-platform",
  "paperpaw-sdk",
 ]
 
@@ -1696,7 +1700,7 @@ dependencies = [
 name = "paperpaw-plugin-transfer"
 version = "0.4.0-dev"
 dependencies = [
- "paperpaw-digest",
+ "paperpaw-fat",
  "paperpaw-i18n",
  "paperpaw-qr",
  "paperpaw-sdk",

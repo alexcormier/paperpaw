@@ -137,6 +137,9 @@ pub struct Env<'a> {
     /// Passwords and keys, kept for every plugin in one place (see
     /// [`secrets`](crate::secrets)).
     pub secrets: &'a crate::secrets::Secrets,
+    /// Random bytes from the platform's source, for keys and tokens (see
+    /// [`random`](crate::random)).
+    pub random: crate::random::Random,
     /// The device's storage. Plugins keep their own files below
     /// [`Env::plugin_dir`].
     pub storage: &'a dyn Storage,
@@ -226,6 +229,9 @@ pub struct EnvParts<'a> {
     /// Passwords and keys, kept for every plugin in one place (see
     /// [`secrets`](crate::secrets)).
     pub secrets: &'a crate::secrets::Secrets,
+    /// Random bytes from the platform's source, for keys and tokens (see
+    /// [`random`](crate::random)).
+    pub random: crate::random::Random,
     /// The device's storage. Plugins keep their own files below
     /// [`Env::plugin_dir`].
     pub storage: &'a dyn Storage,
@@ -267,6 +273,7 @@ impl<'a> From<EnvParts<'a>> for Env<'a> {
             font_dirs: p.font_dirs,
             catalog_device: p.catalog_device,
             secrets: p.secrets,
+            random: p.random,
             storage: p.storage,
         }
     }

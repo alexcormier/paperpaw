@@ -1,11 +1,14 @@
 //! Rules: when something happens, PaperPaw does something. For example
 //! "every day at 22:00: night mode on", "on weekdays at 7:00: sync the
-//! catalogs", "when the battery falls below 20 %: the light off".
+//! catalogs", "when the battery falls below 20 %: the light off", "when
+//! the battery reaches 80 %, only while charging: a message to unplug"
+//! (where the device cannot stop charging by itself).
 //!
 //! - When: PaperPaw starts; at a time of day (every day, on weekdays, at
 //!   weekends or on one day); every so many minutes; a book is opened,
 //!   closed or read to its end; the device wakes up or goes to sleep; the
-//!   battery falls below a percentage; charging begins or ends; a switch
+//!   battery falls below a percentage or reaches one (once, until it fell
+//!   clearly below again); charging begins or ends; a switch
 //!   (any on/off setting) is turned on or off.
 //! - Then: run any action (from any plugin), turn any switch on or off,
 //!   set a number (e.g. the light) or show a message.
@@ -39,7 +42,7 @@ use paperpaw_sdk::{
     Registrar, SDK_VERSION, ScreenSpec, SettingValue, Version, time,
 };
 
-use crate::rule::{Condition, EVERY_DAY, Effect, Rule, Trigger, WEEKDAYS, WEEKENDS};
+use crate::rule::{Condition, EVERY_DAY, Effect, Levels, Rule, Trigger, WEEKDAYS, WEEKENDS};
 
 pub const PLUGIN: Id = Id::new_static("rules");
 /// Opens the list of rules.
@@ -240,6 +243,10 @@ fn trigger_text(env: &Env<'_>, trigger: &Trigger) -> String {
             "rules.when.battery",
             &[("percent", Arg::Int(i64::from(*percent)))],
         ),
+        Trigger::BatteryAtLeast(percent) => env.i18n.format(
+            "rules.when.battery-at",
+            &[("percent", Arg::Int(i64::from(*percent)))],
+        ),
         Trigger::Charging => tr("rules.when.charging"),
         Trigger::Unplugged => tr("rules.when.unplugged"),
         Trigger::SwitchOn(id) => env.i18n.format(
@@ -396,21 +403,29 @@ impl Plugin for Rules {
                 schedule(env, out);
             }),
         )?;
-        // The battery as it was last: a charge falling below a mark, and
-        // charging beginning or ending, compare with it.
-        let battery: Rc<Cell<Option<(u8, bool)>>> = Rc::new(Cell::new(None));
+        // The battery as it was last, and the levels it has reached: a
+        // charge falling below a mark or reaching one, and charging
+        // beginning or ending, compare with it. The level is the best the
+        // device knows: a fuel gauge's (X4 Pro, phones) or an estimate from
+        // the voltage (X4), which reads high while charging.
+        let battery: Rc<Cell<Option<(u8, bool, Levels)>>> = Rc::new(Cell::new(None));
         let book = reading.clone();
         r.on(events::STATUS_CHANGED, move |env, _, out| {
-            let Some(now) = env.status.battery.map(|b| (b.percent, b.charging)) else {
+            let Some((percent, charging)) = env.status.battery.map(|b| (b.percent, b.charging))
+            else {
                 return;
             };
-            let Some((was, was_charging)) = battery.replace(Some(now)) else {
+            let Some((was, was_charging, mut levels)) = battery.get() else {
+                battery.set(Some((percent, charging, Levels::up_to(percent))));
                 return;
             };
+            let reached = levels.reach(percent);
+            battery.set(Some((percent, charging, levels)));
             run(env, book.get(), out, |t| match t {
-                Trigger::BatteryBelow(mark) => was >= *mark && now.0 < *mark,
-                Trigger::Charging => !was_charging && now.1,
-                Trigger::Unplugged => was_charging && !now.1,
+                Trigger::BatteryBelow(mark) => was >= *mark && percent < *mark,
+                Trigger::BatteryAtLeast(mark) => reached.contains(*mark),
+                Trigger::Charging => !was_charging && charging,
+                Trigger::Unplugged => was_charging && !charging,
                 _ => false,
             });
         })?;

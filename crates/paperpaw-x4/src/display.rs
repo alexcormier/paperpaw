@@ -40,6 +40,8 @@ use embedded_hal::digital::{InputPin, OutputPin};
 use embedded_hal::spi::SpiDevice;
 use paperpaw_platform::{FrameView, PixelFormat, Rotation};
 
+use crate::bands::{self, Window};
+
 /// The panel, as the controller addresses it.
 pub const PANEL_WIDTH: u16 = 800;
 pub const PANEL_HEIGHT: u16 = 480;
@@ -50,23 +52,6 @@ pub const HEIGHT: u16 = PANEL_WIDTH;
 
 /// Longest wait for the controller, e.g. a full refresh (about 2 s).
 const BUSY_TIMEOUT_MS: u32 = 30_000;
-/// Bytes sent at once: each sending has its cost, a column of a band takes
-/// 12 to 24 bytes.
-const CHUNK: usize = 1024;
-
-/// Turns eight bytes (rows, the leftmost pixel in the highest bit) into
-/// eight bytes of their columns (the top row in the highest bit).
-fn transpose8(rows: [u8; 8]) -> [u8; 8] {
-    let mut x = u64::from_be_bytes(rows);
-    let t = (x ^ (x >> 7)) & 0x00AA_00AA_00AA_00AA;
-    x ^= t ^ (t << 7);
-    let t = (x ^ (x >> 14)) & 0x0000_CCCC_0000_CCCC;
-    x ^= t ^ (t << 14);
-    let t = (x ^ (x >> 28)) & 0x0000_0000_F0F0_F0F0;
-    x ^= t ^ (t << 28);
-    x.to_be_bytes()
-}
-
 /// The stock firmware's waveform for four grays (V3.1.9, as the FreeInk SDK
 /// records it from the OpenX4 community SDK, MIT licence): 105 bytes of
 /// phases, timing and frame rate, then the gate voltage, the three source
@@ -309,23 +294,8 @@ where
             return Err(Error::Rows);
         }
         let height = rows.height.min(screen_height - top);
-        // Light pixels show white, dark ones black: gray formats read
-        // straight from their bytes, others through their colour.
-        let bpp = usize::from(rows.format.bits_per_pixel());
-        let gray = rows.format.gray_levels().is_some() && bpp <= 8;
-        let max = (1u32 << bpp.min(8)) - 1;
-        let light = |x: u16, y: u16| {
-            if gray {
-                let bit = usize::from(x) * bpp;
-                let at = usize::from(y) * rows.stride + bit / 8;
-                let byte = rows.data.get(at).copied().unwrap_or(0xFF);
-                let level = u32::from(byte >> (8 - bpp - bit % 8)) & max;
-                level * 255 >= 128 * max
-            } else {
-                let c = rows.pixel(x, y);
-                u16::from(c.r) * 77 + u16::from(c.g) * 150 + u16::from(c.b) * 29 >= 128 * 256
-            }
-        };
+        // Light pixels show white, dark ones black.
+        let light = bands::light(&rows);
         for (plane, write) in [
             (planes.new, cmd::WRITE_NEW),
             (planes.shown, cmd::WRITE_SHOWN),
@@ -388,8 +358,8 @@ where
     }
 
     /// Writes one memory: the window for screen rows `top..top + height` as
-    /// the screen is turned, then each pixel's bit (`bit`; black and white
-    /// rows the quick way), `pad` for rows past the band's end.
+    /// the screen is turned, then each pixel's bit (`bit`), `pad` for rows
+    /// past the band's end (see [`bands::send`]).
     fn write_plane(
         &mut self,
         top: u16,
@@ -399,167 +369,16 @@ where
         bit: &dyn Fn(u16, u16) -> bool,
         pad: bool,
     ) -> Result<(), Error> {
-        self.buffer.clear();
-        match self.rotation {
-            Rotation::Deg0 | Rotation::Deg180 => {
-                let flip = self.rotation == Rotation::Deg180;
-                // Whole bytes.
-                let columns = height.div_ceil(8) * 8;
-                let x = if flip {
-                    PANEL_WIDTH - top - columns
-                } else {
-                    top
-                };
-                self.window(x, columns, 0, PANEL_HEIGHT)?;
-                self.command(write, &[])?;
-                if rows.format == PixelFormat::Mono1 {
-                    self.write_mono(rows, height, flip)
-                } else {
-                    self.write_upright(height, flip, bit, pad)
-                }
-            }
-            Rotation::Deg90 | Rotation::Deg270 => {
-                let clockwise = self.rotation == Rotation::Deg90;
-                let y = if clockwise {
-                    top
-                } else {
-                    PANEL_HEIGHT - top - height
-                };
-                self.window(0, PANEL_WIDTH, y, height)?;
-                self.command(write, &[])?;
-                self.write_side(rows, height, clockwise, bit)
-            }
-        }
-    }
-
-    /// An upright band, pixel by pixel: each column of the screen is a row
-    /// of the controller's, the top of the band first (upside down: the
-    /// last column first, the bottom of the band first).
-    fn write_upright(
-        &mut self,
-        height: u16,
-        flip: bool,
-        light: &dyn Fn(u16, u16) -> bool,
-        pad: bool,
-    ) -> Result<(), Error> {
-        let bytes = height.div_ceil(8);
-        for i in 0..WIDTH {
-            let x = if flip { WIDTH - 1 - i } else { i };
-            for j in 0..bytes {
-                let byte = if flip { bytes - 1 - j } else { j };
-                let mut bits = 0u8;
-                for bit in 0..8u16 {
-                    let y = byte * 8 + bit;
-                    if if y >= height { pad } else { light(x, y) } {
-                        bits |= 0x80 >> bit;
-                    }
-                }
-                self.buffer
-                    .push(if flip { bits.reverse_bits() } else { bits });
-            }
-            if self.buffer.len() >= CHUNK {
-                self.data_buffer()?;
-            }
-        }
-        self.data_buffer()
-    }
-
-    /// [`Display::write_upright`] for black and white, as the X4 draws:
-    /// eight rows by eight columns at a time, turned with a few shifts
-    /// where pixel by pixel took a quarter of a page's time.
-    fn write_mono(&mut self, rows: &FrameView<'_>, height: u16, flip: bool) -> Result<(), Error> {
-        let bytes = usize::from(height.div_ceil(8));
-        // Each of eight columns' bytes, top to bottom.
-        let mut columns = [0u8; 8 * (HEIGHT as usize / 8)];
-        let blocks = usize::from(WIDTH) / 8;
-        for i in 0..blocks {
-            let column = if flip { blocks - 1 - i } else { i };
-            for group in 0..bytes {
-                let mut block = [0xFFu8; 8];
-                for (i, row) in block.iter_mut().enumerate() {
-                    let y = group * 8 + i;
-                    if y < usize::from(height) {
-                        *row = rows
-                            .data
-                            .get(y * rows.stride + column)
-                            .copied()
-                            .unwrap_or(0xFF);
-                    }
-                }
-                for (c, byte) in transpose8(block).into_iter().enumerate() {
-                    columns[c * bytes + group] = byte;
-                }
-            }
-            for i in 0..8 {
-                let c = if flip { 7 - i } else { i };
-                let column = &columns[c * bytes..(c + 1) * bytes];
-                if flip {
-                    self.buffer
-                        .extend(column.iter().rev().map(|b| b.reverse_bits()));
-                } else {
-                    self.buffer.extend_from_slice(column);
-                }
-            }
-            if self.buffer.len() >= CHUNK {
-                self.data_buffer()?;
-            }
-        }
-        self.data_buffer()
-    }
-
-    /// A band of the screen on its side: each of its rows is a row of the
-    /// controller's, right to left (turned `clockwise`), or left to right
-    /// from the band's last row.
-    fn write_side(
-        &mut self,
-        rows: &FrameView<'_>,
-        height: u16,
-        clockwise: bool,
-        light: &dyn Fn(u16, u16) -> bool,
-    ) -> Result<(), Error> {
-        let bytes = usize::from(PANEL_WIDTH / 8);
-        for i in 0..height {
-            let y = if clockwise { i } else { height - 1 - i };
-            let at = usize::from(y) * rows.stride;
-            match rows.data.get(at..at + bytes) {
-                // Black and white: as it is, or each byte the other way.
-                Some(row) if rows.format == PixelFormat::Mono1 => {
-                    if clockwise {
-                        self.buffer
-                            .extend(row.iter().rev().map(|b| b.reverse_bits()));
-                    } else {
-                        self.buffer.extend_from_slice(row);
-                    }
-                }
-                _ => {
-                    for byte in 0..bytes {
-                        let mut bits = 0u8;
-                        for bit in 0..8 {
-                            let x = (byte * 8 + bit) as u16;
-                            let x = if clockwise { PANEL_WIDTH - 1 - x } else { x };
-                            if light(x, y) {
-                                bits |= 0x80 >> bit;
-                            }
-                        }
-                        self.buffer.push(bits);
-                    }
-                }
-            }
-            if self.buffer.len() >= CHUNK {
-                self.data_buffer()?;
-            }
-        }
-        self.data_buffer()
-    }
-
-    fn data_buffer(&mut self) -> Result<(), Error> {
-        if self.buffer.is_empty() {
-            return Ok(());
-        }
-        self.dc.set_high().map_err(|_| Error::Pin)?;
-        self.spi.write(&self.buffer).map_err(|_| Error::Spi)?;
-        self.buffer.clear();
-        Ok(())
+        let window = Window::of(self.rotation, top, height);
+        self.window(window.x, window.width, window.y, window.height)?;
+        self.command(write, &[])?;
+        let Self {
+            spi, dc, buffer, ..
+        } = self;
+        bands::send(&window, rows, height, bit, pad, buffer, &mut |bytes| {
+            dc.set_high().map_err(|_| Error::Pin)?;
+            spi.write(bytes).map_err(|_| Error::Spi)
+        })
     }
 
     /// Shows the new frame; `power_off` turns the panel's power off after
@@ -862,7 +681,7 @@ mod tests {
             0,
             0b1000_0000,
         ];
-        let columns = transpose8(rows);
+        let columns = bands::transpose8(rows);
         for (r, row) in rows.iter().enumerate() {
             for (c, column) in columns.iter().enumerate() {
                 let row_bit = row >> (7 - c) & 1;

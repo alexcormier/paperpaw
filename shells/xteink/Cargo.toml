@@ -1,6 +1,6 @@
 [package]
 name = "paperpaw-xteink"
-description = "PaperPaw's firmware for the Xteink X4 (ESP32-C3) and X4 Pro (ESP32-S3)"
+description = "PaperPaw's firmware for the Xteink X4 (ESP32-C3), X4 Pro and X4 Classic (ESP32-S3)"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.95"
@@ -19,9 +19,10 @@ bench = false
 
 [features]
 default = ["x4", "remote"]
-# Which device: the X4 (ESP32-C3, built with the repository's stable
-# toolchain) or the X4 Pro (ESP32-S3, Xtensa: the `esp` toolchain from
-# espup, `cargo +esp x4pro`). Exactly one.
+# Which device: the X4 (ESP32-C3, built with the Rust of
+# `rust-toolchain.toml`), the X4 Pro or the X4 Classic (ESP32-S3, Xtensa:
+# espup's `esp` toolchain of `versions.env`, `cargo +esp x4pro`,
+# `cargo +esp x4classic`). Exactly one.
 x4 = [
     "esp-hal/esp32c3",
     "esp-alloc/esp32c3",
@@ -33,7 +34,11 @@ x4 = [
     "esp-radio/esp32c3",
     "esp-rtos/esp32c3",
 ]
-x4-pro = [
+x4-pro = ["esp32s3"]
+x4-classic = ["esp32s3"]
+# What both ESP32-S3 devices build with; chosen by `x4-pro` or
+# `x4-classic`, not by hand.
+esp32s3 = [
     "esp-hal/esp32s3",
     # The SD card's own bus (SDMMC).
     "esp-hal/__sdmmc",

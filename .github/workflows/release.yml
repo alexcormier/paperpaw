@@ -1,11 +1,13 @@
 name: Release
 
 # A tag `v1.2.3` (the workspace's version) makes a GitHub release with the
-# Android app signed with the release key, the Xteink X4's firmware (one
-# image for its whole flash, which paperpaw.org offers for flashing in the
-# browser, with a signature file of its own, and the update file, both
-# signed with the firmware's key; the update is installed on the device),
-# the list of the plugins built in, their checksums, and the release notes from CHANGELOG.md.
+# Android app signed with the release key and the firmware of the Xteink
+# X4, X4 Pro and X4 Classic. For each device: one image for its whole
+# flash (which paperpaw.org offers for flashing in the browser) with a
+# signature file of its own, and the update file, both signed with the
+# firmware's key (the update is installed on the device); the list of the
+# plugins built in; their checksums. The release notes come from
+# CHANGELOG.md.
 on:
   push:
     tags: ["v*"]
@@ -68,9 +70,15 @@ jobs:
           name: android
           path: dist/paperpaw-*.apk*
 
-  x4:
-    name: Xteink X4 firmware
+  firmware:
+    name: Firmware (${{ matrix.device }})
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # As the release step lists them.
+        device: [x4, x4-pro, x4-classic]
+    env:
+      DEVICE: ${{ matrix.device }}
     steps:
       - uses: actions/checkout@v7
       - name: The tag is the workspace's version
@@ -81,14 +89,12 @@ jobs:
             exit 1
           fi
           echo "VERSION=$version" >> "$GITHUB_ENV"
-      - uses: dtolnay/rust-toolchain@stable
+      # The toolchain named in shells/xteink, and the espflash the images
+      # are made with: it brings the bootloader.
+      - uses: ./.github/actions/xteink-tools
         with:
-          targets: riscv32imc-unknown-none-elf
-      # The version the images are made with: it brings the bootloader.
-      - name: espflash
-        run: |
-          sudo apt-get update && sudo apt-get install -y libudev-dev
-          cargo install espflash@4.6.0 --locked
+          device: ${{ matrix.device }}
+          espflash: true
       # One image for the whole flash (with the partitions of
       # `partitions.csv`, from `espflash.toml`), and the app alone for
       # updates.
@@ -96,12 +102,12 @@ jobs:
         working-directory: shells/xteink
         # Without remote control over USB, which is for testing.
         run: |
-          cargo build --release --no-default-features
+          cargo +"$FIRMWARE_TOOLCHAIN" build $FIRMWARE_CARGO --features "$DEVICE"
           mkdir -p "$GITHUB_WORKSPACE/dist"
-          elf=target/riscv32imc-unknown-none-elf/release/paperpaw-xteink
-          espflash save-image --chip esp32c3 --merge --skip-padding --flash-size 16mb \
-            "$elf" "$GITHUB_WORKSPACE/dist/paperpaw-x4-$VERSION.bin"
-          espflash save-image --chip esp32c3 --flash-size 16mb "$elf" "$RUNNER_TEMP/app.bin"
+          elf="target/$FIRMWARE_TARGET/release/paperpaw-xteink"
+          espflash save-image --chip "$FIRMWARE_CHIP" --merge --skip-padding --flash-size 16mb \
+            "$elf" "$GITHUB_WORKSPACE/dist/paperpaw-$DEVICE-$VERSION.bin"
+          espflash save-image --chip "$FIRMWARE_CHIP" --flash-size 16mb "$elf" "$RUNNER_TEMP/app.bin"
       - name: Sign the update and the flash image with the firmware's key
         env:
           PAPERPAW_SIGNING_KEY: ${{ secrets.PAPERPAW_SIGNING_KEY }}
@@ -113,23 +119,30 @@ jobs:
           # The plugins built in, which updates compare: the release fails
           # if the image does not list them.
           cargo run --release -p paperpaw-sign -- plugins \
-            "$RUNNER_TEMP/app.bin" > "dist/paperpaw-x4-$VERSION-plugins.txt"
+            "$RUNNER_TEMP/app.bin" > "dist/paperpaw-$DEVICE-$VERSION-plugins.txt"
           cargo run --release -p paperpaw-sign -- sign \
-            "$RUNNER_TEMP/app.bin" "dist/paperpaw-x4-$VERSION-update.bin"
+            "$RUNNER_TEMP/app.bin" "dist/paperpaw-$DEVICE-$VERSION-update.bin"
+          # Devices install only updates for their own chip.
+          shown="$(cargo run -q --release -p paperpaw-sign -- show "dist/paperpaw-$DEVICE-$VERSION-update.bin")"
+          echo "$shown"
+          if ! grep -Eq "^chip: +$FIRMWARE_CHIP_ID\$" <<< "$shown"; then
+            echo "::error::the update for the $DEVICE is not for chip $FIRMWARE_CHIP_ID"
+            exit 1
+          fi
           # The web flasher checks the whole image against this.
           cargo run --release -p paperpaw-sign -- sign-apart \
-            "dist/paperpaw-x4-$VERSION.bin" "dist/paperpaw-x4-$VERSION.bin.sig"
+            "dist/paperpaw-$DEVICE-$VERSION.bin" "dist/paperpaw-$DEVICE-$VERSION.bin.sig"
           cd dist
-          sha256sum "paperpaw-x4-$VERSION.bin" > "paperpaw-x4-$VERSION.bin.sha256"
-          sha256sum "paperpaw-x4-$VERSION-update.bin" > "paperpaw-x4-$VERSION-update.bin.sha256"
+          sha256sum "paperpaw-$DEVICE-$VERSION.bin" > "paperpaw-$DEVICE-$VERSION.bin.sha256"
+          sha256sum "paperpaw-$DEVICE-$VERSION-update.bin" > "paperpaw-$DEVICE-$VERSION-update.bin.sha256"
       - uses: actions/upload-artifact@v4
         with:
-          name: x4
-          path: dist/paperpaw-x4-*
+          name: firmware-${{ matrix.device }}
+          path: dist/paperpaw-${{ matrix.device }}-*
 
   release:
     name: Release
-    needs: [android, x4]
+    needs: [android, firmware]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -157,10 +170,12 @@ jobs:
         run: |
           prerelease=()
           [[ "$VERSION" == 0.* || "$VERSION" == *-* ]] && prerelease=(--prerelease)
+          assets=("dist/paperpaw-$VERSION.apk" "dist/paperpaw-$VERSION.apk.sha256")
+          # The devices of the firmware job.
+          for device in x4 x4-pro x4-classic; do
+            for part in .bin .bin.sha256 .bin.sig -update.bin -update.bin.sha256 -plugins.txt; do
+              assets+=("dist/paperpaw-$device-$VERSION$part")
+            done
+          done
           gh release create "$GITHUB_REF_NAME" "${prerelease[@]}" \
-            --title "PaperPaw $VERSION" --notes-file dist/notes.md \
-            "dist/paperpaw-$VERSION.apk" "dist/paperpaw-$VERSION.apk.sha256" \
-            "dist/paperpaw-x4-$VERSION.bin" "dist/paperpaw-x4-$VERSION.bin.sha256" \
-            "dist/paperpaw-x4-$VERSION.bin.sig" \
-            "dist/paperpaw-x4-$VERSION-update.bin" "dist/paperpaw-x4-$VERSION-update.bin.sha256" \
-            "dist/paperpaw-x4-$VERSION-plugins.txt"
+            --title "PaperPaw $VERSION" --notes-file dist/notes.md "${assets[@]}"
