@@ -4,6 +4,10 @@
 #[allow(unused_imports)]
 use super::*;
 
+/// Sections of `paperpaw.ini` that are no plugin's settings: no plugin
+/// may take their name as its id (its settings would be read as these).
+pub(crate) const RESERVED_IDS: [&str; 4] = ["plugins", "fonts", "menus", "slots"];
+
 /// The key maps the kernel's is built from.
 #[derive(Debug, Default)]
 pub(crate) struct KeySources {
@@ -43,6 +47,11 @@ impl Kernel {
                 "a plugin with this id is already loaded".into(),
             );
         }
+        if RESERVED_IDS.contains(&id.as_str()) {
+            let message = format!("`{id}` names a section of {CONFIG_FILE}; not loaded");
+            self.warn(source(), None, message);
+            return self.add_plugin_info(manifest, PluginState::Failed, true);
+        }
         if !SDK_VERSION.satisfies(&manifest.sdk) {
             let message = format!("requires SDK {}, this is {}", manifest.sdk, SDK_VERSION);
             self.warn(source(), None, message);
@@ -75,6 +84,9 @@ impl Kernel {
         let id = manifest.id.clone();
         if id.as_str() != id.namespace() || self.shared.plugins.get(id.as_str()).is_some() {
             return;
+        }
+        if RESERVED_IDS.contains(&id.as_str()) {
+            return self.register_plugin(plugin, manifest);
         }
         let mut registrar = Registrar::new(id);
         if SDK_VERSION.satisfies(&manifest.sdk) && plugin.register(&mut registrar).is_ok() {

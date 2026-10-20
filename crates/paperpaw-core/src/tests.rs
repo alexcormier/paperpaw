@@ -772,7 +772,7 @@ struct FontPlugin;
 impl Plugin for FontPlugin {
     fn manifest(&self) -> Manifest {
         Manifest {
-            id: Id::new_static("fonts"),
+            id: Id::new_static("type"),
             name: Cow::Borrowed("Fonts"),
             description: Cow::Borrowed(""),
             version: Version::new(1, 0, 0),
@@ -781,7 +781,7 @@ impl Plugin for FontPlugin {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        for name in ["fonts.serif", "fonts.sans"] {
+        for name in ["type.serif", "type.sans"] {
             let mut pack = paperpaw_text::PackBuilder::new();
             let metrics = paperpaw_text::LineMetrics {
                 ascent: 8.0,
@@ -798,7 +798,7 @@ impl Plugin for FontPlugin {
         }
         r.bind_font(
             paperpaw_sdk::builtin::fonts::UI,
-            Id::new_static("fonts.sans"),
+            Id::new_static("type.sans"),
             Priority::DEFAULT,
         )?;
         Ok(())
@@ -811,19 +811,19 @@ fn font_roles_follow_proposals_and_user_config() {
     let fonts = kernel.fonts();
     assert_eq!(
         fonts.role("core.font-ui").unwrap().id().as_str(),
-        "fonts.sans"
+        "type.sans"
     );
     // No proposal for reading: the first registered font is used.
     assert_eq!(
         fonts.role("core.font-reading").unwrap().id().as_str(),
-        "fonts.serif"
+        "type.serif"
     );
 
     let mut kernel = Kernel::builder(DEVICE)
         .plugin(FontPlugin)
         .user_config(
             "[fonts]
-core.font-ui = fonts.serif
+core.font-ui = type.serif
 core.font-reading = nope.font
 ",
         )
@@ -831,7 +831,7 @@ core.font-reading = nope.font
         .unwrap();
     assert_eq!(
         kernel.fonts().role("core.font-ui").unwrap().id().as_str(),
-        "fonts.serif"
+        "type.serif"
     );
     let warnings = kernel.take_warnings();
     assert_eq!(warnings.len(), 1);
@@ -3258,6 +3258,7 @@ fn overlays_leave_the_rows_they_do_not_cover() {
 mod frames;
 mod input;
 mod kernel_calls;
+mod plugins_loaded;
 mod screen_life;
 mod settings_files;
 mod storage;

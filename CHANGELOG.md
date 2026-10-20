@@ -6,6 +6,10 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Plugins: a plugin (also a data plugin folder) named `plugins`,
+  `fonts`, `menus` or `slots` is refused with a warning: its settings in
+  `paperpaw.ini` would have been read as that section's entries and
+  dropped.
 - Speech: with "Say what has the focus" on, moving the focus quickly
   says each row in place of the one before, where only the first was
   said until it was done.
