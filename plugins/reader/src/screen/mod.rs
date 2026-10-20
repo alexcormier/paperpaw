@@ -1060,6 +1060,11 @@ mod tests {
         many.sort_by_key(|&(_, at)| at);
         assert_eq!(chapter_ticks(&many), [0, 500]);
         assert!(chapter_ticks(&[]).is_empty());
+        // Many chapters without parts: each its tick, along the whole bar.
+        let flat: Vec<(u8, u32)> = (0..120).map(|i| (0, i * 8)).collect();
+        let ticks = chapter_ticks(&flat);
+        assert_eq!(ticks.len(), 120);
+        assert_eq!(ticks.last(), Some(&952));
     }
 
     #[test]

@@ -306,12 +306,14 @@ pub(super) fn draw_image(
     );
 }
 
-/// Ticks at most on a bar across the book: more crowd it into a line.
+/// Ticks on a bar across the book that deeper levels of the contents
+/// may bring it to: more crowd it into a line.
 const MAX_TICKS: usize = 60;
 
 /// The places of the contents' `entries` (level, thousandths) that get a
-/// tick: the chapters, also those in parts, down to the deepest level
-/// whose entries and those above still leave the ticks apart.
+/// tick: every top-level entry, and the deeper ones (chapters in parts)
+/// down to the deepest level whose entries and those above still leave
+/// the ticks apart.
 pub(super) fn chapter_ticks(entries: &[(u8, u32)]) -> Vec<u32> {
     let deepest = entries.iter().map(|&(level, _)| level).max().unwrap_or(0);
     let shown = (0..=deepest)
@@ -324,6 +326,5 @@ pub(super) fn chapter_ticks(entries: &[(u8, u32)]) -> Vec<u32> {
         .map(|&(_, at)| at)
         .collect();
     ticks.dedup();
-    ticks.truncate(MAX_TICKS);
     ticks
 }
