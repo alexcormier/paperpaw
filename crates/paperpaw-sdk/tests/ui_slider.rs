@@ -13,6 +13,7 @@ use paperpaw_sdk::builtin::actions;
 use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::setting::Setting;
 use paperpaw_sdk::ui::slider::{self, band, key_step, parts, row_height};
+use paperpaw_sdk::ui::{Focus, Separators};
 use paperpaw_sdk::ui::{
     Slider, SliderDrag, SliderFocus, SliderParts, SliderStep, SliderView, UiStyle,
 };
@@ -34,6 +35,13 @@ const STYLE: UiStyle = UiStyle {
     corner: 6,
     strong: false,
     finger: 0,
+    head: 23.0,
+    pill: false,
+    focus: Focus::Fill,
+    separators: Separators::Line,
+    plain_header: false,
+    cards: false,
+    grays: 16,
 };
 
 fn slider_strategy() -> impl Strategy<Value = Slider> {

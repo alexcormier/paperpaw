@@ -211,6 +211,7 @@ impl Harness {
             caps: Capabilities::default(),
             wifi: None,
             firmware: None,
+            native: None,
             clipboard: false,
             slots: &[],
             screens: &[],

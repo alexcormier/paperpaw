@@ -13,6 +13,7 @@ mod support;
 
 use paperpaw_sdk::builtin::actions;
 use paperpaw_sdk::ui::sections::{Item, Section, Sections};
+use paperpaw_sdk::ui::{Focus, Separators};
 use paperpaw_sdk::ui::{ListChange, ListView, Rows, UiStyle, list_step, step_focus};
 use paperpaw_sdk::{Cx, Id, Output, Point, Rect, RefreshMode};
 use proptest::prelude::*;
@@ -32,6 +33,13 @@ const STYLE: UiStyle = UiStyle {
     corner: 6,
     strong: false,
     finger: 0,
+    head: 23.0,
+    pill: false,
+    focus: Focus::Fill,
+    separators: Separators::Line,
+    plain_header: false,
+    cards: false,
+    grays: 16,
 };
 
 /// Every point of `rect` worth trying: its corners and its middle.
