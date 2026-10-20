@@ -454,6 +454,10 @@ impl Screen for ReaderScreen {
             self.pause_aloud(cx);
             return Handled::Yes;
         }
+        // The arrows turn pages as the page buttons do: the X4's buttons
+        // in front, a keyboard's arrows.
+        let turn = page_turn(action);
+        let action = turn.as_ref().unwrap_or(action);
         if *action == crate::actions::READ_ALOUD {
             self.start_aloud(cx);
             return Handled::Yes;
@@ -533,6 +537,18 @@ impl Screen for ReaderScreen {
         } else if *action == actions::PREV_PAGE {
             let env = *cx.env();
             if let Some(start) = book.previous_start(&env) {
+                book.show(cx, start, false);
+            }
+            Handled::Yes
+        } else if *action == crate::actions::NEXT_CHAPTER || *action == crate::actions::PREV_CHAPTER
+        {
+            let env = *cx.env();
+            let to = match *action == crate::actions::NEXT_CHAPTER {
+                true => "chapter:+1",
+                false => "chapter:-1",
+            };
+            if let Some(target) = book.skim_target(&env, to) {
+                let start = book.page_start(&env, target);
                 book.show(cx, start, false);
             }
             Handled::Yes
@@ -874,6 +890,18 @@ impl Screen for ReaderScreen {
             let now = env.now;
             cx.wake_at(now);
         }
+    }
+}
+
+/// The page turn an arrow stands for in a book: left and up back, right
+/// and down on.
+fn page_turn(action: &Id) -> Option<Id> {
+    if *action == actions::LEFT || *action == actions::UP {
+        Some(actions::PREV_PAGE)
+    } else if *action == actions::RIGHT || *action == actions::DOWN {
+        Some(actions::NEXT_PAGE)
+    } else {
+        None
     }
 }
 

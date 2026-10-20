@@ -13,11 +13,13 @@ use paperpaw_core::Kernel;
 use paperpaw_platform::Rotation;
 use paperpaw_plugin_reader::{Reader, actions};
 use paperpaw_sdk::annotations::Kind;
-use paperpaw_sdk::builtin::{actions as core_actions, events, params, slots};
+use paperpaw_sdk::builtin::{
+    actions as core_actions, events, keymap_presets, params, settings, slots,
+};
 use paperpaw_sdk::{
-    DeviceInfo, DirEntry, DisplayInfo, Id, InputCaps, Instant, Manifest, MemoryClass,
-    MemoryStorage, Params, PixelFormat, Plugin, RegisterError, Registrar, SDK_VERSION, Storage,
-    StorageError, Version,
+    ButtonState, DeviceInfo, DirEntry, DisplayInfo, Id, InputCaps, InputEvent, Instant, Manifest,
+    MemoryClass, MemoryStorage, Params, PixelFormat, Plugin, RegisterError, Registrar, SDK_VERSION,
+    Storage, StorageError, Version,
 };
 
 const DEVICE: DeviceInfo = DeviceInfo {
@@ -128,12 +130,18 @@ impl Reading {
 
     /// A kernel over `storage`, with book `data` at `path`.
     fn with_book(storage: Shared, path: &'static str, data: &[u8]) -> Self {
+        Self::with_preset(storage, path, data, keymap_presets::STANDARD_NAME)
+    }
+
+    /// The same with the buttons laid out as `preset` says.
+    fn with_preset(storage: Shared, path: &'static str, data: &[u8], preset: &'static str) -> Self {
         if !storage.exists(path) {
             storage.create_dir("books").unwrap();
             storage.write(path, data).unwrap();
         }
         let heard = Heard::default();
         let kernel = Kernel::builder(DEVICE)
+            .setting_default(&settings::KEYMAP_PRESET, preset.into())
             .storage(storage.clone())
             .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
             .plugin(paperpaw_plugin_format_txt::TxtFormat)
@@ -357,4 +365,101 @@ fn plugins_hear_the_chapter() {
             assert_eq!(left, 0, "{this:?} {next:?}");
         }
     }
+}
+
+#[test]
+fn arrows_turn_pages() {
+    let mut reading = Reading::new(Shared::default());
+    reading.open();
+    reading.run(core_actions::NEXT_PAGE);
+    let second = reading.kept();
+    reading.run(core_actions::NEXT_PAGE);
+    let third = reading.kept();
+    reading.run(core_actions::LEFT);
+    assert_eq!(reading.kept(), second);
+    reading.run(core_actions::RIGHT);
+    assert_eq!(reading.kept(), third);
+    reading.run(core_actions::UP);
+    assert_eq!(reading.kept(), second);
+    reading.run(core_actions::DOWN);
+    assert_eq!(reading.kept(), third);
+}
+
+#[test]
+fn chapters_are_jumped_to_and_turned_back_from() {
+    let epub = include_bytes!("../../../samples/library/books/alice-in-wonderland.epub");
+    let mut reading = Reading::with_book(Shared::default(), EPUB, epub);
+    reading.open();
+    let last = |reading: &Reading| reading.heard.borrow().last().unwrap().1.clone();
+    // Until every page is counted, into the first chapter (a section
+    // of its own, as the chapters after it).
+    let mut turned = 0;
+    while last(&reading).pages.is_none() || !last(&reading).chapter.ends_with("Rabbit-Hole") {
+        reading.run(core_actions::NEXT_PAGE);
+        turned += 1;
+        assert!(turned < 400, "the pages are never counted");
+    }
+    reading.run(core_actions::NEXT_PAGE);
+    let before = last(&reading);
+    let left = before.chapter_left.unwrap();
+    // On to the next chapter's first page.
+    reading.run(actions::NEXT_CHAPTER);
+    let next = last(&reading);
+    assert_ne!(next.chapter, before.chapter, "{before:?} {next:?}");
+    assert_eq!(next.page, before.page.map(|p| p + left + 1));
+    // A page back is the last of the chapter before, not the page left.
+    reading.run(core_actions::PREV_PAGE);
+    let end = last(&reading);
+    assert_eq!(end.page, next.page.map(|p| p - 1));
+    assert_eq!(end.chapter, before.chapter);
+    // Back to this chapter's start, then to the start of the one before.
+    reading.run(actions::PREV_CHAPTER);
+    let start = last(&reading);
+    assert_eq!(start.chapter, before.chapter);
+    assert!(start.page < before.page, "{start:?} {before:?}");
+    // From a chapter's first page, to the page the one before begins on.
+    reading.run(actions::PREV_CHAPTER);
+    let earlier = last(&reading);
+    assert!(earlier.page < start.page, "{earlier:?} {start:?}");
+}
+
+/// Holds the button `name` long enough for a long press.
+fn hold(reading: &mut Reading, name: &'static str) {
+    for (after, state) in [(10, ButtonState::Pressed), (1000, ButtonState::Released)] {
+        reading.now += after;
+        let effects = reading
+            .kernel
+            .handle(Instant(reading.now), InputEvent::Button { name, state });
+        reading.settle(effects);
+    }
+    reading.now += 6000;
+    let effects = reading.kernel.tick(Instant(reading.now));
+    reading.settle(effects);
+}
+
+#[test]
+fn held_page_buttons_go_a_chapter_on_and_back() {
+    let epub = include_bytes!("../../../samples/library/books/alice-in-wonderland.epub");
+    let mut reading = Reading::with_book(Shared::default(), EPUB, epub);
+    reading.open();
+    let chapter = |reading: &Reading| reading.heard.borrow().last().unwrap().1.chapter.clone();
+    hold(&mut reading, "page-forward");
+    hold(&mut reading, "page-forward");
+    let second = chapter(&reading);
+    hold(&mut reading, "page-forward");
+    assert_ne!(chapter(&reading), second);
+    hold(&mut reading, "page-back");
+    assert_eq!(chapter(&reading), second);
+}
+
+#[test]
+fn with_two_buttons_holding_forward_still_opens_the_menu() {
+    let epub = include_bytes!("../../../samples/library/books/alice-in-wonderland.epub");
+    let mut reading = Reading::with_preset(Shared::default(), EPUB, epub, "core.two-buttons");
+    reading.open();
+    hold(&mut reading, "page-forward");
+    assert_ne!(
+        reading.kernel.active_screen().map(Id::as_str),
+        Some("reader.screen")
+    );
 }

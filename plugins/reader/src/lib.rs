@@ -184,6 +184,11 @@ pub mod actions {
     pub const SKIM_BOOK: Id = Id::new_static("reader.skim-book");
     /// Turns the pages by themselves every few seconds, or stops it.
     pub const AUTO_TURN: Id = Id::new_static("reader.auto-turn");
+    /// Goes to the start of the next chapter.
+    pub const NEXT_CHAPTER: Id = Id::new_static("reader.next-chapter");
+    /// Goes to the start of this chapter, or of the one before where the
+    /// page is its first.
+    pub const PREV_CHAPTER: Id = Id::new_static("reader.prev-chapter");
     /// Shows the book's information (slot `core.book-info`).
     pub const BOOK_INFO: Id = Id::new_static("reader.book-info");
     /// A note on the selected text (highlighted with it).
@@ -483,6 +488,8 @@ impl Plugin for Reader {
             (actions::BOOK_INFO, "reader.book-info"),
             (actions::AUTO_TURN, "reader.auto-turn"),
             (actions::SKIM_BOOK, "reader.skim"),
+            (actions::NEXT_CHAPTER, "reader.next-chapter"),
+            (actions::PREV_CHAPTER, "reader.prev-chapter"),
             (actions::EXTEND, "reader.select.extend"),
             (actions::CANCEL, "reader.select.cancel"),
             (actions::MORE, "reader.select.more"),
@@ -558,11 +565,13 @@ impl Plugin for Reader {
         )?;
         // A tap at the bottom of a page opens it. Swipes in from the sides
         // turn pages, as swipes do, rather than going back; two fingers
-        // apart or together make the text larger or smaller.
+        // apart or together make the text larger or smaller. Holding a
+        // page button goes a chapter on or back.
         r.add_keymap(Cow::Borrowed(
             "[keymap.core.reader]\ntap.bottom = reader.quick-settings\n\
              edge.left = core.prev-page\nedge.right = core.next-page\n\
-             pinch.out = reader.font-larger\npinch.in = reader.font-smaller\n",
+             pinch.out = reader.font-larger\npinch.in = reader.font-smaller\n\
+             long.page-forward = reader.next-chapter\nlong.page-back = reader.prev-chapter\n",
         ))?;
         // A short menu; settings in it show their state and change in
         // place.
