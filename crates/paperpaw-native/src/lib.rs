@@ -4,7 +4,9 @@
 //! where it runs ([`Relocator`]), the table the firmware gives every
 //! plugin ([`Api`]) and the plugin's entry ([`Entry`]), and, for the X4,
 //! the index of plugins kept in flash ([`index`]) behind the firmware's
-//! image ([`ImageExtent`]). Authors sign their files ([`signature`]).
+//! image ([`ImageExtent`]), where the web flasher also leaves a
+//! [`bundle`] of plugins to install. Authors sign their files
+//! ([`signature`]).
 //! Plugins get their entry from the SDK's `plugin!`; `paperpaw-sign pack`
 //! makes the files.
 //!
@@ -53,6 +55,7 @@
 
 extern crate alloc;
 
+pub mod bundle;
 mod extent;
 mod header;
 pub mod index;

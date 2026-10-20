@@ -14,8 +14,10 @@
 //! written with its name and the offset into its file.
 
 mod api;
+pub mod bundle;
 #[cfg(feature = "x4")]
 mod flash;
+mod partition;
 #[cfg(feature = "x4-pro")]
 mod psram;
 

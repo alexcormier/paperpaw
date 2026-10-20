@@ -453,4 +453,48 @@ mod tests {
         );
         assert!(hello.restart_needed());
     }
+
+    #[test]
+    fn plugins_the_shell_put_in_folders_install_before_the_start() {
+        let loader = loader();
+        let storage = MemoryStorage::new()
+            .with(
+                "plugins/hello/plugin.ini",
+                "[plugin]\nname = Hello\nversion = 0.1.0\n",
+            )
+            .with(
+                "plugins/.hello.part/plugin.ini",
+                "[plugin]\nname = Hello\nversion = 0.2.0\n",
+            )
+            .with("plugins/.hello.part/code.ppn", "PPNP")
+            .with("plugins/.other.part/plugin.ini", "[plugin]\nid = zeta\n");
+        let mut kernel = Kernel::builder(DEVICE)
+            .storage(storage)
+            .code_plugins(Native::new("code.ppn"), Box::new(loader.clone()))
+            .install_plugin(Id::new_static("hello"), "plugins/.hello.part")
+            .install_plugin(Id::new_static("other"), "plugins/.other.part")
+            .build()
+            .unwrap();
+        // In place of the version before, its code loaded at this start.
+        assert_eq!(*loader.asked.borrow(), ["plugins/hello/code.ppn"]);
+        let hello = info(&kernel, "hello");
+        assert_eq!(
+            (hello.state, hello.kind),
+            (PluginState::Running, PluginKind::Code)
+        );
+        let storage = kernel.storage();
+        assert!(!storage.exists("plugins/.hello.part/plugin.ini"));
+        let ini = paperpaw_sdk::read_file(storage, "plugins/hello/plugin.ini", 512).unwrap();
+        assert!(String::from_utf8(ini).unwrap().contains("0.2.0"));
+        // Not what it says it is: refused, its folder gone.
+        assert!(!storage.exists("plugins/.other.part/plugin.ini"));
+        assert!(kernel.plugins().get("other").is_none());
+        let warnings = kernel.take_warnings();
+        assert!(
+            warnings
+                .iter()
+                .any(|w| w.message.contains("not the plugin `other`")),
+            "{warnings:?}"
+        );
+    }
 }

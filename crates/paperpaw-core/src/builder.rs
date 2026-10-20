@@ -19,6 +19,8 @@ pub struct KernelBuilder {
     firmware: Option<Firmware>,
     code: Option<crate::code_plugin::CodePlugins>,
     safe_mode: Option<paperpaw_sdk::native::SafeMode>,
+    /// Plugins the shell put into folders, to install before plugins load.
+    staged: Vec<(Id, String)>,
     button_row: &'static [&'static str],
     frame_rows: Option<u16>,
     row_align: u16,
@@ -170,6 +172,18 @@ impl KernelBuilder {
         self
     }
 
+    /// Installs the plugin `id` the shell put into `folder` (a folder of
+    /// the plugin folder PaperPaw does not load, e.g. `plugins/.hello.part`:
+    /// a plugin the web flasher wrote with the firmware) before plugins
+    /// are found, so it loads at this start: in place of every version of
+    /// it, as [`Command::InstallPlugin`](paperpaw_sdk::Command::InstallPlugin)
+    /// installs one while PaperPaw runs. One that is not what it says is
+    /// refused, with a warning, and its folder removed.
+    pub fn install_plugin(mut self, id: Id, folder: impl Into<String>) -> Self {
+        self.staged.push((id, folder.into()));
+        self
+    }
+
     /// PaperPaw is the device's firmware and updates it (the shell answers
     /// [`Io::Firmware`] and reports with
     /// [`Kernel::firmware_state`]). See [`paperpaw_sdk::firmware`].
@@ -271,10 +285,16 @@ impl KernelBuilder {
             .into_iter()
             .flatten()
             .collect();
+        let dirs = if self.plugin_dirs.is_empty() {
+            alloc::vec![String::from(paperpaw_sdk::builtin::PLUGIN_DIR)]
+        } else {
+            mem::take(&mut self.plugin_dirs)
+        };
+        kernel.install_staged(mem::take(&mut self.staged), &dirs);
         kernel.add_plugins(
             mem::take(&mut self.plugins),
             mem::take(&mut self.off),
-            mem::take(&mut self.plugin_dirs),
+            dirs,
             mem::take(&mut self.font_dirs),
             &configs,
             self.code
@@ -636,6 +656,7 @@ impl Kernel {
             firmware: None,
             code: None,
             safe_mode: None,
+            staged: Vec::new(),
             button_row: &[],
             frame_rows: None,
             row_align: 1,

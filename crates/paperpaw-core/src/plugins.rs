@@ -549,11 +549,43 @@ impl Kernel {
     /// the folder takes the place of every version of it on the storage,
     /// loaded or not, and is loaded at once.
     pub(crate) fn install_plugin(&mut self, id: &Id, folder: &str) {
+        let dirs = self.shared.plugin_dirs.clone();
+        let Some(placed) = self.place_plugin(id, folder, &dirs) else {
+            return;
+        };
+        // The new version in place: the old ones go, what was chosen from
+        // them stays where the new one offers it too.
+        if self.shared.plugins.get(id.as_str()).is_some() {
+            self.unload_plugin(id);
+        }
+        placed.clear(self.shared.storage.as_ref());
+        self.load_plugin(&placed.target);
+        self.keep_offered_choices();
+        self.apply_reading_font();
+        self.apply_status_font();
+    }
+
+    /// Installs the plugins the shell put into folders before the start
+    /// (see [`KernelBuilder::install_plugin`](crate::KernelBuilder::install_plugin)),
+    /// before the plugins in `dirs` are found.
+    pub(crate) fn install_staged(&mut self, staged: Vec<(Id, String)>, dirs: &[String]) {
+        for (id, folder) in staged {
+            if let Some(placed) = self.place_plugin(&id, &folder, dirs) {
+                placed.clear(self.shared.storage.as_ref());
+            }
+        }
+    }
+
+    /// Puts the plugin `id` in `folder` in the place of every version of
+    /// it in `dirs` (and loaded); `None` when it is refused, said and its
+    /// folder removed.
+    fn place_plugin(&mut self, id: &Id, folder: &str, dirs: &[String]) -> Option<Placed> {
         let storage = self.shared.storage.clone();
         let folder = folder.trim_end_matches('/');
         let refuse = |kernel: &mut Kernel, problem: String| {
             let _ = storage.remove_dir_all(folder);
             kernel.warn(WarningSource::Plugin(id.clone()), None, problem);
+            None
         };
         // What it says it is, before anything changes.
         let found = data_plugin::folder_plugin_id(storage.as_ref(), folder, id.as_str());
@@ -569,7 +601,7 @@ impl Kernel {
         // Every version of it there is: loaded, switched off, or refused at
         // start.
         let mut old: Vec<String> = self.data_folder(id).into_iter().collect();
-        for dir in &self.shared.plugin_dirs {
+        for dir in dirs {
             for path in data_plugin::folders_of(storage.as_ref(), dir, id.as_str()) {
                 if !old.contains(&path) {
                     old.push(path);
@@ -601,19 +633,8 @@ impl Kernel {
             }
             return refuse(self, format!("{target}: not installed ({error:?})"));
         }
-        // The new version in place: the old ones go, what was chosen from
-        // them stays where the new one offers it too.
-        if self.shared.plugins.get(id.as_str()).is_some() {
-            self.unload_plugin(id);
-        }
-        for path in old.iter().filter(|path| **path != target) {
-            let _ = storage.remove_dir_all(path);
-        }
-        let _ = storage.remove_dir_all(&aside);
-        self.load_plugin(&target);
-        self.keep_offered_choices();
-        self.apply_reading_font();
-        self.apply_status_font();
+        old.retain(|path| *path != target);
+        Some(Placed { target, old, aside })
     }
 
     /// After a plugin was loaded or removed while running: the choices of
@@ -653,5 +674,25 @@ impl Kernel {
         shared.refresh_filters.shrink_to_fit();
         shared.stylesheets.shrink_to_fit();
         shared.translator.shrink_to_fit();
+    }
+}
+
+/// A plugin put in its place, and what is left of the versions before.
+struct Placed {
+    /// Its folder.
+    target: String,
+    /// The folders of other versions of it.
+    old: Vec<String>,
+    /// Where the version before stepped aside.
+    aside: String,
+}
+
+impl Placed {
+    /// Removes the versions before.
+    fn clear(&self, storage: &dyn Storage) {
+        for path in &self.old {
+            let _ = storage.remove_dir_all(path);
+        }
+        let _ = storage.remove_dir_all(&self.aside);
     }
 }

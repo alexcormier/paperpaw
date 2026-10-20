@@ -16,22 +16,20 @@
 
 use alloc::vec::Vec;
 
-use esp_bootloader_esp_idf::partitions::{self, FlashStorage, PARTITION_TABLE_MAX_LEN};
+use esp_bootloader_esp_idf::partitions::FlashStorage;
 use esp_hal::peripherals::MMU_TABLE;
 use log::{info, warn};
+use paperpaw_native::bundle::BUNDLE_MAGIC;
 use paperpaw_native::index::{Index, Layout, Region, SECTOR};
-use paperpaw_native::{CODE_OFFSET, HEADER_LEN, Header, ImageExtent, LINK_BASE, Relocator};
+use paperpaw_native::{CODE_OFFSET, HEADER_LEN, Header, LINK_BASE, Relocator};
 use paperpaw_platform::Storage;
 use paperpaw_sdk::PluginProblem;
 
 use super::api::API;
+use super::partition::{Behind, PAGE, behind_image};
 
-/// An MMU page: 64 KiB of flash per entry.
-const PAGE: u32 = 0x1_0000;
 /// The MMU's entries (data and instruction bus share them).
 const ENTRIES: u32 = 128;
-/// The first bytes of the web flasher's bundle of plugins.
-const BUNDLE: [u8; 4] = *b"PPNB";
 
 unsafe extern "C" {
     fn Cache_Dbus_MMU_Set(
@@ -240,23 +238,18 @@ fn check(
 /// The region behind the running firmware's image, mapped, and the
 /// firmware (the SHA-256 its image ends with); or why there is none.
 fn region(flash: &mut FlashStorage<'static>) -> Result<(Region, [u8; 32]), &'static str> {
-    let (offset, size) = running_partition(flash)?;
-    let extent = ImageExtent::read(&mut |at, buf| flash.read(offset + at, buf).is_ok())
-        .filter(|e| e.sha256 && e.len < size)
-        .ok_or("the running image cannot be measured")?;
-    let mut firmware = [0u8; 32];
-    flash
-        .read(offset + extent.len - 32, &mut firmware)
-        .map_err(|_| "the flash cannot be read")?;
-    let start = offset + extent.len.next_multiple_of(SECTOR);
+    let Behind {
+        start,
+        end,
+        firmware,
+    } = behind_image(flash)?;
     let mut head = [0u8; 4];
     flash
         .read(start, &mut head)
         .map_err(|_| "the flash cannot be read")?;
-    if head == BUNDLE {
+    if head == BUNDLE_MAGIC {
         return Err("a bundle of plugins waits to be installed");
     }
-    let end = offset + size;
     // As many pages as the region spans, in the longest run of entries the
     // MMU leaves free.
     let first_page = start / PAGE;
@@ -286,32 +279,6 @@ fn region(flash: &mut FlashStorage<'static>) -> Result<(Region, [u8; 32]), &'sta
     );
     let region = Region::new(start, end, base).ok_or("the region is too small")?;
     Ok((region, firmware))
-}
-
-/// The app partition this code runs from (its offset and size): the one
-/// holding the flash page the MMU maps this function's address to.
-fn running_partition(flash: &mut FlashStorage<'static>) -> Result<(u32, u32), &'static str> {
-    let here = running_partition as *const () as u32;
-    let entry = here
-        .checked_sub(LINK_BASE + CODE_OFFSET)
-        .ok_or("the firmware does not run from flash")?
-        / PAGE;
-    let page = MMU_TABLE::regs().entry(entry as usize).read();
-    if page.invalid().bit() {
-        return Err("the firmware's code is not mapped");
-    }
-    let paddr = u32::from(page.paddr().bits()) * PAGE;
-    let mut table = alloc::vec![0u8; PARTITION_TABLE_MAX_LEN];
-    let table = partitions::read_partition_table(flash, &mut table).map_err(|e| {
-        warn!("native: the partition table: {e:?}");
-        "the partition table cannot be read"
-    })?;
-    table
-        .iter()
-        .filter(|p| matches!(p.partition_type(), partitions::PartitionType::App(_)))
-        .map(|p| (p.offset(), p.len()))
-        .find(|&(offset, len)| (offset..offset + len).contains(&paddr))
-        .ok_or("no app partition holds the firmware's code")
 }
 
 /// The longest run of MMU entries that map nothing (the later of two as

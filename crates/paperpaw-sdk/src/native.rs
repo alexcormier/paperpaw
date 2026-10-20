@@ -477,6 +477,60 @@ mod tests {
         assert_eq!(check_file(&storage, "none.ppn"), Err(Problem::Length));
     }
 
+    /// The web flasher's bundle installs only what `install` would: the
+    /// same rules, kept in two places as the format crate is below the SDK.
+    #[test]
+    fn bundles_take_the_names_install_takes() {
+        use paperpaw_native::bundle::{is_plugin_id, is_safe_path};
+        let ids = [
+            "a",
+            "reading-nook",
+            "a1",
+            "",
+            "-a",
+            "a-",
+            "A",
+            "a.b",
+            "a_b",
+            "\u{e9}",
+        ];
+        let long_id = "a".repeat(41);
+        for id in ids.iter().copied().chain([long_id.as_str(), &long_id[1..]]) {
+            assert_eq!(
+                is_plugin_id(id),
+                crate::install::is_plugin_name(id),
+                "{id:?}"
+            );
+        }
+        let paths = [
+            "plugin.ini",
+            "i18n/de.ini",
+            "fonts/A_b-c.ttf",
+            "",
+            "/a",
+            "a/",
+            "a//b",
+            "../a",
+            ".a",
+            "a/.b",
+            "a b",
+            "a\\b",
+            "a:b",
+        ];
+        let long_path = "a".repeat(101);
+        for path in paths
+            .iter()
+            .copied()
+            .chain([long_path.as_str(), &long_path[1..]])
+        {
+            assert_eq!(
+                is_safe_path(path),
+                crate::install::is_safe_path(path),
+                "{path:?}"
+            );
+        }
+    }
+
     #[test]
     fn this_build_names_itself() {
         let native = Native::new("code.ppn");

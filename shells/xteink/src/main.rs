@@ -245,8 +245,14 @@ fn main() -> ! {
     if let Some(unix_ms) = board.clock_ms {
         clock::set(now(), unix_ms);
     }
+    // Plugins the web flasher wrote behind the image, onto the card first.
+    let staged = native::bundle::stage(&flash, storage.as_ref());
     let code = code_plugins(ota.as_ref(), &flash);
-    let kernel = kernel(storage, ota.as_ref(), code);
+    let installs = staged.as_ref().map_or(&[][..], |s| &s.plugins[..]);
+    let kernel = kernel(storage, ota.as_ref(), code, installs);
+    if let Some(staged) = staged {
+        staged.finish(&flash);
+    }
     // Light sleeps while idle on battery, the deep one at the end.
     power::init(LowPower::new(board.low_power));
     Firmware {
@@ -324,7 +330,12 @@ fn code_plugins(ota: Option<&ota::Ota>, flash: &ota::Flash) -> CodePlugins {
     clippy::expect_used,
     reason = "the plugins are built in: a kernel that cannot be built is a bug to see at once"
 )]
-fn kernel(storage: Box<dyn Storage>, ota: Option<&ota::Ota>, code: CodePlugins) -> Kernel {
+fn kernel(
+    storage: Box<dyn Storage>,
+    ota: Option<&ota::Ota>,
+    code: CodePlugins,
+    installs: &[(paperpaw_sdk::Id, alloc::string::String)],
+) -> Kernel {
     #[cfg(feature = "remote")]
     let storage: Box<dyn Storage> = Box::new(traced::Traced(storage));
     let builder = Kernel::builder(DEVICE)
@@ -366,6 +377,9 @@ fn kernel(storage: Box<dyn Storage>, ota: Option<&ota::Ota>, code: CodePlugins) 
             .safe_mode(safe_mode),
         CodePlugins::None => builder,
     };
+    let builder = installs.iter().fold(builder, |builder, (id, folder)| {
+        builder.install_plugin(id.clone(), folder.clone())
+    });
     let builder = paperpaw_app::install(builder, paperpaw_app::Fonts::Packs).plugin(device::X4);
     let mut kernel = builder.build().expect("kernel");
     for warning in kernel.take_warnings() {
