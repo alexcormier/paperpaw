@@ -3251,4 +3251,6 @@ fn overlays_leave_the_rows_they_do_not_cover() {
     assert_eq!(uncovered(part, Rect::new(40, 200, 400, 600)), Some(part));
 }
 
+mod screen_life;
+mod settings_files;
 mod storage;

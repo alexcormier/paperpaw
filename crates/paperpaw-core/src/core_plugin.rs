@@ -1172,4 +1172,18 @@ mod tests {
         let issues = check::compare(&en, &de);
         assert!(issues.is_empty(), "{issues:?}");
     }
+
+    /// Every plugin writes numbers with the language's decimal mark
+    /// (`paperpaw_sdk::numbers`), which the kernel's catalogs name.
+    #[test]
+    fn languages_name_their_decimal_mark() {
+        use paperpaw_sdk::numbers::DECIMAL_MARK;
+        for (source, mark) in [
+            (include_str!("../i18n/en.ini"), "."),
+            (include_str!("../i18n/de.ini"), ","),
+        ] {
+            let catalog = Catalog::parse(source).unwrap();
+            assert_eq!(catalog.get(DECIMAL_MARK), Some(mark));
+        }
+    }
 }

@@ -12,6 +12,11 @@ pub(crate) struct KeySources {
     pub(crate) presets: Vec<(Id, Cow<'static, str>)>,
     /// Plugins' key maps that apply while a switch (the id) is on.
     pub(crate) when: Vec<(Id, Cow<'static, str>)>,
+    /// The user's bindings: `paperpaw.ini` as read at start and changed
+    /// since ([`Command::Bind`]), then the shell's overrides (see
+    /// [`KernelBuilder::user_config`]), which win.
+    pub(crate) user: String,
+    pub(crate) shell: String,
 }
 
 impl Kernel {
@@ -343,7 +348,10 @@ impl Kernel {
             keymap.load(source, Origin::Preset, true);
         }
         for (origin, source) in &self.keys.sources {
-            keymap.load(source, *origin, *origin != Origin::User);
+            keymap.load(source, *origin, true);
+        }
+        for source in [&self.keys.user, &self.keys.shell] {
+            keymap.load(source, Origin::User, false);
         }
         // After the plugins' other bindings, which they then override.
         for (setting, source) in &self.keys.when {
@@ -366,15 +374,10 @@ impl Kernel {
         }
         // New entries need their labels.
         self.set_menu_titles();
-        let storage = self.shared.storage.as_ref();
-        let source = read_config(storage).unwrap_or_default();
-        let updated = match &value {
-            Some(value) => paperpaw_config::set(&source, "menus", menu.as_str(), value),
-            None => paperpaw_config::remove(&source, "menus", menu.as_str()),
-        };
-        if storage.write(CONFIG_FILE, updated.as_bytes()).is_err() {
-            self.warn_runtime(format!("could not save menu `{menu}` to {CONFIG_FILE}"));
-        }
+        self.update_config(&format_args!("menu `{menu}`"), |source| match &value {
+            Some(value) => paperpaw_config::set(source, "menus", menu.as_str(), value),
+            None => paperpaw_config::remove(source, "menus", menu.as_str()),
+        });
         self.output
             .commands
             .push(events::MENU_CHANGED.emit(events::MenuChanged { id: menu.clone() }));
@@ -469,6 +472,8 @@ impl Kernel {
             );
         }
         let off = read_config(storage.as_ref())
+            .ok()
+            .flatten()
             .is_some_and(|c| crate::config::plugin_switches(&c, false).contains(&id.to_string()));
         if off {
             self.register_off(&plugin, manifest);
@@ -626,6 +631,8 @@ impl Kernel {
         self.keys.sources.shrink_to_fit();
         self.keys.presets.shrink_to_fit();
         self.keys.when.shrink_to_fit();
+        self.keys.user.shrink_to_fit();
+        self.keys.shell.shrink_to_fit();
         self.subscriptions.shrink_to_fit();
         self.shared.plugins.shrink_to_fit();
         self.warnings.shrink_to_fit();

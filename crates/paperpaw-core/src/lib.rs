@@ -70,7 +70,7 @@ use paperpaw_graphics::{Framebuffer, GraphicsError};
 use paperpaw_i18n::Translator;
 use paperpaw_platform::{
     ButtonState, Color, DeviceInfo, FrameView, InputEvent, Instant, NoStorage, Point, PointerEvent,
-    PointerPhase, Rect, RefreshMode, Storage, SystemStatus,
+    PointerPhase, Rect, RefreshMode, Storage, StorageError, SystemStatus,
 };
 use paperpaw_sdk::builtin::{
     CONFIG_FILE, GLOBAL_KEYMAP_LAYER, events, keymap_presets, params as builtin_params,
@@ -96,7 +96,7 @@ pub use crate::io::{
 use crate::keymap::{InputKey, Keymap, Origin, Zone};
 use crate::refresh::RefreshPolicy;
 use crate::registry::{Registry, Staging};
-use crate::screens::{screen_key, uncovered};
+use crate::screens::uncovered;
 use paperpaw_sdk::Registrar;
 use paperpaw_sdk::filters::InputVerdict;
 pub use paperpaw_sdk::firmware::{Firmware, FirmwareCommand, FirmwareState, InstallFailure};
@@ -262,6 +262,10 @@ impl core::error::Error for KernelError {}
 /// A screen on the navigation stack.
 struct ActiveScreen {
     id: Id,
+    /// Tells this opening of the screen from every other, also once it was
+    /// made anew (see `Kernel::remake_screens`): e.g. the owner of a
+    /// settings scope.
+    serial: u32,
     /// The slot it was opened for, if any.
     slot: Option<Id>,
     /// Made for the part above the row of hints (when the row shows), as
@@ -315,11 +319,19 @@ pub struct Kernel {
     last_activity: Instant,
     /// Since when the screen on top has been counted as shown.
     shown_since: Instant,
-    /// The active settings scope: its file and the screen that set it.
-    scope: Option<(String, Option<usize>)>,
+    /// The active settings scope: a book's own settings.
+    scope: Option<config::Scope>,
     /// The screen that asked for the values shown without being kept
-    /// ([`Command::PreviewSettings`]), if any.
-    preview_owner: Option<usize>,
+    /// ([`Command::PreviewSettings`]), if any (its `serial`).
+    preview_owner: Option<u32>,
+    /// The `serial` of the screen opened next.
+    next_serial: u32,
+    /// `paperpaw.ini` is there but could not be read at start: the user
+    /// is told once the first screen shows.
+    config_unreadable: bool,
+    /// The file of passwords and keys is there but could not be read at
+    /// start: it is not written over.
+    secrets_unreadable: bool,
     /// A screen was opened or closed since the last call ended; then the
     /// frame drawn for it is not shown yet (see [`Kernel::shown`]).
     screens_changed: bool,
@@ -409,6 +421,10 @@ impl Kernel {
         self.last_activity = now;
         self.output.commands.push(Command::open_slot(slots::HOME));
         self.output.commands.push(events::STARTED.emit(()));
+        if mem::take(&mut self.config_unreadable) {
+            let text = self.config_notice();
+            self.output.commands.push(Command::Notify(text));
+        }
         self.finish()
     }
 
@@ -723,6 +739,11 @@ impl Kernel {
     pub fn set_secret(&mut self, change: paperpaw_sdk::secrets::SecretChange) {
         use paperpaw_sdk::secrets;
         self.shared.secrets.apply(change);
+        if self.secrets_unreadable {
+            // Written from what was read, the others would be lost.
+            let message = format!("{}: could not be read at start; not saved", secrets::FILE);
+            return self.warn_runtime(message);
+        }
         let text = self.shared.secrets.encode();
         let storage = self.shared.storage.as_ref();
         let _ = storage.create_dir(paperpaw_sdk::data::DIR);

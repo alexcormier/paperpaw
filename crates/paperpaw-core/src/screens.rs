@@ -22,8 +22,11 @@ impl Kernel {
             self.hide_from(self.shown_base());
         }
         self.screens_changed = true;
+        let serial = self.next_serial;
+        self.next_serial = serial.wrapping_add(1);
         self.stack.push(ActiveScreen {
             id,
+            serial,
             slot,
             hinted,
             params: params.clone(),
@@ -84,21 +87,13 @@ impl Kernel {
             return self.warn_runtime(format!("cannot bind `{input}` in `{layer}`"));
         }
         let section = format!("keymap.{layer}");
-        match &action {
-            Some(action) => self.save_config(&section, input, action.as_str()),
-            None => {
-                let storage = self.shared.storage.as_ref();
-                let source = read_config(storage).unwrap_or_default();
-                let updated = paperpaw_config::remove(&source, &section, input);
-                let _ = storage.write(CONFIG_FILE, updated.as_bytes());
-            }
-        }
-        // The user's bindings as the file has them now.
-        let source = read_config(self.shared.storage.as_ref()).unwrap_or_default();
-        self.keys
-            .sources
-            .retain(|(origin, _)| *origin != Origin::User);
-        self.keys.sources.push((Origin::User, Cow::Owned(source)));
+        let action = action.as_ref();
+        // At once, also where it cannot be saved; the shell's overrides
+        // stay above it.
+        self.keys.user = bound(&self.keys.user, &section, input, action);
+        self.update_config(&format_args!("`{section}.{input}`"), |source| {
+            bound(source, &section, input, action)
+        });
         self.rebuild_keymap();
     }
 
@@ -297,6 +292,15 @@ impl Kernel {
     }
 }
 
+/// `source` with `input` in `section` bound to `action`, or to what the
+/// plugins bind it to (`None`).
+fn bound(source: &str, section: &str, input: &str, action: Option<&Id>) -> String {
+    match action {
+        Some(action) => paperpaw_config::set(source, section, input, action.as_str()),
+        None => paperpaw_config::remove(source, section, input),
+    }
+}
+
 /// The part of `area` that `cover` leaves to be seen, as a rectangle:
 /// `None` if it covers all of it; less the rows it covers at the top or
 /// the bottom where it is as wide; else all of `area`.
@@ -323,10 +327,4 @@ pub(crate) fn uncovered(area: Rect, cover: Rect) -> Option<Rect> {
         return Some(Rect::new(area.x, area.y, area.width, common.y - area.y));
     }
     Some(area)
-}
-
-/// Identifies an open screen instance (by its address), e.g. the owner of
-/// a settings scope.
-pub(crate) fn screen_key(screen: &ActiveScreen) -> usize {
-    core::ptr::from_ref::<dyn Screen>(screen.screen.as_ref()).cast::<()>() as usize
 }

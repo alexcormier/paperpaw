@@ -6,6 +6,22 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Settings: a `paperpaw.ini` that is there but cannot be read (saved in
+  another encoding than UTF-8, larger than 64 KiB, or a read of the
+  memory card failed) is no longer written over: PaperPaw starts with
+  the defaults, says so, and leaves the file as it is, where before the
+  next change of a setting, a key binding or a menu wrote a new file
+  with only that change and every other setting was lost. The same goes
+  for a book's own settings ("Only this book") and for the file of
+  passwords and keys. A `paperpaw.ini` saved as "UTF-8 with BOM" is read
+  whole (its first section was lost). Saving a book's own settings keeps
+  what else its file holds, such as the settings of a plugin switched
+  off.
+- Settings: "Only this book" holds while the book is open, also after
+  the screen was turned or the row of button hints changed in a menu
+  over the book; before, the next change went to every book.
+- Key bindings: binding a button in PaperPaw no longer drops the
+  emulator's own bindings from its user configuration.
 - Storage: whether names in another case are the same file (as on the
   memory card) reaches plugins through the kernel's own layers; it read
   "no" everywhere before. Where they are other files (a Linux disk), the

@@ -251,7 +251,7 @@ impl KernelBuilder {
         kernel.read_secrets();
         paperpaw_sdk::library::take_over_old(kernel.shared.storage.as_ref());
         // The configuration file on the device, then the shell's overrides.
-        let stored = read_config(kernel.shared.storage.as_ref());
+        let stored = kernel.read_stored_config();
         let user_config = self.user_config.take();
         let configs: Vec<&str> = [stored.as_deref(), user_config.as_deref()]
             .into_iter()
@@ -269,8 +269,13 @@ impl KernelBuilder {
         }
         kernel.offer_choices();
         kernel.apply_defaults(&self.setting_defaults);
-        for source in &configs {
+        if let Some(source) = &stored {
             kernel.apply_user_config(source);
+            kernel.keys.user.clone_from(source);
+        }
+        if let Some(source) = &user_config {
+            kernel.apply_user_config(source);
+            kernel.keys.shell.clone_from(source);
         }
         kernel.set_menu_titles();
         kernel.apply_reading_font();
@@ -411,6 +416,9 @@ impl KernelBuilder {
             scope: None,
             screens_changed: false,
             preview_owner: None,
+            next_serial: 0,
+            config_unreadable: false,
+            secrets_unreadable: false,
             plugin_defaults: Vec::new(),
             now: Instant::default(),
         })
@@ -419,15 +427,36 @@ impl KernelBuilder {
 
 /// The steps of [`KernelBuilder::build`].
 impl Kernel {
-    /// Passwords and keys, as kept on the storage.
+    /// Passwords and keys, as kept on the storage. A file that is there
+    /// but cannot be read is said and not written over.
     fn read_secrets(&mut self) {
-        if let Ok(data) = paperpaw_sdk::read_file(
-            self.shared.storage.as_ref(),
-            paperpaw_sdk::secrets::FILE,
-            64 * 1024,
-        ) {
-            let text = String::from_utf8_lossy(&data);
-            self.shared.secrets = paperpaw_sdk::secrets::Secrets::decode(&text);
+        use paperpaw_sdk::secrets::{FILE, Secrets};
+        let storage = self.shared.storage.as_ref();
+        match paperpaw_sdk::files::load_text_for_update(storage, FILE, 64 * 1024) {
+            Ok(text) => self.shared.secrets = Secrets::decode(&text.unwrap_or_default()),
+            Err(error) => {
+                self.secrets_unreadable = true;
+                self.warn_runtime(format!(
+                    "{FILE} cannot be read ({error}): passwords and keys are not used or saved"
+                ));
+            }
+        }
+    }
+
+    /// `paperpaw.ini` on the storage, if there is one; one that is there
+    /// but cannot be read is said, at once and to the user once the first
+    /// screen shows, and is not written over.
+    fn read_stored_config(&mut self) -> Option<String> {
+        match read_config(self.shared.storage.as_ref()) {
+            Ok(source) => source,
+            Err(error) => {
+                self.config_unreadable = true;
+                let message = format!(
+                    "{CONFIG_FILE} cannot be read ({error}): started with the defaults,                      the file is left as it is"
+                );
+                self.warn(WarningSource::UserConfig, None, message);
+                None
+            }
         }
     }
 
