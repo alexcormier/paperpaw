@@ -591,3 +591,42 @@ fn more_than_32768_settings_are_refused_not_mixed_up() {
         assert_eq!(s.spec(&id).unwrap().id.as_str(), id);
     }
 }
+
+/// A setting kept in the program is copied before it is changed; with no
+/// place left for the copy, that is said: an error that names it, and
+/// `set_choices` telling it did nothing.
+#[test]
+fn a_full_store_says_so_when_a_fixed_setting_is_changed() {
+    static LOOK: SettingSpec = SettingSpec::fixed_choice(
+        "a.look",
+        "",
+        &["a.plain", "a.bold"],
+        "a.plain",
+        groups::DISPLAY,
+    );
+    let mut s = Settings::new();
+    s.define_fixed(&LOOK).unwrap();
+    for i in 0..32_768u32 {
+        let id = Id::parse(&format!("a.s{i}")).unwrap();
+        s.define(SettingSpec::new(
+            id,
+            "",
+            SettingKind::Bool,
+            SettingValue::Bool(false),
+        ))
+        .unwrap();
+    }
+    assert_eq!(
+        s.set_default_from_text("a.look", "a.bold"),
+        Err(SettingError::Full)
+    );
+    assert!(!s.set_choices("a.look", &["a.thin"][..]));
+    assert!(!s.set_choices("a.none", &["a.thin"][..]));
+    assert_eq!(
+        SettingError::Full.to_string(),
+        "no place left to change this setting"
+    );
+    // The fixed one is as it was.
+    let spec = s.spec("a.look").unwrap();
+    assert_eq!(spec.default, SettingValue::Text(Cow::Borrowed("a.plain")));
+}

@@ -646,6 +646,9 @@ pub struct SettingGroupSpec {
 pub enum SettingError {
     Unknown,
     InvalidValue,
+    /// No place is left to keep a changed spec (more than 32,768
+    /// settings of a kind).
+    Full,
 }
 
 impl fmt::Display for SettingError {
@@ -653,6 +656,7 @@ impl fmt::Display for SettingError {
         f.write_str(match self {
             SettingError::Unknown => "unknown setting",
             SettingError::InvalidValue => "invalid value for this setting",
+            SettingError::Full => "no place left to change this setting",
         })
     }
 }
@@ -700,15 +704,15 @@ impl Specs {
         Some(self.at(self.by_id[at]))
     }
 
-    /// The spec `id` to change: a fixed one is copied first.
-    fn get_mut(&mut self, id: &str) -> Option<&mut SettingSpec> {
-        let at = self.find(id).ok()?;
+    /// The spec `id` to change: a fixed one is copied first, which needs
+    /// a place of its own.
+    fn get_mut(&mut self, id: &str) -> Result<&mut SettingSpec, SettingError> {
+        let at = self.find(id).map_err(|_| SettingError::Unknown)?;
         let place = self.by_id[at];
         let place = if place & FIXED == 0 {
             place
         } else if self.owned.len() >= PLACES {
-            // No place left for a copy: kept as it is.
-            return None;
+            return Err(SettingError::Full);
         } else {
             let copy = self.fixed[usize::from(place & !FIXED)].clone();
             let owned = self.owned.len() as u16;
@@ -719,7 +723,7 @@ impl Specs {
             }
             owned
         };
-        Some(&mut self.owned[usize::from(place)])
+        Ok(&mut self.owned[usize::from(place)])
     }
 
     /// Adds `place`, whose spec's id is not there yet.
@@ -926,16 +930,23 @@ impl Settings {
 
     /// Replaces the options of a [`SettingKind::Choice`] setting, e.g. once
     /// all contributions it chooses from are known.
-    pub fn set_choices(&mut self, id: &str, options: impl Into<Choices>) {
-        if let Some(spec) = self.specs.get_mut(id) {
-            spec.kind = SettingKind::Choice(options.into());
+    ///
+    /// Whether it did: not for an unknown setting, nor where no place is
+    /// left to keep the changed spec ([`SettingError::Full`]).
+    pub fn set_choices(&mut self, id: &str, options: impl Into<Choices>) -> bool {
+        match self.specs.get_mut(id) {
+            Ok(spec) => {
+                spec.kind = SettingKind::Choice(options.into());
+                true
+            }
+            Err(_) => false,
         }
     }
 
     /// Changes a setting's default (e.g. device-specific defaults chosen by
     /// a shell). The user's own values still take precedence.
     pub fn set_default_from_text(&mut self, id: &str, text: &str) -> Result<(), SettingError> {
-        let spec = self.specs.get_mut(id).ok_or(SettingError::Unknown)?;
+        let spec = self.specs.get_mut(id)?;
         spec.default = spec.kind.parse(text).ok_or(SettingError::InvalidValue)?;
         Ok(())
     }
