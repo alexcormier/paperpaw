@@ -1028,7 +1028,7 @@ fn read_nav(
                 page_link = Some(resolve(&base, &href));
                 text.clear();
             }
-            "ol" if in_toc => ol_depth += 1,
+            "ol" if in_toc => ol_depth = ol_depth.saturating_add(1),
             "a" if in_toc && !self_closing => {
                 let href = attrs.get("href").unwrap_or_default();
                 link = Some(resolve(&base, &href));

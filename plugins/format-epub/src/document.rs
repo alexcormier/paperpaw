@@ -147,36 +147,6 @@ fn parse_xpointer(xpointer: &str) -> Option<XPointer> {
     })
 }
 
-/// The lines of the file at `path` in order, read a piece at a time,
-/// until `each` returns `false`.
-fn each_line(storage: &dyn Storage, path: &str, mut each: impl FnMut(&str) -> bool) {
-    let mut chunk = [0u8; 512];
-    let mut line: Vec<u8> = Vec::new();
-    let mut at = 0u64;
-    loop {
-        let Ok(n) = storage.read_at(path, at, &mut chunk) else {
-            return;
-        };
-        if n == 0 {
-            break;
-        }
-        at += n as u64;
-        for &byte in &chunk[..n] {
-            if byte == b'\n' {
-                if !each(&String::from_utf8_lossy(&line)) {
-                    return;
-                }
-                line.clear();
-            } else {
-                line.push(byte);
-            }
-        }
-    }
-    if !line.is_empty() {
-        each(&String::from_utf8_lossy(&line));
-    }
-}
-
 /// A line of `<n>.xpt`: offset, text node, character.
 fn origin(line: &str) -> Option<(u32, &str, u32)> {
     let mut fields = line.split('\t');
@@ -185,6 +155,17 @@ fn origin(line: &str) -> Option<(u32, &str, u32)> {
     let char = fields.next()?.parse().ok()?;
     Some((offset, node, char))
 }
+
+/// A line of `<n>.pos`: offset, element path.
+fn position(line: &str) -> Option<(u32, &str)> {
+    let (offset, path) = line.split_once('\t')?;
+    Some((offset.parse().ok()?, path))
+}
+
+/// The most of a block's text read to count its characters, more than a
+/// block holds: a position further from where its text node is listed
+/// is past the chapter.
+const MAX_SPAN: u32 = 16 * 1024;
 
 /// Where chapters converted without the book's styles are kept.
 /// The cache of a book.
@@ -333,22 +314,6 @@ impl EpubDocument {
 
     fn paths(&self, section: u32) -> CachePaths {
         paths(&self.chapters, section)
-    }
-
-    /// The element path of each block of a chapter (converted if needed),
-    /// by offset.
-    fn positions(&self, storage: &dyn Storage, section: u32) -> Option<Vec<(u32, String)>> {
-        let (paths, ..) = self.chapter(storage, section).ok()?;
-        let data = paperpaw_sdk::read_file(storage, &paths.positions, 1 << 20).ok()?;
-        let text = String::from_utf8_lossy(&data);
-        Some(
-            text.lines()
-                .filter_map(|line| {
-                    let (offset, path) = line.split_once('\t')?;
-                    Some((offset.parse().ok()?, String::from(path)))
-                })
-                .collect(),
-        )
     }
 
     fn length(&self, section: u32) -> Option<u32> {
@@ -556,19 +521,28 @@ impl Document for EpubDocument {
     }
 
     /// Down to the character in its text node, as KOReader counts them,
-    /// where it is in text; else the element of its block.
+    /// where it is in text; else the element of its block. The lists of
+    /// places are read a line at a time, never whole.
     fn xpointer(&self, storage: &dyn Storage, at: Locator) -> Option<String> {
-        let positions = self.positions(storage, at.section)?;
-        let (block, path) = positions
-            .iter()
-            .take_while(|(offset, _)| *offset <= at.offset)
-            .last()
-            .map_or((0, ""), |(offset, path)| (*offset, path.as_str()));
+        let (paths, ..) = self.chapter(storage, at.section).ok()?;
+        // The block: the last listed at or before `at`.
+        let (mut block, mut path) = (0, String::new());
+        cached::lines(storage, &paths.positions, |line| {
+            let Some((offset, element)) = position(line) else {
+                return true;
+            };
+            if offset > at.offset {
+                return false;
+            }
+            block = offset;
+            path.clear();
+            path.push_str(element);
+            true
+        });
         let fragment = alloc::format!("/body/DocFragment[{}]/body", at.section + 1);
         // The text node the block's text at `at` comes from.
-        let paths = self.paths(at.section);
         let mut found: Option<(u32, String, u32)> = None;
-        each_line(storage, &paths.xpointers, |line| {
+        cached::lines(storage, &paths.xpointers, |line| {
             let Some((offset, node, char)) = origin(line) else {
                 return true;
             };
@@ -578,7 +552,9 @@ impl Document for EpubDocument {
             found = Some((offset, String::from(node), char));
             true
         });
-        if let Some((offset, node, char)) = found.filter(|(offset, ..)| *offset >= block) {
+        if let Some((offset, node, char)) =
+            found.filter(|(offset, ..)| *offset >= block && at.offset - *offset <= MAX_SPAN)
+        {
             let mut text = alloc::vec![0u8; (at.offset - offset) as usize];
             let n = storage
                 .read_at(&paths.text, u64::from(offset), &mut text)
@@ -596,15 +572,11 @@ impl Document for EpubDocument {
     fn locate_xpointer(&self, storage: &dyn Storage, xpointer: &str) -> Option<Locator> {
         let pointer = parse_xpointer(xpointer)?;
         let section = pointer.section;
-        if section >= self.sections() {
-            return None;
-        }
-        let positions = self.positions(storage, section)?;
+        let (paths, ..) = self.chapter(storage, section).ok()?;
         // Exactly, where it points into text PaperPaw shows.
         if let Some((node, char)) = pointer.node() {
-            let paths = self.paths(section);
             let mut found: Option<(u32, u32)> = None;
-            each_line(storage, &paths.xpointers, |line| {
+            cached::lines(storage, &paths.xpointers, |line| {
                 if let Some((offset, at, from)) = origin(line)
                     && at == node
                     && from <= char
@@ -614,7 +586,7 @@ impl Document for EpubDocument {
                 true
             });
             if let Some((offset, chars)) = found {
-                let mut text = alloc::vec![0u8; (chars as usize * 4).min(16 * 1024)];
+                let mut text = alloc::vec![0u8; (chars as usize * 4).min(MAX_SPAN as usize)];
                 let n = storage
                     .read_at(&paths.text, u64::from(offset), &mut text)
                     .ok()?;
@@ -627,18 +599,22 @@ impl Document for EpubDocument {
         let inside = |path: &str, of: &str| {
             of.is_empty() || path == of || path.strip_prefix(of).is_some_and(|r| r.starts_with('/'))
         };
-        // The element's first block, else the block it is part of.
-        let offset = positions
-            .iter()
-            .find(|(_, path)| inside(path, &target))
-            .or_else(|| {
-                positions
-                    .iter()
-                    .rev()
-                    .find(|(_, path)| inside(&target, path))
-            })
-            .map_or(0, |(offset, _)| *offset);
-        Some(Locator::new(section, offset))
+        // The element's first block, else the last block it is part of.
+        let (mut first, mut within) = (None, None);
+        cached::lines(storage, &paths.positions, |line| {
+            let Some((offset, path)) = position(line) else {
+                return true;
+            };
+            if inside(path, &target) {
+                first = Some(offset);
+                return false;
+            }
+            if inside(&target, path) {
+                within = Some(offset);
+            }
+            true
+        });
+        Some(Locator::new(section, first.or(within).unwrap_or(0)))
     }
 
     fn fonts(&self, storage: &dyn Storage) -> Vec<EmbeddedFont> {

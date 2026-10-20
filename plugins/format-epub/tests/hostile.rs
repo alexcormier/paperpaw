@@ -424,3 +424,52 @@ fn a_stylesheet_of_a_bad_byte_and_much_space_takes_little_memory() {
     assert!(peak < PLAIN_PEAK, "{peak} bytes at once");
     assert_eq!(block.align, Align::Center);
 }
+
+#[test]
+fn positions_in_a_long_chapter_take_little_memory() {
+    // Its list of places is over a megabyte.
+    let mut chapter = String::from("<html><body>");
+    for _ in 0..80_000 {
+        chapter.push_str("<p>x</p>");
+    }
+    chapter.push_str("</body></html>");
+    let card = Card::new("book.epub", epub(&chapter));
+    let doc = EpubDocument::open(&card, "book.epub").unwrap();
+    // Converted, its length is known.
+    doc.block_at(&card, Locator::START).unwrap();
+    let length = doc.section_len(0);
+    let last = doc
+        .block_at(&card, Locator::new(0, length - 1))
+        .unwrap()
+        .unwrap();
+    let (xpointer, heap) = peak(|| doc.xpointer(&card, Locator::new(0, last.start)));
+    assert!(heap < 16 * 1024, "{heap} bytes at once");
+    let xpointer = xpointer.unwrap();
+    assert_eq!(xpointer, "/body/DocFragment[1]/body/p[80000]/text()[1].0");
+    let (at, heap) = peak(|| doc.locate_xpointer(&card, &xpointer));
+    assert!(heap < 16 * 1024, "{heap} bytes at once");
+    assert_eq!(at, Some(Locator::new(0, last.start)));
+    let element = "/body/DocFragment[1]/body/p[79999]";
+    let before = doc.locate_xpointer(&card, element).unwrap();
+    assert_eq!(
+        doc.block_at(&card, before).unwrap().unwrap().end,
+        last.start
+    );
+}
+
+#[test]
+fn stale_positions_are_refused() {
+    let chapter = "<html><body><p>Only <a href=\"#x\">this</a>.</p></body></html>";
+    let card = Card::new("book.epub", epub(chapter));
+    let doc = EpubDocument::open(&card, "book.epub").unwrap();
+    // A section the book does not have, e.g. from before it changed.
+    assert!(doc.block_at(&card, Locator::new(9, 0)).unwrap().is_none());
+    assert!(doc.links(&card, 9, 0, u32::MAX).is_empty());
+    assert_eq!(doc.xpointer(&card, Locator::new(9, 0)), None);
+    assert_eq!(doc.page_label(&card, Locator::new(9, 0)), None);
+    // A position far past the chapter's end.
+    doc.block_at(&card, Locator::START).unwrap();
+    let (xpointer, heap) = peak(|| doc.xpointer(&card, Locator::new(0, 50 << 20)));
+    assert!(heap < 16 * 1024, "{heap} bytes at once");
+    assert_eq!(xpointer.as_deref(), Some("/body/DocFragment[1]/body/p[1]"));
+}

@@ -158,31 +158,52 @@ pub(crate) fn block_at(
     read_block(storage, paths, length, blocks, block, color).map(Some)
 }
 
+/// Longer lines of cache files are cut: nothing sensible is that long.
+const MAX_LINE: usize = 2048;
+
 /// Calls `visit` with each line of a cache file until it returns
-/// `false`, reading in small pieces.
+/// `false`, reading in small pieces: without its line break, invalid
+/// UTF-8 replaced, cut at [`MAX_LINE`] bytes.
 pub(crate) fn lines(storage: &dyn Storage, path: &str, mut visit: impl FnMut(&str) -> bool) {
-    let mut chunk = [0u8; 256];
+    lines_from(storage, path, 0, |line, _| visit(line));
+}
+
+/// As [`lines`], from byte `from` on (where a line starts); `visit` also
+/// gets where the line after it starts.
+pub(crate) fn lines_from(
+    storage: &dyn Storage,
+    path: &str,
+    from: u64,
+    mut visit: impl FnMut(&str, u64) -> bool,
+) {
+    let mut chunk = [0u8; 512];
     let mut line: Vec<u8> = Vec::new();
-    let mut offset = 0u64;
+    let mut offset = from;
     loop {
         let Ok(n) = storage.read_at(path, offset, &mut chunk) else {
             return;
         };
-        offset += n as u64;
-        for &byte in &chunk[..n] {
+        for (i, &byte) in chunk[..n].iter().enumerate() {
             if byte != b'\n' {
-                // Longer lines are cut; nothing sensible is that long.
-                if line.len() < 2048 {
+                if line.len() < MAX_LINE {
                     line.push(byte);
                 }
                 continue;
             }
-            if !visit(core::str::from_utf8(&line).unwrap_or_default()) {
+            if line.last() == Some(&b'\r') {
+                line.pop();
+            }
+            let next = offset + i as u64 + 1;
+            if !visit(&String::from_utf8_lossy(&line), next) {
                 return;
             }
             line.clear();
         }
+        offset += n as u64;
         if n == 0 {
+            if !line.is_empty() {
+                visit(&String::from_utf8_lossy(&line), offset);
+            }
             return;
         }
     }
