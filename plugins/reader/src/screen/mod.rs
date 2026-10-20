@@ -284,7 +284,7 @@ impl ReaderScreen {
         let (start, end) = (book.page.start, book.page.end);
         let on_page = |m: &Mark| m.kind == Kind::Bookmark && m.start >= start && m.start < end;
         if !annotations::remove(env.storage, &book.path, on_page) {
-            let text: Vec<&str> = book.page.lines.iter().map(|l| l.text.as_str()).collect();
+            let text = page_text(&book.page.lines);
             let kept = annotations::add(
                 env.storage,
                 &book.path,
@@ -298,7 +298,7 @@ impl ReaderScreen {
                     percent: (book.percent() + 0.5) as u8,
                     created: paperpaw_sdk::time::unix_seconds(&env).unwrap_or(0),
                     updated: 0,
-                    text: annotations::snippet(&text.join(" ")),
+                    text: annotations::snippet(&text),
                     note: String::new(),
                 },
             );
@@ -977,6 +977,34 @@ impl ReaderScreen {
             cx.wake_at(now);
         }
     }
+}
+
+/// The text of `lines` as the book has it: a word broken at the end of
+/// a line is whole again, without the hyphen the layout put there (a
+/// hyphen of the book's own stays).
+pub(super) fn page_text(lines: &[PageLine]) -> String {
+    let mut out = String::new();
+    let mut joined = false;
+    for (i, line) in lines.iter().enumerate() {
+        if i > 0 && !joined {
+            out.push(' ');
+        }
+        let last = line.words.last().copied();
+        let next = lines.get(i + 1).filter(|n| n.section == line.section);
+        let first = next.and_then(|n| n.words.first().copied());
+        // The word goes on in the next line, at once.
+        joined = line.text.ends_with('-')
+            && matches!((last, first), (Some((_, end)), Some((start, _))) if start == end);
+        let mut text = line.text.as_str();
+        if let Some((start, end)) = last.filter(|_| joined) {
+            let word = text.rsplit(' ').next().unwrap_or(text);
+            if (end.saturating_sub(start) as usize) < word.len() {
+                text = &text[..text.len() - 1];
+            }
+        }
+        out.push_str(text);
+    }
+    out
 }
 
 /// Says that a bookmark, highlight or note could not be kept: the book's
