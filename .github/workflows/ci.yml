@@ -132,7 +132,15 @@ jobs:
           cargo +"$FIRMWARE_TOOLCHAIN" clippy $FIRMWARE_CARGO --features "$DEVICE" -- -D warnings
           cargo +"$FIRMWARE_TOOLCHAIN" build $FIRMWARE_CARGO --features "$DEVICE"
       - name: The sample code plugin fits the firmware
+        id: native
         uses: ./.github/actions/native-sample
+      # PaperPaw's own plugins that the store offers, as the release
+      # builds them (unsigned here): each packs, for this chip, with the
+      # firmware's fingerprint.
+      - name: The store's first-party plugins fit the firmware
+        env:
+          FINGERPRINT: ${{ steps.native.outputs.fingerprint }}
+        run: tools/plugin-files/build.sh "$DEVICE" "$RUNNER_TEMP/plugins" --fingerprint "$FINGERPRINT"
 
   native:
     name: Native plugins

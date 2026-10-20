@@ -1,0 +1,25 @@
+# The plugins the store offers as files, built here for every release: a
+# line each, its id (a binary of this workspace, a folder of plugins/)
+# and its group in the plugin library (ADR 0023). The firmware leaves them
+# out (crates/paperpaw-app, feature `store-plugins`); keep both in step.
+aids reading
+battery system
+browser library
+calibre library
+diagnostics system
+fonts-browser look
+joplin sync
+keys system
+koreader sync
+kosync sync
+menu-editor look
+news library
+profiles reading
+readwise sync
+rules system
+stats reading
+translate reading
+vocabulary reading
+wallabag library
+weather home
+widgets home

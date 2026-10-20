@@ -1,0 +1,33 @@
+# How a native plugin is built (docs/plugins.md): linked with
+# `paperpaw-plugin.x` (which the SDK brings), its relocations kept for
+# the packer.
+#
+# - The X4 (ESP32-C3, RISC-V): with the toolchain in rust-toolchain.toml,
+#   `cargo x4`. Its code reaches its data by relative addresses (the
+#   medium code model) and keeps frame pointers, so a crash's calls can
+#   be named.
+# - The X4 Pro (ESP32-S3, Xtensa): with espup's `esp` toolchain,
+#   `cargo +esp x4pro`, which builds `core` and `alloc` too.
+[alias]
+x4 = "build --release --target riscv32imc-unknown-none-elf"
+x4pro = "build --release --target xtensa-esp32s3-none-elf -Zbuild-std=core,alloc"
+
+[target.riscv32imc-unknown-none-elf]
+rustflags = [
+    "-C", "link-arg=-Tpaperpaw-plugin.x",
+    "-C", "link-arg=--emit-relocs",
+    "-C", "code-model=medium",
+    "-C", "relocation-model=static",
+    "-C", "force-frame-pointers",
+    # The SDK asks the firmware for what it has already (`icons::char`).
+    "--cfg", "paperpaw_plugin",
+]
+
+[target.xtensa-esp32s3-none-elf]
+rustflags = [
+    "-C", "link-arg=-nostartfiles",
+    "-C", "link-arg=-nostdlib",
+    "-C", "link-arg=-Wl,-Tpaperpaw-plugin.x",
+    "-C", "link-arg=-Wl,--emit-relocs",
+    "--cfg", "paperpaw_plugin",
+]
