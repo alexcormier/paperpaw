@@ -290,4 +290,4 @@ impl std::fmt::Display for Stats {
 }
 
 #[cfg(test)]
-mod accounting_tests;
+pub(crate) mod accounting_tests;

@@ -3,16 +3,19 @@
 //! charged and credited back, what is refused, which budget holds, and
 //! how the numbers are shown.
 //!
-//! The counters are global; the tests that read them take [`LOCK`] so
-//! they do not see each other's allocations. Other tests allocate
-//! untracked, which the counters leave alone.
+//! The counters and the budget are global; the tests that read them,
+//! and the device's tests that run a kernel under a budget, take
+//! [`LOCK`] so they do not see each other's allocations. Other tests
+//! allocate untracked, which the counters leave alone.
 
 use std::alloc::Layout;
 use std::sync::{Mutex, MutexGuard};
 
 use super::*;
 
-static LOCK: Mutex<()> = Mutex::new(());
+/// Held by every test of this binary that tracks allocations or sets a
+/// budget.
+pub(crate) static LOCK: Mutex<()> = Mutex::new(());
 
 /// The counters to themselves, the budget lifted, as no profile set one.
 fn alone() -> MutexGuard<'static, ()> {
