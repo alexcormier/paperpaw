@@ -589,7 +589,10 @@ impl Kernel {
     /// loaded or not, and is loaded at once.
     pub(crate) fn install_plugin(&mut self, id: &Id, folder: &str) {
         let dirs = self.shared.plugin_dirs.clone();
-        let Some(placed) = self.place_plugin(id, folder, &dirs) else {
+        // Loaded without a folder: built in, not to be replaced.
+        let built_in =
+            self.shared.plugins.get(id.as_str()).is_some() && self.data_folder(id).is_none();
+        let Some(placed) = self.place_plugin(id, folder, &dirs, built_in) else {
             return;
         };
         // The new version in place: the old ones go, what was chosen from
@@ -618,10 +621,17 @@ impl Kernel {
 
     /// Installs the plugins the shell put into folders before the start
     /// (see [`KernelBuilder::install_plugin`](crate::KernelBuilder::install_plugin)),
-    /// before the plugins in `dirs` are found.
-    pub(crate) fn install_staged(&mut self, staged: Vec<(Id, String)>, dirs: &[String]) {
+    /// before the plugins in `dirs` are found; not over the plugins built
+    /// in (`built_in`).
+    pub(crate) fn install_staged(
+        &mut self,
+        staged: Vec<(Id, String)>,
+        dirs: &[String],
+        built_in: &[Id],
+    ) {
         for (id, folder) in staged {
-            if let Some(placed) = self.place_plugin(&id, &folder, dirs) {
+            let ours = built_in.contains(&id);
+            if let Some(placed) = self.place_plugin(&id, &folder, dirs, ours) {
                 placed.clear(self.shared.storage.as_ref());
             }
         }
@@ -629,15 +639,35 @@ impl Kernel {
 
     /// Puts the plugin `id` in `folder` in the place of every version of
     /// it in `dirs` (and loaded); `None` when it is refused, said and its
-    /// folder removed.
-    fn place_plugin(&mut self, id: &Id, folder: &str, dirs: &[String]) -> Option<Placed> {
+    /// folder removed. A plugin `built_in` is not replaced, and one that
+    /// would not register is refused before anything changes, so the
+    /// version before stays.
+    fn place_plugin(
+        &mut self,
+        id: &Id,
+        folder: &str,
+        dirs: &[String],
+        built_in: bool,
+    ) -> Option<Placed> {
         let storage = self.shared.storage.clone();
         let folder = folder.trim_end_matches('/');
+        // The folder it is installed in: nothing to put in its place, and
+        // nothing to remove.
+        let dir = paperpaw_sdk::files::parent(folder);
+        let target = paperpaw_sdk::files::join(dir, id.as_str());
+        if paperpaw_sdk::files::same_path(storage.as_ref(), folder, &target) {
+            let problem = format!("{folder}: is where `{id}` is installed; nothing to install");
+            self.warn(WarningSource::Plugin(id.clone()), None, problem);
+            return None;
+        }
         let refuse = |kernel: &mut Kernel, problem: String| {
             let _ = storage.remove_dir_all(folder);
             kernel.warn(WarningSource::Plugin(id.clone()), None, problem);
             None
         };
+        if built_in {
+            return refuse(self, format!("`{id}` is built in; {folder} not installed"));
+        }
         // What it says it is, before anything changes.
         let found = data_plugin::folder_plugin_id(storage.as_ref(), folder, id.as_str());
         if found.as_deref() != Some(id.as_str()) {
@@ -646,10 +676,21 @@ impl Kernel {
                 format!("{folder}: not the plugin `{id}`; not installed"),
             );
         }
-        let version = match data_plugin::load_folder_as(storage.as_ref(), folder, id.as_str()) {
-            Ok(plugin) => plugin.manifest().version,
+        let plugin = match data_plugin::load_folder_as(storage.as_ref(), folder, id.as_str()) {
+            Ok(plugin) => plugin,
             Err(problem) => return refuse(self, problem),
         };
+        let version = plugin.manifest().version;
+        // Registered aside first (its translations, key map, settings): one
+        // that would fail leaves the version before in place.
+        let mut registrar = Registrar::new(id.clone());
+        let staged = plugin.register(&mut registrar).and_then(|()| {
+            registry::stage(id, registrar.into_contributions(), &mut Staging::default())
+        });
+        drop(plugin);
+        if let Err(error) = staged {
+            return refuse(self, format!("{folder}: not installed: {error}"));
+        }
         // Every version of it there is: loaded, switched off, or refused at
         // start.
         let mut old: Vec<String> = self.data_folder(id).into_iter().collect();
@@ -662,8 +703,6 @@ impl Kernel {
         }
         // Its own folder, named as it, in the plugin folder it was
         // downloaded into; one there of another plugin is left alone.
-        let dir = paperpaw_sdk::files::parent(folder);
-        let target = paperpaw_sdk::files::join(dir, id.as_str());
         let taken =
             storage.exists(&target) || paperpaw_sdk::files::is_dir(storage.as_ref(), &target);
         if taken && !old.contains(&target) {

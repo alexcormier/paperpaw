@@ -6,6 +6,12 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Plugins: an update from the store that would not load (a translation
+  with a mistake, say) is refused before anything changes, so the
+  version before stays; before, it was removed and the new one marked
+  failed. A plugin offered under the name of one built in (such as
+  the default fonts or Wi-Fi) is refused, and installing a plugin from
+  the folder it is installed in no longer deletes it.
 - Plugins: data plugins are read one at a time at start, each let go
   once registered, instead of all of them first; one switched off keeps
   only its name and description in memory. A language pack beside a

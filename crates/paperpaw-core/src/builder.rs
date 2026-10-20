@@ -300,7 +300,10 @@ impl KernelBuilder {
         } else {
             mem::take(&mut self.plugin_dirs)
         };
-        kernel.install_staged(mem::take(&mut self.staged), &dirs);
+        let built_in: Vec<Id> = core::iter::once(CORE)
+            .chain(self.plugins.iter().map(|plugin| plugin.manifest().id))
+            .collect();
+        kernel.install_staged(mem::take(&mut self.staged), &dirs, &built_in);
         kernel.add_plugins(
             mem::take(&mut self.plugins),
             mem::take(&mut self.off),
