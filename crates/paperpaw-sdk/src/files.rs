@@ -124,10 +124,15 @@ pub fn list(storage: &dyn Storage, dir: &str, hidden: bool) -> Result<Vec<Entry>
             });
         }
     })?;
+    // Compared letter by letter, without a lower-case copy of each name
+    // for every comparison.
     entries.sort_by(|a, b| {
-        b.is_dir
-            .cmp(&a.is_dir)
-            .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+        b.is_dir.cmp(&a.is_dir).then_with(|| {
+            a.name
+                .chars()
+                .flat_map(char::to_lowercase)
+                .cmp(b.name.chars().flat_map(char::to_lowercase))
+        })
     });
     Ok(entries)
 }
