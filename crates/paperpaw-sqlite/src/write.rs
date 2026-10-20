@@ -385,65 +385,9 @@ impl<'s> Writer<'s> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::memory::Memory;
     use crate::{Database, compare_records, decode_record};
     use alloc::string::ToString;
-    use paperpaw_platform::Storage;
-
-    /// The in-memory storage of the SDK is not reachable from here.
-    #[derive(Default)]
-    pub(super) struct Memory(core::cell::RefCell<Vec<(String, Vec<u8>)>>);
-
-    impl Storage for Memory {
-        fn read_at(
-            &self,
-            path: &str,
-            offset: u64,
-            buf: &mut [u8],
-        ) -> Result<usize, paperpaw_platform::StorageError> {
-            let files = self.0.borrow();
-            let (_, data) = files
-                .iter()
-                .find(|(p, _)| p == path)
-                .ok_or(paperpaw_platform::StorageError::NotFound)?;
-            let start = (offset as usize).min(data.len());
-            let n = buf.len().min(data.len() - start);
-            buf[..n].copy_from_slice(&data[start..start + n]);
-            Ok(n)
-        }
-        fn size(&self, path: &str) -> Result<u64, paperpaw_platform::StorageError> {
-            let files = self.0.borrow();
-            files
-                .iter()
-                .find(|(p, _)| p == path)
-                .map(|(_, d)| d.len() as u64)
-                .ok_or(paperpaw_platform::StorageError::NotFound)
-        }
-        fn write(&self, path: &str, data: &[u8]) -> Result<(), paperpaw_platform::StorageError> {
-            let mut files = self.0.borrow_mut();
-            files.retain(|(p, _)| p != path);
-            files.push((path.to_string(), data.to_vec()));
-            Ok(())
-        }
-        fn append(&self, path: &str, data: &[u8]) -> Result<(), paperpaw_platform::StorageError> {
-            let mut files = self.0.borrow_mut();
-            match files.iter_mut().find(|(p, _)| p == path) {
-                Some((_, d)) => d.extend_from_slice(data),
-                None => files.push((path.to_string(), data.to_vec())),
-            }
-            Ok(())
-        }
-        fn list(
-            &self,
-            _: &str,
-            _: &mut dyn FnMut(paperpaw_platform::DirEntry<'_>),
-        ) -> Result<(), paperpaw_platform::StorageError> {
-            Ok(())
-        }
-        fn remove(&self, path: &str) -> Result<(), paperpaw_platform::StorageError> {
-            self.0.borrow_mut().retain(|(p, _)| p != path);
-            Ok(())
-        }
-    }
 
     #[test]
     fn plans_keep_a_cell_in_every_node() {
@@ -528,7 +472,7 @@ mod check {
         let Ok(out) = std::env::var("PAPERPAW_SQLITE_OUT") else {
             return;
         };
-        let storage = tests_storage();
+        let storage = crate::memory::Memory::default();
         let mut writer = Writer::new(&storage, "db");
         let long = "y".repeat(12_000);
         let rows: Vec<(i64, Vec<u8>)> = (1..=20_000)
@@ -571,12 +515,6 @@ mod check {
             },
         ];
         writer.finish(&schema, 20_221_111).unwrap();
-        let mut data = vec![0u8; storage.size("db").unwrap() as usize];
-        storage.read_at("db", 0, &mut data).unwrap();
-        std::fs::write(out, data).unwrap();
-    }
-
-    fn tests_storage() -> super::tests::Memory {
-        super::tests::Memory::default()
+        std::fs::write(out, storage.bytes("db")).unwrap();
     }
 }
