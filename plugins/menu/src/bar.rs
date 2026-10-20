@@ -13,13 +13,14 @@
 //! Its text is in the status lines' font, as the lines it opens over.
 //!
 //! Switches show their state (an icon on black is on) and change in
-//! place; choices open their list; submenus open as a list below; actions
-//! close the bar and run.
+//! place; choices open their list; settings with a page of their own
+//! open it, numbers and text their group's settings page; submenus open
+//! as a list below; actions close the bar and run.
 
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use paperpaw_sdk::builtin::{actions, events, params};
+use paperpaw_sdk::builtin::{actions, events, params, slots};
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
     Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, RefreshMode,
@@ -223,6 +224,14 @@ impl BarScreen {
             cx.command(Command::RunAction(id));
             return;
         };
+        // Its own page, e.g. the lock's, which asks for the code.
+        if let Some(editor) = &spec.extra().editor {
+            cx.command(Command::OpenScreen(
+                editor.clone(),
+                Params::new().with(params::ID, id.as_str().to_string()),
+            ));
+            return;
+        }
         match &spec.kind {
             SettingKind::Bool => {
                 let value = SettingValue::Bool(!env.settings.bool(id.as_str()));
@@ -243,7 +252,14 @@ impl BarScreen {
                     Params::new().with("id", id.as_str().to_string()),
                 ));
             }
-            _ => {}
+            // Numbers and text have no room here: their settings page.
+            _ => {
+                let group = env.settings.group_of(spec);
+                cx.command(Command::OpenSlot(
+                    slots::SETTINGS,
+                    Params::new().with(params::ID, group.as_str().to_string()),
+                ));
+            }
         }
     }
 
