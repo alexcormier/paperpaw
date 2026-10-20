@@ -6,6 +6,53 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Dictionary: a damaged dictionary is no longer indexed again with
+  every word looked up (each time reading its whole index): it is
+  left out until its files change. The prepared indexes of
+  dictionaries no longer in the folder are removed. Where a word can
+  be looked up online, the row of button hints says which button
+  does it.
+- File manager: a folder of any size is read a page at a time, as the
+  library reads its folders: a folder of thousands of files no longer
+  fills the X4's memory. Moving or renaming a folder tells only of the
+  books in it moving (not of every file), so their progress and notes
+  go along, and says so where a folder holds more books than are told
+  at once; settings naming the folder or one in it (the library folder,
+  the archive, the dictionaries) follow it. A name that differs in case
+  only is taken as it is (it got "(2)" on the memory card), through a
+  free name between, so nothing is lost on storages that ignore case;
+  names the memory card or Windows refuse (`* ? " < > |`, a dot at the
+  end) are refused. A file picked to be moved goes when its folder is
+  deleted.
+- Library: while a book or another full screen covers it, the library
+  lets go of its covers and page and reads nothing when books arrive or
+  a setting changes (a font size in the reader, say); it reads its
+  folder once when it shows again, and then only the page with the
+  book the focus was on, which keeps the focus (also after marking a
+  book finished or archiving one). Covers that could not be made small
+  show a stand-in instead of being read from the book in every band;
+  zipped books are named alike in the list and the grid; sizes in the
+  book information use the language's decimal mark. The folder chooser
+  opens in the folder set (it always started at the top), and names of
+  new folders leave out what the memory card and Windows refuse. The
+  shelves (by author, series, tag) make their catalog once, again only
+  after books came, went or moved, the library folder changed or after
+  half an hour, and making it goes on where a book was opened
+  meanwhile (it stayed at "Collecting the books" for good).
+- Vocabulary: the list of words is never lost to a failed read or
+  write. It is written anew beside itself and put in its place only
+  once complete, so a full card or a read error partway keeps it as
+  it was, and after a power cut at the wrong moment the new list is
+  taken at the next start. Deleting removes the word chosen even where
+  the list changed meanwhile or holds a line cut off by a power cut;
+  the next word looked up after such a line starts a line of its own,
+  and the list shows words looked up elsewhere when it shows again.
+  Looking up the newest word again writes nothing. A word that cannot
+  be kept or deleted says so. The export for Anki tells Anki its
+  fields are separated by tabs and plain text, and quotes fields with
+  quotes in them. Without a clock the word of the day is drawn at
+  random (else the newest) instead of staying on the oldest word; with
+  one it changes at local midnight.
 - Quick panel and reader's panel: on touch screens their sliders (the
   front light and its colour, the text size, spacing and margins) are as
   on the settings pages, across the screen with their title and value
