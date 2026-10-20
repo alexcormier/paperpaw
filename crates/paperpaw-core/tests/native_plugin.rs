@@ -84,6 +84,15 @@ extern "C" fn micros() -> u64 {
     START.get_or_init(Clock::now).elapsed().as_micros() as u64
 }
 
+unsafe extern "C" fn icon(name: *const u8, len: usize) -> u32 {
+    // SAFETY: the plugin's text, `len` bytes, read while this answers.
+    let bytes = unsafe { std::slice::from_raw_parts(name, len) };
+    std::str::from_utf8(bytes)
+        .ok()
+        .and_then(paperpaw_sdk::icons::char)
+        .map_or(0, u32::from)
+}
+
 /// The shell's table, as a firmware's.
 static API: Api = Api {
     size: Api::SIZE,
@@ -92,6 +101,7 @@ static API: Api = Api {
     realloc,
     panic,
     micros,
+    icon,
 };
 
 /// The plugin library, built as the module says.

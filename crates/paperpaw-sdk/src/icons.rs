@@ -11,6 +11,10 @@
 //! Plugins give their menu entries icons by name
 //! ([`Registrar::add_icon`](crate::Registrar::add_icon)); an icon without
 //! a drawing draws nothing.
+//!
+//! A native plugin file (ADR 0024) built with `--cfg paperpaw_plugin`
+//! (as `samples/hello-native` builds) asks the firmware for an icon's
+//! character instead of carrying the names of all of them.
 
 include!("icon_table.rs");
 
@@ -21,7 +25,37 @@ fn name(index: usize) -> &'static str {
 }
 
 /// The character of icon `name` in the icon font.
+#[cfg(not(all(paperpaw_plugin, target_os = "none")))]
 pub fn char(name: &str) -> Option<char> {
+    by_name(name)
+}
+
+/// The character of icon `name` in the icon font, as the firmware that
+/// loaded this plugin file knows it.
+#[cfg(all(paperpaw_plugin, target_os = "none"))]
+pub fn char(name: &str) -> Option<char> {
+    unsafe extern "C" {
+        /// The firmware's table: `paperpaw-plugin.x` makes the word, the
+        /// loader writes its address before the plugin's code runs.
+        static PAPERPAW_API: *const paperpaw_native::Api;
+    }
+    // SAFETY: a table that lives as long as the firmware runs, written
+    // before any code of the plugin ran.
+    let api = unsafe { &*PAPERPAW_API };
+    let has_icon = core::mem::offset_of!(paperpaw_native::Api, icon)
+        + core::mem::size_of::<usize>()
+        <= api.size as usize;
+    if !has_icon {
+        return None;
+    }
+    // SAFETY: the firmware reads `name` while it answers.
+    let code = unsafe { (api.icon)(name.as_ptr(), name.len()) };
+    core::char::from_u32(code).filter(|&c| c != '\0')
+}
+
+/// The character of icon `name`, from the names of all icons.
+#[cfg(not(all(paperpaw_plugin, target_os = "none")))]
+fn by_name(name: &str) -> Option<char> {
     let (mut low, mut high) = (0, ICONS.len());
     while low < high {
         let middle = (low + high) / 2;
@@ -54,6 +88,7 @@ mod tests {
         assert_eq!(char(all[all.len() - 1]), Some(ICONS[ICONS.len() - 1].1));
         assert_eq!(char("no-such-icon"), None);
         assert_eq!(char(""), None);
+        assert_eq!(by_name("home"), char("home"));
         assert!(all.len() > 5000);
     }
 }

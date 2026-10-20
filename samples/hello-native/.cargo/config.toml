@@ -19,6 +19,8 @@ rustflags = [
     "-C", "code-model=medium",
     "-C", "relocation-model=static",
     "-C", "force-frame-pointers",
+    # The SDK asks the firmware for what it has already (`icons::char`).
+    "--cfg", "paperpaw_plugin",
 ]
 
 [target.xtensa-esp32s3-none-elf]
@@ -27,4 +29,5 @@ rustflags = [
     "-C", "link-arg=-nostdlib",
     "-C", "link-arg=-Wl,-Tpaperpaw-plugin.x",
     "-C", "link-arg=-Wl,--emit-relocs",
+    "--cfg", "paperpaw_plugin",
 ]
