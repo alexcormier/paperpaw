@@ -69,6 +69,10 @@ const SAVE_EVERY_MS: u64 = 5000;
 /// Pages remembered for going back before the index covers them.
 const HISTORY: usize = 64;
 
+/// The least text, in bytes, a page back goes where the page index does
+/// not reach (the page shown holding less, e.g. a picture).
+const MIN_PAGE_BACK: u32 = 200;
+
 /// Places jumps were made from (links, contents, search, page numbers),
 /// kept for *Back*.
 const RETURNS: usize = 32;

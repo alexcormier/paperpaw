@@ -62,6 +62,9 @@ pub(super) struct Book {
     pub(super) index: Option<PageIndex>,
     /// Where background pagination continues.
     pub(super) indexing: Option<Locator>,
+    /// Whether pagination stopped for this layout (a page that cannot be
+    /// laid out, a storage that takes no more).
+    pub(super) index_stopped: bool,
     /// Where the bookmarks and highlights are.
     pub(super) marks: Vec<Mark>,
     /// Text to point out on this page, e.g. a search hit.
@@ -181,6 +184,7 @@ impl Book {
             path: path.to_string(),
             index: None,
             indexing: None,
+            index_stopped: false,
             page: Page::default(),
             history: Vec::new(),
             saved_at: None,
@@ -209,14 +213,15 @@ impl Book {
         book.chapter_marks = book.chapter_marks(env);
         book.embedded = Embedded::load(env, book.document.as_ref());
         // Kept with another layout maybe: from the start of its line.
+        // Where the book cannot be shown there (it changed, say), from its
+        // start.
         let start = book
             .saved_position(env)
             .map_or(Locator::START, |at| book.line_start(env, at));
-        book.page = match book.layout(env, start).map_err(error)? {
-            page if page.is_past_end() && start != Locator::START => {
-                book.layout(env, Locator::START).map_err(error)?
-            }
-            page => page,
+        book.page = match book.layout(env, start) {
+            Ok(page) if !page.is_past_end() => page,
+            _ if start != Locator::START => book.layout(env, Locator::START).map_err(error)?,
+            page => page.map_err(error)?,
         };
         book.prepare_images(env);
         book.index = Some(book.open_index(env));
@@ -328,6 +333,7 @@ impl Book {
         self.chapter_end.set(None);
         self.chapter_first.set(None);
         self.indexing = None;
+        self.index_stopped = false;
     }
 
     /// Decodes the pictures of the page shown that are not yet: books
@@ -462,17 +468,55 @@ impl Book {
     }
 
     /// The start of the previous page: the page shown before (this
-    /// session), else from the page index.
+    /// session), else from the page index, else about a page back.
     pub(super) fn previous_start(&mut self, env: &Env<'_>) -> Option<Locator> {
         if let Some(start) = self.history.pop() {
             return Some(start);
         }
-        let index = self.index.as_ref()?;
-        match index.locate(env.storage, self.page.start)? {
-            (page, true) if page > 0 => index.entry(env.storage, page - 1),
-            (page, false) => index.entry(env.storage, page),
-            _ => None,
+        let here = self.page.start;
+        if let Some(index) = &self.index {
+            match index.locate(env.storage, here) {
+                Some((0, true)) => return None,
+                Some((page, true)) => return index.entry(env.storage, page - 1),
+                // Inside a page whose end the index knows: its start.
+                Some((page, false)) if index.is_complete() || page + 1 < index.pages() => {
+                    return index.entry(env.storage, page);
+                }
+                // Past the pages counted so far.
+                _ => {}
+            }
         }
+        self.page_back(env, here)
+    }
+
+    /// About a page before `here`, where the page index does not reach
+    /// yet: as much text back as the page shown holds, from the start of
+    /// its line. The page there may show a line again, but leaves nothing
+    /// out.
+    fn page_back(&self, env: &Env<'_>, here: Locator) -> Option<Locator> {
+        let document = &self.document;
+        let page = &self.page;
+        let end = match page.end.section == page.start.section {
+            true => page.end.offset,
+            false => document.section_len(page.start.section),
+        };
+        let length = end.saturating_sub(page.start.offset).max(MIN_PAGE_BACK);
+        // At the start of its section, the end of the one before.
+        let first = document
+            .block_at(env.storage, Locator::new(here.section, 0))
+            .ok()
+            .flatten()
+            .map_or(0, |block| block.start);
+        let (section, end) = if here.offset > first {
+            (here.section, here.offset)
+        } else {
+            let section = (0..here.section)
+                .rev()
+                .find(|&s| document.section_len(s) > 0)?;
+            (section, document.section_len(section))
+        };
+        let from = Locator::new(section, end.saturating_sub(length));
+        Some(self.line_start(env, from))
     }
 
     pub(super) fn show(&mut self, cx: &mut Cx<'_, '_>, start: Locator, forward: bool) -> bool {
@@ -515,22 +559,26 @@ impl Book {
         true
     }
 
-    /// One step of background pagination. Returns whether more work remains.
+    /// One step of background pagination. Returns whether more work
+    /// remains. A page that cannot be laid out or a storage that takes no
+    /// more end it for this layout; the pages counted so far are used.
     pub(super) fn index_step(&mut self, env: &Env<'_>) -> bool {
-        let Some(mut index) = self.index.take() else {
-            return false;
-        };
-        if index.is_complete() {
-            self.index = Some(index);
+        if self.index_stopped || self.index.as_ref().is_none_or(PageIndex::is_complete) {
             return false;
         }
+        let more = self.index_pages(env);
+        self.index_stopped = more.is_none();
+        more == Some(true)
+    }
+
+    /// Lays out the next pages and adds them to the index: whether more
+    /// remain, `None` if it cannot go on.
+    fn index_pages(&mut self, env: &Env<'_>) -> Option<bool> {
+        let index = self.index.as_ref()?;
         let mut next = match self.indexing {
             Some(next) => next,
             None => match index.last(env.storage) {
-                Some(last) => match self.layout(env, last) {
-                    Ok(page) => page.end,
-                    Err(_) => return false,
-                },
+                Some(last) => self.layout(env, last).ok()?.end,
                 None => Locator::START,
             },
         };
@@ -541,10 +589,8 @@ impl Book {
         let mut starts = Vec::with_capacity(per_step);
         let mut done = false;
         for _ in 0..per_step {
-            let Ok(page) = self.layout(env, next) else {
-                // Unreadable: give up indexing, reading still works.
-                return false;
-            };
+            // Unreadable: reading still works.
+            let page = self.layout(env, next).ok()?;
             if page.is_past_end() {
                 done = true;
                 break;
@@ -556,16 +602,16 @@ impl Book {
             }
             next = page.end;
         }
+        let index = self.index.as_mut()?;
+        // A storage that is read-only or full.
         if !index.append(env.storage, &starts) {
-            // Read-only storage: no index.
-            return false;
+            return None;
         }
         if done {
             index.finish(env.storage);
         }
         self.indexing = Some(next);
-        self.index = Some(index);
-        !done
+        Some(!done)
     }
 
     /// "12 / 340" once the index covers the page exactly, else a percentage.

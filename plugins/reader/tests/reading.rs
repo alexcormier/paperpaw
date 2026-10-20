@@ -46,12 +46,21 @@ const BOOK: &str = "books/alice.txt";
 /// The same book with a table of contents.
 const EPUB: &str = "books/alice.epub";
 
-/// A storage the test looks into while kernels have it.
+/// A storage the test looks into while kernels have it. It refuses to
+/// add to page indexes once the appends in `.1` (if set) are used up, and
+/// to read files whose paths end as `.2` says (if set).
 #[derive(Clone, Default)]
-struct Shared(Rc<MemoryStorage>);
+struct Shared(
+    Rc<MemoryStorage>,
+    Rc<std::cell::Cell<Option<u32>>>,
+    Rc<std::cell::Cell<Option<&'static str>>>,
+);
 
 impl Storage for Shared {
     fn read_at(&self, path: &str, offset: u64, buf: &mut [u8]) -> Result<usize, StorageError> {
+        if self.2.get().is_some_and(|end| path.ends_with(end)) {
+            return Err(StorageError::Io);
+        }
         self.0.read_at(path, offset, buf)
     }
     fn size(&self, path: &str) -> Result<u64, StorageError> {
@@ -61,6 +70,13 @@ impl Storage for Shared {
         self.0.write(path, data)
     }
     fn append(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
+        if path.contains("/pages-") {
+            match self.1.get() {
+                Some(0) => return Err(StorageError::Io),
+                Some(left) => self.1.set(Some(left - 1)),
+                None => {}
+            }
+        }
         self.0.append(path, data)
     }
     fn list(&self, dir: &str, visit: &mut dyn FnMut(DirEntry<'_>)) -> Result<(), StorageError> {
@@ -745,4 +761,111 @@ fn a_percentage_is_gone_to_and_back_returns() {
     reading.run(core_actions::BACK);
     reading.run(core_actions::BACK);
     assert_eq!(reading.kept(), before);
+}
+
+/// Where pages 0 to `pages` of the book begin, turned to one by one, and
+/// the storage with the book's position after the last of them.
+fn page_starts(pages: usize) -> (Shared, Vec<(u32, u32)>) {
+    let storage = Shared::default();
+    let mut reading = Reading::new(storage.clone());
+    reading.open();
+    let mut starts = vec![reading.kept()];
+    for _ in 0..pages {
+        reading.run(core_actions::NEXT_PAGE);
+        starts.push(reading.kept());
+    }
+    (storage, starts)
+}
+
+/// The book opened again where it was left, its page index made anew
+/// as far as one step of eight pages before the storage refuses more.
+fn reopened_with_a_short_index(storage: &Shared) -> Reading {
+    let dir = format!(
+        ".paperpaw/plugins/reader/books/{:016x}",
+        paperpaw_digest::fnv1a64(BOOK)
+    );
+    let mut indexes = Vec::new();
+    storage
+        .list(&dir, &mut |entry| {
+            if entry.name.starts_with("pages-") {
+                indexes.push(format!("{dir}/{}", entry.name));
+            }
+        })
+        .unwrap();
+    assert!(!indexes.is_empty());
+    for index in indexes {
+        storage.remove(&index).unwrap();
+    }
+    storage.1.set(Some(1));
+    let mut reading = Reading::new(storage.clone());
+    reading.open();
+    reading
+}
+
+#[test]
+fn a_page_back_stays_near_where_the_index_does_not_reach() {
+    let (storage, starts) = page_starts(12);
+    let mut reading = reopened_with_a_short_index(&storage);
+    assert_eq!(reading.kept(), starts[12]);
+    reading.run(core_actions::PREV_PAGE);
+    let back = reading.kept();
+    // About the page before: not the last page the index knows (the
+    // eighth), nor where it was.
+    assert!(
+        starts[10] < back && back < starts[12],
+        "{back:?} in {starts:?}"
+    );
+    // And on from there, past the page left.
+    reading.run(core_actions::NEXT_PAGE);
+    reading.run(core_actions::NEXT_PAGE);
+    assert!(reading.kept() > starts[12], "{:?}", reading.kept());
+}
+
+#[test]
+fn an_index_the_storage_stops_taking_is_still_used() {
+    let (storage, starts) = page_starts(12);
+    let mut reading = reopened_with_a_short_index(&storage);
+    // The pages it holds are gone to by number.
+    reading.now += 10;
+    let params = Params::new()
+        .with(params::PATH, BOOK)
+        .with(params::TEXT, "4");
+    let effects = reading.kernel.send_event(
+        Instant(reading.now),
+        Id::new_static("reader.page-entered"),
+        params,
+    );
+    reading.settle(effects);
+    assert_eq!(reading.kept(), starts[3]);
+    reading.run(core_actions::PREV_PAGE);
+    assert_eq!(reading.kept(), starts[2]);
+}
+
+#[test]
+fn a_position_that_cannot_be_laid_out_opens_the_book_at_its_start() {
+    let epub = include_bytes!("../../../samples/library/books/alice-in-wonderland.epub");
+    let storage = Shared::default();
+    let mut reading = Reading::with_book(storage.clone(), EPUB, epub);
+    reading.open();
+    reading.run(core_actions::NEXT_PAGE);
+    let second = reading.kept();
+    reading.run(core_actions::BACK);
+    let dir = format!(
+        ".paperpaw/plugins/reader/books/{:016x}",
+        paperpaw_digest::fnv1a64(EPUB)
+    );
+    storage
+        .write(
+            &format!("{dir}/progress.ini"),
+            b"[progress]
+section = 2
+offset = 100
+",
+        )
+        .unwrap();
+    // Its third part cannot be read (a damaged card, say).
+    storage.2.set(Some("/2.txt"));
+    reading.open();
+    reading.run(core_actions::NEXT_PAGE);
+    assert_eq!(reading.kept(), second);
 }
