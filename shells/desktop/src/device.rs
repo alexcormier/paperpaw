@@ -2,7 +2,7 @@
 
 use std::time::{Duration, Instant as StdInstant};
 
-use paperpaw_core::{Effects, Io, Kernel, KernelError, SpeechCall};
+use paperpaw_core::{Effects, Io, Kernel, KernelBuilder, KernelError, SpeechCall, Warning};
 use paperpaw_graphics::Framebuffer;
 use paperpaw_platform::{
     Battery, ButtonState, DeviceInfo, InputEvent, Instant, Rotation, SystemStatus, WallClock,
@@ -14,9 +14,33 @@ use crate::panel::Panel;
 use crate::profiles::Profile;
 use paperpaw_fs::DirStorage;
 
+/// What the emulated device's storage says it has free (`--free-space`),
+/// where set: screenshots that look the same on every computer.
+static FREE_SPACE: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
+
+/// Makes the storage say it has `bytes` free, whatever the computer's
+/// disk has.
+pub fn set_free_space(bytes: u64) {
+    let _ = FREE_SPACE.set(bytes);
+}
+
+/// The emulated device's storage in the folder `root`.
+pub fn library(root: &std::path::Path) -> std::io::Result<DirStorage> {
+    let storage = DirStorage::new(root)?;
+    Ok(match FREE_SPACE.get() {
+        Some(&bytes) => storage.with_free_space(bytes),
+        None => storage,
+    })
+}
+
 /// How long closing the window waits for answers to what plugins sent as
 /// they saved (e.g. reading progress).
 const SHUT_DOWN_WAIT: Duration = Duration::from_secs(5);
+
+/// Adds plugins to the standard app, after its own: e.g. a plugin being
+/// written, for `paperpaw-dev` (see [`Device::with_plugins`]). Called
+/// again at each restart, as a device builds its kernel at each start.
+pub type AddPlugins = fn(KernelBuilder) -> KernelBuilder;
 
 /// A running device. All kernel calls go through here, so they are
 /// counted against the profile's heap budget.
@@ -27,6 +51,8 @@ pub struct Device {
     /// What a restart needs to build the kernel again.
     user_config: Option<String>,
     root: std::path::PathBuf,
+    /// Plugins added to the standard app.
+    add: Option<AddPlugins>,
     /// The panel controller's frame memory: the kernel writes changed rows
     /// into it, possibly band by band. Not part of the heap budget, as on
     /// the device.
@@ -49,7 +75,13 @@ pub struct Device {
     /// The texts being spoken (emulated), in order: number and when each
     /// ends.
     speech: std::collections::VecDeque<(u32, Instant)>,
+    /// The kernel's warnings since start (the last [`KEPT_WARNINGS`]),
+    /// besides printed: for tools that check there are none.
+    pub warnings: Vec<Warning>,
 }
+
+/// How many of the kernel's warnings [`Device::warnings`] keeps.
+const KEPT_WARNINGS: usize = 1000;
 
 /// Either real time (interactive) or simulated time (headless, tests).
 #[derive(Debug)]
@@ -65,16 +97,29 @@ impl Device {
         storage: DirStorage,
         simulated_time: bool,
     ) -> Result<Self, KernelError> {
+        Self::with_plugins(profile, user_config, storage, simulated_time, None)
+    }
+
+    /// A device whose app has the plugins `add` adds besides the standard
+    /// app's.
+    pub fn with_plugins(
+        profile: &'static Profile,
+        user_config: Option<String>,
+        storage: DirStorage,
+        simulated_time: bool,
+        add: Option<AddPlugins>,
+    ) -> Result<Self, KernelError> {
         budget::set_limit(profile.heap_budget);
         let root = storage.root().to_path_buf();
-        let mut kernel = build_kernel(profile, user_config.as_deref(), storage, Rotation::Deg0)?;
+        let config = user_config.as_deref();
+        let mut kernel = build_kernel(profile, config, storage, Rotation::Deg0, add)?;
         // Turned by the settings: built again for the turned size.
         let rotation = kernel.rotation();
         if rotation != Rotation::Deg0
-            && let Ok(storage) = DirStorage::new(&root)
+            && let Ok(storage) = library(&root)
         {
             drop(kernel);
-            kernel = build_kernel(profile, user_config.as_deref(), storage, rotation)?;
+            kernel = build_kernel(profile, user_config.as_deref(), storage, rotation, add)?;
         }
         let display = turned(profile.device, rotation).display;
         let controller = Framebuffer::new(display.width, display.height, display.format)
@@ -84,6 +129,7 @@ impl Device {
             kernel,
             user_config,
             root,
+            add,
             controller,
             panel: Panel::new(display.width, display.height, display.color),
             wake_at: None,
@@ -92,6 +138,7 @@ impl Device {
             sockets: paperpaw_serve::Sockets::new(|| {}),
             wifi: crate::wifi::Wifi::default(),
             speech: std::collections::VecDeque::new(),
+            warnings: Vec::new(),
             asleep: false,
             rotation,
             clock: if simulated_time {
@@ -102,6 +149,11 @@ impl Device {
         };
         device.report_warnings();
         Ok(device)
+    }
+
+    /// The folder emulating the device's storage.
+    pub fn root(&self) -> &std::path::Path {
+        &self.root
     }
 
     pub fn now(&self) -> Instant {
@@ -172,6 +224,16 @@ impl Device {
     ) {
         let now = self.now();
         let effects = budget::track(|| self.kernel.open_screen(now, screen, params));
+        self.execute(effects);
+    }
+
+    /// Makes a call of the kernel's at the emulated time, counted against
+    /// the heap budget, and does what it asks (draws, ticks, requests):
+    /// for tools, e.g. `|kernel, now| kernel.set_setting(now, id, value)`.
+    pub fn call(&mut self, call: impl FnOnce(&mut Kernel, Instant) -> Effects) {
+        let now = self.now();
+        let kernel = &mut self.kernel;
+        let effects = budget::track(|| call(kernel, now));
         self.execute(effects);
     }
 
@@ -299,6 +361,11 @@ impl Device {
         self.profile.buttons.contains(&name)
     }
 
+    /// Whether the device sleeps: only the power button wakes it.
+    pub fn asleep(&self) -> bool {
+        self.asleep
+    }
+
     fn execute(&mut self, effects: Effects) {
         if effects.restart() {
             return self.restart();
@@ -419,7 +486,7 @@ impl Device {
 
     /// Builds a new kernel, as the device would after a reboot.
     fn restart(&mut self) {
-        let storage = match DirStorage::new(&self.root) {
+        let storage = match library(&self.root) {
             Ok(storage) => storage,
             Err(e) => return eprintln!("restart: {}: {e}", self.root.display()),
         };
@@ -448,6 +515,7 @@ impl Device {
             self.user_config.as_deref(),
             storage,
             self.rotation,
+            self.add,
         ) {
             Ok(new) => {
                 let kernel = &mut self.kernel;
@@ -469,20 +537,28 @@ impl Device {
     }
 
     fn report_warnings(&mut self) {
-        budget::track(|| {
-            for warning in self.kernel.take_warnings() {
-                eprintln!("warning: {warning}");
+        let kernel = &mut self.kernel;
+        let warnings = budget::track(|| kernel.take_warnings());
+        for warning in warnings {
+            eprintln!("warning: {warning}");
+            if self.warnings.len() == KEPT_WARNINGS {
+                self.warnings.remove(0);
             }
-        });
+            // Copied outside the kernel's budget, which the kernel's own
+            // copy leaves as it is dropped.
+            self.warnings.push(warning.clone());
+        }
     }
 }
 
-/// The standard app for `profile`, counted against its heap budget.
+/// The standard app for `profile` (with the plugins `add` adds), counted
+/// against its heap budget.
 fn build_kernel(
     profile: &'static Profile,
     user_config: Option<&str>,
     storage: DirStorage,
     rotation: Rotation,
+    add: Option<AddPlugins>,
 ) -> Result<Kernel, KernelError> {
     budget::track(|| {
         let fonts = if profile.font_packs {
@@ -519,6 +595,9 @@ fn build_kernel(
         }
         if let Some(light) = profile.light {
             builder = builder.plugin(crate::light::Emulated(light));
+        }
+        if let Some(add) = add {
+            builder = add(builder);
         }
         if let Some(rows) = profile.frame_rows {
             builder = builder.frame_rows(rows);

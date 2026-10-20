@@ -330,6 +330,9 @@ impl Harness {
             wifi: None,
             firmware: None,
             native: None,
+            power: paperpaw_sdk::power::Power::normal(),
+            work: paperpaw_sdk::work::WorkStates::none(),
+            reader: true,
             clipboard: false,
             slots: &[],
             screens: &[],
@@ -474,112 +477,6 @@ struct Problem {
     text: String,
 }
 
-/// A problem known, shown by an ignored test of its own (named in
-/// `bug`): widget `id` drawn at one of `sizes` with `what` (part of how
-/// it was drawn, empty for any).
-struct Known {
-    id: &'static str,
-    what: &'static str,
-    sizes: &'static [(u16, u16)],
-    #[allow(dead_code)]
-    bug: &'static str,
-}
-
-/// The problems known, each shown by the ignored test named; the tests
-/// above leave them out, so that they guard everything else.
-const KNOWN: &[Known] = &[
-    Known {
-        id: "widgets.world-clock",
-        what: "",
-        sizes: &[(74, 56), (110, 95), (230, 95), (470, 56), (470, 95)],
-        bug: "the_world_clock_stays_in_one_cell_and_in_a_row",
-    },
-    Known {
-        id: "widgets.word-clock",
-        what: "",
-        sizes: &[(74, 56), (110, 95)],
-        bug: "the_word_clock_stays_in_one_cell",
-    },
-    Known {
-        id: "widgets.countdown",
-        what: "",
-        sizes: &[(74, 56), (110, 95), (470, 56)],
-        bug: "a_countdown_with_a_title_stays_in_one_cell",
-    },
-    Known {
-        id: "widgets.series",
-        what: "widgets.series.numbers = Bool(false)",
-        sizes: &[(110, 95), (230, 200), (470, 420)],
-        bug: "a_series_without_numbers_stays_in_its_place",
-    },
-    Known {
-        id: "widgets.quote",
-        what: "widgets.quote.size = Text(\"core.size.",
-        sizes: &[(110, 95)],
-        bug: "a_quote_in_a_set_size_stays_in_one_cell",
-    },
-    Known {
-        id: "widgets.quote",
-        what: "widgets.quote.align = Text(\"core.align.right\")",
-        sizes: &[(470, 420)],
-        bug: "a_quote_set_right_stays_in_its_place_in_black_and_white",
-    },
-    Known {
-        id: "widgets.day",
-        what: "widgets.day.style = Text(\"widgets.day.style.sheet\")",
-        sizes: &[(110, 95)],
-        bug: "the_day_as_a_sheet_stays_in_one_cell",
-    },
-    Known {
-        id: "widgets.year-progress",
-        what: "",
-        sizes: &[(74, 56), (470, 56)],
-        bug: "the_year_stays_in_a_low_row",
-    },
-    Known {
-        id: "widgets.year-progress",
-        what: "widgets.year-progress.frame = Text(\"core.frame.",
-        sizes: &[(110, 95)],
-        bug: "the_year_in_a_frame_stays_in_one_cell",
-    },
-    Known {
-        id: "widgets.year-progress",
-        what: "widgets.year-progress.style = Text(\"widgets.year.ring\")",
-        sizes: &[(110, 95)],
-        bug: "the_year_as_a_ring_in_one_cell_does_not_panic",
-    },
-    Known {
-        id: "widgets.calendar",
-        what: "",
-        sizes: &[(74, 56), (74, 400), (470, 56)],
-        bug: "the_calendar_stays_in_narrow_and_low_places",
-    },
-    Known {
-        id: "widgets.calendar",
-        what: "widgets.calendar.next = Bool(true)",
-        sizes: &[(110, 95)],
-        bug: "the_calendar_with_the_next_month_stays_in_one_cell",
-    },
-    Known {
-        id: "widgets.greeting",
-        what: "",
-        sizes: &[(74, 56), (470, 56)],
-        bug: "the_greeting_stays_in_a_low_row",
-    },
-    Known {
-        id: "widgets.picture",
-        what: "widgets.picture.folder = Text(\"word word",
-        sizes: &[(110, 95)],
-        bug: "a_long_folder_name_does_not_panic",
-    },
-    Known {
-        id: "widgets.world-clock",
-        what: "tiny",
-        sizes: &[(1, 1), (8, 8), (24, 16), (60, 12)],
-        bug: "the_world_clock_in_the_smallest_cell_with_a_frame_does_not_panic",
-    },
-];
-
 /// Problems found, gathered so that a test reports all at once.
 #[derive(Default)]
 struct Problems(Vec<Problem>);
@@ -621,17 +518,6 @@ impl Problems {
                 });
             }
         }
-    }
-
-    /// Fails with every problem found but those known.
-    fn assert_none(self) {
-        let known = |p: &Problem| {
-            KNOWN
-                .iter()
-                .any(|k| k.id == p.id && p.what.contains(k.what) && k.sizes.contains(&p.size))
-        };
-        let left: Vec<Problem> = self.0.into_iter().filter(|p| !known(p)).collect();
-        Problems(left).assert_all();
     }
 
     /// Fails with every problem found.
@@ -701,7 +587,7 @@ fn time_widgets_stay_in_their_place_at_any_time() {
             }
         }
     }
-    problems.assert_none();
+    problems.assert_all();
 }
 
 #[test]
@@ -718,7 +604,7 @@ fn time_widgets_in_twelve_hours_from_sunday_and_in_german() {
             problems.check(&h, id, &SIZES, what, true);
         }
     }
-    problems.assert_none();
+    problems.assert_all();
 }
 
 /// A library of one book being read, with a cover and a highlight, and
@@ -789,7 +675,7 @@ fn the_other_widgets_stay_in_their_place_empty_and_filled() {
             }
         }
     }
-    problems.assert_none();
+    problems.assert_all();
 }
 
 /// The values to try of a setting: each of a choice, both of a switch,
@@ -861,7 +747,7 @@ fn every_value_of_every_setting_stays_in_its_place() {
             }
         }
     }
-    problems.assert_none();
+    problems.assert_all();
 }
 
 #[test]
@@ -874,7 +760,7 @@ fn widgets_in_places_smaller_than_any_cell_do_not_panic() {
             problems.check_as(&h, &id, &tiny, "tiny", false, false);
         }
     }
-    problems.assert_none();
+    problems.assert_all();
 }
 
 /// The widgets' own files with what no widget wrote: bytes that are no
@@ -925,7 +811,7 @@ fn hostile_files_where_the_widgets_keep_theirs_never_panic() {
             problems.check_as(&h, &id, &sizes, "junk files", false, false);
         }
     }
-    problems.assert_none();
+    problems.assert_all();
 }
 
 /// The CRC of PNG chunks.
@@ -1005,7 +891,7 @@ fn pictures_that_cannot_be_read_never_panic() {
             }
         }
     }
-    problems.assert_none();
+    problems.assert_all();
 }
 
 #[test]
@@ -1021,7 +907,7 @@ fn a_good_picture_is_drawn_inside_its_place() {
         h.set("widgets.picture.fit", fit);
         problems.check(&h, "widgets.picture", &SIZES, fit, true);
     }
-    problems.assert_none();
+    problems.assert_all();
     // Decoded once, the picture's pixels are kept for the next time.
     assert!(h.storage.exists(".paperpaw/plugins/widgets/picture.pixels"));
 }
@@ -1052,7 +938,7 @@ fn folders_of_pictures_that_are_no_folders_never_panic() {
             true,
         );
     }
-    problems.assert_none();
+    problems.assert_all();
 }
 
 #[test]
@@ -1066,13 +952,14 @@ fn a_logo_that_cannot_be_read_never_panics() {
         h.set("core.logo", logo);
         problems.check(&h, "widgets.logo", &SIZES, logo, true);
     }
-    problems.assert_none();
+    problems.assert_all();
 }
 
-// ---- Problems known ----------------------------------------------------------
+// ---- Problems once known ---------------------------------------------------
 //
-// Each shows a problem the tests above leave out (see `KNOWN`), on the
-// grays panel unless the problem is of black and white.
+// Each showed a widget drawing outside its place in a way of its own
+// (all fixed now, kept so they stay fixed), on the grays panel unless
+// the problem was of black and white.
 
 /// Draws widget `id` with `settings` at `sizes`, on `device`, with
 /// `storage`, at an ordinary morning: every problem found.
@@ -1093,7 +980,6 @@ fn problems_of(
 }
 
 #[test]
-#[ignore = "bug: the world clock draws up to 30 px outside a 1x1 cell, 18 px below a 4x1 row and 57 px below a low one"]
 fn the_world_clock_stays_in_one_cell_and_in_a_row() {
     let mut h = Harness::new(&GRAY, MemoryStorage::new());
     let mut problems = Problems::default();
@@ -1106,7 +992,6 @@ fn the_world_clock_stays_in_one_cell_and_in_a_row() {
 }
 
 #[test]
-#[ignore = "bug: the word clock draws far below a 1x1 cell (text at its least size does not fit)"]
 fn the_word_clock_stays_in_one_cell() {
     problems_of(
         &GRAY,
@@ -1119,7 +1004,6 @@ fn the_word_clock_stays_in_one_cell() {
 }
 
 #[test]
-#[ignore = "bug: a countdown with a title draws below a 1x1 cell, and below a low 4x1 row"]
 fn a_countdown_with_a_title_stays_in_one_cell() {
     let settings = [
         ("widgets.countdown.date", "2026-12-24"),
@@ -1144,7 +1028,6 @@ fn a_countdown_with_a_title_stays_in_one_cell() {
 }
 
 #[test]
-#[ignore = "bug: a series without its numbers draws about 10 px outside at every size"]
 fn a_series_without_numbers_stays_in_its_place() {
     let mut h = Harness::new(&GRAY, filled());
     h.settings
@@ -1157,7 +1040,6 @@ fn a_series_without_numbers_stays_in_its_place() {
 }
 
 #[test]
-#[ignore = "bug: a quote in a set size (not fit) draws below a 1x1 cell"]
 fn a_quote_in_a_set_size_stays_in_one_cell() {
     let settings = [("widgets.quote.size", "core.size.large")];
     problems_of(
@@ -1171,7 +1053,6 @@ fn a_quote_in_a_set_size_stays_in_one_cell() {
 }
 
 #[test]
-#[ignore = "bug: some quotes set right draw 5 px past the right edge in black and white"]
 fn a_quote_set_right_stays_in_its_place_in_black_and_white() {
     // Another quote each time it shows: every quote shipped in turn, a
     // minute apart (made within one, it counts as the same showing).
@@ -1193,7 +1074,6 @@ fn a_quote_set_right_stays_in_its_place_in_black_and_white() {
 }
 
 #[test]
-#[ignore = "bug: the day as a sheet draws 10 px outside a 1x1 cell"]
 fn the_day_as_a_sheet_stays_in_one_cell() {
     let settings = [("widgets.day.style", "widgets.day.style.sheet")];
     problems_of(
@@ -1207,7 +1087,6 @@ fn the_day_as_a_sheet_stays_in_one_cell() {
 }
 
 #[test]
-#[ignore = "bug: the year so far draws 41 px below a low 4x1 row (470 x 56)"]
 fn the_year_stays_in_a_low_row() {
     problems_of(
         &GRAY,
@@ -1220,7 +1099,6 @@ fn the_year_stays_in_a_low_row() {
 }
 
 #[test]
-#[ignore = "bug: the year so far in a frame draws 15 px below a 1x1 cell"]
 fn the_year_in_a_frame_stays_in_one_cell() {
     let settings = [("widgets.year-progress.frame", "core.frame.line")];
     problems_of(
@@ -1246,7 +1124,6 @@ fn the_year_as_a_ring_in_one_cell_does_not_panic() {
 }
 
 #[test]
-#[ignore = "bug: the calendar draws 5 px outside narrow (74 px) and low (56 px) places"]
 fn the_calendar_stays_in_narrow_and_low_places() {
     let sizes = [(74, 56), (74, 400), (470, 56)];
     problems_of(&GRAY, MemoryStorage::new(), "widgets.calendar", &[], &sizes).assert_all();
@@ -1266,7 +1143,6 @@ fn the_calendar_with_the_next_month_stays_in_one_cell() {
 }
 
 #[test]
-#[ignore = "bug: the greeting draws 17 px below a low 4x1 row (470 x 56)"]
 fn the_greeting_stays_in_a_low_row() {
     problems_of(
         &GRAY,
@@ -1313,7 +1189,6 @@ fn the_world_clock_in_the_smallest_cell_with_a_frame_does_not_panic() {
 }
 
 #[test]
-#[ignore = "bug: most widgets draw outside the smallest cell (74 x 34, six columns and twelve rows on their side)"]
 fn widgets_stay_in_the_smallest_cell() {
     let mut problems = Problems::default();
     for storage in [MemoryStorage::new(), filled()] {
@@ -1340,7 +1215,6 @@ fn the_moon_beside_its_text_in_a_small_place_does_not_panic() {
 }
 
 #[test]
-#[ignore = "bug: with scalable fonts the year so far draws 6 px below a 2x2 place"]
 fn the_year_with_scalable_fonts_stays_in_its_place() {
     let h = Harness::with_fonts(&GRAY, MemoryStorage::new(), true);
     let mut problems = Problems::default();
@@ -1350,7 +1224,6 @@ fn the_year_with_scalable_fonts_stays_in_its_place() {
 }
 
 #[test]
-#[ignore = "bug: with scalable fonts the word clock in a large set size draws far outside a 2x2 place"]
 fn the_word_clock_in_a_large_size_with_scalable_fonts_stays_in_its_place() {
     let mut h = Harness::with_fonts(&GRAY, MemoryStorage::new(), true);
     h.set("widgets.word-clock.size", "core.size.large");

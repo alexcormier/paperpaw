@@ -30,7 +30,7 @@ use paperpaw_sdk::{
 use crate::catalog::{self, Device, Entry, Index, More, Plugin};
 use crate::list::ENTRY;
 use crate::room::Room;
-use crate::{CATALOG, CHOICE, DOWNLOADED, INSTALLER, failed, trust};
+use crate::{CATALOG, CHOICE, DOWNLOADED, INSTALLER, failed, queue, trust};
 
 /// The answer to *Remove?*.
 const REMOVE: Event<Picked> = Event::new("store.remove");
@@ -362,6 +362,13 @@ impl PageScreen {
                 if self.shown() == Shown::OtherAuthor {
                     INSTALLER.cancel(env.storage);
                     self.job = None;
+                    // The next update waiting has its turn.
+                    let mut out = Vec::new();
+                    queue::next(&env, &mut out);
+                    for command in out {
+                        cx.command(command);
+                    }
+                    self.job = INSTALLER.progress(env.storage);
                 }
                 self.notice = false;
                 self.list.focus = 0;
@@ -373,6 +380,7 @@ impl PageScreen {
                     INSTALLER.cancel(env.storage);
                     out.push(failed(&env, &plugin.name));
                 }
+                queue::next(&env, &mut out);
                 for command in out {
                     cx.command(command);
                 }
@@ -382,7 +390,13 @@ impl PageScreen {
             }
             Some(Row::Stop) => {
                 INSTALLER.cancel(env.storage);
-                self.job = None;
+                // Only this one stops: the next update waiting goes on.
+                let mut out = Vec::new();
+                queue::next(&env, &mut out);
+                for command in out {
+                    cx.command(command);
+                }
+                self.job = INSTALLER.progress(env.storage);
                 self.list.focus = 0;
                 self.redraw(cx);
             }

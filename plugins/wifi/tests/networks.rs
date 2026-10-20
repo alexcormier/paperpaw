@@ -157,6 +157,7 @@ impl Plugin for NoticeKeeper {
             description: "Keeps the notices.".into(),
             version: Version::new(0, 1, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NETWORK,
         }
     }
 
@@ -757,6 +758,7 @@ fn wanted_the_radio_joins_the_saved_network_and_goes_off_after() {
             content_type: None,
             url: None,
             saved: false,
+            headers: Vec::new(),
         },
     );
     device.settle(effects);

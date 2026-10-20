@@ -178,6 +178,7 @@ pub fn manifest(id: &'static str) -> Manifest {
         description: Cow::Borrowed(""),
         version: Version::new(1, 0, 0),
         sdk: SDK_VERSION,
+        uses: paperpaw_sdk::Uses::NETWORK,
     }
 }
 
@@ -220,7 +221,10 @@ impl Plugin for Driver {
                     // A timer that comes again every `repeat` milliseconds.
                     if let Some(every) = params.get(REPEAT).and_then(|r| r.parse().ok()) {
                         let at = env.now.add_millis(every);
-                        out.push(Command::Schedule(event.clone(), params.clone(), at));
+                        out.push(Command::Work(
+                            paperpaw_core::sdk::work::Work::at(event.clone(), at)
+                                .with(params.clone()),
+                        ));
                     }
                 }),
             )?;

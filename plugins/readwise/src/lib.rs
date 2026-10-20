@@ -215,6 +215,7 @@ impl Plugin for Readwise {
             // Released with PaperPaw, also as a file from the store.
             version: paperpaw_sdk::package_version!(),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NETWORK,
         }
     }
 
@@ -225,14 +226,17 @@ impl Plugin for Readwise {
         r.on(events::NOTES_EXPORTED, move |env, exported, out| {
             if send::add_waiting(env.storage, &exported.path).is_ok() {
                 state.borrow_mut().start(env, Start::Export, None, out);
+                retry_later(env, out);
             }
         })?;
+        // Exports still waiting: at the next connection, at the latest in
+        // half an hour (longer while saving).
         let state = run.clone();
-        r.on(events::WIFI_CHANGED, move |env, _, out| {
-            if env.wifi.is_some_and(|w| w.state.is_online()) {
-                state.borrow_mut().start(env, Start::Retry, None, out);
-            }
+        r.on(RETRY_DUE, move |env, (), out| {
+            state.borrow_mut().start(env, Start::Retry, None, out);
+            retry_later(env, out);
         })?;
+        r.on(events::STARTED, |env, _, out| retry_later(env, out))?;
         let state = run.clone();
         r.on(TOKEN_ENTERED, move |env, typed, out| {
             let token = typed.text.trim();
@@ -256,6 +260,19 @@ impl Plugin for Readwise {
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())
+    }
+}
+
+/// Declared work: exports still waiting, sent again.
+const RETRY_DUE: paperpaw_sdk::event::Event = paperpaw_sdk::event::Event::new("readwise.retry");
+
+/// Declares the next try while exports wait.
+fn retry_later(env: &paperpaw_sdk::Env<'_>, out: &mut alloc::vec::Vec<Command>) {
+    if !send::waiting(env.storage).is_empty() {
+        let work = paperpaw_sdk::work::Work::network(RETRY_DUE.id().clone())
+            .within(core::time::Duration::from_secs(30 * 60))
+            .at_moments(paperpaw_sdk::work::Moments::ONLINE);
+        out.push(Command::Work(work));
     }
 }
 

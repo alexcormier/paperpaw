@@ -29,13 +29,22 @@ pub(crate) enum State {
 }
 
 /// The state of `plugin`: how far its download is, whether it waits for
-/// the reader or a restart, whether it is here (and older), or its size.
-pub(crate) fn state(env: &Env<'_>, job: Option<&Progress>, plugin: &Entry) -> State {
+/// the reader, its turn in the queue (`queued`) or a restart, whether it
+/// is here (and older), or its size.
+pub(crate) fn state(
+    env: &Env<'_>,
+    job: Option<&Progress>,
+    queued: &[String],
+    plugin: &Entry,
+) -> State {
     if let Some(job) = job.filter(|j| j.plugin == plugin.id) {
         if job.done >= job.total {
             return State::Busy(env.i18n.tr("store.state.waiting").to_string());
         }
         return State::Busy(format!("{} / {}", job.done, job.total));
+    }
+    if queued.contains(&plugin.id) {
+        return State::Busy(env.i18n.tr("store.state.queued").to_string());
     }
     let restart = env
         .plugins
@@ -53,6 +62,7 @@ pub(crate) fn state(env: &Env<'_>, job: Option<&Progress>, plugin: &Entry) -> St
 }
 
 /// Draws the row of `plugin` in `rect`.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn draw(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
@@ -61,6 +71,7 @@ pub(crate) fn draw(
     focused: bool,
     plugin: &Entry,
     job: Option<&Progress>,
+    queued: &[String],
 ) {
     let Some(font) = style.font(env) else {
         return;
@@ -70,7 +81,7 @@ pub(crate) fn draw(
     let right = f32::from(rect.x) + f32::from(rect.width) - margin;
     let ink = style.focus_ink(focused);
     // The mark first, from the right margin; the name gets the rest.
-    let mark_left = match state(env, job, plugin) {
+    let mark_left = match state(env, job, queued, plugin) {
         State::Offered(text) | State::Busy(text) => {
             let width = font.measure(style.small, &text);
             let x = right - width;
@@ -129,6 +140,30 @@ pub(crate) fn draw(
         &plugin.summary,
         style.focus_faint(focused, 80),
     );
+}
+
+/// Draws `text` as a row's note: one line of small text below its title,
+/// from `left` (where its title begins, after any icon).
+pub(crate) fn draw_note(
+    canvas: &mut Canvas<'_>,
+    env: &Env<'_>,
+    style: &UiStyle,
+    rect: Rect,
+    left: u16,
+    focused: bool,
+    text: &str,
+) {
+    let Some(font) = style.font(env) else {
+        return;
+    };
+    let band = ui::title_area(style, rect);
+    let margin = style.margin as u16;
+    let line = (style.small * 1.3) as u16;
+    let right = rect.x + rect.width - margin;
+    let area = Rect::new(left, band.y + band.height, right.saturating_sub(left), line);
+    let x = f32::from(left + margin);
+    let color = style.focus_faint(focused, 80);
+    ui::draw_label(canvas, &font, style.small, x, area, text, color);
 }
 
 /// Draws `text` as a small filled label ending at `right`, centred on

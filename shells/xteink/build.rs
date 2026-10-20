@@ -77,7 +77,8 @@ fn plugins() {
         crates
             .iter()
             .map(|(name, version)| paperpaw_update::PluginCrate { name, version }),
-    );
+    )
+    .expect("the list of plugins is longer than updates and the web flasher read");
     let code = format!(
         "/// The plugin crates built in (`paperpaw_update::Plugins`), right after
          /// the application descriptor, where updates and the web flasher read them.

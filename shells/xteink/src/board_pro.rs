@@ -21,7 +21,7 @@ use esp_hal::Blocking;
 use esp_hal::delay::Delay;
 use esp_hal::gpio::{Flex, Input, InputConfig, Level, Output, OutputConfig, Pull};
 use esp_hal::i2c::master::{Config as I2cConfig, I2c};
-use esp_hal::peripherals::{FLASH, GPIO40, GPIO41, GPIO42, LPWR, Peripherals, RTC_TIMER, SDHOST};
+use esp_hal::peripherals::{GPIO40, GPIO41, GPIO42, LPWR, Peripherals, RTC_TIMER, SDHOST};
 use esp_hal::spi::Mode;
 use esp_hal::spi::master::{Config as SpiConfig, Spi};
 use esp_hal::time::Rate;
@@ -59,7 +59,8 @@ pub struct CardParts {
 }
 
 /// What the input interrupt reads: the side buttons, and on the I²C bus
-/// the touch screen and the fuel gauge.
+/// the touch screen; the main loop reads the fuel gauge and sets the
+/// clock on the bus too (see `input`).
 pub struct Keys {
     pub up: Input<'static>,
     pub down: Input<'static>,
@@ -189,7 +190,6 @@ pub struct Board {
     pub timers1: TimerGroup<'static, esp_hal::peripherals::TIMG1<'static>>,
     pub rtc: RTC_TIMER<'static>,
     pub low_power: LPWR<'static>,
-    pub flash: FLASH<'static>,
     #[cfg(feature = "remote")]
     pub usb: esp_hal::peripherals::USB_DEVICE<'static>,
     pub radio: (
@@ -303,7 +303,6 @@ impl Board {
             timers1: TimerGroup::new(p.TIMG1),
             rtc: p.RTC_TIMER,
             low_power: p.LPWR,
-            flash: p.FLASH,
             #[cfg(feature = "remote")]
             usb: p.USB_DEVICE,
             radio: (p.WIFI, p.FROM_CPU_INTR0),

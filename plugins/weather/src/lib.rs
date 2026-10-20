@@ -362,11 +362,23 @@ fn check(env: &Env<'_>, state: &Shared, why: Why, out: &mut Vec<Command>) {
         return;
     };
     let mut state = state.borrow_mut();
-    let every = every(env);
+    // Longer while saving; in Offline nothing by itself.
+    let base = every(env);
+    let every = match env.power.every(base as u64) {
+        Some(every) => every as i64,
+        None if why == Why::Due => return,
+        None => base,
+    };
     let age = state.age(env);
     let new_place = state.weather(env).is_none();
     let next = data::until_due(age, every, 5 * 60);
-    out.push(TICK.schedule((), env.now.add_millis(next as u64 * 1000)));
+    // The next look: once due, when the radio is on anyway; nothing
+    // wakes the device or the radio for the weather.
+    let look = paperpaw_sdk::work::Work::network(TICK.id().clone())
+        .optional()
+        .after(core::time::Duration::from_secs(next as u64))
+        .at_moments(paperpaw_sdk::work::Moments::WAKE | paperpaw_sdk::work::Moments::ONLINE);
+    out.push(Command::Work(look));
     if state.asked.is_some_and(|at| env.now.since(at) < PATIENCE) {
         return;
     }
@@ -465,6 +477,7 @@ impl Plugin for Weather {
             // Released with PaperPaw, also as a file from the store.
             version: paperpaw_sdk::package_version!(),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NETWORK,
         }
     }
 
@@ -505,7 +518,7 @@ impl Plugin for Weather {
 
         // When to look: at the start, on waking, once in a network, by
         // the timer, and when a widget is placed or the place changes.
-        for event in [events::STARTED, events::RESUME, events::WIFI_CHANGED, TICK] {
+        for event in [events::STARTED, events::RESUME, TICK] {
             let s = state.clone();
             r.on(event, move |env, _, out| check(env, &s, Why::Due, out))?;
         }

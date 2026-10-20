@@ -75,6 +75,7 @@ impl Plugin for Probe {
             description: Cow::Borrowed("Shows the store's notices."),
             version: SDK_VERSION,
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NETWORK,
         }
     }
 

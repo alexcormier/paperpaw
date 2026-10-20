@@ -37,6 +37,8 @@ impl Kernel {
     pub fn wifi_event(&mut self, now: Instant, event: WifiEvent) -> Effects {
         let _running = self.shared.meter.enter(meter::CORE);
         self.now = now;
+        // While the reader waits for the network, what Wi-Fi says is theirs.
+        self.shared.reader = self.io.http.reader_waits();
         let Some(wifi) = &mut self.shared.wifi else {
             return self.finish();
         };
@@ -147,6 +149,8 @@ impl Kernel {
     pub fn socket_event(&mut self, now: Instant, event: SocketEvent) -> Effects {
         let _running = self.shared.meter.enter(meter::CORE);
         self.now = now;
+        // Servers and sockets are the reader's connection.
+        self.shared.reader = true;
         let storage = &*self.shared.storage;
         self.io
             .sockets
@@ -158,6 +162,8 @@ impl Kernel {
     pub fn server_event(&mut self, now: Instant, event: ServerEvent) -> Effects {
         let _running = self.shared.meter.enter(meter::CORE);
         self.now = now;
+        // Servers and sockets are the reader's connection.
+        self.shared.reader = true;
         let storage = &*self.shared.storage;
         self.io
             .servers
@@ -169,6 +175,8 @@ impl Kernel {
     pub fn http_response(&mut self, now: Instant, response: HttpResponse) -> Effects {
         let _running = self.shared.meter.enter(meter::CORE);
         self.now = now;
+        // The answer to the reader's request is the reader's.
+        self.shared.reader = self.io.http.of_reader(response.id);
         let storage = &*self.shared.storage;
         self.io
             .http

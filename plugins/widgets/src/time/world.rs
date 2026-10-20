@@ -8,8 +8,9 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use paperpaw_sdk::time::{self, LocalTime, TIME_ZONES, TimeZone};
-use paperpaw_sdk::widgets::{self, Align, Drawn, Frame};
-use paperpaw_sdk::{Arg, Canvas, Env, FontHandle, Id, Rect, RegisterError, Registrar};
+use paperpaw_sdk::ui::UiStyle;
+use paperpaw_sdk::widgets::{self, Align, Drawn, Frame, Padding};
+use paperpaw_sdk::{Arg, Canvas, Color, Env, FontHandle, Id, Rect, RegisterError, Registrar};
 
 use paperpaw_sdk::SettingSpec;
 
@@ -66,9 +67,10 @@ const LAYOUTS: [&str; 3] = [
 ];
 
 /// Its settings, kept in the program.
-static SETTINGS: [SettingSpec; 9] = [
+static SETTINGS: [SettingSpec; 10] = [
     widgets::align_spec("widgets.world-clock.align", ID, Align::Left),
     widgets::frame_spec("widgets.world-clock.frame", ID, Frame::None),
+    widgets::padding_spec("widgets.world-clock.padding", ID, Padding::Auto),
     SettingSpec::fixed_choice(
         "widgets.world-clock.place-1",
         "widgets.setting.place-1",
@@ -251,53 +253,91 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         "columns" => true,
         _ => area.width / places.len() as u16 > area.height * 9 / 10 && places.len() > 1,
     };
-    // Where not all have room, those first chosen.
-    let least = line(&font, style.small) as u16;
-    let room = if columns { area.width } else { area.height };
-    places.truncate(super::fitting(room, gap, least, places.len()));
-    let n = places.len() as u16;
     // Rows with the name beside the time where every name has room
     // there, else with the name above it.
-    let row_h = super::share(area.height, gap, n);
-    let stacked = !columns
-        && places.iter().any(|place| {
-            let clock = super::clock_text(env, &place.time);
-            let size = time_size(&font, &clock, f32::from(row_h), f32::from(area.width));
-            font.measure(size, &clock) + style.gap as f32 + font.measure(style.small, &place.name)
-                > f32::from(area.width)
-        });
-    // Places side by side or stacked alike: the times as large as the
-    // widest allows, room for notes where any has one.
+    let stacked_in = |places: &[Place], row_h: u16| {
+        !columns
+            && places.iter().any(|place| {
+                let clock = super::clock_text(env, &place.time);
+                let size = time_size(&font, &clock, f32::from(row_h), f32::from(area.width))
+                    .max(style.small);
+                let name = name_size(&style, row_h);
+                font.measure(size, &clock) + style.gap as f32 + font.measure(name, &place.name)
+                    > f32::from(area.width)
+            })
+    };
+    // Where not all have room, those first chosen: each needs a line of
+    // the small size, two where its name goes above its time.
     let small = line(&font, style.small);
+    let room = if columns { area.width } else { area.height };
+    let mut n = places.len();
+    while n > 1 {
+        let each = super::share(room, gap, n as u16);
+        let least = if stacked_in(&places[..n], each) {
+            2.0 * small
+        } else {
+            small
+        };
+        if f32::from(each) >= least {
+            break;
+        }
+        n -= 1;
+    }
+    places.truncate(n);
+    let n = n as u16;
+    let row_h = super::share(area.height, gap, n);
+    let stacked = stacked_in(&places, row_h);
+    // Places side by side or stacked alike: the times as large as the
+    // widest allows, room for the name and the notes where any has one;
+    // where the height has no room for them, the notes are left out, then
+    // the names.
     let common = {
         let any_note = !stacked && places.iter().any(|p| !note(env, p).is_empty());
-        let notes = if any_note { 2.0 } else { 1.0 };
         let (w, h) = if columns {
             (super::share(area.width, gap, n), area.height)
         } else {
             (area.width, row_h)
         };
+        let mut notes: f32 = if any_note { 2.0 } else { 1.0 };
+        while notes > 0.0 && small * notes + small > f32::from(h) {
+            notes -= 1.0;
+        }
         let room = (f32::from(h) - small * notes).max(small);
-        let size = places
+        let clocks: Vec<String> = places
             .iter()
-            .map(|p| {
-                let clock = super::clock_text(env, &p.time);
-                super::fit_size(&font, room * 0.8, &clock, f32::from(w) * 0.96)
-            })
-            .fold(room * 0.8, f32::min)
-            .max(style.small);
+            .map(|p| super::clock_text(env, &p.time))
+            .collect();
+        let fits = |size: f32| {
+            clocks
+                .iter()
+                .all(|clock| font.measure(size, clock) <= f32::from(w) * 0.96)
+        };
+        let size = widgets::largest_size((room * 0.8).max(style.small), style.small, fits)
+            .unwrap_or(style.small);
         (size, notes)
     };
+    // Too flat for the name above the time: beside it, where it has room
+    // there.
+    let beside = columns
+        && common.1 == 0.0
+        && places.iter().all(|place| {
+            let clock = super::clock_text(env, &place.time);
+            let w = f32::from(super::share(area.width, gap, n));
+            let time = time_size(&font, &clock, f32::from(area.height), w).max(style.small);
+            let name = name_size(&style, area.height);
+            font.measure(time, &clock) + style.gap as f32 + font.measure(name, &place.name) <= w
+        });
     for (i, place) in places.iter().enumerate() {
         let i = i as u16;
         let cell = if columns {
             let w = super::share(area.width, gap, n);
             Rect::new(area.x + i * (w + gap), area.y, w, area.height)
         } else {
-            let h = super::share(area.height, gap, n);
-            Rect::new(area.x, area.y + i * (h + gap), area.width, h)
+            Rect::new(area.x, area.y + i * (row_h + gap), area.width, row_h)
         };
-        if columns || stacked {
+        if beside {
+            draw_row(canvas, env, &font, &look, cell, place);
+        } else if columns || stacked {
             draw_column(canvas, env, &font, &look, cell, place, stacked, common);
         } else {
             draw_row(canvas, env, &font, &look, cell, place);
@@ -311,9 +351,37 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
             } else {
                 Rect::new(cell.x, cell.y - back, cell.width, thick.min(gap))
             };
-            canvas.fill_shaded(between, paperpaw_sdk::Color::gray(200));
+            draw_between(canvas, &style, between, look.ink);
         }
     }
+}
+
+/// The fine line between places: light gray, or on a panel of black and
+/// white alone every third dot of it, counted from its start, so that it
+/// looks alike wherever it falls (a shaded gray there would be dotted in
+/// one place and solid in another).
+fn draw_between(canvas: &mut Canvas<'_>, style: &UiStyle, area: Rect, ink: Color) {
+    if style.grays > 2 {
+        canvas.fill_shaded(area, Color::gray(200));
+        return;
+    }
+    let along_x = area.width >= area.height;
+    canvas.draw_mask(
+        i32::from(area.x),
+        i32::from(area.y),
+        u32::from(area.width),
+        u32::from(area.height),
+        ink,
+        |x, y| {
+            let at = if along_x { x } else { y };
+            if at % 3 == 0 { 255 } else { 0 }
+        },
+    );
+}
+
+/// The size of a place's name beside its time in a row `height` high.
+fn name_size(style: &UiStyle, height: u16) -> f32 {
+    style.text.min(f32::from(height) * 0.4).max(style.small)
 }
 
 /// A place as a row: its name and note on the left, the time large on
@@ -353,7 +421,7 @@ fn draw_row(
         (width - time_width - style.gap as f32).max(0.0) as u16,
         cell.height,
     );
-    let name_size = style.text.min(f32::from(cell.height) * 0.5);
+    let name_size = name_size(&style, cell.height);
     let name_line = line(font, name_size);
     let note_line = if note.is_empty() {
         0.0
@@ -412,7 +480,8 @@ fn draw_row(
 /// The size of the time in a row `height` high and `width` wide: up to
 /// half the width, and most of the height.
 fn time_size(font: &FontHandle<'_>, clock: &str, height: f32, width: f32) -> f32 {
-    super::fit_size(font, height * 0.62, clock, width * 0.5)
+    let fits = |size: f32| font.measure(size, clock) <= width * 0.5;
+    widgets::largest_size(height * 0.62, 1.0, fits).unwrap_or(1.0)
 }
 
 /// A place as a column: its name small above, the time large, the note
@@ -446,19 +515,22 @@ fn draw_column(
     let total = small * notes + big;
     let mut y = f32::from(cell.y) + (f32::from(cell.height) - total).max(0.0) / 2.0;
     let row = |y: f32, h: f32| Rect::new(cell.x, y as u16, cell.width, h as u16);
-    super::label(
-        canvas,
-        font,
-        style.small,
-        align,
-        row(y, small),
-        &name,
-        look.faint,
-    );
-    y += small;
+    // The name where there is room for it (see `draw`), the note too.
+    if notes >= 1.0 {
+        super::label(
+            canvas,
+            font,
+            style.small,
+            align,
+            row(y, small),
+            &name,
+            look.faint,
+        );
+        y += small;
+    }
     super::label(canvas, font, size, align, row(y, big), &clock, look.ink);
     y += big;
-    if !note.is_empty() {
+    if notes >= 2.0 && !note.is_empty() {
         super::label(
             canvas,
             font,
@@ -474,6 +546,34 @@ fn draw_column(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn places_neither_overlap_nor_leave_their_place() {
+        use paperpaw_graphics::Framebuffer;
+        use paperpaw_sdk::PixelFormat;
+
+        assert_eq!(super::super::word_clock::drawn_outside(ID.as_str()), None);
+        let h = crate::harness::Harness::new(paperpaw_sdk::MemoryStorage::new());
+        let env = h.env();
+        let display = crate::harness::DEVICE.display;
+        let mut fb = Framebuffer::new(display.width, display.height, PixelFormat::Gray4).unwrap();
+        for area in [
+            Rect::new(10, 10, 74, 53),
+            Rect::new(10, 10, 190, 53),
+            Rect::new(10, 10, 190, 150),
+            Rect::new(10, 10, 74, 300),
+        ] {
+            let mut described = Vec::new();
+            draw(&mut fb.canvas().describing(&mut described), &env, area);
+            let parts: Vec<Rect> = described.iter().map(|d| d.area).collect();
+            assert!(!parts.is_empty(), "{area:?}");
+            for (i, a) in parts.iter().enumerate() {
+                for b in &parts[i + 1..] {
+                    assert!(a.intersection(b).is_none(), "{area:?}: {a:?} over {b:?}");
+                }
+            }
+        }
+    }
 
     /// Wednesday, 14 October 2026, 10:41 in Berlin (summer time).
     const NOW: i64 = 1_791_967_260;

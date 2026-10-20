@@ -1,6 +1,8 @@
 //! Setting the clock over the network: SNTP's messages (RFC 4330), a
 //! request and the time in its answer; and Unix time of a calendar date.
 
+use core::net::SocketAddr;
+
 /// The servers asked: many, near and spread by DNS.
 pub const SERVER: &str = "pool.ntp.org";
 pub const PORT: u16 = 123;
@@ -9,37 +11,54 @@ pub const MESSAGE: usize = 48;
 /// Seconds from 1900 (NTP's start) to 1970 (Unix's).
 const NTP_TO_UNIX: i64 = 2_208_988_800;
 
-/// An SNTP request (version 4, from a client).
-pub fn request() -> [u8; MESSAGE] {
-    let mut message = [0u8; MESSAGE];
-    message[0] = (4 << 3) | 3;
-    message
+/// An SNTP request sent: the server asked, and a random number sent as
+/// its transmit time, which the server's answer gives back as its
+/// originate time. Only an answer from that server with that number is
+/// taken, not a stray or forged one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Asked {
+    pub server: SocketAddr,
+    pub nonce: u64,
 }
 
-/// The time an SNTP answer gives, in milliseconds since 1970 (UTC), if it
-/// is a server's answer that tells one.
-pub fn answer(message: &[u8]) -> Option<i64> {
-    let message = message.get(..MESSAGE)?;
-    let mode = message[0] & 7;
-    let stratum = message[1];
-    // From a server (4), synchronised (stratum 1 to 15; 0 is a refusal).
-    if mode != 4 || !(1..=15).contains(&stratum) {
-        return None;
+impl Asked {
+    /// The request (version 4, from a client).
+    pub fn request(&self) -> [u8; MESSAGE] {
+        let mut message = [0u8; MESSAGE];
+        message[0] = (4 << 3) | 3;
+        message[40..48].copy_from_slice(&self.nonce.to_be_bytes());
+        message
     }
-    // The transmit time: seconds since 1900 and a fraction of 2^32.
-    let seconds = u32::from_be_bytes(message[40..44].try_into().ok()?);
-    let fraction = u32::from_be_bytes(message[44..48].try_into().ok()?);
-    if seconds == 0 {
-        return None;
+
+    /// The time an answer that came from `from` gives, in milliseconds
+    /// since 1970 (UTC), if it is the server's answer to this request and
+    /// tells one.
+    pub fn answer(&self, message: &[u8], from: SocketAddr) -> Option<i64> {
+        let message = message.get(..MESSAGE)?;
+        if from != self.server || message[24..32] != self.nonce.to_be_bytes() {
+            return None;
+        }
+        let mode = message[0] & 7;
+        let stratum = message[1];
+        // From a server (4), synchronised (stratum 1 to 15; 0 is a refusal).
+        if mode != 4 || !(1..=15).contains(&stratum) {
+            return None;
+        }
+        // The transmit time: seconds since 1900 and a fraction of 2^32.
+        let seconds = u32::from_be_bytes(message[40..44].try_into().ok()?);
+        let fraction = u32::from_be_bytes(message[44..48].try_into().ok()?);
+        if seconds == 0 {
+            return None;
+        }
+        // NTP's seconds roll over in 2036: a time before 2020 (3_786_825_600
+        // seconds after 1900) is one after the roll-over.
+        let mut seconds = i64::from(seconds);
+        if seconds < 3_786_825_600 {
+            seconds += 1 << 32;
+        }
+        let ms = (i64::from(fraction) * 1000) >> 32;
+        Some((seconds - NTP_TO_UNIX) * 1000 + ms)
     }
-    // NTP's seconds roll over in 2036: a time before 2020 (3_786_825_600
-    // seconds after 1900) is one after the roll-over.
-    let mut seconds = i64::from(seconds);
-    if seconds < 3_786_825_600 {
-        seconds += 1 << 32;
-    }
-    let ms = (i64::from(fraction) * 1000) >> 32;
-    Some((seconds - NTP_TO_UNIX) * 1000 + ms)
 }
 
 /// Seconds since 1970 (UTC) of a calendar date and time (UTC), for the
@@ -60,19 +79,36 @@ pub fn unix_seconds(year: i32, month: u32, day: u32, hour: u32, minute: u32, sec
 mod tests {
     use super::*;
 
-    /// An answer from a server: mode 4, stratum 2, the transmit time.
+    /// A request to a server of the pool.
+    fn asked() -> Asked {
+        Asked {
+            server: SocketAddr::from(([192, 0, 2, 7], PORT)),
+            nonce: 0x0123_4567_89AB_CDEF,
+        }
+    }
+
+    /// The server's answer to `asked()`: mode 4, stratum 2, the request's
+    /// transmit time as its originate time, and its own transmit time.
     fn answer_at(seconds: u32, fraction: u32) -> [u8; MESSAGE] {
         let mut message = [0u8; MESSAGE];
         message[0] = (4 << 3) | 4;
         message[1] = 2;
+        message[24..32].copy_from_slice(&asked().request()[40..48]);
         message[40..44].copy_from_slice(&seconds.to_be_bytes());
         message[44..48].copy_from_slice(&fraction.to_be_bytes());
         message
     }
 
+    /// The time `message` gives as an answer from the server asked.
+    fn answer(message: &[u8]) -> Option<i64> {
+        asked().answer(message, asked().server)
+    }
+
     #[test]
-    fn asks_as_a_client() {
-        assert_eq!(request()[0], 0x23);
+    fn asks_as_a_client_with_its_number() {
+        let request = asked().request();
+        assert_eq!(request[0], 0x23);
+        assert_eq!(request[40..48], 0x0123_4567_89AB_CDEF_u64.to_be_bytes());
     }
 
     #[test]
@@ -100,6 +136,28 @@ mod tests {
         client[0] = (4 << 3) | 3;
         assert_eq!(answer(&client), None);
         assert_eq!(answer(&[0; 12]), None);
+    }
+
+    #[test]
+    fn answers_to_another_request_tell_no_time() {
+        let mut other = answer_at(4_000_000_000, 0);
+        other[31] ^= 1;
+        assert_eq!(answer(&other), None);
+        // Without the number given back.
+        let mut without = answer_at(4_000_000_000, 0);
+        without[24..32].fill(0);
+        assert_eq!(answer(&without), None);
+    }
+
+    #[test]
+    fn answers_from_elsewhere_tell_no_time() {
+        let message = answer_at(4_000_000_000, 0);
+        let asked = asked();
+        assert!(asked.answer(&message, asked.server).is_some());
+        let other_host = SocketAddr::from(([192, 0, 2, 8], PORT));
+        assert_eq!(asked.answer(&message, other_host), None);
+        let other_port = SocketAddr::from(([192, 0, 2, 7], 1234));
+        assert_eq!(asked.answer(&message, other_port), None);
     }
 
     #[test]

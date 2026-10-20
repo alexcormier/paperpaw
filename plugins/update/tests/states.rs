@@ -1,7 +1,7 @@
 //! The update page's states with the real kernel, by buttons and by
 //! touch: installing with its bar (no way out half way), installed and
-//! the restart, failed, an own build whose key is trusted only when
-//! chosen, files for another device; what is said after the restart;
+//! the restart, failed, an own build whose key the reader accepts at
+//! each install, files for another device; what is said after the restart;
 //! an update offered once at start (also as version 1 of `offered.txt`
 //! has it); hostile and late answers of the update server; versions with
 //! pre-releases.
@@ -19,7 +19,6 @@ use paperpaw_plugin_update::{CHECK, OPEN, Update};
 use paperpaw_sdk::builtin::{actions, params, slots};
 use paperpaw_sdk::firmware::{
     Firmware, FirmwareCommand, FirmwareState, InstallFailure, PLUGINS_AT, PluginCrate, Plugins,
-    trusted_keys,
 };
 use paperpaw_sdk::{
     Canvas, Cx, DeviceInfo, DirEntry, DisplayInfo, Env, Handled, Id, InputCaps, Instant, Manifest,
@@ -70,7 +69,8 @@ fn update_file(project: &str, version: &str, seed: &[u8; 32]) -> Vec<u8> {
     let list = Plugins::record([PluginCrate {
         name: "paperpaw-plugin-stats",
         version,
-    }]);
+    }])
+    .unwrap();
     image[PLUGINS_AT..PLUGINS_AT + list.len()].copy_from_slice(&list);
     let trailer = paperpaw_update::sign(&image, seed).unwrap();
     image.extend_from_slice(&trailer.to_bytes());
@@ -132,6 +132,7 @@ impl Plugin for Notices {
             description: Cow::Borrowed(""),
             version: Version::new(0, 1, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NETWORK,
         }
     }
 
@@ -361,7 +362,9 @@ fn installing_shows_its_bar_and_cannot_be_left() {
     assert_eq!(
         d.firmware_commands(),
         [FirmwareCommand::Install {
-            path: CARD.to_string()
+            path: CARD.to_string(),
+            key: None,
+            older: false,
         }]
     );
     // Kept through the restart, to say how it went.
@@ -424,34 +427,37 @@ fn a_failed_install_says_why_and_closes() {
 }
 
 #[test]
-fn an_own_build_is_trusted_only_when_chosen() {
+fn an_own_build_installs_only_with_its_key_accepted() {
     let mut d = Device::with_card(&update_file(PROJECT, "0.5.0", &OWN), false);
     d.run(OPEN);
     let shown = d.shown();
     assert!(shown.contains("PaperPaw 0.5.0, own build"), "{shown}");
     assert!(shown.contains("Trust and install"), "{shown}");
-    // "Not now": nothing trusted, nothing installed.
+    // "Not now": nothing installed.
     d.run(actions::DOWN);
     assert_eq!(d.focused().as_deref(), Some("Not now"));
     d.run(actions::CONFIRM);
     assert_ne!(d.screen(), Some(PAGE));
-    assert!(trusted_keys(&d.storage).is_empty());
     assert!(d.firmware_commands().is_empty());
 
+    // Accepted: the install names the key shown.
     d.run(OPEN);
     d.run(actions::CONFIRM);
     assert_eq!(
-        trusted_keys(&d.storage),
-        [paperpaw_update::public_key(&OWN)]
+        d.firmware_commands(),
+        [FirmwareCommand::Install {
+            path: CARD.to_string(),
+            key: Some(paperpaw_update::public_key(&OWN)),
+            older: false,
+        }]
     );
-    assert_eq!(d.firmware_commands().len(), 1);
-    // Trusted from then on: no longer an unknown key.
+    // Asked again at the next install: nothing on the card trusts a key.
     d.state(FirmwareState::Failed(InstallFailure::Write));
     d.run(actions::CONFIRM);
     d.run(OPEN);
     let shown = d.shown();
-    assert!(!shown.contains("own build"), "{shown}");
-    assert!(shown.contains("Install"), "{shown}");
+    assert!(shown.contains("own build"), "{shown}");
+    assert!(shown.contains("Trust and install"), "{shown}");
 }
 
 #[test]

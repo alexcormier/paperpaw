@@ -167,6 +167,20 @@ pub fn track<R>(f: impl FnOnce() -> R) -> R {
     f()
 }
 
+/// Runs `f` with allocation tracking off: for the emulator's own
+/// bookkeeping inside kernel calls (the trace's records), which the
+/// device does not have.
+pub fn untracked<R>(f: impl FnOnce() -> R) -> R {
+    struct Restore(bool);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            TRACKING.with(|t| t.set(self.0));
+        }
+    }
+    let _restore = Restore(TRACKING.with(|t| t.replace(false)));
+    f()
+}
+
 /// Whether the budget was given on the command line, over the profile's.
 static OVERRIDDEN: AtomicBool = AtomicBool::new(false);
 
@@ -256,6 +270,36 @@ pub fn report(depth: usize) {
         println!("{:>8.1} KiB {count:>6}x  {site}", bytes as f64 / 1024.0);
     }
     TRACKING.with(|t| t.set(tracking));
+}
+
+/// Starts the peak anew from what is live now, e.g. to measure the peak
+/// of one screen.
+pub fn reset_peak() {
+    PEAK.store(LIVE.load(Ordering::Relaxed), Ordering::Relaxed);
+}
+
+/// Live tracked allocations grouped by call site (`depth` frames of
+/// PaperPaw code each), largest first: site, bytes, count. Empty unless
+/// [`profile`] was called.
+pub fn sites(depth: usize) -> Vec<(String, usize, usize)> {
+    let tracking = TRACKING.with(|t| t.replace(false));
+    let mut groups: HashMap<String, (usize, usize)> = HashMap::new();
+    if let Ok(sites) = SITES.lock()
+        && let Some(sites) = sites.as_ref()
+    {
+        for (size, backtrace) in sites.values() {
+            let group = groups.entry(site_of(backtrace, depth)).or_default();
+            group.0 += size + HEADER;
+            group.1 += 1;
+        }
+    }
+    let mut groups: Vec<_> = groups
+        .into_iter()
+        .map(|(site, (bytes, count))| (site, bytes, count))
+        .collect();
+    groups.sort_by_key(|(_, bytes, _)| std::cmp::Reverse(*bytes));
+    TRACKING.with(|t| t.set(tracking));
+    groups
 }
 
 /// Current heap usage of the kernel and its plugins.

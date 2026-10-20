@@ -7,13 +7,15 @@ use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::actions;
 use paperpaw_sdk::ui::UiStyle;
-use paperpaw_sdk::widgets::{self, Align, Frame, Look, Size, Widget, WidgetSpec, WidgetTarget};
+use paperpaw_sdk::widgets::{
+    self, Align, Frame, Look, Padding, Size, Widget, WidgetSpec, WidgetTarget,
+};
 use paperpaw_sdk::{Canvas, Command, Env, Id, Point, Rect, RegisterError, Registrar};
 
 use super::{
-    Book, Covers, Lines, THICKNESSES, add_settings, below_caption, caption, chosen, cover_size,
-    current, draw_bar, draw_cover, draw_message, draw_percent_alone, draw_ring, draw_ring_percent,
-    frame_height, percent_text, place_x, text_size, thickness,
+    Book, Covers, Lines, Role, THICKNESSES, add_settings, below_caption, caption, chosen,
+    cover_size, current, draw_bar, draw_cover, draw_message, draw_percent_alone, draw_ring,
+    draw_ring_percent, frame_height, percent_text, place_x, text_size, thickness,
 };
 use paperpaw_sdk::SettingSpec;
 
@@ -30,9 +32,10 @@ const STYLES: [&str; 4] = [
 ];
 
 /// Its settings, kept in the program.
-static SETTINGS: [SettingSpec; 9] = [
+static SETTINGS: [SettingSpec; 10] = [
     widgets::align_spec("widgets.progress.align", ID, Align::Center),
     widgets::frame_spec("widgets.progress.frame", ID, Frame::None),
+    widgets::padding_spec("widgets.progress.padding", ID, Padding::Auto),
     widgets::size_spec("widgets.progress.size", ID, Size::Medium, false),
     SettingSpec::fixed_choice(
         "widgets.progress.style",
@@ -227,7 +230,12 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, book: Option<&Book>,
     // Too small for a ring: the percentage alone.
     if percent_alone(env, area) {
         let align = widgets::align(env, WIDGET);
-        draw_percent_alone(canvas, env, &look, area, align, book.percent());
+        if area.width >= area.height * 4 && !lines.is_empty() {
+            // Wide but low: the percentage, the title beside it.
+            draw_percent_beside(canvas, env, &look, area, book, &mut lines);
+        } else {
+            draw_percent_alone(canvas, env, &look, area, align, book.percent());
+        }
         return;
     }
     let cover = cover_at(env, &look, area, book);
@@ -270,15 +278,64 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, book: Option<&Book>,
     }
 }
 
+/// The percentage as large as the height allows, and the title in the
+/// rest of the width beside it (where it fits), the two together placed
+/// as the alignment says.
+fn draw_percent_beside(
+    canvas: &mut Canvas<'_>,
+    env: &Env<'_>,
+    look: &Look,
+    area: Rect,
+    book: &Book,
+    lines: &mut Lines<'_>,
+) {
+    let style = UiStyle::new(env);
+    let Some(font) = style.font(env) else {
+        return;
+    };
+    let gap = style.gap as u16;
+    let text = percent_text(env, book.percent());
+    let size = widgets::largest_size(style.title * 2.0, style.small, |s| {
+        widgets::line_height(env, s) <= area.height
+    })
+    .unwrap_or(style.small);
+    let percent_w = (font.measure(size, &text) + 1.0) as u16;
+    let rest = area.width.saturating_sub(percent_w + gap);
+    lines.fit(env, rest, area.height);
+    let text_w = lines
+        .lines
+        .iter()
+        .map(|l| font.measure(l.size, &l.text) as u16)
+        .max()
+        .unwrap_or(0);
+    let total = if lines.is_empty() {
+        percent_w
+    } else {
+        percent_w + gap + text_w
+    };
+    let x = place_x(area, total.min(area.width), widgets::align(env, WIDGET));
+    let at = Rect::new(x, area.y, percent_w, area.height);
+    widgets::draw_line(canvas, env, at, Align::Left, size, size, &text, look.ink);
+    if !lines.is_empty() {
+        let beside = Rect::new(x + percent_w + gap, area.y, text_w, area.height);
+        lines.draw(canvas, env, beside, Align::Left);
+    }
+}
+
 /// The title and the author, as far as shown.
 fn texts<'b>(env: &Env<'_>, look: &Look, book: &'b Book) -> Lines<'b> {
     let style = UiStyle::new(env);
     let mut lines = Lines::new();
     if widgets::shows(env, WIDGET, "title") {
-        lines.add(text_size(env, WIDGET), book.title.as_str(), look.ink);
+        lines.add(
+            Role::Title,
+            text_size(env, WIDGET),
+            book.title.as_str(),
+            look.ink,
+        );
     }
     if widgets::shows(env, WIDGET, "author") {
-        lines.add(style.small, book.author.as_str(), look.faint);
+        lines.add(Role::Note, style.small, book.author.as_str(), look.faint);
     }
     lines
 }
@@ -302,7 +359,7 @@ fn ring_layout(env: &Env<'_>, area: Rect, lines: &mut Lines<'_>) -> RingLayout {
         // Beside the ring, room for a title of some length.
         let d = area.height.min(area.width * 2 / 5);
         let room = area.width.saturating_sub(d + gap * 3 / 2);
-        if f32::from(room) >= style.small * 6.0 && !lines.lines.is_empty() {
+        if f32::from(room) >= style.small * 6.0 && !lines.is_empty() {
             let ring = Rect::new(area.x, area.y + (area.height - d) / 2, d, d);
             let text = Rect::new(area.x + area.width - room, area.y, room, area.height);
             return RingLayout {
@@ -311,18 +368,32 @@ fn ring_layout(env: &Env<'_>, area: Rect, lines: &mut Lines<'_>) -> RingLayout {
             };
         }
     }
-    lines.fit(env, area.height / 2);
-    let text_h = lines.height(env);
-    let below = text_h + gap / 2;
-    let d = area.width.min(area.height.saturating_sub(below));
-    if d >= area.height / 2 && !lines.lines.is_empty() {
-        let top = area.y + (area.height - (d + below).min(area.height)) / 2;
-        let ring = Rect::new(place_x(area, d, align), top, d, d);
-        let text = Rect::new(area.x, top + d + gap / 2, area.width, text_h);
-        return RingLayout {
-            ring,
-            text: Some((text, false)),
+    // Below the ring where it is as wide as the place (the text keeps the
+    // rest of the height) or half as high: the text in half the height,
+    // else in one line.
+    for budget in [area.height / 2, 0] {
+        let budget = if budget > 0 {
+            budget
+        } else {
+            let first = lines.lines.iter().find(|l| l.role == Role::Title);
+            match first.or(lines.lines.first()) {
+                Some(line) => widgets::line_height(env, line.size.min(style.text)),
+                None => break,
+            }
         };
+        lines.fit(env, area.width, budget);
+        let text_h = lines.height(env);
+        let below = text_h + gap / 2;
+        let d = area.width.min(area.height.saturating_sub(below));
+        if (d >= area.height / 2 || d >= area.width) && d > 0 && !lines.is_empty() {
+            let top = area.y + (area.height - (d + below).min(area.height)) / 2;
+            let ring = Rect::new(place_x(area, d, align), top, d, d);
+            let text = Rect::new(area.x, top + d + gap / 2, area.width, text_h);
+            return RingLayout {
+                ring,
+                text: Some((text, false)),
+            };
+        }
     }
     let d = area.width.min(area.height);
     let ring = Rect::new(
@@ -402,7 +473,12 @@ fn ring_inner(env: &Env<'_>, at: Rect) -> u32 {
 fn round_lines<'b>(env: &Env<'b>, look: &Look, book: &'b Book) -> Lines<'b> {
     let style = UiStyle::new(env);
     let mut lines = Lines::new();
-    lines.add(style.small, percent_text(env, book.percent()), look.faint);
+    lines.add(
+        Role::Main,
+        style.small,
+        percent_text(env, book.percent()),
+        look.faint,
+    );
     lines.lines.extend(texts(env, look, book).lines);
     lines
 }
@@ -432,7 +508,7 @@ fn draw_bar_and_text(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, area: 
     let align = widgets::align(env, WIDGET);
     let mut lines = texts(env, look, book);
     let row = widgets::line_height(env, style.small);
-    lines.fit(env, area.height.saturating_sub(row + gap));
+    lines.fit(env, area.width, area.height.saturating_sub(row + gap));
     let text_h = lines.height(env);
     let total = (text_h + gap + row).min(area.height);
     let top = area.y + (area.height - total) / 2;

@@ -86,14 +86,7 @@ impl Psram {
     /// free beside it (shared with everything else kept there).
     pub fn room(&self) -> Option<CodeRoom> {
         let free = esp_alloc::HEAP.free_caps(MemoryCapability::External.into()) as u64;
-        Some(CodeRoom {
-            total: self.used + free,
-            used: self.used,
-            granule: CACHE_LINE as u32,
-            max_plugins: None,
-            placed: self.placed,
-            shared: true,
-        })
+        Some(CodeRoom::in_psram(self.used, free, self.placed))
     }
 }
 

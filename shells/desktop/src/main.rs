@@ -3,24 +3,14 @@
 //! Runs the real kernel and plugins against an emulated e-ink device,
 //! interactively in a window, or headless for screenshots and CI.
 
-mod budget;
-mod device;
 mod gui;
-mod headless;
-mod http;
-mod light;
-mod panel;
-mod profiles;
-mod trace;
-mod wifi;
+mod record;
 
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use device::Device;
-
-#[global_allocator]
-static ALLOCATOR: budget::BudgetAllocator = budget::BudgetAllocator;
+use paperpaw_emulator::device::Device;
+use paperpaw_emulator::{budget, device, headless, profiles, trace};
 
 const USAGE: &str = "\
 PaperPaw emulator
@@ -40,9 +30,13 @@ OPTIONS:
     --library <dir>       Folder emulating the device storage
                           (default: samples/library)
     --screenshot-dir <d>  Where F12 saves screenshots (default: out)
+    --record <file>       Write what is pressed, tapped and swiped in the window
+                          as a flow's steps, for `paperpaw-dev flows`
     --heap-budget <KiB>   Override the profile's heap budget (`none` = unlimited)
     --trace-alloc <bytes> Print every kernel allocation of at least this size, with where
     --heap-report         After a headless run, list the live heap by call site
+    --free-space <bytes>  Say the storage has this much free, not the computer's
+                          disk (screenshots alike everywhere)
     --trace               Print what each frame's drawing asks the storage, band by band,
                           and how long it takes
     -h, --help            Show this help
@@ -65,6 +59,7 @@ struct Options {
     script: Option<String>,
     screenshot: Option<PathBuf>,
     screenshot_dir: Option<PathBuf>,
+    record: Option<PathBuf>,
     library: Option<PathBuf>,
     /// `Some(None)` removes the budget.
     heap_budget: Option<Option<usize>>,
@@ -93,8 +88,11 @@ fn run() -> Result<(), String> {
         .library
         .clone()
         .unwrap_or_else(|| PathBuf::from("samples/library"));
-    let storage = paperpaw_fs::DirStorage::new(&library)
-        .map_err(|e| format!("library {}: {e}", library.display()))?;
+    let storage =
+        device::library(&library).map_err(|e| format!("library {}: {e}", library.display()))?;
+    if options.record.is_some() && options.headless {
+        return Err("--record records the window: not with --headless".into());
+    }
     if options.heap_report {
         if !options.headless {
             return Err("--heap-report requires --headless".into());
@@ -138,10 +136,14 @@ fn run() -> Result<(), String> {
     if options.script.is_some() || options.screenshot.is_some() {
         return Err("--script and --screenshot require --headless".into());
     }
+    let recorder = match &options.record {
+        Some(path) => Some(record::Recorder::create(path, profile.device.id)?),
+        None => None,
+    };
     let dir = options
         .screenshot_dir
         .unwrap_or_else(|| PathBuf::from("out"));
-    gui::run(device, dir)
+    gui::run(device, dir, recorder)
 }
 
 /// Reads `--config` and appends `--set` overrides as config sections.
@@ -192,10 +194,19 @@ fn parse_args(mut args: impl Iterator<Item = String>) -> Result<Option<Options>,
             "--script" => options.script = Some(value("--script")?),
             "--screenshot" => options.screenshot = Some(PathBuf::from(value("--screenshot")?)),
             "--library" => options.library = Some(PathBuf::from(value("--library")?)),
+            "--record" => options.record = Some(PathBuf::from(value("--record")?)),
             "--screenshot-dir" => {
                 options.screenshot_dir = Some(PathBuf::from(value("--screenshot-dir")?));
             }
             "--heap-report" => options.heap_report = true,
+            "--free-space" => {
+                let bytes = value("--free-space")?;
+                device::set_free_space(
+                    bytes
+                        .parse()
+                        .map_err(|_| format!("--free-space expects bytes, got `{bytes}`"))?,
+                );
+            }
             "--trace" => trace::start(),
             "--trace-alloc" => {
                 let bytes = value("--trace-alloc")?;

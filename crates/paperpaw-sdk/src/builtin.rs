@@ -576,6 +576,23 @@ pub mod events {
     /// ([`Firmware::state`](crate::firmware::Firmware), see
     /// [`firmware`](crate::firmware)).
     pub const FIRMWARE_CHANGED: Event<()> = Event::new("core.firmware-changed");
+    /// The power level or mode changed ([`power`](crate::power)), e.g. by
+    /// the battery in Automatic.
+    pub const POWER_CHANGED: Event<()> = Event::new("core.power-changed");
+    /// A plugin's declared work was taken out because it can never run
+    /// (its network switched off, not declared in its manifest), sent to
+    /// that plugin; work only held back stays queued (see
+    /// [`work`](crate::work)).
+    pub const WORK_REFUSED: Event<crate::work::WorkRefused> = Event::new("core.work-refused");
+    /// What held work or requests back no longer does (the mode changed,
+    /// the reader switched a plugin's network on, went online): a plugin
+    /// told [`Retry::WhenAllowed`](crate::work::Retry::WhenAllowed) may
+    /// try again.
+    pub const WORK_ALLOWED: Event<()> = Event::new("core.work-allowed");
+    /// A plugin's declared work changed its state or its progress (at most
+    /// once a second), sent to that plugin, e.g. for its page; the work's
+    /// id comes as [`params::ID`](super::params::ID).
+    pub const WORK_CHANGED: Event<()> = Event::new("core.work-changed");
 }
 
 /// Status items of the kernel (see [`status`](crate::status)).

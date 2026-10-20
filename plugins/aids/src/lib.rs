@@ -152,6 +152,7 @@ impl Plugin for Aids {
             // Released with PaperPaw, also as a file from the store.
             version: paperpaw_sdk::package_version!(),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NOTHING,
         }
     }
 

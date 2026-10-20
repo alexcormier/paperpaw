@@ -75,6 +75,7 @@ fn manifest(id: Id, name: &'static str, description: &'static str) -> Manifest {
         description: Cow::Borrowed(description),
         version: Version::new(0, 1, 0),
         sdk: SDK_VERSION,
+        uses: paperpaw_sdk::Uses::NOTHING,
     }
 }
 

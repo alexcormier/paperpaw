@@ -116,6 +116,17 @@ pub struct Env<'a> {
     /// How native code plugins are loaded here, e.g. which builds fit
     /// (see [`native`](crate::native)); `None` where PaperPaw loads none.
     pub native: Option<&'a crate::native::Native>,
+    /// The power level and mode in use (see [`power`](crate::power)).
+    pub power: &'a crate::power::Power,
+    /// Where declared work stands, and plugins' notes (see
+    /// [`work`](crate::work)).
+    pub work: &'a crate::work::WorkStates,
+    /// What is handled now is the reader's own doing (input, a screen or
+    /// an action they opened or ran, the answer to their request): act at
+    /// once. Otherwise it is background work (an event, a rule's action,
+    /// declared work), which may wait for a good moment (see
+    /// [`work`](crate::work)) and says nothing over reading.
+    pub reader: bool,
     /// Whether there is text on the clipboard, copied here
     /// ([`Command::SetClipboard`](crate::Command::SetClipboard)) or, where
     /// the system has a clipboard, in another app; read it with
@@ -208,6 +219,17 @@ pub struct EnvParts<'a> {
     /// How native code plugins are loaded here, e.g. which builds fit
     /// (see [`native`](crate::native)); `None` where PaperPaw loads none.
     pub native: Option<&'a crate::native::Native>,
+    /// The power level and mode in use (see [`power`](crate::power)).
+    pub power: &'a crate::power::Power,
+    /// Where declared work stands, and plugins' notes (see
+    /// [`work`](crate::work)).
+    pub work: &'a crate::work::WorkStates,
+    /// What is handled now is the reader's own doing (input, a screen or
+    /// an action they opened or ran, the answer to their request): act at
+    /// once. Otherwise it is background work (an event, a rule's action,
+    /// declared work), which may wait for a good moment (see
+    /// [`work`](crate::work)) and says nothing over reading.
+    pub reader: bool,
     /// Whether there is text on the clipboard, copied here
     /// ([`Command::SetClipboard`](crate::Command::SetClipboard)) or, where
     /// the system has a clipboard, in another app; read it with
@@ -267,6 +289,9 @@ impl<'a> From<EnvParts<'a>> for Env<'a> {
             wifi: p.wifi,
             firmware: p.firmware,
             native: p.native,
+            power: p.power,
+            work: p.work,
+            reader: p.reader,
             clipboard: p.clipboard,
             slots: p.slots,
             screens: p.screens,

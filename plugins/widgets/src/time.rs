@@ -174,6 +174,39 @@ fn month_name<'a>(env: &'a Env<'_>, n: u8) -> &'a str {
     env.i18n.tr(KEYS[usize::from(n.clamp(1, 12) - 1)])
 }
 
+/// The short name of month `n` (1 to 12): "Oct".
+fn month_short<'a>(env: &'a Env<'_>, n: u8) -> &'a str {
+    const KEYS: [&str; 12] = [
+        "core.month.short.1",
+        "core.month.short.2",
+        "core.month.short.3",
+        "core.month.short.4",
+        "core.month.short.5",
+        "core.month.short.6",
+        "core.month.short.7",
+        "core.month.short.8",
+        "core.month.short.9",
+        "core.month.short.10",
+        "core.month.short.11",
+        "core.month.short.12",
+    ];
+    env.i18n.tr(KEYS[usize::from(n.clamp(1, 12) - 1)])
+}
+
+/// The short name of weekday `n` (0: Sunday): "Wed".
+fn weekday_short<'a>(env: &'a Env<'_>, n: u8) -> &'a str {
+    const KEYS: [&str; 7] = [
+        "core.weekday.short.0",
+        "core.weekday.short.1",
+        "core.weekday.short.2",
+        "core.weekday.short.3",
+        "core.weekday.short.4",
+        "core.weekday.short.5",
+        "core.weekday.short.6",
+    ];
+    env.i18n.tr(KEYS[usize::from(n % 7)])
+}
+
 /// The values of a date format setting ([`date_format_spec`]).
 const DATE_FORMATS: [&str; 4] = [
     "widgets.date-format.long",
@@ -282,56 +315,101 @@ fn label(
 }
 
 /// The size at which `text` is `width` pixels wide at most, and `size`
-/// at most.
+/// at most, measured as it is drawn ([`widgets::largest_size`]): a font
+/// of a few sizes (a pack) gives one of its own that really fits. Where
+/// none does, the smallest tried (drawn at the font's smallest).
 fn fit_size(font: &FontHandle<'_>, size: f32, text: &str, width: f32) -> f32 {
-    let mut size = size;
-    // Widths do not grow quite evenly with the size (each letter's is
-    // rounded, fonts of fixed sizes take the nearest they have): steps
-    // down to where it fits.
-    let mut last = (f32::MAX, size);
-    for step in 0..12 {
-        let wide = font.measure(size, text);
-        if wide <= width || wide <= 0.0 {
-            break;
+    let least = (size * 0.1).max(1.0);
+    widgets::largest_size(size, least, |s| font.measure(s, text) <= width).unwrap_or(least)
+}
+
+/// `text` broken between words into lines `width` pixels wide at `size`
+/// (never inside a word), and whether a word is wider than a line alone.
+pub(crate) fn break_words(
+    font: &FontHandle<'_>,
+    size: f32,
+    text: &str,
+    width: f32,
+) -> (Vec<String>, bool) {
+    let mut lines: Vec<String> = Vec::new();
+    let mut too_wide = false;
+    let mut line = String::new();
+    for word in text.split_whitespace() {
+        if font.measure(size, word) > width {
+            too_wide = true;
         }
-        if wide >= last.0 {
-            // The smallest the font has: no smaller.
-            return last.1;
+        if line.is_empty() {
+            line.push_str(word);
+            continue;
         }
-        last = (wide, size);
-        size *= (width / wide).min(0.99) * if step > 0 { 0.96 } else { 1.0 };
+        let longer = format!("{line} {word}");
+        if font.measure(size, &longer) <= width {
+            line = longer;
+        } else {
+            lines.push(core::mem::replace(&mut line, String::from(word)));
+        }
     }
-    size
+    if !line.is_empty() {
+        lines.push(line);
+    }
+    (lines, too_wide)
 }
 
-/// The size at which each word of `text` is `width` pixels wide at most
-/// (so that lines break between words, not in them), and `size` at most.
-fn fit_words(font: &FontHandle<'_>, size: f32, text: &str, width: f32) -> f32 {
-    text.split_whitespace()
-        .map(|word| fit_size(font, size, word, width))
-        .fold(size, f32::min)
-}
-
-/// `text` broken into lines `width` pixels wide at `size`, `most` at
-/// most, the last one shortened with "…" where there is more.
-fn wrap(font: &FontHandle<'_>, size: f32, text: &str, width: f32, most: usize) -> Vec<String> {
-    let ranges = font.wrap(size, text, width);
-    let cut = ranges.len() > most;
-    let mut lines: Vec<String> = ranges
-        .iter()
-        .take(most.max(1))
-        .map(|r| String::from(text[r.clone()].trim()))
-        .collect();
-    if cut && let (Some(last), Some(range)) = (lines.last_mut(), ranges.get(most.max(1) - 1)) {
-        let rest = text[range.start..].trim();
-        *last = paperpaw_sdk::ui::fit(font, size, rest, width);
+/// `text` broken between words into lines `width` pixels wide at `size`,
+/// `most` at most, the last one shortened with "…" where there is more;
+/// a word wider than a line ends the text there, shortened.
+pub(crate) fn wrap(
+    font: &FontHandle<'_>,
+    size: f32,
+    text: &str,
+    width: f32,
+    most: usize,
+) -> Vec<String> {
+    let (mut lines, _) = break_words(font, size, text, width);
+    let most = most.max(1);
+    // Up to the first line with a word wider than a line: it ends there.
+    if let Some(wide) = lines.iter().position(|l| font.measure(size, l) > width) {
+        let rest = lines[wide..].join(" ");
+        lines.truncate(wide);
+        lines.push(rest);
+    }
+    if lines.len() > most {
+        let rest = lines[most - 1..].join(" ");
+        lines.truncate(most - 1);
+        lines.push(rest);
+    }
+    if let Some(last) = lines.last_mut()
+        && font.measure(size, last) > width
+    {
+        *last = paperpaw_sdk::ui::fit(font, size, last, width);
     }
     lines
 }
 
+/// `text` whole in `most` lines at most, `width` pixels wide and
+/// `height` pixels high, broken between words: at the largest size from
+/// `max` down to `min` at which it fits so, measured as drawn; `None`
+/// where it does not even at `min` (then it is better left out, or
+/// shortened, than broken in a word).
+fn wrap_whole(
+    font: &FontHandle<'_>,
+    (max, min): (f32, f32),
+    text: &str,
+    (width, height): (f32, f32),
+    most: usize,
+) -> Option<(f32, Vec<String>)> {
+    let size = widgets::largest_size(max, min, |size| {
+        let (lines, too_wide) = break_words(font, size, text, width);
+        !too_wide && lines.len() <= most.max(1) && line(font, size) * lines.len() as f32 <= height
+    })?;
+    Some((size, break_words(font, size, text, width).0))
+}
+
 /// `items` (e.g. "Day 287 of 365", "Week 42") in lines `width` pixels
 /// wide at `size`, separated by " · " within a line, `most` lines at
-/// most: an item is not broken where it can go whole to the next line.
+/// most: an item is not broken where it can go whole to the next line,
+/// and one wider than a line is broken between its words; what does not
+/// fit is shortened with "…" on the last line.
 fn pack(
     font: &FontHandle<'_>,
     size: f32,
@@ -339,21 +417,44 @@ fn pack(
     width: f32,
     most: usize,
 ) -> Vec<String> {
+    let most = most.max(1);
     let mut lines: Vec<String> = Vec::new();
-    for item in items {
-        let full = lines.len() >= most.max(1);
-        match lines.last_mut() {
-            Some(last) if font.measure(size, &format!("{last} · {item}")) <= width => {
-                last.push_str(" · ");
-                last.push_str(item);
+    // Each item's pieces: itself where it fits a line, else its lines.
+    let pieces = items.iter().flat_map(|item| {
+        if font.measure(size, item) <= width {
+            alloc::vec![(item.clone(), true)]
+        } else {
+            let (parts, _) = break_words(font, size, item, width);
+            let first = parts.len();
+            parts
+                .into_iter()
+                .enumerate()
+                .map(move |(n, p)| (p, n == 0 && first > 0))
+                .collect()
+        }
+    });
+    let mut cut = false;
+    for (piece, starts_item) in pieces {
+        let n = lines.len();
+        if n > 0 {
+            let sep = if starts_item { " · " } else { " " };
+            let joined = format!("{}{sep}{piece}", lines[n - 1]);
+            if font.measure(size, &joined) <= width {
+                lines[n - 1] = joined;
+                continue;
             }
-            Some(last) if full => {
+            if n >= most {
                 // No more lines: the rest shortened on the last.
-                let joined = format!("{last} · {item}");
-                *last = paperpaw_sdk::ui::fit(font, size, &joined, width);
+                lines[n - 1] = joined;
+                cut = true;
                 break;
             }
-            _ => lines.push(item.clone()),
+        }
+        lines.push(piece);
+    }
+    for line in &mut lines {
+        if cut || font.measure(size, line) > width {
+            *line = paperpaw_sdk::ui::fit(font, size, line, width);
         }
     }
     lines
@@ -363,15 +464,6 @@ fn pack(
 /// `gap` between them: nothing where the gaps take all the room.
 fn share(room: u16, gap: u16, n: u16) -> u16 {
     room.saturating_sub(gap.saturating_mul(n.saturating_sub(1))) / n.max(1)
-}
-
-/// How many of `n` parts fit side by side in `room` pixels with `gap`
-/// between them, each `least` pixels at least: all where they do, else
-/// as many as do, one at least.
-fn fitting(room: u16, gap: u16, least: u16, n: usize) -> usize {
-    let each = u32::from(least.max(1)) + u32::from(gap);
-    let fit = (u32::from(room) + u32::from(gap)) / each;
-    n.min(fit as usize).max(1)
 }
 
 /// The height of a line of text `size` pixels large, as a float.
@@ -394,6 +486,106 @@ fn draw_centred(
     let width = font.measure(size, text);
     let baseline = y + cap_height(font, size) / 2.0;
     font.draw(canvas, size, x - width / 2.0, baseline as i32, text, color);
+}
+
+/// A part of a stack of text ([`draw_stack`]): its lines, their size and
+/// colour.
+pub(crate) struct Part<'a> {
+    pub lines: Vec<&'a str>,
+    pub size: f32,
+    pub color: Color,
+    /// Its own font, where it is not the stack's.
+    pub font: Option<&'a FontHandle<'a>>,
+}
+
+/// How far the ink of `part` reaches above its first baseline and below
+/// it (its lines a line height apart), in pixels (above negative).
+fn part_ink(font: &FontHandle<'_>, part: &Part<'_>) -> (f32, f32) {
+    let font = part.font.unwrap_or(font);
+    let pitch = line(font, part.size);
+    let ink = |text: &str| {
+        font.ink(part.size, text).map_or_else(
+            || {
+                let metrics = font.line_metrics(part.size);
+                (-metrics.ascent, -metrics.descent)
+            },
+            |(top, bottom)| (top as f32, bottom as f32),
+        )
+    };
+    let first = part.lines.first().map_or((0.0, 0.0), |l| ink(l));
+    let last = part.lines.last().map_or((0.0, 0.0), |l| ink(l));
+    let below = pitch * part.lines.len().saturating_sub(1) as f32 + last.1;
+    (first.0, below)
+}
+
+/// The height the ink of `parts` takes stacked with `gap` between them
+/// ([`draw_stack`]).
+pub(crate) fn stack_height(font: &FontHandle<'_>, parts: &[Part<'_>], gap: f32) -> f32 {
+    let inked: f32 = parts
+        .iter()
+        .map(|part| {
+            let (top, bottom) = part_ink(font, part);
+            bottom - top
+        })
+        .sum();
+    inked + gap * parts.len().saturating_sub(1) as f32
+}
+
+/// Draws `parts` one below the other, `gap` pixels between the ink of
+/// one and the next, the whole in the middle of `area` by its ink from
+/// top to bottom, each line placed as `align` says: e.g. a number large
+/// and what it counts below it, centred as one sees them rather than by
+/// their lines (which leave more room above letters than below).
+pub(crate) fn draw_stack(
+    canvas: &mut Canvas<'_>,
+    font: &FontHandle<'_>,
+    area: Rect,
+    align: Align,
+    parts: &[Part<'_>],
+    gap: f32,
+) {
+    // The last parts left out where they have no room after all, and
+    // all where not even the first has.
+    let mut count = parts.len();
+    while count > 0 && stack_height(font, &parts[..count], gap) > f32::from(area.height) {
+        count -= 1;
+    }
+    let parts = &parts[..count];
+    let total = stack_height(font, parts, gap);
+    let mut top = f32::from(area.y) + (f32::from(area.height) - total).max(0.0) / 2.0;
+    for part in parts {
+        let (above, below) = part_ink(font, part);
+        let font = part.font.unwrap_or(font);
+        let pitch = line(font, part.size);
+        // Told as one text, drawn as lines.
+        let told = Rect::new(area.x, top as u16, area.width, (below - above) as u16);
+        let text = part.lines.join(" ");
+        canvas.describe(
+            paperpaw_sdk::semantics::Role::Text,
+            &text,
+            told,
+            false,
+            None,
+        );
+        let mut baseline = top - above;
+        for text in &part.lines {
+            // Shortened where it is wider than the place after all.
+            let width = f32::from(area.width);
+            let shown = if font.measure(part.size, text) > width {
+                Cow::Owned(paperpaw_sdk::ui::fit(font, part.size, text, width))
+            } else {
+                Cow::Borrowed(*text)
+            };
+            let wide = font.measure(part.size, &shown);
+            if wide <= width {
+                let x = align.x(area, wide);
+                let baseline_y = (baseline + 0.5) as i32;
+                font.draw(canvas, part.size, x, baseline_y, &shown, part.color);
+            }
+            baseline += pitch;
+        }
+        top += below - above + gap;
+    }
 }
 
 /// The height of digits and capitals at `size`, about.

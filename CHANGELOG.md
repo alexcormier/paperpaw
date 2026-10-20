@@ -31,6 +31,30 @@ change the plugin SDK.
   with their folders and their entries for the plugin library; CI builds
   them for every device. Their version is the release's
   (`paperpaw_sdk::package_version!`).
+- Emulator: `--free-space <bytes>` makes the emulated storage say it has
+  that much free, whatever the computer's disk has, so screenshots of the
+  store look the same everywhere (the snapshot tests use it).
+- Plugin authors: `paperpaw-dev` (`tools/dev`) checks a plugin before it
+  is published, on the emulated X4, X4 Pro, X4 Classic and Boox, in
+  every language, light and dark, and look: contact sheets of every
+  screen and of every widget in every size; text cut, shortened or
+  broken, parts outside their cell or the screen, uneven margins, touch
+  targets too small, focus not shown, contrast on black and white;
+  missing translations, settings without help, dashes, and a
+  pseudo-language that shows where longer text will not fit; screens
+  reachable and closable with buttons alone; storage read while drawing,
+  heap and frame time against the X4's budgets; scripted flows with
+  assertions (recorded in the emulator with `--record`); snapshots with
+  `--bless`; data plugins checked as the installer and the plugin
+  library take them, `.ppn` files as the device does. Templates for a
+  plugin's own repository (harness, snapshot test, CI job) are in
+  `tools/dev/templates`; docs/plugins.md, "Checking your plugin".
+- Emulator: usable as a library (`paperpaw_emulator`), with plugins
+  added to the standard app, frames recorded with their storage calls,
+  and `--record <file>` to write what is done in the window as a flow.
+- SDK: what the drawing helpers describe carries the clip each part was
+  drawn in; `Kernel::described` and `Kernel::described_active` give it
+  as drawn.
 
 - Store: easier to find one's way in a library of thousands of
   plugins. The start lists Search, the plugins installed (with how many
@@ -41,7 +65,10 @@ change the plugin SDK.
   long press on the arrows beside it). Rows are denser
   (name, size or an installed or update mark, one line of what it does):
   five a page on the X4 instead of three. *Update all* among the
-  installed plugins updates them one after another. A plugin's page
+  installed plugins updates them one after another (those waiting
+  marked so); one stopped or set aside lets the next go on, and the rest
+  wait through a restart or a lost connection until the store is opened
+  again. The order of a long list says how to go to a page. A plugin's page
   says whether it is a code plugin (full access to the device) or data
   only, whether its build was checked against its source, since when
   its author publishes and how many plugins they have, how much room it
@@ -51,11 +78,15 @@ change the plugin SDK.
   that does not fit in the room left for code plugins is not offered,
   or refused once downloaded.
 - SDK: `Storage::free_space` says how many bytes a storage has free
-  where it can tell (memory cards by their own count, the desktop and
-  Android by the file system); storages that wrap another forward it.
-  `native::CodeRoom`, `native::code_room` and `native::keep_code_room`
-  say how much room code plugins have and take (the X4's flash region,
-  the X4 Pro's PSRAM), as the shell found it at the start;
+  where it can tell (the desktop and Android by the file system);
+  storages that wrap another forward it. A memory card says the count it
+  keeps at once, counts its FAT exactly a part at each ask (never all of
+  it at once, as rust-fatfs does on a card not unmounted) and follows
+  what is written and removed from then on.
+  `native::CodeRoom` (with `CodeRoom::in_flash` and `in_psram`),
+  `native::code_room` and `native::keep_code_room` say how much room
+  code plugins have and take (the X4's flash region, the X4 Pro's PSRAM),
+  as the shell found it at the start, also in safe mode;
   `native::installed_code_need` and `native::read_header` measure the
   code installed. `ui::draw_qr` draws a QR code (`paperpaw_sdk::qr`),
   `Header::on_page_number` tells a tap on a header's page number, and
@@ -122,6 +153,96 @@ change the plugin SDK.
   changed while the library shows (how books show, the order, the size
   of the interface) apply at once. On devices of little memory (the X4)
   it lists 2000 books at most and says how many there are beyond.
+- SDK, power saving (ADR 0025): a plugin's manifest says what it uses
+  (`Manifest::uses`, `Uses::NETWORK`): every plugin that reaches the
+  network must declare it. Declared work (`work`: `Work`, `Moments`,
+  `Command::Work`, `Command::CancelWork`; jobs in steps with `WorkSpec`,
+  `Step`, `Registrar::add_work`, `events::WORK_CHANGED`; keys for
+  several works of one event), power levels and modes (`power`:
+  `PowerLevel`, `Power`, `Wear`; `Env::power`, `Env::work`), and one
+  answer for what did not run (`Refusal` with a `Reason` and when to
+  `Retry`; `events::WORK_REFUSED`, `WORK_ALLOWED`, `POWER_CHANGED`).
+  Breaking: `Command::Schedule` is gone (work at a time, `Work::at`, or
+  `EVENT.schedule`, replaces it); `HttpReply` has two more public
+  fields, `refused` and `headers`, so replies built field by field need
+  them; `Manifest` has `uses`; `PluginUsage` has `requests` and
+  `refused`. `Env::reader` tells a plugin whether the reader waits.
+- Kernel, declared work (ADR 0025): one queue for plugins' timers and
+  work. Work runs at its time, at one of its moments (waking, a book
+  opened or closed, going to sleep, the radio on anyway, charging, idle)
+  or at its deadline, whichever comes first, as background work even
+  when the reader's own doing brought it due; work that needs the
+  network and is only nice to have runs only while the radio is on
+  anyway, and nothing wakes the device for work that cannot run then.
+  Declared again, work keeps its first time and a running job goes on;
+  a timer with a period comes again. Jobs take one step a tick, never
+  while input waits. A plugin may have 8 works on the X4 (32 elsewhere),
+  declared under its own name only; a full queue says `WORK_ALLOWED`
+  once there is room again.
+- Network by the power mode and the manifest: requests, servers and
+  sockets of a plugin whose manifest does not declare the network are
+  refused (`Reason::NotDeclared`). In Offline only what the reader went
+  online for goes out (`Command::GoOnline`, for the screen in front
+  until it closes); anything else is refused (`Reason::Offline`) and
+  may try again when allowed. `Command::CancelHttp` takes a plugin's
+  requests back, each answered as cancelled.
+- Quiet reading (ADR 0025): background work says nothing over reading.
+  A notice from an event handler, an action run by a rule or a job,
+  outside the reader's own doing and over another plugin's screen,
+  becomes that plugin's note (`Env::work`, `WorkStates::note`), to show
+  on its own page. What the reader does (a held button too), answers to
+  their requests, Wi-Fi while they wait for the network and a plugin's
+  own screen still say what they like. `Command::Announce` is for what
+  must reach the reader anyway: a rule's message they set up, and what
+  happened to the device (safe mode, plugins not installed, an update
+  installed).
+- Power modes (ADR 0025): Normal, Saving, Offline and Automatic, chosen
+  in the quick panel (four segments where they fit) or under Settings,
+  System, Power.
+  Automatic goes by the battery: Saving below 20 %, Offline below 10 %,
+  back 5 % above each, Normal while charging; it switches silently, and
+  the status lines show a leaf while saving and Wi-Fi crossed out while
+  offline, nothing in Normal. Saving makes declared work wait four times
+  as long, sleeps after at most 5 minutes and keeps the front light at
+  most at half; Offline keeps the radio off for background work, also
+  while charging. A mode's values and limits lie over the reader's own
+  (`Settings::wear`) and go when it ends; what the reader changes while
+  it is worn is theirs until the next mode, also across a start. The
+  modes are presets (`core.power-mode`), worn with `Command::Wear`;
+  `Kernel::power` tells shells the level.
+- Plugins on declared work: weather looks again only once the radio is
+  on anyway (no hourly wake), four times as seldom while saving, not by
+  itself in Offline; Readwise and Joplin send what waits at the next
+  connection, at the latest after half an hour; OPDS sync, news and
+  Wallabag fetches, Joplin's send and the update check, when a rule runs
+  them, wait for a good moment (at the latest an hour), while the
+  reader's own run acts at once (`Env::reader`, `Work::when_cheap`); an
+  update a rule's check finds waits on the update's page instead of
+  opening it over the book.
+- Battery: *Network this time awake* lists each plugin's requests, those
+  held back, its network setting where not the default and what its
+  background work last said (`PluginUsage::requests`, `refused`).
+- Progress sync (kosync) by the power mode: silently, when a book opens
+  or closes, on waking and before sleep, as before; while reading with
+  the radio off, the progress goes out when the radio is on anyway, at
+  the latest after 30 minutes (two hours in Saving). Offline sends and
+  fetches nothing; once allowed again, the books switched from go out,
+  then the open one's latest is fetched before its own is sent.
+- Network per plugin (ADR 0025): under Settings, System, *Network per
+  plugin*, each plugin that uses the network has its own part: its
+  *Network* on or off (off, its requests and network work are refused,
+  `Reason::NetworkOff`), and *In saving modes*: follow the mode, as in
+  Normal (its work keeps Normal's limits while saving, not in Offline),
+  or only when asked (no background network at all).
+- SDK, HTTP: `HttpRequest` is made with `HttpRequest::get` or `new` and
+  methods (`header`, `body`, `body_from`, `save_to`, `with`), no longer
+  field by field (`#[non_exhaustive]`). A request may set a `timeout`
+  (by default 30 s, 10 minutes for a download to a file), the answer's
+  headers it wants back (`want_headers`, read with `HttpReply::header`)
+  and the longest body kept in memory (`max_body`); by default that is
+  64 KiB on the X4 and the X4 Pro (it was 1 MiB everywhere) and 1 MiB
+  elsewhere. Every shell keeps the time limit and passes the headers
+  back.
 - Themes: a theme's defaults (a data plugin's `settings.ini`, or the
   Pebble theme switched on) win over the device's own: a large-print
   theme now enlarges the interface on the X4 too, whose own default is
@@ -299,6 +420,34 @@ change the plugin SDK.
   `Canvas::fill_corners`, `round::corner_inset`. Plugins draw what is on
   a focused row in `focus_ink` rather than white, so every highlight
   works.
+- Home screen widgets fit their place in every size, on the X4, the X4
+  Pro and large screens alike: text that must stay on one line (times,
+  dates, numbers, titles) is made smaller before it is shortened, longer
+  text breaks between words and never inside one, and a part that does
+  not fit (a caption, a note, a cover too small to tell) is left out
+  whole rather than cut or drawn over its neighbours. Sizes are found as
+  the font draws them, so the font packs of the X4s fit as well. Fixed
+  on the way: the continue card ran out of its frame in low cells, the
+  world clock's places overlapped, the status widget's battery ran past
+  a small cell, the streak's second line was cut, the calendar's digits
+  ran together, the year's note fell below its cell. Each widget has a
+  spacing setting (automatic, none, small, normal, large; per
+  placement): automatically, widgets without a frame line up with the
+  page's margins as before, and framed ones keep a gap inside their
+  frame.
+- Home screen tools: an icon and its name are placed by their ink as
+  one group, half a gap apart, so that on the X4s the name no longer
+  sits as near the tool below as its own icon.
+- SDK, widgets: a spacing setting for widgets (`widgets::Padding`,
+  `padding_spec`, `padding_setting`, `padding`; automatic, none, small,
+  normal, large), which `look` and `draw_frame` keep. Text that fits
+  its place: `fit_line` and `draw_line` (one line, smaller down to a
+  least size, then shortened, centred by its ink), `largest_size`
+  (measured as drawn, so fonts of a few sizes fit too),
+  `ink_baseline`, `Wrapped::fitting`, `Wrapped::{size, lines, whole}`.
+  `Wrapped`, `draw_wrapped` and `draw_message` break text between
+  words only, never inside one, and make it smaller, down to the small
+  size, before they cut it.
 - Books: no book can crash the X4 or exhaust its memory any more. A
   picture's long alternative text in CJK script crashed the EPUB
   converter, and with the last book reopened at start, possibly at
@@ -1174,7 +1323,15 @@ change the plugin SDK.
 - X4: removing or copying a large folder (e.g. one with many books, or
   their caches) no longer starts the device again half way: work on the
   card keeps the watchdogs from taking it for hung (it took 20 s before
-  they did, removing the books' caches over a minute).
+  they did, removing the books' caches over a minute). It does so for at
+  most 15 minutes in one step of the firmware's loop: work on the card
+  that never ends (e.g. on a damaged FAT) still starts the X4 again
+  rather than keep it on until its battery is empty.
+- X4 Pro and X4 Classic: the fuel gauge is read and the clock chip set
+  by the firmware's loop, no longer in the interrupt that reads the
+  buttons, where each I²C reading held off every other interrupt (the
+  radio's too) for a millisecond or two. On every X4 the battery is read
+  when its status is due (once a minute), no longer every second.
 - X4: more memory left while the radio is on (on USB power it stays on
   by default, and a book opening then came close to the heap's end): the
   radio keeps 5 receive buffers instead of 10 and takes at most 16 more
@@ -1189,6 +1346,57 @@ change the plugin SDK.
   `heap` says the most the heap held since start, the log says the heap
   after every frame, and failed requests are logged with their host
   (`wifi:status`, `wifi:scan`, `http:get:` as script steps).
+- X4: losing the network's address (as on every joining again) lets go
+  of what was open on it: plugins' servers no longer keep listening and
+  holding their memory (some 12 KB a connection), nor requests theirs
+  (some 17 KB), and name lookups no longer pile up (after four, every
+  lookup said "no such host" until the radio went off). Requests made
+  while a network is being joined wait for its address, as they were
+  meant to, instead of failing at once.
+- X4: the clock takes the time only from the server asked and only its
+  answer to that request (the random number sent with it given back), no
+  longer any answer that comes. `paperpaw-x4`: `sntp::Asked` (its
+  `request` and `answer`) in place of `sntp::request` and `sntp::answer`.
+- X4: two clients sending or reading a byte now and then no longer hold
+  a plugin's server for good: a request's body and its answer must move
+  16 KB every 30 s (as a request's head must come whole in 30 s), while
+  a large upload or download that moves takes as long as it needs.
+- X4 updates: an update whose signature does not hold can never start.
+  A second install before restarting wrote into the partition the first
+  update had chosen, so a file under PaperPaw's key with a wrong
+  signature started at the next restart. An update installed and not
+  started yet is now given up before another is written, and an image's
+  first word, without which the bootloader starts nothing, is written
+  only once its signature held.
+- X4 updates: firmware signed with another key than PaperPaw's (one's
+  own builds) installs only when the reader accepts that key, shown by
+  its fingerprint, at each install; nothing on the card trusts a key any
+  more, so `.paperpaw/firmware-keys.txt` is no longer read and can go.
+  The shell installs an older firmware, or the same again, only when
+  the reader chose it on the update page. SDK:
+  `FirmwareCommand::Install` has `key` and `older`,
+  `Update::may_install` is the shell's check,
+  `Update::is_newer`, `InstallFailure::NotNewer`; `Update::signer`
+  takes no list of keys; `TRUSTED_KEYS`, `trust`, `trusted_keys` and
+  `Signer::Trusted` are gone (none was released).
+- X4 updates: an update that fails early in its start is undone too. It
+  goes on trial before the board is set up, and is taken as good after
+  half a minute or when it goes to sleep or restarts (it was at its
+  first frame, so one that crashed opening the last book stayed). The
+  start is watched from its first moment; a power cut while an update is
+  chosen no longer starts it without a trial.
+- X4: what was written is on the card before every restart, also one a
+  plugin asks for (a plugin switched just before was lost), and at most
+  2 s after work, however often work comes.
+- X4: put to sleep on USB power and then unplugged, it sleeps as on
+  battery, where it stayed awake and drained the battery.
+- X4: a display whose busy line sticks ends in an error after 10 s,
+  where the watchdog started the X4 again and again; a long panic
+  message is kept for `crashes.txt`, no longer lost when a character was
+  cut in two; the remote control over USB (test builds) refuses lines
+  too long rather than carry them out cut.
+- `paperpaw-update`: `Plugins::record` gives `None` for a list longer
+  than readers take, and the firmware's build stops there.
 - The X4's remote control over USB (test builds) does much more, for
   developing on the device: the card (`ls`, `stat`, `md5`, `rm` also of
   folders, `mkdir`, `mv`, `sync`; `tools/x4-remote.py` pushes and pulls

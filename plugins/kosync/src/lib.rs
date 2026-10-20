@@ -49,6 +49,7 @@ use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::HttpReply;
 use paperpaw_sdk::secrets::SecretChange;
 use paperpaw_sdk::setting::{Setting, Text};
+use paperpaw_sdk::work::{Moments, Work};
 use paperpaw_sdk::{
     ActionSpec, Arg, Command, Env, HttpRequest, Id, Instant, Manifest, MenuEntry, Params, Plugin,
     RegisterError, Registrar, SDK_VERSION, ScreenSpec, SettingGroupSpec, SettingSpec,
@@ -73,6 +74,14 @@ const ACCOUNT_CHANGED: Event = Event::new("kosync.account-changed");
 /// Replies of the server.
 const PULLED: Event<HttpReply> = Event::new("kosync.pulled");
 const PUSHED: Event<HttpReply> = Event::new("kosync.pushed");
+/// Declared work: the progress, sent while reading at the next moment
+/// the radio is on anyway, at the latest after [`PUSH_WITHIN`] (ADR 0025).
+const PUSH_DUE: Event = Event::new("kosync.push-due");
+/// At the latest this long after a page turned, the progress goes out
+/// (longer in Saving); closing the book or sleeping sends it before.
+const PUSH_WITHIN: core::time::Duration = core::time::Duration::from_secs(30 * 60);
+/// Books switched from while Offline, their progress sent once allowed.
+const MOST_UNSENT: usize = 4;
 
 /// Whether sending now keeps no radio on that would be off otherwise: the
 /// system runs Wi-Fi, or PaperPaw's radio is in a network already.
@@ -136,6 +145,8 @@ struct State {
     declined: Option<(String, String)>,
     /// Book fingerprints already computed.
     digests: Vec<(String, String)>,
+    /// Positions of books switched from while Offline, not sent yet.
+    unsent: Vec<Position>,
     /// The server the account belongs to; another one signs out.
     server: Option<String>,
 }
@@ -228,6 +239,28 @@ impl State {
         env.caps.network && env.settings.read(&AUTO) && self.signed_in(env)
     }
 
+    /// Whether to sync by itself now, and the power mode lets the network
+    /// be used (not Offline): otherwise what is not sent waits, silently.
+    fn may_send(&self, env: &Env<'_>) -> bool {
+        self.active(env) && env.power.online()
+    }
+
+    /// Sends what waited while Offline: the books switched from, the open
+    /// one's progress, and fetches its latest.
+    fn allowed(&mut self, env: &Env<'_>, out: &mut Vec<Command>) {
+        if !self.may_send(env) {
+            return;
+        }
+        for position in core::mem::take(&mut self.unsent) {
+            self.transmit(env, out, position, false);
+        }
+        // The latest first: what this device sends waits for it (`Hold`).
+        if let Some(path) = self.current.as_ref().map(|c| c.path.clone()) {
+            self.pull(env, out, &path, false);
+        }
+        self.push(env, out, false);
+    }
+
     fn signed_in(&self, env: &Env<'_>) -> bool {
         !env.settings.read(&USER).is_empty() && key(env).is_some()
     }
@@ -279,6 +312,18 @@ impl State {
         if !force && self.sent.as_ref() == Some(&position) {
             return;
         }
+        self.transmit(env, out, position, true);
+    }
+
+    /// Puts `position` to the server; `tracked` when it is to be known as
+    /// the position sent last.
+    fn transmit(
+        &mut self,
+        env: &Env<'_>,
+        out: &mut Vec<Command>,
+        position: Position,
+        tracked: bool,
+    ) {
         // Not worth opening the book for.
         if !self.signed_in(env) {
             return;
@@ -304,8 +349,10 @@ impl State {
         let target = "/syncs/progress";
         if let Some(command) = self.request(env, "PUT", target, Some(body), &PUSHED, params) {
             out.push(command);
-            self.sent = Some(position);
-            self.last_push = Some(env.now);
+            if tracked {
+                self.sent = Some(position);
+                self.last_push = Some(env.now);
+            }
         }
     }
 
@@ -516,12 +563,11 @@ pub(crate) fn server_request(
         headers.push(("x-auth-user".to_string(), user.to_string()));
         headers.push(("x-auth-key".to_string(), key.to_string()));
     }
-    HttpRequest {
-        headers,
-        body,
-        params,
-        ..HttpRequest::new(method, &format!("{}{path}", server(env)), reply)
-    }
+    let mut request =
+        HttpRequest::new(method, &format!("{}{path}", server(env)), reply).with(params);
+    request.headers = headers;
+    request.body = body;
+    request
 }
 
 /// The position in the parameters of a reading event.
@@ -587,6 +633,7 @@ impl Plugin for Kosync {
             // Released with PaperPaw, also as a file from the store.
             version: paperpaw_sdk::package_version!(),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NETWORK,
         }
     }
 
@@ -634,7 +681,15 @@ impl Plugin for Kosync {
                 .as_ref()
                 .is_some_and(|c| c.path != position.path);
             if active && other {
-                state.push(env, out, false);
+                if state.may_send(env) {
+                    state.push(env, out, false);
+                } else if let Some(last) = state.current.clone() {
+                    // Offline: sent once allowed, silently.
+                    state.unsent.retain(|u| u.path != last.path);
+                    state.unsent.push(last);
+                    let extra = state.unsent.len().saturating_sub(MOST_UNSENT);
+                    state.unsent.drain(..extra);
+                }
             }
             let path = position.path.clone();
             state.current = Some(position);
@@ -642,7 +697,7 @@ impl Plugin for Kosync {
                 .last_pull
                 .as_ref()
                 .is_some_and(|(p, at)| *p == path && env.now.since(*at) < PULL_EVERY_MS);
-            if active && !recent {
+            if !recent && state.may_send(env) {
                 state.pull(env, out, &path, false);
             }
         })?;
@@ -654,8 +709,15 @@ impl Plugin for Kosync {
             let due = state
                 .last_push
                 .is_none_or(|at| env.now.since(at) >= PUSH_EVERY_MS);
-            if due && state.active(env) && radio_on_anyway(env) {
+            if due && state.may_send(env) && radio_on_anyway(env) {
                 state.push(env, out, false);
+            } else if state.active(env) && env.work.get(PUSH_DUE.id()).is_none() {
+                // When the radio is on anyway, at the latest in a while.
+                out.push(Command::Work(
+                    Work::network(PUSH_DUE.id().clone())
+                        .within(PUSH_WITHIN)
+                        .at_moments(Moments::ONLINE),
+                ));
             }
         })?;
         let s = state.clone();
@@ -664,16 +726,30 @@ impl Plugin for Kosync {
             Box::new(move |env, _, out| {
                 let mut state = s.borrow_mut();
                 state.load(env);
-                if state.active(env) {
+                if state.may_send(env) {
                     state.push(env, out, false);
                 }
             }),
         )?;
         let s = state.clone();
+        r.on(PUSH_DUE, move |env, (), out| {
+            let mut state = s.borrow_mut();
+            state.load(env);
+            if state.may_send(env) {
+                state.push(env, out, false);
+            }
+        })?;
+        let s = state.clone();
+        r.on(events::WORK_ALLOWED, move |env, (), out| {
+            let mut state = s.borrow_mut();
+            state.load(env);
+            state.allowed(env, out);
+        })?;
+        let s = state.clone();
         r.on(events::SUSPEND, move |env, _, out| {
             let mut state = s.borrow_mut();
             state.load(env);
-            if state.active(env) {
+            if state.may_send(env) {
                 state.push(env, out, false);
             }
         })?;
@@ -683,7 +759,7 @@ impl Plugin for Kosync {
             let mut state = s.borrow_mut();
             state.load(env);
             let path = state.current.as_ref().map(|c| c.path.clone());
-            if let Some(path) = path.filter(|_| state.active(env)) {
+            if let Some(path) = path.filter(|_| state.may_send(env)) {
                 state.pull(env, out, &path, false);
             }
         })?;

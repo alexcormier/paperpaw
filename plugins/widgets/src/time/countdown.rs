@@ -5,10 +5,11 @@
 
 use alloc::format;
 use alloc::string::String;
+use alloc::vec::Vec;
 
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::time;
-use paperpaw_sdk::widgets::{self, Align, Drawn, Frame, Size};
+use paperpaw_sdk::widgets::{self, Align, Drawn, Frame, Padding, Size};
 use paperpaw_sdk::{Arg, Canvas, Env, FontHandle, Id, Rect, RegisterError, Registrar, SettingSpec};
 
 use super::word_clock::{balanced, largest};
@@ -27,9 +28,10 @@ const STYLES: [&str; 2] = [
 ];
 
 /// Its settings, kept in the program.
-static SETTINGS: [SettingSpec; 9] = [
+static SETTINGS: [SettingSpec; 10] = [
     widgets::align_spec("widgets.countdown.align", ID, Align::Left),
     widgets::frame_spec("widgets.countdown.frame", ID, Frame::None),
+    widgets::padding_spec("widgets.countdown.padding", ID, Padding::Auto),
     SettingSpec::fixed_text(
         "widgets.countdown.title",
         "widgets.setting.countdown-title",
@@ -277,8 +279,20 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
             (f32::from(area.height) - notes_h) as u16,
         );
         let size = text_size(env, &font, &shown.sentence, room);
-        let lines = balanced(&font, size, &shown.sentence, f32::from(room.width));
+        let mut lines = balanced(&font, size, &shown.sentence, f32::from(room.width));
         let height = line(&font, size);
+        // No more lines than the place holds: the last one shortened.
+        let fit = ((f32::from(room.height) / height.max(1.0)) as usize).max(1);
+        if lines.len() > fit {
+            let width = f32::from(room.width);
+            lines = super::wrap(&font, size, &shown.sentence, width, fit);
+        }
+        // The notes where they fit below.
+        let notes_h = if height * lines.len() as f32 + notes_h <= f32::from(area.height) {
+            notes_h
+        } else {
+            0.0
+        };
         let total = height * lines.len() as f32 + notes_h;
         let mut y = f32::from(area.y) + (f32::from(area.height) - total).max(0.0) / 2.0;
         for text in &lines {
@@ -286,52 +300,163 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
             super::label(canvas, &font, size, align, row, text, look.ink);
             y += height;
         }
-        if !notes.is_empty() {
+        if notes_h > 0.0 {
             let row = Rect::new(area.x, y as u16, area.width, small as u16);
             super::label(canvas, &font, style.small, align, row, &notes, look.faint);
         }
         return;
     }
-    // The number large, what it counts to below it (in two lines where
-    // it is wider and there is room).
-    let note_size = style
-        .text
-        .min(f32::from(area.height) / 5.0)
-        .max(style.small);
-    let note_line = line(&font, note_size);
-    let most = if f32::from(area.height) - notes_h >= note_line * 3.0 {
-        2
-    } else {
-        1
-    };
-    // In one line: smaller, down to the small size, before it is cut.
-    let note_size = if most == 1 {
-        super::fit_size(&font, note_size, &shown.note, f32::from(area.width)).max(style.small)
-    } else {
-        note_size
-    };
-    let note_lines = super::wrap(&font, note_size, &shown.note, f32::from(area.width), most);
-    let notes_room = note_line * note_lines.len() as f32;
-    let room = (f32::from(area.height) - notes_room - notes_h).max(note_line);
-    let size = match widgets::size(env, ID.as_str()) {
-        Size::Fit => super::fit_size(&font, room * 0.78, &shown.big, f32::from(area.width)),
-        size => size.text(&style) * 1.6,
-    };
-    let big = line(&font, size).min(room);
-    let total = big + notes_room + notes_h;
-    let mut y = f32::from(area.y) + (f32::from(area.height) - total).max(0.0) / 2.0;
-    let row = Rect::new(area.x, y as u16, area.width, big as u16);
-    super::label(canvas, &font, size, align, row, &shown.big, look.ink);
-    y += big;
-    for text in &note_lines {
-        let row = Rect::new(area.x, y as u16, area.width, note_line as u16);
-        super::label(canvas, &font, note_size, align, row, text, look.ink);
-        y += note_line;
+    // The number large, what it counts to below it (whole in as few
+    // lines as fit, from the body size down to the small one, else on
+    // one line shortened at its end), the notes below where they fit
+    // whole; a gap between their ink.
+    let width = f32::from(area.width);
+    let height = f32::from(area.height);
+    let gap = style.gap as f32;
+    let note_max = style.text.min(height / 5.0).max(style.small);
+    let chosen = widgets::size(env, ID.as_str());
+    // The notes below whole on their line, or not at all; the label
+    // whole before the notes, shortened only where it has no room whole.
+    let with_notes = !notes.is_empty() && font.measure(style.small, &notes) <= width;
+    // The label whole at the largest size that has room (in fewer lines
+    // where two counts give it the same), then shortened on one.
+    let best_lines = (1..=3)
+        .filter_map(|most| {
+            super::wrap_whole(
+                &font,
+                (note_max, style.small),
+                &shown.note,
+                (width, height),
+                most,
+            )
+            .map(|(size, lines)| (size, lines.len()))
+        })
+        .fold(None::<(f32, usize)>, |best, (size, lines)| match best {
+            Some((s, _)) if s >= size => best,
+            _ => Some((size, lines)),
+        })
+        .map(|(_, lines)| lines);
+    let mut ways: Vec<(bool, Option<usize>)> = Vec::new();
+    for lines in [best_lines, Some(1), Some(2), Some(3), None] {
+        for extra in [true, false] {
+            if (!extra || with_notes) && (lines.is_some() || best_lines.is_none()) {
+                ways.push((extra, lines));
+            }
+        }
     }
-    if !notes.is_empty() {
-        let row = Rect::new(area.x, y as u16, area.width, small as u16);
-        super::label(canvas, &font, style.small, align, row, &notes, look.faint);
+    ways.push((false, None));
+    let ink_of =
+        |part: &super::Part<'_>| super::stack_height(&font, core::slice::from_ref(part), 0.0);
+    let laid = ways.into_iter().find_map(|(extra, lines)| {
+        let (note_size, note_lines) = match lines {
+            Some(most) => super::wrap_whole(
+                &font,
+                (note_max, style.small),
+                &shown.note,
+                (width, height),
+                most,
+            )?,
+            None => (
+                style.small,
+                alloc::vec![paperpaw_sdk::ui::fit(
+                    &font,
+                    style.small,
+                    &shown.note,
+                    width
+                )],
+            ),
+        };
+        let note_part = super::Part {
+            lines: note_lines.iter().map(String::as_str).collect(),
+            size: note_size,
+            color: look.ink,
+            font: None,
+        };
+        let mut below = ink_of(&note_part) + gap;
+        if extra {
+            let part = super::Part {
+                lines: alloc::vec![notes.as_str()],
+                size: style.small,
+                color: look.faint,
+                font: None,
+            };
+            below += ink_of(&part) + gap;
+        }
+        // The number's ink: its digits, as high as capitals.
+        let fits = |s: f32| {
+            font.measure(s, &shown.big) <= width && super::cap_height(&font, s) + below <= height
+        };
+        let size = match chosen {
+            Size::Fit => widgets::largest_size(height, style.text, fits),
+            size => {
+                let size = size.text(&style) * 1.6;
+                widgets::largest_size(size, style.text.min(size), fits)
+            }
+        }?;
+        Some((size, note_size, note_lines, extra))
+    });
+    // Not even with the label shortened: the number alone, shortened at
+    // the small size where it is a word ("Tomorrow"), nothing where not
+    // even that has room.
+    let (size, note_size, note_lines, extra) = laid.unwrap_or_else(|| {
+        let alone =
+            |s: f32| font.measure(s, &shown.big) <= width && super::cap_height(&font, s) <= height;
+        let size = widgets::largest_size(height, style.small, alone).unwrap_or(style.small);
+        (size, style.small, Vec::new(), false)
+    });
+    // The digits' ink measured where capitals were assumed: smaller
+    // where it reaches further.
+    let mut size = size;
+    let stack = |size: f32| {
+        let number = super::Part {
+            lines: alloc::vec![shown.big.as_str()],
+            size,
+            color: look.ink,
+            font: None,
+        };
+        let note = super::Part {
+            lines: note_lines.iter().map(String::as_str).collect(),
+            size: note_size,
+            color: look.ink,
+            font: None,
+        };
+        let mut parts = alloc::vec![number];
+        if !note_lines.is_empty() {
+            parts.push(note);
+        }
+        super::stack_height(&font, &parts, gap) + if extra { small + gap } else { 0.0 }
+    };
+    while size > style.small && stack(size) > height {
+        size *= 0.92;
     }
+    let number = paperpaw_sdk::ui::fit(&font, size, &shown.big, width);
+    if font.measure(size, &number) > width || super::cap_height(&font, size) > height {
+        return;
+    }
+    // Centred together by their ink, a gap between the parts.
+    let mut parts = alloc::vec![super::Part {
+        lines: alloc::vec![number.as_str()],
+        size,
+        color: look.ink,
+        font: None,
+    }];
+    if !note_lines.is_empty() {
+        parts.push(super::Part {
+            lines: note_lines.iter().map(String::as_str).collect(),
+            size: note_size,
+            color: look.ink,
+            font: None,
+        });
+    }
+    if extra {
+        parts.push(super::Part {
+            lines: alloc::vec![notes.as_str()],
+            size: style.small,
+            color: look.faint,
+            font: None,
+        });
+    }
+    super::draw_stack(canvas, &font, area, align, &parts, gap);
 }
 
 /// The size of the sentence: as large as fits, or as set.

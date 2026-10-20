@@ -199,6 +199,7 @@ impl paperpaw_sdk::Plugin for BuiltInStats {
             description: "Reading statistics.".into(),
             version: paperpaw_sdk::Version::new(0, 4, 0),
             sdk: paperpaw_sdk::SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NOTHING,
         }
     }
 

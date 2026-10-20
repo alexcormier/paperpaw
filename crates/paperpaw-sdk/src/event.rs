@@ -26,7 +26,7 @@
 //!
 //! Underneath, what an event carries travels as [`Params`] (named
 //! strings), so it can cross to plugins in other languages and be
-//! scheduled ([`Command::Schedule`]); events of other plugins, known only
+//! declared as work ([`work`](crate::work)); events of other plugins, known only
 //! at run time, are heard by id ([`Registrar::subscribe`](crate::Registrar::subscribe)).
 
 use alloc::boxed::Box;
@@ -322,10 +322,10 @@ impl<P: EventData> Event<P> {
         Command::Emit(self.id.clone(), data.to_params())
     }
 
-    /// The command that emits it with `data` at `at` (see
-    /// [`Command::Schedule`]).
+    /// The command that emits it with `data` at `at`: work at a time
+    /// ([`Work::at`](crate::work::Work::at)), in place of the one before.
     pub fn schedule(&self, data: P, at: paperpaw_platform::Instant) -> Command {
-        Command::Schedule(self.id.clone(), data.to_params(), at)
+        Command::Work(crate::work::Work::at(self.id.clone(), at).with(data.to_params()))
     }
 
     /// What it carries, if `event` is this event (for screens'

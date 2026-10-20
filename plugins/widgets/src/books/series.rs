@@ -12,7 +12,9 @@ use core::cell::RefCell;
 
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::ui::UiStyle;
-use paperpaw_sdk::widgets::{self, Align, Frame, Look, Size, Widget, WidgetSpec, WidgetTarget};
+use paperpaw_sdk::widgets::{
+    self, Align, Frame, Look, Padding, Size, Widget, WidgetSpec, WidgetTarget,
+};
 use paperpaw_sdk::{Arg, Canvas, Env, Id, Rect, RegisterError, Registrar, SettingSpec};
 
 use super::shelf::{self, Place, Shelved};
@@ -34,9 +36,10 @@ const STARTS: [&str; 2] = ["widgets.series.around", "widgets.series.first"];
 const MAX_MEMBERS: usize = 60;
 
 /// Its settings, kept in the program.
-static SETTINGS: [SettingSpec; 11] = [
+static SETTINGS: [SettingSpec; 12] = [
     widgets::align_spec("widgets.series.align", ID, Align::Center),
     widgets::frame_spec("widgets.series.frame", ID, Frame::None),
+    widgets::padding_spec("widgets.series.padding", ID, Padding::Auto),
     widgets::size_spec("widgets.series.size", ID, Size::Medium, false),
     SettingSpec::fixed_text(
         "widgets.series.name",
@@ -336,7 +339,8 @@ impl Series {
         let label = if Self::labelled(env) {
             shelf::label_height(env)
         } else {
-            0
+            // Room for the line below the book being read.
+            shelf::mark_height(env)
         };
         let align = widgets::align(env, WIDGET);
         let books = &self.shown.books;
@@ -344,6 +348,8 @@ impl Series {
         let at = books.iter().position(|b| b.book.path == self.shown.current);
         let around = chosen(env, WIDGET, "start") != STARTS[1];
         let shown = window(books.len(), places.len(), at, around);
+        let mut places = places;
+        shelf::pack(env, &mut places, &books[shown.clone()], area, align);
         (places, &books[shown])
     }
 
@@ -357,6 +363,28 @@ impl Series {
             }
             _ => Covers::default(),
         };
+    }
+
+    /// "Discworld · 3 of 41 read".
+    fn caption(&self, env: &Env<'_>) -> String {
+        if self.shown.read > 0 {
+            env.i18n.format(
+                "widgets.series.caption-read",
+                &[
+                    ("series", Arg::Str(&self.shown.name)),
+                    ("read", Arg::Int(self.shown.read as i64)),
+                    ("count", Arg::Int(self.shown.total as i64)),
+                ],
+            )
+        } else {
+            env.i18n.format(
+                "widgets.series.caption",
+                &[
+                    ("series", Arg::Str(&self.shown.name)),
+                    ("count", Arg::Int(self.shown.total as i64)),
+                ],
+            )
+        }
     }
 
     /// The area below the caption.
@@ -411,24 +439,7 @@ impl Widget for Series {
             draw_message(canvas, env, &look, key);
             return;
         }
-        let title = if self.shown.read > 0 {
-            env.i18n.format(
-                "widgets.series.caption-read",
-                &[
-                    ("series", Arg::Str(&self.shown.name)),
-                    ("read", Arg::Int(self.shown.read as i64)),
-                    ("count", Arg::Int(self.shown.total as i64)),
-                ],
-            )
-        } else {
-            env.i18n.format(
-                "widgets.series.caption",
-                &[
-                    ("series", Arg::Str(&self.shown.name)),
-                    ("count", Arg::Int(self.shown.total as i64)),
-                ],
-            )
-        };
+        let title = self.caption(env);
         let rest = self.content(env, &look);
         let (places, books) = self.places(env, rest);
         shelf::draw_caption(canvas, env, WIDGET, &look, rest, &places, &title);

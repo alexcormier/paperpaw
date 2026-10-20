@@ -5,11 +5,11 @@
 //! service offers it), so no time left is shown.
 
 use alloc::boxed::Box;
-use alloc::string::ToString;
+use alloc::string::{String, ToString};
 
 use paperpaw_sdk::builtin::settings::BATTERY_LOW;
 use paperpaw_sdk::ui::UiStyle;
-use paperpaw_sdk::widgets::{self, Align, Frame, Look, Size, Widget, WidgetSpec};
+use paperpaw_sdk::widgets::{self, Align, Frame, Look, Padding, Size, Widget, WidgetSpec};
 use paperpaw_sdk::{Canvas, Color, Env, FontHandle, Id, Point, Rect, RegisterError, Registrar};
 
 use super::{add_settings, caption, chosen, draw_message, draw_ring, frame_height};
@@ -26,9 +26,10 @@ const STYLES: [&str; 3] = [
 ];
 
 /// Its settings, kept in the program.
-static SETTINGS: [SettingSpec; 7] = [
+static SETTINGS: [SettingSpec; 8] = [
     widgets::align_spec("widgets.battery.align", ID, Align::Center),
     widgets::frame_spec("widgets.battery.frame", ID, Frame::None),
+    widgets::padding_spec("widgets.battery.padding", ID, Padding::Auto),
     widgets::size_spec("widgets.battery.size", ID, Size::Fit, true),
     SettingSpec::fixed_choice(
         "widgets.battery.style",
@@ -117,18 +118,20 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, percent: u8, chargi
     let gap = style.gap as u16;
     let charging = charging && widgets::shows(env, id, "charging");
     let low = i64::from(percent) <= env.settings.read(&BATTERY_LOW);
-    let number = percent.to_string();
+    let number = Number {
+        font: &font,
+        text: percent.to_string(),
+        bolt: if charging { 0.55 } else { 0.0 },
+        least: style.small * 0.6,
+        ratio: font.line_metrics(style.text).ascent / style.text.max(1.0),
+    };
     let with_text = widgets::shows(env, id, "percent");
     let align = widgets::align(env, id);
-    // The text's width at size 1, and its height (a line) at size 1.
-    let unit = text_width(&font, 100.0, &number) / 100.0;
-    let line = f32::from(widgets::line_height(env, 100.0)) / 100.0;
     let fixed = match widgets::size(env, id) {
         Size::Fit => None,
         other => Some(other.text(&style) * 1.4),
     };
     let (w, h) = (f32::from(area.width), f32::from(area.height));
-    let bolt = if charging { 0.55 } else { 0.0 };
     let style_value = chosen(env, id, "style");
     // Not larger than this, however large the place: calm, not loud.
     let most = fixed.map_or(style.title * 4.0, |f| f * 1.2);
@@ -139,95 +142,93 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, percent: u8, chargi
         let radius = u32::from(d / 2);
         let thick = (radius / 7).max(style.line * 2).max(2);
         let inner = radius.saturating_sub(thick + (radius / 8).max(1)) as f32;
-        let inside = (inner * 0.9).min(inner * 1.5 / (unit + bolt).max(0.1));
-        let inside = fixed.map_or(inside, |f| f.min(inside));
-        let text_w =
-            |size: f32| text_width(&font, size, &number) + if charging { size * bolt } else { 0.0 };
+        let inside = number
+            .largest(fixed.unwrap_or(inner * 0.9), |s| {
+                number.width(s) <= inner * 1.5 && number.ascent(s) <= inner
+            })
+            .unwrap_or(0.0);
         // Beside: as large as the room right of the ring allows.
         let room = (w - f32::from(d + gap)).max(0.0);
-        let beside_size = fixed
-            .unwrap_or(h * 0.55)
-            .min(room * 0.9 / (unit + if charging { bolt } else { 0.0 }).max(0.1));
-        let beside = with_text && inside < style.small && beside_size >= style.small * 0.6;
+        let beside_size = number
+            .largest(fixed.unwrap_or(h * 0.55), |s| number.width(s) <= room)
+            .unwrap_or(0.0);
+        let beside = with_text && inside < style.small && beside_size > 0.0;
+        if with_text && !beside && inside == 0.0 {
+            // Too small for a ring: the number alone.
+            let Some(size) = number.largest(most, |s| {
+                number.width(s) <= w && f32::from(widgets::line_height(env, s)) <= h
+            }) else {
+                return;
+            };
+            let tx = align.x(area, number.width(size));
+            draw_charge_text(canvas, look, &number, tx, area, size);
+            return;
+        }
         let total = if beside {
-            d + gap + text_w(beside_size) as u16
+            d + gap + number.width(beside_size) as u16
         } else {
             d
         };
-        if with_text && !beside && inside < style.small * 0.6 {
-            // Too small for a ring: the number alone.
-            let bolt = if charging { bolt } else { 0.0 };
-            let size = (h / line).min(w * 0.9 / (unit + bolt)).min(most);
-            let tx = align.x(area, text_w(size));
-            let top = f32::from(area.y) + (h - size * line) / 2.0;
-            draw_charge_text(
-                canvas, &font, look, tx, top, size, line, &number, charging, bolt,
-            );
-            return;
-        }
         let x = super::place_x(area, total.min(area.width), align);
+        let ring = Rect::new(x, area.y + (area.height - d) / 2, d, d);
         let center = Point::new(
-            i32::from(x) + radius as i32,
-            i32::from(area.y + (area.height - d) / 2) + radius as i32,
+            i32::from(ring.x) + radius as i32,
+            i32::from(ring.y) + radius as i32,
         );
         draw_ring(canvas, env, look, center, radius, thick, percent);
         if !with_text {
             return;
         }
         if beside {
-            let size = beside_size;
             let tx = f32::from(x + d + gap);
-            let top = center.y as f32 - size * line / 2.0;
-            draw_charge_text(
-                canvas, &font, look, tx, top, size, line, &number, charging, bolt,
-            );
-        } else if inside >= style.small * 0.6 {
-            let tx = center.x as f32 - text_w(inside) / 2.0;
-            let top = center.y as f32 - inside * line / 2.0;
-            draw_charge_text(
-                canvas, &font, look, tx, top, inside, line, &number, charging, bolt,
-            );
+            draw_charge_text(canvas, look, &number, tx, ring, beside_size);
+        } else {
+            let tx = center.x as f32 - number.width(inside) / 2.0;
+            draw_charge_text(canvas, look, &number, tx, ring, inside);
         }
         return;
     }
     let standing = style_value == STYLES[1];
     // The battery's size: its height B (lying) or its width (standing),
     // the number as high as the battery beside it, or below it where the
-    // place is high.
+    // place is high. A font of a few sizes may draw it smaller.
     let (bw, bh) = if standing {
         (100.0, 185.0)
     } else {
         (LYING as f32, 100.0)
     };
-    let text_w = |b: f32| -> f32 {
+    let text_size = |b: f32, share: f32| -> f32 {
+        let wanted = fixed.unwrap_or(b * share);
+        number
+            .largest(wanted, |s| number.ascent(s) <= number.ratio * wanted + 0.5)
+            .unwrap_or(number.least)
+    };
+    let text_w = |b: f32, share: f32| -> f32 {
         if with_text {
-            let size = fixed.unwrap_or(b * 0.9);
-            text_width(&font, size, &number) + if charging { size * bolt } else { 0.0 }
+            number.width(text_size(b, share))
         } else {
             0.0
         }
     };
     // Side by side: B from the height and from the width.
     let side = {
-        let by_h = (h / (bh / 100.0)).min(most);
-        let mut b = by_h;
-        while b > 4.0 && b * bw / 100.0 + f32::from(gap) + text_w(b) > w {
+        let mut b = (h / (bh / 100.0)).min(most);
+        while b > 4.0 && b * bw / 100.0 + f32::from(gap) + text_w(b, 0.9) > w {
             b *= 0.95;
         }
         b
     };
-    // One above the other.
+    // One above the other, the number's ink half a gap below the battery.
     let stacked = {
         let mut b = (w / (bw / 100.0)).min(most);
         let text_h = |b: f32| {
             if with_text {
-                fixed.unwrap_or(b * 0.6) * line
+                number.ascent(text_size(b, 0.6))
             } else {
                 0.0
             }
         };
-        while b > 4.0
-            && (b * bh / 100.0 + f32::from(gap) / 2.0 + text_h(b) > h || text_w(b * 0.66) > w)
+        while b > 4.0 && (b * bh / 100.0 + f32::from(gap / 2) + text_h(b) > h || text_w(b, 0.6) > w)
         {
             b *= 0.95;
         }
@@ -237,31 +238,31 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, percent: u8, chargi
     let b = if beside { side } else { stacked };
     let body = ((b * bw / 100.0) as u16, (b * bh / 100.0).min(h) as u16);
     if beside {
-        let size = fixed.unwrap_or(b * 0.9);
-        let tw = text_w(b) as u16;
+        let size = text_size(b, 0.9);
+        let tw = if with_text {
+            number.width(size) as u16
+        } else {
+            0
+        };
         let total = body.0 + if with_text { gap + tw } else { 0 };
         let x = super::place_x(area, total.min(area.width), align);
         let y = area.y + (area.height - body.1) / 2;
-        draw_battery(
-            canvas,
-            env,
-            look,
-            Rect::new(x, y, body.0, body.1),
-            percent,
-            low,
-            standing,
-        );
+        let at = Rect::new(x, y, body.0, body.1);
+        draw_battery(canvas, env, look, at, percent, low, standing);
         if with_text {
             let tx = f32::from(x + body.0 + gap);
-            let top = f32::from(area.y) + (h - size * line) / 2.0;
-            draw_charge_text(
-                canvas, &font, look, tx, top, size, line, &number, charging, bolt,
-            );
+            draw_charge_text(canvas, look, &number, tx, at, size);
         }
     } else {
-        let size = fixed.unwrap_or(b * 0.6);
-        let text_h = if with_text { (size * line) as u16 } else { 0 };
-        let total = (body.1 + gap / 2 + text_h).min(area.height);
+        // The battery and the number's ink together in the middle.
+        let size = text_size(b, 0.6);
+        let ink = if with_text {
+            number.ink(size).1 as u16
+        } else {
+            0
+        };
+        let below = if with_text { gap / 2 + ink } else { 0 };
+        let total = (body.1 + below).min(area.height);
         let top = area.y + (area.height - total) / 2;
         let x = super::place_x(area, body.0, align);
         draw_battery(
@@ -274,68 +275,85 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, percent: u8, chargi
             standing,
         );
         if with_text {
-            let tw = text_width(&font, size, &number) + if charging { size * bolt } else { 0.0 };
-            let tx = align.x(area, tw);
-            let ty = f32::from(top + body.1 + gap / 2);
-            draw_charge_text(
-                canvas, &font, look, tx, ty, size, line, &number, charging, bolt,
-            );
+            let tx = align.x(area, number.width(size));
+            let band = Rect::new(area.x, top + body.1 + gap / 2, area.width, ink);
+            draw_charge_text(canvas, look, &number, tx, band, size);
         }
     }
 }
 
-/// The width of the number with its small percent sign at `size`.
-fn text_width(font: &FontHandle<'_>, size: f32, number: &str) -> f32 {
-    font.measure(size, number) + font.measure(size * 0.45, " %")
+/// The charge as drawn: the number, a small percent sign after it, a
+/// bolt before it while charging; measured as the font draws it.
+struct Number<'a, 'f> {
+    font: &'a FontHandle<'f>,
+    text: String,
+    /// The bolt's width, in sizes (0 without one).
+    bolt: f32,
+    /// The least size it is drawn at.
+    least: f32,
+    /// The font's ascent for its size, where it draws sizes as asked.
+    ratio: f32,
 }
 
-/// The number at `size` from `x`, the line's top at `top`, the percent
-/// sign small after it.
-#[allow(clippy::too_many_arguments)]
-fn draw_number(
-    canvas: &mut Canvas<'_>,
-    font: &FontHandle<'_>,
-    look: &Look,
-    x: f32,
-    top: f32,
-    size: f32,
-    line: f32,
-    number: &str,
-) {
-    let metrics = font.line_metrics(size);
-    let baseline = (top + (size * line + metrics.ascent - metrics.descent) / 2.0) as i32;
-    font.draw(canvas, size, x, baseline, number, look.ink);
-    let x = x + font.measure(size, number);
-    font.draw(canvas, size * 0.45, x, baseline, " %", look.faint);
+impl Number<'_, '_> {
+    /// Its width at `size`, the bolt and the sign included.
+    fn width(&self, size: f32) -> f32 {
+        self.font.measure(size, &self.text)
+            + self.font.measure(size * 0.45, " %")
+            + size * self.bolt
+    }
+
+    /// The height of a line's ascent at `size`, as drawn.
+    fn ascent(&self, size: f32) -> f32 {
+        self.font.line_metrics(size).ascent
+    }
+
+    /// Where the digits' ink is at `size`: its top above the baseline
+    /// (negative) and its height.
+    fn ink(&self, size: f32) -> (i32, i32) {
+        let (top, bottom) = self.font.ink(size, &self.text).unwrap_or_else(|| {
+            let metrics = self.font.line_metrics(size);
+            (-(metrics.ascent as i32), 0)
+        });
+        (top, bottom - top)
+    }
+
+    /// The largest size from `max` down to the least at which `fits`.
+    fn largest(&self, max: f32, fits: impl FnMut(f32) -> bool) -> Option<f32> {
+        widgets::largest_size(max.max(self.least), self.least, fits)
+    }
 }
 
-/// A bolt (while charging) and the number after it.
-#[allow(clippy::too_many_arguments)]
+/// The charge at `size` from `x`, its digits' ink in the middle of
+/// `band` from top to bottom: a bolt while charging, the number, the
+/// percent sign small after it.
 fn draw_charge_text(
     canvas: &mut Canvas<'_>,
-    font: &FontHandle<'_>,
     look: &Look,
+    number: &Number<'_, '_>,
     x: f32,
-    top: f32,
+    band: Rect,
     size: f32,
-    line: f32,
-    number: &str,
-    charging: bool,
-    bolt: f32,
 ) {
+    let font = number.font;
+    let baseline = widgets::ink_baseline(font, size, &number.text, band);
+    let (top, height) = number.ink(size);
     let mut x = x;
-    if charging {
-        let h = size * line * 0.62;
+    if number.bolt > 0.0 {
+        let h = (height as f32 * 1.15) as u16;
+        let ink_top = baseline + top;
         let at = Rect::new(
             x as u16,
-            (top + (size * line - h) / 2.0) as u16,
-            (size * bolt * 0.75) as u16,
-            h as u16,
+            (ink_top - (i32::from(h) - height) / 2).max(0) as u16,
+            (size * number.bolt * 0.75) as u16,
+            h,
         );
         draw_bolt(canvas, at, look.ink);
-        x += size * bolt;
+        x += size * number.bolt;
     }
-    draw_number(canvas, font, look, x, top, size, line, number);
+    font.draw(canvas, size, x, baseline, &number.text, look.ink);
+    let x = x + font.measure(size, &number.text);
+    font.draw(canvas, size * 0.45, x, baseline, " %", look.faint);
 }
 
 /// A battery drawn in `body`: rounded, with its knob (to the right, or

@@ -10,7 +10,10 @@
 //! ([`roots`](crate::roots), checked in mbedTLS's verify callback) and be
 //! for the host asked; mbedTLS checks the rest of the chain. Their dates
 //! are checked in the same callback against the time set over the
-//! network ([`crate::clock`]); secure requests wait for it.
+//! network ([`crate::clock`]). Secure requests wait until that time is
+//! known or a try to get it failed; then they go ahead with the dates
+//! unchecked rather than not at all (ADR 0017: the X4 has no clock that
+//! runs while it is off).
 //!
 //! A session takes about 40 KB of heap (two record buffers of 16 KB,
 //! which TLS needs: a server may send records that long), only while it
@@ -238,7 +241,7 @@ unsafe extern "C" fn verify(
 }
 
 /// The flags of a certificate valid from `from` to `to`, now (none while
-/// the time is not known: see [`crate::clock`]).
+/// the time is not known, so its dates go unchecked: see the module).
 fn dates(from: mbedtls_x509_time, to: mbedtls_x509_time) -> u32 {
     let Some(now) = crate::clock::unix_ms(crate::now()).map(|ms| ms / 1000) else {
         return 0;

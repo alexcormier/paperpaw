@@ -44,6 +44,8 @@ pub const FETCH: Id = Id::new_static("news.fetch");
 /// Articles kept of each feed.
 pub const ARTICLES: Setting<i64> = Setting::new("news.articles");
 const SCREEN: Id = Id::new_static("news.list");
+/// Declared work: a fetch no reader waits for (a rule's).
+const FETCH_DUE: Event = Event::new("news.fetch-due");
 const CHOICE: Id = Id::new_static("news.choice");
 const CHOSEN: Event<choice::Picked> = Event::new("news.chosen");
 /// A feed's answer.
@@ -394,6 +396,7 @@ impl Plugin for News {
             // Released with PaperPaw, also as a file from the store.
             version: paperpaw_sdk::package_version!(),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NETWORK,
         }
     }
 
@@ -416,9 +419,18 @@ impl Plugin for News {
         ))?;
         r.add_action(ActionSpec::new(FETCH, "news.fetch").handler(
             |env: &Env<'_>, out: &mut Vec<Command>| {
-                fetch(env, 0, true, out);
+                if env.reader {
+                    fetch(env, 0, true, out);
+                } else {
+                    let due = FETCH_DUE.id().clone();
+                    out.push(Command::Work(paperpaw_sdk::work::Work::when_cheap(
+                        due,
+                        core::time::Duration::from_secs(3600),
+                    )));
+                }
             },
         ))?;
+        r.on(FETCH_DUE, |env, (), out| fetch(env, 0, true, out))?;
         r.on(FETCHED, fetched)?;
         r.add_menu_entry(MenuEntry {
             menu: menus::TOOLS,

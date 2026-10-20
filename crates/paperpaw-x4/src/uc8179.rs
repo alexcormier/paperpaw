@@ -53,6 +53,7 @@ use embedded_hal::spi::SpiDevice;
 use paperpaw_platform::{FrameView, PixelFormat, Rotation};
 
 use crate::bands::{self, Window};
+use crate::display::BUSY_TIMEOUT_MS;
 pub use crate::display::{Error, PANEL_HEIGHT, PANEL_WIDTH, Planes, Refresh};
 
 /// The screen PaperPaw draws upright (see [`Display::size`] for it
@@ -64,8 +65,6 @@ pub const HEIGHT: u16 = PANEL_WIDTH;
 const ADDRESSED_LINES: u16 = 600;
 /// Bytes of a line.
 const LINE: usize = PANEL_WIDTH as usize / 8;
-/// Longest wait for the controller, e.g. a full refresh.
-const BUSY_TIMEOUT_MS: u32 = 30_000;
 
 /// The controller's commands used here.
 mod cmd {

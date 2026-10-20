@@ -54,6 +54,8 @@ pub const OPEN: Id = Id::new_static("opds.open");
 /// Syncs the catalogs marked for it.
 pub const SYNC: Id = Id::new_static("opds.sync");
 const LIST_SCREEN: Id = Id::new_static("opds.catalogs");
+/// Declared work: a sync no reader waits for (a rule's), at a good moment.
+const SYNC_DUE: Event = Event::new("opds.sync-due");
 const BROWSE_SCREEN: Id = Id::new_static("opds.browse");
 const EDIT_SCREEN: Id = Id::new_static("opds.edit");
 const CHOICE: Id = Id::new_static("opds.choice");
@@ -78,11 +80,9 @@ fn request(
     reply: &Event<HttpReply>,
     params: Params,
 ) -> HttpRequest {
-    let mut request = HttpRequest {
-        params: params.with(temp::FILE, save_to.clone()),
-        save_to: Some(save_to),
-        ..HttpRequest::new("GET", url, reply)
-    };
+    let mut request = HttpRequest::get(url, reply)
+        .with(params.with(temp::FILE, save_to.clone()))
+        .save_to(save_to);
     request.headers.push(paperpaw_sdk::web::user_agent());
     if let Some(auth) = catalog.authorization()
         && same_origin(url, &catalog.url)
@@ -212,6 +212,7 @@ impl Plugin for Opds {
             ),
             version: Version::new(0, 1, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NETWORK,
         }
     }
 
@@ -249,9 +250,21 @@ impl Plugin for Opds {
         let shared = state.clone();
         r.add_action(ActionSpec::new(SYNC, "opds.sync-all").handler(
             move |env: &Env<'_>, out: &mut Vec<Command>| {
-                shared.borrow_mut().start(env, marked(env), out);
+                if env.reader {
+                    shared.borrow_mut().start(env, marked(env), out);
+                } else {
+                    let due = SYNC_DUE.id().clone();
+                    out.push(Command::Work(paperpaw_sdk::work::Work::when_cheap(
+                        due,
+                        core::time::Duration::from_secs(3600),
+                    )));
+                }
             },
         ))?;
+        let shared = state.clone();
+        r.on(SYNC_DUE, move |env, (), out| {
+            shared.borrow_mut().start(env, marked(env), out);
+        })?;
         r.add_menu_entry(MenuEntry {
             menu: menus::TOOLS,
             item: OPEN,

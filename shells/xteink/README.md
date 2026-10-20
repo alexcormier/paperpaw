@@ -82,9 +82,10 @@ python tools/x4-remote.py --push my-fonts .paperpaw/fonts --info
   downloads straight to the card.
 - Updates from the card (ADR 0019): two app partitions
   (`partitions.csv`, which `espflash.toml` names), signed update files
-  made with `paperpaw-sign`, a failed update undone at the next start.
-- To come: the UC8179 controller of newer X4s, updates fetched over the
-  network.
+  made with `paperpaw-sign`, a failed update undone at the next start;
+  or fetched over the network by the `update` plugin.
+- The UltraChip UC8179 of newer X4s as well as the SSD1677, whichever
+  answers at the start.
 
 ## The X4 Pro
 
@@ -110,8 +111,8 @@ What works: the screen (black and white, and four grays for pictures),
 touch and the home key, the page and power buttons,
 the SD card (SDMMC), the battery from its fuel gauge, the clock chip,
 the front light (brightness and warmth, in the quick panel), sleep, the
-network as on the X4. To come: the UC8279 of other X4 Pros, battery
-life measured.
+network as on the X4, the UC8279 of other X4 Pros. To come: battery life
+measured.
 
 ## The X4 Classic
 

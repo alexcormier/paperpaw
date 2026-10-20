@@ -121,6 +121,8 @@ pub enum Contribution {
     Decorator(Box<crate::decorations::DecoratorSpec>),
     InputFilter(InputFilterSpec),
     RefreshFilter(RefreshFilterSpec),
+    /// A job: work done in steps (see [`work`](crate::work)).
+    Work(Box<crate::work::WorkSpec>),
     Widget(Box<WidgetSpec>),
     SetupStep(Box<SetupStepSpec>),
     /// A preset made at start (see [`presets`](crate::presets)).
@@ -183,6 +185,7 @@ impl Contribution {
             Contribution::Decorator(_) => "decorator",
             Contribution::InputFilter(_) => "input-filter",
             Contribution::RefreshFilter(_) => "refresh-filter",
+            Contribution::Work(_) => "work",
             Contribution::Widget(_) => "widget",
             Contribution::SetupStep(_) => "setup-step",
             Contribution::Preset(_) | Contribution::FixedPresets(_) => "preset",
@@ -217,6 +220,7 @@ impl Contribution {
             Contribution::Decorator(d) => &d.id,
             Contribution::InputFilter(f) => &f.id,
             Contribution::RefreshFilter(f) => &f.id,
+            Contribution::Work(w) => &w.id,
             Contribution::Widget(w) => &w.id,
             Contribution::SetupStep(s) => &s.id,
             Contribution::Preset(p) => &p.id,
@@ -596,6 +600,12 @@ impl Registrar {
     /// [`filters`](crate::filters)).
     pub fn add_refresh_filter(&mut self, filter: RefreshFilterSpec) -> Result<(), RegisterError> {
         self.add(Contribution::RefreshFilter(filter))
+    }
+
+    /// Adds a job: the steps of the work declared with its id (see
+    /// [`work`](crate::work)).
+    pub fn add_work(&mut self, work: crate::work::WorkSpec) -> Result<(), RegisterError> {
+        self.add(Contribution::Work(Box::new(work)))
     }
 
     /// Adds a widget, e.g. for the home screen (see

@@ -42,6 +42,11 @@ pub struct PluginUsage {
     /// Bytes of storage its code read and wrote.
     pub read: u64,
     pub written: u64,
+    /// Its requests, servers and connections that went out to the network,
+    /// and those refused (Offline, its network off, not declared; see
+    /// [`work`](crate::work)).
+    pub requests: u32,
+    pub refused: u32,
 }
 
 impl Default for PluginUsage {
@@ -55,6 +60,8 @@ impl Default for PluginUsage {
             pixels: 0,
             read: 0,
             written: 0,
+            requests: 0,
+            refused: 0,
         }
     }
 }

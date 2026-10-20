@@ -437,6 +437,7 @@ fn canvases_describe_what_they_draw_to_those_who_ask() {
                 area: Rect::new(0, 0, 50, 8),
                 focused: false,
                 on: None,
+                clip: Rect::new(0, 0, W, H),
             },
             Described {
                 role: Role::Switch,
@@ -444,6 +445,7 @@ fn canvases_describe_what_they_draw_to_those_who_ask() {
                 area: Rect::new(0, 10, 20, 10),
                 focused: true,
                 on: Some(true),
+                clip: Rect::new(0, 10, 20, 10),
             },
         ]
     );

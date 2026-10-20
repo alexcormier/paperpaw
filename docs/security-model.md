@@ -12,8 +12,10 @@ are reported as [SECURITY.md](../SECURITY.md) says.
   does not start cleanly is undone ([ADR 0019](adr/0019-firmware-updates.md)).
   The image paperpaw.org offers for flashing in the browser is signed
   too; the site and the browser check it before it is written.
-  Further keys are trusted only by the reader's choice
-  (`.paperpaw/firmware-keys.txt`).
+  Firmware signed with another key (one's own builds) installs only
+  when the reader accepts that key, shown by its fingerprint, at that
+  install, and an older firmware only when the reader chooses it, told
+  it is older: nothing on the card makes a key trusted.
 - **Passwords and keys** (Wi-Fi, catalogs, sync accounts) are kept in
   `.paperpaw/secrets.txt`, veiled so that they do not show at a glance,
   **not encrypted**: whoever has the card has them. They are never shown

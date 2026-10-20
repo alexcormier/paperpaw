@@ -54,6 +54,7 @@ impl Plugin for FramesPlugin {
             description: Cow::Borrowed(""),
             version: Version::new(1, 0, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NOTHING,
         }
     }
 
@@ -168,6 +169,7 @@ impl Plugin for Flash {
             description: Cow::Borrowed(""),
             version: Version::new(1, 0, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NOTHING,
         }
     }
 

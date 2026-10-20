@@ -317,7 +317,16 @@ pub(crate) fn checked(env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) 
     let key = (String::from("online"), offer.version.clone());
     if quiet && read_pair(storage, OFFERED) != Some(key.clone()) {
         write_pair(storage, OFFERED, &key.0, &key.1);
-        out.push(Command::OpenScreen(PAGE, Params::new()));
+        if env.reader {
+            out.push(Command::OpenScreen(PAGE, Params::new()));
+        } else {
+            // Nothing over reading: the offer waits on the update's page.
+            let text = env.i18n.format(
+                "update.offer.title",
+                &[("version", Arg::Str(&offer.version))],
+            );
+            out.push(Command::Notify(text));
+        }
     }
 }
 

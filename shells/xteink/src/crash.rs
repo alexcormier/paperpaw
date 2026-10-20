@@ -22,7 +22,9 @@ static mut LAST: [u8; 400] = [0; 400];
 /// The calls kept with a panic, at most.
 const CALLS: usize = 16;
 
-/// Writes into a fixed buffer, cutting what does not fit.
+/// Writes into a fixed buffer, cutting what does not fit between two
+/// characters (a character cut in two would make the whole message
+/// unreadable) and leaving its last byte zero.
 struct Cut<'a> {
     buf: &'a mut [u8],
     len: usize,
@@ -30,12 +32,13 @@ struct Cut<'a> {
 
 impl Write for Cut<'_> {
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
-        for &b in s.as_bytes() {
-            if self.len + 1 < self.buf.len() {
-                self.buf[self.len] = b;
-                self.len += 1;
-            }
+        let room = self.buf.len().saturating_sub(self.len + 1);
+        let mut take = s.len().min(room);
+        while !s.is_char_boundary(take) {
+            take -= 1;
         }
+        self.buf[self.len..self.len + take].copy_from_slice(&s.as_bytes()[..take]);
+        self.len += take;
         Ok(())
     }
 }

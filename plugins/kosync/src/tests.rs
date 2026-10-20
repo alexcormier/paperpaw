@@ -261,6 +261,9 @@ impl Harness {
             wifi: None,
             firmware: None,
             native: None,
+            power: paperpaw_sdk::power::Power::normal(),
+            work: paperpaw_sdk::work::WorkStates::none(),
+            reader: true,
             clipboard: false,
             slots: &[],
             screens: &[],
@@ -304,6 +307,8 @@ impl Harness {
             content_type: Some("application/json".to_string()),
             final_url: None,
             context: request.params.clone(),
+            refused: None,
+            headers: Vec::new(),
         };
         self.dispatch(&request.reply, &reply.to_params())
     }

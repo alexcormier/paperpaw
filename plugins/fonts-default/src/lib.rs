@@ -137,6 +137,7 @@ fn manifest() -> Manifest {
         description: Cow::Borrowed("Literata for reading and Source Sans for menus."),
         version: Version::new(0, 1, 0),
         sdk: SDK_VERSION,
+        uses: paperpaw_sdk::Uses::NOTHING,
     }
 }
 

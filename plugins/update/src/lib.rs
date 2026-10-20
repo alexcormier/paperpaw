@@ -9,9 +9,11 @@
 //! first start.
 //!
 //! Updates signed by PaperPaw install at once; one's own builds, signed
-//! with one's own key, after the reader chose to trust that key. An
-//! update without some of the plugins built in now says which, and the
-//! reader chooses to update without them or to wait.
+//! with one's own key, once the reader accepted that key, shown by its
+//! fingerprint, at each install. An older version installs only when the
+//! reader chooses it, told it is older. An update without some of the
+//! plugins built in now says which, and the reader chooses to update
+//! without them or to wait.
 
 #![no_std]
 
@@ -42,6 +44,8 @@ pub const OPEN: Id = Id::new_static("update.open");
 /// from a rule); says nothing otherwise.
 pub const CHECK: Id = Id::new_static("update.check");
 const PAGE: Id = Id::new_static("update.page");
+/// Declared work: a check no reader waits for (a rule's).
+const CHECK_DUE: paperpaw_sdk::event::Event = paperpaw_sdk::event::Event::new("update.check-due");
 /// The update being installed (its path and version), kept through the
 /// restart to say how it went.
 const INSTALLING: &str = "installing.txt";
@@ -84,7 +88,7 @@ fn started(env: &Env<'_>, firmware: &Firmware, out: &mut Vec<Command>) {
         let _ = storage.remove(&file(INSTALLING));
         if !firmware.undone && version == firmware.version {
             let _ = storage.remove(&path);
-            out.push(Command::Notify(
+            out.push(Command::Announce(
                 env.i18n
                     .format("update.done", &[("version", Arg::Str(&version))]),
             ));
@@ -92,7 +96,7 @@ fn started(env: &Env<'_>, firmware: &Firmware, out: &mut Vec<Command>) {
         }
     }
     if firmware.undone {
-        out.push(Command::Notify(env.i18n.format(
+        out.push(Command::Announce(env.i18n.format(
             "update.undone",
             &[("version", Arg::Str(&firmware.version))],
         )));
@@ -100,7 +104,7 @@ fn started(env: &Env<'_>, firmware: &Firmware, out: &mut Vec<Command>) {
     }
     // A newer update on the card, not offered before.
     if let Ok(update) = found::find(storage, firmware)
-        && paperpaw_sdk::firmware::compare_versions(&update.info.version, &firmware.version).is_gt()
+        && update.is_newer(firmware)
         && read_pair(storage, OFFERED) != Some((update.path.clone(), update.info.version.clone()))
     {
         write_pair(storage, OFFERED, &update.path, &update.info.version);
@@ -122,6 +126,7 @@ impl Plugin for Update {
             ),
             version: Version::new(0, 1, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NETWORK,
         }
     }
 
@@ -139,10 +144,20 @@ impl Plugin for Update {
                 out.push(Command::OpenScreen(PAGE, Params::new()));
             },
         ))?;
-        r.add_action(
-            ActionSpec::new(CHECK, "update.check")
-                .handler(|env: &Env<'_>, out: &mut Vec<Command>| online::check(env, true, out)),
-        )?;
+        r.add_action(ActionSpec::new(CHECK, "update.check").handler(
+            |env: &Env<'_>, out: &mut Vec<Command>| {
+                if env.reader {
+                    online::check(env, true, out);
+                } else {
+                    let due = CHECK_DUE.id().clone();
+                    out.push(Command::Work(paperpaw_sdk::work::Work::when_cheap(
+                        due,
+                        core::time::Duration::from_secs(3600),
+                    )));
+                }
+            },
+        ))?;
+        r.on(CHECK_DUE, |env, (), out| online::check(env, true, out))?;
         r.set_menu_need(CHECK, MenuNeed::Firmware)?;
         r.add_icon(CHECK, Cow::Borrowed("cloud-download"))?;
         // Answers and downloads go on while the page is closed.

@@ -31,6 +31,7 @@ pub struct Light {
 }
 
 /// The plugin that registers a profile's light.
+#[derive(Debug)]
 pub struct Emulated(pub Light);
 
 const EN: &str = "[meta]
@@ -65,6 +66,7 @@ impl Plugin for Emulated {
             description: Cow::Borrowed("The emulated device's front light, set as on the device."),
             version: Version::new(0, 1, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_core::sdk::Uses::NOTHING,
         }
     }
 

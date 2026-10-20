@@ -91,6 +91,7 @@ impl Plugin for Store {
             ),
             version: Version::new(0, 1, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NETWORK,
         }
     }
 
@@ -146,9 +147,16 @@ impl Plugin for Store {
         r.on(queue::FETCHED, queue::fetched)?;
         // The first-run setup's offer of the plugins most readers add.
         setup::register(r)?;
-        r.on(events::STARTED, |env, _, _| {
+        r.on(events::STARTED, |env, _, out| {
+            // A download cut off by the restart is begun anew from its
+            // page, or first when the queue goes on.
+            queue::interrupted(env);
             INSTALLER.cancel(env.storage);
-            queue::clear(env);
+            // The setup's plugins go on without the store being opened:
+            // the reader asked for them.
+            if queue::has_quiet(env) {
+                queue::next(env, out);
+            }
         })?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;

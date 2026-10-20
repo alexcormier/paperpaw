@@ -50,8 +50,10 @@ pub const PANEL_HEIGHT: u16 = 480;
 pub const WIDTH: u16 = PANEL_HEIGHT;
 pub const HEIGHT: u16 = PANEL_WIDTH;
 
-/// Longest wait for the controller, e.g. a full refresh (about 2 s).
-const BUSY_TIMEOUT_MS: u32 = 30_000;
+/// Longest wait for the controller, e.g. a full refresh (about 2 s, a
+/// UC8179's 3.5 s): a busy line that sticks ends in an error, well before
+/// the firmware's watchdog (20 s) would start the X4 again.
+pub(crate) const BUSY_TIMEOUT_MS: u32 = 10_000;
 /// The stock firmware's waveform for four grays (V3.1.9, as the FreeInk SDK
 /// records it from the OpenX4 community SDK, MIT licence): 105 bytes of
 /// phases, timing and frame rate, then the gate voltage, the three source
@@ -626,6 +628,44 @@ mod tests {
     }
     impl DelayNs for Delay {
         fn delay_ns(&mut self, _: u32) {}
+    }
+
+    /// A busy line that never ends.
+    struct Stuck;
+    impl embedded_hal::digital::ErrorType for Stuck {
+        type Error = core::convert::Infallible;
+    }
+    impl InputPin for Stuck {
+        fn is_high(&mut self) -> Result<bool, Self::Error> {
+            Ok(true)
+        }
+        fn is_low(&mut self) -> Result<bool, Self::Error> {
+            Ok(false)
+        }
+    }
+
+    /// Counts the time waited, in nanoseconds.
+    struct Clock(Rc<core::cell::Cell<u64>>);
+    impl DelayNs for Clock {
+        fn delay_ns(&mut self, ns: u32) {
+            self.0.set(self.0.get() + u64::from(ns));
+        }
+    }
+
+    #[test]
+    fn a_stuck_busy_line_ends_before_the_watchdog() {
+        let controller = Controller::new();
+        let waited = Rc::new(core::cell::Cell::new(0));
+        let mut display = Display::new(
+            Spi(controller.clone()),
+            Dc(controller),
+            Pin,
+            Stuck,
+            Clock(waited.clone()),
+        );
+        assert!(matches!(display.wait(), Err(Error::Timeout)));
+        let seconds = waited.get() / 1_000_000_000;
+        assert!((5..20).contains(&seconds), "waited {seconds} s");
     }
 
     /// Where screen pixel `(x, y)` lies on the panel, turned: the

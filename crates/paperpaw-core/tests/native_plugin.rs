@@ -140,6 +140,7 @@ impl Plugin for Looks {
             description: "".into(),
             version: Version::new(1, 0, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NOTHING,
         }
     }
 

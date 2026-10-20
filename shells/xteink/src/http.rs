@@ -103,6 +103,8 @@ struct Call {
     got: u64,
     /// Until when it may wait for the network, or for progress.
     until: u64,
+    /// Until when it may take in all ([`HttpCall::timeout_ms`]).
+    deadline: u64,
     /// A later call saves to the same file: this one ends unanswered.
     replaced: bool,
 }
@@ -138,6 +140,7 @@ impl Calls {
             },
             None => Sink::Memory(Vec::new(), call.max_response),
         };
+        let deadline = now_ms() + u64::from(call.timeout_ms);
         self.calls.push(Call {
             url: call.url.clone(),
             call,
@@ -146,6 +149,7 @@ impl Calls {
             sink,
             got: 0,
             until: now_ms() + OFFLINE_MS,
+            deadline,
             replaced: false,
         });
     }
@@ -226,6 +230,13 @@ impl Call {
     /// One step on; the outcome once there is one.
     fn step(&mut self, net: &mut Net, storage: &dyn Storage, may_open: bool) -> Option<Outcome> {
         let now = now_ms();
+        if now > self.deadline {
+            return Some(Err("timed out"));
+        }
+        if net.address().is_none() && !matches!(self.phase, Phase::Waiting) {
+            // The address went: what was open on it is gone.
+            return Some(Err("no network"));
+        }
         match self.phase {
             Phase::Waiting => self.start(net, storage, may_open, now),
             Phase::Resolving(query, port) => {
@@ -324,6 +335,7 @@ impl Call {
                 etag: head.etag,
                 content_type: head.content_type,
                 url: (self.url != self.call.url).then(|| self.url.clone()),
+                headers: head.headers,
                 ..HttpResponse::default()
             }));
         }
@@ -391,7 +403,7 @@ impl Call {
             request,
             sent: 0,
             upload,
-            parser: Parser::new(&self.call.method),
+            parser: Parser::new(&self.call.method).wanting(&self.call.want_headers),
         };
         self.until = now_ms() + STALL_MS;
         None

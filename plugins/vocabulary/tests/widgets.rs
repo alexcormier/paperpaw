@@ -211,3 +211,14 @@ fn both_draw_in_every_frame() {
         }
     }
 }
+
+/// Without words, a cell too small for where words come from says there
+/// are none yet, rather than a sentence cut short.
+#[test]
+fn a_small_cell_says_there_are_no_words() {
+    for widget in ["vocabulary.widget.word", "vocabulary.widget.saved"] {
+        let (shown, _) = home(MemoryStorage::new(), &format!("{widget} 0/0 2x1"), "");
+        assert!(shown.contains("No words yet"), "{widget}: {shown}");
+        assert!(!shown.contains("Words you look up"), "{widget}: {shown}");
+    }
+}

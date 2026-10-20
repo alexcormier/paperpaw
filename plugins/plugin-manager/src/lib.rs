@@ -62,6 +62,7 @@ impl Plugin for PluginManager {
             description: Cow::Borrowed("Lists the plugins and switches them on and off."),
             version: Version::new(0, 1, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NOTHING,
         }
     }
 
@@ -89,10 +90,10 @@ impl Plugin for PluginManager {
             // One notice shows at a time: safe mode's, the more
             // important, last.
             if let Some(notice) = not_installed_notice(env, &native.not_installed) {
-                out.push(Command::Notify(notice));
+                out.push(Command::Announce(notice));
             }
             if let Some(safe_mode) = &native.safe_mode {
-                out.push(Command::Notify(safe_mode_notice(env, safe_mode)));
+                out.push(Command::Announce(safe_mode_notice(env, safe_mode)));
             }
         })?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;

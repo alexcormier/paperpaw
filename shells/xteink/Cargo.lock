@@ -2036,6 +2036,7 @@ dependencies = [
  "paperpaw-plugin-menu",
  "paperpaw-plugin-opds",
  "paperpaw-plugin-plugin-manager",
+ "paperpaw-plugin-power",
  "paperpaw-plugin-reader",
  "paperpaw-plugin-settings",
  "paperpaw-plugin-setup",
@@ -2265,6 +2266,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "paperpaw-plugin-power"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-sdk",
+]
+
+[[package]]
 name = "paperpaw-plugin-reader"
 version = "0.4.0-dev"
 dependencies = [
@@ -2396,7 +2404,7 @@ version = "0.4.0-dev"
 
 [[package]]
 name = "paperpaw-xteink"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "critical-section",
  "embassy-net-driver",

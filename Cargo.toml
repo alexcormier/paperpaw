@@ -47,6 +47,7 @@ members = [
     "plugins/stats",
     "plugins/battery",
     "plugins/wifi",
+    "plugins/power",
     "plugins/file-manager",
     "plugins/transfer",
     "plugins/browser",
@@ -80,6 +81,7 @@ members = [
     "shells/android",
     "tools/fontgen",
     "tools/sign",
+    "tools/dev",
 ]
 
 [workspace.package]
@@ -127,6 +129,7 @@ paperpaw-plugin-calibre = { path = "plugins/calibre", version = "0.4.0-dev" }
 paperpaw-plugin-stats = { path = "plugins/stats", version = "0.4.0-dev" }
 paperpaw-plugin-battery = { path = "plugins/battery", version = "0.4.0-dev" }
 paperpaw-plugin-wifi = { path = "plugins/wifi", version = "0.4.0-dev" }
+paperpaw-plugin-power = { path = "plugins/power", version = "0.4.0-dev" }
 paperpaw-plugin-file-manager = { path = "plugins/file-manager", version = "0.4.0-dev" }
 paperpaw-plugin-transfer = { path = "plugins/transfer", version = "0.4.0-dev" }
 paperpaw-plugin-browser = { path = "plugins/browser", version = "0.4.0-dev" }

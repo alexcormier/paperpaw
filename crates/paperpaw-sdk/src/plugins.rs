@@ -246,6 +246,7 @@ mod tests {
                 description: Cow::Borrowed("Does things."),
                 version: Version::new(1, 0, 0),
                 sdk: SDK_VERSION,
+                uses: crate::Uses::NOTHING,
             },
             state,
             enabled,
