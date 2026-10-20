@@ -6,6 +6,15 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Rules: those that repeat every so many minutes run without a clock
+  too (they count from the start); a time of day is waited for again
+  when the clock becomes known, is set or moves to another time zone,
+  where before it waited for the next wake. Rules that undo each other
+  through the settings they change stop after four in a row, where they
+  ran on until the kernel cut them off, writing the settings each time.
+  The rules are read once and kept, not on every event; where the file
+  cannot be read, none apply and the list says so instead of saving
+  over it, and a rule not saved (card full) says so too.
 - Buttons and gestures: where there are buttons only (the X4), a change
   that leaves no button to select, to go back or to move on or back
   with, everywhere or in one place (also the lock screen), is refused
