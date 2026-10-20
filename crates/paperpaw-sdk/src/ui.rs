@@ -693,8 +693,16 @@ impl Header {
         }
     }
 
-    fn page_label(page: (usize, usize)) -> String {
-        format!("{} / {}", page.0 + 1, page.1)
+    /// Page `page.0` (0-based) of `page.1`, e.g. "2 / 5".
+    fn page_label(env: &Env<'_>, page: (usize, usize)) -> String {
+        let (shown, pages) = (page.0.saturating_add(1), page.1);
+        env.i18n.format(
+            "core.page-of",
+            &[
+                ("page", paperpaw_i18n::Arg::Int(shown as i64)),
+                ("pages", paperpaw_i18n::Arg::Int(pages as i64)),
+            ],
+        )
     }
 
     fn layout(&self, env: &Env<'_>, style: &UiStyle, page: Option<(usize, usize)>) -> HeaderParts {
@@ -710,7 +718,7 @@ impl Header {
         let mut right = a.x + a.width;
         let pager = match (page, style.font(env)) {
             (Some(page), Some(font)) if page.1 > 1 => {
-                let label = font.measure(style.small, &Self::page_label(page)) as u16;
+                let label = font.measure(style.small, &Self::page_label(env, page)) as u16;
                 let arrow = if self.arrows { square * 4 / 5 } else { 0 };
                 let margin = if self.arrows { 0 } else { style.margin as u16 };
                 let next = Rect::new(right - arrow - margin, a.y, arrow, a.height);
@@ -770,7 +778,9 @@ impl Header {
             x
         });
         let title = fit(&font, style.head, title, right - f32::from(t.x));
-        let label = page.filter(|_| parts.pager.is_some()).map(Self::page_label);
+        let label = page
+            .filter(|_| parts.pager.is_some())
+            .map(|page| Self::page_label(env, page));
         let baseline = |size: f32, text: &str| ink_baseline(&font, band, size, text);
         if let Some(back) = parts.back {
             arrow(canvas, back, true, ink);
@@ -893,7 +903,7 @@ impl Pager {
         let Some(font) = style.font(env) else {
             return;
         };
-        let label = Header::page_label(page);
+        let label = Header::page_label(env, page);
         let x = f32::from(a.x) + (f32::from(a.width) - font.measure(style.small, &label)) / 2.0;
         draw_label(canvas, &font, style.small, x, a, &label, Color::BLACK);
         if self.arrows {
@@ -1502,8 +1512,18 @@ impl ListView {
     /// A grid of `columns` items a row instead of a list (rows are then
     /// `row` high and items as wide as a column).
     pub fn columns(mut self, columns: u32) -> Self {
-        self.columns = columns.max(1);
+        self.columns = columns.clamp(1, u32::from(u16::MAX));
         self
+    }
+
+    /// The height of a row, at least 1 (`row` is a field anyone can set).
+    fn row_height(&self) -> u32 {
+        self.row.max(1)
+    }
+
+    /// The width of a column, at least 1.
+    fn column_width(&self) -> u16 {
+        (self.area.width / self.columns as u16).max(1)
     }
 
     /// Items side by side in a row.
@@ -1513,7 +1533,7 @@ impl ListView {
 
     /// Items per page (rows times columns).
     pub fn rows(&self) -> usize {
-        ((u32::from(self.area.height) / self.row).max(1) * self.columns) as usize
+        ((u32::from(self.area.height) / self.row_height()).max(1) * self.columns) as usize
     }
 
     /// The page containing the focus (0-based).
@@ -1521,7 +1541,8 @@ impl ListView {
         self.focus / self.rows()
     }
 
-    /// The page and the number of pages, e.g. for [`Header::draw`].
+    /// The page and the number of pages, e.g. for [`Header::draw`]; always
+    /// `Some` (a list of one page shows no page number there).
     pub fn paging(&self, len: usize) -> Option<(usize, usize)> {
         Some((self.page(), self.pages(len)))
     }
@@ -1535,6 +1556,30 @@ impl ListView {
     pub fn focus_on_keys(mut self, env: &Env<'_>) -> Self {
         self.shown = !env.device.input.touch;
         self
+    }
+
+    /// The item a confirming button chooses, or `None` while the focus is
+    /// hidden (on touch screens before a button moved it): then this first
+    /// press shows the focus instead, so that a button never chooses a row
+    /// nobody saw (draw again, as for [`ListChange::Focus`]).
+    pub fn confirm(&mut self) -> Option<usize> {
+        if self.shown {
+            Some(self.focus)
+        } else {
+            self.shown = true;
+            self.before = self.focus;
+            None
+        }
+    }
+
+    /// Keeps the focus among `len` items after the list changed (the last
+    /// one if it was past the end); the page follows the focus.
+    pub fn set_len(&mut self, len: usize) {
+        let last = len.saturating_sub(1);
+        if self.focus > last {
+            self.before = self.focus;
+            self.focus = last;
+        }
     }
 
     /// Moves the focus by a navigation action among `len` items (see
@@ -1577,12 +1622,13 @@ impl ListView {
     /// The rectangle of visible item `slot` (0 = top left of the page).
     pub fn row_rect(&self, slot: usize) -> Rect {
         let columns = self.columns as usize;
-        let width = self.area.width / self.columns as u16;
+        let width = self.column_width();
+        let row = self.row_height();
         Rect::new(
             self.area.x + (slot % columns) as u16 * width,
-            self.area.y + ((slot / columns) as u32 * self.row) as u16,
+            self.area.y + ((slot / columns) as u32 * row) as u16,
             width,
-            self.row as u16,
+            row as u16,
         )
     }
 
@@ -1591,8 +1637,8 @@ impl ListView {
         if !self.area.contains(point) {
             return None;
         }
-        let line = ((point.y - i32::from(self.area.y)) as u32 / self.row) as usize;
-        let width = u32::from(self.area.width / self.columns as u16).max(1);
+        let line = ((point.y - i32::from(self.area.y)) as u32 / self.row_height()) as usize;
+        let width = u32::from(self.column_width());
         let column = ((point.x - i32::from(self.area.x)) as u32 / width) as usize;
         let slot = line * self.columns as usize + column.min(self.columns as usize - 1);
         let index = self.page() * self.rows() + slot;
@@ -1941,13 +1987,11 @@ pub fn draw_number(
     room: &str,
     focus: Option<bool>,
 ) {
-    let room = if room.len() < value.len() {
-        value
-    } else {
-        room
+    let Some(font) = style.font(env) else {
+        return;
     };
-    let (Some(font), Some((minus, plus))) = (style.font(env), stepper(env, style, rect, room))
-    else {
+    let room = wider(&font, style.text, room, value);
+    let Some((minus, plus)) = stepper(env, style, rect, room) else {
         return;
     };
     let margin = style.margin as f32;
@@ -1967,6 +2011,18 @@ pub fn draw_number(
     );
     draw_button(canvas, env, style, minus, "−", false, focus == Some(false));
     draw_button(canvas, env, style, plus, "+", false, focus == Some(true));
+}
+
+/// The wider of `room` and `value` as drawn: the room a stepper keeps for
+/// its value, so that steppers of stacked rows line up while no value is
+/// wider than that room (measured, not counted in bytes: "−" or "•" take
+/// three bytes and are narrow).
+fn wider<'a>(font: &FontHandle<'_>, size: f32, room: &'a str, value: &'a str) -> &'a str {
+    if font.measure(size, room) < font.measure(size, value) {
+        value
+    } else {
+        room
+    }
 }
 
 /// Where `value` starts, centred between the buttons `minus` and `plus`.
@@ -1990,13 +2046,11 @@ pub fn draw_stepper(
     room: &str,
     editing: bool,
 ) {
-    let room = if room.len() < value.len() {
-        value
-    } else {
-        room
+    let Some(font) = style.font(env) else {
+        return;
     };
-    let (Some(font), Some((minus, plus))) = (style.font(env), stepper(env, style, rect, room))
-    else {
+    let room = wider(&font, style.text, room, value);
+    let Some((minus, plus)) = stepper(env, style, rect, room) else {
         return;
     };
     let margin = style.margin as f32;
@@ -2057,8 +2111,8 @@ pub fn setting_value(env: &Env<'_>, spec: &SettingSpec) -> String {
 
 fn plain_setting_value(env: &Env<'_>, spec: &SettingSpec) -> String {
     match env.settings.get(spec.id.as_str()) {
-        Some(SettingValue::Bool(true)) => env.i18n.tr("settings.on").to_string(),
-        Some(SettingValue::Bool(false)) => env.i18n.tr("settings.off").to_string(),
+        Some(SettingValue::Bool(true)) => env.i18n.tr("core.on").to_string(),
+        Some(SettingValue::Bool(false)) => env.i18n.tr("core.off").to_string(),
         Some(SettingValue::Int(v)) => match &spec.extra().unit {
             Some(unit) => env.i18n.plural(unit, *v, &[]),
             None => format!("{v}"),
@@ -2143,9 +2197,15 @@ pub fn next_value(env: &Env<'_>, spec: &SettingSpec, step: i64) -> Option<Settin
     let current = env.settings.get(spec.id.as_str())?;
     let cycle = |options: &[&str], value: &str| -> SettingValue {
         let len = options.len().max(1) as i64;
-        let index = options.iter().position(|o| *o == value).unwrap_or(0) as i64;
+        // From a value not among the options, the first step on is the
+        // first option and the first step back the last.
+        let index = match options.iter().position(|o| *o == value) {
+            Some(index) => index as i64,
+            None if step > 0 => -1,
+            None => len,
+        };
         let next = options
-            .get((index + step).rem_euclid(len) as usize)
+            .get(index.saturating_add(step).rem_euclid(len) as usize)
             .copied()
             .unwrap_or_default();
         SettingValue::Text(Cow::Owned(next.to_string()))
@@ -2153,7 +2213,8 @@ pub fn next_value(env: &Env<'_>, spec: &SettingSpec, step: i64) -> Option<Settin
     Some(match (&spec.kind, current) {
         (SettingKind::Bool, SettingValue::Bool(v)) => SettingValue::Bool(!v),
         (SettingKind::Int { min, max }, SettingValue::Int(v)) => {
-            SettingValue::Int((v + step * spec.extra().step).clamp(*min, *max))
+            let next = v.saturating_add(step.saturating_mul(spec.extra().step));
+            SettingValue::Int(next.clamp(*min, (*max).max(*min)))
         }
         (SettingKind::Choice(options), SettingValue::Text(v)) => {
             let options: Vec<&str> = options.iter().collect();
@@ -2317,8 +2378,31 @@ pub fn fit_image(image: &ImageRef, width: u16, height: u16) -> (u16, u16) {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
+
+    /// Sizes for tests: no fonts needed, nothing rounded.
+    pub(crate) const STYLE: UiStyle = UiStyle {
+        text: 20.0,
+        small: 15.0,
+        title: 23.0,
+        head: 23.0,
+        row: 60,
+        header: 64,
+        margin: 12,
+        gap: 8,
+        line: 2,
+        dark_header: false,
+        corner: 0,
+        strong: false,
+        pill: false,
+        focus: crate::ui::Focus::Fill,
+        separators: crate::ui::Separators::Line,
+        plain_header: false,
+        cards: false,
+        grays: 2,
+        finger: 0,
+    };
 
     #[test]
     fn list_pages_focus_and_hits() {
@@ -2341,5 +2425,40 @@ mod tests {
         assert_eq!(list.move_focus(-1, 7), ListChange::Page);
         assert_eq!(list.focus, 6);
         assert_eq!(list.move_focus(1, 0), ListChange::None);
+    }
+
+    #[test]
+    fn a_hidden_focus_is_shown_before_a_button_chooses() {
+        let mut list = ListView::new(Rect::new(0, 0, 200, 300), 100);
+        list.shown = false;
+        list.focus = 2;
+        // The first press shows the focus; the second chooses.
+        assert_eq!(list.confirm(), None);
+        assert!(list.shown);
+        assert_eq!(list.confirm(), Some(2));
+        // Shorter lists keep the focus on their last item.
+        list.set_len(2);
+        assert_eq!(list.focus, 1);
+        list.set_len(5);
+        assert_eq!(list.focus, 1);
+        list.set_len(0);
+        assert_eq!(list.focus, 0);
+    }
+
+    #[test]
+    fn lists_with_fields_set_wrong_do_not_panic() {
+        // Rows 0 high, set through the field after `new`.
+        let mut list = ListView::new(Rect::new(0, 0, 200, 300), 100);
+        list.row = 0;
+        assert_eq!(list.rows(), 300);
+        assert_eq!(list.hit(Point::new(10, 2), 5), Some(2));
+        assert_eq!(list.hit(Point::new(10, 10), 5), None);
+        assert_eq!(list.row_rect(2).height, 1);
+        // More columns than a u16 holds, or than the list is wide.
+        let grid = ListView::new(Rect::new(0, 0, 200, 300), 100).columns(70_000);
+        assert_eq!(grid.column_count(), usize::from(u16::MAX));
+        assert_eq!(grid.row_rect(1).width, 1);
+        assert_eq!(grid.hit(Point::new(150, 10), 3), None);
+        assert_eq!(grid.hit(Point::new(0, 10), 3), Some(0));
     }
 }
