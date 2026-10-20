@@ -503,6 +503,7 @@ impl Kernel {
         if plugin.has_code() {
             self.add_code_plugin_later(&plugin, off);
         } else if off {
+            plugin.keep_listing_only();
             self.register_off(&plugin, manifest);
         } else {
             self.register_plugin(&plugin, manifest);
@@ -691,38 +692,6 @@ impl Kernel {
             aside,
             version,
         })
-    }
-
-    /// Puts back the versions of plugins set aside by an install that did
-    /// not finish (the power went): `.<id>.old` in a plugin folder without
-    /// `<id>` takes its place again; beside `<id>`, the new version got
-    /// there and it goes.
-    pub(crate) fn restore_set_aside(&mut self, dirs: &[String]) {
-        use paperpaw_sdk::files::{is_dir, join};
-        let storage = self.shared.storage.clone();
-        for dir in dirs {
-            let mut aside: Vec<String> = Vec::new();
-            let _ = storage.list(dir, &mut |entry| {
-                if let Some(id) = entry
-                    .name
-                    .strip_prefix('.')
-                    .and_then(|n| n.strip_suffix(".old"))
-                    && entry.is_dir
-                    && !id.is_empty()
-                {
-                    aside.push(String::from(id));
-                }
-            });
-            for id in aside {
-                let old = join(dir, &format!(".{id}.old"));
-                let target = join(dir, &id);
-                if storage.exists(&target) || is_dir(storage.as_ref(), &target) {
-                    let _ = storage.remove_dir_all(&old);
-                } else if let Err(error) = storage.rename(&old, &target) {
-                    self.warn_runtime(format!("{old}: not put back ({error})"));
-                }
-            }
-        }
     }
 
     /// After a plugin was loaded or removed while running: the choices of

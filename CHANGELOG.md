@@ -6,6 +6,10 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Plugins: data plugins are read one at a time at start, each let go
+  once registered, instead of all of them first; one switched off keeps
+  only its name and description in memory. A language pack beside a
+  few other data plugins no longer fills the X4's memory at every start.
 - Passwords and keys: the file that holds them is read again before
   each change is saved. Where it cannot be read, it is left as it is and
   the device says so; once it can be read again (corrected on a

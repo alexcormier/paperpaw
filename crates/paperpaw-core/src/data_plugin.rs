@@ -78,6 +78,16 @@ impl DataPlugin {
         &self.folder
     }
 
+    /// Keeps of its translations only what lists it (its name and
+    /// description, in every language), for a plugin switched off: the
+    /// rest would take memory for nothing.
+    pub(crate) fn keep_listing_only(&self) {
+        let prefix = format!("{}.plugin.", self.manifest.id);
+        for source in self.translations.borrow_mut().iter_mut() {
+            *source = listing(source, &prefix);
+        }
+    }
+
     /// Whether its folder holds native code: it is a code plugin.
     pub(crate) fn has_code(&self) -> bool {
         self.code
@@ -167,6 +177,26 @@ impl Plugin for DataPlugin {
     }
 }
 
+/// Of a translation catalog `source`, its `[meta]` section and the
+/// messages whose keys start with `prefix`.
+fn listing(source: &str, prefix: &str) -> String {
+    let mut out = String::new();
+    let mut meta = false;
+    for line in source.lines() {
+        let text = line.trim();
+        if text.starts_with('[') {
+            meta = text == "[meta]";
+            out.push_str(text);
+        } else if meta || text.starts_with(prefix) {
+            out.push_str(line);
+        } else {
+            continue;
+        }
+        out.push('\n');
+    }
+    out
+}
+
 /// The presets of a `presets.ini`, a section each: its `kind`, `name`
 /// and `description`, then its values (keys with a dot: settings).
 fn presets(plugin: &Id, source: &str) -> Result<Vec<Preset>, RegisterError> {
@@ -215,26 +245,49 @@ fn presets(plugin: &Id, source: &str) -> Result<Vec<Preset>, RegisterError> {
     Ok(out)
 }
 
-/// Every data plugin in the folders of `dir`, in name order. Folders
-/// without a usable `plugin.ini` are reported through `warn` and skipped.
-pub(crate) fn discover(
+/// The folders of the data plugins in `dir` (not the hidden ones), in
+/// name order, to load one at a time ([`load_folder`]): read all first,
+/// their files together might not fit in memory.
+///
+/// In the same listing, a plugin set aside by an install cut short (the
+/// power went) is put back: `.<id>.old` takes the place of a missing
+/// `<id>`, and goes where `<id>` is there (the new version got there);
+/// what cannot be put back is reported through `warn`.
+pub(crate) fn folders(
     storage: &dyn Storage,
     dir: &str,
     warn: &mut dyn FnMut(String),
-) -> Vec<DataPlugin> {
-    let mut folders: Vec<String> = Vec::new();
+) -> Vec<String> {
+    let mut names: Vec<String> = Vec::new();
+    let mut aside: Vec<String> = Vec::new();
     let _ = storage.list(dir, &mut |entry| {
-        if entry.is_dir && !entry.name.starts_with('.') {
-            folders.push(entry.name.to_string());
+        if !entry.is_dir {
+            return;
+        }
+        match entry.name.strip_prefix('.') {
+            None => names.push(entry.name.to_string()),
+            Some(hidden) => {
+                if let Some(id) = hidden.strip_suffix(".old").filter(|id| !id.is_empty()) {
+                    aside.push(id.to_string());
+                }
+            }
         }
     });
-    folders.sort_unstable();
-    folders
-        .iter()
-        .filter_map(|name| {
-            let path = format!("{dir}/{name}");
-            load(storage, &path, name).map_err(&mut *warn).ok()
-        })
+    for id in aside {
+        let old = format!("{dir}/.{id}.old");
+        if names.contains(&id) {
+            let _ = storage.remove_dir_all(&old);
+        } else {
+            match storage.rename(&old, &format!("{dir}/{id}")) {
+                Ok(()) => names.push(id),
+                Err(error) => warn(format!("{old}: not put back ({error})")),
+            }
+        }
+    }
+    names.sort_unstable();
+    names
+        .into_iter()
+        .map(|name| format!("{dir}/{name}"))
         .collect()
 }
 
@@ -514,6 +567,23 @@ fn parse_manifest(source: &str, folder: &str) -> Result<Manifest, String> {
 mod tests {
     use super::*;
     use paperpaw_sdk::MemoryStorage;
+
+    /// Every data plugin in `dir` that loads, the others reported.
+    fn discover(storage: &dyn Storage, dir: &str, warn: &mut dyn FnMut(String)) -> Vec<DataPlugin> {
+        folders(storage, dir, warn)
+            .iter()
+            .filter_map(|path| load_folder(storage, path).map_err(&mut *warn).ok())
+            .collect()
+    }
+
+    #[test]
+    fn plugins_switched_off_keep_only_what_lists_them() {
+        let source = "[meta]\nlanguage = de\nname = Deutsch\n\n[messages]\nbig.plugin.name = Groß\nbig.plugin.description = Größer.\nreader.title = Lesen\n";
+        assert_eq!(
+            listing(source, "big.plugin."),
+            "[meta]\nlanguage = de\nname = Deutsch\n\n[messages]\nbig.plugin.name = Groß\nbig.plugin.description = Größer.\n"
+        );
+    }
 
     #[test]
     fn finds_folders_with_a_manifest() {

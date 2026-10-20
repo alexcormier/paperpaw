@@ -550,17 +550,31 @@ impl Kernel {
         } else {
             plugin_dirs
         };
-        self.restore_set_aside(&dirs);
+        let storage = self.shared.storage.clone();
         let mut with_code = Vec::new();
         for dir in &dirs {
             let mut problems = Vec::new();
-            let found = data_plugin::discover(self.shared.storage.as_ref(), dir, &mut |problem| {
+            let folders = data_plugin::folders(storage.as_ref(), dir, &mut |problem| {
                 problems.push(problem);
             });
             for problem in problems {
                 self.warn_runtime(problem);
             }
-            for plugin in found {
+            // One at a time: loaded, registered, its files let go.
+            for folder in folders {
+                let plugin = match data_plugin::load_folder(storage.as_ref(), &folder) {
+                    Ok(plugin) => plugin,
+                    Err(problem) => {
+                        self.warn_runtime(problem);
+                        continue;
+                    }
+                };
+                if disabled
+                    .iter()
+                    .any(|id| id == plugin.manifest().id.as_str())
+                {
+                    plugin.keep_listing_only();
+                }
                 self.shared
                     .data_folders
                     .push((plugin.manifest().id, plugin.folder().to_string()));

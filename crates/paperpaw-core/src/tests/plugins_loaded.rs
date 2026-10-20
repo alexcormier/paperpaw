@@ -55,3 +55,26 @@ fn a_plugin_set_aside_by_an_install_cut_short_is_put_back() {
     assert_eq!(small.manifest.version, Version::new(2, 0, 0));
     assert!(!storage.exists("plugins/.small.old/plugin.ini"));
 }
+
+/// A data plugin switched off keeps of its translations only its name
+/// and description, to be listed: the rest (a language pack's whole
+/// catalogs) would take memory for nothing.
+#[test]
+fn a_data_plugin_switched_off_keeps_only_what_lists_it() {
+    let catalog = "[meta]\nlanguage = en\nname = English\n\n[messages]\nbig.plugin.name = Big print\nbig.other = Taken\n";
+    let storage = MemoryStorage::new()
+        .with("plugins/big/plugin.ini", "[plugin]\nname = Big\n")
+        .with("plugins/big/i18n/en.ini", catalog);
+    let kernel = Kernel::builder(DEVICE)
+        .storage(storage)
+        .user_config("[plugins]\nbig = off\n")
+        .build()
+        .unwrap();
+    let info = kernel.plugins().get("big").unwrap();
+    assert_eq!(info.state, paperpaw_sdk::PluginState::Off);
+    assert_eq!(
+        kernel.translator().get("big.plugin.name"),
+        Some("Big print")
+    );
+    assert_eq!(kernel.translator().get("big.other"), None);
+}
