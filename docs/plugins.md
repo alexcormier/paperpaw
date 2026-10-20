@@ -605,6 +605,10 @@ plugin makes its request. `optional()` work (weather, headlines) runs
 only while that is cheap, and never brings the radio on by itself.
 `Work::at(event, time)` is a timer, `every` repeats, `key` tells
 several works of one event apart, `Command::CancelWork` takes one back.
+`env.reader` says whether what is handled is the reader's own doing: an
+action the reader ran acts at once, the same action run by a rule
+declares `Work::when_cheap(id, within)` instead and waits for a good
+moment.
 Long work in steps (an install, a catalog walked) registers its step
 function (`r.add_work(WorkSpec::new(id, title, step))`) and is stepped
 between frames. `env.work` says where a work stands, for the plugin's

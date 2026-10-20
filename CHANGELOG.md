@@ -79,7 +79,8 @@ change the plugin SDK.
   Breaking: `Command::Schedule` is gone (work at a time, `Work::at`, or
   `EVENT.schedule`, replaces it); `HttpReply` has two more public
   fields, `refused` and `headers`, so replies built field by field need
-  them; `Manifest` has `uses`.
+  them; `Manifest` has `uses`; `PluginUsage` has `requests` and
+  `refused`. `Env::reader` tells a plugin whether the reader waits.
 - Kernel, declared work (ADR 0025): one queue for plugins' timers and
   work. Work runs at its time, at one of its moments (waking, a book
   opened or closed, going to sleep, the radio on anyway, charging, idle)
@@ -123,6 +124,18 @@ change the plugin SDK.
   it is worn is theirs until the next mode, also across a start. The
   modes are presets (`core.power-mode`), worn with `Command::Wear`;
   `Kernel::power` tells shells the level.
+- Plugins on declared work: weather looks again only once the radio is
+  on anyway (no hourly wake), four times as seldom while saving, not by
+  itself in Offline; Readwise and Joplin send what waits at the next
+  connection, at the latest after half an hour; OPDS sync, news and
+  Wallabag fetches, Joplin's send and the update check, when a rule runs
+  them, wait for a good moment (at the latest an hour), while the
+  reader's own run acts at once (`Env::reader`, `Work::when_cheap`); an
+  update a rule's check finds waits on the update's page instead of
+  opening it over the book.
+- Battery: *Network this time awake* lists each plugin's requests, those
+  held back, its network setting where not the default and what its
+  background work last said (`PluginUsage::requests`, `refused`).
 - Progress sync (kosync) by the power mode: silently, when a book opens
   or closes, on waking and before sleep, as before; while reading with
   the radio off, the progress goes out when the radio is on anyway, at

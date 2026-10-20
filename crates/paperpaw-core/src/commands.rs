@@ -125,7 +125,7 @@ impl Kernel {
         // What background work said in this call, kept as notes.
         self.keep_notes();
         // The next call is the reader's only if it says so.
-        self.reader = false;
+        self.shared.reader = false;
         effects
     }
 
@@ -243,7 +243,7 @@ impl Kernel {
             // Background work says nothing over reading.
             let top = self.stack.last().map(|s| s.id.namespace());
             work::quiet(
-                self.reader,
+                self.shared.reader,
                 top,
                 self.now,
                 from,
@@ -383,7 +383,7 @@ impl Kernel {
                     .command(command, network, screens, &*self.shared.storage, out);
             }
             Command::Http(request) => {
-                let reader = self.reader;
+                let reader = self.shared.reader;
                 self.io
                     .http
                     .request(request, network, reader, &*self.shared.storage, out)

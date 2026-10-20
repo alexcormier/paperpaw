@@ -306,7 +306,7 @@ impl Kernel {
                     let from = self.output.commands.len();
                     handler(&env, &mut self.output.commands);
                     // Run by a rule, not the reader: nothing said over reading.
-                    let (reader, now) = (self.reader, self.now);
+                    let (reader, now) = (self.shared.reader, self.now);
                     let top = self.stack.last().map(|s| s.id.namespace());
                     let out = &mut self.output.commands;
                     let owner = action.namespace();

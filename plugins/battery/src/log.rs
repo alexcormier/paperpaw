@@ -421,6 +421,8 @@ mod tests {
                 pixels: 12_000_000,
                 read: 300 * 1024,
                 written: 2048,
+                requests: 0,
+                refused: 0,
             },
             PluginUsage {
                 plugin: paperpaw_sdk::Id::new_static("idle"),

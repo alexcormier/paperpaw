@@ -231,6 +231,8 @@ fn plugin_lines_leave_out_the_idle_and_count_in_whole_units() {
         pixels: 999,
         read: 1023,
         written: 1025,
+        requests: 0,
+        refused: 0,
     }];
     assert_eq!(plugin_lines(5, &plugins), "5,busy,0,1,0,0,0,0,0,0,1\n");
     assert_eq!(plugin_lines(5, &[]), "");
