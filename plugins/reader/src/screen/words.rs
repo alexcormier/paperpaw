@@ -48,9 +48,10 @@ pub(super) fn sentence(words: &[WordBox], lo: usize, hi: usize) -> String {
 
 impl Book {
     /// The words of the page with their boxes on the screen, in reading
-    /// order, measured as they are drawn.
-    pub(super) fn words(&self, env: &Env<'_>) -> Vec<WordBox> {
-        self.words_of(env, &self.page)
+    /// order, measured as they are drawn: once a page (a page drawn in
+    /// bands is drawn several times).
+    pub(super) fn words(&self, env: &Env<'_>) -> &[WordBox] {
+        self.words.get_or_init(|| self.words_of(env, &self.page))
     }
 
     /// The words of `page`, as [`Book::words`].

@@ -260,9 +260,19 @@ impl Book {
             .chain(t.status.map(|r| (r, false)))
     }
 
+    /// Draws the status lines in the canvas's band; in the others what
+    /// they show is not even asked (the X4 draws a page in eight bands).
     pub(super) fn draw_status(&self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
+        let clip = canvas.clip();
+        let mut areas = self
+            .status_areas()
+            .filter(|(area, _)| area.intersection(&clip).is_some())
+            .peekable();
+        if areas.peek().is_none() {
+            return;
+        }
         let context = self.status_context(env);
-        for (area, top) in self.status_areas() {
+        for (area, top) in areas {
             canvas.fill(area, Color::WHITE);
             let id = status::current(env, top, &self.status_lines[usize::from(!top)]);
             let frame = paperpaw_sdk::StatusFrame {

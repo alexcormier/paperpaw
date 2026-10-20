@@ -344,20 +344,18 @@ impl Screen for ReaderScreen {
         };
         // Word boxes are measured only when something is drawn on words.
         let has_highlights = book.marks.iter().any(|m| m.kind == Kind::Highlight);
-        let words = if has_highlights
+        let measured = has_highlights
             || self.selection.is_some()
             || self.linking.is_some()
             || book.found.is_some()
             || self.aloud.is_some()
             || !book.links.is_empty()
-            || !env.decorators.is_empty()
-        {
-            book.words(env)
-        } else {
-            Vec::new()
+            || !env.decorators.is_empty();
+        book.update_decorations(env);
+        let Ok(book) = &self.book else {
+            return;
         };
-        book.update_decorations(env, &words);
-        let book = &*book;
+        let words = if measured { book.words(env) } else { &[] };
         // The sentence read aloud, where it is on this page.
         let aloud = self
             .aloud
@@ -366,11 +364,11 @@ impl Screen for ReaderScreen {
                     && env.settings.read(&crate::settings::ALOUD_HIGHLIGHT)
             })
             .map(|a| (a.now.from, a.now.to));
-        let marks = book.page_marks(env, aloud, &words);
+        let marks = book.page_marks(env, aloud, words);
         marks.draw_behind(canvas, env);
         book.draw_page(canvas, env, &marks.inks);
         marks.draw_over(canvas, env);
-        book.draw_note_signs(canvas, env, &words);
+        book.draw_note_signs(canvas, env, words);
         book.draw_back(canvas, env);
         book.draw_status(canvas, env);
         if book.bookmarked() {
@@ -382,14 +380,14 @@ impl Screen for ReaderScreen {
             canvas.fill(status, Color::WHITE);
         }
         if let Some(linking) = self.linking {
-            draw_linking(canvas, env, book, &words, linking);
+            draw_linking(canvas, env, book, words, linking);
         }
         let Some(selection) = self.selection else {
             return;
         };
         let (lo, hi) = selection.range();
         let line = env.metrics.tenth_mm(4).max(2);
-        for b in selection::line_boxes(&words, |i| (lo..=hi).contains(&i)) {
+        for b in selection::line_boxes(words, |i| (lo..=hi).contains(&i)) {
             canvas.stroke_rect(
                 i32::from(b.x) - 4,
                 i32::from(b.y) - 2,
@@ -400,7 +398,7 @@ impl Screen for ReaderScreen {
             );
         }
         if selection.mode == Mode::Bar {
-            let items = self.items(env, &words);
+            let items = self.items(env, words);
             selection::draw_bar(canvas, env, &items, selection.focus);
         }
     }
@@ -682,9 +680,9 @@ impl Screen for ReaderScreen {
         };
         let link = at(gesture.start)
             .and_then(|i| book.link_of(&words[i]))
-            .map(|link| (link.href.clone(), link_label(book, &words, link)));
+            .map(|link| (link.href.clone(), link_label(book, words, link)));
         // A mark whose plugin hears taps on it.
-        let tapped = at(gesture.start).and_then(|i| book.tappable_at(&words, i));
+        let tapped = at(gesture.start).and_then(|i| book.tappable_at(words, i));
         match (gesture.kind, self.selection) {
             (GestureKind::Tap, None)
                 if env.settings.read(&crate::settings::CORNER_BOOKMARK)
@@ -714,7 +712,7 @@ impl Screen for ReaderScreen {
             }
             (GestureKind::Tap, None) if tapped.is_some() => {
                 if let Some(mark) = tapped {
-                    book.tap_mark(&words, mark, cx);
+                    book.tap_mark(words, mark, cx);
                 }
                 Handled::Yes
             }
@@ -726,7 +724,7 @@ impl Screen for ReaderScreen {
                 None => Handled::No,
             },
             (GestureKind::Tap, Some(selection)) => {
-                let items = self.items(&env, &words);
+                let items = self.items(&env, words);
                 if let Some(item) = selection::item_at(&env, &items, gesture.start) {
                     self.activate(&item.id, cx);
                 } else if let Some(word) = at(gesture.start) {

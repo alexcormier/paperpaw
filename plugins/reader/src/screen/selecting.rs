@@ -86,7 +86,7 @@ impl ReaderScreen {
                 cx.command(events::WORD_LOOKED_UP.emit(events::WordLookedUp {
                     word: phrase.to_string(),
                     language: book.language.clone(),
-                    text: sentence(&words, lo, hi),
+                    text: sentence(words, lo, hi),
                     path: book.path.clone(),
                     title: book.title.clone(),
                     section: start.section,
@@ -252,7 +252,7 @@ impl ReaderScreen {
                         ..selection
                     };
                     self.set_selection(Some(to), cx);
-                } else if let Some(cursor) = selection.moved(a, &words) {
+                } else if let Some(cursor) = selection.moved(a, words) {
                     let anchor = if selection.mode == Mode::Choosing {
                         cursor
                     } else {
@@ -269,7 +269,7 @@ impl ReaderScreen {
                 }
             }
             Mode::Bar => {
-                let items = self.items(&env, &words);
+                let items = self.items(&env, words);
                 let focus = selection.focus.unwrap_or(0);
                 if *a == actions::CONFIRM {
                     if let Some(item) = items.get(focus) {

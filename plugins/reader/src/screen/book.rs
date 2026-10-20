@@ -52,6 +52,8 @@ pub(super) struct Book {
     pub(super) language: String,
     pub(super) typography: Typography,
     pub(super) page: Page,
+    /// The words of the page, once measured (see [`Book::words`]).
+    pub(super) words: core::cell::OnceCell<Vec<WordBox>>,
     /// The starts of the pages turned forward to this one, one after
     /// another (none before a jump).
     pub(super) history: Vec<Locator>,
@@ -186,6 +188,7 @@ impl Book {
             indexing: None,
             index_stopped: false,
             page: Page::default(),
+            words: core::cell::OnceCell::new(),
             history: Vec::new(),
             saved_at: None,
             unsaved: false,
@@ -342,6 +345,7 @@ impl Book {
             return;
         };
         self.typography = Typography::new(env, &font, &self.language, self.document.whole_pages());
+        self.words = core::cell::OnceCell::new();
         let start = self.line_start(env, self.page.start);
         if let Ok(page) = self.layout(env, start) {
             self.page = page;
@@ -560,6 +564,7 @@ impl Book {
             self.history.clear();
         }
         self.page = page;
+        self.words = core::cell::OnceCell::new();
         self.prepare_images(&env);
         self.update_chapter(&env);
         // Found now, so the status lines read nothing while drawn.

@@ -985,3 +985,75 @@ fn search_and_contents_read_the_book_as_the_page_shows_it() {
         .unwrap();
     assert!(styled.is_empty(), "{styled:?}");
 }
+
+/// How often a status item was asked what it shows.
+type Asked = Rc<std::cell::Cell<u32>>;
+
+/// A plugin with a status item that counts how often it is asked.
+struct Counter(Asked);
+
+impl Plugin for Counter {
+    fn manifest(&self) -> Manifest {
+        Manifest {
+            id: Id::new_static("counter"),
+            name: "Counter".into(),
+            description: "Counts what status items are asked.".into(),
+            version: Version::new(0, 1, 0),
+            sdk: SDK_VERSION,
+        }
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        let asked = self.0.clone();
+        r.add_status_item(paperpaw_sdk::StatusItemSpec {
+            id: Id::new_static("counter.item"),
+            title: "counter".into(),
+            value: Box::new(move |_, _| {
+                asked.set(asked.get() + 1);
+                None
+            }),
+        })
+    }
+}
+
+#[test]
+fn a_page_drawn_in_bands_asks_the_status_line_once() {
+    let storage = Shared::default();
+    storage.create_dir("books").unwrap();
+    let text = include_str!("../../../samples/library/books/alice-in-wonderland.txt");
+    storage.write(BOOK, text.as_bytes()).unwrap();
+    let asked = Asked::default();
+    // Bands of a hundred rows, as on the X4.
+    let mut kernel = Kernel::builder(DEVICE)
+        .frame_rows(100)
+        .setting_default_text("reader.status.bottom-left", "counter.item")
+        .setting_default_text("reader.status.top-lines", "")
+        .storage(storage.clone())
+        .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
+        .plugin(paperpaw_plugin_format_txt::TxtFormat)
+        .plugin(Reader)
+        .plugin(Counter(asked.clone()))
+        .build()
+        .unwrap();
+    let effects = kernel.start(Instant(0));
+    let mut reading = Reading {
+        kernel,
+        storage,
+        heard: Heard::default(),
+        now: 0,
+        book: BOOK,
+    };
+    reading.settle(effects);
+    reading.open();
+    reading.kernel.render(&mut |_, _| {});
+    reading.run(core_actions::NEXT_PAGE);
+    asked.set(0);
+    let mut bands = 0;
+    reading.kernel.render(&mut |_, _| bands += 1);
+    assert!(bands > 4, "{bands} bands");
+    assert!(
+        (1..=2).contains(&asked.get()),
+        "asked {} times",
+        asked.get()
+    );
+}
