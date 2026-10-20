@@ -1383,6 +1383,7 @@ dependencies = [
  "paperpaw-i18n",
  "paperpaw-json",
  "paperpaw-platform",
+ "paperpaw-plugin-format-epub",
  "paperpaw-sdk",
 ]
 
@@ -1773,6 +1774,9 @@ dependencies = [
 name = "paperpaw-plugin-wifi"
 version = "0.4.0-dev"
 dependencies = [
+ "paperpaw-core",
+ "paperpaw-i18n",
+ "paperpaw-platform",
  "paperpaw-sdk",
 ]
 

@@ -204,6 +204,44 @@ change the plugin SDK.
   no other app reads (up to Android 9 apps with the storage permission
   read the app's shared folder); a file kept there before moves at the
   first start. The app is left out of Android's backups.
+- Browser: an address typed with a port (`example.org:8080`,
+  `localhost:8080`) is loaded over `https://`; it was taken for an
+  address of another kind and failed. In the tools it now comes before
+  Calibre instead of sharing its place.
+- Security: Calibre is connected to only on a computer the reader chose.
+  One found in the network is shown with its name and address and
+  trusted once the reader connects to it (kept in
+  `.paperpaw/plugins/calibre/host.txt`; the address set by hand is
+  trusted as it is), so another device in the network can no longer
+  answer first and pose as Calibre. Calibre writes only books of formats
+  PaperPaw reads, replaces and deletes only books it sent itself, and
+  leaves the reader's own files as they are (a book whose name is taken
+  is not received, with a notice).
+- Calibre: the books on the device are listed to Calibre a part at a
+  time and without their cover thumbnails, and on the X4 a message from
+  Calibre may be 64 KB at most (a megabyte elsewhere), so a large
+  library or a hostile peer no longer exhausts its memory.
+- Wi-Fi transfer: PaperPaw's settings file, `paperpaw.ini`, can be
+  fetched but no longer deleted or replaced from the browser: it names
+  the servers that get passwords and keys.
+- Wi-Fi transfer: a folder is listed to the browser in parts of about
+  8 KB, which the page puts together and sorts, so a folder of thousands
+  of books no longer has to fit in the X4's memory at once.
+- Wi-Fi transfer: where there is too little room for the QR code
+  (large fonts, a short screen turned), the address is shown without it;
+  the code's place was computed below zero. Typing on a phone: a text
+  too long for the device is refused with a message on the phone, which
+  keeps it; it arrived as an empty text, which cleared the field.
+- Wi-Fi: the radio goes off again once what waited for the network has
+  failed (no saved network in reach, or none joined in the time a
+  request waits). It went on looking for networks every ten seconds,
+  with a notice each time, until the device slept, as the kernel kept
+  saying that work waits.
+- Wi-Fi: only secured networks are joined by themselves, with their
+  saved password. Anyone can set up an open network with any name, so
+  open networks are joined only when chosen on the Wi-Fi page and are no
+  longer saved, and an open network named as a saved secured one is not
+  joined either.
 - Rules: a rule can apply when the battery reaches a level (80 %, 90 %,
   full or another), once each time it gets there and not again while
   the level wavers around it; with *Only if … While charging* it says

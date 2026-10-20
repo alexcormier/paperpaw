@@ -72,11 +72,20 @@ async function load() {
     nav.append(' / ');
     crumb(part, path);
   }
-  const answer = await fetch('/api/list?' + query(here));
   const list = $('list');
   list.textContent = '';
-  if (!answer.ok) { say(T.failed); return; }
-  const entries = await answer.json();
+  // Big folders come in parts.
+  const entries = [];
+  let from = 0;
+  while (from !== undefined) {
+    const answer = await fetch('/api/list?' + query(here) + (from ? '&from=' + from : ''));
+    if (!answer.ok) { say(T.failed); return; }
+    const part = await answer.json();
+    entries.push(...part.entries);
+    from = part.next;
+  }
+  // Folders first, then by name.
+  entries.sort((a, b) => (b.dir - a.dir) || a.name.localeCompare(b.name, undefined, {sensitivity: 'base'}));
   if (!entries.length) {
     const li = document.createElement('li');
     li.textContent = T.empty;
