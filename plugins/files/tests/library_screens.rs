@@ -176,7 +176,11 @@ fn an_empty_library_shows_again_after_its_menu_closes() {
 fn a_library_folder_that_is_missing_shows_as_empty() {
     let _turn = turn();
     for device in DEVICES {
-        let mut app = library(device, "[files]\nroot = nowhere/at/all\n", &many(3));
+        let mut app = library(
+            device,
+            "[core]\nlibrary-folder = nowhere/at/all\n",
+            &many(3),
+        );
         assert!(app.shows("No books here yet"), "{}", app.described());
         assert!(app.shows("nowhere/at/all"), "{}", app.described());
     }

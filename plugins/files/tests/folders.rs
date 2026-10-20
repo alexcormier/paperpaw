@@ -111,7 +111,7 @@ fn it_starts_in_the_folder_set() {
     let _turn = turn();
     let card = Card::new("start");
     for device in DEVICES {
-        let mut app = chooser(device, card.storage(), "files.root");
+        let mut app = chooser(device, card.storage(), "core.library-folder");
         assert!(app.shows("books"), "{}", app.described());
         assert_eq!(
             rows(&mut app),
@@ -131,7 +131,7 @@ fn folders_open_and_parent_folder_goes_up_to_the_folder_left() {
     let _turn = turn();
     let card = Card::new("up");
     for device in DEVICES {
-        let mut app = chooser(device, card.storage(), "files.root");
+        let mut app = chooser(device, card.storage(), "core.library-folder");
         choose(&mut app, "Parent folder");
         assert_eq!(
             rows(&mut app),
@@ -167,7 +167,7 @@ fn a_folder_chosen_by_buttons_or_touch_is_kept_and_the_library_shows_it() {
     let card = Card::new("choose");
     for device in DEVICES {
         let storage = card.storage();
-        let mut app = chooser(device, storage.clone(), "files.root");
+        let mut app = chooser(device, storage.clone(), "core.library-folder");
         choose(&mut app, "Novels/");
         assert_eq!(
             rows(&mut app),
@@ -175,9 +175,12 @@ fn a_folder_chosen_by_buttons_or_touch_is_kept_and_the_library_shows_it() {
         );
         choose(&mut app, "Use this folder");
         assert_ne!(app.screen(), CHOOSER);
-        assert_eq!(app.kernel.settings().text("files.root"), "books/Novels");
+        assert_eq!(
+            app.kernel.settings().text("core.library-folder"),
+            "books/Novels"
+        );
         assert!(
-            storage.config().contains("root = books/Novels"),
+            storage.config().contains("library-folder = books/Novels"),
             "{}",
             storage.config()
         );
@@ -201,7 +204,7 @@ fn a_folder_chosen_by_buttons_or_touch_is_kept_and_the_library_shows_it() {
 fn back_goes_up_first_and_closes_the_chooser_at_the_top() {
     let _turn = turn();
     let card = Card::new("back");
-    let mut app = chooser(X4, card.storage(), "files.root");
+    let mut app = chooser(X4, card.storage(), "core.library-folder");
     choose(&mut app, "Novels/");
     choose(&mut app, "Old/");
     assert!(app.shows("books/Novels/Old"), "{}", app.described());
@@ -213,10 +216,10 @@ fn back_goes_up_first_and_closes_the_chooser_at_the_top() {
     app.run(actions::BACK);
     assert_ne!(app.screen(), CHOOSER);
     // Nothing was chosen.
-    assert!(!app.kernel.settings().is_set("files.root"));
+    assert!(!app.kernel.settings().is_set("core.library-folder"));
 
     // Touch: the arrow in the header does the same.
-    let mut app = chooser(TOUCH, card.storage(), "files.root");
+    let mut app = chooser(TOUCH, card.storage(), "core.library-folder");
     app.tap_back();
     assert!(app.shows("Device"), "{}", app.described());
     app.tap_back();
@@ -228,8 +231,8 @@ fn a_folder_set_that_is_gone_starts_at_the_top() {
     let _turn = turn();
     let card = Card::new("gone");
     let storage = card.storage();
-    storage.set_config("[files]\nroot = books/Vanished\n");
-    let mut app = chooser(TOUCH, storage, "files.root");
+    storage.set_config("[core]\nlibrary-folder = books/Vanished\n");
+    let mut app = chooser(TOUCH, storage, "core.library-folder");
     assert!(app.shows("Device"), "{}", app.described());
 }
 
@@ -267,7 +270,7 @@ fn new_folder_names_cannot_leave_the_folder_or_name_none() {
     let storage = card.storage();
     let before = storage.names("books");
     for name in ["..", "...", "/", "\\", ":", "   ", "\u{7}", "../", "./"] {
-        let mut app = chooser(X4, storage.clone(), "files.root");
+        let mut app = chooser(X4, storage.clone(), "core.library-folder");
         app.will_type(name);
         choose(&mut app, "New folder");
         assert_eq!(app.screen(), CHOOSER, "{name:?}");
@@ -281,7 +284,7 @@ fn new_folder_names_cannot_leave_the_folder_or_name_none() {
         ("..hidden", "hidden"),
         ("tab\there", "tabhere"),
     ] {
-        let mut app = chooser(X4, storage.clone(), "files.root");
+        let mut app = chooser(X4, storage.clone(), "core.library-folder");
         app.will_type(typed);
         choose(&mut app, "New folder");
         let names = storage.names("books");
@@ -303,7 +306,7 @@ fn many_folders_are_paged_and_each_is_reached() {
             .unwrap();
     }
     for device in DEVICES {
-        let mut app = chooser(device, storage.clone(), "files.root");
+        let mut app = chooser(device, storage.clone(), "core.library-folder");
         choose(&mut app, "Many/");
         let mut seen: Vec<String> = Vec::new();
         for _ in 0..60 {
@@ -327,4 +330,25 @@ fn many_folders_are_paged_and_each_is_reached() {
         }
         assert!(app.shows("Many/Folder 39"), "{}", app.described());
     }
+}
+
+/// The library folder is the kernel's setting; its editor opens the
+/// folder chooser in its place, which sets it, and then goes back to
+/// where the editor was opened from.
+#[test]
+fn the_kernels_folder_editor_opens_the_chooser() {
+    let _turn = turn();
+    let card = Card::new("editor");
+    let mut app = App::new(X4, card.storage());
+    app.run(actions::LIBRARY);
+    let editor = paperpaw_sdk::builtin::screens::FOLDER_EDITOR;
+    app.open_screen(editor, Params::new().with("id", "core.library-folder"));
+    assert_eq!(app.screen(), CHOOSER);
+    choose(&mut app, "Novels/");
+    choose(&mut app, "Use this folder");
+    assert_eq!(app.screen(), "files.browser");
+    assert_eq!(
+        app.kernel.settings().text("core.library-folder"),
+        "books/Novels"
+    );
 }

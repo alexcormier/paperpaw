@@ -522,6 +522,7 @@ every view of it.
 | A book came | `events::BOOK_ADDED` (`library::added(path, source)`) | transfers, syncs and downloads send it |
 | What can be done with a book | `menus::BOOK`, `events::BOOK_CHOSEN` | add an action to the menu, hear which book it was chosen for |
 | A book's information | `slots::BOOK_INFO` | lists the fields of `add_book_field` |
+| Where the books are | `settings::LIBRARY_FOLDER` (`library::folder(env)`) | the kernel's setting, chosen with `screens::FOLDER_EDITOR` (the folder chooser of `slots::CHOOSE_FOLDER`) |
 
 How far a book is read and whether it is a favourite change while the
 catalog stands: the kernel notes such changes beside it (when a book is

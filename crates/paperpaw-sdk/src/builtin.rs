@@ -702,6 +702,10 @@ pub mod screens {
     pub const STATUS_ITEMS: Id = Id::new_static("core.status-items");
     /// Chooses the status lines a setting lists.
     pub const STATUS_LINES: Id = Id::new_static("core.status-lines");
+    /// Chooses a folder for a setting with the folder chooser
+    /// ([`slots::CHOOSE_FOLDER`](super::slots::CHOOSE_FOLDER)), whichever
+    /// plugin fills it: name it as a text setting's editor.
+    pub const FOLDER_EDITOR: Id = Id::new_static("core.folder-editor");
 }
 
 /// Global settings.
@@ -714,6 +718,11 @@ pub mod settings {
     /// [`groups::DEVELOPER`](super::groups::DEVELOPER) show, and plugins may
     /// show what only developers need (e.g. what each plugin took).
     pub const DEVELOPER: Setting<bool> = Setting::new("core.developer");
+    /// The library folder, where books are kept (`books`; empty for the
+    /// storage's top): the kernel's, so that any library and every plugin
+    /// that puts books somewhere reads the same
+    /// ([`library::folder`](crate::library::folder)).
+    pub const LIBRARY_FOLDER: Setting<Text> = Setting::new("core.library-folder");
     /// Draw everything inverted.
     pub const NIGHT_MODE: Setting<bool> = Setting::new("core.night-mode");
     /// In night mode, pictures inverted too (else as they are, not as

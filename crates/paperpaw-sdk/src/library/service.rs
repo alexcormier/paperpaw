@@ -6,7 +6,7 @@
 //!
 //! The kernel's library (the default) keeps what it knows in
 //! `.paperpaw/library`: each book's details, the books read last, the
-//! favourites and the catalog ([`catalog`], [`super::index`]). A replacement
+//! favourites and the catalog ([`catalog`], [`index`](mod@super::index)). A replacement
 //! publishes itself as the service [`SERVICE`]
 //! ([`Registrar::publish`](crate::Registrar::publish), a
 //! `Box<dyn Library>`) and answers the same questions its own way; views

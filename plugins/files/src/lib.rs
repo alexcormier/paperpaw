@@ -82,19 +82,13 @@ const SHELF_SCREEN: Id = Id::new_static("files.shelf");
 #[derive(Debug, Default)]
 pub struct Files;
 
-/// Folders chosen on the folder chooser.
-static FOLDER: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new().editor(CHOOSE_FOLDER);
+/// Folders chosen with the folder chooser, whichever plugin fills it.
+static FOLDER: paperpaw_sdk::SettingExtra =
+    paperpaw_sdk::SettingExtra::new().editor(paperpaw_sdk::builtin::screens::FOLDER_EDITOR);
 
-/// Where the books and the archive are, and how the library shows them.
-static SETTINGS: [SettingSpec; 4] = [
-    SettingSpec::fixed_text(
-        ROOT.static_str(),
-        "files.setting.root",
-        "books",
-        groups::LIBRARY,
-    )
-    .with_extra(&FOLDER)
-    .described("files.setting.root.help"),
+/// Where the archive is, and how the library shows the books (the
+/// library folder is the kernel's, [`ROOT`]).
+static SETTINGS: [SettingSpec; 3] = [
     SettingSpec::fixed_text(
         ARCHIVE.static_str(),
         "files.setting.archive",

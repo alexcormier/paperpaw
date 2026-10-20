@@ -70,7 +70,8 @@ impl Storage for Shared {
     }
 }
 
-const CONFIG: &str = "[keymap.global]\nbutton.fetch = news.fetch\n";
+/// The library at the storage's top.
+const CONFIG: &str = "[core]\nlibrary-folder =\n[keymap.global]\nbutton.fetch = news.fetch\n";
 const FEEDS: &str = ".paperpaw/plugins/news/feeds.txt";
 const FOLDER: &str = "News";
 const ALPHA: &str = "https://alpha.example/rss";

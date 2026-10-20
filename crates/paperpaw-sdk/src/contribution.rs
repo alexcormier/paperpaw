@@ -451,7 +451,7 @@ impl Registrar {
     }
 
     /// Adds a badge to books' rows in every view of the library (see
-    /// [`library::service`](crate::library::service)).
+    /// [`library::service`](fn@crate::library::service)).
     pub fn add_book_badge(
         &mut self,
         badge: crate::library::BookBadge,

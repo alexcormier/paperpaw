@@ -270,3 +270,20 @@ fn passwords_that_cannot_be_read_are_left_as_they_are() {
     assert_eq!(saved.get("wifi.home"), Some("secret"));
     assert_eq!(saved.get("b.key"), Some("swordfish"));
 }
+
+/// The library folder set as `files.root` (before it was the kernel's)
+/// is taken over once as `core.library-folder`, and written so.
+#[test]
+fn the_library_folder_set_before_is_taken_over() {
+    let config = "[core]\nlanguage = en\n\n[files]\nroot = Novels\nsort = files.sort.name\n";
+    let kernel = kernel_with(MemoryStorage::new().with(CONFIG_FILE, config));
+    assert_eq!(kernel.settings().text("core.library-folder"), "Novels");
+    let written = String::from_utf8(bytes(&kernel, CONFIG_FILE)).unwrap();
+    assert!(written.contains("library-folder = Novels"), "{written}");
+    assert!(!written.contains("root"), "{written}");
+    assert!(written.contains("sort = files.sort.name"), "{written}");
+    // Where both are set, the new one stays.
+    let config = "[core]\nlibrary-folder = Books\n[files]\nroot = Novels\n";
+    let kernel = kernel_with(MemoryStorage::new().with(CONFIG_FILE, config));
+    assert_eq!(kernel.settings().text("core.library-folder"), "Books");
+}

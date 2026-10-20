@@ -26,8 +26,7 @@ change the plugin SDK.
   (`library::index::Index`, 24 bytes a book, kept in a file while a book
   is open). New: `events::BOOK_ADDED`, `BOOK_CHANGED` (bits of
   `library::what`), `BOOK_CHOSEN`, `CATALOG_CHANGED`, `CATALOG_WANTED`;
-  `library::{added, changed_book, request_catalog, note_status,
-  cover_variant}`; `menus::BOOK`; `Registrar::add_book_field`
+  `library::{added, changed_book, request_catalog, cover_variant}`; `menus::BOOK`; `Registrar::add_book_field`
   (`library::BookField`) and `add_book_badge` (`library::BookBadge`,
   `Badge`), listed in `Env::book_fields` and `Env::book_badges`;
   `catalog::series_order` reads `2,5` as `2.5`; `Formats::is_empty`.
@@ -38,6 +37,15 @@ change the plugin SDK.
   `Walk` is the kernel's work: views listen to `CATALOG_CHANGED` and ask
   with `library::request_catalog` instead of walking. `Env` and
   `EnvParts` have `book_fields` and `book_badges`.
+- The library folder is the kernel's setting, `core.library-folder`
+  (it was the library plugin's `files.root`), so a library of one's own
+  and every plugin that puts books somewhere read the same; a folder set
+  before is taken over once. SDK: `builtin::settings::LIBRARY_FOLDER`
+  (`library::FOLDER` names it) and `builtin::screens::FOLDER_EDITOR`, a
+  text setting's editor that opens the folder chooser of whichever
+  plugin fills its slot. The catalog's writers (`catalog::Walk`,
+  `catalog::note`, `catalog::fold`, `library::note_status`) come with
+  the SDK's `kernel` feature.
 - SDK: the screen stack, readable and steerable (gap A2).
   `Env::stack` lists the open screens (`StackEntry`: screen, slot,
   overlay, key) and `Env::top` the one shown; plugins subscribed to

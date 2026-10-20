@@ -532,7 +532,38 @@ fn register_screens(r: &mut Registrar) -> Result<(), RegisterError> {
         "core.screen.placeholder",
         Box::new(|_, _| Box::new(PlaceholderScreen)),
     ))?;
+    // A folder for a setting: the folder chooser's, whichever plugin
+    // fills its slot.
+    r.add_screen(ScreenSpec::new(
+        screens::FOLDER_EDITOR,
+        "core.setting.library-folder",
+        Box::new(|_, params| {
+            Box::new(FolderEditor {
+                params: params.clone(),
+            })
+        }),
+    ))?;
     Ok(())
+}
+
+/// Opens the folder chooser in its own place, with what it was given
+/// ([`screens::FOLDER_EDITOR`]).
+struct FolderEditor {
+    params: paperpaw_sdk::Params,
+}
+
+impl Screen for FolderEditor {
+    fn draw(&mut self, _: &mut Canvas<'_>, _: &Env<'_>) {}
+
+    fn on_action(&mut self, _: &Id, _: &mut Cx<'_, '_>) -> Handled {
+        Handled::No
+    }
+
+    fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
+        cx.command(Command::Back);
+        let params = core::mem::take(&mut self.params);
+        cx.command(Command::OpenSlot(slots::CHOOSE_FOLDER, params));
+    }
 }
 
 /// The main menu, the tools, the quick panel and the settings' sections
@@ -723,8 +754,20 @@ static GENERAL: [SettingSpec; 8] = [
     .described("core.setting.edge.help"),
 ];
 
+/// The library folder, chosen with the folder chooser.
+static FOLDER_EDITOR: SettingExtra = SettingExtra::new().editor(screens::FOLDER_EDITOR);
+static LIBRARY: [SettingSpec; 1] = [SettingSpec::fixed_text(
+    settings::LIBRARY_FOLDER.static_str(),
+    "core.setting.library-folder",
+    "books",
+    groups::LIBRARY,
+)
+.with_extra(&FOLDER_EDITOR)
+.described("core.setting.library-folder.help")];
+
 fn register_general_settings(r: &mut Registrar) -> Result<(), RegisterError> {
     r.add_settings(&GENERAL)?;
+    r.add_settings(&LIBRARY)?;
     r.set_menu_need(settings::MONO_TEXT, paperpaw_sdk::MenuNeed::BlackAndWhite)?;
     r.set_menu_need(settings::SPEAK_FOCUS, paperpaw_sdk::MenuNeed::Speech)?;
     Ok(())

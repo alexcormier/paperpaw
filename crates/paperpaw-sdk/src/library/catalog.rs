@@ -5,7 +5,7 @@
 //! and searches, without reading each book's details.
 //!
 //! It is kept in `.paperpaw/library/catalog.txt`, a book a line, and made
-//! anew by the kernel in the background ([`Walk`], as a job; see
+//! anew by the kernel in the background (`Walk`, as a job; see
 //! [`super::request_catalog`]): from the details the library keeps of
 //! each book, opening only books not seen before, a few entries at a
 //! time. Until a new one is complete, the old one is read. It is read a
@@ -13,8 +13,9 @@
 //!
 //! How far a book is read and whether it is a favourite change while
 //! the catalog stands: such changes are appended to a short log beside it
-//! (`status.log`, [`note`]) and read with it, and folded into it when the
-//! log grows long ([`fold`]), so a page turned never rewrites the catalog.
+//! (`status.log`, by the kernel and the library's setters) and read with
+//! it, and folded into it when the log grows long, so a page turned never
+//! rewrites the catalog.
 //!
 //! The first line of a catalog of this format is a header (`\tcatalog\t2`
 //! and its [`generation`]); a catalog of format 1 (six columns, no
@@ -24,6 +25,7 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
+#[cfg(any(test, feature = "kernel"))]
 use super::listing::{Entry, Listing};
 use super::{Book, DIR};
 use crate::{Env, Storage, files};
@@ -40,7 +42,7 @@ const STEP_ENTRIES: usize = 12;
 /// generation follows.
 const HEADER: &str = "\tcatalog\t2";
 /// Changes of books' status the log holds before they are folded into
-/// the catalog ([`fold`]); read with it, 16 bytes each.
+/// the catalog; read with it, 16 bytes each.
 pub const MAX_LOG: usize = 256;
 
 fn catalog_path() -> String {
@@ -60,7 +62,7 @@ fn folding_path() -> String {
 }
 
 /// How far a book is read and what the reader made of it: what changes
-/// while the catalog stands ([`note`]).
+/// while the catalog stands (noted beside it).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct Status {
@@ -444,7 +446,13 @@ fn next_header(storage: &dyn Storage) -> String {
 /// the catalog once it holds [`MAX_LOG`] changes. The kernel calls this
 /// from the reading events and the library's setters ([`super::record`],
 /// [`super::set_finished`], [`super::set_favourite`]).
+#[cfg(any(test, feature = "kernel"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
 pub fn note(storage: &dyn Storage, path: &str, status: Status) {
+    noted(storage, path, status);
+}
+
+pub(crate) fn noted(storage: &dyn Storage, path: &str, status: Status) {
     if !storage.exists(&catalog_path()) {
         // Made anew from the books' details, which have it.
         return;
@@ -454,13 +462,19 @@ pub fn note(storage: &dyn Storage, path: &str, status: Status) {
     let _ = storage.append(&log_path(), line.as_bytes());
     // A line takes some 22 bytes.
     if storage.size(&log_path()).unwrap_or(0) > (MAX_LOG * 22) as u64 {
-        fold(storage);
+        folded(storage);
     }
 }
 
 /// Writes the logged status changes into the catalog and empties the
 /// log: the catalog read and written a piece at a time.
+#[cfg(any(test, feature = "kernel"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
 pub fn fold(storage: &dyn Storage) {
+    folded(storage);
+}
+
+fn folded(storage: &dyn Storage) {
     let log = changes(storage);
     if log.is_empty() {
         let _ = storage.remove(&log_path());
@@ -753,6 +767,8 @@ pub fn write(storage: &dyn Storage, records: &[Record]) {
 /// Making the catalog anew: the folders still to walk, and where the
 /// current one is. The kernel walks it as a job; views wait for
 /// [`crate::builtin::events::CATALOG_CHANGED`].
+#[cfg(any(test, feature = "kernel"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
 #[derive(Debug, Default)]
 pub struct Walk {
     dirs: Vec<String>,
@@ -765,6 +781,8 @@ pub struct Walk {
     opened: Vec<u64>,
 }
 
+#[cfg(any(test, feature = "kernel"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
 impl Walk {
     /// Starts anew with the books under `root`.
     pub fn start(storage: &dyn Storage, root: &str) -> Walk {

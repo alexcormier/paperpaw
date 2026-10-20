@@ -5,7 +5,7 @@
 //! same books.
 //!
 //! - A book's details: title, author, series, tags and cover, read from
-//!   the book once ([`index`]), its reading progress, and fields that
+//!   the book once ([`index`](fn@index)), its reading progress, and fields that
 //!   plugins add (e.g. a rating or where a book came from), in
 //!   `.paperpaw/library/books/<hash>.ini`.
 //! - The books opened last, most recent first (`opened.txt`), and the
@@ -55,11 +55,11 @@ use paperpaw_digest::fnv1a64;
 /// Where the library keeps what it knows.
 pub const DIR: &str = crate::data_path!("library");
 
-/// The library folder, where books are kept (e.g. `books`): the `files`
-/// plugin offers it in its settings, and every plugin that puts books
-/// somewhere reads it ([`folder`]).
+/// The library folder, where books are kept (e.g. `books`): the kernel's
+/// setting [`settings::LIBRARY_FOLDER`](crate::builtin::settings::LIBRARY_FOLDER),
+/// which every plugin that puts books somewhere reads ([`folder`]).
 pub const FOLDER: crate::setting::Setting<crate::setting::Text> =
-    crate::setting::Setting::new("files.root");
+    crate::builtin::settings::LIBRARY_FOLDER;
 
 /// The library folder ([`FOLDER`]) as a path in the storage, without
 /// slashes around it (`""` for the storage's top).
@@ -100,7 +100,7 @@ pub struct Book {
     pub cover: Option<ImageRef>,
     /// Reading progress in percent, once opened.
     pub progress: Option<u8>,
-    /// The day the library first read the book ([`index`]), in days since
+    /// The day the library first read the book ([`index`](fn@index)), in days since
     /// 1970 (UTC); none where the device did not know the date then.
     pub added: Option<u32>,
     /// Fields plugins keep with the book: id (e.g. `myplugin.rating`)
@@ -706,7 +706,7 @@ pub fn is_new_on(book: &Book, opened: bool, today: Option<u32>) -> bool {
 }
 
 /// What the library knows of the book at `path`, read from the book
-/// first if it is not yet ([`index`]).
+/// first if it is not yet ([`index`](fn@index)).
 pub fn indexed(env: &Env<'_>, path: &str) -> Book {
     match book(env.storage, path) {
         Some(book) if book.indexed => book,
@@ -755,7 +755,7 @@ impl Provided {
 
 /// Keeps what a source knows of the book at `path`, for books that name
 /// nothing themselves (text files, PDFs): what the book names wins when
-/// it is read ([`index`]).
+/// it is read ([`index`](fn@index)).
 pub fn provide(storage: &dyn Storage, path: &str, provided: Provided) {
     let Ok(mut book) = book_for_update(storage, path) else {
         return;
@@ -819,20 +819,26 @@ pub fn record(env: &Env<'_>, reading: &crate::builtin::events::Reading, opened: 
     // Opened: the catalog knows it at once (a page turned does not write
     // there; the book's closing does, [`note_status`]).
     if opened {
-        note_status(storage, path);
+        noted_status(storage, path);
     }
 }
 
 /// Notes the status of the book at `path` (how far it is read, whether it
 /// is a favourite, whether it was opened) beside the catalog
-/// ([`catalog::note`]), so views of the library show it without reading
+/// (the catalog's log), so views of the library show it without reading
 /// each book's details. The kernel calls it when a book is opened,
 /// closed or finished; [`set_finished`] and [`set_favourite`] call it.
+#[cfg(any(test, feature = "kernel"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
 pub fn note_status(storage: &dyn Storage, path: &str) {
+    noted_status(storage, path);
+}
+
+pub(crate) fn noted_status(storage: &dyn Storage, path: &str) {
     let progress = book(storage, path).and_then(|b| b.progress);
     let favourite = favourites(storage).iter().any(|p| p == path);
     let opened = opened_books(storage).iter().any(|p| p == path);
-    catalog::note(
+    catalog::noted(
         storage,
         path,
         catalog::Status::new(progress, favourite, opened),
@@ -879,7 +885,7 @@ pub fn set_finished(storage: &dyn Storage, path: &str, finished: bool) {
     };
     book.progress = finished.then_some(100);
     save(storage, path, &book);
-    note_status(storage, path);
+    noted_status(storage, path);
 }
 
 /// Paths of the books opened last, most recent first (also of books no
@@ -901,7 +907,7 @@ pub fn set_favourite(storage: &dyn Storage, path: &str, favourite: bool) {
             list.insert(0, path.to_string());
         }
     });
-    note_status(storage, path);
+    noted_status(storage, path);
 }
 
 /// Takes over what the library plugin kept before the library was a

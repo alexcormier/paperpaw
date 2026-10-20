@@ -377,6 +377,7 @@ pub const paperpaw_sdk::builtin::roles::HIGHLIGHT: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::roles::LINK: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::roles::SEARCH_HIT: paperpaw_sdk::Id
 pub mod paperpaw_sdk::builtin::screens
+pub const paperpaw_sdk::builtin::screens::FOLDER_EDITOR: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::screens::PLACEHOLDER: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::screens::STATUS_ITEMS: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::screens::STATUS_LINES: paperpaw_sdk::Id
@@ -414,6 +415,7 @@ pub const paperpaw_sdk::builtin::settings::HEADER_LIGHT: &str
 pub const paperpaw_sdk::builtin::settings::HEADER_PLAIN: &str
 pub const paperpaw_sdk::builtin::settings::KEYMAP_PRESET: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
 pub const paperpaw_sdk::builtin::settings::LANGUAGE: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
+pub const paperpaw_sdk::builtin::settings::LIBRARY_FOLDER: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
 pub const paperpaw_sdk::builtin::settings::LONG_PRESS_MS: paperpaw_sdk::setting::Setting<i64>
 pub const paperpaw_sdk::builtin::settings::MONO_TEXT: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
 pub const paperpaw_sdk::builtin::settings::MONO_TEXT_LEVELS: &[&str]
@@ -1283,21 +1285,14 @@ pub paperpaw_sdk::library::catalog::Status::opened: bool
 pub paperpaw_sdk::library::catalog::Status::progress: core::option::Option<u8>
 impl paperpaw_sdk::library::catalog::Status
 pub fn paperpaw_sdk::library::catalog::Status::new(core::option::Option<u8>, bool, bool) -> Self
-pub struct paperpaw_sdk::library::catalog::Walk
-impl paperpaw_sdk::library::catalog::Walk
-pub fn paperpaw_sdk::library::catalog::Walk::found(&self) -> usize
-pub fn paperpaw_sdk::library::catalog::Walk::start(&dyn paperpaw_platform::storage::Storage, &str) -> paperpaw_sdk::library::catalog::Walk
-pub fn paperpaw_sdk::library::catalog::Walk::step(&mut self, &paperpaw_sdk::Env<'_>) -> bool
 pub const paperpaw_sdk::library::catalog::MAX_FOUND: usize
 pub const paperpaw_sdk::library::catalog::MAX_LOG: usize
 pub fn paperpaw_sdk::library::catalog::changes(&dyn paperpaw_platform::storage::Storage) -> alloc::vec::Vec<(u64, paperpaw_sdk::library::catalog::Status)>
 pub fn paperpaw_sdk::library::catalog::count(&dyn paperpaw_platform::storage::Storage, &dyn core::ops::function::Fn(&paperpaw_sdk::library::catalog::Record) -> bool) -> usize
 pub fn paperpaw_sdk::library::catalog::each(&dyn paperpaw_platform::storage::Storage, &mut dyn core::ops::function::FnMut(paperpaw_sdk::library::catalog::Record))
 pub fn paperpaw_sdk::library::catalog::each_at(&dyn paperpaw_platform::storage::Storage, &mut dyn core::ops::function::FnMut(u64, paperpaw_sdk::library::catalog::Record))
-pub fn paperpaw_sdk::library::catalog::fold(&dyn paperpaw_platform::storage::Storage)
 pub fn paperpaw_sdk::library::catalog::found(&dyn paperpaw_platform::storage::Storage, &paperpaw_sdk::library::catalog::Query) -> usize
 pub fn paperpaw_sdk::library::catalog::generation(&dyn paperpaw_platform::storage::Storage) -> core::option::Option<u64>
-pub fn paperpaw_sdk::library::catalog::note(&dyn paperpaw_platform::storage::Storage, &str, paperpaw_sdk::library::catalog::Status)
 pub fn paperpaw_sdk::library::catalog::page(&dyn paperpaw_platform::storage::Storage, &dyn core::ops::function::Fn(&paperpaw_sdk::library::catalog::Record) -> bool, core::option::Option<&paperpaw_sdk::library::catalog::Record>, usize) -> alloc::vec::Vec<paperpaw_sdk::library::catalog::Record>
 pub fn paperpaw_sdk::library::catalog::query(&dyn paperpaw_platform::storage::Storage, &paperpaw_sdk::library::catalog::Query, core::option::Option<&paperpaw_sdk::library::catalog::Record>, usize) -> alloc::vec::Vec<paperpaw_sdk::library::catalog::Record>
 pub fn paperpaw_sdk::library::catalog::query_words(&str) -> alloc::vec::Vec<alloc::string::String>
@@ -1536,7 +1531,6 @@ pub fn paperpaw_sdk::library::is_new_on(&paperpaw_sdk::library::Book, bool, core
 pub fn paperpaw_sdk::library::key(&str) -> alloc::string::String
 pub fn paperpaw_sdk::library::move_data(&dyn paperpaw_platform::storage::Storage, &[paperpaw_sdk::library::BookData], &str, &str)
 pub fn paperpaw_sdk::library::moved(&dyn paperpaw_platform::storage::Storage, &str, &str)
-pub fn paperpaw_sdk::library::note_status(&dyn paperpaw_platform::storage::Storage, &str)
 pub fn paperpaw_sdk::library::opened_books(&dyn paperpaw_platform::storage::Storage) -> alloc::vec::Vec<alloc::string::String>
 pub fn paperpaw_sdk::library::provide(&dyn paperpaw_platform::storage::Storage, &str, paperpaw_sdk::library::Provided)
 pub fn paperpaw_sdk::library::readable_name(&str) -> alloc::borrow::Cow<'_, str>

@@ -483,6 +483,40 @@ pub(crate) fn read_config(storage: &dyn Storage) -> Result<Option<String>, Stora
     paperpaw_sdk::files::load_text_for_update(storage, CONFIG_FILE, MAX_CONFIG)
 }
 
+/// Settings that moved to another id, as `(section, key)` before and
+/// after: what was set is taken over once.
+const MOVED_SETTINGS: [(Place, Place); 1] = [(("files", "root"), ("core", "library-folder"))];
+
+/// Where a setting is kept: its section and key.
+type Place = (&'static str, &'static str);
+
+/// `source` with the values of moved settings ([`MOVED_SETTINGS`]) under
+/// their new ids (unless the new one is set too), written back where it
+/// changed.
+pub(crate) fn take_over_moved(storage: &dyn Storage, source: String) -> String {
+    let mut updated = source.clone();
+    for ((section, key), (to_section, to_key)) in MOVED_SETTINGS {
+        let mut old = None;
+        let mut new = false;
+        for entry in paperpaw_config::parse(&source).filter_map(Result::ok) {
+            if (entry.section, entry.key) == (section, key) {
+                old = Some(entry.value.as_str().into_owned());
+            }
+            new |= (entry.section, entry.key) == (to_section, to_key);
+        }
+        if let Some(old) = old {
+            if !new {
+                updated = paperpaw_config::set(&updated, to_section, to_key, &old);
+            }
+            updated = paperpaw_config::remove(&updated, section, key);
+        }
+    }
+    if updated != source {
+        let _ = storage.write(CONFIG_FILE, updated.as_bytes());
+    }
+    updated
+}
+
 /// Plugin ids switched on (`on`) or off in the `[plugins]` section of a
 /// user config.
 pub(crate) fn plugin_switches(source: &str, on: bool) -> Vec<String> {
