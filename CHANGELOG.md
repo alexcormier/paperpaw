@@ -6,6 +6,9 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- List icons are centred by their drawing in their column, so icons
+  with more room on one side line up with the others. SDK:
+  `FontHandle::ink_across`, `ui::icon_ink`.
 - Restarting no longer counts as going to sleep: after plugins were
   switched or an update installed, rules for "on sleep", sync on sleep,
   work waiting for sleep and the sleep counters no longer take the
