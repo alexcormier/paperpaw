@@ -1197,7 +1197,7 @@ pub paperpaw_sdk::native::NotInstalledReason::OtherAuthor
 #[non_exhaustive] pub enum paperpaw_sdk::native::SafeModeReason
 pub paperpaw_sdk::native::SafeModeReason::FailedStarts
 pub paperpaw_sdk::native::SafeModeReason::KeyHeld
-pub struct paperpaw_sdk::native::CodeRoom
+#[non_exhaustive] pub struct paperpaw_sdk::native::CodeRoom
 pub paperpaw_sdk::native::CodeRoom::granule: u32
 pub paperpaw_sdk::native::CodeRoom::max_plugins: core::option::Option<u32>
 pub paperpaw_sdk::native::CodeRoom::placed: u32
@@ -1206,8 +1206,13 @@ pub paperpaw_sdk::native::CodeRoom::total: u64
 pub paperpaw_sdk::native::CodeRoom::used: u64
 impl paperpaw_sdk::native::CodeRoom
 pub fn paperpaw_sdk::native::CodeRoom::fits(&self, u64, u32, u64) -> bool
+pub fn paperpaw_sdk::native::CodeRoom::in_flash(u32, u32, u32, u32) -> Self
+pub fn paperpaw_sdk::native::CodeRoom::in_psram(u64, u64, u32) -> Self
 pub fn paperpaw_sdk::native::CodeRoom::left(&self, u64) -> u64
 pub fn paperpaw_sdk::native::CodeRoom::needs(&self, u64, u32) -> u64
+pub fn paperpaw_sdk::native::CodeRoom::new(u64, u64, u32) -> Self
+pub fn paperpaw_sdk::native::CodeRoom::shared(self) -> Self
+pub fn paperpaw_sdk::native::CodeRoom::with_plugins(self, u32, core::option::Option<u32>) -> Self
 pub struct paperpaw_sdk::native::Fingerprint(pub u64)
 impl paperpaw_sdk::native::Fingerprint
 pub fn paperpaw_sdk::native::Fingerprint::parse(&str) -> core::option::Option<paperpaw_sdk::native::Fingerprint>
@@ -1278,7 +1283,7 @@ pub fn paperpaw_sdk::presets::Presets::shrink_to_fit(&mut self)
 pub fn paperpaw_sdk::presets::applied(&paperpaw_sdk::Settings, &[(paperpaw_sdk::Id, core::option::Option<paperpaw_sdk::SettingValue>)]) -> bool
 pub fn paperpaw_sdk::presets::commands(&paperpaw_sdk::Settings, &[(paperpaw_sdk::Id, core::option::Option<paperpaw_sdk::SettingValue>)]) -> alloc::vec::Vec<paperpaw_sdk::Command>
 pub mod paperpaw_sdk::qr
-pub use paperpaw_sdk::qr::<<paperpaw_qr::*>>
+pub use paperpaw_sdk::qr::QrCode
 pub mod paperpaw_sdk::random
 pub struct paperpaw_sdk::random::Random
 impl paperpaw_sdk::random::Random

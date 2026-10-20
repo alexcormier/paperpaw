@@ -20,7 +20,7 @@ use esp_bootloader_esp_idf::partitions::FlashStorage;
 use esp_hal::peripherals::MMU_TABLE;
 use log::{info, warn};
 use paperpaw_native::bundle::BUNDLE_MAGIC;
-use paperpaw_native::index::{Index, Layout, MAX_PLACED, Region, SECTOR};
+use paperpaw_native::index::{Index, Layout, Region, SECTOR};
 use paperpaw_native::{CODE_OFFSET, HEADER_LEN, Header, LINK_BASE, Relocator};
 use paperpaw_platform::Storage;
 use paperpaw_sdk::PluginProblem;
@@ -181,14 +181,10 @@ impl Flash {
     /// in, or, where none was placed, the one they would be (found, not
     /// mapped); `None` where there is none (a bundle waits).
     pub fn room(&self) -> Option<CodeRoom> {
-        let (start, end, used) = match &self.layout {
+        let (start, end, images_end) = match &self.layout {
             Some(Some(layout)) => {
                 let region = layout.region();
-                (
-                    region.start,
-                    region.end,
-                    layout.end() - region.start - SECTOR,
-                )
+                (region.start, region.end, layout.end())
             }
             Some(None) => return None,
             None => {
@@ -196,17 +192,10 @@ impl Flash {
                 let (_, free) = free_entries();
                 let first_page = behind.start / PAGE;
                 let end = behind.end.min((first_page + free) * PAGE);
-                (behind.start, end, 0)
+                (behind.start, end, behind.start)
             }
         };
-        Some(CodeRoom {
-            total: u64::from(end.saturating_sub(start + SECTOR)),
-            used: u64::from(used),
-            granule: SECTOR,
-            max_plugins: Some(MAX_PLACED as u32),
-            placed: self.placed,
-            shared: false,
-        })
+        Some(CodeRoom::in_flash(start, end, images_end, self.placed))
     }
 
     /// Writes the index, if what lies in the region changed.
