@@ -79,9 +79,10 @@ pub struct State {
     /// gray test over USB): the next change is shown with the whole screen
     /// drawn again.
     gray_shown: bool,
-    /// When the kernel last worked, if what it wrote may not be on the
-    /// card yet: written back [`SYNC_MS`] after, so nothing is lost when
-    /// the X4 is cut off (reset, flashed, an empty battery).
+    /// When the kernel first worked since the card was last written back,
+    /// if what it wrote may not be on the card yet: written back
+    /// [`SYNC_MS`] after, so nothing is lost when the X4 is cut off
+    /// (reset, flashed, an empty battery).
     unsynced: Option<u64>,
 }
 
@@ -197,14 +198,16 @@ impl Firmware {
                 let effects = self.kernel.firmware_state(now(), state);
                 self.apply(effects);
             }
-            FirmwareCommand::Restart => {
-                // What plugins keep is saved first.
-                info!("restarting");
-                let effects = self.kernel.suspend(now());
-                self.apply(effects);
-                esp_hal::system::software_reset();
-            }
+            FirmwareCommand::Restart => self.restart(),
         }
+    }
+
+    /// Restarts the X4 once what plugins keep is saved and all written
+    /// is on the card (the kernel's suspend writes it back).
+    fn restart(&mut self) -> ! {
+        info!("restarting");
+        let _ = self.kernel.suspend(now());
+        esp_hal::system::software_reset();
     }
 
     /// How an update goes.
@@ -438,15 +441,18 @@ impl Firmware {
         self.state.sleep = false;
         let effects = self.kernel.resume(now());
         self.apply(effects);
+        true
     }
 
     /// Carries out what the kernel asks: shows what changed, notes when to
     /// wake it, restarts, notes whether to sleep.
     pub fn apply(&mut self, mut effects: Effects) {
-        self.state.unsynced = Some(now().0);
+        // From the first work not written back: work coming again and
+        // again does not put it off.
+        self.state.unsynced.get_or_insert(now().0);
         loop {
             if effects.restart() {
-                esp_hal::system::software_reset();
+                self.restart();
             }
             // Turned (the setting): the same screens, made anew for the
             // turned size and drawn whole, instead of what was asked.
