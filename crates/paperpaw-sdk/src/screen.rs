@@ -91,6 +91,79 @@ impl Hint {
     }
 }
 
+/// Tells one opened screen from every other, also from another opening
+/// of the same screen: as long as it is open, through being made anew
+/// (see [`StackEntry::key`], [`Cx::close`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ScreenKey(u32);
+
+impl ScreenKey {
+    /// The key numbered `serial`; the kernel numbers the screens it opens.
+    pub const fn new(serial: u32) -> Self {
+        Self(serial)
+    }
+}
+
+/// An open screen, as [`Env::stack`](crate::Env::stack) lists them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct StackEntry {
+    /// Which screen it is.
+    pub screen: Id,
+    /// The slot it was opened for, if any (e.g. the reader's).
+    pub slot: Option<Id>,
+    /// Shown over part of the screen below it (a menu, a dialog), as its
+    /// [`Screen::region`] was when the stack last changed.
+    pub overlay: bool,
+    /// This opening of it.
+    pub key: ScreenKey,
+}
+
+impl StackEntry {
+    /// Made of its fields, e.g. by the kernel or a test.
+    pub fn new(screen: Id, slot: Option<Id>, overlay: bool, key: ScreenKey) -> Self {
+        Self {
+            screen,
+            slot,
+            overlay,
+            key,
+        }
+    }
+
+    /// Whether it is screen `id`, or the screen of slot `id`.
+    pub fn is(&self, id: &Id) -> bool {
+        self.screen == *id || self.slot.as_ref() == Some(id)
+    }
+}
+
+/// Why the kernel is about to close a screen (see
+/// [`Screen::on_close_request`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum CloseCause {
+    /// *Back* ([`Command::Back`], the back button or gesture).
+    Back,
+    /// A tap outside an overlay (see [`Screen::outside`]).
+    TapOutside,
+    /// Its slot, or a screen below it, shown again: the screens above it
+    /// go ([`Command::OpenSlot`], [`Command::BackTo`]).
+    Slot,
+}
+
+/// What a tap outside an overlay does (see [`Screen::outside`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub enum Outside {
+    /// It closes the overlay, as *Back* does.
+    #[default]
+    Close,
+    /// Nothing: the overlay stays, the tap is taken.
+    Ignore,
+    /// It goes to the screen below, as if the overlay were not there (a
+    /// bar for skimming that leaves the page usable).
+    PassThrough,
+}
+
 /// Whether an event was consumed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
@@ -170,6 +243,39 @@ pub trait Screen {
     /// and notices wait until it lets go.
     fn guards(&self) -> bool {
         false
+    }
+
+    /// What a tap outside it does, for an overlay: by default it closes
+    /// it.
+    fn outside(&self) -> Outside {
+        Outside::Close
+    }
+
+    /// For an overlay: whether input it does not take (an action or a
+    /// gesture it answers [`Handled::No`]) goes on to the screen below it,
+    /// as for a bar or a panel that leaves the page usable. By default it
+    /// goes to the action's handler and the key map, as on top.
+    fn passes_through(&self) -> bool {
+        false
+    }
+
+    /// When it shows the row of hints, where it knows better than the
+    /// plugin said for all its openings
+    /// ([`Registrar::set_screen_hints`](crate::Registrar::set_screen_hints)):
+    /// read when it is opened, for the part of the screen it is made for,
+    /// and whenever the row would come for a while ([`Hints::OnPress`]).
+    fn hints(&self) -> Option<Hints> {
+        None
+    }
+
+    /// Asked before the kernel closes it for `why` (*Back*, a tap
+    /// outside, its slot shown again): [`Handled::Yes`] keeps it open,
+    /// e.g. to ask first whether text typed is to be thrown away. Not
+    /// asked where it closes itself ([`Cx::close`]) or its plugin is
+    /// removed.
+    fn on_close_request(&mut self, why: CloseCause, cx: &mut Cx<'_, '_>) -> Handled {
+        let _ = (why, cx);
+        Handled::No
     }
 
     /// Raw pointer samples, offered before gesture recognition and before
@@ -262,12 +368,55 @@ impl Output {
 pub struct Cx<'a, 'e> {
     env: &'a Env<'e>,
     output: &'a mut Output,
+    /// The screen whose handler runs, if it is one of the stack's.
+    key: Option<ScreenKey>,
 }
 
 impl<'a, 'e> Cx<'a, 'e> {
     /// Used by the kernel and by tests.
     pub fn new(env: &'a Env<'e>, output: &'a mut Output) -> Self {
-        Self { env, output }
+        Self {
+            env,
+            output,
+            key: None,
+        }
+    }
+
+    /// For the handler of the open screen `key` (the kernel's, or a test
+    /// that plays it).
+    pub fn for_screen(mut self, key: ScreenKey) -> Self {
+        self.key = Some(key);
+        self
+    }
+
+    /// Which opening of a screen this handler runs for: `None` outside
+    /// the stack (a screen made aside, a notice).
+    pub fn key(&self) -> Option<ScreenKey> {
+        self.key
+    }
+
+    /// This screen as the stack lists it ([`Env::stack`](crate::Env::stack)).
+    pub fn entry(&self) -> Option<&StackEntry> {
+        let key = self.key?;
+        self.env.stack.iter().find(|entry| entry.key == key)
+    }
+
+    /// Which screen this is.
+    pub fn screen_id(&self) -> Option<&Id> {
+        self.entry().map(|entry| &entry.screen)
+    }
+
+    /// The slot this screen was opened for, if any.
+    pub fn slot(&self) -> Option<&Id> {
+        self.entry().and_then(|entry| entry.slot.as_ref())
+    }
+
+    /// Closes this screen, wherever it is in the stack ([`Command::Close`]):
+    /// the screens above it stay. Nothing outside the stack.
+    pub fn close(&mut self) {
+        if let Some(key) = self.key {
+            self.output.commands.push(Command::Close(key));
+        }
     }
 
     pub fn env(&self) -> &Env<'e> {

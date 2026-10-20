@@ -1062,6 +1062,9 @@ struct Shared {
     /// The system's clipboard has text (see
     /// [`Kernel::set_clipboard_available`]).
     system_clipboard: bool,
+    /// The open screens as plugins see them ([`Env::stack`]), kept in
+    /// step with the kernel's stack.
+    stack: Vec<paperpaw_sdk::StackEntry>,
     /// Slots some screen is bound to.
     slots: Vec<Id>,
     /// Every screen, with the translation key of its name.
@@ -1121,6 +1124,7 @@ impl Shared {
             work: &self.work_states,
             reader: self.reader,
             clipboard: self.system_clipboard || !self.clipboard.is_empty(),
+            stack: &self.stack,
             slots: &self.slots,
             screens: &self.screens,
             font_dirs: &self.font_dirs,
