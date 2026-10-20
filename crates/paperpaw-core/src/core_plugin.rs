@@ -563,7 +563,7 @@ static GENERAL: [SettingSpec; 8] = [
     SettingSpec::fixed_choice(
         settings::MONO_TEXT.static_str(),
         "core.setting.mono-text",
-        &settings::MONO_TEXT_LEVELS,
+        settings::MONO_TEXT_LEVELS,
         settings::MONO_TEXT_LEVELS[1],
         groups::DISPLAY,
     )
@@ -645,7 +645,7 @@ static LOOK: [SettingSpec; 12] = [
     SettingSpec::fixed_choice(
         settings::UI_CORNERS.static_str(),
         "core.setting.ui-corners",
-        &settings::CORNERS,
+        settings::CORNERS,
         settings::CORNERS[3],
         groups::LOOK,
     )
@@ -789,7 +789,7 @@ static DEVICE: [SettingSpec; 9] = [
     SettingSpec::fixed_choice(
         settings::ROTATION.static_str(),
         "core.setting.rotation",
-        &settings::ROTATIONS,
+        settings::ROTATIONS,
         settings::ROTATIONS[0],
         groups::DISPLAY,
     )
@@ -849,7 +849,7 @@ static COLOR_SETTINGS: [SettingSpec; 4] = [
     SettingSpec::fixed_choice(
         settings::TEXT_COLOR.static_str(),
         "core.setting.text-color",
-        &settings::TEXT_COLORS,
+        settings::TEXT_COLORS,
         settings::TEXT_COLORS[0],
         groups::LOOK,
     )
@@ -866,7 +866,7 @@ static COLOR_SETTINGS: [SettingSpec; 4] = [
     SettingSpec::fixed_choice(
         settings::PAPER_COLOR.static_str(),
         "core.setting.paper-color",
-        &settings::PAPER_COLORS,
+        settings::PAPER_COLORS,
         settings::PAPER_COLORS[0],
         groups::LOOK,
     )
@@ -1010,7 +1010,7 @@ static TIME: [SettingSpec; 4] = [
     SettingSpec::fixed_choice(
         settings::WEEK_START.static_str(),
         "core.setting.week-start",
-        &time::WEEK_STARTS,
+        time::WEEK_STARTS,
         time::WEEK_STARTS[0],
         groups::SYSTEM,
     )
@@ -1211,7 +1211,7 @@ fn screenshot_path(env: &Env<'_>) -> alloc::string::String {
 static SPACE: [SettingSpec; 1] = [SettingSpec::fixed_choice(
     widgets::SPACE_SIZE.static_str(),
     "core.setting.space-size",
-    &widgets::SPACE_SIZES,
+    widgets::SPACE_SIZES,
     widgets::SPACE_SIZES[1],
     Id::new_static(widgets::SPACE),
 )

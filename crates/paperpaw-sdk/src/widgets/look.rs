@@ -45,7 +45,7 @@ use crate::settings::{Choices, SettingKind, SettingSpec, SettingValue};
 use crate::ui::{self, UiStyle};
 
 /// The values of a widget's frame setting ([`frame_setting`]).
-pub const FRAMES: [&str; 4] = [
+pub const FRAMES: &[&str] = &[
     "core.frame.none",
     "core.frame.line",
     "core.frame.card",
@@ -83,7 +83,7 @@ impl Frame {
 }
 
 /// The values of a widget's size setting ([`size_setting`]).
-pub const SIZES: [&str; 4] = [
+pub const SIZES: &[&str] = &[
     "core.size.small",
     "core.size.medium",
     "core.size.large",
@@ -95,7 +95,7 @@ const SIZES_SET: [&str; 3] = [SIZES[0], SIZES[1], SIZES[2]];
 
 /// The sizes offered: with `fit`, also "as large as fits".
 const fn sizes(fit: bool) -> &'static [&'static str] {
-    if fit { &SIZES } else { &SIZES_SET }
+    if fit { SIZES } else { &SIZES_SET }
 }
 
 /// How large a widget's text is.
@@ -136,7 +136,7 @@ impl Size {
 }
 
 /// The values of a widget's padding setting ([`padding_spec`]).
-pub const PADDINGS: [&str; 5] = [
+pub const PADDINGS: &[&str] = &[
     "core.padding.auto",
     "core.padding.none",
     "core.padding.small",
@@ -223,7 +223,7 @@ pub fn frame_setting(widget: &Id, default: Frame) -> SettingSpec {
         widget,
         "frame",
         "core.setting.frame",
-        &FRAMES,
+        FRAMES,
         default.value(),
     )
 }
@@ -232,7 +232,7 @@ pub fn frame_setting(widget: &Id, default: Frame) -> SettingSpec {
 /// `static` list of the widget's settings: `id` must be
 /// `<widget>.frame`.
 pub const fn frame_spec(id: &'static str, widget: Id, default: Frame) -> SettingSpec {
-    SettingSpec::fixed_choice(id, "core.setting.frame", &FRAMES, default.value(), widget)
+    SettingSpec::fixed_choice(id, "core.setting.frame", FRAMES, default.value(), widget)
 }
 
 /// The setting of how far `widget`'s content keeps from its frame,
@@ -243,7 +243,7 @@ pub fn padding_setting(widget: &Id, default: Padding) -> SettingSpec {
         widget,
         "padding",
         "core.setting.padding",
-        &PADDINGS,
+        PADDINGS,
         default.value(),
     )
     .described("core.setting.padding.help")
@@ -255,7 +255,7 @@ pub const fn padding_spec(id: &'static str, widget: Id, default: Padding) -> Set
     SettingSpec::fixed_choice(
         id,
         "core.setting.padding",
-        &PADDINGS,
+        PADDINGS,
         default.value(),
         widget,
     )

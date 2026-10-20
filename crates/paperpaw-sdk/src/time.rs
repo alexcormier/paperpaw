@@ -516,7 +516,7 @@ fn dated(env: &Env<'_>, key: &str, kind: &str) -> Option<String> {
 /// The values of the first day of the week
 /// ([`WEEK_START`](crate::builtin::settings::WEEK_START)): as the
 /// language has it, Monday, Sunday.
-pub const WEEK_STARTS: [&str; 3] = ["core.week.auto", "core.week.monday", "core.week.sunday"];
+pub const WEEK_STARTS: &[&str] = &["core.week.auto", "core.week.monday", "core.week.sunday"];
 
 /// The first day of the week, 0 (Sunday) or 1 (Monday), as set or, where
 /// set to the language's habit, as the translation `core.week-start-day`

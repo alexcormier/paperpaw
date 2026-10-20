@@ -58,7 +58,7 @@ pub const TOOLCHAIN: &str = env!("PAPERPAW_NATIVE_TOOLCHAIN");
 /// The names a plugin folder's code has: `code.ppn` on the X4 and the X4
 /// Pro, `code.so` on Android. A folder with one is a code plugin's, also
 /// where PaperPaw loads none.
-pub const CODE_FILES: [&str; 2] = ["code.ppn", "code.so"];
+pub const CODE_FILES: &[&str] = &["code.ppn", "code.so"];
 
 /// The folder in the plugins' folder where code plugins fetched for a
 /// firmware update wait for it (`plugins/.stats.next`), which PaperPaw
