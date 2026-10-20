@@ -6,6 +6,17 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Storage: paths with control characters, a dot or space at the end of
+  a name, or a name Windows keeps for a device (`CON`, `nul.txt`,
+  `COM1`) are refused on every storage, as FAT and Windows take them for
+  another entry or a device. Names made from the web
+  (`web::clean_name`) leave those out, `_CON.txt` for `CON.txt`, and are
+  cut as FAT counts their length. `web::host` leaves out a user and
+  password written before the host.
+- Passwords and Wi-Fi: a network whose name holds a tab or a line break
+  is joined again by its name (it was kept with a space for them).
+  Passwords are left out where secrets and Wi-Fi commands are printed
+  for debugging.
 - Time zones: a rule of your own (`core.time-zone-rule`) may name the
   days summer time starts and ends by the day of the year (`J60`, `59`)
   as POSIX allows, not only by week and weekday; one that is not a rule

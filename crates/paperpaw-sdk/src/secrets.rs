@@ -18,8 +18,8 @@ pub const FILE: &str = crate::data_path!("secrets.txt");
 /// keeps the old name, so the files written before stay readable.
 const VEIL: &[u8] = b"QuireInk keeps this out of sight, not safe"; // not PaperPaw
 
-/// A password or key.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// A password or key. Printed for debugging without its value.
+#[derive(Clone, PartialEq, Eq)]
 pub struct Secret {
     /// Who keeps it and for what, e.g. `translate.deepl-key`.
     pub id: String,
@@ -30,13 +30,36 @@ pub struct Secret {
     pub changeable: bool,
 }
 
-/// A change: `value` `None` removes the secret.
-#[derive(Debug, Clone, PartialEq, Eq)]
+impl core::fmt::Debug for Secret {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Secret")
+            .field("id", &self.id)
+            .field("label", &self.label)
+            .field("value", &"…")
+            .field("changeable", &self.changeable)
+            .finish()
+    }
+}
+
+/// A change: `value` `None` removes the secret. Printed for debugging
+/// without the value.
+#[derive(Clone, PartialEq, Eq)]
 pub struct SecretChange {
     pub id: String,
     pub label: String,
     pub value: Option<String>,
     pub changeable: bool,
+}
+
+impl core::fmt::Debug for SecretChange {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("SecretChange")
+            .field("id", &self.id)
+            .field("label", &self.label)
+            .field("value", &self.value.as_ref().map(|_| "…"))
+            .field("changeable", &self.changeable)
+            .finish()
+    }
 }
 
 impl SecretChange {
@@ -119,16 +142,17 @@ impl Secrets {
     }
 
     /// The file's text: `id<TAB>label<TAB>flags<TAB>value` lines, the
-    /// value veiled.
+    /// value veiled, tabs, line breaks and backslashes in the id and the
+    /// label written as `\t`, `\n`, `\r` and `\\` (a network's name may
+    /// hold any of them).
     pub fn encode(&self) -> String {
-        let clean = |s: &str| s.replace(['\t', '\n', '\r'], " ");
         self.list
             .iter()
             .map(|s| {
                 alloc::format!(
                     "{}\t{}\t{}\t{}\n",
-                    clean(&s.id),
-                    clean(&s.label),
+                    escape(&s.id),
+                    escape(&s.label),
                     if s.changeable { "c" } else { "" },
                     hex(&veil(s.value.as_bytes()))
                 )
@@ -141,8 +165,8 @@ impl Secrets {
             .lines()
             .filter_map(|line| {
                 let mut f = line.splitn(4, '\t');
-                let id = f.next()?.to_string();
-                let label = f.next()?.to_string();
+                let id = unescape(f.next()?);
+                let label = unescape(f.next()?);
                 let changeable = f.next()? == "c";
                 let value = String::from_utf8(veil(&unhex(f.next()?)?)).ok()?;
                 (!id.is_empty()).then_some(Secret {
@@ -157,9 +181,72 @@ impl Secrets {
     }
 }
 
+/// `text` on one line of the file (see [`Secrets::encode`]).
+fn escape(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for c in text.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '\t' => out.push_str("\\t"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            c => out.push(c),
+        }
+    }
+    out
+}
+
+/// The other way round from [`escape`]; any other `\` stays, as files
+/// from before kept it.
+fn unescape(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        let escaped = match (c, chars.peek()) {
+            ('\\', Some('\\')) => Some('\\'),
+            ('\\', Some('t')) => Some('\t'),
+            ('\\', Some('n')) => Some('\n'),
+            ('\\', Some('r')) => Some('\r'),
+            _ => None,
+        };
+        match escaped {
+            Some(e) => {
+                chars.next();
+                out.push(e);
+            }
+            None => out.push(c),
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn names_with_tabs_and_breaks_stay_as_they_are() {
+        let mut secrets = Secrets::default();
+        for id in [
+            "wifi.Home\tNet",
+            "wifi.Two\nlines\r",
+            "wifi.back\\slash\\t",
+            "x\\y",
+        ] {
+            secrets.apply(SecretChange::keep(id, "Label\tlabel", "pw"));
+        }
+        let text = secrets.encode();
+        assert_eq!(text.lines().count(), 4);
+        assert_eq!(Secrets::decode(&text), secrets);
+        // Written before, a lone backslash stays.
+        assert_eq!(unescape("a\\b"), "a\\b");
+        // Values are not printed.
+        let printed = alloc::format!("{secrets:?} {:?}", SecretChange::keep("a", "b", "s3cr3t"));
+        assert!(
+            !printed.contains("pw") && !printed.contains("s3cr3t"),
+            "{printed}"
+        );
+    }
 
     #[test]
     fn kept_changed_removed_and_veiled() {
