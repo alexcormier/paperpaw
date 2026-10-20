@@ -110,7 +110,7 @@ pub use replies::{Chosen, HttpReply, ServerNotice, SocketNotice, Typed};
 pub use screen::{Cx, Handled, Hint, Hints, Output, Screen, ScreenFactory, ScreenSpec};
 pub use setting::{Setting, Text};
 pub use settings::{
-    Choices, Level, SettingError, SettingExtra, SettingGroupSpec, SettingKind, SettingSpec,
+    Choices, Editor, Level, SettingError, SettingExtra, SettingGroupSpec, SettingKind, SettingSpec,
     SettingValue, Settings,
 };
 pub use version::{DATA_FORMATS, SDK_VERSION, Version};

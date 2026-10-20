@@ -226,10 +226,7 @@ impl BarScreen {
         };
         // Its own page, e.g. the lock's, which asks for the code.
         if let Some(editor) = &spec.extra().editor {
-            cx.command(Command::OpenScreen(
-                editor.clone(),
-                Params::new().with(params::ID, id.as_str().to_string()),
-            ));
+            cx.command(editor.open(&id));
             return;
         }
         match &spec.kind {

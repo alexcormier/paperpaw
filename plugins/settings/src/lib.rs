@@ -179,6 +179,7 @@ impl Plugin for SettingsPlugin {
         r.add_icon(secrets::OPEN, Cow::Borrowed("key"))?;
         r.on(secrets::ENTERED, secrets::entered)?;
         r.bind_slot(slots::SETTINGS, SCREEN, Priority::DEFAULT)?;
+        r.bind_slot(slots::CHOOSE_VALUE, CHOOSE_SCREEN, Priority::DEFAULT)?;
         r.add_settings(&SETTINGS)?;
         r.on(TEXT_ENTERED, |env, typed, out| {
             let id = typed.context.get(ID).and_then(|id| Id::parse(id).ok());

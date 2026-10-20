@@ -177,18 +177,12 @@ struct MenuScreen {
 /// Parameter: the depth of a submenu.
 pub(crate) const DEPTH: &str = "depth";
 
-/// The settings plugin's list for choosing a value.
-const CHOOSE_SCREEN: Id = Id::new_static("settings.choose");
-
-/// Chooses a value of choice or language setting `spec`: in the settings
-/// plugin's list, or the next value at once where that plugin is
-/// replaced or off.
+/// Chooses a value of choice or language setting `spec`: on the screen
+/// of slot `core.choose-value`, or the next value at once where none
+/// fills it.
 pub(crate) fn choose(env: &Env<'_>, spec: &SettingSpec, cx: &mut Cx<'_, '_>) {
-    if env.screens.iter().any(|(id, _)| *id == CHOOSE_SCREEN) {
-        cx.command(Command::OpenScreen(
-            CHOOSE_SCREEN,
-            Params::new().with(params::ID, spec.id.as_str().to_string()),
-        ));
+    if env.has_slot(&slots::CHOOSE_VALUE) {
+        cx.command(paperpaw_sdk::Editor::Slot(slots::CHOOSE_VALUE).open(&spec.id));
     } else if let Some(value) = ui::next_value(env, spec, 1) {
         cx.command(Command::SetSetting(spec.id.clone(), value));
         cx.request_redraw();
@@ -318,10 +312,7 @@ impl MenuScreen {
             return;
         };
         if let Some(editor) = &spec.extra().editor {
-            cx.command(Command::OpenScreen(
-                editor.clone(),
-                Params::new().with("id", spec.id.as_str().to_string()),
-            ));
+            cx.command(editor.open(&spec.id));
             return;
         }
         match spec.kind {

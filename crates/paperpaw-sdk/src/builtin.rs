@@ -129,6 +129,11 @@ pub mod slots {
     /// emitted with all of the parameters and [`PATH`](super::params::PATH)
     /// set to the folder; [`TEXT`](super::params::TEXT), where to start.
     pub const CHOOSE_FOLDER: Id = Id::new_static("core.choose-folder");
+    /// Picks one of the values of a choice or language setting, on a page
+    /// of its own: parameter [`ID`](super::params::ID), the setting. The
+    /// settings plugin binds here; menus and the setup open it for a
+    /// setting with more values than two.
+    pub const CHOOSE_VALUE: Id = Id::new_static("core.choose-value");
     /// Shows what is known of a book: parameter [`PATH`](super::params::PATH).
     pub const BOOK_INFO: Id = Id::new_static("core.book-info");
     /// Shows a short message ([`Command::Notify`](crate::Command::Notify))

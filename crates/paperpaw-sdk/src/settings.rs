@@ -183,6 +183,31 @@ enum Extra {
     Owned(Box<SettingExtra>),
 }
 
+/// Where a setting is edited (see [`SettingExtra::editor`]), opened with
+/// the parameter [`ID`](crate::builtin::params::ID), the setting's id.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum Editor {
+    /// A screen of a plugin's, e.g. one that asks for a code.
+    Screen(Id),
+    /// Whatever screen fills a slot, e.g.
+    /// [`CHOOSE_FOLDER`](crate::builtin::slots::CHOOSE_FOLDER), so that a
+    /// plugin taking the slot's place edits the setting too.
+    Slot(Id),
+}
+
+impl Editor {
+    /// The command that opens it for setting `setting`.
+    pub fn open(&self, setting: &Id) -> crate::Command {
+        let params =
+            crate::Params::new().with(crate::builtin::params::ID, String::from(setting.as_str()));
+        match self {
+            Editor::Screen(screen) => crate::Command::OpenScreen(screen.clone(), params),
+            Editor::Slot(slot) => crate::Command::OpenSlot(slot.clone(), params),
+        }
+    }
+}
+
 /// What few settings have (see [`SettingSpec::extra`]).
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
@@ -190,9 +215,9 @@ pub struct SettingExtra {
     /// Translation key that formats a number with its unit, with plural
     /// forms, e.g. `core.unit.pt.other = {count} pt`.
     pub unit: Option<Cow<'static, str>>,
-    /// A screen that edits the value, opened with the parameter `id` (the
-    /// setting's id), e.g. a folder chooser for a path.
-    pub editor: Option<Id>,
+    /// Where the value is edited instead of on the settings page, e.g.
+    /// a folder chooser for a path ([`Editor::open`] opens it).
+    pub editor: Option<Editor>,
     /// How much one step changes a number (e.g. 10 for percentages).
     pub step: i64,
     /// A number better set by eye than by its value, such as the line
@@ -250,7 +275,15 @@ impl SettingExtra {
 
     /// Edited on screen `screen` ([`SettingExtra::editor`]).
     pub const fn editor(mut self, screen: Id) -> Self {
-        core::mem::forget(self.editor.replace(screen));
+        core::mem::forget(self.editor.replace(Editor::Screen(screen)));
+        self
+    }
+
+    /// Edited on whatever screen fills slot `slot`
+    /// ([`SettingExtra::editor`]), e.g.
+    /// [`CHOOSE_FOLDER`](crate::builtin::slots::CHOOSE_FOLDER).
+    pub const fn editor_slot(mut self, slot: Id) -> Self {
+        core::mem::forget(self.editor.replace(Editor::Slot(slot)));
         self
     }
 
@@ -610,9 +643,16 @@ impl SettingSpec {
         self
     }
 
-    /// Edited on its own screen (see [`SettingSpec::editor`]).
+    /// Edited on its own screen (see [`SettingExtra::editor`]).
     pub fn editor(mut self, screen: Id) -> Self {
-        self.extra_mut().editor = Some(screen);
+        self.extra_mut().editor = Some(Editor::Screen(screen));
+        self
+    }
+
+    /// Edited on whatever screen fills slot `slot` (see
+    /// [`SettingExtra::editor_slot`]).
+    pub fn editor_slot(mut self, slot: Id) -> Self {
+        self.extra_mut().editor = Some(Editor::Slot(slot));
         self
     }
 }

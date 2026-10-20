@@ -16,7 +16,7 @@
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use paperpaw_sdk::builtin::{actions, params};
+use paperpaw_sdk::builtin::{actions, slots};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::setup::SetupPage;
@@ -29,8 +29,6 @@ use paperpaw_sdk::{
 
 use crate::{CHOICE, mark_done};
 
-/// The settings plugin's list of choices, opened for a setting.
-const CHOOSE: Id = Id::new_static("settings.choose");
 /// Whether to skip the setup, asked by *Back* on the first page.
 const SKIP_CHOSEN: Event<Picked> = Event::new("setup.skip-chosen");
 /// Lines of the explanation at most; at the end, with no card, more.
@@ -388,15 +386,14 @@ impl Guide {
                 let Some(spec) = self.setting(&env) else {
                     return;
                 };
-                let with_id = || Params::new().with(params::ID, spec.id.as_str().to_string());
                 if let Some(editor) = &spec.extra().editor {
-                    cx.command(Command::OpenScreen(editor.clone(), with_id()));
+                    cx.command(editor.open(&spec.id));
                 } else if matches!(spec.kind, SettingKind::Bool) || ui::two_options(&env, spec) {
                     self.change(1, cx);
                 } else if matches!(spec.kind, SettingKind::Choice(_) | SettingKind::Language) {
                     // The settings plugin's list; without it, the next.
-                    if env.screens.iter().any(|(id, _)| *id == CHOOSE) {
-                        cx.command(Command::OpenScreen(CHOOSE, with_id()));
+                    if env.has_slot(&slots::CHOOSE_VALUE) {
+                        cx.command(paperpaw_sdk::Editor::Slot(slots::CHOOSE_VALUE).open(&spec.id));
                     } else {
                         self.change(1, cx);
                     }

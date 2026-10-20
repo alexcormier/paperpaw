@@ -556,10 +556,7 @@ impl PanelScreen {
                     return;
                 };
                 match &setting.extra().editor {
-                    Some(editor) => cx.command(Command::OpenScreen(
-                        editor.clone(),
-                        Params::new().with("id", id.as_str().to_string()),
-                    )),
+                    Some(editor) => cx.command(editor.open(id)),
                     None => choose(&env, setting, cx),
                 }
             }

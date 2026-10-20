@@ -847,7 +847,11 @@ fn follow_folders(env: &Env<'_>, from: &str, to: &str, cx: &mut Cx<'_, '_>) {
             .extra()
             .editor
             .as_ref()
-            .is_some_and(|editor| *editor == CHOOSE_FOLDER || *editor == slots::CHOOSE_FOLDER);
+            .is_some_and(|editor| match editor {
+                paperpaw_sdk::Editor::Slot(slot) => *slot == slots::CHOOSE_FOLDER,
+                paperpaw_sdk::Editor::Screen(screen) => *screen == CHOOSE_FOLDER,
+                _ => false,
+            });
         if !folder {
             continue;
         }

@@ -440,6 +440,7 @@ pub mod paperpaw_sdk::builtin::slots
 pub const paperpaw_sdk::builtin::slots::BOOK_INFO: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::slots::BROWSER: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::slots::CHOOSE_FOLDER: paperpaw_sdk::Id
+pub const paperpaw_sdk::builtin::slots::CHOOSE_VALUE: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::slots::HOME: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::slots::KEYBOARD: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::slots::LIBRARY: paperpaw_sdk::Id
@@ -2935,6 +2936,11 @@ pub paperpaw_sdk::Direction::Right
 pub paperpaw_sdk::Direction::Up
 impl paperpaw_sdk::Direction
 pub const fn paperpaw_sdk::Direction::id(self) -> &'static str
+#[non_exhaustive] pub enum paperpaw_sdk::Editor
+pub paperpaw_sdk::Editor::Screen(paperpaw_sdk::Id)
+pub paperpaw_sdk::Editor::Slot(paperpaw_sdk::Id)
+impl paperpaw_sdk::Editor
+pub fn paperpaw_sdk::Editor::open(&self, &paperpaw_sdk::Id) -> paperpaw_sdk::Command
 #[non_exhaustive] pub enum paperpaw_sdk::GestureKind
 pub paperpaw_sdk::GestureKind::LongPress
 pub paperpaw_sdk::GestureKind::Pinch
@@ -3609,7 +3615,7 @@ pub fn paperpaw_sdk::setting::Setting<T>::fmt(&self, &mut core::fmt::Formatter<'
 impl<T: paperpaw_sdk::setting::SettingType> core::fmt::Display for paperpaw_sdk::setting::Setting<T>
 pub fn paperpaw_sdk::setting::Setting<T>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 #[non_exhaustive] pub struct paperpaw_sdk::SettingExtra
-pub paperpaw_sdk::SettingExtra::editor: core::option::Option<paperpaw_sdk::Id>
+pub paperpaw_sdk::SettingExtra::editor: core::option::Option<paperpaw_sdk::Editor>
 pub paperpaw_sdk::SettingExtra::follows: core::option::Option<&'static str>
 pub paperpaw_sdk::SettingExtra::secret: bool
 pub paperpaw_sdk::SettingExtra::section: core::option::Option<alloc::borrow::Cow<'static, str>>
@@ -3618,6 +3624,7 @@ pub paperpaw_sdk::SettingExtra::step: i64
 pub paperpaw_sdk::SettingExtra::unit: core::option::Option<alloc::borrow::Cow<'static, str>>
 impl paperpaw_sdk::SettingExtra
 pub const fn paperpaw_sdk::SettingExtra::editor(self, paperpaw_sdk::Id) -> Self
+pub const fn paperpaw_sdk::SettingExtra::editor_slot(self, paperpaw_sdk::Id) -> Self
 pub const fn paperpaw_sdk::SettingExtra::follows(self, &'static str) -> Self
 pub const fn paperpaw_sdk::SettingExtra::new() -> Self
 pub const fn paperpaw_sdk::SettingExtra::secret(self) -> Self
@@ -3651,6 +3658,7 @@ pub fn paperpaw_sdk::SettingSpec::choice(&paperpaw_sdk::setting::Setting<paperpa
 pub const fn paperpaw_sdk::SettingSpec::described(self, &'static str) -> Self
 pub fn paperpaw_sdk::SettingSpec::description(self, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
 pub fn paperpaw_sdk::SettingSpec::editor(self, paperpaw_sdk::Id) -> Self
+pub fn paperpaw_sdk::SettingSpec::editor_slot(self, paperpaw_sdk::Id) -> Self
 pub fn paperpaw_sdk::SettingSpec::extra(&self) -> &paperpaw_sdk::SettingExtra
 pub const fn paperpaw_sdk::SettingSpec::fixed(&'static str, &'static str, paperpaw_sdk::SettingKind, paperpaw_sdk::SettingValue, paperpaw_sdk::Id) -> Self
 pub const fn paperpaw_sdk::SettingSpec::fixed_choice(&'static str, &'static str, &'static [&'static str], &'static str, paperpaw_sdk::Id) -> Self

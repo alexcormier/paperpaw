@@ -60,8 +60,6 @@ const EDIT_WIDGETS: Id = Id::new_static("home.edit");
 pub const FOLDER: Setting<Text> = Setting::new("sleep.folder");
 const SCREEN: Id = Id::new_static("sleep.screen");
 const SECTION: &str = "sleep.section";
-/// The folder chooser of the `files` plugin, if installed.
-const CHOOSE_FOLDER: Id = Id::new_static("files.choose-folder");
 
 fn data(name: &str) -> String {
     format!("{}/{name}", Env::plugin_dir(PLUGIN.as_str()))
@@ -76,7 +74,7 @@ pub struct Sleep;
 static IN_SLEEP: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new().section(SECTION);
 static FOLDER_EXTRA: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new()
     .section(SECTION)
-    .editor(CHOOSE_FOLDER);
+    .editor_slot(paperpaw_sdk::builtin::slots::CHOOSE_FOLDER);
 static WIDGETS_EXTRA: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new()
     .section(SECTION)
     .editor(EDIT_WIDGETS);

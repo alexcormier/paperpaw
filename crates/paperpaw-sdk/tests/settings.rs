@@ -261,7 +261,21 @@ fn extras_are_kept_in_the_program_and_copied_when_changed() {
         .unit("u")
         .description("d")
         .advanced();
-    assert_eq!(editor.extra().editor, Some(Id::new_static("a.edit")));
+    assert_eq!(
+        editor.extra().editor,
+        Some(paperpaw_sdk::Editor::Screen(Id::new_static("a.edit")))
+    );
+    // A slot's screen edits it, whichever plugin fills the slot.
+    let folder = SettingSpec::switch(&ON, "", false)
+        .editor_slot(paperpaw_sdk::builtin::slots::CHOOSE_FOLDER);
+    let opens = folder.extra().editor.as_ref().unwrap().open(&folder.id);
+    assert_eq!(
+        opens,
+        paperpaw_sdk::Command::OpenSlot(
+            paperpaw_sdk::builtin::slots::CHOOSE_FOLDER,
+            paperpaw_sdk::Params::new().with("id", folder.id.as_str().to_string()),
+        )
+    );
     assert_eq!(editor.level, Level::Advanced);
     let fixed = SettingSpec::fixed_switch("a.x", "a.x", true, groups::OTHER)
         .described("help")

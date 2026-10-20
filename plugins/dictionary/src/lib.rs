@@ -40,8 +40,6 @@ pub const PLUGIN: Id = Id::new_static("dictionary");
 pub const POPUP: Id = Id::new_static("dictionary.popup");
 /// The folder searched for dictionaries.
 pub const FOLDER: Setting<Text> = Setting::new("dictionary.folder");
-/// The folder chooser of the `files` plugin, if installed.
-const CHOOSE_FOLDER: Id = Id::new_static("files.choose-folder");
 
 /// Bytes of an index read per background step.
 const STEP_BYTES: usize = 64 * 1024;
@@ -56,7 +54,7 @@ pub struct DictionaryPlugin;
 /// chosen on the folder chooser.
 static FOLDER_EXTRA: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new()
     .section("dictionary.section")
-    .editor(CHOOSE_FOLDER);
+    .editor_slot(paperpaw_sdk::builtin::slots::CHOOSE_FOLDER);
 static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_text(
     FOLDER.static_str(),
     "dictionary.setting.folder",

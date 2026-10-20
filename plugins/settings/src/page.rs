@@ -390,10 +390,7 @@ impl GroupPage {
             return;
         };
         if let Some(editor) = &spec.extra().editor {
-            cx.command(Command::OpenScreen(
-                editor.clone(),
-                Params::new().with(ID, spec.id.as_str().to_string()),
-            ));
+            cx.command(editor.open(&spec.id));
             return;
         }
         match spec.kind {

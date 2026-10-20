@@ -6,6 +6,13 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: a setting's editor may be a slot (`SettingExtra::editor_slot`,
+  `SettingSpec::editor_slot`), so a plugin filling it edits the setting
+  too: `SettingExtra::editor` is now an `Editor` (`Screen` or `Slot`),
+  opened with `Editor::open`. New slot `core.choose-value`
+  (`slots::CHOOSE_VALUE`) picks a choice setting's value; the settings
+  plugin binds it, menus and the setup open it. The dictionary, sleep
+  and picture widget choose their folders with `core.choose-folder`.
 - SDK: `ask::text(..).live()` asks for answers on each change too (a
   list that filters as one types), each with `Typed::typing` set; the
   keyboard gives them. `params::FOCUS` opens slot `core.settings` on a
