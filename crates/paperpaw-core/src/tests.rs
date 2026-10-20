@@ -2284,6 +2284,24 @@ name = Other
 }
 
 #[test]
+fn page_buttons_swap_where_asked() {
+    let log = log();
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(TestPlugin::new("a", &log))
+        .setting_default(&settings::SWAP_PAGE_BUTTONS, true)
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    press(&mut kernel, 100, "page-forward");
+    press(&mut kernel, 300, "page-back");
+    press(&mut kernel, 500, "confirm");
+    assert_eq!(
+        *log.borrow(),
+        ["a:core.prev-page", "a:core.next-page", "a:core.confirm"]
+    );
+}
+
+#[test]
 fn keymap_presets_follow_device_defaults_and_switch_at_runtime() {
     let log = log();
     let mut kernel = Kernel::builder(DEVICE)

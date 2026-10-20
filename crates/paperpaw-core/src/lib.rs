@@ -422,6 +422,7 @@ impl Kernel {
         self.now = now;
         self.last_activity = now;
         self.shared.usage.inputs = self.shared.usage.inputs.saturating_add(1);
+        let event = self.page_buttons_swapped(event);
         // Plugins' input filters come first.
         let verdict = {
             let env = self.shared.env(now);
@@ -455,6 +456,25 @@ impl Kernel {
         self.run_commands();
         self.speak_focus();
         self.finish()
+    }
+
+    /// `event` with the page buttons the other way round, where the user
+    /// asked for it ([`core_settings::SWAP_PAGE_BUTTONS`]).
+    fn page_buttons_swapped(&self, event: InputEvent) -> InputEvent {
+        use paperpaw_platform::buttons::{PAGE_BACK, PAGE_FORWARD};
+        match event {
+            InputEvent::Button { name, state }
+                if self.shared.settings.read(&core_settings::SWAP_PAGE_BUTTONS) =>
+            {
+                let name = match name {
+                    PAGE_FORWARD => PAGE_BACK,
+                    PAGE_BACK => PAGE_FORWARD,
+                    other => other,
+                };
+                InputEvent::Button { name, state }
+            }
+            other => other,
+        }
     }
 
     /// Goes on with the work an input started, once the shell began showing

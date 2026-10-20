@@ -653,7 +653,7 @@ fn register_look_settings(r: &mut Registrar) -> Result<(), RegisterError> {
 
 /// Buttons, the panel's refresh, sleep, rotation, notices and long
 /// presses.
-static DEVICE: [SettingSpec; 8] = [
+static DEVICE: [SettingSpec; 9] = [
     SettingSpec::fixed_choice(
         settings::KEYMAP_PRESET.static_str(),
         "core.setting.keymap-preset",
@@ -705,6 +705,13 @@ static DEVICE: [SettingSpec; 8] = [
         groups::CONTROLS,
     )
     .described("core.setting.button-hints.help"),
+    SettingSpec::fixed_switch(
+        settings::SWAP_PAGE_BUTTONS.static_str(),
+        "core.setting.swap-page-buttons",
+        false,
+        groups::CONTROLS,
+    )
+    .described("core.setting.swap-page-buttons.help"),
     SettingSpec::fixed_number(
         settings::NOTICE_SECONDS.static_str(),
         "core.setting.notice-seconds",
