@@ -1,6 +1,6 @@
 [package]
 name = "paperpaw-fuzz"
-description = "Fuzz targets for PaperPaw's parsers (cargo fuzz, Linux and nightly Rust)"
+description = "Fuzz targets for PaperPaw's parsers (cargo fuzz, nightly Rust)"
 version = "0.0.0"
 edition = "2024"
 license = "Apache-2.0"
@@ -12,18 +12,125 @@ cargo-fuzz = true
 [dependencies]
 libfuzzer-sys = "0.4"
 paperpaw-sdk = { path = "../crates/paperpaw-sdk" }
+paperpaw-config = { path = "../crates/paperpaw-config" }
+paperpaw-http = { path = "../crates/paperpaw-http" }
+paperpaw-hyphen = { path = "../crates/paperpaw-hyphen" }
+paperpaw-i18n = { path = "../crates/paperpaw-i18n" }
+paperpaw-image = { path = "../crates/paperpaw-image" }
+paperpaw-json = { path = "../crates/paperpaw-json" }
+paperpaw-sqlite = { path = "../crates/paperpaw-sqlite" }
+paperpaw-stardict = { path = "../crates/paperpaw-stardict" }
+paperpaw-text = { path = "../crates/paperpaw-text", features = ["outline"] }
+paperpaw-zip = { path = "../crates/paperpaw-zip" }
 paperpaw-plugin-format-epub = { path = "../plugins/format-epub" }
 paperpaw-plugin-format-txt = { path = "../plugins/format-txt" }
-paperpaw-hyphen = { path = "../crates/paperpaw-hyphen" }
-paperpaw-image = { path = "../crates/paperpaw-image" }
+paperpaw-plugin-format-xtc = { path = "../plugins/format-xtc" }
 paperpaw-plugin-koreader = { path = "../plugins/koreader" }
 
 # Not part of the main workspace.
 [workspace]
 
 [[bin]]
+name = "cbz"
+path = "fuzz_targets/cbz.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "config"
+path = "fuzz_targets/config.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
 name = "epub"
 path = "fuzz_targets/epub.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fb2"
+path = "fuzz_targets/fb2.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "font"
+path = "fuzz_targets/font.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "html"
+path = "fuzz_targets/html.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "http_head"
+path = "fuzz_targets/http_head.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "hyphen"
+path = "fuzz_targets/hyphen.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "i18n"
+path = "fuzz_targets/i18n.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "image"
+path = "fuzz_targets/image.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "json"
+path = "fuzz_targets/json.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "lua"
+path = "fuzz_targets/lua.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "markdown"
+path = "fuzz_targets/markdown.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "sqlite"
+path = "fuzz_targets/sqlite.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "stardict"
+path = "fuzz_targets/stardict.rs"
 test = false
 doc = false
 bench = false
@@ -43,22 +150,15 @@ doc = false
 bench = false
 
 [[bin]]
-name = "hyphen"
-path = "fuzz_targets/hyphen.rs"
+name = "xtc"
+path = "fuzz_targets/xtc.rs"
 test = false
 doc = false
 bench = false
 
 [[bin]]
-name = "image"
-path = "fuzz_targets/image.rs"
-test = false
-doc = false
-bench = false
-
-[[bin]]
-name = "lua"
-path = "fuzz_targets/lua.rs"
+name = "zip"
+path = "fuzz_targets/zip.rs"
 test = false
 doc = false
 bench = false

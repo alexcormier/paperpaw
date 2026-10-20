@@ -28,7 +28,7 @@ use alloc::vec::Vec;
 
 use crate::config;
 use crate::document::ImageRef;
-use crate::{Env, Storage};
+use crate::{Env, Storage, StorageError};
 use paperpaw_digest::fnv1a64;
 
 /// Where the library keeps what it knows.
@@ -49,6 +49,12 @@ pub fn folder<'e>(env: &Env<'e>) -> &'e str {
 const MAX_OPENED: usize = 100;
 /// Favourites kept at most.
 const MAX_FAVOURITES: usize = 500;
+/// Longest details file of a book read; [`save`] keeps them shorter.
+const MAX_DETAILS: usize = 16 * 1024;
+/// Longest value of a book's details kept, in bytes.
+const MAX_VALUE: usize = 1024;
+/// Tags of a book kept at most.
+const MAX_TAGS: usize = 32;
 /// What the details hold; books read with another version are read
 /// again (2 added the series, 3 the tags, 4 covers as large as the
 /// screen shows them).
@@ -232,9 +238,69 @@ fn clean(storage: &dyn Storage, data: &[BookData], keep: &dyn Fn(&str) -> bool) 
     removed
 }
 
+/// Removes what is kept in folders `data` for files no longer on the
+/// storage (e.g. books deleted on a computer); how many entries went.
+/// What is kept for any file there stays, of any format, also of formats
+/// whose plugin is switched off now, and by every spelling a plugin may
+/// use for it: the storage's own and, where the storage ignores case,
+/// with the library folder spelt as its setting has it ([`folder`],
+/// `library`). Where a folder cannot be listed, nothing is removed.
+pub fn clean_up_unused(
+    storage: &dyn Storage,
+    data: &[BookData],
+    library: &str,
+) -> Result<u32, StorageError> {
+    let keys = file_keys(storage, library)?;
+    let keep =
+        |key: &str| u64::from_str_radix(key, 16).is_ok_and(|k| keys.binary_search(&k).is_ok());
+    Ok(clean(storage, data, &keep))
+}
+
+/// The keys ([`key`]) of every file on the storage (not in hidden
+/// folders), by every spelling of [`clean_up_unused`], sorted.
+fn file_keys(storage: &dyn Storage, library: &str) -> Result<Vec<u64>, StorageError> {
+    let library = library.trim_matches('/');
+    let depth = library.split('/').count();
+    let mut keys: Vec<u64> = Vec::new();
+    let mut add = |key: u64| -> Result<(), StorageError> {
+        // A card full of files is not worth the device: told, not taken.
+        keys.try_reserve(1).map_err(|_| StorageError::TooLarge)?;
+        keys.push(key);
+        Ok(())
+    };
+    let mut folders = alloc::vec![String::new()];
+    while let Some(folder) = folders.pop() {
+        let mut files = Vec::new();
+        storage.list(&folder, &mut |entry| {
+            if !entry.name.starts_with('.') {
+                let path = crate::files::join(&folder, entry.name);
+                if entry.is_dir {
+                    folders.push(path);
+                } else {
+                    files.push(path);
+                }
+            }
+        })?;
+        for path in files {
+            add(fnv1a64(&path))?;
+            if !library.is_empty() && crate::files::is_within(storage, &path, library) {
+                let rest = path.splitn(depth + 1, '/').nth(depth).unwrap_or_default();
+                let spelt = crate::files::join(library, rest);
+                if spelt != path {
+                    add(fnv1a64(&spelt))?;
+                }
+            }
+        }
+    }
+    keys.sort_unstable();
+    keys.dedup();
+    Ok(keys)
+}
+
 /// The keys ([`key`]) of every book on the storage (every file a format
-/// plugin opens, in any folder but PaperPaw's own), sorted: what
-/// [`clean_up`] keeps.
+/// plugin opens, in any folder but PaperPaw's own), sorted. Folders that
+/// cannot be listed are left out, and books of formats switched off:
+/// to clean up, [`clean_up_unused`] keeps more.
 pub fn book_keys(storage: &dyn Storage, formats: &crate::Formats) -> Vec<u64> {
     let mut keys = Vec::new();
     books_in(storage, formats, "", &mut |path| keys.push(fnv1a64(path)));
@@ -320,17 +386,34 @@ fn favourites_file() -> String {
     format!("{DIR}/favourites.txt")
 }
 
-/// The lines of a list file.
-fn read_list(storage: &dyn Storage, path: &str, max: usize) -> Vec<String> {
-    let Ok(data) = crate::read_file(storage, path, max * 512) else {
-        return Vec::new();
-    };
-    core::str::from_utf8(&data)
+/// The lines of a list file of at most `max` paths; none where there is
+/// no such file, an error where it could not be read or a newer PaperPaw
+/// wrote it ([`data::Format`](crate::data::Format)), so it is not written
+/// over.
+fn read_list(storage: &dyn Storage, path: &str, max: usize) -> Result<Vec<String>, StorageError> {
+    let text = crate::data::Format::FIRST.load(storage, path, max * 512)?;
+    Ok(text
+        .as_deref()
         .unwrap_or_default()
         .lines()
         .filter(|line| !line.is_empty())
         .map(ToString::to_string)
-        .collect()
+        .collect())
+}
+
+/// Changes the list file at `path` of at most `max` paths, if it could
+/// be read.
+fn update_list(
+    storage: &dyn Storage,
+    path: &str,
+    max: usize,
+    change: impl FnOnce(&mut Vec<String>),
+) {
+    if let Ok(mut list) = read_list(storage, path, max) {
+        change(&mut list);
+        list.truncate(max);
+        let _ = storage.write(path, list.join("\n").as_bytes());
+    }
 }
 
 /// What the library knows of the book at `path`, if it belongs to this
@@ -343,8 +426,30 @@ pub fn book(storage: &dyn Storage, path: &str) -> Option<Book> {
 /// ([`listing::Entry::size`]): the file is not looked up again (on a card,
 /// a search through its folder).
 pub fn book_sized(storage: &dyn Storage, path: &str, size: u64) -> Option<Book> {
-    let data = crate::read_file(storage, &book_file(path), 8192).ok()?;
-    let source = core::str::from_utf8(&data).ok()?;
+    let source = crate::data::Format::FIRST
+        .load(storage, &book_file(path), MAX_DETAILS)
+        .ok()??;
+    let book = parse_details(&source);
+    (book.size == size).then_some(book)
+}
+
+/// What the library knows of the book at `path` to change it and
+/// [`save`] it, or a new entry where it knows nothing of this file; an
+/// error where its details are there but could not be read, so they are
+/// not written over.
+fn book_for_update(storage: &dyn Storage, path: &str) -> Result<Book, StorageError> {
+    let size = storage.size(path).unwrap_or_default();
+    let known = crate::data::Format::FIRST
+        .load(storage, &book_file(path), MAX_DETAILS)?
+        .map(|source| parse_details(&source))
+        .filter(|book| book.size == size);
+    Ok(known.unwrap_or_else(|| Book {
+        size,
+        ..Book::default()
+    }))
+}
+
+fn parse_details(source: &str) -> Book {
     let mut book = Book::default();
     let (mut cover_path, mut cover_width, mut cover_height) = (None, None, None);
     let mut version = 1;
@@ -376,13 +481,24 @@ pub fn book_sized(storage: &dyn Storage, path: &str, size: u64) -> Option<Book> 
     }
     // Details of an older kind are read again.
     book.indexed &= version == DETAILS;
-    (book.size == size).then_some(book)
+    book
 }
 
-/// Keeps `book` as what the library knows of the book at `path`.
-pub fn save(storage: &dyn Storage, path: &str, book: &Book) {
+/// `value` in at most [`MAX_VALUE`] bytes.
+fn fit(value: &str) -> &str {
+    let mut end = value.len().min(MAX_VALUE);
+    while !value.is_char_boundary(end) {
+        end -= 1;
+    }
+    &value[..end]
+}
+
+/// Keeps `book` as what the library knows of the book at `path`: values
+/// cut at a kilobyte, the first 32 tags; `false` where it could not be
+/// written (or would be too large to be read back).
+pub fn save(storage: &dyn Storage, path: &str, book: &Book) -> bool {
     let mut ini = String::new();
-    let mut set = |key: &str, value: &str| ini = config::set(&ini, "book", key, value);
+    let mut set = |key: &str, value: &str| ini = config::set(&ini, "book", key, fit(value));
     set("size", &book.size.to_string());
     set("indexed", if book.indexed { "on" } else { "off" });
     set("version", &DETAILS.to_string());
@@ -398,7 +514,7 @@ pub fn save(storage: &dyn Storage, path: &str, book: &Book) {
     if let Some(index) = &book.series_index {
         set("series-index", index);
     }
-    for (i, tag) in book.tags.iter().enumerate() {
+    for (i, tag) in book.tags.iter().take(MAX_TAGS).enumerate() {
         set(&format!("tag.{}", i + 1), tag);
     }
     if let Some(cover) = &book.cover {
@@ -410,17 +526,9 @@ pub fn save(storage: &dyn Storage, path: &str, book: &Book) {
         set("progress", &progress.to_string());
     }
     for (id, value) in &book.fields {
-        ini = config::set(&ini, "field", id, value);
+        ini = config::set(&ini, "field", id, fit(value));
     }
-    let _ = storage.write(&book_file(path), ini.as_bytes());
-}
-
-/// What the library knows of the book at `path`, or a new entry for it.
-fn book_or_new(storage: &dyn Storage, path: &str) -> Book {
-    book(storage, path).unwrap_or_else(|| Book {
-        size: storage.size(path).unwrap_or_default(),
-        ..Book::default()
-    })
+    ini.len() <= MAX_DETAILS && storage.write(&book_file(path), ini.as_bytes()).is_ok()
 }
 
 /// Reads title, author, series, tags and cover from the book itself and
@@ -429,7 +537,11 @@ fn book_or_new(storage: &dyn Storage, path: &str) -> Book {
 /// e.g. for the rows they show.
 pub fn index(env: &Env<'_>, path: &str) -> Book {
     let storage = env.storage;
-    let mut book = book_or_new(storage, path);
+    // Details that could not be read are not written over.
+    let (mut book, known) = match book_for_update(storage, path) {
+        Ok(book) => (book, true),
+        Err(_) => (Book::default(), false),
+    };
     book.size = storage.size(path).unwrap_or_default();
     book.indexed = true;
     if let Ok(document) = env.formats.open(storage, path) {
@@ -444,7 +556,9 @@ pub fn index(env: &Env<'_>, path: &str) -> Book {
         }
         book.cover = document.cover(storage).ok().flatten();
     }
-    save(storage, path, &book);
+    if known {
+        save(storage, path, &book);
+    }
     book
 }
 
@@ -472,7 +586,9 @@ pub struct Provided {
 /// nothing themselves (text files, PDFs): what the book names wins when
 /// it is read ([`index`]).
 pub fn provide(storage: &dyn Storage, path: &str, provided: Provided) {
-    let mut book = book_or_new(storage, path);
+    let Ok(mut book) = book_for_update(storage, path) else {
+        return;
+    };
     let some = |s: Option<String>| s.filter(|s| !s.trim().is_empty());
     book.title = some(provided.title).or(book.title);
     book.author = some(provided.author).or(book.author);
@@ -489,7 +605,9 @@ pub fn provide(storage: &dyn Storage, path: &str, provided: Provided) {
 /// Sets field `id` of the book at `path` (a plugin's, e.g.
 /// `myplugin.rating`); an empty value removes it.
 pub fn set_field(storage: &dyn Storage, path: &str, id: &str, value: &str) {
-    let mut book = book_or_new(storage, path);
+    let Ok(mut book) = book_for_update(storage, path) else {
+        return;
+    };
     book.fields.retain(|(k, _)| k != id);
     if !value.is_empty() {
         book.fields.push((id.to_string(), value.to_string()));
@@ -504,14 +622,15 @@ pub fn record(env: &Env<'_>, reading: &crate::builtin::events::Reading, opened: 
     let path = reading.path.as_str();
     let storage = env.storage;
     if opened {
-        let mut list = opened_books(storage);
-        list.retain(|p| p != path);
-        list.insert(0, path.to_string());
-        list.truncate(MAX_OPENED);
-        let _ = storage.write(&opened_file(), list.join("\n").as_bytes());
+        update_list(storage, &opened_file(), MAX_OPENED, |list| {
+            list.retain(|p| p != path);
+            list.insert(0, path.to_string());
+        });
     }
     let progress = Some((reading.progress + 0.5).clamp(0.0, 100.0) as u8);
-    let mut book = book_or_new(storage, path);
+    let Ok(mut book) = book_for_update(storage, path) else {
+        return;
+    };
     let mut changed = false;
     let title = reading.title.as_str();
     if !title.is_empty() && !book.indexed && book.title.as_deref() != Some(title) {
@@ -542,15 +661,13 @@ pub fn moved(storage: &dyn Storage, from: &str, to: &str) {
         cover.path = cover.path.replace(&key(from), &key(to));
         save(storage, to, &book);
     }
-    let replace = |list: Vec<String>| -> Vec<String> {
-        list.into_iter()
-            .map(|p| if p == from { to.to_string() } else { p })
-            .collect()
+    let replace = |list: &mut Vec<String>| {
+        for p in list.iter_mut().filter(|p| *p == from) {
+            *p = to.to_string();
+        }
     };
-    let opened = replace(opened_books(storage));
-    let _ = storage.write(&opened_file(), opened.join("\n").as_bytes());
-    let favourites = replace(favourites(storage));
-    let _ = storage.write(&favourites_file(), favourites.join("\n").as_bytes());
+    update_list(storage, &opened_file(), MAX_OPENED, replace);
+    update_list(storage, &favourites_file(), MAX_FAVOURITES, replace);
 }
 
 /// Forgets the book at `path`, deleted: its details, its cover made
@@ -558,17 +675,16 @@ pub fn moved(storage: &dyn Storage, from: &str, to: &str) {
 pub fn removed(storage: &dyn Storage, path: &str) {
     let _ = storage.remove(&book_file(path));
     let _ = storage.remove(&cover_file(path));
-    let without =
-        |list: Vec<String>| -> Vec<String> { list.into_iter().filter(|p| p != path).collect() };
-    let opened = without(opened_books(storage));
-    let _ = storage.write(&opened_file(), opened.join("\n").as_bytes());
-    let favourites = without(favourites(storage));
-    let _ = storage.write(&favourites_file(), favourites.join("\n").as_bytes());
+    let without = |list: &mut Vec<String>| list.retain(|p| p != path);
+    update_list(storage, &opened_file(), MAX_OPENED, without);
+    update_list(storage, &favourites_file(), MAX_FAVOURITES, without);
 }
 
 /// Marks the book at `path` as read to the end, or as not read at all.
 pub fn set_finished(storage: &dyn Storage, path: &str, finished: bool) {
-    let mut book = book_or_new(storage, path);
+    let Ok(mut book) = book_for_update(storage, path) else {
+        return;
+    };
     book.progress = finished.then_some(100);
     save(storage, path, &book);
 }
@@ -576,23 +692,22 @@ pub fn set_finished(storage: &dyn Storage, path: &str, finished: bool) {
 /// Paths of the books opened last, most recent first (also of books no
 /// longer there).
 pub fn opened_books(storage: &dyn Storage) -> Vec<String> {
-    read_list(storage, &opened_file(), MAX_OPENED)
+    read_list(storage, &opened_file(), MAX_OPENED).unwrap_or_default()
 }
 
 /// The paths of the favourite books, the newest first.
 pub fn favourites(storage: &dyn Storage) -> Vec<String> {
-    read_list(storage, &favourites_file(), MAX_FAVOURITES)
+    read_list(storage, &favourites_file(), MAX_FAVOURITES).unwrap_or_default()
 }
 
 /// Makes the book at `path` a favourite, or no longer one.
 pub fn set_favourite(storage: &dyn Storage, path: &str, favourite: bool) {
-    let mut list = favourites(storage);
-    list.retain(|p| p != path);
-    if favourite {
-        list.insert(0, path.to_string());
-        list.truncate(MAX_FAVOURITES);
-    }
-    let _ = storage.write(&favourites_file(), list.join("\n").as_bytes());
+    update_list(storage, &favourites_file(), MAX_FAVOURITES, |list| {
+        list.retain(|p| p != path);
+        if favourite {
+            list.insert(0, path.to_string());
+        }
+    });
 }
 
 /// Takes over what the library plugin kept before the library was a
@@ -620,6 +735,7 @@ pub fn changed() -> crate::Command {
 mod tests {
     use super::*;
     use crate::MemoryStorage;
+    use crate::memory_storage::Unreadable;
 
     #[test]
     fn details_belong_to_one_file_version() {
@@ -858,6 +974,158 @@ books/b.txt",
         assert_eq!(book.title.as_deref(), Some("Alice"));
         assert_eq!(book.tags, ["Classics"]);
         assert!(!book.indexed);
+    }
+
+    /// A memory storage that says it ignores case, as a memory card does
+    /// (its own names still count case: enough for paths spelt as listed).
+    struct Folding(MemoryStorage);
+
+    impl Storage for Folding {
+        fn read_at(&self, path: &str, at: u64, buf: &mut [u8]) -> Result<usize, StorageError> {
+            self.0.read_at(path, at, buf)
+        }
+        fn size(&self, path: &str) -> Result<u64, StorageError> {
+            self.0.size(path)
+        }
+        fn write(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
+            self.0.write(path, data)
+        }
+        fn append(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
+            self.0.append(path, data)
+        }
+        fn list(
+            &self,
+            dir: &str,
+            visit: &mut dyn FnMut(paperpaw_platform::DirEntry<'_>),
+        ) -> Result<(), StorageError> {
+            if dir == "broken" {
+                return Err(StorageError::Io);
+            }
+            self.0.list(dir, visit)
+        }
+        fn remove(&self, path: &str) -> Result<(), StorageError> {
+            self.0.remove(path)
+        }
+        fn remove_dir_all(&self, path: &str) -> Result<(), StorageError> {
+            self.0.remove_dir_all(path)
+        }
+        fn ignores_case(&self) -> bool {
+            true
+        }
+    }
+
+    #[test]
+    fn clean_up_keeps_what_any_spelling_or_format_needs() {
+        let data = [BookData {
+            folder: "cache".into(),
+            prefix: "".into(),
+        }];
+        let kept = |path: &str| format!("cache/{}.ini", key(path));
+        // The card names the folder `Books`; the library's setting says
+        // `books`, and the reader opened the book by it.
+        let storage = Folding(
+            MemoryStorage::new()
+                .with("Books/Sub/a.epub", "book")
+                .with("Books/notes.xyz", "a format switched off")
+                .with(&kept("books/Sub/a.epub"), "x")
+                .with(&kept("Books/Sub/a.epub"), "x")
+                .with(&kept("Books/notes.xyz"), "x")
+                .with(&kept("books/gone.epub"), "x"),
+        );
+        assert_eq!(clean_up_unused(&storage, &data, "books/"), Ok(1));
+        assert!(storage.exists(&kept("books/Sub/a.epub")));
+        assert!(storage.exists(&kept("Books/Sub/a.epub")));
+        assert!(storage.exists(&kept("Books/notes.xyz")));
+        assert!(!storage.exists(&kept("books/gone.epub")));
+        // A folder that cannot be listed: nothing goes.
+        let storage = Folding(
+            storage
+                .0
+                .with("broken/b.epub", "book")
+                .with(&kept("books/gone.epub"), "x"),
+        );
+        assert_eq!(
+            clean_up_unused(&storage, &data, "books"),
+            Err(StorageError::Io)
+        );
+        assert!(storage.exists(&kept("books/gone.epub")));
+    }
+
+    #[test]
+    fn unreadable_details_are_not_written_over() {
+        let kept = MemoryStorage::new().with("books/a.txt", "hello");
+        set_field(&kept, "books/a.txt", "stars.rating", "4");
+        let before = kept.get(&book_file("books/a.txt"));
+        let storage = Unreadable(kept);
+        set_field(&storage, "books/a.txt", "other.x", "1");
+        set_finished(&storage, "books/a.txt", true);
+        provide(&storage, "books/a.txt", Provided::default());
+        assert_eq!(storage.0.get(&book_file("books/a.txt")), before);
+    }
+
+    #[test]
+    fn details_of_many_tags_are_read_back() {
+        let storage = MemoryStorage::new().with("books/a.txt", "hello");
+        let book = Book {
+            size: 5,
+            indexed: true,
+            title: Some("t".repeat(5000)),
+            tags: (0..200).map(|i| format!("Subject number {i}")).collect(),
+            fields: alloc::vec![("stars.rating".into(), "4".into())],
+            ..Book::default()
+        };
+        assert!(save(&storage, "books/a.txt", &book));
+        let read = super::book(&storage, "books/a.txt").expect("read back");
+        assert_eq!(read.tags.len(), MAX_TAGS);
+        assert_eq!(read.title.as_deref().map(str::len), Some(MAX_VALUE));
+        assert_eq!(read.field("stars.rating"), Some("4"));
+        // A field set later keeps what other plugins set.
+        set_field(&storage, "books/a.txt", "other.x", "1");
+        let read = super::book(&storage, "books/a.txt").unwrap();
+        assert_eq!(read.field("stars.rating"), Some("4"));
+        assert!(read.indexed);
+    }
+
+    #[test]
+    fn unreadable_lists_are_not_written_over() {
+        let kept = MemoryStorage::new();
+        set_favourite(&kept, "a.epub", true);
+        set_favourite(&kept, "b.epub", true);
+        let before = kept.get(&favourites_file());
+        let storage = Unreadable(kept);
+        set_favourite(&storage, "c.epub", true);
+        moved(&storage, "a.epub", "d.epub");
+        removed(&storage, "b.epub");
+        assert_eq!(storage.0.get(&favourites_file()), before);
+        // Saved in another encoding (here Latin-1): kept as it is.
+        let storage = MemoryStorage::new().with(&favourites_file(), b"b\xFCcher/a.epub".to_vec());
+        set_favourite(&storage, "c.epub", true);
+        assert_eq!(
+            storage.get(&favourites_file()).as_deref(),
+            Some(&b"b\xFCcher/a.epub"[..])
+        );
+        // Written by a newer PaperPaw (after going back to an older
+        // update): left as it is.
+        let newer = "# format 2\nbooks/a.epub";
+        let storage = MemoryStorage::new().with(&favourites_file(), newer);
+        set_favourite(&storage, "c.epub", true);
+        assert_eq!(
+            storage.get(&favourites_file()).as_deref(),
+            Some(newer.as_bytes())
+        );
+        let storage = MemoryStorage::new()
+            .with("books/a.txt", "hello")
+            .with(&book_file("books/a.txt"), "# format 2\n[book]\nsize = 5\n");
+        set_finished(&storage, "books/a.txt", true);
+        assert!(
+            storage
+                .get(&book_file("books/a.txt"))
+                .unwrap()
+                .starts_with(b"# format 2")
+        );
+        // A byte order mark first, as Notepad writes: read past.
+        let storage = MemoryStorage::new().with(&favourites_file(), "\u{feff}a.epub\r\nb.epub");
+        assert_eq!(favourites(&storage), ["a.epub", "b.epub"]);
     }
 
     #[test]

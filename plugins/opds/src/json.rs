@@ -15,7 +15,10 @@ use paperpaw_json::stream::{self, Event};
 use paperpaw_sdk::Storage;
 use paperpaw_sdk::web::join_url;
 
-use crate::feed::{Book, Entry, Feed, MAX_ENTRIES, Search};
+use crate::feed::{Book, Entry, Feed, MAX_AUTHORS, MAX_BOOKS, MAX_ENTRIES, Search};
+
+/// Relations kept of one link.
+const MAX_RELS: usize = 8;
 
 /// A link being read.
 #[derive(Debug, Default)]
@@ -76,7 +79,9 @@ impl Builder {
             return;
         }
         let local = ungrouped(path);
-        if is(local, &["publications", "[]"]) || is(local, &["navigation", "[]"]) {
+        let entry = is(local, &["publications", "[]"]) || is(local, &["navigation", "[]"]);
+        // Past the entries kept, nothing of them is built.
+        if entry && self.feed.entries.len() < MAX_ENTRIES {
             let kind = if local[0] == "publications" {
                 Kind::Publication
             } else {
@@ -144,6 +149,9 @@ fn add_entry_link(base: &str, entry: &mut Entry, kind: Kind, link: Link) {
     let acquisition = link.rel.iter().any(|r| r.contains("acquisition"));
     let feed = link.kind.contains("opds") || link.kind.contains("atom");
     if kind == Kind::Publication && (acquisition || (!feed && link.rel.is_empty())) {
+        if entry.books.len() >= MAX_BOOKS {
+            return;
+        }
         entry.books.push(Book {
             mime: link.kind,
             url,
@@ -163,7 +171,7 @@ impl Builder {
                 && rel[0] == "links"
             {
                 match rel[2].as_str() {
-                    "rel" => link.rel.push(value.to_string()),
+                    "rel" if link.rel.len() < MAX_RELS => link.rel.push(value.to_string()),
                     "href" => link.href = value.to_string(),
                     "type" => link.kind = value.to_string(),
                     "title" => link.title = value.to_string(),
@@ -188,7 +196,9 @@ impl Builder {
                         ["metadata", "author"]
                         | ["metadata", "author", "[]"]
                         | ["metadata", "author", "name"]
-                        | ["metadata", "author", "[]", "name"] => {
+                        | ["metadata", "author", "[]", "name"]
+                            if self.authors.len() < MAX_AUTHORS =>
+                        {
                             self.authors.push(value.to_string());
                         }
                         ["images", "[]", "href"] if entry.thumbnail.is_none() => {
@@ -205,7 +215,7 @@ impl Builder {
             && path[0] == "links"
         {
             match path[2].as_str() {
-                "rel" => link.rel.push(value.to_string()),
+                "rel" if link.rel.len() < MAX_RELS => link.rel.push(value.to_string()),
                 "href" => link.href = value.to_string(),
                 "type" => link.kind = value.to_string(),
                 "templated" => link.templated = value == "true",
@@ -335,6 +345,26 @@ mod tests {
         let grouped = &feed.entries[2];
         assert_eq!(grouped.authors, "A. Writer");
         assert_eq!(grouped.books[0].url, "https://x.org/g.epub");
+    }
+
+    #[test]
+    fn hostile_feeds_are_kept_small() {
+        let link = r#"{"rel": ["http://opds-spec.org/acquisition"], "href": "/b.epub", "type": "application/epub+zip"}"#;
+        let links = alloc::vec![link; 1000].join(",");
+        let rels = alloc::vec![r#""x""#; 1000].join(",") + r#","next""#;
+        let authors = alloc::vec![r#""A""#; 1000].join(",");
+        let text = alloc::format!(
+            r#"{{"links": [{{"rel": [{rels}], "href": "/next"}}],
+            "publications": [{{"metadata": {{"title": "One", "author": [{authors}]}}, "links": [{links}]}}]}}"#
+        );
+        let storage = MemoryStorage::new();
+        storage.write("feed.json", text.as_bytes()).unwrap();
+        let feed = read(&storage, "feed.json", "https://a.org/");
+        let entry = &feed.entries[0];
+        assert_eq!(entry.books.len(), crate::feed::MAX_BOOKS);
+        assert_eq!(entry.authors.split(" & ").count(), MAX_AUTHORS);
+        // A link's relations past the limit are not read.
+        assert!(feed.next.is_none());
     }
 
     #[test]

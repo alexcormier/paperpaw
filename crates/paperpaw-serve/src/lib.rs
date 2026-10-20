@@ -10,19 +10,28 @@
 //! answers through [`Servers::pump`]. The channels in between are
 //! bounded, so a fast network waits for a slow storage, not the other
 //! way round.
+//!
+//! Nothing a client in the network sends holds on to more than a little:
+//! a request's head is read by `paperpaw_http::server`, up to its limit
+//! and within half a minute in all; a server serves a few connections at
+//! a time (more are answered 503); an answer that comes before the body
+//! is whole (no room for it) ends the upload; and stopping a server ends
+//! its connections.
 
 use std::collections::HashMap;
-use std::io::{BufRead, BufReader, Read, Write};
-use std::net::{IpAddr, Ipv4Addr, TcpListener, TcpStream, UdpSocket};
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::io::{Read, Write};
+use std::net::{IpAddr, Ipv4Addr, Shutdown, TcpListener, TcpStream, UdpSocket};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 use std::sync::mpsc::{
-    Receiver, Sender, SyncSender, TryRecvError, TrySendError, channel, sync_channel,
+    Receiver, RecvTimeoutError, Sender, SyncSender, TryRecvError, TrySendError, channel,
+    sync_channel,
 };
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use paperpaw_core::{ServedFile, ServerCall, ServerEvent};
+use paperpaw_http::server::{MAX_REQUEST_HEAD, RequestHead, parse_request};
 
 mod sockets;
 
@@ -35,6 +44,23 @@ const QUEUE: usize = 8;
 /// Parts of a file read ahead at most, per connection. The shell is
 /// woken each time half of them were sent, so it reads many at once.
 const READ_AHEAD: usize = 32;
+/// Connections a server serves at a time; more are answered 503.
+const MAX_CONNECTIONS: usize = 8;
+/// How long a request's head may take to come, in all.
+const HEAD_TIME: Duration = if cfg!(test) {
+    Duration::from_secs(1)
+} else {
+    Duration::from_secs(30)
+};
+/// How long a read of a request's body may wait.
+const READ_TIME: Duration = Duration::from_secs(30);
+/// How long an answer may take the plugin.
+const ANSWER_TIME: Duration = Duration::from_secs(120);
+/// What of a body is still taken after an answer that came before the
+/// body was whole (so that the client reads the answer rather than a
+/// reset connection), at most.
+const DRAIN: u64 = 256 * 1024;
+const DRAIN_TIME: Duration = Duration::from_secs(2);
 
 /// An answer for a waiting connection.
 struct Answer {
@@ -48,6 +74,8 @@ struct Answer {
 
 /// A file being sent.
 struct Stream {
+    /// The server it is sent for.
+    server: u32,
     path: String,
     size: u64,
     at: u64,
@@ -56,14 +84,27 @@ struct Stream {
     held: Option<Vec<u8>>,
 }
 
-type Waiting = Arc<Mutex<HashMap<u32, Sender<Answer>>>>;
+/// The requests waiting for an answer: their server, and where the
+/// answer goes.
+type Waiting = Arc<Mutex<HashMap<u32, (u32, Sender<Answer>)>>>;
 type Wake = Arc<dyn Fn() + Send + Sync>;
+
+/// A server listening.
+struct Running {
+    /// Ends the server's thread once set (and it is woken).
+    stop: Arc<AtomicBool>,
+    port: u16,
+    /// Its connections, numbered, to end them with it.
+    open: Open,
+}
+
+type Open = Arc<Mutex<HashMap<u64, TcpStream>>>;
 
 /// The servers of all plugins.
 pub struct Servers {
     events: SyncSender<ServerEvent>,
     receiver: Receiver<ServerEvent>,
-    running: HashMap<u32, Arc<AtomicBool>>,
+    running: HashMap<u32, Running>,
     waiting: Waiting,
     streams: Vec<Stream>,
     next_request: Arc<AtomicU32>,
@@ -98,11 +139,7 @@ impl Servers {
     pub fn apply(&mut self, call: ServerCall) {
         match call {
             ServerCall::Listen { server, port } => self.listen(server, port),
-            ServerCall::Stop { server } => {
-                if let Some(stop) = self.running.remove(&server) {
-                    stop.store(true, Ordering::Relaxed);
-                }
-            }
+            ServerCall::Stop { server } => self.stop(server),
             ServerCall::Respond {
                 request,
                 status,
@@ -111,7 +148,7 @@ impl Servers {
                 body,
                 file,
             } => {
-                let Some(answer) = self
+                let Some((server, answer)) = self
                     .waiting
                     .lock()
                     .ok()
@@ -122,6 +159,7 @@ impl Servers {
                 let file = file.map(|ServedFile { path, size }| {
                     let (parts, receiver) = sync_channel(READ_AHEAD);
                     self.streams.push(Stream {
+                        server,
                         path,
                         size,
                         at: 0,
@@ -139,6 +177,27 @@ impl Servers {
                 });
             }
         }
+    }
+
+    /// Stops a server: its thread, its connections, the answers its
+    /// requests wait for and the files it sends.
+    fn stop(&mut self, server: u32) {
+        let Some(running) = self.running.remove(&server) else {
+            return;
+        };
+        running.stop.store(true, Ordering::Relaxed);
+        // Wakes the thread waiting for the next connection.
+        let wake_up = (Ipv4Addr::LOCALHOST, running.port).into();
+        let _ = TcpStream::connect_timeout(&wake_up, Duration::from_secs(1));
+        if let Ok(mut open) = running.open.lock() {
+            for (_, stream) in open.drain() {
+                let _ = stream.shutdown(Shutdown::Both);
+            }
+        }
+        if let Ok(mut waiting) = self.waiting.lock() {
+            waiting.retain(|_, (of, _)| *of != server);
+        }
+        self.streams.retain(|stream| stream.server != server);
     }
 
     /// An event to pass to the kernel, if any.
@@ -215,9 +274,16 @@ impl Servers {
             return;
         };
         let port = listener.local_addr().map(|a| a.port()).unwrap_or(port);
-        let _ = listener.set_nonblocking(true);
         let stop = Arc::new(AtomicBool::new(false));
-        self.running.insert(server, stop.clone());
+        let open = Open::default();
+        self.running.insert(
+            server,
+            Running {
+                stop: stop.clone(),
+                port,
+                open: open.clone(),
+            },
+        );
         send(ServerEvent::Started {
             server,
             address: format!("{}:{port}", local_address()),
@@ -228,20 +294,42 @@ impl Servers {
             self.wake.clone(),
         );
         thread::spawn(move || {
-            while !stop.load(Ordering::Relaxed) {
-                match listener.accept() {
-                    Ok((stream, _)) => {
-                        let connection = Connection {
-                            server,
-                            send: send.clone(),
-                            waiting: waiting.clone(),
-                            next: next.clone(),
-                            wake: wake.clone(),
-                        };
-                        thread::spawn(move || connection.handle(stream));
-                    }
-                    Err(_) => thread::sleep(Duration::from_millis(50)),
+            let count = Arc::new(AtomicUsize::new(0));
+            let mut numbers = 0u64;
+            for stream in listener.incoming() {
+                if stop.load(Ordering::Relaxed) {
+                    break;
                 }
+                let Ok(mut stream) = stream else {
+                    // E.g. out of file handles: not at full speed.
+                    thread::sleep(Duration::from_millis(50));
+                    continue;
+                };
+                if count.fetch_add(1, Ordering::Relaxed) >= MAX_CONNECTIONS {
+                    count.fetch_sub(1, Ordering::Relaxed);
+                    let _ = write_head(&mut stream, 503, "text/plain", &[], 0);
+                    continue;
+                }
+                numbers += 1;
+                let number = numbers;
+                if let (Ok(mut open), Ok(clone)) = (open.lock(), stream.try_clone()) {
+                    open.insert(number, clone);
+                }
+                let connection = Connection {
+                    server,
+                    send: send.clone(),
+                    waiting: waiting.clone(),
+                    next: next.clone(),
+                    wake: wake.clone(),
+                };
+                let (count, open) = (count.clone(), open.clone());
+                thread::spawn(move || {
+                    connection.handle(stream);
+                    if let Ok(mut open) = open.lock() {
+                        open.remove(&number);
+                    }
+                    count.fetch_sub(1, Ordering::Relaxed);
+                });
             }
         });
     }
@@ -268,57 +356,43 @@ struct Connection<F> {
     wake: Wake,
 }
 
+/// Why no request came: the status to answer, if any.
+enum NoRequest {
+    /// The connection ended or took too long.
+    Gone,
+    Answer(u16),
+}
+
 impl<F: Fn(ServerEvent)> Connection<F> {
-    fn handle(self, stream: TcpStream) {
+    fn handle(self, mut stream: TcpStream) {
         let _ = stream.set_nonblocking(false);
-        let _ = stream.set_read_timeout(Some(Duration::from_secs(30)));
         let Ok(mut writer) = stream.try_clone() else {
             return;
         };
-        let mut reader = BufReader::new(stream);
-        let mut line = String::new();
-        if reader.read_line(&mut line).is_err() {
-            return;
-        }
-        let mut parts = line.split_whitespace();
-        let (Some(method), Some(target)) = (parts.next(), parts.next()) else {
-            return;
-        };
-        let (method, target) = (method.to_string(), target.to_string());
-        let mut length = 0u64;
-        let mut chunked = false;
-        let mut header_bytes = 0;
-        loop {
-            let mut header = String::new();
-            match reader.read_line(&mut header) {
-                Ok(0) | Err(_) => return,
-                Ok(n) => header_bytes += n,
-            }
-            if header_bytes > 64 * 1024 {
+        let (head, mut early) = match read_head(&mut stream) {
+            Ok(request) => request,
+            Err(NoRequest::Gone) => return,
+            Err(NoRequest::Answer(status)) => {
+                let _ = write_head(&mut writer, status, "text/plain", &[], 0);
                 return;
             }
-            let header = header.trim_end();
-            if header.is_empty() {
-                break;
-            }
-            if let Some((name, value)) = header.split_once(':') {
-                let (name, value) = (name.trim(), value.trim());
-                if name.eq_ignore_ascii_case("content-length") {
-                    length = value.parse().unwrap_or(0);
-                } else if name.eq_ignore_ascii_case("transfer-encoding") {
-                    chunked = !value.eq_ignore_ascii_case("identity");
-                }
-            }
-        }
-        if chunked {
+        };
+        if head.chunked {
             let _ = write_head(&mut writer, 411, "text/plain", &[], 0);
             return;
         }
+        let _ = stream.set_read_timeout(Some(READ_TIME));
         let request = self.next.fetch_add(1, Ordering::Relaxed) + 1;
         let (answer, receiver) = channel();
         if let Ok(mut waiting) = self.waiting.lock() {
-            waiting.insert(request, answer);
+            waiting.insert(request, (self.server, answer));
         }
+        let RequestHead {
+            method,
+            target,
+            length,
+            ..
+        } = head;
         (self.send)(ServerEvent::Request {
             server: self.server,
             request,
@@ -327,11 +401,27 @@ impl<F: Fn(ServerEvent)> Connection<F> {
             body: length > 0,
         });
         let mut left = length;
+        early.truncate(usize::try_from(left).unwrap_or(usize::MAX));
         while left > 0 {
-            let mut part = vec![0u8; left.min(PART as u64) as usize];
-            if reader.read_exact(&mut part).is_err() {
-                return self.close(request);
+            // An answer before the body is whole (e.g. no room for it):
+            // the rest is not wanted.
+            match receiver.try_recv() {
+                Ok(answer) => {
+                    self.answer(&mut writer, answer);
+                    return drain(&mut stream, left);
+                }
+                Err(TryRecvError::Disconnected) => return self.close(request),
+                Err(TryRecvError::Empty) => {}
             }
+            let part = if early.is_empty() {
+                let mut part = vec![0u8; left.min(PART as u64) as usize];
+                if stream.read_exact(&mut part).is_err() {
+                    return self.close(request);
+                }
+                part
+            } else {
+                std::mem::take(&mut early)
+            };
             left -= part.len() as u64;
             (self.send)(ServerEvent::Body {
                 request,
@@ -339,16 +429,25 @@ impl<F: Fn(ServerEvent)> Connection<F> {
                 last: left == 0,
             });
         }
-        let Ok(answer) = receiver.recv_timeout(Duration::from_secs(120)) else {
-            let _ = write_head(&mut writer, 503, "text/plain", &[], 0);
-            return self.close(request);
-        };
+        match receiver.recv_timeout(ANSWER_TIME) {
+            Ok(answer) => self.answer(&mut writer, answer),
+            Err(RecvTimeoutError::Timeout) => {
+                let _ = write_head(&mut writer, 503, "text/plain", &[], 0);
+                self.close(request);
+            }
+            // The server stopped.
+            Err(RecvTimeoutError::Disconnected) => self.close(request),
+        }
+    }
+
+    /// Writes `answer`, its file as the shell reads it.
+    fn answer(&self, writer: &mut TcpStream, answer: Answer) {
         let size = answer
             .file
             .as_ref()
             .map_or(answer.body.len() as u64, |f| f.0);
         let written = write_head(
-            &mut writer,
+            writer,
             answer.status,
             &answer.content_type,
             &answer.headers,
@@ -391,6 +490,48 @@ impl<F: Fn(ServerEvent)> Connection<F> {
             waiting.remove(&request);
         }
         (self.send)(ServerEvent::Closed { request });
+    }
+}
+
+/// Reads a request's head, at most [`MAX_REQUEST_HEAD`] bytes within
+/// [`HEAD_TIME`] in all; the head and the bytes of the body that came
+/// with it.
+fn read_head(stream: &mut TcpStream) -> Result<(RequestHead, Vec<u8>), NoRequest> {
+    let until = Instant::now() + HEAD_TIME;
+    let mut data = Vec::new();
+    let mut buffer = [0u8; 1024];
+    loop {
+        let left = until.saturating_duration_since(Instant::now());
+        if left.is_zero() || stream.set_read_timeout(Some(left)).is_err() {
+            return Err(NoRequest::Gone);
+        }
+        let n = match stream.read(&mut buffer) {
+            Ok(0) | Err(_) => return Err(NoRequest::Gone),
+            Ok(n) => n,
+        };
+        data.extend_from_slice(&buffer[..n]);
+        match parse_request(&data) {
+            Ok(Some((head, used))) => return Ok((head, data.split_off(used))),
+            Ok(None) => {}
+            Err(_) if data.len() >= MAX_REQUEST_HEAD => return Err(NoRequest::Answer(431)),
+            Err(_) => return Err(NoRequest::Answer(400)),
+        }
+    }
+}
+
+/// Takes up to [`DRAIN`] of `left` bytes still coming, for a short
+/// while, then ends the connection.
+fn drain(stream: &mut TcpStream, left: u64) {
+    let _ = stream.shutdown(Shutdown::Write);
+    let _ = stream.set_read_timeout(Some(DRAIN_TIME));
+    let until = Instant::now() + DRAIN_TIME;
+    let mut taken = 0;
+    let mut buffer = [0u8; 4096];
+    while taken < left.min(DRAIN) && Instant::now() < until {
+        match stream.read(&mut buffer) {
+            Ok(0) | Err(_) => break,
+            Ok(n) => taken += n as u64,
+        }
     }
 }
 
@@ -506,5 +647,151 @@ mod tests {
         assert!(answer[split..] == down[..], "the file arrives whole");
         servers.apply(ServerCall::Stop { server: 1 });
         assert!(!servers.any());
+    }
+
+    /// A server listening (as server 1) near `port`, and its port.
+    fn serving(servers: &mut Servers, port: u16) -> u16 {
+        servers.apply(ServerCall::Listen { server: 1, port });
+        let ServerEvent::Started { address, .. } = next(servers) else {
+            panic!("not started");
+        };
+        address.rsplit(':').next().unwrap().parse().unwrap()
+    }
+
+    fn connect(port: u16) -> TcpStream {
+        let stream = TcpStream::connect(("127.0.0.1", port)).unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(5)))
+            .unwrap();
+        stream
+    }
+
+    /// The head of the answer `stream` gets (empty if none).
+    fn answer_head(stream: &mut TcpStream) -> String {
+        let mut answer = Vec::new();
+        let mut byte = [0u8];
+        while !answer.ends_with(b"\r\n\r\n") {
+            match stream.read(&mut byte) {
+                Ok(1) => answer.push(byte[0]),
+                _ => break,
+            }
+        }
+        String::from_utf8_lossy(&answer).into_owned()
+    }
+
+    #[test]
+    fn long_or_bad_heads_are_refused_at_once() {
+        let mut servers = Servers::new(|| {});
+        let port = serving(&mut servers, 18_865);
+        // A line without end, longer than any head.
+        let mut client = connect(port);
+        let _ = client.write_all(&vec![b'a'; 4 * MAX_REQUEST_HEAD]);
+        assert!(answer_head(&mut client).starts_with("HTTP/1.1 431 "));
+        for bad in [
+            &b"PUT / HTTP/1.1\r\nContent-Length: many\r\n\r\n"[..],
+            b"GET / SPDY/3\r\n\r\n",
+            b"GET /\r\n\r\n",
+        ] {
+            let mut client = connect(port);
+            client.write_all(bad).unwrap();
+            assert!(answer_head(&mut client).starts_with("HTTP/1.1 400 "));
+        }
+        assert!(
+            servers
+                .receiver
+                .recv_timeout(Duration::from_millis(100))
+                .is_err(),
+            "no request reaches the kernel"
+        );
+        servers.apply(ServerCall::Stop { server: 1 });
+    }
+
+    #[test]
+    fn a_slow_head_ends_in_time() {
+        let mut servers = Servers::new(|| {});
+        let port = serving(&mut servers, 18_885);
+        let mut client = connect(port);
+        let started = Instant::now();
+        // A byte a while, each well within a read's patience.
+        let mut ended = false;
+        for byte in b"GET / HTTP/1.1\r\nX: ".iter().cycle().take(40) {
+            if client.write_all(&[*byte]).is_err() {
+                ended = true;
+                break;
+            }
+            thread::sleep(Duration::from_millis(100));
+            let mut probe = [0u8];
+            client.set_nonblocking(true).unwrap();
+            let read = client.read(&mut probe);
+            client.set_nonblocking(false).unwrap();
+            if matches!(read, Ok(0)) {
+                ended = true;
+                break;
+            }
+        }
+        assert!(ended, "the connection ends");
+        assert!(started.elapsed() < HEAD_TIME * 3);
+        servers.apply(ServerCall::Stop { server: 1 });
+    }
+
+    #[test]
+    fn connections_are_limited() {
+        let mut servers = Servers::new(|| {});
+        let port = serving(&mut servers, 18_905);
+        let idle: Vec<TcpStream> = (0..MAX_CONNECTIONS).map(|_| connect(port)).collect();
+        let mut one_more = connect(port);
+        assert!(answer_head(&mut one_more).starts_with("HTTP/1.1 503 "));
+        drop(idle);
+        servers.apply(ServerCall::Stop { server: 1 });
+    }
+
+    #[test]
+    fn stopping_ends_connections_and_frees_the_port() {
+        let mut servers = Servers::new(|| {});
+        let port = serving(&mut servers, 18_925);
+        let mut client = connect(port);
+        client.write_all(b"GET / HTTP/1.1\r\n\r\n").unwrap();
+        assert!(matches!(next(&servers), ServerEvent::Request { .. }));
+        // The request waits for its answer; the server stops.
+        let started = Instant::now();
+        servers.apply(ServerCall::Stop { server: 1 });
+        assert_eq!(answer_head(&mut client), "");
+        assert!(started.elapsed() < Duration::from_secs(4));
+        // The listener goes once its thread woke.
+        let freed = (0..40).any(|_| {
+            thread::sleep(Duration::from_millis(50));
+            TcpListener::bind((Ipv4Addr::UNSPECIFIED, port)).is_ok()
+        });
+        assert!(freed, "the port is free again");
+    }
+
+    #[test]
+    fn an_early_answer_ends_the_upload() {
+        let mut servers = Servers::new(|| {});
+        let port = serving(&mut servers, 18_945);
+        let mut client = connect(port);
+        let head = format!("PUT /up HTTP/1.1\r\nContent-Length: {}\r\n\r\n", 1u64 << 34);
+        client.write_all(head.as_bytes()).unwrap();
+        client.write_all(&[7; PART]).unwrap();
+        let ServerEvent::Request { request, body, .. } = next(&servers) else {
+            panic!("no request");
+        };
+        assert!(body);
+        assert!(matches!(
+            next(&servers),
+            ServerEvent::Body { last: false, .. }
+        ));
+        // No room for it: the kernel answers before the body is whole.
+        servers.apply(ServerCall::Respond {
+            request,
+            status: 507,
+            content_type: String::from("text/plain"),
+            headers: Vec::new(),
+            body: b"the storage is full".to_vec(),
+            file: None,
+        });
+        let _ = client.write_all(&[7; PART]);
+        assert!(answer_head(&mut client).starts_with("HTTP/1.1 507 "));
+        servers.apply(ServerCall::Stop { server: 1 });
     }
 }

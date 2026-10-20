@@ -20,8 +20,8 @@ change the plugin SDK.
   remembered as the store does; code signed by another author than the
   version installed is not, and the plugin manager says so. Safe mode:
   after two starts that did not get to their first frame, or with *Back*
-  (X4) or *Home* (X4 Pro) held at power-on, PaperPaw starts without code plugins and
-  switches off the one that crashed; the plugin manager says why a code
+  (X4) or *Home* (X4 Pro) held at power-on, PaperPaw starts without code
+  plugins and switches off the one that crashed; the plugin manager says why a code
   plugin does not run. `samples/hello-native` is the sample plugin as a
   file, with a CI job for a plugin's own repository.
 - SDK: `native` (the fingerprint, `plugin!`, `Env::native`,
@@ -35,6 +35,129 @@ change the plugin SDK.
 - Kernel: `KernelBuilder::code_plugins`, `safe_mode` and
   `install_plugin` (plugins a shell put in folders, installed before
   plugins load); `Kernel::describe` describes a notice showing.
+- Dictionary: a damaged dictionary is no longer indexed again with
+  every word looked up (each time reading its whole index): it is
+  left out until its files change. The prepared indexes of
+  dictionaries no longer in the folder are removed. Where a word can
+  be looked up online, the row of button hints says which button
+  does it.
+- File manager: a folder of any size is read a page at a time, as the
+  library reads its folders: a folder of thousands of files no longer
+  fills the X4's memory. Moving or renaming a folder tells only of the
+  books in it moving (not of every file), so their progress and notes
+  go along, and says so where a folder holds more books than are told
+  at once; settings naming the folder or one in it (the library folder,
+  the archive, the dictionaries) follow it. A name that differs in case
+  only is taken as it is (it got "(2)" on the memory card), through a
+  free name between, so nothing is lost on storages that ignore case;
+  names the memory card or Windows refuse (`* ? " < > |`, a dot at the
+  end) are refused. A file picked to be moved goes when its folder is
+  deleted.
+- Library: while a book or another full screen covers it, the library
+  lets go of its covers and page and reads nothing when books arrive or
+  a setting changes (a font size in the reader, say); it reads its
+  folder once when it shows again, and then only the page with the
+  book the focus was on, which keeps the focus (also after marking a
+  book finished or archiving one). Covers that could not be made small
+  show a stand-in instead of being read from the book in every band;
+  zipped books are named alike in the list and the grid; sizes in the
+  book information use the language's decimal mark. The folder chooser
+  opens in the folder set (it always started at the top), and names of
+  new folders leave out what the memory card and Windows refuse. The
+  shelves (by author, series, tag) make their catalog once, again only
+  after books came, went or moved, the library folder changed or after
+  half an hour, and making it goes on where a book was opened
+  meanwhile (it stayed at "Collecting the books" for good).
+- Vocabulary: the list of words is never lost to a failed read or
+  write. It is written anew beside itself and put in its place only
+  once complete, so a full card or a read error partway keeps it as
+  it was, and after a power cut at the wrong moment the new list is
+  taken at the next start. Deleting removes the word chosen even where
+  the list changed meanwhile or holds a line cut off by a power cut;
+  the next word looked up after such a line starts a line of its own,
+  and the list shows words looked up elsewhere when it shows again.
+  Looking up the newest word again writes nothing. A word that cannot
+  be kept or deleted says so. The export for Anki tells Anki its
+  fields are separated by tabs and plain text, and quotes fields with
+  quotes in them. Without a clock the word of the day is drawn at
+  random (else the newest) instead of staying on the oldest word; with
+  one it changes at local midnight.
+- Widgets: no widget panics where it has little room any more: the
+  year so far with lines of 0.8 mm or more (on every draw, so a home
+  screen showing it restarted the X4), the year ring, the two-month
+  calendar, the world clock and the battery ring in small cells. A
+  test draws every widget of the pack in each of its styles and pairs
+  of its settings in tiny and narrow cells with the thickest lines.
+  Until the clock is set, the time widgets say so instead of drawing an
+  empty frame or a face without hands. The countdown no longer reads
+  "12-280" as 24 December.
+- Widgets: the to-do list is written back only once it was read: a list
+  that cannot be read (another encoding, too large, the card failing)
+  is left as it is, and the widget and the list say so; items past the
+  hundredth are kept; a failed save is reported. Items move down as
+  well as up. A quote, picture or highlight set to change "each time it
+  shows" counts its showings in memory instead of writing on every
+  making of the widget, so it no longer moves on with unrelated
+  changes. "Next up: the newest" finds new books in a library of any
+  size (a set of 8 KiB, `seen.bits`, in place of the first 4,096
+  books' hashes); a long series is counted whole and kept round the
+  book being read. Settings that need it are explained.
+- Home screen: a UI margin of 0 no longer breaks the grid (a panic in
+  debug builds, taps missing their cells in release). Pages are kept by
+  their own setting: editing page 3 from the settings while page 2 is
+  empty edits page 3, and *Add a page* adds one that shows until it is
+  removed. The layout chooser fits screens without touch and offers
+  only layouts whose widgets and tools are there. Widgets are made once
+  as the screen shows and anew only for changes of the home screen, the
+  look or their own settings; other changes have them read anew.
+- X4 Pro: the front light is set in single percents and dims evenly to
+  the eye. Its percentages follow the lightness the eye sees (CIE L*)
+  rather than the square of the light, on a PWM of 12 bits instead of
+  10, so each step looks about as large as the next, also at the dim
+  end where the eye is most sensitive: from 1 % to 10 % the light now
+  has ten levels where it had two (5 % and 10 %, the second five times
+  as bright as the first); 1 % is dimmer than the least light before,
+  100 % as bright. `−` and `+` change it a
+  percent, a slider moves it further; its colour stays in fives.
+- Reading (PLANNING T1 to T12), after a comparison with CrossPoint,
+  CrossInk and KOReader:
+  - Holding a page button goes a chapter on or back (*Hold a page
+    button for the next chapter* under Controls, advanced, turns it off,
+    and a page then turns as its button goes down); *Next chapter* and
+    *Previous chapter* can be put on any button or gesture. Going a
+    chapter on goes to the first that begins on a later page, and
+    skimming goes chapter by chapter also through parts.
+  - The X4's front buttons Left and Right turn pages in a book, as they
+    did nothing there; *Swap the page buttons* under Controls turns the
+    page buttons the other way round while reading.
+  - Holding *Select* while reading sets or removes the page's bookmark
+    (one press with buttons instead of five); *Bookmark* sits in the
+    reader's bar instead of under *More*, and *Font* comes first in it,
+    focused as it opens (two presses instead of five).
+  - *Go to a percentage* and *Go to page* in *More*.
+  - Status items: the page in the chapter (5 / 25), the pages left in
+    it, and how far into it the page is as a short bar.
+  - *Margins at the top and bottom* (advanced), as the sides until
+    changed; *Space between paragraphs* and *Indent paragraphs* as two
+    switches (who had turned indents off turns the spacing on for the
+    look of before); line spacing down to 80 %, closer than the font
+    sets its lines.
+  - *Turn the screen* may be a book's own: turned while reading with
+    *Only this book* on, for that book alone.
+  - Fixed: a page back after a jump (contents, skimming, a chapter)
+    went to the page read before the jump.
+- Settings: rarely changed reading settings (reopening the last book,
+  footnotes, the seconds between pages turned by themselves, the status
+  lines' distance from the edge, replaced words, the dictionary folder,
+  keeping words looked up, the language to translate into, the corner
+  bookmark) are at the advanced level; those about taps and swipes show
+  only on touch screens; the full refresh every so many pages is basic.
+- SDK: `MenuNeed::Touch` for menu entries and settings that need a
+  touch screen; `settings::SWAP_PAGE_BUTTONS`;
+  `Registrar::add_keymap_when` (`Contribution::KeymapWhen`) for key
+  bindings that apply while a switch is on; `SettingExtra::follows` for a
+  setting that has another's value until set itself;
+  `StatusValue::Bar` for status items shown as a short bar.
 - Quick panel and reader's panel: on touch screens their sliders (the
   front light and its colour, the text size, spacing and margins) are as
   on the settings pages, across the screen with their title and value
@@ -53,7 +176,8 @@ change the plugin SDK.
   three and one), so the X4 Pro's quick panel fits on one page; the
   quick panel may cover up to 95 % of the screen, as phones' quick
   settings do. With the buttons, a slider is chosen and then moved as on
-  the settings pages. With buttons alone (the X4) the panels are as
+  the settings pages. A focused row that opens a list (*Font*) is drawn
+  as other rows are, its name no longer cut at the left. With buttons alone (the X4) the panels are as
   before. The home screen no longer builds its widgets anew while a
   value is shown above it, which read the card on every step. On Boox
   devices the light follows a slider while it moves. The emulator has
@@ -65,6 +189,335 @@ change the plugin SDK.
   fingertip high on touch screens, `SliderDrag::on_pointer` takes the
   slider's band, the style and its value and moves the knob relative to
   where the finger came down, `Slider::knob_x` says where the knob is.
+- Memory card: a file renamed to another case of its name (`book.epub`
+  to `Book.epub`) is no longer removed, and a folder is no longer moved
+  into itself by another case of its name. A file open under one
+  spelling of its path and written anew or removed under another is no
+  longer read from, or written back over, clusters given to other
+  files. Changes reach the card in the order they were made, each one
+  when it is done (appends still when written back): cut off by an
+  empty battery, the card holds a file's old content or its new one,
+  whole, but for short moments the FAT library leaves open (a file
+  removed has its clusters freed before its name is gone; a file moved
+  to another folder is at neither place for a moment). A damaged folder
+  whose clusters run in a loop is no longer read for ever.
+- Going back to an older update no longer lets it write over the
+  library's files a newer PaperPaw wrote: annotations, the books opened
+  last, the favourites and a book's details are read through
+  `data::Format::FIRST` and left as they are when they say a later
+  version. SDK: `data::Format::FIRST`, and `StorageError` from
+  `data::Error`.
+- Emulator and Android: a file written whole is on the disk before it
+  replaces the old one, so a power cut leaves the old or the new, and
+  files of one name with other extensions (`a.x`, `a.y`) no longer
+  share one temporary file.
+- SDK: `Id::unplaced` gives an id without its placement
+  (`widgets.clock@2.face` to `widgets.clock.face`) as an id; `placed`,
+  which did the same under a name that said the opposite, stays until
+  plugins have moved. `Id::placement` of a placed id is another
+  placement of the same (`widgets.clock@2` and 3 make `widgets.clock@3`),
+  not an invalid `widgets.clock@2@3`.
+- Storage: paths with control characters, a dot or space at the end of
+  a name, or a name Windows keeps for a device (`CON`, `nul.txt`,
+  `COM1`) are refused on every storage, as FAT and Windows take them for
+  another entry or a device. Names made from the web
+  (`web::clean_name`) leave those out, `_CON.txt` for `CON.txt`, and are
+  cut as FAT counts their length. `web::host` leaves out a user and
+  password written before the host.
+- Passwords and Wi-Fi: a network whose name holds a tab or a line break
+  is joined again by its name (it was kept with a space for them).
+  Passwords are left out where secrets and Wi-Fi commands are printed
+  for debugging.
+- Time zones: a rule of your own (`core.time-zone-rule`) may name the
+  days summer time starts and ends by the day of the year (`J60`, `59`)
+  as POSIX allows, not only by week and weekday; one that is not a rule
+  falls back to the zone chosen from the list instead of the system's
+  (UTC on the X4).
+- Library: searching a large library no longer runs the X4 out of
+  memory. A search holds the first 200 books by title (it held up to
+  2,000, unsorted until all were found); `catalog::search_after` pages
+  through the rest and `catalog::page` and `catalog::count` page any
+  view of the catalog the same way, a page in memory at a time.
+- SDK: `library::clean_up_unused` removes what is kept for books no
+  longer on the storage without touching what any book there needs:
+  the data of files of formats switched off stays, and so does the data
+  of a book opened by another spelling of its folder (a card's `Books`
+  read as the library folder `books`). Where a folder cannot be listed,
+  nothing is removed.
+- Library: a folder that has become empty no longer stops the library
+  in the emulator (a page of an empty listing was counted below zero).
+- Data files: a file marked `# format 0` is left as it is instead of
+  stopping PaperPaw; versions start at 1.
+- SDK: helpers that plugins wrote each for themselves, now in one place.
+  `Storage::ignores_case` says whether a storage takes `Books` for
+  `books` (memory cards, Windows and macOS disks do), and
+  `files::same_path` and `files::is_within` compare paths as it does;
+  `files::has_extension` ignores case everywhere. Files made in parts
+  (downloads, copies) go to `files::part_path` and are put in place
+  when whole with `files::put_in_place` or `files::put_in_free_place`.
+  `web::USER_AGENT` names PaperPaw with its version (`web::user_agent`
+  as a header), `web::base_url` makes a server's address as entered a
+  base URL. `time::clock_of` and `time::twelve_hours` write a time of
+  day as the user wants it; the calendar is public: `time::is_leap`,
+  `days_in_month`, `days_in_year`, `days_from_civil`,
+  `civil_from_days`, `weekday`, `weekday_of`, `day_of_year`,
+  `iso_week`. `numbers::decimal_mark` is the language's decimal mark,
+  `numbers::fixed` writes numbers with it.
+- Files: a copy cut short (a full card) no longer leaves a half file
+  that looks whole: each file is copied to a part and put in place when
+  whole. A folder is not moved or copied into itself by another case of
+  its name, and finding a free name ends after 65,536 tries.
+- Data that cannot be read is no longer written over: annotations, the
+  books opened last, the favourites and a book's details were taken for
+  empty when their file could not be read (a failing card, a file too
+  large, text saved in another encoding), and the next change wrote a
+  file with only that change. Now nothing is written then. A book's
+  details keep their values to a kilobyte and 32 tags, so they are
+  always read back (larger ones were written but never read, and the
+  book was read anew in every list). A UTF-8 byte order mark, as
+  Windows Notepad writes, is read past. SDK:
+  `files::load_for_update`, `files::load_text_for_update`,
+  `files::read_text`, `files::without_bom`,
+  `annotations::load_for_update`; `annotations::add`,
+  `annotations::save` and `library::save` say whether they kept what
+  they were given; `annotations::moved` (unused) is gone;
+  `StorageError::TooLarge` (what `read_file` says of a file over its
+  limit, before `Unsupported`) and `StorageError::InvalidData`;
+  `data::Format::load` tells a missing file from an unreadable one.
+  Annotations are read line by line, and where they are only drawn,
+  without their texts.
+- Library: a folder whose name ends inside a character, such as one
+  named with two or three Chinese characters, no longer stops the
+  library (the X4 restarted whenever the folder's parent or a catalog
+  shelf was shown).
+- Security: a redirect no longer takes a request's credentials to
+  another server, nor any request from `https` down to plain `http`.
+  Every shell follows redirects by one rule (`paperpaw_http::follow`):
+  to another scheme, host or port only headers that never carry
+  credentials go along (`Accept`, `Range`, `User-Agent`, …; not
+  `Authorization`, cookies or a service's key headers), a body never
+  (the request fails), and from `https` to `http` not at all. Android
+  follows redirects itself for this, and now tells plugins where every
+  redirected answer came from (`final-url`), not only after a change
+  of scheme. Addresses with control characters are refused, spaces and
+  other bytes a request line cannot carry are percent-encoded, a
+  redirect's `Location` resolves as RFC 3986 says (`?query`, `../`),
+  and IPv6 hosts work (`http://[::1]:8080/`).
+- HTTP answers for a file (`save_to`): only a successful one (2xx) is
+  saved; an error's body (404, 500, also a 304) is its reason for the
+  plugin and leaves the file as it was, and the X4 replaces the old file
+  only once the new one is whole. A download longer than the limit
+  fails instead of being saved cut short. A request saving to a file
+  another is still saving to replaces that one (it fails at once,
+  "replaced by a newer request", and its late answer is passed over)
+  instead of both being mixed into the file. A body for the plugin
+  moves through the kernel without copies (it was held up to three
+  times), and the X4 sends a request's body without copying it first.
+- Sockets: text read from a socket keeps a character whole where a read
+  ends inside it (it comes with the next read), so non-ASCII text, e.g.
+  Calibre's metadata, no longer turns into replacement characters at
+  random and no longer upsets a protocol that counts bytes.
+- Plugins' servers on the emulator and Android (Wi-Fi transfer, the
+  phone keyboard) no longer let anyone in the network tie them up: a
+  request's head is read by the same parser as on the X4 (up to 8 KiB,
+  within 30 seconds in all; 431 or 400 otherwise, also for a
+  `Content-Length` that is no number), a server serves 8 connections at
+  a time and answers more with 503, an answer that comes before an
+  upload is whole (507, no room) ends it at once, and stopping a server
+  ends its connections and frees its port without polling. Request
+  bodies a crash left in `.paperpaw/tmp` are removed when the next one
+  comes.
+
+- Damaged or crafted files can no longer restart the X4, freeze the
+  reader or use up its memory; what cannot be read is refused or left
+  out, and the rest carries on:
+  - Pictures: a GIF picture without width or height, or larger than
+    the limit, is refused; parts of a GIF outside its screen are no
+    longer decoded. A small JPEG that claims to be huge, stops its data
+    early or repeats its scans takes milliseconds instead of minutes;
+    where its data ends, the rest is filled evenly. A PNG with a colour
+    table of more than 256 colours opens.
+  - Statistics sync: a damaged or crafted KOReader statistics file is
+    rejected, and reading it takes little memory however large it is.
+  - Dictionaries: a damaged StarDict dictionary is handled safely,
+    compressed or not; one lookup keeps to 32 KiB of text, so very long
+    definitions are shortened.
+  - Catalogs and web services (OPDS, the plugin store, Joplin,
+    Wallabag): a broken escape, a very long number or key, or very deep
+    nesting in JSON no longer takes the device's memory; parts nested
+    too deeply are skipped. Broken escaped characters show as a
+    replacement mark instead of losing the entry.
+  - Fonts: a damaged font pack or font leaves the character it cannot
+    draw blank, and characters far larger than the text size are left
+    blank; a negative character width no longer crashes hyphenated
+    lines.
+  - Books: a part of a chapter that never ends is reported as damaged,
+    and a picture without a size is left out. Files inside an EPUB or
+    CBZ are checked against their checksum and size instead of showing
+    as garbled text or pictures. Text after a very long comment or tag
+    no longer shows stray markup, a lone `<` (as in "a < b") no longer
+    swallows the words after it, and text full of `&` no longer slows
+    reading down. A hyphenation exception starting or ending with a
+    hyphen no longer crashes the reader.
+- Books: chapters and pictures whose links differ from the file names
+  only in upper and lower case are found again, and archives with
+  names that are not UTF-8 or with a comment at their end open.
+- Progress sync: books are identified as KOReader does also on storage
+  that reads less than asked at a time, so the same book is found.
+- Settings and the files kept per book are no longer broken by a key
+  or section name with characters the format does not allow. SDK:
+  `config::set_all` sets many keys in one pass.
+- Drawing: lines, rounded boxes, rings and clock hands with very large
+  or far away coordinates no longer crash, hang or land in the wrong
+  place.
+- Fuzzing covers every parser: SQLite, StarDict, JSON, INI, fonts, ZIP,
+  translation catalogs, HTTP request heads, FB2, HTML, Markdown, CBZ
+  and XTC besides EPUB, TXT, XML, pictures and hyphenation; the picture
+  target decodes in colour and at sizes the input chooses.
+- Emulator profiles match the devices: the X4 Pro draws in black and
+  white at 217 dpi with the 8 MB of PSRAM it has (a 10 MiB heap budget);
+  a new `xteink-x4-classic` profile; the Xteink profiles show the busy
+  mark, keep 12 KiB for glyphs and keep Wi-Fi on while charging, as the
+  firmware does; the Boox Go 7 draws in 256 grays, has Android's back
+  button and shows the text and paper colours of the settings, as the
+  Android app does.
+- Emulator: closing the window lets plugins save and send what is
+  pending, as the device does before it sleeps. An emulated device
+  asleep no longer keeps a processor core busy. A restart forgets the
+  old kernel's requests, servers, speech and Wi-Fi, whose answers
+  reached the new kernel's requests before; the pretend radio reports
+  in the order of time (joining no longer waits for a scan).
+- `paperpaw-sign key` makes the key file readable by its owner alone
+  (mode 0600 on Linux and macOS) and checks that none is there in the
+  same step as making it.
+- The sample plugin (`samples/hello-plugin`) no longer underflows below
+  a header taller than the screen.
+- Android: a PDF page that fails no longer makes every later page of the
+  book fail. In the background or with the screen off, PaperPaw neither
+  runs timers (unless it reads aloud) nor draws. A restart while reading
+  aloud no longer keeps the screen on. Only the rows that changed are
+  copied to the screen, not all 2.1 million pixels of a Boox Go 7. The
+  sample books are copied once, into a library folder that is not there
+  yet: deleted, they stay deleted.
+- The Android app installs on devices with 16 KB memory pages: its
+  library is linked and aligned in the APK for them (`zipalign -P 16`,
+  build tools 35 or later). `build-apk.sh` also builds in folders whose
+  path has spaces.
+- Android: holding a page key that is a volume key no longer brings up
+  the system's volume panel. A crash writes its message, place and stack
+  to the log (`adb logcat -s PaperPaw`). Reading aloud goes on after the
+  activity is made anew in the same process, and changes such as a new
+  system language no longer make it anew.
+- Android 8 to 10: PaperPaw asks for the permission to write the shared
+  storage besides the one to read it, so downloads, uploads through
+  Transfer, renaming and deleting books work there; who allowed reading
+  only is offered access again on the home screen. Passwords and keys
+  (`.paperpaw/secrets.txt`) are kept in the app's private folder, which
+  no other app reads (up to Android 9 apps with the storage permission
+  read the app's shared folder); a file kept there before moves at the
+  first start. The app is left out of Android's backups.
+- Browser: an address typed with a port (`example.org:8080`,
+  `localhost:8080`) is loaded over `https://`; it was taken for an
+  address of another kind and failed. In the tools it now comes before
+  Calibre instead of sharing its place.
+- Security: Calibre is connected to only on a computer the reader chose.
+  One found in the network is shown with its name and address and
+  trusted once the reader connects to it (kept in
+  `.paperpaw/plugins/calibre/host.txt`; the address set by hand is
+  trusted as it is), so another device in the network can no longer
+  answer first and pose as Calibre. Calibre writes only books of formats
+  PaperPaw reads, replaces and deletes only books it sent itself, and
+  leaves the reader's own files as they are (a book whose name is taken
+  is not received, with a notice).
+- Calibre: the books on the device are listed to Calibre a part at a
+  time and without their cover thumbnails, and on the X4 a message from
+  Calibre may be 64 KB at most (a megabyte elsewhere), so a large
+  library or a hostile peer no longer exhausts its memory.
+- Wi-Fi transfer: PaperPaw's settings file, `paperpaw.ini`, can be
+  fetched but no longer deleted or replaced from the browser: it names
+  the servers that get passwords and keys.
+- Wi-Fi transfer: a folder is listed to the browser in parts of about
+  8 KB, which the page puts together and sorts, so a folder of thousands
+  of books no longer has to fit in the X4's memory at once.
+- Wi-Fi transfer: where there is too little room for the QR code
+  (large fonts, a short screen turned), the address is shown without it;
+  the code's place was computed below zero. Typing on a phone: a text
+  too long for the device is refused with a message on the phone, which
+  keeps it; it arrived as an empty text, which cleared the field.
+- Wi-Fi: the radio goes off again once what waited for the network has
+  failed (no saved network in reach, or none joined in the time a
+  request waits). It went on looking for networks every ten seconds,
+  with a notice each time, until the device slept, as the kernel kept
+  saying that work waits.
+- Wi-Fi: only secured networks are joined by themselves, with their
+  saved password. Anyone can set up an open network with any name, so
+  open networks are joined only when chosen on the Wi-Fi page and are no
+  longer saved, and an open network named as a saved secured one is not
+  joined either.
+- Diagnostics: the page shown stays within the test pages when they
+  are made fewer (it showed "Page 11 of 3" and drew past its bar), a
+  held finger starts the screen over as a held *Select* does, its page
+  is told to screen readers.
+- Reading profiles: a name in use (whatever its case) is refused when a
+  profile is saved or renamed, where two profiles could share one and
+  *Next profile* then went back and forth between them; renaming the
+  profile applied last keeps it the last, so *Next profile* goes on from
+  it. Where the profiles cannot be read, the list says so and saves
+  nothing over them, and a profile not saved says so too.
+- Battery use: its page turns pages (page buttons, up and down, the
+  arrows in the header) where the recent times awake do not fit, where
+  those below the bottom could not be seen. The log goes to the card
+  every ten minutes and at sleep instead of every minute, sparing the
+  card. A full log that cannot become the old one starts anew instead
+  of growing without end. "1 refresh" in the singular.
+- Setup: *Back* on the first page asks whether to skip the setup, going
+  on first, where a stray press ended it for good; the *Skip setup*
+  button still skips at once. Without the settings plugin a choice of
+  many (the time zone) steps to the next option instead of doing
+  nothing.
+- Keyboard: it takes up to 2,000 characters, where long web addresses
+  and keys were cut at 200 without a word; text past the limit is cut
+  and the keyboard says so. The list of layouts finds the layouts the
+  fonts draw once, not at every frame, and says *On* and *Off* with
+  words of its own, also without the settings plugin.
+- Menu editor: a menu is no longer offered for one of its own submenus
+  (the main menu inside the tools), a circle that hid both menus from
+  the editor; menus caught in one all the same are listed, and *Reset
+  all* resets every changed menu, listed or not.
+- Rules: those that repeat every so many minutes run without a clock
+  too (they count from the start); a time of day is waited for again
+  when the clock becomes known, is set or moves to another time zone,
+  where before it waited for the next wake. Rules that undo each other
+  through the settings they change stop after four in a row, where they
+  ran on until the kernel cut them off, writing the settings each time.
+  The rules are read once and kept, not on every event; where the file
+  cannot be read, none apply and the list says so instead of saving
+  over it, and a rule not saved (card full) says so too.
+- Buttons and gestures: where there are buttons only (the X4), a change
+  that leaves no button to select, to go back or to move on or back
+  with, everywhere or in one place (also the lock screen), is refused
+  with a word why; before, binding *Select* to *Nothing* left the device
+  unusable for good. *Reset buttons and gestures*, the last row, takes
+  every change back (*Reset all settings* leaves key bindings as they
+  are). Screens of the same name (a tool's list and its editor) are each
+  offered as a place, told apart by their id; before, only one was.
+- Screen lock: a locked device goes to sleep again, by the power button
+  and by itself; refreshing the screen and night mode pass the lock
+  too, nothing else does. Unlocking after the device woke with the sleep
+  screen on no longer leaves the sleep screen above everything, taking
+  every button (only a restart helped): it closes once the lock does,
+  and asleep it lets *Sleep* and *Home* through. While a password is
+  typed on the keyboard, a swipe in from an edge or a button opens
+  nothing over it, so the quick panel no longer gets past a password
+  lock on touch screens. The wait after five wrong tries holds when the
+  screen is turned and when PaperPaw starts anew (the count is kept in
+  `.paperpaw/plugins/lock/tries.txt`). The kind of lock changed
+  elsewhere than on its own page (a plain list of choices, *Reset all
+  settings*) goes back to the kind whose code is kept; with its code
+  removed while locked, the lock lets the device be used instead of
+  asking for a code it cannot check. *Back* shows no "Delete" over a
+  password, and the help says that on the X4 on battery every wake is a
+  start.
 - Rules: a rule can apply when the battery reaches a level (80 %, 90 %,
   full or another), once each time it gets there and not again while
   the level wavers around it; with *Only if … While charging* it says
@@ -1128,6 +1581,83 @@ change the plugin SDK.
   after a fast one. Covers in a list stay below that.
 - X4: on USB power, sleep shows the sleep screen and keeps the USB
   connection, so a computer can still read the log and wake it.
+- OPDS: a catalog's user name and password go only to the catalog's own
+  server (the same scheme, host and port); covers, books and further
+  lists elsewhere no longer receive them, and the password field warns
+  when the address begins with `http://`. Feeds made to fill the memory
+  (endless links, authors or entries) are cut to what is shown. Books
+  synced before are recognised however many there are, so deleted books
+  no longer come back; a record of them that cannot be read leaves the
+  catalog alone for that sync. Two books downloaded one right after the
+  other are both saved intact, and a stopped sync leaves no partly
+  downloaded book behind. A list of catalogs that cannot be read (a card
+  error, a file saved in another encoding) is no longer saved over:
+  changes are refused with a message, so catalogs and their passwords
+  stay.
+- Progress sync (kosync): *Sync progress* fetches the position on the
+  server before it sends its own, so a further position from another
+  device, such as KOReader, is no longer overwritten. Nothing is sent
+  for a book while its progress is being fetched or while *Go there?* is
+  open; it is sent once no other device is further, or after you choose
+  to stay. An answer that cannot be read no longer counts as "no
+  progress". Changing the server, however it is changed, signs out, so
+  the account's key never goes to another server; the server setting
+  opens the account screen.
+- Joplin: when the connection drops just after a note was written,
+  sending again finds the note Joplin already has and updates it instead
+  of making it a second time. Lock files named in upper case are seen.
+- Readwise: highlights are read and sent a piece at a time from a file,
+  so notes of any length go, also on the X4; very long highlights are cut
+  to what Readwise takes. What cannot be sent (no connection, Readwise
+  down) waits and goes with the next export or when Wi-Fi comes back.
+- Wallabag: an answer that is not the article list (a maintenance page,
+  an error, a list cut short) no longer deletes the articles on the
+  device. An unread article that is no longer among the 30 newest stays;
+  a book goes only when Wallabag says its article is archived or
+  deleted. If the list of fetched articles cannot be read, a fetch stops
+  and changes nothing. The user name and client ID settings have help
+  texts.
+- News: feeds of the same name get a book each, and removing one no
+  longer deletes the other's (books from earlier versions are found and
+  replaced at the next fetch). Removing a feed during a fetch, or two
+  fetches at once, no longer puts one feed's articles into another's
+  book. An answer that is no feed, such as a Wi-Fi sign-in page, keeps
+  the last book instead of emptying it. A list of feeds that cannot be
+  read is not overwritten.
+- KOReader: a KOReader file that cannot be read, is not there yet (while
+  Syncthing is still copying a book's `.sdr` folder) or is in an older
+  form no longer deletes the bookmarks and highlights on the device, and
+  annotations PaperPaw cannot read are no longer removed in KOReader:
+  the exchange waits, changing nothing on either side. On the X4, books
+  whose KOReader file is over 32 KiB are not exchanged, so opening them
+  cannot run out of memory. While the clock is not set, new annotations
+  are no longer sent dated 1970; they go once the time is known, and a
+  note changed on one side only always reaches the other. When the card
+  is too full to keep what came from KOReader, the exchange stops instead
+  of later removing those annotations in KOReader.
+- Statistics sync: a file in the WebDAV folder that cannot be read (a
+  login page, a file cut short) no longer replaces the statistics there
+  or here; the sync stops and says so. Changing the folder or the user no
+  longer deletes statistics on this device, and statistics lost here
+  come back from the folder instead of being deleted there too. The
+  first upload to an empty folder no longer overwrites a file that
+  appeared meanwhile, and passwords with spaces at either end work.
+  Syncing large KOReader libraries takes much less memory and leaves no
+  working files behind after an error; KOReader books without a
+  fingerprint stay separate books.
+- Reading statistics: a list of books that cannot be read is no longer
+  overwritten when a new book is opened. Closing a book ends the reading
+  of its last page, and time on the home screen no longer counts as
+  reading. On an X4 without a set clock, pages read are kept and
+  recorded as soon as the time is known, and the statistics say they
+  need it instead of showing January 1970. Pages of long books are no
+  longer merged before the reader has counted them; the time per day is
+  worked out anew after a change of time zone; the *Time left* items no
+  longer read the statistics while the page is drawn. Setting a daily
+  goal adds the *Read today* widget only the first time, so one you
+  removed stays away. When the card is full, reading is kept, written
+  once there is room, and a notice says so. Every widget setting has a
+  help text.
 
 ## [0.3.0] - 2026-10-16
 

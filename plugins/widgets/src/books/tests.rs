@@ -12,17 +12,12 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use paperpaw_graphics::Framebuffer;
-use paperpaw_i18n::{Catalog, Translator};
-use paperpaw_sdk::builtin::settings as core_settings;
 use paperpaw_sdk::document::ImageRef;
 use paperpaw_sdk::document::Locator;
 use paperpaw_sdk::library::{self, catalog};
-use paperpaw_sdk::widgets::{Widget, Widgets, categories};
+use paperpaw_sdk::widgets::categories;
 use paperpaw_sdk::{
-    Actions, Battery, Capabilities, Color, Contribution, DeviceInfo, DisplayInfo, Env, EnvParts,
-    Fonts, Formats, Hyphenation, Id, InputCaps, Instant, MemoryClass, MemoryStorage, Menus,
-    Metrics, PixelFormat, Plugin, Plugins, Rect, Registrar, SettingKind, SettingSpec, SettingValue,
-    Settings, StatusItems, SystemStatus, WallClock,
+    Color, Id, MemoryStorage, PixelFormat, Rect, SettingKind, SettingSpec, SettingValue,
 };
 
 use super::highlight::{self, Found};
@@ -30,194 +25,7 @@ use super::next;
 use super::numbers::Numbers;
 use super::reading::{Position, chapter_left_text, left_text, wrap_words};
 use super::series::{self, Member};
-
-const DEVICE: DeviceInfo = DeviceInfo {
-    id: "test",
-    name: "Test device",
-    display: DisplayInfo {
-        width: 480,
-        height: 800,
-        dpi: 220,
-        format: PixelFormat::Gray4,
-        rotation: paperpaw_platform::Rotation::Deg0,
-        color: None,
-    },
-    input: InputCaps {
-        buttons: true,
-        touch: true,
-        pen: false,
-        keys: &[],
-    },
-    memory: MemoryClass::Large,
-};
-
-struct NoKeys;
-
-impl paperpaw_sdk::keys::KeyBindings for NoKeys {
-    fn bound(&self, _: &[&str], _: &str) -> Option<Id> {
-        None
-    }
-}
-
-/// What an `Env` is made of: the widget pack and the default fonts
-/// registered, a library on a storage in memory.
-struct Harness {
-    settings: Settings,
-    i18n: Translator,
-    fonts: Fonts,
-    formats: Formats,
-    hyphenation: Hyphenation,
-    menus: Menus,
-    actions: Actions,
-    plugins: Plugins,
-    status: SystemStatus,
-    usage: paperpaw_sdk::usage::Usage,
-    plugin_usage: core::cell::RefCell<Vec<paperpaw_sdk::usage::PluginUsage>>,
-    status_items: StatusItems,
-    text_filters: paperpaw_sdk::filters::TextFilters,
-    decorators: paperpaw_sdk::decorations::Decorators,
-    widgets: Widgets,
-    setup: paperpaw_sdk::setup::SetupSteps,
-    services: paperpaw_sdk::services::Services,
-    secrets: paperpaw_sdk::secrets::Secrets,
-    storage: MemoryStorage,
-}
-
-impl Harness {
-    fn new(storage: MemoryStorage) -> Self {
-        let mut h = Harness {
-            settings: Settings::new(),
-            i18n: Translator::new(),
-            fonts: Fonts::new(64 * 1024),
-            formats: Formats::new(),
-            hyphenation: Hyphenation::new(),
-            menus: Menus::new(),
-            actions: Actions::new(),
-            plugins: Plugins::new(),
-            status: SystemStatus {
-                clock: Some(WallClock {
-                    at: Instant(0),
-                    // Wednesday, 14 October 2026, 10:41 UTC.
-                    unix_millis: 1_791_974_460_000,
-                    utc_offset_minutes: Some(0),
-                }),
-                battery: Some(Battery {
-                    percent: 64,
-                    charging: true,
-                    millivolts: None,
-                }),
-            },
-            usage: Default::default(),
-            plugin_usage: Default::default(),
-            status_items: StatusItems::new(),
-            text_filters: Default::default(),
-            decorators: Default::default(),
-            widgets: Widgets::new(),
-            setup: Default::default(),
-            services: Default::default(),
-            secrets: Default::default(),
-            storage,
-        };
-        // The look of the UI, as the kernel defines it.
-        for (id, value) in [
-            (core_settings::UI_SIZE.as_str(), 12),
-            (core_settings::UI_ROW.as_str(), 160),
-            (core_settings::UI_MARGIN.as_str(), 4),
-            (core_settings::UI_LINES.as_str(), 2),
-            (core_settings::BATTERY_LOW.as_str(), 15),
-        ] {
-            h.settings
-                .define(SettingSpec::new(
-                    Id::parse(id).unwrap(),
-                    "x",
-                    SettingKind::Int { min: 0, max: 400 },
-                    SettingValue::Int(value),
-                ))
-                .unwrap();
-        }
-        let mut r = Registrar::new(Id::new_static("fonts-default"));
-        paperpaw_plugin_fonts_default::DefaultFonts
-            .register(&mut r)
-            .unwrap();
-        h.apply(r);
-        let mut r = Registrar::new(crate::PLUGIN);
-        crate::Widgets.register(&mut r).unwrap();
-        h.apply(r);
-        h.i18n.set_language("en");
-        h
-    }
-
-    fn apply(&mut self, r: Registrar) {
-        for contribution in r.into_contributions() {
-            match contribution {
-                Contribution::Setting(spec) => self.settings.define(*spec).unwrap(),
-                Contribution::FixedSettings(list) => {
-                    for spec in list {
-                        self.settings.define_fixed(spec).unwrap();
-                    }
-                }
-                Contribution::SettingGroup(group) => self.settings.add_group(group).unwrap(),
-                Contribution::Widget(widget) => self.widgets.add(*widget),
-                Contribution::Translations(text) => {
-                    self.i18n.add(Catalog::parse(text).unwrap());
-                }
-                Contribution::Font(font) => self.fonts.add(*font).unwrap(),
-                Contribution::FontBinding {
-                    role,
-                    font,
-                    priority,
-                } => self.fonts.propose(role, font, priority),
-                _ => {}
-            }
-        }
-    }
-
-    fn set(&mut self, id: &str, value: SettingValue) {
-        self.settings.set(id, value).unwrap();
-    }
-
-    fn env(&self) -> Env<'_> {
-        Env::from(EnvParts {
-            device: &DEVICE,
-            now: Instant(1000),
-            metrics: Metrics {
-                dpi: DEVICE.display.dpi,
-            },
-            settings: &self.settings,
-            i18n: &self.i18n,
-            fonts: &self.fonts,
-            formats: &self.formats,
-            hyphenation: &self.hyphenation,
-            menus: &self.menus,
-            actions: &self.actions,
-            plugins: &self.plugins,
-            status: &self.status,
-            usage: &self.usage,
-            plugin_usage: &self.plugin_usage,
-            status_items: &self.status_items,
-            text_filters: &self.text_filters,
-            decorators: &self.decorators,
-            stylesheets: &[],
-            book_data: &[],
-            widgets: &self.widgets,
-            setup: &self.setup,
-            services: &self.services,
-            keys: &NoKeys,
-            caps: Capabilities::default(),
-            wifi: None,
-            firmware: None,
-            native: None,
-            clipboard: false,
-            slots: &[],
-            screens: &[],
-            font_dirs: &[],
-            catalog_device: None,
-            secrets: &self.secrets,
-            random: paperpaw_sdk::random::Random::NONE,
-            storage: &self.storage,
-        })
-    }
-}
+use crate::harness::{DEVICE, Harness, pixels};
 
 /// A cover: a decoded picture (`PPGI`, its width and height, rows of
 /// gray), dark at the top, light at the bottom.
@@ -237,7 +45,7 @@ fn cover() -> Vec<u8> {
 
 /// A library: a series of four, the third being read, the first read,
 /// each with a cover; two other books, favourites, a highlight.
-fn library() -> MemoryStorage {
+pub(crate) fn library() -> MemoryStorage {
     let mut storage = MemoryStorage::new().with(COVER, cover());
     let mut records = Vec::new();
     let mut add = |storage: MemoryStorage,
@@ -334,27 +142,6 @@ const IDS: [&str; 8] = [
     "widgets.library",
     "widgets.battery",
 ];
-
-/// The pixels of `widget` drawn into `area` of a page with `env`.
-fn pixels(env: &Env<'_>, widget: &dyn Widget, area: Rect) -> Vec<u8> {
-    let mut fb = Framebuffer::new(
-        DEVICE.display.width,
-        DEVICE.display.height,
-        PixelFormat::Gray4,
-    )
-    .unwrap();
-    {
-        let mut canvas = fb.canvas();
-        canvas.clear(Color::WHITE);
-        widget.draw(&mut canvas, env, area);
-    }
-    let view = fb.view();
-    let mut pixels = Vec::new();
-    for y in area.y..area.y + area.height {
-        pixels.extend((area.x..area.x + area.width).map(|x| view.pixel(x, y).luma()));
-    }
-    pixels
-}
 
 /// Each way the widgets with covers or long texts can be drawn.
 const STYLES: [(&str, &str, &str); 7] = [
@@ -638,6 +425,42 @@ fn series_go_by_their_numbers() {
     assert_eq!(series::window(3, 6, None, true), 0..3);
 }
 
+/// Of a series longer than is kept, the books round the one being read
+/// are kept, and it is counted whole.
+#[test]
+fn a_long_series_is_kept_round_the_book_being_read() {
+    let records: Vec<catalog::Record> = (1..=150)
+        .rev()
+        .map(|n| {
+            let book = library::Book {
+                series: Some("Long".to_string()),
+                series_index: Some(n.to_string()),
+                ..library::Book::default()
+            };
+            catalog::Record::of(&alloc::format!("books/long/{n:03}.epub"), &book)
+        })
+        .collect();
+    let storage = MemoryStorage::new();
+    catalog::write(&storage, &records);
+    let h = Harness::new(storage);
+    let env = h.env();
+    let read = |path: &str| path < "books/long/010.epub";
+    let near = series::members(&env, "long", Some("120"), &read);
+    assert_eq!((near.total, near.read), (150, 9));
+    let numbers: Vec<&str> = near.books.iter().map(|m| m.number.as_str()).collect();
+    assert_eq!(numbers.len(), 60);
+    assert!(
+        numbers.contains(&"120") && numbers.contains(&"121"),
+        "{numbers:?}"
+    );
+    // In order, by number.
+    assert_eq!(numbers.first(), Some(&"90"));
+    assert_eq!(numbers.last(), Some(&"149"));
+    let first = series::members(&env, "long", None, &read);
+    assert_eq!(first.books.first().map(|m| m.number.as_str()), Some("1"));
+    assert_eq!(first.books.last().map(|m| m.number.as_str()), Some("60"));
+}
+
 #[test]
 fn chance_picks_another_book_each_day() {
     let books: Vec<String> = (0..50).map(|i| alloc::format!("books/{i}.epub")).collect();
@@ -658,12 +481,68 @@ fn chance_picks_another_book_each_day() {
 
 #[test]
 fn new_books_are_those_not_seen() {
-    let books = vec![(1, "one".to_string()), (5, "five".to_string())];
-    // The first time, none is new.
-    assert!(next::new_books(None, &books, Vec::new()).is_empty());
-    let seen = [1, 2, 3];
-    let newest = next::new_books(Some(&seen), &books, vec!["older".to_string()]);
+    let mut seen = next::Seen::new();
+    for hash in [1, 2, 3] {
+        seen.add(hash);
+    }
+    assert!(seen.has(2) && !seen.has(5));
+    let newest = next::new_books(vec!["five".to_string()], vec!["older".to_string()]);
     assert_eq!(newest, ["five", "older"]);
+    // Ten thousand seen: few others count as seen.
+    let mut seen = next::Seen::new();
+    for n in 0..10_000u64 {
+        seen.add(super::mix(n));
+    }
+    assert!((0..10_000u64).all(|n| seen.has(super::mix(n))));
+    let wrong = (10_000..20_000u64)
+        .filter(|&n| seen.has(super::mix(n)))
+        .count();
+    assert!(wrong < 1000, "{wrong}");
+}
+
+/// In a large library, a book added after thousands of others is found
+/// new, and what is kept stays small.
+#[test]
+fn new_books_in_a_large_library() {
+    let books = |count: usize| -> Vec<catalog::Record> {
+        (0..count)
+            .map(|n| {
+                let path = alloc::format!("books/{n:05}.epub");
+                catalog::Record::of(&path, &library::Book::default())
+            })
+            .collect()
+    };
+    let storage = MemoryStorage::new();
+    catalog::write(&storage, &books(5000));
+    let mut h = Harness::new(storage);
+    h.set(
+        "widgets.next.pick",
+        SettingValue::Text(Cow::Borrowed("widgets.next.newest")),
+    );
+    let pick = |h: &Harness| {
+        let env = h.env();
+        let widget = env.widgets.make("widgets.next", &env).unwrap();
+        let mut described = Vec::new();
+        let mut fb = Framebuffer::new(480, 800, PixelFormat::Gray4).unwrap();
+        widget.draw(
+            &mut fb.canvas().describing(&mut described),
+            &env,
+            Rect::new(0, 0, 460, 300),
+        );
+        described
+            .into_iter()
+            .map(|d| d.label)
+            .collect::<Vec<_>>()
+            .join(" ")
+    };
+    // The first look: all seen.
+    pick(&h);
+    catalog::write(&h.storage, &books(5001));
+    paperpaw_sdk::Storage::write(&h.storage, "books/05000.epub", b"a book").unwrap();
+    let shown = pick(&h);
+    assert!(shown.contains("05000"), "{shown}");
+    let kept = paperpaw_sdk::Storage::size(&h.storage, ".paperpaw/plugins/widgets/seen.bits");
+    assert_eq!(kept, Ok(8 * 1024));
 }
 
 #[test]
@@ -687,6 +566,55 @@ fn a_highlight_a_day() {
     assert!(picks.len() > 4);
     assert!(picks.iter().all(|t| !t.starts_with('b')));
     assert!(highlight::pick(&[], 1, &mut |p| found(p)).is_none());
+}
+
+/// Set to change each time it shows, a highlight read anew while it
+/// shows (after events, each time a book closes) stays the one shown.
+#[test]
+fn a_highlight_each_time_it_shows_stays_while_it_shows() {
+    let storage = library();
+    // Highlights in three books, to have others to change to.
+    for (path, n) in [
+        ("books/a.epub", 1),
+        ("books/b.epub", 2),
+        ("books/s1.epub", 3),
+    ] {
+        paperpaw_sdk::annotations::add(
+            &storage,
+            path,
+            paperpaw_sdk::annotations::Annotation {
+                mark: paperpaw_sdk::annotations::Mark {
+                    kind: paperpaw_sdk::annotations::Kind::Highlight,
+                    start: Locator::new(n, 0),
+                    end: Locator::new(n, 20),
+                    noted: false,
+                },
+                percent: 10,
+                created: 0,
+                updated: 0,
+                text: alloc::format!("Highlight number {n}"),
+                note: String::new(),
+            },
+        );
+    }
+    let mut h = Harness::new(storage);
+    h.set(
+        "widgets.highlight.change",
+        SettingValue::Text(Cow::Borrowed("widgets.highlight.shown")),
+    );
+    h.set(
+        "widgets.highlight.source",
+        SettingValue::Text(Cow::Borrowed("widgets.highlight.all")),
+    );
+    let env = h.env();
+    let mut widget = env.widgets.make("widgets.highlight", &env).unwrap();
+    let area = Rect::new(0, 0, 400, 200);
+    widget.place(&env, area);
+    let first = pixels(&env, &*widget, area);
+    for _ in 0..12 {
+        assert!(!widget.update(&env), "changed as it was read anew");
+    }
+    assert!(pixels(&env, &*widget, area) == first);
 }
 
 #[test]
@@ -859,10 +787,21 @@ fn long_titles_in_lines_as_even_as_can_be() {
 #[test]
 fn every_setting_has_a_name_in_both_languages() {
     let mut h = Harness::new(MemoryStorage::new());
+    // Every widget of the pack's, not only the books': values such as
+    // `widgets.ring.one` and `.two` look like plural forms to the
+    // comparison of the catalogs, which would not miss one.
+    let groups: Vec<String> = h
+        .widgets
+        .iter()
+        .map(|(id, _)| id.as_str().to_string())
+        .collect();
     for language in ["en", "de"] {
         h.i18n.set_language(language);
         for spec in h.settings.specs() {
-            if !IDS.contains(&h.settings.group_of(spec).as_str()) {
+            if !groups
+                .iter()
+                .any(|g| g == h.settings.group_of(spec).as_str())
+            {
                 continue;
             }
             let mut keys = vec![spec.title.to_string()];
@@ -876,6 +815,31 @@ fn every_setting_has_a_name_in_both_languages() {
         }
         for id in IDS {
             assert!(h.i18n.get(h.widgets.title(id).unwrap()).is_some(), "{id}");
+        }
+    }
+}
+
+/// The settings whose names and values do not say all they do are
+/// explained, in both languages.
+#[test]
+fn settings_that_need_it_are_explained() {
+    let mut h = Harness::new(MemoryStorage::new());
+    for language in ["en", "de"] {
+        h.i18n.set_language(language);
+        for id in [
+            "widgets.quote.change",
+            "widgets.picture.change",
+            "widgets.highlight.change",
+            "widgets.series.start",
+            "widgets.series.name",
+            "widgets.next.pick",
+            "widgets.countdown.date",
+            "widgets.picture.folder",
+            "widgets.quote.source",
+        ] {
+            let spec = h.settings.spec(id).unwrap();
+            let help = spec.description.as_deref().unwrap_or_default();
+            assert!(h.i18n.get(help).is_some(), "{language}: {id}");
         }
     }
 }

@@ -2,8 +2,8 @@
 //! needs it: e.g. KOReader's reading statistics.
 //!
 //! - [`Database`] reads tables page by page from storage, so memory stays
-//!   at a page or two whatever the file's size. Rollback-journal and WAL
-//!   files (after a checkpoint) both work; free pages are ignored.
+//!   at a page and the row at hand whatever the file's size. Rollback-journal
+//!   and WAL files (after a checkpoint) both work; free pages are ignored.
 //! - [`Writer`] builds a new database file from rows and index entries
 //!   given in order: tables and indexes as B-trees written leaf by leaf,
 //!   long values in overflow pages, the schema on page 1.
@@ -15,6 +15,8 @@
 
 extern crate alloc;
 
+#[cfg(test)]
+mod memory;
 mod read;
 mod record;
 mod varint;
@@ -39,6 +41,8 @@ pub enum Error {
     Missing,
     /// The schema does not fit on the first page.
     SchemaTooLarge,
+    /// A page or value does not fit in memory.
+    OutOfMemory,
     Storage(StorageError),
 }
 
@@ -49,6 +53,7 @@ impl fmt::Display for Error {
             Error::Corrupt(what) => write!(f, "corrupt database: {what}"),
             Error::Missing => f.write_str("no such table"),
             Error::SchemaTooLarge => f.write_str("schema too large"),
+            Error::OutOfMemory => f.write_str("out of memory"),
             Error::Storage(e) => write!(f, "{e}"),
         }
     }

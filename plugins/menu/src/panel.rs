@@ -248,9 +248,11 @@ fn place(line: &Line, area: Rect, g: Geometry) -> Row {
                 .collect();
             (Some(id.clone()), controls)
         }
+        // The whole row, as in lists: its text within the margins, its
+        // focus as other rows' (a little in from the screen's edges).
         Line::Open(id) => (
             Some(id.clone()),
-            alloc::vec![(Control::Open(id.clone()), inner)],
+            alloc::vec![(Control::Open(id.clone()), area)],
         ),
     };
     Row {
@@ -586,9 +588,6 @@ impl PanelScreen {
         focused: bool,
     ) {
         let style = self.style;
-        let Some(font) = style.font(env) else {
-            return;
-        };
         let (on, label): (bool, String) = match control {
             Control::Toggle(id) => {
                 let name = spec(env, id).map_or("", |s| env.i18n.tr(&s.title));
@@ -623,32 +622,9 @@ impl PanelScreen {
                 if focused {
                     ui::draw_focus(canvas, &style, rect);
                 }
-                let color = if focused { Color::WHITE } else { Color::BLACK };
                 let value = alloc::format!("{} ›", ui::setting_value(env, spec));
                 let title = env.i18n.tr(&spec.title);
-                let gap = style.gap as f32;
-                let width = f32::from(rect.width);
-                let (name, value, value_width) =
-                    ui::fit_pair(&font, style.text, title, &value, width, gap);
-                let right = f32::from(rect.x) + f32::from(rect.width);
-                ui::draw_label(
-                    canvas,
-                    &font,
-                    style.text,
-                    right - value_width,
-                    rect,
-                    &value,
-                    color,
-                );
-                ui::draw_label(
-                    canvas,
-                    &font,
-                    style.text,
-                    f32::from(rect.x),
-                    rect,
-                    &name,
-                    color,
-                );
+                ui::draw_value_row(canvas, env, &style, rect, focused, title, &value);
                 return;
             }
             Control::Run(id) => {

@@ -279,10 +279,11 @@ pub(crate) fn decode(
                 });
             }
             b"PLTE" => {
-                for color in colors.iter_mut().take(len / 3) {
+                let entries = (len / 3).min(colors.len());
+                for color in colors.iter_mut().take(entries) {
                     *color = (reader.byte()?, reader.byte()?, reader.byte()?);
                 }
-                reader.skip(len % 3 + len.saturating_sub(256 * 3))?;
+                reader.skip(len - entries * 3)?;
             }
             b"tRNS" if header.as_ref().is_some_and(|h| h.color == 3) => {
                 for a in alpha.iter_mut().take(len) {

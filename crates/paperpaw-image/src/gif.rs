@@ -6,8 +6,9 @@
 //! around the picture are white. The
 //! LZW codes are decoded as they come, with a table of at most 4096
 //! entries (about 20 KiB). Pictures stored in order come out row by row;
-//! interlaced ones are gathered in a buffer of their size first, which
-//! fails with [`ImageError::OutOfMemory`] where memory is short.
+//! of interlaced ones the part on the screen is gathered in a buffer of
+//! its size first, which fails with [`ImageError::OutOfMemory`] where
+//! memory is short.
 
 use alloc::vec::Vec;
 
@@ -17,8 +18,8 @@ use crate::{Downscaler, Fit, ImageError, ImageSink, Reader, luma, zeroed};
 const MAX_CODES: usize = 4096;
 /// White, for the screen around the picture and transparent pixels.
 const WHITE: u8 = 255;
-/// Larger screens are refused (64 megapixels): no book needs them, and a
-/// damaged size would take long to fill.
+/// Larger screens and pictures are refused (64 megapixels): no book
+/// needs them, and a damaged size would take long to fill.
 const MAX_PIXELS: u64 = 1 << 26;
 
 /// The colours of a colour table of `entries` colours.
@@ -263,6 +264,12 @@ fn picture(
     let w = u32::from(u16_le(reader)?);
     let h = u32::from(u16_le(reader)?);
     let packed = reader.byte()?;
+    if w == 0 || h == 0 {
+        return Err(ImageError::Invalid("GIF picture size"));
+    }
+    if u64::from(w) * u64::from(h) > MAX_PIXELS {
+        return Err(ImageError::Unsupported("GIF this large"));
+    }
     let interlaced = packed & 0x40 != 0;
     let mut colors = if packed & 0x80 != 0 {
         palette(reader, 2 << (packed & 7))?
@@ -291,18 +298,21 @@ fn picture(
         acc: 0,
         count: 0,
     };
-    // The part of the picture on the screen.
+    // The part of the picture on the screen: `shown_w` × `shown_h` from
+    // its top left corner.
     let right = (left + w).min(width);
     let bottom = (top + h).min(height);
+    let shown_w = right.saturating_sub(left);
+    let shown_h = bottom.saturating_sub(top);
     let size = fit.size(width, height);
     let mut scaler = Downscaler::new(width, height, size, channels)?;
     sink.start(scaler.out_width(), scaler.out_height())?;
     let mut row: Vec<u8> = zeroed(width as usize * channels)?;
     row.fill(WHITE);
     let blank = row.clone();
-    // Interlaced: every row of the picture first.
+    // Interlaced: every row of the picture first, as far as it shows.
     let mut gathered: Vec<u8> = if interlaced {
-        zeroed(w as usize * h as usize)?
+        zeroed(shown_w as usize * shown_h as usize)?
     } else {
         Vec::new()
     };
@@ -317,17 +327,22 @@ fn picture(
     let mut sent = top.min(height);
     let mut pass_rows = interlace_rows(h);
     let mut failure = None;
-    'codes: while r < h {
+    // Rows stored in order are read as far as they show; interlaced ones
+    // to the end, the rows that show coming in every pass.
+    let last = if interlaced { h } else { shown_h };
+    'codes: while r < last {
         let Some(code) = bits.code(lzw.size)? else {
             break;
         };
         let mut put = |index: u8| {
-            if r >= h {
+            if r >= last {
                 return;
             }
             if interlaced {
-                gathered[(r * w + x) as usize] = index;
-            } else if left + x < right {
+                if x < shown_w && r < shown_h {
+                    gathered[(r * shown_w + x) as usize] = index;
+                }
+            } else if x < shown_w {
                 paint(&mut row, (left + x) as usize, index);
             }
             x += 1;
@@ -337,9 +352,7 @@ fn picture(
                     r = pass_rows.next().unwrap_or(h);
                 } else {
                     // A row of the picture is done.
-                    if top + r < bottom
-                        && let Err(e) = scaler.row(&row, sink)
-                    {
+                    if let Err(e) = scaler.row(&row, sink) {
                         failure = Some(e);
                     }
                     sent = top + r + 1;
@@ -356,14 +369,11 @@ fn picture(
         }
     }
     if interlaced {
-        for pr in 0..h {
-            let y = top + pr;
-            if y >= bottom {
-                break;
-            }
-            for px in 0..(right.saturating_sub(left)) {
-                let index = gathered[(pr * w + px) as usize];
-                paint(&mut row, (left + px) as usize, index);
+        let shown_w = shown_w as usize;
+        for pr in 0..shown_h as usize {
+            let shown = &gathered[pr * shown_w..(pr + 1) * shown_w];
+            for (px, &index) in shown.iter().enumerate() {
+                paint(&mut row, left as usize + px, index);
             }
             scaler.row(&row, sink)?;
         }

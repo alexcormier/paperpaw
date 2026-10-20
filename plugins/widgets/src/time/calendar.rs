@@ -12,7 +12,7 @@ use paperpaw_sdk::{Canvas, Color, Env, FontHandle, Id, Point, Rect, RegisterErro
 use paperpaw_sdk::SettingSpec;
 
 use super::dates::MonthGrid;
-use super::{chosen, frame_height, ui};
+use super::{chosen_name, frame_height, ui};
 
 const ID: Id = Id::new_static("widgets.calendar");
 
@@ -111,7 +111,7 @@ pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
 /// The first day of the week, 0 (Sunday) or 1 (Monday), as `widget`'s
 /// setting `week-start` says, or as set for the device.
 pub(super) fn week_start(env: &Env<'_>, widget: &str) -> u8 {
-    match chosen(env, widget, "week-start") {
+    match chosen_name(env, widget, "week-start") {
         "sunday" => 0,
         "monday" => 1,
         _ => paperpaw_sdk::time::week_start(env),
@@ -131,12 +131,22 @@ fn height(env: &Env<'_>, width: u16) -> u16 {
 fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     let look = widgets::draw_frame(canvas, env, ID.as_str(), area);
     let (style, font) = ui(env);
-    let (Some(font), Some(today)) = (font, time::local_time(env)) else {
+    let Some(today) = time::local_time(env) else {
+        super::draw_no_time(canvas, env, &look);
+        return;
+    };
+    let Some(font) = font else {
         return;
     };
     let area = look.area;
     let month = MonthGrid::new(today.year, today.month, week_start(env, ID.as_str()));
-    if !widgets::shows(env, ID.as_str(), "next") {
+    // Two months: side by side where the place is wide, else one below
+    // the other; this one alone where two have no room.
+    let gap = style.gap as u16 * 2;
+    let wide = area.width > area.height * 5 / 4;
+    let least = (super::line(&font, style.small) * 4.0) as u16;
+    let room = if wide { area.width } else { area.height };
+    if !widgets::shows(env, ID.as_str(), "next") || super::fitting(room, gap, least, 2) < 2 {
         draw_month(
             canvas,
             env,
@@ -149,17 +159,14 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         );
         return;
     }
-    // Two months: side by side where the place is wide, else one below
-    // the other.
-    let gap = style.gap as u16 * 2;
-    let (first, second) = if area.width > area.height * 5 / 4 {
-        let w = (area.width - gap) / 2;
+    let (first, second) = if wide {
+        let w = super::share(area.width, gap, 2);
         (
             Rect::new(area.x, area.y, w, area.height),
             Rect::new(area.x + w + gap, area.y, w, area.height),
         )
     } else {
-        let h = (area.height - gap) / 2;
+        let h = super::share(area.height, gap, 2);
         (
             Rect::new(area.x, area.y, area.width, h),
             Rect::new(area.x, area.y + h + gap, area.width, h),
@@ -259,7 +266,7 @@ fn draw_month(
         top += cell_h * 1.3;
     }
     if initials {
-        let two = chosen(env, id, "initials") == "two";
+        let two = chosen_name(env, id, "initials") == "two";
         for column in 0..7u8 {
             let name = super::weekday_name(env, month.weekday_of(column));
             let initial: String = name.chars().take(if two { 2 } else { 1 }).collect();
@@ -271,7 +278,7 @@ fn draw_month(
     }
     let others = widgets::shows(env, id, "others");
     let weekends = widgets::shows(env, id, "weekends");
-    let mark = chosen(env, id, "mark");
+    let mark = chosen_name(env, id, "mark");
     let first = super::dates::days_from_civil(month.year, month.month, 1);
     for week in 0..month.weeks {
         let y = top + cell_h * (f32::from(week) + 0.5);

@@ -99,19 +99,30 @@ fn schedule_off(env: &Env<'_>, policy: &Policy, out: &mut Vec<Command>) {
     }
 }
 
-/// Sets the timer to try again, if the network is still wanted then.
+/// After a round that joined nothing: sets the timer to try again, if
+/// the network is still wanted (or charging keeps the radio on), or else
+/// the one to switch the radio off.
 fn schedule_retry(env: &Env<'_>, policy: &Policy, out: &mut Vec<Command>) {
     let Some(wifi) = env.wifi else {
         return;
     };
-    if wifi.wanted || charging_keeps_it(env) {
+    if policy.still_wanted(wifi, env.now) || charging_keeps_it(env) {
         let params = Params::new().with(GENERATION, alloc::format!("{}", policy.generation));
         out.push(Command::Schedule(
             RETRY,
             params,
             env.now.add_millis(RETRY_MS),
         ));
+    } else if !wifi.busy {
+        schedule_off(env, policy, out);
     }
+}
+
+/// No network is coming for what waits: it fails now, and the network
+/// counts as no longer wanted.
+fn no_network(policy: &mut Policy, out: &mut Vec<Command>) {
+    policy.asked_at = None;
+    out.push(Command::NoNetwork);
 }
 
 /// Why joining `ssid` failed, in words.
@@ -220,13 +231,15 @@ impl Plugin for Wifi {
             if !env.settings.read(&ON_DEMAND) {
                 return;
             }
+            let mut policy = p.borrow_mut();
+            policy.asked_at = Some(env.now);
             let known = wifi::known(env.secrets);
             if known.is_empty() {
                 // Nothing to join: what waits says so now.
                 out.push(Command::Notify(env.i18n.tr("wifi.no-saved").into()));
-                out.push(Command::NoNetwork);
+                no_network(&mut policy, out);
             }
-            wifi_commands(out, p.borrow_mut().wanted(&wifi.state, &known));
+            wifi_commands(out, policy.wanted(&wifi.state, &known));
         })?;
 
         // The radio's state changed.
@@ -256,7 +269,7 @@ impl Plugin for Wifi {
                 wifi_commands(out, policy.retry());
             }
             // On, with nothing to do (e.g. joined, nothing waits).
-            if !wifi.busy && !wifi.wanted {
+            if !wifi.busy && !policy.still_wanted(wifi, env.now) {
                 schedule_off(env, &policy, out);
             }
         })?;
@@ -273,9 +286,9 @@ impl Plugin for Wifi {
                 Some(commands) => wifi_commands(out, commands),
                 None => {
                     policy.goal = Goal::Nothing;
-                    if wifi.wanted {
+                    if policy.still_wanted(wifi, env.now) {
                         out.push(Command::Notify(env.i18n.tr("wifi.none-in-reach").into()));
-                        out.push(Command::NoNetwork);
+                        no_network(&mut policy, out);
                     }
                     schedule_retry(env, &policy, out);
                 }
@@ -302,7 +315,7 @@ impl Plugin for Wifi {
                     }
                     // Said when the user waits for it, not for tries
                     // in the background.
-                    if chosen || wifi.wanted {
+                    if chosen || policy.still_wanted(wifi, env.now) {
                         out.push(Command::Notify(failure_text(env, ssid, reason)));
                     }
                 }
@@ -340,7 +353,7 @@ impl Plugin for Wifi {
                 if current
                     && wifi.state.is_on()
                     && !wifi.busy
-                    && !wifi.wanted
+                    && !policy.still_wanted(wifi, env.now)
                     && policy.may_go_off(charging_keeps_it(env))
                 {
                     out.push(Command::Wifi(WifiCommand::Off));
@@ -359,13 +372,16 @@ impl Plugin for Wifi {
                 let mut policy = p.borrow_mut();
                 let current = params.get(GENERATION).and_then(|g| g.parse::<u32>().ok())
                     == Some(policy.generation);
-                if current
-                    && wifi.state == WifiState::On
-                    && policy.goal == Goal::Nothing
-                    && (wifi.wanted || charging_keeps_it(env))
+                if !current || wifi.state != WifiState::On || policy.goal != Goal::Nothing {
+                    return;
+                }
+                if (policy.still_wanted(wifi, env.now) || charging_keeps_it(env))
                     && !wifi::known(env.secrets).is_empty()
                 {
                     wifi_commands(out, policy.retry());
+                } else if !wifi.busy {
+                    // What waited has failed meanwhile.
+                    schedule_off(env, &policy, out);
                 }
             }),
         )?;
@@ -393,7 +409,7 @@ impl Plugin for Wifi {
                             let known = wifi::known(env.secrets);
                             wifi_commands(out, policy.wanted(&wifi.state, &known));
                         }
-                    } else if !wifi.busy && !wifi.wanted {
+                    } else if !wifi.busy && !policy.still_wanted(wifi, env.now) {
                         schedule_off(env, &policy, out);
                     }
                 }),

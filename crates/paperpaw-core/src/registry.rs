@@ -123,6 +123,8 @@ pub(crate) struct Staging {
     candidates: Vec<SlotCandidate>,
     pub(crate) settings: Vec<Staged>,
     pub(crate) keymaps: Vec<Cow<'static, str>>,
+    /// Key maps that apply while a switch (the id) is on.
+    pub(crate) keymaps_when: Vec<(Id, Cow<'static, str>)>,
     pub(crate) catalogs: Vec<Catalog>,
     pub(crate) fonts: Vec<FontSpec>,
     pub(crate) font_files: Vec<(Id, alloc::string::String)>,
@@ -235,6 +237,10 @@ pub(crate) fn stage(
             Contribution::KeymapPreset { id, source } => {
                 validate_keymap(&source)?;
                 staging.keymap_presets.push((id, source));
+            }
+            Contribution::KeymapWhen { setting, source } => {
+                validate_keymap(&source)?;
+                staging.keymaps_when.push((setting, source));
             }
             Contribution::Stylesheet(css) => staging.stylesheets.push(css),
             Contribution::BookData(data) => staging.book_data.push(data),

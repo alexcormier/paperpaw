@@ -6,9 +6,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use paperpaw_sdk::Storage;
-use paperpaw_sqlite::{
-    Database, Error, SchemaEntry, Value, Writer, compare_records, encode_record,
-};
+use paperpaw_sqlite::{Database, Error, SchemaEntry, Value, Writer, encode_record};
 
 use crate::extsort;
 
@@ -175,9 +173,10 @@ pub(crate) fn stat_record(values: [u32; 5]) -> [u8; STAT] {
     out
 }
 
-/// Writes a statistics database to `path`: `books` (with ids) and the
+/// Writes a statistics database to `path`: `books` (by id) and the
 /// stays in `stats` (a file of [`STAT`] records sorted by start time,
-/// which become rows 1, 2, …). `temp` names working files.
+/// which become rows 1, 2, …). `temp` names working files, which are
+/// gone afterwards, also after an error.
 pub(crate) fn write(
     storage: &dyn Storage,
     path: &str,
@@ -185,50 +184,71 @@ pub(crate) fn write(
     stats: &str,
     temp: &str,
 ) -> Result<(), Error> {
+    let keys = alloc::format!("{temp}.keys");
+    let result = write_with(storage, path, books, stats, &keys, temp);
+    let _ = storage.remove(&keys);
+    result
+}
+
+fn write_with(
+    storage: &dyn Storage,
+    path: &str,
+    books: &[KoBook],
+    stats: &str,
+    keys: &str,
+    temp: &str,
+) -> Result<(), Error> {
     let mut writer = Writer::new(storage, path);
     let int = Value::Int;
     let text = |t: &str| Value::Text(t.to_string());
-    let book_rows: Vec<(i64, Vec<u8>)> = books
-        .iter()
-        .map(|b| {
-            let record = encode_record(&[
-                // The id is the row id.
-                Value::Null,
-                text(&b.title),
-                text(&b.authors),
-                int(b.notes),
-                int(b.last_open),
-                int(b.highlights),
-                int(b.pages),
-                text(&b.series),
-                text(&b.language),
-                text(&b.md5),
-                int(b.total_read_time),
-                int(b.total_read_pages),
-            ]);
-            (b.id, record)
-        })
-        .collect();
+    // Rows and index entries are made one at a time as they are written.
+    let book_rows = books.iter().map(|b| {
+        let record = encode_record(&[
+            // The id is the row id.
+            Value::Null,
+            text(&b.title),
+            text(&b.authors),
+            int(b.notes),
+            int(b.last_open),
+            int(b.highlights),
+            int(b.pages),
+            text(&b.series),
+            text(&b.language),
+            text(&b.md5),
+            int(b.total_read_time),
+            int(b.total_read_pages),
+        ]);
+        (b.id, record)
+    });
     let book_root = writer.table(book_rows)?;
     let last_id = books.iter().map(|b| b.id).max().unwrap_or(0);
     let sequence = writer.table([(1, encode_record(&[text("book"), int(last_id)]))])?;
-    let mut book_index: Vec<Vec<u8>> = books
-        .iter()
-        .map(|b| encode_record(&[text(&b.title), text(&b.authors), text(&b.md5), int(b.id)]))
-        .collect();
-    book_index.sort_by(|a, b| compare_records(a, b));
+    // In SQLite's order: texts bytewise, then the row id.
+    let mut order: Vec<usize> = (0..books.len()).collect();
+    fn index_key(b: &KoBook) -> (&[u8], &[u8], &[u8], i64) {
+        (
+            b.title.as_bytes(),
+            b.authors.as_bytes(),
+            b.md5.as_bytes(),
+            b.id,
+        )
+    }
+    order.sort_by(|&a, &b| index_key(&books[a]).cmp(&index_key(&books[b])));
+    let book_index = order.iter().map(|&i| {
+        let b = &books[i];
+        encode_record(&[text(&b.title), text(&b.authors), text(&b.md5), int(b.id)])
+    });
     let book_index_root = writer.index(book_index)?;
 
     // The stays, row by row in time order; the keys of the unique index
     // (book, page, start, row) go to a file to be sorted on the way.
-    let keys = alloc::format!("{temp}.keys");
-    storage.write(&keys, &[])?;
+    storage.write(keys, &[])?;
     let pending = core::cell::RefCell::new(Vec::<u8>::new());
     let failed = core::cell::Cell::new(None);
     let flush = |force: bool| {
         let mut pending = pending.borrow_mut();
         if (force || pending.len() >= 4096) && !pending.is_empty() {
-            if let Err(e) = storage.append(&keys, &pending) {
+            if let Err(e) = storage.append(keys, &pending) {
                 failed.set(Some(e));
             }
             pending.clear();
@@ -254,18 +274,24 @@ pub(crate) fn write(
     if let Some(e) = records.failed.take().or(failed.take()) {
         return Err(Error::Storage(e));
     }
-    extsort::sort(storage, &keys, &keys, 16, temp)?;
-    let unique = extsort::Records::new(storage, &keys, 16).map(|r| {
+    extsort::sort(storage, keys, keys, 16, temp)?;
+    let mut sorted = extsort::Records::new(storage, keys, 16);
+    let unique = sorted.by_ref().map(|r| {
         let n = |i: usize| i64::from(u32::from_be_bytes([r[i], r[i + 1], r[i + 2], r[i + 3]]));
         encode_record(&[int(n(0)), int(n(4)), int(n(8)), int(n(12))])
     });
     let unique_root = writer.index(unique)?;
-    let _ = storage.remove(&keys);
     // By start time: the rows are in that order already.
-    let by_start = extsort::Records::new(storage, stats, STAT)
+    let mut again = extsort::Records::new(storage, stats, STAT);
+    let by_start = again
+        .by_ref()
         .enumerate()
         .map(|(i, r)| encode_record(&[int(fields(&r)[2]), int(i as i64 + 1)]));
     let start_root = writer.index(by_start)?;
+    // An index cut short by a read error would not match its table.
+    if let Some(e) = sorted.failed.take().or(again.failed.take()) {
+        return Err(Error::Storage(e));
+    }
     let numbers_root = writer.table((1..=1000).map(|n| (n, encode_record(&[Value::Null]))))?;
 
     let entry = |kind: &str, name: &str, table: &str, root: u32, sql: &str| SchemaEntry {

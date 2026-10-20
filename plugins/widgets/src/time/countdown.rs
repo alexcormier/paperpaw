@@ -12,7 +12,7 @@ use paperpaw_sdk::widgets::{self, Align, Drawn, Frame, Size};
 use paperpaw_sdk::{Arg, Canvas, Env, FontHandle, Id, Rect, RegisterError, Registrar, SettingSpec};
 
 use super::word_clock::{balanced, largest};
-use super::{chosen, dates, frame_height, line, ui};
+use super::{chosen_name, dates, frame_height, line, ui};
 
 const ID: Id = Id::new_static("widgets.countdown");
 /// The date counted to: `YYYY-MM-DD` once, `MM-DD` each year (also
@@ -113,7 +113,7 @@ pub(super) fn parse(text: &str) -> Option<Target> {
             _ => return None,
         }
     };
-    if !(1..=12).contains(&month) || day == 0 {
+    if !(1..=12).contains(&month) || !(1..=31).contains(&day) {
         return None;
     }
     let (month, day) = (month as u8, day as u8);
@@ -210,7 +210,11 @@ pub(super) fn shown(i18n: &paperpaw_sdk::Translator, days: i64, title: &str) -> 
 fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     let look = widgets::draw_frame(canvas, env, ID.as_str(), area);
     let (style, font) = ui(env);
-    let (Some(font), Some(now)) = (font, time::local_time(env)) else {
+    let Some(now) = time::local_time(env) else {
+        super::draw_no_time(canvas, env, &look);
+        return;
+    };
+    let Some(font) = font else {
         return;
     };
     let Some(target) = parse(env.settings.read(&DATE)) else {
@@ -265,7 +269,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     let align = widgets::align(env, ID.as_str());
     let small = line(&font, style.small);
     let notes_h = if notes.is_empty() { 0.0 } else { small };
-    if chosen(env, ID.as_str(), "style") == "sentence" {
+    if chosen_name(env, ID.as_str(), "style") == "sentence" {
         let room = Rect::new(
             area.x,
             area.y,
@@ -360,6 +364,10 @@ mod tests {
         assert_eq!(parse("2026-02-29"), None);
         assert_eq!(parse("2028-02-29"), Some(Target::Once(2028, 2, 29)));
         assert_eq!(parse("13-01"), None);
+        // Not cut to a day that fits in a byte (280 is 24 there).
+        assert_eq!(parse("12-280"), None);
+        assert_eq!(parse("2026-12-280"), None);
+        assert_eq!(parse("280.12."), None);
         assert_eq!(parse("Christmas"), None);
         assert_eq!(parse(""), None);
     }

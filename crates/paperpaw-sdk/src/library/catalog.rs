@@ -18,8 +18,9 @@ use crate::{Env, Storage, files};
 
 /// Between a book's tags in the catalog.
 const TAG_SEPARATOR: char = '\u{1f}';
-/// Books a search finds at most.
-const MAX_FOUND: usize = 2000;
+/// Books [`search`] finds at most: a page of them fits the smallest
+/// device (a record takes some 200 bytes).
+pub const MAX_FOUND: usize = 200;
 /// Entries looked at, and books opened, in one step of making the catalog.
 const STEP_ENTRIES: usize = 12;
 
@@ -134,25 +135,81 @@ pub fn each(storage: &dyn Storage, f: &mut dyn FnMut(Record)) {
     }
 }
 
-/// The books of the catalog matching `query` (words, any case), by
-/// title.
-pub fn search(storage: &dyn Storage, query: &str) -> Vec<Record> {
-    let words: Vec<String> = query
+/// Where a record goes in the order of [`page`]: by title regardless of
+/// case, then by path.
+fn order_key(record: &Record) -> (String, &str) {
+    (record.title.to_lowercase(), &record.path)
+}
+
+/// `n` records of the catalog that `keep` keeps, by title regardless of
+/// case (then by path), those after `after` (from the first without):
+/// one reading of the catalog that holds only `n` records at a time
+/// (keyset pagination, as [`Listing`] pages a folder).
+pub fn page(
+    storage: &dyn Storage,
+    keep: &dyn Fn(&Record) -> bool,
+    after: Option<&Record>,
+    n: usize,
+) -> Vec<Record> {
+    let after = after.map(|r| (r.title.to_lowercase(), r.path.clone()));
+    // Each with its title in lower case, computed once.
+    let mut page: Vec<(String, Record)> = Vec::new();
+    each(storage, &mut |record| {
+        if n == 0 || !keep(&record) {
+            return;
+        }
+        let (title, path) = order_key(&record);
+        if after
+            .as_ref()
+            .is_some_and(|(t, p)| (title.as_str(), path) <= (t.as_str(), p.as_str()))
+        {
+            return;
+        }
+        let at =
+            page.partition_point(|(t, r)| (t.as_str(), r.path.as_str()) < (title.as_str(), path));
+        if at < n {
+            page.insert(at, (title, record));
+            page.truncate(n);
+        }
+    });
+    page.into_iter().map(|(_, record)| record).collect()
+}
+
+/// How many records of the catalog `keep` keeps.
+pub fn count(storage: &dyn Storage, keep: &dyn Fn(&Record) -> bool) -> usize {
+    let mut count = 0;
+    each(storage, &mut |record| count += usize::from(keep(&record)));
+    count
+}
+
+/// The words of a query, lowercase, as [`Record::matches`] takes them.
+pub fn query_words(query: &str) -> Vec<String> {
+    query
         .to_lowercase()
         .split_whitespace()
         .map(String::from)
-        .collect();
-    let mut found = Vec::new();
+        .collect()
+}
+
+/// The books of the catalog matching `query` (words, any case), by
+/// title: the first [`MAX_FOUND`]. [`search_after`] pages through more.
+pub fn search(storage: &dyn Storage, query: &str) -> Vec<Record> {
+    search_after(storage, query, None, MAX_FOUND)
+}
+
+/// `n` books of the catalog matching `query` after `after`, by title (see
+/// [`page`]); none for an empty query.
+pub fn search_after(
+    storage: &dyn Storage,
+    query: &str,
+    after: Option<&Record>,
+    n: usize,
+) -> Vec<Record> {
+    let words = query_words(query);
     if words.is_empty() {
-        return found;
+        return Vec::new();
     }
-    each(storage, &mut |record| {
-        if found.len() < MAX_FOUND && record.matches(&words) {
-            found.push(record);
-        }
-    });
-    found.sort_by_key(|r| r.title.to_lowercase());
-    found
+    page(storage, &|record| record.matches(&words), after, n)
 }
 
 /// Writes `records` as the catalog, e.g. for tests of views.
@@ -268,5 +325,42 @@ mod tests {
         assert_eq!(all[1].title, "Untitled");
         assert_eq!(search(&storage, "ann TALES"), [record]);
         assert!(search(&storage, "nothing").is_empty());
+    }
+
+    #[test]
+    fn searches_page_by_title_holding_a_page() {
+        let storage = MemoryStorage::new();
+        // Titles in no order, two alike but for case and path.
+        let records: Vec<Record> = (0..30)
+            .map(|i| {
+                let book = Book {
+                    title: Some(format!(
+                        "{}Tale {:02}",
+                        if i % 2 == 0 { "a" } else { "A" },
+                        (i * 7) % 30
+                    )),
+                    ..Book::default()
+                };
+                Record::of(&format!("books/{i}.epub"), &book)
+            })
+            .collect();
+        write(&storage, &records);
+        let mut sorted = records.clone();
+        sorted.sort_by(|a, b| order_key(a).cmp(&order_key(b)));
+        let mut seen = Vec::new();
+        let mut last: Option<Record> = None;
+        loop {
+            let page = search_after(&storage, "tale", last.as_ref(), 7);
+            if page.is_empty() {
+                break;
+            }
+            assert!(page.len() <= 7);
+            last = page.last().cloned();
+            seen.extend(page);
+        }
+        assert_eq!(seen, sorted);
+        assert_eq!(count(&storage, &|r| r.title.ends_with('5')), 3);
+        assert_eq!(search(&storage, "tale").len(), 30);
+        assert!(search_after(&storage, "  ", None, 5).is_empty());
     }
 }
