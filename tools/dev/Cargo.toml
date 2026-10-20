@@ -1,0 +1,29 @@
+[package]
+name = "paperpaw-dev"
+description = "Checks PaperPaw plugins before they are published: galleries of every screen and widget, visual and text checks, flows, budgets and packaging"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+publish = false
+
+[[bin]]
+name = "paperpaw-dev"
+path = "src/main.rs"
+
+[dependencies]
+paperpaw-emulator = { path = "../../shells/desktop" }
+paperpaw-core = { workspace = true, features = ["color", "outline"] }
+paperpaw-config.workspace = true
+paperpaw-fs.workspace = true
+paperpaw-graphics = { workspace = true, features = ["color"] }
+paperpaw-i18n.workspace = true
+paperpaw-platform.workspace = true
+paperpaw-sdk.workspace = true
+png = "0.17"
+
+[lints]
+workspace = true

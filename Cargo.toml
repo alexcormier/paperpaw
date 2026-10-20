@@ -79,6 +79,7 @@ members = [
     "shells/android",
     "tools/fontgen",
     "tools/sign",
+    "tools/dev",
 ]
 
 [workspace.package]
