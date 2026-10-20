@@ -28,6 +28,9 @@ impl ReaderScreen {
         let bar_before = self.selection.is_some_and(|s| s.mode == Mode::Bar);
         let bar_after = to.is_some_and(|s| s.mode == Mode::Bar);
         self.selection = to;
+        if let Ok(book) = &self.book {
+            self.selected_on = book.page.start;
+        }
         // Fast refreshes are black and white: they would hide the gray of
         // highlights.
         let highlights = self.book.as_ref().is_ok_and(|book| {

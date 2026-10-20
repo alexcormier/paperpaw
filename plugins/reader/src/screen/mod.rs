@@ -83,8 +83,9 @@ const RETURNS: usize = 32;
 /// Shows a book page by page.
 pub(crate) struct ReaderScreen {
     book: Result<Book, String>,
-    /// Text chosen on the page (see `selection`).
+    /// Text chosen on the page (see `selection`), and the page's start.
     selection: Option<Selection>,
+    selected_on: Locator,
     /// A link being chosen with the buttons.
     linking: Option<Linking>,
     /// The last search, offered again.
@@ -122,6 +123,7 @@ impl ReaderScreen {
             book,
             preparing,
             selection: None,
+            selected_on: Locator::START,
             linking: None,
             last_search: String::new(),
             status_shown: String::new(),
@@ -455,6 +457,7 @@ impl Screen for ReaderScreen {
             cx.wake_at(env.now.add_millis(STEP_DELAY_MS));
         }
         self.auto_turn_due(cx);
+        self.let_go_of_other_pages(cx);
         // Page numbers once counted, the time, the battery, …
         self.update_status(cx);
     }
@@ -743,6 +746,23 @@ impl Screen for ReaderScreen {
     }
 
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
+        self.event(event, params, cx);
+        self.let_go_of_other_pages(cx);
+    }
+}
+
+impl ReaderScreen {
+    /// Lets go of text chosen on a page no longer shown: read aloud,
+    /// skimmed or turned by itself, its words are those of another page.
+    fn let_go_of_other_pages(&mut self, cx: &mut Cx<'_, '_>) {
+        if let (Some(_), Ok(book)) = (self.selection, &self.book)
+            && book.page.start != self.selected_on
+        {
+            self.set_selection(None, cx);
+        }
+    }
+
+    fn event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
         let Ok(book) = &mut self.book else {
             return;
         };

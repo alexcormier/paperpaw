@@ -290,7 +290,9 @@ pub(crate) fn line_boxes(words: &[WordBox], mut picked: impl FnMut(usize) -> boo
 
 /// The word on the line above (or below) word `index` nearest to it.
 fn nearest_on_line(words: &[WordBox], index: usize, below: bool) -> usize {
-    let current = &words[index].area;
+    let Some(current) = words.get(index).map(|w| &w.area) else {
+        return index;
+    };
     let center = |r: &Rect| i32::from(r.x) + i32::from(r.width) / 2;
     let line = words
         .iter()
@@ -306,4 +308,30 @@ fn nearest_on_line(words: &[WordBox], index: usize, below: bool) -> usize {
         .filter(|(_, w)| w.area.y == line)
         .min_by_key(|(_, w)| center(&w.area).abs_diff(center(current)))
         .map_or(index, |(i, _)| i)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use paperpaw_sdk::document::Locator;
+
+    #[test]
+    fn a_cursor_past_the_words_moves_without_panicking() {
+        let word = |x: u16, y: u16| WordBox {
+            area: Rect::new(x, y, 10, 10),
+            text: String::from("word"),
+            start: Locator::START,
+            end: Locator::START,
+        };
+        let words = [word(0, 0), word(20, 0), word(0, 20)];
+        // Chosen on a page with more words than this one.
+        let selection = Selection::choosing(7);
+        for action in [actions::UP, actions::DOWN] {
+            assert_eq!(selection.moved(&action, &words), Some(7));
+        }
+        assert_eq!(
+            Selection::choosing(1).moved(&actions::DOWN, &words),
+            Some(2)
+        );
+    }
 }

@@ -924,3 +924,22 @@ fn page_indexes_of_layouts_left_do_not_pile_up() {
     let kept = indexes(&storage, BOOK).len();
     assert!((1..=4).contains(&kept), "{kept} indexes");
 }
+
+#[test]
+fn text_chosen_is_let_go_when_the_page_turns_by_itself() {
+    let mut reading = Reading::new(Shared::default());
+    reading.open();
+    reading.run(actions::SELECT);
+    reading.run(actions::AUTO_TURN);
+    let before = reading.kept();
+    // The page turns by itself.
+    reading.now += 120_000;
+    let effects = reading.kernel.tick(Instant(reading.now));
+    reading.settle(effects);
+    reading.run(actions::AUTO_TURN);
+    assert!(reading.kept() > before);
+    // Nothing chosen on the new page: the page is marked as without.
+    reading.run(actions::TOGGLE_BOOKMARK);
+    let marks = paperpaw_sdk::annotations::marks(&reading.storage, BOOK);
+    assert_eq!(marks.iter().filter(|m| m.kind == Kind::Bookmark).count(), 1);
+}
