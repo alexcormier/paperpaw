@@ -397,8 +397,8 @@ impl Firmware {
         info!("sleeping");
         // Released first: held, the button would wake it at once.
         self.wait_for_power_release();
-        if self.usb_power.is_high() {
-            return self.sleep_on_usb();
+        if self.usb_power.is_high() && self.sleep_on_usb() {
+            return;
         }
         let mut power = input::stop().expect("the power button");
         // The ESP32-S3 devices hold their latch through resets: let go
@@ -419,8 +419,9 @@ impl Firmware {
     }
 
     /// Asleep on USB power: the sleep screen shows until the power button,
-    /// or `press power` over USB, wakes it.
-    fn sleep_on_usb(&mut self) {
+    /// or `press power` over USB, wakes it (`true`), or until the USB
+    /// power is gone (`false`): then it sleeps as on battery.
+    fn sleep_on_usb(&mut self) -> bool {
         loop {
             self.delay.delay_millis(POLL_MS as u32);
             power::feed();
@@ -430,6 +431,10 @@ impl Firmware {
             #[cfg(feature = "remote")]
             if self.remote_while_asleep() {
                 break;
+            }
+            if self.usb_power.is_low() {
+                info!("off USB: sleeping as on battery");
+                return false;
             }
         }
         self.wait_for_power_release();
