@@ -678,6 +678,10 @@ struct HeaderParts {
     /// Previous page, page label, next page.
     pager: Option<(Rect, Rect, Rect)>,
     title: Rect,
+    /// Where the middles of the back, previous and next arrows are drawn:
+    /// the back arrow's ink starts at the margin, the next arrow's ends
+    /// there, as the content of the screen does.
+    arrows: (i32, i32, i32),
 }
 
 impl Header {
@@ -708,22 +712,38 @@ impl Header {
     fn layout(&self, env: &Env<'_>, style: &UiStyle, page: Option<(usize, usize)>) -> HeaderParts {
         let a = self.area;
         let square = a.height;
-        let back = self.back.then(|| Rect::new(a.x, a.y, square, a.height));
-        let mut left = a.x
-            + if self.back {
-                square
-            } else {
-                style.margin as u16
-            };
+        let margin = style.margin as u16;
+        let (reach, ink) = chevron_extent(style);
+        let start = i32::from(a.x) + i32::from(margin);
+        let end = i32::from(a.x) + i32::from(a.width) - i32::from(margin);
+        // The back arrow where the content's icons are, the title where
+        // the labels after them begin (as far as the arrow leaves room).
+        let back_x = start + reach;
+        let mut left = if self.back {
+            let column = (style.text * ICON_SCALE) as u16 + style.gap as u16;
+            a.x + margin + column.max(ink as u16 + style.gap as u16)
+        } else {
+            a.x + margin
+        };
+        let back = self
+            .back
+            .then(|| Rect::new(a.x, a.y, left.saturating_sub(a.x), a.height));
         let mut right = a.x + a.width;
+        let mut arrows = (back_x, 0, end - reach - 1);
         let pager = match (page, style.font(env)) {
             (Some(page), Some(font)) if page.1 > 1 => {
                 let label = font.measure(style.small, &Self::page_label(env, page)) as u16;
-                let arrow = if self.arrows { square * 4 / 5 } else { 0 };
-                let margin = if self.arrows { 0 } else { style.margin as u16 };
-                let next = Rect::new(right - arrow - margin, a.y, arrow, a.height);
-                let label = Rect::new(next.x - label, a.y, label, a.height);
-                let prev = Rect::new(label.x - arrow, a.y, arrow, a.height);
+                let (next, prev_end) = if self.arrows {
+                    // A finger's room round the arrow, out to the edge.
+                    let arrow = square * 4 / 5;
+                    let x = (arrows.2 - i32::from(arrow / 2)).max(i32::from(a.x)) as u16;
+                    (Rect::new(x, a.y, right.saturating_sub(x), a.height), arrow)
+                } else {
+                    (Rect::new(right - margin, a.y, 0, a.height), 0)
+                };
+                let label = Rect::new(next.x.saturating_sub(label), a.y, label, a.height);
+                let prev = Rect::new(label.x.saturating_sub(prev_end), a.y, prev_end, a.height);
+                arrows.1 = i32::from(prev.x) + i32::from(prev.width) / 2;
                 right = prev.x;
                 Some((prev, label, next))
             }
@@ -736,6 +756,7 @@ impl Header {
             back,
             pager,
             title: Rect::new(left, a.y, right.saturating_sub(left), a.height),
+            arrows,
         }
     }
 
@@ -761,9 +782,8 @@ impl Header {
         // Everything centred in the band by its ink: the arrows by their
         // drawing, each text by its letters.
         let band = style.header_band(self.area);
-        let middle = |area: Rect| Rect::new(area.x, band.y, area.width, band.height);
-        let arrow = |canvas: &mut Canvas<'_>, area: Rect, left: bool, color: Color| {
-            let (x, y) = center(middle(area));
+        let arrow = |canvas: &mut Canvas<'_>, x: i32, left: bool, color: Color| {
+            let (_, y) = center(band);
             draw_chevron(canvas, style, x, y, left, color);
         };
         let t = parts.title;
@@ -782,15 +802,16 @@ impl Header {
             .filter(|_| parts.pager.is_some())
             .map(|page| Self::page_label(env, page));
         let baseline = |size: f32, text: &str| ink_baseline(&font, band, size, text);
-        if let Some(back) = parts.back {
-            arrow(canvas, back, true, ink);
+        let (back_x, prev_x, next_x) = parts.arrows;
+        if parts.back.is_some() {
+            arrow(canvas, back_x, true, ink);
         }
-        if let (Some((prev, at, next)), Some(page), Some(text)) = (parts.pager, page, &label) {
+        if let (Some((_, at, _)), Some(page), Some(text)) = (parts.pager, page, &label) {
             if self.arrows {
                 // At the first or last page, the arrow is gray.
                 let color = |end: bool| if end { Color::gray(150) } else { ink };
-                arrow(canvas, prev, true, color(page.0 == 0));
-                arrow(canvas, next, false, color(page.0 + 1 >= page.1));
+                arrow(canvas, prev_x, true, color(page.0 == 0));
+                arrow(canvas, next_x, false, color(page.0 + 1 >= page.1));
             }
             let x = f32::from(at.x);
             let y = baseline(style.small, text);
@@ -956,8 +977,9 @@ pub fn draw_chevron(
     color: Color,
 ) {
     let half = (style.title * 0.38) as i32;
-    let width = half * 4 / 5;
+    let (_, extent) = chevron_extent(style);
     let thickness = (style.line * 3).max(3);
+    let width = extent - thickness as i32;
     for dy in -half..=half {
         let dx = width * dy.abs() / half.max(1);
         let tip = if left {
@@ -976,6 +998,15 @@ pub fn draw_chevron(
             canvas.fill_tint(Rect::new(x, y, thickness as u16, 1), color);
         }
     }
+}
+
+/// How far a chevron's ink reaches from the middle it is drawn at to its
+/// point, and how wide its ink is (see [`draw_chevron`]).
+fn chevron_extent(style: &UiStyle) -> (i32, i32) {
+    let half = (style.title * 0.38) as i32;
+    let width = half * 4 / 5;
+    let thickness = (style.line * 3).max(3) as i32;
+    (width / 2, width + thickness)
 }
 
 fn label_mid(label: Rect) -> i32 {
