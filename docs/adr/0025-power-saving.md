@@ -1,6 +1,6 @@
 # 0025. Power saving: efficient by default, declared work, power modes
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-10-20
 
 ## Context
@@ -125,9 +125,11 @@ Three layers, each building on the one before:
    it keep Normal's limits in Saving, explicitly and visibly; the
    default follows the mode.
 
-Throughout, nothing is refused or held back silently: a plugin always
-learns what happened to its work or request, why, and when it may try
-again, and the kernel does not let it try in a tight loop.
+Throughout, two rules hold. **Nothing nags the reader**: background
+work never asks and never notifies; quiet reading is why people own
+such a device. And **nothing is refused silently to the plugin**: it
+always learns what happened to its work or request, why, and when it
+may try again, and the kernel does not let it try in a tight loop.
 
 ### 1. Efficient by default
 
@@ -250,9 +252,32 @@ radio is on or the deadline allows, in Saving at the next connection.
 
 **The `wifi` plugin** keeps deciding the radio ([ADR 0016](0016-network-and-wifi.md)):
 `core.network-wanted` now says whether a reader waits or which work is
-due, and the plugin switches on for either (in Offline, it asks first
-when a reader waits, see below). It no longer needs retry rounds for
-work that can wait: the kernel declares it due again.
+due, and in Normal and Saving the plugin switches on for either,
+silently, as today. It no longer needs retry rounds for work that can
+wait: the kernel declares it due again.
+
+### Quiet: background work never asks, never notifies
+
+Part of the SDK's contract: **a plugin's background work cannot raise
+anything over reading.** The kernel tells apart what follows from the
+reader's input (the handler of an input or of an action the reader
+ran, a screen the reader opened, and the replies to requests made
+there) from everything else (declared work and its replies, events
+such as a book opened, timers, rules). From everything else:
+
+- `Command::Notify` is not shown: it becomes the plugin's **note**, the
+  last one kept per plugin (with its time), written to the battery
+  log, and shown where the reader looks on purpose: the plugin's own
+  page, the Power page and the battery view ("Last sync failed 10:42,
+  will try again at 11:12");
+- refusals, held work and failures are never shown as a notice or a
+  toast either; they are in `Env::work` and the same places;
+- a plugin may show its own state on its own screens, as it likes.
+
+Automatic switches levels silently: only the status line's power mark
+changes. In Normal and Saving, Wi-Fi comes on for what the reader asks
+for without a question. Answers to the reader's own actions may notify
+as before ("Sync done" after *Sync progress*).
 
 ### Refused, held back, failed: always said, never in a loop
 
@@ -330,13 +355,26 @@ What a level does to declared work, in the kernel:
 |-|--------|--------|---------|
 | expected work, deadline | as declared | four times as long | held, none runs on its own |
 | optional work | when cheap | only at `ONLINE` and `CHARGING` | not run |
-| requests the reader makes | at once | at once | a question first ("Offline mode: go online for this?") |
+| requests the reader makes | at once | at once | refused (`Offline`); a screen opened for the network offers to go online, once, inline |
 | radio after background work | off at once | off at once | stays off |
-| work held back | | | runs at the first connection the reader allows, or when the mode changes |
+| work held back | | | waits silently; runs on the next connection the reader makes, or when the mode changes |
 
 These are settings (`core.work.stretch`, `core.work.optional`,
 `core.work.network`), so a mode is a set of setting values, nothing
 more.
+
+**Offline and the reader.** Background and declared work never asks in
+Offline: it waits silently and runs on the next connection the reader
+makes. A question appears only when the reader actively opens
+something that needs the network (the store, Calibre, Wi-Fi transfer,
+an OPDS catalog): that screen shows it once, inline in its own layout
+and not as a pop-up over the page, "Offline mode. Go online for this?"
+with *Go online* and *Not now* (`ui::offline_offer`, the same for every
+plugin). *Go online* sends `Command::GoOnline`: network for that screen
+until it closes, and the work held back rides along on the same
+connection. A request the reader makes elsewhere in Offline (an action
+such as *Sync progress*) is refused with `Offline`, and its plugin may
+say so in answer to that action.
 
 **A mode** is a level plus a set of setting values, worn while the mode
 is in use. Four are built in:
@@ -441,16 +479,16 @@ so all of it can be tried without hardware.
 
 | Plugin | Declares | Normal | Saving | Offline |
 |--------|----------|--------|--------|---------|
-| `kosync` | pull: expected, at `WAKE`, `BOOK_OPENED`, within 10 s; push: expected, at `BOOK_CLOSED`, `SLEEP`, `ONLINE`, within 30 min | position fresh on opening, on the other device as soon as the X4 is put away | the same moments; deadlines 40 s and 2 h | held; *Sync progress* asks |
+| `kosync` | pull: expected, at `WAKE`, `BOOK_OPENED`, within 10 s; push: expected, at `BOOK_CLOSED`, `SLEEP`, `ONLINE`, within 30 min; both silent | position fresh on opening, on the other device as soon as the X4 is put away; a newer position elsewhere offered when the reader opens the book, as today | the same moments; deadlines 40 s and 2 h | held, silently |
 | `weather` | fetch: optional, every `weather.every` (1 h) | when the radio is on anyway (as today) | at `ONLINE` and `CHARGING` | the last forecast, marked as old |
 | `news` | refresh: optional, every few hours | at the next connection | at `ONLINE` and `CHARGING` | the last headlines |
 | `stats` | sync: expected after reading, at `SLEEP`, `ONLINE`, within a day | at the next sleep | the same, within four days | held |
 | `readwise`, `joplin` | an export: expected, within 30 min | at the next moment | within 2 h | held until online |
 | `opds`, `update` | syncs and checks started by rules: expected, within an hour | at the next connection | within four hours | held |
-| `calibre`, `transfer`, `browser`, `store` | nothing: the reader is there | at once | at once | a question first |
+| `calibre`, `transfer`, `browser`, `store`, `opds` (browsing) | nothing: the reader is there | at once | at once | the inline offer on opening |
 | `reader` | page counting: needs nothing, at `IDLE`, `CHARGING` | when idle | when idle | when idle |
 | `home`, `widgets` | nothing; redraw only what changed | | clocks in whole minutes | as Saving |
-| `wifi` | nothing; follows `core.network-wanted` | | | asks when a reader waits |
+| `wifi` | nothing; follows `core.network-wanted`, silently | | | off; on after *Go online* |
 | `rules` | its times as exact work | | | |
 | `battery` | measures; its log gains the mode, radio time, connections and requests per plugin | | | |
 
@@ -467,15 +505,16 @@ so all of it can be tried without hardware.
   the reader's own modes and *Save as new mode*. The setting
   `core.power-mode` (`auto` or a mode's id) is an ordinary choice, so
   rules, buttons and the menu editor reach it like any other.
-- **A notice** when Automatic switches ("Saving: battery below 20 %"),
-  and in Offline a question where the reader asks for the network.
-  Nothing else interrupts.
+- **Nothing else**: no notice when Automatic switches, no prompt about
+  Wi-Fi while reading; in Offline only the inline offer on a screen the
+  reader opened for the network.
 
 ### Where it lives
 
 - **SDK**: `work` (`Work`, `Moments`, `Command::Work`,
-  `Command::CancelWork`, `Refusal`, `Reason`, `Retry`, `Env::work`,
-  `events::WORK_REFUSED`, `events::WORK_ALLOWED`), `HttpReply::refused`,
+  `Command::CancelWork`, `Command::GoOnline`, `Refusal`, `Reason`,
+  `Retry`, `Env::work`, `events::WORK_REFUSED`, `events::WORK_ALLOWED`),
+  `ui::offline_offer`, `HttpReply::refused`,
   `Manifest::uses`, `power` (`PowerLevel`, `Power`), `Env::power`,
   `events::POWER_CHANGED`, the settings' mode layer and limits.
   `Command::Schedule` is removed in favour of `Work::at` (its callers
@@ -487,8 +526,8 @@ so all of it can be tried without hardware.
   writing down what was not done, the per-plugin network and exemption
   settings, refusals and the limits against retrying too often.
 - **A new `power` plugin**, replaceable like `wifi`: the built-in modes,
-  Automatic, the settings page, the quick panel entry, the status item
-  and the notices. Mechanism in the kernel and the shells, policy in a
+  Automatic, the settings page, the quick panel entry and the status
+  item. Mechanism in the kernel and the shells, policy in a
   plugin, as in ADR 0016.
 
 ### Defaults for beginners
@@ -496,10 +535,10 @@ so all of it can be tried without hardware.
 Efficient by default, and Automatic: Saving below 20 % (the level at
 which PaperPaw already calls the battery low), Offline below 10 %,
 Normal while charging. A beginner never has to find the setting: the
-device saves anyway, saves more when the battery runs low, says so
-once, shows a leaf while it does, and goes back by itself when charged.
-Nothing they use stops working in Saving; in Offline, what needs the
-network asks.
+device saves anyway, saves more when the battery runs low, shows a
+leaf while it does, and goes back by itself when charged, all without a
+word. Nothing they use stops working in Saving; in Offline, a screen
+opened for the network offers to go online.
 
 ### Expected gain
 
@@ -546,73 +585,60 @@ with the battery plugin before and after each step:
 - Manifests must declare the network, or their requests are refused.
 - Gains are claimed only after the battery plugin has measured them.
 
-## Open questions, with a recommendation each
+## Decisions on what was left open
 
-Marked *measure* where a measurement on the device should come first.
+Decided on 2026-10-20. Where a measurement on the device comes first,
+the value here is the starting point and the measurement may change it.
 
-1. **Modes and profiles: one concept or two?** Recommended: two for
-   the reader, one building block (presets, the same editing), and a
-   profile may name a mode.
-2. **Automatic's levels.** Recommended: Saving below 20 % (the existing
-   *battery low* level, one number to know), Offline below 10 %, Normal
-   5 % above each and while charging.
-3. **Offline and what the reader asks for.** Recommended: ask each time
-   ("Go online for this?" with *Go online* and *Not now*), also for
-   Wi-Fi transfer and Calibre; work held back runs on that connection
-   too.
-4. **What the built-in modes bring.** Recommended: the values in the
-   table above. *Measure*: the sleep timer (a shorter one means more
-   starts, and every start on the X4 costs a half refresh, a mount and
-   the wake's connection) and the light caps (what 50 % and 30 % save).
-5. **Should Saving change looks?** Recommended: no, apart from the
-   light cap and clocks in whole minutes: no grays dropped, no covers
-   removed; their cost is small once refreshes sleep.
-6. **Requests outside input and outside declared work.** Recommended:
-   expected work due at once with the old 30 s deadline, limited by the
-   mode; nothing to change for plugins written before this.
-7. **Custom modes in the quick panel.** Recommended: the four built-in
-   modes as segments; the reader's own modes in the list under
-   Settings › System › Power and as actions for buttons and rules; a
-   fifth row *More modes* only when there are some.
-8. **Charging.** Recommended: Normal while charging (the X4 charges
-   from USB; charging is also the moment optional work runs), and
-   Automatic picks up again when unplugged.
-9. **Timers with slack.** Recommended: yes, as declared work replacing
-   `Command::Schedule` (decided above), with exact times for the rules.
-10. **How long going to sleep may wait for work.** Recommended: about
-    15 s, the radio off at once afterwards. *Measure*: how long a
-    connection and a kosync push take on the X4 once the radio is fixed
-    (the firmware logs `wifi: join took`).
-11. **kosync's deadlines.** Recommended: pull within 10 s of opening
-    (the reader expects the latest position, and it is the wake's one
-    connection anyway), push at closing or sleeping and at the latest
-    after 30 min of reading. *Measure*: a session's cost with these
-    deadlines, against today.
-12. **The base fixes that need the hardware.** Recommended: all of
-    them, each kept only if it looks the same and measures better.
-    *Measure*: modem sleep and light sleep with the radio on (what
-    esp-radio allows), the panel's power off after fast refreshes, the
+1. **Modes and profiles** are two things for the reader on one building
+   block (presets, the same editing), and a profile may name a mode.
+2. **Automatic**: Saving below 20 % (the existing *battery low* level),
+   Offline below 10 %, Normal 5 % above each and while charging;
+   switching is silent, only the status line's power mark changes.
+3. **Offline and the reader**: background and declared work never asks
+   and never notifies; it waits and runs on the next connection the
+   reader makes. Only a screen the reader opens for the network offers
+   to go online, once, inline. In Normal and Saving, Wi-Fi comes on
+   silently on demand.
+4. **The built-in modes** bring the values in the table above.
+   *Measure* the sleep timer (every start on the X4 costs a half
+   refresh, a mount and the wake's connection) and the light caps.
+5. **Saving does not change looks**, apart from the light cap and
+   clocks in whole minutes.
+6. **Requests outside input and outside declared work** are expected
+   work due at once with the old 30 s deadline, limited by the mode.
+7. **The quick panel** shows the four built-in modes as segments; the
+   reader's own modes are on the Power page and actions for buttons and
+   rules, with a row *More modes* in the panel only when there are any.
+8. **Charging**: Normal while charging; Automatic picks up again when
+   unplugged.
+9. **Timers with slack**: declared work replaces `Command::Schedule`;
+   the rules keep exact times through `Work::at`.
+10. **Going to sleep** waits for running work for about 15 s, the radio
+    off at once afterwards. *Measure* a connection and a kosync push on
+    the X4 once the radio is fixed (the firmware logs `wifi: join took`).
+11. **kosync** pulls within 10 s of opening and pushes on closing or
+    sleeping, at the latest after 30 min of reading, silently; a newer
+    position elsewhere is offered only when the reader opens the book,
+    inline, as today. *Measure* a session's cost against today.
+12. **The base fixes** are all done, each kept only if it looks the
+    same and measures better. *Measure* modem sleep and light sleep
+    with the radio on, the panel's power off after fast refreshes, the
     front light through light sleep on the S3.
-13. **Switching a plugin's network off.** Recommended: on each plugin's
-    page and in the battery view, on by default; a plugin that does not
-    declare the network in its manifest gets none (`NotDeclared`), so
-    first-party and community plugins must declare it.
-14. **Exempting a plugin from the mode.** Recommended: three choices
-    (*follow the mode*, *as in Normal*, *only when I ask*), set only by
-    the reader, applying to Saving and the reader's own modes but not
-    to Offline; exempt plugins listed on the Power page and their cost
-    shown in the battery view. This does not harm the concept: the
-    exemption only restores Normal's limits inside the same work model
-    (moments, shared connections, the minimum gap), it is explicit,
-    per plugin and visible, and the default stays saving.
-15. **Refusals and retries.** Recommended: one `Refusal` (reason and
-    when to retry) for requests and work alike, held work kept in the
-    queue rather than refused, `TooOften` refused without I/O, a
-    backoff from 30 s to 6 h for failures, and at most one connection
-    forced by deadlines per plugin in 15 min. *Measure*: whether 15 min
-    is right once a connection's cost is known (question 10).
-16. **May a plugin ask to be exempted?** Recommended: it may explain
-    and open its own settings page, never set the exemption itself and
-    never ask by a dialog of its own at start; a reader who installs a
-    plugin for its frequent updates (e.g. a news ticker) finds the
-    choice on its page.
+13. **A plugin's network** can be switched off on its row in the plugin
+    manager and in the battery view, on by default; a plugin that does
+    not declare the network in its manifest gets none (`NotDeclared`).
+    Refusals are never shown over reading (see *Quiet*).
+14. **Exemptions**: three choices (*follow the mode*, *as in Normal*,
+    *only when I ask*), set only by the reader, for Saving and the
+    reader's own modes, not for Offline; listed on the Power page, their
+    cost in the battery view.
+15. **Refusals and retries**: one `Refusal` for requests and work,
+    held work kept in the queue, `TooOften` refused without I/O, a
+    backoff from 30 s to 6 h, at most one deadline-forced connection per
+    plugin in 15 min; failures of background work only in the plugin's
+    note, its page, the Power page and the battery view. *Measure*
+    whether 15 min is right once a connection's cost is known.
+16. **A plugin may not exempt itself**: it may explain and open its own
+    settings page, never set the exemption, never ask by a dialog of
+    its own.
