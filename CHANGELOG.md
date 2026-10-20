@@ -6,6 +6,9 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: `Services::ids` and `Services::points` list the services
+  published and the points contributed to; `Services::add` (deprecated)
+  is gone.
 - SDK: `time::iso8601` and `time::parse_iso8601` write and read
   ISO 8601 times (UTC with milliseconds; offsets and dates alone read
   too), `time::duration_text` writes a length of time as `1 h 05 min`,

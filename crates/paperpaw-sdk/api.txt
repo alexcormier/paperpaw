@@ -1605,7 +1605,9 @@ impl paperpaw_sdk::services::Services
 pub fn paperpaw_sdk::services::Services::contributions<'a>(&'a self, &'a str) -> impl core::iter::traits::iterator::Iterator<Item = (&'a paperpaw_sdk::Id, &'a str)>
 pub fn paperpaw_sdk::services::Services::get<T: core::any::Any>(&self, &str) -> core::option::Option<&T>
 pub fn paperpaw_sdk::services::Services::has(&self, &str) -> bool
+pub fn paperpaw_sdk::services::Services::ids(&self) -> impl core::iter::traits::iterator::Iterator<Item = &paperpaw_sdk::Id>
 pub fn paperpaw_sdk::services::Services::new() -> Self
+pub fn paperpaw_sdk::services::Services::points(&self) -> impl core::iter::traits::iterator::Iterator<Item = &paperpaw_sdk::Id>
 impl core::fmt::Debug for paperpaw_sdk::services::Services
 pub fn paperpaw_sdk::services::Services::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub mod paperpaw_sdk::setting

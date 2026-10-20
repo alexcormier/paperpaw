@@ -125,15 +125,6 @@ impl Services {
         Self::default()
     }
 
-    /// Publishes `service` as `id`, found by its `TypeId` only (see
-    /// [`Service::any`]).
-    #[deprecated(since = "0.4.0", note = "use `Services::insert` with a `Service`")]
-    #[cfg(any(test, feature = "kernel"))]
-    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
-    pub fn add(&mut self, id: Id, service: Box<dyn Any>) {
-        self.insert(id, Service::any(service));
-    }
-
     /// Publishes `service` as `id` (kernel; plugins use
     /// [`Registrar::publish`](crate::Registrar::publish)).
     #[cfg(any(test, feature = "kernel"))]
@@ -170,6 +161,22 @@ impl Services {
         self.services.iter().any(|(s, _)| s.as_str() == id)
     }
 
+    /// The ids of the services published, in the order they were (e.g.
+    /// for a list of what plugins offer each other).
+    pub fn ids(&self) -> impl Iterator<Item = &Id> {
+        self.services.iter().map(|(id, _)| id)
+    }
+
+    /// The points something was contributed to, each once, in the order
+    /// of their first contribution.
+    pub fn points(&self) -> impl Iterator<Item = &Id> {
+        let all = &self.contributions;
+        all.iter()
+            .enumerate()
+            .filter(move |(at, (point, _, _))| !all[..*at].iter().any(|(p, _, _)| p == point))
+            .map(|(_, (point, _, _))| point)
+    }
+
     /// The contributions to `point`, with the plugin each comes from, in
     /// the order the plugins registered.
     pub fn contributions<'a>(&'a self, point: &'a str) -> impl Iterator<Item = (&'a Id, &'a str)> {
@@ -195,6 +202,22 @@ impl fmt::Debug for Services {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn services_and_points_are_listed_each_once() {
+        let mut services = Services::new();
+        services.insert(Id::new_static("a.count"), Service::new(3u32));
+        services.insert(Id::new_static("b.name"), Service::new("x"));
+        let ids: Vec<&str> = services.ids().map(Id::as_str).collect();
+        assert_eq!(ids, ["a.count", "b.name"]);
+        let (a, b) = (Id::new_static("a"), Id::new_static("b"));
+        services.contribute(Id::new_static("p.one"), a.clone(), Cow::Borrowed("1"));
+        services.contribute(Id::new_static("p.two"), b.clone(), Cow::Borrowed("2"));
+        services.contribute(Id::new_static("p.one"), b, Cow::Borrowed("3"));
+        let points: Vec<&str> = services.points().map(Id::as_str).collect();
+        assert_eq!(points, ["p.one", "p.two"]);
+        assert_eq!(Services::new().points().count(), 0);
+    }
 
     #[test]
     fn services_by_id_and_type() {
