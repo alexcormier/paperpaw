@@ -146,7 +146,9 @@ fn the_widgets_show_what_they_should() {
     assert!(has(&shown, "Francis Bacon"), "{shown:?}");
     assert!(has(&shown, "If found"), "{shown:?}");
     assert!(has(&shown, "To do · 2"), "{shown:?}");
-    assert!(has(&shown, "Return the library"), "{shown:?}");
+    // A half-wide list inside the widget's padding has no room for the
+    // whole item even at the small size: shortened, its start shown.
+    assert!(has(&shown, "Return the"), "{shown:?}");
     assert!(has(&shown, "Put pictures"), "{shown:?}");
 }
 

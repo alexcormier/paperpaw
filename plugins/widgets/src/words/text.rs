@@ -9,7 +9,7 @@ use alloc::vec::Vec;
 use paperpaw_sdk::FontHandle;
 use paperpaw_sdk::builtin::fonts;
 use paperpaw_sdk::ui::{self, UiStyle};
-use paperpaw_sdk::widgets::Align;
+use paperpaw_sdk::widgets::{self, Align};
 use paperpaw_sdk::{Canvas, Color, Env, Rect};
 
 /// The values of a widget's font setting: the menus' font, the book's,
@@ -42,8 +42,9 @@ pub(super) fn line_height(font: &FontHandle<'_>, size: f32) -> f32 {
     font.line_metrics(size).line_height
 }
 
-/// `text` broken into lines `width` pixels wide at `size`, at most `max`
-/// of them, the last one shortened with "…" where there is more.
+/// `text` broken between words into lines `width` pixels wide at `size`,
+/// at most `max` of them, the last one shortened with "…" where there is
+/// more (as is a word wider than a line).
 pub(super) fn lines(
     font: &FontHandle<'_>,
     size: f32,
@@ -51,40 +52,26 @@ pub(super) fn lines(
     width: f32,
     max: usize,
 ) -> Vec<String> {
-    let ranges = font.wrap(size, text, width);
-    let cut = ranges.len() > max;
-    let count = ranges.len().min(max);
-    ranges
-        .into_iter()
-        .take(count)
-        .enumerate()
-        .map(|(n, range)| {
-            if cut && n + 1 == count {
-                let rest = text[range.start..].trim_end();
-                ui::fit(font, size, &format!("{rest} …"), width)
-            } else {
-                String::from(text[range].trim())
-            }
-        })
-        .collect()
+    crate::time::wrap(font, size, text, width, max)
 }
 
-/// How many lines `text` takes `width` pixels wide at `size`.
-pub(super) fn count_lines(font: &FontHandle<'_>, size: f32, text: &str, width: f32) -> usize {
-    font.wrap(size, text, width).len()
+/// How many lines `text` takes `width` pixels wide at `size`, broken
+/// between words, and whether a word is wider than a line alone.
+pub(super) fn count_lines(
+    font: &FontHandle<'_>,
+    size: f32,
+    text: &str,
+    width: f32,
+) -> (usize, bool) {
+    let (lines, too_wide) = crate::time::break_words(font, size, text, width);
+    (lines.len(), too_wide)
 }
 
-/// The largest size from `most` down to `least` (in steps of a tenth) at
-/// which `fits(size)` holds; `least` if it holds at none.
+/// The largest size from `most` down to `least` at which `fits(size)`
+/// holds, measured as drawn ([`widgets::largest_size`]); `least` if it
+/// holds at none.
 pub(super) fn largest(least: f32, most: f32, fits: impl Fn(f32) -> bool) -> f32 {
-    let mut size = most.max(least);
-    while size > least {
-        if fits(size) {
-            return size;
-        }
-        size *= 0.9;
-    }
-    least
+    widgets::largest_size(most.max(least), least, fits).unwrap_or(least)
 }
 
 /// Draws `lines` at `size`, each `lead` times its line height below the

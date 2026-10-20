@@ -16,7 +16,7 @@ use paperpaw_sdk::event::Event;
 use paperpaw_sdk::files::for_each_line;
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::ui::UiStyle;
-use paperpaw_sdk::widgets::{self, Align, Frame, Size, Widget, WidgetSpec, WidgetTarget};
+use paperpaw_sdk::widgets::{self, Align, Frame, Padding, Size, Widget, WidgetSpec, WidgetTarget};
 use paperpaw_sdk::{Canvas, Env, Id, Rect, RegisterError, Registrar, SettingSpec};
 
 use super::text::{self, FACES};
@@ -61,7 +61,7 @@ fn turns_file() -> String {
 }
 
 /// The quote's settings, kept in the program.
-static SETTINGS: [SettingSpec; 10] = [
+static SETTINGS: [SettingSpec; 11] = [
     SettingSpec::fixed_choice(
         "widgets.quote.source",
         "widgets.quote.setting.source",
@@ -112,6 +112,7 @@ static SETTINGS: [SettingSpec; 10] = [
     widgets::size_spec("widgets.quote.size", ID, Size::Fit, true),
     widgets::align_spec("widgets.quote.align", ID, Align::Center),
     widgets::frame_spec("widgets.quote.frame", ID, Frame::None),
+    widgets::padding_spec("widgets.quote.padding", ID, Padding::Auto),
 ];
 
 pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
@@ -286,31 +287,62 @@ fn lay_out(env: &Env<'_>, area: Rect, quote: &Quote) -> Option<Laid> {
     };
     let author = (widgets::shows(env, ID.as_str(), AUTHOR) && !quote.author.is_empty())
         .then_some(quote.author.as_str());
-    let mut layout = Layout {
+    let width = f32::from(area.width);
+    let height = f32::from(area.height);
+    // Who said it, where the name fits its line whole.
+    let author = author.filter(|name| {
+        style
+            .font(env)
+            .is_some_and(|ui| ui.measure(style.small, name) <= width)
+    });
+    let wished = Layout {
         mark: widgets::shows(env, ID.as_str(), MARK),
         author: author.map_or(0.0, |_| {
             f32::from(widgets::line_height(env, style.small)) + style.gap as f32 * 0.75
         }),
     };
-    let least = text::line_height(&font, style.small * 0.85);
-    if layout.height(&font, style.small * 0.85, 1) > f32::from(area.height) {
-        layout.mark = false;
-    }
-    let author = author.filter(|_| least + layout.author <= f32::from(area.height));
-    if author.is_none() {
-        layout.author = 0.0;
-    }
-    let width = f32::from(area.width);
-    let size = match widgets::size(env, ID.as_str()) {
-        Size::Fit => text::largest(style.small * 0.85, style.title * 2.0, |size| {
-            let lines = text::count_lines(&font, size, &shown, width);
-            layout.height(&font, size, lines) <= f32::from(area.height)
-        }),
-        size => size.text(&style),
+    // Where the quote does not fit whole with them, the large mark goes,
+    // then who said it.
+    let choices = [
+        wished,
+        Layout {
+            mark: false,
+            ..wished
+        },
+        Layout {
+            mark: false,
+            author: 0.0,
+        },
+    ];
+    let whole = |layout: &Layout, size: f32| {
+        let (lines, too_wide) = text::count_lines(&font, size, &shown, width);
+        !too_wide && layout.height(&font, size, lines) <= height
     };
+    let least = style.small * 0.85;
+    let (layout, size) = match widgets::size(env, ID.as_str()) {
+        Size::Fit => choices
+            .iter()
+            .find_map(|layout| {
+                widgets::largest_size(style.title * 2.0, least, |size| whole(layout, size))
+                    .map(|size| (*layout, size))
+            })
+            .unwrap_or((choices[2], least)),
+        size => {
+            let size = size.text(&style);
+            let layout = choices.iter().find(|layout| whole(layout, size));
+            (*layout.unwrap_or(&choices[2]), size)
+        }
+    };
+    let author = author.filter(|_| layout.author > 0.0);
     let line = text::line_height(&font, size);
     let room = f32::from(area.height) - layout.height(&font, size, 0);
-    let lines = text::lines(&font, size, &shown, width, ((room / line) as usize).max(1));
+    // As many lines as fit; none where not even one has room.
+    let fits = (room / line).max(0.0) as usize;
+    let lines = if fits == 0 {
+        Vec::new()
+    } else {
+        text::lines(&font, size, &shown, width, fits)
+    };
     let total = layout.height(&font, size, lines.len()) as u16;
     Some(Laid {
         caption,
