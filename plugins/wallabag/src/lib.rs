@@ -40,7 +40,7 @@ use paperpaw_sdk::web::{clean_name, encode};
 use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, HttpRequest, Id,
     Manifest, MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION,
-    Screen, ScreenSpec, SettingSpec, Storage, StorageError, Version,
+    Screen, ScreenSpec, SettingSpec, Storage, StorageError,
 };
 
 pub const PLUGIN: Id = Id::new_static("wallabag");
@@ -546,7 +546,8 @@ impl Plugin for Wallabag {
             id: PLUGIN,
             name: Cow::Borrowed("Wallabag"),
             description: Cow::Borrowed("Articles saved in Wallabag, fetched as books."),
-            version: Version::new(0, 1, 0),
+            // Released with PaperPaw, also as a file from the store.
+            version: paperpaw_sdk::package_version!(),
             sdk: SDK_VERSION,
             uses: paperpaw_sdk::Uses::NETWORK,
         }

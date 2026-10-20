@@ -17,8 +17,10 @@
 //!
 //! Also gives the firmware PaperPaw's version (`PAPERPAW_VERSION`), the
 //! workspace's: the firmware is outside it; and the list of the plugin
-//! crates built in (`plugins.rs`, see `paperpaw_update::Plugins`), from
-//! the firmware's lockfile.
+//! crates built in (`plugins.rs`, see `paperpaw_update::Plugins`): those
+//! of the app as built here (`paperpaw-app`'s, by `links`), with their
+//! versions from the firmware's lockfile, which names optional crates
+//! whether they are built or not.
 
 use std::path::PathBuf;
 
@@ -45,10 +47,16 @@ fn main() {
     println!("cargo::rustc-link-arg=-Tlinkall.x");
 }
 
-/// Writes `plugins.rs`: the list of the plugin crates in `Cargo.lock`,
-/// the bytes the firmware keeps right after its application descriptor.
+/// Writes `plugins.rs`: the list of the plugin crates built in, the
+/// bytes the firmware keeps right after its application descriptor.
 fn plugins() {
     println!("cargo::rerun-if-changed=Cargo.lock");
+    let built: Vec<String> = std::env::var("DEP_PAPERPAW_APP_CRATES")
+        .expect("paperpaw-app names its plugin crates")
+        .split(',')
+        .filter(|name| !name.is_empty())
+        .map(String::from)
+        .collect();
     let lock = std::fs::read_to_string("Cargo.lock").expect("Cargo.lock");
     let mut crates: Vec<(String, String)> = Vec::new();
     for package in lock.split("[[package]]") {
@@ -59,7 +67,7 @@ fn plugins() {
             })
         };
         if let (Some(name), Some(version)) = (field("name = "), field("version = "))
-            && name.starts_with("paperpaw-plugin-")
+            && built.contains(&name)
         {
             crates.push((name, version));
         }

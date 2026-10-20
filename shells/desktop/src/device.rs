@@ -585,6 +585,9 @@ fn build_kernel(
         if !profile.font_packs {
             builder = builder.font_dir("fonts");
         }
+        // Every plugin, those the store offers as files too switched on,
+        // as if the reader had installed them (the emulator loads no
+        // plugin files): `--set plugins.<id>=off` shows a device without.
         let mut builder = paperpaw_app::install(builder, fonts);
         #[cfg(feature = "hello")]
         {

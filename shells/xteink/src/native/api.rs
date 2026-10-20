@@ -1,5 +1,5 @@
 //! The firmware's table for plugins (`paperpaw_native::Api`): its heap,
-//! its panics, its clock.
+//! its panics, its clock, the icons' names.
 
 use core::alloc::Layout;
 
@@ -13,6 +13,7 @@ pub static API: Api = Api {
     realloc,
     panic,
     micros,
+    icon,
 };
 
 unsafe extern "C" fn alloc(size: usize, align: usize) -> *mut u8 {
@@ -50,4 +51,13 @@ unsafe extern "C" fn panic(message: *const u8, len: usize) -> ! {
 
 extern "C" fn micros() -> u64 {
     crate::micros()
+}
+
+unsafe extern "C" fn icon(name: *const u8, len: usize) -> u32 {
+    // SAFETY: the plugin's text, `len` bytes, read while this answers.
+    let bytes = unsafe { core::slice::from_raw_parts(name, len) };
+    core::str::from_utf8(bytes)
+        .ok()
+        .and_then(paperpaw_sdk::icons::char)
+        .map_or(0, u32::from)
 }

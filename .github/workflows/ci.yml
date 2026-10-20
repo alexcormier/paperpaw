@@ -96,7 +96,7 @@ jobs:
         # one is built here without being listed.
         run: >
           cargo build --release --target ${{ matrix.target }}
-          -p paperpaw-app --no-default-features --features packs
+          -p paperpaw-app --no-default-features --features packs,store-plugins,diagnostics
           -p paperpaw-image -p paperpaw-sqlite -p paperpaw-stardict
           -p paperpaw-sample-hello -p paperpaw-x4 -p paperpaw-fat
 
@@ -132,7 +132,24 @@ jobs:
           cargo +"$FIRMWARE_TOOLCHAIN" clippy $FIRMWARE_CARGO --features "$DEVICE" -- -D warnings
           cargo +"$FIRMWARE_TOOLCHAIN" build $FIRMWARE_CARGO --features "$DEVICE"
       - name: The sample code plugin fits the firmware
+        id: native
         uses: ./.github/actions/native-sample
+      # PaperPaw's own plugins that the store offers, as the release
+      # builds them (unsigned here): each packs, for this chip, with the
+      # firmware's fingerprint.
+      # Signed with a key made for this run, and their catalogue entries
+      # made, as the release does.
+      - name: The store's first-party plugins fit the firmware
+        env:
+          FINGERPRINT: ${{ steps.native.outputs.fingerprint }}
+        run: |
+          out="$RUNNER_TEMP/plugins"
+          tools/plugin-files/build.sh "$DEVICE" "$out" --fingerprint "$FINGERPRINT"
+          cargo build -q --release -p paperpaw-sign
+          target/release/paperpaw-sign key "$RUNNER_TEMP/ci.key" > /dev/null
+          tools/plugin-files/sign.sh "$out" target/release/paperpaw-sign --key "$RUNNER_TEMP/ci.key"
+          version="$(sed -n '/^\[workspace.package\]/,/^\[/s/^version = "\(.*\)"/\1/p' Cargo.toml)"
+          python3 tools/plugin-files/catalogue.py "$out" "$version" https://example.invalid/ci
 
   native:
     name: Native plugins

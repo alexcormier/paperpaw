@@ -117,7 +117,18 @@ impl Firmware {
 
     fn step(&mut self) {
         if now().0 >= TRIAL_MS {
+            let trial = self.ota.as_ref().is_some_and(Ota::on_trial);
             self.confirm();
+            // An update on trial starts without code plugins, so those
+            // fetched for it wait: a start once it is kept installs and
+            // loads them (ADR 0024).
+            let native = paperpaw_sdk::native::Native::new("code.ppn");
+            if trial
+                && !paperpaw_sdk::native::fetched_for(self.kernel.storage(), &native).is_empty()
+            {
+                info!("native: the update is kept; restarting for the plugins fetched for it");
+                self.restart();
+            }
         }
         let installing = self.installing();
         if self.state.sleep && !installing {

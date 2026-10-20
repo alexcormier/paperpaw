@@ -135,10 +135,16 @@ impl Plugin for Files {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        // When the shelves' catalog was made, for the screens and the
+        // handlers below.
+        let catalog = shelves::CatalogMade::default();
         r.add_screen(ScreenSpec {
             id: SCREEN,
             title: Cow::Borrowed("files.title"),
-            factory: Box::new(|env, params| list::screen(env, params)),
+            factory: Box::new({
+                let catalog = catalog.clone();
+                move |env, params| list::screen(env, params, catalog.clone())
+            }),
         })?;
         list::register(r)?;
         r.add_screen(ScreenSpec {
@@ -154,7 +160,10 @@ impl Plugin for Files {
         r.add_screen(ScreenSpec {
             id: SHELF_SCREEN,
             title: Cow::Borrowed("files.title"),
-            factory: Box::new(|env, params| Box::new(shelves::ShelfScreen::new(env, params))),
+            factory: Box::new({
+                let catalog = catalog.clone();
+                move |env, params| Box::new(shelves::ShelfScreen::new(env, params, catalog.clone()))
+            }),
         })?;
         for (action, mode, title, icon) in [
             (BY_AUTHOR, shelves::MODE_AUTHORS, "files.by-author", "user"),
@@ -210,12 +219,15 @@ impl Plugin for Files {
             r.add_icon(setting, Cow::Borrowed(icon))?;
         }
         // The catalog of the shelves is made anew when they show next.
-        r.on(events::LIBRARY_CHANGED, |_, _, _| shelves::outdated())?;
-        r.on(events::BOOK_MOVED, |_, _, _| shelves::outdated())?;
-        r.on(events::BOOK_REMOVED, |_, _, _| shelves::outdated())?;
-        r.on(events::SETTING_CHANGED, |_, changed, _| {
+        let made = catalog.clone();
+        r.on(events::LIBRARY_CHANGED, move |_, _, _| made.outdated())?;
+        let made = catalog.clone();
+        r.on(events::BOOK_MOVED, move |_, _, _| made.outdated())?;
+        let made = catalog.clone();
+        r.on(events::BOOK_REMOVED, move |_, _, _| made.outdated())?;
+        r.on(events::SETTING_CHANGED, move |_, changed, _| {
             if changed.id == *ROOT.id() {
-                shelves::outdated();
+                catalog.outdated();
             }
         })?;
         r.on(SEARCH_ENTERED, |_, typed, out| {

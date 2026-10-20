@@ -28,6 +28,40 @@ change the plugin SDK.
   the long s as s, rare punctuation as its common cousin.
 - Statistics files: a database written for KOReader that fails part way
   (a full card) leaves the one there before as it was.
+- X4, X4 Pro and X4 Classic: a lean firmware. The 20 plugins the store
+  offers as files (statistics, widgets, Calibre, KOReader sync, weather,
+  news, rules and more) are no longer built in, nor the diagnostics
+  screen (developer builds, and the store, have it): 21 files in the
+  store. The X4's image shrinks from 6.59 to 5.43 MB, the room for
+  plugin files grows, and the X4 starts with less heap. Android builds
+  them in, switched off for a new reader until wanted; for one who ran
+  PaperPaw before they stay as they were. Pebble stays built in, off.
+- Updates: the code plugins built for an update are fetched once it is
+  downloaded, as far as the room for code holds them, and installed by
+  the updated firmware: as the update's first start loads no code
+  plugins, the firmware starts once more when it keeps the update (after
+  half a minute), and they run from then on, also offline. A fetch cut
+  off by a restart goes on when the update page shows; what is left for
+  an update installed meanwhile is let go. A plugin that comes back as a
+  file is no longer named as left out.
+- Plugin files ask the firmware for icons by name instead of carrying
+  all their names (some 125 KB less per file that draws icons): the
+  firmware's table for plugins, `paperpaw_native::Api`, has a new entry
+  at its end, `icon`, which the SDK's `icons::char` calls in a plugin
+  built with `--cfg paperpaw_plugin` (as the sample is).
+- Files, widgets and vocabulary keep no writable statics, so they pack
+  as plugin files.
+- First-run setup: after Wi-Fi, "Add more" offers four plugins most
+  readers add (reading statistics, home widgets, Calibre, KOReader sync),
+  all off; those chosen are installed in the background from the store
+  (switched on where they are built in) and said once when done. The
+  store's queue installs plugins not there yet too.
+- Releases publish PaperPaw's own store plugins as files for every
+  device (tools/plugin-files), built first and then signed apart with
+  the first-party plugin key (secret `PAPERPAW_PLUGIN_KEY`), with their
+  folders and their entries for the plugin library; CI builds, signs
+  (with a key of its own) and catalogues them for every device. Their
+  version is the release's (`paperpaw_sdk::package_version!`).
 - Emulator: `--free-space <bytes>` makes the emulated storage say it has
   that much free, whatever the computer's disk has, so screenshots of the
   store look the same everywhere (the snapshot tests use it).

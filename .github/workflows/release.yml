@@ -7,8 +7,11 @@ name: Release
 # signature file of its own, and the update file, both signed with the
 # firmware's key (the update is installed on the device); the list of the
 # plugins built in; the fingerprint native code plugins must have to run
-# on it (ADR 0024); their checksums. The release notes come from
-# CHANGELOG.md.
+# on it (ADR 0024); their checksums. PaperPaw's own plugins that the store
+# offers (tools/plugin-files) come as files for each device, signed with
+# the first-party plugin key, with their folders and their entries for
+# the plugin library (`paperpaw-<version>-catalogue.zip`). The release
+# notes come from CHANGELOG.md.
 on:
   push:
     tags: ["v*"]
@@ -118,6 +121,30 @@ jobs:
         env:
           FINGERPRINT: ${{ steps.native.outputs.fingerprint }}
         run: echo "$FINGERPRINT" > "dist/paperpaw-$DEVICE-$VERSION-abi.txt"
+      # PaperPaw's own plugins that the store offers, built for this
+      # firmware (ADR 0024) and signed with the first-party plugin key (its
+      # public key is the catalogue's `author_key`; never the firmware's).
+      - name: The store's first-party plugins
+        env:
+          FINGERPRINT: ${{ steps.native.outputs.fingerprint }}
+        run: |
+          tools/plugin-files/build.sh "$DEVICE" dist/plugins --fingerprint "$FINGERPRINT"
+          # The signing tool, built before the key comes near the disk.
+          cargo build -q --release -p paperpaw-sign
+      # Apart from every build: the key is on the disk only while the
+      # files are signed (audit O-17).
+      - name: Sign the store's first-party plugins
+        env:
+          PAPERPAW_PLUGIN_KEY: ${{ secrets.PAPERPAW_PLUGIN_KEY }}
+        run: |
+          if [[ -z "$PAPERPAW_PLUGIN_KEY" ]]; then
+            echo "::error::no PAPERPAW_PLUGIN_KEY: devices install only signed plugins"
+            exit 1
+          fi
+          key="$RUNNER_TEMP/plugin.key"
+          trap 'rm -f "$key"' EXIT
+          (umask 077 && printf '%s\n' "$PAPERPAW_PLUGIN_KEY" > "$key")
+          tools/plugin-files/sign.sh dist/plugins target/release/paperpaw-sign --key "$key"
       - name: Sign the update and the flash image with the firmware's key
         env:
           PAPERPAW_SIGNING_KEY: ${{ secrets.PAPERPAW_SIGNING_KEY }}
@@ -149,6 +176,10 @@ jobs:
         with:
           name: firmware-${{ matrix.device }}
           path: dist/paperpaw-${{ matrix.device }}-*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plugins-${{ matrix.device }}
+          path: dist/plugins/*.ppn
 
   release:
     name: Release
@@ -162,6 +193,17 @@ jobs:
           merge-multiple: true
       - name: The version
         run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+      # The plugins' folders and their entries for the plugin library,
+      # each file named by its address in this release.
+      - name: The first-party plugins' folders and catalogue entries
+        run: |
+          mkdir -p dist/plugins
+          mv dist/*.ppn dist/plugins/
+          python3 tools/plugin-files/catalogue.py dist/plugins "$VERSION" \
+            "https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME" \
+            --date "$(date -u +%F)"
+          (cd dist/plugins && zip -q -X -r "../paperpaw-$VERSION-catalogue.zip" catalogue)
+          mv dist/plugins/SHA256SUMS "dist/paperpaw-$VERSION-plugins.sha256"
       - name: Release notes from CHANGELOG.md
         run: |
           # The section of this version, up to the next one.
@@ -188,5 +230,9 @@ jobs:
               assets+=("dist/paperpaw-$device-$VERSION$part")
             done
           done
+          # The store's first-party plugins: a file per device, the
+          # folders, the catalogue entries, their checksums.
+          assets+=(dist/plugins/*.ppn dist/plugins/*.zip \
+            "dist/paperpaw-$VERSION-catalogue.zip" "dist/paperpaw-$VERSION-plugins.sha256")
           gh release create "$GITHUB_REF_NAME" "${prerelease[@]}" \
             --title "PaperPaw $VERSION" --notes-file dist/notes.md "${assets[@]}"
