@@ -527,8 +527,8 @@ impl UpdatePage {
     }
 }
 
-/// Draws `text` left-aligned in `area`, wrapped, at most `max` lines;
-/// returns the height used.
+/// Draws `text` left-aligned in `area`, wrapped, at most `max` lines and
+/// as many as `area` holds; returns the height used.
 #[allow(clippy::too_many_arguments)]
 fn paragraph(
     canvas: &mut Canvas<'_>,
@@ -544,6 +544,7 @@ fn paragraph(
         return 0;
     };
     let height = font.line_metrics(size).line_height as u16;
+    let max = max.min(usize::from(area.height / height.max(1)));
     let lines = font.wrap(size, text, f32::from(area.width));
     let used = height * lines.len().min(max) as u16;
     canvas.describe(
@@ -597,12 +598,13 @@ impl Screen for UpdatePage {
             3,
             Color::BLACK,
         ) + gap;
-        let area = Rect::new(
-            margin,
-            y,
-            width,
-            env.device.display.height.saturating_sub(y),
-        );
+        let buttons = self.buttons(env);
+        let rects = self.button_rects(env, buttons.len());
+        // The words keep clear of the buttons.
+        let bottom = rects
+            .first()
+            .map_or(env.device.display.height, |r| r.y.saturating_sub(gap));
+        let area = Rect::new(margin, y, width, bottom.saturating_sub(y));
         y += paragraph(
             canvas,
             env,
@@ -617,12 +619,7 @@ impl Screen for UpdatePage {
             let bar = Rect::new(margin, y, width, gap * 3);
             self.draw_progress(canvas, env, bar, done, total);
         }
-        let buttons = self.buttons(env);
-        for (i, (button, rect)) in buttons
-            .iter()
-            .zip(self.button_rects(env, buttons.len()))
-            .enumerate()
-        {
+        for (i, (button, rect)) in buttons.iter().zip(rects).enumerate() {
             let label = self.label(env, *button);
             let focused = self.shown && self.focus == i;
             ui::draw_button(canvas, env, &style, rect, label, i == 0, focused);

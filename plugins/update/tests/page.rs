@@ -13,6 +13,7 @@ use paperpaw_platform::Rotation;
 use paperpaw_plugin_update::{CHECK, OPEN, Update};
 use paperpaw_sdk::builtin::actions;
 use paperpaw_sdk::firmware::{Firmware, PLUGINS_AT, PluginCrate, Plugins};
+use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::{
     DeviceInfo, DirEntry, DisplayInfo, Id, InputCaps, Instant, MemoryClass, MemoryStorage,
     PixelFormat, Storage, StorageError,
@@ -303,6 +304,37 @@ fn an_older_update_says_so_and_installs_only_as_chosen() {
             older: true,
         }
     );
+}
+
+#[test]
+fn the_words_keep_clear_of_the_buttons() {
+    // The most there is to say (another key, older, a plugin left out)
+    // in the largest text.
+    let storage = Shared::default();
+    let stats = [("paperpaw-plugin-stats", "0.3.0")];
+    storage
+        .write("updates/old.bin", &update_signed("0.3.0", &stats, &[5; 32]))
+        .unwrap();
+    let mut device = Device::new(storage);
+    device
+        .kernel
+        .set_setting(Instant(1), "core.ui-size", "24")
+        .unwrap();
+    device.run(OPEN);
+    device.shown();
+    let parts = device.kernel.describe();
+    let first_button = parts
+        .iter()
+        .filter(|p| p.role == Role::Button)
+        .map(|p| p.area.y)
+        .min()
+        .unwrap();
+    for text in parts.iter().filter(|p| p.role == Role::Text) {
+        if text.area.y < first_button {
+            let bottom = text.area.y + text.area.height;
+            assert!(bottom <= first_button, "{:?} below {first_button}", text);
+        }
+    }
 }
 
 #[test]
