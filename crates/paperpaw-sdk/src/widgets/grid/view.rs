@@ -856,3 +856,541 @@ fn handle(area: Rect, style: &UiStyle) -> Rect {
         side,
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use core::cell::RefCell;
+
+    use paperpaw_platform::Rotation;
+
+    use super::*;
+    use crate::decorations::Decorators;
+    use crate::filters::TextFilters;
+    use crate::secrets::Secrets;
+    use crate::services::Services;
+    use crate::setup::SetupSteps;
+    use crate::status::StatusItems;
+    use crate::usage::{PluginUsage, Usage};
+    use crate::widgets::Widgets;
+    use crate::{
+        Actions, DeviceInfo, DisplayInfo, EnvParts, Fonts, Formats, Hyphenation, InputCaps,
+        Instant, MemoryClass, MemoryStorage, Menus, Metrics, Output, PixelFormat, Plugins,
+        PointerTool, Settings, SystemStatus, Translator,
+    };
+
+    const CHOSEN: Event<Picked> = Event::new("test.chosen");
+    const CHOICE: Id = Id::new_static("test.choice");
+
+    struct NoKeys;
+
+    impl crate::keys::KeyBindings for NoKeys {
+        fn bound(&self, _: &[&str], _: &str) -> Option<Id> {
+            None
+        }
+    }
+
+    /// What an [`Env`] is made of.
+    struct Kit {
+        device: DeviceInfo,
+        settings: Settings,
+        i18n: Translator,
+        fonts: Fonts,
+        formats: Formats,
+        hyphenation: Hyphenation,
+        menus: Menus,
+        actions: Actions,
+        plugins: Plugins,
+        status: SystemStatus,
+        usage: Usage,
+        plugin_usage: RefCell<Vec<PluginUsage>>,
+        status_items: StatusItems,
+        text_filters: TextFilters,
+        decorators: Decorators,
+        widgets: Widgets,
+        setup: SetupSteps,
+        services: Services,
+        secrets: Secrets,
+        storage: MemoryStorage,
+    }
+
+    impl Kit {
+        /// A device with buttons alone (as the X4), or with touch too.
+        fn new(touch: bool) -> Self {
+            Self {
+                device: DeviceInfo {
+                    id: "test",
+                    name: "Test",
+                    display: DisplayInfo {
+                        width: 400,
+                        height: 400,
+                        dpi: 254,
+                        format: PixelFormat::Gray4,
+                        rotation: Rotation::Deg0,
+                        color: None,
+                    },
+                    input: InputCaps {
+                        buttons: true,
+                        touch,
+                        pen: false,
+                        keys: &[],
+                    },
+                    memory: MemoryClass::Small,
+                },
+                settings: Settings::new(),
+                i18n: Translator::new(),
+                fonts: Fonts::new(0),
+                formats: Formats::new(),
+                hyphenation: Hyphenation::new(),
+                menus: Menus::new(),
+                actions: Actions::new(),
+                plugins: Plugins::new(),
+                status: SystemStatus::default(),
+                usage: Usage::default(),
+                plugin_usage: RefCell::new(Vec::new()),
+                status_items: StatusItems::new(),
+                text_filters: TextFilters::new(),
+                decorators: Decorators::new(),
+                widgets: Widgets::new(),
+                setup: SetupSteps::new(),
+                services: Services::new(),
+                secrets: Secrets::default(),
+                storage: MemoryStorage::new(),
+            }
+        }
+
+        fn env(&self) -> Env<'_> {
+            Env::from(EnvParts {
+                device: &self.device,
+                now: Instant::default(),
+                metrics: Metrics::new(self.device.display.dpi),
+                settings: &self.settings,
+                i18n: &self.i18n,
+                fonts: &self.fonts,
+                formats: &self.formats,
+                hyphenation: &self.hyphenation,
+                menus: &self.menus,
+                actions: &self.actions,
+                plugins: &self.plugins,
+                status: &self.status,
+                usage: &self.usage,
+                plugin_usage: &self.plugin_usage,
+                status_items: &self.status_items,
+                text_filters: &self.text_filters,
+                decorators: &self.decorators,
+                stylesheets: &[],
+                book_data: &[],
+                widgets: &self.widgets,
+                setup: &self.setup,
+                services: &self.services,
+                keys: &NoKeys,
+                caps: crate::Capabilities::default(),
+                wifi: None,
+                firmware: None,
+                clipboard: false,
+                slots: &[],
+                screens: &[],
+                font_dirs: &[],
+                catalog_device: None,
+                secrets: &self.secrets,
+                random: crate::random::Random::default(),
+                storage: &self.storage,
+            })
+        }
+    }
+
+    /// Four columns and three rows of 100 pixels, a gap of 10: cell
+    /// (c, r) is at (c * 100 + 5, r * 100 + 5), 90 pixels wide and high.
+    fn geometry() -> Geometry {
+        Geometry::of(Rect::new(0, 0, 400, 300), 4, 3, 10)
+    }
+
+    fn tool(id: &'static str) -> What {
+        What::Tool(Id::new_static(id))
+    }
+
+    fn at(what: What, col: u8, row: u8, w: u8, h: u8) -> Item {
+        Item::placed(what, Cells::new(col, row, w, h))
+    }
+
+    /// Tools `a` at 0/0, `b` at 1/0 and `c` at 0/1.
+    fn three() -> Vec<Item> {
+        alloc::vec![
+            at(tool("t.a"), 0, 0, 1, 1),
+            at(tool("t.b"), 1, 0, 1, 1),
+            at(tool("t.c"), 0, 1, 1, 1),
+        ]
+    }
+
+    /// A button below the grid, numbered 7.
+    const BUTTON: (Rect, u16) = (Rect::new(0, 310, 100, 40), 7);
+
+    fn laid_out(env: &Env<'_>, items: &[Item], buttons: &[(Rect, u16)]) -> GridView {
+        let mut grid = GridView::new(env, CHOICE, CHOSEN);
+        grid.layout(env, geometry(), items, buttons);
+        grid
+    }
+
+    /// Being edited, as the screen lays it out again once editing began.
+    fn edited(env: &Env<'_>, items: &[Item]) -> GridView {
+        let mut grid = laid_out(env, items, &[]);
+        grid.set_editing(true);
+        grid.layout(env, geometry(), items, &[]);
+        grid
+    }
+
+    fn act(grid: &mut GridView, env: &Env<'_>, action: &Id) -> (GridResponse, Output) {
+        let mut out = Output::default();
+        let response = grid.on_action(action, &mut Cx::new(env, &mut out));
+        (response, out)
+    }
+
+    /// Option `option` of item `index` chosen, as the choice screen says.
+    fn pick(grid: &mut GridView, env: &Env<'_>, index: usize, option: &str) -> GridResponse {
+        let picked = Picked {
+            path: format!("{index}"),
+            option: option.into(),
+        };
+        let Command::Emit(event, params) = CHOSEN.emit(picked) else {
+            unreachable!("an event is emitted");
+        };
+        let mut out = Output::default();
+        grid.on_event(&event, &params, &mut Cx::new(env, &mut out))
+    }
+
+    fn pointer(
+        grid: &mut GridView,
+        env: &Env<'_>,
+        phase: PointerPhase,
+        x: i32,
+        y: i32,
+    ) -> (GridResponse, Output) {
+        let event = PointerEvent {
+            id: 0,
+            phase,
+            point: Point::new(x, y),
+            tool: PointerTool::Finger,
+            pressure: 1000,
+        };
+        let mut out = Output::default();
+        let response = grid.on_pointer(&event, &mut Cx::new(env, &mut out));
+        (response, out)
+    }
+
+    fn gesture(
+        grid: &mut GridView,
+        env: &Env<'_>,
+        kind: GestureKind,
+        x: i32,
+        y: i32,
+    ) -> GridResponse {
+        let point = Point::new(x, y);
+        let gesture = Gesture {
+            kind,
+            start: point,
+            end: point,
+            tool: PointerTool::Finger,
+        };
+        let mut out = Output::default();
+        grid.on_gesture(gesture, &mut Cx::new(env, &mut out))
+    }
+
+    /// Where item `index` is now.
+    fn cells(grid: &GridView, index: usize) -> Cells {
+        grid.items[index].cells
+    }
+
+    fn changed(response: GridResponse) -> Vec<Item> {
+        match response {
+            GridResponse::Changed(items) => items,
+            other => panic!("not changed: {other:?}"),
+        }
+    }
+
+    fn notified(out: &Output) -> bool {
+        out.commands.iter().any(|c| matches!(c, Command::Notify(_)))
+    }
+
+    /// Whether the options of item `index` were offered.
+    fn offered(out: &Output, index: usize) -> bool {
+        let path = format!("{index}");
+        out.commands.iter().any(|c| {
+            matches!(c, Command::OpenScreen(screen, p)
+                if *screen == CHOICE && p.get(params::PATH) == Some(path.as_str()))
+        })
+    }
+
+    #[test]
+    fn items_without_room_are_kept() {
+        let kit = Kit::new(false);
+        let env = kit.env();
+        // Thirteen tools for twelve cells: the last has no room.
+        let names = [
+            "t.a", "t.b", "t.c", "t.d", "t.e", "t.f", "t.g", "t.h", "t.i", "t.j", "t.k", "t.l",
+            "t.m",
+        ];
+        let items: Vec<Item> = names.iter().map(|n| Item::new(tool(n))).collect();
+        let grid = laid_out(&env, &items, &[]);
+        let kept = grid.items();
+        assert_eq!(kept.len(), 13);
+        assert!(kept[..12].iter().all(|i| i.at.is_some()));
+        assert_eq!(kept[12], Item::new(tool("t.m")));
+    }
+
+    #[test]
+    fn a_long_press_begins_editing_and_back_ends_it() {
+        let kit = Kit::new(true);
+        let env = kit.env();
+        let mut grid = laid_out(&env, &three(), &[]);
+        assert!(!grid.editing() && !grid.holds_edges());
+        // Not editing, a finger is the screen's.
+        let (response, _) = pointer(&mut grid, &env, PointerPhase::Down, 50, 50);
+        assert_eq!(response, GridResponse::Ignored);
+        let response = gesture(&mut grid, &env, GestureKind::LongPress, 50, 50);
+        assert_eq!(response, GridResponse::Editing(true));
+        assert!(grid.editing() && grid.holds_edges());
+        // Once editing, a long press does nothing more.
+        let response = gesture(&mut grid, &env, GestureKind::LongPress, 50, 50);
+        assert_eq!(response, GridResponse::Ignored);
+        grid.layout(&env, geometry(), &three(), &[]);
+        assert!(matches!(grid.hint(&actions::BACK, &env), Hint::Text(_)));
+        let (response, _) = act(&mut grid, &env, &actions::BACK);
+        assert_eq!(response, GridResponse::Editing(false));
+        assert!(!grid.editing() && !grid.holds_edges());
+        assert_eq!(grid.hint(&actions::BACK, &env), Hint::Default);
+        // Not editing, *Back* is the screen's.
+        let (response, _) = act(&mut grid, &env, &actions::BACK);
+        assert_eq!(response, GridResponse::Ignored);
+    }
+
+    #[test]
+    fn the_buttons_move_the_focus_and_run_tools() {
+        let kit = Kit::new(false);
+        let env = kit.env();
+        let mut grid = laid_out(&env, &three(), &[]);
+        // Without touch, the focus shows from the start.
+        assert!(grid.focus_shown);
+        assert_eq!(grid.focus, 0);
+        let (response, out) = act(&mut grid, &env, &actions::RIGHT);
+        assert_eq!(response, GridResponse::Handled);
+        assert_eq!(grid.focus, 1);
+        assert!(out.redraw_area.is_some());
+        // Down from `b`: `c`, the only one below.
+        act(&mut grid, &env, &actions::DOWN);
+        assert_eq!(grid.focus, 2);
+        // Up from `c`: `a`, right above it.
+        act(&mut grid, &env, &actions::UP);
+        assert_eq!(grid.focus, 0);
+        // Nothing above: the focus stays.
+        act(&mut grid, &env, &actions::UP);
+        assert_eq!(grid.focus, 0);
+        // Before the first: round to the last.
+        act(&mut grid, &env, &actions::PREVIOUS);
+        assert_eq!(grid.focus, 2);
+        act(&mut grid, &env, &actions::NEXT);
+        assert_eq!(grid.focus, 0);
+        let (response, out) = act(&mut grid, &env, &actions::CONFIRM);
+        assert_eq!(response, GridResponse::Handled);
+        assert_eq!(out.commands, [Command::RunAction(Id::new_static("t.a"))]);
+        // Other buttons are the screen's.
+        let (response, _) = act(&mut grid, &env, &actions::NEXT_PAGE);
+        assert_eq!(response, GridResponse::Ignored);
+    }
+
+    #[test]
+    fn with_touch_the_first_press_shows_the_focus() {
+        let kit = Kit::new(true);
+        let env = kit.env();
+        let mut grid = laid_out(&env, &three(), &[]);
+        assert!(!grid.focus_shown);
+        let (response, out) = act(&mut grid, &env, &actions::RIGHT);
+        assert_eq!(response, GridResponse::Handled);
+        assert!(grid.focus_shown && out.commands.is_empty());
+        assert_eq!(grid.focus, 0);
+        act(&mut grid, &env, &actions::RIGHT);
+        assert_eq!(grid.focus, 1);
+        // A tap runs the tool there and takes the focus.
+        assert_eq!(
+            gesture(&mut grid, &env, GestureKind::Tap, 50, 150),
+            GridResponse::Handled
+        );
+        assert_eq!(grid.focus, 2);
+        assert_eq!(
+            gesture(&mut grid, &env, GestureKind::Tap, 350, 250),
+            GridResponse::Ignored
+        );
+    }
+
+    #[test]
+    fn the_buttons_alone_move_and_size_an_item() {
+        let kit = Kit::new(false);
+        let env = kit.env();
+        let mut grid = edited(&env, &three());
+        // While editing, the targets are the items: confirm offers the
+        // options of the one with the focus.
+        let (_, out) = act(&mut grid, &env, &actions::RIGHT);
+        assert!(out.commands.is_empty());
+        let (_, out) = act(&mut grid, &env, &actions::CONFIRM);
+        assert!(offered(&out, 1));
+        assert_eq!(pick(&mut grid, &env, 1, "move"), GridResponse::Handled);
+        // `b` a cell right, then down.
+        act(&mut grid, &env, &actions::RIGHT);
+        assert_eq!(cells(&grid, 1), Cells::new(2, 0, 1, 1));
+        act(&mut grid, &env, &actions::DOWN);
+        assert_eq!(cells(&grid, 1), Cells::new(2, 1, 1, 1));
+        // The page buttons go up and down too (the X4's side buttons).
+        act(&mut grid, &env, &actions::PREV_PAGE);
+        assert_eq!(cells(&grid, 1), Cells::new(2, 0, 1, 1));
+        act(&mut grid, &env, &actions::NEXT_PAGE);
+        act(&mut grid, &env, &actions::LEFT);
+        // `c` is in the way: said, and nothing moves.
+        let (_, out) = act(&mut grid, &env, &actions::LEFT);
+        assert!(notified(&out));
+        assert_eq!(cells(&grid, 1), Cells::new(1, 1, 1, 1));
+        // At the grid's edge nothing is said.
+        act(&mut grid, &env, &actions::DOWN);
+        let (_, out) = act(&mut grid, &env, &actions::DOWN);
+        assert!(!notified(&out));
+        assert_eq!(cells(&grid, 1), Cells::new(1, 2, 1, 1));
+        // Confirm ends moving and keeps the place.
+        let items = changed(act(&mut grid, &env, &actions::CONFIRM).0);
+        assert_eq!(items[1], at(tool("t.b"), 1, 2, 1, 1));
+        assert!(grid.editing());
+        // The buttons move the focus again.
+        act(&mut grid, &env, &actions::RIGHT);
+        assert_eq!(grid.focus, 2);
+        assert_eq!(cells(&grid, 1), Cells::new(1, 2, 1, 1));
+
+        // `c` wider, then higher; never narrower than a cell.
+        pick(&mut grid, &env, 2, "resize");
+        act(&mut grid, &env, &actions::RIGHT);
+        assert_eq!(cells(&grid, 2), Cells::new(0, 1, 2, 1));
+        // `b` below it is in the way.
+        act(&mut grid, &env, &actions::DOWN);
+        assert_eq!(cells(&grid, 2), Cells::new(0, 1, 2, 1));
+        act(&mut grid, &env, &actions::RIGHT);
+        act(&mut grid, &env, &actions::RIGHT);
+        assert_eq!(cells(&grid, 2), Cells::new(0, 1, 4, 1));
+        for _ in 0..5 {
+            act(&mut grid, &env, &actions::LEFT);
+        }
+        assert_eq!(cells(&grid, 2), Cells::new(0, 1, 1, 1));
+        act(&mut grid, &env, &actions::DOWN);
+        assert_eq!(cells(&grid, 2), Cells::new(0, 1, 1, 2));
+        // *Back* ends sizing, not editing.
+        let items = changed(act(&mut grid, &env, &actions::BACK).0);
+        assert_eq!(items[2], at(tool("t.c"), 0, 1, 1, 2));
+        assert!(grid.editing());
+        assert_eq!(
+            act(&mut grid, &env, &actions::BACK).0,
+            GridResponse::Editing(false)
+        );
+    }
+
+    #[test]
+    fn items_are_moved_and_sized_by_a_finger() {
+        let kit = Kit::new(true);
+        let env = kit.env();
+        let mut grid = edited(&env, &three());
+        // `a` dragged a cell right and two down.
+        pointer(&mut grid, &env, PointerPhase::Down, 50, 50);
+        let (_, out) = pointer(&mut grid, &env, PointerPhase::Move, 150, 250);
+        assert!(out.redraw_area.is_some());
+        let items = changed(pointer(&mut grid, &env, PointerPhase::Up, 150, 250).0);
+        assert_eq!(items[0], at(tool("t.a"), 1, 2, 1, 1));
+        // Its corner (the bottom right) pulled two cells right.
+        pointer(&mut grid, &env, PointerPhase::Down, 190, 290);
+        pointer(&mut grid, &env, PointerPhase::Move, 350, 290);
+        let items = changed(pointer(&mut grid, &env, PointerPhase::Up, 350, 290).0);
+        assert_eq!(items[0], at(tool("t.a"), 1, 2, 3, 1));
+        // `c` onto `b`: it stays where it was.
+        pointer(&mut grid, &env, PointerPhase::Down, 50, 150);
+        pointer(&mut grid, &env, PointerPhase::Move, 150, 50);
+        let (response, _) = pointer(&mut grid, &env, PointerPhase::Up, 150, 50);
+        assert_eq!(response, GridResponse::Handled);
+        assert_eq!(cells(&grid, 2), Cells::new(0, 1, 1, 1));
+        // Taken away (a palm): nothing moves.
+        pointer(&mut grid, &env, PointerPhase::Down, 50, 150);
+        pointer(&mut grid, &env, PointerPhase::Move, 350, 50);
+        let (response, out) = pointer(&mut grid, &env, PointerPhase::Cancel, 350, 50);
+        assert_eq!(response, GridResponse::Handled);
+        assert!(out.commands.is_empty());
+        assert_eq!(cells(&grid, 2), Cells::new(0, 1, 1, 1));
+        // A tap offers the options and takes the focus.
+        pointer(&mut grid, &env, PointerPhase::Down, 150, 50);
+        let (response, out) = pointer(&mut grid, &env, PointerPhase::Up, 150, 50);
+        assert_eq!(response, GridResponse::Handled);
+        assert!(offered(&out, 1));
+        assert_eq!(grid.focus, 1);
+        assert!(grid.focus_shown);
+        // Off the items: not the grid's.
+        let (response, _) = pointer(&mut grid, &env, PointerPhase::Down, 350, 150);
+        assert_eq!(response, GridResponse::Ignored);
+    }
+
+    #[test]
+    fn items_come_back_as_they_were_left() {
+        let kit = Kit::new(true);
+        let env = kit.env();
+        let mut grid = edited(&env, &three());
+        pointer(&mut grid, &env, PointerPhase::Down, 150, 50);
+        pointer(&mut grid, &env, PointerPhase::Move, 350, 250);
+        let items = changed(pointer(&mut grid, &env, PointerPhase::Up, 350, 250).0);
+        assert_eq!(items, grid.items());
+        let text = super::super::write(&items);
+        assert_eq!(text, "tool:t.a 0/0 1x1, tool:t.b 3/2 1x1, tool:t.c 0/1 1x1");
+        let again = laid_out(&env, &super::super::parse(&text), &[]);
+        assert_eq!(again.items(), items);
+    }
+
+    #[test]
+    fn the_screens_buttons_follow_the_items() {
+        let kit = Kit::new(false);
+        let env = kit.env();
+        let mut grid = laid_out(&env, &three(), &[BUTTON]);
+        // Before the first item: the button, the last target.
+        act(&mut grid, &env, &actions::LEFT);
+        assert_eq!(grid.focus, 3);
+        assert_eq!(
+            act(&mut grid, &env, &actions::CONFIRM).0,
+            GridResponse::Button(7)
+        );
+        // Down from `a`: `c`, then the button below it.
+        grid.reset_focus();
+        act(&mut grid, &env, &actions::DOWN);
+        act(&mut grid, &env, &actions::DOWN);
+        assert_eq!(grid.focus, 3);
+        // A tap on it, editing or not.
+        assert_eq!(
+            gesture(&mut grid, &env, GestureKind::Tap, 50, 330),
+            GridResponse::Button(7)
+        );
+        grid.set_editing(true);
+        grid.layout(&env, geometry(), &three(), &[BUTTON]);
+        assert_eq!(
+            gesture(&mut grid, &env, GestureKind::Tap, 50, 330),
+            GridResponse::Button(7)
+        );
+        // While editing, after the items too.
+        grid.reset_focus();
+        act(&mut grid, &env, &actions::LEFT);
+        assert_eq!(grid.focus, 3);
+        assert_eq!(
+            act(&mut grid, &env, &actions::CONFIRM).0,
+            GridResponse::Button(7)
+        );
+    }
+
+    #[test]
+    fn removed_items_are_gone() {
+        let kit = Kit::new(false);
+        let env = kit.env();
+        let mut grid = edited(&env, &three());
+        let items = changed(pick(&mut grid, &env, 1, "remove"));
+        let all = three();
+        assert_eq!(items, [all[0].clone(), all[2].clone()]);
+        assert_eq!(grid.targets.len(), 2);
+        // Options of an item not there are not taken.
+        assert_eq!(pick(&mut grid, &env, 5, "remove"), GridResponse::Handled);
+        assert_eq!(grid.items().len(), 2);
+    }
+}
