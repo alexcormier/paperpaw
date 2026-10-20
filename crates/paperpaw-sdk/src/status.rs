@@ -181,15 +181,21 @@ impl StatusItems {
         Self::default()
     }
 
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn add(&mut self, item: StatusItemSpec) {
         self.items.push(item);
     }
 
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn shrink_to_fit(&mut self) {
         self.items.shrink_to_fit();
         self.lines.shrink_to_fit();
     }
 
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn add_line(&mut self, line: StatusLineSpec) {
         self.lines.push(line);
     }

@@ -287,7 +287,6 @@ impl Device {
 /// and its value ("Synchronised …, Joplin Cl…") where the whole of either
 /// would fit beside the other.
 #[test]
-#[ignore = "bug: at 480 px the service row cuts both its title and its value (Synchronised ..., Joplin Cl...)"]
 fn the_service_row_shows_its_title_and_value_whole() {
     let mut d = Device::new(WEBDAV, false, false);
     d.run(OPEN);

@@ -13,10 +13,19 @@ impl Kernel {
         };
         // Made once, at the size it asked for: above the row of hints, or
         // all of the screen.
-        let hinted = self.registry.hints_of(&id) == Hints::Shown;
+        let mut hinted = self.registry.hints_of(&id) == Hints::Shown;
         self.shared.device.display.height = self.content_height(hinted);
         let running = self.shared.meter.enter(id.namespace());
-        let screen = (spec.factory)(&self.shared.env(self.now), params);
+        let mut screen = (spec.factory)(&self.shared.env(self.now), params);
+        // It says otherwise of the row of hints: made again for the part
+        // of the screen it then has.
+        if let Some(own) = screen.hints()
+            && (own == Hints::Shown) != hinted
+        {
+            hinted = !hinted;
+            self.shared.device.display.height = self.content_height(hinted);
+            screen = (spec.factory)(&self.shared.env(self.now), params);
+        }
         drop(running);
         let serial = self.next_serial;
         self.next_serial = serial.wrapping_add(1);
@@ -33,6 +42,7 @@ impl Kernel {
         // below the guard, hidden.
         if let Some(guard) = self.guard().filter(|_| !self.from_guard) {
             self.stack.insert(guard, active);
+            self.sync_stack();
             let _running = self.shared.meter.enter(self.stack[guard].id.namespace());
             self.stack[guard].screen.on_hide();
             return;
@@ -42,6 +52,7 @@ impl Kernel {
         }
         self.screens_changed = true;
         self.stack.push(active);
+        self.sync_stack();
         let top = self.stack.len() - 1;
         let overlay = self.overlay(top);
         self.screen_changed(self.changed_region(top), overlay.is_some());
@@ -157,7 +168,124 @@ impl Kernel {
             self.stack.truncate(i);
             self.screens_changed = true;
         }
+        self.sync_stack();
         self.sync_content();
+    }
+
+    /// The open screens as plugins see them ([`Env::stack`]), after the
+    /// stack changed.
+    pub(crate) fn sync_stack(&mut self) {
+        let env = self.shared.env(self.now);
+        let entries: Vec<paperpaw_sdk::StackEntry> = self
+            .stack
+            .iter()
+            .map(|active| {
+                let overlay = active.screen.region(&env).is_some();
+                let key = paperpaw_sdk::ScreenKey::new(active.serial);
+                paperpaw_sdk::StackEntry::new(active.id.clone(), active.slot.clone(), overlay, key)
+            })
+            .collect();
+        self.shared.stack.clear();
+        self.shared.stack.extend(entries);
+    }
+
+    /// Closes the open screen `key` (see [`Command::Close`]), leaving the
+    /// screens above it; not the only one, nor a screen guarding the device
+    /// for another. What it started (servers, sockets, speech) runs on
+    /// until the screens above it close too.
+    pub(crate) fn close_screen(&mut self, key: paperpaw_sdk::ScreenKey) {
+        let Some(index) = self
+            .stack
+            .iter()
+            .position(|active| paperpaw_sdk::ScreenKey::new(active.serial) == key)
+        else {
+            return;
+        };
+        if self.stack.len() < 2 || (self.held_by_guard() && self.guard() == Some(index)) {
+            return;
+        }
+        if index + 1 == self.stack.len() {
+            return self.close_above(index - 1);
+        }
+        let base = self.shown_base();
+        let region = self.changed_region(index);
+        self.with_screen(index, |screen, cx| {
+            screen.on_close(cx);
+            Handled::Yes
+        });
+        self.stack.remove(index);
+        self.screens_changed = true;
+        self.sync_stack();
+        if index == base {
+            // The full screen shown went: what was below it shows.
+            let content = self.content();
+            self.hint.shown.clear();
+            self.invalidate(content);
+            self.output.request_refresh(RefreshMode::Partial);
+        } else if index > base {
+            self.invalidate(region);
+            self.output.request_refresh(RefreshMode::Partial);
+        }
+    }
+
+    /// Whether the screens above `index` may close for `why` (see
+    /// [`Kernel::may_close_from`]).
+    pub(crate) fn may_close_above(&mut self, index: usize, why: paperpaw_sdk::CloseCause) -> bool {
+        self.may_close_from(index + 1, why)
+    }
+
+    /// Whether the screens from `index` on may close for `why`: each is
+    /// asked, the top one first ([`Screen::on_close_request`]).
+    pub(crate) fn may_close_from(&mut self, index: usize, why: paperpaw_sdk::CloseCause) -> bool {
+        (index..self.stack.len()).rev().all(|i| {
+            self.with_screen(i, |screen, cx| screen.on_close_request(why, cx)) == Handled::No
+        })
+    }
+
+    /// Closes the screen on top for `why` (*Back*, a tap outside it), if
+    /// it agrees ([`Screen::on_close_request`]); never the only one.
+    pub(crate) fn close_top(&mut self, why: paperpaw_sdk::CloseCause) {
+        let Some(below) = self.stack.len().checked_sub(2) else {
+            return;
+        };
+        if self.may_close_above(below, why) {
+            self.close_above(below);
+        }
+    }
+
+    /// Opens screen `id` in place of the one on top ([`Command::Replace`]).
+    pub(crate) fn replace(&mut self, id: Id, params: &Params) {
+        // Not in place of a screen guarding the device: below it.
+        if self.held_by_guard() {
+            return self.open(id, None, params);
+        }
+        let Some(top) = self.stack.len().checked_sub(1) else {
+            return self.open(id, None, params);
+        };
+        let closed = self.changed_region(top);
+        self.close_from(top);
+        self.stop_for_closed_screens();
+        self.open(id, None, params);
+        self.invalidate(closed);
+    }
+
+    /// Closes the screens above the topmost screen `id`, or the screen of
+    /// slot `id` ([`Command::BackTo`]).
+    pub(crate) fn back_to(&mut self, id: &Id) {
+        let Some(index) = self
+            .stack
+            .iter()
+            .rposition(|active| active.id == *id || active.slot.as_ref() == Some(id))
+        else {
+            return;
+        };
+        let guarded = self.held_by_guard() && self.guard() > Some(index);
+        if index + 1 < self.stack.len()
+            && !guarded
+            && self.may_close_above(index, paperpaw_sdk::CloseCause::Slot)
+        {
+            self.close_above(index);
+        }
     }
 
     /// Closes all screens above `index`.
@@ -254,6 +382,7 @@ impl Kernel {
             let _running = self.shared.meter.enter(active.id.namespace());
             active.screen = (spec.factory)(&env, &active.params);
         }
+        self.sync_stack();
         // Made anew, those below the screen shown are hidden again.
         let base = self.shown_base();
         for active in self.stack.iter_mut().take(base) {
@@ -284,7 +413,8 @@ impl Kernel {
         };
         let env = self.shared.env(self.now);
         let running = self.shared.meter.enter(active.id.namespace());
-        let mut cx = Cx::new(&env, &mut self.output);
+        let key = paperpaw_sdk::ScreenKey::new(active.serial);
+        let mut cx = Cx::new(&env, &mut self.output).for_screen(key);
         let handled = f(active.screen.as_mut(), &mut cx);
         drop(running);
         // The commands of a guarding screen, or of one above it, open

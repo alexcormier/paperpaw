@@ -335,6 +335,7 @@ impl Harness {
             work: paperpaw_sdk::work::WorkStates::none(),
             reader: true,
             clipboard: false,
+            stack: &[],
             slots: &[],
             screens: &[],
             font_dirs: &[],

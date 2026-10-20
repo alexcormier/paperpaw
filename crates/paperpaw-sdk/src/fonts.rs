@@ -140,7 +140,7 @@ const MAX_FONT_FILE: u64 = 48 * 1024 * 1024;
 /// Fonts are bound to *roles* such as
 /// [`builtin::fonts::UI`](crate::builtin::fonts::UI), like screens to slots.
 /// Plugins propose fonts for roles; a chosen reading family
-/// ([`Fonts::set_family`]) fills the reading roles, and the user's
+/// (`Fonts::set_family`) fills the reading roles, and the user's
 /// `[fonts]` configuration overrides everything.
 pub struct Fonts {
     entries: Vec<Entry>,
@@ -186,6 +186,8 @@ impl Fonts {
         Ok(())
     }
 
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn add(&mut self, spec: FontSpec) -> Result<(), RegisterError> {
         self.check_new(&spec.id)?;
         self.entries.push(Entry {
@@ -206,6 +208,8 @@ impl Fonts {
     /// font `extends`, e.g. Cyrillic and Greek to `fonts-default.literata`:
     /// read a glyph at a time when drawn, so it takes almost no memory, and
     /// asked for what that font lacks.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn add_extension(
         &mut self,
         id: Id,
@@ -230,6 +234,8 @@ impl Fonts {
     /// Adds a font file on the storage, described by its header (see
     /// [`sfnt::read_info`](paperpaw_text::sfnt::read_info)); it is loaded
     /// only when its family is chosen.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn add_file(&mut self, id: Id, path: String, info: FontInfo) -> Result<(), RegisterError> {
         self.check_new(&id)?;
         self.entries.push(Entry {
@@ -248,6 +254,8 @@ impl Fonts {
 
     /// Adds a face of a family in a file on the storage (see
     /// [`FontFace`]); it is loaded only when its family is chosen.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn add_face(&mut self, face: FontFace) -> Result<(), RegisterError> {
         self.check_new(&face.id)?;
         self.entries.push(Entry {
@@ -267,6 +275,8 @@ impl Fonts {
     /// Forgets every font of plugin `plugin` (ids `<plugin>.…`), e.g. of a
     /// data plugin removed while running; returns how many. Glyphs drawn
     /// so far are forgotten too.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn remove_plugin(&mut self, plugin: &str) -> usize {
         let before = self.entries.len();
         self.entries.retain(|e| e.id.namespace() != plugin);
@@ -281,11 +291,15 @@ impl Fonts {
     }
 
     /// Proposes `font` for `role`; the highest priority wins.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn propose(&mut self, role: Id, font: Id, priority: Priority) {
         self.candidates.push((role, font, priority));
     }
 
     /// Releases unused capacity once registration is complete.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn shrink_to_fit(&mut self) {
         self.entries.shrink_to_fit();
         self.candidates.shrink_to_fit();
@@ -293,6 +307,8 @@ impl Fonts {
     }
 
     /// The user's explicit choice for a role.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn bind_user(&mut self, role: Id, font: Id) {
         self.user.insert(role, font);
     }
@@ -324,6 +340,8 @@ impl Fonts {
 
     /// Chooses the family for reading (`None`: the plugins' proposals).
     /// Call [`Fonts::load`] afterwards for font files.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn set_family(&mut self, family: Option<&str>) {
         self.family = family.map(String::from);
     }
@@ -332,6 +350,8 @@ impl Fonts {
     /// of [`STATUS_FONT`](crate::builtin::settings::STATUS_FONT), as the
     /// menus, as the book or a family's name. Call [`Fonts::load`]
     /// afterwards for font files.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn set_status(&mut self, choice: &str) {
         self.status = Some(String::from(choice));
     }
@@ -382,6 +402,8 @@ impl Fonts {
     /// Loads the files of the chosen family's faces (one per style) and
     /// frees all others; returns the files that could not be loaded.
     /// Packs that extend fonts are opened too (they stay where they are).
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn load(&mut self, storage: &Rc<dyn Storage>) -> Vec<String> {
         let mut failed = Vec::new();
         let chosen = self.family.clone();
@@ -772,6 +794,32 @@ impl<'a> FontHandle<'a> {
             let top = i32::from(glyph.top) + i32::from(first);
             let bottom = i32::from(glyph.top) + i32::from(last) + 1;
             ink = Some(ink.map_or((top, bottom), |(t, b)| (t.min(top), b.max(bottom))));
+        }
+        ink
+    }
+
+    /// Where the ink of `text` at `size` begins and ends across, from the
+    /// pen's start, in pixels (counting pixels at least half covered, as
+    /// [`FontHandle::ink`] does): what centres it by its ink rather than by
+    /// its advance (e.g. an icon in its column). `None` for text without
+    /// ink.
+    pub fn ink_across(&self, size: f32, text: &str) -> Option<(i32, i32)> {
+        let mut cache = self.cache.borrow_mut();
+        let mut ink: Option<(i32, i32)> = None;
+        let mut pen = 0.0f32;
+        for ch in text.chars() {
+            let (font, index) = self.pick(ch);
+            let glyph = cache.glyph(index, font, ch, size);
+            let inked = |x: u16| (0..glyph.height).any(|y| glyph.coverage(x, y) >= 128);
+            if let (Some(first), Some(last)) = (
+                (0..glyph.width).find(|x| inked(*x)),
+                (0..glyph.width).rev().find(|x| inked(*x)),
+            ) {
+                let at = (pen + 0.5) as i32 + i32::from(glyph.left);
+                let (left, right) = (at + i32::from(first), at + i32::from(last) + 1);
+                ink = Some(ink.map_or((left, right), |(l, r)| (l.min(left), r.max(right))));
+            }
+            pen += glyph.advance;
         }
         ink
     }

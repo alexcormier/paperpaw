@@ -240,10 +240,18 @@ impl Kernel {
                     && gesture.kind == GestureKind::Tap
                     && !region.contains(gesture.start)
                 {
-                    self.output.commands.push(Command::Back);
-                    return;
+                    let top = self.stack.len() - 1;
+                    match self.stack[top].screen.outside() {
+                        paperpaw_sdk::Outside::Ignore => return,
+                        paperpaw_sdk::Outside::PassThrough => {
+                            let below = top.saturating_sub(1);
+                            self.with_screen(below, |screen, cx| screen.on_gesture(gesture, cx));
+                            return;
+                        }
+                        _ => return self.close_top(paperpaw_sdk::CloseCause::TapOutside),
+                    }
                 }
-                if self.with_top(|screen, cx| screen.on_gesture(gesture, cx)) == Handled::Yes {
+                if self.offer(|screen, cx| screen.on_gesture(gesture, cx)) == Handled::Yes {
                     return;
                 }
                 // Screens with gestures of their own: none from the key map.
@@ -291,8 +299,29 @@ impl Kernel {
         self.shared.keymap.resolve(&layers[..=count], key)
     }
 
+    /// Offers input to the screen on top with `f`, and on to the screens
+    /// below it while the one asked lets what it does not take pass
+    /// ([`Screen::passes_through`]).
+    pub(crate) fn offer(
+        &mut self,
+        f: impl Fn(&mut dyn Screen, &mut Cx<'_, '_>) -> Handled,
+    ) -> Handled {
+        let Some(mut index) = self.stack.len().checked_sub(1) else {
+            return Handled::No;
+        };
+        loop {
+            if self.with_screen(index, &f) == Handled::Yes {
+                return Handled::Yes;
+            }
+            if index == 0 || !self.stack[index].screen.passes_through() {
+                return Handled::No;
+            }
+            index -= 1;
+        }
+    }
+
     pub(crate) fn dispatch(&mut self, action: Id) {
-        if self.with_top(|screen, cx| screen.on_action(&action, cx)) == Handled::Yes {
+        if self.offer(|screen, cx| screen.on_action(&action, cx)) == Handled::Yes {
             return;
         }
         match self.shared.actions.get(action.as_str()) {

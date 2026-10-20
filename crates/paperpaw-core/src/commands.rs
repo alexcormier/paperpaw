@@ -139,6 +139,10 @@ impl Kernel {
                     screen.on_show(cx);
                     Handled::Yes
                 });
+                if let Some(top) = self.stack.last() {
+                    let shown = events::ScreenShown::new(top.id.clone()).slot(top.slot.clone());
+                    self.output.commands.push(events::SCREEN_SHOWN.emit(shown));
+                }
                 continue;
             }
             let trusted = mem::take(&mut self.trusted);
@@ -161,15 +165,18 @@ impl Kernel {
             return;
         };
         match command {
-            Command::OpenSlot(slot, params) => self.open_slot_command(slot, params),
+            Command::OpenSlot(slot, params) => self.open_slot_command(slot, None, params),
+            Command::OpenInSlot(slot, screen, params) => {
+                self.open_slot_command(slot, Some(screen), params);
+            }
+            Command::Close(key) => self.close_screen(key),
+            Command::Replace(screen, params) => self.replace(screen, &params),
+            Command::BackTo(id) => self.back_to(&id),
+            Command::BindSlot(slot, screen) => self.bind_slot(slot, screen),
             Command::OpenScreen(screen, params) => self.open(screen, None, &params),
             // Not past a screen that guards the device, but from it.
             Command::Back if self.held_by_guard() => {}
-            Command::Back => {
-                if self.stack.len() > 1 {
-                    self.close_above(self.stack.len() - 2);
-                }
-            }
+            Command::Back => self.close_top(paperpaw_sdk::CloseCause::Back),
             Command::Notify(text) | Command::Announce(text) => self.notify(text),
             Command::Emit(event, params) => self.emit(&event, &params),
             Command::RunAction(action) => self.dispatch(action),
@@ -200,11 +207,13 @@ impl Kernel {
 
     /// Opens the screen bound to `slot`, or shows it again where it is
     /// open for the same (closing what is above it).
-    fn open_slot_command(&mut self, slot: Id, params: Params) {
-        let open = self
-            .stack
-            .iter()
-            .position(|s| s.slot.as_ref() == Some(&slot));
+    /// Opens the screen bound to `slot`, or `screen` for it
+    /// ([`Command::OpenInSlot`]), or shows it again where the slot is open
+    /// with it and the same params (closing what is above it).
+    fn open_slot_command(&mut self, slot: Id, screen: Option<Id>, params: Params) {
+        let open = self.stack.iter().position(|s| {
+            s.slot.as_ref() == Some(&slot) && screen.as_ref().is_none_or(|screen| s.id == *screen)
+        });
         // Below a screen that guards the device, it stays as it is; one
         // for something else waits below the guard too.
         let below_guard = |index: usize| self.held_by_guard() && self.guard() > Some(index);
@@ -214,9 +223,14 @@ impl Kernel {
             }
         } else if let Some(index) = open {
             if params.is_empty() || self.stack[index].params == params {
-                if index + 1 < self.stack.len() {
+                if index + 1 < self.stack.len()
+                    && self.may_close_above(index, paperpaw_sdk::CloseCause::Slot)
+                {
                     self.close_above(index);
                 }
+                return;
+            }
+            if !self.may_close_from(index, paperpaw_sdk::CloseCause::Slot) {
                 return;
             }
             // The slot for something else (e.g. another book): opened anew
@@ -231,10 +245,27 @@ impl Kernel {
                 self.invalidate(region);
             }
         }
-        match self.registry.resolve_slot(slot.as_str()).cloned() {
+        match screen.or_else(|| self.registry.resolve_slot(slot.as_str()).cloned()) {
             Some(screen) => self.open(screen, Some(slot), &params),
             None => self.warn_runtime(format!("no screen for slot `{slot}`")),
         }
+    }
+
+    /// Binds `slot` to `screen` for the user, or back to the plugins'
+    /// (see [`Command::BindSlot`]): at once, and kept in `paperpaw.ini`.
+    fn bind_slot(&mut self, slot: Id, screen: Option<Id>) {
+        match &screen {
+            Some(screen) if !self.registry.screens.contains_key(screen) => {
+                return self.warn_runtime(format!("unknown screen `{screen}` for slot `{slot}`"));
+            }
+            Some(screen) => self.registry.bind_user(slot.clone(), screen.clone()),
+            None => self.registry.unbind_user(&slot),
+        }
+        self.update_config(&format_args!("slot `{slot}`"), |source| match &screen {
+            Some(screen) => paperpaw_config::set(source, "slots", slot.as_str(), screen.as_str()),
+            None => paperpaw_config::remove(source, "slots", slot.as_str()),
+        });
+        self.shared.slots = self.registry.bound_slots();
     }
 
     /// An event to its subscribers, then to every open screen.
@@ -261,6 +292,10 @@ impl Kernel {
                 &mut self.output.commands,
                 &mut self.works,
             );
+        }
+        // Screens learn that they show from `on_show`.
+        if *event == events::SCREEN_SHOWN {
+            return;
         }
         for index in 0..self.stack.len() {
             self.with_screen(index, |screen, cx| {

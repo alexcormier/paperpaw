@@ -41,6 +41,15 @@ rebuild them.
   stays until the next breaking release (the next minor before 1.0, the
   next major after). `#[non_exhaustive]` on structs and enums that will
   grow lets them grow without breaking.
+- **The kernel's part behind a feature**: methods only the kernel and
+  the shells call (registering, setting values, binding: e.g.
+  `Settings::{define, set, set_scope}`, `Menus::{add, customize}`,
+  `Fonts::add`, the registries' `add`) come with the SDK's `kernel`
+  feature, off by default; paperpaw-core, paperpaw-app and the shells
+  turn it on. Plugins see these types only to read through `Env`, and a
+  plugin built on its own cannot call them. The docs show them marked
+  with the feature (`doc(cfg)`); `api.txt`, made without features,
+  leaves them out, so they may change with the kernel.
 
 ## Consequences
 
@@ -52,3 +61,6 @@ rebuild them.
 - The API file is made with a nightly toolchain (rustdoc's JSON output)
   pinned in CI, so its output stays the same between machines.
 - New crates are checked from their first release on.
+- A plugin's tests that build an environment as the kernel does (their
+  own `Settings`, `Fonts`, `Menus`) turn on `kernel` in their
+  dev-dependencies, as the SDK's tests do.

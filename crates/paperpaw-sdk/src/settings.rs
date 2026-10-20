@@ -819,7 +819,7 @@ impl Specs {
 /// its settings as always.
 ///
 /// Values may be shown for a while without being kept, e.g. a layout
-/// before it is chosen ([`Settings::set_preview`], asked for with
+/// before it is chosen (`Settings::set_preview`, asked for with
 /// [`Command::PreviewSettings`](crate::Command::PreviewSettings)): they
 /// are what [`Settings::get`] gives while they last; what is kept
 /// ([`Settings::global`]) stays as it is. The ready-made sets of values
@@ -854,6 +854,8 @@ impl Settings {
     }
 
     /// Releases unused capacity once registration is complete.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn shrink_to_fit(&mut self) {
         self.specs.shrink_to_fit();
         self.values.shrink_to_fit();
@@ -867,6 +869,8 @@ impl Settings {
     }
 
     /// Adds presets (see [`presets`](crate::presets)).
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn presets_mut(&mut self) -> &mut crate::presets::Presets {
         &mut self.presets
     }
@@ -874,6 +878,8 @@ impl Settings {
     /// Shows `values` in place of those kept (`None`: as if not set),
     /// until they are replaced; empty, the kept ones show again. Values of
     /// unknown settings and those that do not fit are left out.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn set_preview(&mut self, values: Vec<(Id, Option<SettingValue>)>) {
         self.preview = VecMap::default();
         for (id, value) in values {
@@ -892,6 +898,8 @@ impl Settings {
     /// values show again when the mode is taken off. Values of unknown
     /// settings and those that do not fit are left out. The ids whose
     /// shown value may have changed come back.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn wear(&mut self, values: Vec<(Id, SettingValue)>, limits: Vec<(Id, i64)>) -> Vec<Id> {
         let mut touched: Vec<Id> = self
             .worn
@@ -934,6 +942,8 @@ impl Settings {
 
     /// Lets go of the worn mode's value for `id`, as when the reader
     /// changed it (e.g. after a restart, see [`Settings::released`]).
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn release(&mut self, id: &Id) {
         let value = self.worn.remove(id.as_str()).is_some();
         let limit = self.limits.remove(id.as_str()).is_some();
@@ -958,6 +968,8 @@ impl Settings {
     }
 
     /// Registers a group of settings.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn add_group(&mut self, group: SettingGroupSpec) -> Result<(), RegisterError> {
         if self.groups.iter().any(|g| g.id == group.id) {
             return Err(RegisterError::Duplicate { id: group.id });
@@ -985,6 +997,8 @@ impl Settings {
     }
 
     /// Registers a setting. Its default must be valid.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn define(&mut self, spec: SettingSpec) -> Result<(), RegisterError> {
         if self.specs.get(spec.id.as_str()).is_some() {
             return Err(RegisterError::Duplicate { id: spec.id });
@@ -1004,6 +1018,8 @@ impl Settings {
 
     /// Registers a fixed setting ([`SettingSpec::fixed`]), kept by
     /// reference. Its default must be valid.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn define_fixed(&mut self, spec: &'static SettingSpec) -> Result<(), RegisterError> {
         if self.specs.get(spec.id.as_str()).is_some() {
             return Err(RegisterError::Duplicate {
@@ -1028,6 +1044,8 @@ impl Settings {
     ///
     /// Whether it did: not for an unknown setting, nor where no place is
     /// left to keep the changed spec ([`SettingError::Full`]).
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn set_choices(&mut self, id: &str, options: impl Into<Choices>) -> bool {
         match self.specs.get_mut(id) {
             Ok(spec) => {
@@ -1040,6 +1058,8 @@ impl Settings {
 
     /// Changes a setting's default (e.g. device-specific defaults chosen by
     /// a shell). The user's own values still take precedence.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn set_default_from_text(&mut self, id: &str, text: &str) -> Result<(), SettingError> {
         let spec = self.specs.get_mut(id)?;
         spec.default = spec.kind.parse(text).ok_or(SettingError::InvalidValue)?;
@@ -1067,6 +1087,8 @@ impl Settings {
     }
 
     /// Sets a value after validating it.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn set(&mut self, id: &str, value: SettingValue) -> Result<(), SettingError> {
         let spec = self.spec(id).ok_or(SettingError::Unknown)?;
         if !spec.kind.accepts(&value) {
@@ -1125,6 +1147,8 @@ impl Settings {
     /// ([`Settings::goes_to_scope`]), the scope's value, so that the
     /// global one applies again (for "only this book", the scope's values
     /// all go, as when it is switched off).
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn reset(&mut self, id: &str) -> Result<(), SettingError> {
         let id = self.value_id(id)?;
         if self.goes_to_scope(id.as_str()) {
@@ -1142,6 +1166,8 @@ impl Settings {
     }
 
     /// Sets a value from configuration-file text.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn set_from_text(&mut self, id: &str, text: &str) -> Result<(), SettingError> {
         let spec = self.spec(id).ok_or(SettingError::Unknown)?;
         let value = spec.kind.parse(text).ok_or(SettingError::InvalidValue)?;
@@ -1238,6 +1264,8 @@ impl Settings {
 
     /// Activates a scope with its values (only valid scoped ones are
     /// kept), or ends it.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn set_scope(&mut self, values: Option<VecMap<Id, SettingValue>>) {
         self.scope = values.map(|mut values| {
             let ids: Vec<Id> = values.keys().cloned().collect();
@@ -1257,6 +1285,8 @@ impl Settings {
     /// Sets a scoped setting in the active scope. Switching the scope off
     /// ([`SCOPE_ONLY`](crate::builtin::settings::SCOPE_ONLY)) drops its
     /// values.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn set_in_scope(&mut self, id: &str, value: SettingValue) -> Result<(), SettingError> {
         let spec = self.specs.get(id).ok_or(SettingError::Unknown)?;
         if !spec.scoped || !spec.kind.accepts(&value) {

@@ -99,6 +99,8 @@ impl Actions {
         Self::default()
     }
 
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn insert(&mut self, action: ActionSpec) {
         self.map.insert(action.id.clone(), action);
     }
@@ -116,6 +118,8 @@ impl Actions {
     }
 
     /// Releases unused capacity once registration is complete.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn shrink_to_fit(&mut self) {
         self.map.shrink_to_fit();
     }
