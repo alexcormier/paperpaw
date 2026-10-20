@@ -97,6 +97,13 @@ impl Translator {
         languages
     }
 
+    /// Every catalog added, in the order added, for tools that check
+    /// translations. Catalogs of languages not in use have dropped their
+    /// messages: such a tool clones one and [`Catalog::load`]s the clone.
+    pub fn catalogs(&self) -> &[Catalog] {
+        &self.catalogs
+    }
+
     /// The message for `key`, if a catalog has it.
     pub fn get(&self, key: &str) -> Option<&str> {
         self.ordered().find_map(|catalog| catalog.get(key))
@@ -223,6 +230,22 @@ mod tests {
             t.format("hello", &[("name", Arg::Str("Ada"))]),
             "Moin, Ada!"
         );
+    }
+
+    #[test]
+    fn catalogs_of_other_languages_load_when_cloned() {
+        let t = translator("de");
+        let en = t.catalogs().iter().find(|c| c.language() == "en").unwrap();
+        assert!(en.keys().any(|k| k == "hello"));
+        let at = t
+            .catalogs()
+            .iter()
+            .find(|c| c.language() == "de-AT")
+            .unwrap();
+        assert!(at.is_empty());
+        let mut at = at.clone();
+        at.load();
+        assert_eq!(at.get("hello"), Some("Servus, {name}!"));
     }
 
     #[test]

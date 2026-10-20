@@ -377,6 +377,13 @@ impl Kernel {
     /// [`paperpaw_sdk::semantics`]): for reading the screen aloud,
     /// automation and tests. Draws them once, aside.
     pub fn describe(&mut self) -> Vec<paperpaw_sdk::semantics::Part> {
+        paperpaw_sdk::semantics::parts(self.described())
+    }
+
+    /// What [`describe`](Self::describe) puts together: everything the
+    /// drawing helpers told as they drew, in drawing order, each with the
+    /// clip it was drawn in, e.g. for checks of text cut at a cell's edge.
+    pub fn described(&mut self) -> Vec<paperpaw_sdk::semantics::Described> {
         let bounds = self.framebuffer.bounds();
         let Ok(mut aside) = Framebuffer::new(
             bounds.width,
@@ -418,7 +425,34 @@ impl Kernel {
                 notice.draw(&mut canvas.clipped(area), &env);
             }
         }
-        paperpaw_sdk::semantics::parts(described)
+        described
+    }
+
+    /// What the screen shown tells as it draws (see
+    /// [`described`](Self::described)), alone: without the screens below
+    /// an overlay and the button hints, e.g. for checks that move the
+    /// focus through its parts. Draws it once, aside.
+    pub fn described_active(&mut self) -> Vec<paperpaw_sdk::semantics::Described> {
+        let bounds = self.framebuffer.bounds();
+        let Ok(mut aside) = Framebuffer::new(
+            bounds.width,
+            bounds.height,
+            paperpaw_platform::PixelFormat::Mono1,
+        ) else {
+            return Vec::new();
+        };
+        let env = self.shared.env(self.now);
+        let Some(active) = self.stack.last_mut() else {
+            return Vec::new();
+        };
+        let content = Rect::new(0, 0, env.device.display.width, env.device.display.height);
+        let area = active.screen.region(&env).unwrap_or(content);
+        let mut described = Vec::new();
+        active.screen.draw(
+            &mut aside.canvas().describing(&mut described).clipped(area),
+            &env,
+        );
+        described
     }
 
     /// Times what the input started, and shows the busy mark first if it

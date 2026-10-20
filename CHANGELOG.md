@@ -6,6 +6,28 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Plugin authors: `paperpaw-dev` (`tools/dev`) checks a plugin before it
+  is published, on the emulated X4, X4 Pro, X4 Classic and Boox, in
+  every language, light and dark, and look: contact sheets of every
+  screen and of every widget in every size; text cut, shortened or
+  broken, parts outside their cell or the screen, uneven margins, touch
+  targets too small, focus not shown, contrast on black and white;
+  missing translations, settings without help, dashes, and a
+  pseudo-language that shows where longer text will not fit; screens
+  reachable and closable with buttons alone; storage read while drawing,
+  heap and frame time against the X4's budgets; scripted flows with
+  assertions (recorded in the emulator with `--record`); snapshots with
+  `--bless`; data plugins checked as the installer and the plugin
+  library take them, `.ppn` files as the device does. Templates for a
+  plugin's own repository (harness, snapshot test, CI job) are in
+  `tools/dev/templates`; docs/plugins.md, "Checking your plugin".
+- Emulator: usable as a library (`paperpaw_emulator`), with plugins
+  added to the standard app, frames recorded with their storage calls,
+  and `--record <file>` to write what is done in the window as a flow.
+- SDK: what the drawing helpers describe carries the clip each part was
+  drawn in; `Kernel::described` and `Kernel::described_active` give it
+  as drawn.
+
 - Store: easier to find one's way in a library of thousands of
   plugins. The start lists Search, the plugins installed (with how many
   have an update), the newest, and the groups with how many plugins

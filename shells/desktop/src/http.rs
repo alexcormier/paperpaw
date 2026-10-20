@@ -18,6 +18,12 @@ pub struct Http {
     pub in_flight: usize,
 }
 
+impl Default for Http {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Http {
     pub fn new() -> Self {
         let (sender, receiver) = channel();
