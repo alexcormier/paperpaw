@@ -10,14 +10,21 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use paperpaw_sdk::MemoryStorage;
+use paperpaw_sdk::time::days_from_civil;
 use proptest::prelude::*;
 
-use super::{
-    Item, MAX_ITEMS, MAX_TEXT, cleaned, date_of, day_of, days_of, format, load, parse, save,
-};
+use super::{Item, List, MAX_ITEMS, MAX_TEXT, cleaned, date_of, day_of, format, load, parse, save};
 
 /// Wednesday, 14 October 2026, as days since 1970.
 const TODAY: i64 = 20_740;
+
+/// A list of just `items`, nothing after them.
+fn list(items: &[Item]) -> List {
+    List {
+        items: items.to_vec(),
+        rest: String::new(),
+    }
+}
 
 /// Texts an item can have once typed on the list's screen.
 fn text() -> impl Strategy<Value = String> {
@@ -52,11 +59,11 @@ proptest! {
             .map(|(text, done)| Item { text, done: done.then_some(TODAY) })
             .collect();
         let storage = MemoryStorage::new();
-        save(&storage, &items);
-        prop_assert_eq!(load(&storage, TODAY), items.clone());
+        save(&storage, &list(&items)).unwrap();
+        prop_assert_eq!(load(&storage, TODAY).unwrap().items, items.clone());
         // The next day, those done have gone, the open ones are kept.
         let open: Vec<Item> = items.iter().filter(|i| i.done.is_none()).cloned().collect();
-        prop_assert_eq!(load(&storage, TODAY + 1), open);
+        prop_assert_eq!(load(&storage, TODAY + 1).unwrap().items, open);
     }
 
     /// A text typed is one line, trimmed at its start (its end too, but
@@ -75,7 +82,7 @@ proptest! {
     #[test]
     fn any_file_is_read_without_panic(bytes in proptest::collection::vec(any::<u8>(), 0..2000)) {
         let text = String::from_utf8_lossy(&bytes);
-        let items = parse(&text, TODAY);
+        let items = parse(&text, TODAY).items;
         prop_assert!(items.len() <= MAX_ITEMS);
         for item in &items {
             prop_assert!(!item.text.is_empty());
@@ -93,7 +100,7 @@ proptest! {
         text in "[a-z ]{0,10}",
     ) {
         let line = std::format!("x {year:04}-{month:02}-{day:02} {text}\nopen\n");
-        let items = parse(&line, TODAY);
+        let items = parse(&line, TODAY).items;
         prop_assert_eq!(items.last().map(|i| i.text.as_str()), Some("open"));
     }
 
@@ -107,9 +114,9 @@ proptest! {
 
 #[test]
 fn dates_of_the_calendar() {
-    assert_eq!(days_of(1970, 1, 1), 0);
+    assert_eq!(days_from_civil(1970, 1, 1), 0);
     assert_eq!(day_of("1969-12-31"), Some(-1));
-    assert_eq!(day_of("2000-02-29"), Some(days_of(2000, 3, 1) - 1));
+    assert_eq!(day_of("2000-02-29"), Some(days_from_civil(2000, 3, 1) - 1));
     assert_eq!(day_of("2026-10-14"), Some(TODAY));
     // Not a date: no day.
     for text in [
@@ -129,17 +136,19 @@ fn dates_of_the_calendar() {
 }
 
 #[test]
-fn a_list_of_one_hundred_and_more_keeps_one_hundred() {
+fn a_list_of_one_hundred_and_more_shows_one_hundred_and_keeps_the_rest() {
     let text: String = (0..150).map(|n| std::format!("item {n}\n")).collect();
-    let items = parse(&text, TODAY);
-    assert_eq!(items.len(), MAX_ITEMS);
-    assert_eq!(items[0].text, "item 0");
-    assert_eq!(items[MAX_ITEMS - 1].text, "item 99");
+    let list = parse(&text, TODAY);
+    assert_eq!(list.items.len(), MAX_ITEMS);
+    assert_eq!(list.items[0].text, "item 0");
+    assert_eq!(list.items[MAX_ITEMS - 1].text, "item 99");
+    // The lines after them are written back as they were.
+    assert_eq!(format(&list), text);
 }
 
 #[test]
 fn done_items_without_a_date_go_and_empty_ones_are_none() {
-    let items = parse("x done long ago\n   \n\nx 2026-10-14\nkept\n", TODAY);
+    let items = parse("x done long ago\n   \n\nx 2026-10-14\nkept\n", TODAY).items;
     assert_eq!(
         items,
         [Item {
@@ -148,11 +157,11 @@ fn done_items_without_a_date_go_and_empty_ones_are_none() {
         }]
     );
     // A line of just "x" is an item called so.
-    let items = parse("x\nx \n", TODAY);
+    let items = parse("x\nx \n", TODAY).items;
     assert_eq!(items.len(), 2);
     assert!(items.iter().all(|i| i.text == "x" && i.done.is_none()));
     // Done later than today (a clock set back): still shown, done.
-    let items = parse("x 2026-10-15 tomorrow\n", TODAY);
+    let items = parse("x 2026-10-15 tomorrow\n", TODAY).items;
     assert_eq!(items.len(), 1);
     assert_eq!(items[0].done, Some(TODAY + 1));
 }
@@ -167,7 +176,7 @@ fn huge_years_in_dates_do_not_panic() {
         "x -9223372036854775808-01-01 never\nopen\n",
         "x 99999999999999999-01-01 never\nopen\n",
     ] {
-        let items = parse(line, TODAY);
+        let items = parse(line, TODAY).items;
         assert_eq!(items.last().map(|i| i.text.as_str()), Some("open"));
     }
 }
@@ -182,8 +191,8 @@ fn open_items_beginning_with_x_are_kept() {
         text: cleaned("x ray appointment at 3"),
         done: None,
     }];
-    save(&storage, &items);
-    assert_eq!(load(&storage, TODAY), items);
+    save(&storage, &list(&items)).unwrap();
+    assert_eq!(load(&storage, TODAY).unwrap().items, items);
 }
 
 #[test]
@@ -192,7 +201,7 @@ fn line_breaks_in_texts_do_not_make_new_items() {
         text: String::from("one\ntwo\rthree"),
         done: None,
     }];
-    let text = format(&items);
+    let text = format(&list(&items));
     assert_eq!(text, "one two three\n");
-    assert_eq!(parse(&text, TODAY).len(), 1);
+    assert_eq!(parse(&text, TODAY).items.len(), 1);
 }

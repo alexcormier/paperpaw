@@ -24,8 +24,8 @@ use core::cmp::Ordering;
 
 use paperpaw_platform::{Storage, StorageError};
 pub use paperpaw_update::{
-    APP_HEAD_LEN, AppInfo, CHIP_ESP32_C3, Check, PLUGINS_AT, PLUGINS_HEAD_LEN, PluginCrate,
-    Plugins, Problem, TRAILER_LEN, Trailer, fingerprint, key_hex, parse_key,
+    APP_HEAD_LEN, AppInfo, CHIP_ESP32_C3, CHIP_ESP32_S3, Check, PLUGINS_AT, PLUGINS_HEAD_LEN,
+    PluginCrate, Plugins, Problem, TRAILER_LEN, Trailer, fingerprint, key_hex, parse_key,
 };
 
 /// The folder on the card where update files are looked for.
@@ -273,9 +273,13 @@ mod tests {
     }
 
     fn file(project: &[u8], len: usize, seed: &[u8; 32]) -> Vec<u8> {
+        file_for(CHIP_ESP32_C3, project, len, seed)
+    }
+
+    fn file_for(chip: u16, project: &[u8], len: usize, seed: &[u8; 32]) -> Vec<u8> {
         let mut image = alloc::vec![0u8; len];
         image[0] = 0xE9;
-        image[12..14].copy_from_slice(&paperpaw_update::CHIP_ESP32_C3.to_le_bytes());
+        image[12..14].copy_from_slice(&chip.to_le_bytes());
         image[32..36].copy_from_slice(&0xABCD_5432u32.to_le_bytes());
         image[48..53].copy_from_slice(b"0.4.0");
         image[80..80 + project.len()].copy_from_slice(project);
@@ -315,6 +319,32 @@ mod tests {
         let trusted = trusted_keys(&storage);
         assert_eq!(trusted.len(), 1);
         assert_eq!(a.signer(&fw, &trusted), Signer::Trusted);
+    }
+
+    #[test]
+    fn an_update_for_the_other_chip_is_refused() {
+        let storage = MemoryStorage::new()
+            .with(
+                "updates/c3.bin",
+                file_for(CHIP_ESP32_C3, b"paperpaw-xteink", 4000, &SEED),
+            )
+            .with(
+                "updates/s3.bin",
+                file_for(CHIP_ESP32_S3, b"paperpaw-xteink", 4000, &SEED),
+            );
+        let c3 = Update::read(&storage, "updates/c3.bin").unwrap();
+        let s3 = Update::read(&storage, "updates/s3.bin").unwrap();
+        assert_eq!(s3.info.chip, CHIP_ESP32_S3);
+        // The X4 (ESP32-C3) and an ESP32-S3 device of the same firmware.
+        let x4 = firmware();
+        let pro = Firmware {
+            chip: CHIP_ESP32_S3,
+            ..firmware()
+        };
+        assert_eq!(c3.fits(&x4), Ok(()));
+        assert_eq!(s3.fits(&x4), Err(InstallFailure::OtherDevice));
+        assert_eq!(s3.fits(&pro), Ok(()));
+        assert_eq!(c3.fits(&pro), Err(InstallFailure::OtherDevice));
     }
 
     #[test]

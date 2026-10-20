@@ -1,41 +1,19 @@
 //! Browsing a catalog with the real kernel: its feed is loaded and shown,
 //! an entry leads to a further feed and *Back* to the one before, a book
 //! is downloaded into the catalog's folder in the library, and what goes
-//! wrong is said.
+//! wrong is said. The catalog's password goes to the catalog only, and a
+//! list that cannot be read is never saved over.
 
 // Tests panic on purpose when something is wrong.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use std::rc::Rc;
+mod common;
 
-use paperpaw_core::{HttpCall, HttpResponse, Io, Kernel};
-use paperpaw_platform::Rotation;
-use paperpaw_plugin_opds::{OPEN, Opds};
+use common::{Device, Shared, authorized, catalogs_path};
+use paperpaw_core::HttpCall;
+use paperpaw_plugin_opds::OPEN;
 use paperpaw_sdk::builtin::actions;
-use paperpaw_sdk::{
-    DeviceInfo, DirEntry, DisplayInfo, Id, InputCaps, Instant, MemoryClass, MemoryStorage,
-    PixelFormat, Storage, StorageError,
-};
-
-const DEVICE: DeviceInfo = DeviceInfo {
-    id: "test",
-    name: "Test device",
-    display: DisplayInfo {
-        width: 480,
-        height: 800,
-        dpi: 220,
-        format: PixelFormat::Gray4,
-        rotation: Rotation::Deg0,
-        color: None,
-    },
-    input: InputCaps {
-        buttons: true,
-        touch: false,
-        pen: false,
-        keys: &[],
-    },
-    memory: MemoryClass::Small,
-};
+use paperpaw_sdk::{Params, Storage};
 
 /// The catalog the list starts with.
 const START: &str = "https://www.gutenberg.org/ebooks.opds/";
@@ -66,116 +44,46 @@ const POPULAR: &str = r#"<?xml version="1.0" encoding="utf-8"?>
 </entry>
 </feed>"#;
 
-/// A storage the test looks into while the kernel has it.
-#[derive(Clone, Default)]
-struct Shared(Rc<MemoryStorage>);
+/// A catalog of two books: one on its own server, one elsewhere.
+const TWO_BOOKS: &str = r#"<feed xmlns="http://www.w3.org/2005/Atom">
+<title>Mine</title>
+<entry>
+  <title>Own</title>
+  <link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="/own.epub"/>
+</entry>
+<entry>
+  <title>Elsewhere</title>
+  <link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="https://elsewhere.example/b.epub"/>
+</entry>
+</feed>"#;
 
-impl Storage for Shared {
-    fn read_at(&self, path: &str, offset: u64, buf: &mut [u8]) -> Result<usize, StorageError> {
-        self.0.read_at(path, offset, buf)
-    }
-    fn size(&self, path: &str) -> Result<u64, StorageError> {
-        self.0.size(path)
-    }
-    fn write(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
-        self.0.write(path, data)
-    }
-    fn append(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
-        self.0.append(path, data)
-    }
-    fn list(&self, dir: &str, visit: &mut dyn FnMut(DirEntry<'_>)) -> Result<(), StorageError> {
-        self.0.list(dir, visit)
-    }
-    fn remove(&self, path: &str) -> Result<(), StorageError> {
-        self.0.remove(path)
-    }
-    fn exists(&self, path: &str) -> bool {
-        self.0.exists(path)
-    }
-    fn rename(&self, from: &str, to: &str) -> Result<(), StorageError> {
-        self.0.rename(from, to)
-    }
-    fn create_dir(&self, path: &str) -> Result<(), StorageError> {
-        self.0.create_dir(path)
-    }
+/// The first catalog opened: its feed is asked for.
+fn browse(storage: Shared) -> (Device, HttpCall) {
+    let mut device = Device::start(storage);
+    device.run(OPEN);
+    device.run(actions::CONFIRM);
+    let call = device.request();
+    (device, call)
 }
 
-struct Browsing {
-    kernel: Kernel,
-    storage: Shared,
-    now: u64,
+/// The catalog that starts the list opened.
+fn browse_start() -> (Device, HttpCall) {
+    let (device, call) = browse(Shared::default());
+    assert_eq!(call.url, START);
+    (device, call)
 }
 
-impl Browsing {
-    /// The first catalog opened: its feed is asked for.
-    fn new() -> (Self, HttpCall) {
-        let storage = Shared::default();
-        let mut kernel = Kernel::builder(DEVICE)
-            .storage(storage.clone())
-            .network(true)
-            .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
-            .plugin(paperpaw_plugin_format_epub::EpubFormat)
-            .plugin(Opds)
-            .build()
-            .unwrap();
-        kernel.start(Instant(0));
-        let mut browsing = Self {
-            kernel,
-            storage,
-            now: 0,
-        };
-        browsing.run(OPEN);
-        browsing.run(actions::CONFIRM);
-        let call = browsing.request();
-        assert_eq!(call.url, START);
-        (browsing, call)
-    }
-
-    fn run(&mut self, action: Id) {
-        self.now += 100;
-        self.kernel.run_action(Instant(self.now), action);
-    }
-
-    /// The one request the kernel asks the shell to make now.
-    fn request(&mut self) -> HttpCall {
-        let mut calls: Vec<HttpCall> = self
-            .kernel
-            .take_io()
-            .into_iter()
-            .filter_map(|io| match io {
-                Io::Http(call) => Some(call),
-                _ => None,
-            })
-            .collect();
-        assert_eq!(calls.len(), 1, "{calls:?}");
-        calls.remove(0)
-    }
-
-    fn answer(&mut self, call: &HttpCall, status: u16, body: &str) {
-        self.now += 100;
-        let response = HttpResponse {
-            id: call.id,
-            status,
-            body: body.as_bytes().to_vec(),
-            ..HttpResponse::default()
-        };
-        self.kernel.http_response(Instant(self.now), response);
-    }
-
-    /// The labels of what the screen shows, in order.
-    fn shown(&mut self) -> Vec<String> {
-        self.kernel.render(&mut |_, _| {});
-        self.kernel
-            .describe()
-            .into_iter()
-            .map(|p| p.label)
-            .collect()
-    }
+/// A storage with one catalog, which needs an account.
+fn with_account(url: &str) -> Shared {
+    let storage = Shared::default();
+    let line = format!("Mine\t{url}\tme\t\t\t\t\n");
+    storage.write(&catalogs_path(), line.as_bytes()).unwrap();
+    storage
 }
 
 #[test]
 fn a_feed_is_shown_with_search_and_more() {
-    let (mut browsing, call) = Browsing::new();
+    let (mut browsing, call) = browse_start();
     browsing.answer(&call, 200, FEED);
     let shown = browsing.shown();
     let at = |text: &str| shown.iter().position(|l| l.contains(text));
@@ -191,7 +99,7 @@ fn a_feed_is_shown_with_search_and_more() {
 
 #[test]
 fn entries_lead_on_and_back() {
-    let (mut browsing, call) = Browsing::new();
+    let (mut browsing, call) = browse_start();
     browsing.answer(&call, 200, FEED);
     // Past *Search*, to *Popular books*.
     browsing.run(actions::DOWN);
@@ -216,7 +124,7 @@ fn entries_lead_on_and_back() {
 
 #[test]
 fn a_book_is_downloaded_into_the_library() {
-    let (mut browsing, call) = Browsing::new();
+    let (mut browsing, call) = browse_start();
     browsing.answer(&call, 200, FEED);
     // Search, Popular books, then the book.
     browsing.run(actions::DOWN);
@@ -238,12 +146,12 @@ fn a_book_is_downloaded_into_the_library() {
     assert_eq!(saved.len(), 1, "{saved:?}");
     assert!(saved[0].ends_with(".epub"), "{saved:?}");
     let book = format!("Project Gutenberg/{}", saved[0]);
-    assert_eq!(browsing.storage.0.get(&book).unwrap(), b"PK the book");
+    assert_eq!(browsing.storage.get(&book).unwrap(), b"PK the book");
 }
 
 #[test]
 fn what_goes_wrong_is_said() {
-    let (mut browsing, call) = Browsing::new();
+    let (mut browsing, call) = browse_start();
     browsing.answer(&call, 401, "");
     let shown = browsing.shown().join(" | ");
     assert!(
@@ -251,13 +159,90 @@ fn what_goes_wrong_is_said() {
         "{shown}"
     );
 
-    let (mut browsing, call) = Browsing::new();
+    let (mut browsing, call) = browse_start();
     browsing.answer(&call, 200, "<html><body>Not a feed</body></html>");
     let shown = browsing.shown().join(" | ");
     assert!(shown.to_lowercase().contains("catalog"), "{shown}");
 
-    let (mut browsing, call) = Browsing::new();
+    let (mut browsing, call) = browse_start();
     browsing.answer(&call, 0, "no network");
     let shown = browsing.shown().join(" | ");
     assert!(shown.contains("gutenberg.org"), "{shown}");
+}
+
+#[test]
+fn credentials_go_only_to_the_catalog() {
+    let storage = with_account("https://books.example/opds");
+    let (mut browsing, call) = browse(storage);
+    assert_eq!(call.url, "https://books.example/opds");
+    assert!(authorized(&call));
+    browsing.answer(&call, 200, TWO_BOOKS);
+    browsing.run(actions::CONFIRM);
+    let own = browsing.request();
+    assert_eq!(own.url, "https://books.example/own.epub");
+    assert!(authorized(&own));
+    browsing.run(actions::DOWN);
+    browsing.run(actions::CONFIRM);
+    let elsewhere = browsing.request();
+    assert_eq!(elsewhere.url, "https://elsewhere.example/b.epub");
+    assert!(!authorized(&elsewhere), "{elsewhere:?}");
+}
+
+#[test]
+fn two_downloads_at_once_are_both_saved() {
+    let (mut browsing, call) = browse(with_account("https://books.example/opds"));
+    browsing.answer(&call, 200, TWO_BOOKS);
+    // Both tapped before either has come.
+    browsing.run(actions::CONFIRM);
+    browsing.run(actions::DOWN);
+    browsing.run(actions::CONFIRM);
+    let calls = browsing.requests();
+    assert_eq!(calls.len(), 2, "{calls:?}");
+    let (own, elsewhere) = (&calls[0], &calls[1]);
+    assert_ne!(own.save_to, elsewhere.save_to, "each to a file of its own");
+    browsing.answer(elsewhere, 200, "PK elsewhere");
+    browsing.answer(own, 200, "PK own");
+    let book = |name: &str| browsing.storage.get(&format!("Mine/{name}"));
+    assert_eq!(book("Own.epub").as_deref(), Some(&b"PK own"[..]));
+    assert_eq!(
+        book("Elsewhere.epub").as_deref(),
+        Some(&b"PK elsewhere"[..])
+    );
+    for call in &calls {
+        assert!(!browsing.storage.exists(call.save_to.as_deref().unwrap()));
+    }
+}
+
+#[test]
+fn a_list_that_cannot_be_read_is_not_saved_over() {
+    let storage = with_account("https://books.example/opds");
+    let kept = storage.get(&catalogs_path()).unwrap();
+    let mut device = Device::start(storage.clone());
+    device.open("opds.edit", Params::new().with("id", "0"));
+    assert!(device.shown().iter().any(|l| l == "Mine"));
+    // The card fails, then the catalog is marked for syncing.
+    storage.break_file(&catalogs_path());
+    for _ in 0..6 {
+        device.run(actions::DOWN);
+    }
+    device.run(actions::CONFIRM);
+    assert_eq!(storage.get(&catalogs_path()), Some(kept.clone()));
+    // The list shows nothing it could save over, and says why.
+    device.run(actions::BACK);
+    device.run(OPEN);
+    let shown = device.shown().join(" | ");
+    assert!(!shown.contains("Project Gutenberg"), "{shown}");
+    assert!(shown.contains("could not be read"), "{shown}");
+    assert_eq!(storage.get(&catalogs_path()), Some(kept));
+}
+
+#[test]
+fn passwords_over_http_are_warned_of() {
+    let warned = |url: &str| {
+        let mut device = Device::start(with_account(url));
+        device.open("opds.edit", Params::new().with("id", "0"));
+        device.shown().join(" | ").contains("unencrypted")
+    };
+    assert!(warned("http://books.example/opds"));
+    assert!(!warned("https://books.example/opds"));
 }

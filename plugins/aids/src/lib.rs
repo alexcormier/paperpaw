@@ -138,6 +138,7 @@ static SETTINGS: [SettingSpec; 2] = [
         "",
         groups::READING,
     )
+    .advanced()
     .with_extra(&IN_AIDS)
     .described("aids.setting.replace.help"),
 ];

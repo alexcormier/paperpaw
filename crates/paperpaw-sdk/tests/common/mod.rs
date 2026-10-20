@@ -113,6 +113,7 @@ impl Harness {
         Env::from(EnvParts {
             device: &DEVICE,
             now: self.now,
+            random: paperpaw_sdk::random::Random::NONE,
             metrics: Metrics::new(DEVICE.display.dpi),
             settings: &self.settings,
             i18n: &self.i18n,

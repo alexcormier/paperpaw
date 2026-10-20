@@ -1,6 +1,8 @@
 //! Converting frames to the window's RGBA pixels, in the colours of the
 //! settings (`Kernel::colors`), and what kind of screen the device has.
 
+use core::ops::Range;
+
 use paperpaw_platform::{ColorPanel, FrameView};
 
 /// What a screen shows.
@@ -52,19 +54,19 @@ pub fn tint(colors: [[u8; 3]; 2]) -> [[u8; 4]; 256] {
     })
 }
 
-/// Converts `frame` to RGBA_8888 for a window of `stride` pixels per row,
-/// placing it at row `top`, each gray as `tint` shows it and each colour
-/// (of pictures) as it is: `put(byte offset, rgba)` writes one pixel.
-/// Pixels wider than the window are skipped.
+/// Converts the `rows` of `frame` to RGBA_8888 for a window of `stride`
+/// pixels per row, each gray as `tint` shows it and each colour (of
+/// pictures) as it is: `put(byte offset, rgba)` writes one pixel. Pixels
+/// wider than the window and rows below the frame are skipped.
 pub fn to_rgba(
     frame: &FrameView<'_>,
-    top: usize,
+    rows: Range<usize>,
     stride: usize,
     tint: &[[u8; 4]; 256],
     mut put: impl FnMut(usize, [u8; 4]),
 ) {
-    for y in 0..usize::from(frame.height) {
-        let row = (top + y) * stride * 4;
+    for y in rows.start..rows.end.min(usize::from(frame.height)) {
+        let row = y * stride * 4;
         for x in 0..usize::from(frame.width).min(stride) {
             let color = frame.pixel(x as u16, y as u16);
             let rgba = if color.r == color.g && color.g == color.b {
@@ -86,25 +88,29 @@ mod tests {
 
     #[test]
     fn gray_becomes_opaque_rgba() {
-        // Two Gray8 rows of two pixels: black, white / gray, black.
-        let data = [0u8, 255, 128, 0];
+        // Three Gray8 rows of two pixels: white, white / black, white /
+        // gray, black.
+        let data = [255u8, 255, 0, 255, 128, 0];
         let frame = FrameView {
             width: 2,
-            height: 2,
+            height: 3,
             format: PixelFormat::Gray8,
             stride: 2,
             data: &data,
         };
-        // A window three pixels wide, written from row 1.
-        let mut buffer = [7u8; 3 * 3 * 4];
-        to_rgba(&frame, 1, 3, &tint(BLACK_ON_WHITE), |at, rgba| {
+        // A window three pixels wide, of which rows 1 and 2 changed (and
+        // a row below the frame is asked for).
+        let mut buffer = [7u8; 3 * 4 * 4];
+        to_rgba(&frame, 1..4, 3, &tint(BLACK_ON_WHITE), |at, rgba| {
             buffer[at..at + 4].copy_from_slice(&rgba)
         });
         assert_eq!(&buffer[12..20], &[0, 0, 0, 255, 255, 255, 255, 255]);
         assert_eq!(&buffer[24..28], &[128, 128, 128, 255]);
-        // Row 0 is untouched, as is the third column.
+        // Row 0 is untouched, as are the third column and the window's
+        // row below the frame.
         assert_eq!(&buffer[0..4], &[7, 7, 7, 7]);
         assert_eq!(&buffer[20..24], &[7, 7, 7, 7]);
+        assert!(buffer[36..].iter().all(|&b| b == 7));
     }
 
     #[test]
@@ -120,7 +126,7 @@ mod tests {
         };
         let mut buffer = [0u8; 8];
         let sepia = tint([[91, 70, 54], [244, 236, 216]]);
-        to_rgba(&frame, 0, 2, &sepia, |at, rgba| {
+        to_rgba(&frame, 0..1, 2, &sepia, |at, rgba| {
             buffer[at..at + 4].copy_from_slice(&rgba)
         });
         assert_eq!(&buffer[..4], &[255, 0, 0, 255]);

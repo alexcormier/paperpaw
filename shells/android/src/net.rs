@@ -1,6 +1,9 @@
 //! HTTP for Android: each request runs on a thread of its own through
 //! Java's `HttpURLConnection` (the system's TLS and certificates, no extra
 //! library), and the event loop is woken when an answer has arrived.
+//! Redirects are followed here, not by Java, as `paperpaw_http::follow`
+//! says for every shell: never down to plain `http`, never with
+//! credentials to another server.
 
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::thread;
@@ -9,7 +12,7 @@ use android_activity::{AndroidApp, AndroidAppWaker};
 use jni::JNIEnv;
 use jni::JavaVM;
 use jni::objects::{JObject, JValue};
-use paperpaw_core::{HttpCall, HttpResponse};
+use paperpaw_core::{HttpCall, HttpResponse, MAX_RESPONSE};
 
 /// Requests in flight and their answers.
 pub struct Net {
@@ -36,7 +39,7 @@ impl Net {
         thread::spawn(move || {
             // SAFETY: the process's Java VM, valid while the app runs.
             let response = match unsafe { JavaVM::from_raw(vm as *mut jni::sys::JavaVM) } {
-                Ok(vm) => perform(&vm, &call),
+                Ok(vm) => perform(&vm, call),
                 Err(_) => failed(&call, "no Java VM"),
             };
             let _ = sender.send(response);
@@ -66,24 +69,24 @@ fn failed(call: &HttpCall, reason: &str) -> HttpResponse {
     }
 }
 
-/// Redirects followed at most, also from `http` to `https` (which Java
-/// does not follow by itself).
+/// Redirects followed at most.
 const MAX_REDIRECTS: u32 = 10;
 
-fn perform(vm: &JavaVM, call: &HttpCall) -> HttpResponse {
+fn perform(vm: &JavaVM, mut call: HttpCall) -> HttpResponse {
     let Ok(mut env) = vm.attach_current_thread() else {
-        return failed(call, "cannot attach to the Java VM");
+        return failed(&call, "cannot attach to the Java VM");
     };
-    let result = env.with_local_frame(64, |env| request(env, call));
-    match result {
+    match request(&mut env, &mut call) {
         Ok(response) => response,
         Err(e) => {
             // E.g. no network or an unknown host (an IOException).
             if env.exception_check().unwrap_or(false) {
                 let _ = env.exception_clear();
             }
-            log::warn!("{} {}: {e}", call.method, call.url);
-            failed(call, "request failed")
+            // The host only: addresses may carry keys.
+            let host = paperpaw_http::Url::parse(&call.url).map_or("?", |url| url.host);
+            log::warn!("{} {host}: {e}", call.method);
+            failed(&call, "request failed")
         }
     }
 }
@@ -111,56 +114,79 @@ fn header(
     )))
 }
 
-fn request(env: &mut JNIEnv<'_>, call: &HttpCall) -> jni::errors::Result<HttpResponse> {
-    let address = env.new_string(&call.url)?;
-    let mut url = env.new_object(
+/// What one exchange with a server came to.
+enum Step {
+    Answer(HttpResponse),
+    /// A redirect with this status, to this `Location`.
+    Redirect(u16, String),
+}
+
+/// Makes the request, following redirects; `call` changes on the way as
+/// `paperpaw_http::follow` says (its method, body and headers).
+fn request(env: &mut JNIEnv<'_>, call: &mut HttpCall) -> jni::errors::Result<HttpResponse> {
+    let mut url = call.url.clone();
+    for _ in 0..=MAX_REDIRECTS {
+        // Each exchange's Java objects go with it.
+        let step = env.with_local_frame(32, |env| exchange(env, &url, call))?;
+        let (status, location) = match step {
+            Step::Answer(mut response) => {
+                if url != call.url {
+                    response.url = Some(url);
+                }
+                return Ok(response);
+            }
+            Step::Redirect(status, location) => (status, location),
+        };
+        let body = call.body.is_some();
+        let redirect = match paperpaw_http::follow(&url, status, &location, &call.method, body) {
+            Ok(redirect) => redirect,
+            Err(refusal) => return Ok(failed(call, refusal.reason())),
+        };
+        if redirect.to_get {
+            call.method = String::from("GET");
+            call.body = None;
+        }
+        redirect.keep(&mut call.headers);
+        url = redirect.url;
+    }
+    Ok(failed(call, "too many redirects"))
+}
+
+/// Sends the request to `url` and takes the answer, or where it redirects.
+fn exchange(env: &mut JNIEnv<'_>, url: &str, call: &HttpCall) -> jni::errors::Result<Step> {
+    let conn = connect(env, url, call)?;
+    let status = env.call_method(&conn, "getResponseCode", "()I", &[])?.i()?;
+    let status = status.clamp(0, i32::from(u16::MAX)) as u16;
+    if matches!(status, 301 | 302 | 303 | 307 | 308)
+        && let Some(location) = header(env, &conn, "Location")?
+    {
+        env.call_method(&conn, "disconnect", "()V", &[])?;
+        return Ok(Step::Redirect(status, location));
+    }
+    answer(env, &conn, call, status).map(Step::Answer)
+}
+
+/// Opens `url` and sends the request; redirects are left to the caller.
+fn connect<'a>(
+    env: &mut JNIEnv<'a>,
+    url: &str,
+    call: &HttpCall,
+) -> jni::errors::Result<JObject<'a>> {
+    let address = env.new_string(url)?;
+    let url = env.new_object(
         "java/net/URL",
         "(Ljava/lang/String;)V",
         &[JValue::Object(&address)],
     )?;
-    let mut redirects = 0;
-    loop {
-        let conn = connect(env, &url, call)?;
-        let status = env.call_method(&conn, "getResponseCode", "()I", &[])?.i()?;
-        let location = header(env, &conn, "Location")?;
-        if matches!(status, 301 | 302 | 303 | 307 | 308)
-            && redirects < MAX_REDIRECTS
-            && call.body.is_none()
-            && let Some(location) = location
-        {
-            // Relative to the address it came from.
-            let location = env.new_string(&location)?;
-            url = env.new_object(
-                "java/net/URL",
-                "(Ljava/net/URL;Ljava/lang/String;)V",
-                &[JValue::Object(&url), JValue::Object(&location)],
-            )?;
-            env.call_method(&conn, "disconnect", "()V", &[])?;
-            redirects += 1;
-            continue;
-        }
-        let mut response = answer(env, &conn, call, status)?;
-        if redirects > 0 {
-            let text = env
-                .call_method(&url, "toString", "()Ljava/lang/String;", &[])?
-                .l()?;
-            response.url = Some(String::from(
-                env.get_string(&jni::objects::JString::from(text))?,
-            ));
-        }
-        return Ok(response);
-    }
-}
-
-/// Opens `url` and sends the request.
-fn connect<'a>(
-    env: &mut JNIEnv<'a>,
-    url: &JObject<'_>,
-    call: &HttpCall,
-) -> jni::errors::Result<JObject<'a>> {
     let conn = env
-        .call_method(url, "openConnection", "()Ljava/net/URLConnection;", &[])?
+        .call_method(&url, "openConnection", "()Ljava/net/URLConnection;", &[])?
         .l()?;
+    env.call_method(
+        &conn,
+        "setInstanceFollowRedirects",
+        "(Z)V",
+        &[JValue::Bool(0)],
+    )?;
     set_method(env, &conn, &call.method)?;
     env.call_method(&conn, "setConnectTimeout", "(I)V", &[JValue::Int(15_000)])?;
     env.call_method(&conn, "setReadTimeout", "(I)V", &[JValue::Int(60_000)])?;
@@ -229,13 +255,21 @@ fn set_method(env: &mut JNIEnv<'_>, conn: &JObject<'_>, method: &str) -> jni::er
     Ok(())
 }
 
-/// Reads the answer of `conn`.
+/// Reads the answer of `conn`: its body cut at `max_response`, or, for a
+/// file (`save_to`), failed if longer. An error's body is its reason, read
+/// up to [`MAX_RESPONSE`] also for a file.
 fn answer(
     env: &mut JNIEnv<'_>,
     conn: &JObject<'_>,
     call: &HttpCall,
-    status: i32,
+    status: u16,
 ) -> jni::errors::Result<HttpResponse> {
+    let success = (200..300).contains(&status);
+    let (max, whole) = match &call.save_to {
+        Some(_) if success => (call.max_response, true),
+        Some(_) => (call.max_response.min(MAX_RESPONSE), false),
+        None => (call.max_response, false),
+    };
     let etag = header(env, conn, "ETag")?;
     let content_type = header(env, conn, "Content-Type")?;
     // Errors come with a body too, e.g. the server's reason.
@@ -248,25 +282,36 @@ fn answer(
         .call_method(conn, stream, "()Ljava/io/InputStream;", &[])?
         .l()?;
     let mut body = Vec::new();
+    let mut too_long = false;
     if !stream.is_null() {
         let buffer = env.new_byte_array(8192)?;
         loop {
             let n = env
                 .call_method(&stream, "read", "([B)I", &[JValue::Object(&buffer)])?
                 .i()?;
-            if n < 0 || body.len() >= call.max_response {
+            let Ok(n) = usize::try_from(n) else {
                 break;
+            };
+            let room = max - body.len();
+            if n > room {
+                too_long = true;
             }
-            let mut chunk = vec![0i8; n as usize];
+            let mut chunk = vec![0i8; n.min(room)];
             env.get_byte_array_region(&buffer, 0, &mut chunk)?;
             body.extend(chunk.iter().map(|&b| b as u8));
+            if too_long {
+                break;
+            }
         }
         env.call_method(&stream, "close", "()V", &[])?;
     }
     env.call_method(conn, "disconnect", "()V", &[])?;
+    if too_long && whole {
+        return Ok(failed(call, "too large"));
+    }
     Ok(HttpResponse {
         id: call.id,
-        status: status.clamp(0, i32::from(u16::MAX)) as u16,
+        status,
         body,
         etag,
         content_type,

@@ -15,7 +15,7 @@ use super::{Feed, data, load, save};
 fn feeds_of_version_1_are_written_alike() {
     let v1 = include_str!("../testdata/feeds.txt.v1");
     let storage = MemoryStorage::new().with(&data("feeds.txt"), v1);
-    let feeds = load(&storage);
+    let feeds = load(&storage).unwrap();
     save(&storage, &feeds);
     assert_eq!(storage.get(&data("feeds.txt")).unwrap(), v1.as_bytes());
 }
@@ -40,6 +40,6 @@ proptest! {
                 name: String::from(f.name.replace(['\t', '\n'], " ").trim()),
             })
             .collect();
-        prop_assert_eq!(load(&storage), expected);
+        prop_assert_eq!(load(&storage).unwrap(), expected);
     }
 }

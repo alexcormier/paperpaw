@@ -7,8 +7,8 @@
 //! too, see the keyboard) and fetches: each unread article comes as an
 //! EPUB Wallabag makes, with its pictures. Articles read to the end are
 //! archived with the next fetch and their books removed, as are those
-//! archived or deleted elsewhere. The password and the client's secret
-//! are kept with the other passwords and keys (see
+//! Wallabag says are archived or deleted elsewhere. The password and the
+//! client's secret are kept with the other passwords and keys (see
 //! `paperpaw_sdk::secrets`).
 //!
 //! The list of articles is read as it streams from storage (see
@@ -40,7 +40,7 @@ use paperpaw_sdk::web::{clean_name, encode};
 use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, HttpRequest, Id,
     Manifest, MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION,
-    Screen, ScreenSpec, SettingSpec, Version,
+    Screen, ScreenSpec, SettingSpec, Storage, StorageError, Version,
 };
 
 pub const PLUGIN: Id = Id::new_static("wallabag");
@@ -57,10 +57,12 @@ pub const CLIENT: Setting<Text> = Setting::new("wallabag.client-id");
 pub const PASSWORD: &str = "wallabag.password";
 pub const SECRET: &str = "wallabag.client-secret";
 const SCREEN: Id = Id::new_static("wallabag.setup");
-/// Answers: the token, an archived article, the list, a book.
+/// Answers: the token, an archived article, the list, an article asked
+/// about, a book.
 const TOKEN: Event<HttpReply> = Event::new("wallabag.token");
 const ARCHIVED: Event<HttpReply> = Event::new("wallabag.archived");
 const LISTED: Event<HttpReply> = Event::new("wallabag.listed");
+const CHECKED: Event<HttpReply> = Event::new("wallabag.checked");
 const DOWNLOADED: Event<HttpReply> = Event::new("wallabag.downloaded");
 /// Emitted with a message (`text`) when a fetch ends.
 const DONE: Event<Finished> = Event::new("wallabag.done");
@@ -86,6 +88,14 @@ fn data(name: &str) -> String {
     format!("{}/{name}", Env::plugin_dir(PLUGIN.as_str()))
 }
 
+/// The text of this plugin's file `name`, to change: empty when there is
+/// none yet, an error when it cannot be read (then it must not be
+/// written either, or what it holds would be lost).
+fn load_for_update(storage: &dyn Storage, name: &str, cap: usize) -> Result<String, StorageError> {
+    paperpaw_sdk::files::load_text_for_update(storage, &data(name), cap)
+        .map(Option::unwrap_or_default)
+}
+
 /// The folder of the articles: `Wallabag` in the library.
 fn folder(env: &Env<'_>) -> String {
     let library = paperpaw_sdk::library::folder(env);
@@ -99,16 +109,7 @@ fn folder(env: &Env<'_>) -> String {
 /// The server as a base URL: `https://` unless another scheme is given,
 /// no `/` at the end.
 fn server(env: &Env<'_>) -> String {
-    let text = env
-        .settings
-        .text(SERVER.as_str())
-        .trim()
-        .trim_end_matches('/');
-    if text.is_empty() || text.contains("://") {
-        text.to_string()
-    } else {
-        format!("https://{text}")
-    }
+    paperpaw_sdk::web::base_url(env.settings.text(SERVER.as_str()))
 }
 
 /// An article fetched: its id in Wallabag and its book.
@@ -119,11 +120,9 @@ struct Article {
 }
 
 /// The articles fetched, kept as `id<TAB>path` lines.
-fn articles(storage: &dyn paperpaw_sdk::Storage) -> Vec<Article> {
-    let Ok(data) = paperpaw_sdk::read_file(storage, &data("articles.txt"), 64 * 1024) else {
-        return Vec::new();
-    };
-    String::from_utf8_lossy(&data)
+fn articles(storage: &dyn Storage) -> Result<Vec<Article>, StorageError> {
+    let text = load_for_update(storage, "articles.txt", 64 * 1024)?;
+    Ok(text
         .lines()
         .filter_map(|line| {
             let (id, path) = line.split_once('\t')?;
@@ -132,7 +131,7 @@ fn articles(storage: &dyn paperpaw_sdk::Storage) -> Vec<Article> {
                 path: path.to_string(),
             })
         })
-        .collect()
+        .collect())
 }
 
 fn save_articles(env: &Env<'_>, list: &[Article]) {
@@ -144,16 +143,13 @@ fn save_articles(env: &Env<'_>, list: &[Article]) {
 }
 
 /// The ids of articles read to the end, to archive.
-fn finished(storage: &dyn paperpaw_sdk::Storage) -> Vec<String> {
-    paperpaw_sdk::read_file(storage, &data("finished.txt"), 16 * 1024)
-        .map(|d| {
-            String::from_utf8_lossy(&d)
-                .lines()
-                .filter(|l| !l.is_empty())
-                .map(String::from)
-                .collect()
-        })
-        .unwrap_or_default()
+fn finished(storage: &dyn Storage) -> Result<Vec<String>, StorageError> {
+    let text = load_for_update(storage, "finished.txt", 16 * 1024)?;
+    Ok(text
+        .lines()
+        .filter(|l| !l.is_empty())
+        .map(String::from)
+        .collect())
 }
 
 fn save_finished(env: &Env<'_>, ids: &[String]) {
@@ -172,10 +168,15 @@ fn page_turned(env: &Env<'_>, reading: &events::Reading) {
     if !read || !path.starts_with(&folder(env)) {
         return;
     }
-    let Some(article) = articles(env.storage).into_iter().find(|a| a.path == path) else {
+    let Ok(articles) = articles(env.storage) else {
         return;
     };
-    let mut ids = finished(env.storage);
+    let Some(article) = articles.into_iter().find(|a| a.path == path) else {
+        return;
+    };
+    let Ok(mut ids) = finished(env.storage) else {
+        return;
+    };
     if !ids.contains(&article.id) {
         ids.push(article.id);
         save_finished(env, &ids);
@@ -187,8 +188,10 @@ fn page_turned(env: &Env<'_>, reading: &events::Reading) {
 struct Fetch {
     running: bool,
     token: String,
-    /// Articles to archive, then to download (id and title).
+    /// Articles to archive, then to ask about (those fetched that are not
+    /// in the list), then to download (id and title).
     archive: Vec<String>,
+    checks: Vec<String>,
     downloads: Vec<(String, String)>,
     listed: bool,
     archived: usize,
@@ -211,10 +214,7 @@ impl Fetch {
             String::from("Authorization"),
             format!("Bearer {}", self.token),
         ));
-        request.headers.push((
-            String::from("User-Agent"),
-            String::from("PaperPaw/0.1 (e-reader)"),
-        ));
+        request.headers.push(paperpaw_sdk::web::user_agent());
         request
     }
 
@@ -273,15 +273,19 @@ impl Fetch {
             return done(env, key, &[], out);
         };
         self.token = token;
-        let fetched = articles(env.storage);
-        self.archive = finished(env.storage)
+        let (Ok(fetched), Ok(finished)) = (articles(env.storage), finished(env.storage)) else {
+            self.running = false;
+            return done(env, "wallabag.unreadable", &[], out);
+        };
+        self.archive = finished
             .into_iter()
             .filter(|id| fetched.iter().any(|a| a.id == *id))
             .collect();
         self.next(env, out);
     }
 
-    /// The next step: archive, list, download, or done.
+    /// The next step: archive, list, ask about articles, download, or
+    /// done.
     fn next(&mut self, env: &Env<'_>, out: &mut Vec<Command>) {
         if let Some(id) = self.archive.pop() {
             let mut request =
@@ -304,6 +308,14 @@ impl Fetch {
             out.push(Command::Http(request));
             return;
         }
+        if let Some(id) = self.checks.pop() {
+            let mut request =
+                self.request(env, "GET", &format!("/api/entries/{id}.json"), &CHECKED);
+            request.save_to = Some(data("entry.json"));
+            request.params = Params::new().with(ARTICLE, id);
+            out.push(Command::Http(request));
+            return;
+        }
         if let Some((id, title)) = self.downloads.pop() {
             let mut request = self.request(
                 env,
@@ -318,6 +330,7 @@ impl Fetch {
         }
         self.running = false;
         let _ = env.storage.remove(&data("entries.json"));
+        let _ = env.storage.remove(&data("entry.json"));
         let key = if self.failed > 0 {
             "wallabag.done-failed"
         } else {
@@ -343,46 +356,75 @@ impl Fetch {
     }
 
     fn listed(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
-        if Self::ok(reply).is_none() {
+        self.listed = true;
+        // Only a whole list counts: an answer that is not one (a page of
+        // the server's own, an error, a list cut short) changes nothing.
+        let unread = Self::ok(reply).and_then(|_| unread(env.storage));
+        let (Some(unread), Ok(fetched)) = (unread, articles(env.storage)) else {
             self.failed += 1;
-            self.downloads.clear();
-            self.listed = true;
             return self.next(env, out);
-        }
-        let unread = unread(env.storage);
-        // Those archived or deleted elsewhere go.
-        for article in articles(env.storage) {
-            if !unread.iter().any(|(id, _)| *id == article.id) {
-                remove_article(env, &article.id);
-            }
-        }
-        let fetched = articles(env.storage);
+        };
+        // Those not in the list may be archived or deleted elsewhere, or
+        // just older than the newest: each is asked about before its book
+        // goes.
+        self.checks = fetched
+            .iter()
+            .filter(|a| !unread.iter().any(|(id, _)| *id == a.id))
+            .map(|a| a.id.clone())
+            .collect();
+        // The list is newest first: popped from the end, the oldest come
+        // first, so the newest are the most recent books.
         self.downloads = unread
             .into_iter()
             .filter(|(id, _)| !fetched.iter().any(|a| a.id == *id))
             .collect();
-        // The list is newest first: popped from the end, the oldest come
-        // first, so the newest are the most recent books.
-        self.listed = true;
+        self.next(env, out);
+    }
+
+    /// An article fetched but not among the newest unread: its book goes
+    /// only when Wallabag says it is archived or no longer there.
+    fn checked(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+        let id = reply.context.get(ARTICLE).unwrap_or_default();
+        let gone = match reply.status {
+            404 => Some(true),
+            _ if reply.ok() => is_archived(env.storage, id),
+            _ => None,
+        };
+        match gone {
+            Some(true) => remove_article(env, id),
+            Some(false) => {}
+            None => self.failed += 1,
+        }
+        let _ = env.storage.remove(&data("entry.json"));
         self.next(env, out);
     }
 
     fn downloaded(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
         let tmp = data("article.tmp");
-        let id = reply.context.get(ARTICLE).unwrap_or_default().to_string();
+        let id = reply.context.get(ARTICLE).unwrap_or_default();
         let title = reply.context.get(params::TITLE).unwrap_or_default();
-        let dir = folder(env);
-        let _ = env.storage.create_dir(&dir);
-        let name = clean_name(title, 80).unwrap_or_else(|| id.clone());
-        let mut path = format!("{dir}/{name}.epub");
-        if env.storage.exists(&path) {
-            path = format!("{dir}/{name} ({id}).epub");
-        }
-        if Self::ok(reply).is_some() && env.storage.rename(&tmp, &path).is_ok() {
-            self.fetched += 1;
-            let mut list = articles(env.storage);
-            list.push(Article { id, path });
+        // The id goes into a file's name: a number only.
+        let list = Self::ok(reply)
+            .filter(|_| is_id(id))
+            .and_then(|_| articles(env.storage).ok());
+        let saved = list.and_then(|mut list| {
+            let dir = folder(env);
+            let _ = env.storage.create_dir(&dir);
+            let name = clean_name(title, 80).unwrap_or_else(|| id.to_string());
+            let mut path = format!("{dir}/{name}.epub");
+            if env.storage.exists(&path) {
+                path = format!("{dir}/{name} ({id}).epub");
+            }
+            env.storage.rename(&tmp, &path).ok()?;
+            list.push(Article {
+                id: id.to_string(),
+                path,
+            });
             save_articles(env, &list);
+            Some(())
+        });
+        if saved.is_some() {
+            self.fetched += 1;
         } else {
             self.failed += 1;
             let _ = env.storage.remove(&tmp);
@@ -391,12 +433,18 @@ impl Fetch {
     }
 }
 
-/// The unread articles in the list Wallabag sent: ids and titles.
-fn unread(storage: &dyn paperpaw_sdk::Storage) -> Vec<(String, String)> {
+/// The unread articles in the list Wallabag sent: ids and titles. Ids
+/// are numbers in Wallabag; others are left out, as they go into the
+/// list of articles and into names of files. `None` when the answer is
+/// not a whole list (its items never end).
+fn unread(storage: &dyn Storage) -> Option<Vec<(String, String)>> {
     let mut items: Vec<(String, String)> = Vec::new();
+    let mut whole = false;
+    let list = ["_embedded", "items"];
     let item = ["_embedded", "items", "[]"];
     stream::read_file(storage, &data("entries.json"), &mut |event| match event {
         Json::Open(path) if path == item => items.push((String::new(), String::new())),
+        Json::Close(path) if path == list => whole = true,
         Json::Value(path, value) if path.len() == 4 && path[..3] == item => {
             if let Some(last) = items.last_mut() {
                 match path[3].as_str() {
@@ -408,21 +456,51 @@ fn unread(storage: &dyn paperpaw_sdk::Storage) -> Vec<(String, String)> {
         }
         _ => {}
     });
-    items.retain(|(id, _)| !id.is_empty());
+    items.retain(|(id, _)| is_id(id));
     items.truncate(MAX_ARTICLES);
-    items
+    whole.then_some(items)
 }
 
-/// Removes an article's book and what is noted about it.
+/// Whether article `id`, as Wallabag sent it (`entry.json`), is
+/// archived; `None` when the answer is not that article.
+fn is_archived(storage: &dyn Storage, id: &str) -> Option<bool> {
+    let (mut same, mut archived) = (false, None);
+    stream::read_file(storage, &data("entry.json"), &mut |event| {
+        if let Json::Value([key], value) = event {
+            match key.as_str() {
+                "id" => same = value == id,
+                "is_archived" => {
+                    archived = match value {
+                        "1" | "true" => Some(true),
+                        "0" | "false" => Some(false),
+                        _ => None,
+                    }
+                }
+                _ => {}
+            }
+        }
+    });
+    archived.filter(|_| same)
+}
+
+/// Whether `id` is an id as Wallabag gives them: a number.
+fn is_id(id: &str) -> bool {
+    (1..=20).contains(&id.len()) && id.bytes().all(|b| b.is_ascii_digit())
+}
+
+/// Removes an article's book and what is noted about it (nothing from a
+/// list that cannot be read).
 fn remove_article(env: &Env<'_>, id: &str) {
-    let mut list = articles(env.storage);
-    if let Some(at) = list.iter().position(|a| a.id == id) {
+    if let Ok(mut list) = articles(env.storage)
+        && let Some(at) = list.iter().position(|a| a.id == id)
+    {
         let article = list.remove(at);
         let _ = env.storage.remove(&article.path);
         save_articles(env, &list);
     }
-    let mut ids = finished(env.storage);
-    if let Some(at) = ids.iter().position(|f| f == id) {
+    if let Ok(mut ids) = finished(env.storage)
+        && let Some(at) = ids.iter().position(|f| f == id)
+    {
         ids.remove(at);
         save_finished(env, &ids);
     }
@@ -447,7 +525,8 @@ static SETTINGS: [SettingSpec; 3] = [
         .described("wallabag.server.help"),
     SettingSpec::fixed_text(USER.static_str(), "wallabag.user", "", groups::LIBRARY)
         .with_extra(&ON_SETUP)
-        .advanced(),
+        .advanced()
+        .described("wallabag.user.help"),
     SettingSpec::fixed_text(
         CLIENT.static_str(),
         "wallabag.client-id",
@@ -455,7 +534,8 @@ static SETTINGS: [SettingSpec; 3] = [
         groups::LIBRARY,
     )
     .with_extra(&ON_SETUP)
-    .advanced(),
+    .advanced()
+    .described("wallabag.client-id.help"),
 ];
 
 impl Plugin for Wallabag {
@@ -496,10 +576,11 @@ impl Plugin for Wallabag {
         r.add_icon(OPEN, Cow::Borrowed("article"))?;
         r.add_icon(FETCH, Cow::Borrowed("refresh"))?;
         type Step = fn(&mut Fetch, &Env<'_>, &HttpReply, &mut Vec<Command>);
-        let steps: [(Event<HttpReply>, Step); 4] = [
+        let steps: [(Event<HttpReply>, Step); 5] = [
             (TOKEN, Fetch::token),
             (ARCHIVED, Fetch::archived),
             (LISTED, Fetch::listed),
+            (CHECKED, Fetch::checked),
             (DOWNLOADED, Fetch::downloaded),
         ];
         for (event, step) in steps {
@@ -758,11 +839,104 @@ mod tests {
         ]}, "_links": {"self": {"href": "x"}}}"#;
         let storage = paperpaw_sdk::MemoryStorage::new().with(&data("entries.json"), list);
         assert_eq!(
-            unread(&storage),
+            unread(&storage).unwrap(),
             [
                 (String::from("7"), String::from("Slow \"news\"")),
                 (String::from("9"), String::from("Second")),
             ]
+        );
+        let empty = r#"{"page": 1, "_embedded": {"items": []}}"#;
+        let storage = paperpaw_sdk::MemoryStorage::new().with(&data("entries.json"), empty);
+        assert_eq!(unread(&storage), Some(Vec::new()));
+    }
+
+    /// Answers that are not a whole list are no list at all, not an empty
+    /// one (which would have every book removed).
+    #[test]
+    fn only_a_whole_list_counts() {
+        for answer in [
+            "<!DOCTYPE html><html><body>Down for maintenance</body></html>",
+            r#"{"error": "server_error", "error_description": "Try again later"}"#,
+            r#"{"page": 1, "_embedded": {"items": [{"id": 9, "title": "Newer"}, {"id": 7"#,
+            "",
+        ] {
+            let storage = paperpaw_sdk::MemoryStorage::new().with(&data("entries.json"), answer);
+            assert_eq!(unread(&storage), None, "{answer}");
+        }
+        assert_eq!(unread(&paperpaw_sdk::MemoryStorage::new()), None);
+    }
+
+    #[test]
+    fn archived_articles_by_their_answer() {
+        let answer = |body: &str| {
+            let storage = paperpaw_sdk::MemoryStorage::new().with(&data("entry.json"), body);
+            is_archived(&storage, "7")
+        };
+        let content = "x".repeat(20_000);
+        assert_eq!(
+            answer(&format!(
+                r#"{{"is_archived": 1, "content": "{content}", "id": 7}}"#
+            )),
+            Some(true)
+        );
+        assert_eq!(answer(r#"{"id": 7, "is_archived": true}"#), Some(true));
+        assert_eq!(answer(r#"{"id": 7, "is_archived": 0}"#), Some(false));
+        // Another article, a nested field, or no answer of that kind.
+        assert_eq!(answer(r#"{"id": 8, "is_archived": 1}"#), None);
+        assert_eq!(answer(r#"{"id": 7, "x": {"is_archived": 1}}"#), None);
+        assert_eq!(answer("<html>Login</html>"), None);
+    }
+
+    /// Every setting is explained, in each language.
+    #[test]
+    fn settings_have_help() {
+        for ini in [
+            include_str!("../i18n/en.ini"),
+            include_str!("../i18n/de.ini"),
+        ] {
+            let catalog = Catalog::parse(ini).unwrap();
+            for spec in &SETTINGS {
+                let help = spec.description.as_deref();
+                assert!(
+                    help.is_some_and(|key| catalog.get(key).is_some()),
+                    "{}",
+                    spec.id.as_str()
+                );
+            }
+        }
+    }
+
+    /// Lists that cannot be read are not taken for empty ones, which the
+    /// next change would write over.
+    #[test]
+    fn unreadable_lists_are_not_empty() {
+        let storage = paperpaw_sdk::MemoryStorage::new()
+            .with(
+                &data("articles.txt"),
+                b"7\tWallabag/A.epub\n\xff\n".as_slice(),
+            )
+            .with(&data("finished.txt"), "1\n".repeat(10_000));
+        assert!(articles(&storage).is_err());
+        assert!(finished(&storage).is_err());
+        let none = paperpaw_sdk::MemoryStorage::new();
+        assert_eq!(articles(&none), Ok(Vec::new()));
+        assert_eq!(finished(&none), Ok(Vec::new()));
+    }
+
+    /// A hostile server's ids do not plant lines in the list of articles
+    /// (which would remove any file at the next sync).
+    #[test]
+    fn ids_are_numbers() {
+        let list = r#"{"_embedded": {"items": [
+            {"id": "x\t.paperpaw/secrets.txt\ny", "title": "Planted"},
+            {"id": "../../x", "title": "Out"},
+            {"id": "", "title": "None"},
+            {"id": 12, "title": "Fine"}
+        ]}}"#;
+        let storage = paperpaw_sdk::MemoryStorage::new().with(&data("entries.json"), list);
+        assert_eq!(
+            unread(&storage).unwrap(),
+            [(String::from("12"), String::from("Fine"))]
         );
     }
 
@@ -788,11 +962,11 @@ mod tests {
                 &super::data("finished.txt"),
                 include_str!("../testdata/finished.txt.v1"),
             );
-        let articles = super::articles(&storage);
+        let articles = super::articles(&storage).unwrap();
         assert_eq!(articles.len(), 2);
         assert_eq!(articles[0].id, "123");
         assert_eq!(articles[1].path, "Wallabag/456 E-ink at night.epub");
-        assert_eq!(super::finished(&storage), ["123"]);
+        assert_eq!(super::finished(&storage).unwrap(), ["123"]);
     }
 }
 

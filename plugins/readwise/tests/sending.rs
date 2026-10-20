@@ -15,7 +15,7 @@ use std::rc::Rc;
 use paperpaw_core::{HttpCall, HttpResponse, Io, Kernel};
 use paperpaw_json::stream::{Event as Json, Parser};
 use paperpaw_platform::Rotation;
-use paperpaw_plugin_readwise::{Highlight, Notes, Readwise, SECRET, parse, request};
+use paperpaw_plugin_readwise::{Highlight, Parser as Notes, Readwise, SECRET};
 use paperpaw_sdk::builtin::events::NotesExported;
 use paperpaw_sdk::builtin::{params, slots};
 use paperpaw_sdk::event::EventData;
@@ -288,20 +288,29 @@ fn nothing_is_sent_without_network() {
     assert!(h.told().contains("needs a network"), "{}", h.told());
 }
 
+/// The title and highlights the reader's Markdown `text` holds, read a
+/// line at a time as the plugin reads a notes file.
+fn parse(text: &str) -> (String, Vec<Highlight>) {
+    let mut notes = Notes::default();
+    let mut highlights: Vec<Highlight> = text.lines().filter_map(|l| notes.line(l)).collect();
+    highlights.extend(notes.finish());
+    (notes.title().to_string(), highlights)
+}
+
 #[test]
 fn odd_markdown_is_read_as_well_as_it_can() {
-    let notes = parse(
+    let (title, highlights) = parse(
         "no title line\n## Highlights\n> 99999999999999999999 %\n>   \n> -5 %\n> 50%\n\
          \n> second\n> lines\n> 7 %\n## Highlights again\n> not read\n",
     );
-    assert_eq!(notes.title, "");
-    assert_eq!(notes.highlights.len(), 2, "{notes:?}");
+    assert_eq!(title, "");
+    assert_eq!(highlights.len(), 2, "{highlights:?}");
     // Places that are no numbers are text.
-    assert_eq!(notes.highlights[0].text, "99999999999999999999 %\n-5 %");
-    assert_eq!(notes.highlights[0].percent, 50);
-    assert_eq!(notes.highlights[1].text, "second\nlines");
-    assert_eq!(notes.highlights[1].percent, 7);
-    assert_eq!(parse(""), Notes::default());
+    assert_eq!(highlights[0].text, "99999999999999999999 %\n-5 %");
+    assert_eq!(highlights[0].percent, 50);
+    assert_eq!(highlights[1].text, "second\nlines");
+    assert_eq!(highlights[1].percent, 7);
+    assert_eq!(parse(""), (String::new(), Vec::new()));
 }
 
 /// The texts, notes and places of the highlights in a body sent.
@@ -344,19 +353,20 @@ proptest! {
         author in prop_oneof![Just(String::new()), text()],
         highlights in prop::collection::vec((text(), prop_oneof![Just(String::new()), text()], 0u32..=100), 1..5),
     ) {
-        let notes = Notes {
-            title,
-            author,
-            highlights: highlights
-                .iter()
-                .map(|(text, note, percent)| Highlight {
+        let mut notes = Notes::default();
+        notes.line(&format!("# {}", title.replace(['\n', '\r'], " ")));
+        notes.line(&author.replace(['\n', '\r'], " "));
+        let objects: Vec<String> = highlights
+            .iter()
+            .map(|(text, note, percent)| {
+                notes.json(&Highlight {
                     text: text.clone(),
                     note: note.clone(),
                     percent: *percent,
                 })
-                .collect(),
-        };
-        let body = request(&notes, "t").body.unwrap();
+            })
+            .collect();
+        let body = format!("{{\"highlights\":[{}]}}", objects.join(","));
         let expected: Vec<(String, String, String)> = highlights
             .iter()
             .map(|(t, n, p)| (t.clone(), n.clone(), p.to_string()))
@@ -366,7 +376,7 @@ proptest! {
 
     #[test]
     fn any_markdown_parses_without_panic(text in ".{0,400}") {
-        let notes = parse(&text);
-        prop_assert!(notes.highlights.iter().all(|h| !h.text.is_empty()));
+        let (_, highlights) = parse(&text);
+        prop_assert!(highlights.iter().all(|h| !h.text.is_empty()));
     }
 }

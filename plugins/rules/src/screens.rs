@@ -2,12 +2,13 @@
 //!
 //! Adding a rule asks, one after the other: when (a choice; for a time of
 //! day the time on the keyboard and the days, for a repeat the minutes,
-//! for the battery the percentage, for a switch which one), what (a
-//! choice: run an action, turn a switch on or off, set a number, show a
-//! message), then which action, switch or number ([`PickScreen`]) and
-//! its value, or the message. A rule's options add a condition (only
-//! if …): between two times, while reading or not, on battery or while
-//! charging, while a switch is on or off.
+//! for the battery falling low the percentage, for it reaching a level
+//! which level (a choice, or another on the keyboard), for a switch which
+//! one), what (a choice: run an action, turn a switch on or off, set a
+//! number, show a message), then which action, switch or number
+//! ([`PickScreen`]) and its value, or the message. A rule's options add a
+//! condition (only if …): between two times, while reading or not, on
+//! battery or while charging, while a switch is on or off.
 
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -25,7 +26,7 @@ use paperpaw_sdk::{
 };
 
 use crate::rule::{self, Condition, EVERY_DAY, Effect, Rule, Trigger, WEEKDAYS, WEEKENDS};
-use crate::{CHOICE, PICK_SCREEN, effect_text, trigger_text, when_text};
+use crate::{CHOICE, PICK_SCREEN, Shared, effect_text, trigger_text, when_text};
 
 /// Replies: a trigger, a time, an effect, an action or switch picked, a
 /// rule's option.
@@ -34,10 +35,15 @@ const TIME_ENTERED: Event<Typed> = Event::new("rules.time-entered");
 const DAYS_CHOSEN: Event<choice::Picked> = Event::new("rules.days-chosen");
 const EVERY_ENTERED: Event<Typed> = Event::new("rules.every-entered");
 const BATTERY_ENTERED: Event<Typed> = Event::new("rules.battery-entered");
+/// The level a battery reaches: chosen, or another one entered.
+const LEVEL_CHOSEN: Event<choice::Picked> = Event::new("rules.level-chosen");
+const LEVEL_ENTERED: Event<Typed> = Event::new("rules.level-entered");
+/// The levels offered, then another one.
+const LEVELS: [&str; 4] = ["80", "90", "100", "other"];
 /// The switch a trigger watches was picked.
 const TRIGGER_PICKED: Id = Id::new_static("rules.trigger-picked");
 /// The triggers offered, in this order.
-const TRIGGERS: [&str; 13] = [
+const TRIGGERS: [&str; 14] = [
     "start",
     "time",
     "every",
@@ -47,6 +53,7 @@ const TRIGGERS: [&str; 13] = [
     "resume",
     "sleep",
     "battery",
+    "battery-at",
     "charging",
     "unplugged",
     "switch-on",
@@ -116,13 +123,17 @@ pub(crate) struct RulesScreen {
     list: ListView,
     /// The line at the bottom.
     status: Rect,
+    state: Shared,
     rules: Vec<Rule>,
+    /// Whether the rules could be read: if not, nothing is saved over
+    /// them.
+    readable: bool,
     draft: Draft,
     message: Option<String>,
 }
 
 impl RulesScreen {
-    pub(crate) fn new(env: &Env<'_>) -> Self {
+    pub(crate) fn new(env: &Env<'_>, state: Shared) -> Self {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
         let display = env.device.display;
@@ -135,14 +146,28 @@ impl RulesScreen {
             display.width,
             display.height.saturating_sub(top + line),
         );
-        Self {
+        let mut screen = Self {
             list: ListView::new(area, style.noted_row()).focus_on_keys(env),
             status,
-            rules: rule::load(env.storage),
+            state,
+            rules: Vec::new(),
+            readable: true,
             draft: Draft::default(),
             message: None,
             style,
             header,
+        };
+        screen.reload(env);
+        screen
+    }
+
+    /// The rules as kept; where they cannot be read, none, and a word why.
+    fn reload(&mut self, env: &Env<'_>) {
+        let loaded = self.state.store.get(env.storage);
+        self.readable = loaded.is_some();
+        self.rules = loaded.unwrap_or_default();
+        if !self.readable {
+            self.message = Some(env.i18n.tr("rules.unreadable").to_string());
         }
     }
 
@@ -157,12 +182,25 @@ impl RulesScreen {
         cx.request_refresh(RefreshMode::Fast);
     }
 
-    /// Keeps the rules and sets the timer again.
-    fn save(&self, cx: &mut Cx<'_, '_>) {
+    /// Keeps the rules and sets the timers again. Not kept (the card
+    /// could not be written, or the rules could not be read), the list
+    /// goes back to what the card has, and says why.
+    fn save(&mut self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        rule::save(env.storage, &self.rules);
+        let saved = self.readable
+            && self
+                .state
+                .store
+                .save(env.storage, self.rules.clone())
+                .is_ok();
+        if !saved {
+            self.reload(&env);
+            if self.readable {
+                self.message = Some(env.i18n.tr("rules.not-saved").to_string());
+            }
+        }
         let mut out = Vec::new();
-        crate::schedule(&env, &mut out);
+        crate::schedule(&env, &self.state.store, &mut out);
         for command in out {
             cx.command(command);
         }
@@ -209,26 +247,17 @@ impl RulesScreen {
 
     /// Adds the rule drafted, doing `effect`.
     fn finish(&mut self, effect: Effect, cx: &mut Cx<'_, '_>) {
-        let env = *cx.env();
         let Some(trigger) = self.draft.trigger.clone() else {
             return;
         };
         self.draft = Draft::default();
-        let mut out = Vec::new();
-        crate::add(
-            &env,
-            Rule {
-                trigger,
-                effect,
-                on: true,
-                condition: Condition::Always,
-            },
-            &mut out,
-        );
-        for command in out {
-            cx.command(command);
-        }
-        self.rules = rule::load(env.storage);
+        self.rules.push(Rule {
+            trigger,
+            effect,
+            on: true,
+            condition: Condition::Always,
+        });
+        self.save(cx);
         self.list.focus = self.rules.len().saturating_sub(1);
         self.redraw(cx);
     }
@@ -325,7 +354,8 @@ impl Screen for RulesScreen {
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
-        self.rules = rule::load(cx.env().storage);
+        let env = *cx.env();
+        self.reload(&env);
         self.redraw(cx);
     }
 
@@ -376,6 +406,8 @@ impl Screen for RulesScreen {
             || *event == DAYS_CHOSEN
             || *event == EVERY_ENTERED
             || *event == BATTERY_ENTERED
+            || *event == LEVEL_CHOSEN
+            || *event == LEVEL_ENTERED
             || *event == TRIGGER_PICKED
         {
             self.on_trigger(&answer, cx);
@@ -412,6 +444,18 @@ impl RulesScreen {
                 "time" => return ask_text(cx, "rules.time-title", "22:00", &TIME_ENTERED),
                 "every" => return ask_text(cx, "rules.every-title", "30", &EVERY_ENTERED),
                 "battery" => return ask_text(cx, "rules.battery-title", "20", &BATTERY_ENTERED),
+                // Which level, with what to know about it.
+                "battery-at" => {
+                    cx.command(choice::open(
+                        CHOICE,
+                        &LEVEL_CHOSEN,
+                        env.i18n.tr("rules.level-title"),
+                        "",
+                        "rules.level.",
+                        &LEVELS,
+                    ));
+                    return;
+                }
                 "switch-on" | "switch-off" => {
                     self.draft.watch_on = option == "switch-on";
                     cx.command(Command::OpenScreen(
@@ -454,20 +498,29 @@ impl RulesScreen {
                 self.draft.trigger = Some(Trigger::Time { minute, days });
                 self.ask_effect(cx);
             }
-        } else if *event == EVERY_ENTERED || *event == BATTERY_ENTERED {
-            let number = text.trim().trim_end_matches('%').trim().parse::<u16>().ok();
-            let trigger = match number {
-                Some(m) if *event == EVERY_ENTERED && (1..=24 * 60).contains(&m) => {
-                    Trigger::Every(m)
-                }
-                Some(p) if *event == BATTERY_ENTERED && (1..=100).contains(&p) => {
-                    Trigger::BatteryBelow(p as u8)
-                }
-                _ => {
-                    let text = env.i18n.tr("rules.bad-number").to_string();
-                    cx.command(Command::Notify(text));
-                    return;
-                }
+        } else if *event == LEVEL_CHOSEN && option == "other" {
+            ask_text(cx, "rules.level-other-title", "80", &LEVEL_ENTERED);
+        } else if *event == EVERY_ENTERED
+            || *event == BATTERY_ENTERED
+            || *event == LEVEL_CHOSEN
+            || *event == LEVEL_ENTERED
+        {
+            let trigger = if *event == EVERY_ENTERED {
+                text.trim()
+                    .parse::<u16>()
+                    .ok()
+                    .filter(|m| (1..=24 * 60).contains(m))
+                    .map(Trigger::Every)
+            } else if *event == BATTERY_ENTERED {
+                rule::parse_percent(text).map(Trigger::BatteryBelow)
+            } else {
+                let level = if *event == LEVEL_CHOSEN { option } else { text };
+                rule::parse_percent(level).map(Trigger::BatteryAtLeast)
+            };
+            let Some(trigger) = trigger else {
+                let text = env.i18n.tr("rules.bad-number").to_string();
+                cx.command(Command::Notify(text));
+                return;
             };
             self.draft.trigger = Some(trigger);
             self.ask_effect(cx);
@@ -646,6 +699,7 @@ impl<'a> Answer<'a> {
         let picked = [
             &TRIGGER_CHOSEN,
             &DAYS_CHOSEN,
+            &LEVEL_CHOSEN,
             &EFFECT_CHOSEN,
             &OPTION_CHOSEN,
             &CONDITION_CHOSEN,
@@ -656,6 +710,7 @@ impl<'a> Answer<'a> {
             &TIME_ENTERED,
             &EVERY_ENTERED,
             &BATTERY_ENTERED,
+            &LEVEL_ENTERED,
             &NUMBER_ENTERED,
             &MESSAGE_ENTERED,
             &FROM_ENTERED,

@@ -14,7 +14,7 @@ use paperpaw_sdk::{
 
 use paperpaw_sdk::SettingSpec;
 
-use super::{chosen, dates, frame_height, line, ui};
+use super::{chosen_name, dates, frame_height, line, ui};
 
 const ID: Id = Id::new_static("widgets.year-progress");
 
@@ -162,7 +162,11 @@ fn track(look: &widgets::Look) -> Color {
 fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     let look = widgets::draw_frame(canvas, env, ID.as_str(), area);
     let (_, font) = ui(env);
-    let (Some(font), Some(now)) = (font, time::local_time(env)) else {
+    let Some(now) = time::local_time(env) else {
+        super::draw_no_time(canvas, env, &look);
+        return;
+    };
+    let Some(font) = font else {
         return;
     };
     let p = progress(&now);
@@ -170,7 +174,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     if widgets::shows(env, ID.as_str(), "year") {
         area = widgets::draw_caption(canvas, env, ID.as_str(), &look, &format!("{}", now.year));
     }
-    match chosen(env, ID.as_str(), "style") {
+    match chosen_name(env, ID.as_str(), "style") {
         "ring" => draw_ring(canvas, env, &font, &look, area, &p),
         "months" => draw_bar(canvas, env, &font, &look, area, &p, Some(&now)),
         _ => draw_bar(canvas, env, &font, &look, area, &p, None),
@@ -214,7 +218,12 @@ fn draw_bar(
     let bar_h = if months.is_some() {
         (f32::from(area.width) / 12.0 * 0.7).min(f32::from(area.height) * 0.3)
     } else {
-        (f32::from(area.height) * 0.1).clamp(style.line as f32 * 4.0, style.gap as f32 * 1.5)
+        // Four lines thick at least, but no thicker than one and a half
+        // gaps (where thick lines want more, the gaps win).
+        (f32::from(area.height) * 0.1)
+            .max(style.line as f32 * 4.0)
+            .min(style.gap as f32 * 1.5)
+            .min(f32::from(area.height))
     };
     let percent = widgets::shows(env, ID.as_str(), "percent");
     let text = percent_text(p);
@@ -330,12 +339,16 @@ fn draw_ring(
         align.x(area, f32::from(side)) as u16
     };
     let radius = u32::from(side / 2);
-    let top = area.y + (area.height - side - below) / 2;
+    let thick = (radius / 7).max(3);
+    if radius <= thick {
+        // No room for a ring.
+        return;
+    }
+    let top = area.y + area.height.saturating_sub(side + below) / 2;
     let center = Point::new(
         i32::from(ring_x) + radius as i32,
         i32::from(top) + radius as i32,
     );
-    let thick = (radius / 7).max(3);
     canvas.fill_ring(center, radius, thick, 0, 360, track(look));
     let sweep = u32::from(p.permille) * 360 / 1000;
     canvas.fill_ring(center, radius, thick, 0, sweep, look.ink);

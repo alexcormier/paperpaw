@@ -1,8 +1,10 @@
 //! The home screen's pages: each a grid of items in a setting of its own,
 //! `home.page-1` to `home.page-4`, their layout as
 //! `paperpaw_sdk::widgets::grid` writes it. The first page always
-//! shows; the others where they have items. Above the grid sits the
-//! status line, below it the page dots and the pencil.
+//! shows; the others where they have items. A page added and not filled
+//! yet, or emptied, keeps a space ([`widgets::SPACE`], which the grid
+//! leaves out) so that it shows until it is removed. Above the grid sits
+//! the status line, below it the page dots and the pencil.
 
 use alloc::borrow::Cow;
 use alloc::format;
@@ -162,18 +164,24 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     Ok(())
 }
 
-/// The items of every page shown, the first page always.
-pub(crate) fn pages(env: &Env<'_>) -> Vec<Vec<Item>> {
-    let mut pages: Vec<Vec<Item>> = (0..MAX_PAGES)
-        .map(|index| grid::parse(env.settings.text(setting(index).as_str())))
-        .enumerate()
-        .filter(|(index, page)| *index == 0 || !page.is_empty())
-        .map(|(_, page)| page)
-        .collect();
-    if pages.is_empty() {
-        pages.push(Vec::new());
-    }
-    pages
+/// A page shown: which setting keeps it, and its items.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct Page {
+    /// The setting it is kept in: 0 for `home.page-1`.
+    pub(crate) slot: usize,
+    pub(crate) items: Vec<Item>,
+}
+
+/// Every page shown, in the order of their settings: the first always,
+/// the others where they hold something.
+pub(crate) fn pages(env: &Env<'_>) -> Vec<Page> {
+    (0..MAX_PAGES)
+        .map(|slot| Page {
+            slot,
+            items: grid::parse(env.settings.text(setting(slot).as_str())),
+        })
+        .filter(|page| page.slot == 0 || !page.items.is_empty())
+        .collect()
 }
 
 /// A page's items as the grid shows them: the tools for `home.tools`,
@@ -202,18 +210,30 @@ pub(crate) fn expand(env: &Env<'_>, items: &[Item]) -> Vec<Item> {
     out
 }
 
-/// The commands that store `pages` (the rest emptied).
-pub(crate) fn store(pages: &[Vec<Item>]) -> Vec<Command> {
+/// The command that keeps `items` as the page in `slot`: a page other
+/// than the first keeps a space when emptied, so that it still shows.
+pub(crate) fn store(slot: usize, items: &[Item]) -> Command {
+    let text = if items.is_empty() && slot > 0 {
+        String::from(widgets::SPACE)
+    } else {
+        grid::write(items)
+    };
+    Command::SetSetting(setting(slot), SettingValue::Text(Cow::Owned(text)))
+}
+
+/// The commands that keep `pages` in the first settings, in their order,
+/// and empty the others: once a page was added or removed.
+pub(crate) fn store_all(pages: &[Page]) -> Vec<Command> {
     (0..MAX_PAGES)
-        .map(|index| {
-            let text = pages.get(index).map(|p| grid::write(p)).unwrap_or_default();
-            Command::SetSetting(setting(index), SettingValue::Text(Cow::Owned(text)))
+        .map(|slot| match pages.get(slot) {
+            Some(page) => store(slot, &page.items),
+            None => Command::SetSetting(setting(slot), SettingValue::Text(Cow::Borrowed(""))),
         })
         .collect()
 }
 
-/// The page whose setting is `id`, if it is one.
-pub(crate) fn page_of(id: &str) -> Option<usize> {
+/// The setting `id` is, if it keeps a page: 0 for `home.page-1`.
+pub(crate) fn slot_of(id: &str) -> Option<usize> {
     (0..MAX_PAGES).find(|&i| setting(i).as_str() == id)
 }
 
@@ -243,9 +263,29 @@ mod tests {
 
     #[test]
     fn every_page_is_stored() {
-        let pages = alloc::vec![grid::parse("a 0/0 1x1")];
-        assert_eq!(store(&pages).len(), MAX_PAGES);
-        assert_eq!(page_of("home.page-2"), Some(1));
-        assert_eq!(page_of("home.columns"), None);
+        let pages = alloc::vec![
+            Page {
+                slot: 0,
+                items: grid::parse("a 0/0 1x1"),
+            },
+            Page {
+                slot: 3,
+                items: Vec::new(),
+            },
+        ];
+        let stored = store_all(&pages);
+        assert_eq!(stored.len(), MAX_PAGES);
+        // In order from the first setting, the empty page kept as a space.
+        let text = |n: usize| match &stored[n] {
+            Command::SetSetting(id, SettingValue::Text(text)) => {
+                (String::from(id.as_str()), String::from(text.as_ref()))
+            }
+            other => panic!("{other:?}"),
+        };
+        assert_eq!(text(0), ("home.page-1".into(), "a 0/0 1x1".into()));
+        assert_eq!(text(1), ("home.page-2".into(), widgets::SPACE.into()));
+        assert_eq!(text(2), ("home.page-3".into(), String::new()));
+        assert_eq!(slot_of("home.page-2"), Some(1));
+        assert_eq!(slot_of("home.columns"), None);
     }
 }

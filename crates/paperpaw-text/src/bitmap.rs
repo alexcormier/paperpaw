@@ -78,8 +78,12 @@ impl BitmapFont {
         }
         for i in 0..usize::from(strikes) {
             let strike = font.strike(i).ok_or(FontError::Invalid)?;
-            let end = strike.glyph_table + strike.glyphs * RECORD;
-            if end > font.data.len() || strike.bitmaps > font.data.len() {
+            // Checked: on 32-bit chips a large count would wrap.
+            let end = strike
+                .glyphs
+                .checked_mul(RECORD)
+                .and_then(|table| table.checked_add(strike.glyph_table));
+            if end.is_none_or(|end| end > font.data.len()) || strike.bitmaps > font.data.len() {
                 return Err(FontError::Invalid);
             }
         }
@@ -186,15 +190,17 @@ impl BitmapFont {
         let read = || -> Option<GlyphRef<'_>> {
             let width = u16_at(d, offset + 12)?;
             let height = u16_at(d, offset + 14)?;
-            let start = strike.bitmaps + u32_at(d, offset + 16)? as usize;
+            let start = strike
+                .bitmaps
+                .checked_add(u32_at(d, offset + 16)? as usize)?;
             let len = usize::from(width).div_ceil(2) * usize::from(height);
             Some(GlyphRef {
-                advance: q6(i32_at(d, offset + 4)?),
+                advance: q6(i32_at(d, offset + 4)?).max(0.0),
                 left: i16_at(d, offset + 8)?,
                 top: i16_at(d, offset + 10)?,
                 width,
                 height,
-                data: d.get(start..start + len)?,
+                data: d.get(start..start.checked_add(len)?)?,
             })
         };
         read().unwrap_or(empty)
@@ -300,7 +306,7 @@ fn to_q6(value: f32) -> i32 {
 }
 
 fn bytes<const N: usize>(data: &[u8], at: usize) -> Option<[u8; N]> {
-    data.get(at..at + N)?.try_into().ok()
+    data.get(at..at.checked_add(N)?)?.try_into().ok()
 }
 
 fn u16_at(data: &[u8], at: usize) -> Option<u16> {
@@ -332,7 +338,7 @@ mod tests {
             width,
             height: 2,
             advance,
-            data: pack_coverage(&coverage, usize::from(width), 2),
+            data: pack_coverage(&coverage, usize::from(width), 2).unwrap(),
         }
     }
 
@@ -382,6 +388,22 @@ mod tests {
             FontError::UnsupportedVersion
         );
         assert!(BitmapFont::new(b"nope".to_vec()).is_err());
+    }
+
+    #[test]
+    fn negative_advances_read_as_zero() {
+        let mut builder = PackBuilder::new();
+        let metrics = LineMetrics::fallback(10.0);
+        builder.add_strike(10.0, metrics, alloc::vec![('a', glyph(2, 255, -3.0))]);
+        let font = BitmapFont::new(builder.build()).unwrap();
+        assert_eq!(font.advance('a', 10.0), 0.0);
+    }
+
+    #[test]
+    fn reads_past_the_address_space_find_nothing() {
+        let data = [0u8; 8];
+        assert_eq!(u32_at(&data, usize::MAX - 1), None);
+        assert_eq!(u16_at(&data, usize::MAX), None);
     }
 
     #[test]

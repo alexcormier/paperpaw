@@ -25,7 +25,7 @@ use alloc::string::String;
 use paperpaw_json::stream::{self, Event as Json};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::HttpReply;
-use paperpaw_sdk::{HttpRequest, Storage};
+use paperpaw_sdk::{HttpRequest, Storage, files};
 use paperpaw_xml::{Token, Tokenizer, local_name};
 
 use crate::service::{self, Auth, Service};
@@ -34,6 +34,9 @@ use crate::service::{self, Auth, Service};
 pub const TTL: i64 = 3 * 60 * 1000;
 /// The type of an exclusive lock.
 const EXCLUSIVE: &str = "2";
+/// Longest `<href>` or `<getlastmodified>` kept from a WebDAV listing, in
+/// bytes; the rest of a longer one is left out (no lock has such a name).
+const MAX_FIELD: usize = 1024;
 /// What a WebDAV folder is asked for: when each file changed.
 const PROPFIND: &str = "<?xml version=\"1.0\"?><d:propfind xmlns:d=\"DAV:\">\
     <d:prop><d:getlastmodified/></d:prop></d:propfind>";
@@ -119,8 +122,8 @@ fn webdav_upgrading(storage: &dyn Storage, path: &str, held: &dyn Fn(Option<i64>
             _ => {}
         },
         Token::Text(text) => match field {
-            Some(true) => href.push_str(&paperpaw_xml::decode(&text)),
-            Some(false) => modified.push_str(&paperpaw_xml::decode(&text)),
+            Some(true) => push_bounded(&mut href, &paperpaw_xml::decode(&text)),
+            Some(false) => push_bounded(&mut modified, &paperpaw_xml::decode(&text)),
             None => {}
         },
         Token::End { name } => match local_name(name) {
@@ -128,8 +131,8 @@ fn webdav_upgrading(storage: &dyn Storage, path: &str, held: &dyn Fn(Option<i64>
             "response" => {
                 let file = href.trim().trim_end_matches('/');
                 let file = file.rsplit('/').next().unwrap_or_default();
-                let exclusive =
-                    file.starts_with(&alloc::format!("{EXCLUSIVE}_")) && file.ends_with(".json");
+                let exclusive = file.starts_with(&alloc::format!("{EXCLUSIVE}_"))
+                    && files::has_extension(file, "json");
                 let renewed = paperpaw_sdk::web::http_date(&modified).map(|s| s * 1000);
                 found |= exclusive && held(renewed);
             }
@@ -148,6 +151,16 @@ fn webdav_upgrading(storage: &dyn Storage, path: &str, held: &dyn Fn(Option<i64>
     }
     tokenizer.finish(&mut emit);
     found
+}
+
+/// Adds `text` to `field`, as much as fits in [`MAX_FIELD`] bytes.
+fn push_bounded(field: &mut String, text: &str) {
+    let room = MAX_FIELD.saturating_sub(field.len());
+    let mut end = text.len().min(room);
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    field.push_str(&text[..end]);
 }
 
 #[cfg(test)]
@@ -190,6 +203,8 @@ mod tests {
         assert!(!webdav(&listing(&[("2_1_abc.json", old)])));
         assert!(!webdav(&listing(&[("1_1_abc.json", fresh)])));
         assert!(!webdav(&listing(&[("2_1_abc.txt", fresh)])));
+        // Named in upper case, as a FAT or Windows server may give it.
+        assert!(webdav(&listing(&[("2_1_ABC.JSON", fresh)])));
         assert!(!webdav(&listing(&[])));
         assert!(!webdav(""));
         // Among others.
@@ -197,6 +212,23 @@ mod tests {
             ("1_2_m.json", fresh),
             ("2_3_cli.json", fresh)
         ])));
+    }
+
+    #[test]
+    fn long_listing_fields_are_cut() {
+        let fresh = "Tue, 20 Oct 2026 07:58:30 GMT";
+        let long = "x".repeat(64 * 1024);
+        let mut href = String::new();
+        push_bounded(&mut href, &long);
+        push_bounded(&mut href, "y");
+        assert_eq!(href.len(), MAX_FIELD);
+        // Cut between the bytes of a character: the character is left out.
+        let mut text = "x".repeat(MAX_FIELD - 1);
+        push_bounded(&mut text, "\u{e4}");
+        assert_eq!(text.len(), MAX_FIELD - 1);
+        // A huge name and date do not hide the lock that follows.
+        let xml = listing(&[(long.as_str(), long.as_str()), ("2_1_abc.json", fresh)]);
+        assert!(webdav(&xml));
     }
 
     fn server(json: &str) -> bool {

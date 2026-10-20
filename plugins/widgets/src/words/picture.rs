@@ -1,6 +1,7 @@
 //! A picture frame: a picture from a folder on the card (JPEG, PNG,
-//! GIF), another each day or each time it shows, the whole of it or its
-//! place filled; its name below, if wanted. A tap shows the next one.
+//! GIF), another each day or each time it shows (the showings counted
+//! in memory, see [`Showings`]), the whole of it or its place filled; its
+//! name below, if wanted. A tap shows the next one.
 //!
 //! A picture is decoded once, when it is chosen, into a file of its
 //! pixels as large as the screen (as the sleep screen does), read row by
@@ -8,6 +9,7 @@
 
 use alloc::boxed::Box;
 use alloc::format;
+use alloc::rc::Rc;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
@@ -21,6 +23,7 @@ use paperpaw_sdk::{Arg, Canvas, Env, Id, Rect, RegisterError, Registrar, Setting
 
 use super::quote::CHANGES;
 use super::{Turns, changed, changes, data, of_the_day, today};
+use crate::showings::Showings;
 
 pub(super) const ID: Id = Id::new_static("widgets.picture");
 /// The folder of the pictures.
@@ -74,7 +77,8 @@ static SETTINGS: [SettingSpec; 5] = [
         &CHANGES,
         CHANGES[0],
         ID,
-    ),
+    )
+    .described("widgets.setting.change.help"),
     SettingSpec::fixed_choice(
         "widgets.picture.fit",
         "widgets.picture.setting.fit",
@@ -100,12 +104,15 @@ pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
         Turns::turn(env.storage, &turns_file(), today(env), daily(env));
         changed(out, &ID);
     })?;
+    let shown = Rc::new(Showings::default());
     r.add_widget(
-        WidgetSpec::new(ID, "widgets.picture", |env| {
-            if !daily(env) {
-                Turns::turn(env.storage, &turns_file(), today(env), false);
-            }
-            Box::new(PictureWidget::default())
+        WidgetSpec::new(ID, "widgets.picture", move |env| {
+            // Another picture each time it shows: made as it shows.
+            let showing = if daily(env) { 0 } else { shown.show(env.now) };
+            Box::new(PictureWidget {
+                showing,
+                ..PictureWidget::default()
+            })
         })
         .category(widgets::categories::PERSONAL),
     )
@@ -170,11 +177,15 @@ struct Shown {
     name: String,
 }
 
-/// Today's picture, decoded unless it was already.
-fn picture(env: &Env<'_>, day: i64) -> Option<Shown> {
+/// Today's picture (turned on as often as tapped and, where another
+/// shows each time, as often as shown: `showing`), decoded unless it
+/// was already.
+fn picture(env: &Env<'_>, day: i64, showing: u32) -> Option<Shown> {
     let folder = folder(env);
     let daily = daily(env);
-    let turns = Turns::load(env.storage, &turns_file()).on(day, daily);
+    let turns = Turns::load(env.storage, &turns_file())
+        .on(day, daily)
+        .wrapping_add(showing);
     let (name, size) = picture_at(env.storage, &folder, |count| {
         let first = if daily { of_the_day(day, count) } else { 0 };
         first + turns as usize
@@ -213,6 +224,8 @@ fn picture(env: &Env<'_>, day: i64) -> Option<Shown> {
 /// A picture of the folder, read when updated.
 #[derive(Default)]
 struct PictureWidget {
+    /// The showing it was made for, where another shows each time.
+    showing: u32,
     shown: Option<Shown>,
     /// The day and the changes it was read at.
     read: Option<(i64, u32)>,
@@ -228,7 +241,7 @@ impl Widget for PictureWidget {
             return false;
         }
         self.read = read;
-        let shown = picture(env, day);
+        let shown = picture(env, day, self.showing);
         let changed = shown != self.shown;
         self.shown = shown;
         changed

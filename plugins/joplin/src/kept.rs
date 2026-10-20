@@ -5,6 +5,9 @@
 //! - `sent.txt`: the books whose notes are in Joplin: the notes file,
 //!   the note's id and the MD5 of its text as written last
 //!   (`path<TAB>id<TAB>md5`).
+//! - `sending.txt`: the notes sent whose answer did not come (yet), as
+//!   `sent.txt` has them: Joplin may have them all the same, so the next
+//!   sending looks for them there rather than making the note again.
 //! - `waiting.txt`: the notes files still to send.
 //! - `notebook.txt`: the notebook made for the notes: its name and id.
 
@@ -24,6 +27,7 @@ pub fn file(name: &str) -> String {
 }
 
 const SENT: &str = "sent.txt";
+const SENDING: &str = "sending.txt";
 const WAITING: &str = "waiting.txt";
 const NOTEBOOK: &str = "notebook.txt";
 
@@ -87,17 +91,49 @@ fn rewrite(
     }
 }
 
-/// The note of the notes file `path`, if it was sent.
-pub fn sent(storage: &dyn Storage, path: &str) -> Option<Sent> {
-    let fields = find(storage, SENT, path)?;
+/// The note of the notes file `path` in the list `name`.
+fn note(storage: &dyn Storage, name: &str, path: &str) -> Option<Sent> {
+    let fields = find(storage, name, path)?;
     let [id, text] = <[String; 2]>::try_from(fields).ok()?;
     Some(Sent { id, text })
 }
 
+/// Keeps the note of the notes file `path` in the list `name`.
+fn keep_note(
+    storage: &dyn Storage,
+    name: &str,
+    path: &str,
+    note: &Sent,
+) -> Result<(), StorageError> {
+    let line = format!("{path}\t{}\t{}", note.id, note.text);
+    rewrite(storage, name, path, Some(&line))
+}
+
+/// The note of the notes file `path`, if it was sent.
+pub fn sent(storage: &dyn Storage, path: &str) -> Option<Sent> {
+    note(storage, SENT, path)
+}
+
 /// Keeps that the notes file `path` was sent as `note`.
 pub fn keep_sent(storage: &dyn Storage, path: &str, note: &Sent) -> Result<(), StorageError> {
-    let line = format!("{path}\t{}\t{}", note.id, note.text);
-    rewrite(storage, SENT, path, Some(&line))
+    keep_note(storage, SENT, path, note)
+}
+
+/// The note of the notes file `path` sent last, if its answer did not
+/// come.
+pub fn sending(storage: &dyn Storage, path: &str) -> Option<Sent> {
+    note(storage, SENDING, path)
+}
+
+/// Keeps that the notes file `path` is being sent as `note`, until its
+/// answer comes.
+pub fn keep_sending(storage: &dyn Storage, path: &str, note: &Sent) -> Result<(), StorageError> {
+    keep_note(storage, SENDING, path, note)
+}
+
+/// The answer for the notes file `path` came.
+pub fn remove_sending(storage: &dyn Storage, path: &str) -> Result<(), StorageError> {
+    rewrite(storage, SENDING, path, None)
 }
 
 /// The notes files waiting to be sent, the oldest first.
@@ -162,6 +198,21 @@ mod tests {
             b"Notes/b.md\t2\tt2\nNotes/a.md\t1\tt3\n"
         );
         assert!(s.get(&file("sent.txt.new")).is_none());
+    }
+
+    #[test]
+    fn keeps_what_is_being_sent() {
+        let s = MemoryStorage::new();
+        assert_eq!(sending(&s, "Notes/a.md"), None);
+        let note = Sent {
+            id: String::from("1"),
+            text: String::from("t1"),
+        };
+        keep_sending(&s, "Notes/a.md", &note).unwrap();
+        assert_eq!(sending(&s, "Notes/a.md"), Some(note));
+        assert_eq!(sent(&s, "Notes/a.md"), None);
+        remove_sending(&s, "Notes/a.md").unwrap();
+        assert_eq!(sending(&s, "Notes/a.md"), None);
     }
 
     #[test]

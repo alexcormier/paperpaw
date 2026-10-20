@@ -1,11 +1,14 @@
 //! Rules: when something happens, PaperPaw does something. For example
 //! "every day at 22:00: night mode on", "on weekdays at 7:00: sync the
-//! catalogs", "when the battery falls below 20 %: the light off".
+//! catalogs", "when the battery falls below 20 %: the light off", "when
+//! the battery reaches 80 %, only while charging: a message to unplug"
+//! (where the device cannot stop charging by itself).
 //!
 //! - When: PaperPaw starts; at a time of day (every day, on weekdays, at
 //!   weekends or on one day); every so many minutes; a book is opened,
 //!   closed or read to its end; the device wakes up or goes to sleep; the
-//!   battery falls below a percentage; charging begins or ends; a switch
+//!   battery falls below a percentage or reaches one (once, until it fell
+//!   clearly below again); charging begins or ends; a switch
 //!   (any on/off setting) is turned on or off.
 //! - Then: run any action (from any plugin), turn any switch on or off,
 //!   set a number (e.g. the light) or show a message.
@@ -16,7 +19,14 @@
 //! pauses it, holding it offers a condition or to remove it, *Add rule*
 //! asks when and what. Times
 //! come through the kernel's timer for plugins (`Command::Schedule`), so
-//! they apply whatever screen is open.
+//! they apply whatever screen is open; they are set again when the clock
+//! becomes known or the time zone changes. Rules that repeat count the
+//! minutes from the start, clock or not.
+//!
+//! Rules set off by a setting another rule changed follow each other at
+//! most [`MAX_CHAIN`] deep: two rules that undo each other stop there.
+//! The rules are read once and kept; where the file cannot be read, none
+//! apply and the list says so instead of saving over it.
 
 #![no_std]
 
@@ -30,16 +40,16 @@ use alloc::boxed::Box;
 use alloc::rc::Rc;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
-use core::cell::Cell;
+use core::cell::{Cell, RefCell};
 
-use paperpaw_sdk::builtin::{events, menus};
+use paperpaw_sdk::builtin::{events, menus, settings};
 use paperpaw_sdk::ui::choice::Choice;
 use paperpaw_sdk::{
     ActionSpec, Arg, Command, Env, Id, Manifest, MenuEntry, Params, Plugin, RegisterError,
     Registrar, SDK_VERSION, ScreenSpec, SettingValue, Version, time,
 };
 
-use crate::rule::{Condition, EVERY_DAY, Effect, Rule, Trigger, WEEKDAYS, WEEKENDS};
+use crate::rule::{Condition, EVERY_DAY, Effect, Levels, Rule, Store, Trigger, WEEKDAYS, WEEKENDS};
 
 pub const PLUGIN: Id = Id::new_static("rules");
 /// Opens the list of rules.
@@ -55,17 +65,82 @@ const TICK: Id = Id::new_static("rules.tick");
 
 /// The names of the days, Sunday first.
 pub(crate) const DAY_NAMES: [&str; 7] = [
-    "rules.day.0",
-    "rules.day.1",
-    "rules.day.2",
-    "rules.day.3",
-    "rules.day.4",
-    "rules.day.5",
-    "rules.day.6",
+    "rules.days.0",
+    "rules.days.1",
+    "rules.days.2",
+    "rules.days.3",
+    "rules.days.4",
+    "rules.days.5",
+    "rules.days.6",
 ];
+/// How many rules may follow each other through the settings they
+/// change: rules that undo each other stop there.
+pub const MAX_CHAIN: u8 = 4;
 
-/// Whether a book is open, as the reading events tell.
-type Reading = Rc<Cell<bool>>;
+/// What the handlers and the list of rules share.
+#[derive(Debug, Default)]
+pub(crate) struct State {
+    pub(crate) store: Store,
+    /// Whether a book is open, as the reading events tell.
+    reading: Cell<bool>,
+    /// The settings rules changed, not yet heard of, each with how many
+    /// rules in a row led to the change.
+    chain: RefCell<Vec<(Id, u8)>>,
+}
+
+pub(crate) type Shared = Rc<State>;
+
+impl State {
+    /// Runs the rules whose trigger `applies` and whose condition holds;
+    /// `depth` rules in a row led here.
+    fn run(
+        &self,
+        env: &Env<'_>,
+        depth: u8,
+        out: &mut Vec<Command>,
+        applies: impl Fn(&Trigger) -> bool,
+    ) {
+        let reading = self.reading.get();
+        self.store.with(env.storage, |rules| {
+            for rule in rules {
+                if !rule.on || !applies(&rule.trigger) || !holds(env, &rule.condition, reading) {
+                    continue;
+                }
+                let (id, value) = match &rule.effect {
+                    Effect::Action(action) => {
+                        out.push(Command::RunAction(action.clone()));
+                        continue;
+                    }
+                    Effect::Message(text) => {
+                        out.push(Command::Notify(text.clone()));
+                        continue;
+                    }
+                    Effect::Switch(id, on) => (id, SettingValue::Bool(*on)),
+                    Effect::Number(id, value) => (id, SettingValue::Int(*value)),
+                };
+                if env.settings.get(id.as_str()) != Some(&value) {
+                    self.caused(id, depth.saturating_add(1));
+                    out.push(Command::SetSetting(id.clone(), value));
+                }
+            }
+        });
+    }
+
+    /// Setting `id` is changed by the `depth`-th rule in a row.
+    fn caused(&self, id: &Id, depth: u8) {
+        let mut chain = self.chain.borrow_mut();
+        chain.retain(|(other, _)| other != id);
+        chain.push((id.clone(), depth));
+    }
+
+    /// How many rules in a row led to setting `id` changing: none where
+    /// the change is not a rule's.
+    fn depth_of(&self, id: &Id) -> u8 {
+        let mut chain = self.chain.borrow_mut();
+        let found = chain.iter().position(|(other, _)| other == id);
+        found.map_or(0, |at| chain.remove(at).1)
+    }
+}
 
 /// Whether `condition` holds now.
 fn holds(env: &Env<'_>, condition: &Condition, reading: bool) -> bool {
@@ -85,62 +160,59 @@ fn holds(env: &Env<'_>, condition: &Condition, reading: bool) -> bool {
     }
 }
 
-/// Runs the rules whose trigger `applies` and whose condition holds.
-fn run(env: &Env<'_>, reading: bool, out: &mut Vec<Command>, applies: impl Fn(&Trigger) -> bool) {
-    for rule in rule::load(env.storage) {
-        if !rule.on || !applies(&rule.trigger) || !holds(env, &rule.condition, reading) {
-            continue;
-        }
-        match rule.effect {
-            Effect::Action(action) => out.push(Command::RunAction(action)),
-            Effect::Switch(id, on) => {
-                if env.settings.get(id.as_str()) != Some(&SettingValue::Bool(on)) {
-                    out.push(Command::SetSetting(id, SettingValue::Bool(on)));
-                }
-            }
-            Effect::Number(id, value) => {
-                if env.settings.get(id.as_str()) != Some(&SettingValue::Int(value)) {
-                    out.push(Command::SetSetting(id, SettingValue::Int(value)));
-                }
-            }
-            Effect::Message(text) => out.push(Command::Notify(text)),
-        }
-    }
-}
-
 /// Sets the timers: to the next time of day a rule waits for, and to the
 /// next minute while rules repeat.
-fn schedule(env: &Env<'_>, out: &mut Vec<Command>) {
+pub(crate) fn schedule(env: &Env<'_>, store: &Store, out: &mut Vec<Command>) {
+    schedule_time(env, store, out);
+    schedule_tick(env, store, out);
+}
+
+/// Sets the timer to the next time of day a rule waits for, if the clock
+/// is known.
+fn schedule_time(env: &Env<'_>, store: &Store, out: &mut Vec<Command>) {
     let Some(now) = time::local_time(env) else {
         return;
     };
-    let rules = rule::load(env.storage);
     let minute_now = u16::from(now.hour) * 60 + u16::from(now.minute);
-    // The start of a minute so many minutes ahead.
-    let at_minute = |ahead: u16| {
-        env.now
-            .add_millis(u64::from(ahead) * 60_000 - u64::from(now.second) * 1000)
-    };
-    let next = rules
-        .iter()
-        .filter(|r| r.on)
-        .filter_map(|r| match r.trigger {
-            Trigger::Time { minute, .. } => Some((rule::minutes_until(minute_now, minute), minute)),
-            _ => None,
-        })
-        .min();
+    let next = store.with(env.storage, |rules| {
+        rules
+            .iter()
+            .filter(|r| r.on)
+            .filter_map(|r| match r.trigger {
+                Trigger::Time { minute, .. } => {
+                    Some((rule::minutes_until(minute_now, minute), minute))
+                }
+                _ => None,
+            })
+            .min()
+    });
     if let Some((ahead, at)) = next {
+        // The start of that minute.
+        let at_minute = env
+            .now
+            .add_millis(u64::from(ahead) * 60_000 - u64::from(now.second) * 1000);
         out.push(Command::Schedule(
             TIME,
             Params::new().with(MINUTE, at.to_string()),
-            at_minute(ahead),
+            at_minute,
         ));
     }
-    if rules
-        .iter()
-        .any(|r| r.on && matches!(r.trigger, Trigger::Every(_)))
-    {
-        out.push(Command::Schedule(TICK, Params::new(), at_minute(1)));
+}
+
+/// Sets the timer to a minute from now while rules repeat: they count
+/// minutes from the start, so they need no clock.
+fn schedule_tick(env: &Env<'_>, store: &Store, out: &mut Vec<Command>) {
+    let repeats = store.with(env.storage, |rules| {
+        rules
+            .iter()
+            .any(|r| r.on && matches!(r.trigger, Trigger::Every(_)))
+    });
+    if repeats {
+        out.push(Command::Schedule(
+            TICK,
+            Params::new(),
+            env.now.add_millis(60_000),
+        ));
     }
 }
 
@@ -240,6 +312,10 @@ fn trigger_text(env: &Env<'_>, trigger: &Trigger) -> String {
             "rules.when.battery",
             &[("percent", Arg::Int(i64::from(*percent)))],
         ),
+        Trigger::BatteryAtLeast(percent) => env.i18n.format(
+            "rules.when.battery-at",
+            &[("percent", Arg::Int(i64::from(*percent)))],
+        ),
         Trigger::Charging => tr("rules.when.charging"),
         Trigger::Unplugged => tr("rules.when.unplugged"),
         Trigger::SwitchOn(id) => env.i18n.format(
@@ -304,10 +380,14 @@ impl Plugin for Rules {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        let state: Shared = Rc::new(State::default());
+        let shared = state.clone();
         r.add_screen(ScreenSpec {
             id: LIST_SCREEN,
             title: Cow::Borrowed("rules.title"),
-            factory: Box::new(|env, _| Box::new(screens::RulesScreen::new(env))),
+            factory: Box::new(move |env, _| {
+                Box::new(screens::RulesScreen::new(env, shared.clone()))
+            }),
         })?;
         r.add_screen(ScreenSpec {
             id: PICK_SCREEN,
@@ -330,11 +410,10 @@ impl Plugin for Rules {
             order: 230,
         })?;
         r.add_icon(OPEN, Cow::Borrowed("automation"))?;
-        let reading: Reading = Rc::new(Cell::new(false));
-        let book = reading.clone();
+        let started = state.clone();
         r.on(events::STARTED, move |env, _, out| {
-            run(env, book.get(), out, |t| *t == Trigger::Start);
-            schedule(env, out);
+            started.run(env, 0, out, |t| *t == Trigger::Start);
+            schedule(env, &started.store, out);
         })?;
         for (event, trigger, open) in [
             (
@@ -346,81 +425,101 @@ impl Plugin for Rules {
             (events::BOOK_FINISHED.into(), Trigger::BookFinished, None),
             (events::SUSPEND.into(), Trigger::Sleep, None),
         ] {
-            let book = reading.clone();
+            let state = state.clone();
             r.subscribe(
                 event,
                 Box::new(move |env: &Env<'_>, _: &Params, out: &mut Vec<Command>| {
                     if let Some(open) = open {
-                        book.set(open);
+                        state.reading.set(open);
                     }
-                    run(env, book.get(), out, |t| *t == trigger);
+                    state.run(env, 0, out, |t| *t == trigger);
                 }),
             )?;
         }
-        let book = reading.clone();
+        let resumed = state.clone();
         r.on(events::RESUME, move |env, _, out| {
-            run(env, book.get(), out, |t| *t == Trigger::Resume);
+            resumed.run(env, 0, out, |t| *t == Trigger::Resume);
             // The clock may have moved on while asleep.
-            schedule(env, out);
+            schedule_time(env, &resumed.store, out);
         })?;
-        let book = reading.clone();
+        let timed = state.clone();
         r.subscribe(
             TIME,
             Box::new(
                 move |env: &Env<'_>, params: &Params, out: &mut Vec<Command>| {
                     let today = time::local_time(env).map_or(0, |t| t.weekday);
                     if let Some(at) = params.get(MINUTE).and_then(|m| m.parse::<u16>().ok()) {
-                        run(env, book.get(), out, |t| {
+                        timed.run(env, 0, out, |t| {
                             matches!(t, Trigger::Time { minute, days }
                             if *minute == at && days & (1 << today) != 0)
                         });
                     }
-                    schedule(env, out);
+                    schedule_time(env, &timed.store, out);
                 },
             ),
         )?;
         // Minutes since the start, for the rules that repeat.
         let minutes = Rc::new(Cell::new(0u32));
-        let book = reading.clone();
+        let ticked = state.clone();
         r.subscribe(
             TICK,
             Box::new(move |env: &Env<'_>, _: &Params, out: &mut Vec<Command>| {
                 let now = minutes.get() + 1;
                 minutes.set(now);
-                run(
+                ticked.run(
                     env,
-                    book.get(),
+                    0,
                     out,
                     |t| matches!(t, Trigger::Every(every) if now.is_multiple_of(u32::from(*every))),
                 );
-                schedule(env, out);
+                schedule_tick(env, &ticked.store, out);
             }),
         )?;
-        // The battery as it was last: a charge falling below a mark, and
-        // charging beginning or ending, compare with it.
-        let battery: Rc<Cell<Option<(u8, bool)>>> = Rc::new(Cell::new(None));
-        let book = reading.clone();
+        // The battery as it was last, and the levels it has reached: a
+        // charge falling below a mark or reaching one, and charging
+        // beginning or ending, compare with it. The level is the best the
+        // device knows: a fuel gauge's (X4 Pro, phones) or an estimate from
+        // the voltage (X4), which reads high while charging.
+        let battery: Rc<Cell<Option<(u8, bool, Levels)>>> = Rc::new(Cell::new(None));
+        let status = state.clone();
         r.on(events::STATUS_CHANGED, move |env, _, out| {
-            let Some(now) = env.status.battery.map(|b| (b.percent, b.charging)) else {
+            // The clock became known, was set or moved to another zone:
+            // the time of day waited for comes at another moment.
+            schedule_time(env, &status.store, out);
+            let Some((percent, charging)) = env.status.battery.map(|b| (b.percent, b.charging))
+            else {
                 return;
             };
-            let Some((was, was_charging)) = battery.replace(Some(now)) else {
+            let Some((was, was_charging, mut levels)) = battery.get() else {
+                battery.set(Some((percent, charging, Levels::up_to(percent))));
                 return;
             };
-            run(env, book.get(), out, |t| match t {
-                Trigger::BatteryBelow(mark) => was >= *mark && now.0 < *mark,
-                Trigger::Charging => !was_charging && now.1,
-                Trigger::Unplugged => was_charging && !now.1,
+            let reached = levels.reach(percent);
+            battery.set(Some((percent, charging, levels)));
+            status.run(env, 0, out, |t| match t {
+                Trigger::BatteryBelow(mark) => was >= *mark && percent < *mark,
+                Trigger::BatteryAtLeast(mark) => reached.contains(*mark),
+                Trigger::Charging => !was_charging && charging,
+                Trigger::Unplugged => was_charging && !charging,
                 _ => false,
             });
         })?;
         r.on(events::SETTING_CHANGED, move |env, changed, out| {
+            let depth = state.depth_of(&changed.id);
             let id = changed.id.as_str();
+            if id == settings::TIME_ZONE.as_str() || id == settings::TIME_ZONE_RULE.as_str() {
+                schedule_time(env, &state.store, out);
+                return;
+            }
             let Some(SettingValue::Bool(on)) = env.settings.get(id) else {
                 return;
             };
+            // Rules undoing each other's changes stop after a few.
+            if depth >= MAX_CHAIN {
+                return;
+            }
             let on = *on;
-            run(env, reading.get(), out, |t| match t {
+            state.run(env, depth, out, |t| match t {
                 Trigger::SwitchOn(s) => on && s.as_str() == id,
                 Trigger::SwitchOff(s) => !on && s.as_str() == id,
                 _ => false,
@@ -430,14 +529,6 @@ impl Plugin for Rules {
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())
     }
-}
-
-/// Adds `rule` and sets the timers again.
-fn add(env: &Env<'_>, rule: Rule, out: &mut Vec<Command>) {
-    let mut rules = rule::load(env.storage);
-    rules.push(rule);
-    rule::save(env.storage, &rules);
-    schedule(env, out);
 }
 
 #[cfg(test)]

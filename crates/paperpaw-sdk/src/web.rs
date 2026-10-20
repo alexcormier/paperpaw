@@ -8,6 +8,35 @@ use alloc::vec::Vec;
 
 use crate::document::is_external;
 
+/// What PaperPaw calls itself to servers, with its version: the
+/// `User-Agent` header's value, e.g. `PaperPaw/0.4.0 (e-reader)`.
+pub const USER_AGENT: &str = concat!("PaperPaw/", env!("CARGO_PKG_VERSION"), " (e-reader)");
+
+/// The `User-Agent` header ([`USER_AGENT`]), to push onto a request's
+/// headers.
+pub fn user_agent() -> (String, String) {
+    (String::from("User-Agent"), String::from(USER_AGENT))
+}
+
+/// A server's address as entered in a setting, as a base URL to put paths
+/// after: spaces around and `/` at the end left out, `https://` put first
+/// unless it names a scheme (`http://`, `webdavs://`); empty if nothing
+/// is entered.
+pub fn base_url(text: &str) -> String {
+    let text = text.trim().trim_end_matches('/');
+    let scheme = text.split_once("://").is_some_and(|(scheme, _)| {
+        scheme.starts_with(|c: char| c.is_ascii_alphabetic())
+            && scheme
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'))
+    });
+    if text.is_empty() || scheme {
+        text.to_string()
+    } else {
+        format!("https://{text}")
+    }
+}
+
 /// `href` made absolute with `base`, a page's address: as browsers
 /// resolve links (`/a`, `../b`, `?q`, `//host/c`).
 pub fn join_url(base: &str, href: &str) -> String {
@@ -112,11 +141,15 @@ pub fn percent_decode(text: &str) -> String {
     String::from_utf8_lossy(&out).into_owned()
 }
 
-/// The host of an address, for messages: `de.wikipedia.org`.
+/// The host of an address, for messages: `de.wikipedia.org` (with its
+/// port, if it names one; without a user and password before it).
 pub fn host(url: &str) -> &str {
     let rest = url.split_once("://").map_or(url, |(_, rest)| rest);
     let end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
-    &rest[..end]
+    let authority = &rest[..end];
+    authority
+        .rsplit_once('@')
+        .map_or(authority, |(_, host)| host)
 }
 
 /// A file name for what `url` points at: its last path part, decoded,
@@ -129,8 +162,11 @@ pub fn file_name(url: &str) -> String {
     clean_name(&percent_decode(last), 200).unwrap_or_else(|| String::from("download"))
 }
 
-/// `name` as a file name: without characters file systems refuse, not
-/// hidden, at most `max` characters; `None` if nothing is left.
+/// `name` as a file name every storage takes: without characters file
+/// systems refuse, not hidden, no dot or space at the end, not a name
+/// Windows keeps for a device (`CON.txt` becomes `_CON.txt`), at most
+/// `max` UTF-16 units as FAT counts them (255 at most there); `None` if
+/// nothing is left.
 pub fn clean_name(name: &str, max: usize) -> Option<String> {
     let name: String = name
         .chars()
@@ -139,12 +175,22 @@ pub fn clean_name(name: &str, max: usize) -> Option<String> {
             c => c,
         })
         .filter(|c| !c.is_control())
-        .take(max)
         .collect();
     let name = name.split_whitespace().collect::<Vec<_>>().join(" ");
-    let name = name
-        .trim_start_matches(|c: char| c == '.' || c.is_whitespace())
-        .trim_end();
+    let mut name = String::from(name.trim_start_matches(|c: char| c == '.' || c.is_whitespace()));
+    if paperpaw_platform::storage::is_reserved_name(&name) {
+        name.insert(0, '_');
+    }
+    let mut units = 0;
+    let end = name
+        .char_indices()
+        .find(|(_, c)| {
+            units += c.len_utf16();
+            units > max
+        })
+        .map_or(name.len(), |(at, _)| at);
+    name.truncate(end);
+    let name = name.trim_end_matches(|c: char| c == '.' || c.is_whitespace());
     (!name.is_empty()).then(|| name.to_string())
 }
 
@@ -215,6 +261,17 @@ mod tests {
     use super::*;
 
     #[test]
+    fn servers_as_base_urls() {
+        assert_eq!(base_url(" sync.example.org/ "), "https://sync.example.org");
+        assert_eq!(base_url("http://nas.local:8080//"), "http://nas.local:8080");
+        assert_eq!(base_url("webdavs://nas/dav/"), "webdavs://nas/dav");
+        assert_eq!(base_url("nas/x?to=http://y"), "https://nas/x?to=http://y");
+        assert_eq!(base_url("  "), "");
+        assert!(USER_AGENT.starts_with(concat!("PaperPaw/", env!("CARGO_PKG_VERSION"))));
+        assert_eq!(user_agent().0, "User-Agent");
+    }
+
+    #[test]
     fn http_dates() {
         assert_eq!(
             http_date("Tue, 20 Oct 2026 08:00:00 GMT"),
@@ -270,7 +327,18 @@ mod tests {
             Some("Kafka Die Verwandlung")
         );
         assert_eq!(clean_name("...", 100), None);
+        // Names FAT and Windows take for another, or for a device.
+        assert_eq!(clean_name("Chapter 1.", 100).as_deref(), Some("Chapter 1"));
+        assert_eq!(clean_name("con.txt", 100).as_deref(), Some("_con.txt"));
+        assert_eq!(clean_name("abcdef. x", 6).as_deref(), Some("abcdef"));
+        // Counted in UTF-16 units: a character beyond the BMP takes two.
+        let emoji = "\u{1f4da}".repeat(3);
+        assert_eq!(clean_name(&emoji, 5).as_deref(), Some("\u{1f4da}\u{1f4da}"));
         assert_eq!(host("https://de.wikipedia.org/wiki/X"), "de.wikipedia.org");
+        assert_eq!(
+            host("https://me:secret@dav.example.org:8443/x"),
+            "dav.example.org:8443"
+        );
         assert_eq!(encode("Größe a"), "Gr%C3%B6%C3%9Fe+a");
     }
 

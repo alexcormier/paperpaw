@@ -15,7 +15,12 @@ use super::*;
 use crate::store::PageStat;
 
 const DIR: &str = ".paperpaw/plugins/stats";
-const MD5S: [&str; 4] = ["md5-a", "md5-b", "md5-c", "md5-d"];
+const MD5S: [&str; 4] = [
+    "0000000000000000000000000000000a",
+    "0000000000000000000000000000000b",
+    "0000000000000000000000000000000c",
+    "0000000000000000000000000000000d",
+];
 
 /// A device's statistics: its books (an id and one of [`MD5S`]) and its
 /// stays (an index into its books, page, start, duration).
@@ -46,7 +51,7 @@ impl Device {
             .collect();
         let mut books_sorted = books;
         books_sorted.sort_by_key(|b| b.id);
-        store::save_books(&storage, &books_sorted);
+        store::save_books(&storage, &books_sorted).unwrap();
         let mut stays = self.stays.clone();
         stays.sort_by_key(|s| s.2);
         for (book, page, start, duration) in stays {
@@ -59,7 +64,8 @@ impl Device {
                     duration,
                     pages: 50,
                 },
-            );
+            )
+            .unwrap();
         }
         storage
     }
@@ -95,7 +101,7 @@ fn device() -> impl Strategy<Value = Device> {
 fn totals(storage: &dyn Storage) -> BTreeMap<(String, u32, u32), u16> {
     let books = store::books(storage);
     let mut out = BTreeMap::new();
-    store::scan(storage, |s| {
+    let _ = store::scan(storage, |s| {
         let md5 = books
             .iter()
             .find(|b| b.id == s.book)
@@ -235,10 +241,15 @@ fn books_are_the_same_by_their_fingerprint_not_their_title() {
     store::save_books(
         &there,
         &[
-            book(7, "Here md5-a", "md5-other"),
-            book(8, "Another title", "md5-b"),
+            book(
+                7,
+                "Here 0000000000000000000000000000000a",
+                "0000000000000000000000000000000e",
+            ),
+            book(8, "Another title", "0000000000000000000000000000000b"),
         ],
-    );
+    )
+    .unwrap();
     let stay = |book: u16, start: u32| PageStat {
         book,
         page: 2,
@@ -246,8 +257,8 @@ fn books_are_the_same_by_their_fingerprint_not_their_title() {
         duration: 20,
         pages: 50,
     };
-    store::append(&there, stay(7, 2000));
-    store::append(&there, stay(8, 2100));
+    store::append(&there, stay(7, 2000)).unwrap();
+    store::append(&there, stay(8, 2100)).unwrap();
     here.write("income.db", &export(&there)).unwrap();
     let outcome = merge(&here, Some("income.db"), None, None, DIR).unwrap();
     assert_eq!(outcome, Outcome { books: 3, stays: 4 });
@@ -259,16 +270,28 @@ fn books_are_the_same_by_their_fingerprint_not_their_title() {
     assert_eq!(
         titles,
         [
-            ("md5-a", "Here md5-a"),
+            (
+                "0000000000000000000000000000000a",
+                "Here 0000000000000000000000000000000a"
+            ),
             // Named as there, so KOReader finds it by its key.
-            ("md5-b", "Another title"),
+            ("0000000000000000000000000000000b", "Another title"),
             // Its title the same as another's: still a book of its own.
-            ("md5-other", "Here md5-a"),
+            (
+                "0000000000000000000000000000000e",
+                "Here 0000000000000000000000000000000a"
+            ),
         ]
     );
     let t = totals(&here);
-    assert_eq!(t.get(&(String::from("md5-b"), 2, 2100)), Some(&20));
-    assert_eq!(t.get(&(String::from("md5-other"), 2, 2000)), Some(&20));
+    assert_eq!(
+        t.get(&(String::from("0000000000000000000000000000000b"), 2, 2100)),
+        Some(&20)
+    );
+    assert_eq!(
+        t.get(&(String::from("0000000000000000000000000000000e"), 2, 2000)),
+        Some(&20)
+    );
 }
 
 #[test]
@@ -372,5 +395,5 @@ fn a_book_deleted_on_both_sides_stays_deleted() {
     here.write("income.db", &export(&there)).unwrap();
     let outcome = merge(&here, Some("income.db"), Some("cached.db"), None, DIR).unwrap();
     assert_eq!(outcome, Outcome { books: 1, stays: 2 });
-    assert_eq!(fingerprints(&here), ["md5-a"]);
+    assert_eq!(fingerprints(&here), ["0000000000000000000000000000000a"]);
 }

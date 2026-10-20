@@ -15,8 +15,11 @@
 
 extern crate alloc;
 
+mod folder;
+
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
+use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
@@ -29,11 +32,13 @@ use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
     MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen,
-    ScreenSpec, SettingSpec, Version,
+    ScreenSpec, SettingSpec, SettingValue, Storage, StorageError, Version,
 };
 
 use paperpaw_sdk::files::{self as ops, Entry};
 use paperpaw_sdk::setting::Setting;
+
+use folder::Folder;
 
 pub const PLUGIN: Id = Id::new_static("file-manager");
 /// Opens the file manager.
@@ -133,7 +138,12 @@ struct Browser {
     bar: Rect,
     /// The shown folder; empty at the top of the storage.
     dir: String,
-    entries: Vec<Entry>,
+    /// How many entries it has.
+    len: usize,
+    /// The entries of the visible page, the first of them number `first`:
+    /// only a page is held, however large the folder.
+    page: Vec<Entry>,
+    first: usize,
     picked: Option<Picked>,
     focus: Focus,
     /// What happened last (an error, or what was done).
@@ -159,27 +169,98 @@ impl Browser {
             list: ListView::new(area, style.row).focus_on_keys(env),
             bar: Rect::new(0, display.height - bar_height, display.width, bar_height),
             dir: params.get(params::PATH).unwrap_or_default().to_string(),
-            entries: Vec::new(),
+            len: 0,
+            page: Vec::new(),
+            first: 0,
             picked: None,
             focus: Focus::List,
             message: None,
             style,
             header,
         };
-        browser.load(env);
+        browser.load(env, None);
         browser
     }
 
-    fn load(&mut self, env: &Env<'_>) {
-        let hidden = env.settings.read(&HIDDEN);
-        match ops::list(env.storage, &self.dir, hidden) {
-            Ok(entries) => self.entries = entries,
+    fn folder<'a>(&'a self, env: &'a Env<'_>) -> Folder<'a> {
+        Folder {
+            storage: env.storage,
+            dir: &self.dir,
+            hidden: env.settings.read(&HIDDEN),
+        }
+    }
+
+    /// The entry number `index`, if its page is held.
+    fn entry(&self, index: usize) -> Option<&Entry> {
+        self.page.get(index.checked_sub(self.first)?)
+    }
+
+    /// Shows the folder as it is now, reading only the page shown: the one
+    /// with entry `at` on it, focused (where it went, the one at its
+    /// place), else the one the focus is on.
+    fn load(&mut self, env: &Env<'_>, at: Option<Entry>) {
+        let rows = self.list.rows().max(1);
+        let focus = self.list.focus;
+        let folder = self.folder(env);
+        let shown = (|| {
+            let len = folder.count()?;
+            if len == 0 {
+                return Ok((0, 0, 0, Vec::new()));
+            }
+            let mut focus = focus.min(len - 1);
+            if let Some(at) = &at {
+                let (first, page) = folder.page_of(at, rows)?;
+                if let Some(i) = page.iter().position(|e| e.name == at.name) {
+                    return Ok((len, first, first + i, page));
+                }
+                focus = folder.rank(at)?.min(len - 1);
+            }
+            let page = folder.page(focus / rows, rows, len)?;
+            Ok((len, focus - focus % rows, focus, page))
+        })();
+        match shown {
+            Ok((len, first, focus, page)) => {
+                self.len = len;
+                self.first = first;
+                self.list.focus = focus;
+                self.page = page;
+            }
             Err(e) => {
-                self.entries.clear();
+                self.len = 0;
+                self.first = 0;
+                self.list.focus = 0;
+                self.page = Vec::new();
                 self.message = Some(error(env, e));
             }
         }
-        self.list.focus = self.list.focus.min(self.entries.len().saturating_sub(1));
+    }
+
+    /// Reads the page the focus is on, if it is not held: the next or the
+    /// one before from the one held, as the buttons go.
+    fn show_focus(&mut self, env: &Env<'_>) {
+        let rows = self.list.rows().max(1);
+        let first = self.list.focus - self.list.focus % rows;
+        if first == self.first && !self.page.is_empty() || self.len == 0 {
+            return;
+        }
+        let folder = self.folder(env);
+        let page = if first == self.first + rows {
+            folder.after(self.page.last(), rows)
+        } else if first + rows == self.first {
+            folder.before(self.page.first(), rows)
+        } else {
+            folder.page(first / rows, rows, self.len)
+        };
+        match page {
+            Ok(page) => {
+                self.first = first;
+                self.page = page;
+            }
+            Err(e) => {
+                self.message = Some(error(env, e));
+                self.load(env, None);
+            }
+        }
     }
 
     fn buttons(&self) -> Vec<Button> {
@@ -210,11 +291,16 @@ impl Browser {
 
     /// Opens folder `dir` from its first entry.
     fn enter(&mut self, dir: String, cx: &mut Cx<'_, '_>) {
+        self.open_at(dir, None, cx);
+    }
+
+    /// Opens folder `dir` at entry `at` (from its first without).
+    fn open_at(&mut self, dir: String, at: Option<Entry>, cx: &mut Cx<'_, '_>) {
         self.dir = dir;
         self.list.focus = 0;
         self.focus = Focus::List;
         let env = *cx.env();
-        self.load(&env);
+        self.load(&env, at);
         cx.request_redraw();
         cx.request_refresh(RefreshMode::Partial);
     }
@@ -224,19 +310,28 @@ impl Browser {
         if self.dir.is_empty() {
             return false;
         }
-        let name = ops::name(&self.dir).to_string();
-        let parent = ops::parent(&self.dir).to_string();
-        self.enter(parent, cx);
         // The folder just left stays chosen.
-        if let Some(at) = self.entries.iter().position(|e| e.name == name) {
-            self.list.focus = at;
-        }
+        let left = folder_entry(ops::name(&self.dir));
+        let parent = ops::parent(&self.dir).to_string();
+        self.open_at(parent, Some(left), cx);
         true
+    }
+
+    /// Shows the folder again, at the entry `name` (where it went, at its
+    /// place), after something was done to it.
+    fn reload_at(&mut self, env: &Env<'_>, name: &str) {
+        let path = ops::join(&self.dir, name);
+        let entry = Entry {
+            name: name.to_string(),
+            is_dir: ops::is_dir(env.storage, &path),
+            size: 0,
+        };
+        self.load(env, Some(entry));
     }
 
     /// Tapped or confirmed: a folder opens, a file offers its actions.
     fn activate(&mut self, index: usize, cx: &mut Cx<'_, '_>) {
-        let Some(entry) = self.entries.get(index).cloned() else {
+        let Some(entry) = self.entry(index).cloned() else {
             return;
         };
         let path = ops::join(&self.dir, &entry.name);
@@ -249,7 +344,7 @@ impl Browser {
 
     /// The actions for entry `index`.
     fn offer(&mut self, index: usize, cx: &mut Cx<'_, '_>) {
-        let Some(entry) = self.entries.get(index) else {
+        let Some(entry) = self.entry(index) else {
             return;
         };
         let path = ops::join(&self.dir, &entry.name);
@@ -286,31 +381,28 @@ impl Browser {
                     return;
                 };
                 let target = ops::free_path(env.storage, &self.dir, ops::name(&picked.path));
+                let mut note = None;
                 let result = if picked.copy {
                     ops::copy(env.storage, &picked.path, &target)
-                } else if ops::parent(&picked.path) == self.dir {
+                } else if ops::same_path(env.storage, ops::parent(&picked.path), &self.dir) {
                     // Moved where it is: nothing to do.
                     Ok(())
                 } else {
                     let moved = ops::move_to(env.storage, &picked.path, &target);
                     if moved.is_ok() {
-                        tell_moved(&env, &picked.path, &target, cx);
+                        note = tell_moved(&env, &picked.path, &target, cx);
                     }
                     moved
                 };
                 if result.is_ok() && picked.copy {
                     cx.command(paperpaw_sdk::library::changed());
                 }
-                self.message = result.err().map(|e| error(&env, e));
+                self.message = match result {
+                    Ok(()) => note,
+                    Err(e) => Some(error(&env, e)),
+                };
                 self.focus = Focus::List;
-                self.load(&env);
-                if let Some(at) = self
-                    .entries
-                    .iter()
-                    .position(|e| e.name == ops::name(&target))
-                {
-                    self.list.focus = at;
-                }
+                self.reload_at(&env, ops::name(&target));
                 cx.request_redraw();
                 cx.request_refresh(RefreshMode::Partial);
             }
@@ -362,10 +454,19 @@ impl Browser {
             "delete-yes" => {
                 // The books in it, said gone once it is: what is kept
                 // for them goes too.
+                // At most `MAX_TOLD`: the data of those beyond stays until
+                // the storage is cleaned up.
                 let mut books = Vec::new();
                 paperpaw_sdk::library::books_in(env.storage, env.formats, path, &mut |book| {
-                    books.push(String::from(book));
+                    if books.len() < MAX_TOLD {
+                        books.push(String::from(book));
+                    }
                 });
+                let at = Entry {
+                    name,
+                    is_dir: ops::is_dir(env.storage, path),
+                    size: 0,
+                };
                 let deleted = ops::delete(env.storage, path);
                 if deleted.is_ok() {
                     for path in books {
@@ -374,10 +475,14 @@ impl Browser {
                     cx.command(paperpaw_sdk::library::changed());
                 }
                 self.message = deleted.err().map(|e| error(&env, e));
-                if self.picked.as_ref().is_some_and(|p| p.path == path) {
+                // Picked to be moved or copied, and gone with it.
+                if (self.picked.as_ref())
+                    .is_some_and(|p| ops::is_within(env.storage, &p.path, path))
+                {
                     self.picked = None;
                 }
-                self.load(&env);
+                // The focus where it was.
+                self.load(&env, Some(at));
                 cx.request_redraw();
                 cx.request_refresh(RefreshMode::Partial);
             }
@@ -386,7 +491,7 @@ impl Browser {
     }
 
     fn move_focus(&mut self, delta: isize, cx: &mut Cx<'_, '_>) {
-        let len = self.entries.len();
+        let len = self.len;
         let bar = self.buttons().len();
         // The list and the bar below it, one round: past the last button
         // to the first entry, and back.
@@ -411,6 +516,8 @@ impl Browser {
             }
             Focus::Bar(i) => Focus::Bar(i - 1),
         };
+        let env = *cx.env();
+        self.show_focus(&env);
         self.redraw(cx);
     }
 }
@@ -428,21 +535,60 @@ fn error(env: &Env<'_>, e: paperpaw_sdk::StorageError) -> String {
     env.i18n.tr(key).to_string()
 }
 
-/// A name for a file or folder: one line, no `/`, not `.` or `..`.
+/// A name for a file or folder that every file system takes as it is, the
+/// memory card's (FAT) and Windows' too: one line, none of `/ \ : * ? " <
+/// > |`, not ending in a dot (which they drop), not `.` or `..`.
 fn valid_name(name: &str) -> Option<&str> {
     let name = name.trim();
     let bad = name.is_empty()
-        || name == "."
-        || name == ".."
-        || name.contains(['/', '\\', ':', '\0'])
+        || name.ends_with('.')
+        || name.contains(['/', '\\', ':', '*', '?', '"', '<', '>', '|', '\0'])
         || name.chars().any(char::is_control);
     (!bad).then_some(name)
+}
+
+/// A folder named `name`, as an entry to find in a listing.
+fn folder_entry(name: &str) -> Entry {
+    Entry {
+        name: name.to_string(),
+        is_dir: true,
+        size: 0,
+    }
+}
+
+/// Renames `path` to `name` in its folder: where another entry has that
+/// name, to a free one beside it (`name (2)`). A name that differs in case
+/// only is the same one on storages that ignore case (the memory card):
+/// there it is renamed through a free name between, as such a storage takes
+/// both names for one. The path it has now, or why not.
+fn rename(storage: &dyn Storage, path: &str, name: &str) -> Result<String, StorageError> {
+    let dir = ops::parent(path);
+    let own = ops::name(path);
+    let other = {
+        let mut other = false;
+        storage.list(dir, &mut |e| other |= e.name == name && e.name != own)?;
+        other
+    };
+    if other || own.to_lowercase() != name.to_lowercase() {
+        let target = ops::free_path(storage, dir, name);
+        ops::move_to(storage, path, &target)?;
+        return Ok(target);
+    }
+    let target = ops::join(dir, name);
+    let between = ops::free_path(storage, dir, &format!(".{own}.renaming"));
+    ops::move_to(storage, path, &between)?;
+    if let Err(e) = ops::move_to(storage, &between, &target) {
+        // Back as it was.
+        let _ = ops::move_to(storage, &between, path);
+        return Err(e);
+    }
+    Ok(target)
 }
 
 impl Screen for Browser {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
-        let len = self.entries.len();
+        let len = self.len;
         let title = if self.dir.is_empty() {
             env.i18n.tr("file-manager.device").to_string()
         } else {
@@ -463,12 +609,14 @@ impl Screen for Browser {
         }
         let decimal = env.i18n.tr("file-manager.decimal");
         let room = ui::icon_room(env, &style, true);
-        let entries = &self.entries;
+        let (page, first) = (&self.page, self.first);
         let active = self.focus == Focus::List;
         self.list.active = active;
         self.list
             .draw(canvas, &style, len, |canvas, index, rect, focused| {
-                let entry = &entries[index];
+                let Some(entry) = index.checked_sub(first).and_then(|i| page.get(i)) else {
+                    return;
+                };
                 let value = if entry.is_dir {
                     String::from("›")
                 } else {
@@ -524,7 +672,9 @@ impl Screen for Browser {
             } else {
                 -rows
             };
-            if self.list.move_focus(delta, self.entries.len()) != ListChange::None {
+            if self.list.move_focus(delta, self.len) != ListChange::None {
+                let env = *cx.env();
+                self.show_focus(&env);
                 cx.request_redraw();
                 cx.request_refresh(RefreshMode::Partial);
             }
@@ -550,7 +700,7 @@ impl Screen for Browser {
     }
 
     fn on_gesture(&mut self, gesture: Gesture, cx: &mut Cx<'_, '_>) -> Handled {
-        let paging = self.list.paging(self.entries.len());
+        let paging = self.list.paging(self.len);
         if gesture.kind == GestureKind::Tap
             && let Some(action) = self
                 .header
@@ -576,7 +726,7 @@ impl Screen for Browser {
             }
             return Handled::Yes;
         }
-        let Some(index) = self.list.hit(gesture.start, self.entries.len()) else {
+        let Some(index) = self.list.hit(gesture.start, self.len) else {
             return Handled::No;
         };
         self.list.focus = index;
@@ -608,20 +758,17 @@ impl Screen for Browser {
             if name == ops::name(&path) {
                 return;
             }
-            let target = ops::free_path(env.storage, ops::parent(&path), name);
-            let moved = ops::move_to(env.storage, &path, &target);
-            if moved.is_ok() {
-                tell_moved(&env, &path, &target, cx);
-            }
-            self.message = moved.err().map(|e| error(&env, e));
-            self.load(&env);
-            if let Some(at) = self
-                .entries
-                .iter()
-                .position(|e| e.name == ops::name(&target))
-            {
-                self.list.focus = at;
-            }
+            let at = match rename(env.storage, &path, name) {
+                Ok(target) => {
+                    self.message = tell_moved(&env, &path, &target, cx);
+                    ops::name(&target).to_string()
+                }
+                Err(e) => {
+                    self.message = Some(error(&env, e));
+                    ops::name(&path).to_string()
+                }
+            };
+            self.reload_at(&env, &at);
             self.redraw(cx);
         } else if let Some(typed) = FOLDER_NAMED.read(event, params) {
             let text = typed.text.as_str();
@@ -638,40 +785,86 @@ impl Screen for Browser {
                 .create_dir(&target)
                 .err()
                 .map(|e| error(&env, e));
-            self.load(&env);
-            if let Some(at) = self
-                .entries
-                .iter()
-                .position(|e| e.name == ops::name(&target))
-            {
-                self.list.focus = at;
-            }
+            self.load(&env, Some(folder_entry(ops::name(&target))));
             self.redraw(cx);
         }
     }
 }
 
-/// Most books whose moving is told for one moved folder.
-const MAX_MOVED: usize = 2000;
+/// Most books whose moving (or deleting) is told at once, for one folder.
+const MAX_TOLD: usize = 2000;
 
-/// Tells the other plugins that the files at `from` are now at `to`
+/// The folder chooser of the `files` plugin: settings edited with it (or
+/// with whatever is bound to `core.choose-folder`) hold folders.
+const CHOOSE_FOLDER: Id = Id::new_static("files.choose-folder");
+
+/// Tells the other plugins that the books at `from` are now at `to`
 /// ([`events::BOOK_MOVED`]), so the data they keep by a book's path
-/// (progress, notes, statistics) goes along; for a folder, of every file
-/// in it.
-fn tell_moved(env: &Env<'_>, from: &str, to: &str, cx: &mut Cx<'_, '_>) {
-    let mut pending = alloc::vec![(from.to_string(), to.to_string())];
+/// (progress, notes, statistics) goes along: for a folder, of each book in
+/// it (each file a format plugin opens), up to [`MAX_TOLD`]. Settings
+/// that hold the folder moved, or one in it (the library folder, say),
+/// follow it. Says so where the data of some books could not go along.
+fn tell_moved(env: &Env<'_>, from: &str, to: &str, cx: &mut Cx<'_, '_>) -> Option<String> {
+    follow_folders(env, from, to, cx);
+    let (from, to) = (from.trim_matches('/'), to.trim_matches('/'));
     let mut told = 0;
-    while let Some((from, to)) = pending.pop() {
-        if !ops::is_dir(env.storage, &to) {
-            cx.command(events::BOOK_MOVED.emit(events::BookMoved { from, path: to }));
-            told += 1;
+    let mut more = false;
+    paperpaw_sdk::library::books_in(env.storage, env.formats, to, &mut |book| {
+        let Some(rest) = book.strip_prefix(to) else {
+            return;
+        };
+        if told == MAX_TOLD {
+            more = true;
+            return;
+        }
+        told += 1;
+        cx.command(events::BOOK_MOVED.emit(events::BookMoved {
+            from: format!("{from}{rest}"),
+            path: book.to_string(),
+        }));
+    });
+    more.then(|| env.i18n.tr("file-manager.moved-many").to_string())
+}
+
+/// Folder `value` (a setting's), after folder `from` moved to `to`: where
+/// it is `from` or in it, as the storage names entries (`Books` is `books`
+/// on the memory card), the same folder at `to`.
+fn moved_folder(storage: &dyn Storage, value: &str, from: &str, to: &str) -> Option<String> {
+    let (value, from, to) = (
+        value.trim_matches('/'),
+        from.trim_matches('/'),
+        to.trim_matches('/'),
+    );
+    if from.is_empty() || !ops::is_within(storage, value, from) {
+        return None;
+    }
+    let rest = value.split('/').skip(from.split('/').count());
+    Some(
+        core::iter::once(to)
+            .chain(rest)
+            .collect::<Vec<_>>()
+            .join("/"),
+    )
+}
+
+/// Settings that name folder `from` or one in it, chosen with the folder
+/// chooser, name it at `to` now.
+fn follow_folders(env: &Env<'_>, from: &str, to: &str, cx: &mut Cx<'_, '_>) {
+    for spec in env.settings.specs() {
+        let folder = spec
+            .extra()
+            .editor
+            .as_ref()
+            .is_some_and(|editor| *editor == CHOOSE_FOLDER || *editor == slots::CHOOSE_FOLDER);
+        if !folder {
             continue;
         }
-        for entry in ops::list(env.storage, &to, true).unwrap_or_default() {
-            if told + pending.len() >= MAX_MOVED {
-                return;
-            }
-            pending.push((ops::join(&from, &entry.name), ops::join(&to, &entry.name)));
+        let value = env.settings.text(spec.id.as_str());
+        if let Some(moved) = moved_folder(env.storage, value, from, to) {
+            cx.command(Command::SetSetting(
+                spec.id.clone(),
+                SettingValue::Text(moved.into()),
+            ));
         }
     }
 }
@@ -693,8 +886,157 @@ mod tests {
     #[test]
     fn names_are_checked() {
         assert_eq!(valid_name("  Neu  "), Some("Neu"));
+        assert_eq!(valid_name(".hidden"), Some(".hidden"));
         assert_eq!(valid_name("a/b"), None);
         assert_eq!(valid_name(".."), None);
         assert_eq!(valid_name(""), None);
+        // What the memory card and Windows refuse or change.
+        for bad in ["a*b", "what?", "say \"hi\"", "a<b>", "a|b", "notes."] {
+            assert_eq!(valid_name(bad), None, "{bad}");
+        }
+    }
+
+    use alloc::collections::BTreeMap;
+    use core::cell::RefCell;
+    use paperpaw_sdk::{DirEntry, MemoryStorage};
+
+    /// A storage that ignores case, as the memory card's file system does:
+    /// files by their path in lower case, each with the spelling it was
+    /// written with.
+    #[derive(Default)]
+    struct Folding {
+        files: RefCell<BTreeMap<String, (String, Vec<u8>)>>,
+    }
+
+    impl Folding {
+        fn with(self, path: &str, data: &str) -> Self {
+            let file = (path.to_string(), data.as_bytes().to_vec());
+            self.files.borrow_mut().insert(path.to_lowercase(), file);
+            self
+        }
+
+        fn paths(&self) -> Vec<String> {
+            self.files
+                .borrow()
+                .values()
+                .map(|(p, _)| p.clone())
+                .collect()
+        }
+    }
+
+    impl Storage for Folding {
+        fn ignores_case(&self) -> bool {
+            true
+        }
+        fn read_at(&self, path: &str, offset: u64, buf: &mut [u8]) -> Result<usize, StorageError> {
+            let files = self.files.borrow();
+            let (_, data) = files
+                .get(&path.to_lowercase())
+                .ok_or(StorageError::NotFound)?;
+            let from = (offset as usize).min(data.len());
+            let n = buf.len().min(data.len() - from);
+            buf[..n].copy_from_slice(&data[from..from + n]);
+            Ok(n)
+        }
+        fn size(&self, path: &str) -> Result<u64, StorageError> {
+            let files = self.files.borrow();
+            let (_, data) = files
+                .get(&path.to_lowercase())
+                .ok_or(StorageError::NotFound)?;
+            Ok(data.len() as u64)
+        }
+        fn write(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
+            let file = (path.to_string(), data.to_vec());
+            self.files.borrow_mut().insert(path.to_lowercase(), file);
+            Ok(())
+        }
+        fn append(&self, _: &str, _: &[u8]) -> Result<(), StorageError> {
+            Err(StorageError::Unsupported)
+        }
+        fn list(&self, dir: &str, visit: &mut dyn FnMut(DirEntry<'_>)) -> Result<(), StorageError> {
+            // Folders only by the files in them (the tests keep them flat).
+            let prefix = format!("{}/", dir.to_lowercase());
+            let mut found = false;
+            for (key, (path, data)) in self.files.borrow().iter() {
+                if key.starts_with(&prefix) {
+                    found = true;
+                    visit(DirEntry {
+                        name: ops::name(path),
+                        is_dir: false,
+                        size: data.len() as u64,
+                    });
+                }
+            }
+            if found {
+                Ok(())
+            } else {
+                Err(StorageError::NotFound)
+            }
+        }
+        fn remove(&self, path: &str) -> Result<(), StorageError> {
+            self.files.borrow_mut().remove(&path.to_lowercase());
+            Ok(())
+        }
+        fn rename(&self, from: &str, to: &str) -> Result<(), StorageError> {
+            let mut files = self.files.borrow_mut();
+            let (_, data) = files
+                .remove(&from.to_lowercase())
+                .ok_or(StorageError::NotFound)?;
+            files.insert(to.to_lowercase(), (to.to_string(), data));
+            Ok(())
+        }
+    }
+
+    /// On a storage that ignores case, a name that differs in case only is
+    /// its own: no `(2)`, and nothing lost.
+    #[test]
+    fn a_new_case_only_is_the_same_name() {
+        let storage = Folding::default()
+            .with("books/alice.epub", "Alice")
+            .with("books/other.epub", "Other");
+        assert_eq!(
+            rename(&storage, "books/alice.epub", "Alice.epub"),
+            Ok(String::from("books/Alice.epub"))
+        );
+        assert_eq!(storage.paths(), ["books/Alice.epub", "books/other.epub"]);
+        assert_eq!(storage.size("books/alice.EPUB"), Ok(5));
+        // Another name taken: beside it.
+        assert_eq!(
+            rename(&storage, "books/Alice.epub", "OTHER.epub"),
+            Ok(String::from("books/OTHER (2).epub"))
+        );
+    }
+
+    /// A folder setting follows its folder as the storage names it.
+    #[test]
+    fn folders_follow_as_the_storage_names_them() {
+        let card = Folding::default();
+        let moved = |value| moved_folder(&card, value, "books", "Library");
+        assert_eq!(moved("Books").as_deref(), Some("Library"));
+        assert_eq!(moved("Books/Archive/").as_deref(), Some("Library/Archive"));
+        assert_eq!(moved("books2"), None);
+        assert_eq!(moved("Notes"), None);
+        // Where case counts, `Books` is another folder.
+        let disk = MemoryStorage::new();
+        assert_eq!(moved_folder(&disk, "Books", "books", "Library"), None);
+        assert_eq!(
+            moved_folder(&disk, "books/Archive", "books", "Library").as_deref(),
+            Some("Library/Archive")
+        );
+    }
+
+    /// Where case counts, a name another file has in another case is that
+    /// file's: it is not replaced.
+    #[test]
+    fn where_case_counts_the_other_file_stays() {
+        let storage = MemoryStorage::new()
+            .with("books/alice.epub", "a")
+            .with("books/Alice.epub", "A");
+        assert_eq!(
+            rename(&storage, "books/alice.epub", "Alice.epub"),
+            Ok(String::from("books/Alice (2).epub"))
+        );
+        assert_eq!(storage.get("books/Alice.epub"), Some(b"A".to_vec()));
+        assert_eq!(storage.get("books/Alice (2).epub"), Some(b"a".to_vec()));
     }
 }

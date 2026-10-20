@@ -55,8 +55,11 @@ const SIGNED_LEN: usize = 48;
 
 /// How many of an image's first bytes [`AppInfo::read`] needs.
 pub const APP_HEAD_LEN: usize = 208;
-/// The chip id of the ESP32-C3 in an image's header.
+/// The chip id of the ESP32-C3 (the X4's) in an image's header.
 pub const CHIP_ESP32_C3: u16 = 5;
+/// The chip id of the ESP32-S3 (the X4 Pro's and the X4 Classic's) in an
+/// image's header.
+pub const CHIP_ESP32_S3: u16 = 9;
 
 /// What is wrong with an update file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -316,9 +319,13 @@ mod tests {
 
     /// An image header and descriptor as espflash writes them.
     fn image(len: usize) -> Vec<u8> {
+        image_for(CHIP_ESP32_C3, len)
+    }
+
+    fn image_for(chip: u16, len: usize) -> Vec<u8> {
         let mut image = std::vec![0u8; len];
         image[0] = 0xE9;
-        image[12..14].copy_from_slice(&CHIP_ESP32_C3.to_le_bytes());
+        image[12..14].copy_from_slice(&chip.to_le_bytes());
         image[32..36].copy_from_slice(&0xABCD_5432u32.to_le_bytes());
         image[48..53].copy_from_slice(b"0.4.0");
         image[80..95].copy_from_slice(b"paperpaw-xteink");
@@ -413,6 +420,8 @@ mod tests {
         assert_eq!(info.chip, CHIP_ESP32_C3);
         assert_eq!(info.version, "0.4.0");
         assert_eq!(info.project, "paperpaw-xteink");
+        let s3 = AppInfo::read(&image_for(CHIP_ESP32_S3, APP_HEAD_LEN)).unwrap();
+        assert_eq!(s3.chip, CHIP_ESP32_S3);
         let mut other = image(APP_HEAD_LEN);
         other[32] = 0;
         assert_eq!(AppInfo::read(&other), Err(Problem::NotAnImage));

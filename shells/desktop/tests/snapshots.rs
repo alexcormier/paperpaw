@@ -450,6 +450,37 @@ const CASES: &[Case] = &[
         script: "run:core.library,wait:300,long-tap:600:200,wait:300",
         colour: 0,
     },
+    // The quick panel while reading, its sliders a fingertip high and
+    // across the screen: on the X4 Pro while a finger moves the light's
+    // colour (down far from the knob, which moves as far as the finger,
+    // its value shown at once), on the Boox once it is lifted.
+    Case {
+        name: "x4-pro-quick-panel",
+        profile: "xteink-x4-pro",
+        book: Some("books/alice-in-wonderland.epub"),
+        sets: &[],
+        script: "run:core.quick-panel,wait:300,down:300:410,move:330:415,move:360:420,wait:100",
+        colour: 0,
+    },
+    Case {
+        name: "boox-quick-panel",
+        profile: "boox-go-7",
+        book: Some("books/alice-in-wonderland.epub"),
+        sets: &[],
+        script: "run:core.quick-panel,wait:300,down:1000:565,move:950:570,move:800:575,up:800:575,wait:300",
+        colour: 0,
+    },
+    // The reader's panel on the X4, the row that opens the fonts focused:
+    // its whole name and value on the focus bar, aligned with the rows
+    // below.
+    Case {
+        name: "x4-reader-panel",
+        profile: "xteink-x4",
+        book: Some("books/alice-in-wonderland.epub"),
+        sets: &[],
+        script: "run:reader.quick-settings,wait:300,right,wait:200",
+        colour: 0,
+    },
     Case {
         name: "kobo-colour-cover",
         profile: "kobo-libra-colour",

@@ -284,8 +284,9 @@ fn numbers_change_with_the_buttons_kept_when_chosen() {
     assert_eq!(settings.int(size), before - 1);
 }
 
-/// On a touch screen a slider's knob is taken along by the finger: what it
-/// is moved to shows at once and is kept where the finger is lifted.
+/// On a touch screen a slider's knob is taken along by the finger, as far
+/// as it moves: what it is moved to shows at once and is kept where the
+/// finger is lifted.
 #[test]
 fn sliders_follow_the_finger_kept_where_it_is_lifted() {
     let mut app = App::on(TOUCH);
@@ -302,14 +303,18 @@ fn sliders_follow_the_finger_kept_where_it_is_lifted() {
     let y = i32::from(track.y) + i32::from(track.height) / 2;
     let size = "core.font-size";
     let before = app.kernel.settings().int(size);
+    // Down at the track's start, moved its whole length: as far, to the
+    // end.
     app.finger(PointerPhase::Down, Point::new(i32::from(track.x), y));
     app.finger(PointerPhase::Move, Point::new(track.right() as i32, y));
     let settings = app.kernel.settings();
     assert!(settings.previewing());
     assert_eq!(settings.int(size), 40, "the end of the track");
     assert!(!settings.is_set(size));
-    app.finger(PointerPhase::Move, Point::new(i32::from(track.x), y));
-    app.finger(PointerPhase::Up, Point::new(i32::from(track.x), y));
+    // As far past the start: the start.
+    let past = i32::from(track.x) - i32::from(track.width);
+    app.finger(PointerPhase::Move, Point::new(past, y));
+    app.finger(PointerPhase::Up, Point::new(past, y));
     let settings = app.kernel.settings();
     assert!(!settings.previewing());
     assert_eq!(settings.int(size), 6, "the start of the track");

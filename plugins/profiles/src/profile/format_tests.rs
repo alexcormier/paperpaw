@@ -40,7 +40,7 @@ fn version_2_profiles() -> Vec<Profile> {
 fn files_of_version_2_are_read() {
     let file = include_str!("../../testdata/profiles.ini.v2");
     let storage = MemoryStorage::new().with(&path(), file);
-    assert_eq!(load(&storage), version_2_profiles());
+    assert_eq!(load(&storage).unwrap(), version_2_profiles());
 }
 
 /// The writer of today still writes what `testdata` holds for version 2,
@@ -65,7 +65,7 @@ fn version_1_upgrades_keep_only_valid_ids_and_skip_lines_before_a_profile() {
               []\n\
               reader.margin = 2 = 3\n";
     let storage = MemoryStorage::new().with(&path(), v1);
-    let loaded = load(&storage);
+    let loaded = load(&storage).unwrap();
     assert_eq!(
         loaded,
         [
@@ -98,13 +98,13 @@ fn damaged_files_give_what_can_be_read() {
         &path(),
         "# format 2\n[other]\nname = no\n[profile.9]\nname = yes\n",
     );
-    assert_eq!(load(&storage), [profile("yes", &[])]);
-    // Not UTF-8: nothing, no panic.
+    assert_eq!(load(&storage).unwrap(), [profile("yes", &[])]);
+    // Not UTF-8: cannot be read, so nothing may be saved over it; no panic.
     let storage = MemoryStorage::new().with(
         &path(),
         b"# format 2\n[profile.1]\nname = \xff\xfe\n".to_vec(),
     );
-    assert!(load(&storage).is_empty());
+    assert_eq!(load(&storage), None);
 }
 
 #[test]
@@ -114,7 +114,7 @@ fn a_profile_without_a_name_line_keeps_its_values() {
         "# format 2\n[profile.1]\ncore.night-mode = on\nname = Later\n",
     );
     assert_eq!(
-        load(&storage),
+        load(&storage).unwrap(),
         [profile("Later", &[("core.night-mode", "on")])]
     );
 }
@@ -124,7 +124,7 @@ fn a_file_of_a_newer_version_is_left_as_it_is() {
     let newer = "# format 3\n[set.1]\ntitle = From the future\n";
     let storage = MemoryStorage::new().with(&path(), newer);
     // Not read, not written over.
-    assert!(load(&storage).is_empty());
+    assert_eq!(load(&storage), None);
     save(&storage, &[profile("Now", &[])]);
     assert_eq!(storage.get(&path()).unwrap(), newer.as_bytes());
 }
@@ -136,7 +136,7 @@ fn files_larger_than_the_limit_are_not_read() {
         text.push_str("core.font-size = 12\n");
     }
     let storage = MemoryStorage::new().with(&path(), text);
-    assert!(load(&storage).is_empty());
+    assert_eq!(load(&storage), None);
 }
 
 #[test]
@@ -196,7 +196,7 @@ proptest! {
     fn profiles_round_trip(profiles in profiles_strategy()) {
         let storage = MemoryStorage::new();
         save(&storage, &profiles);
-        prop_assert_eq!(load(&storage), profiles);
+        prop_assert_eq!(load(&storage), Some(profiles));
     }
 
     /// Whatever the file holds, reading it does not panic.
@@ -211,8 +211,8 @@ proptest! {
     #[test]
     fn any_version_1_text_upgrades(text in "(\\[[^\\]\n]{0,8}\\]\n|[a-z.=# \\[\\]]{0,16}\n){0,8}") {
         let storage = MemoryStorage::new().with(&path(), text.as_str());
-        let loaded = load(&storage);
+        let loaded = load(&storage).unwrap_or_default();
         save(&storage, &loaded);
-        prop_assert_eq!(load(&storage), loaded);
+        prop_assert_eq!(load(&storage), Some(loaded));
     }
 }

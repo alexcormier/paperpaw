@@ -27,6 +27,7 @@ const STYLE: UiStyle = UiStyle {
     dark_header: false,
     corner: 0,
     strong: false,
+    finger: 0,
 };
 
 /// Rows 50 high, 8 a page.

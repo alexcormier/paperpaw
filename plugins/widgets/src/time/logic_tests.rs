@@ -377,7 +377,7 @@ proptest! {
         prop_assert!((0..=366).contains(&left));
         prop_assert!(ty == y || ty == y + 1);
         prop_assert_eq!(tm, month);
-        if (month, day) == (2, 29) && !dates::is_leap(ty) {
+        if (month, day) == (2, 29) && !paperpaw_sdk::time::is_leap(ty) {
             prop_assert_eq!(td, 28);
         } else {
             prop_assert_eq!(td, day);

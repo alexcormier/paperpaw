@@ -10,6 +10,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use paperpaw_json as json;
+use paperpaw_sdk::MemoryClass;
 
 /// The ports Calibre listens on for a device looking for it.
 pub const BROADCAST_PORTS: [u16; 5] = [54982, 48123, 39001, 44044, 59678];
@@ -53,22 +54,47 @@ pub fn frame(op: u8, args: &str) -> Vec<u8> {
     format!("{}{body}", body.len()).into_bytes()
 }
 
-/// Longest message read (Calibre's are small; a book's metadata with its
-/// description is the largest).
-const MAX_MESSAGE: usize = 1 << 20;
+/// Longest message read on a device with `memory` (Calibre's are small;
+/// a book's metadata with its description and cover thumbnail is the
+/// largest, a few dozen kilobytes). A message is held whole, and copied
+/// once or twice while it is taken apart.
+pub fn max_message(memory: MemoryClass) -> usize {
+    match memory {
+        MemoryClass::Small => 64 * 1024,
+        _ => 1 << 20,
+    }
+}
 
 /// Reads messages from what comes, never asking for more than the
 /// current message holds, so a book's bytes after it are not taken as
 /// text.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Framing {
     /// The digits of the length so far.
     digits: String,
     /// The message's text so far, once its length is known.
     body: Option<(usize, String)>,
+    /// The longest message taken, in bytes.
+    max: usize,
+}
+
+impl Default for Framing {
+    /// A framing for messages up to a megabyte.
+    fn default() -> Self {
+        Self::new(1 << 20)
+    }
 }
 
 impl Framing {
+    /// A framing for messages up to `max` bytes ([`max_message`]).
+    pub fn new(max: usize) -> Self {
+        Self {
+            digits: String::new(),
+            body: None,
+            max,
+        }
+    }
+
     /// How many bytes to read next.
     pub fn wanted(&self) -> u32 {
         match &self.body {
@@ -91,7 +117,7 @@ impl Framing {
                 }
                 None if c == '[' => {
                     let len: usize = self.digits.parse().map_err(|_| "no length")?;
-                    if len == 0 || len > MAX_MESSAGE {
+                    if len == 0 || len > self.max {
                         return Err("bad length");
                     }
                     self.digits.clear();
@@ -204,16 +230,59 @@ pub fn device_information(stored: Option<&str>, name: &str, version: &str) -> St
 }
 
 /// The path a book is to have below the library folder: Calibre's
-/// `lpath`, with no way out of the folder.
+/// `lpath`, with no way out of the folder and none into what is hidden
+/// there (PaperPaw's own data): plain names alone
+/// ([`files::is_plain_name`](paperpaw_sdk::files::is_plain_name)).
 pub fn safe_path(lpath: &str) -> Option<String> {
     let parts: Vec<&str> = lpath
         .split(['/', '\\'])
         .filter(|p| !p.is_empty() && *p != ".")
         .collect();
-    if parts.is_empty() || parts.iter().any(|p| *p == ".." || p.contains(':')) {
-        return None;
+    paperpaw_sdk::files::plain_path(&parts.join("/"))
+}
+
+/// The path a book Calibre sends is to have below the library folder:
+/// [`safe_path`], and a book PaperPaw reads (`extensions`, lowercase,
+/// e.g. `epub` or `fb2.zip`), so nothing else on the storage is written
+/// (the settings, data plugins, update images).
+pub fn book_path(lpath: &str, extensions: &[&str]) -> Option<String> {
+    let path = safe_path(lpath)?;
+    let name = path.rsplit('/').next()?.to_lowercase();
+    extensions
+        .iter()
+        .any(|ext| {
+            name.strip_suffix(ext)
+                .is_some_and(|stem| stem.len() > 1 && stem.ends_with('.'))
+        })
+        .then_some(path)
+}
+
+/// `object` without its member `key`, e.g. a book's metadata without the
+/// cover thumbnail Calibre sends with it, which nothing here needs.
+pub fn without_member(object: &str, key: &str) -> String {
+    let Some(value) = member(object, key) else {
+        return object.to_string();
+    };
+    // Where the value is in `object`, and the key before it.
+    let start = value.as_ptr() as usize - object.as_ptr() as usize;
+    let end = start + value.len();
+    let quoted = json::string(key);
+    let Some(key_at) = object[..start].rfind(&quoted) else {
+        return object.to_string();
+    };
+    if object[key_at + quoted.len()..start].trim() != ":" {
+        return object.to_string();
     }
-    Some(parts.join("/"))
+    let after = &object[end..];
+    match after.trim_start().strip_prefix(',') {
+        // With the comma after it.
+        Some(rest) => format!("{}{}", &object[..key_at], rest.trim_start()),
+        // The last member: with the comma before it.
+        None => {
+            let before = object[..key_at].trim_end();
+            format!("{}{after}", before.strip_suffix(',').unwrap_or(before))
+        }
+    }
 }
 
 /// Calibre's answer to a broadcast: the port to connect to.
@@ -327,6 +396,68 @@ mod tests {
         assert_eq!(safe_path("../etc/passwd"), None);
         assert_eq!(safe_path("C:/x.epub"), None);
         assert_eq!(safe_path(""), None);
+        // Not into PaperPaw's own data, by any spelling.
+        for hidden in [
+            ".paperpaw/firmware-keys.txt",
+            ".PaperPaw/secrets.txt",
+            "\\.paperpaw\\secrets.txt",
+            "./.paperpaw/secrets.txt",
+            ".paperpaw./secrets.txt",
+            ".paperpaw /secrets.txt",
+            "Ann/.hidden.epub",
+            "Ann./Book.epub",
+        ] {
+            assert_eq!(safe_path(hidden), None, "{hidden}");
+        }
+    }
+
+    #[test]
+    fn books_only_of_formats_read() {
+        let read = ["epub", "txt", "fb2.zip"];
+        assert_eq!(
+            book_path("Ann/Book.EPUB", &read).as_deref(),
+            Some("Ann/Book.EPUB")
+        );
+        assert_eq!(
+            book_path("Ann/B.fb2.zip", &read).as_deref(),
+            Some("Ann/B.fb2.zip")
+        );
+        for other in [
+            "paperpaw.ini",
+            "plugins/evil/plugin.ini",
+            "updates/paperpaw.bin",
+            "Ann/epub",
+            "Ann/.epub",
+            "Ann/Book.zip",
+            "../Book.epub",
+            ".paperpaw/Book.epub",
+        ] {
+            assert_eq!(book_path(other, &read), None, "{other}");
+        }
+        assert_eq!(book_path("Ann/Book.epub", &[]), None);
+    }
+
+    #[test]
+    fn members_are_left_out() {
+        let metadata = r#"{"title": "A", "thumbnail": [60, 80, "/9j/4AAQ=="], "uuid": "u"}"#;
+        let without = without_member(metadata, "thumbnail");
+        assert_eq!(without, r#"{"title": "A", "uuid": "u"}"#);
+        let last = r#"{"title": "A", "thumbnail": null }"#;
+        assert_eq!(without_member(last, "thumbnail"), r#"{"title": "A" }"#);
+        let only = r#"{"thumbnail": "x"}"#;
+        assert_eq!(without_member(only, "thumbnail"), "{}");
+        // Nested ones and other keys stay.
+        let nested = r#"{"a": {"thumbnail": 1}, "b": "thumbnail"}"#;
+        assert_eq!(without_member(nested, "thumbnail"), nested);
+    }
+
+    #[test]
+    fn long_messages_are_refused_on_small_devices() {
+        let mut framing = Framing::new(max_message(MemoryClass::Small));
+        assert!(framing.feed("100000[").is_err());
+        let mut framing = Framing::new(max_message(MemoryClass::Small));
+        assert!(framing.feed("65536[").unwrap().is_none());
+        assert!(Framing::default().feed("1000000[").unwrap().is_none());
     }
 
     #[test]

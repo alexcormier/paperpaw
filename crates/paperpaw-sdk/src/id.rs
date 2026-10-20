@@ -11,7 +11,7 @@ use core::fmt;
 /// A segment may end in `@` and a number for one placement of something
 /// placed more than once, e.g. `widgets.clock@2` for a clock's second
 /// place and `widgets.clock@2.face` for that place's own setting (see
-/// [`Id::placed`]).
+/// [`Id::placement`], [`Id::unplaced`]).
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Id(pub(crate) Cow<'static, str>);
 
@@ -73,14 +73,26 @@ impl Id {
 
     /// The id without its placement (`widgets.clock@2.face` is
     /// `widgets.clock.face`), if it names one; see [`Id::placement`].
+    pub fn unplaced(&self) -> Option<Id> {
+        unplaced(self.as_str()).map(|plain| Id(Cow::Owned(plain)))
+    }
+
+    /// [`Id::unplaced`] as text: its name before it had the one it has
+    /// now, kept while plugins still call it.
+    #[doc(hidden)]
     pub fn placed(&self) -> Option<String> {
         unplaced(self.as_str())
     }
 
     /// The id of placement `n` of this: `widgets.clock` and 2 make
-    /// `widgets.clock@2`.
+    /// `widgets.clock@2`, and so does `widgets.clock@5` (another
+    /// placement of the same).
     pub fn placement(&self, n: u32) -> Id {
-        Id(Cow::Owned(alloc::format!("{self}@{n}")))
+        let last = self.0.rfind('.').map_or(0, |dot| dot + 1);
+        let end = self.0[last..]
+            .find('@')
+            .map_or(self.0.len(), |at| last + at);
+        Id(Cow::Owned(alloc::format!("{}@{n}", &self.0[..end])))
     }
 
     /// Whether this id belongs to the plugin `plugin`.
@@ -165,10 +177,16 @@ mod tests {
             assert!(Id::parse(invalid).is_err(), "{invalid}");
         }
         let id = Id::parse("widgets.clock@2.face").unwrap();
+        assert_eq!(id.unplaced(), Some(Id::new_static("widgets.clock.face")));
         assert_eq!(id.placed().as_deref(), Some("widgets.clock.face"));
-        assert_eq!(Id::new_static("widgets.clock").placed(), None);
+        assert_eq!(Id::new_static("widgets.clock").unplaced(), None);
         let clock = Id::new_static("widgets.clock");
         assert_eq!(clock.placement(3).as_str(), "widgets.clock@3");
+        // Another placement of a placed id, not one of it.
+        let placed = clock.placement(2).placement(3);
+        assert_eq!(placed.as_str(), "widgets.clock@3");
+        assert!(Id::parse(placed.as_str()).is_ok());
+        assert_eq!(id.placement(4).as_str(), "widgets.clock@2.face@4");
     }
 
     #[test]

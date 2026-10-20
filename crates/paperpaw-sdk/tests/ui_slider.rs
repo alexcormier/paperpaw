@@ -33,6 +33,7 @@ const STYLE: UiStyle = UiStyle {
     dark_header: false,
     corner: 6,
     strong: false,
+    finger: 0,
 };
 
 fn slider_strategy() -> impl Strategy<Value = Slider> {
@@ -101,37 +102,46 @@ proptest! {
         prop_assert_eq!(slider.value_at(track, x), value, "at {}", x);
     }
 
-    /// A finger taking the knob along: each sample's value is the one
-    /// under it, the last chosen when it is lifted.
+    /// A finger taking the knob along: the knob moves as far as the
+    /// finger, within the range and on the steps, also off the band's
+    /// height; brought back to where it came down, the knob is back at
+    /// its value, and lifted there, that value is kept.
     #[test]
-    fn a_drag_shows_and_chooses_the_value_under_the_finger(
+    fn a_drag_moves_the_knob_as_far_as_the_finger(
         slider in slider_strategy(),
+        value in -3000i64..3000,
         xs in proptest::collection::vec(0i32..400, 1..12),
     ) {
-        let track = Rect::new(20, 40, 360, 30);
+        let band = Rect::new(20, 40, 360, 30);
+        let value = slider.clamp(value);
         let mut drag = SliderDrag::default();
-        // Down on the track.
+        // Down anywhere in the band: taken, nothing to draw yet.
         let first = xs[0].clamp(20, 379);
-        let down = drag.on_pointer(&pointer(PointerPhase::Down, first, 50), &slider, track);
-        prop_assert_eq!(down, Some(SliderStep::Moved(slider.value_at(track, first))));
-        let mut shown = slider.value_at(track, first);
+        let down = drag.on_pointer(&pointer(PointerPhase::Down, first, 50), &STYLE, &slider, band, value);
+        prop_assert_eq!(down, Some(SliderStep::Same));
+        prop_assert_eq!(drag.dragging(), Some(value));
+        let mut moved = false;
         for &x in &xs[1..] {
-            // Off the track's height too: the finger keeps the knob.
-            let step = drag.on_pointer(&pointer(PointerPhase::Move, x, 300), &slider, track);
-            let value = slider.value_at(track, x);
-            let expected = if value == shown {
-                SliderStep::Same
-            } else {
-                SliderStep::Moved(value)
-            };
-            prop_assert_eq!(step, Some(expected));
-            shown = value;
-            prop_assert_eq!(drag.dragging(), Some(shown));
+            let step = drag.on_pointer(&pointer(PointerPhase::Move, x, 300), &STYLE, &slider, band, value);
+            match step {
+                Some(SliderStep::Moved(shown)) => {
+                    moved = true;
+                    prop_assert!(offered(&slider, shown), "{} of {:?}", shown, slider);
+                    prop_assert_eq!(drag.dragging(), Some(shown));
+                }
+                Some(SliderStep::Same) => {}
+                other => prop_assert!(false, "{:?} for a move", other),
+            }
+            let shown = drag.dragging().unwrap();
+            prop_assert!(offered(&slider, shown) || shown == value);
         }
-        let last = *xs.last().unwrap();
-        let up = drag.on_pointer(&pointer(PointerPhase::Up, last, 300), &slider, track);
-        prop_assert_eq!(up, Some(SliderStep::Chosen(slider.value_at(track, last))));
-        prop_assert_eq!(drag.dragging(), None);
+        if moved {
+            drag.on_pointer(&pointer(PointerPhase::Move, first, 300), &STYLE, &slider, band, value);
+            prop_assert_eq!(drag.dragging(), Some(value));
+            let up = drag.on_pointer(&pointer(PointerPhase::Up, first, 300), &STYLE, &slider, band, value);
+            prop_assert_eq!(up, Some(SliderStep::Chosen(value)));
+            prop_assert_eq!(drag.dragging(), None);
+        }
     }
 
     /// The buttons move a value a step at a time, never out of the range;
@@ -249,23 +259,29 @@ fn wrong_ranges_and_steps_are_made_right() {
 }
 
 #[test]
-fn a_finger_beside_the_track_is_left_to_the_screen() {
+fn a_finger_beside_the_band_is_left_to_the_screen() {
     let slider = Slider::new(0, 10);
-    let track = Rect::new(100, 50, 200, 20);
+    let band = Rect::new(100, 50, 200, 20);
     let mut drag = SliderDrag::default();
     for (x, y) in [(99, 60), (300, 60), (150, 49), (150, 70)] {
         assert_eq!(
-            drag.on_pointer(&pointer(PointerPhase::Down, x, y), &slider, track),
+            drag.on_pointer(&pointer(PointerPhase::Down, x, y), &STYLE, &slider, band, 5),
             None,
             "({x}, {y})"
         );
     }
     // Another finger while one drags: not taken.
-    drag.on_pointer(&pointer(PointerPhase::Down, 150, 60), &slider, track)
-        .unwrap();
+    drag.on_pointer(
+        &pointer(PointerPhase::Down, 150, 60),
+        &STYLE,
+        &slider,
+        band,
+        5,
+    )
+    .unwrap();
     let mut other = pointer(PointerPhase::Up, 290, 60);
     other.id = 3;
-    assert_eq!(drag.on_pointer(&other, &slider, track), None);
+    assert_eq!(drag.on_pointer(&other, &STYLE, &slider, band, 5), None);
     assert!(drag.dragging().is_some());
 }
 

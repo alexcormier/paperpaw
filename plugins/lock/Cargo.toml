@@ -21,6 +21,7 @@ paperpaw-platform.workspace = true
 paperpaw-plugin-fonts-default = { workspace = true, features = ["packs"] }
 paperpaw-plugin-keyboard.workspace = true
 proptest.workspace = true
+paperpaw-plugin-sleep.workspace = true
 
 [lints]
 workspace = true

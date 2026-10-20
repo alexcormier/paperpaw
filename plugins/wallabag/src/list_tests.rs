@@ -41,7 +41,7 @@ proptest! {
     #[test]
     fn any_bytes_give_at_most_thirty_articles_with_ids(data_bytes in prop::collection::vec(any::<u8>(), 0..2000)) {
         let storage = MemoryStorage::new().with(&data("entries.json"), data_bytes);
-        let items = unread(&storage);
+        let items = unread(&storage).unwrap_or_default();
         prop_assert!(items.len() <= MAX_ARTICLES);
         prop_assert!(items.iter().all(|(id, _)| !id.is_empty()));
     }
@@ -49,7 +49,7 @@ proptest! {
     #[test]
     fn pieces_of_lists_give_at_most_thirty_articles_with_ids(parts in prop::collection::vec(json_piece(), 0..100)) {
         let storage = MemoryStorage::new().with(&data("entries.json"), parts.concat());
-        let items = unread(&storage);
+        let items = unread(&storage).unwrap_or_default();
         prop_assert!(items.len() <= MAX_ARTICLES);
         prop_assert!(items.iter().all(|(id, _)| !id.is_empty()));
     }
@@ -59,10 +59,10 @@ proptest! {
         let storage = MemoryStorage::new()
             .with(&data("articles.txt"), text.clone())
             .with(&data("finished.txt"), text);
-        for article in articles(&storage) {
+        for article in articles(&storage).unwrap_or_default() {
             prop_assert!(!article.id.contains(['\t', '\n']));
         }
-        prop_assert!(finished(&storage).iter().all(|id| !id.is_empty()));
+        prop_assert!(finished(&storage).unwrap_or_default().iter().all(|id| !id.is_empty()));
     }
 }
 
@@ -80,7 +80,7 @@ fn nested(depth: usize) -> MemoryStorage {
 fn deep_nesting_in_the_list_is_no_harm() {
     assert_eq!(
         unread(&nested(2_000)),
-        vec![(String::from("1"), String::from("Kept"))]
+        Some(vec![(String::from("1"), String::from("Kept"))])
     );
 }
 
@@ -90,17 +90,18 @@ fn very_deep_nesting_is_read_quickly() {
     // 100 KB from a hostile server: on the X4 this must not take long.
     let storage = nested(50_000);
     let started = std::time::Instant::now();
-    assert_eq!(unread(&storage).len(), 1);
+    assert_eq!(unread(&storage).map_or(0, |items| items.len()), 1);
     let took = started.elapsed();
     assert!(took.as_millis() < 2000, "{took:?}");
 }
 
 #[test]
-fn lists_too_large_read_as_none() {
+fn lists_too_large_are_not_read() {
     let big: Vec<u8> = "1\tWallabag/a.epub\n".repeat(5000).into_bytes();
     let storage = MemoryStorage::new()
         .with(&data("articles.txt"), big.clone())
         .with(&data("finished.txt"), big);
-    assert!(articles(&storage).is_empty());
-    assert!(finished(&storage).is_empty());
+    // Not read, so that nothing is written over them.
+    assert!(articles(&storage).is_err());
+    assert!(finished(&storage).is_err());
 }

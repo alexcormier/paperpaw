@@ -294,6 +294,8 @@ pub(crate) struct Reader<'a> {
     buf: alloc::boxed::Box<[u8]>,
     pos: usize,
     len: usize,
+    /// Bytes of the source before those in `buf`.
+    before: u64,
 }
 
 impl<'a> Reader<'a> {
@@ -303,14 +305,22 @@ impl<'a> Reader<'a> {
             buf: zeroed(4096)?.into_boxed_slice(),
             pos: 0,
             len: 0,
+            before: 0,
         })
+    }
+
+    /// Bytes taken from the source so far.
+    pub(crate) fn position(&self) -> u64 {
+        self.before + self.pos as u64
     }
 
     /// The next byte, `None` at the end.
     fn next(&mut self) -> Result<Option<u8>, ImageError> {
         if self.pos == self.len {
-            self.len = self.source.read(&mut self.buf)?;
-            self.pos = 0;
+            self.before += self.len as u64;
+            (self.pos, self.len) = (0, 0);
+            // A source that says it read more than asked for is not believed.
+            self.len = self.source.read(&mut self.buf)?.min(self.buf.len());
             if self.len == 0 {
                 return Ok(None);
             }
@@ -395,6 +405,16 @@ impl Downscaler {
         if out_width > u32::from(u16::MAX) {
             return Err(ImageError::Unsupported("image this large"));
         }
+        if !matches!(channels, 1 | 3) {
+            return Err(ImageError::Unsupported("channels"));
+        }
+        // Each smaller pixel sums all it covers in 32 bits, and counts
+        // the columns it covers in 16.
+        let across = u64::from(width.div_ceil(out_width));
+        let down = u64::from(height.div_ceil(out_height));
+        if across > u64::from(u16::MAX) || across * down * 255 > u64::from(u32::MAX) {
+            return Err(ImageError::Unsupported("image this large made this small"));
+        }
         let mut columns = alloc::vec::Vec::new();
         let mut counts: alloc::vec::Vec<u16> = zeroed(out_width as usize)?;
         if out_width != width {
@@ -446,38 +466,85 @@ impl Downscaler {
         }
     }
 
+    /// The first `width` pixels of `pixels`; an error if it is shorter.
+    fn whole<'p>(&self, pixels: &'p [u8]) -> Result<&'p [u8], ImageError> {
+        pixels
+            .get(..self.width as usize * self.channels)
+            .ok_or(ImageError::Invalid("row shorter than the image"))
+    }
+
     /// Adds a row; emits a smaller one when the rows it covers are in.
     pub fn row(&mut self, pixels: &[u8], sink: &mut dyn ImageSink) -> Result<(), ImageError> {
-        let ch = self.channels;
         if self.seen >= self.height {
             return Ok(());
         }
+        let pixels = self.whole(pixels)?;
         self.seen += 1;
         if self.out_width == self.width && self.out_height == self.height {
-            return self.emit(&pixels[..self.width as usize * ch], sink);
+            return self.emit(pixels, sink);
         }
-        let pixels = &pixels[..self.width as usize * ch];
+        self.add(pixels, 1);
+        if self.seen == self.height || self.out_row(self.seen) != self.out_row(self.seen - 1) {
+            self.flush(sink)?;
+        }
+        Ok(())
+    }
+
+    /// Adds `count` rows of the same `pixels`, as that many calls of
+    /// [`Downscaler::row`] would, but each run of them going to the same
+    /// smaller row summed at once: for images whose rows below some point
+    /// are all alike (e.g. where the data of a JPEG ends early).
+    pub(crate) fn rows_alike(
+        &mut self,
+        pixels: &[u8],
+        mut count: u32,
+        sink: &mut dyn ImageSink,
+    ) -> Result<(), ImageError> {
+        let pixels = self.whole(pixels)?;
+        while count > 0 && self.seen < self.height {
+            if self.out_width == self.width && self.out_height == self.height {
+                self.row(pixels, sink)?;
+                count -= 1;
+                continue;
+            }
+            // The rows from here on that go to the same smaller row (at
+            // least this one).
+            let out_row = self.out_row(self.seen);
+            let end = ((out_row + 1) * u64::from(self.height))
+                .div_ceil(u64::from(self.out_height))
+                .min(u64::from(self.height));
+            let run = (end - u64::from(self.seen)).min(u64::from(count)) as u32;
+            self.add(pixels, run);
+            self.seen += run;
+            count -= run;
+            if self.seen == self.height || self.out_row(self.seen) != self.out_row(self.seen - 1) {
+                self.flush(sink)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Sums `times` rows of `pixels` (whole ones) into the smaller row.
+    #[inline]
+    fn add(&mut self, pixels: &[u8], times: u32) {
+        let ch = self.channels;
         if self.columns.is_empty() {
             for (sum, &v) in self.sums.iter_mut().zip(pixels) {
-                *sum += u32::from(v);
+                *sum += u32::from(v) * times;
             }
         } else if ch == 1 {
             for (&to, &v) in self.columns.iter().zip(pixels) {
-                self.sums[usize::from(to)] += u32::from(v);
+                self.sums[usize::from(to)] += u32::from(v) * times;
             }
         } else {
             for (&to, pixel) in self.columns.iter().zip(pixels.chunks_exact(ch)) {
                 let at = usize::from(to) * ch;
                 for (sum, &v) in self.sums[at..at + ch].iter_mut().zip(pixel) {
-                    *sum += u32::from(v);
+                    *sum += u32::from(v) * times;
                 }
             }
         }
-        self.rows += 1;
-        if self.seen == self.height || self.out_row(self.seen) != self.out_row(self.seen - 1) {
-            self.flush(sink)?;
-        }
-        Ok(())
+        self.rows += times;
     }
 
     /// Emits a partial last row, if any.
@@ -530,5 +597,61 @@ impl ImageFile {
             height: file.height,
             color: true,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use alloc::vec::Vec;
+
+    #[derive(Default)]
+    struct Rows(Vec<Vec<u8>>);
+
+    impl ImageSink for Rows {
+        fn start(&mut self, _: u32, _: u32) -> Result<(), ImageError> {
+            Ok(())
+        }
+        fn row(&mut self, gray: &[u8]) -> Result<(), ImageError> {
+            self.0.push(gray.to_vec());
+            Ok(())
+        }
+        fn row_rgb(&mut self, rgb: &[u8]) -> Result<(), ImageError> {
+            self.0.push(rgb.to_vec());
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn rows_alike_as_row_by_row() {
+        for (width, height, size, channels) in [
+            (7, 23, (3, 5), 1),
+            (7, 23, (7, 4), 3),
+            (5, 9, (5, 9), 1),
+            (16, 100, (16, 7), 1),
+            (9, 64, (2, 64), 3),
+        ] {
+            let mut one = Downscaler::new(width, height, size, channels).unwrap();
+            let mut runs = Downscaler::new(width, height, size, channels).unwrap();
+            let (mut a, mut b) = (Rows::default(), Rows::default());
+            let len = width as usize * channels;
+            // A few rows each, then runs of alike ones of several lengths.
+            let mut y = 0;
+            for (count, value) in [(1u32, 10u8), (3, 200), (1, 7), (11, 90), (50, 255), (99, 3)] {
+                let row: Vec<u8> = (0..len)
+                    .map(|x| value.wrapping_add((x as u8).wrapping_mul(13)))
+                    .collect();
+                for _ in 0..count {
+                    one.row(&row, &mut a).unwrap();
+                }
+                runs.rows_alike(&row, count, &mut b).unwrap();
+                y += count;
+                assert_eq!(a.0, b.0, "{width}x{height} to {size:?} after {y} rows");
+            }
+            one.finish(&mut a).unwrap();
+            runs.finish(&mut b).unwrap();
+            assert_eq!(a.0, b.0);
+            assert_eq!(a.0.len(), runs.out_height() as usize);
+        }
     }
 }

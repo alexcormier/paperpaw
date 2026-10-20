@@ -105,7 +105,7 @@ use crate::firmware::{Firmware, State};
 // PaperPaw's version and which firmware this is, read from updates.
 esp_bootloader_esp_idf::esp_app_desc!(
     env!("PAPERPAW_VERSION"),
-    "paperpaw-xteink",
+    ota::PROJECT,
     esp_bootloader_esp_idf::BUILD_TIME,
     esp_bootloader_esp_idf::BUILD_DATE,
     esp_bootloader_esp_idf::ESP_IDF_COMPATIBLE_VERSION,
@@ -200,6 +200,13 @@ const DEVICE: DeviceInfo = DeviceInfo {
     },
     memory: MemoryClass::Large,
 };
+
+/// Random bytes from the chip's generator: fully random while the
+/// radio is on, pseudo-random before (see `esp_hal::rng`).
+fn random(buf: &mut [u8]) -> bool {
+    esp_hal::rng::Rng::new().read(buf);
+    true
+}
 
 /// Microseconds since start, for measuring what plugins take.
 pub fn micros() -> u64 {
@@ -316,6 +323,8 @@ fn kernel(storage: Box<dyn Storage>, ota: Option<&ota::Ota>) -> Kernel {
     let builder = Kernel::builder(DEVICE)
         .storage_boxed(storage)
         .clock(micros)
+        // Fully random while the radio is on, as when serving.
+        .random(random)
         // The panel refreshes on its own: a mark shows at once while slow
         // work goes on.
         .busy_mark(true)

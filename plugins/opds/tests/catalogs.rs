@@ -7,6 +7,7 @@
 // Tests panic on purpose when something is wrong.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+#[path = "harness/mod.rs"]
 mod common;
 
 use common::{CATALOGS, Harness, Shared, catalogs};

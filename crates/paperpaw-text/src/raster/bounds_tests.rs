@@ -69,7 +69,7 @@ proptest! {
         width in 0usize..40,
         height in 0usize..40,
     ) {
-        let coverage = rasterize(&lines, width, height);
+        let coverage = rasterize(&lines, width, height).expect("a small bitmap fits in memory");
         prop_assert_eq!(coverage.len(), width * height);
     }
 
@@ -89,7 +89,7 @@ proptest! {
             path.quad_to(b, a);
         }
         let _ = path.bounds();
-        let coverage = rasterize(&lines, width, height);
+        let coverage = rasterize(&lines, width, height).expect("a small bitmap fits in memory");
         prop_assert_eq!(coverage.len(), width * height);
     }
 
@@ -99,7 +99,7 @@ proptest! {
             (Just(w), Just(h), inside(w, h), inside(w, h), inside(w, h))
         }),
     ) {
-        let coverage = rasterize(&triangle(a, b, c), width, height);
+        let coverage = rasterize(&triangle(a, b, c), width, height).expect("a small bitmap fits in memory");
         let total: f32 = coverage.iter().map(|&v| f32::from(v) / 255.0).sum();
         let expected = area(a, b, c);
         // Each pixel is rounded to 1/255.
@@ -153,7 +153,7 @@ fn a_shape_larger_than_the_box_fills_it() {
         Pt { x: 200.0, y: -50.0 },
         Pt { x: -50.0, y: 200.0 },
     );
-    let coverage = rasterize(&lines, 8, 8);
+    let coverage = rasterize(&lines, 8, 8).expect("a small bitmap fits in memory");
     assert!(coverage.iter().all(|&v| v == 255), "{coverage:?}");
 }
 

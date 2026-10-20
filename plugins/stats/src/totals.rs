@@ -17,20 +17,45 @@ pub(crate) struct BookTotals {
     pub days: Vec<(i32, u32)>,
 }
 
+/// The most pages a book is taken to have: page numbers come from other
+/// devices' files too, and size the bits of the pages read (8 KiB at
+/// most).
+pub(crate) const MOST_PAGES: u32 = 1 << 16;
+
 /// The pages of the book's current `pages` a stay on page `page` of
 /// `then` pages stands for (KOReader's `page_stat` view rescales alike,
-/// so the counts agree after a change of font size).
+/// so the counts agree after a change of font size); never beyond
+/// [`MOST_PAGES`].
 pub(crate) fn rescaled(page: u32, then: u32, pages: u32) -> core::ops::RangeInclusive<u32> {
+    let page = page.clamp(1, MOST_PAGES);
     if then == 0 || pages == 0 {
         return page..=page;
     }
-    let (page, then, pages) = (u64::from(page.max(1)), u64::from(then), u64::from(pages));
+    let then = then.min(MOST_PAGES);
+    let (page, then, pages) = (
+        u64::from(page.min(then)),
+        u64::from(then),
+        u64::from(pages.min(MOST_PAGES)),
+    );
     let first = (page - 1) * pages / then + 1;
     let last = first.max(page * pages / then);
     first as u32..=last as u32
 }
 
+/// Marks the pages a stay on page `page` of `then` pages stands for in
+/// `read`, a bit per page of the book's `pages` (see [`rescaled`]).
+pub(crate) fn mark_read(read: &mut Vec<u8>, page: u32, then: u32, pages: u32) {
+    for page in rescaled(page, then, pages) {
+        let (byte, bit) = ((page / 8) as usize, page % 8);
+        if read.len() <= byte {
+            read.resize(byte + 1, 0);
+        }
+        read[byte] |= 1 << bit;
+    }
+}
+
 /// The totals of `book`; `day_of` turns Unix seconds into local days.
+/// Where the log cannot be read to the end, those of what could be.
 pub(crate) fn of_book(
     storage: &dyn Storage,
     book: &Book,
@@ -39,7 +64,7 @@ pub(crate) fn of_book(
     let mut totals = BookTotals::default();
     // Pages read, as bits.
     let mut read: Vec<u8> = Vec::new();
-    store::scan(storage, |stat: &PageStat| {
+    let _ = store::scan(storage, |stat: &PageStat| {
         if stat.book != book.id {
             return;
         }
@@ -49,13 +74,7 @@ pub(crate) fn of_book(
         } else {
             stat.pages
         };
-        for page in rescaled(stat.page, stat.pages, pages) {
-            let (byte, bit) = ((page / 8) as usize, page % 8);
-            if read.len() <= byte {
-                read.resize(byte + 1, 0);
-            }
-            read[byte] |= 1 << bit;
-        }
+        mark_read(&mut read, stat.page, stat.pages, pages);
         let day = day_of(stat.start);
         match totals.days.binary_search_by_key(&day, |(d, _)| *d) {
             Ok(i) => totals.days[i].1 += u32::from(stat.duration),
@@ -66,15 +85,14 @@ pub(crate) fn of_book(
     totals
 }
 
-/// Reading time per book id, for lists.
-pub(crate) fn seconds_per_book(storage: &dyn Storage) -> Vec<u64> {
-    let mut seconds = vec![0u64; 0];
-    store::scan(storage, |stat| {
-        let i = usize::from(stat.book);
-        if seconds.len() <= i {
-            seconds.resize(i + 1, 0);
+/// Reading time of each of `books` (sorted by id), for lists; where the
+/// log cannot be read to the end, that of what could be.
+pub(crate) fn seconds_per_book(storage: &dyn Storage, books: &[Book]) -> Vec<u64> {
+    let mut seconds = vec![0u64; books.len()];
+    let _ = store::scan(storage, |stat| {
+        if let Ok(i) = books.binary_search_by_key(&stat.book, |b| b.id) {
+            seconds[i] += u64::from(stat.duration);
         }
-        seconds[i] += u64::from(stat.duration);
     });
     seconds
 }
@@ -137,6 +155,20 @@ mod tests {
         assert_eq!(rescaled(5, 100, 100), 5..=5);
     }
 
+    /// Page numbers from a damaged or hostile file stay within a book's
+    /// pages, and the bits of the pages read small.
+    #[test]
+    fn page_numbers_are_clamped() {
+        assert_eq!(rescaled(u32::MAX, 0, 0), MOST_PAGES..=MOST_PAGES);
+        assert_eq!(rescaled(u32::MAX, 100, 100), 100..=100);
+        assert_eq!(rescaled(1, u32::MAX, u32::MAX), 1..=1);
+        assert_eq!(*rescaled(u32::MAX, u32::MAX, u32::MAX).end(), MOST_PAGES);
+        let mut read = Vec::new();
+        mark_read(&mut read, u32::MAX, u32::MAX, u32::MAX);
+        mark_read(&mut read, 4_000_000_000, 0, 0);
+        assert!(read.len() <= MOST_PAGES as usize / 8 + 1);
+    }
+
     #[test]
     fn books_add_up() {
         let storage = MemoryStorage::new();
@@ -147,28 +179,28 @@ mod tests {
             duration,
             pages,
         };
-        store::append(&storage, stat(1, 100, 30, 100));
-        store::append(&storage, stat(2, 140, 40, 100));
+        store::append(&storage, stat(1, 100, 30, 100)).unwrap();
+        store::append(&storage, stat(2, 140, 40, 100)).unwrap();
         // The same page again, the next day.
-        store::append(&storage, stat(2, 1000, 20, 100));
-        // Another book.
-        store::append(
-            &storage,
-            PageStat {
-                book: 2,
+        store::append(&storage, stat(2, 1000, 20, 100)).unwrap();
+        // Another book, and one of an id no book has.
+        for book in [2, u16::MAX] {
+            let other = PageStat {
+                book,
                 ..stat(9, 1100, 50, 100)
-            },
-        );
-        let book = Book {
-            id: 1,
+            };
+            store::append(&storage, other).unwrap();
+        }
+        let book = |id| Book {
+            id,
             pages: 100,
             ..Book::default()
         };
-        let totals = of_book(&storage, &book, |unix| (unix / 500) as i32);
+        let totals = of_book(&storage, &book(1), |unix| (unix / 500) as i32);
         assert_eq!(totals.seconds, 90);
         assert_eq!(totals.pages_read, 2);
         assert_eq!(totals.days, [(0, 70), (2, 20)]);
-        assert_eq!(seconds_per_book(&storage), [0, 90, 50]);
+        assert_eq!(seconds_per_book(&storage, &[book(1), book(2)]), [90, 50]);
     }
 
     #[test]

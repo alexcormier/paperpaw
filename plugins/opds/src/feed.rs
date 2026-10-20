@@ -6,7 +6,8 @@
 //! What is kept of a feed: its title, its entries (at most
 //! [`MAX_ENTRIES`]) with their titles, authors and links, the next page
 //! and where to search. Entries lead to another feed (navigation) or to
-//! books (acquisition links), or both.
+//! books (acquisition links), or both. Everything kept has a limit, so a
+//! feed made to fill the memory cannot.
 
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -19,6 +20,13 @@ use paperpaw_sdk::xml::{Token, Tokenizer, decode, local_name};
 pub(crate) const MAX_ENTRIES: usize = 100;
 /// Titles and notes are cut at this many characters.
 const MAX_TEXT: usize = 300;
+/// Files kept of one entry: catalogs offer a book in a few formats.
+pub(crate) const MAX_BOOKS: usize = 16;
+/// Authors kept of one entry.
+pub(crate) const MAX_AUTHORS: usize = 10;
+/// The longest address read from a WebDAV listing, in bytes (links in
+/// feeds are attributes, which the tokenizer bounds).
+const MAX_LINK: usize = 4096;
 /// Feeds are read in pieces of this size.
 const CHUNK: usize = 2048;
 
@@ -145,6 +153,8 @@ struct Reader {
     /// The plain content or summary of the entry.
     content: String,
     authors: Vec<String>,
+    /// In an entry past [`MAX_ENTRIES`]: read over, nothing kept.
+    skipping: bool,
 }
 
 impl Reader {
@@ -156,7 +166,14 @@ impl Reader {
                 self_closing,
             } => {
                 let name = local_name(name);
+                if self.skipping {
+                    return;
+                }
                 match name {
+                    "entry" if self.feed.entries.len() >= MAX_ENTRIES => {
+                        self.skipping = !self_closing;
+                        return;
+                    }
                     "entry" => {
                         self.entry = Some(Entry::default());
                         self.authors.clear();
@@ -203,6 +220,9 @@ impl Reader {
                     self.text.push_str(text);
                 }
             }
+            Token::End { name } if self.skipping => {
+                self.skipping = local_name(name) != "entry";
+            }
             Token::End { name } => self.end(local_name(name)),
         }
     }
@@ -221,7 +241,11 @@ impl Reader {
                 (Some(Field::FeedTitle), _) => self.feed.title = text,
                 (Some(Field::Title), Some(entry)) => entry.title = text,
                 (Some(Field::Id), Some(entry)) => entry.id = text,
-                (Some(Field::Author), Some(_)) if !text.is_empty() => self.authors.push(text),
+                (Some(Field::Author), Some(_))
+                    if !text.is_empty() && self.authors.len() < MAX_AUTHORS =>
+                {
+                    self.authors.push(text);
+                }
                 (Some(Field::Content), Some(_)) if self.content.is_empty() => self.content = text,
                 _ => {}
             }
@@ -276,6 +300,9 @@ impl Reader {
         if rel == "http://opds-spec.org/acquisition"
             || rel == "http://opds-spec.org/acquisition/open-access"
         {
+            if entry.books.len() >= MAX_BOOKS {
+                return;
+            }
             entry.books.push(Book {
                 mime: kind.to_string(),
                 url,
@@ -310,6 +337,16 @@ pub(crate) fn clean(text: &str) -> String {
         }
         None => out,
     }
+}
+
+/// Adds `piece` to `text` if it stays within `max` bytes; `false` if it
+/// does not fit.
+fn push_within(text: &mut String, piece: &str, max: usize) -> bool {
+    let fits = text.len() + piece.len() <= max;
+    if fits {
+        text.push_str(piece);
+    }
+    fits
 }
 
 /// Reads the feed in file `path`, which came from `base` (links are
@@ -353,6 +390,8 @@ pub(crate) fn read_webdav(storage: &dyn Storage, path: &str, base: &str) -> Feed
     let mut current: Option<Response> = None;
     let mut field: Option<&'static str> = None;
     let mut text = String::new();
+    // The field's text did not fit: an address cut short leads nowhere.
+    let mut cut = false;
     let own = percent_decode(
         base.split("://")
             .nth(1)
@@ -366,7 +405,9 @@ pub(crate) fn read_webdav(storage: &dyn Storage, path: &str, base: &str) -> Feed
         Token::Start {
             name, self_closing, ..
         } => match local_name(name) {
-            "response" => current = Some(Response::default()),
+            "response" => {
+                current = (feed.entries.len() < MAX_ENTRIES).then(Response::default);
+            }
             "collection" => {
                 if let Some(r) = &mut current {
                     r.folder = true;
@@ -379,17 +420,19 @@ pub(crate) fn read_webdav(storage: &dyn Storage, path: &str, base: &str) -> Feed
                     _ => "getcontenttype",
                 });
                 text.clear();
+                cut = false;
             }
             _ => {}
         },
-        Token::Text(t) if field.is_some() => text.push_str(&decode(&t)),
-        Token::CData(t) if field.is_some() => text.push_str(t),
+        Token::Text(t) if field.is_some() => cut |= !push_within(&mut text, &decode(&t), MAX_LINK),
+        Token::CData(t) if field.is_some() => cut |= !push_within(&mut text, t, MAX_LINK),
         Token::End { name } => {
             let name = local_name(name);
             if field == Some(name) {
                 if let Some(r) = &mut current {
                     let value = text.trim().to_string();
                     match name {
+                        "href" if cut => r.href.clear(),
                         "href" => r.href = value,
                         "displayname" => r.name = value,
                         _ => r.kind = value,
@@ -656,6 +699,35 @@ mod tests {
         let feed = parse(&text, "https://a.org/");
         assert_eq!(feed.entries.len(), MAX_ENTRIES);
         assert_eq!(feed.entries[3].feed.as_deref(), Some("https://a.org/3"));
+    }
+
+    #[test]
+    fn hostile_feeds_are_kept_small() {
+        let mut text = String::from("<feed><title>Big</title><entry><title>One</title>");
+        for n in 0..1000 {
+            text.push_str(&alloc::format!(
+                "<author><name>A{n}</name></author><link rel=\"http://opds-spec.org/acquisition\" type=\"application/epub+zip\" href=\"/{n}.epub\"/>"
+            ));
+        }
+        text.push_str("</entry></feed>");
+        let feed = parse(&text, "https://a.org/");
+        let entry = &feed.entries[0];
+        assert_eq!(entry.books.len(), MAX_BOOKS);
+        assert_eq!(entry.authors.split(" & ").count(), MAX_AUTHORS);
+
+        // A WebDAV address that does not end.
+        let endless = "a".repeat(100_000);
+        let listing = alloc::format!(
+            "<d:multistatus xmlns:d=\"DAV:\">\
+             <d:response><d:href>/dav/{endless}.epub</d:href></d:response>\
+             <d:response><d:href>/dav/b.epub</d:href></d:response>\
+             </d:multistatus>"
+        );
+        let storage = MemoryStorage::new();
+        storage.write("dav.xml", listing.as_bytes()).unwrap();
+        let feed = read_webdav(&storage, "dav.xml", "https://a.org/dav/");
+        assert_eq!(feed.entries.len(), 1);
+        assert_eq!(feed.entries[0].title, "b");
     }
 }
 

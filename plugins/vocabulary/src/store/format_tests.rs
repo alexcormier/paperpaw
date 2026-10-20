@@ -8,6 +8,7 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
+use paperpaw_sdk::files::MAX_LINE;
 use paperpaw_sdk::{MemoryStorage, Storage};
 use proptest::prelude::*;
 
@@ -102,13 +103,13 @@ proptest! {
     }
 
     /// Words added are all in the file, newest last, each once whatever
-    /// its case, and the file is read the same line by line however its
+    /// its case (one added again while newest staying as it was), and the file is read the same line by line however its
     /// lines fall on the chunks it is read in.
     #[test]
     fn words_added_are_read_back(words in proptest::collection::vec(listed_word(), 1..12)) {
         let storage = MemoryStorage::new();
         for w in &words {
-            add(&storage, w);
+            add(&storage, w).unwrap();
         }
         let read = all(&storage);
         // Expected: the last of each word (by lower case and language),
@@ -118,6 +119,10 @@ proptest! {
             let same = |e: &&Word| {
                 e.language == w.language && e.word.to_lowercase() == w.word.to_lowercase()
             };
+            // Looked up again while it is the newest, it stays as kept.
+            if expected.last().is_some_and(same) {
+                continue;
+            }
             expected.retain(|e| !same(e));
             expected.push(w);
         }
@@ -144,7 +149,7 @@ proptest! {
         prop_assert!(count(&storage) <= lines);
         let _ = summary(&storage);
         prop_assert!(export(&storage, "out.tsv"));
-        add(&storage, &word("new", "en"));
+        add(&storage, &word("new", "en")).unwrap();
         prop_assert_eq!(all(&storage).last().map(|w| w.word.clone()), Some("new".to_string()));
     }
 }
@@ -152,9 +157,9 @@ proptest! {
 #[test]
 fn the_same_word_in_another_case_replaces_the_older() {
     let storage = MemoryStorage::new();
-    add(&storage, &word("Rabbit", "en"));
-    add(&storage, &word("hole", "en"));
-    add(&storage, &word("RABBIT", "en"));
+    add(&storage, &word("Rabbit", "en")).unwrap();
+    add(&storage, &word("hole", "en")).unwrap();
+    add(&storage, &word("RABBIT", "en")).unwrap();
     let words: Vec<String> = all(&storage).into_iter().map(|w| w.word).collect();
     assert_eq!(words, ["hole", "RABBIT"]);
 }
@@ -162,8 +167,8 @@ fn the_same_word_in_another_case_replaces_the_older() {
 #[test]
 fn the_same_word_in_another_language_is_another_word() {
     let storage = MemoryStorage::new();
-    add(&storage, &word("Gift", "en"));
-    add(&storage, &word("Gift", "de"));
+    add(&storage, &word("Gift", "en")).unwrap();
+    add(&storage, &word("Gift", "de")).unwrap();
     assert_eq!(count(&storage), 2);
     assert_eq!(summary(&storage).languages, 2);
 }
@@ -174,11 +179,11 @@ fn duplicates_in_the_file_all_go_when_the_word_is_added_again() {
     let twice = format!(
         "{}{}{}",
         word("echo", "en").line(),
-        word("other", "en").line(),
-        word("Echo", "en").line()
+        word("Echo", "en").line(),
+        word("other", "en").line()
     );
     storage.write(&file(), twice.as_bytes()).unwrap();
-    add(&storage, &word("ECHO", "en"));
+    add(&storage, &word("ECHO", "en")).unwrap();
     let words: Vec<String> = all(&storage).into_iter().map(|w| w.word).collect();
     assert_eq!(words, ["other", "ECHO"]);
 }
@@ -254,9 +259,9 @@ fn deleting_a_word_after_an_unreadable_line_deletes_that_word() {
     storage.write(&file(), data.as_bytes()).unwrap();
     // The list shows each word with its number, and deletes by it.
     let listed = range(&storage, 0, 10);
-    let (n, first) = listed.iter().find(|(_, w)| w.word == "first").unwrap();
+    let (_, first) = listed.iter().find(|(_, w)| w.word == "first").unwrap();
     assert_eq!(first.word, "first");
-    remove(&storage, *n);
+    remove(&storage, first).unwrap();
     let left: Vec<String> = all(&storage).into_iter().map(|w| w.word).collect();
     assert_eq!(left, ["second"]);
 }
@@ -272,7 +277,7 @@ fn a_word_added_to_a_file_without_a_last_line_break_is_its_own() {
     storage
         .write(&file(), last.trim_end_matches('\n').as_bytes())
         .unwrap();
-    add(&storage, &word("new", "en"));
+    add(&storage, &word("new", "en")).unwrap();
     let words: Vec<String> = all(&storage).into_iter().map(|w| w.word).collect();
     assert_eq!(words, ["last", "new"]);
     assert_eq!(all(&storage)[0].sentence, "With last in it.");

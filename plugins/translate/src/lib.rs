@@ -181,6 +181,7 @@ static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_choice(
     AUTO,
     groups::READING,
 )
+.advanced()
 .with_extra(&IN_TRANSLATION)
 .described("translate.setting.to.help")];
 

@@ -334,7 +334,7 @@ fn marks_overlap_only_where_they_share_characters() {
 }
 
 #[test]
-fn files_are_per_book_and_move_with_it() {
+fn files_are_per_book() {
     assert_ne!(annotations::file("a.epub"), annotations::file("b.epub"));
     assert!(annotations::file("a.epub").starts_with(".paperpaw/annotations/"));
     let storage = MemoryStorage::new();
@@ -343,9 +343,8 @@ fn files_are_per_book_and_move_with_it() {
         "a.epub",
         annotation(Kind::Bookmark, (1, 0), (1, 0), "", ""),
     );
-    annotations::moved(&storage, "a.epub", "b.epub");
-    assert_eq!(annotations::marks(&storage, "b.epub").len(), 1);
-    assert!(annotations::marks(&storage, "a.epub").is_empty());
+    assert_eq!(annotations::marks(&storage, "a.epub").len(), 1);
+    assert!(annotations::marks(&storage, "b.epub").is_empty());
 }
 
 #[test]

@@ -68,6 +68,9 @@ pub struct UiStyle {
     pub corner: u32,
     /// Gray text is drawn black (see [`UiStyle::faint`]).
     pub strong: bool,
+    /// The least size of what a finger sets or presses, about 7 mm, on
+    /// touch screens; 0 with buttons alone (see [`UiStyle::touch_row`]).
+    pub finger: u32,
 }
 
 impl UiStyle {
@@ -102,7 +105,15 @@ impl UiStyle {
                 _ => 0,
             },
             strong: s.text(settings::UI_CONTRAST.as_str()) == settings::CONTRAST_STRONG,
+            finger: if env.device.input.touch { m.mm(7) } else { 0 },
         }
+    }
+
+    /// A row of `height` made high enough on touch screens that the
+    /// buttons in it ([`button_height`]) are as large as a fingertip
+    /// ([`UiStyle::finger`]); as it is with buttons alone.
+    pub fn touch_row(&self, height: u32) -> u32 {
+        height.max(self.finger * 10 / 7)
     }
 
     /// The colour of gray text such as hints and notes: `gray`, or black

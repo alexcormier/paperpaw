@@ -28,7 +28,7 @@ fn stay(book: u16, page: u32, start: u32, duration: u16) -> PageStat {
 
 fn logged(storage: &MemoryStorage) -> Vec<PageStat> {
     let mut out = Vec::new();
-    scan(storage, |s| out.push(*s));
+    let _ = scan(storage, |s| out.push(*s));
     out
 }
 
@@ -107,7 +107,7 @@ fn stays_after_a_record_cut_off_are_read_as_written() {
     let first = stay(1, 1, 1000, 30);
     let storage = log_with_tail(&[first], &stay(1, 2, 1030, 40).encode()[..7]);
     let later = stay(1, 3, 1100, 25);
-    append(&storage, later);
+    append(&storage, later).unwrap();
     assert_eq!(logged(&storage), [first, later]);
 }
 
@@ -115,8 +115,8 @@ fn stays_after_a_record_cut_off_are_read_as_written() {
 fn stays_at_the_edges_of_time_are_counted_on_their_days() {
     let storage = MemoryStorage::new();
     // The first second of 1970, and the last a u32 holds (2106).
-    append(&storage, stay(1, 1, 0, 30));
-    append(&storage, stay(1, 2, u32::MAX, 40));
+    append(&storage, stay(1, 1, 0, 30)).unwrap();
+    append(&storage, stay(1, 2, u32::MAX, 40)).unwrap();
     let day_of = |unix: u32| (i64::from(unix) / 86_400) as i32;
     let days = days(&storage, day_of);
     assert_eq!(
@@ -132,8 +132,8 @@ fn stays_at_the_edges_of_time_are_counted_on_their_days() {
 #[test]
 fn stays_of_no_length_count_as_stays_without_time() {
     let storage = MemoryStorage::new();
-    append(&storage, stay(1, 1, 1000, 0));
-    append(&storage, stay(1, 2, 1010, 0));
+    append(&storage, stay(1, 1, 1000, 0)).unwrap();
+    append(&storage, stay(1, 2, 1010, 0)).unwrap();
     let days = days(&storage, short_days);
     assert_eq!(
         days,
@@ -150,7 +150,7 @@ fn the_longest_stays_are_summed_without_loss() {
     let storage = MemoryStorage::new();
     // A thousand stays of the longest a record holds, on one day.
     for page in 0..1000 {
-        append(&storage, stay(1, page + 1, 1000, u16::MAX));
+        append(&storage, stay(1, page + 1, 1000, u16::MAX)).unwrap();
     }
     let days = days(&storage, short_days);
     assert_eq!(days.len(), 1);
@@ -216,7 +216,7 @@ fn a_broken_days_file_is_summed_anew_from_the_log() {
 fn days_stay_in_order_whatever_order_the_stays_come_in() {
     let storage = MemoryStorage::new();
     for start in [5000u32, 100, 3000, 100, 9000, 0] {
-        append(&storage, stay(1, 1, start, 10));
+        append(&storage, stay(1, 1, start, 10)).unwrap();
     }
     let days = days(&storage, short_days);
     let order: Vec<i32> = days.iter().map(|d| d.day).collect();
@@ -266,7 +266,7 @@ fn books_of_version_1_are_written_back_as_read() {
     assert_eq!(v1.len(), 2);
     // Without `finished`, which version 1 did not have.
     assert!(v1.iter().all(|b| b.finished == 0));
-    save_books(&storage, &v1);
+    save_books(&storage, &v1).unwrap();
     assert_eq!(books(&storage), v1);
 }
 
@@ -277,7 +277,7 @@ fn the_log_of_version_1_is_appended_to_as_written() {
         include_bytes!("../../testdata/pages.bin.v1").to_vec(),
     );
     let new = stay(1, 6, 1_760_000_100, 12);
-    append(&storage, new);
+    append(&storage, new).unwrap();
     let all = logged(&storage);
     assert_eq!(all.len(), 3);
     assert_eq!(all[2], new);
@@ -337,7 +337,7 @@ proptest! {
             book.id = n as u16 + 1;
         }
         let storage = MemoryStorage::new();
-        save_books(&storage, &books_in);
+        save_books(&storage, &books_in).unwrap();
         prop_assert_eq!(books(&storage), books_in);
     }
 
@@ -345,7 +345,7 @@ proptest! {
     fn stays_survive_the_log(stays in proptest::collection::vec(any_stay(), 0..200)) {
         let storage = MemoryStorage::new();
         for s in &stays {
-            append(&storage, *s);
+            append(&storage, *s).unwrap();
         }
         prop_assert_eq!(logged(&storage), stays.clone());
         let mut newest_first = stays.clone();
@@ -372,7 +372,7 @@ proptest! {
             .with(&path("books.ini"), ini)
             .with(&path("days.bin"), cache);
         let mut count = 0usize;
-        scan(&storage, |_| count += 1);
+        let _ = scan(&storage, |_| count += 1);
         prop_assert_eq!(count, log.len() / RECORD);
         scan_recent(&storage, since, |s| assert!(s.start >= since));
         let _ = days(&storage, |unix| (unix / 86_400) as i32);

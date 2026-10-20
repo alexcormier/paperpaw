@@ -1,178 +1,155 @@
-//! The library's shelves with the real kernel and the standard app, on a
-//! buttons-only X4 and a touch-only device: by author (made from the
-//! books' own details in the background, an author's books listed when
-//! chosen, books without one under "Unknown author"), the favourites,
-//! and an empty library.
+//! The shelves (by author, series, tag) with the real kernel: their
+//! catalog is made once and again only after the library changed, and
+//! making it goes on where another screen came on top meanwhile.
+//!
+//! One test only: the catalog's freshness is known for the whole program,
+//! as on a device, so tests of it run one after the other.
 
 // Tests panic on purpose when something is wrong.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-mod common;
+use std::cell::Cell;
+use std::rc::Rc;
 
-use common::*;
+use paperpaw_core::{Effects, Kernel};
+use paperpaw_platform::Rotation;
+use paperpaw_sdk::builtin::{actions, events, params};
+use paperpaw_sdk::{
+    DeviceInfo, DirEntry, DisplayInfo, Id, InputCaps, Instant, MemoryClass, MemoryStorage, Params,
+    PixelFormat, Storage, StorageError,
+};
 
-const SHELF: &str = "files.shelf";
+const DEVICE: DeviceInfo = DeviceInfo {
+    id: "test-x4",
+    name: "Test X4",
+    display: DisplayInfo {
+        width: 480,
+        height: 800,
+        dpi: 220,
+        format: PixelFormat::Mono1,
+        rotation: Rotation::Deg0,
+        color: None,
+    },
+    input: InputCaps {
+        buttons: true,
+        touch: false,
+        pen: false,
+        keys: &["back", "confirm", "left", "right", "up", "down", "power"],
+    },
+    memory: MemoryClass::Small,
+};
 
-/// A Project Gutenberg text with its title and author in its header.
-fn gutenberg(title: &str, author: Option<&str>) -> Vec<u8> {
-    let author = author.map_or(String::new(), |a| format!("Author: {a}\r\n"));
-    format!(
-        "The Project Gutenberg eBook of {title}\r\n\r\nTitle: {title}\r\n{author}\
-         Language: English\r\n\r\n*** START OF THE PROJECT GUTENBERG EBOOK ***\r\n\r\n\
-         Some text of the book.\r\n\r\n*** END OF THE PROJECT GUTENBERG EBOOK ***\r\n"
-    )
-    .into_bytes()
+/// A card that counts how often the library folder is listed.
+struct Counted {
+    inner: MemoryStorage,
+    listings: Rc<Cell<usize>>,
 }
 
-fn library() -> Shared {
-    let books = [
-        ("books/a.txt", gutenberg("Alice", Some("Lewis Carroll"))),
-        (
-            "books/b.txt",
-            gutenberg("Sylvie and Bruno", Some("Lewis Carroll")),
-        ),
-        (
-            "books/c.txt",
-            gutenberg("Die Verwandlung", Some("Franz Kafka")),
-        ),
-        (
-            "books/d.txt",
-            gutenberg("Ödön's Tales", Some("Ödön von Horváth")),
-        ),
-        ("books/e.txt", gutenberg("Nobody's", None)),
-        (
-            "books/sub/f.txt",
-            gutenberg("Der Process", Some("Franz Kafka")),
-        ),
-    ];
-    let files: Vec<(&str, &[u8])> = books.iter().map(|(p, d)| (*p, d.as_slice())).collect();
-    Shared::memory("", &files)
-}
-
-fn rows(app: &mut App) -> Vec<String> {
-    app.parts()
-        .into_iter()
-        .filter(|p| p.role == Role::Row)
-        .map(|p| p.label)
-        .collect()
-}
-
-/// Lets the catalog be made in the background.
-fn wait(app: &mut App) {
-    for _ in 0..20 {
-        app.now += 1000;
-        let effects = app.kernel.tick(Instant(app.now));
-        app.settle(effects);
+impl Storage for Counted {
+    fn read_at(&self, path: &str, offset: u64, buf: &mut [u8]) -> Result<usize, StorageError> {
+        self.inner.read_at(path, offset, buf)
     }
-}
-
-/// Chooses the row that begins with `label`.
-fn choose(app: &mut App, label: &str) {
-    if app.kernel.device().input.touch {
-        app.tap_on(label);
-        return;
+    fn size(&self, path: &str) -> Result<u64, StorageError> {
+        self.inner.size(path)
     }
-    for _ in 0..40 {
-        if app.focused().is_some_and(|f| f.starts_with(label)) {
-            app.run(actions::CONFIRM);
-            return;
+    fn write(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
+        self.inner.write(path, data)
+    }
+    fn append(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
+        self.inner.append(path, data)
+    }
+    fn list(&self, dir: &str, visit: &mut dyn FnMut(DirEntry<'_>)) -> Result<(), StorageError> {
+        if dir == "books" {
+            self.listings.set(self.listings.get() + 1);
         }
-        app.run(actions::DOWN);
+        self.inner.list(dir, visit)
     }
-    panic!("no row {label}:\n{}", app.described());
+    fn remove(&self, path: &str) -> Result<(), StorageError> {
+        self.inner.remove(path)
+    }
+    fn rename(&self, from: &str, to: &str) -> Result<(), StorageError> {
+        self.inner.rename(from, to)
+    }
 }
 
-#[test]
-fn books_by_author_listed_and_opened() {
-    for device in DEVICES {
-        let mut app = App::new(device, library());
-        app.run(actions::LIBRARY);
-        app.run(Id::new_static("files.by-author"));
-        assert_eq!(app.screen(), SHELF);
-        wait(&mut app);
-        let authors = rows(&mut app);
-        let names: Vec<&str> = authors
-            .iter()
-            .map(|r| r.split(", ").next().unwrap())
-            .collect();
-        for author in [
-            "Lewis Carroll",
-            "Franz Kafka",
-            "Ödön von Horváth",
-            "Unknown author",
-        ] {
-            assert!(names.contains(&author), "{author}: {authors:?}");
+/// Runs the timers asked for, `ticks` of them at most.
+fn run(kernel: &mut Kernel, mut effects: Effects, ticks: usize) {
+    let mut now = 0;
+    for _ in 0..ticks {
+        match effects.wake_at() {
+            Some(at) if at.0 <= now + 10_000 => {
+                now = now.max(at.0);
+                effects = kernel.tick(Instant(now));
+            }
+            _ => break,
         }
-        // Books in folders below count too.
-        let kafka = authors
-            .iter()
-            .find(|r| r.starts_with("Franz Kafka"))
-            .unwrap();
-        assert!(kafka.contains("2 books"), "{kafka}");
-        choose(&mut app, "Franz Kafka");
-        let books = rows(&mut app);
-        assert_eq!(books.len(), 2, "{books:?}");
-        assert!(
-            books.iter().any(|b| b.starts_with("Der Process")),
-            "{books:?}"
-        );
-        choose(&mut app, "Die Verwandlung");
-        assert_eq!(app.screen(), "reader.screen");
-        app.run(actions::BACK);
-        assert_eq!(app.screen(), SHELF);
-        app.run(actions::BACK);
-        app.run(actions::BACK);
-        assert_eq!(app.screen(), "files.browser");
     }
+    kernel.render(&mut |_, _| {});
+}
+
+fn shown(kernel: &mut Kernel) -> String {
+    kernel.render(&mut |_, _| {});
+    let labels: Vec<String> = kernel.describe().into_iter().map(|p| p.label).collect();
+    labels.join("\n")
 }
 
 #[test]
-fn the_shelves_of_an_empty_library_say_so() {
-    for device in DEVICES {
-        let mut app = App::new(device, Shared::memory("", &[]));
-        for shelf in ["files.by-author", "files.by-series", "files.by-tag"] {
-            app.run(Id::new_static(shelf));
-            assert_eq!(app.screen(), SHELF, "{shelf}");
-            wait(&mut app);
-            assert!(rows(&mut app).is_empty(), "{shelf}: {}", app.described());
-            app.run(actions::BACK);
-        }
-        app.run(Id::new_static("files.favourites"));
-        assert!(app.shows("No favourites yet"), "{}", app.described());
-    }
-}
+fn the_catalog_is_made_once_and_after_changes() {
+    let storage = (0..40).fold(MemoryStorage::new(), |card, i| {
+        card.with(&format!("books/book {i:02}.txt"), "Some text.")
+    });
+    let listings = Rc::new(Cell::new(0));
+    let mut kernel = Kernel::builder(DEVICE)
+        .storage(Counted {
+            inner: storage,
+            listings: Rc::clone(&listings),
+        })
+        .user_config("[core]\nlanguage = en\n")
+        .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
+        .plugin(paperpaw_plugin_format_txt::TxtFormat)
+        .plugin(paperpaw_plugin_files::Files)
+        .build()
+        .unwrap();
+    let effects = kernel.start(Instant(0));
+    run(&mut kernel, effects, 100);
+    let by_author = paperpaw_plugin_files::BY_AUTHOR;
 
-#[test]
-fn books_without_series_or_tags_say_so_on_those_shelves() {
-    for device in DEVICES {
-        let mut app = App::new(device, library());
-        app.run(Id::new_static("files.by-series"));
-        wait(&mut app);
-        assert!(
-            app.shows("None of the books names a series."),
-            "{}",
-            app.described()
-        );
-        app.run(actions::BACK);
-        app.run(Id::new_static("files.by-tag"));
-        wait(&mut app);
-        assert!(
-            app.shows("None of the books has tags."),
-            "{}",
-            app.described()
-        );
-    }
-}
+    // The first steps of making the catalog, then a full screen on top.
+    let effects = kernel.run_action(Instant(0), by_author.clone());
+    run(&mut kernel, effects, 2);
+    assert!(
+        shown(&mut kernel).contains("Collecting"),
+        "{}",
+        shown(&mut kernel)
+    );
+    let info = Params::new().with(params::PATH, "books/book 01.txt");
+    let effects = kernel.open_screen(Instant(0), paperpaw_plugin_files::INFO_SCREEN, info);
+    run(&mut kernel, effects, 100);
+    // Back: it goes on to the end.
+    let effects = kernel.run_action(Instant(0), actions::BACK);
+    run(&mut kernel, effects, 1000);
+    let text = shown(&mut kernel);
+    assert!(text.contains("40 books"), "{text}");
 
-#[test]
-fn the_shelves_menu_offers_every_shelf() {
-    for device in DEVICES {
-        let mut app = App::new(device, library());
-        app.run(Id::new_static("files.shelves"));
-        assert_eq!(app.screen(), "menu.list");
-        let shown: Vec<String> = rows(&mut app);
-        assert_eq!(shown, ["Favourites", "By author", "By series", "By tag"]);
-        choose(&mut app, "By series");
-        assert_eq!(app.screen(), SHELF);
-    }
+    // Shown again: the catalog made is taken as it is.
+    let effects = kernel.run_action(Instant(0), actions::BACK);
+    run(&mut kernel, effects, 100);
+    listings.set(0);
+    let effects = kernel.run_action(Instant(0), by_author.clone());
+    run(&mut kernel, effects, 1000);
+    assert!(shown(&mut kernel).contains("40 books"));
+    assert_eq!(listings.get(), 0, "made anew without a change");
+
+    // After a change it is made anew.
+    let effects = kernel.run_action(Instant(0), actions::BACK);
+    run(&mut kernel, effects, 100);
+    let effects = kernel.send_event(
+        Instant(0),
+        events::LIBRARY_CHANGED.id().clone(),
+        Params::new(),
+    );
+    run(&mut kernel, effects, 100);
+    let effects = kernel.run_action(Instant(0), Id::new_static("files.by-series"));
+    run(&mut kernel, effects, 1000);
+    assert!(listings.get() > 0, "not made anew after a change");
 }

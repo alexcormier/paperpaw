@@ -75,11 +75,14 @@ fn last_path() -> String {
     format!("{}/last.txt", Env::plugin_dir(PLUGIN.as_str()))
 }
 
-pub(crate) fn load(storage: &dyn Storage) -> Vec<Profile> {
-    let Ok(Some(text)) = FORMAT.load(storage, &path(), 64 * 1024) else {
-        return Vec::new();
-    };
-    parse(&text)
+/// The profiles kept: none where there is no file yet, `None` where it
+/// cannot be read (then nothing may be saved over it).
+pub(crate) fn load(storage: &dyn Storage) -> Option<Vec<Profile>> {
+    match FORMAT.load(storage, &path(), 64 * 1024) {
+        Ok(Some(text)) => Some(parse(&text)),
+        Ok(None) => Some(Vec::new()),
+        Err(_) => None,
+    }
 }
 
 /// The profiles of the file's text (in this version).
@@ -111,8 +114,15 @@ fn parse(text: &str) -> Vec<Profile> {
     profiles.into_iter().map(|(_, p)| p).collect()
 }
 
-pub(crate) fn save(storage: &dyn Storage, profiles: &[Profile]) {
-    let _ = FORMAT.save(storage, &path(), &text(profiles));
+/// Keeps `profiles`; whether it could.
+pub(crate) fn save(storage: &dyn Storage, profiles: &[Profile]) -> bool {
+    FORMAT.save(storage, &path(), &text(profiles)).is_ok()
+}
+
+/// Whether `a` and `b` name the same profile: as they read, whatever the
+/// case.
+pub(crate) fn same_name(a: &str, b: &str) -> bool {
+    a.to_lowercase() == b.to_lowercase()
 }
 
 /// The name of the profile applied last.
@@ -170,7 +180,7 @@ mod tests {
     #[test]
     fn profiles_are_kept() {
         let storage = MemoryStorage::new();
-        assert!(load(&storage).is_empty());
+        assert!(load(&storage).unwrap().is_empty());
         let profiles = [
             Profile {
                 name: String::from("Night"),
@@ -184,8 +194,8 @@ mod tests {
                 values: Vec::from([(Id::new_static("core.font-size"), String::from("18"))]),
             },
         ];
-        save(&storage, &profiles);
-        let loaded = load(&storage);
+        assert!(save(&storage, &profiles));
+        let loaded = load(&storage).unwrap();
         assert_eq!(loaded, profiles, "names with brackets and spaces too");
         set_last(&storage, "Night");
         assert_eq!(last(&storage), "Night");
@@ -199,7 +209,7 @@ mod tests {
                 .as_bytes()
                 .to_vec(),
         );
-        let loaded = load(&storage);
+        let loaded = load(&storage).unwrap();
         assert_eq!(loaded.len(), 2);
         assert_eq!(loaded[0].name, "Night");
         assert_eq!(
@@ -211,10 +221,10 @@ mod tests {
         );
         assert_eq!(loaded[1].name, "Large print");
         // Saved again, it is version 2.
-        save(&storage, &loaded);
+        assert!(save(&storage, &loaded));
         let text = paperpaw_sdk::read_file(&storage, &path(), 4096).unwrap();
         assert!(text.starts_with(b"# format 2\n[profile.1]\nname = Night\n"));
-        assert_eq!(load(&storage), loaded);
+        assert_eq!(load(&storage).unwrap(), loaded);
     }
 
     /// What version 1 wrote stays readable (see `docs/data-files.md`).

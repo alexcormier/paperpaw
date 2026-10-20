@@ -5,8 +5,9 @@
 //! buffer, and a running sum per row yields the coverage of each pixel.
 //! Curves are flattened into line segments first.
 
-use alloc::vec;
 use alloc::vec::Vec;
+
+use crate::glyph::zeroed;
 
 /// A point in pixel space, y pointing down.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -73,7 +74,8 @@ impl Path {
         self.current = self.start;
     }
 
-    /// Integer pixel bounds `(x0, y0, x1, y1)` covering all segments.
+    /// Integer pixel bounds `(x0, y0, x1, y1)` covering all segments;
+    /// `None` if there are none or a point is not finite.
     pub fn bounds(&self) -> Option<(i32, i32, i32, i32)> {
         let mut points = self.lines.iter().flat_map(|(a, b)| [*a, *b]);
         let first = points.next()?;
@@ -84,7 +86,12 @@ impl Path {
             x1 = x1.max(p.x);
             y1 = y1.max(p.y);
         }
-        Some((floor(x0), floor(y0), ceil(x1), ceil(y1)))
+        // `min` and `max` pass over NaN: look at every point.
+        let finite = self
+            .lines
+            .iter()
+            .all(|(a, b)| [a.x, a.y, b.x, b.y].iter().all(|c| c.is_finite()));
+        finite.then(|| (floor(x0), floor(y0), ceil(x1), ceil(y1)))
     }
 }
 
@@ -98,24 +105,26 @@ fn segments(len: f32) -> usize {
 }
 
 /// Rasterizes `lines` (already translated so the bounding box starts at
-/// 0,0) into an 8-bit coverage bitmap of `width`×`height`.
-pub(crate) fn rasterize(lines: &[(Pt, Pt)], width: usize, height: usize) -> Vec<u8> {
+/// 0,0) into an 8-bit coverage bitmap of `width`×`height`; `None` if memory
+/// is short.
+pub(crate) fn rasterize(lines: &[(Pt, Pt)], width: usize, height: usize) -> Option<Vec<u8>> {
+    let cells = width.checked_mul(height)?;
     // Two extra cells absorb contributions right of the last column.
-    let mut acc = vec![0.0f32; width * height + 2];
+    let mut acc: Vec<f32> = zeroed(cells.checked_add(2)?)?;
     for &(p0, p1) in lines {
         accumulate_line(&mut acc, width, height, p0, p1);
     }
     // One running sum over the whole buffer: an edge on a row's right
     // border contributes to the next cell, which is the start of the next
     // row, where it cancels exactly.
+    let mut coverage = Vec::new();
+    coverage.try_reserve_exact(cells).ok()?;
     let mut sum = 0.0f32;
-    acc[..width * height]
-        .iter()
-        .map(|a| {
-            sum += a;
-            (abs(sum).min(1.0) * 255.0 + 0.5) as u8
-        })
-        .collect()
+    coverage.extend(acc[..cells].iter().map(|a| {
+        sum += a;
+        (abs(sum).min(1.0) * 255.0 + 0.5) as u8
+    }));
+    Some(coverage)
 }
 
 fn accumulate_line(acc: &mut [f32], width: usize, height: usize, p0: Pt, p1: Pt) {
@@ -208,7 +217,7 @@ mod tests {
     fn pixel_aligned_square_is_fully_covered() {
         let mut path = Path::default();
         square(&mut path, 1.0, 1.0, 3.0, 3.0);
-        let c = rasterize(&path.lines, 4, 4);
+        let c = rasterize(&path.lines, 4, 4).unwrap();
         assert_eq!(c[5], 255);
         assert_eq!(c[10], 255);
         assert_eq!(c[0], 0);
@@ -219,7 +228,7 @@ mod tests {
     fn half_pixel_edges_give_half_coverage() {
         let mut path = Path::default();
         square(&mut path, 0.5, 0.0, 2.0, 1.0);
-        let c = rasterize(&path.lines, 2, 1);
+        let c = rasterize(&path.lines, 2, 1).unwrap();
         assert!((126..=129).contains(&c[0]), "{}", c[0]);
         assert_eq!(c[1], 255);
     }
@@ -232,7 +241,20 @@ mod tests {
         path.line_to(Pt { x: 2.0, y: 2.0 });
         path.line_to(Pt { x: 2.0, y: 0.0 });
         path.close();
-        assert!(rasterize(&path.lines, 2, 2).iter().all(|&v| v == 255));
+        assert!(
+            rasterize(&path.lines, 2, 2)
+                .unwrap()
+                .iter()
+                .all(|&v| v == 255)
+        );
+    }
+
+    #[test]
+    fn impossible_bitmaps_and_points_are_refused() {
+        assert_eq!(rasterize(&[], usize::MAX, 2), None);
+        let mut path = Path::default();
+        square(&mut path, 0.0, 0.0, f32::NAN, 1.0);
+        assert_eq!(path.bounds(), None);
     }
 
     #[test]

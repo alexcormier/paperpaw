@@ -7,6 +7,10 @@ rust-version = "1.95"
 license = "Apache-2.0"
 publish = false
 
+# A workspace of its own (the repository's leaves it out), found as such
+# also in a checkout inside another one, such as a git worktree.
+[workspace]
+
 [[bin]]
 name = "paperpaw-xteink"
 path = "src/main.rs"
@@ -15,10 +19,10 @@ bench = false
 
 [features]
 default = ["x4", "remote"]
-# Which device: the X4 (ESP32-C3, built with the repository's stable
-# toolchain), the X4 Pro or the X4 Classic (ESP32-S3, Xtensa: the `esp`
-# toolchain from espup, `cargo +esp x4pro`, `cargo +esp x4classic`).
-# Exactly one.
+# Which device: the X4 (ESP32-C3, built with the Rust of
+# `rust-toolchain.toml`), the X4 Pro or the X4 Classic (ESP32-S3, Xtensa:
+# espup's `esp` toolchain of `versions.env`, `cargo +esp x4pro`,
+# `cargo +esp x4classic`). Exactly one.
 x4 = [
     "esp-hal/esp32c3",
     "esp-alloc/esp32c3",

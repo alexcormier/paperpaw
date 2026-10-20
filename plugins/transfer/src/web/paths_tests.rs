@@ -30,8 +30,10 @@ fn ask(
         method,
         target,
         body_file: body,
+        at: Instant(0),
     };
-    let (response, done) = answer(storage, KEY, "<page>", request);
+    let mut guard = Guard::new(KEY.to_string());
+    let (response, done) = answer(storage, &mut guard, "<page>", request);
     (response.status, done)
 }
 
@@ -287,8 +289,10 @@ fn lists_escape_names_for_json() {
         method: "GET",
         target: "/api/list?k=k3y&path=Books",
         body_file: None,
+        at: Instant(0),
     };
-    let (response, _) = answer(&storage, KEY, "", request);
+    let mut guard = Guard::new(KEY.to_string());
+    let (response, _) = answer(&storage, &mut guard, "", request);
     assert_eq!(
         String::from_utf8(response.body).unwrap(),
         r#"[{"name":"a\"b\u003c\\c.epub","dir":false,"size":0}]"#
@@ -308,12 +312,12 @@ fn a_query_with_broken_escapes_is_read_as_it_is() {
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(256))]
 
-    /// What `safe` lets through has no way out: no `..`, no hidden part,
+    /// What `files::plain_path` lets through has no way out: no `..`, no hidden part,
     /// no backslash, colon or control character, no empty part; and it
     /// is as safe again.
     #[test]
     fn safe_paths_stay_inside(path in "[a-zA-Z0-9./\\\\:% \t\u{0}-]{0,24}") {
-        if let Some(safe_path) = safe(&path) {
+        if let Some(safe_path) = files::plain_path(&path) {
             prop_assert!(!safe_path.starts_with('/') && !safe_path.ends_with('/'));
             for part in safe_path.split('/').filter(|_| !safe_path.is_empty()) {
                 prop_assert!(!part.is_empty());
@@ -321,7 +325,7 @@ proptest! {
                 prop_assert!(!part.contains(['\\', ':']));
                 prop_assert!(!part.chars().any(char::is_control));
             }
-            prop_assert_eq!(safe(&safe_path), Some(safe_path.clone()));
+            prop_assert_eq!(files::plain_path(&safe_path), Some(safe_path.clone()));
         }
     }
 

@@ -31,6 +31,7 @@ const STYLE: UiStyle = UiStyle {
     dark_header: false,
     corner: 6,
     strong: false,
+    finger: 0,
 };
 
 /// Every point of `rect` worth trying: its corners and its middle.

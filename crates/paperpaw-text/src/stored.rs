@@ -6,7 +6,8 @@
 //!
 //! The format is the packs' (see [`BitmapFont`](crate::BitmapFont));
 //! every strike must hold the same characters, as `paperpaw-fontgen`
-//! makes them.
+//! makes them. What a damaged pack says is checked before memory is set
+//! aside for it: a glyph larger than its size allows reads as empty.
 
 use alloc::rc::Rc;
 use alloc::vec::Vec;
@@ -14,7 +15,7 @@ use core::cell::RefCell;
 use core::fmt;
 
 use crate::font::{FontError, LineMetrics};
-use crate::glyph::Glyph;
+use crate::glyph::{self, Glyph, zeroed};
 
 const MAGIC: &[u8; 4] = b"PPFP";
 /// Packs made before PaperPaw had its name (the same format): still read.
@@ -25,6 +26,8 @@ const STRIKE: usize = 32;
 const RECORD: usize = 20;
 /// Characters a pack may hold at most (a script or a few).
 const MAX_CHARS: usize = 8192;
+/// Sizes a pack may hold at most.
+const MAX_STRIKES: usize = 64;
 
 /// Where a pack's bytes come from.
 pub trait PackSource {
@@ -93,7 +96,7 @@ impl StoredPack {
             return Err(FontError::UnsupportedVersion);
         }
         let count = usize::from(u16_le(&header, 8));
-        if count == 0 {
+        if count == 0 || count > MAX_STRIKES {
             return Err(FontError::Invalid);
         }
         let mut table = alloc::vec![0u8; count * STRIKE];
@@ -121,7 +124,7 @@ impl StoredPack {
             });
         }
         let n = glyphs.unwrap_or(0);
-        let mut records = alloc::vec![0u8; n * RECORD];
+        let mut records = zeroed(n * RECORD).ok_or(FontError::Invalid)?;
         if !source.read_at(strikes[0].glyph_table, &mut records) {
             return Err(FontError::Invalid);
         }
@@ -167,8 +170,11 @@ impl StoredPack {
         let strike = self.nearest(size);
         let mut advances = self.advances.borrow_mut();
         if advances[strike].is_none() {
-            // A strike's advances, read once.
-            let mut records = alloc::vec![0u8; self.chars.len() * RECORD];
+            // A strike's advances, read once (tried again while memory is
+            // short).
+            let Some(mut records) = zeroed(self.chars.len() * RECORD) else {
+                return 0.0;
+            };
             let read = self
                 .source
                 .read_at(self.strikes[strike].glyph_table, &mut records);
@@ -179,7 +185,7 @@ impl StoredPack {
                     .iter()
                     .map(|r| {
                         if read {
-                            (i32_le(r, 4).max(0) / 4) as u16
+                            (i32_le(r, 4) / 4).clamp(0, i32::from(u16::MAX)) as u16
                         } else {
                             0
                         }
@@ -205,10 +211,15 @@ impl StoredPack {
         if !self.source.read_at(at, &mut record) {
             return Glyph::empty(0.0);
         }
-        let advance = q6(i32_le(&record, 4));
+        let advance = q6(i32_le(&record, 4)).max(0.0);
         let (width, height) = (u16_le(&record, 12), u16_le(&record, 14));
-        let len = usize::from(width).div_ceil(2) * usize::from(height);
-        let mut data = alloc::vec![0u8; len];
+        let (w, h) = (usize::from(width), usize::from(height));
+        if !glyph::fits(w, h, f32::from(strike.size) / 4.0) {
+            return Glyph::empty(advance);
+        }
+        let Some(mut data) = zeroed(w.div_ceil(2) * h) else {
+            return Glyph::empty(advance);
+        };
         let start = strike.bitmaps + u64::from(u32_le(&record, 16));
         if !self.source.read_at(start, &mut data) {
             return Glyph::empty(advance);
@@ -256,7 +267,7 @@ mod tests {
             width,
             height: 2,
             advance,
-            data: pack_coverage(&coverage, usize::from(width), 2),
+            data: pack_coverage(&coverage, usize::from(width), 2).unwrap(),
         }
     }
 
@@ -304,6 +315,16 @@ mod tests {
         stored.advance('а', 10.0);
         stored.advance('ж', 10.0);
         assert_eq!(memory.1.get(), reads);
+    }
+
+    #[test]
+    fn negative_advances_read_as_zero() {
+        let mut builder = PackBuilder::new();
+        let metrics = LineMetrics::fallback(10.0);
+        builder.add_strike(10.0, metrics, alloc::vec![('a', glyph(2, 255, -3.0))]);
+        let stored = StoredPack::open(Rc::new(Memory(builder.build(), Cell::new(0)))).unwrap();
+        assert_eq!(stored.advance('a', 10.0), 0.0);
+        assert_eq!(stored.render('a', 10.0).advance, 0.0);
     }
 
     #[test]

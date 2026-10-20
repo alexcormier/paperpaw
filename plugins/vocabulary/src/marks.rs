@@ -85,7 +85,7 @@ fn same_language(kept: &str, language: &str) -> bool {
 fn words_in(storage: &dyn Storage, language: &str) -> WordSet {
     // One string with a word a line, rather than a string for each.
     let mut words = String::new();
-    store::each_line(storage, &store::file(), |line| {
+    let _ = store::each_line(storage, &store::file(), |line| {
         let mut fields = line.splitn(3, '\t');
         let (Some(word), Some(kept)) = (fields.next(), fields.next()) else {
             return;
@@ -120,7 +120,7 @@ pub(crate) fn tapped(env: &Env<'_>, tapped: &events::DecorationTapped, out: &mut
 fn language_of(storage: &dyn Storage, word: &str) -> String {
     let key = fold(word);
     let mut language = String::new();
-    store::each_line(storage, &store::file(), |line| {
+    let _ = store::each_line(storage, &store::file(), |line| {
         let mut fields = line.splitn(3, '\t');
         if let (Some(kept), Some(kept_language)) = (fields.next(), fields.next())
             && fold(kept) == key
@@ -213,7 +213,7 @@ mod tests {
             language: "en".to_string(),
             ..store::Word::default()
         };
-        store::add(&storage, &quire);
+        store::add(&storage, &quire).unwrap();
         assert_ne!(signature(), before);
         assert_eq!(decorate(&cache, &storage, &page("en", &text)).len(), 1);
     }
