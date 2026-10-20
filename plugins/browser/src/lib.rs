@@ -107,7 +107,7 @@ impl Plugin for Browser {
         r.add_menu_entry(MenuEntry {
             menu: menus::TOOLS,
             item: OPEN,
-            order: 47,
+            order: 43,
         })?;
         r.add_icon(OPEN, Cow::Borrowed("world"))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;

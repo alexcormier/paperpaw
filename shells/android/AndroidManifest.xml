@@ -8,14 +8,18 @@
     android:versionName="0.4.0-dev">
 
     <!-- The shared Books folder: "All files access" from Android 11 on, the
-         storage permission before. Asked for only when the user chooses
-         "Use the Books folder" on the home screen. -->
+         storage permissions before (reading and writing, for downloads,
+         uploads, renaming and deleting). Asked for only when the user
+         chooses "Allow access to your books" on the home screen. -->
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
     <!-- Plugins that sync (e.g. reading progress with KOReader). -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="29" />
 
     <!-- Reading aloud: the system's speech engines must be visible. -->
     <queries>
@@ -25,24 +29,29 @@
     </queries>
 
     <!-- extractNativeLibs false: the library is stored in the APK, aligned,
-         and runs from there. usesCleartextTraffic: self-hosted sync servers often answer over
-         plain http in the home network. -->
+         and runs from there. allowBackup false: the data folder holds
+         passwords and caches, which do not belong in backups (and exceed
+         their quota). usesCleartextTraffic: self-hosted sync servers often
+         answer over plain http in the home network. -->
     <application
         android:label="PaperPaw"
         android:icon="@mipmap/ic_launcher"
         android:hasCode="true"
         android:extractNativeLibs="false"
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:requestLegacyExternalStorage="true"
         android:usesCleartextTraffic="true">
 
+        <!-- configChanges: every change of the configuration (turning, a
+             new language, a keyboard) comes to PaperPaw as an event; the
+             activity is never made anew for one. -->
         <activity
             android:name="android.app.NativeActivity"
             android:exported="true"
             android:launchMode="singleTask"
             android:screenOrientation="portrait"
             android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen"
-            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|density|fontScale|locale">
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|touchscreen|uiMode|density|fontScale|fontWeightAdjustment|locale|layoutDirection|colorMode|mcc|mnc|grammaticalGender">
             <meta-data
                 android:name="android.app.lib_name"
                 android:value="paperpaw" />

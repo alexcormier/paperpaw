@@ -661,12 +661,18 @@ pub mod settings {
     /// (the status item [`BATTERY_LOW`](super::status_items::BATTERY_LOW)).
     pub const BATTERY_LOW: Setting<i64> = Setting::new("core.battery-low");
     /// How the screen is turned: one of [`ROTATIONS`], where the shell
-    /// can turn it (see [`MenuNeed::Rotation`](crate::MenuNeed)).
+    /// can turn it (see [`MenuNeed::Rotation`](crate::MenuNeed)); each
+    /// book may have its own ([`SCOPE_ONLY`]).
     pub const ROTATION: Setting<Text> = Setting::new("core.rotation");
     /// Whether a row below the screen shows what the buttons under it do,
     /// where a device has buttons in a row there (see
     /// [`MenuNeed::ButtonRow`](crate::MenuNeed)).
     pub const BUTTON_HINTS: Setting<bool> = Setting::new("core.button-hints");
+    /// The page buttons the other way round while reading (on the screen
+    /// bound to [`slots::READER`](super::slots::READER)): page forward
+    /// goes back and page back forward (the kernel swaps them before key
+    /// maps and input filters see them).
+    pub const SWAP_PAGE_BUTTONS: Setting<bool> = Setting::new("core.swap-page-buttons");
     /// The values of [`ROTATION`]: upright, on its side (landscape),
     /// upside down, on its other side.
     pub const ROTATIONS: [&str; 4] = [

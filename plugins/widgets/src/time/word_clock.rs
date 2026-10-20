@@ -24,7 +24,7 @@ use paperpaw_sdk::{
 
 use paperpaw_sdk::SettingSpec;
 
-use super::{chosen, frame_height, line, ui};
+use super::{chosen_name, frame_height, line, ui};
 
 const ID: Id = Id::new_static("widgets.word-clock");
 
@@ -148,11 +148,11 @@ pub(super) fn sentence(i18n: &Translator, hour: u8, minute: u8, next: bool) -> (
 /// The whole sentence as the settings want it: with the lead or without,
 /// in capitals or not.
 fn text(env: &Env<'_>, hour: u8, minute: u8) -> (Option<String>, String) {
-    let next = chosen(env, ID.as_str(), "quarters") == "next";
+    let next = chosen_name(env, ID.as_str(), "quarters") == "next";
     let (lead, rest) = sentence(env.i18n, hour, minute, next);
     let capitals = widgets::shows(env, ID.as_str(), "capitals");
     let case = |s: String| if capitals { upper(&s) } else { s };
-    match chosen(env, ID.as_str(), "lead") {
+    match chosen_name(env, ID.as_str(), "lead") {
         "none" => (None, case(capitalised(&rest))),
         "caption" => (Some(case(lead)), case(capitalised(&rest))),
         _ => (None, case(format!("{lead} {rest}"))),
@@ -182,7 +182,7 @@ fn shows(env: &Env<'_>) -> String {
 
 fn height(env: &Env<'_>, width: u16) -> u16 {
     let (style, _) = ui(env);
-    let lines = if chosen(env, ID.as_str(), "style") == "grid" {
+    let lines = if chosen_name(env, ID.as_str(), "style") == "grid" {
         return width.min((style.row * 5) as u16) + frame_height(env, ID.as_str());
     } else {
         3
@@ -194,12 +194,16 @@ fn height(env: &Env<'_>, width: u16) -> u16 {
 fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     let look = widgets::draw_frame(canvas, env, ID.as_str(), area);
     let (_, font) = ui(env);
-    let (Some(font), Some(now)) = (font, time::local_time(env)) else {
+    let Some(now) = time::local_time(env) else {
+        super::draw_no_time(canvas, env, &look);
+        return;
+    };
+    let Some(font) = font else {
         return;
     };
     let dots = widgets::shows(env, ID.as_str(), "dots");
     let (hour, minute, past) = told(now.hour, now.minute, dots);
-    if chosen(env, ID.as_str(), "style") == "grid"
+    if chosen_name(env, ID.as_str(), "style") == "grid"
         && draw_grid(
             canvas,
             env,
@@ -401,7 +405,7 @@ fn draw_grid(
     minute: u8,
     past: Option<u8>,
 ) -> bool {
-    let next = chosen(env, ID.as_str(), "quarters") == "next";
+    let next = chosen_name(env, ID.as_str(), "quarters") == "next";
     let (lead, rest) = sentence(env.i18n, hour, minute, next);
     let rows = grid(env.i18n);
     let Some(cells) = lit(&rows, &format!("{lead} {rest}")) else {

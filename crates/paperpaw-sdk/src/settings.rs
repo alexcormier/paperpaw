@@ -205,6 +205,10 @@ pub struct SettingExtra {
     /// A secret such as an API key: shown as dots, and entered afresh
     /// rather than edited.
     pub secret: bool,
+    /// Another setting of the same kind whose value this one has until it
+    /// is set itself, e.g. the margins at the top and bottom those at the
+    /// sides (one step only: what that one follows is not followed).
+    pub follows: Option<&'static str>,
 }
 
 /// The extra of settings without one.
@@ -232,6 +236,7 @@ impl SettingExtra {
             slider: false,
             section: None,
             secret: false,
+            follows: None,
         }
     }
 
@@ -268,6 +273,13 @@ impl SettingExtra {
     /// A secret ([`SettingExtra::secret`]).
     pub const fn secret(mut self) -> Self {
         self.secret = true;
+        self
+    }
+
+    /// With the value of setting `id` until set itself
+    /// ([`SettingExtra::follows`]).
+    pub const fn follows(mut self, id: &'static str) -> Self {
+        self.follows = Some(id);
         self
     }
 }
@@ -1022,7 +1034,21 @@ impl Settings {
         if let Some(plain) = crate::id::unplaced(id) {
             return self.values.get(id).or_else(|| self.get(&plain));
         }
-        self.scoped_value(id).or_else(|| self.global(id))
+        self.scoped_value(id)
+            .or_else(|| self.values.get(id))
+            .or_else(|| {
+                let other = self.follows(id)?;
+                self.scoped_value(other)
+                    .or_else(|| self.values.get(other))
+                    .or_else(|| self.specs.get(other).map(|spec| &spec.default))
+            })
+            .or_else(|| self.specs.get(id).map(|spec| &spec.default))
+    }
+
+    /// The setting `id` follows until it is set
+    /// ([`SettingExtra::follows`]), if any.
+    fn follows(&self, id: &str) -> Option<&'static str> {
+        self.specs.get(id)?.extra().follows
     }
 
     /// The value outside any scope, or the default if none was set; for a
@@ -1033,6 +1059,12 @@ impl Settings {
         }
         self.values
             .get(id)
+            .or_else(|| {
+                let other = self.follows(id)?;
+                self.values
+                    .get(other)
+                    .or_else(|| self.specs.get(other).map(|spec| &spec.default))
+            })
             .or_else(|| self.specs.get(id).map(|spec| &spec.default))
     }
 
@@ -1149,6 +1181,53 @@ impl Settings {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_setting_follows_another_until_set_itself() {
+        static FOLLOWS: SettingExtra = SettingExtra::new().follows("a.sides");
+        let mut s = Settings::new();
+        let int = |id: &'static str| {
+            SettingSpec::new(
+                Id::new_static(id),
+                id,
+                SettingKind::Int { min: 0, max: 99 },
+                SettingValue::Int(4),
+            )
+            .scoped()
+        };
+        s.define(int("a.sides")).unwrap();
+        s.define(int("a.ends").with_extra(&FOLLOWS)).unwrap();
+        s.define(
+            SettingSpec::new(
+                crate::builtin::settings::SCOPE_ONLY,
+                "x",
+                SettingKind::Bool,
+                SettingValue::Bool(false),
+            )
+            .scoped(),
+        )
+        .unwrap();
+        s.set("a.sides", SettingValue::Int(8)).unwrap();
+        assert_eq!(
+            (s.int("a.ends"), s.global("a.ends")),
+            (8, Some(&SettingValue::Int(8)))
+        );
+        // A book's own sides, and so its ends.
+        let mut values = VecMap::new();
+        values.insert(Id::new_static("a.sides"), SettingValue::Int(2));
+        values.insert(
+            crate::builtin::settings::SCOPE_ONLY.into(),
+            SettingValue::Bool(true),
+        );
+        s.set_scope(Some(values));
+        assert_eq!(s.int("a.ends"), 2);
+        s.set_scope(None);
+        // Set itself, it keeps its own.
+        s.set("a.ends", SettingValue::Int(4)).unwrap();
+        assert_eq!(s.int("a.ends"), 4);
+        s.set("a.sides", SettingValue::Int(12)).unwrap();
+        assert_eq!(s.int("a.ends"), 4);
+    }
 
     #[test]
     fn scopes_override_scoped_settings_while_switched_on() {

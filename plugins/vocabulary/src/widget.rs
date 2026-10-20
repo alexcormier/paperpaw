@@ -3,7 +3,8 @@
 //! alignment) with settings of its own for what it shows:
 //!
 //! - *Word of the day* (`vocabulary.widget.word`): a word to go over,
-//!   another one each day (or the newest), with its sentence and book;
+//!   another one each day (or the newest; without a clock, another one
+//!   from time to time), with its sentence and book;
 //! - *Words saved* (`vocabulary.widget.saved`): how many words are kept,
 //!   from how many books and in how many languages, and the newest.
 //!
@@ -223,7 +224,16 @@ fn open_words(area: Rect) -> Vec<WidgetTarget> {
     }]
 }
 
-/// The word to show: another one every day, or the newest.
+/// The day it is where the reader is, counted from 1970; `None` where the
+/// device does not know the time.
+fn today(env: &Env<'_>) -> Option<i64> {
+    let unix = paperpaw_sdk::time::unix_seconds(env)?;
+    Some(paperpaw_sdk::time::local_seconds(env, unix).div_euclid(86_400))
+}
+
+/// The word to show: another one every day, or the newest. Where the
+/// device does not know the day, one drawn at random each time the words
+/// are read (at start, and when they change), else the newest.
 fn pick(env: &Env<'_>) -> Option<Word> {
     if env.settings.text(&format!("{WORD_NAME}.pick")) == PICKS[1] {
         return store::summary(env.storage).newest;
@@ -232,8 +242,18 @@ fn pick(env: &Env<'_>) -> Option<Word> {
     if count == 0 {
         return None;
     }
-    let day = paperpaw_sdk::time::unix_seconds(env).map_or(0, |s| s / 86_400) as usize;
-    store::range(env.storage, day % count, day % count + 1)
+    let n = match today(env) {
+        Some(day) => day.rem_euclid(count as i64) as usize,
+        None => {
+            let mut drawn = [0u8; 4];
+            if env.random.fill(&mut drawn) {
+                u32::from_le_bytes(drawn) as usize % count
+            } else {
+                count - 1
+            }
+        }
+    };
+    store::range(env.storage, n, n + 1)
         .into_iter()
         .next()
         .map(|(_, word)| word)
@@ -245,7 +265,7 @@ struct WordWidget {
     word: Option<Word>,
     /// What it was read for: the day, the size of the file of words and
     /// the choice of word.
-    read_for: Option<(i64, u64, bool)>,
+    read_for: Option<(Option<i64>, u64, bool)>,
     /// Where it is drawn, once placed, and the word laid out there.
     area: Option<Rect>,
     laid: Option<Laid>,
@@ -335,10 +355,9 @@ impl Widget for WordWidget {
     fn update(&mut self, env: &Env<'_>) -> bool {
         // Read again only when the day, the words or the choice changed:
         // it is asked each minute, for the day.
-        let day = paperpaw_sdk::time::unix_seconds(env).map_or(0, |s| s / 86_400);
         let size = env.storage.size(&store::file()).unwrap_or(0);
         let newest = env.settings.text(&format!("{WORD_NAME}.pick")) == PICKS[1];
-        let read_for = Some((day, size, newest));
+        let read_for = Some((today(env), size, newest));
         if read_for == self.read_for {
             return false;
         }

@@ -400,6 +400,60 @@ fn a_note_changed_in_joplin_stays_and_a_new_one_is_made() {
 }
 
 #[test]
+fn a_lost_answer_makes_no_second_note() {
+    // A new note Joplin wrote, its answer lost on the way back.
+    let mut t = Test::new(WEBDAV, false);
+    let calls = t.export(ALICE);
+    let calls = t.checked(&calls[0]);
+    let notebook = t.body(&calls[0]);
+    let calls = t.answer(&calls[0], 201, "");
+    let mut joplin = t.body(&calls[0]);
+    let id = prop(&joplin, "id").to_string();
+    assert!(t.answer(&calls[0], 0, "connection reset").is_empty());
+    assert_eq!(t.file("waiting.txt"), format!("{ALICE}\n"));
+    // Sent again: the note Joplin has is found and written over.
+    let calls = t.export(ALICE);
+    let calls = t.checked(&calls[0]);
+    let calls = t.answer(&calls[0], 200, &notebook);
+    assert_eq!(calls[0].method, "GET");
+    assert!(calls[0].url.ends_with(&format!("/{id}.md")));
+    let calls = t.answer(&calls[0], 200, &joplin);
+    assert_eq!(calls[0].method, "PUT");
+    assert!(calls[0].url.ends_with(&format!("/{id}.md")));
+    joplin = t.body(&calls[0]);
+    assert!(t.answer(&calls[0], 201, "").is_empty());
+    assert_eq!(t.last_said(), "The notes of 1 book are in Joplin.");
+    assert!(t.file("sent.txt").starts_with(&format!("{ALICE}\t{id}\t")));
+    assert_eq!(t.file("sending.txt"), "");
+
+    // An update whose answer was lost: written over again, whether it
+    // reached Joplin or Joplin still has the note before it.
+    for reached in [true, false] {
+        let notes = format!("{NOTES}> Who are you? ({reached})\n>\n> 40 %\n\n");
+        t.storage.0.write(ALICE, notes.as_bytes()).unwrap();
+        let calls = t.export(ALICE);
+        let calls = t.checked(&calls[0]);
+        let calls = t.answer(&calls[0], 200, &notebook);
+        let calls = t.answer(&calls[0], 200, &joplin);
+        assert!(calls[0].url.ends_with(&format!("/{id}.md")));
+        if reached {
+            joplin = t.body(&calls[0]);
+        }
+        assert!(t.answer(&calls[0], 0, "connection reset").is_empty());
+
+        let calls = t.export(ALICE);
+        let calls = t.checked(&calls[0]);
+        let calls = t.answer(&calls[0], 200, &notebook);
+        let calls = t.answer(&calls[0], 200, &joplin);
+        assert_eq!(calls[0].method, "PUT", "{reached}");
+        assert!(calls[0].url.ends_with(&format!("/{id}.md")), "{reached}");
+        joplin = t.body(&calls[0]);
+        assert!(t.answer(&calls[0], 204, "").is_empty());
+        assert_eq!(t.last_said(), "The notes of 1 book are in Joplin.");
+    }
+}
+
+#[test]
 fn joplin_cloud_signs_in_and_again_when_the_session_ends() {
     let mut t = Test::new(CLOUD, false);
     let calls = t.export(ALICE);

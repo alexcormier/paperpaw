@@ -84,34 +84,11 @@ static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_choice(
 
 pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     r.add_settings(&SETTINGS)?;
-    // A goal set shows on the home screen: the widget goes onto its first
-    // page, after the book being read, if no page shows it yet.
     r.on(
         paperpaw_sdk::builtin::events::SETTING_CHANGED,
         |env, changed, out| {
-            if changed.id != GOAL || goal(env).is_none() {
-                return;
-            }
-            let pages: [&str; 4] = ["home.page-1", "home.page-2", "home.page-3", "home.page-4"];
-            let shown = pages.iter().any(|page| {
-                // Also placed in a grid: `stats.today 0/2 4x1`.
-                paperpaw_sdk::status::item_ids(env.settings.text(page))
-                    .any(|item| item.split_whitespace().next() == Some(TODAY.as_str()))
-            });
-            if let Some(SettingValue::Text(list)) = env.settings.get(pages[0])
-                && !shown
-            {
-                let mut ids: Vec<&str> = paperpaw_sdk::status::item_ids(list).collect();
-                let at = ids
-                    .iter()
-                    .position(|item| item.split_whitespace().next() == Some("home.continue"))
-                    .map_or(ids.len(), |i| i + 1);
-                let today = TODAY;
-                ids.insert(at, today.as_str());
-                out.push(Command::SetSetting(
-                    Id::new_static("home.page-1"),
-                    SettingValue::Text(Cow::Owned(ids.join(", "))),
-                ));
+            if changed.id == GOAL && goal(env).is_some() {
+                offer_widget(env, out);
             }
         },
     )?;
@@ -121,6 +98,48 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     calendar::register(r)?;
     year::register(r)?;
     streak::register(r)
+}
+
+/// A goal set shows on the home screen: the first time, *Read today*
+/// goes onto its first page, after the book being read, if no page shows
+/// it yet. Offered once only (kept as a file of the plugin), so that a
+/// widget the user removed stays away.
+fn offer_widget(env: &Env<'_>, out: &mut Vec<Command>) {
+    let offered = alloc::format!(
+        "{}/goal-widget-offered",
+        Env::plugin_dir(crate::PLUGIN.as_str())
+    );
+    if env.storage.exists(&offered) {
+        return;
+    }
+    let pages: [&str; 4] = ["home.page-1", "home.page-2", "home.page-3", "home.page-4"];
+    let shown = pages.iter().any(|page| {
+        // Also placed in a grid: `stats.today 0/2 4x1`.
+        paperpaw_sdk::status::item_ids(env.settings.text(page))
+            .any(|item| item.split_whitespace().next() == Some(TODAY.as_str()))
+    });
+    let first = match env.settings.get(pages[0]) {
+        Some(SettingValue::Text(list)) => Some(list),
+        _ => None,
+    };
+    // Nothing to offer it on (another home screen), or not kept as
+    // offered (it would come back at every change of the goal).
+    if (first.is_none() && !shown) || env.storage.write(&offered, b"").is_err() {
+        return;
+    }
+    if let Some(list) = first.filter(|_| !shown) {
+        let mut ids: Vec<&str> = paperpaw_sdk::status::item_ids(list).collect();
+        let at = ids
+            .iter()
+            .position(|item| item.split_whitespace().next() == Some("home.continue"))
+            .map_or(ids.len(), |i| i + 1);
+        let today = TODAY;
+        ids.insert(at, today.as_str());
+        out.push(Command::SetSetting(
+            Id::new_static("home.page-1"),
+            SettingValue::Text(Cow::Owned(ids.join(", "))),
+        ));
+    }
 }
 
 /// The value of widget `widget`'s choice `key`.
@@ -321,12 +340,6 @@ fn days(env: &Env<'_>) -> Option<(i32, Vec<Day>)> {
         today,
         store::days(env.storage, |unix| fmt::day_of(env, unix)),
     ))
-}
-
-/// Seconds read on `day`.
-fn seconds_on(days: &[Day], day: i32) -> u32 {
-    days.binary_search_by_key(&day, |d| d.day)
-        .map_or(0, |i| days[i].seconds)
 }
 
 /// The first letter of a weekday's short name (0 being Sunday).

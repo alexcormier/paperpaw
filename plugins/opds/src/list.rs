@@ -42,6 +42,8 @@ pub(crate) struct ListScreen {
     /// The line at the bottom.
     status: Rect,
     catalogs: Vec<Catalog>,
+    /// The list could not be read: it is left as it is.
+    unreadable: bool,
     sync: Rc<RefCell<Sync>>,
     message: Option<String>,
 }
@@ -60,10 +62,12 @@ impl ListScreen {
             display.width,
             display.height.saturating_sub(top + line),
         );
+        let loaded = catalogs::load(env);
         Self {
             list: ListView::new(area, style.noted_row()).focus_on_keys(env),
             status,
-            catalogs: catalogs::load(env),
+            unreadable: loaded.is_err(),
+            catalogs: loaded.unwrap_or_default(),
             sync,
             message: None,
             style,
@@ -86,12 +90,19 @@ impl ListScreen {
         cx.request_refresh(RefreshMode::Partial);
     }
 
-    fn save(&self, env: &Env<'_>, cx: &mut Cx<'_, '_>) {
+    /// Saves the list, unless it could not be read; `false` then.
+    fn save(&mut self, env: &Env<'_>, cx: &mut Cx<'_, '_>) -> bool {
+        if self.unreadable {
+            self.message = Some(env.i18n.tr("opds.unreadable").to_string());
+            self.redraw(cx);
+            return false;
+        }
         let mut out = Vec::new();
         catalogs::save(env, &self.catalogs, &mut out);
         for command in out {
             cx.command(command);
         }
+        true
     }
 
     fn activate(&mut self, index: usize, cx: &mut Cx<'_, '_>) {
@@ -176,8 +187,11 @@ impl ListScreen {
                 Params::new().with(ID, i.to_string()),
             )),
             "remove" => {
-                self.catalogs.remove(i);
-                self.save(&env, cx);
+                let removed = self.catalogs.remove(i);
+                if !self.save(&env, cx) {
+                    self.catalogs.insert(i, removed);
+                    return;
+                }
                 let len = self.rows().len();
                 self.list.focus = self.list.focus.min(len - 1);
                 self.redraw(cx);
@@ -193,6 +207,7 @@ impl ListScreen {
         }
         match &self.sync.borrow().report {
             Some(report) => report_text(env, report),
+            None if self.unreadable => env.i18n.tr("opds.unreadable").to_string(),
             None => ui::tr_input(env, "opds.hint").to_string(),
         }
     }
@@ -239,6 +254,10 @@ pub(crate) fn report_text(env: &Env<'_>, report: &Report) -> String {
             &env.i18n
                 .plural("opds.unreachable", report.unreachable as i64, &[]),
         );
+    }
+    if report.skipped > 0 {
+        text.push(' ');
+        text.push_str(&env.i18n.plural("opds.skipped", report.skipped as i64, &[]));
     }
     text
 }
@@ -301,7 +320,9 @@ impl Screen for ListScreen {
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
         // Back from editing a catalog.
-        self.catalogs = catalogs::load(cx.env());
+        let loaded = catalogs::load(cx.env());
+        self.unreadable = loaded.is_err();
+        self.catalogs = loaded.unwrap_or_default();
         let len = self.rows().len();
         self.list.focus = self.list.focus.min(len - 1);
         self.redraw(cx);
@@ -360,7 +381,10 @@ impl Screen for ListScreen {
                 format!("https://{text}")
             };
             self.catalogs.push(Catalog::new(&url));
-            self.save(&env, cx);
+            if !self.save(&env, cx) {
+                self.catalogs.pop();
+                return;
+            }
             let i = self.catalogs.len() - 1;
             cx.command(Command::OpenScreen(
                 EDIT_SCREEN,

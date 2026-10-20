@@ -39,7 +39,6 @@ use paperpaw_sdk::ask;
 use paperpaw_sdk::builtin::{
     actions as core_actions, events, groups, params, settings as core_settings, slots,
 };
-use paperpaw_sdk::document::ImageRef;
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::files;
 use paperpaw_sdk::library::listing::{Entry, Listing, UNRANKED};
@@ -246,6 +245,15 @@ impl Plugin for Files {
         ] {
             r.add_icon(setting, Cow::Borrowed(icon))?;
         }
+        // The catalog of the shelves is made anew when they show next.
+        r.on(events::LIBRARY_CHANGED, |_, _, _| shelves::outdated())?;
+        r.on(events::BOOK_MOVED, |_, _, _| shelves::outdated())?;
+        r.on(events::BOOK_REMOVED, |_, _, _| shelves::outdated())?;
+        r.on(events::SETTING_CHANGED, |_, changed, _| {
+            if changed.id == *ROOT.id() {
+                shelves::outdated();
+            }
+        })?;
         r.on(SEARCH_ENTERED, |_, typed, out| {
             let text = typed.text.trim();
             if !text.is_empty() {
@@ -320,6 +328,19 @@ fn library_screen(env: &Env<'_>, params: &Params) -> Box<dyn Screen> {
 /// Delay between two books read in the background, so input stays quick.
 pub(crate) const STEP_DELAY_MS: u64 = 20;
 
+/// What the library has to do before it shows again.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum Stale {
+    /// Nothing: what it holds is as it is.
+    No,
+    /// Read the folder again: a book was read (its progress and place in
+    /// the order changed), or books came or went.
+    Reload,
+    /// Be made anew: a setting changed (the size of the UI, the order,
+    /// the library folder).
+    Remake,
+}
+
 #[derive(Debug)]
 pub(crate) struct Browser {
     root: String,
@@ -335,8 +356,13 @@ pub(crate) struct Browser {
     /// The covers of `page`, made small once (drawing a cover from its
     /// file in every band of every frame took most of a page's time).
     thumbs: Vec<Option<Thumbnail>>,
-    /// Just loaded: the first `on_show` need not load again.
-    fresh: bool,
+    /// What is to be done before it shows again (see [`Stale`]).
+    stale: Stale,
+    /// Covered by a full screen (a book, say): it holds no page then, and
+    /// events only mark it [`stale`](Self::stale).
+    hidden: bool,
+    /// The entry the focus was on when it was hidden, to find it again.
+    anchor: Option<Entry>,
     style: UiStyle,
     header: ui::Header,
     list: ListView,
@@ -344,6 +370,13 @@ pub(crate) struct Browser {
 
 impl Browser {
     pub(crate) fn new(env: &Env<'_>, params: &Params) -> Self {
+        let mut browser = Self::made(env, params);
+        browser.show_at(env, None);
+        browser
+    }
+
+    /// The library for `params` as the settings say, not read yet.
+    pub(crate) fn made(env: &Env<'_>, params: &Params) -> Self {
         let root = env
             .settings
             .text(ROOT.as_str())
@@ -355,7 +388,7 @@ impl Browser {
         let header = ui::Header::new(env, &style, true);
         let top = header.area.height + style.gap as u16;
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
-        let mut browser = Self {
+        Self {
             root,
             dir,
             recent: Vec::new(),
@@ -363,13 +396,13 @@ impl Browser {
             first: 0,
             page: Vec::new(),
             thumbs: Vec::new(),
-            fresh: true,
+            stale: Stale::No,
+            hidden: false,
+            anchor: None,
             list: list_view(env, &style, area),
             style,
             header,
-        };
-        browser.load(env);
-        browser
+        }
     }
 
     /// The folder's entries, in the chosen order.
@@ -392,8 +425,25 @@ impl Browser {
             .map_or(UNRANKED, |(_, rank)| *rank)
     }
 
-    /// Shows the first page of the current folder.
-    fn load(&mut self, env: &Env<'_>) {
+    /// The book at `path` as an entry of its folder, to find it there.
+    fn book_entry(path: &str) -> Entry {
+        Entry {
+            name: files::name(path).to_string(),
+            is_dir: false,
+            rank: UNRANKED,
+            size: 0,
+        }
+    }
+
+    /// The entry the focus is on, if its page is held.
+    fn focused(&self) -> Option<Entry> {
+        self.entry(self.list.focus).map(|(entry, _)| entry.clone())
+    }
+
+    /// Shows the current folder as it is now: at `anchor` (an entry of it,
+    /// or one that was), reading only the page that holds it; else from
+    /// the top. Where the entry went, the focus stays at its place.
+    fn show_at(&mut self, env: &Env<'_>, anchor: Option<Entry>) {
         let prefix = if self.dir.is_empty() {
             String::new()
         } else {
@@ -407,16 +457,76 @@ impl Browser {
                 (!name.contains('/')).then(|| (name.to_string(), rank as u32))
             })
             .collect();
+        let rows = self.list.rows().max(1);
         let recent = &self.recent;
         let rank = |name: &str| Self::rank_of(recent, name);
-        let (len, page) = {
+        let (len, first, focus, page) = {
             let listing = self.listing(env, &rank);
-            (listing.count(), listing.after(None, self.list.rows()))
+            let len = listing.count();
+            match anchor {
+                _ if len == 0 => (0, 0, 0, Vec::new()),
+                None => (len, 0, 0, listing.after(None, rows)),
+                Some(anchor) => {
+                    // Its place in the order now (a book just read moved).
+                    let ranked = listing.rank.is_some() && !anchor.is_dir;
+                    let anchor = Entry {
+                        rank: if ranked { rank(&anchor.name) } else { UNRANKED },
+                        ..anchor
+                    };
+                    let (first, page) = listing.page_of(&anchor, rows);
+                    match page.iter().position(|e| e.name == anchor.name) {
+                        Some(at) => (len, first, first + at, page),
+                        None => {
+                            let focus = listing.rank(&anchor).min(len - 1);
+                            if focus - focus % rows == first {
+                                (len, first, focus, page)
+                            } else {
+                                let page = listing.page(focus / rows, rows, len);
+                                (len, focus - focus % rows, focus, page)
+                            }
+                        }
+                    }
+                }
+            }
         };
         self.len = len;
-        self.list.focus = 0;
-        self.first = 0;
+        self.list.focus = focus;
+        self.first = first;
+        self.stale = Stale::No;
         self.set_page(env, page);
+    }
+
+    /// Makes it anew for the settings as they are now: in the folder shown
+    /// (the new library folder where that changed), at the same entry.
+    fn remake(&mut self, env: &Env<'_>) {
+        let root = env.settings.read(&ROOT).trim_matches('/');
+        let dir = if root == self.root {
+            self.dir.clone()
+        } else {
+            root.to_string()
+        };
+        let anchor = if dir == self.dir {
+            self.focused().or_else(|| self.anchor.take())
+        } else {
+            None
+        };
+        let hidden = self.hidden;
+        *self = Self::made(env, &Params::new().with(params::PATH, dir));
+        self.hidden = hidden;
+        self.show_at(env, anchor);
+    }
+
+    /// Does what [`Self::stale`] says is to be done before it shows.
+    fn freshen(&mut self, env: &Env<'_>) {
+        match self.stale {
+            Stale::No => {}
+            Stale::Reload => {
+                let anchor = self.focused().or_else(|| self.anchor.take());
+                self.show_at(env, anchor);
+            }
+            Stale::Remake => self.remake(env),
+        }
+        self.anchor = None;
     }
 
     /// Takes `entries` as the visible page, with their cached details.
@@ -456,7 +566,7 @@ impl Browser {
     fn show_focus(&mut self, env: &Env<'_>) {
         let rows = self.list.rows();
         let first = self.list.page() * rows;
-        if first == self.first && !self.page.is_empty() {
+        if first == self.first && !self.page.is_empty() || self.len == 0 {
             return;
         }
         let recent = &self.recent;
@@ -546,14 +656,10 @@ impl Browser {
         if entry.is_dir {
             self.dir = path;
             let env = *cx.env();
-            self.load(&env);
+            self.show_at(&env, None);
             cx.request_redraw();
             cx.wake_at(env.now);
         } else {
-            // The covers made small go while the book is read: memory for
-            // it (on the X4 a grid of them takes some 40 KB). Made again
-            // from their small files when the library shows again.
-            self.thumbs = Vec::new();
             cx.command(Command::OpenSlot(
                 slots::READER,
                 Params::new().with(params::PATH, path),
@@ -572,14 +678,7 @@ impl Browser {
             .rsplit_once('/')
             .map_or(String::new(), |(parent, _)| parent.to_string());
         let env = *cx.env();
-        self.load(&env);
-        let recent = &self.recent;
-        let rank = |name: &str| Self::rank_of(recent, name);
-        let (first, page) = self.listing(&env, &rank).page_of(&child, self.list.rows());
-        self.list.focus = (first + page.iter().position(|e| *e == child).unwrap_or(0))
-            .min(self.len.saturating_sub(1));
-        self.first = first;
-        self.set_page(&env, page);
+        self.show_at(&env, Some(child));
         cx.request_redraw();
         cx.wake_at(env.now);
         true
@@ -609,7 +708,7 @@ impl Browser {
         ];
         // Not for books already in the archive.
         let archive = env.settings.read(&ARCHIVE).trim_matches('/');
-        if !archive.is_empty() && files::parent(&path) != archive {
+        if !archive.is_empty() && !files::same_path(env.storage, files::parent(&path), archive) {
             options.push("archive");
         }
         if !env.device.input.touch {
@@ -649,7 +748,7 @@ impl Browser {
             }
             "finished" | "unfinished" => {
                 library::set_finished(env.storage, path, option == "finished");
-                self.load(&env);
+                self.show_at(&env, Some(Self::book_entry(path)));
                 cx.request_redraw();
             }
             "archive" => {
@@ -672,7 +771,8 @@ impl Browser {
                         env.i18n.tr("files.archive-failed").to_string(),
                     )),
                 }
-                self.load(&env);
+                // Gone from here: the focus stays at its place.
+                self.show_at(&env, Some(Self::book_entry(path)));
                 cx.request_redraw();
             }
             "info" => cx.command(Command::OpenScreen(
@@ -692,8 +792,6 @@ impl Browser {
     }
 }
 
-/// Draws one row: a cover (or folder) on the left, then title, progress
-/// and a note (author and format).
 /// An entry of the page as drawn: the file or folder, its details, its
 /// cover made small.
 pub(crate) struct Shown<'a> {
@@ -766,30 +864,23 @@ pub(crate) fn picture_radius(style: &UiStyle, area: Rect) -> u32 {
     }
 }
 
-/// What a cover drawn from its picture has its corners filled with, on a
-/// row or cell `focused` or not: the paper behind it; none on a light
-/// gray focus, where it stays square.
-pub(crate) fn cover_paper(style: &UiStyle, focused: bool) -> Option<Color> {
-    let gray = focused && style.focus == Focus::Soft && style.grays > 2;
-    (!gray).then(|| style.focus_paper(focused))
+/// A book's file name without its extension, and its format as the
+/// extension says: a zipped book by what is inside (`book.fb2.zip` is
+/// `book` in FB2).
+pub(crate) fn stem_and_format(name: &str) -> (&str, String) {
+    let unzipped = match name.len().checked_sub(4).and_then(|at| name.get(at..)) {
+        Some(zip) if zip.eq_ignore_ascii_case(".zip") => {
+            let inner = &name[..name.len() - 4];
+            if inner.contains('.') { inner } else { name }
+        }
+        _ => name,
+    };
+    let (stem, extension) = unzipped.rsplit_once('.').unwrap_or((unzipped, ""));
+    (stem, extension.to_uppercase())
 }
 
-/// Draws a cover from its picture into `area`, its corners rounded by
-/// `radius` where the `paper` behind it is known.
-pub(crate) fn draw_cover_image(
-    canvas: &mut Canvas<'_>,
-    env: &Env<'_>,
-    image: &ImageRef,
-    area: Rect,
-    radius: u32,
-    paper: Option<Color>,
-) {
-    ui::draw_image(canvas, env.storage, image, area);
-    if let Some(paper) = paper {
-        canvas.fill_corners(area, radius, paper);
-    }
-}
-
+/// Draws one row: a cover (or folder) on the left, then title, progress
+/// and a note (author and format).
 pub(crate) fn draw_row(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
@@ -818,34 +909,16 @@ pub(crate) fn draw_row(
         ui::draw_noted_row(canvas, env, style, text, focused, &entry.name, "›", note);
         return;
     }
-    // A zipped book is named by what is inside (`book.fb2.zip`: FB2).
-    let name = entry.name.as_str();
-    let unzipped = name
-        .strip_suffix(".zip")
-        .or_else(|| name.strip_suffix(".ZIP"))
-        .filter(|inner| inner.contains('.'))
-        .unwrap_or(name);
-    let (stem, extension) = unzipped.rsplit_once('.').unwrap_or((unzipped, ""));
-    let format = extension.to_uppercase();
-    let radius = cover_radius(style, thumb);
-    match (small, book.and_then(|b| b.cover.as_ref())) {
-        (Some(small), _) => {
+    let (stem, format) = stem_and_format(&entry.name);
+    // Without a cover made small (none, or no memory for it), a stand-in:
+    // a cover read from its book in every band takes most of a page's time.
+    match small {
+        Some(small) => {
             let x = thumb.x + thumb.width.saturating_sub(small.width()) / 2;
             let y = thumb.y + thumb.height.saturating_sub(small.height()) / 2;
             small.draw_round(canvas, x, y, picture_radius(style, thumb));
         }
-        (None, Some(cover)) => {
-            let (w, h) = ui::fit_image(cover, thumb.width, thumb.height);
-            let area = Rect::new(
-                thumb.x + (thumb.width - w) / 2,
-                thumb.y + (thumb.height - h) / 2,
-                w,
-                h,
-            );
-            let paper = cover_paper(style, focused);
-            draw_cover_image(canvas, env, cover, area, radius, paper);
-        }
-        (None, None) => {
+        None => {
             let title = &*shown_title(book, stem);
             draw_placeholder(canvas, env, style, thumb, title, &format, fg);
         }
@@ -928,31 +1001,15 @@ pub(crate) fn draw_cell(
         );
         return;
     }
-    let name = entry.name.as_str();
-    let (stem, extension) = name.rsplit_once('.').unwrap_or((name, ""));
+    let (stem, format) = stem_and_format(&entry.name);
     let title = &*shown_title(book, stem);
-    let radius = cover_radius(style, cover);
-    match (small, book.and_then(|b| b.cover.as_ref())) {
+    match small {
         // On the line its title starts, at the bottom of its place.
-        (Some(small), _) => {
+        Some(small) => {
             let y = cover.y + cover.height.saturating_sub(small.height());
             small.draw_round(canvas, cover.x, y, picture_radius(style, cover));
         }
-        (None, Some(image)) => {
-            let (w, h) = ui::fit_image(image, cover.width, cover.height);
-            let area = Rect::new(cover.x, cover.y + (cover.height - h), w, h);
-            let paper = cover_paper(style, focused);
-            draw_cover_image(canvas, env, image, area, radius, paper);
-        }
-        (None, None) => draw_placeholder(
-            canvas,
-            env,
-            style,
-            cover,
-            title,
-            &extension.to_uppercase(),
-            fg,
-        ),
+        None => draw_placeholder(canvas, env, style, cover, title, &format, fg),
     }
     // The title, then how far it is read.
     let x = f32::from(cover.x);
@@ -1047,6 +1104,13 @@ pub(crate) fn draw_placeholder(
 
 impl Screen for Browser {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
+        if self.hidden {
+            // Drawn below an overlay left open above: shown again, as in
+            // `on_show`, in the first band.
+            self.hidden = false;
+            self.stale = self.stale.max(Stale::Reload);
+            self.freshen(env);
+        }
         let style = self.style;
         let len = self.len;
         let title = if self.dir == self.root {
@@ -1098,15 +1162,25 @@ impl Screen for Browser {
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        if !core::mem::take(&mut self.fresh) {
-            // Back from a book: its progress and place in the order changed.
-            let focus = self.list.focus;
-            self.load(&env);
-            self.list.focus = focus.min(self.len.saturating_sub(1));
-            self.show_focus(&env);
+        self.hidden = false;
+        if self.stale != Stale::No {
+            // Back from a book: its progress and place in the order
+            // changed; or what changed meanwhile.
+            self.freshen(&env);
             cx.request_redraw();
         }
         cx.wake_at(env.now);
+    }
+
+    /// Covered by a full screen, a book say: the covers made small and the
+    /// page go (on the X4 a grid of covers takes some 40 KB), made again
+    /// from their small files when the library shows again.
+    fn on_hide(&mut self) {
+        self.anchor = self.focused().or_else(|| self.anchor.take());
+        self.page = Vec::new();
+        self.thumbs = Vec::new();
+        self.hidden = true;
+        self.stale = self.stale.max(Stale::Reload);
     }
 
     /// Reads the details of one visible book that has none yet.
@@ -1222,35 +1296,27 @@ impl Screen for Browser {
             self.chosen(&picked.option, &picked.path, cx);
             return;
         }
-        if *event == events::LIBRARY_CHANGED {
-            // Books came or went: shown as they are now.
-            let env = *cx.env();
-            let focus = self.list.focus;
-            self.load(&env);
-            self.list.focus = focus.min(self.len.saturating_sub(1));
-            self.show_focus(&env);
-            cx.request_redraw();
-            cx.request_refresh(RefreshMode::Partial);
+        // Books came or went, or the UI size, the order or the library
+        // folder may have changed (a new library folder is shown from its
+        // top). Hidden, it only remembers to show them when it shows again:
+        // a book received or a font size changed in the reader reads no
+        // folder and no cover under the book.
+        let stale = if *event == events::LIBRARY_CHANGED {
+            Stale::Reload
+        } else if *event == events::SETTING_CHANGED {
+            Stale::Remake
+        } else {
+            return;
+        };
+        self.stale = self.stale.max(stale);
+        if self.hidden {
             return;
         }
-        if *event == events::SETTING_CHANGED {
-            // The UI size, the order or the library folder may have
-            // changed; a new library folder is shown from its top.
-            let env = *cx.env();
-            let root = env.settings.read(&ROOT).trim_matches('/');
-            let dir = if root == self.root {
-                self.dir.clone()
-            } else {
-                root.to_string()
-            };
-            let focus = self.list.focus;
-            *self = Self::new(&env, &Params::new().with(params::PATH, dir));
-            self.fresh = false;
-            self.list.focus = focus.min(self.len.saturating_sub(1));
-            self.show_focus(&env);
-            cx.request_redraw();
-            cx.wake_at(env.now);
-        }
+        let env = *cx.env();
+        self.freshen(&env);
+        cx.request_redraw();
+        cx.request_refresh(RefreshMode::Partial);
+        cx.wake_at(env.now);
     }
 }
 
@@ -1291,5 +1357,19 @@ mod tests {
             let issues = check::compare(&en, &de);
             assert!(issues.is_empty(), "{issues:?}");
         }
+    }
+
+    /// The list and the grid name zipped books alike, by what is inside.
+    #[test]
+    fn zipped_books_by_what_is_inside() {
+        use super::stem_and_format;
+        use alloc::string::String;
+        assert_eq!(stem_and_format("tale.fb2.zip"), ("tale", "FB2".into()));
+        assert_eq!(stem_and_format("tale.FB2.ZIP"), ("tale", "FB2".into()));
+        assert_eq!(stem_and_format("tale.zip"), ("tale", "ZIP".into()));
+        assert_eq!(stem_and_format("tale.epub"), ("tale", "EPUB".into()));
+        assert_eq!(stem_and_format("tale"), ("tale", String::new()));
+        // Names that end in a character of several bytes.
+        assert_eq!(stem_and_format("物語"), ("物語", String::new()));
     }
 }

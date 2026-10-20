@@ -16,8 +16,9 @@ use paperpaw_sdk::{
     RefreshMode, Screen,
 };
 
+use crate::fmt::{self, month_start};
 use crate::store::{self, Book, Day};
-use crate::{fmt, totals};
+use crate::totals;
 
 /// Most books listed for a day.
 const DAY_BOOKS: usize = 3;
@@ -31,8 +32,9 @@ pub(crate) struct Calendar {
     detail: Rect,
     days: Vec<Day>,
     books: Vec<Book>,
-    today: i32,
-    /// The chosen day.
+    /// Today, if the device knows the time.
+    today: Option<i32>,
+    /// The chosen day: at first today, else the last day read.
     day: i32,
     /// Its books (titles and seconds) and distinct pages.
     day_books: Vec<(String, u32)>,
@@ -43,11 +45,6 @@ pub(crate) struct Calendar {
 fn month_of(day: i32) -> (i32, u8) {
     let d = fmt::date_of(day);
     (d.year, d.month)
-}
-
-/// The day the month of `day` begins on.
-fn month_start(day: i32) -> i32 {
-    day - i32::from(fmt::date_of(day).day) + 1
 }
 
 /// The first day of the month after the one of `day`.
@@ -88,8 +85,9 @@ impl Calendar {
             display.width,
             display.height.saturating_sub(detail_top),
         );
-        let today = fmt::today(env).unwrap_or(0);
+        let today = fmt::today(env);
         let days = store::days(env.storage, |unix| fmt::day_of(env, unix));
+        let day = today.or(days.last().map(|d| d.day)).unwrap_or(0);
         let mut calendar = Self {
             style,
             header,
@@ -99,7 +97,7 @@ impl Calendar {
             days,
             books: store::books(env.storage),
             today,
-            day: today,
+            day,
             day_books: Vec::new(),
             day_pages: 0,
         };
@@ -108,19 +106,20 @@ impl Calendar {
     }
 
     fn seconds_on(&self, day: i32) -> u32 {
-        self.days
-            .binary_search_by_key(&day, |d| d.day)
-            .map_or(0, |i| self.days[i].seconds)
+        fmt::seconds_on(&self.days, day)
     }
 
     /// What was read on the chosen day.
     fn load_day(&mut self, env: &Env<'_>) {
         let day = self.day;
-        let since = fmt::unix_near(day).saturating_sub(14 * 3600).max(0) as u32;
+        // The local day, whatever the time zone.
+        let unix = |day: i32| fmt::unix_near(day).clamp(0, i64::from(u32::MAX)) as u32;
+        let from = unix(day).saturating_sub(14 * 3600);
+        let to = unix(day + 1).saturating_add(14 * 3600);
         let mut per_book: Vec<(u16, u32)> = Vec::new();
         let mut pages: Vec<(u16, u32)> = Vec::new();
         if self.seconds_on(day) > 0 {
-            store::scan_recent(env.storage, since, |stat| {
+            store::scan_range(env.storage, from, to, |stat| {
                 if fmt::day_of(env, stat.start) != day {
                     return;
                 }
@@ -283,7 +282,7 @@ impl Calendar {
             let border = ui::button_border(&style);
             if day == self.day {
                 canvas.stroke(r, border * 2, Color::BLACK);
-            } else if day == self.today {
+            } else if Some(day) == self.today {
                 canvas.stroke(inner, border, style.faint(90));
             }
         }
@@ -368,11 +367,24 @@ impl Screen for Calendar {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let title = env.i18n.tr("stats.calendar");
-        let streak = totals::streak(&self.days, self.today);
+        let streak = self
+            .today
+            .map_or(0, |today| totals::streak(&self.days, today));
         let note =
             (streak > 1).then(|| env.i18n.plural("stats.streak-note", i64::from(streak), &[]));
         self.header
             .draw(canvas, env, &style, title, note.as_deref(), None);
+        if self.today.is_none() && self.days.is_empty() {
+            // No day to show: neither today nor one read.
+            let area = Rect::new(
+                0,
+                self.nav.y,
+                self.nav.width,
+                (self.detail.y + self.detail.height).saturating_sub(self.nav.y),
+            );
+            ui::draw_message(canvas, env, &style, area, env.i18n.tr("stats.no-clock"));
+            return;
+        }
         let (left, right) = self.arrows();
         ui::draw_button(canvas, env, &style, left, "‹", false, false);
         ui::draw_button(canvas, env, &style, right, "›", false, false);

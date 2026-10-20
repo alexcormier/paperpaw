@@ -10,7 +10,7 @@ use paperpaw_sdk::builtin::{actions, params};
 use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::{
     Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect,
-    RefreshMode, Screen, time,
+    RefreshMode, Screen,
 };
 
 use crate::store::{self, Day};
@@ -95,9 +95,7 @@ impl Overview {
     }
 
     fn seconds_on(&self, day: i32) -> u32 {
-        self.days
-            .binary_search_by_key(&day, |d| d.day)
-            .map_or(0, |i| self.days[i].seconds)
+        fmt::seconds_on(&self.days, day)
     }
 
     fn open(&self, row: Row, cx: &mut Cx<'_, '_>) {
@@ -116,7 +114,9 @@ impl Overview {
         let Some(font) = style.font(env) else {
             return;
         };
-        let today = self.today.unwrap_or(0);
+        let Some(today) = self.today else {
+            return;
+        };
         let week: u32 = (0..7).map(|d| self.seconds_on(today - d)).sum();
         let streak = totals::streak(&self.days, today);
         let pages = env
@@ -211,7 +211,9 @@ impl Overview {
             &label,
             style.faint(90),
         );
-        let today = self.today.unwrap_or(0);
+        let Some(today) = self.today else {
+            return;
+        };
         let first = today - CHART_DAYS + 1;
         let values: Vec<u32> = (first..=today).map(|d| self.seconds_on(d)).collect();
         let names: Vec<&str> = (first..=today)
@@ -239,6 +241,43 @@ impl Overview {
             (Some(values.len() - 1), &top),
         );
     }
+
+    /// All reading: the time, the books and the days.
+    fn draw_totals(&self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
+        let style = self.style;
+        let Some(font) = style.font(env) else {
+            return;
+        };
+        let total: u64 = self.days.iter().map(|d| u64::from(d.seconds)).sum();
+        let text = env.i18n.format(
+            "stats.totals",
+            &[
+                ("time", Arg::Str(&fmt::duration(env, total))),
+                (
+                    "books",
+                    Arg::Str(&env.i18n.plural("stats.books-count", self.books as i64, &[])),
+                ),
+                (
+                    "days",
+                    Arg::Str(
+                        &env.i18n
+                            .plural("stats.reading-days", self.days.len() as i64, &[]),
+                    ),
+                ),
+            ],
+        );
+        let w = font.measure(style.small, &text);
+        let x = (f32::from(self.totals.width) - w).max(0.0) / 2.0;
+        ui::draw_label(
+            canvas,
+            &font,
+            style.small,
+            x,
+            self.totals,
+            &text,
+            style.faint(60),
+        );
+    }
 }
 
 /// Distinct pages read on local day `day`.
@@ -260,7 +299,12 @@ impl Screen for Overview {
         let style = self.style;
         let title = env.i18n.tr("stats.title");
         self.header.draw(canvas, env, &style, title, None, None);
-        if time::unix_seconds(env).is_none() && self.days.is_empty() {
+        if self.today.is_some() {
+            self.draw_tiles(canvas, env);
+            self.draw_chart(canvas, env);
+        } else {
+            // Without the time no day is today: what needs it gives way to
+            // a hint (and the totals, if anything was read).
             let area = Rect::new(
                 0,
                 self.tiles.y,
@@ -268,41 +312,9 @@ impl Screen for Overview {
                 self.totals.y - self.tiles.y,
             );
             ui::draw_message(canvas, env, &style, area, env.i18n.tr("stats.no-clock"));
-        } else {
-            self.draw_tiles(canvas, env);
-            self.draw_chart(canvas, env);
-            let total: u64 = self.days.iter().map(|d| u64::from(d.seconds)).sum();
-            let text = env.i18n.format(
-                "stats.totals",
-                &[
-                    ("time", Arg::Str(&fmt::duration(env, total))),
-                    (
-                        "books",
-                        Arg::Str(&env.i18n.plural("stats.books-count", self.books as i64, &[])),
-                    ),
-                    (
-                        "days",
-                        Arg::Str(&env.i18n.plural(
-                            "stats.reading-days",
-                            self.days.len() as i64,
-                            &[],
-                        )),
-                    ),
-                ],
-            );
-            if let Some(font) = style.font(env) {
-                let w = font.measure(style.small, &text);
-                let x = (f32::from(self.totals.width) - w).max(0.0) / 2.0;
-                ui::draw_label(
-                    canvas,
-                    &font,
-                    style.small,
-                    x,
-                    self.totals,
-                    &text,
-                    style.faint(60),
-                );
-            }
+        }
+        if self.today.is_some() || !self.days.is_empty() {
+            self.draw_totals(canvas, env);
         }
         let rows = &self.rows;
         self.list.draw(

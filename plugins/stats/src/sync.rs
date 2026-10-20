@@ -4,9 +4,11 @@
 //!
 //! A sync downloads `statistics.sqlite3` from the folder, merges it (see
 //! [`merge`]), uploads the result (only if nobody changed the file in
-//! between: `If-Match` with its ETag, else it starts over) and keeps
-//! what it uploaded, to tell later what was deleted. KOReader does the
-//! same, so either may sync first.
+//! between: `If-Match` with its ETag, or `If-None-Match: *` where there
+//! was none, else it starts over) and keeps what it uploaded, to tell
+//! later what was deleted there; for that folder and user only. KOReader
+//! does the same, so either may sync first. A downloaded file that cannot
+//! be read ends the sync: nothing is merged and nothing uploaded.
 
 use alloc::borrow::Cow;
 use alloc::format;
@@ -26,7 +28,7 @@ use paperpaw_sdk::{
 
 use paperpaw_sdk::secrets::SecretChange;
 
-use crate::merge::{self, Outcome};
+use crate::merge::{self, Failure, Outcome};
 use paperpaw_sdk::setting::{Setting, Text};
 
 /// The folder (its address) and the user; the password is kept with the
@@ -88,6 +90,11 @@ fn file(name: &str) -> String {
 pub(crate) struct Sync {
     attempt: u8,
     running: bool,
+    /// The last upload to the folder and user of this sync
+    /// ([`last_upload`]).
+    last_upload: String,
+    /// The books there are after the merge.
+    books: usize,
 }
 
 pub(crate) type SharedSync = Rc<RefCell<Sync>>;
@@ -95,21 +102,15 @@ pub(crate) type SharedSync = Rc<RefCell<Sync>>;
 /// The folder as a base URL: `https://` unless another scheme is given,
 /// no `/` at the end.
 pub(crate) fn folder(text: &str) -> String {
-    let text = text.trim().trim_end_matches('/');
-    if text.is_empty() || text.contains("://") {
-        text.to_string()
-    } else {
-        format!("https://{text}")
-    }
+    paperpaw_sdk::web::base_url(text)
 }
 
 fn password<'a>(env: &Env<'a>) -> &'a str {
     env.secrets.get(SECRET).unwrap_or_default()
 }
 
-/// Keeps the password, or removes it if empty.
+/// Keeps the password as typed (spaces too), or removes it if empty.
 fn save_password(password: &str) -> Command {
-    let password = password.trim();
     Command::SetSecret(if password.is_empty() {
         SecretChange::remove(SECRET)
     } else {
@@ -157,6 +158,35 @@ fn done(out: &mut Vec<Command>, message: String) {
     out.push(DONE.emit(Finished { text: message }));
 }
 
+/// The file this device last uploaded to the folder and user set now:
+/// the next sync there compares with it. One is kept for one folder and
+/// user only: another one's tells nothing about what was deleted here.
+fn last_upload(env: &Env<'_>) -> String {
+    let target = format!(
+        "{}\n{}",
+        folder(env.settings.read(&URL)),
+        env.settings.read(&USER)
+    );
+    let key = paperpaw_digest::fnv1a64(target);
+    file(&format!("{FILE}.{key:016x}.sync"))
+}
+
+/// Removes the last uploads kept but `keep`: those of other folders or
+/// users, and the one of earlier versions (`statistics.sqlite3.sync`, of
+/// whichever folder was set then).
+fn forget_other_uploads(env: &Env<'_>, keep: &str) {
+    let mut others = Vec::new();
+    let _ = env.storage.list(&dir(), &mut |entry| {
+        let path = file(entry.name);
+        if entry.name.starts_with(FILE) && entry.name.ends_with(".sync") && path != keep {
+            others.push(path);
+        }
+    });
+    for path in others {
+        let _ = env.storage.remove(&path);
+    }
+}
+
 impl Sync {
     /// Starts a sync, or says why it cannot.
     pub(crate) fn start(&mut self, env: &Env<'_>, out: &mut Vec<Command>) {
@@ -168,6 +198,7 @@ impl Sync {
         }
         self.running = true;
         self.attempt += 1;
+        self.last_upload = last_upload(env);
         let mut get = request(env, "GET", &DOWNLOADED);
         get.save_to = Some(file("incoming.sqlite3"));
         out.push(Command::Http(get));
@@ -178,41 +209,51 @@ impl Sync {
         if !self.running {
             return;
         }
+        let incoming = file("incoming.sqlite3");
         let income = match reply.status {
-            200 => Some(file("incoming.sqlite3")),
+            200 => Some(incoming.as_str()),
             // None yet: this is the first.
             404 => None,
-            status => return self.fail(env, &status.to_string(), out),
+            status => {
+                let _ = env.storage.remove(&incoming);
+                return self.fail(env, &status.to_string(), out);
+            }
         };
-        let cached = file(&format!("{FILE}.sync"));
-        let cached = env.storage.exists(&cached).then_some(cached);
+        let cached = env
+            .storage
+            .exists(&self.last_upload)
+            .then_some(self.last_upload.as_str());
         let upload = file(FILE);
-        let result = merge::merge(
-            env.storage,
-            income.as_deref(),
-            cached.as_deref(),
-            Some(&upload),
-            &dir(),
-        );
-        if let Some(income) = &income {
-            let _ = env.storage.remove(income);
-        }
-        if let Err(e) = result {
-            self.running = false;
-            self.attempt = 0;
-            let reason = format!("{e}");
-            let text = env
-                .i18n
-                .format("stats.sync.failed", &[("reason", Arg::Str(&reason))]);
-            return done(out, text);
-        }
+        let result = merge::merge(env.storage, income, cached, Some(&upload), &dir());
+        let _ = env.storage.remove(&incoming);
+        let outcome = match result {
+            Ok(outcome) => outcome,
+            Err(failure) => {
+                self.running = false;
+                self.attempt = 0;
+                let key = match failure {
+                    Failure::Income(_) => "stats.sync.unreadable",
+                    Failure::Here(_) => "stats.sync.failed",
+                };
+                let reason = format!("{failure}");
+                return done(out, env.i18n.format(key, &[("reason", Arg::Str(&reason))]));
+            }
+        };
+        self.books = outcome.books;
         let mut put = request(env, "PUT", &UPLOADED);
         put.body_from = Some(upload);
-        if let Some(etag) = &reply.etag {
-            // A weak validator does not match strongly (as KOReader does).
-            let etag = etag.trim_start_matches("W/").trim_start_matches("w/");
-            put.headers
-                .push((String::from("If-Match"), etag.to_string()));
+        match (income, &reply.etag) {
+            // There was none: only if there still is none.
+            (None, _) => put
+                .headers
+                .push((String::from("If-None-Match"), String::from("*"))),
+            (Some(_), Some(etag)) => {
+                // A weak validator does not match strongly (as KOReader does).
+                let etag = etag.trim_start_matches("W/").trim_start_matches("w/");
+                put.headers
+                    .push((String::from("If-Match"), etag.to_string()));
+            }
+            (Some(_), None) => {}
         }
         put.headers.push((
             String::from("Content-Type"),
@@ -227,34 +268,37 @@ impl Sync {
             return;
         }
         let status = reply.status.to_string();
+        let upload = file(FILE);
         match reply.status {
             200..=299 => {
                 // What was uploaded is what the next sync compares with.
-                let upload = file(FILE);
-                let cached = file(&format!("{FILE}.sync"));
-                if env.storage.rename(&upload, &cached).is_err()
-                    && let Ok(data) = paperpaw_sdk::read_file(env.storage, &upload, 256 << 20)
-                {
-                    let _ = env.storage.write(&cached, &data);
+                // Where it cannot be kept, the one before stays: it can
+                // only tell less, never more, as deleted there.
+                if paperpaw_sdk::files::move_to(env.storage, &upload, &self.last_upload).is_err() {
+                    let _ = env.storage.remove(&upload);
                 }
+                forget_other_uploads(env, &self.last_upload);
                 self.running = false;
                 self.attempt = 0;
-                let books = crate::store::books(env.storage).len();
                 let text = env.i18n.format(
                     "stats.sync.done",
                     &[(
                         "books",
-                        Arg::Str(&env.i18n.plural("stats.books-count", books as i64, &[])),
+                        Arg::Str(&env.i18n.plural("stats.books-count", self.books as i64, &[])),
                     )],
                 );
                 done(out, text);
             }
             // Changed in between: again, from the download.
             412 if self.attempt < ATTEMPTS => {
+                let _ = env.storage.remove(&upload);
                 self.running = false;
                 self.start(env, out);
             }
-            _ => self.fail(env, &status, out),
+            _ => {
+                let _ = env.storage.remove(&upload);
+                self.fail(env, &status, out);
+            }
         }
     }
 
@@ -298,10 +342,13 @@ fn import(env: &Env<'_>) -> String {
                 ("stays", Arg::Int(stays as i64)),
             ],
         ),
-        Err(e) => {
-            let reason = format!("{e}");
-            env.i18n
-                .format("stats.sync.failed", &[("reason", Arg::Str(&reason))])
+        Err(failure) => {
+            let key = match failure {
+                Failure::Income(_) => "stats.import.unreadable",
+                Failure::Here(_) => "stats.sync.failed",
+            };
+            let reason = format!("{failure}");
+            env.i18n.format(key, &[("reason", Arg::Str(&reason))])
         }
     }
 }
@@ -553,6 +600,19 @@ mod tests {
             "https://cloud.example.org/dav/KOReader"
         );
         assert_eq!(folder("http://nas:8080/dav"), "http://nas:8080/dav");
+    }
+
+    /// A password is kept as typed: spaces at either end belong to it.
+    #[test]
+    fn passwords_are_kept_as_typed() {
+        let Command::SetSecret(change) = save_password(" secret ") else {
+            panic!("no secret kept");
+        };
+        assert_eq!(change.value.as_deref(), Some(" secret "));
+        let Command::SetSecret(change) = save_password("") else {
+            panic!("no secret removed");
+        };
+        assert_eq!(change.value, None);
     }
 
     /// What version 1 wrote stays readable (see `docs/data-files.md`).

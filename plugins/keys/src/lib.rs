@@ -14,6 +14,11 @@
 //! from, in groups and searchable, after *As standard* (what plugins and
 //! the button layout bind) and *Nothing*. Changes go to `paperpaw.ini`
 //! like any binding written there (`Command::Bind`) and apply at once.
+//!
+//! Where there are buttons only (the X4), a change that leaves no button
+//! to choose, to go back or to move one way or the other is refused: one
+//! wrong choice would leave the device unusable, with no way back. The
+//! last row, *Reset buttons and gestures*, takes every change back.
 
 #![no_std]
 
@@ -26,9 +31,10 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use paperpaw_sdk::ask;
-use paperpaw_sdk::builtin::{GLOBAL_KEYMAP_LAYER, actions, menus, params, slots};
+use paperpaw_sdk::builtin::{CONFIG_FILE, GLOBAL_KEYMAP_LAYER, actions, menus, params, slots};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::Typed;
+use paperpaw_sdk::ui::choice::{self, Choice, Picked};
 use paperpaw_sdk::ui::{self, ListChange, ListView, Rows, UiStyle};
 use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
@@ -42,6 +48,10 @@ pub const OPEN: Id = Id::new_static("keys.open");
 const LIST_SCREEN: Id = Id::new_static("keys.list");
 const PICK_SCREEN: Id = Id::new_static("keys.pick");
 const PLACE_SCREEN: Id = Id::new_static("keys.place");
+/// Asks whether to take every change back.
+const CHOICE: Id = Id::new_static("keys.choice");
+/// The answer.
+const RESET_CHOSEN: Event<Picked> = Event::new("keys.reset-chosen");
 /// The action picked for an input: parameters `input` and `id` (empty
 /// for *As standard*).
 const PICKED: Id = Id::new_static("keys.picked");
@@ -83,6 +93,32 @@ const ZONES: [&str; 9] = [
 ];
 const SWIPES: [&str; 4] = ["left", "right", "up", "down"];
 const EDGES: [&str; 4] = ["bottom", "top", "left", "right"];
+
+/// What buttons alone cannot do without, each with the message that a
+/// change taking its last button away is refused with: choosing, going
+/// back, moving on and moving back.
+const NEEDED: [(&[Id], &str); 4] = [
+    (&[actions::CONFIRM], "keys.needed.confirm"),
+    (&[actions::BACK], "keys.needed.back"),
+    (
+        &[
+            actions::DOWN,
+            actions::NEXT,
+            actions::RIGHT,
+            actions::NEXT_PAGE,
+        ],
+        "keys.needed.forward",
+    ),
+    (
+        &[
+            actions::UP,
+            actions::PREVIOUS,
+            actions::LEFT,
+            actions::PREV_PAGE,
+        ],
+        "keys.needed.backward",
+    ),
+];
 
 /// Where a change applies: the key map layers looked up there, and the
 /// one changes go to.
@@ -155,9 +191,89 @@ fn all_screens(env: &Env<'_>) -> Vec<Place> {
             layers: Vec::from([id.as_str().to_string(), GLOBAL_KEYMAP_LAYER.to_string()]),
         })
         .collect();
+    tell_apart(&mut all);
     all.sort_by_key(|p| p.title.to_lowercase());
-    all.dedup_by(|a, b| a.title == b.title);
     all
+}
+
+/// Places of the same name told apart by their screen's id, e.g. a
+/// tool's list and its editor, both named after the tool.
+fn tell_apart(places: &mut [Place]) {
+    let alike: Vec<bool> = places
+        .iter()
+        .map(|p| places.iter().filter(|o| o.title == p.title).count() > 1)
+        .collect();
+    for (place, alike) in places.iter_mut().zip(alike) {
+        if alike {
+            place.title = format!("{} ({})", place.title, place.layer());
+        }
+    }
+}
+
+/// The inputs of the buttons this device has, short and held.
+fn button_inputs(env: &Env<'_>) -> Vec<String> {
+    let keys = env.device.input.keys;
+    let has: Vec<&str> = BUTTONS
+        .iter()
+        .copied()
+        .filter(|b| keys.is_empty() || keys.contains(b))
+        .collect();
+    let short = has.iter().map(|b| format!("button.{b}"));
+    let held = has.iter().map(|b| format!("long.{b}"));
+    short.chain(held).collect()
+}
+
+/// Why binding `input` to `action` in `layers` is refused, if it is: on a
+/// device with buttons only, when something the buttons reach there now
+/// ([`NEEDED`]) would have no button left. *As standard* (`None`) brings
+/// back what the device came with, so it always may.
+fn refused(
+    env: &Env<'_>,
+    layers: &[&str],
+    input: &str,
+    action: Option<&Id>,
+) -> Option<&'static str> {
+    let action = action?;
+    if !env.device.input.buttons || env.device.input.touch {
+        return None;
+    }
+    let inputs = button_inputs(env);
+    let reaches = |need: &[Id], bound: &dyn Fn(&str) -> Option<Id>| {
+        inputs
+            .iter()
+            .any(|i| bound(i).is_some_and(|a| need.contains(&a)))
+    };
+    let now = |i: &str| env.keys.bound(layers, i);
+    let then = |i: &str| {
+        if i == input {
+            Some(action.clone())
+        } else {
+            env.keys.bound(layers, i)
+        }
+    };
+    NEEDED
+        .iter()
+        .find(|(need, _)| reaches(need, &now) && !reaches(need, &then))
+        .map(|(_, message)| *message)
+}
+
+/// The changes `paperpaw.ini` holds: the layer and the input of every
+/// binding in a key map section. `None` where the file cannot be read
+/// (not where it is not there: then there are none).
+fn changes(env: &Env<'_>) -> Option<Vec<(String, String)>> {
+    let source = match paperpaw_sdk::read_file(env.storage, CONFIG_FILE, 256 * 1024) {
+        Ok(data) => String::from_utf8(data).ok()?,
+        Err(paperpaw_sdk::StorageError::NotFound) => return Some(Vec::new()),
+        Err(_) => return None,
+    };
+    let found = paperpaw_sdk::config::parse(&source)
+        .flatten()
+        .filter_map(|entry| {
+            let layer = entry.section.strip_prefix("keymap.")?;
+            Some((layer.to_string(), entry.key.to_string()))
+        })
+        .collect();
+    Some(found)
 }
 
 /// A row of the list of inputs.
@@ -167,10 +283,12 @@ enum Row {
     Policy,
     Heading(&'static str),
     Input(String),
+    /// Takes every change back.
+    Reset,
 }
 
 /// The rows for this device: the place (and its gestures), then the
-/// inputs in sections, gestures first on touch screens.
+/// inputs in sections, gestures first on touch screens, then the reset.
 fn rows(env: &Env<'_>, everywhere: bool) -> Vec<Row> {
     let input = env.device.input;
     let mut rows = Vec::from([Row::Place]);
@@ -218,6 +336,7 @@ fn rows(env: &Env<'_>, everywhere: bool) -> Vec<Row> {
     for (heading, inputs) in first.into_iter().chain(then) {
         section(&mut rows, heading, inputs);
     }
+    rows.push(Row::Reset);
     rows
 }
 
@@ -284,6 +403,11 @@ impl Plugin for Keys {
             id: PLACE_SCREEN,
             title: Cow::Borrowed("keys.place"),
             factory: Box::new(|env, params| Box::new(PlaceScreen::new(env, params))),
+        })?;
+        r.add_screen(ScreenSpec {
+            id: CHOICE,
+            title: Cow::Borrowed("keys.title"),
+            factory: Box::new(|env, params| Box::new(Choice::new(env, params))),
         })?;
         r.add_action(ActionSpec::new(OPEN, "keys.title").handler(
             |_: &Env<'_>, out: &mut Vec<Command>| {
@@ -433,8 +557,38 @@ impl ListScreen {
                     Params::new().with(INPUT, input.clone()),
                 ));
             }
+            Some(Row::Reset) => {
+                let question = env.i18n.tr("keys.reset.question");
+                cx.command(choice::open(
+                    CHOICE,
+                    &RESET_CHOSEN,
+                    question,
+                    "",
+                    "keys.option.",
+                    &["reset", "cancel"],
+                ));
+            }
             _ => {}
         }
+    }
+
+    /// Every change taken back, as `paperpaw.ini` holds them.
+    fn reset(env: &Env<'_>, cx: &mut Cx<'_, '_>) {
+        let Some(changes) = changes(env) else {
+            let text = env.i18n.tr("keys.reset.unreadable").to_string();
+            cx.command(Command::Notify(text));
+            return;
+        };
+        for (layer, input) in changes {
+            cx.command(Command::Bind {
+                layer,
+                input,
+                action: None,
+            });
+        }
+        cx.command(Command::Notify(env.i18n.tr("keys.reset.done").to_string()));
+        cx.request_redraw();
+        cx.request_refresh(RefreshMode::Partial);
     }
 }
 
@@ -508,6 +662,11 @@ impl Screen for ListScreen {
                         let name = input_name(env, input);
                         ui::draw_noted_row(canvas, env, &style, rect, focused, &name, "›", &does);
                     }
+                    Row::Reset => {
+                        let title = env.i18n.tr("keys.reset");
+                        let note = env.i18n.tr("keys.reset.help");
+                        ui::draw_noted_row(canvas, env, &style, rect, focused, title, "", note);
+                    }
                 }
             });
     }
@@ -562,6 +721,12 @@ impl Screen for ListScreen {
 
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
+        if let Some(picked) = RESET_CHOSEN.read(event, params) {
+            if picked.option == "reset" {
+                Self::reset(&env, cx);
+            }
+            return;
+        }
         if *event == PLACED {
             let Some(chosen) = params.get(params::ID) else {
                 return;
@@ -586,8 +751,13 @@ impl Screen for ListScreen {
             return;
         };
         let action = params.get(params::ID).and_then(|id| Id::parse(id).ok());
+        let place = self.place();
+        if let Some(message) = refused(&env, &place.layer_refs(), input, action.as_ref()) {
+            cx.command(Command::Notify(env.i18n.tr(message).to_string()));
+            return;
+        }
         cx.command(Command::Bind {
-            layer: self.place().layer().to_string(),
+            layer: place.layer().to_string(),
             input: input.to_string(),
             action,
         });

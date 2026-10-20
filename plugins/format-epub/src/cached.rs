@@ -3,6 +3,7 @@
 
 use alloc::string::String;
 use alloc::vec::Vec;
+use core::cell::Cell;
 
 use paperpaw_sdk::document::{
     Align, Block, BlockKind, DocumentError, Link, OffsetMap, Run, TextStyle,
@@ -10,6 +11,13 @@ use paperpaw_sdk::document::{
 use paperpaw_sdk::{Storage, StorageError};
 
 use crate::convert::{self, CachePaths, HEADER, INDEX};
+
+/// The length of a converted chapter's text, if its conversion is
+/// complete: `<n>.end` says it, and `<n>.txt` is as long.
+pub(crate) fn converted_length(storage: &dyn Storage, paths: &CachePaths) -> Option<u32> {
+    let length = u32_at(storage, &paths.end, 0).ok()?;
+    (storage.size(&paths.text).ok()? == u64::from(length)).then_some(length)
+}
 
 pub(crate) fn u32_at(storage: &dyn Storage, path: &str, offset: u64) -> Result<u32, StorageError> {
     let mut buf = [0u8; 4];
@@ -46,6 +54,12 @@ pub(crate) fn read_block(
     storage.read_at(&paths.text, u64::from(at), &mut header)?;
     let len = usize::from(u16::from_le_bytes([header[4], header[5]]));
     let run_count = usize::from(u16::from_le_bytes([header[6], header[7]]));
+    // A record the converter cannot have written: the cache is damaged.
+    if len > convert::LIMIT || run_count > len {
+        return Err(DocumentError::Malformed(alloc::borrow::Cow::Borrowed(
+            "cache record",
+        )));
+    }
     let mut text = alloc::vec![0u8; len];
     let mut filled = 0;
     while filled < len {
@@ -158,48 +172,104 @@ pub(crate) fn block_at(
     read_block(storage, paths, length, blocks, block, color).map(Some)
 }
 
+/// Longer lines of cache files are cut: nothing sensible is that long.
+const MAX_LINE: usize = 2048;
+
 /// Calls `visit` with each line of a cache file until it returns
-/// `false`, reading in small pieces.
+/// `false`, reading in small pieces: without its line break, invalid
+/// UTF-8 replaced, cut at [`MAX_LINE`] bytes.
 pub(crate) fn lines(storage: &dyn Storage, path: &str, mut visit: impl FnMut(&str) -> bool) {
-    let mut chunk = [0u8; 256];
+    lines_from(storage, path, 0, |line, _| visit(line));
+}
+
+/// As [`lines`], from byte `from` on (where a line starts); `visit` also
+/// gets where the line after it starts.
+pub(crate) fn lines_from(
+    storage: &dyn Storage,
+    path: &str,
+    from: u64,
+    mut visit: impl FnMut(&str, u64) -> bool,
+) {
+    let mut chunk = [0u8; 512];
     let mut line: Vec<u8> = Vec::new();
-    let mut offset = 0u64;
+    let mut offset = from;
     loop {
         let Ok(n) = storage.read_at(path, offset, &mut chunk) else {
             return;
         };
-        offset += n as u64;
-        for &byte in &chunk[..n] {
+        for (i, &byte) in chunk[..n].iter().enumerate() {
             if byte != b'\n' {
-                // Longer lines are cut; nothing sensible is that long.
-                if line.len() < 2048 {
+                if line.len() < MAX_LINE {
                     line.push(byte);
                 }
                 continue;
             }
-            if !visit(core::str::from_utf8(&line).unwrap_or_default()) {
+            if line.last() == Some(&b'\r') {
+                line.pop();
+            }
+            let next = offset + i as u64 + 1;
+            if !visit(&String::from_utf8_lossy(&line), next) {
                 return;
             }
             line.clear();
         }
+        offset += n as u64;
         if n == 0 {
+            if !line.is_empty() {
+                visit(&String::from_utf8_lossy(&line), offset);
+            }
             return;
         }
     }
 }
 
-/// The offset of anchor `id` in a converted chapter.
-pub(crate) fn anchor(storage: &dyn Storage, paths: &CachePaths, id: &str) -> Option<u32> {
+/// Where an anchor of a document was found last: its chapter, and where
+/// its line starts in the chapter's `<n>.anc`. Anchors are mostly looked
+/// up in the order of the text (the entries of the contents, the printed
+/// pages), often one twice in a row, and each is then found there or
+/// right after it, where a search from the start would read the list
+/// again for each.
+#[derive(Debug, Default)]
+pub(crate) struct AnchorHint(Cell<(u32, u64)>);
+
+impl AnchorHint {
+    /// Forgets the place, as when its chapter is converted again.
+    pub fn reset(&self) {
+        self.0.set((0, 0));
+    }
+}
+
+/// The offset of anchor `id` in converted chapter `section`, looked for
+/// from where `hint` says on, then from the start up to there.
+pub(crate) fn anchor(
+    storage: &dyn Storage,
+    paths: &CachePaths,
+    section: u32,
+    id: &str,
+    hint: &AnchorHint,
+) -> Option<u32> {
+    let (last, from) = hint.0.get();
+    let from = if last == section { from } else { 0 };
     let mut found = None;
-    lines(storage, &paths.anchors, |line| {
-        if let Some((name, offset)) = line.split_once('\t')
-            && name == id
-        {
-            found = offset.parse().ok();
-            return false;
+    for (start, end) in [(from, u64::MAX), (0, from)] {
+        let mut at = start;
+        lines_from(storage, &paths.anchors, start, |line, next| {
+            if at >= end {
+                return false;
+            }
+            if let Some((name, offset)) = line.split_once('\t')
+                && name == id
+            {
+                found = offset.parse().ok();
+                hint.0.set((section, at));
+            }
+            at = next;
+            found.is_none()
+        });
+        if found.is_some() || from == 0 {
+            break;
         }
-        true
-    });
+    }
     found
 }
 

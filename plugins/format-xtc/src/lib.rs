@@ -12,7 +12,10 @@
 //!
 //! Each page is a section of one image block, decoded into the gray cache
 //! when it is first shown. Pages are decoded in bands of rows, so a page
-//! never needs more than a few kilobytes, also on the X4.
+//! never needs more than about 20 kilobytes, also on the X4. Offsets and
+//! sizes from the file are checked against it before they are used, so a
+//! damaged or hostile file fails cleanly instead of filling memory or the
+//! card.
 
 #![no_std]
 
@@ -32,7 +35,8 @@ use paperpaw_sdk::document::{
 };
 use paperpaw_sdk::image::{GrayFile, GrayWriter, ImageError, ImageSink};
 use paperpaw_sdk::{
-    Env, FormatSpec, Id, Manifest, Plugin, RegisterError, Registrar, SDK_VERSION, Storage, Version,
+    Env, FormatSpec, Id, Manifest, Plugin, RegisterError, Registrar, SDK_VERSION, Storage,
+    StorageError, Version,
 };
 
 pub const PLUGIN: Id = Id::new_static("format-xtc");
@@ -47,12 +51,19 @@ const METADATA: u64 = 256;
 const CHAPTER: u64 = 96;
 const INDEX_ENTRY: u64 = 16;
 const PAGE_HEADER: u64 = 22;
-/// Rows of a gray page decoded at a time.
-const BAND: u32 = 32;
+/// Bytes of a gray page (XTH) held at a time: as many rows of both planes
+/// as fit, so the planes, read once for each band of rows, are read only
+/// a few times for a whole page (6 times for a screen of the X4).
+const BAND_BYTES: usize = 16 * 1024;
 /// Bytes read from storage at a time.
 const WINDOW: usize = 4096;
 /// Chapters kept at most.
 const MAX_CHAPTERS: u64 = 1000;
+/// Pages are pictures for a screen: no side longer than this, and no more
+/// pixels than the largest e-paper screens have (13.3", 3200 by 2400),
+/// which bounds the time a page takes to decode and its size on the card.
+const MAX_SIDE: u32 = 4096;
+const MAX_PIXELS: u64 = 8 << 20;
 
 fn malformed(what: &'static str) -> DocumentError {
     DocumentError::Malformed(Cow::Borrowed(what))
@@ -78,6 +89,30 @@ fn text(field: &[u8]) -> String {
     String::from_utf8_lossy(&field[..end]).trim().to_string()
 }
 
+/// Bytes at each end of a file that tell it from another of its size.
+const ENDS: u64 = 4096;
+
+/// What tells the file at `path` (`size` bytes) from another of its name:
+/// its size and a hash of its first and last 4 KiB (storages tell no time
+/// a file was changed).
+fn fingerprint(storage: &dyn Storage, path: &str, size: u64) -> Result<String, DocumentError> {
+    let ends = size.min(ENDS);
+    let mut bytes = zeroed(2 * ends as usize)?;
+    let (head, tail) = bytes.split_at_mut(ends as usize);
+    read_exact(storage, path, 0, head)?;
+    read_exact(storage, path, size - ends, tail)?;
+    Ok(format!("{size} {:016x}", fnv1a64(&bytes)))
+}
+
+/// `len` zero bytes; an error instead of an abort when memory is short.
+fn zeroed(len: usize) -> Result<Vec<u8>, DocumentError> {
+    let mut buf = Vec::new();
+    buf.try_reserve_exact(len)
+        .map_err(|_| DocumentError::OutOfMemory)?;
+    buf.resize(len, 0);
+    Ok(buf)
+}
+
 fn read_exact(
     storage: &dyn Storage,
     path: &str,
@@ -86,7 +121,10 @@ fn read_exact(
 ) -> Result<(), DocumentError> {
     let mut filled = 0;
     while filled < out.len() {
-        let n = storage.read_at(path, at + filled as u64, &mut out[filled..])?;
+        let from = at
+            .checked_add(filled as u64)
+            .ok_or(malformed("offset past the end"))?;
+        let n = storage.read_at(path, from, &mut out[filled..])?;
         if n == 0 {
             return Err(malformed("file too short"));
         }
@@ -106,29 +144,26 @@ struct Window<'a> {
 }
 
 impl<'a> Window<'a> {
-    fn new(storage: &'a dyn Storage, path: &'a str) -> Self {
-        Self {
+    fn new(storage: &'a dyn Storage, path: &'a str) -> Result<Self, DocumentError> {
+        Ok(Self {
             storage,
             path,
             start: 0,
             len: 0,
-            buf: vec![0; WINDOW],
-        }
+            buf: zeroed(WINDOW)?,
+        })
     }
 
-    /// The byte at `at`, 0 past the end.
-    fn byte(&mut self, at: u64) -> u8 {
-        if at < self.start || at >= self.start + self.len as u64 {
+    /// The byte at `at`; an error past the end.
+    fn byte(&mut self, at: u64) -> Result<u8, DocumentError> {
+        if at < self.start || at - self.start >= self.len as u64 {
             self.start = at;
-            self.len = self
-                .storage
-                .read_at(self.path, at, &mut self.buf)
-                .unwrap_or(0);
+            self.len = self.storage.read_at(self.path, at, &mut self.buf)?;
             if self.len == 0 {
-                return 0;
+                return Err(malformed("file too short"));
             }
         }
-        self.buf[(at - self.start) as usize]
+        Ok(self.buf[(at - self.start) as usize])
     }
 }
 
@@ -136,11 +171,16 @@ impl<'a> Window<'a> {
 #[derive(Debug)]
 pub struct XtcDocument {
     path: String,
+    /// The size of the file, which the offsets in it must lie within.
+    size: u64,
     pages: u32,
     index: u64,
     metadata: Metadata,
-    /// Chapters: title and first page.
-    chapters: Vec<(String, u32)>,
+    /// Where the chapter records start.
+    chapters_at: u64,
+    /// Chapters: their record and first page. Titles are read from the
+    /// file when they are wanted, so a long table takes little memory.
+    chapters: Vec<(u16, u16)>,
     cover: u32,
     cache: String,
 }
@@ -160,10 +200,23 @@ impl XtcDocument {
         if pages == 0 {
             return Err(malformed("no pages"));
         }
+        let size = storage.size(path)?;
+        if index
+            .checked_add(u64::from(pages) * INDEX_ENTRY)
+            .is_none_or(|end| end > size)
+        {
+            return Err(malformed("page index past the end"));
+        }
         let mut metadata = Metadata::default();
         let mut cover = 0;
         let mut chapter_count = None;
+        // Where the chapters start: after the metadata, if there is any.
+        let mut chapters_at = HEADER as u64;
         if has_metadata && metadata_at > 0 {
+            chapters_at = metadata_at
+                .checked_add(METADATA)
+                .filter(|&end| end <= size)
+                .ok_or(malformed("metadata past the end"))?;
             let mut m = [0u8; METADATA as usize];
             read_exact(storage, path, metadata_at, &mut m)?;
             metadata.title = Some(text(&m[..128])).filter(|t| !t.is_empty());
@@ -180,19 +233,19 @@ impl XtcDocument {
         }
         let mut chapters = Vec::new();
         if has_chapters {
-            let at = if has_metadata && metadata_at > 0 {
-                metadata_at + METADATA
-            } else {
-                HEADER as u64
-            };
-            let room = index.saturating_sub(at) / CHAPTER;
+            // The chapters lie before the page index.
+            let room = index.saturating_sub(chapters_at) / CHAPTER;
             let count = chapter_count.unwrap_or(room).min(room).min(MAX_CHAPTERS);
-            let mut c = [0u8; CHAPTER as usize];
-            for i in 0..count {
-                read_exact(storage, path, at + i * CHAPTER, &mut c)?;
-                let start = u32::from(u16_at(&c, 80));
-                if start < pages {
-                    chapters.push((text(&c[..80]), start));
+            chapters
+                .try_reserve_exact(count as usize)
+                .map_err(|_| DocumentError::OutOfMemory)?;
+            // Through a window: the first pages of many records in a read.
+            let mut window = Window::new(storage, path)?;
+            for record in 0..count as u16 {
+                let at = chapters_at + u64::from(record) * CHAPTER + 80;
+                let start = u16::from_le_bytes([window.byte(at)?, window.byte(at + 1)?]);
+                if u32::from(start) < pages {
+                    chapters.push((record, start));
                 }
             }
         }
@@ -201,12 +254,12 @@ impl XtcDocument {
             metadata.title = Some(name.rsplit_once('.').map_or(name, |(s, _)| s).to_string());
         }
         let cache = format!(
-            "{}/{:016x}",
+            "{}/{}",
             Env::plugin_dir(PLUGIN.as_str()),
-            fnv1a64(path.as_bytes())
+            paperpaw_sdk::library::key(path)
         );
         // Pages decoded from another file of the same name go.
-        let stamp = format!("{} {pages}\n", storage.size(path)?);
+        let stamp = format!("{} {pages}\n", fingerprint(storage, path, size)?);
         let stamp_path = format!("{cache}/source");
         if paperpaw_sdk::read_file(storage, &stamp_path, 64).ok()
             != Some(stamp.clone().into_bytes())
@@ -217,34 +270,36 @@ impl XtcDocument {
         }
         Ok(Self {
             path: path.to_string(),
+            size,
             pages,
             index,
             metadata,
+            chapters_at,
             chapters,
             cover,
             cache,
         })
     }
 
-    /// Page `page` as a gray picture in the cache, decoded if needed.
+    /// Page `page` as a gray picture in the cache, decoded if needed. A
+    /// page that cannot be decoded is marked, so it is not decoded again
+    /// each time it is shown (until the book changes, and its cache with
+    /// it).
     fn page(&self, storage: &dyn Storage, page: u32) -> Result<ImageRef, DocumentError> {
         let cache = format!("{}/p{page}.gray", self.cache);
         if GrayFile::open(storage, &cache).is_none() {
-            let mut entry = [0u8; INDEX_ENTRY as usize];
-            read_exact(
-                storage,
-                &self.path,
-                self.index + u64::from(page) * INDEX_ENTRY,
-                &mut entry,
-            )?;
-            let offset = u64_at(&entry, 0);
-            let mut writer = GrayWriter::new(storage, &cache);
-            let result = decode_page(storage, &self.path, offset, &mut writer)
-                .and_then(|()| writer.finish().map_err(image_error));
-            if result.is_err() {
-                let _ = storage.remove(&cache);
+            let broken = format!("{}/p{page}.broken", self.cache);
+            if storage.exists(&broken) {
+                return Err(malformed("page cannot be decoded"));
             }
-            result?;
+            if let Err(error) = self.decode(storage, page, &cache) {
+                let _ = storage.remove(&cache);
+                // Short memory or a full card may pass; damage stays.
+                if matches!(error, DocumentError::Malformed(_)) {
+                    let _ = storage.write(&broken, b"");
+                }
+                return Err(error);
+            }
         }
         let file = GrayFile::open(storage, &cache).ok_or(malformed("page"))?;
         Ok(ImageRef {
@@ -253,19 +308,43 @@ impl XtcDocument {
             height: file.height,
         })
     }
+
+    /// Decodes page `page` into the gray picture at `cache`.
+    fn decode(&self, storage: &dyn Storage, page: u32, cache: &str) -> Result<(), DocumentError> {
+        let at = self
+            .index
+            .checked_add(u64::from(page) * INDEX_ENTRY)
+            .ok_or(malformed("page index past the end"))?;
+        let mut entry = [0u8; INDEX_ENTRY as usize];
+        read_exact(storage, &self.path, at, &mut entry)?;
+        let offset = u64_at(&entry, 0);
+        let mut writer = GrayWriter::new(storage, cache);
+        decode_page(storage, &self.path, self.size, offset, &mut writer)?;
+        writer.finish().map_err(image_error)
+    }
 }
 
 fn image_error(e: ImageError) -> DocumentError {
-    DocumentError::Malformed(Cow::Owned(format!("{e}")))
+    match e {
+        ImageError::Io => DocumentError::Storage(StorageError::Io),
+        ImageError::OutOfMemory => DocumentError::OutOfMemory,
+        e => DocumentError::Malformed(Cow::Owned(format!("{e}"))),
+    }
 }
 
-/// Decodes the page picture at `offset` of `path` into `sink`.
+/// Decodes the page picture at `offset` of `path` (`file_size` bytes long)
+/// into `sink`.
 fn decode_page(
     storage: &dyn Storage,
     path: &str,
+    file_size: u64,
     offset: u64,
     sink: &mut dyn ImageSink,
 ) -> Result<(), DocumentError> {
+    let data = offset
+        .checked_add(PAGE_HEADER)
+        .filter(|&data| data <= file_size)
+        .ok_or(malformed("page past the end"))?;
     let mut head = [0u8; PAGE_HEADER as usize];
     read_exact(storage, path, offset, &mut head)?;
     let (width, height) = (u32::from(u16_at(&head, 4)), u32::from(u16_at(&head, 6)));
@@ -273,16 +352,35 @@ fn decode_page(
     if width == 0 || height == 0 {
         return Err(malformed("empty page"));
     }
-    let data = offset + PAGE_HEADER;
-    let mut window = Window::new(storage, path);
-    let mut row = vec![0u8; width as usize];
+    if width > MAX_SIDE || height > MAX_SIDE || u64::from(width) * u64::from(height) > MAX_PIXELS {
+        return Err(malformed("page too large"));
+    }
+    let magic = &head[..4];
+    // The bytes the pixels are read from, all of which must be there.
+    let stride = u64::from(width.div_ceil(8));
+    let column = u64::from(height.div_ceil(8));
+    let plane = size / 2;
+    let pixel_bytes = if magic == XTG {
+        stride * u64::from(height)
+    } else if magic == XTH {
+        plane + column * u64::from(width)
+    } else {
+        return Err(malformed("page format"));
+    };
+    if data
+        .checked_add(pixel_bytes)
+        .is_none_or(|end| end > file_size)
+    {
+        return Err(malformed("page data past the end"));
+    }
+    let mut window = Window::new(storage, path)?;
+    let mut row = zeroed(width as usize)?;
     sink.start(width, height).map_err(image_error)?;
-    if &head[..4] == XTG {
+    if magic == XTG {
         // Rows of bits, a set bit white.
-        let stride = u64::from(width.div_ceil(8));
         for y in 0..height {
             for x in 0..width {
-                let byte = window.byte(data + u64::from(y) * stride + u64::from(x / 8));
+                let byte = window.byte(data + u64::from(y) * stride + u64::from(x / 8))?;
                 let on = byte >> (7 - (x % 8)) & 1;
                 row[x as usize] = if on == 1 { 255 } else { 0 };
             }
@@ -290,38 +388,36 @@ fn decode_page(
         }
         return Ok(());
     }
-    if &head[..4] != XTH {
-        return Err(malformed("page format"));
-    }
     // Two bit planes; in each, columns from the right, eight rows a byte.
-    let column = u64::from(height.div_ceil(8));
-    let plane = size / 2;
-    let mut band = vec![0u8; (BAND * width) as usize];
-    let mut y0 = 0;
-    while y0 < height {
-        let rows = BAND.min(height - y0);
-        band[..(rows * width) as usize].fill(0);
-        for (p, shift) in [(0u64, 1u8), (1, 0)] {
-            for x in 0..width {
-                let base = data + p * plane + u64::from(width - 1 - x) * column;
-                for y in y0..y0 + rows {
-                    let byte = window.byte(base + u64::from(y / 8));
-                    let bit = byte >> (7 - (y % 8)) & 1;
-                    band[((y - y0) * width + x) as usize] |= bit << shift;
-                }
+    // A band holds some of those bytes of every column in both planes,
+    // read in the order of the file, so the window only moves forward.
+    let (width, height) = (width as usize, height as usize);
+    let groups = height.div_ceil(8);
+    let per_band = (BAND_BYTES / (2 * width)).clamp(1, groups);
+    let mut band = zeroed(2 * width * per_band)?;
+    let mut g0 = 0;
+    while g0 < groups {
+        let n = per_band.min(groups - g0);
+        // Chunk `p * width + c`: plane `p`, the file's column `c`.
+        for (i, chunk) in band.chunks_exact_mut(per_band).enumerate() {
+            let (p, c) = ((i / width) as u64, (i % width) as u64);
+            let base = data + p * plane + c * column + g0 as u64;
+            for (j, byte) in chunk[..n].iter_mut().enumerate() {
+                *byte = window.byte(base + j as u64)?;
             }
         }
-        for r in 0..rows {
-            for (out, &raw) in row
-                .iter_mut()
-                .zip(&band[(r * width) as usize..((r + 1) * width) as usize])
-            {
+        for y in g0 * 8..((g0 + n) * 8).min(height) {
+            let (j, shift) = (y / 8 - g0, 7 - y % 8);
+            for (x, out) in row.iter_mut().enumerate() {
+                let c = width - 1 - x;
+                let high = band[c * per_band + j] >> shift & 1;
+                let low = band[(width + c) * per_band + j] >> shift & 1;
                 // 00 white, 01 dark gray, 10 light gray, 11 black.
-                *out = [255, 85, 170, 0][usize::from(raw & 3)];
+                *out = [255, 85, 170, 0][usize::from(high << 1 | low)];
             }
             sink.row(&row).map_err(image_error)?;
         }
-        y0 += rows;
+        g0 += n;
     }
     Ok(())
 }
@@ -372,12 +468,15 @@ impl Document for XtcDocument {
         self.chapters.len() as u32
     }
 
-    fn toc_entry(&self, _: &dyn Storage, index: u32) -> Option<TocEntry> {
-        let (title, page) = self.chapters.get(index as usize)?;
+    fn toc_entry(&self, storage: &dyn Storage, index: u32) -> Option<TocEntry> {
+        let &(record, page) = self.chapters.get(index as usize)?;
+        let mut title = [0u8; 80];
+        let at = self.chapters_at + u64::from(record) * CHAPTER;
+        read_exact(storage, &self.path, at, &mut title).ok()?;
         Some(TocEntry {
-            title: title.clone(),
+            title: text(&title),
             level: 0,
-            at: Locator::new(*page, 0),
+            at: Locator::new(u32::from(page), 0),
         })
     }
 
@@ -424,8 +523,9 @@ impl Plugin for XtcFormat {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use core::cell::Cell;
     use paperpaw_i18n::{Catalog, check};
-    use paperpaw_sdk::MemoryStorage;
+    use paperpaw_sdk::{DirEntry, MemoryStorage, StorageError};
 
     #[test]
     fn translations_are_complete() {
@@ -489,6 +589,68 @@ mod tests {
         out
     }
 
+    /// A storage that counts the reads of its books (files ending in
+    /// `.xtc`) and the bytes they return.
+    struct Counting {
+        inner: MemoryStorage,
+        reads: Cell<usize>,
+        bytes: Cell<usize>,
+    }
+
+    impl Counting {
+        fn new(inner: MemoryStorage) -> Self {
+            Self {
+                inner,
+                reads: Cell::new(0),
+                bytes: Cell::new(0),
+            }
+        }
+
+        /// Reads and bytes read since the last call.
+        fn take(&self) -> (usize, usize) {
+            (self.reads.take(), self.bytes.take())
+        }
+    }
+
+    impl Storage for Counting {
+        fn read_at(&self, path: &str, offset: u64, buf: &mut [u8]) -> Result<usize, StorageError> {
+            let n = self.inner.read_at(path, offset, buf)?;
+            if path.ends_with(".xtc") {
+                self.reads.set(self.reads.get() + 1);
+                self.bytes.set(self.bytes.get() + n);
+            }
+            Ok(n)
+        }
+
+        fn size(&self, path: &str) -> Result<u64, StorageError> {
+            self.inner.size(path)
+        }
+
+        fn write(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
+            self.inner.write(path, data)
+        }
+
+        fn append(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
+            self.inner.append(path, data)
+        }
+
+        fn list(&self, dir: &str, visit: &mut dyn FnMut(DirEntry<'_>)) -> Result<(), StorageError> {
+            self.inner.list(dir, visit)
+        }
+
+        fn remove(&self, path: &str) -> Result<(), StorageError> {
+            self.inner.remove(path)
+        }
+
+        fn create_dir(&self, path: &str) -> Result<(), StorageError> {
+            self.inner.create_dir(path)
+        }
+
+        fn remove_dir_all(&self, path: &str) -> Result<(), StorageError> {
+            self.inner.remove_dir_all(path)
+        }
+    }
+
     fn rows(storage: &dyn Storage, image: &ImageRef) -> Vec<Vec<u8>> {
         let file = GrayFile::open(storage, &image.path).unwrap();
         (0..file.height)
@@ -540,5 +702,208 @@ mod tests {
                 .unwrap()
                 .is_none()
         );
+    }
+
+    #[test]
+    fn column_pages_are_read_a_few_times_only() {
+        // An X4 screen of four grays, in a pattern that tells pixels apart.
+        let (width, height) = (480u32, 800u32);
+        let column = height.div_ceil(8);
+        let planes: Vec<u8> = (0..2 * width * column)
+            .map(|i| (i.wrapping_mul(2_654_435_761) >> 13) as u8)
+            .collect();
+        let gray = |x: u32, y: u32| {
+            let bit = |p: u32| {
+                let byte = planes[(p * width * column + (width - 1 - x) * column + y / 8) as usize];
+                byte >> (7 - y % 8) & 1
+            };
+            [255, 85, 170, 0][usize::from(bit(0) << 1 | bit(1))]
+        };
+        let xth = page(XTH, width as u16, height as u16, &planes);
+        let storage = Counting::new(MemoryStorage::new().with("b/t.xtc", book(&[xth])));
+        let doc = XtcDocument::open(&storage, "b/t.xtc").unwrap();
+        storage.take();
+        let block = doc.block_at(&storage, Locator::new(0, 0)).unwrap().unwrap();
+        let (_, bytes) = storage.take();
+        assert!(bytes < 8 * planes.len(), "{bytes} bytes read");
+        let rows = rows(&storage, &block.image.unwrap());
+        for (y, row) in rows.iter().enumerate() {
+            for (x, &value) in row.iter().enumerate() {
+                assert_eq!(value, gray(x as u32, y as u32), "({x}, {y})");
+            }
+        }
+    }
+
+    #[test]
+    fn broken_pages_are_not_decoded_again() {
+        let broken = page(b"XTZ\0", 8, 1, &[0]);
+        let storage = Counting::new(MemoryStorage::new().with("b/t.xtc", book(&[broken])));
+        let doc = XtcDocument::open(&storage, "b/t.xtc").unwrap();
+        for view in 0..3 {
+            storage.take();
+            let block = doc.block_at(&storage, Locator::new(0, 0)).unwrap().unwrap();
+            assert!(block.image.is_none());
+            let (reads, _) = storage.take();
+            assert_eq!(reads > 0, view == 0, "view {view}: {reads} reads");
+        }
+        // Until the book changes.
+        let mut data = storage.inner.get("b/t.xtc").unwrap();
+        data.push(0);
+        storage.inner.write("b/t.xtc", &data).unwrap();
+        let doc = XtcDocument::open(&storage, "b/t.xtc").unwrap();
+        storage.take();
+        doc.block_at(&storage, Locator::new(0, 0)).unwrap().unwrap();
+        assert!(storage.take().0 > 0);
+    }
+
+    #[test]
+    fn a_replaced_book_of_the_same_size_is_decoded_anew() {
+        let storage = MemoryStorage::new().with("b/t.xtc", book(&[page(XTG, 8, 1, &[0x00])]));
+        let pixel = |storage: &MemoryStorage| {
+            let doc = XtcDocument::open(storage, "b/t.xtc").unwrap();
+            let block = doc.block_at(storage, Locator::new(0, 0)).unwrap().unwrap();
+            rows(storage, &block.image.unwrap())[0][0]
+        };
+        assert_eq!(pixel(&storage), 0);
+        // Black, then white: the same size.
+        storage
+            .write("b/t.xtc", &book(&[page(XTG, 8, 1, &[0xff])]))
+            .unwrap();
+        assert_eq!(pixel(&storage), 255);
+    }
+
+    #[test]
+    fn chapters_are_read_in_few_reads() {
+        let pages: Vec<Vec<u8>> = (0..MAX_CHAPTERS).map(|_| page(XTG, 8, 1, &[0])).collect();
+        let storage = Counting::new(MemoryStorage::new().with("b/t.xtc", book(&pages)));
+        let doc = XtcDocument::open(&storage, "b/t.xtc").unwrap();
+        let (reads, _) = storage.take();
+        assert!(reads < 100, "{reads} reads");
+        assert_eq!(doc.toc_len(&storage), 1000);
+        let last = doc.toc_entry(&storage, 999).unwrap();
+        assert_eq!(last.title, "Chapter 1000");
+        assert_eq!(last.at, Locator::new(999, 0));
+        assert!(doc.toc_entry(&storage, 1000).is_none());
+    }
+
+    #[test]
+    fn oversized_and_truncated_pages_are_refused() {
+        let pages = [
+            // Wider than any screen.
+            page(XTG, 4097, 1, &[0xff; 513]),
+            // 512 bytes of pixels promised, 16 there.
+            page(XTG, 64, 64, &[0xff; 16]),
+            // 4 Gi pixels: hours of decoding and gigabytes on the card.
+            page(XTH, u16::MAX, u16::MAX, &[0; 8]),
+        ];
+        let storage = MemoryStorage::new().with("b/t.xtc", book(&pages));
+        let doc = XtcDocument::open(&storage, "b/t.xtc").unwrap();
+        for p in 0..3 {
+            let block = doc.block_at(&storage, Locator::new(p, 0)).unwrap().unwrap();
+            assert!(block.image.is_none(), "page {p}");
+            assert_eq!(block.text, format!("{}", p + 1));
+            assert!(storage.get(&format!("{}/p{p}.gray", doc.cache)).is_none());
+        }
+    }
+
+    #[test]
+    fn offsets_near_the_end_of_u64_fail_cleanly() {
+        let pages = [page(XTG, 8, 1, &[0xff]), page(XTG, 8, 1, &[0x00])];
+        let good = book(&pages);
+        let patched = |at: usize, value: u64| {
+            let mut data = good.clone();
+            data[at..at + 8].copy_from_slice(&value.to_le_bytes());
+            data
+        };
+        // The page index, the metadata, the first page.
+        let index = u64_at(&good, 24) as usize;
+        for (what, data) in [
+            ("index", patched(24, u64::MAX - 8)),
+            ("metadata", patched(16, u64::MAX - 8)),
+            ("page", patched(index, u64::MAX - 8)),
+        ] {
+            let storage = MemoryStorage::new().with("b/t.xtc", data);
+            let Ok(doc) = XtcDocument::open(&storage, "b/t.xtc") else {
+                assert_ne!(
+                    what, "page",
+                    "one broken page stopped the book from opening"
+                );
+                continue;
+            };
+            assert_eq!(what, "page", "{what} past the end opened");
+            let first = doc.block_at(&storage, Locator::new(0, 0)).unwrap().unwrap();
+            assert!(first.image.is_none());
+            let second = doc.block_at(&storage, Locator::new(1, 0)).unwrap().unwrap();
+            assert!(second.image.is_some());
+        }
+    }
+
+    /// Damaged books must fail cleanly: no panic, no endless decoding, no
+    /// page larger on the card than the book could describe. Bytes of a
+    /// valid book are changed at random (deterministically, so a failure
+    /// can be reproduced from its seed), mostly in its structures.
+    #[test]
+    fn damaged_books_fail_cleanly() {
+        struct Rng(u64);
+        impl Rng {
+            fn next(&mut self) -> u64 {
+                self.0 ^= self.0 >> 12;
+                self.0 ^= self.0 << 25;
+                self.0 ^= self.0 >> 27;
+                self.0.wrapping_mul(0x2545_f491_4f6c_dd1d)
+            }
+
+            fn below(&mut self, n: usize) -> usize {
+                (self.next() % n.max(1) as u64) as usize
+            }
+        }
+
+        let xth = page(XTH, 24, 20, &[0x5a; 2 * 24 * 3]);
+        let good = book(&[
+            page(XTG, 16, 4, &[0xa5; 8]),
+            xth.clone(),
+            page(XTG, 9, 3, &[0x0f; 6]),
+            xth,
+        ]);
+        // Header, metadata, chapters and index, then the pages.
+        let structures = u64_at(&good, 32) as usize;
+        for seed in 1..=2000u64 {
+            let mut rng = Rng(seed.wrapping_mul(0x9e37_79b9_7f4a_7c15));
+            let mut data = good.clone();
+            for _ in 0..1 + rng.below(4) {
+                let at = match rng.below(4) {
+                    0 => rng.below(data.len()),
+                    _ => rng.below(structures),
+                };
+                data[at] = match rng.below(3) {
+                    0 => data[at] ^ 1 << rng.below(8),
+                    1 => [0x00, 0xff, 0x7f, 0x80][rng.below(4)],
+                    _ => rng.next() as u8,
+                };
+            }
+            if rng.below(8) == 0 {
+                data.truncate(rng.below(data.len()));
+            }
+            let storage = MemoryStorage::new().with("b/t.xtc", data.clone());
+            let Ok(doc) = XtcDocument::open(&storage, "b/t.xtc") else {
+                continue;
+            };
+            for p in 0..doc.sections() {
+                let block = doc.block_at(&storage, Locator::new(p, 0)).unwrap();
+                if let Some(image) = block.and_then(|b| b.image) {
+                    // Every pixel comes from at least one bit of the book.
+                    let pixels = u64::from(image.width) * u64::from(image.height);
+                    assert!(pixels <= 8 * data.len() as u64, "seed {seed}: page {p}");
+                }
+            }
+            for i in 0..doc.toc_len(&storage) {
+                let entry = doc.toc_entry(&storage, i);
+                assert!(
+                    entry.is_none_or(|e| e.at.section < doc.sections()),
+                    "seed {seed}"
+                );
+            }
+            let _ = doc.cover(&storage);
+        }
     }
 }
