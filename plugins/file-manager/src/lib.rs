@@ -384,7 +384,7 @@ impl Browser {
                 let mut note = None;
                 let result = if picked.copy {
                     ops::copy(env.storage, &picked.path, &target)
-                } else if ops::parent(&picked.path) == self.dir {
+                } else if ops::same_path(env.storage, ops::parent(&picked.path), &self.dir) {
                     // Moved where it is: nothing to do.
                     Ok(())
                 } else {
@@ -476,7 +476,9 @@ impl Browser {
                 }
                 self.message = deleted.err().map(|e| error(&env, e));
                 // Picked to be moved or copied, and gone with it.
-                if self.picked.as_ref().is_some_and(|p| is_in(&p.path, path)) {
+                if (self.picked.as_ref())
+                    .is_some_and(|p| ops::is_within(env.storage, &p.path, path))
+                {
                     self.picked = None;
                 }
                 // The focus where it was.
@@ -543,12 +545,6 @@ fn valid_name(name: &str) -> Option<&str> {
         || name.contains(['/', '\\', ':', '*', '?', '"', '<', '>', '|', '\0'])
         || name.chars().any(char::is_control);
     (!bad).then_some(name)
-}
-
-/// Whether `path` is `folder` or in it.
-fn is_in(path: &str, folder: &str) -> bool {
-    path.strip_prefix(folder)
-        .is_some_and(|rest| rest.is_empty() || rest.starts_with('/'))
 }
 
 /// A folder named `name`, as an entry to find in a listing.
@@ -830,10 +826,30 @@ fn tell_moved(env: &Env<'_>, from: &str, to: &str, cx: &mut Cx<'_, '_>) -> Optio
     more.then(|| env.i18n.tr("file-manager.moved-many").to_string())
 }
 
+/// Folder `value` (a setting's), after folder `from` moved to `to`: where
+/// it is `from` or in it, as the storage names entries (`Books` is `books`
+/// on the memory card), the same folder at `to`.
+fn moved_folder(storage: &dyn Storage, value: &str, from: &str, to: &str) -> Option<String> {
+    let (value, from, to) = (
+        value.trim_matches('/'),
+        from.trim_matches('/'),
+        to.trim_matches('/'),
+    );
+    if from.is_empty() || !ops::is_within(storage, value, from) {
+        return None;
+    }
+    let rest = value.split('/').skip(from.split('/').count());
+    Some(
+        core::iter::once(to)
+            .chain(rest)
+            .collect::<Vec<_>>()
+            .join("/"),
+    )
+}
+
 /// Settings that name folder `from` or one in it, chosen with the folder
 /// chooser, name it at `to` now.
 fn follow_folders(env: &Env<'_>, from: &str, to: &str, cx: &mut Cx<'_, '_>) {
-    let (from, to) = (from.trim_matches('/'), to.trim_matches('/'));
     for spec in env.settings.specs() {
         let folder = spec
             .extra()
@@ -843,12 +859,12 @@ fn follow_folders(env: &Env<'_>, from: &str, to: &str, cx: &mut Cx<'_, '_>) {
         if !folder {
             continue;
         }
-        let value = env.settings.text(spec.id.as_str()).trim_matches('/');
-        if let Some(rest) = value.strip_prefix(from)
-            && (rest.is_empty() || rest.starts_with('/'))
-        {
-            let moved = SettingValue::Text(format!("{to}{rest}").into());
-            cx.command(Command::SetSetting(spec.id.clone(), moved));
+        let value = env.settings.text(spec.id.as_str());
+        if let Some(moved) = moved_folder(env.storage, value, from, to) {
+            cx.command(Command::SetSetting(
+                spec.id.clone(),
+                SettingValue::Text(moved.into()),
+            ));
         }
     }
 }
@@ -880,14 +896,6 @@ mod tests {
         }
     }
 
-    #[test]
-    fn what_is_in_a_folder() {
-        assert!(is_in("books/a.epub", "books"));
-        assert!(is_in("books", "books"));
-        assert!(!is_in("books2/a.epub", "books"));
-        assert!(!is_in("book", "books"));
-    }
-
     use alloc::collections::BTreeMap;
     use core::cell::RefCell;
     use paperpaw_sdk::{DirEntry, MemoryStorage};
@@ -917,6 +925,9 @@ mod tests {
     }
 
     impl Storage for Folding {
+        fn ignores_case(&self) -> bool {
+            true
+        }
         fn read_at(&self, path: &str, offset: u64, buf: &mut [u8]) -> Result<usize, StorageError> {
             let files = self.files.borrow();
             let (_, data) = files
@@ -993,6 +1004,24 @@ mod tests {
         assert_eq!(
             rename(&storage, "books/Alice.epub", "OTHER.epub"),
             Ok(String::from("books/OTHER (2).epub"))
+        );
+    }
+
+    /// A folder setting follows its folder as the storage names it.
+    #[test]
+    fn folders_follow_as_the_storage_names_them() {
+        let card = Folding::default();
+        let moved = |value| moved_folder(&card, value, "books", "Library");
+        assert_eq!(moved("Books").as_deref(), Some("Library"));
+        assert_eq!(moved("Books/Archive/").as_deref(), Some("Library/Archive"));
+        assert_eq!(moved("books2"), None);
+        assert_eq!(moved("Notes"), None);
+        // Where case counts, `Books` is another folder.
+        let disk = MemoryStorage::new();
+        assert_eq!(moved_folder(&disk, "Books", "books", "Library"), None);
+        assert_eq!(
+            moved_folder(&disk, "books/Archive", "books", "Library").as_deref(),
+            Some("Library/Archive")
         );
     }
 

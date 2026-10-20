@@ -675,7 +675,7 @@ impl Browser {
         ];
         // Not for books already in the archive.
         let archive = env.settings.read(&ARCHIVE).trim_matches('/');
-        if !archive.is_empty() && files::parent(&path) != archive {
+        if !archive.is_empty() && !files::same_path(env.storage, files::parent(&path), archive) {
             options.push("archive");
         }
         if !env.device.input.touch {

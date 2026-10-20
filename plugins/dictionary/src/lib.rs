@@ -109,7 +109,7 @@ fn find_dictionaries(storage: &dyn Storage, folder: &str) -> Result<Vec<String>,
             };
             if entry.is_dir && depth < MAX_DEPTH {
                 folders.push((path, depth + 1));
-            } else if !entry.is_dir && entry.name.ends_with(".ifo") {
+            } else if !entry.is_dir && paperpaw_sdk::files::has_extension(entry.name, "ifo") {
                 found.push(path);
             }
         });
@@ -613,5 +613,20 @@ mod tests {
         let de = Catalog::parse(include_str!("../i18n/de.ini")).unwrap();
         let issues = check::compare(&en, &de);
         assert!(issues.is_empty(), "{issues:?}");
+    }
+
+    /// Dictionaries are found whatever the case of their extension (FAT
+    /// and Windows keep `.IFO`); a folder that cannot be listed says so.
+    #[test]
+    fn dictionaries_are_found_in_any_case() {
+        let storage = paperpaw_sdk::MemoryStorage::new()
+            .with("dict/a/a.ifo", "")
+            .with("dict/B/B.IFO", "")
+            .with("dict/c.idx", "");
+        assert_eq!(
+            super::find_dictionaries(&storage, "dict"),
+            Ok(alloc::vec!["dict/B/B.IFO".into(), "dict/a/a.ifo".into()])
+        );
+        assert!(super::find_dictionaries(&storage, "gone").is_err());
     }
 }
