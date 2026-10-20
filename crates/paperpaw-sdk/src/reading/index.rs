@@ -1,11 +1,13 @@
 //! A page index stored on the device: the start locator of every page for
 //! one book and one layout. It is built in the background and read in place,
-//! so even books with thousands of pages need no RAM for it.
+//! so even books with thousands of pages need no RAM for it. A reader names
+//! its file by the layout (see [`PageType::key`](super::PageType)), so
+//! another layout has an index of its own.
 
 use alloc::string::String;
 
-use paperpaw_sdk::Storage;
-use paperpaw_sdk::document::Locator;
+use crate::Storage;
+use crate::document::Locator;
 
 const ENTRY: u64 = 8;
 const SENTINEL: Locator = Locator::new(u32::MAX, u32::MAX);
@@ -14,8 +16,10 @@ const SENTINEL: Locator = Locator::new(u32::MAX, u32::MAX);
 /// (and whether it starts there).
 type Found = (Locator, u32, Option<(u32, bool)>);
 
+/// The starts of a book's pages in one layout, kept in a file of 8 bytes
+/// a page (a section and an offset), complete once a last entry says so.
 #[derive(Debug, Clone)]
-pub(crate) struct PageIndex {
+pub struct PageIndex {
     path: String,
     /// Number of page entries (without the completion sentinel).
     pages: u32,
@@ -27,7 +31,9 @@ pub(crate) struct PageIndex {
 }
 
 impl PageIndex {
-    pub(crate) fn open(storage: &dyn Storage, path: String) -> Self {
+    /// The index in the file at `path`, as far as it goes (none yet:
+    /// empty).
+    pub fn open(storage: &dyn Storage, path: String) -> Self {
         let entries = storage.size(&path).map_or(0, |size| (size / ENTRY) as u32);
         let mut index = Self {
             path,
@@ -42,15 +48,18 @@ impl PageIndex {
         index
     }
 
-    pub(crate) fn pages(&self) -> u32 {
+    /// The pages counted so far.
+    pub fn pages(&self) -> u32 {
         self.pages
     }
 
-    pub(crate) fn is_complete(&self) -> bool {
+    /// Whether every page of the book is counted.
+    pub fn is_complete(&self) -> bool {
         self.complete
     }
 
-    pub(crate) fn entry(&self, storage: &dyn Storage, page: u32) -> Option<Locator> {
+    /// Where page `page` (from 0) starts.
+    pub fn entry(&self, storage: &dyn Storage, page: u32) -> Option<Locator> {
         let mut buf = [0u8; ENTRY as usize];
         let n = storage
             .read_at(&self.path, u64::from(page) * ENTRY, &mut buf)
@@ -63,14 +72,14 @@ impl PageIndex {
     }
 
     /// The last indexed page start, from which indexing continues.
-    pub(crate) fn last(&self, storage: &dyn Storage) -> Option<Locator> {
+    pub fn last(&self, storage: &dyn Storage) -> Option<Locator> {
         self.pages
             .checked_sub(1)
             .and_then(|page| self.entry(storage, page))
     }
 
     /// Appends page starts; returns `false` if the storage refused.
-    pub(crate) fn append(&mut self, storage: &dyn Storage, starts: &[Locator]) -> bool {
+    pub fn append(&mut self, storage: &dyn Storage, starts: &[Locator]) -> bool {
         let mut data = alloc::vec::Vec::with_capacity(starts.len() * ENTRY as usize);
         for start in starts {
             data.extend_from_slice(&start.section.to_le_bytes());
@@ -83,7 +92,8 @@ impl PageIndex {
         ok
     }
 
-    pub(crate) fn finish(&mut self, storage: &dyn Storage) {
+    /// Marks the index complete: the book has no more pages.
+    pub fn finish(&mut self, storage: &dyn Storage) {
         if self.append(storage, &[SENTINEL]) {
             self.pages -= 1;
             self.complete = true;
@@ -92,7 +102,7 @@ impl PageIndex {
 
     /// The page containing `at`: the 0-based index of the last page start
     /// at or before it, and whether `at` is exactly that start.
-    pub(crate) fn locate(&self, storage: &dyn Storage, at: Locator) -> Option<(u32, bool)> {
+    pub fn locate(&self, storage: &dyn Storage, at: Locator) -> Option<(u32, bool)> {
         if let Some((before, pages, found)) = self.found.get()
             && before == at
             && pages == self.pages
@@ -122,7 +132,7 @@ impl PageIndex {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use paperpaw_sdk::MemoryStorage;
+    use crate::MemoryStorage;
 
     #[test]
     fn appends_locates_and_completes() {

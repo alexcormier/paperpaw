@@ -6,6 +6,11 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: `reading` holds the reader's building blocks for readers of
+  one's own: `FilteredDocument`, `PageIndex`, and with the feature
+  `unstable` `PageType`, `ReadingFaces`, `EmbeddedFonts`, `StatusRoom`,
+  `WordBox`, `word_boxes`, `draw_lines`, `draw_image`. The reader uses
+  them; pages look as before.
 - SDK: the reader's contents, search, marks and footnotes are standard
   slots (`slots::TOC`, `SEARCH`, `ANNOTATIONS`, `FOOTNOTE`), and
   following a link the standard event `events::FOLLOW_LINK`: a plugin

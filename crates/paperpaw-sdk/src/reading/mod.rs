@@ -1,5 +1,9 @@
 //! Building blocks of reading, for readers and for the plugins around
-//! them.
+//! them: a book through the plugins' text filters ([`FilteredDocument`]),
+//! the starts of its pages kept on the device ([`PageIndex`]), how it is
+//! opened ([`open_options`]); with the feature `unstable` (as the layout
+//! it builds on, until 1.0) the type of its pages and the page drawn
+//! (`PageType`, `ReadingFaces`, `word_boxes`, `draw_lines`).
 //!
 //! The words of the page shown: any plugin asks the reader with
 //! [`ask_page_words`] and hears them as [`PageWords`] (a dictionary that
@@ -7,6 +11,19 @@
 //! answers while a book is open; nothing comes otherwise. Decorators get
 //! the words with every page without asking (see
 //! [`decorations`](crate::decorations)).
+
+mod filtered;
+mod index;
+#[cfg(feature = "unstable")]
+mod typeset;
+
+pub use filtered::FilteredDocument;
+pub use index::PageIndex;
+#[cfg(feature = "unstable")]
+pub use typeset::{
+    EmbeddedFonts, PageType, ReadingFaces, StatusRoom, WordBox, draw_image, draw_lines,
+    small_caps_parts, uses_book_fonts, word_boxes,
+};
 
 use alloc::format;
 use alloc::string::{String, ToString};

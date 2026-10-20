@@ -5,7 +5,6 @@
 
 extern crate std;
 
-use alloc::string::String;
 use alloc::vec::Vec;
 
 use paperpaw_sdk::Rect;
@@ -23,12 +22,12 @@ fn page(lines: &[(u8, u8)]) -> Vec<WordBox> {
         let mut x = 10u16;
         for _ in 0..count {
             let width = u16::from(width.max(1));
-            words.push(WordBox {
-                area: Rect::new(x, 20 + line as u16 * 30, width, 24),
-                text: String::from("word"),
-                start: Locator::new(0, offset),
-                end: Locator::new(0, offset + 4),
-            });
+            words.push(WordBox::new(
+                Rect::new(x, 20 + line as u16 * 30, width, 24),
+                "word",
+                Locator::new(0, offset),
+                Locator::new(0, offset + 4),
+            ));
             x += width + 8;
             offset += 5;
         }

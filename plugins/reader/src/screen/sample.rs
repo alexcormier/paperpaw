@@ -13,7 +13,6 @@ use paperpaw_sdk::Storage;
 use paperpaw_sdk::document::{Align, Block, BlockKind, Metadata, OffsetMap};
 use paperpaw_sdk::widgets::Widget;
 
-use super::draw::draw_lines;
 use super::*;
 
 /// The share of the screen's height the sample takes: a few lines, and
@@ -82,10 +81,7 @@ impl Widget for Sample {
             metadata: Metadata::default(),
         };
         // Through the text filters, as books are.
-        let filtered = Filtered {
-            document: &document,
-            env,
-        };
+        let filtered = FilteredDocument::new(&document, env);
         let cx = LayoutContext::new(&filtered, env.storage, t.width, &t.style, &faces)
             .hyphenate(patterns.is_some().then_some(&hyphenate as Hyphenate<'_>));
         let page = layout_page(&cx, Locator::new(0, 0), t.height).unwrap_or_default();
@@ -113,7 +109,7 @@ impl Widget for Sample {
         };
         let origin = (f32::from(area.x) + t.x, f32::from(area.y) + t.y);
         let mut clipped = canvas.clipped(area);
-        draw_lines(&mut clipped, &faces, t, origin, &self.lines, &[]);
+        paperpaw_sdk::reading::draw_lines(&mut clipped, &faces, t, origin, &self.lines, &[]);
     }
 }
 

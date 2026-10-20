@@ -102,10 +102,7 @@ impl SearchScreen {
         // kept before a value.
         let width = f32::from(self.list.area().width) - 4.0 * self.style.margin as f32;
         // The text as the page shows it (see `paperpaw_sdk::filters`).
-        let filtered = crate::screen::Filtered {
-            document: document.as_ref(),
-            env,
-        };
+        let filtered = paperpaw_sdk::reading::FilteredDocument::new(document.as_ref(), env);
         for _ in 0..BLOCKS_PER_STEP {
             match filtered.block_at(env.storage, at) {
                 Ok(Some(block)) => {

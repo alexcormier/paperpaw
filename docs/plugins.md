@@ -504,6 +504,14 @@ A reader in turn sends the reading events (`BOOK_OPENED`, `PAGE_TURNED`,
 `BOOK_CLOSED`, `BOOK_FINISHED`), takes `GOTO`, and offers its actions
 in these menus.
 
+A reader of one's own builds on the shipped one's parts in
+`paperpaw_sdk::reading` rather than copying them: `FilteredDocument` (a
+book through the plugins' text filters), `PageIndex` (the starts of its
+pages, kept on the device), and with the feature `unstable` (as the
+layout, until 1.0) `PageType` (the page's box and type from the standard
+settings, its layout key), `ReadingFaces` (the faces with the book's own
+fonts and small capitals), `word_boxes`, `draw_lines` and `draw_image`.
+
 ### Services and points of your own
 
 A plugin can offer others more than the kernel knows of. A service is

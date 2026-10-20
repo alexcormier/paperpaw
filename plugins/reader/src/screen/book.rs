@@ -4,43 +4,6 @@
 
 use super::*;
 
-/// The book as the layout sees it: every block through the text
-/// filters of plugins (see `paperpaw_sdk::filters`).
-pub(crate) struct Filtered<'d, 'e> {
-    pub(crate) document: &'d dyn Document,
-    pub(crate) env: &'d Env<'e>,
-}
-
-impl Document for Filtered<'_, '_> {
-    fn metadata(&self) -> &paperpaw_sdk::document::Metadata {
-        self.document.metadata()
-    }
-
-    fn sections(&self) -> u32 {
-        self.document.sections()
-    }
-
-    fn section_len(&self, section: u32) -> u32 {
-        self.document.section_len(section)
-    }
-
-    fn block_at(
-        &self,
-        storage: &dyn paperpaw_sdk::Storage,
-        at: Locator,
-    ) -> Result<Option<paperpaw_sdk::document::Block>, DocumentError> {
-        let mut block = self.document.block_at(storage, at)?;
-        if let Some(block) = &mut block {
-            self.env.text_filters.apply(self.env, block);
-        }
-        Ok(block)
-    }
-
-    fn progress(&self, at: Locator) -> f32 {
-        self.document.progress(at)
-    }
-}
-
 /// The book being read.
 pub(super) struct Book {
     pub(super) path: String,
@@ -160,7 +123,7 @@ impl Book {
             .language
             .clone()
             .unwrap_or_else(|| env.i18n.language().to_string());
-        let typography = Typography::new(env, &font, &language, document.whole_pages());
+        let typography = typography(env, &font, &language, document.whole_pages());
         let dir = book_dir(path);
         // Kept with the reader's data of the book before plugins shared
         // them: moved where they are now, if any are there.
@@ -344,7 +307,7 @@ impl Book {
         let Some(font) = self.font(env) else {
             return;
         };
-        self.typography = Typography::new(env, &font, &self.language, self.document.whole_pages());
+        self.typography = typography(env, &font, &self.language, self.document.whole_pages());
         self.words = core::cell::OnceCell::new();
         self.xpointer = None;
         let start = self.line_start(env, self.page.start);
@@ -413,10 +376,7 @@ impl Book {
                 patterns.hyphenate(word, out);
             }
         };
-        let filtered = Filtered {
-            document: self.document.as_ref(),
-            env,
-        };
+        let filtered = FilteredDocument::new(self.document.as_ref(), env);
         let cx = LayoutContext::new(&filtered, env.storage, t.width, &t.style, &faces)
             .hyphenate(patterns.is_some().then_some(&hyphenate as Hyphenate<'_>));
         Some(f(&cx))
@@ -750,10 +710,7 @@ impl Book {
         let mut at = self.document.link_target(env.storage, href)?;
         let mut text = String::new();
         // As the page shows it.
-        let filtered = Filtered {
-            document: self.document.as_ref(),
-            env,
-        };
+        let filtered = FilteredDocument::new(self.document.as_ref(), env);
         for _ in 0..4 {
             let Ok(Some(block)) = filtered.block_at(env.storage, at) else {
                 break;

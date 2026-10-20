@@ -21,19 +21,15 @@ use paperpaw_sdk::builtin::{actions, events, fonts, params, slots};
 use paperpaw_sdk::digest::fnv1a64;
 use paperpaw_sdk::document::{Document, DocumentError, Link, Locator};
 use paperpaw_sdk::event::EventData;
-use paperpaw_sdk::layout::{
-    Face, Hyphenate, LayoutContext, Page, PageImage, PageLine, Style, Typesetter, layout_page,
-    line_start,
-};
+use paperpaw_sdk::layout::{Hyphenate, LayoutContext, Page, PageLine, layout_page, line_start};
 use paperpaw_sdk::status::context as status_context;
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
-    Arg, Canvas, Color, Command, Cx, Env, FontHandle, FontSet, Gesture, GestureKind, Handled, Id,
-    Params, Point, Rect, RefreshMode, Screen,
+    Arg, Canvas, Color, Command, Cx, Env, FontHandle, Gesture, GestureKind, Handled, Id, Params,
+    Point, Rect, RefreshMode, Screen,
 };
 
 use crate::annotations::{self, Annotation, Kind, Mark};
-use crate::index::PageIndex;
 use crate::selection::{self, Item, Mode, Selection};
 use crate::settings::{
     FONT_SIZE, FONT_WEIGHT, HYPHENATE, INDENT, JUSTIFY, LINE_SPACING, MARGIN, MARGIN_ENDS,
@@ -41,9 +37,10 @@ use crate::settings::{
 };
 use crate::status;
 use crate::{PLUGIN, state_path};
+use paperpaw_sdk::reading::{FilteredDocument, PageIndex};
 
 use self::book::*;
-pub(crate) use self::book::{Filtered, book_dir, remember_last};
+pub(crate) use self::book::{book_dir, remember_last};
 use self::hands_free::*;
 use self::linking::*;
 pub(crate) use self::sample::Sample;
@@ -1140,27 +1137,5 @@ mod tests {
         let ticks = chapter_ticks(&flat);
         assert_eq!(ticks.len(), 120);
         assert_eq!(ticks.last(), Some(&952));
-    }
-
-    #[test]
-    fn small_caps_split_lower_case() {
-        let parts: Vec<(&str, bool)> =
-            super::typography::small_caps_parts("Mr. Gregor Samsa").collect();
-        assert_eq!(
-            parts,
-            [
-                ("M", false),
-                ("r", true),
-                (". G", false),
-                ("regor", true),
-                (" S", false),
-                ("amsa", true)
-            ]
-        );
-        assert_eq!(super::typography::small_caps_parts("").count(), 0);
-        assert_eq!(
-            super::typography::small_caps_parts("straße").collect::<Vec<_>>(),
-            [("straße", true)]
-        );
     }
 }

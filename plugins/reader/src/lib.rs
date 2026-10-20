@@ -28,7 +28,6 @@ extern crate alloc;
 mod aloud;
 mod annotations;
 mod footnote;
-mod index;
 mod screen;
 mod search;
 mod selection;
