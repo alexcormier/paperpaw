@@ -36,6 +36,48 @@ change the plugin SDK.
   fingertip high on touch screens, `SliderDrag::on_pointer` takes the
   slider's band, the style and its value and moves the knob relative to
   where the finger came down, `Slider::knob_x` says where the knob is.
+- SDK: helpers that plugins wrote each for themselves, now in one place.
+  `Storage::ignores_case` says whether a storage takes `Books` for
+  `books` (memory cards, Windows and macOS disks do), and
+  `files::same_path` and `files::is_within` compare paths as it does;
+  `files::has_extension` ignores case everywhere. Files made in parts
+  (downloads, copies) go to `files::part_path` and are put in place
+  when whole with `files::put_in_place` or `files::put_in_free_place`.
+  `web::USER_AGENT` names PaperPaw with its version (`web::user_agent`
+  as a header), `web::base_url` makes a server's address as entered a
+  base URL. `time::clock_of` and `time::twelve_hours` write a time of
+  day as the user wants it; the calendar is public: `time::is_leap`,
+  `days_in_month`, `days_in_year`, `days_from_civil`,
+  `civil_from_days`, `weekday`, `weekday_of`, `day_of_year`,
+  `iso_week`. `numbers::decimal_mark` is the language's decimal mark,
+  `numbers::fixed` writes numbers with it.
+- Files: a copy cut short (a full card) no longer leaves a half file
+  that looks whole: each file is copied to a part and put in place when
+  whole. A folder is not moved or copied into itself by another case of
+  its name, and finding a free name ends after 65,536 tries.
+- Data that cannot be read is no longer written over: annotations, the
+  books opened last, the favourites and a book's details were taken for
+  empty when their file could not be read (a failing card, a file too
+  large, text saved in another encoding), and the next change wrote a
+  file with only that change. Now nothing is written then. A book's
+  details keep their values to a kilobyte and 32 tags, so they are
+  always read back (larger ones were written but never read, and the
+  book was read anew in every list). A UTF-8 byte order mark, as
+  Windows Notepad writes, is read past. SDK:
+  `files::load_for_update`, `files::load_text_for_update`,
+  `files::read_text`, `files::without_bom`,
+  `annotations::load_for_update`; `annotations::add`,
+  `annotations::save` and `library::save` say whether they kept what
+  they were given; `annotations::moved` (unused) is gone;
+  `StorageError::TooLarge` (what `read_file` says of a file over its
+  limit, before `Unsupported`) and `StorageError::InvalidData`;
+  `data::Format::load` tells a missing file from an unreadable one.
+  Annotations are read line by line, and where they are only drawn,
+  without their texts.
+- Library: a folder whose name ends inside a character, such as one
+  named with two or three Chinese characters, no longer stops the
+  library (the X4 restarted whenever the folder's parent or a catalog
+  shelf was shown).
 - Rules: a rule can apply when the battery reaches a level (80 %, 90 %,
   full or another), once each time it gets there and not again while
   the level wavers around it; with *Only if … While charging* it says
