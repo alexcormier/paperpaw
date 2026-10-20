@@ -345,6 +345,7 @@ impl Screen for ListScreen {
 
     fn on_hide(&mut self) {
         self.covers.clear();
+        self.walk = None;
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {

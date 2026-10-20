@@ -1098,8 +1098,11 @@ impl Screen for Shelves {
         cx.wake_at(env.now);
     }
 
+    /// Covered by a book or another screen: the covers go, and the
+    /// summary is made anew when the shelves show again, not meanwhile.
     fn on_hide(&mut self) {
         self.covers.clear();
+        self.walk = None;
     }
 
     /// A step of making the summary; the shelves anew once it is made.

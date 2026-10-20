@@ -38,6 +38,8 @@ pub(crate) struct Sheet {
     next: Option<Item>,
     thumb: Option<Thumbnail>,
     cover: Rect,
+    /// Where the text beside the cover ends: the bar of its progress.
+    text_bottom: u16,
     /// The title's lines, the author's and the series' line.
     title: Vec<String>,
     series: String,
@@ -101,9 +103,12 @@ impl Sheet {
             + line(style.small)
             + bar_height(env, &style);
         let cover_height = text_height.max(least);
-        let cover = Rect::new(margin, y, cover_width, cover_height);
         let format = display.format;
         let thumb = library::cover(env.storage, path, &book, cover_width, cover_height, format);
+        // The cover at the top, level with the title.
+        let shown = thumb.as_ref().map_or(cover_height, Thumbnail::height);
+        let cover = Rect::new(margin, y, cover_width, shown.min(cover_height));
+        let text_bottom = y + cover_height;
         y += cover_height + gap * 2;
 
         // The pills, as many in a row as fit.
@@ -153,6 +158,7 @@ impl Sheet {
         Self {
             region: Rect::new(0, top, display.width, y.min(display.height)),
             cover: shift(cover),
+            text_bottom: text_bottom + top,
             item,
             next,
             thumb,
@@ -300,7 +306,7 @@ impl Screen for Sheet {
                 .format("files.shelves.read", &[("percent", Arg::Int(i64::from(p)))]),
             State::Finished => env.i18n.tr("files.finished").to_string(),
         };
-        let bottom = self.cover.y + self.cover.height;
+        let bottom = self.text_bottom;
         let small = line(style.small);
         let border = style.line.max(1) as u16;
         let bar = bar_height(env, &style);

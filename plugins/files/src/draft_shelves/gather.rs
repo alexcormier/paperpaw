@@ -514,8 +514,8 @@ mod tests {
         assert_eq!(unread.total, 4);
         let titles: Vec<&str> = unread.tiles.iter().map(Tile::name).collect();
         assert_eq!(titles, ["b", "c"]);
+        let series = series.done();
         let numbers: Vec<&str> = series
-            .done()
             .tiles
             .iter()
             .map(|t| t.item().number.as_str())
