@@ -661,7 +661,8 @@ pub mod settings {
     /// (the status item [`BATTERY_LOW`](super::status_items::BATTERY_LOW)).
     pub const BATTERY_LOW: Setting<i64> = Setting::new("core.battery-low");
     /// How the screen is turned: one of [`ROTATIONS`], where the shell
-    /// can turn it (see [`MenuNeed::Rotation`](crate::MenuNeed)).
+    /// can turn it (see [`MenuNeed::Rotation`](crate::MenuNeed)); each
+    /// book may have its own ([`SCOPE_ONLY`]).
     pub const ROTATION: Setting<Text> = Setting::new("core.rotation");
     /// Whether a row below the screen shows what the buttons under it do,
     /// where a device has buttons in a row there (see

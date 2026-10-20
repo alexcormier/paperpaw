@@ -673,3 +673,19 @@ fn the_page_holds_what_its_type_and_margins_leave_room_for() {
             > sixth_page(&[("reader.line-spacing", "100")])
     );
 }
+
+#[test]
+fn a_book_may_be_turned_on_its_own() {
+    use paperpaw_platform::Rotation;
+    let storage = Shared::default();
+    let mut reading = Reading::new(storage.clone());
+    reading.open();
+    set(&mut reading, "core.scope-only", "on");
+    set(&mut reading, "core.rotation", "core.rotation.landscape");
+    assert_eq!(reading.kernel.rotation(), Rotation::Deg90);
+    // Closed: the device as it was; opened again, turned again.
+    reading.run(core_actions::BACK);
+    assert_eq!(reading.kernel.rotation(), Rotation::Deg0);
+    reading.open();
+    assert_eq!(reading.kernel.rotation(), Rotation::Deg90);
+}

@@ -697,6 +697,7 @@ static DEVICE: [SettingSpec; 9] = [
         settings::ROTATIONS[0],
         groups::DISPLAY,
     )
+    .scoped()
     .described("core.setting.rotation.help"),
     SettingSpec::fixed_switch(
         settings::BUTTON_HINTS.static_str(),
