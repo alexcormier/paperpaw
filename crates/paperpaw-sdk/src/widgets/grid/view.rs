@@ -175,15 +175,18 @@ impl GridView {
         buttons: &[(Rect, u16)],
     ) {
         self.style = UiStyle::new(env);
-        let placed = super::place(env, &geometry, items);
+        let placed = super::places(env, &geometry, items);
+        // By index: of equal items, each without room is kept.
         self.unplaced = items
             .iter()
-            .filter(|i| !placed.iter().any(|(p, _)| p == *i))
-            .cloned()
+            .enumerate()
+            .filter(|(index, _)| !placed.iter().any(|(p, _)| p == index))
+            .map(|(_, item)| item.clone())
             .collect();
         self.items = placed
             .into_iter()
-            .map(|(item, cells)| {
+            .map(|(index, cells)| {
+                let item = items[index].clone();
                 let area = geometry.rect(cells);
                 let widget = match &item.what {
                     What::Widget(id) => env.widgets.make(id, env).map(|mut widget| {
@@ -1134,6 +1137,26 @@ mod tests {
         assert_eq!(kept.len(), 13);
         assert!(kept[..12].iter().all(|i| i.at.is_some()));
         assert_eq!(kept[12], Item::new(tool("t.m")));
+    }
+
+    #[test]
+    fn equal_items_without_room_are_kept() {
+        let kit = Kit::new(false);
+        let env = kit.env();
+        // The same tool twice in one place: the second has no room, and
+        // is kept all the same.
+        let items = [at(tool("t.a"), 0, 0, 1, 1), at(tool("t.a"), 0, 0, 1, 1)];
+        let grid = laid_out(&env, &items, &[]);
+        assert_eq!(grid.items(), items);
+        // So with places to come, in a grid of one cell.
+        let mut one = GridView::new(&env, CHOICE, CHOSEN);
+        let items = [Item::new(tool("t.a")), Item::new(tool("t.a"))];
+        let small = Geometry::of(Rect::new(0, 0, 100, 100), 1, 1, 0);
+        one.layout(&env, small, &items, &[]);
+        assert_eq!(
+            one.items(),
+            [at(tool("t.a"), 0, 0, 1, 1), Item::new(tool("t.a"))]
+        );
     }
 
     #[test]
