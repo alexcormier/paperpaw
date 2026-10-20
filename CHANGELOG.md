@@ -1255,7 +1255,9 @@ change the plugin SDK.
   whose KOReader file is over 32 KiB are not exchanged, so opening them
   cannot run out of memory. While the clock is not set, new annotations
   are no longer sent dated 1970; they go once the time is known, and a
-  note changed on one side only always reaches the other.
+  note changed on one side only always reaches the other. When the card
+  is too full to keep what came from KOReader, the exchange stops instead
+  of later removing those annotations in KOReader.
 - Statistics sync: a file in the WebDAV folder that cannot be read (a
   login page, a file cut short) no longer replaces the statistics there
   or here; the sync stops and says so. Changing the folder or the user no
