@@ -6,6 +6,52 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Damaged or crafted files can no longer restart the X4, freeze the
+  reader or use up its memory; what cannot be read is refused or left
+  out, and the rest carries on:
+  - Pictures: a GIF picture without width or height, or larger than
+    the limit, is refused; parts of a GIF outside its screen are no
+    longer decoded. A small JPEG that claims to be huge, stops its data
+    early or repeats its scans takes milliseconds instead of minutes;
+    where its data ends, the rest is filled evenly. A PNG with a colour
+    table of more than 256 colours opens.
+  - Statistics sync: a damaged or crafted KOReader statistics file is
+    rejected, and reading it takes little memory however large it is.
+  - Dictionaries: a damaged StarDict dictionary is handled safely,
+    compressed or not; one lookup keeps to 32 KiB of text, so very long
+    definitions are shortened.
+  - Catalogs and web services (OPDS, the plugin store, Joplin,
+    Wallabag): a broken escape, a very long number or key, or very deep
+    nesting in JSON no longer takes the device's memory; parts nested
+    too deeply are skipped. Broken escaped characters show as a
+    replacement mark instead of losing the entry.
+  - Fonts: a damaged font pack or font leaves the character it cannot
+    draw blank, and characters far larger than the text size are left
+    blank; a negative character width no longer crashes hyphenated
+    lines.
+  - Books: a part of a chapter that never ends is reported as damaged,
+    and a picture without a size is left out. Files inside an EPUB or
+    CBZ are checked against their checksum and size instead of showing
+    as garbled text or pictures. Text after a very long comment or tag
+    no longer shows stray markup, a lone `<` (as in "a < b") no longer
+    swallows the words after it, and text full of `&` no longer slows
+    reading down. A hyphenation exception starting or ending with a
+    hyphen no longer crashes the reader.
+- Books: chapters and pictures whose links differ from the file names
+  only in upper and lower case are found again, and archives with
+  names that are not UTF-8 or with a comment at their end open.
+- Progress sync: books are identified as KOReader does also on storage
+  that reads less than asked at a time, so the same book is found.
+- Settings and the files kept per book are no longer broken by a key
+  or section name with characters the format does not allow. SDK:
+  `config::set_all` sets many keys in one pass.
+- Drawing: lines, rounded boxes, rings and clock hands with very large
+  or far away coordinates no longer crash, hang or land in the wrong
+  place.
+- Fuzzing covers every parser: SQLite, StarDict, JSON, INI, fonts, ZIP,
+  translation catalogs, HTTP request heads, FB2, HTML, Markdown, CBZ
+  and XTC besides EPUB, TXT, XML, pictures and hyphenation; the picture
+  target decodes in colour and at sizes the input chooses.
 - Rules: a rule can apply when the battery reaches a level (80 %, 90 %,
   full or another), once each time it gets there and not again while
   the level wavers around it; with *Only if … While charging* it says
