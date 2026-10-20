@@ -23,8 +23,9 @@ use paperpaw_sdk::{
 use super::highlight::{self, Found};
 use super::next;
 use super::numbers::Numbers;
-use super::reading::{Position, chapter_left_text, left_text, wrap_words};
+use super::reading::{Position, chapter_left_text, left_text};
 use super::series::{self, Member};
+use super::wrap_words;
 use crate::harness::{DEVICE, Harness, pixels};
 
 /// A cover: a decoded picture (`PPGI`, its width and height, rows of
@@ -778,10 +779,11 @@ fn long_titles_in_lines_as_even_as_can_be() {
         wrap(3, width("Adventures in")),
         ["Alice's", "Adventures in", "Wonderland"]
     );
-    assert_eq!(
-        wrap(2, width("Adventures in")),
-        ["Alice's", "Adventures in Wonderland"]
-    );
+    // Where it needs more lines than there are, or a word is wider than
+    // a line: on one line, shortened where it is drawn, never a line too
+    // wide nor a word broken.
+    assert_eq!(wrap(2, width("Adventures in")), [title]);
+    assert_eq!(wrap(3, width("Adventures") - 1), [title]);
 }
 
 #[test]

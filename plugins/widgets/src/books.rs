@@ -303,30 +303,91 @@ pub(crate) fn draw_line(
     height
 }
 
-/// Lines of text, each with its size and colour, drawn one below the
-/// other together in the middle of `area` (from the top where `top`),
-/// as many as fit, a little room between them.
+/// What a line of [`Lines`] is to its widget: how it gives way where
+/// there is no room.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Role {
+    /// Above the rest ("Next up"): whole or not at all, left out first.
+    Caption,
+    /// The book's title: smaller where it is wider, down to the body
+    /// size, then in two lines broken between words where there is room,
+    /// else shortened with "…".
+    Title,
+    /// What the widget is there for (a page, a percentage): always
+    /// shown, smaller down to the body size, then shortened.
+    Main,
+    /// A detail (the author, the series): whole or not at all, left out
+    /// after the caption.
+    Note,
+}
+
+/// A line of [`Lines`].
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct Line<'t> {
+    pub size: f32,
+    pub text: Cow<'t, str>,
+    pub color: Color,
+    pub role: Role,
+}
+
+/// Lines of text, each with its size, colour and [`Role`], drawn one
+/// below the other together in the middle of an area, a little room
+/// between them. What does not fit gives way as its role says: no line
+/// breaks inside a word, a caption before a note before the title's
+/// second line.
 pub(crate) struct Lines<'t> {
-    pub lines: Vec<(f32, Cow<'t, str>, Color)>,
+    pub lines: Vec<Line<'t>>,
+    /// The title as given, its size and the lines it shows in, while it
+    /// shows in more than one.
+    title: Option<(f32, Cow<'t, str>, usize)>,
+    /// The title is left out where it would be shortened to a few
+    /// letters ([`title_may_go`](Self::title_may_go)).
+    title_may_go: bool,
 }
 
 impl<'t> Lines<'t> {
     pub(crate) fn new() -> Self {
-        Self { lines: Vec::new() }
+        Self {
+            lines: Vec::new(),
+            title: None,
+            title_may_go: false,
+        }
+    }
+
+    /// Leaves the title out where it would be shortened to a few
+    /// letters: where it says little next to what matters more (a ring).
+    pub(crate) fn title_may_go(mut self) -> Self {
+        self.title_may_go = true;
+        self
     }
 
     /// Adds a line, if it says anything.
-    pub(crate) fn add(&mut self, size: f32, text: impl Into<Cow<'t, str>>, color: Color) {
+    pub(crate) fn add(
+        &mut self,
+        role: Role,
+        size: f32,
+        text: impl Into<Cow<'t, str>>,
+        color: Color,
+    ) {
         let text = text.into();
         if !text.is_empty() {
-            self.lines.push((size, text, color));
+            self.lines.push(Line {
+                size,
+                text,
+                color,
+                role,
+            });
         }
+    }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        self.lines.is_empty()
     }
 
     /// The height they take, the room between them included.
     pub(crate) fn height(&self, env: &Env<'_>) -> u16 {
         let gap = Self::gap(env);
-        let lines: u16 = self.lines.iter().map(|l| line_height(env, l.0)).sum();
+        let lines: u16 = self.lines.iter().map(|l| line_height(env, l.size)).sum();
         lines + gap * self.lines.len().saturating_sub(1) as u16
     }
 
@@ -334,16 +395,127 @@ impl<'t> Lines<'t> {
         UiStyle::new(env).gap as u16 / 4
     }
 
-    /// Leaves out lines from the end until they fit `height`; the first
-    /// stays.
-    pub(crate) fn fit(&mut self, env: &Env<'_>, height: u16) {
+    /// Makes them fit `width` × `height`: each line on one line (captions
+    /// and notes whole or left out, the title and main lines smaller down
+    /// to the body size), a title still too wide in two lines where they
+    /// fit, else shortened; then, while they are too high, the caption
+    /// left out, the notes from the last, the title's second line, the
+    /// main lines from the last. The title and the first line stay. Made
+    /// again with the same room, nothing changes.
+    pub(crate) fn fit(&mut self, env: &Env<'_>, width: u16, height: u16) {
+        let style = UiStyle::new(env);
+        let Some(font) = style.font(env) else {
+            return;
+        };
+        let room = f32::from(width);
+        let fits = |size: f32, text: &str| font.measure(size, text) <= room;
+        let keeps = |role: Role| matches!(role, Role::Title | Role::Main);
+        self.lines
+            .retain(|l| keeps(l.role) || fits(l.size, &l.text));
+        let mut two = None;
+        for (i, line) in self.lines.iter_mut().enumerate() {
+            if !keeps(line.role) || fits(line.size, &line.text) {
+                continue;
+            }
+            let least = line.size.min(style.text);
+            let text = &line.text;
+            if let Some(size) = widgets::largest_size(line.size, least, |s| fits(s, text)) {
+                line.size = size;
+            } else if line.role == Role::Title && self.title.is_none() && two.is_none() {
+                two = Some(i);
+            } else {
+                line.text = Cow::Owned(ui::fit(&font, least, &line.text, room));
+                line.size = least;
+            }
+        }
+        if self.title_may_go {
+            self.lines.retain(|l| {
+                l.role != Role::Title || !l.text.ends_with('…') || {
+                    shown_letters(&l.text) >= LEAST_LETTERS
+                }
+            });
+        }
+        if let Some(i) = two {
+            let (size, text, color) = {
+                let line = &self.lines[i];
+                (line.size, line.text.clone(), line.color)
+            };
+            let least = size.min(style.text);
+            // In lines broken between words, where they fit with the main
+            // lines (the caption and the notes give way to them).
+            let others: u16 = self
+                .lines
+                .iter()
+                .filter(|l| l.role == Role::Main)
+                .map(|l| line_height(env, l.size) + Self::gap(env))
+                .sum();
+            let free = height.saturating_sub(others);
+            let wrap = |s: f32, most: usize| {
+                let line = line_height(env, s) + Self::gap(env);
+                let rows = usize::from((free + Self::gap(env)) / line.max(1));
+                let lines = wrap_words(&font, s, &text, width, most.min(rows));
+                (lines.len() > 1).then_some(lines)
+            };
+            // As few lines as can be, then as large as can be.
+            let split = (2..=MOST_TITLE_LINES).find_map(|most| {
+                widgets::largest_size(size, least, |s| wrap(s, most).is_some())
+                    .and_then(|s| wrap(s, most).map(|lines| (s, lines)))
+            });
+            match split {
+                Some((s, lines)) => {
+                    let count = lines.len();
+                    self.lines.splice(
+                        i..=i,
+                        lines.into_iter().map(|text| Line {
+                            size: s,
+                            text: Cow::Owned(text),
+                            color,
+                            role: Role::Title,
+                        }),
+                    );
+                    self.title = Some((size, text, count));
+                }
+                None => {
+                    let short = ui::fit(&font, least, &text, room);
+                    if self.title_may_go && shown_letters(&short) < LEAST_LETTERS {
+                        self.lines.remove(i);
+                    } else {
+                        let line = &mut self.lines[i];
+                        line.text = Cow::Owned(short);
+                        line.size = least;
+                    }
+                }
+            }
+        }
         while self.lines.len() > 1 && self.height(env) > height {
-            self.lines.pop();
+            if let Some(i) = self.lines.iter().position(|l| l.role == Role::Caption) {
+                self.lines.remove(i);
+            } else if let Some(i) = self.lines.iter().rposition(|l| l.role == Role::Note) {
+                self.lines.remove(i);
+            } else if let Some((size, text, count)) = self.title.take() {
+                // The title back in one line, shortened.
+                if let Some(i) = self.lines.iter().position(|l| l.role == Role::Title) {
+                    self.lines.drain(i + 1..(i + count).min(self.lines.len()));
+                    let least = size.min(style.text);
+                    let line = &mut self.lines[i];
+                    line.text = Cow::Owned(ui::fit(&font, least, &text, room));
+                    line.size = least;
+                }
+            } else if let Some(i) = self
+                .lines
+                .iter()
+                .rposition(|l| l.role == Role::Main)
+                .filter(|&i| i > 0)
+            {
+                self.lines.remove(i);
+            } else {
+                break;
+            }
         }
     }
 
-    /// Draws them in `area` as `align` says (lines larger than the body
-    /// text that are too wide in the body size); returns where they went.
+    /// Draws them in `area` as `align` says, made to fit it first
+    /// ([`fit`](Self::fit)); returns where they went.
     pub(crate) fn draw(
         &mut self,
         canvas: &mut Canvas<'_>,
@@ -355,41 +527,105 @@ impl<'t> Lines<'t> {
         let Some(font) = style.font(env) else {
             return area;
         };
-        // A long title in the body size rather than shortened much.
-        for (size, text, _) in &mut self.lines {
-            if *size > style.text && font.measure(*size, text) > f32::from(area.width) {
-                *size = style.text;
-            }
-        }
-        // A title still too long goes on in a second line, where there is
-        // room for one more.
-        let width = f32::from(area.width);
-        let room = self.height(env)
-            + line_height(env, self.lines.first().map_or(0.0, |l| l.0))
-            + Self::gap(env)
-            <= area.height;
-        if let Some((size, text, color)) = self.lines.first().cloned()
-            && room
-            && font.measure(size, &text) > width
-        {
-            let ranges = font.wrap(size, &text, width);
-            if let (Some(first), Some(second)) = (ranges.first(), ranges.get(1)) {
-                let head = String::from(text[first.clone()].trim_end());
-                let rest = String::from(text[second.start..].trim());
-                self.lines[0].1 = Cow::Owned(head);
-                self.lines.insert(1, (size, Cow::Owned(rest), color));
-            }
-        }
-        self.fit(env, area.height);
+        self.fit(env, area.width, area.height);
         let total = self.height(env).min(area.height);
         let top = area.y + (area.height - total) / 2;
         let mut y = top;
-        for (size, text, color) in &self.lines {
+        for line in &self.lines {
+            if y >= area.y + area.height {
+                break;
+            }
             let row = Rect::new(area.x, y, area.width, area.y + area.height - y);
-            y += draw_line(canvas, env, &font, *size, row, align, text, *color) + Self::gap(env);
+            y += draw_line(
+                canvas, env, &font, line.size, row, align, &line.text, line.color,
+            ) + Self::gap(env);
         }
         Rect::new(area.x, top, area.width, total)
     }
+}
+
+/// Titles shortened to fewer letters than this say too little to show
+/// ([`Lines::title_may_go`]).
+const LEAST_LETTERS: usize = 8;
+
+/// The most lines a title is broken into.
+const MOST_TITLE_LINES: usize = 4;
+
+/// The letters `text` shows before a "…" that ends it.
+fn shown_letters(text: &str) -> usize {
+    text.trim_end_matches('…').trim_end().chars().count()
+}
+
+/// `text` in at most `most` lines `width` wide at `size`, broken between
+/// words: in two where it needs two, where the longer line is shortest;
+/// else as many words in each as fit. Where it does not fit so (a word
+/// wider than a line, more lines than `most`), on one line, to be
+/// shortened where it is drawn: never broken inside a word.
+pub(crate) fn wrap_words(
+    font: &FontHandle<'_>,
+    size: f32,
+    text: &str,
+    width: u16,
+    most: usize,
+) -> Vec<String> {
+    let width = f32::from(width);
+    let fits = |text: &str| font.measure(size, text) <= width;
+    let one = || alloc::vec![String::from(text)];
+    if most < 2 || fits(text) {
+        return one();
+    }
+    if let Some((head, tail)) = two_lines(font, size, text, width) {
+        return alloc::vec![head, tail];
+    }
+    let lines = title_lines(font, size, text, width, most, false);
+    // Whole only: every word there, none shortened.
+    let words = |text: &str| text.split_whitespace().count();
+    let shown: usize = lines.iter().map(|l| words(l)).sum();
+    if shown == words(text) && lines.iter().all(|l| fits(l) && !l.ends_with('…')) {
+        lines
+    } else {
+        one()
+    }
+}
+
+/// `text` in two lines `width` pixels wide at `size`, broken between
+/// words, the longer line as short as can be; `None` where no break
+/// makes both fit.
+pub(crate) fn two_lines(
+    font: &FontHandle<'_>,
+    size: f32,
+    text: &str,
+    width: f32,
+) -> Option<(String, String)> {
+    let head = |at: usize| text[..at].trim_end();
+    let tail = |at: usize| text[at..].trim_start();
+    text.match_indices(' ')
+        .map(|(at, _)| at)
+        .filter(|&at| !head(at).is_empty() && !tail(at).is_empty())
+        .map(|at| {
+            let widest = font
+                .measure(size, head(at))
+                .max(font.measure(size, tail(at)));
+            (at, widest)
+        })
+        .filter(|(_, widest)| *widest <= width)
+        .min_by(|a, b| a.1.total_cmp(&b.1))
+        .map(|(at, _)| (String::from(head(at)), String::from(tail(at))))
+}
+
+/// Whether a caption `text` fits `width` whole: shown whole or not at
+/// all.
+pub(crate) fn caption_fits(env: &Env<'_>, text: &str, width: u16) -> bool {
+    let style = UiStyle::new(env);
+    style
+        .font(env)
+        .is_none_or(|font| font.measure(style.small, text) <= f32::from(width))
+}
+
+/// The least width of a cover, so that one is still told from another:
+/// smaller ones are left out.
+pub(crate) fn least_cover_width(env: &Env<'_>) -> u16 {
+    env.metrics.mm(5).max(24) as u16
 }
 
 /// The size of a cover fitted into `width` × `height`: as its picture
@@ -476,32 +712,69 @@ fn draw_placeholder(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, at: Rec
         at.width.saturating_sub(2 * pad),
         at.height.saturating_sub(2 * pad),
     );
-    if inner.width < 8 || inner.height < 8 {
+    let size = style.small;
+    // Room for a few letters a line, else a frame alone.
+    if f32::from(inner.width) < size * 2.5 || inner.height < 8 {
         return;
     }
-    let size = style.small.min(f32::from(inner.width) / 3.0);
     let Some(font) = style.font(env) else {
         return;
     };
     let line = line_height(env, size).max(1);
-    let fits = usize::from(inner.height / line).max(1);
-    let mut lines: Vec<String> = Vec::new();
-    let width = f32::from(inner.width);
-    for word in title.split_whitespace() {
-        let joined = lines.last().map(|last| format!("{last} {word}"));
-        match joined {
-            Some(joined) if font.measure(size, &joined) <= width => {
-                if let Some(last) = lines.last_mut() {
-                    *last = joined;
-                }
-            }
-            _ => lines.push(ui::fit(&font, size, word, width)),
-        }
-    }
-    for (n, text) in lines.iter().take(fits).enumerate() {
+    let fits = usize::from(inner.height / line);
+    let lines = title_lines(&font, size, title, f32::from(inner.width), fits, false);
+    for (n, text) in lines.iter().enumerate() {
         let row = Rect::new(inner.x, inner.y + n as u16 * line, inner.width, line);
         ui::draw_label(canvas, &font, size, f32::from(inner.x), row, text, look.ink);
     }
+}
+
+/// `title` in at most `most` lines `width` pixels wide at `size`, broken
+/// between words: a word too long for a line alone is shortened with
+/// "…" and ends it (one cut to a letter or two is left out), as does the
+/// last line where there is more (with `more`, also where none of the
+/// next word would show: "…" alone after it).
+pub(crate) fn title_lines(
+    font: &FontHandle<'_>,
+    size: f32,
+    title: &str,
+    width: f32,
+    most: usize,
+    more: bool,
+) -> Vec<String> {
+    let mut lines: Vec<String> = Vec::new();
+    let fits = |text: &str| font.measure(size, text) <= width;
+    for word in title.split_whitespace() {
+        if let Some(last) = lines.last_mut() {
+            let joined = format!("{last} {word}");
+            if fits(&joined) {
+                *last = joined;
+                continue;
+            }
+        }
+        if lines.len() == most {
+            // More than there is room for: the last line ends in "…"
+            // where that leaves a few letters of the word.
+            if let Some(last) = lines.last_mut() {
+                let cut = ui::fit(font, size, &format!("{last} {word}"), width);
+                if shown_letters(&cut) > last.chars().count() + 3 {
+                    *last = cut;
+                } else if more {
+                    *last = ui::fit(font, size, &format!("{last} …"), width);
+                }
+            }
+            break;
+        }
+        if !fits(word) {
+            let short = ui::fit(font, size, word, width);
+            if short.chars().count() > 3 {
+                lines.push(short);
+            }
+            break;
+        }
+        lines.push(String::from(word));
+    }
+    lines
 }
 
 /// "16 %".
@@ -568,17 +841,27 @@ pub(crate) fn draw_ring_percent(
     let number = percent.to_string();
     let room = inner as f32 * 1.5;
     let least = style.small * 0.6;
-    let mut size = (inner as f32 * 0.8).max(least);
     let sign = |size: f32| (size * 0.45).max(least * 0.8);
     let width = |size: f32| font.measure(size, &number) + font.measure(sign(size), "%");
-    if width(size) > room {
-        size = (size * room / width(size)).max(least);
-    }
+    // As large as fits inside, measured as drawn (a font of a few sizes
+    // draws the nearest of its own).
+    let size = widgets::largest_size((inner as f32 * 0.8).max(least), least, |s| {
+        width(s) <= room
+            && font
+                .ink(s, &number)
+                .is_none_or(|(top, bottom)| (bottom - top) as u32 <= inner)
+    })
+    .unwrap_or(least);
     let total = width(size);
     let x = center.x as f32 - total / 2.0;
-    let metrics = font.line_metrics(size);
-    // The digits' middle at the centre.
-    let baseline = center.y + (metrics.ascent * 0.36) as i32;
+    // The digits' ink in the middle of the ring.
+    let band = Rect::new(
+        0,
+        (center.y - inner as i32).max(0) as u16,
+        1,
+        (inner * 2) as u16,
+    );
+    let baseline = widgets::ink_baseline(&font, size, &number, band);
     font.draw(canvas, size, x, baseline, &number, look.ink);
     let x = x + font.measure(size, &number);
     font.draw(canvas, sign(size), x, baseline, "%", look.faint);
@@ -595,30 +878,12 @@ pub(crate) fn draw_percent_alone(
     percent: u8,
 ) {
     let style = UiStyle::new(env);
-    let Some(font) = style.font(env) else {
-        return;
-    };
     let text = percent_text(env, percent);
-    let line = f32::from(line_height(env, 100.0)).max(1.0) / 100.0;
-    let by_height = f32::from(area.height) / line;
-    let by_width = 90.0 * f32::from(area.width) / font.measure(100.0, &text).max(1.0);
-    let size = by_height.min(by_width).min(style.title * 2.0);
-    draw_line(
-        canvas,
-        env,
-        &font,
-        size,
-        center_row(env, area, size),
-        align,
-        &text,
-        look.ink,
-    );
-}
-
-/// A row for a line of text `size` large in the middle of `area`.
-pub(crate) fn center_row(env: &Env<'_>, area: Rect, size: f32) -> Rect {
-    let h = line_height(env, size).min(area.height);
-    Rect::new(area.x, area.y + (area.height - h) / 2, area.width, h)
+    let max = widgets::largest_size(style.title * 2.0, style.small, |s| {
+        line_height(env, s) <= area.height
+    })
+    .unwrap_or(style.small);
+    widgets::draw_line(canvas, env, area, align, max, style.small, &text, look.ink);
 }
 
 /// Draws a bar `percent` full in `area`: a fine line along it, the part
