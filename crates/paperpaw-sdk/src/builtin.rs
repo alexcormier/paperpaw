@@ -667,8 +667,9 @@ pub mod settings {
     /// where a device has buttons in a row there (see
     /// [`MenuNeed::ButtonRow`](crate::MenuNeed)).
     pub const BUTTON_HINTS: Setting<bool> = Setting::new("core.button-hints");
-    /// The page buttons the other way round: page forward goes back and
-    /// page back forward, everywhere (the kernel swaps them before key
+    /// The page buttons the other way round while reading (on the screen
+    /// bound to [`slots::READER`](super::slots::READER)): page forward
+    /// goes back and page back forward (the kernel swaps them before key
     /// maps and input filters see them).
     pub const SWAP_PAGE_BUTTONS: Setting<bool> = Setting::new("core.swap-page-buttons");
     /// The values of [`ROTATION`]: upright, on its side (landscape),

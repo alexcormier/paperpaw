@@ -2283,8 +2283,10 @@ name = Other
     assert!(storage.exists("plugins/other/plugin.ini"));
 }
 
+/// Swapped page buttons apply while reading only (the reader's tests
+/// show them swapped there): elsewhere they stay as they are.
 #[test]
-fn page_buttons_swap_where_asked() {
+fn page_buttons_stay_outside_the_reader() {
     let log = log();
     let mut kernel = Kernel::builder(DEVICE)
         .plugin(TestPlugin::new("a", &log))
@@ -2297,7 +2299,7 @@ fn page_buttons_swap_where_asked() {
     press(&mut kernel, 500, "confirm");
     assert_eq!(
         *log.borrow(),
-        ["a:core.prev-page", "a:core.next-page", "a:core.confirm"]
+        ["a:core.next-page", "a:core.prev-page", "a:core.confirm"]
     );
 }
 

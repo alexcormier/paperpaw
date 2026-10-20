@@ -460,6 +460,9 @@ pub paperpaw_sdk::contribution::Contribution::Keymap(alloc::borrow::Cow<'static,
 pub paperpaw_sdk::contribution::Contribution::KeymapPreset
 pub paperpaw_sdk::contribution::Contribution::KeymapPreset::id: paperpaw_sdk::Id
 pub paperpaw_sdk::contribution::Contribution::KeymapPreset::source: alloc::borrow::Cow<'static, str>
+pub paperpaw_sdk::contribution::Contribution::KeymapWhen
+pub paperpaw_sdk::contribution::Contribution::KeymapWhen::setting: paperpaw_sdk::Id
+pub paperpaw_sdk::contribution::Contribution::KeymapWhen::source: alloc::borrow::Cow<'static, str>
 pub paperpaw_sdk::contribution::Contribution::MenuEntry(paperpaw_sdk::MenuEntry)
 pub paperpaw_sdk::contribution::Contribution::MenuNeed
 pub paperpaw_sdk::contribution::Contribution::MenuNeed::item: paperpaw_sdk::Id
@@ -518,6 +521,7 @@ pub fn paperpaw_sdk::contribution::Registrar::add_icon(&mut self, impl core::con
 pub fn paperpaw_sdk::contribution::Registrar::add_input_filter(&mut self, paperpaw_sdk::filters::InputFilterSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_keymap(&mut self, alloc::borrow::Cow<'static, str>) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_keymap_preset(&mut self, paperpaw_sdk::Id, alloc::borrow::Cow<'static, str>) -> core::result::Result<(), paperpaw_sdk::RegisterError>
+pub fn paperpaw_sdk::contribution::Registrar::add_keymap_when(&mut self, &paperpaw_sdk::setting::Setting<bool>, alloc::borrow::Cow<'static, str>) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_menu_entry(&mut self, paperpaw_sdk::MenuEntry) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_menu_section(&mut self, paperpaw_sdk::MenuSection) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_preset(&mut self, paperpaw_sdk::presets::Preset) -> core::result::Result<(), paperpaw_sdk::RegisterError>
@@ -2284,6 +2288,9 @@ pub paperpaw_sdk::Contribution::Keymap(alloc::borrow::Cow<'static, str>)
 pub paperpaw_sdk::Contribution::KeymapPreset
 pub paperpaw_sdk::Contribution::KeymapPreset::id: paperpaw_sdk::Id
 pub paperpaw_sdk::Contribution::KeymapPreset::source: alloc::borrow::Cow<'static, str>
+pub paperpaw_sdk::Contribution::KeymapWhen
+pub paperpaw_sdk::Contribution::KeymapWhen::setting: paperpaw_sdk::Id
+pub paperpaw_sdk::Contribution::KeymapWhen::source: alloc::borrow::Cow<'static, str>
 pub paperpaw_sdk::Contribution::MenuEntry(paperpaw_sdk::MenuEntry)
 pub paperpaw_sdk::Contribution::MenuNeed
 pub paperpaw_sdk::Contribution::MenuNeed::item: paperpaw_sdk::Id
@@ -2894,6 +2901,7 @@ pub fn paperpaw_sdk::contribution::Registrar::add_icon(&mut self, impl core::con
 pub fn paperpaw_sdk::contribution::Registrar::add_input_filter(&mut self, paperpaw_sdk::filters::InputFilterSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_keymap(&mut self, alloc::borrow::Cow<'static, str>) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_keymap_preset(&mut self, paperpaw_sdk::Id, alloc::borrow::Cow<'static, str>) -> core::result::Result<(), paperpaw_sdk::RegisterError>
+pub fn paperpaw_sdk::contribution::Registrar::add_keymap_when(&mut self, &paperpaw_sdk::setting::Setting<bool>, alloc::borrow::Cow<'static, str>) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_menu_entry(&mut self, paperpaw_sdk::MenuEntry) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_menu_section(&mut self, paperpaw_sdk::MenuSection) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_preset(&mut self, paperpaw_sdk::presets::Preset) -> core::result::Result<(), paperpaw_sdk::RegisterError>

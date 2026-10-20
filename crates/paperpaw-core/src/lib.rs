@@ -458,23 +458,43 @@ impl Kernel {
         self.finish()
     }
 
-    /// `event` with the page buttons the other way round, where the user
-    /// asked for it ([`core_settings::SWAP_PAGE_BUTTONS`]).
-    fn page_buttons_swapped(&self, event: InputEvent) -> InputEvent {
+    /// `event` with the page buttons the other way round while reading,
+    /// where the user asked for it ([`core_settings::SWAP_PAGE_BUTTONS`]):
+    /// a button swapped when pressed stays swapped when let go, also if
+    /// another screen came up meanwhile.
+    fn page_buttons_swapped(&mut self, event: InputEvent) -> InputEvent {
         use paperpaw_platform::buttons::{PAGE_BACK, PAGE_FORWARD};
-        match event {
-            InputEvent::Button { name, state }
-                if self.shared.settings.read(&core_settings::SWAP_PAGE_BUTTONS) =>
-            {
-                let name = match name {
-                    PAGE_FORWARD => PAGE_BACK,
-                    PAGE_BACK => PAGE_FORWARD,
-                    other => other,
-                };
-                InputEvent::Button { name, state }
-            }
-            other => other,
+        let InputEvent::Button { name, state } = event else {
+            return event;
+        };
+        if name != PAGE_FORWARD && name != PAGE_BACK {
+            return event;
         }
+        let swap = match state {
+            ButtonState::Pressed => {
+                let reading = self
+                    .stack
+                    .last()
+                    .and_then(|top| top.slot.as_ref())
+                    .is_some_and(|slot| *slot == slots::READER);
+                let swap = reading && self.shared.settings.read(&core_settings::SWAP_PAGE_BUTTONS);
+                self.input.swapped.retain(|b| *b != name);
+                if swap {
+                    self.input.swapped.push(name);
+                }
+                swap
+            }
+            _ => {
+                let held = self.input.swapped.iter().position(|b| *b == name);
+                held.map(|at| self.input.swapped.remove(at)).is_some()
+            }
+        };
+        let name = match (swap, name) {
+            (false, name) => name,
+            (true, PAGE_FORWARD) => PAGE_BACK,
+            (true, _) => PAGE_FORWARD,
+        };
+        InputEvent::Button { name, state }
     }
 
     /// Goes on with the work an input started, once the shell began showing

@@ -563,3 +563,80 @@ fn held_select_marks_the_page() {
     hold(&mut reading, "confirm");
     assert_eq!(bookmarks(&reading), 0);
 }
+
+/// Presses the button `name` briefly (let go before the kernel's timers
+/// run, which would make it a long press).
+fn press(reading: &mut Reading, name: &'static str) {
+    let mut effects = None;
+    for (after, state) in [(10, ButtonState::Pressed), (50, ButtonState::Released)] {
+        reading.now += after;
+        effects = Some(
+            reading
+                .kernel
+                .handle(Instant(reading.now), InputEvent::Button { name, state }),
+        );
+    }
+    if let Some(effects) = effects {
+        reading.settle(effects);
+    }
+    reading.now += 6000;
+    let effects = reading.kernel.tick(Instant(reading.now));
+    reading.settle(effects);
+}
+
+/// Sets a setting as the settings screen would.
+fn set(reading: &mut Reading, id: &str, value: &str) {
+    reading.now += 10;
+    let effects = reading
+        .kernel
+        .set_setting(Instant(reading.now), id, value)
+        .unwrap();
+    reading.settle(effects);
+}
+
+#[test]
+fn held_page_buttons_turn_one_page_with_the_switch_off() {
+    let epub = include_bytes!("../../../samples/library/books/alice-in-wonderland.epub");
+    let mut reading = Reading::with_book(Shared::default(), EPUB, epub);
+    reading.open();
+    set(&mut reading, "reader.hold-chapters", "off");
+    reading.run(core_actions::NEXT_PAGE);
+    let page = |reading: &mut Reading| reading.kept();
+    let start = page(&mut reading);
+    reading.run(core_actions::NEXT_PAGE);
+    let next = page(&mut reading);
+    reading.run(core_actions::PREV_PAGE);
+    // Held, a page on, as pressed: no chapter.
+    hold(&mut reading, "page-forward");
+    assert_eq!(page(&mut reading), next);
+    press(&mut reading, "page-back");
+    assert_eq!(page(&mut reading), start);
+    // On again: held, a chapter on.
+    set(&mut reading, "reader.hold-chapters", "on");
+    hold(&mut reading, "page-forward");
+    hold(&mut reading, "page-forward");
+    let chapter = |reading: &Reading| reading.heard.borrow().last().unwrap().1.chapter.clone();
+    let second = chapter(&reading);
+    hold(&mut reading, "page-forward");
+    assert_ne!(chapter(&reading), second);
+}
+
+#[test]
+fn swapped_page_buttons_turn_the_other_way_while_reading() {
+    let mut reading = Reading::new(Shared::default());
+    reading.open();
+    let at = |reading: &Reading| {
+        let heard = reading.heard.borrow();
+        let last = &heard.last().unwrap().1;
+        (last.section, last.offset)
+    };
+    reading.run(core_actions::NEXT_PAGE);
+    reading.run(core_actions::NEXT_PAGE);
+    let third = at(&reading);
+    set(&mut reading, "core.swap-page-buttons", "on");
+    press(&mut reading, "page-forward");
+    let second = at(&reading);
+    assert!(second < third, "{second:?} {third:?}");
+    press(&mut reading, "page-back");
+    assert_eq!(at(&reading), third);
+}

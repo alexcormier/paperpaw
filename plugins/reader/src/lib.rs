@@ -125,6 +125,9 @@ pub mod settings {
     pub const PUBLISHER_STYLES: Setting<bool> = Setting::new("reader.publisher-styles");
     /// A tap on the top right corner sets or removes a bookmark.
     pub const CORNER_BOOKMARK: Setting<bool> = Setting::new("reader.corner-bookmark");
+    /// Holding a page button goes a chapter on or back; off, the page
+    /// buttons turn pages as they are pressed rather than let go.
+    pub const HOLD_CHAPTERS: Setting<bool> = Setting::new("reader.hold-chapters");
     /// How fast books are read aloud, in percent of the voice's speed.
     pub const ALOUD_SPEED: Setting<i64> = Setting::new("reader.aloud-speed");
     /// The sentence read aloud is underlined.
@@ -251,7 +254,7 @@ mod extras {
 
 /// The reading settings: the page and its type (each book may have its
 /// own), what the reader does, and reading aloud.
-static SETTINGS: [SettingSpec; 17] = [
+static SETTINGS: [SettingSpec; 18] = [
     SettingSpec::fixed_number(
         settings::LINE_SPACING.static_str(),
         "reader.setting.line-spacing",
@@ -368,6 +371,14 @@ static SETTINGS: [SettingSpec; 17] = [
     )
     .advanced()
     .described("reader.setting.corner-bookmark.help"),
+    SettingSpec::fixed_switch(
+        settings::HOLD_CHAPTERS.static_str(),
+        "reader.setting.hold-chapters",
+        true,
+        groups::CONTROLS,
+    )
+    .advanced()
+    .described("reader.setting.hold-chapters.help"),
     SettingSpec::fixed_number(
         settings::AUTO_TURN_SECONDS.static_str(),
         "reader.setting.auto-turn-seconds",
@@ -569,16 +580,25 @@ impl Plugin for Reader {
         )?;
         // A tap at the bottom of a page opens it. Swipes in from the sides
         // turn pages, as swipes do, rather than going back; two fingers
-        // apart or together make the text larger or smaller. Holding a
-        // page button goes a chapter on or back; holding Select (which
-        // opens the menu) marks the page, as the corner does by touch.
+        // apart or together make the text larger or smaller. Holding
+        // Select (which opens the menu) marks the page, as the corner does
+        // by touch.
         r.add_keymap(Cow::Borrowed(
             "[keymap.core.reader]\ntap.bottom = reader.quick-settings\n\
              edge.left = core.prev-page\nedge.right = core.next-page\n\
              pinch.out = reader.font-larger\npinch.in = reader.font-smaller\n\
-             long.page-forward = reader.next-chapter\nlong.page-back = reader.prev-chapter\n\
              long.confirm = reader.toggle-bookmark\n",
         ))?;
+        // Holding a page button goes a chapter on or back, while the
+        // switch is on: off, the binding is gone, and a page turns as its
+        // button goes down rather than when it is let go.
+        r.add_keymap_when(
+            &settings::HOLD_CHAPTERS,
+            Cow::Borrowed(
+                "[keymap.core.reader]\nlong.page-forward = reader.next-chapter\n\
+                 long.page-back = reader.prev-chapter\n",
+            ),
+        )?;
         // A short menu; settings in it show their state and change in
         // place.
         let entries = [

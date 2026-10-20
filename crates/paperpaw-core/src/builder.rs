@@ -374,6 +374,7 @@ impl KernelBuilder {
                 shown_at: [None; 2],
                 dropped_buttons: Vec::new(),
                 dropped_pointers: Vec::new(),
+                swapped: Vec::new(),
             },
             io: network::IoState {
                 http: io::http::Http::default(),
