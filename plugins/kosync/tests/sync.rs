@@ -390,7 +390,6 @@ fn an_answer_for_a_book_left_meanwhile_is_ignored() {
 /// drops that hold, and the first book's answer is then ignored: its
 /// position is never sent (until it is read again here).
 #[test]
-#[ignore = "bug: a position held back for a fetch is lost when another book is opened before the answer"]
 fn a_position_held_for_a_fetch_still_goes_after_another_book_is_opened() {
     let mut sync = with_books();
     let digest = paperpaw_digest::md5::partial(&sync.storage, BOOK).unwrap();

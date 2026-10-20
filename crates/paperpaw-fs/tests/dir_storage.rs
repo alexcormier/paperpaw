@@ -142,7 +142,6 @@ fn writing_the_empty_path_touches_nothing_outside() {
 /// A file beside the root named like the root's temporary is outside the
 /// storage: writing the empty path must not open it.
 #[test]
-#[ignore = "bug: lib.rs resolve() lets \"\" stand for the root, so write(\"\") truncates and then removes `<root>.paperpaw-tmp` beside the root"]
 fn writing_the_empty_path_keeps_a_file_beside_the_root() {
     let place = Place::new();
     let beside = place.base.join("root.paperpaw-tmp");
@@ -156,7 +155,6 @@ fn writing_the_empty_path_keeps_a_file_beside_the_root() {
 
 /// Removing "everything below the empty path" would remove the root.
 #[test]
-#[ignore = "bug: lib.rs remove_dir_all(\"\") removes the storage's root with every file in it"]
 fn removing_the_empty_path_keeps_the_root() {
     let place = Place::new();
     place.storage.write("books/a.epub", b"a book").unwrap();
@@ -200,7 +198,6 @@ fn reads_past_the_end_read_nothing() {
 
 /// The largest offset is past the end as well.
 #[test]
-#[ignore = "bug: lib.rs passes a seek past i64::MAX on as an error (Io) instead of reading nothing"]
 fn reads_at_the_largest_offset_read_nothing() {
     let place = Place::new();
     place.storage.write("a.bin", &[7u8; 30]).unwrap();

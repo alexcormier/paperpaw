@@ -167,7 +167,11 @@ fn parse_f32(text: &str) -> Option<f32> {
         _ => {}
     }
     let (number, exponent) = match rest.find(['e', 'E']) {
-        Some(at) => (&rest[..at], rest[at + 1..].parse::<i32>().ok()?),
+        // Clamped so that counting digits cannot overflow it.
+        Some(at) => (
+            &rest[..at],
+            rest[at + 1..].parse::<i32>().ok()?.clamp(-10_000, 10_000),
+        ),
         None => (rest, 0),
     };
     let (whole, fraction) = number.split_once('.').unwrap_or((number, ""));
@@ -193,20 +197,26 @@ fn parse_f32(text: &str) -> Option<f32> {
             scale += 1;
         }
     }
-    // Powers of ten to 10^10 are exact in an f32 (5^10 < 2^24).
-    const TENS: [f32; 11] = [1e0, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9, 1e10];
-    let mut value = mantissa as f32;
+    // Worked out in f64, whose 53 bits keep the steps' rounding far
+    // below an f32's last place; powers of ten to 10^22 are exact in it.
+    const TENS: [f64; 23] = [
+        1e0, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9, 1e10, 1e11, 1e12, 1e13, 1e14, 1e15, 1e16,
+        1e17, 1e18, 1e19, 1e20, 1e21, 1e22,
+    ];
+    let mut value = mantissa as f64;
+    // Beyond what an f32 holds either way: no endless steps.
+    let mut scale = scale.clamp(-400, 400);
     while scale > 0 {
-        let step = scale.min(10);
+        let step = scale.min(22);
         value *= TENS[step as usize];
         scale -= step;
     }
     while scale < 0 {
-        let step = (-scale).min(10);
+        let step = (-scale).min(22);
         value /= TENS[step as usize];
         scale += step;
     }
-    Some(sign * value)
+    Some(sign * value as f32)
 }
 
 /// An optional value: `None` when the event does not carry it.

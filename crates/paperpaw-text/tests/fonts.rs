@@ -128,11 +128,9 @@ fn odd_utf16_names_are_read_lossily() {
     assert_eq!(got, "Ab\u{fffd}C");
 }
 
-/// Mac Roman names are read as ASCII only, but letters beyond ASCII
-/// become U+007F (DELETE), a control character, in the family name
-/// shown to the reader.
+/// Mac Roman names are decoded beyond ASCII too: no letter of a family
+/// name shown to the reader becomes a control character.
 #[test]
-#[ignore = "bug: non-ASCII Mac Roman bytes in a font name become DEL control characters"]
 fn mac_roman_names_have_no_control_characters() {
     // "Café" in Mac Roman.
     let got = family(name(&[(MAC, 0, 1, b"Caf\x8e".to_vec())])).unwrap();

@@ -350,13 +350,12 @@ fn rename_in<IO: ReadWriteSeek + 'static>(
     }
 }
 
-/// A name in `dir` beside `name` that nothing has, for a moment.
-fn free_name<IO: ReadWriteSeek + 'static>(
-    dir: &FatDir<IO>,
-    name: &str,
-) -> Result<String, StorageError> {
-    for n in 0..8 {
-        let temp = format!("{name}.{n}.tmp");
+/// A name in `dir` that nothing has, for a moment: short (a file system
+/// short name of its own, so it fits beside a name of any length) and
+/// not taken from another name, so it never stands for a file there.
+fn free_name<IO: ReadWriteSeek + 'static>(dir: &FatDir<IO>) -> Result<String, StorageError> {
+    for n in 0..64 {
+        let temp = format!("~pp{n}.tmp");
         if let Lookup {
             entry: None,
             others: false,
@@ -523,15 +522,20 @@ impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
         self.close(path)?;
         self.create_dirs(parent(path))?;
         let dir = self.dir(parent(path))?;
-        let (name, temp) = (name(path), format!("{}.tmp", name(path)));
+        let name = name(path);
         // Refused before anything is written: no temporary file is left.
         if lookup(&dir, name, true)?.others {
             return Err(StorageError::InvalidPath);
         }
-        {
-            let mut file = create_file(&dir, &temp)?;
+        let temp = free_name(&dir)?;
+        let written = create_file(&dir, &temp).and_then(|mut file| {
             file.truncate().map_err(error)?;
-            Self::write_all(&mut file, data)?;
+            Self::write_all(&mut file, data)
+        });
+        if let Err(e) = written {
+            // A card that is full keeps no part of the new content.
+            let _ = remove_in(&dir, &temp);
+            return Err(e);
         }
         remove_in(&dir, name)?;
         rename_in(&dir, &temp, &dir, name)
@@ -575,7 +579,7 @@ impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
             // rust-fatfs takes a move to its own entry for nothing to do:
             // it goes through a name of the moment (kept, cut off between).
             let dir = self.dir(parent(from))?;
-            let temp = free_name(&dir, name(from))?;
+            let temp = free_name(&dir)?;
             rename_in(&dir, name(from), &dir, &temp)?;
             return rename_in(&dir, &temp, &dir, name(to));
         }
@@ -638,7 +642,12 @@ impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
 
 impl<IO: ReadWriteSeek + 'static> Storage for FatStorage<IO> {
     fn read_at(&self, path: &str, offset: u64, buf: &mut [u8]) -> Result<usize, StorageError> {
+        // Past what FAT holds (4 GiB less a byte): the end of any file.
+        let past_any_file = offset > u64::from(u32::MAX);
         self.with_open(path, false, |Open { file, .. }| {
+            if past_any_file {
+                return Ok(0);
+            }
             file.seek(SeekFrom::Start(offset)).map_err(error)?;
             let mut read = 0;
             while read < buf.len() {
@@ -971,7 +980,7 @@ mod tests {
         for (n, files) in cuts.iter().enumerate() {
             assert_eq!(read(files, "Books/b.txt"), Some(&b"beside"[..]), "{n}");
             assert_eq!(read(files, "notes.txt"), Some(&b"notes"[..]), "{n}");
-            let temp = read(files, "Books/a.txt.tmp");
+            let temp = read(files, "Books/~pp0.tmp");
             assert!(temp.is_none_or(|t| t.is_empty() || t == new), "{n}");
             assert!(files.len() <= 4, "{n}: {}", files.len());
             match read(files, "Books/a.txt") {

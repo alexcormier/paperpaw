@@ -149,7 +149,7 @@ impl StoredPack {
     fn nearest(&self, size: f32) -> usize {
         let wanted = (size * 4.0) as i32;
         (0..self.strikes.len())
-            .min_by_key(|&i| (i32::from(self.strikes[i].size) - wanted).abs())
+            .min_by_key(|&i| i32::from(self.strikes[i].size).abs_diff(wanted))
             .unwrap_or(0)
     }
 

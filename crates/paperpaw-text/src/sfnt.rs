@@ -148,8 +148,8 @@ fn family_name(table: &[u8]) -> Option<String> {
                     .map(|c| u16::from_be_bytes([c[0], c[1]]))
                     .collect::<Vec<_>>(),
             ),
-            // Macintosh: Roman, here only ASCII.
-            1 => bytes.iter().map(|&b| char::from(b.min(0x7f))).collect(),
+            // Macintosh: Roman.
+            1 => bytes.iter().map(|&b| mac_roman(b)).collect(),
             _ => continue,
         };
         let english = language == 0x409 || (platform == 1 && language == 0);
@@ -159,6 +159,25 @@ fn family_name(table: &[u8]) -> Option<String> {
         }
     }
     best.map(|(_, name)| name)
+}
+
+/// The upper half of Mac Roman, bytes 0x80 to 0xff.
+const MAC_ROMAN: &str = "ÄÅÇÉÑÖÜáàâäãåçéèêëíìîïñóòôöõúùûü\
+    †°¢£§•¶ß®©™´¨≠ÆØ∞±≤≥¥µ∂∑∏π∫ªºΩæø\
+    ¿¡¬√ƒ≈∆«»…\u{a0}ÀÃÕŒœ\u{2013}\u{2014}“”‘’÷◊ÿŸ⁄€‹›ﬁﬂ\
+    ‡·‚„‰ÂÊÁËÈÍÎÏÌÓÔ\u{f8ff}ÒÚÛÙıˆ˜¯˘˙˚¸˝˛ˇ";
+
+/// A Mac Roman byte as a character; control characters, which have no
+/// place in a name, become U+FFFD.
+fn mac_roman(b: u8) -> char {
+    match b {
+        0x20..=0x7e => char::from(b),
+        0x80..=0xff => MAC_ROMAN
+            .chars()
+            .nth(usize::from(b - 0x80))
+            .unwrap_or(char::REPLACEMENT_CHARACTER),
+        _ => char::REPLACEMENT_CHARACTER,
+    }
 }
 
 #[cfg(test)]

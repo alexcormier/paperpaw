@@ -179,15 +179,18 @@ impl<B: Storage, M: Storage> Mounted<B, M> {
         Self { base, at, mounted }
     }
 
+    /// The path inside the mounted storage for `path`, where it is there.
+    fn inside<'p>(&self, path: &'p str) -> Option<&'p str> {
+        if path == self.at {
+            return Some("");
+        }
+        path.strip_prefix(self.at)
+            .and_then(|rest| rest.strip_prefix('/'))
+    }
+
     /// The storage and path inside it for `path`.
     fn route<'p>(&self, path: &'p str) -> (&dyn Storage, &'p str) {
-        if path == self.at {
-            return (&self.mounted, "");
-        }
-        match path
-            .strip_prefix(self.at)
-            .and_then(|rest| rest.strip_prefix('/'))
-        {
+        match self.inside(path) {
             Some(rest) => (&self.mounted, rest),
             None => (&self.base, path),
         }
@@ -241,14 +244,14 @@ impl<B: Storage, M: Storage> Storage for Mounted<B, M> {
     }
 
     fn rename(&self, from: &str, to: &str) -> Result<(), StorageError> {
-        let (a, from_path) = self.route(from);
-        let (b, to_path) = self.route(to);
         // Within one storage only; across a mount point it is a copy.
-        if core::ptr::addr_eq(a, b) {
-            a.rename(from_path, to_path)
-        } else {
-            Err(StorageError::Unsupported)
+        // (Told by the paths: two storages of no size share an address.)
+        if self.inside(from).is_some() != self.inside(to).is_some() {
+            return Err(StorageError::Unsupported);
         }
+        let (storage, from_path) = self.route(from);
+        let (_, to_path) = self.route(to);
+        storage.rename(from_path, to_path)
     }
 
     fn create_dir(&self, path: &str) -> Result<(), StorageError> {

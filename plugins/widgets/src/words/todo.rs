@@ -1,8 +1,9 @@
 //! A to-do list: a few things to do, kept in `todo.txt` in the plugin's
 //! folder (as todo.txt has them: an item a line, `x 2026-10-19 ` before
-//! those done). The widget shows the open ones with a box each; a tap on
-//! one ticks it off: it shows struck through for the rest of the day (or
-//! goes at once), then it goes. The list's own screen adds, ticks, edits,
+//! those done, a date before open ones that would read as done). The
+//! widget shows the open ones with a box each; a tap on one ticks it
+//! off: it shows struck through for the rest of the day (or goes at
+//! once), then it goes. The list's own screen adds, ticks, edits,
 //! moves and removes them.
 //!
 //! The list is written back only once it was read: a file that cannot be
@@ -220,9 +221,17 @@ fn parse(text: &str, today: i64) -> List {
                     },
                 }
             }
-            None => Item {
-                text: String::from(line),
-                done: None,
+            // An open item kept with a date in front (see `dated`): the
+            // date dropped.
+            None => match line.split_once(' ') {
+                Some((date, text)) if dated(line) && day_of(date).is_some() => Item {
+                    text: String::from(text.trim_start()),
+                    done: None,
+                },
+                _ => Item {
+                    text: String::from(line),
+                    done: None,
+                },
             },
         };
         let gone = item.done.is_some_and(|day| day < today);
@@ -238,6 +247,26 @@ fn parse(text: &str, today: i64) -> List {
     List { items, rest }
 }
 
+/// The date before an open item whose text would read as one done.
+const MADE: &str = "1970-01-01";
+
+/// Whether an open item's text would read as one done ("x ray at 3"),
+/// also once dates before it are dropped: such an item is kept with a
+/// date in front ([`MADE`]), where todo.txt has the day an item was made,
+/// so that it reads as open there and here, and loses nothing.
+fn dated(text: &str) -> bool {
+    let mut rest = text;
+    loop {
+        if rest.starts_with("x ") {
+            return true;
+        }
+        match rest.split_once(' ') {
+            Some((word, after)) if day_of(word).is_some() => rest = after.trim_start(),
+            _ => return false,
+        }
+    }
+}
+
 /// The list as kept: an item a line, those done after `x` and the day,
 /// then the lines after the first items as they were.
 fn format(list: &List) -> String {
@@ -246,6 +275,7 @@ fn format(list: &List) -> String {
         let line = item.text.replace(['\n', '\r'], " ");
         match item.done {
             Some(day) => text.push_str(&format!("x {} {line}\n", date_of(day))),
+            None if dated(&line) => text.push_str(&format!("{MADE} {line}\n")),
             None => text.push_str(&format!("{line}\n")),
         }
     }

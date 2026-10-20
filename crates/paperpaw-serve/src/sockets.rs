@@ -81,12 +81,14 @@ impl Sockets {
                 }
             }
             SocketCall::Close { socket } => {
+                // Its senders go with it: the writing thread sends what
+                // was asked before, then ends the stream (see `connect`).
                 if let Some(c) = self.open.remove(&socket) {
                     c.closed.store(true, Ordering::Relaxed);
                     if let Ok(stream) = c.stream.lock()
                         && let Some(stream) = stream.as_ref()
                     {
-                        let _ = stream.shutdown(Shutdown::Both);
+                        let _ = stream.shutdown(Shutdown::Read);
                     }
                 }
             }
@@ -186,6 +188,9 @@ impl Sockets {
                             return;
                         }
                     }
+                    // Closed (its sender gone) once everything asked
+                    // before was sent: the other side reads the end.
+                    let _ = writing.shutdown(Shutdown::Write);
                 });
             }
             for max in read_asks {

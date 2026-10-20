@@ -122,6 +122,9 @@ struct Hold {
     send: bool,
     /// Send it even if it was sent already (*Sync progress*).
     force: bool,
+    /// The position to send then, kept as it was when it was held back,
+    /// so it is sent also after another book was opened.
+    position: Option<Position>,
 }
 
 #[derive(Debug, Default)]
@@ -135,6 +138,9 @@ struct State {
     /// The book last fetched for, and when.
     last_pull: Option<(String, Instant)>,
     hold: Option<Hold>,
+    /// Holds of books left while their fetch was out: their position is
+    /// sent when the answer says no other device is further.
+    left: Vec<Hold>,
     /// A position the user chose not to go to: book and progress.
     declined: Option<(String, String)>,
     /// Book fingerprints already computed.
@@ -295,8 +301,14 @@ impl State {
             // Sent when the hold ends, if this position is kept.
             hold.send = true;
             hold.force |= force;
+            hold.position = Some(position);
             return;
         }
+        self.send(env, out, position, force);
+    }
+
+    /// Sends `position`, unless it was sent already (or `force`).
+    fn send(&mut self, env: &Env<'_>, out: &mut Vec<Command>, position: Position, force: bool) {
         if !force && self.sent.as_ref() == Some(&position) {
             return;
         }
@@ -358,11 +370,19 @@ impl State {
         if let Some(command) = self.request(env, "GET", &target, None, &PULLED, params) {
             out.push(command);
             self.last_pull = Some((path.to_string(), env.now));
-            let held = self.hold.take().filter(|h| h.path == path);
+            let mut held = self.hold.take();
+            // Another book's hold: its answer is still to come.
+            if let Some(other) = held.take_if(|h| h.path != path)
+                && other.send
+            {
+                self.left.retain(|h| h.path != other.path);
+                self.left.push(other);
+            }
             self.hold = Some(Hold {
                 path: path.to_string(),
                 send: manual || held.as_ref().is_some_and(|h| h.send),
-                force: manual || held.is_some_and(|h| h.force),
+                force: manual || held.as_ref().is_some_and(|h| h.force),
+                position: held.and_then(|h| h.position),
             });
         }
     }
@@ -372,8 +392,21 @@ impl State {
         let manual = reply.context.get(MANUAL) == Some("1");
         let path = reply.context.get(params::PATH).unwrap_or_default();
         let hold = self.hold.take_if(|h| h.path == path);
-        // The book was closed meanwhile.
+        // The book was left meanwhile: its position held back goes, unless
+        // another device is further (no offer then, the book is closed).
         if self.current.as_ref().is_none_or(|c| c.path != path) {
+            if let Some(at) = self.left.iter().position(|h| h.path == path) {
+                let left = self.left.swap_remove(at);
+                let body = json::object(&reply.body);
+                let from_here = json::text(&body, "device_id") == Some(self.device_id.as_str());
+                if let Some(position) = left.position
+                    && reply.status == 200
+                    && remote_progress(&reply.body, &body)
+                        .is_some_and(|remote| from_here || remote <= position.progress + FURTHER)
+                {
+                    self.send(env, out, position, left.force);
+                }
+            }
             return;
         }
         let status = reply.status.to_string();
@@ -419,6 +452,7 @@ impl State {
                 path: path.to_string(),
                 send: false,
                 force: false,
+                position: None,
             }));
             return;
         }

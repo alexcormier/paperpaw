@@ -284,6 +284,45 @@ change the plugin SDK.
 - XTC books with damaged or oversized pages fail cleanly instead of
   crashing the X4 or filling the card, gray pages open much faster, and
   long chapter lists take little memory.
+- EPUB: small capitals of a book's stylesheet apply.
+- EPUB: a quoted string left open in a stylesheet ends at its line, so
+  the rules after it apply, and a font name can no longer break the
+  stylesheet's cache.
+- EPUB: CDATA in a chapter is shown as written, its entities not decoded.
+- FictionBook: a second picture of the same id that cannot be decoded no
+  longer removes the first.
+- Markdown: two spaces at a line's end break the line after it, not
+  before; very long lines are no longer cut inside words.
+- Plain text: old Mac line ends (a carriage return alone) part words.
+- Plain text: a long paragraph starting at certain places no longer
+  loses its first word when read from inside it.
+- Memory cards: books and folders whose names begin with a letter
+  beyond ASCII ("Ärger.epub") no longer crash the X4; names of up to 255
+  letters can be written, a file named like another's temporary one is
+  never replaced, and a write that fails on a full card leaves nothing.
+- Desktop and Android: no call can remove or write over the storage's
+  top folder through an empty path.
+- Updates: numbered pre-releases compare by number, so `0.5.0-rc.10`
+  is offered on `0.5.0-rc.9`.
+- Library: going up to a folder that starts a page shows that page.
+- HTTP: an answer's head over the limit is refused also when it comes
+  at once; redirects from an address without a path keep their target.
+- Servers: port 65535 can be listened on; a socket closed right after
+  sending still delivers what was sent.
+- Progress sync: a position held back while its book's progress was
+  fetched is sent even when another book was opened meanwhile.
+- Browser: a server's error page is shown again.
+- Weather: a day whose date cannot be read no longer shifts the others,
+  answers with more days than asked for keep the first ones, and values
+  at their limits no longer overflow.
+- OPDS: a cover of the catalog shown before no longer appears beside
+  another entry.
+- News: very long feed titles are cut like article titles.
+- Lock: a damaged kept code no longer locks the device for good, and the
+  wait no longer shows a second too many.
+- Battery: hostile logs no longer overflow, a damaged line loses only
+  itself, 3999 mV shows as 4.00 V, and the hours left fit on the X4.
+- Joplin: its menu entries show icons again.
 - Native code plugins as files (ADR 0024, PLANNING P5): a code plugin
   can be a file in its folder on the card (`plugins/<id>/code.ppn`),
   which the Xteink X4 and X4 Pro load at their start, without a new
@@ -2005,6 +2044,48 @@ change the plugin SDK.
   removed stays away. When the card is full, reading is kept, written
   once there is room, and a notice says so. Every widget setting has a
   help text.
+- To-do list: an open item beginning with "x " ("x ray at 3") is no
+  longer read back as done and lost; it is kept with a date in front, as
+  todo.txt has the day an item was made.
+- Picture widget: its hint for a folder name of thousands of words is
+  measured without overflow (a panic in debug builds).
+- Text layout: a word moved to the next line, and text carried to a
+  narrower line (after a hanging first line), is broken again where it
+  does not fit, so no line comes out wider than its box, and lines laid
+  out from a kept position are those laid out from the paragraph's
+  start. A paragraph's last line no longer counts the spaces after it,
+  so right-aligned and centred last lines end where they should.
+- Fonts: family names in Mac Roman show their letters beyond ASCII
+  ("Café" had a control character for the "é"); absurd text sizes and
+  outlines far outside a glyph's box no longer overflow (a panic in
+  debug builds) or take long to draw.
+- Hyphenation: words from a pattern file's exception list keep the
+  minimum letters before and after a hyphen, as in TeX.
+- Documents: a position in a gap before a block's first checkpoint (a
+  comment at its start) maps to the next character, no longer past it;
+  `Block::replace` keeps styled runs apart where the replaced text
+  reaches from one run into the next.
+- Pictures: a JPEG whose data ends without its end marker is shown,
+  baseline and progressive, instead of failing; a GIF stops offering
+  rows once the sink refused one; decoded image files open on storage
+  that reads in pieces; `PngWriter::new` refuses a width of `u32::MAX`
+  instead of overflowing.
+- JSON: `stream::Parser::finish` reports a number or literal that ends
+  the text (`42` as the whole text was never reported); `read_file`
+  calls it.
+- SQLite: integers and reals beyond 2^53 are ordered exactly, as SQLite
+  orders them in indexes; a schema too large for page 1 leaves no
+  `.part` file behind; `columns` passes over commas in comments and
+  quoted texts.
+- Dictionaries: a short definition that decoding makes longer (brackets
+  around a pronunciation) comes whole, no longer cut at its end.
+- Graphics: shading on panels of 2 to 16 grays is reported changed, so
+  it is refreshed; `round::point_at` rounds to the nearest pixel on
+  every side of the centre; two half rings meet without a seam; rounded
+  rectangles and pills reach their sides wherever the circle covers
+  most of a pixel (`round::corner_inset` rounds to the nearest pixel),
+  and a 2 by 2 square of radius 1 is drawn. `Rect::union` keeps the
+  largest size instead of wrapping past 65535.
 
 ## [0.3.0] - 2026-10-16
 

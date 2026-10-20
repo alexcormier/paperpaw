@@ -289,7 +289,6 @@ proptest! {
 /// long paragraphs: a paragraph longer than a block holds, at the file's
 /// start.
 #[test]
-#[ignore = "bug: a long paragraph starting just at or after a split grid point loses its first word when read from inside"]
 fn a_long_first_paragraph_is_one_block_from_any_position() {
     // Its pieces start after the first white space past each multiple of
     // 2048 bytes; the paragraph starts at 0, so the first piece starts
@@ -307,7 +306,6 @@ fn a_long_first_paragraph_is_one_block_from_any_position() {
 /// The same where a paragraph starts a few bytes after a grid point,
 /// not at the file's start.
 #[test]
-#[ignore = "bug: a long paragraph starting just at or after a split grid point loses its first word when read from inside"]
 fn a_long_paragraph_starting_at_a_grid_point_is_one_block_from_any_position() {
     // A first paragraph of 2046 bytes and a blank line: the second starts
     // at 2048, its first word ending past the grid point there.

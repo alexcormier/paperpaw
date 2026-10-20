@@ -606,10 +606,10 @@ fn png_writer_refuses_what_it_cannot_write() {
 }
 
 #[test]
-#[ignore = "bug: PngWriter::new overflows on a width of u32::MAX"]
 fn png_writer_refuses_the_largest_width() {
-    // `width + 1 > 0xffff` overflows for u32::MAX: a panic in debug
-    // builds; in release it wraps to 0 and the width is taken.
+    // A row and its filter byte must fit a stored block; `width + 1`
+    // must not overflow on the way (a panic in debug builds, in release
+    // a wrap to 0 that took the width).
     let storage = OneFile::default();
     assert_eq!(
         PngWriter::new(&storage, "a.png", u32::MAX, 1).unwrap_err(),

@@ -229,7 +229,6 @@ fn a_damaged_count_starts_again_at_the_first_picture() {
 /// The count read from `next.txt` plus one overflows at the largest
 /// number: a panic in debug builds (and a wrap in release ones).
 #[test]
-#[ignore = "bug: a count of usize::MAX in next.txt overflows (panics in debug builds)"]
 fn the_largest_count_does_not_overflow() {
     let storage = MemoryStorage::new()
         .with("sleep/a.png", PNG)

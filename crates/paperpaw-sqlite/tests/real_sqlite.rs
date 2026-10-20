@@ -224,7 +224,6 @@ fn sqlite_order(values: &[Value]) -> Vec<usize> {
 /// Large integers next to reals: SQLite compares them exactly, not as
 /// two floats.
 #[test]
-#[ignore = "bug: compare_records compares an integer with a real as f64, wrong beyond 2^53"]
 fn large_integers_and_reals_sort_like_sqlite() {
     let big = 1i64 << 53;
     let values = [

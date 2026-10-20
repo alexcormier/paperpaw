@@ -133,14 +133,17 @@ fn long_and_unusual_names() {
 /// Books and folders whose names begin with a letter outside ASCII, as
 /// many do in German, Danish or Japanese.
 #[test]
-#[ignore = "bug: fatfs (rev 2aefc2a) dir.rs:1075 slices name[1..] when making a short name: panics on a multi-byte first letter"]
 fn names_beginning_with_a_letter_outside_ascii_can_be_created() {
     let card = Card::new(1 << 20);
     let s = card.storage;
-    for name in ["Ärger.epub", "Ørsted.txt", "東京.txt", "📚.md"] {
+    for name in ["Ärger.epub", "Ørsted.txt", "東京.txt"] {
         s.write(&format!("books/{name}"), name.as_bytes()).unwrap();
         assert_eq!(read(s, &format!("books/{name}")), name.as_bytes(), "{name}");
     }
+    // Letters beyond the first 65536 (emoji) the FAT library does not
+    // write: refused cleanly, nothing left behind.
+    assert_eq!(s.write("books/📚.md", b"x"), Err(StorageError::InvalidPath));
+    assert_eq!(names(s, "books").len(), 3);
     s.create_dir("Übersetzungen").unwrap();
     assert!(names(s, "").contains(&"Übersetzungen/".to_string()));
 }
@@ -148,7 +151,6 @@ fn names_beginning_with_a_letter_outside_ascii_can_be_created() {
 /// Names of 252 to 255 UTF-16 units are valid on FAT: appended to they
 /// work, written whole too.
 #[test]
-#[ignore = "bug: lib.rs writes through `<name>.tmp`, four units longer: names over 251 units cannot be written"]
 fn the_longest_names_can_be_written() {
     let card = Card::new(1 << 20);
     let s = card.storage;
@@ -187,7 +189,6 @@ fn a_file_replaced_under_another_case_is_read_anew() {
 /// A file of the reader's that is named like the temporary file of a
 /// write beside it.
 #[test]
-#[ignore = "bug: lib.rs writes `<name>.tmp` beside the file and so replaces a file of that name"]
 fn a_write_keeps_a_file_named_like_its_temporary() {
     let card = Card::new(1 << 20);
     let s = card.storage;
@@ -219,7 +220,6 @@ fn reads_past_the_end_read_nothing() {
 
 /// Offsets past what FAT files can reach (4 GiB) are past the end too.
 #[test]
-#[ignore = "bug: lib.rs maps fatfs' InvalidInput for a seek past 4 GiB to InvalidPath instead of reading nothing"]
 fn reads_past_4_gib_read_nothing() {
     let card = Card::new(1 << 20);
     let s = card.storage;
@@ -248,7 +248,6 @@ fn a_full_card_keeps_the_old_content() {
 /// After a write that did not fit, no temporary file is left taking the
 /// card's space.
 #[test]
-#[ignore = "bug: lib.rs leaves `<name>.tmp` behind when writing it fails (e.g. the card is full)"]
 fn a_write_that_does_not_fit_leaves_no_temporary_file() {
     let card = Card::new(256 * 1024);
     let s = card.storage;

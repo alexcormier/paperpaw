@@ -272,11 +272,10 @@ fn rendering_a_damaged_stored_glyph_allocates_no_more_than_it_needs() {
     );
 }
 
-/// The strike nearest a size is found by `(quarters - wanted).abs()` in
-/// `i32`: sizes below about -5e8 px (e.g. a broken setting) overflow,
-/// which panics in debug builds.
+/// The strike nearest a size is found by its distance in quarter pixels:
+/// sizes below about -5e8 px (e.g. a broken setting) must not overflow
+/// that reckoning, which would panic in debug builds.
 #[test]
-#[ignore = "bug: the nearest strike to a hugely negative size overflows i32"]
 fn sizes_far_below_zero_do_not_overflow() {
     let font = BitmapFont::new(PACK).unwrap();
     let stored = open(PACK).unwrap();

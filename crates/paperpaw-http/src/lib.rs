@@ -214,6 +214,8 @@ pub fn redirect(base: &str, location: &str) -> Option<String> {
             Some((path, query)) => (path, Some(query)),
             None => (url.path, None),
         };
+        // A base without a path (`http://h.org?x`) is at the root.
+        let base_path = if base_path.is_empty() { "/" } else { base_path };
         let (path, query) = if path.is_empty() {
             (String::from(base_path), query.or(base_query))
         } else if path.starts_with('/') {
@@ -496,6 +498,10 @@ impl Parser {
             }
             return Ok(&[]);
         };
+        // However it came: in pieces or at once.
+        if end > MAX_HEAD {
+            return Err(Error::Malformed);
+        }
         let rest_len = self.line.len() - (end + 4);
         let head = parse_head(&self.line[..end]).ok_or(Error::Malformed)?;
         self.line.clear();
