@@ -54,9 +54,37 @@ impl Plugin for CorePlugin {
         register_marks(r)?;
         register_time_and_battery(r)?;
         register_keymaps_and_setup(r)?;
+        r.add_presets(&POWER_MODES)?;
         Ok(())
     }
 }
+
+/// The power modes built in (ADR 0025): a level, how much longer
+/// declared work may wait, and values worn over the reader's own (a
+/// number after `<=` is a limit).
+static POWER_MODES: [paperpaw_sdk::presets::Preset; 3] = [
+    paperpaw_sdk::presets::Preset::fixed(
+        "core.normal",
+        "core.power-mode",
+        "core.power.normal",
+        "core.power.normal.help",
+        "power.level = normal",
+    ),
+    paperpaw_sdk::presets::Preset::fixed(
+        "core.saving",
+        "core.power-mode",
+        "core.power.saving",
+        "core.power.saving.help",
+        "power.level = saving\npower.stretch = 4\ncore.sleep-after = 5\nx4.frontlight <= 50",
+    ),
+    paperpaw_sdk::presets::Preset::fixed(
+        "core.offline",
+        "core.power-mode",
+        "core.power.offline",
+        "core.power.offline.help",
+        "power.level = offline\npower.stretch = 4\ncore.sleep-after = 5\nx4.frontlight <= 30",
+    ),
+];
 
 /// The actions screens give a meaning of their own (with their hints in
 /// the row), and how a screen takes gestures.

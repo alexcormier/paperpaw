@@ -43,6 +43,16 @@ change the plugin SDK.
 - SDK: `Settings::wear` puts a power mode's values and limits over the
   reader's own without writing anything; the reader's change wins until
   the next mode.
+- Power modes (ADR 0025): Normal, Saving, Offline and Automatic, chosen
+  in the quick panel (four segments) or under Settings, System, Power.
+  Automatic goes by the battery: Saving below 20 %, Offline below 10 %,
+  back 5 % above each, Normal while charging; it switches silently, and
+  the status lines name the mode while it is not Normal. Saving makes
+  declared work wait four times as long, sleeps after 5 minutes and
+  keeps the front light at most at half; Offline keeps the radio off for
+  background work. A mode's values lie over the reader's own and go
+  when it ends. The modes are presets (`core.power-mode`), worn with
+  `Command::Wear`; `Kernel::power` tells shells the level.
 - SDK, HTTP: `HttpRequest` is made with `HttpRequest::get` or `new` and
   methods (`header`, `body`, `body_from`, `save_to`, `with`), no longer
   field by field (`#[non_exhaustive]`). A request may set a `timeout`

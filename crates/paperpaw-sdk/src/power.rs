@@ -58,6 +58,36 @@ impl PowerLevel {
     }
 }
 
+/// Which mode to wear ([`Command::Wear`](crate::Command::Wear)), sent by
+/// the plugin that chooses (the `power` plugin).
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct Wear {
+    /// A preset of the kind [`MODE_KIND`].
+    pub mode: Id,
+    /// Chosen by the battery (Automatic), not by the reader.
+    pub automatic: bool,
+}
+
+impl Wear {
+    pub fn new(mode: Id) -> Self {
+        Self {
+            mode,
+            automatic: false,
+        }
+    }
+
+    /// Chosen by the battery.
+    pub fn automatic(mut self) -> Self {
+        self.automatic = true;
+        self
+    }
+}
+
+/// The setting in a mode's values that says how many times longer
+/// declared work may wait ([`Power::stretch`]).
+pub const STRETCH: Id = Id::new_static("power.stretch");
+
 /// The kind of presets that are power modes.
 pub const MODE_KIND: Id = Id::new_static("core.power-mode");
 /// The setting in a mode's values that names its level.

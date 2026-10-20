@@ -1313,6 +1313,7 @@ dependencies = [
  "paperpaw-plugin-news",
  "paperpaw-plugin-opds",
  "paperpaw-plugin-plugin-manager",
+ "paperpaw-plugin-power",
  "paperpaw-plugin-profiles",
  "paperpaw-plugin-reader",
  "paperpaw-plugin-readwise",
@@ -1824,6 +1825,15 @@ dependencies = [
  "paperpaw-i18n",
  "paperpaw-platform",
  "paperpaw-plugin-fonts-default",
+ "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-plugin-power"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-core",
+ "paperpaw-platform",
  "paperpaw-sdk",
 ]
 

@@ -164,7 +164,9 @@ impl Kernel {
             Command::Notify(text) | Command::Announce(text) => self.notify(text),
             Command::Emit(event, params) => self.emit(&event, &params),
             Command::RunAction(action) => self.dispatch(action),
-            command @ (Command::Work(_) | Command::CancelWork(..)) => self.apply_work(command),
+            command @ (Command::Work(_) | Command::CancelWork(..) | Command::Wear(_)) => {
+                self.apply_work(command);
+            }
             #[expect(deprecated, reason = "timers of plugins not moved yet")]
             command @ Command::Schedule(..) => self.apply_work(command),
             Command::Restart => self.restart = true,

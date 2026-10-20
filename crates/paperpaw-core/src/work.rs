@@ -16,7 +16,7 @@ use core::mem;
 use paperpaw_platform::Instant;
 use paperpaw_sdk::builtin::{events, params};
 use paperpaw_sdk::event::EventData;
-use paperpaw_sdk::power::{Power, PowerLevel};
+use paperpaw_sdk::power::{self, Power, PowerLevel, Wear};
 use paperpaw_sdk::work::{
     Importance, Moments, Progress, Reason, Refusal, Retry, Step, Why, Work, WorkRefused, WorkSpec,
     WorkState,
@@ -296,7 +296,60 @@ impl Kernel {
                     .declare(work, self.now, &mut self.output.commands);
             }
             Command::CancelWork(id, key) => self.works.cancel(&id, key.as_deref()),
+            Command::Wear(wear) => self.wear(wear),
             _ => {}
+        }
+    }
+
+    /// Wears a power mode: its level and how much longer work may wait,
+    /// its values and limits over the reader's own. Plugins hear of the
+    /// mode and of every setting whose value shows otherwise now; work held
+    /// back by Offline may go on once another mode is worn.
+    fn wear(&mut self, wear: Wear) {
+        let Some(preset) = self
+            .shared
+            .settings
+            .presets()
+            .get(wear.mode.as_str())
+            .filter(|p| p.kind == power::MODE_KIND)
+        else {
+            self.warn_runtime(alloc::format!("no power mode `{}`", wear.mode));
+            return;
+        };
+        let mut level = PowerLevel::Normal;
+        let mut stretch = 1;
+        let mut values = Vec::new();
+        let mut limits = Vec::new();
+        for (id, text) in preset.values() {
+            if id == power::LEVEL.as_str() {
+                level = PowerLevel::parse(text).unwrap_or(PowerLevel::Normal);
+            } else if id == power::STRETCH.as_str() {
+                stretch = text.parse().unwrap_or(1);
+            } else if let Some(id) = id.strip_suffix('<') {
+                // `id <= number`: a limit.
+                if let (Ok(id), Ok(most)) = (Id::parse(id.trim()), text.parse()) {
+                    limits.push((id, most));
+                }
+            } else if let (Ok(id), Some(spec)) = (Id::parse(id), self.shared.settings.spec(id))
+                && let Some(value) = spec.kind.parse(text)
+            {
+                values.push((id, value));
+            }
+        }
+        let before = self.shared.power.clone();
+        let touched = self.shared.settings.wear(values, limits);
+        self.shared.power = Power::new(level, wear.mode, wear.automatic, stretch);
+        for id in touched {
+            let changed = events::SettingChanged { id };
+            self.output
+                .commands
+                .push(events::SETTING_CHANGED.emit(changed));
+        }
+        if self.shared.power != before {
+            self.output.commands.push(events::POWER_CHANGED.emit(()));
+        }
+        if before.level == PowerLevel::Offline && level != PowerLevel::Offline {
+            self.output.commands.push(events::WORK_ALLOWED.emit(()));
         }
     }
 

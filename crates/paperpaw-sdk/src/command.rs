@@ -430,6 +430,10 @@ pub enum Command {
     /// [`power`](crate::power)): the network for the screen sending it
     /// until it closes; work held back runs on the same connection.
     GoOnline,
+    /// Wears a power mode: its level for plugins and declared work, its
+    /// values over the reader's own (see [`power`](crate::power)). Sent
+    /// by the plugin that chooses the mode.
+    Wear(crate::power::Wear),
     /// Installs a firmware update or restarts, where PaperPaw is the
     /// device's firmware ([`Env::firmware`](crate::Env)); see
     /// [`firmware`](crate::firmware). Ignored elsewhere.

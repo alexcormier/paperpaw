@@ -1262,12 +1262,19 @@ pub fn paperpaw_sdk::power::Power::normal() -> &'static paperpaw_sdk::power::Pow
 pub fn paperpaw_sdk::power::Power::online(&self) -> bool
 impl core::default::Default for paperpaw_sdk::power::Power
 pub fn paperpaw_sdk::power::Power::default() -> Self
+#[non_exhaustive] pub struct paperpaw_sdk::power::Wear
+pub paperpaw_sdk::power::Wear::automatic: bool
+pub paperpaw_sdk::power::Wear::mode: paperpaw_sdk::Id
+impl paperpaw_sdk::power::Wear
+pub fn paperpaw_sdk::power::Wear::automatic(self) -> Self
+pub fn paperpaw_sdk::power::Wear::new(paperpaw_sdk::Id) -> Self
 pub const paperpaw_sdk::power::AUTOMATIC: &str
 pub const paperpaw_sdk::power::LEVEL: paperpaw_sdk::Id
 pub const paperpaw_sdk::power::MODE_KIND: paperpaw_sdk::Id
 pub const paperpaw_sdk::power::NORMAL: paperpaw_sdk::Id
 pub const paperpaw_sdk::power::OFFLINE: paperpaw_sdk::Id
 pub const paperpaw_sdk::power::SAVING: paperpaw_sdk::Id
+pub const paperpaw_sdk::power::STRETCH: paperpaw_sdk::Id
 pub mod paperpaw_sdk::presets
 #[non_exhaustive] pub struct paperpaw_sdk::presets::Preset
 pub paperpaw_sdk::presets::Preset::description: alloc::borrow::Cow<'static, str>
@@ -2592,6 +2599,7 @@ pub paperpaw_sdk::Command::SocketSend::socket: paperpaw_sdk::Id
 pub paperpaw_sdk::Command::Speak(paperpaw_sdk::Speech)
 pub paperpaw_sdk::Command::StopServing(paperpaw_sdk::Id)
 pub paperpaw_sdk::Command::StopSpeaking
+pub paperpaw_sdk::Command::Wear(paperpaw_sdk::power::Wear)
 pub paperpaw_sdk::Command::Wifi(paperpaw_sdk::wifi::WifiCommand)
 pub paperpaw_sdk::Command::Work(paperpaw_sdk::work::Work)
 impl paperpaw_sdk::Command

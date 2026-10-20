@@ -753,6 +753,12 @@ impl Kernel {
         self.shared.storage.as_ref()
     }
 
+    /// The power level and mode worn (see [`paperpaw_sdk::power`]), e.g.
+    /// for a shell that slows its processor down while saving.
+    pub fn power(&self) -> &paperpaw_sdk::power::Power {
+        &self.shared.power
+    }
+
     pub fn settings(&self) -> &Settings {
         &self.shared.settings
     }
