@@ -28,6 +28,8 @@ paperpaw-digest.workspace = true
 
 [dev-dependencies]
 proptest.workspace = true
+# Scalable fonts in tests that draw text (the UI font of fonts-default).
+paperpaw-text = { workspace = true, features = ["outline"] }
 
 [features]
 default = []
