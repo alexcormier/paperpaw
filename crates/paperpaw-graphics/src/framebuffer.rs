@@ -161,7 +161,7 @@ impl Framebuffer {
     pub fn view_rows(&self, region: Rect) -> FrameView<'_> {
         let band = self.band();
         let first = region.y.clamp(band.y, band.bottom() as u16);
-        let last = (region.bottom() as u16).clamp(first, band.bottom() as u16);
+        let last = region.bottom().clamp(u32::from(first), band.bottom()) as u16;
         let start = usize::from(first - self.top) * self.stride;
         let end = usize::from(last - self.top) * self.stride;
         FrameView {
@@ -390,9 +390,6 @@ impl Framebuffer {
         self.store(x, y, encoded);
     }
 
-    /// Sets the pixel at `(x, y)` (inside the band) to `gray`, ordered
-    /// dithered for formats with few gray levels, so photos and
-    /// illustrations keep their tones.
     /// Pixels of pictures (photos, illustrations) drawn since the last
     /// call: panels that keep ghosts of them want a full refresh after.
     pub fn take_pictured(&mut self) -> u32 {
@@ -405,6 +402,9 @@ impl Framebuffer {
         core::mem::replace(&mut self.counting, counting)
     }
 
+    /// Sets the pixel at `(x, y)` (inside the band) to `gray`, ordered
+    /// dithered for formats with few gray levels, so photos and
+    /// illustrations keep their tones.
     pub(crate) fn put_gray(&mut self, x: u16, y: u16, gray: u8) {
         self.pictured = self.pictured.saturating_add(u32::from(self.counting));
         let gray = self.dithered(x, y, gray);
@@ -620,6 +620,9 @@ mod tests {
             assert_eq!(full.view().pixel((i + 1) % 8, i), Color::WHITE, "row {i}");
         }
         assert_eq!(full.view_rows(Rect::new(0, 3, 8, 2)).height, 2);
+        // A region reaching past the largest row number still ends with
+        // the band.
+        assert_eq!(full.view_rows(Rect::new(0, 5, 8, u16::MAX)).height, 5);
     }
 
     #[test]

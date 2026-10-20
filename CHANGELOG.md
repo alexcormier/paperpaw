@@ -34,6 +34,162 @@ change the plugin SDK.
   only layouts whose widgets and tools are there. Widgets are made once
   as the screen shows and anew only for changes of the home screen, the
   look or their own settings; other changes have them read anew.
+- Quick panel and reader's panel: on touch screens their sliders (the
+  front light and its colour, the text size, spacing and margins) are as
+  on the settings pages, across the screen with their title and value
+  above, and every slider is a fingertip high (7 mm from the panel's
+  dpi) with a large knob. A finger that comes down anywhere on a
+  slider's band and moves sideways moves the knob as far as it moves
+  itself, from where it was, so it never jumps under the finger and the
+  finger need not hide it; a tap on the track sets the value there, a
+  tap on `−` or `+` (or beside them) one step. While it moves the value
+  shows at once, the light follows it, only the slider is drawn again
+  with a quick refresh, and nothing is read from the card; lifting the
+  finger keeps the value and refreshes the panel cleanly. The rest of
+  the track is a thin black line, which quick refreshes keep. The
+  panels' buttons are a fingertip high on touch screens too, a little
+  apart, and buttons share their rows evenly (four two and two, not
+  three and one), so the X4 Pro's quick panel fits on one page; the
+  quick panel may cover up to 95 % of the screen, as phones' quick
+  settings do. With the buttons, a slider is chosen and then moved as on
+  the settings pages. With buttons alone (the X4) the panels are as
+  before. The home screen no longer builds its widgets anew while a
+  value is shown above it, which read the card on every step. On Boox
+  devices the light follows a slider while it moves. The emulator has
+  the front light of the X4 Pro and the Boox profiles, and its scripts
+  can put a finger down, move and lift it step by step (`down`, `move`,
+  `up`).
+  SDK: `UiStyle::finger` (a fingertip's size on touch screens, 0 with
+  buttons alone) and `UiStyle::touch_row`; `ui::slider` bands are a
+  fingertip high on touch screens, `SliderDrag::on_pointer` takes the
+  slider's band, the style and its value and moves the knob relative to
+  where the finger came down, `Slider::knob_x` says where the knob is.
+- SDK: helpers that plugins wrote each for themselves, now in one place.
+  `Storage::ignores_case` says whether a storage takes `Books` for
+  `books` (memory cards, Windows and macOS disks do), and
+  `files::same_path` and `files::is_within` compare paths as it does;
+  `files::has_extension` ignores case everywhere. Files made in parts
+  (downloads, copies) go to `files::part_path` and are put in place
+  when whole with `files::put_in_place` or `files::put_in_free_place`.
+  `web::USER_AGENT` names PaperPaw with its version (`web::user_agent`
+  as a header), `web::base_url` makes a server's address as entered a
+  base URL. `time::clock_of` and `time::twelve_hours` write a time of
+  day as the user wants it; the calendar is public: `time::is_leap`,
+  `days_in_month`, `days_in_year`, `days_from_civil`,
+  `civil_from_days`, `weekday`, `weekday_of`, `day_of_year`,
+  `iso_week`. `numbers::decimal_mark` is the language's decimal mark,
+  `numbers::fixed` writes numbers with it.
+- Files: a copy cut short (a full card) no longer leaves a half file
+  that looks whole: each file is copied to a part and put in place when
+  whole. A folder is not moved or copied into itself by another case of
+  its name, and finding a free name ends after 65,536 tries.
+- Data that cannot be read is no longer written over: annotations, the
+  books opened last, the favourites and a book's details were taken for
+  empty when their file could not be read (a failing card, a file too
+  large, text saved in another encoding), and the next change wrote a
+  file with only that change. Now nothing is written then. A book's
+  details keep their values to a kilobyte and 32 tags, so they are
+  always read back (larger ones were written but never read, and the
+  book was read anew in every list). A UTF-8 byte order mark, as
+  Windows Notepad writes, is read past. SDK:
+  `files::load_for_update`, `files::load_text_for_update`,
+  `files::read_text`, `files::without_bom`,
+  `annotations::load_for_update`; `annotations::add`,
+  `annotations::save` and `library::save` say whether they kept what
+  they were given; `annotations::moved` (unused) is gone;
+  `StorageError::TooLarge` (what `read_file` says of a file over its
+  limit, before `Unsupported`) and `StorageError::InvalidData`;
+  `data::Format::load` tells a missing file from an unreadable one.
+  Annotations are read line by line, and where they are only drawn,
+  without their texts.
+- Library: a folder whose name ends inside a character, such as one
+  named with two or three Chinese characters, no longer stops the
+  library (the X4 restarted whenever the folder's parent or a catalog
+  shelf was shown).
+- Security: a redirect no longer takes a request's credentials to
+  another server, nor any request from `https` down to plain `http`.
+  Every shell follows redirects by one rule (`paperpaw_http::follow`):
+  to another scheme, host or port only headers that never carry
+  credentials go along (`Accept`, `Range`, `User-Agent`, …; not
+  `Authorization`, cookies or a service's key headers), a body never
+  (the request fails), and from `https` to `http` not at all. Android
+  follows redirects itself for this, and now tells plugins where every
+  redirected answer came from (`final-url`), not only after a change
+  of scheme. Addresses with control characters are refused, spaces and
+  other bytes a request line cannot carry are percent-encoded, a
+  redirect's `Location` resolves as RFC 3986 says (`?query`, `../`),
+  and IPv6 hosts work (`http://[::1]:8080/`).
+- HTTP answers for a file (`save_to`): only a successful one (2xx) is
+  saved; an error's body (404, 500, also a 304) is its reason for the
+  plugin and leaves the file as it was, and the X4 replaces the old file
+  only once the new one is whole. A download longer than the limit
+  fails instead of being saved cut short. A request saving to a file
+  another is still saving to replaces that one (it fails at once,
+  "replaced by a newer request", and its late answer is passed over)
+  instead of both being mixed into the file. A body for the plugin
+  moves through the kernel without copies (it was held up to three
+  times), and the X4 sends a request's body without copying it first.
+- Sockets: text read from a socket keeps a character whole where a read
+  ends inside it (it comes with the next read), so non-ASCII text, e.g.
+  Calibre's metadata, no longer turns into replacement characters at
+  random and no longer upsets a protocol that counts bytes.
+- Plugins' servers on the emulator and Android (Wi-Fi transfer, the
+  phone keyboard) no longer let anyone in the network tie them up: a
+  request's head is read by the same parser as on the X4 (up to 8 KiB,
+  within 30 seconds in all; 431 or 400 otherwise, also for a
+  `Content-Length` that is no number), a server serves 8 connections at
+  a time and answers more with 503, an answer that comes before an
+  upload is whole (507, no room) ends it at once, and stopping a server
+  ends its connections and frees its port without polling. Request
+  bodies a crash left in `.paperpaw/tmp` are removed when the next one
+  comes.
+
+- Damaged or crafted files can no longer restart the X4, freeze the
+  reader or use up its memory; what cannot be read is refused or left
+  out, and the rest carries on:
+  - Pictures: a GIF picture without width or height, or larger than
+    the limit, is refused; parts of a GIF outside its screen are no
+    longer decoded. A small JPEG that claims to be huge, stops its data
+    early or repeats its scans takes milliseconds instead of minutes;
+    where its data ends, the rest is filled evenly. A PNG with a colour
+    table of more than 256 colours opens.
+  - Statistics sync: a damaged or crafted KOReader statistics file is
+    rejected, and reading it takes little memory however large it is.
+  - Dictionaries: a damaged StarDict dictionary is handled safely,
+    compressed or not; one lookup keeps to 32 KiB of text, so very long
+    definitions are shortened.
+  - Catalogs and web services (OPDS, the plugin store, Joplin,
+    Wallabag): a broken escape, a very long number or key, or very deep
+    nesting in JSON no longer takes the device's memory; parts nested
+    too deeply are skipped. Broken escaped characters show as a
+    replacement mark instead of losing the entry.
+  - Fonts: a damaged font pack or font leaves the character it cannot
+    draw blank, and characters far larger than the text size are left
+    blank; a negative character width no longer crashes hyphenated
+    lines.
+  - Books: a part of a chapter that never ends is reported as damaged,
+    and a picture without a size is left out. Files inside an EPUB or
+    CBZ are checked against their checksum and size instead of showing
+    as garbled text or pictures. Text after a very long comment or tag
+    no longer shows stray markup, a lone `<` (as in "a < b") no longer
+    swallows the words after it, and text full of `&` no longer slows
+    reading down. A hyphenation exception starting or ending with a
+    hyphen no longer crashes the reader.
+- Books: chapters and pictures whose links differ from the file names
+  only in upper and lower case are found again, and archives with
+  names that are not UTF-8 or with a comment at their end open.
+- Progress sync: books are identified as KOReader does also on storage
+  that reads less than asked at a time, so the same book is found.
+- Settings and the files kept per book are no longer broken by a key
+  or section name with characters the format does not allow. SDK:
+  `config::set_all` sets many keys in one pass.
+- Drawing: lines, rounded boxes, rings and clock hands with very large
+  or far away coordinates no longer crash, hang or land in the wrong
+  place.
+- Fuzzing covers every parser: SQLite, StarDict, JSON, INI, fonts, ZIP,
+  translation catalogs, HTTP request heads, FB2, HTML, Markdown, CBZ
+  and XTC besides EPUB, TXT, XML, pictures and hyphenation; the picture
+  target decodes in colour and at sizes the input chooses.
 - Rules: a rule can apply when the battery reaches a level (80 %, 90 %,
   full or another), once each time it gets there and not again while
   the level wavers around it; with *Only if … While charging* it says
@@ -131,9 +287,7 @@ change the plugin SDK.
   *Back* goes back to the value before, and the row of hints says so
   (`−`, `+`, *Keep*, *Cancel*). By touch, a slider's knob follows the
   finger and the value is kept where it is lifted; `−` and `+` change it
-  a step at once, as before. The reader's panel shows its sliders'
-  values, and gives them `−` and `+` alone where the screen is too
-  narrow for a track (the X4 Pro).
+  a step at once, as before.
 - SDK: sliders as a building block for any plugin (`ui::slider`:
   `Slider`, `SliderDrag`, `SliderFocus`, `SliderParts`, `SliderStep`,
   `SliderView`, `band`, `band_height`, `key_step`, `marked`, `parts`,
@@ -144,8 +298,7 @@ change the plugin SDK.
   takes the knob along in the slider's steps and lifting it chooses the
   value, with the buttons left and right move it a step; `shows` says
   whether a setting gets one here (a touch screen). Screen readers
-  hear it as `semantics::Role::Slider`. The panel's sliders (the
-  frontlight) are drawn with it and keep to their steps. The help texts
+  hear it as `semantics::Role::Slider`. The help texts
   of the margins and the word spacing say more plainly what they do, and
   a test checks that every slider shows its unit.
 - Screens draw without reading the card (PLANNING §12.3, B3). The X4

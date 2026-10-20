@@ -1161,6 +1161,7 @@ dependencies = [
  "paperpaw-digest",
  "paperpaw-fs",
  "paperpaw-graphics",
+ "paperpaw-http",
  "paperpaw-platform",
  "paperpaw-plugin-dictionary",
  "paperpaw-sdk",

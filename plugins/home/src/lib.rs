@@ -618,8 +618,7 @@ impl Screen for Dashboard {
         let setting = events::SETTING_CHANGED.read(event, params);
         if response != GridResponse::Ignored {
             self.respond(response, cx);
-        } else if layouts::shows_anew(event)
-            || (self.chooser.is_some() && setting.is_some())
+        } else if (self.chooser.is_some() && (layouts::shows_anew(event) || setting.is_some()))
             || setting
                 .as_ref()
                 .is_some_and(|changed| self.remakes(changed.id.as_str()))

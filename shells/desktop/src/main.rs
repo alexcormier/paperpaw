@@ -8,6 +8,7 @@ mod device;
 mod gui;
 mod headless;
 mod http;
+mod light;
 mod panel;
 mod profiles;
 mod trace;

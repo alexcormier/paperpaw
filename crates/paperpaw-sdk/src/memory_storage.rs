@@ -169,12 +169,17 @@ impl Storage for MemoryStorage {
     }
 }
 
-/// Reads a whole (small) file, refusing files larger than `limit` bytes.
+/// Reads a whole (small) file: [`StorageError::NotFound`] where there is
+/// none, [`StorageError::TooLarge`] for files larger than `limit` bytes,
+/// any other error where it could not be read. Before writing back a
+/// changed file, read it with
+/// [`files::load_for_update`](crate::files::load_for_update), which tells
+/// a missing file from one that could not be read.
 pub fn read_file(storage: &dyn Storage, path: &str, limit: usize) -> Result<Vec<u8>, StorageError> {
     let size = storage.size(path)?;
     let size = usize::try_from(size).unwrap_or(usize::MAX);
     if size > limit {
-        return Err(StorageError::Unsupported);
+        return Err(StorageError::TooLarge);
     }
     let mut data = alloc::vec![0; size];
     let mut filled = 0;
@@ -187,6 +192,39 @@ pub fn read_file(storage: &dyn Storage, path: &str, limit: usize) -> Result<Vec<
     }
     data.truncate(filled);
     Ok(data)
+}
+
+/// A storage whose files cannot be read, as on a failing card: what is
+/// there says [`StorageError::Io`] where it is read or its size asked
+/// for. For tests of what must not be written over.
+#[cfg(test)]
+pub(crate) struct Unreadable(pub MemoryStorage);
+
+#[cfg(test)]
+impl Storage for Unreadable {
+    fn read_at(&self, path: &str, _: u64, _: &mut [u8]) -> Result<usize, StorageError> {
+        self.size(path).map(|_| 0)
+    }
+
+    fn size(&self, path: &str) -> Result<u64, StorageError> {
+        self.0.size(path).and(Err(StorageError::Io))
+    }
+
+    fn write(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
+        self.0.write(path, data)
+    }
+
+    fn append(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
+        self.0.append(path, data)
+    }
+
+    fn list(&self, dir: &str, visit: &mut dyn FnMut(DirEntry<'_>)) -> Result<(), StorageError> {
+        self.0.list(dir, visit)
+    }
+
+    fn remove(&self, path: &str) -> Result<(), StorageError> {
+        self.0.remove(path)
+    }
 }
 
 #[cfg(test)]
@@ -208,7 +246,7 @@ mod tests {
         assert_eq!(read_file(&storage, "notes/n.txt", 10).unwrap(), b"abc");
         assert_eq!(
             read_file(&storage, "notes/n.txt", 2),
-            Err(StorageError::Unsupported)
+            Err(StorageError::TooLarge)
         );
 
         let mut entries = vec![];
