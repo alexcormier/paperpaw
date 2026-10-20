@@ -307,17 +307,18 @@ pub(crate) fn draw_line(
 /// there is no room.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Role {
-    /// Above the rest ("Next up"): whole or not at all, left out first.
+    /// Above the rest ("Next up"): shortened where it is wider, left out
+    /// first where it is too high.
     Caption,
     /// The book's title: smaller where it is wider, down to the body
-    /// size, then in two lines broken between words where there is room,
-    /// else shortened with "…".
+    /// size, then in a few lines broken between words where there is
+    /// room, else shortened with "…".
     Title,
     /// What the widget is there for (a page, a percentage): always
     /// shown, smaller down to the body size, then shortened.
     Main,
-    /// A detail (the author, the series): whole or not at all, left out
-    /// after the caption.
+    /// A detail (the author, the series): shortened where it is wider,
+    /// left out after the caption and the title's other lines.
     Note,
 }
 
@@ -333,16 +334,13 @@ pub(crate) struct Line<'t> {
 /// Lines of text, each with its size, colour and [`Role`], drawn one
 /// below the other together in the middle of an area, a little room
 /// between them. What does not fit gives way as its role says: no line
-/// breaks inside a word, a caption before a note before the title's
-/// second line.
+/// breaks inside a word, a caption before the title's other lines
+/// before a note.
 pub(crate) struct Lines<'t> {
     pub lines: Vec<Line<'t>>,
     /// The title as given, its size and the lines it shows in, while it
     /// shows in more than one.
     title: Option<(f32, Cow<'t, str>, usize)>,
-    /// The title is left out where it would be shortened to a few
-    /// letters ([`title_may_go`](Self::title_may_go)).
-    title_may_go: bool,
 }
 
 impl<'t> Lines<'t> {
@@ -350,15 +348,7 @@ impl<'t> Lines<'t> {
         Self {
             lines: Vec::new(),
             title: None,
-            title_may_go: false,
         }
-    }
-
-    /// Leaves the title out where it would be shortened to a few
-    /// letters: where it says little next to what matters more (a ring).
-    pub(crate) fn title_may_go(mut self) -> Self {
-        self.title_may_go = true;
-        self
     }
 
     /// Adds a line, if it says anything.
@@ -395,13 +385,13 @@ impl<'t> Lines<'t> {
         UiStyle::new(env).gap as u16 / 4
     }
 
-    /// Makes them fit `width` × `height`: each line on one line (captions
-    /// and notes whole or left out, the title and main lines smaller down
-    /// to the body size), a title still too wide in two lines where they
-    /// fit, else shortened; then, while they are too high, the caption
-    /// left out, the notes from the last, the title's second line, the
-    /// main lines from the last. The title and the first line stay. Made
-    /// again with the same room, nothing changes.
+    /// Makes them fit `width` × `height`: each line on one line, smaller
+    /// down to the body size where it is wider, a title still too wide in
+    /// a few lines broken between words where they fit with the rest,
+    /// else shortened with "…"; then, while they are too high, the
+    /// caption left out, the title back in one line, the notes from the
+    /// last, the main lines from the last. The title and the first line
+    /// stay. Made again with the same room, nothing changes.
     pub(crate) fn fit(&mut self, env: &Env<'_>, width: u16, height: u16) {
         let style = UiStyle::new(env);
         let Some(font) = style.font(env) else {
@@ -409,12 +399,9 @@ impl<'t> Lines<'t> {
         };
         let room = f32::from(width);
         let fits = |size: f32, text: &str| font.measure(size, text) <= room;
-        let keeps = |role: Role| matches!(role, Role::Title | Role::Main);
-        self.lines
-            .retain(|l| keeps(l.role) || fits(l.size, &l.text));
         let mut two = None;
         for (i, line) in self.lines.iter_mut().enumerate() {
-            if !keeps(line.role) || fits(line.size, &line.text) {
+            if fits(line.size, &line.text) {
                 continue;
             }
             let least = line.size.min(style.text);
@@ -428,13 +415,6 @@ impl<'t> Lines<'t> {
                 line.size = least;
             }
         }
-        if self.title_may_go {
-            self.lines.retain(|l| {
-                l.role != Role::Title || !l.text.ends_with('…') || {
-                    shown_letters(&l.text) >= LEAST_LETTERS
-                }
-            });
-        }
         if let Some(i) = two {
             let (size, text, color) = {
                 let line = &self.lines[i];
@@ -442,11 +422,11 @@ impl<'t> Lines<'t> {
             };
             let least = size.min(style.text);
             // In lines broken between words, where they fit with the main
-            // lines (the caption and the notes give way to them).
+            // lines and the notes (the caption gives way to them).
             let others: u16 = self
                 .lines
                 .iter()
-                .filter(|l| l.role == Role::Main)
+                .filter(|l| matches!(l.role, Role::Main | Role::Note))
                 .map(|l| line_height(env, l.size) + Self::gap(env))
                 .sum();
             let free = height.saturating_sub(others);
@@ -457,10 +437,20 @@ impl<'t> Lines<'t> {
                 (lines.len() > 1).then_some(lines)
             };
             // As few lines as can be, then as large as can be.
-            let split = (2..=MOST_TITLE_LINES).find_map(|most| {
-                widgets::largest_size(size, least, |s| wrap(s, most).is_some())
-                    .and_then(|s| wrap(s, most).map(|lines| (s, lines)))
-            });
+            let split = (2..=MOST_TITLE_LINES)
+                .find_map(|most| {
+                    widgets::largest_size(size, least, |s| wrap(s, most).is_some())
+                        .and_then(|s| wrap(s, most).map(|lines| (s, lines)))
+                })
+                .or_else(|| {
+                    // Not whole in any: in lines up to the word it has
+                    // to shorten, where that shows more than one line.
+                    let line = line_height(env, least) + Self::gap(env);
+                    let rows = usize::from((free + Self::gap(env)) / line.max(1));
+                    let rows = rows.min(MOST_TITLE_LINES);
+                    let lines = cut_lines(&font, least, &text, width, rows);
+                    (lines.len() > 1).then_some((least, lines))
+                });
             match split {
                 Some((s, lines)) => {
                     let count = lines.len();
@@ -476,21 +466,14 @@ impl<'t> Lines<'t> {
                     self.title = Some((size, text, count));
                 }
                 None => {
-                    let short = ui::fit(&font, least, &text, room);
-                    if self.title_may_go && shown_letters(&short) < LEAST_LETTERS {
-                        self.lines.remove(i);
-                    } else {
-                        let line = &mut self.lines[i];
-                        line.text = Cow::Owned(short);
-                        line.size = least;
-                    }
+                    let line = &mut self.lines[i];
+                    line.text = Cow::Owned(ui::fit(&font, least, &text, room));
+                    line.size = least;
                 }
             }
         }
         while self.lines.len() > 1 && self.height(env) > height {
             if let Some(i) = self.lines.iter().position(|l| l.role == Role::Caption) {
-                self.lines.remove(i);
-            } else if let Some(i) = self.lines.iter().rposition(|l| l.role == Role::Note) {
                 self.lines.remove(i);
             } else if let Some((size, text, count)) = self.title.take() {
                 // The title back in one line, shortened.
@@ -501,6 +484,8 @@ impl<'t> Lines<'t> {
                     line.text = Cow::Owned(ui::fit(&font, least, &text, room));
                     line.size = least;
                 }
+            } else if let Some(i) = self.lines.iter().rposition(|l| l.role == Role::Note) {
+                self.lines.remove(i);
             } else if let Some(i) = self
                 .lines
                 .iter()
@@ -544,10 +529,6 @@ impl<'t> Lines<'t> {
     }
 }
 
-/// Titles shortened to fewer letters than this say too little to show
-/// ([`Lines::title_may_go`]).
-const LEAST_LETTERS: usize = 8;
-
 /// The most lines a title is broken into.
 const MOST_TITLE_LINES: usize = 4;
 
@@ -577,7 +558,7 @@ pub(crate) fn wrap_words(
     if let Some((head, tail)) = two_lines(font, size, text, width) {
         return alloc::vec![head, tail];
     }
-    let lines = title_lines(font, size, text, width, most, false);
+    let lines = title_lines(font, size, text, width, most);
     // Whole only: every word there, none shortened.
     let words = |text: &str| text.split_whitespace().count();
     let shown: usize = lines.iter().map(|l| words(l)).sum();
@@ -585,6 +566,31 @@ pub(crate) fn wrap_words(
         lines
     } else {
         one()
+    }
+}
+
+/// `text` in at most `most` lines `width` wide at `size` where it does
+/// not fit them whole: broken between words up to the word it has to
+/// shorten ("Alice's / Adventu…"), where that shows more of it than one
+/// line shortened; else that one line.
+pub(crate) fn cut_lines(
+    font: &FontHandle<'_>,
+    size: f32,
+    text: &str,
+    width: u16,
+    most: usize,
+) -> Vec<String> {
+    let room = f32::from(width);
+    let one = ui::fit(font, size, text, room);
+    if most < 2 {
+        return alloc::vec![one];
+    }
+    let lines = title_lines(font, size, text, room, most);
+    let letters = |lines: &[String]| lines.iter().map(|l| shown_letters(l)).sum::<usize>();
+    if lines.len() > 1 && letters(&lines) > shown_letters(&one) {
+        lines
+    } else {
+        alloc::vec![one]
     }
 }
 
@@ -611,15 +617,6 @@ pub(crate) fn two_lines(
         .filter(|(_, widest)| *widest <= width)
         .min_by(|a, b| a.1.total_cmp(&b.1))
         .map(|(at, _)| (String::from(head(at)), String::from(tail(at))))
-}
-
-/// Whether a caption `text` fits `width` whole: shown whole or not at
-/// all.
-pub(crate) fn caption_fits(env: &Env<'_>, text: &str, width: u16) -> bool {
-    let style = UiStyle::new(env);
-    style
-        .font(env)
-        .is_none_or(|font| font.measure(style.small, text) <= f32::from(width))
 }
 
 /// The least width of a cover, so that one is still told from another:
@@ -712,17 +709,16 @@ fn draw_placeholder(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, at: Rec
         at.width.saturating_sub(2 * pad),
         at.height.saturating_sub(2 * pad),
     );
-    let size = style.small;
-    // Room for a few letters a line, else a frame alone.
-    if f32::from(inner.width) < size * 2.5 || inner.height < 8 {
+    if inner.width < 8 || inner.height < 8 {
         return;
     }
+    let size = style.small.min(f32::from(inner.width) / 3.0);
     let Some(font) = style.font(env) else {
         return;
     };
     let line = line_height(env, size).max(1);
     let fits = usize::from(inner.height / line);
-    let lines = title_lines(&font, size, title, f32::from(inner.width), fits, false);
+    let lines = cover_lines(&font, size, title, f32::from(inner.width), fits);
     for (n, text) in lines.iter().enumerate() {
         let row = Rect::new(inner.x, inner.y + n as u16 * line, inner.width, line);
         ui::draw_label(canvas, &font, size, f32::from(inner.x), row, text, look.ink);
@@ -732,15 +728,13 @@ fn draw_placeholder(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, at: Rec
 /// `title` in at most `most` lines `width` pixels wide at `size`, broken
 /// between words: a word too long for a line alone is shortened with
 /// "…" and ends it (one cut to a letter or two is left out), as does the
-/// last line where there is more (with `more`, also where none of the
-/// next word would show: "…" alone after it).
+/// last line where there is more.
 pub(crate) fn title_lines(
     font: &FontHandle<'_>,
     size: f32,
     title: &str,
     width: f32,
     most: usize,
-    more: bool,
 ) -> Vec<String> {
     let mut lines: Vec<String> = Vec::new();
     let fits = |text: &str| font.measure(size, text) <= width;
@@ -757,11 +751,11 @@ pub(crate) fn title_lines(
             // where that leaves a few letters of the word.
             if let Some(last) = lines.last_mut() {
                 let cut = ui::fit(font, size, &format!("{last} {word}"), width);
-                if shown_letters(&cut) > last.chars().count() + 3 {
-                    *last = cut;
-                } else if more {
-                    *last = ui::fit(font, size, &format!("{last} …"), width);
-                }
+                *last = if shown_letters(&cut) > last.chars().count() + 3 {
+                    cut
+                } else {
+                    ui::fit(font, size, &format!("{last} …"), width)
+                };
             }
             break;
         }
@@ -773,6 +767,44 @@ pub(crate) fn title_lines(
             break;
         }
         lines.push(String::from(word));
+    }
+    lines
+}
+
+/// `title` in at most `most` lines `width` pixels wide at `size` on a
+/// cover without a picture: broken between words, a word too long for a
+/// line shortened with "…" on a line of its own, the last line ending
+/// in "…" where there is more and room for it.
+fn cover_lines(
+    font: &FontHandle<'_>,
+    size: f32,
+    title: &str,
+    width: f32,
+    most: usize,
+) -> Vec<String> {
+    let mut lines: Vec<String> = Vec::new();
+    let fits = |text: &str| font.measure(size, text) <= width;
+    let mut cut = false;
+    for word in title.split_whitespace() {
+        if let Some(last) = lines.last_mut().filter(|l| !l.ends_with('…')) {
+            let joined = format!("{last} {word}");
+            if fits(&joined) {
+                *last = joined;
+                continue;
+            }
+        }
+        if lines.len() == most {
+            cut = true;
+            break;
+        }
+        lines.push(ui::fit(font, size, word, width));
+    }
+    if let Some(last) = lines.last_mut().filter(|l| cut && !l.ends_with('…')) {
+        // A "…" where it fits beside the last word, never in its stead.
+        let more = format!("{last} …");
+        if fits(&more) {
+            *last = more;
+        }
     }
     lines
 }

@@ -411,9 +411,16 @@ pub(crate) fn chapter_left_text(
             .is_none_or(|font| font.measure(size, text) <= f32::from(width))
     };
     if left == 0 {
+        // The long way, else a short one that still says "chapter", else
+        // the long way to be broken in lines.
         let last = env.i18n.tr("widgets.reading.chapter-last");
         let short = env.i18n.tr("widgets.reading.chapter-last-short");
-        return Some(if fits(last) { last } else { short }.to_string());
+        let shown = if !fits(last) && fits(short) {
+            short
+        } else {
+            last
+        };
+        return Some(shown.to_string());
     }
     let count = i64::from(left);
     let long = env.i18n.plural("widgets.reading.chapter-left", count, &[]);
@@ -509,37 +516,23 @@ fn draw(
     let left = position.left().filter(|_| timed).map(|s| left_text(env, s));
     let font = style.font(env);
     let width = f32::from(rest.width);
-    // What must be whole to show (a caption, a note) fits the width.
+    // Whether a small line fits the width whole.
     let whole = |text: &str| {
         font.as_ref()
             .is_none_or(|font| font.measure(style.small, text) <= width)
     };
     let caption_text = env.i18n.tr("widgets.reading.caption");
-    // The chapter on a line, or in a few broken between words.
-    let chapter_whole = font.as_ref().is_none_or(|font| {
-        whole(&position.chapter)
-            || super::wrap_words(font, style.small, &position.chapter, rest.width, 3).len() > 1
-    });
-    let chapter_left = chapter_left_text(env, position, timed, true, style.small, rest.width);
     let mut parts: Vec<Part> = [
-        (Part::Caption, "caption", whole(caption_text)),
-        (
-            Part::Author,
-            "author",
-            !book.author.is_empty() && whole(&book.author),
-        ),
+        (Part::Caption, "caption", true),
+        (Part::Author, "author", !book.author.is_empty()),
         (Part::Bar, "bar", true),
         (Part::Pages, "pages", true),
-        (Part::Left, "left", left.as_deref().is_some_and(whole)),
-        (
-            Part::Chapter,
-            "chapter",
-            !position.chapter.is_empty() && chapter_whole,
-        ),
+        (Part::Left, "left", left.is_some()),
+        (Part::Chapter, "chapter", !position.chapter.is_empty()),
         (
             Part::ChapterLeft,
             "chapter-left",
-            chapter_left.as_deref().is_some_and(whole),
+            position.chapter_left.is_some(),
         ),
     ]
     .into_iter()
@@ -582,34 +575,111 @@ fn draw(
         }
         parts.retain(|p| *p != drop);
     }
-    // Room to spare: a long title in more lines, then a long chapter,
-    // each broken between words only (else on one line, shortened; the
-    // chapter left out).
+    // Room to spare: a long title in more lines, then a long chapter and
+    // what is left of it, each broken between words only (else on one
+    // line, shortened).
     let mut total = height(&parts);
-    let mut wrapped = |size: f32, text: &str| -> Vec<String> {
+    // In more lines where there is room: whole words, else (with `cut`)
+    // up to the word that has to be shortened; else one line.
+    let wrapped = |total: &mut u16, size: f32, text: &str, cut: bool| -> Vec<String> {
         let line = widgets::line_height(env, size) + line_gap;
-        let more = usize::from(rest.height.saturating_sub(total) / line);
+        let more = usize::from(rest.height.saturating_sub(*total) / line);
         let lines = match font.as_ref() {
-            Some(font) if more > 0 => super::wrap_words(font, size, text, rest.width, more + 1),
+            Some(font) if more > 0 => {
+                let lines = super::wrap_words(font, size, text, rest.width, more + 1);
+                if lines.len() == 1 && cut && font.measure(size, text) > width {
+                    super::cut_lines(font, size, text, rest.width, more + 1)
+                } else {
+                    lines
+                }
+            }
             _ => alloc::vec![String::from(text)],
         };
-        total += line * (lines.len() as u16 - 1);
+        *total += line * (lines.len() as u16 - 1);
         lines
     };
-    let title = wrapped(title_size, &book.title);
-    let chapter = if parts.contains(&Part::Chapter) {
-        wrapped(style.small, &position.chapter)
+    let title = wrapped(&mut total, title_size, &book.title, true);
+    // The page and the percentage: on a line, the percentage below the
+    // page (in lines broken between words where it needs them), as
+    // "5/395 · 2 %", as "5/395"; else shortened.
+    let pages = if parts.contains(&Part::Pages) {
+        let full = where_text(env, book, position);
+        let percent = percent_text(env, book.percent());
+        let counted = match (position.page, position.pages) {
+            (Some(page), Some(pages)) if pages > 0 => Some((page, pages)),
+            _ => None,
+        };
+        let mut lines = alloc::vec![full.clone()];
+        if !whole(&full) {
+            let line = small + line_gap;
+            let more = usize::from(rest.height.saturating_sub(total) / line);
+            let page = counted.map(|(page, pages)| {
+                env.i18n.format(
+                    "widgets.reading.page",
+                    &[
+                        ("page", Arg::Int(i64::from(page))),
+                        ("pages", Arg::Int(i64::from(pages))),
+                    ],
+                )
+            });
+            let broken = match (&page, font.as_ref()) {
+                (Some(page), Some(font)) if more > 0 && whole(&percent) => {
+                    let mut broken = super::wrap_words(font, style.small, page, rest.width, more);
+                    broken.push(percent.clone());
+                    let fits = broken.len() <= more + 1 && broken.iter().all(|l| whole(l));
+                    fits.then_some(broken)
+                }
+                _ => None,
+            };
+            lines = match (broken, counted) {
+                (Some(broken), _) => broken,
+                (None, Some((page, pages))) => {
+                    let short = format!("{page}/{pages} · {percent}");
+                    let shorter = format!("{page}/{pages}");
+                    if whole(&short) {
+                        alloc::vec![short]
+                    } else if whole(&shorter) {
+                        alloc::vec![shorter]
+                    } else {
+                        lines
+                    }
+                }
+                (None, None) => lines,
+            };
+            total += line * (lines.len() as u16 - 1);
+        }
+        lines
     } else {
         Vec::new()
     };
-    let chapter = if chapter.len() == 1 && !whole(&chapter[0]) {
-        // Without the chapter, as if it were not there.
-        let before = height(&parts);
-        parts.retain(|p| *p != Part::Chapter);
-        total -= before - height(&parts);
-        Vec::new()
+    let chapter = if parts.contains(&Part::Chapter) {
+        wrapped(&mut total, style.small, &position.chapter, true)
     } else {
-        chapter
+        Vec::new()
+    };
+    let titled = parts.contains(&Part::Chapter);
+    let chapter_left = if parts.contains(&Part::ChapterLeft) {
+        // The long way on a line or in a few, else a short way that fits.
+        let last = position.chapter_left == Some(0);
+        let long = if last {
+            Some(env.i18n.tr("widgets.reading.chapter-last").to_string())
+        } else {
+            chapter_left_text(env, position, timed, titled, style.small, rest.width)
+        };
+        let long = long.unwrap_or_default();
+        if whole(&long) {
+            alloc::vec![long]
+        } else {
+            let lines = wrapped(&mut total, style.small, &long, false);
+            let short = chapter_left_text(env, position, timed, titled, style.small, rest.width);
+            match short {
+                _ if lines.len() > 1 => lines,
+                Some(short) if whole(&short) => alloc::vec![short],
+                _ => lines,
+            }
+        }
+    } else {
+        Vec::new()
     };
     let has = |part: Part| parts.contains(&part);
     let total = total.min(rest.height);
@@ -634,16 +704,8 @@ fn draw(
         y += bar_h + gap;
     }
     let mut place = Lines::new();
-    if has(Part::Pages) {
-        // The page and the percentage, or the percentage alone where
-        // both do not fit.
-        let full = where_text(env, book, position);
-        let text = if whole(&full) {
-            full
-        } else {
-            percent_text(env, book.percent())
-        };
-        place.add(Role::Main, style.small, text, look.ink);
+    for line in pages {
+        place.add(Role::Main, style.small, line, look.ink);
     }
     if let (true, Some(left)) = (has(Part::Left), left) {
         place.add(Role::Note, style.small, left, look.faint);
@@ -652,15 +714,8 @@ fn draw(
     for line in chapter {
         chapter_lines.add(Role::Main, style.small, line, look.ink);
     }
-    if has(Part::ChapterLeft) {
-        let titled = has(Part::Chapter);
-        let left = chapter_left_text(env, position, timed, titled, style.small, rest.width);
-        chapter_lines.add(
-            Role::Main,
-            style.small,
-            left.unwrap_or_default(),
-            look.faint,
-        );
+    for line in chapter_left {
+        chapter_lines.add(Role::Main, style.small, line, look.faint);
     }
     y += line_gap;
     for (i, mut lines) in [place, chapter_lines].into_iter().enumerate() {

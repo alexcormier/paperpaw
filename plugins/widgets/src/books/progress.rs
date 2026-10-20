@@ -325,7 +325,7 @@ fn draw_percent_beside(
 /// The title and the author, as far as shown.
 fn texts<'b>(env: &Env<'_>, look: &Look, book: &'b Book) -> Lines<'b> {
     let style = UiStyle::new(env);
-    let mut lines = Lines::new().title_may_go();
+    let mut lines = Lines::new();
     if widgets::shows(env, WIDGET, "title") {
         lines.add(
             Role::Title,
@@ -368,20 +368,32 @@ fn ring_layout(env: &Env<'_>, area: Rect, lines: &mut Lines<'_>) -> RingLayout {
             };
         }
     }
-    lines.fit(env, area.width, area.height / 2);
-    let text_h = lines.height(env);
-    let below = text_h + gap / 2;
-    let d = area.width.min(area.height.saturating_sub(below));
     // Below the ring where it is as wide as the place (the text keeps the
-    // rest of the height) or half as high.
-    if (d >= area.height / 2 || d >= area.width) && d > 0 && !lines.is_empty() {
-        let top = area.y + (area.height - (d + below).min(area.height)) / 2;
-        let ring = Rect::new(place_x(area, d, align), top, d, d);
-        let text = Rect::new(area.x, top + d + gap / 2, area.width, text_h);
-        return RingLayout {
-            ring,
-            text: Some((text, false)),
+    // rest of the height) or half as high: the text in half the height,
+    // else in one line.
+    for budget in [area.height / 2, 0] {
+        let budget = if budget > 0 {
+            budget
+        } else {
+            let first = lines.lines.iter().find(|l| l.role == Role::Title);
+            match first.or(lines.lines.first()) {
+                Some(line) => widgets::line_height(env, line.size.min(style.text)),
+                None => break,
+            }
         };
+        lines.fit(env, area.width, budget);
+        let text_h = lines.height(env);
+        let below = text_h + gap / 2;
+        let d = area.width.min(area.height.saturating_sub(below));
+        if (d >= area.height / 2 || d >= area.width) && d > 0 && !lines.is_empty() {
+            let top = area.y + (area.height - (d + below).min(area.height)) / 2;
+            let ring = Rect::new(place_x(area, d, align), top, d, d);
+            let text = Rect::new(area.x, top + d + gap / 2, area.width, text_h);
+            return RingLayout {
+                ring,
+                text: Some((text, false)),
+            };
+        }
     }
     let d = area.width.min(area.height);
     let ring = Rect::new(
@@ -460,7 +472,7 @@ fn ring_inner(env: &Env<'_>, at: Rect) -> u32 {
 /// (where there is room for one line, that one), the title, the author.
 fn round_lines<'b>(env: &Env<'b>, look: &Look, book: &'b Book) -> Lines<'b> {
     let style = UiStyle::new(env);
-    let mut lines = Lines::new().title_may_go();
+    let mut lines = Lines::new();
     lines.add(
         Role::Main,
         style.small,

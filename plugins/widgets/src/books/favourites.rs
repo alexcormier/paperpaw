@@ -101,7 +101,9 @@ impl Favourites {
             0
         };
         let align = widgets::align(env, WIDGET);
-        shelf::places(env, area, self.books.len(), Self::grid(env), label, align)
+        let mut places = shelf::places(env, area, self.books.len(), Self::grid(env), label, align);
+        shelf::pack(env, &mut places, &self.books, area, align);
+        places
     }
 
     /// The covers shown, made small for where they go.
@@ -119,7 +121,6 @@ impl Favourites {
     fn content(env: &Env<'_>, look: &Look) -> Rect {
         if widgets::shows(env, WIDGET, "caption")
             && look.area.height >= 3 * widgets::caption_height(env)
-            && super::caption_fits(env, env.i18n.tr("widgets.favourites"), look.area.width)
         {
             super::below(look.area, widgets::caption_height(env))
         } else {
