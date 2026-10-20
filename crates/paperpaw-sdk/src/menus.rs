@@ -169,6 +169,8 @@ impl Menus {
     }
 
     /// Releases unused capacity once registration is complete.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn shrink_to_fit(&mut self) {
         self.entries.shrink_to_fit();
         self.custom.shrink_to_fit();
@@ -182,11 +184,15 @@ impl Menus {
     }
 
     /// What the device can do, for entries with a [`MenuNeed`].
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn set_capabilities(&mut self, caps: crate::Capabilities) {
         self.caps = caps;
     }
 
     /// Offers `item` only where `need` is met.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn set_need(&mut self, item: Id, need: MenuNeed) {
         self.needs.insert(item, need);
     }
@@ -225,16 +231,22 @@ impl Menus {
         }
     }
 
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn add(&mut self, entry: MenuEntry) {
         self.entries.push(entry);
     }
 
     /// Replaces a menu's entries with exactly `actions`, in this order.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn customize(&mut self, menu: Id, actions: Vec<Id>) {
         self.custom.insert(menu, actions);
     }
 
     /// Returns a menu to the entries plugins contribute.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn reset(&mut self, menu: &str) {
         self.custom.remove(menu);
     }
@@ -282,6 +294,8 @@ impl Menus {
     }
 
     /// Registers the label of an action or setting.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn set_title(&mut self, item: Id, title: Cow<'static, str>) {
         self.titles.insert(item, title);
     }
@@ -294,6 +308,8 @@ impl Menus {
 
     /// Gives an action or setting an icon (by name; see
     /// [`icons`](crate::icons)), wherever it is shown.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn set_icon(&mut self, item: Id, icon: Cow<'static, str>) {
         self.icons.insert(item, icon);
     }
@@ -304,6 +320,8 @@ impl Menus {
     }
 
     /// Adds a heading to a menu.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn add_section(&mut self, section: MenuSection) {
         self.titles.insert(section.id.clone(), section.title);
         self.sections.push(section.id.clone());

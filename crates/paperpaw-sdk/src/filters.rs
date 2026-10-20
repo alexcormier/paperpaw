@@ -83,10 +83,14 @@ impl TextFilters {
         Self::default()
     }
 
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn add(&mut self, filter: TextFilterSpec) {
         self.filters.push(filter);
     }
 
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn shrink_to_fit(&mut self) {
         self.filters.shrink_to_fit();
     }
@@ -181,10 +185,14 @@ impl InputFilters {
         Self::default()
     }
 
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn add(&mut self, filter: InputFilterSpec) {
         self.filters.push(filter);
     }
 
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn shrink_to_fit(&mut self) {
         self.filters.shrink_to_fit();
     }
@@ -275,10 +283,14 @@ impl RefreshFilters {
         Self::default()
     }
 
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn add(&mut self, filter: RefreshFilterSpec) {
         self.filters.push(filter);
     }
 
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn shrink_to_fit(&mut self) {
         self.filters.shrink_to_fit();
     }

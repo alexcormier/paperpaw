@@ -35,6 +35,14 @@ pub fn icon_width(env: &Env<'_>, name: &str, size: f32) -> f32 {
     icon(env, name).map_or(0.0, |(font, ch)| font.advance(size, ch))
 }
 
+/// Where icon `name`'s ink begins and ends across at `size`, from where it
+/// is drawn (see [`FontHandle::ink_across`]); `None` without a drawing.
+pub fn icon_ink(env: &Env<'_>, name: &str, size: f32) -> Option<(i32, i32)> {
+    let (font, ch) = icon(env, name)?;
+    let mut text = [0u8; 4];
+    font.ink_across(size, ch.encode_utf8(&mut text))
+}
+
 /// The icon font and the character of icon `name`, where it has a drawing
 /// (its own, or an icon pack's).
 pub(super) fn icon<'f>(env: &Env<'f>, name: &str) -> Option<(FontHandle<'f>, char)> {
@@ -168,7 +176,12 @@ pub fn draw_row_icon(
 ) -> Rect {
     if let Some(icon) = icon.filter(|_| room > 0) {
         let size = style.text * ICON_SCALE;
-        let x = f32::from(rect.x) + style.margin as f32;
+        // Centred by its ink in a column as wide as the icons are high:
+        // icons drawn with more room on one side line up with the others.
+        let column = f32::from(rect.x) + style.margin as f32;
+        let x = icon_ink(env, icon, size).map_or(column, |(left, right)| {
+            column + (size - (right - left) as f32) / 2.0 - left as f32
+        });
         draw_icon(canvas, env, icon, size, x, rect, ink);
     }
     Rect::new(

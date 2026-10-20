@@ -31,6 +31,8 @@ paperpaw-qr.workspace = true
 paperpaw-native.workspace = true
 
 [dev-dependencies]
+# The tests build environments as the kernel does.
+paperpaw-sdk = { path = ".", features = ["kernel"] }
 proptest.workspace = true
 # Scalable fonts in tests that draw text (the UI font of fonts-default).
 paperpaw-text = { workspace = true, features = ["outline"] }
@@ -40,8 +42,17 @@ default = []
 # Building blocks still changing before 1.0 (`layout`, `zip`): a plugin
 # that uses them names this feature and follows their changes.
 unstable = []
+# What only the kernel and the shells do: registering, setting, binding
+# (ADR 0020). Off for plugins, which get these only to read through
+# `Env`.
+kernel = []
 # Scalable OpenType/TrueType fonts (see paperpaw-text).
 outline = ["paperpaw-text/outline"]
 
 [lints]
 workspace = true
+
+[package.metadata.docs.rs]
+# The kernel's part shown too, marked as needing the `kernel` feature.
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

@@ -68,6 +68,8 @@ impl Default for PluginUsage {
 
 impl Usage {
     /// Counts a refresh of `area` in `mode`.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn refreshed(&mut self, mode: RefreshMode, area: Rect) {
         let index = match mode {
             RefreshMode::Fast => 0,

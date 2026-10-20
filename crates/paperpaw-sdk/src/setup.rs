@@ -98,11 +98,15 @@ impl SetupSteps {
     }
 
     /// Adds a step in its place.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn add(&mut self, step: SetupStepSpec) {
         let at = self.steps.partition_point(|s| s.order <= step.order);
         self.steps.insert(at, step);
     }
 
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn shrink_to_fit(&mut self) {
         self.steps.shrink_to_fit();
     }

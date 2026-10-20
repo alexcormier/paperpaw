@@ -162,12 +162,16 @@ impl Formats {
 
     /// Whether documents open with colour pictures, for colour screens
     /// (set by the kernel from the device).
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn set_color(&mut self, on: bool) {
         self.color = on;
     }
 
     /// The screen's size for pictures: they are decoded no larger than it
     /// shows them, upright or turned (set by the kernel from the device).
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn set_image_fit(&mut self, fit: Fit) {
         self.image_fit = Some(fit);
     }
@@ -185,12 +189,16 @@ impl Formats {
     }
 
     /// Releases unused capacity once registration is complete.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn shrink_to_fit(&mut self) {
         self.specs.shrink_to_fit();
     }
 
     /// Registers a format. Later registrations win for shared extensions,
     /// so a plugin can replace a built-in format.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn add(&mut self, spec: FormatSpec) -> Result<(), RegisterError> {
         if self.specs.iter().any(|s| s.id == spec.id) {
             return Err(RegisterError::Duplicate { id: spec.id });

@@ -754,12 +754,10 @@ impl core::fmt::Debug for paperpaw_sdk::decorations::DecoratorSpec
 pub fn paperpaw_sdk::decorations::DecoratorSpec::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct paperpaw_sdk::decorations::Decorators
 impl paperpaw_sdk::decorations::Decorators
-pub fn paperpaw_sdk::decorations::Decorators::add(&mut self, paperpaw_sdk::decorations::DecoratorSpec)
 pub fn paperpaw_sdk::decorations::Decorators::decorate(&self, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::decorations::PageText<'_>) -> alloc::vec::Vec<paperpaw_sdk::decorations::Mark>
 pub fn paperpaw_sdk::decorations::Decorators::get(&self, &paperpaw_sdk::Id) -> core::option::Option<&paperpaw_sdk::decorations::DecoratorSpec>
 pub fn paperpaw_sdk::decorations::Decorators::is_empty(&self) -> bool
 pub fn paperpaw_sdk::decorations::Decorators::new() -> Self
-pub fn paperpaw_sdk::decorations::Decorators::shrink_to_fit(&mut self)
 pub fn paperpaw_sdk::decorations::Decorators::signature(&self, &paperpaw_sdk::Env<'_>) -> u64
 pub struct paperpaw_sdk::decorations::Mark
 pub paperpaw_sdk::decorations::Mark::decorator: paperpaw_sdk::Id
@@ -1010,10 +1008,8 @@ impl core::fmt::Debug for paperpaw_sdk::filters::InputFilterSpec
 pub fn paperpaw_sdk::filters::InputFilterSpec::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct paperpaw_sdk::filters::InputFilters
 impl paperpaw_sdk::filters::InputFilters
-pub fn paperpaw_sdk::filters::InputFilters::add(&mut self, paperpaw_sdk::filters::InputFilterSpec)
 pub fn paperpaw_sdk::filters::InputFilters::apply(&self, &paperpaw_sdk::Env<'_>, &paperpaw_platform::input::InputEvent) -> paperpaw_sdk::filters::InputVerdict
 pub fn paperpaw_sdk::filters::InputFilters::new() -> Self
-pub fn paperpaw_sdk::filters::InputFilters::shrink_to_fit(&mut self)
 #[non_exhaustive] pub struct paperpaw_sdk::filters::Refresh
 pub paperpaw_sdk::filters::Refresh::mode: paperpaw_platform::display::RefreshMode
 pub paperpaw_sdk::filters::Refresh::region: paperpaw_platform::geometry::Rect
@@ -1030,10 +1026,8 @@ impl core::fmt::Debug for paperpaw_sdk::filters::RefreshFilterSpec
 pub fn paperpaw_sdk::filters::RefreshFilterSpec::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct paperpaw_sdk::filters::RefreshFilters
 impl paperpaw_sdk::filters::RefreshFilters
-pub fn paperpaw_sdk::filters::RefreshFilters::add(&mut self, paperpaw_sdk::filters::RefreshFilterSpec)
 pub fn paperpaw_sdk::filters::RefreshFilters::apply(&self, &paperpaw_sdk::Env<'_>, paperpaw_sdk::filters::Refresh, paperpaw_platform::geometry::Rect) -> paperpaw_sdk::filters::Refresh
 pub fn paperpaw_sdk::filters::RefreshFilters::new() -> Self
-pub fn paperpaw_sdk::filters::RefreshFilters::shrink_to_fit(&mut self)
 #[non_exhaustive] pub struct paperpaw_sdk::filters::TextFilterSpec
 pub paperpaw_sdk::filters::TextFilterSpec::filter: paperpaw_sdk::filters::TextFilterFn
 pub paperpaw_sdk::filters::TextFilterSpec::id: paperpaw_sdk::Id
@@ -1045,10 +1039,8 @@ impl core::fmt::Debug for paperpaw_sdk::filters::TextFilterSpec
 pub fn paperpaw_sdk::filters::TextFilterSpec::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct paperpaw_sdk::filters::TextFilters
 impl paperpaw_sdk::filters::TextFilters
-pub fn paperpaw_sdk::filters::TextFilters::add(&mut self, paperpaw_sdk::filters::TextFilterSpec)
 pub fn paperpaw_sdk::filters::TextFilters::apply(&self, &paperpaw_sdk::Env<'_>, &mut paperpaw_document::Block)
 pub fn paperpaw_sdk::filters::TextFilters::new() -> Self
-pub fn paperpaw_sdk::filters::TextFilters::shrink_to_fit(&mut self)
 pub fn paperpaw_sdk::filters::TextFilters::signature(&self, &paperpaw_sdk::Env<'_>) -> alloc::string::String
 pub type paperpaw_sdk::filters::InputFilterFn = alloc::boxed::Box<dyn core::ops::function::Fn(&paperpaw_sdk::Env<'_>, &paperpaw_platform::input::InputEvent) -> paperpaw_sdk::filters::InputVerdict>
 pub type paperpaw_sdk::filters::RefreshFilterFn = alloc::boxed::Box<dyn core::ops::function::Fn(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::filters::Refresh) -> core::option::Option<paperpaw_platform::display::RefreshMode>>
@@ -1658,7 +1650,6 @@ impl core::fmt::Debug for paperpaw_sdk::secrets::SecretChange
 pub fn paperpaw_sdk::secrets::SecretChange::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct paperpaw_sdk::secrets::Secrets
 impl paperpaw_sdk::secrets::Secrets
-pub fn paperpaw_sdk::secrets::Secrets::apply(&mut self, paperpaw_sdk::secrets::SecretChange)
 pub fn paperpaw_sdk::secrets::Secrets::decode(&str) -> Self
 pub fn paperpaw_sdk::secrets::Secrets::encode(&self) -> alloc::string::String
 pub fn paperpaw_sdk::secrets::Secrets::get(&self, &str) -> core::option::Option<&str>
@@ -1697,14 +1688,10 @@ impl core::fmt::Debug for paperpaw_sdk::services::Service
 pub fn paperpaw_sdk::services::Service::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct paperpaw_sdk::services::Services
 impl paperpaw_sdk::services::Services
-pub fn paperpaw_sdk::services::Services::add(&mut self, paperpaw_sdk::Id, alloc::boxed::Box<dyn core::any::Any>)
-pub fn paperpaw_sdk::services::Services::contribute(&mut self, paperpaw_sdk::Id, paperpaw_sdk::Id, alloc::borrow::Cow<'static, str>)
 pub fn paperpaw_sdk::services::Services::contributions<'a>(&'a self, &'a str) -> impl core::iter::traits::iterator::Iterator<Item = (&'a paperpaw_sdk::Id, &'a str)>
 pub fn paperpaw_sdk::services::Services::get<T: core::any::Any>(&self, &str) -> core::option::Option<&T>
 pub fn paperpaw_sdk::services::Services::has(&self, &str) -> bool
-pub fn paperpaw_sdk::services::Services::insert(&mut self, paperpaw_sdk::Id, paperpaw_sdk::services::Service)
 pub fn paperpaw_sdk::services::Services::new() -> Self
-pub fn paperpaw_sdk::services::Services::shrink_to_fit(&mut self)
 impl core::fmt::Debug for paperpaw_sdk::services::Services
 pub fn paperpaw_sdk::services::Services::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub mod paperpaw_sdk::setting
@@ -1778,10 +1765,8 @@ impl core::fmt::Debug for paperpaw_sdk::setup::SetupStepSpec
 pub fn paperpaw_sdk::setup::SetupStepSpec::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct paperpaw_sdk::setup::SetupSteps
 impl paperpaw_sdk::setup::SetupSteps
-pub fn paperpaw_sdk::setup::SetupSteps::add(&mut self, paperpaw_sdk::setup::SetupStepSpec)
 pub fn paperpaw_sdk::setup::SetupSteps::applying<'a>(&'a self, &paperpaw_sdk::Env<'_>) -> alloc::vec::Vec<&'a paperpaw_sdk::setup::SetupStepSpec>
 pub fn paperpaw_sdk::setup::SetupSteps::new() -> Self
-pub fn paperpaw_sdk::setup::SetupSteps::shrink_to_fit(&mut self)
 pub type paperpaw_sdk::setup::AppliesFn = alloc::boxed::Box<dyn core::ops::function::Fn(&paperpaw_sdk::Env<'_>) -> bool>
 pub mod paperpaw_sdk::socket_params
 pub const paperpaw_sdk::socket_params::ANSWER: &str
@@ -1829,14 +1814,11 @@ impl core::fmt::Debug for paperpaw_sdk::status::StatusItemSpec
 pub fn paperpaw_sdk::status::StatusItemSpec::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct paperpaw_sdk::status::StatusItems
 impl paperpaw_sdk::status::StatusItems
-pub fn paperpaw_sdk::status::StatusItems::add(&mut self, paperpaw_sdk::status::StatusItemSpec)
-pub fn paperpaw_sdk::status::StatusItems::add_line(&mut self, paperpaw_sdk::status::StatusLineSpec)
 pub fn paperpaw_sdk::status::StatusItems::draw_line(&self, &str, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::status::StatusFrame<'_>) -> bool
 pub fn paperpaw_sdk::status::StatusItems::iter(&self) -> impl core::iter::traits::iterator::Iterator<Item = (&paperpaw_sdk::Id, &str)>
 pub fn paperpaw_sdk::status::StatusItems::line_signature(&self, &str, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::Params) -> alloc::string::String
 pub fn paperpaw_sdk::status::StatusItems::lines(&self) -> impl core::iter::traits::iterator::Iterator<Item = (&paperpaw_sdk::Id, &str)>
 pub fn paperpaw_sdk::status::StatusItems::new() -> Self
-pub fn paperpaw_sdk::status::StatusItems::shrink_to_fit(&mut self)
 pub fn paperpaw_sdk::status::StatusItems::title(&self, &str) -> core::option::Option<&str>
 pub fn paperpaw_sdk::status::StatusItems::value(&self, &str, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::Params) -> core::option::Option<paperpaw_sdk::status::StatusValue>
 pub struct paperpaw_sdk::status::StatusLine<'a>
@@ -2299,6 +2281,7 @@ pub fn paperpaw_sdk::ui::fit_pair(&paperpaw_sdk::FontHandle<'_>, f32, &str, &str
 pub fn paperpaw_sdk::ui::focus_rect(&paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect) -> paperpaw_platform::geometry::Rect
 pub fn paperpaw_sdk::ui::has_icons(&paperpaw_sdk::Env<'_>) -> bool
 pub fn paperpaw_sdk::ui::heading_height(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle) -> u16
+pub fn paperpaw_sdk::ui::icon_ink(&paperpaw_sdk::Env<'_>, &str, f32) -> core::option::Option<(i32, i32)>
 pub fn paperpaw_sdk::ui::icon_room(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, bool) -> u16
 pub fn paperpaw_sdk::ui::icon_width(&paperpaw_sdk::Env<'_>, &str, f32) -> f32
 pub fn paperpaw_sdk::ui::list_step(&paperpaw_sdk::Id, isize) -> core::option::Option<isize>
@@ -2335,7 +2318,6 @@ pub paperpaw_sdk::usage::Usage::pixels: u64
 pub paperpaw_sdk::usage::Usage::refreshes: [u32; 3]
 pub paperpaw_sdk::usage::Usage::sleeps: u32
 impl paperpaw_sdk::usage::Usage
-pub fn paperpaw_sdk::usage::Usage::refreshed(&mut self, paperpaw_platform::display::RefreshMode, paperpaw_platform::geometry::Rect)
 pub fn paperpaw_sdk::usage::Usage::total_refreshes(&self) -> u32
 pub mod paperpaw_sdk::web
 pub const paperpaw_sdk::web::USER_AGENT: &str
@@ -2584,14 +2566,12 @@ impl paperpaw_sdk::widgets::WidgetTarget
 pub fn paperpaw_sdk::widgets::WidgetTarget::new(paperpaw_platform::geometry::Rect, paperpaw_sdk::Command) -> Self
 pub struct paperpaw_sdk::widgets::Widgets
 impl paperpaw_sdk::widgets::Widgets
-pub fn paperpaw_sdk::widgets::Widgets::add(&mut self, paperpaw_sdk::widgets::WidgetSpec)
 pub fn paperpaw_sdk::widgets::Widgets::category(&self, &str) -> core::option::Option<&str>
 pub fn paperpaw_sdk::widgets::Widgets::has(&self, &str) -> bool
 pub fn paperpaw_sdk::widgets::Widgets::iter(&self) -> impl core::iter::traits::iterator::Iterator<Item = (&paperpaw_sdk::Id, &str)>
 pub fn paperpaw_sdk::widgets::Widgets::make(&self, &str, &paperpaw_sdk::Env<'_>) -> core::option::Option<alloc::boxed::Box<dyn paperpaw_sdk::widgets::Widget>>
 pub fn paperpaw_sdk::widgets::Widgets::new() -> Self
 pub fn paperpaw_sdk::widgets::Widgets::preview(&self, &str) -> core::option::Option<&paperpaw_sdk::Id>
-pub fn paperpaw_sdk::widgets::Widgets::shrink_to_fit(&mut self)
 pub fn paperpaw_sdk::widgets::Widgets::title(&self, &str) -> core::option::Option<&str>
 pub struct paperpaw_sdk::widgets::Wrapped
 impl paperpaw_sdk::widgets::look::Wrapped
@@ -3237,10 +3217,8 @@ pub struct paperpaw_sdk::Actions
 impl paperpaw_sdk::Actions
 pub fn paperpaw_sdk::Actions::contains(&self, &str) -> bool
 pub fn paperpaw_sdk::Actions::get(&self, &str) -> core::option::Option<&paperpaw_sdk::ActionSpec>
-pub fn paperpaw_sdk::Actions::insert(&mut self, paperpaw_sdk::ActionSpec)
 pub fn paperpaw_sdk::Actions::iter(&self) -> impl core::iter::traits::iterator::Iterator<Item = &paperpaw_sdk::ActionSpec>
 pub fn paperpaw_sdk::Actions::new() -> Self
-pub fn paperpaw_sdk::Actions::shrink_to_fit(&mut self)
 #[non_exhaustive] pub struct paperpaw_sdk::Capabilities
 pub paperpaw_sdk::Capabilities::black_and_white: bool
 pub paperpaw_sdk::Capabilities::button_row: bool
@@ -3368,6 +3346,7 @@ pub fn paperpaw_sdk::FontHandle<'a>::draw_bolder(&self, &mut paperpaw_graphics::
 pub fn paperpaw_sdk::FontHandle<'a>::has_char(&self, char) -> bool
 pub fn paperpaw_sdk::FontHandle<'a>::id(&self) -> &'a paperpaw_sdk::Id
 pub fn paperpaw_sdk::FontHandle<'a>::ink(&self, f32, &str) -> core::option::Option<(i32, i32)>
+pub fn paperpaw_sdk::FontHandle<'a>::ink_across(&self, f32, &str) -> core::option::Option<(i32, i32)>
 pub fn paperpaw_sdk::FontHandle<'a>::line_metrics(&self, f32) -> paperpaw_text::font::LineMetrics
 pub fn paperpaw_sdk::FontHandle<'a>::measure(&self, f32, &str) -> f32
 pub fn paperpaw_sdk::FontHandle<'a>::wrap(&self, f32, &str, f32) -> alloc::vec::Vec<core::ops::range::Range<usize>>
@@ -3393,11 +3372,6 @@ pub fn paperpaw_sdk::FontSpec::family(self, impl core::convert::Into<alloc::borr
 pub fn paperpaw_sdk::FontSpec::new(paperpaw_sdk::Id, paperpaw_text::font::Font) -> Self
 pub struct paperpaw_sdk::Fonts
 impl paperpaw_sdk::Fonts
-pub fn paperpaw_sdk::Fonts::add(&mut self, paperpaw_sdk::FontSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
-pub fn paperpaw_sdk::Fonts::add_extension(&mut self, paperpaw_sdk::Id, alloc::string::String, paperpaw_sdk::Id) -> core::result::Result<(), paperpaw_sdk::RegisterError>
-pub fn paperpaw_sdk::Fonts::add_face(&mut self, paperpaw_sdk::FontFace) -> core::result::Result<(), paperpaw_sdk::RegisterError>
-pub fn paperpaw_sdk::Fonts::add_file(&mut self, paperpaw_sdk::Id, alloc::string::String, paperpaw_text::sfnt::FontInfo) -> core::result::Result<(), paperpaw_sdk::RegisterError>
-pub fn paperpaw_sdk::Fonts::bind_user(&mut self, paperpaw_sdk::Id, paperpaw_sdk::Id)
 pub fn paperpaw_sdk::Fonts::bound(&self, &str) -> core::option::Option<paperpaw_sdk::FontHandle<'_>>
 pub fn paperpaw_sdk::Fonts::cache_bytes(&self) -> usize
 pub fn paperpaw_sdk::Fonts::contains(&self, &str) -> bool
@@ -3405,14 +3379,8 @@ pub fn paperpaw_sdk::Fonts::families(&self) -> alloc::vec::Vec<&str>
 pub fn paperpaw_sdk::Fonts::family(&self) -> core::option::Option<&str>
 pub fn paperpaw_sdk::Fonts::get(&self, &str) -> core::option::Option<paperpaw_sdk::FontHandle<'_>>
 pub fn paperpaw_sdk::Fonts::ids(&self) -> impl core::iter::traits::iterator::Iterator<Item = &paperpaw_sdk::Id>
-pub fn paperpaw_sdk::Fonts::load(&mut self, &alloc::rcs::rc::Rc<dyn paperpaw_platform::storage::Storage>) -> alloc::vec::Vec<alloc::string::String>
 pub fn paperpaw_sdk::Fonts::new(usize) -> Self
-pub fn paperpaw_sdk::Fonts::propose(&mut self, paperpaw_sdk::Id, paperpaw_sdk::Id, paperpaw_sdk::Priority)
-pub fn paperpaw_sdk::Fonts::remove_plugin(&mut self, &str) -> usize
 pub fn paperpaw_sdk::Fonts::role(&self, &str) -> core::option::Option<paperpaw_sdk::FontHandle<'_>>
-pub fn paperpaw_sdk::Fonts::set_family(&mut self, core::option::Option<&str>)
-pub fn paperpaw_sdk::Fonts::set_status(&mut self, &str)
-pub fn paperpaw_sdk::Fonts::shrink_to_fit(&mut self)
 pub fn paperpaw_sdk::Fonts::user_bound(&self, &str) -> bool
 impl core::fmt::Debug for paperpaw_sdk::Fonts
 pub fn paperpaw_sdk::Fonts::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
@@ -3429,7 +3397,6 @@ impl core::fmt::Debug for paperpaw_sdk::FormatSpec
 pub fn paperpaw_sdk::FormatSpec::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct paperpaw_sdk::Formats
 impl paperpaw_sdk::Formats
-pub fn paperpaw_sdk::Formats::add(&mut self, paperpaw_sdk::FormatSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::Formats::contains(&self, &str) -> bool
 pub fn paperpaw_sdk::Formats::for_path(&self, &str) -> core::option::Option<&paperpaw_sdk::FormatSpec>
 pub fn paperpaw_sdk::Formats::iter(&self) -> impl core::iter::traits::iterator::Iterator<Item = &paperpaw_sdk::FormatSpec>
@@ -3438,9 +3405,6 @@ pub fn paperpaw_sdk::Formats::open(&self, &dyn paperpaw_platform::storage::Stora
 pub fn paperpaw_sdk::Formats::open_with(&self, &dyn paperpaw_platform::storage::Storage, &str, &paperpaw_sdk::OpenOptions) -> core::result::Result<alloc::boxed::Box<dyn paperpaw_document::Document>, paperpaw_document::DocumentError>
 pub fn paperpaw_sdk::Formats::options(&self) -> paperpaw_sdk::OpenOptions
 pub fn paperpaw_sdk::Formats::prepared(&self, &dyn paperpaw_platform::storage::Storage, &str, &paperpaw_sdk::OpenOptions) -> bool
-pub fn paperpaw_sdk::Formats::set_color(&mut self, bool)
-pub fn paperpaw_sdk::Formats::set_image_fit(&mut self, paperpaw_image::Fit)
-pub fn paperpaw_sdk::Formats::shrink_to_fit(&mut self)
 pub fn paperpaw_sdk::Formats::supports(&self, &str) -> bool
 #[non_exhaustive] pub struct paperpaw_sdk::Gesture
 pub paperpaw_sdk::Gesture::end: paperpaw_platform::geometry::Point
@@ -3493,11 +3457,9 @@ pub fn paperpaw_sdk::HttpRequest::want_headers(self, &[&str]) -> Self
 pub fn paperpaw_sdk::HttpRequest::with(self, paperpaw_sdk::Params) -> Self
 pub struct paperpaw_sdk::Hyphenation
 impl paperpaw_sdk::Hyphenation
-pub fn paperpaw_sdk::Hyphenation::add(&mut self, paperpaw_sdk::HyphenationSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::Hyphenation::contains(&self, &str) -> bool
 pub fn paperpaw_sdk::Hyphenation::get(&self, &str) -> core::option::Option<&paperpaw_hyphen::Patterns<'static>>
 pub fn paperpaw_sdk::Hyphenation::new() -> Self
-pub fn paperpaw_sdk::Hyphenation::shrink_to_fit(&mut self)
 #[non_exhaustive] pub struct paperpaw_sdk::HyphenationSpec
 pub paperpaw_sdk::HyphenationSpec::id: paperpaw_sdk::Id
 pub paperpaw_sdk::HyphenationSpec::language: alloc::borrow::Cow<'static, str>
@@ -3595,10 +3557,7 @@ pub fn paperpaw_sdk::MenuSection::new(paperpaw_sdk::Id, impl core::convert::Into
 pub fn paperpaw_sdk::MenuSection::order(self, i16) -> Self
 pub struct paperpaw_sdk::Menus
 impl paperpaw_sdk::Menus
-pub fn paperpaw_sdk::Menus::add(&mut self, paperpaw_sdk::MenuEntry)
-pub fn paperpaw_sdk::Menus::add_section(&mut self, paperpaw_sdk::MenuSection)
 pub fn paperpaw_sdk::Menus::available(&self, &str) -> bool
-pub fn paperpaw_sdk::Menus::customize(&mut self, paperpaw_sdk::Id, alloc::vec::Vec<paperpaw_sdk::Id>)
 pub fn paperpaw_sdk::Menus::default_ids(&self, &str) -> alloc::vec::Vec<&paperpaw_sdk::Id>
 pub fn paperpaw_sdk::Menus::hidden(&paperpaw_sdk::Params, &str) -> bool
 pub fn paperpaw_sdk::Menus::icon(&self, &str) -> core::option::Option<&str>
@@ -3610,12 +3569,6 @@ pub fn paperpaw_sdk::Menus::menu_ids(&self) -> alloc::vec::Vec<&paperpaw_sdk::Id
 pub fn paperpaw_sdk::Menus::new() -> Self
 pub fn paperpaw_sdk::Menus::order_of(&self, &str, &str) -> core::option::Option<i16>
 pub fn paperpaw_sdk::Menus::referenced_items(&self) -> impl core::iter::traits::iterator::Iterator<Item = &paperpaw_sdk::Id>
-pub fn paperpaw_sdk::Menus::reset(&mut self, &str)
-pub fn paperpaw_sdk::Menus::set_capabilities(&mut self, paperpaw_sdk::Capabilities)
-pub fn paperpaw_sdk::Menus::set_icon(&mut self, paperpaw_sdk::Id, alloc::borrow::Cow<'static, str>)
-pub fn paperpaw_sdk::Menus::set_need(&mut self, paperpaw_sdk::Id, paperpaw_sdk::MenuNeed)
-pub fn paperpaw_sdk::Menus::set_title(&mut self, paperpaw_sdk::Id, alloc::borrow::Cow<'static, str>)
-pub fn paperpaw_sdk::Menus::shrink_to_fit(&mut self)
 pub fn paperpaw_sdk::Menus::title(&self, &str) -> core::option::Option<&str>
 pub struct paperpaw_sdk::Metrics
 pub paperpaw_sdk::Metrics::dpi: u16
@@ -3673,16 +3626,12 @@ pub fn paperpaw_sdk::PluginInfo::restart_needed(&self) -> bool
 pub struct paperpaw_sdk::Plugins
 impl paperpaw_sdk::Plugins
 pub fn paperpaw_sdk::Plugins::get(&self, &str) -> core::option::Option<&paperpaw_sdk::PluginInfo>
-pub fn paperpaw_sdk::Plugins::get_mut(&mut self, &str) -> core::option::Option<&mut paperpaw_sdk::PluginInfo>
 pub fn paperpaw_sdk::Plugins::is_empty(&self) -> bool
 pub fn paperpaw_sdk::Plugins::iter(&self) -> impl core::iter::traits::iterator::Iterator<Item = &paperpaw_sdk::PluginInfo>
 pub fn paperpaw_sdk::Plugins::len(&self) -> usize
 pub const fn paperpaw_sdk::Plugins::new() -> Self
 pub fn paperpaw_sdk::Plugins::owner(&self, &paperpaw_sdk::Id) -> core::option::Option<&paperpaw_sdk::PluginInfo>
-pub fn paperpaw_sdk::Plugins::push(&mut self, paperpaw_sdk::PluginInfo)
-pub fn paperpaw_sdk::Plugins::remove(&mut self, &str) -> core::option::Option<paperpaw_sdk::PluginInfo>
 pub fn paperpaw_sdk::Plugins::restart_needed(&self) -> bool
-pub fn paperpaw_sdk::Plugins::shrink_to_fit(&mut self)
 pub struct paperpaw_sdk::Priority(pub i16)
 impl paperpaw_sdk::Priority
 pub const paperpaw_sdk::Priority::DEFAULT: paperpaw_sdk::Priority
@@ -3856,10 +3805,7 @@ pub fn paperpaw_sdk::SettingSpec::unit(self, impl core::convert::Into<alloc::bor
 pub const fn paperpaw_sdk::SettingSpec::with_extra(self, &'static paperpaw_sdk::SettingExtra) -> Self
 pub struct paperpaw_sdk::Settings
 impl paperpaw_sdk::Settings
-pub fn paperpaw_sdk::Settings::add_group(&mut self, paperpaw_sdk::SettingGroupSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::Settings::bool(&self, &str) -> bool
-pub fn paperpaw_sdk::Settings::define(&mut self, paperpaw_sdk::SettingSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
-pub fn paperpaw_sdk::Settings::define_fixed(&mut self, &'static paperpaw_sdk::SettingSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::Settings::get(&self, &str) -> core::option::Option<&paperpaw_sdk::SettingValue>
 pub fn paperpaw_sdk::Settings::global(&self, &str) -> core::option::Option<&paperpaw_sdk::SettingValue>
 pub fn paperpaw_sdk::Settings::goes_to_scope(&self, &str) -> bool
@@ -3872,26 +3818,14 @@ pub fn paperpaw_sdk::Settings::is_worn(&self, &str) -> bool
 pub fn paperpaw_sdk::Settings::new() -> Self
 pub fn paperpaw_sdk::Settings::placement_values(&self, &str) -> alloc::vec::Vec<paperpaw_sdk::Id>
 pub fn paperpaw_sdk::Settings::presets(&self) -> &paperpaw_sdk::presets::Presets
-pub fn paperpaw_sdk::Settings::presets_mut(&mut self) -> &mut paperpaw_sdk::presets::Presets
 pub fn paperpaw_sdk::Settings::previewing(&self) -> bool
 pub fn paperpaw_sdk::Settings::read<T: paperpaw_sdk::setting::SettingType>(&self, &paperpaw_sdk::setting::Setting<T>) -> <T as paperpaw_sdk::setting::SettingType>::Value
-pub fn paperpaw_sdk::Settings::release(&mut self, &paperpaw_sdk::Id)
 pub fn paperpaw_sdk::Settings::released(&self) -> &[paperpaw_sdk::Id]
-pub fn paperpaw_sdk::Settings::reset(&mut self, &str) -> core::result::Result<(), paperpaw_sdk::SettingError>
 pub fn paperpaw_sdk::Settings::scope(&self) -> core::option::Option<&paperpaw_sdk::collections::VecMap<paperpaw_sdk::Id, paperpaw_sdk::SettingValue>>
 pub fn paperpaw_sdk::Settings::scoped_value(&self, &str) -> core::option::Option<&paperpaw_sdk::SettingValue>
-pub fn paperpaw_sdk::Settings::set(&mut self, &str, paperpaw_sdk::SettingValue) -> core::result::Result<(), paperpaw_sdk::SettingError>
-pub fn paperpaw_sdk::Settings::set_choices(&mut self, &str, impl core::convert::Into<paperpaw_sdk::Choices>) -> bool
-pub fn paperpaw_sdk::Settings::set_default_from_text(&mut self, &str, &str) -> core::result::Result<(), paperpaw_sdk::SettingError>
-pub fn paperpaw_sdk::Settings::set_from_text(&mut self, &str, &str) -> core::result::Result<(), paperpaw_sdk::SettingError>
-pub fn paperpaw_sdk::Settings::set_in_scope(&mut self, &str, paperpaw_sdk::SettingValue) -> core::result::Result<(), paperpaw_sdk::SettingError>
-pub fn paperpaw_sdk::Settings::set_preview(&mut self, alloc::vec::Vec<(paperpaw_sdk::Id, core::option::Option<paperpaw_sdk::SettingValue>)>)
-pub fn paperpaw_sdk::Settings::set_scope(&mut self, core::option::Option<paperpaw_sdk::collections::VecMap<paperpaw_sdk::Id, paperpaw_sdk::SettingValue>>)
-pub fn paperpaw_sdk::Settings::shrink_to_fit(&mut self)
 pub fn paperpaw_sdk::Settings::spec(&self, &str) -> core::option::Option<&paperpaw_sdk::SettingSpec>
 pub fn paperpaw_sdk::Settings::specs(&self) -> impl core::iter::traits::iterator::Iterator<Item = &paperpaw_sdk::SettingSpec>
 pub fn paperpaw_sdk::Settings::text(&self, &str) -> &str
-pub fn paperpaw_sdk::Settings::wear(&mut self, alloc::vec::Vec<(paperpaw_sdk::Id, paperpaw_sdk::SettingValue)>, alloc::vec::Vec<(paperpaw_sdk::Id, i64)>) -> alloc::vec::Vec<paperpaw_sdk::Id>
 pub fn paperpaw_sdk::Settings::with_placement<R>(&self, core::option::Option<&str>, impl core::ops::function::FnOnce() -> R) -> R
 #[non_exhaustive] pub struct paperpaw_sdk::SlotSpec
 pub paperpaw_sdk::SlotSpec::id: paperpaw_sdk::Id
@@ -3937,14 +3871,11 @@ impl core::fmt::Debug for paperpaw_sdk::status::StatusItemSpec
 pub fn paperpaw_sdk::status::StatusItemSpec::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct paperpaw_sdk::StatusItems
 impl paperpaw_sdk::status::StatusItems
-pub fn paperpaw_sdk::status::StatusItems::add(&mut self, paperpaw_sdk::status::StatusItemSpec)
-pub fn paperpaw_sdk::status::StatusItems::add_line(&mut self, paperpaw_sdk::status::StatusLineSpec)
 pub fn paperpaw_sdk::status::StatusItems::draw_line(&self, &str, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::status::StatusFrame<'_>) -> bool
 pub fn paperpaw_sdk::status::StatusItems::iter(&self) -> impl core::iter::traits::iterator::Iterator<Item = (&paperpaw_sdk::Id, &str)>
 pub fn paperpaw_sdk::status::StatusItems::line_signature(&self, &str, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::Params) -> alloc::string::String
 pub fn paperpaw_sdk::status::StatusItems::lines(&self) -> impl core::iter::traits::iterator::Iterator<Item = (&paperpaw_sdk::Id, &str)>
 pub fn paperpaw_sdk::status::StatusItems::new() -> Self
-pub fn paperpaw_sdk::status::StatusItems::shrink_to_fit(&mut self)
 pub fn paperpaw_sdk::status::StatusItems::title(&self, &str) -> core::option::Option<&str>
 pub fn paperpaw_sdk::status::StatusItems::value(&self, &str, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::Params) -> core::option::Option<paperpaw_sdk::status::StatusValue>
 #[non_exhaustive] pub struct paperpaw_sdk::StatusLineSpec

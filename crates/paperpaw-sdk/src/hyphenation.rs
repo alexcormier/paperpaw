@@ -50,6 +50,8 @@ impl Hyphenation {
         Self::default()
     }
 
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn add(&mut self, spec: HyphenationSpec) -> Result<(), RegisterError> {
         if self.languages.iter().any(|(id, ..)| *id == spec.id) {
             return Err(RegisterError::Duplicate { id: spec.id });
@@ -66,6 +68,8 @@ impl Hyphenation {
     }
 
     /// Releases unused capacity once registration is complete.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn shrink_to_fit(&mut self) {
         self.languages.shrink_to_fit();
     }

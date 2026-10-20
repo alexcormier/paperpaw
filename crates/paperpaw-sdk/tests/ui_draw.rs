@@ -335,6 +335,54 @@ fn a_progress_bar_fills_inside_its_track() {
     }
 }
 
+/// List icons are centred by their ink in their column, whatever room
+/// an icon's drawing leaves at its sides: icons of one list line up (they
+/// were 7 to 9 px apart where drawn from their advance).
+#[test]
+fn row_icons_are_centred_by_their_ink() {
+    for device in [Device::BUTTONS, Device::TOUCH] {
+        let h = Harness::new(device);
+        let env = h.env();
+        let style = UiStyle::new(&env);
+        let size = style.text * ui::ICON_SCALE;
+        let column = f32::from(style.margin as u16) + size / 2.0;
+        let room = ui::icon_room(&env, &style, true);
+        let mut seen = 0;
+        for icon in [
+            "search",
+            "books",
+            "settings",
+            "hand-click",
+            "paw",
+            "devices",
+            "adjustments",
+        ] {
+            if ui::icon_ink(&env, icon, size).is_none() {
+                continue;
+            }
+            seen += 1;
+            let row = Rect::new(0, 100, 480, style.row as u16);
+            let mut frame = frame(480, 800);
+            ui::draw_row_icon(
+                &mut frame.canvas(),
+                &env,
+                &style,
+                row,
+                room,
+                Some(icon),
+                paperpaw_sdk::Color::BLACK,
+            );
+            let (first, last) = ink_columns(&frame, row.y..row.y + row.height);
+            let middle = (f32::from(first) + f32::from(last) + 1.0) / 2.0;
+            assert!(
+                (middle - column).abs() <= 1.0,
+                "{icon}: ink {first}..{last}, column middle {column}"
+            );
+        }
+        assert!(seen >= 3, "icons to compare");
+    }
+}
+
 // ---- Header and pager --------------------------------------------------
 
 /// Points across the whole header, every 4 pixels.
