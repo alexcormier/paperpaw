@@ -162,6 +162,48 @@ change the plugin SDK.
   translation catalogs, HTTP request heads, FB2, HTML, Markdown, CBZ
   and XTC besides EPUB, TXT, XML, pictures and hyphenation; the picture
   target decodes in colour and at sizes the input chooses.
+- Emulator profiles match the devices: the X4 Pro draws in black and
+  white at 217 dpi with the 8 MB of PSRAM it has (a 10 MiB heap budget);
+  a new `xteink-x4-classic` profile; the Xteink profiles show the busy
+  mark, keep 12 KiB for glyphs and keep Wi-Fi on while charging, as the
+  firmware does; the Boox Go 7 draws in 256 grays, has Android's back
+  button and shows the text and paper colours of the settings, as the
+  Android app does.
+- Emulator: closing the window lets plugins save and send what is
+  pending, as the device does before it sleeps. An emulated device
+  asleep no longer keeps a processor core busy. A restart forgets the
+  old kernel's requests, servers, speech and Wi-Fi, whose answers
+  reached the new kernel's requests before; the pretend radio reports
+  in the order of time (joining no longer waits for a scan).
+- `paperpaw-sign key` makes the key file readable by its owner alone
+  (mode 0600 on Linux and macOS) and checks that none is there in the
+  same step as making it.
+- The sample plugin (`samples/hello-plugin`) no longer underflows below
+  a header taller than the screen.
+- Android: a PDF page that fails no longer makes every later page of the
+  book fail. In the background or with the screen off, PaperPaw neither
+  runs timers (unless it reads aloud) nor draws. A restart while reading
+  aloud no longer keeps the screen on. Only the rows that changed are
+  copied to the screen, not all 2.1 million pixels of a Boox Go 7. The
+  sample books are copied once, into a library folder that is not there
+  yet: deleted, they stay deleted.
+- The Android app installs on devices with 16 KB memory pages: its
+  library is linked and aligned in the APK for them (`zipalign -P 16`,
+  build tools 35 or later). `build-apk.sh` also builds in folders whose
+  path has spaces.
+- Android: holding a page key that is a volume key no longer brings up
+  the system's volume panel. A crash writes its message, place and stack
+  to the log (`adb logcat -s PaperPaw`). Reading aloud goes on after the
+  activity is made anew in the same process, and changes such as a new
+  system language no longer make it anew.
+- Android 8 to 10: PaperPaw asks for the permission to write the shared
+  storage besides the one to read it, so downloads, uploads through
+  Transfer, renaming and deleting books work there; who allowed reading
+  only is offered access again on the home screen. Passwords and keys
+  (`.paperpaw/secrets.txt`) are kept in the app's private folder, which
+  no other app reads (up to Android 9 apps with the storage permission
+  read the app's shared folder); a file kept there before moves at the
+  first start. The app is left out of Android's backups.
 - Rules: a rule can apply when the battery reaches a level (80 %, 90 %,
   full or another), once each time it gets there and not again while
   the level wavers around it; with *Only if … While charging* it says

@@ -8,7 +8,7 @@
 //! on one of its threads; the event loop is woken to pass it on.
 
 use std::collections::VecDeque;
-use std::sync::{Mutex, OnceLock};
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use android_activity::{AndroidApp, AndroidAppWaker};
@@ -33,8 +33,9 @@ const LISTENER: &str = "io.github.hthoene.paperpaw.SpeechListener";
 
 /// Texts the engine reported as ended (spoken or not), from its threads.
 static ENDED: Mutex<Vec<(u32, bool)>> = Mutex::new(Vec::new());
-/// Wakes the event loop when a text ended.
-static WAKER: OnceLock<AndroidAppWaker> = OnceLock::new();
+/// Wakes the event loop when a text ended: the current one's (Android may
+/// make the activity anew in the same process, with a new event loop).
+static WAKER: Mutex<Option<AndroidAppWaker>> = Mutex::new(None);
 
 /// Called by `SpeechListener` when a text ended.
 extern "system" fn ended(mut env: JNIEnv<'_>, _: JClass<'_>, id: JString<'_>, spoken: jboolean) {
@@ -45,7 +46,9 @@ extern "system" fn ended(mut env: JNIEnv<'_>, _: JClass<'_>, id: JString<'_>, sp
     if let (Some(id), Ok(mut ended)) = (id, ENDED.lock()) {
         ended.push((id, spoken != 0));
     }
-    if let Some(waker) = WAKER.get() {
+    if let Ok(waker) = WAKER.lock()
+        && let Some(waker) = waker.as_ref()
+    {
         waker.wake();
     }
 }
@@ -75,7 +78,9 @@ pub struct Speech {
 
 impl Speech {
     pub fn new(app: &AndroidApp) -> Self {
-        let _ = WAKER.set(app.create_waker());
+        if let Ok(mut waker) = WAKER.lock() {
+            *waker = Some(app.create_waker());
+        }
         Self {
             app: app.clone(),
             tts: None,
