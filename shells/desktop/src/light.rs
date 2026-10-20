@@ -31,6 +31,7 @@ pub struct Light {
 }
 
 /// The plugin that registers a profile's light.
+#[derive(Debug)]
 pub struct Emulated(pub Light);
 
 const EN: &str = "[meta]

@@ -3,24 +3,13 @@
 //! Runs the real kernel and plugins against an emulated e-ink device,
 //! interactively in a window, or headless for screenshots and CI.
 
-mod budget;
-mod device;
 mod gui;
-mod headless;
-mod http;
-mod light;
-mod panel;
-mod profiles;
-mod trace;
-mod wifi;
 
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use device::Device;
-
-#[global_allocator]
-static ALLOCATOR: budget::BudgetAllocator = budget::BudgetAllocator;
+use paperpaw_emulator::device::Device;
+use paperpaw_emulator::{budget, device, headless, profiles, trace};
 
 const USAGE: &str = "\
 PaperPaw emulator

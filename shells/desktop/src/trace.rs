@@ -14,22 +14,43 @@ use paperpaw_platform::{DirEntry, Storage, StorageError};
 
 thread_local! {
     static ON: Cell<bool> = const { Cell::new(false) };
+    /// Frames are kept for [`take_frames`] (see [`record`]).
+    static RECORDING: Cell<bool> = const { Cell::new(false) };
+    static FRAMES: RefCell<Vec<FrameRecord>> = const { RefCell::new(Vec::new()) };
     static COUNTS: RefCell<Counts> = RefCell::new(Counts::default());
 }
 
 /// Calls by what was done, and bytes read.
-#[derive(Debug, Default, Clone, Copy)]
-struct Counts {
-    reads: u32,
-    bytes: u64,
-    sizes: u32,
-    lists: u32,
-    writes: u32,
-    other: u32,
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct Counts {
+    pub reads: u32,
+    pub bytes: u64,
+    /// Sizes asked and whether files exist.
+    pub sizes: u32,
+    pub lists: u32,
+    pub writes: u32,
+    pub other: u32,
+}
+
+/// A frame drawn while recording (see [`record`]).
+#[derive(Debug, Clone, PartialEq)]
+pub struct FrameRecord {
+    /// The screen shown.
+    pub screen: String,
+    /// How long the drawing took, on this computer.
+    pub millis: f64,
+    /// The storage calls of each band, in order.
+    pub bands: Vec<u32>,
+    /// The calls the drawing made, all bands.
+    pub drawing: Counts,
+    /// The calls made since the frame before (opening a screen, handling
+    /// a press).
+    pub before: Counts,
 }
 
 impl Counts {
-    fn calls(&self) -> u32 {
+    /// All calls.
+    pub fn calls(&self) -> u32 {
         self.reads + self.sizes + self.lists + self.writes + self.other
     }
 
@@ -66,8 +87,19 @@ pub fn start() {
     ON.with(|on| on.set(true));
 }
 
+/// Keeps a [`FrameRecord`] of every frame from now on, printed or not,
+/// for tools that look at them (see [`take_frames`]).
+pub fn record() {
+    RECORDING.with(|on| on.set(true));
+}
+
+/// The frames recorded since the last call.
+pub fn take_frames() -> Vec<FrameRecord> {
+    FRAMES.with(|frames| std::mem::take(&mut *frames.borrow_mut()))
+}
+
 fn on() -> bool {
-    ON.with(Cell::get)
+    ON.with(Cell::get) || RECORDING.with(Cell::get)
 }
 
 fn count(f: impl FnOnce(&mut Counts)) {
@@ -79,6 +111,7 @@ fn now() -> Counts {
 }
 
 /// A frame being drawn, from [`Frame::start`] until [`Frame::done`].
+#[derive(Debug)]
 pub struct Frame {
     started: Instant,
     before: Counts,
@@ -115,12 +148,25 @@ impl Frame {
         let counts = now();
         let drawing = counts.since(&self.before);
         let before = LAST.with(|last| self.before.since(&last.replace(counts)));
-        println!(
-            "frame {screen}: drawn in {:.1} ms, {} bands {:?}, {drawing}; before it {before}",
-            took.as_secs_f64() * 1000.0,
-            self.bands.len(),
-            self.bands,
-        );
+        let millis = took.as_secs_f64() * 1000.0;
+        if ON.with(Cell::get) {
+            println!(
+                "frame {screen}: drawn in {millis:.1} ms, {} bands {:?}, {drawing}; before it {before}",
+                self.bands.len(),
+                self.bands,
+            );
+        }
+        if RECORDING.with(Cell::get) {
+            FRAMES.with(|frames| {
+                frames.borrow_mut().push(FrameRecord {
+                    screen: screen.to_string(),
+                    millis,
+                    bands: self.bands,
+                    drawing,
+                    before,
+                });
+            });
+        }
     }
 }
 

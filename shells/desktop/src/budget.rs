@@ -258,6 +258,36 @@ pub fn report(depth: usize) {
     TRACKING.with(|t| t.set(tracking));
 }
 
+/// Starts the peak anew from what is live now, e.g. to measure the peak
+/// of one screen.
+pub fn reset_peak() {
+    PEAK.store(LIVE.load(Ordering::Relaxed), Ordering::Relaxed);
+}
+
+/// Live tracked allocations grouped by call site (`depth` frames of
+/// PaperPaw code each), largest first: site, bytes, count. Empty unless
+/// [`profile`] was called.
+pub fn sites(depth: usize) -> Vec<(String, usize, usize)> {
+    let tracking = TRACKING.with(|t| t.replace(false));
+    let mut groups: HashMap<String, (usize, usize)> = HashMap::new();
+    if let Ok(sites) = SITES.lock()
+        && let Some(sites) = sites.as_ref()
+    {
+        for (size, backtrace) in sites.values() {
+            let group = groups.entry(site_of(backtrace, depth)).or_default();
+            group.0 += size + HEADER;
+            group.1 += 1;
+        }
+    }
+    let mut groups: Vec<_> = groups
+        .into_iter()
+        .map(|(site, (bytes, count))| (site, bytes, count))
+        .collect();
+    groups.sort_by_key(|(_, bytes, _)| std::cmp::Reverse(*bytes));
+    TRACKING.with(|t| t.set(tracking));
+    groups
+}
+
 /// Current heap usage of the kernel and its plugins.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Stats {
