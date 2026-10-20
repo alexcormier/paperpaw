@@ -20,10 +20,9 @@ use esp_bootloader_esp_idf::partitions::{self, FlashStorage, PARTITION_TABLE_MAX
 use esp_hal::peripherals::MMU_TABLE;
 use log::{info, warn};
 use paperpaw_native::index::{Index, Layout, Region, SECTOR};
-use paperpaw_native::{CODE_OFFSET, HEADER_LEN, Header, LINK_BASE, Relocator};
+use paperpaw_native::{CODE_OFFSET, HEADER_LEN, Header, ImageExtent, LINK_BASE, Relocator};
 use paperpaw_platform::Storage;
 use paperpaw_sdk::PluginProblem;
-use paperpaw_update::ImageExtent;
 
 use super::api::API;
 

@@ -32,6 +32,10 @@ use alloc::vec::Vec;
 use core::fmt;
 
 use crate::Id;
+use paperpaw_platform::Storage;
+
+pub use paperpaw_native::signature::{self, BadSignature};
+pub use paperpaw_native::{Chip, HEADER_LEN, Header, Problem, Signature};
 
 /// What this build of the SDK makes plugins fit: the compiler, target,
 /// SDK version and features (see the [module documentation](self)).
@@ -55,6 +59,79 @@ pub const TOOLCHAIN: &str = env!("PAPERPAW_NATIVE_TOOLCHAIN");
 /// Pro, `code.so` on Android. A folder with one is a code plugin's, also
 /// where PaperPaw loads none.
 pub const CODE_FILES: [&str; 2] = ["code.ppn", "code.so"];
+
+/// Checks the plugin file at `path` whole, reading it once: its header,
+/// its length, its digest and, if it is signed, its author's signature.
+/// Its header and its author's signature (`None` if it is not signed);
+/// whether it fits this device and build is for the caller to see
+/// ([`Header::chip`], [`Header::fingerprint`]), and whether the author is
+/// one known (a store remembers the key of the first install).
+pub fn check_file(
+    storage: &dyn Storage,
+    path: &str,
+) -> Result<(Header, Option<Signature>), Problem> {
+    let mut head = [0u8; HEADER_LEN];
+    read_exact(storage, path, 0, &mut head)?;
+    let header = Header::read(&head)?;
+    let size = storage.size(path).map_err(|_| Problem::Length)?;
+    let end = header.file_len();
+    let signature = if header.signed(size)? {
+        let mut trailer = [0u8; signature::SIGNATURE_LEN];
+        read_exact(storage, path, end, &mut trailer)?;
+        let signature = Signature::read(&trailer).ok_or(Problem::Signature)?;
+        if u64::from(signature.signed_len) != end {
+            return Err(Problem::Signature);
+        }
+        Some(signature)
+    } else {
+        None
+    };
+    let mut author = match &signature {
+        Some(signature) => Some(signature.check().map_err(|_| Problem::Signature)?),
+        None => None,
+    };
+    if let Some(check) = author.as_mut() {
+        check.absorb(&head);
+    }
+    let mut digest = header.digest();
+    let mut buf = [0u8; 512];
+    let mut at = HEADER_LEN as u64;
+    while at < end {
+        let len = (end - at).min(buf.len() as u64) as usize;
+        read_exact(storage, path, at, &mut buf[..len])?;
+        digest.update(&buf[..len]);
+        if let Some(check) = author.as_mut() {
+            check.absorb(&buf[..len]);
+        }
+        at += len as u64;
+    }
+    if !header.holds(digest) {
+        return Err(Problem::Damaged);
+    }
+    if let Some(check) = author {
+        check.finish().map_err(|_| Problem::Signature)?;
+    }
+    Ok((header, signature))
+}
+
+/// Fills `buf` from `path` at `at`.
+fn read_exact(
+    storage: &dyn Storage,
+    path: &str,
+    mut at: u64,
+    mut buf: &mut [u8],
+) -> Result<(), Problem> {
+    while !buf.is_empty() {
+        match storage.read_at(path, at, buf) {
+            Ok(n) if n > 0 => {
+                at += n as u64;
+                buf = &mut buf[n..];
+            }
+            _ => return Err(Problem::Length),
+        }
+    }
+    Ok(())
+}
 
 /// Which build a code plugin fits: a hash of what it was built with.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -347,6 +424,57 @@ mod tests {
         assert_eq!(Fingerprint::parse("85073a61323717"), None);
         assert_eq!(Fingerprint::parse("0085073a6132371g"), None);
         assert_eq!(Fingerprint::parse("+085073a61323717"), None);
+    }
+
+    /// A small plugin file of `Header`'s own tests: no code to run, only
+    /// to check.
+    fn file() -> Vec<u8> {
+        let mut header = Header {
+            chip: Chip::Esp32C3,
+            fingerprint: 1,
+            base: paperpaw_native::LINK_BASE,
+            image_len: 64,
+            code_at: 32,
+            entry: 0,
+            api: 16,
+            relocs: 0,
+            align: 16,
+            sha256: [0; 32],
+        };
+        let image = [9u8; 64];
+        let mut sha = header.digest();
+        sha.update(&image);
+        header.sha256 = sha.finish();
+        let mut file = header.to_bytes().to_vec();
+        file.extend_from_slice(&image);
+        file
+    }
+
+    #[test]
+    fn plugin_files_on_the_storage_are_checked_whole() {
+        let storage = crate::MemoryStorage::new();
+        let unsigned = file();
+        let mut signed = unsigned.clone();
+        let author = signature::sign(&unsigned, &[2; 32]);
+        signed.extend_from_slice(&author.to_bytes());
+        storage.write("a.ppn", &unsigned).unwrap();
+        storage.write("b.ppn", &signed).unwrap();
+        assert_eq!(check_file(&storage, "a.ppn").map(|(_, s)| s), Ok(None));
+        assert_eq!(
+            check_file(&storage, "b.ppn").map(|(_, s)| s),
+            Ok(Some(author))
+        );
+        let mut changed = signed.clone();
+        changed[100] ^= 1;
+        storage.write("c.ppn", &changed).unwrap();
+        assert_eq!(check_file(&storage, "c.ppn"), Err(Problem::Damaged));
+        let mut resigned = signed.clone();
+        resigned[signed.len() - 30] ^= 1;
+        storage.write("d.ppn", &resigned).unwrap();
+        assert_eq!(check_file(&storage, "d.ppn"), Err(Problem::Signature));
+        storage.write("e.ppn", &signed[..signed.len() - 1]).unwrap();
+        assert_eq!(check_file(&storage, "e.ppn"), Err(Problem::Length));
+        assert_eq!(check_file(&storage, "none.ppn"), Err(Problem::Length));
     }
 
     #[test]

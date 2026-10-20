@@ -117,7 +117,7 @@ mod tests {
     #[test]
     fn words_move_with_the_image_in_any_pieces() {
         let file = file();
-        let header = Header::check_file(&file).unwrap();
+        let (header, _) = Header::check_file(&file).unwrap();
         let words = [20, 24];
         let base = 0x3C80_0040;
         for piece in [4, 8, 20, 96] {

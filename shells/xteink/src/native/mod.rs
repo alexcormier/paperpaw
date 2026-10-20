@@ -178,9 +178,10 @@ impl Loader {
             );
             return Err(PluginProblem::OtherBuild);
         }
-        if storage.size(path).ok() != Some(header.file_len()) {
-            return Err(PluginProblem::Damaged);
-        }
+        // Signed by its author or not: the store and the bundle checked
+        // the signature when they installed it.
+        let size = storage.size(path).map_err(|_| PluginProblem::Damaged)?;
+        header.signed(size).map_err(problem)?;
         let words = read_words(storage, path, &header)?;
         let base = self.place.put(storage, path, &header, &words)?;
         drop(words);

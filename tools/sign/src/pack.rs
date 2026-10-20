@@ -561,7 +561,7 @@ pub(crate) mod tests {
         for (machine, chip) in [(EM_RISCV, Chip::Esp32C3), (EM_XTENSA, Chip::Esp32S3)] {
             let elf = plugin(machine).b.build();
             let packed = pack(&elf).unwrap();
-            let header = Header::check_file(&packed.file).unwrap();
+            let (header, _) = Header::check_file(&packed.file).unwrap();
             assert_eq!(header, packed.header);
             assert_eq!(header.chip, chip);
             assert_eq!(header.fingerprint, FINGERPRINT);

@@ -1126,6 +1126,13 @@ pub fn paperpaw_sdk::logo::Logo::read(&paperpaw_sdk::Env<'_>, u16, u16) -> paper
 pub const paperpaw_sdk::logo::LOGO: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
 pub fn paperpaw_sdk::logo::draw(&mut paperpaw_graphics::canvas::Canvas<'_>, paperpaw_platform::geometry::Rect, paperpaw_platform::pixel::Color)
 pub mod paperpaw_sdk::native
+pub use paperpaw_sdk::native::BadSignature
+pub use paperpaw_sdk::native::Chip
+pub use paperpaw_sdk::native::HEADER_LEN
+pub use paperpaw_sdk::native::Header
+pub use paperpaw_sdk::native::Problem
+pub use paperpaw_sdk::native::Signature
+pub use paperpaw_sdk::native::signature
 #[non_exhaustive] pub enum paperpaw_sdk::native::SafeModeReason
 pub paperpaw_sdk::native::SafeModeReason::FailedStarts
 pub paperpaw_sdk::native::SafeModeReason::KeyHeld
@@ -1152,6 +1159,7 @@ pub fn paperpaw_sdk::native::SafeMode::new(paperpaw_sdk::native::SafeModeReason)
 pub const paperpaw_sdk::native::CODE_FILES: [&str; 2]
 pub const paperpaw_sdk::native::FINGERPRINT: paperpaw_sdk::native::Fingerprint
 pub const paperpaw_sdk::native::TOOLCHAIN: &str
+pub fn paperpaw_sdk::native::check_file(&dyn paperpaw_platform::storage::Storage, &str) -> core::result::Result<(paperpaw_native::header::Header, core::option::Option<paperpaw_native::signature::Signature>), paperpaw_native::header::Problem>
 pub unsafe fn paperpaw_sdk::native::take(*mut core::ffi::c_void) -> core::option::Option<alloc::boxed::Box<dyn paperpaw_sdk::Plugin>>
 pub mod paperpaw_sdk::presets
 #[non_exhaustive] pub struct paperpaw_sdk::presets::Preset

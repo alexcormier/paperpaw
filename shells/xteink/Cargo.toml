@@ -65,8 +65,6 @@ paperpaw-http = { path = "../../crates/paperpaw-http" }
 paperpaw-digest = { path = "../../crates/paperpaw-digest" }
 # Native code plugins' files (`src/native`).
 paperpaw-native = { path = "../../crates/paperpaw-native" }
-# Where the running image ends, behind which the X4 keeps native plugins.
-paperpaw-update = { path = "../../crates/paperpaw-update" }
 # Their settings' ids, for the X4's defaults.
 paperpaw-plugin-reader = { path = "../../plugins/reader" }
 paperpaw-plugin-wifi = { path = "../../plugins/wifi" }

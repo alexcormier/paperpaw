@@ -1,6 +1,6 @@
 [package]
 name = "paperpaw-native"
-description = "PaperPaw's native code plugin files (.ppn): their format, how they are checked and moved to where they run, the table the firmware gives them, and the index of plugins kept in flash (no_std)"
+description = "PaperPaw's native code plugin files (.ppn): their format, authors' signatures, how they are checked and moved to where they run, the table the firmware gives them, and what the X4 keeps behind its firmware (no_std)"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -15,6 +15,8 @@ include = ["src", "build.rs", "paperpaw-plugin.x"]
 
 [dependencies]
 paperpaw-digest.workspace = true
+# Authors' signatures (`signature`). Small code, as the firmware's.
+ed25519-compact = { version = "2.6", default-features = false, features = ["opt_size"] }
 
 [lints]
 workspace = true

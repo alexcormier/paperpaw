@@ -3,8 +3,8 @@
 //! the check that crates keep no mutable statics.
 
 use paperpaw_digest::{hex, sha256::Sha256};
-use paperpaw_native::Header;
-use paperpaw_update::{PluginSignature, fingerprint, key_hex};
+use paperpaw_native::{Header, Signature, signature};
+use paperpaw_update::{fingerprint, key_hex};
 
 use crate::{secret_key, statics};
 
@@ -16,22 +16,28 @@ fn write(path: &str, bytes: &[u8]) -> Result<(), String> {
     std::fs::write(path, bytes).map_err(|e| format!("{path}: {e}"))
 }
 
-/// A plugin file, checked whole.
-fn plugin_file(path: &str) -> Result<(Vec<u8>, Header), String> {
+/// A plugin file, checked whole, and its author's signature if it ends
+/// with one.
+fn plugin_file(path: &str) -> Result<(Vec<u8>, Header, Option<Signature>), String> {
     let file = read(path)?;
-    let header = Header::check_file(&file).map_err(|e| format!("{path}: {e}"))?;
-    Ok((file, header))
+    let (header, signature) = Header::check_file(&file).map_err(|e| format!("{path}: {e}"))?;
+    Ok((file, header, signature))
 }
 
-/// Where a plugin file's signature lies beside it.
-fn signature_path(file: &str) -> String {
-    format!("{file}.sig")
-}
-
-pub fn pack(elf: &str, out: &str) -> Result<(), String> {
+pub fn pack(elf: &str, out: &str, key_file: Option<&str>) -> Result<(), String> {
     let packed = crate::pack::pack(&read(elf)?).map_err(|e| format!("{elf}: {e}"))?;
-    write(out, &packed.file)?;
     let header = &packed.header;
+    let mut file = packed.file.clone();
+    let signed = match key_file {
+        Some(key_file) => {
+            let seed = secret_key(Some(key_file))?;
+            let signed = signature::sign(&file, &seed);
+            file.extend_from_slice(&signed.to_bytes());
+            Some(signed)
+        }
+        None => None,
+    };
+    write(out, &file)?;
     println!(
         "{out}: {} bytes of data, {} of code, {} words to relocate, fingerprint {:016x}, {}",
         header.code_at,
@@ -40,11 +46,14 @@ pub fn pack(elf: &str, out: &str) -> Result<(), String> {
         header.fingerprint,
         header.chip
     );
+    if let Some(signed) = signed {
+        print_signer(&signed);
+    }
     Ok(())
 }
 
 pub fn show(path: &str) -> Result<(), String> {
-    let (file, header) = plugin_file(path)?;
+    let (file, header, signed) = plugin_file(path)?;
     let mut sha = Sha256::new();
     sha.update(&file);
     println!("chip:        {} ({})", header.chip, header.chip.id());
@@ -68,18 +77,14 @@ pub fn show(path: &str) -> Result<(), String> {
         hex::encode(&sha.finish())
     );
     println!("digest:      {}", hex::encode(&header.sha256));
-    let signature = signature_path(path);
-    if !std::path::Path::new(&signature).exists() {
-        println!("signature:   none beside it");
-        return Ok(());
+    match signed {
+        Some(signed) => print_signer(&signed),
+        None => println!("signer:      none, not signed"),
     }
-    let signed = paperpaw_update::check_plugin(&file, &read(&signature)?)
-        .map_err(|e| format!("{signature}: {e}"))?;
-    print_signer(&signed);
     Ok(())
 }
 
-fn print_signer(signed: &PluginSignature) {
+fn print_signer(signed: &Signature) {
     println!(
         "signer:      {} ({})",
         fingerprint(&signed.key),
@@ -88,23 +93,23 @@ fn print_signer(signed: &PluginSignature) {
     println!("signature:   holds ({})", hex::encode(&signed.signature));
 }
 
+/// Signs a plugin file as its author, its signature put at its end (a
+/// signature it had before replaced).
 pub fn sign(path: &str, key_file: Option<&str>) -> Result<(), String> {
     let seed = secret_key(key_file)?;
-    let (file, _) = plugin_file(path)?;
-    let signed = paperpaw_update::sign_plugin(&file, &seed);
-    let signature = signature_path(path);
-    write(&signature, &signed.to_bytes())?;
-    println!("{signature}: signed by {}", fingerprint(&signed.key));
-    println!("key:         {}", key_hex(&signed.key));
-    println!("signature:   {}", hex::encode(&signed.signature));
+    let (mut file, header, _) = plugin_file(path)?;
+    file.truncate(header.file_len() as usize);
+    let signed = signature::sign(&file, &seed);
+    file.extend_from_slice(&signed.to_bytes());
+    write(path, &file)?;
+    println!("{path}: signed");
+    print_signer(&signed);
     Ok(())
 }
 
-pub fn check(path: &str, signature: Option<&str>) -> Result<(), String> {
-    let signature = signature.map_or_else(|| signature_path(path), str::to_string);
-    let (file, header) = plugin_file(path)?;
-    let signed = paperpaw_update::check_plugin(&file, &read(&signature)?)
-        .map_err(|e| format!("{signature}: {e}"))?;
+pub fn check(path: &str) -> Result<(), String> {
+    let (file, header, signed) = plugin_file(path)?;
+    let signed = signed.ok_or_else(|| format!("{path}: not signed"))?;
     println!(
         "plugin:      {} bytes for the {}, fingerprint {:016x}",
         file.len(),
@@ -140,41 +145,49 @@ pub fn statics(archives: &[&str]) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::elf::{EM_RISCV, EM_XTENSA};
+    use crate::elf::EM_RISCV;
     use crate::pack::tests::packed;
 
     #[test]
-    fn a_signed_plugin_checks_and_another_file_does_not() {
+    fn a_signed_plugin_checks_and_a_changed_one_does_not() {
         let dir = std::env::temp_dir().join(format!("paperpaw-sign-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = |name: &str| dir.join(name).to_string_lossy().into_owned();
-        let (key, file, other) = (path("key"), path("plugin.ppn"), path("other.ppn"));
-        std::fs::write(
-            &key,
-            format!(
-                "{}
-",
-                "07".repeat(32)
-            ),
-        )
-        .unwrap();
-        std::fs::write(&file, packed(EM_RISCV)).unwrap();
-        std::fs::write(&other, packed(EM_XTENSA)).unwrap();
+        let (key, file) = (path("key"), path("plugin.ppn"));
+        std::fs::write(&key, format!("{}\n", "07".repeat(32))).unwrap();
+        let unsigned = packed(EM_RISCV);
+        std::fs::write(&file, &unsigned).unwrap();
+        assert!(check(&file).unwrap_err().ends_with("not signed"));
 
         sign(&file, Some(&key)).unwrap();
-        let signature = signature_path(&file);
-        assert_eq!(std::fs::read(&signature).unwrap().len(), 104);
-        check(&file, None).unwrap();
+        let signed = std::fs::read(&file).unwrap();
+        assert_eq!(signed.len(), unsigned.len() + signature::SIGNATURE_LEN);
+        assert_eq!(signed[..unsigned.len()], unsigned[..], "the file is kept");
+        check(&file).unwrap();
         show(&file).unwrap();
-        let error = check(&other, Some(&signature)).unwrap_err();
-        assert!(error.ends_with("the signature does not hold"), "{error}");
+        // Signed again: one signature, the new one.
+        sign(&file, Some(&key)).unwrap();
+        assert_eq!(
+            std::fs::read(&file).unwrap(),
+            signed,
+            "Ed25519 signs deterministically"
+        );
 
         // A changed byte: the file no longer holds, before its signature.
-        let mut changed = std::fs::read(&file).unwrap();
+        let mut changed = signed.clone();
         changed[100] ^= 1;
-        std::fs::write(&file, changed).unwrap();
-        let error = check(&file, None).unwrap_err();
-        assert!(error.ends_with("changed or damaged"), "{error}");
+        std::fs::write(&file, &changed).unwrap();
+        assert!(check(&file).unwrap_err().ends_with("changed or damaged"));
+        // A changed signature.
+        let mut changed = signed;
+        let last = changed.len() - 20;
+        changed[last] ^= 1;
+        std::fs::write(&file, &changed).unwrap();
+        assert!(
+            check(&file)
+                .unwrap_err()
+                .ends_with("its author's signature does not hold")
+        );
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

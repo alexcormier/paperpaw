@@ -26,10 +26,6 @@
 //! An image also says which code plugins it has built in ([`Plugins`],
 //! right after its application descriptor), so that an update can bring
 //! the same ones.
-//!
-//! Native plugin files are signed by their authors, apart and in a format
-//! of their own ([`PluginSignature`], checked as read with
-//! [`PluginCheck`]).
 
 #![no_std]
 
@@ -41,15 +37,8 @@ use core::fmt;
 
 use ed25519_compact::{PublicKey, Signature, VerifyingState};
 
-mod extent;
-mod plugin_signature;
 mod plugins;
 
-pub use extent::ImageExtent;
-pub use plugin_signature::{
-    PLUGIN_DOMAIN, PLUGIN_SIGNATURE_FORMAT, PLUGIN_SIGNATURE_LEN, PLUGIN_SIGNATURE_MAGIC,
-    PluginCheck, PluginSignature, SignatureProblem, check_plugin, sign_plugin,
-};
 pub use plugins::{
     PLUGINS_AT, PLUGINS_FORMAT, PLUGINS_HEAD_LEN, PLUGINS_MAGIC, PLUGINS_MAX_LEN, PluginCrate,
     Plugins,

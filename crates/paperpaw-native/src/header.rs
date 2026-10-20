@@ -6,6 +6,7 @@ use core::fmt;
 use paperpaw_digest::sha256::Sha256;
 
 use crate::interface::ENTRY_LEN;
+use crate::signature::Signature;
 
 /// A plugin file's first bytes.
 pub const MAGIC: [u8; 4] = *b"PPNP";
@@ -85,6 +86,8 @@ pub enum Problem {
     Damaged,
     /// A word it lists to relocate is not one.
     Relocation,
+    /// It ends with an author's signature that does not hold.
+    Signature,
 }
 
 impl fmt::Display for Problem {
@@ -97,6 +100,7 @@ impl fmt::Display for Problem {
             Problem::Length => "not as long as it says",
             Problem::Damaged => "changed or damaged",
             Problem::Relocation => "a word to relocate is not one",
+            Problem::Signature => "its author's signature does not hold",
         })
     }
 }
@@ -250,25 +254,43 @@ impl Header {
         HEADER_LEN as u64 + u64::from(self.image_len)
     }
 
-    /// The file's length.
+    /// The file's length without its author's signature.
     pub fn file_len(&self) -> u64 {
         self.relocs_at() + 4 * u64::from(self.relocs)
     }
 
-    /// The header and the words to relocate of a whole plugin file, all
-    /// checked (its length, its digest, its relocations).
-    pub fn check_file(file: &[u8]) -> Result<Header, Problem> {
-        let header = Header::read(file)?;
-        if file.len() as u64 != header.file_len() {
-            return Err(Problem::Length);
+    /// Whether a file of `len` bytes with this header ends with an
+    /// author's signature (at [`Header::file_len`]); not as long as either
+    /// is [`Problem::Length`].
+    pub fn signed(&self, len: u64) -> Result<bool, Problem> {
+        match len.checked_sub(self.file_len()) {
+            Some(0) => Ok(false),
+            Some(n) if n == crate::signature::SIGNATURE_LEN as u64 => Ok(true),
+            _ => Err(Problem::Length),
         }
+    }
+
+    /// The header of a whole plugin file and its author's signature, if
+    /// it is signed, all checked (its length, its digest, its
+    /// relocations, the signature).
+    pub fn check_file(file: &[u8]) -> Result<(Header, Option<Signature>), Problem> {
+        let header = Header::read(file)?;
+        let end = header.file_len() as usize;
+        let signed = header.signed(file.len() as u64)?;
         let mut sha = header.digest();
-        sha.update(&file[HEADER_LEN..]);
+        sha.update(&file[HEADER_LEN..end]);
         if !header.holds(sha) {
             return Err(Problem::Damaged);
         }
-        crate::check_relocations(&header, header.words(file))?;
-        Ok(header)
+        crate::check_relocations(&header, header.words(&file[..end]))?;
+        if !signed {
+            return Ok((header, None));
+        }
+        let signature = Signature::read(&file[end..]).ok_or(Problem::Signature)?;
+        if signature.signed_len as usize != end || signature.holds(&file[..end]).is_err() {
+            return Err(Problem::Signature);
+        }
+        Ok((header, Some(signature)))
     }
 
     /// The words to relocate in a whole file whose length was checked.
@@ -343,7 +365,8 @@ pub(crate) mod tests {
     #[test]
     fn a_file_reads_back_as_written() {
         let file = file();
-        let header = Header::check_file(&file).unwrap();
+        let (header, signature) = Header::check_file(&file).unwrap();
+        assert_eq!(signature, None);
         assert_eq!(header.chip, Chip::Esp32C3);
         assert_eq!(header.fingerprint, 0x0123_4567_89ab_cdef);
         assert_eq!(header.file_len(), file.len() as u64);
@@ -438,5 +461,33 @@ pub(crate) mod tests {
         let image = &file[HEADER_LEN..HEADER_LEN + 96];
         let unordered = seal(header, image, &[24, 20]);
         assert_eq!(Header::check_file(&unordered), Err(Problem::Relocation));
+    }
+
+    #[test]
+    fn a_signed_file_says_who_signed_it() {
+        let file = file();
+        let mut signed = file.clone();
+        let signature = crate::signature::sign(&file, &[5; 32]);
+        signed.extend_from_slice(&signature.to_bytes());
+        assert_eq!(
+            Header::check_file(&signed).map(|(_, s)| s),
+            Ok(Some(signature))
+        );
+        // Its trailer changed, or cut short.
+        let mut changed = signed.clone();
+        let last = changed.len() - 10;
+        changed[last] ^= 1;
+        assert_eq!(Header::check_file(&changed), Err(Problem::Signature));
+        assert_eq!(
+            Header::check_file(&signed[..signed.len() - 1]),
+            Err(Problem::Length)
+        );
+        let mut not_a_trailer = file.clone();
+        not_a_trailer.extend_from_slice(&[0; crate::signature::SIGNATURE_LEN]);
+        assert_eq!(Header::check_file(&not_a_trailer), Err(Problem::Signature));
+        // A signature of another file.
+        let mut other = file.clone();
+        other.extend_from_slice(&crate::signature::sign(b"other", &[5; 32]).to_bytes());
+        assert_eq!(Header::check_file(&other), Err(Problem::Signature));
     }
 }

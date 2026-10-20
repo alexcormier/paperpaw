@@ -3,8 +3,10 @@
 //! holds and how it is checked ([`Header`]), how its image is moved to
 //! where it runs ([`Relocator`]), the table the firmware gives every
 //! plugin ([`Api`]) and the plugin's entry ([`Entry`]), and, for the X4,
-//! the index of plugins kept in flash ([`index`]). Plugins get their entry
-//! from the SDK's `plugin!`; `paperpaw-sign pack` makes the files.
+//! the index of plugins kept in flash ([`index`]) behind the firmware's
+//! image ([`ImageExtent`]). Authors sign their files ([`signature`]).
+//! Plugins get their entry from the SDK's `plugin!`; `paperpaw-sign pack`
+//! makes the files.
 //!
 //! # The file
 //!
@@ -27,6 +29,7 @@
 //! | 48..80 | SHA-256 of bytes 0..48 and of everything after the header |
 //! | 80.. | the image: read-only data, then code from `code_at` |
 //! | then | `relocs` offsets into the image (u32 each, increasing) of the 32-bit words that hold an address in the plugin |
+//! | then | the author's signature, if signed ([`signature`], 112 bytes) |
 //!
 //! # Where an image runs
 //!
@@ -50,13 +53,17 @@
 
 extern crate alloc;
 
+mod extent;
 mod header;
 pub mod index;
 mod interface;
 mod reloc;
+pub mod signature;
 
+pub use extent::ImageExtent;
 pub use header::{
     CODE_OFFSET, Chip, FORMAT, HEADER_LEN, Header, LINK_BASE, MAGIC, MAX_IMAGE_LEN, Problem,
 };
 pub use interface::{API_SYMBOL, Api, ENTRY_SECTION, ENTRY_SYMBOL, Entry};
 pub use reloc::{Relocator, check_relocations};
+pub use signature::Signature;

@@ -42,24 +42,24 @@ USAGE:
     paperpaw-sign plugins <image.bin>
         Lists the plugin crates an app image or update file has built in;
         fails if it lists none.
-    paperpaw-sign pack <plugin.elf> <plugin.ppn>
+    paperpaw-sign pack <plugin.elf> <plugin.ppn> [--key <secret-key-file>]
         Makes a native plugin file from a plugin linked with
         paperpaw-plugin.x and --emit-relocs, or says what keeps it from
         moving (writable data, undefined symbols, addresses built into
-        instructions, relative reaches out of the plugin).
+        instructions, relative reaches out of the plugin). With --key,
+        signs it as sign-plugin does.
     paperpaw-sign plugin <plugin.ppn>
-        Shows what a plugin file holds, and its signer if
-        <plugin.ppn>.sig lies beside it (failing if that does not hold).
+        Shows what a plugin file holds, and its author if it is signed
+        (failing if the signature does not hold).
     paperpaw-sign sign-plugin <plugin.ppn> [--key <secret-key-file>]
-        Signs a plugin file as its author: writes <plugin.ppn>.sig and
-        prints the key (64 hexadecimal digits) and the signature (128), as
-        the plugin library lists them; the key as for sign. The signature
-        is Ed25519 over \"PaperPaw plugin file\", a zero byte and the
-        whole file; the .sig file is 104 bytes: PPNS, the format (1, two
-        bytes little-endian), two zero bytes, the public key (32), the
-        signature (64).
-    paperpaw-sign check-plugin <plugin.ppn> [<plugin.ppn.sig>]
-        Shows the signer of a plugin file and whether its signature holds.
+        Signs a plugin file as its author: the signature goes at its end
+        (one it had is replaced), and the author's key (64 hexadecimal
+        digits) is printed, as the plugin library names it; the key as for
+        sign. The signature is paperpaw-native's: Ed25519 over \"PaperPaw
+        plugin file\", a zero byte, the file and the trailer's start.
+    paperpaw-sign check-plugin <plugin.ppn>
+        Shows the author of a plugin file and whether the signature holds;
+        fails if it is not signed.
     paperpaw-sign statics <crate.rlib>...
         Lists the symbols in writable memory (mutable statics) of the
         objects in rlibs (built without LTO); fails if there is one. A
@@ -90,12 +90,12 @@ fn run(args: Vec<String>) -> Result<(), String> {
         }
         ["check", image, signature] => firmware::check(image, signature),
         ["plugins", image] => firmware::plugins(image),
-        ["pack", elf, out] => plugin::pack(elf, out),
+        ["pack", elf, out] => plugin::pack(elf, out, None),
+        ["pack", elf, out, "--key", key] => plugin::pack(elf, out, Some(key)),
         ["plugin", file] => plugin::show(file),
         ["sign-plugin", file] => plugin::sign(file, None),
         ["sign-plugin", file, "--key", key] => plugin::sign(file, Some(key)),
-        ["check-plugin", file] => plugin::check(file, None),
-        ["check-plugin", file, signature] => plugin::check(file, Some(signature)),
+        ["check-plugin", file] => plugin::check(file),
         ["statics", archives @ ..] if !archives.is_empty() => plugin::statics(archives),
         ["-h" | "--help"] => {
             print!("{USAGE}");
