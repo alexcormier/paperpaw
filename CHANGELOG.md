@@ -6,6 +6,14 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Buttons and gestures: where there are buttons only (the X4), a change
+  that leaves no button to select, to go back or to move on or back
+  with, everywhere or in one place (also the lock screen), is refused
+  with a word why; before, binding *Select* to *Nothing* left the device
+  unusable for good. *Reset buttons and gestures*, the last row, takes
+  every change back (*Reset all settings* leaves key bindings as they
+  are). Screens of the same name (a tool's list and its editor) are each
+  offered as a place, told apart by their id; before, only one was.
 - Screen lock: a locked device goes to sleep again, by the power button
   and by itself; refreshing the screen and night mode pass the lock
   too, nothing else does. Unlocking after the device woke with the sleep
