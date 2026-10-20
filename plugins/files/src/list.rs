@@ -23,8 +23,9 @@
 //! menu.
 //!
 //! What is known of each book to filter and sort is kept small
-//! ([`index`]); a page's books are read when it is shown, never while
-//! drawing.
+//! ([`index`]), and in a file while a book covers the library; a page's
+//! books are read, and their words made ready, when it is shown, never
+//! while drawing.
 
 mod find;
 mod grid;
@@ -42,13 +43,14 @@ use alloc::vec::Vec;
 use paperpaw_sdk::builtin::{actions, events, params, slots};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::library::{self, catalog::Walk};
+use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
     Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, RefreshMode,
     RegisterError, Registrar, Screen, ScreenSpec,
 };
 
-use index::{Filter, Index, NEVER, has_catalog, read_line};
+use index::{Filter, Index, NEVER, has_catalog, hash, read_line};
 use rows::{Loaded, Sizes};
 
 /// Finds a book by a letter ([`find`]).
@@ -78,6 +80,9 @@ const SHOW_FILTERS: [Filter; 6] = [
 const STEP_MS: u64 = 20;
 /// Books whose progress is read in one step.
 const STEP_BOOKS: usize = 8;
+/// Books read last whose progress is read again when the library shows
+/// again: what a reading may have changed.
+const RECENT_AGAIN: u8 = 3;
 
 /// Registers the list's screens and actions.
 pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
@@ -119,6 +124,15 @@ pub(crate) fn screen(env: &Env<'_>, _params: &Params) -> Box<dyn Screen> {
     Box::new(ListScreen::new(env))
 }
 
+/// The archive folder, as the setting names it: its books are on the
+/// shelves, not in the list.
+fn archive(env: &Env<'_>) -> String {
+    env.settings
+        .read(&crate::ARCHIVE)
+        .trim_matches('/')
+        .to_string()
+}
+
 /// Opens the library's menu.
 fn open_menu(cx: &mut Cx<'_, '_>) {
     cx.command(Command::OpenSlot(
@@ -135,6 +149,18 @@ fn offer(path: &str, cx: &mut Cx<'_, '_>) {
     ));
 }
 
+/// A book changed on its sheet (finished, favourite): the library reads
+/// it again when it shows.
+const TOUCHED: Event<paperpaw_sdk::ui::choice::Picked> = Event::new("files.list.touched");
+
+/// The command that says the book at `path` changed on its sheet.
+fn touched(path: &str) -> Command {
+    TOUCHED.emit(paperpaw_sdk::ui::choice::Picked {
+        path: path.to_string(),
+        option: String::new(),
+    })
+}
+
 /// Opens the book at `path` in the reader.
 fn read(path: &str, cx: &mut Cx<'_, '_>) {
     cx.command(Command::OpenSlot(
@@ -143,7 +169,7 @@ fn read(path: &str, cx: &mut Cx<'_, '_>) {
     ));
 }
 
-/// A shelf of the shelves' pill.
+/// A shelf of the shelves, with its words made ready.
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ShelfRow {
     /// "Next in your series" (a filter), else a shelf of `kind`.
@@ -153,18 +179,130 @@ struct ShelfRow {
     name: String,
     count: usize,
     finished: usize,
+    icon: &'static str,
+    title: String,
+    note: String,
+}
+
+impl ShelfRow {
+    fn new(next: bool, kind: shelf::Kind, name: &str, count: usize, finished: usize) -> Self {
+        ShelfRow {
+            next,
+            kind,
+            name: name.to_string(),
+            count,
+            finished,
+            icon: "",
+            title: String::new(),
+            note: String::new(),
+        }
+    }
+
+    /// Writes its icon, title and note.
+    fn word(&mut self, env: &Env<'_>) {
+        let books = env.i18n.plural("files.books", self.count as i64, &[]);
+        let (icon, title, note) = match self.kind {
+            _ if self.next => (
+                "arrow-bar-to-right",
+                env.i18n.tr("files.list.show.next").to_string(),
+                books,
+            ),
+            shelf::Kind::Favourites => ("star", env.i18n.tr("files.favourites").to_string(), books),
+            shelf::Kind::Authors => (
+                "user",
+                env.i18n.tr("files.list.authors").to_string(),
+                env.i18n
+                    .plural("files.list.authors.count", self.count as i64, &[]),
+            ),
+            shelf::Kind::Series => {
+                let series = env.i18n.tr("files.list.series");
+                let note = if self.finished > 0 {
+                    let finished =
+                        env.i18n
+                            .plural("files.list.finished.count", self.finished as i64, &[]);
+                    format!("{series} · {books} · {finished}")
+                } else {
+                    format!("{series} · {books}")
+                };
+                ("stack-2", self.name.clone(), note)
+            }
+            _ => (
+                "folder",
+                paperpaw_sdk::files::name(&self.name).to_string(),
+                format!("{} · {books}", env.i18n.tr("files.folder")),
+            ),
+        };
+        self.icon = icon;
+        self.title = title;
+        self.note = note;
+    }
+}
+
+/// Where things go on the screen, and the words of the pills: made anew
+/// when a setting changes (the view, the size of the interface).
+struct Layout {
+    style: UiStyle,
+    sizes: Sizes,
+    header: ui::Header,
+    /// The pills and their names (larger screens), and whether the last
+    /// shows as an icon.
+    pills: Vec<Rect>,
+    pill_labels: Vec<String>,
+    pill_icon: bool,
+    /// The filter's row (small screens).
+    filter_row: Option<Rect>,
+    /// Where the books (or shelves) go.
+    area: Rect,
+    /// The covers' grid, where books show as covers ([`crate::VIEW`]).
+    grid: Option<grid::Grid>,
+}
+
+impl Layout {
+    fn new(env: &Env<'_>) -> Self {
+        let style = UiStyle::new(env);
+        let sizes = Sizes::new(env, &style);
+        let header = ui::Header::new(env, &style, true);
+        let display = env.device.display;
+        let gap = style.gap as u16;
+        let pill_labels: Vec<String> = Filter::ALL
+            .iter()
+            .map(|f| env.i18n.tr(f.label()).to_string())
+            .collect();
+        let (pills, pill_icon, filter_row, top) = if sizes.compact {
+            let row = Rect::new(0, header.area.height, display.width, sizes.filter_row);
+            (Vec::new(), false, Some(row), row.y + row.height + gap / 2)
+        } else {
+            // Room below the pills for the focus's bar.
+            let pills_area = Rect::new(0, header.area.height, display.width, sizes.pill + gap);
+            let (pills, icon) = rows::pill_places(env, &style, &sizes, pills_area, &pill_labels);
+            (pills, icon, None, pills_area.y + pills_area.height)
+        };
+        let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
+        let grid = (env.settings.read(&crate::VIEW) == crate::VIEW_COVERS)
+            .then(|| grid::Grid::new(env, &style, &sizes, area.height));
+        Layout {
+            style,
+            sizes,
+            header,
+            pills,
+            pill_labels,
+            pill_icon,
+            filter_row,
+            area,
+            grid,
+        }
+    }
 }
 
 /// The library; see the [module documentation](self).
 struct ListScreen {
-    style: UiStyle,
-    sizes: Sizes,
-    header: ui::Header,
+    layout: Layout,
     root: String,
+    /// The archive folder, whose books are on the shelves only.
+    archive: String,
     index: Index,
-    /// The catalog being made anew, and whether it was this time.
+    /// The catalog being made anew.
     walk: Option<Walk>,
-    walked: bool,
     filter: Filter,
     by_recent: bool,
     /// The books shown, as indices of the index's items.
@@ -172,9 +310,7 @@ struct ListScreen {
     /// How many books each of `order` stands for: more than one for a
     /// series as a stack (covers only); empty where each is one.
     counts: Vec<u16>,
-    /// The covers' grid, where books show as covers ([`crate::VIEW`]).
-    grid: Option<grid::Grid>,
-    /// The shelves, while their pill is chosen.
+    /// The shelves, while they are shown.
     shelves: Vec<ShelfRow>,
     /// The first book shown is the one read last, as a large card.
     card: bool,
@@ -182,66 +318,61 @@ struct ListScreen {
     /// The focus shows: with buttons, and on touch screens once a button
     /// moved it.
     shown: bool,
-    /// The pills, and whether the last shows as an icon (larger screens).
-    pills: Vec<Rect>,
-    /// The filter's row (small screens).
-    filter_row: Option<Rect>,
     /// The focus is on the filter's row or the pills.
     filter_focused: bool,
-    pill_icon: bool,
-    /// Where the books (or shelves) go.
-    area: Rect,
     /// The books of the page shown, read when it was shown.
     loaded: Vec<Loaded>,
     /// The page `loaded` holds.
     loaded_page: Option<usize>,
+    /// The words of the filter's row, and of an empty list.
+    filter_label: String,
+    filter_end: String,
+    empty_title: String,
+    empty_text: String,
+    /// The search button on touch screens.
+    find: Option<Rect>,
+    /// Paths (hashed) of books moved or removed since the catalog was
+    /// made: not shown until it is made anew.
+    gone: Vec<u32>,
+    /// While covered: the book the focus was on, to find again; the
+    /// index is kept in a file.
+    kept_focus: Option<u32>,
+    /// Books changed on their sheets since it showed (hashed).
+    touched: Vec<u32>,
+    covered: bool,
     /// Just opened: the first `on_show` need not load again.
     fresh: bool,
 }
 
 impl ListScreen {
     fn new(env: &Env<'_>) -> Self {
-        let style = UiStyle::new(env);
-        let sizes = Sizes::new(env, &style);
-        let header = ui::Header::new(env, &style, true);
-        let display = env.device.display;
-        let gap = style.gap as u16;
-        let (pills, pill_icon, filter_row, top) = if sizes.compact {
-            let row = Rect::new(0, header.area.height, display.width, sizes.filter_row);
-            (Vec::new(), false, Some(row), row.y + row.height + gap / 2)
-        } else {
-            let pills_area = Rect::new(0, header.area.height, display.width, sizes.pill + gap / 2);
-            let labels: Vec<&str> = Filter::ALL.iter().map(|f| env.i18n.tr(f.label())).collect();
-            let (pills, icon) = rows::pill_places(env, &style, &sizes, pills_area, &labels);
-            (pills, icon, None, pills_area.y + pills_area.height)
-        };
-        let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
         let mut screen = Self {
+            layout: Layout::new(env),
             root: library::folder(env).to_string(),
-            index: Index::build(env.storage),
+            archive: archive(env),
+            index: Index::build(env.storage, Index::cap(env.device.memory), &archive(env)),
             walk: None,
-            walked: false,
             filter: Filter::All,
             by_recent: env.settings.read(&crate::SORT) != crate::SORT_NAME,
             order: Vec::new(),
             counts: Vec::new(),
-            grid: (env.settings.read(&crate::VIEW) == crate::VIEW_COVERS)
-                .then(|| grid::Grid::new(env, &style, &sizes, area.height)),
             shelves: Vec::new(),
             card: false,
             focus: 0,
             shown: !env.device.input.touch,
-            pills,
-            pill_icon,
-            filter_row,
             filter_focused: false,
-            area,
             loaded: Vec::new(),
             loaded_page: None,
+            filter_label: String::new(),
+            filter_end: String::new(),
+            empty_title: String::new(),
+            empty_text: String::new(),
+            find: None,
+            gone: Vec::new(),
+            kept_focus: None,
+            touched: Vec::new(),
+            covered: false,
             fresh: true,
-            style,
-            sizes,
-            header,
         };
         screen.refilter(env);
         screen
@@ -255,10 +386,19 @@ impl ListScreen {
         }
     }
 
-    /// Takes the shown books (or shelves) anew from the index, focus on
-    /// the first.
-    fn refilter(&mut self, env: &Env<'_>) {
+    /// The hash of the book the focus is on, if one is.
+    fn focused_book(&self) -> Option<u32> {
+        let i = *self.order.get(self.focus)?;
+        Some(self.index.items.get(usize::from(i))?.hash)
+    }
+
+    /// Takes the shown books (or shelves) anew from the index, the focus
+    /// on the book whose path hashes to `keep` where it is shown, else at
+    /// the place it was (or the first, `keep_place` false).
+    fn refilter_keeping(&mut self, env: &Env<'_>, keep: Option<u32>, keep_place: bool) {
+        let place = self.focus;
         self.focus = 0;
+        self.loaded = Vec::new();
         self.loaded_page = None;
         self.counts = Vec::new();
         if self.filter == Filter::Shelves {
@@ -268,26 +408,111 @@ impl ListScreen {
         } else {
             self.shelves = Vec::new();
             self.order = self.index.order(self.filter, self.by_recent);
+            if !self.gone.is_empty() {
+                let (items, gone) = (&self.index.items, &self.gone);
+                self.order
+                    .retain(|&i| !gone.contains(&items[usize::from(i)].hash));
+            }
             // As covers, the books of a series are one stack.
-            if self.grid.is_some() && self.filter == Filter::All {
+            if self.layout.grid.is_some() && self.filter == Filter::All {
                 (self.order, self.counts) = self.index.stacked(&self.order);
             }
             // The card: the book read last, while it is read (as covers,
             // it is the first cover).
             self.card = self.by_recent
-                && self.grid.is_none()
+                && self.layout.grid.is_none()
                 && matches!(self.filter, Filter::All | Filter::Reading)
                 && self.order.first().is_some_and(|&i| {
                     let item = &self.index.items[usize::from(i)];
                     item.recent != NEVER && item.progress != 100
                 });
         }
+        let found = keep.and_then(|hash| {
+            let items = &self.index.items;
+            self.order
+                .iter()
+                .position(|&i| items[usize::from(i)].hash == hash)
+        });
+        self.focus = match found {
+            Some(at) => at,
+            None if keep_place => place.min(self.len().saturating_sub(1)),
+            None => 0,
+        };
         self.load_page(env);
+        self.word(env);
     }
 
-    /// The shelves: favourites and authors, then the series and the
-    /// folders, each with how many books it has (and how many are
-    /// finished), from one pass over the catalog.
+    /// Takes the shown books anew, the focus on the first.
+    fn refilter(&mut self, env: &Env<'_>) {
+        self.refilter_keeping(env, None, false);
+    }
+
+    /// Takes the shown books anew, the focus where it was: on its book,
+    /// else at its place.
+    fn refilter_in_place(&mut self, env: &Env<'_>) {
+        let keep = self.focused_book();
+        self.refilter_keeping(env, keep, true);
+    }
+
+    /// Writes the words of the filter's row and of an empty list, and
+    /// where the search button is, so drawing writes none.
+    fn word(&mut self, env: &Env<'_>) {
+        let shown = SHOW_FILTERS
+            .iter()
+            .position(|f| *f == self.filter)
+            .unwrap_or(0);
+        let mut key = String::from("files.list.show.");
+        key.push_str(SHOW_OPTIONS[shown]);
+        self.filter_label = env.i18n.tr(&key).to_string();
+        let total = self.index.total;
+        self.filter_end = if self.filter == Filter::Shelves {
+            String::new()
+        } else if self.filter == Filter::All && total > self.index.items.len() {
+            // Some left out: said, not hidden.
+            env.i18n.format(
+                "files.list.left-out",
+                &[
+                    ("shown", Arg::Int(self.index.items.len() as i64)),
+                    ("count", Arg::Int(total as i64)),
+                ],
+            )
+        } else {
+            env.i18n.plural("files.books", self.len() as i64, &[])
+        };
+        (self.empty_title, self.empty_text) = if let Some(walk) = &self.walk
+            && self.index.items.is_empty()
+        {
+            let found = walk.found() as i64;
+            (
+                String::new(),
+                env.i18n.plural("files.collecting", found, &[]),
+            )
+        } else if self.index.items.is_empty() && self.index.archived > 0 {
+            (
+                String::new(),
+                env.i18n.tr("files.list.none.all").to_string(),
+            )
+        } else if self.index.items.is_empty() {
+            (
+                env.i18n.tr("files.empty.title").to_string(),
+                env.i18n
+                    .format("files.empty", &[("dir", Arg::Str(&self.root))]),
+            )
+        } else {
+            let key = match self.filter {
+                Filter::Reading => "files.list.none.reading",
+                Filter::Unread => "files.list.none.unread",
+                Filter::Next => "files.list.none.next",
+                _ => "files.list.none.finished",
+            };
+            (String::new(), env.i18n.tr(key).to_string())
+        };
+        self.find = self.find_button(env);
+    }
+
+    /// The shelves: the next books of the series begun, favourites and
+    /// authors, then the series and the folders, each with how many books
+    /// it has (and how many are finished), from one pass over the catalog.
     fn make_shelves(&self, env: &Env<'_>) -> Vec<ShelfRow> {
         let favourites = library::favourites(env.storage).len();
         let mut authors: Vec<String> = Vec::new();
@@ -314,24 +539,15 @@ impl ListScreen {
                     row.count += 1;
                     row.finished += usize::from(finished);
                 }
-                None => rows.push(ShelfRow {
-                    next: false,
-                    kind,
-                    name: name.to_string(),
-                    count: 1,
-                    finished: usize::from(finished),
-                }),
+                None => rows.push(ShelfRow::new(false, kind, name, 1, usize::from(finished))),
             };
             if !line.series.is_empty() {
                 count(&mut series, shelf::Kind::Series, &line.series);
             }
             let inner = line.path.strip_prefix(&prefix).unwrap_or(&line.path);
             if let Some((folder, _)) = inner.split_once('/') {
-                count(
-                    &mut folders,
-                    shelf::Kind::Folder,
-                    &format!("{prefix}{folder}"),
-                );
+                let folder = format!("{prefix}{folder}");
+                count(&mut folders, shelf::Kind::Folder, &folder);
             }
         });
         series.sort_by_key(|r| r.name.to_lowercase());
@@ -339,40 +555,35 @@ impl ListScreen {
         let next = self.index.order(Filter::Next, false).len();
         let mut shelves = Vec::new();
         if next > 0 {
-            shelves.push(ShelfRow {
-                next: true,
-                kind: shelf::Kind::Series,
-                name: String::new(),
-                count: next,
-                finished: 0,
-            });
+            shelves.push(ShelfRow::new(true, shelf::Kind::Series, "", next, 0));
         }
-        shelves.extend([
-            ShelfRow {
-                next: false,
-                kind: shelf::Kind::Favourites,
-                name: String::new(),
-                count: favourites,
-                finished: 0,
-            },
-            ShelfRow {
-                next: false,
-                kind: shelf::Kind::Authors,
-                name: String::new(),
-                count: authors.len(),
-                finished: 0,
-            },
-        ]);
+        shelves.push(ShelfRow::new(
+            false,
+            shelf::Kind::Favourites,
+            "",
+            favourites,
+            0,
+        ));
+        shelves.push(ShelfRow::new(
+            false,
+            shelf::Kind::Authors,
+            "",
+            authors.len(),
+            0,
+        ));
         shelves.extend(series);
         shelves.extend(folders);
+        for row in &mut shelves {
+            row.word(env);
+        }
         shelves
     }
 
     fn row_height(&self) -> u16 {
         if self.filter == Filter::Shelves {
-            self.style.noted_row() as u16
+            self.layout.style.noted_row() as u16
         } else {
-            self.sizes.row
+            self.layout.sizes.row
         }
     }
 
@@ -381,22 +592,23 @@ impl ListScreen {
     /// foot of the screen.
     fn row_on(&self, page: usize) -> u16 {
         let row = self.row_height();
-        if !self.sizes.compact || self.filter == Filter::Shelves {
+        if !self.layout.sizes.compact || self.filter == Filter::Shelves {
             return row;
         }
         let card = if self.card && page == 0 {
-            self.sizes.card
+            self.layout.sizes.card
         } else {
             0
         };
-        let room = self.area.height.saturating_sub(card);
+        let room = self.layout.area.height.saturating_sub(card);
         let rows = (room / row.max(1)).max(1);
         room / rows
     }
 
     /// The covers' grid, while books show (not the shelves).
     fn covers(&self) -> Option<&grid::Grid> {
-        self.grid
+        self.layout
+            .grid
             .as_ref()
             .filter(|_| self.filter != Filter::Shelves)
     }
@@ -405,18 +617,21 @@ impl ListScreen {
     fn per_page(&self) -> usize {
         match self.covers() {
             Some(g) => g.per_page(),
-            None => usize::from(self.area.height / self.row_height().max(1)).max(1),
+            None => usize::from(self.layout.area.height / self.row_height().max(1)).max(1),
         }
     }
 
-    /// Entries on the first page: the card and the rows (or covers)
-    /// below it.
+    /// Entries on the first page: the card and the rows below it.
     fn first_page(&self) -> usize {
         if !self.card {
             return self.per_page();
         }
-        let below = self.area.height.saturating_sub(self.sizes.card);
-        1 + usize::from(below / self.sizes.row.max(1))
+        let below = self
+            .layout
+            .area
+            .height
+            .saturating_sub(self.layout.sizes.card);
+        1 + usize::from(below / self.layout.sizes.row.max(1))
     }
 
     fn page_of(&self, index: usize) -> usize {
@@ -449,22 +664,23 @@ impl ListScreen {
     fn place(&self, index: usize) -> Rect {
         let page = self.page_of(index);
         let slot = index - self.page_start(page);
-        let a = self.area;
-        let row = self.row_on(page);
+        let a = self.layout.area;
         if let Some(g) = self.covers() {
             return g.place(a, a.y, slot);
         }
+        let row = self.row_on(page);
         if self.card && page == 0 {
             if slot == 0 {
-                return Rect::new(a.x, a.y, a.width, self.sizes.card);
+                return Rect::new(a.x, a.y, a.width, self.layout.sizes.card);
             }
-            let y = a.y + self.sizes.card + (slot as u16 - 1) * row;
+            let y = a.y + self.layout.sizes.card + (slot as u16 - 1) * row;
             return Rect::new(a.x, y, a.width, row);
         }
         Rect::new(a.x, a.y + slot as u16 * row, a.width, row)
     }
 
-    /// Reads the books of the page the focus is on, if they are not read.
+    /// Reads the books of the page the focus is on, if they are not read,
+    /// and makes their words ready.
     fn load_page(&mut self, env: &Env<'_>) {
         if self.filter == Filter::Shelves {
             self.loaded = Vec::new();
@@ -476,6 +692,8 @@ impl ListScreen {
         }
         // The page before goes first: never two pages of covers at once.
         self.loaded = Vec::new();
+        let (style, sizes) = (&self.layout.style, &self.layout.sizes);
+        let width = self.layout.area.width;
         let mut loaded = Vec::new();
         for index in self.page_range(page) {
             let item = self.index.items[usize::from(self.order[index])];
@@ -484,11 +702,22 @@ impl ListScreen {
             };
             let card = self.card && index == 0;
             let cover = match self.covers() {
-                _ if card => self.sizes.card_cover,
+                _ if card => sizes.card_cover,
                 Some(g) => g.cover,
-                None => self.sizes.cover,
+                None => sizes.cover,
             };
-            let book = Loaded::load(env, line, item.recent != NEVER, cover, card);
+            let mut book = Loaded::load(env, line, item.recent != NEVER, cover, card);
+            match self.covers() {
+                _ if card => rows::prepare_card(env, style, sizes, width, &mut book),
+                Some(g) => {
+                    let count = self.counts.get(index).copied().unwrap_or(1);
+                    grid::prepare_cell(env, style, sizes, g, &mut book, count);
+                }
+                None => {
+                    let note = book.author.clone();
+                    rows::prepare_row(env, style, sizes, width, &mut book, note, false);
+                }
+            }
             self.index.set_progress(item.hash, book.progress);
             loaded.push(book);
         }
@@ -522,6 +751,10 @@ impl ListScreen {
     fn step(&mut self, delta: isize, cx: &mut Cx<'_, '_>) {
         let len = self.len();
         let before = self.focus;
+        if !self.index.has_books() {
+            // Nothing to move to: no books, no filter shown.
+            return;
+        }
         if self.filter_focused {
             self.filter_focused = false;
             self.focus = if delta > 0 { 0 } else { len.saturating_sub(1) };
@@ -554,6 +787,7 @@ impl ListScreen {
             cx.request_refresh(RefreshMode::Fast);
         } else {
             self.load_page(&env);
+            self.find = self.find_button(&env);
             cx.request_redraw();
             cx.request_refresh(RefreshMode::Partial);
         }
@@ -569,6 +803,7 @@ impl ListScreen {
         self.filter_focused = false;
         let env = *cx.env();
         self.load_page(&env);
+        self.find = self.find_button(&env);
         cx.request_redraw();
         cx.request_refresh(RefreshMode::Partial);
     }
@@ -588,15 +823,29 @@ impl ListScreen {
             }
             return;
         }
-        if let Some(book) = self.book(index) {
-            if self.counts.get(index).is_some_and(|&c| c > 1) {
-                // A series as a stack: its books.
-                cx.command(shelf::open(shelf::Kind::Series, &book.series));
-                return;
-            }
-            let path = book.path.clone();
-            read(&path, cx);
+        let Some(book) = self.book(index) else {
+            return;
+        };
+        if self.counts.get(index).is_some_and(|&c| c > 1) {
+            // A series as a stack: its books.
+            cx.command(shelf::open(shelf::Kind::Series, &book.series));
+            return;
         }
+        let path = book.path.clone();
+        let env = *cx.env();
+        if env.storage.exists(&path) {
+            read(&path, cx);
+            return;
+        }
+        // Gone without a word (deleted on a computer, say): left out, and
+        // the catalog made anew.
+        self.gone.push(hash(&path));
+        crate::shelves::outdated();
+        self.walk = Some(Walk::start(env.storage, &self.root));
+        self.refilter_in_place(&env);
+        cx.command(Command::Notify(env.i18n.tr("files.list.gone").to_string()));
+        cx.request_redraw();
+        cx.wake_at(env.now);
     }
 
     /// Offers what can be done with book `index`; `false` for a shelf.
@@ -611,58 +860,45 @@ impl ListScreen {
         }
     }
 
-    /// Back from a book or an overlay: progress and order may have
-    /// changed; read again (the order at once, progress in the
-    /// background).
-    fn reload(&mut self, env: &Env<'_>) {
-        self.index.rerank(env.storage);
-        self.index.read_again();
-        let filter = self.filter;
-        let focus = self.focus;
-        self.refilter(env);
-        // The book just read comes first: the focus goes there.
-        if !self.by_recent || filter == Filter::Shelves {
-            self.focus = focus.min(self.len().saturating_sub(1));
-            self.load_page(env);
-        }
-    }
-
-    /// On touch screens, where the header has its search button: left of
-    /// the page arrows (as [`ui::Header`] places them).
+    /// On touch screens, where the search button is: at the end of the
+    /// filter's row, or in the header left of the page arrows (as
+    /// [`ui::Header`] places them).
     fn find_button(&self, env: &Env<'_>) -> Option<Rect> {
-        if !env.device.input.touch || self.index.items.is_empty() {
+        if !env.device.input.touch || !self.index.has_books() {
             return None;
         }
-        if let Some(row) = self.filter_row {
+        let style = &self.layout.style;
+        if let Some(row) = self.layout.filter_row {
             // At the end of the filter's row, its icon on the margin.
             let square = row.height;
-            let size = self.style.title * ui::ICON_SCALE;
+            let size = style.title * ui::ICON_SCALE;
             let icon = ui::icon_width(env, "search", size) as u16;
-            let right = (row.x + row.width).saturating_sub(self.style.margin as u16);
+            let right = (row.x + row.width).saturating_sub(style.margin as u16);
             let x = (right + (square - icon) / 2).saturating_sub(square);
             return Some(Rect::new(x, row.y, square, square));
         }
-        let a = self.header.area;
+        let a = self.layout.header.area;
         let square = a.height;
         let pages = self.pages();
         let right = if self.len() > 0 && pages > 1 {
-            let font = self.style.font(env)?;
+            let font = style.font(env)?;
             let label = format!("{} / {pages}", self.page_of(self.focus) + 1);
-            let label = font.measure(self.style.small, &label) as u16;
+            let label = font.measure(style.small, &label) as u16;
             (a.x + a.width).saturating_sub(2 * (square * 4 / 5) + label)
         } else {
-            (a.x + a.width).saturating_sub(self.style.margin as u16)
+            (a.x + a.width).saturating_sub(style.margin as u16)
         };
         Some(Rect::new(right.saturating_sub(square), a.y, square, square))
     }
 
     /// Where the filter is: its row, or the pills' band.
     fn filter_area(&self) -> Rect {
-        match self.filter_row {
+        match self.layout.filter_row {
             Some(row) => row,
             None => {
-                let top = self.header.area.y + self.header.area.height;
-                Rect::new(0, top, self.area.width, self.area.y.saturating_sub(top))
+                let top = self.layout.header.area.y + self.layout.header.area.height;
+                let a = self.layout.area;
+                Rect::new(0, top, a.width, a.y.saturating_sub(top))
             }
         }
     }
@@ -681,30 +917,16 @@ impl ListScreen {
         ));
     }
 
-    fn draw_empty(&self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
-        let style = &self.style;
-        let area = self.area;
-        if self.walk.is_some() && self.index.items.is_empty() {
-            let found = self.walk.as_ref().map_or(0, Walk::found);
-            let message = env.i18n.plural("files.collecting", found as i64, &[]);
-            ui::draw_message(canvas, env, style, area, &message);
-            return;
-        }
-        if self.index.items.is_empty() {
-            let text = env
-                .i18n
-                .format("files.empty", &[("dir", Arg::Str(&self.root))]);
-            let title = env.i18n.tr("files.empty.title");
-            ui::draw_empty(canvas, env, style, area, "books", title, &text);
-            return;
-        }
-        let key = match self.filter {
-            Filter::Reading => "files.list.none.reading",
-            Filter::Unread => "files.list.none.unread",
-            Filter::Next => "files.list.none.next",
-            _ => "files.list.none.finished",
-        };
-        ui::draw_empty(canvas, env, style, area, "books", "", env.i18n.tr(key));
+    /// The catalog was made anew: the index from it, the place kept.
+    fn walked(&mut self, env: &Env<'_>) {
+        self.walk = None;
+        crate::shelves::made(env);
+        let keep = self.focused_book();
+        // The old index goes first: never two at once.
+        self.index = Index::default();
+        self.index = Index::build(env.storage, Index::cap(env.device.memory), &archive(env));
+        self.gone.clear();
+        self.refilter_keeping(env, keep, true);
     }
 
     fn draw_shelf(
@@ -715,117 +937,94 @@ impl ListScreen {
         rect: Rect,
         focused: bool,
     ) {
-        let style = &self.style;
+        let style = &self.layout.style;
+        // A row, whose words are those drawn in it.
+        canvas.describe(Role::Row, "", rect, focused, None);
         let ink = style.focus_ink(focused);
         let room = ui::icon_room(env, style, true);
-        let (icon, title, note) = match row.kind {
-            _ if row.next => (
-                "arrow-bar-to-right",
-                env.i18n.tr("files.list.show.next").to_string(),
-                env.i18n.plural("files.books", row.count as i64, &[]),
-            ),
-            shelf::Kind::Favourites => (
-                "star",
-                env.i18n.tr("files.favourites").to_string(),
-                env.i18n.plural("files.books", row.count as i64, &[]),
-            ),
-            shelf::Kind::Authors => (
-                "user",
-                env.i18n.tr("files.list.authors").to_string(),
-                env.i18n
-                    .plural("files.list.authors.count", row.count as i64, &[]),
-            ),
-            shelf::Kind::Series => {
-                let books = env.i18n.plural("files.books", row.count as i64, &[]);
-                let note = if row.finished > 0 {
-                    let finished =
-                        env.i18n
-                            .plural("files.list.finished.count", row.finished as i64, &[]);
-                    format!(
-                        "{} · {books} · {finished}",
-                        env.i18n.tr("files.list.series")
-                    )
-                } else {
-                    format!("{} · {books}", env.i18n.tr("files.list.series"))
-                };
-                ("stack-2", row.name.clone(), note)
-            }
-            _ => {
-                let books = env.i18n.plural("files.books", row.count as i64, &[]);
-                (
-                    "folder",
-                    paperpaw_sdk::files::name(&row.name).to_string(),
-                    format!("{} · {books}", env.i18n.tr("files.folder")),
-                )
-            }
-        };
         let band = ui::title_area(style, rect);
-        ui::draw_row_icon(canvas, env, style, band, room, Some(icon), ink);
+        ui::draw_row_icon(canvas, env, style, band, room, Some(row.icon), ink);
         let text = Rect::new(
             rect.x + room,
             rect.y,
             rect.width.saturating_sub(room),
             rect.height,
         );
-        ui::draw_noted_row(canvas, env, style, text, focused, &title, "›", &note);
+        ui::draw_noted_row(
+            canvas, env, style, text, focused, &row.title, "›", &row.note,
+        );
     }
 }
 
 impl Screen for ListScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
-        let style = self.style;
-        let len = self.len();
-        // "Find": a search button on touch screens, in the header or at
-        // the end of the filter's row; with buttons in the filter's
-        // choice.
-        let find = self.find_button(env);
-        let paging = (len > 0).then(|| (self.page_of(self.focus), self.pages()));
-        let title = env.i18n.tr("files.title");
-        self.header.draw(canvas, env, &style, title, None, paging);
-        if let Some(row) = self.filter_row {
-            if !self.index.items.is_empty() {
-                let shown = SHOW_FILTERS
-                    .iter()
-                    .position(|f| *f == self.filter)
-                    .unwrap_or(0);
-                let key = format!("files.list.show.{}", SHOW_OPTIONS[shown]);
-                let label = env.i18n.tr(&key).to_string();
-                let end = if self.filter == Filter::Shelves {
-                    String::new()
-                } else {
-                    env.i18n.plural("files.books", len as i64, &[])
-                };
-                let focused = self.shown && self.filter_focused;
-                rows::draw_filter_row(canvas, env, &style, row, focused, &label, &end, find);
-            }
-        } else if let Some(button) = find {
-            let size = style.title * ui::ICON_SCALE;
-            let w = ui::icon_width(env, "search", size);
-            let x = f32::from(button.x) + (f32::from(button.width) - w) / 2.0;
-            let ink = style.header_colors().1;
-            ui::draw_icon(canvas, env, "search", size, x, button, ink);
-        }
-        let labels: Vec<&str> = Filter::ALL.iter().map(|f| env.i18n.tr(f.label())).collect();
-        let active = Filter::ALL
-            .iter()
-            .position(|f| *f == self.filter)
-            .unwrap_or(0);
-        // No pills before there are books to sort.
-        if self.filter_row.is_none() && !self.index.items.is_empty() {
-            rows::draw_pills(
-                canvas,
-                env,
-                &style,
-                &self.pills,
-                &labels,
-                active,
-                self.pill_icon,
-            );
-        }
-        if len == 0 {
-            self.draw_empty(canvas, env);
+        if self.covered {
+            // Below an overlay left open before it showed again: nothing
+            // to draw until it shows ([`Screen::on_show`]).
             return;
         }
+        let layout = &self.layout;
+        let style = layout.style;
+        let len = self.len();
+        let paging = (len > 0).then(|| (self.page_of(self.focus), self.pages()));
+        let title = env.i18n.tr("files.title");
+        layout.header.draw(canvas, env, &style, title, None, paging);
+        let has_books = self.index.has_books();
+        let focused_filter = self.shown && self.filter_focused;
+        if let Some(row) = layout.filter_row {
+            if has_books {
+                let (label, end) = (&self.filter_label, &self.filter_end);
+                rows::draw_filter_row(
+                    canvas,
+                    env,
+                    &style,
+                    row,
+                    focused_filter,
+                    label,
+                    end,
+                    self.find,
+                );
+            }
+        } else {
+            if let Some(button) = self.find {
+                let size = style.title * ui::ICON_SCALE;
+                let w = ui::icon_width(env, "search", size);
+                let x = f32::from(button.x) + (f32::from(button.width) - w) / 2.0;
+                let ink = style.header_colors().1;
+                ui::draw_icon(canvas, env, "search", size, x, button, ink);
+            }
+            // No pills before there are books to sort. Next in your series
+            // is on the shelves: their pill is the active one then.
+            if has_books {
+                let shown = if self.filter == Filter::Next {
+                    Filter::Shelves
+                } else {
+                    self.filter
+                };
+                let active = Filter::ALL.iter().position(|f| *f == shown);
+                rows::draw_pills(
+                    canvas,
+                    env,
+                    &style,
+                    &layout.pills,
+                    &layout.pill_labels,
+                    active,
+                    focused_filter,
+                    layout.pill_icon,
+                );
+            }
+        }
+        if len == 0 {
+            let area = layout.area;
+            if self.walk.is_some() && !has_books {
+                ui::draw_message(canvas, env, &style, area, &self.empty_text);
+            } else {
+                let (title, text) = (&self.empty_title, &self.empty_text);
+                ui::draw_empty(canvas, env, &style, area, "books", title, text);
+            }
+            return;
+        }
+        let sizes = &layout.sizes;
         let page = self.page_of(self.focus);
         for index in self.page_range(page) {
             let rect = self.place(index);
@@ -835,14 +1034,13 @@ impl Screen for ListScreen {
             let focused = self.shown && !self.filter_focused && index == self.focus;
             if self.card && index == 0 {
                 if let Some(book) = self.book(0) {
-                    rows::draw_card(canvas, env, &style, &self.sizes, rect, focused, book);
+                    rows::draw_card(canvas, env, &style, sizes, rect, focused, book);
                 }
                 continue;
             }
             if let Some(g) = self.covers() {
                 if let Some(book) = self.book(index) {
                     let count = self.counts.get(index).copied().unwrap_or(1);
-                    let sizes = &self.sizes;
                     grid::draw_cell(canvas, env, &style, sizes, g, rect, focused, book, count);
                 }
                 continue;
@@ -855,86 +1053,108 @@ impl Screen for ListScreen {
             if self.filter == Filter::Shelves {
                 self.draw_shelf(canvas, env, &self.shelves[index], rect, focused);
             } else if let Some(book) = self.book(index) {
-                let tail = book.series_label();
-                rows::draw_book_row(
-                    canvas,
-                    env,
-                    &style,
-                    &self.sizes,
-                    rect,
-                    focused,
-                    book,
-                    &book.author,
-                    &tail,
-                    false,
-                );
+                rows::draw_book_row(canvas, env, &style, sizes, rect, focused, book, false);
             }
         }
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        if !core::mem::take(&mut self.fresh) {
-            self.reload(&env);
+        if core::mem::take(&mut self.fresh) {
+            if !has_catalog(env.storage) {
+                // No catalog yet: made first, then shown.
+                self.walk = Some(Walk::start(env.storage, &self.root));
+                self.word(&env);
+            }
+        } else if core::mem::take(&mut self.covered) {
+            // Back from a book or a screen over the whole library: the
+            // index as it was kept, then what may have changed read again
+            // (the books read last, those changed on their sheets).
+            let cap = Index::cap(env.device.memory);
+            let archive = archive(&env);
+            self.index = Index::load(env.storage, &archive)
+                .unwrap_or_else(|| Index::build(env.storage, cap, &archive));
+            self.index.rerank(env.storage);
+            let touched = core::mem::take(&mut self.touched);
+            self.index.read_some_again(RECENT_AGAIN, &touched);
+            let keep = self.kept_focus.take();
+            self.refilter_keeping(&env, keep, true);
             cx.request_redraw();
-        } else if !has_catalog(env.storage) {
-            // No catalog yet: made first, then shown.
+        } else {
+            // An overlay (a sheet, a choice) went: what it changed.
+            let touched = core::mem::take(&mut self.touched);
+            if !touched.is_empty() {
+                self.index.read_some_again(0, &touched);
+                self.refilter_in_place(&env);
+                cx.request_redraw();
+            }
+        }
+        if self.walk.is_some() && !crate::shelves::is_outdated(&env) && has_catalog(env.storage) {
+            // Another view of the library made the catalog meanwhile.
+            self.walked(&env);
+            cx.request_redraw();
+        } else if self.walk.is_none()
+            && crate::shelves::is_outdated(&env)
+            && has_catalog(env.storage)
+        {
+            // Books came, went or moved since the catalog was made.
             self.walk = Some(Walk::start(env.storage, &self.root));
         }
         cx.wake_at(env.now);
     }
 
     fn on_hide(&mut self) {
-        // The covers go while a book is read: memory for it.
+        // Covered by a book (or another full screen): the covers and the
+        // index go, memory for the book; the index is kept in a file.
         self.loaded = Vec::new();
         self.loaded_page = None;
+        if self.covered {
+            return;
+        }
+        self.covered = true;
+        self.kept_focus = self.focused_book();
+        self.order = Vec::new();
+        self.counts = Vec::new();
+        self.shelves = Vec::new();
+        self.index = Index::default();
     }
 
     /// Makes the catalog anew or reads books' progress, a step at a time.
     fn on_timer(&mut self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
+        if self.covered {
+            return;
+        }
         if let Some(walk) = &mut self.walk {
             if walk.step(&env) {
-                // The new catalog: the index anew, the place kept.
-                self.walk = None;
-                self.walked = true;
-                crate::shelves::made(&env);
-                // The old index goes first: never two at once.
-                self.index = Index::default();
-                self.index = Index::build(env.storage);
-                let focus = self.focus;
-                self.refilter(&env);
-                self.focus = focus.min(self.len().saturating_sub(1));
-                self.load_page(&env);
+                self.walked(&env);
                 cx.request_redraw();
                 cx.request_refresh(RefreshMode::Partial);
             } else if self.index.items.is_empty() {
                 // "Collecting the books" counts up.
-                cx.request_redraw_area(self.area);
+                self.word(&env);
+                cx.request_redraw_area(self.layout.area);
                 cx.request_refresh(RefreshMode::Fast);
             }
             cx.wake_at(env.now.add_millis(STEP_MS));
             return;
         }
         if self.index.unknown() > 0 {
-            let stacks = self.grid.is_some() && self.filter == Filter::All;
+            let stacks = self.layout.grid.is_some() && self.filter == Filter::All;
             if self.index.step(env.storage, STEP_BOOKS) && (self.filter != Filter::All || stacks) {
                 // Every book's progress known: the filter (or which books
                 // are stacked) is right now.
-                let focus = self.focus;
-                self.refilter(&env);
-                self.focus = focus.min(self.len().saturating_sub(1));
-                self.load_page(&env);
+                self.refilter_in_place(&env);
                 cx.request_redraw();
                 cx.request_refresh(RefreshMode::Partial);
             }
             cx.wake_at(env.now.add_millis(STEP_MS));
             return;
         }
-        if !self.walked && crate::shelves::is_outdated(&env) {
-            // Books that came since the catalog was made.
-            self.walk = Some(Walk::start(env.storage, &self.root));
-            cx.wake_at(env.now.add_millis(STEP_MS));
+        if self.index.dirty {
+            // Settled: kept in a file, to be read again instead of made
+            // anew when the library shows after a book.
+            self.index.dirty = !self.index.save(env.storage, &archive(&env));
         }
     }
 
@@ -942,7 +1162,7 @@ impl Screen for ListScreen {
         let a = action;
         let touch = cx.env().device.input.touch;
         let side = *a == actions::LEFT || *a == actions::RIGHT;
-        if side && self.filter_focused && self.filter_row.is_none() {
+        if side && self.filter_focused && self.layout.filter_row.is_none() {
             // On the pills, left and right go from pill to pill.
             let steps = if *a == actions::LEFT { -1 } else { 1 };
             self.set_filter(self.filter.step(steps), cx);
@@ -990,36 +1210,31 @@ impl Screen for ListScreen {
             return Handled::No;
         }
         let paging = Some((self.page_of(self.focus), self.pages()));
-        if let Some(action) = self.header.tap(cx.env(), &self.style, point, paging) {
+        let style = self.layout.style;
+        if let Some(action) = self.layout.header.tap(cx.env(), &style, point, paging) {
             cx.command(Command::RunAction(action));
             return Handled::Yes;
         }
-        if self.header.area.contains(point) {
+        if self.layout.header.area.contains(point) {
             // The search button, else the title: the library's menu.
-            if self
-                .find_button(cx.env())
-                .is_some_and(|b| b.contains(point))
-            {
+            if self.find.is_some_and(|b| b.contains(point)) {
                 cx.command(Command::OpenScreen(FIND, Params::new()));
             } else {
                 open_menu(cx);
             }
             return Handled::Yes;
         }
-        if let Some(row) = self.filter_row
+        if let Some(row) = self.layout.filter_row
             && row.contains(point)
         {
-            if self
-                .find_button(cx.env())
-                .is_some_and(|b| b.contains(point))
-            {
+            if self.find.is_some_and(|b| b.contains(point)) {
                 cx.command(Command::OpenScreen(FIND, Params::new()));
             } else {
                 self.choose_shown(cx);
             }
             return Handled::Yes;
         }
-        if let Some(n) = self.pills.iter().position(|p| p.contains(point)) {
+        if let Some(n) = self.layout.pills.iter().position(|p| p.contains(point)) {
             self.set_filter(Filter::ALL[n], cx);
             return Handled::Yes;
         }
@@ -1046,24 +1261,62 @@ impl Screen for ListScreen {
             }
             return;
         }
+        if let Some(changed) = TOUCHED.read(event, params) {
+            self.touched.push(hash(&changed.path));
+            return;
+        }
         let env = *cx.env();
-        if *event == events::LIBRARY_CHANGED {
+        let gone = if let Some(moved) = events::BOOK_MOVED.read(event, params) {
+            Some(moved.from)
+        } else {
+            events::BOOK_REMOVED
+                .read(event, params)
+                .map(|removed| removed.path)
+        };
+        if let Some(path) = gone {
+            // Moved (to the archive, say) or removed: not shown where it
+            // was; the catalog is made anew when the library shows.
+            self.gone.push(hash(&path));
+            if !self.covered {
+                self.walk = Some(Walk::start(env.storage, &self.root));
+                self.refilter_in_place(&env);
+                cx.request_redraw();
+                cx.wake_at(env.now);
+            }
+        } else if *event == events::LIBRARY_CHANGED {
             // Books came or went: the catalog anew.
             self.walk = Some(Walk::start(env.storage, &self.root));
-            cx.wake_at(env.now);
+            if !self.covered {
+                cx.wake_at(env.now);
+            }
         } else if *event == events::SETTING_CHANGED {
-            let by_recent = env.settings.read(&crate::SORT) != crate::SORT_NAME;
             let root = library::folder(&env);
             if root != self.root {
                 *self = Self::new(&env);
                 self.fresh = false;
                 self.walk = Some(Walk::start(env.storage, &self.root));
-            } else if by_recent != self.by_recent {
-                self.by_recent = by_recent;
-                self.refilter(&env);
+            } else if !self.covered {
+                // The view, the order, the size of the interface: laid out
+                // anew, the focus on its book; another archive folder: the
+                // index anew.
+                self.by_recent = env.settings.read(&crate::SORT) != crate::SORT_NAME;
+                self.layout = Layout::new(&env);
+                if archive(&env) != self.archive {
+                    self.archive = archive(&env);
+                    let cap = Index::cap(env.device.memory);
+                    self.index = Index::default();
+                    self.index = Index::build(env.storage, cap, &self.archive);
+                }
+                self.refilter_in_place(&env);
+            } else {
+                // Laid out anew when it shows.
+                self.by_recent = env.settings.read(&crate::SORT) != crate::SORT_NAME;
+                self.layout = Layout::new(&env);
             }
             cx.request_redraw();
-            cx.wake_at(env.now);
+            if !self.covered {
+                cx.wake_at(env.now);
+            }
         }
     }
 }

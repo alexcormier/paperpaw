@@ -25,8 +25,22 @@ use paperpaw_sdk::library;
 pub(crate) const UNKNOWN: u8 = u8::MAX;
 /// Not among the books read last.
 pub(crate) const NEVER: u8 = u8::MAX;
-/// Books indexed at most (as many as a search of the catalog finds).
-const MAX_BOOKS: usize = 2000;
+/// Books indexed at most on devices of little memory (the X4: 40 KB),
+/// and on others; those past it are counted, not shown.
+const MAX_BOOKS_SMALL: usize = 2000;
+const MAX_BOOKS: usize = 20_000;
+/// Where the index is kept while the library is covered (by a book).
+const KEPT: &str = ".paperpaw/plugins/files/index.bin";
+/// The kept index's first bytes: what it is, and its version.
+const MAGIC: &[u8; 4] = b"PPI2";
+/// Letters of a title kept to sort by.
+pub(crate) const KEY: usize = 8;
+/// Bytes of an item kept.
+const ITEM_BYTES: usize = 22;
+/// Bytes of the kept index's head: what it is, the catalog's size, the
+/// archive (hashed), how many books are in it, in the catalog and
+/// indexed, how many series.
+const HEAD: usize = 30;
 
 /// A book of the catalog, as the index keeps it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -36,10 +50,7 @@ pub(crate) struct Item {
     /// A hash of its path, to find it again ([`hash`]).
     pub(crate) hash: u32,
     /// Its title's first letters, to sort by ([`sort_key`]).
-    pub(crate) key: [u8; 4],
-    /// The first letter of its title and of its author's surname, in
-    /// capitals, `#` for anything else ([`letter`]).
-    pub(crate) initials: [u8; 2],
+    pub(crate) key: [u8; KEY],
     /// How far it is read in percent (0 never), or [`UNKNOWN`].
     pub(crate) progress: u8,
     /// Its place among the books read last (0 the last), or [`NEVER`].
@@ -111,9 +122,15 @@ impl Filter {
         }
     }
 
-    /// The filter `steps` pills on, round at the ends.
+    /// The filter `steps` pills on, round at the ends (from Next in your
+    /// series as from the shelves, where it is).
     pub(crate) fn step(self, steps: isize) -> Filter {
-        let at = Self::ALL.iter().position(|f| *f == self).unwrap_or(0) as isize;
+        let pill = if self == Filter::Next {
+            Filter::Shelves
+        } else {
+            self
+        };
+        let at = Self::ALL.iter().position(|f| *f == pill).unwrap_or(0) as isize;
         let len = Self::ALL.len() as isize;
         Self::ALL[(at + steps).rem_euclid(len) as usize]
     }
@@ -280,10 +297,11 @@ fn fold(c: char) -> Option<u8> {
     }
 }
 
-/// The first four letters of `title` to sort by, without a leading
-/// article; titles with the same four are kept in the catalog's order.
-pub(crate) fn sort_key(title: &str) -> [u8; 4] {
-    let mut key = [0u8; 4];
+/// The first letters of `title` to sort by ([`KEY`]), without a leading
+/// article; titles with the same first letters are kept in the catalog's
+/// order.
+pub(crate) fn sort_key(title: &str) -> [u8; KEY] {
+    let mut key = [0u8; KEY];
     for (slot, byte) in key
         .iter_mut()
         .zip(without_article(title).chars().filter_map(fold))
@@ -316,25 +334,60 @@ pub(crate) fn surname(authors: &str) -> &str {
 #[derive(Debug, Default)]
 pub(crate) struct Index {
     pub(crate) items: Vec<Item>,
+    /// Books in the catalog (but the archive's): more than
+    /// [`Index::items`] where some were left out (more than the device
+    /// holds).
+    pub(crate) total: usize,
+    /// Books in the archive folder, kept out of the list (they are on the
+    /// shelves, in the archive's folder).
+    pub(crate) archived: usize,
     /// The names of the series, as [`Item::series`] counts them.
     pub(crate) series: Vec<String>,
     /// Items whose progress is still to be read, the next one last.
     pending: Vec<u16>,
+    /// Changed since it was kept in a file ([`Index::save`]).
+    pub(crate) dirty: bool,
 }
 
 impl Index {
-    /// Makes the index from the catalog (progress still unknown).
-    pub(crate) fn build(storage: &dyn Storage) -> Index {
+    /// The most books indexed on a device of `memory`.
+    pub(crate) fn cap(memory: paperpaw_sdk::MemoryClass) -> usize {
+        if memory == paperpaw_sdk::MemoryClass::Small {
+            MAX_BOOKS_SMALL
+        } else {
+            MAX_BOOKS
+        }
+    }
+
+    /// Whether there are books at all (in the archive too).
+    pub(crate) fn has_books(&self) -> bool {
+        !self.items.is_empty() || self.archived > 0
+    }
+
+    /// Makes the index from the catalog, of at most `cap` books, those in
+    /// the folder `archive` left out (progress still unknown).
+    pub(crate) fn build(storage: &dyn Storage, cap: usize, archive: &str) -> Index {
+        let archive = if archive.is_empty() {
+            String::new()
+        } else {
+            format!("{archive}/")
+        };
+        let mut archived = 0;
         let opened: Vec<u32> = library::opened_books(storage)
             .iter()
             .map(|p| hash(p))
             .collect();
         // As many as there are lines: a list grown by doubling would hold
         // twice that for a moment (40 KB for 1000 books on the X4).
-        let mut items = Vec::with_capacity(lines(storage).min(MAX_BOOKS));
+        let total = lines(storage);
+        let mut items = Vec::with_capacity(total.min(cap));
         let mut series: Vec<String> = Vec::new();
         scan(storage, &mut |offset, line| {
-            if items.len() >= MAX_BOOKS {
+            if !archive.is_empty() && line.path.starts_with(&archive) {
+                archived += 1;
+                return;
+            }
+            if items.len() >= cap {
                 return;
             }
             let hash = hash(&line.path);
@@ -352,10 +405,6 @@ impl Index {
                 offset,
                 hash,
                 key: sort_key(&line.title),
-                initials: [
-                    letter(without_article(&line.title)),
-                    letter(surname(&line.author)),
-                ],
                 progress: UNKNOWN,
                 recent: rank(&opened, hash),
                 series: of,
@@ -363,9 +412,12 @@ impl Index {
             });
         });
         let mut index = Index {
+            total: total.saturating_sub(archived).max(items.len()),
+            archived,
             items,
             series,
             pending: Vec::new(),
+            dirty: true,
         };
         index.read_again();
         index
@@ -380,6 +432,142 @@ impl Index {
         self.pending = pending;
     }
 
+    /// Reads the progress of the books read last (`recent` places) and of
+    /// those whose paths hash to `hashes` again, in the background: what
+    /// may have changed while the library was covered.
+    pub(crate) fn read_some_again(&mut self, recent: u8, hashes: &[u32]) {
+        for (i, item) in self.items.iter_mut().enumerate() {
+            if item.recent < recent || hashes.contains(&item.hash) {
+                item.progress = UNKNOWN;
+                if !self.pending.contains(&(i as u16)) {
+                    self.pending.push(i as u16);
+                }
+            }
+        }
+    }
+
+    /// Keeps the index in a file, to be read again ([`Index::load`]) when
+    /// the library shows again, so it holds no memory meanwhile. Written
+    /// a piece at a time; `false` where it could not be.
+    /// `archive` is the archive folder it was made without.
+    pub(crate) fn save(&self, storage: &dyn Storage, archive: &str) -> bool {
+        let Ok(stamp) = storage.size(&catalog_path()) else {
+            return false;
+        };
+        let mut head = Vec::with_capacity(HEAD);
+        head.extend_from_slice(MAGIC);
+        head.extend_from_slice(&stamp.to_le_bytes());
+        head.extend_from_slice(&hash(archive).to_le_bytes());
+        head.extend_from_slice(&(self.archived as u32).to_le_bytes());
+        head.extend_from_slice(&(self.total as u32).to_le_bytes());
+        head.extend_from_slice(&(self.items.len() as u32).to_le_bytes());
+        head.extend_from_slice(&(self.series.len() as u16).to_le_bytes());
+        if storage.write(KEPT, &head).is_err() {
+            return false;
+        }
+        let mut piece: Vec<u8> = Vec::with_capacity(64 * ITEM_BYTES);
+        for chunk in self.items.chunks(64) {
+            piece.clear();
+            for item in chunk {
+                piece.extend_from_slice(&item.offset.to_le_bytes());
+                piece.extend_from_slice(&item.hash.to_le_bytes());
+                piece.extend_from_slice(&item.key);
+                piece.push(item.progress);
+                piece.push(item.recent);
+                piece.extend_from_slice(&item.series.to_le_bytes());
+                piece.extend_from_slice(&item.number.to_le_bytes());
+            }
+            if storage.append(KEPT, &piece).is_err() {
+                return false;
+            }
+        }
+        for name in &self.series {
+            piece.clear();
+            let name = &name.as_bytes()[..name.len().min(usize::from(u16::MAX))];
+            piece.extend_from_slice(&(name.len() as u16).to_le_bytes());
+            piece.extend_from_slice(name);
+            if storage.append(KEPT, &piece).is_err() {
+                return false;
+            }
+        }
+        true
+    }
+
+    /// The index kept by [`Index::save`], if it is of the catalog there is
+    /// now and without the archive folder `archive`; progress of books not
+    /// yet read stays to be read.
+    pub(crate) fn load(storage: &dyn Storage, archive: &str) -> Option<Index> {
+        let stamp = storage.size(&catalog_path()).ok()?;
+        let mut head = [0u8; HEAD];
+        if storage.read_at(KEPT, 0, &mut head).ok()? != head.len() || &head[..4] != MAGIC {
+            return None;
+        }
+        let u32_at =
+            |at: usize| u32::from_le_bytes([head[at], head[at + 1], head[at + 2], head[at + 3]]);
+        let mut kept = [0u8; 8];
+        kept.copy_from_slice(&head[4..12]);
+        if u64::from_le_bytes(kept) != stamp || u32_at(12) != hash(archive) {
+            return None;
+        }
+        let archived = u32_at(16) as usize;
+        let total = u32_at(20) as usize;
+        let count = u32_at(24) as usize;
+        let series = usize::from(u16::from_le_bytes([head[28], head[29]]));
+        let mut items = Vec::new();
+        items.try_reserve_exact(count).ok()?;
+        let mut at = head.len() as u64;
+        let mut buf = [0u8; 64 * ITEM_BYTES];
+        while items.len() < count {
+            let n = (count - items.len()).min(64);
+            let want = &mut buf[..n * ITEM_BYTES];
+            if storage.read_at(KEPT, at, want).ok()? != want.len() {
+                return None;
+            }
+            at += want.len() as u64;
+            for b in want.as_chunks::<ITEM_BYTES>().0 {
+                let word = |i: usize| u32::from_le_bytes([b[i], b[i + 1], b[i + 2], b[i + 3]]);
+                items.push(Item {
+                    offset: word(0),
+                    hash: word(4),
+                    key: [b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15]],
+                    progress: b[16],
+                    recent: b[17],
+                    series: u16::from_le_bytes([b[18], b[19]]),
+                    number: u16::from_le_bytes([b[20], b[21]]),
+                });
+            }
+        }
+        let mut names = Vec::with_capacity(series);
+        for _ in 0..series {
+            let mut len = [0u8; 2];
+            if storage.read_at(KEPT, at, &mut len).ok()? != 2 {
+                return None;
+            }
+            let len = usize::from(u16::from_le_bytes(len));
+            let mut name = alloc::vec![0u8; len];
+            if storage.read_at(KEPT, at + 2, &mut name).ok()? != len {
+                return None;
+            }
+            at += 2 + len as u64;
+            names.push(String::from_utf8(name).ok()?);
+        }
+        // Progress not read before it was kept is read now.
+        let pending = items
+            .iter()
+            .enumerate()
+            .filter(|(_, item)| item.progress == UNKNOWN)
+            .map(|(i, _)| i as u16)
+            .collect();
+        Some(Index {
+            items,
+            total,
+            archived,
+            series: names,
+            pending,
+            dirty: false,
+        })
+    }
+
     /// Takes the order of the books read last anew (after reading).
     pub(crate) fn rerank(&mut self, storage: &dyn Storage) {
         let opened: Vec<u32> = library::opened_books(storage)
@@ -387,7 +575,9 @@ impl Index {
             .map(|p| hash(p))
             .collect();
         for item in &mut self.items {
-            item.recent = rank(&opened, item.hash);
+            let recent = rank(&opened, item.hash);
+            self.dirty |= item.recent != recent;
+            item.recent = recent;
         }
     }
 
@@ -398,6 +588,7 @@ impl Index {
             let Some(i) = self.pending.pop() else {
                 break;
             };
+            self.dirty = true;
             let item = &mut self.items[usize::from(i)];
             let progress = read_line(storage, item.offset)
                 .and_then(|line| library::book(storage, &line.path))
@@ -416,8 +607,11 @@ impl Index {
     /// Notes the progress of the book whose path hashes to `hash`, e.g.
     /// as a page of the list read it.
     pub(crate) fn set_progress(&mut self, hash: u32, progress: u8) {
-        if let Some(item) = self.items.iter_mut().find(|i| i.hash == hash) {
+        if let Some(item) = self.items.iter_mut().find(|i| i.hash == hash)
+            && item.progress != progress
+        {
             item.progress = progress;
+            self.dirty = true;
         }
     }
 
@@ -532,9 +726,10 @@ mod tests {
 
     #[test]
     fn titles_sort_without_articles() {
-        assert_eq!(&sort_key("The Hound of the Baskervilles"), b"houn");
-        assert_eq!(&sort_key("Émile"), b"emil");
-        assert_eq!(&sort_key("A"), b"a\0\0\0");
+        assert_eq!(&sort_key("The Hound of the Baskervilles"), b"hound of");
+        assert_eq!(&sort_key("Émile Zola"), b"emile zo");
+        assert_eq!(&sort_key("A"), b"a\0\0\0\0\0\0\0");
+        assert!(sort_key("Book 000") < sort_key("Book 019"));
         assert_eq!(letter(without_article("Die Verwandlung")), b'V');
         assert_eq!(letter("1984"), b'#');
     }
@@ -570,8 +765,7 @@ mod tests {
         Item {
             offset: u32::from(series) * 100 + u32::from(n),
             hash: 0,
-            key: [b'a' + n as u8, 0, 0, 0],
-            initials: *b"AA",
+            key: [b'a' + n as u8, 0, 0, 0, 0, 0, 0, 0],
             progress,
             recent,
             series,
@@ -596,7 +790,10 @@ mod tests {
                 item(NO_SERIES, 1, 0, NEVER),
             ],
             series: alloc::vec!["A".into(), "B".into(), "C".into()],
+            total: 7,
+            archived: 0,
             pending: Vec::new(),
+            dirty: false,
         };
         assert_eq!(index.order(Filter::Next, true), [2]);
     }
@@ -613,12 +810,78 @@ mod tests {
                 item(1, 2, 0, NEVER),
             ],
             series: alloc::vec!["A".into(), "B".into()],
+            total: 6,
+            archived: 0,
             pending: Vec::new(),
+            dirty: false,
         };
         let order = [0, 1, 2, 3, 4, 5];
         let (entries, counts) = index.stacked(&order);
         assert_eq!(entries, [0, 1, 2, 4]);
         assert_eq!(counts, [1, 2, 1, 2]);
+    }
+
+    /// A catalog of `count` books, `books/Book 0001.txt` and on, a few
+    /// of a series and the last two in the archive folder.
+    fn catalog(count: usize) -> paperpaw_sdk::MemoryStorage {
+        let storage = paperpaw_sdk::MemoryStorage::new();
+        let records: Vec<library::catalog::Record> = (1..=count)
+            .map(|n| {
+                let folder = if n + 2 > count {
+                    "books/Archive"
+                } else {
+                    "books"
+                };
+                let series = (n % 3 == 0).then(|| String::from("Tales"));
+                let book = library::Book {
+                    title: Some(format!("Book {n:04}")),
+                    author: Some(String::from("Ann")),
+                    series_index: series.as_ref().map(|_| format!("{n}")),
+                    series,
+                    ..library::Book::default()
+                };
+                library::catalog::Record::of(&format!("{folder}/Book {n:04}.txt"), &book)
+            })
+            .collect();
+        library::catalog::write(&storage, &records);
+        storage
+    }
+
+    #[test]
+    fn an_index_holds_at_most_its_cap_and_says_how_many_it_left_out() {
+        // A book costs 24 bytes; the X4's 2000 at most 48 KB.
+        assert!(core::mem::size_of::<Item>() <= 24);
+        assert!(
+            Index::cap(paperpaw_sdk::MemoryClass::Small) * core::mem::size_of::<Item>()
+                <= 48 * 1024
+        );
+        let storage = catalog(12);
+        let index = Index::build(&storage, 5, "books/Archive");
+        assert_eq!(index.items.len(), 5);
+        assert!(index.items.capacity() <= 5, "made no larger than it holds");
+        // The archive's two are apart; of the others five shown, ten in all.
+        assert_eq!(index.archived, 2);
+        assert_eq!(index.total, 10);
+    }
+
+    #[test]
+    fn a_kept_index_is_read_back_while_its_catalog_is_the_same() {
+        let storage = catalog(9);
+        let mut index = Index::build(&storage, 100, "books/Archive");
+        while !index.step(&storage, 8) {}
+        index.set_progress(index.items[2].hash, 42);
+        assert!(index.save(&storage, "books/Archive"));
+        let kept = Index::load(&storage, "books/Archive").unwrap();
+        assert_eq!(kept.items, index.items);
+        assert_eq!(kept.series, index.series);
+        assert_eq!((kept.total, kept.archived), (index.total, index.archived));
+        assert_eq!(kept.unknown(), 0, "progress kept, not read again");
+        // Another archive folder, or another catalog: made anew.
+        assert!(Index::load(&storage, "books/Old").is_none());
+        let other = catalog(10);
+        assert!(index.save(&other, "books/Archive"));
+        library::catalog::write(&other, &[]);
+        assert!(Index::load(&other, "books/Archive").is_none());
     }
 
     #[test]

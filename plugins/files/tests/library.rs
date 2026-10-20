@@ -169,7 +169,8 @@ fn hidden_it_reads_nothing_until_it_shows() {
 /// marking a book finished on its sheet keeps the focus on it.
 #[test]
 fn the_focus_stays_on_its_book() {
-    let (mut kernel, _) = library(card(30), "[files]\nsort = files.sort.name\n");
+    // The order as it comes: by recent reading.
+    let (mut kernel, _) = library(card(30), "");
     for _ in 0..13 {
         action(&mut kernel, "core.down");
     }

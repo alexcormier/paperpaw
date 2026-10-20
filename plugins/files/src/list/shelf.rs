@@ -83,7 +83,7 @@ pub(crate) fn open(kind: Kind, name: &str) -> Command {
 #[derive(Debug, Clone, Copy)]
 struct Entry {
     offset: u32,
-    key: [u8; 4],
+    key: [u8; super::index::KEY],
     /// Its number in a series.
     number: f32,
     /// How far it is read (series only, else as its page read it).
@@ -103,6 +103,10 @@ pub(crate) struct ShelfScreen {
     opened: Vec<u32>,
     /// The line below the header: how many books, how many finished.
     summary: Rect,
+    /// The words of the header and of that line, written when the list
+    /// is made, so drawing writes none.
+    title_text: String,
+    summary_text: String,
     list: ListView,
     loaded: Vec<Loaded>,
     loaded_page: Option<usize>,
@@ -135,6 +139,8 @@ impl ShelfScreen {
             next: None,
             opened,
             summary,
+            title_text: String::new(),
+            summary_text: String::new(),
             loaded: Vec::new(),
             loaded_page: None,
             fresh: true,
@@ -147,7 +153,25 @@ impl ShelfScreen {
         screen.mark_next();
         screen.list.focus = screen.next.unwrap_or(0);
         screen.load_page(env);
+        screen.word(env);
         screen
+    }
+
+    /// Writes the title and the line below it: how many books, and for a
+    /// series how many are finished.
+    fn word(&mut self, env: &Env<'_>) {
+        self.title_text = self.title(env);
+        let len = self.entries.len();
+        let books = env.i18n.plural("files.books", len as i64, &[]);
+        let finished = self.entries.iter().filter(|e| e.progress == 100).count();
+        self.summary_text = if self.kind == Kind::Series && finished > 0 {
+            let done = env
+                .i18n
+                .plural("files.list.finished.count", finished as i64, &[]);
+            alloc::format!("{books} · {done}")
+        } else {
+            books
+        };
     }
 
     /// The series' next book: the first not begun, after the finished
@@ -165,14 +189,33 @@ impl ShelfScreen {
         }
         self.loaded = Vec::new();
         let rows = self.list.rows();
+        let series = self.kind == Kind::Series;
+        let width = self.list.area.width;
         let mut loaded = Vec::new();
-        for entry in self.entries.iter_mut().skip(page * rows).take(rows) {
+        for (n, entry) in self
+            .entries
+            .iter_mut()
+            .enumerate()
+            .skip(page * rows)
+            .take(rows)
+        {
             let Some(line) = read_line(env.storage, entry.offset) else {
                 continue;
             };
             let opened = self.opened.contains(&hash(&line.path));
-            let book = Loaded::load(env, line, opened, self.sizes.cover, false);
+            let mut book = Loaded::load(env, line, opened, self.sizes.cover, false);
             entry.progress = book.progress;
+            // A series by numbers; elsewhere the author.
+            let note = if series {
+                book.series_note(env)
+            } else {
+                book.author.clone()
+            };
+            let next = self.next == Some(n);
+            rows::prepare_row(env, &self.style, &self.sizes, width, &mut book, note, next);
+            if series {
+                book.tail = String::new();
+            }
             loaded.push(book);
         }
         self.loaded = loaded;
@@ -243,7 +286,9 @@ fn find(env: &Env<'_>, kind: Kind, name: &str) -> Vec<Entry> {
                 } else {
                     b'#'
                 };
-                title == wanted || letter(surname(&line.author)) == wanted
+                // A book with no author is not under "#" for that.
+                let by_author = letter(surname(&line.author));
+                title == wanted || (by_author == wanted && by_author != b'#')
             }
             Kind::Search => {
                 let text = alloc::format!(
@@ -285,57 +330,55 @@ impl Screen for ShelfScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let len = self.entries.len();
-        let title = self.title(env);
-        self.header
-            .draw(canvas, env, &style, &title, None, self.list.paging(len));
-        let Some(font) = style.font(env) else {
-            return;
-        };
-        // How many books, and for a series how many are finished.
-        let books = env.i18n.plural("files.books", len as i64, &[]);
-        let finished = self.entries.iter().filter(|e| e.progress == 100).count();
-        let summary = if self.kind == Kind::Series && finished > 0 {
-            let done = env
-                .i18n
-                .plural("files.list.finished.count", finished as i64, &[]);
-            alloc::format!("{books} · {done}")
-        } else {
-            books
-        };
+        self.header.draw(
+            canvas,
+            env,
+            &style,
+            &self.title_text,
+            None,
+            self.list.paging(len),
+        );
         let x = style.margin as f32;
         let faint = style.faint(80);
-        ui::draw_label(canvas, &font, style.small, x, self.summary, &summary, faint);
+        if let Some(font) = style.font(env) {
+            let summary = &self.summary_text;
+            ui::draw_label(canvas, &font, style.small, x, self.summary, summary, faint);
+        }
         if len == 0 {
-            let text = match self.kind {
-                Kind::Favourites => ui::tr_input(env, "files.no-favourites"),
-                _ => env.i18n.tr("files.search.none"),
+            let (icon, title, text) = match self.kind {
+                Kind::Favourites => (
+                    "star",
+                    env.i18n.tr("files.no-favourites.title"),
+                    ui::tr_input(env, "files.no-favourites"),
+                ),
+                _ => ("books", "", env.i18n.tr("files.search.none")),
             };
-            ui::draw_empty(canvas, env, &style, self.list.area, "books", "", text);
+            ui::draw_empty(canvas, env, &style, self.list.area, icon, title, text);
             return;
         }
-        let series = self.kind == Kind::Series;
-        let next = self.next;
-        let sizes = self.sizes;
+        // Each book a row that says itself (its title first), so drawn
+        // here rather than by the list view, which describes its rows.
         let rows = self.list.rows();
-        let (loaded, loaded_page) = (&self.loaded, self.loaded_page);
-        self.list
-            .draw(canvas, &style, len, |canvas, index, rect, focused| {
-                if loaded_page != Some(index / rows) {
-                    return;
-                }
-                let Some(book) = loaded.get(index % rows) else {
-                    return;
-                };
-                let (note, tail) = if series {
-                    (book.series_note(env), String::new())
-                } else {
-                    (book.author.clone(), book.series_label())
-                };
-                let is_next = next == Some(index);
-                rows::draw_book_row(
-                    canvas, env, &style, &sizes, rect, focused, book, &note, &tail, is_next,
-                );
-            });
+        let first = self.list.page() * rows;
+        for (slot, index) in (first..len).take(rows).enumerate() {
+            let rect = self.list.row_rect(slot);
+            if canvas.clip().intersection(&rect).is_none() {
+                continue;
+            }
+            let focused = self.list.active && self.list.shown && index == self.list.focus;
+            if focused {
+                ui::draw_focus(canvas, &style, rect);
+            } else {
+                ui::draw_separator(canvas, &style, rect, 0);
+            }
+            if self.loaded_page != Some(index / rows) {
+                continue;
+            }
+            if let Some(book) = self.loaded.get(index % rows) {
+                let next = self.next == Some(index);
+                rows::draw_book_row(canvas, env, &style, &self.sizes, rect, focused, book, next);
+            }
+        }
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
@@ -351,6 +394,7 @@ impl Screen for ShelfScreen {
         self.list.focus = focus.min(self.entries.len().saturating_sub(1));
         self.loaded_page = None;
         self.load_page(&env);
+        self.word(&env);
         cx.request_redraw();
     }
 

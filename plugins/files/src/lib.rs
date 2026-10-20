@@ -324,10 +324,18 @@ pub(crate) fn draw_placeholder(
     let center = |text: &str, size: f32| {
         f32::from(area.x) + (f32::from(area.width) - font.measure(size, text)) / 2.0
     };
-    let initial = title
-        .chars()
-        .find(|c| c.is_alphanumeric())
-        .map(|c| c.to_uppercase().collect::<String>());
+    // The first letter in capitals, written on the stack: a letter's
+    // capital is at most three letters of four bytes.
+    let mut letters = [0u8; 12];
+    let initial = title.chars().find(|c| c.is_alphanumeric()).map(|c| {
+        let mut len = 0;
+        for upper in c.to_uppercase() {
+            if len + upper.len_utf8() <= letters.len() {
+                len += upper.encode_utf8(&mut letters[len..]).len();
+            }
+        }
+        core::str::from_utf8(&letters[..len]).unwrap_or_default()
+    });
     let (upper, lower) = (area.height * 3 / 5, area.height * 2 / 5);
     // As large as titles and a bit, or as fits in the upper part.
     let mut size = style.title * 1.3;
@@ -342,9 +350,9 @@ pub(crate) fn draw_placeholder(
                 canvas,
                 &font,
                 size,
-                center(&initial, size),
+                center(initial, size),
                 top,
-                &initial,
+                initial,
                 color,
             );
             let bottom = Rect::new(area.x, area.y + upper, area.width, lower);

@@ -62,7 +62,10 @@ impl BookSheet {
             tags: String::new(),
             path: path.clone(),
         };
-        let book = Loaded::load(env, line, opened, sizes.cover, false);
+        let mut book = Loaded::load(env, line, opened, sizes.cover, false);
+        let note = book.author.clone();
+        let width = env.device.display.width;
+        rows::prepare_row(env, &style, &sizes, width, &mut book, note, false);
         let favourite = library::favourites(storage).contains(&path);
         let tr = |key: &str| env.i18n.tr(key).to_string();
         let mut actions = Vec::new();
@@ -132,10 +135,12 @@ impl BookSheet {
             Action::Series => cx.command(shelf::open(Kind::Series, &self.book.series)),
             Action::Finished | Action::Unfinished => {
                 library::set_finished(env.storage, path, *action == Action::Finished);
+                cx.command(super::touched(path));
             }
             Action::Favourite | Action::Unfavourite => {
                 let favourite = *action == Action::Favourite;
                 library::set_favourite(env.storage, path, favourite);
+                cx.command(super::touched(path));
                 let key = if favourite {
                     "files.favourite-added"
                 } else {
@@ -175,7 +180,6 @@ impl Screen for BookSheet {
         );
         // The book as a row of the list, but larger text: its cover, title,
         // author and state, never focused.
-        let tail = self.book.series_label();
         rows::draw_book_row(
             canvas,
             env,
@@ -184,8 +188,6 @@ impl Screen for BookSheet {
             self.head,
             false,
             &self.book,
-            &self.book.author,
-            &tail,
             false,
         );
         ui::draw_separator(canvas, &style, self.head, 0);

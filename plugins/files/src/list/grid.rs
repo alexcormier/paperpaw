@@ -134,7 +134,7 @@ pub(crate) fn draw_cell(
     let Some(font) = style.font(env) else {
         return;
     };
-    canvas.describe(Role::Row, "", cell, focused, None);
+    canvas.describe(Role::Row, &book.spoken, cell, focused, None);
     let around = grid.focus_box(cell, sizes, style);
     if focused {
         draw_focus(canvas, style, around);
@@ -165,15 +165,37 @@ pub(crate) fn draw_cell(
     draw_marks(canvas, env, style, sizes, cover, book, count);
 
     // The title (or the series), on one or two lines below.
-    let title = if stack { &book.series } else { &book.title };
-    let lines = if sizes.compact { 1 } else { 2 };
     let x = around.x + grid.pad;
     let width = around.width.saturating_sub(2 * grid.pad);
     let mut y = around.y + grid.pad + h + gap / 3;
-    for line in rows::wrap_lines(env, style, style.small, title, f32::from(width), lines) {
+    for line in &book.lines {
         let area = Rect::new(x, y, width, sizes.small_line);
-        ui::draw_label(canvas, &font, style.small, f32::from(x), area, &line, ink);
+        ui::draw_label(canvas, &font, style.small, f32::from(x), area, line, ink);
         y += sizes.small_line;
+    }
+}
+
+/// Makes `book` ready to be drawn as a cell of `grid` ([`draw_cell`]):
+/// its title (the series' name for a stack of `count` books) in the
+/// lines under the cover, and for a stack how many books it holds.
+pub(crate) fn prepare_cell(
+    env: &Env<'_>,
+    style: &UiStyle,
+    sizes: &Sizes,
+    grid: &Grid,
+    book: &mut Loaded,
+    count: u16,
+) {
+    let lines = if sizes.compact { 1 } else { 2 };
+    let width = grid.column.saturating_sub(2 * grid.pad);
+    let title = if count > 1 { &book.series } else { &book.title };
+    book.lines = rows::wrap_lines(env, style, style.small, title, f32::from(width), lines);
+    if count > 1 {
+        book.stack = env.i18n.plural("files.books", i64::from(count), &[]);
+        book.spoken = rows::spoken(&[&book.series, &book.stack]);
+    } else {
+        let state = rows::state_words(env, book);
+        book.spoken = rows::spoken(&[&book.title, &book.author, state]);
     }
 }
 
@@ -198,14 +220,13 @@ fn draw_marks(
         line,
     );
     if count > 1 {
-        let label = env.i18n.plural("files.books", i64::from(count), &[]);
         rows::draw_tag(
             canvas,
             env,
             style,
             foot.x,
             foot,
-            &label,
+            &book.stack,
             true,
             Color::BLACK,
             Color::WHITE,

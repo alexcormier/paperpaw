@@ -108,8 +108,10 @@ impl Sizes {
 /// Screens narrower than this many millimetres are small ([`Sizes::compact`]).
 const COMPACT_MM: u32 = 75;
 
-/// A book of a page, read when the page is shown.
-#[derive(Debug)]
+/// A book of a page, read when the page is shown, with its words made
+/// ready for where it is drawn ([`prepare_row`], [`prepare_card`],
+/// [`super::grid::prepare_cell`]): drawing reads and allocates nothing.
+#[derive(Debug, Default)]
 pub(crate) struct Loaded {
     pub(crate) path: String,
     pub(crate) title: String,
@@ -122,6 +124,20 @@ pub(crate) struct Loaded {
     pub(crate) new: bool,
     /// Its cover, made small for where it is drawn.
     pub(crate) thumb: Option<Thumbnail>,
+    /// Its title broken into the lines drawn.
+    pub(crate) lines: Vec<String>,
+    /// The line of details under the title (the author, or its number in
+    /// a series), shortened to the room it has.
+    pub(crate) note: String,
+    /// The series with the book's number ("Sherlock Holmes 5").
+    pub(crate) tail: String,
+    /// How far it is read, as written ("42 %").
+    pub(crate) percent: String,
+    /// For a series as a stack of covers: how many books it holds.
+    pub(crate) stack: String,
+    /// What it says when read out (spoken focus, taps by name): its
+    /// title first, then its details and how far it is read.
+    pub(crate) spoken: String,
 }
 
 impl Loaded {
@@ -147,7 +163,7 @@ impl Loaded {
             let stamp = (u64::from(hash(&line.path)) << 32)
                 ^ (u64::from(w) << 16 | u64::from(h))
                 ^ book.size;
-            if let Some(kept) = Thumbnail::kept(storage, CARD_COVER, stamp) {
+            if let Some(kept) = Thumbnail::kept(storage, CARD_COVER, stamp, (w, h)) {
                 return Some(kept);
             }
             let thumb = Thumbnail::new(storage, image, w, h, format)?;
@@ -164,6 +180,11 @@ impl Loaded {
         } else {
             line.title
         };
+        let tail = match (line.series.is_empty(), line.number.is_empty()) {
+            (true, _) => String::new(),
+            (false, true) => line.series.clone(),
+            (false, false) => format!("{} {}", line.series, line.number),
+        };
         Loaded {
             path: line.path,
             title,
@@ -173,16 +194,9 @@ impl Loaded {
             progress,
             new,
             thumb,
-        }
-    }
-
-    /// The series with the book's number ("Sherlock Holmes 5"), shown
-    /// after how far it is read; empty for a book of no series.
-    pub(crate) fn series_label(&self) -> String {
-        match (self.series.is_empty(), self.number.is_empty()) {
-            (true, _) => String::new(),
-            (false, true) => self.series.clone(),
-            (false, false) => format!("{} {}", self.series, self.number),
+            tail,
+            percent: format!("{progress} %"),
+            ..Loaded::default()
         }
     }
 
@@ -284,10 +298,44 @@ pub(crate) fn draw_tag(
     w
 }
 
+/// The width of a tag ([`draw_tag`]) saying `label`.
+fn tag_width(env: &Env<'_>, style: &UiStyle, label: &str) -> u16 {
+    style.font(env).map_or(0, |font| {
+        font.measure(style.small * 0.9, label) as u16 + style.gap as u16
+    })
+}
+
+/// How wide a bar of how far a book is read is in a row `width` wide.
+fn bar_width(env: &Env<'_>, sizes: &Sizes, width: u16) -> u16 {
+    if sizes.compact {
+        env.metrics.mm(10) as u16
+    } else {
+        (width / 3).min(env.metrics.mm(20) as u16)
+    }
+}
+
+/// The width [`draw_state`] takes for `book` with a bar `bar` wide.
+fn state_width(env: &Env<'_>, style: &UiStyle, bar: u16, book: &Loaded) -> u16 {
+    let Some(font) = style.font(env) else {
+        return 0;
+    };
+    let gap = style.gap as u16;
+    match book.progress {
+        100 => {
+            let icon = ui::icon_width(env, "circle-check", style.small * 1.15);
+            let label = font.measure(style.small, env.i18n.tr("files.finished"));
+            (icon + label) as u16 + gap / 3
+        }
+        p if p > 0 => bar + gap / 2 + font.measure(style.small, &book.percent) as u16,
+        _ if book.new => tag_width(env, style, env.i18n.tr("files.list.new")),
+        _ => 0,
+    }
+}
+
 /// Draws how far a book is read on the line `area` from `x`: a bar and
-/// the percentage while it is read, a check when finished, "New" when it
-/// was never opened; nothing for a book opened but not begun. Returns
-/// where what it drew ends.
+/// the percentage while it is read, a check when finished, "New" for a
+/// new book; nothing for a book opened but not begun. Returns where what
+/// it drew ends.
 #[allow(clippy::too_many_arguments)]
 fn draw_state(
     canvas: &mut Canvas<'_>,
@@ -318,8 +366,7 @@ fn draw_state(
         p if p > 0 => {
             draw_bar(canvas, style, sizes, x, area, bar, p, ink);
             let at = f32::from(x + bar + gap / 2);
-            let text = format!("{p} %");
-            let w = ui::draw_label(canvas, &font, style.small, at, area, &text, ink);
+            let w = ui::draw_label(canvas, &font, style.small, at, area, &book.percent, ink);
             (at + w) as u16
         }
         _ if book.new => {
@@ -360,10 +407,106 @@ pub(crate) fn wrap_lines(
         .collect()
 }
 
-/// Draws a book's row in `rect`: its cover at the margin, then its title
-/// on up to two lines, `note` below it (the author), and how far it is
-/// read followed by `tail` (its series); `next` marks the book to read
-/// next in a series.
+/// `words` that say something, joined as a part of the screen is read
+/// out.
+pub(crate) fn spoken(words: &[&str]) -> String {
+    let mut out = String::new();
+    for word in words.iter().filter(|w| !w.is_empty()) {
+        if !out.is_empty() {
+            out.push_str(", ");
+        }
+        out.push_str(word);
+    }
+    out
+}
+
+/// How far `book` is read, in words: the percentage, "Finished", "New",
+/// or nothing.
+pub(crate) fn state_words<'a>(env: &Env<'a>, book: &'a Loaded) -> &'a str {
+    match book.progress {
+        100 => env.i18n.tr("files.finished"),
+        p if p > 0 => &book.percent,
+        _ if book.new => env.i18n.tr("files.list.new"),
+        _ => "",
+    }
+}
+
+/// Where the text of a row (or card) with a cover `cover` wide starts,
+/// and how wide it is in a row `width` wide.
+fn text_room(style: &UiStyle, cover: u16, width: u16) -> (u16, u16) {
+    let margin = style.margin as u16;
+    let x = margin + cover + margin;
+    (x, width.saturating_sub(x + margin))
+}
+
+/// Makes `book` ready to be drawn as a row `width` wide
+/// ([`draw_book_row`]), with `note` (the author, or its number in a
+/// series) under its title; `next` marks the book to read next in a
+/// series.
+pub(crate) fn prepare_row(
+    env: &Env<'_>,
+    style: &UiStyle,
+    sizes: &Sizes,
+    width: u16,
+    book: &mut Loaded,
+    note: String,
+    next: bool,
+) {
+    let (x, room) = text_room(style, sizes.cover.0, width);
+    book.lines = wrap_lines(env, style, style.text, &book.title, f32::from(room), 2);
+    let next_word = if next {
+        env.i18n.tr("files.list.next")
+    } else {
+        ""
+    };
+    book.spoken = spoken(&[
+        &book.title,
+        &note,
+        next_word,
+        state_words(env, book),
+        &book.tail,
+    ]);
+    book.note = note;
+    if !sizes.compact {
+        return;
+    }
+    // The details share their line with how far the book is read.
+    let gap = style.gap as u16;
+    let right = x + room;
+    let mut end = right;
+    let state = state_width(env, style, bar_width(env, sizes, room), book);
+    if state > 0 {
+        end = right.saturating_sub(state);
+    }
+    if next {
+        let w = tag_width(env, style, env.i18n.tr("files.list.next"));
+        end = end.saturating_sub(w + if state > 0 { gap / 2 } else { 0 });
+    }
+    let room = end.saturating_sub(x + if end < right { gap } else { 0 });
+    if let Some(font) = style.font(env) {
+        book.note = ui::fit(&font, style.small, &book.note, f32::from(room));
+    }
+}
+
+/// Makes `book` ready to be drawn as the card in a row `width` wide
+/// ([`draw_card`]).
+pub(crate) fn prepare_card(
+    env: &Env<'_>,
+    style: &UiStyle,
+    sizes: &Sizes,
+    width: u16,
+    book: &mut Loaded,
+) {
+    let (_, room) = text_room(style, sizes.card_cover.0, width);
+    book.lines = wrap_lines(env, style, style.title, &book.title, f32::from(room), 2);
+    let eyebrow = env.i18n.tr("files.list.continue-reading");
+    book.spoken = spoken(&[&book.title, eyebrow, &book.author, &book.percent]);
+}
+
+/// Draws a book's row in `rect` as [`prepare_row`] made it ready: its
+/// cover at the margin, then its title on up to two lines, its details
+/// below and how far it is read (with its series on larger screens);
+/// `next` marks the book to read next in a series.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn draw_book_row(
     canvas: &mut Canvas<'_>,
@@ -373,14 +516,11 @@ pub(crate) fn draw_book_row(
     rect: Rect,
     focused: bool,
     book: &Loaded,
-    note: &str,
-    tail: &str,
     next: bool,
 ) {
-    // A row, whose words are those drawn in it.
-    canvas.describe(Role::Row, "", rect, focused, None);
+    canvas.describe(Role::Row, &book.spoken, rect, focused, None);
     if sizes.compact {
-        draw_compact_row(canvas, env, style, sizes, rect, focused, book, note, next);
+        draw_compact_row(canvas, env, style, sizes, rect, focused, book, next);
         return;
     }
     let Some(font) = style.font(env) else {
@@ -393,15 +533,16 @@ pub(crate) fn draw_book_row(
     let place = Rect::new(rect.x + margin, rect.y + (rect.height - ch) / 2, cw, ch);
     draw_cover(canvas, env, style, place, book, ink);
 
-    let x = place.x + cw + margin;
-    let width = (rect.x + rect.width).saturating_sub(x + margin);
-    let title = wrap_lines(env, style, style.text, &book.title, f32::from(width), 2);
+    let (x, width) = text_room(style, cw, rect.width);
+    let x = rect.x + x;
+    let note = &book.note;
+    let tail = &book.tail;
     let state = book.progress > 0 || book.new || next || !tail.is_empty();
-    let block = title.len() as u16 * sizes.text_line
+    let block = book.lines.len() as u16 * sizes.text_line
         + if note.is_empty() { 0 } else { sizes.small_line }
         + if state { sizes.small_line + gap / 3 } else { 0 };
     let mut y = rect.y + rect.height.saturating_sub(block) / 2;
-    for text in &title {
+    for text in &book.lines {
         let area = Rect::new(x, y, width, sizes.text_line);
         ui::draw_label(canvas, &font, style.text, f32::from(x), area, text, ink);
         y += sizes.text_line;
@@ -421,7 +562,7 @@ pub(crate) fn draw_book_row(
             let label = env.i18n.tr("files.list.next");
             at += draw_tag(canvas, env, style, at, area, label, true, ink, paper) + gap / 2;
         }
-        let bar = (width / 3).min(env.metrics.mm(20) as u16);
+        let bar = bar_width(env, sizes, width);
         let end = draw_state(canvas, env, style, sizes, at, area, bar, book, focused);
         if !tail.is_empty() {
             let x = if end > at { end + gap * 2 / 3 } else { at };
@@ -431,35 +572,10 @@ pub(crate) fn draw_book_row(
     }
 }
 
-/// The width [`draw_state`] takes for `book` with a bar `bar` wide.
-fn state_width(env: &Env<'_>, style: &UiStyle, bar: u16, book: &Loaded) -> u16 {
-    let Some(font) = style.font(env) else {
-        return 0;
-    };
-    let gap = style.gap as u16;
-    match book.progress {
-        100 => {
-            let icon = ui::icon_width(env, "circle-check", style.small * 1.15);
-            let label = font.measure(style.small, env.i18n.tr("files.finished"));
-            (icon + label) as u16 + gap / 3
-        }
-        p if p > 0 => bar + gap / 2 + font.measure(style.small, &format!("{p} %")) as u16,
-        _ if book.new => tag_width(env, style, env.i18n.tr("files.list.new")),
-        _ => 0,
-    }
-}
-
-/// The width of a tag ([`draw_tag`]) saying `label`.
-fn tag_width(env: &Env<'_>, style: &UiStyle, label: &str) -> u16 {
-    style.font(env).map_or(0, |font| {
-        font.measure(style.small * 0.9, label) as u16 + style.gap as u16
-    })
-}
-
 /// A book's row on a small screen: its cover at the margin, the title on
-/// up to two lines, and one line below: `note` (the author) at the
-/// start, how far it is read at the end, on the right margin; `next`
-/// marks the book to read next in a series.
+/// up to two lines, and one line below: its details at the start, how
+/// far it is read at the end, on the right margin; `next` marks the book
+/// to read next in a series.
 #[allow(clippy::too_many_arguments)]
 fn draw_compact_row(
     canvas: &mut Canvas<'_>,
@@ -469,7 +585,6 @@ fn draw_compact_row(
     rect: Rect,
     focused: bool,
     book: &Loaded,
-    note: &str,
     next: bool,
 ) {
     let Some(font) = style.font(env) else {
@@ -482,20 +597,19 @@ fn draw_compact_row(
     let (cw, ch) = sizes.cover;
     let place = Rect::new(rect.x + margin, rect.y + (rect.height - ch) / 2, cw, ch);
     draw_cover(canvas, env, style, place, book, ink);
-    let x = place.x + cw + margin;
-    let right = (rect.x + rect.width).saturating_sub(margin);
-    let width = right.saturating_sub(x);
-    let title = wrap_lines(env, style, style.text, &book.title, f32::from(width), 2);
+    let (x, width) = text_room(style, cw, rect.width);
+    let x = rect.x + x;
+    let right = x + width;
     // The title and the details below it, together centred on the cover.
-    let block = title.len() as u16 * sizes.text_line + gap / 3 + sizes.small_line;
+    let block = book.lines.len() as u16 * sizes.text_line + gap / 3 + sizes.small_line;
     let mut y = rect.y + rect.height.saturating_sub(block) / 2;
-    for text in &title {
+    for text in &book.lines {
         let area = Rect::new(x, y, width, sizes.text_line);
         ui::draw_label(canvas, &font, style.text, f32::from(x), area, text, ink);
         y += sizes.text_line;
     }
     let line = Rect::new(x, y + gap / 3, width, sizes.small_line);
-    let bar = env.metrics.mm(10) as u16;
+    let bar = bar_width(env, sizes, width);
     let mut end = right;
     let state = state_width(env, style, bar, book);
     if state > 0 {
@@ -508,12 +622,10 @@ fn draw_compact_row(
         let at = end.saturating_sub(w + if state > 0 { gap / 2 } else { 0 });
         let paper = style.focus_paper(focused);
         draw_tag(canvas, env, style, at, line, label, true, ink, paper);
-        end = at;
     }
-    if !note.is_empty() {
-        let room = end.saturating_sub(x + if end < right { gap } else { 0 });
-        let note = ui::fit(&font, style.small, note, f32::from(room));
-        ui::draw_label(canvas, &font, style.small, f32::from(x), line, &note, faint);
+    if !book.note.is_empty() {
+        let note = &book.note;
+        ui::draw_label(canvas, &font, style.small, f32::from(x), line, note, faint);
     }
 }
 
@@ -543,11 +655,10 @@ fn draw_compact_card(
     let (cw, ch) = sizes.card_cover;
     let place = Rect::new(rect.x + margin, rect.y + (rect.height - ch) / 2, cw, ch);
     draw_cover(canvas, env, style, place, book, ink);
-    let x = place.x + cw + margin;
-    let right = (rect.x + rect.width).saturating_sub(margin);
-    let width = right.saturating_sub(x);
-    let title = wrap_lines(env, style, style.title, &book.title, f32::from(width), 2);
-    let block = 2 * sizes.small_line + title.len() as u16 * sizes.title_line + gap / 2;
+    let (x, width) = text_room(style, cw, rect.width);
+    let x = rect.x + x;
+    let right = x + width;
+    let block = 2 * sizes.small_line + book.lines.len() as u16 * sizes.title_line + gap / 2;
     let mut y = rect.y + rect.height.saturating_sub(block) / 2;
     let eyebrow = env.i18n.tr("files.list.continue-reading");
     let area = Rect::new(x, y, width, sizes.small_line);
@@ -561,26 +672,26 @@ fn draw_compact_card(
         faint,
     );
     y += sizes.small_line;
-    for text in &title {
+    for text in &book.lines {
         let area = Rect::new(x, y, width, sizes.title_line);
         ui::draw_label(canvas, &font, style.title, f32::from(x), area, text, ink);
         y += sizes.title_line;
     }
     y += gap / 2;
     let area = Rect::new(x, y, width, sizes.small_line);
-    let percent = format!("{} %", book.progress);
-    let label = font.measure(style.small, &percent) as u16;
+    let label = font.measure(style.small, &book.percent) as u16;
     let bar = width.saturating_sub(label + gap / 2);
     draw_bar(canvas, style, sizes, x, area, bar, book.progress, ink);
     let at = f32::from(right - label);
-    ui::draw_label(canvas, &font, style.small, at, area, &percent, ink);
+    ui::draw_label(canvas, &font, style.small, at, area, &book.percent, ink);
     if !focused {
         ui::draw_separator(canvas, style, rect, 0);
     }
 }
 
-/// Draws the "Continue reading" card in `rect`: the book read last with a
-/// large cover, its title, author and progress, and a button to go on.
+/// Draws the "Continue reading" card in `rect` as [`prepare_card`] made
+/// it ready: the book read last with a large cover, its title, author
+/// and progress, and a button to go on.
 pub(crate) fn draw_card(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
@@ -590,7 +701,7 @@ pub(crate) fn draw_card(
     focused: bool,
     book: &Loaded,
 ) {
-    canvas.describe(Role::Row, "", rect, focused, None);
+    canvas.describe(Role::Row, &book.spoken, rect, focused, None);
     if sizes.compact {
         draw_compact_card(canvas, env, style, sizes, rect, focused, book);
         return;
@@ -622,28 +733,32 @@ pub(crate) fn draw_card(
     let place = Rect::new(rect.x + margin, rect.y + (rect.height - ch) / 2, cw, ch);
     draw_cover(canvas, env, style, place, book, ink);
 
-    let x = place.x + cw + margin;
-    let width = (rect.x + rect.width).saturating_sub(x + margin);
-    let title = wrap_lines(env, style, style.title, &book.title, f32::from(width), 2);
-    let block = 2 * sizes.small_line + title.len() as u16 * sizes.title_line + gap / 2 + sizes.pill;
+    let (x, width) = text_room(style, cw, rect.width);
+    let x = rect.x + x;
+    let block =
+        2 * sizes.small_line + book.lines.len() as u16 * sizes.title_line + gap / 2 + sizes.pill;
     let mut y = rect.y + rect.height.saturating_sub(block) / 2;
-    let small = |canvas: &mut Canvas<'_>, y: u16, text: &str, color: Color| {
-        let area = Rect::new(x, y, width, sizes.small_line);
-        ui::draw_label(canvas, &font, style.small, f32::from(x), area, text, color);
-    };
-    for text in &title {
+    for text in &book.lines {
         let area = Rect::new(x, y, width, sizes.title_line);
         ui::draw_label(canvas, &font, style.title, f32::from(x), area, text, ink);
         y += sizes.title_line;
     }
-    small(canvas, y, &book.author, faint);
+    let area = Rect::new(x, y, width, sizes.small_line);
+    ui::draw_label(
+        canvas,
+        &font,
+        style.small,
+        f32::from(x),
+        area,
+        &book.author,
+        faint,
+    );
     y += sizes.small_line;
     let area = Rect::new(x, y, width, sizes.small_line);
     let bar = width * 3 / 5;
     draw_bar(canvas, style, sizes, x, area, bar, book.progress, ink);
-    let percent = format!("{} %", book.progress);
     let at = f32::from(x + bar + gap / 2);
-    ui::draw_label(canvas, &font, style.small, at, area, &percent, ink);
+    ui::draw_label(canvas, &font, style.small, at, area, &book.percent, ink);
     y += sizes.small_line + gap / 2;
     // The button: dark, or light on the dark focus.
     let label = env.i18n.tr("files.list.continue-reading");
@@ -651,15 +766,8 @@ pub(crate) fn draw_card(
     let w = font.measure(style.small, label) as u16 + 2 * pad;
     let button = Rect::new(x, y, w, sizes.pill);
     canvas.fill_round(button, u32::from(sizes.pill / 2), ink);
-    ui::draw_label(
-        canvas,
-        &font,
-        style.small,
-        f32::from(x + pad),
-        button,
-        label,
-        paper,
-    );
+    let at = f32::from(x + pad);
+    ui::draw_label(canvas, &font, style.small, at, button, label, paper);
 }
 
 /// Draws the filter's row of a small screen in `rect`: what is shown
@@ -719,7 +827,7 @@ pub(crate) fn pill_places(
     style: &UiStyle,
     sizes: &Sizes,
     area: Rect,
-    labels: &[&str],
+    labels: &[String],
 ) -> (Vec<Rect>, bool) {
     let Some(font) = style.font(env) else {
         return (Vec::new(), false);
@@ -764,24 +872,39 @@ pub(crate) fn pill_places(
     (places, chosen.1)
 }
 
-/// Draws the pills at `places` with `labels`, `active` filled; the last
-/// as the shelves' icon where `icon`.
+/// Draws the pills at `places` with `labels`, `active` filled (none
+/// where what is shown has no pill of its own), the last as the shelves'
+/// icon where `icon`; `focused`, the active one framed as the focus is.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn draw_pills(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
     style: &UiStyle,
     places: &[Rect],
-    labels: &[&str],
-    active: usize,
+    labels: &[String],
+    active: Option<usize>,
+    focused: bool,
     icon: bool,
 ) {
     let Some(font) = style.font(env) else {
         return;
     };
+    let ring = (style.line * 2).max(3);
     for (n, (place, label)) in places.iter().zip(labels).enumerate() {
-        let on = n == active;
+        let on = Some(n) == active;
         let radius = u32::from(place.height / 2);
-        canvas.describe(Role::Button, label, *place, false, Some(on));
+        canvas.describe(Role::Button, label, *place, on && focused, Some(on));
+        if on && focused {
+            // The focus: a bar under the pill, as wide as it.
+            let gap = (style.gap as u16 / 4).max(2);
+            let bar = Rect::new(
+                place.x,
+                place.y + place.height + gap,
+                place.width,
+                ring as u16,
+            );
+            canvas.fill_round(bar, ring / 2, Color::BLACK);
+        }
         let ink = if on {
             canvas.fill_round(*place, radius, Color::BLACK);
             Color::WHITE
