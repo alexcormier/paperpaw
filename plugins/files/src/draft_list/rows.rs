@@ -36,6 +36,12 @@ pub(crate) struct Sizes {
     pub(crate) pill: u16,
     /// How thick a progress bar is.
     pub(crate) bar: u16,
+    /// A small screen (the X4's 55 mm wide): fewer things with more room
+    /// around them, one line of details under a title, the filters
+    /// behind one row ([`Sizes::filter_row`]) instead of pills.
+    pub(crate) compact: bool,
+    /// The row that shows and changes the filter on small screens.
+    pub(crate) filter_row: u16,
 }
 
 impl Sizes {
@@ -49,10 +55,35 @@ impl Sizes {
             (line(style.text), line(style.small), line(style.title));
         let gap = style.gap as u16;
         let finger = style.finger as u16;
+        let pill = (small_line + gap * 2 / 3).max(finger);
+        let bar = env.metrics.tenth_mm(9).max(4) as u16;
+        let compact = u32::from(env.device.display.width) < env.metrics.mm(COMPACT_MM);
+        if compact {
+            // Title on two lines and one line of details beside a cover
+            // as high, with a gap and a half above and below.
+            let block = 2 * text_line + small_line + gap / 3;
+            let row = (block + 2 * gap + gap / 2).max(finger * 2);
+            let cover_h = block;
+            // A word above the title, the title, the bar: as the rows.
+            let card_block = small_line + 2 * title_line + small_line + gap / 2;
+            let card = card_block.max(cover_h) + 2 * gap + gap / 2;
+            return Sizes {
+                text_line,
+                small_line,
+                title_line,
+                row,
+                cover: (cover_h * 2 / 3, cover_h),
+                card,
+                card_cover: (cover_h * 2 / 3, cover_h),
+                pill,
+                bar,
+                compact,
+                filter_row: (text_line + gap).max(finger),
+            };
+        }
         // Title on two lines, the note, how far it is read.
         let row = (2 * text_line + 2 * small_line + gap / 2).max(finger * 2);
         let cover_h = row - gap * 2 / 3;
-        let pill = (small_line + gap * 2 / 3).max(finger);
         // The title on two lines, the author, the bar, the button.
         let card_text = 2 * small_line + 2 * title_line + gap / 2 + pill;
         let card = (card_text + gap).max(row * 3 / 2);
@@ -66,10 +97,15 @@ impl Sizes {
             card,
             card_cover: (card_h * 2 / 3, card_h),
             pill,
-            bar: env.metrics.tenth_mm(9).max(4) as u16,
+            bar,
+            compact,
+            filter_row: pill,
         }
     }
 }
+
+/// Screens narrower than this many millimetres are small ([`Sizes::compact`]).
+const COMPACT_MM: u32 = 75;
 
 /// A book of a page, read when the page is shown.
 #[derive(Debug)]
@@ -81,8 +117,8 @@ pub(crate) struct Loaded {
     pub(crate) number: String,
     /// How far it is read, in percent.
     pub(crate) progress: u8,
-    /// It was opened (else it is new).
-    pub(crate) opened: bool,
+    /// It is new: added lately and never opened ([`library::is_new`]).
+    pub(crate) new: bool,
     /// Its cover, made small for where it is drawn.
     pub(crate) thumb: Option<Thumbnail>,
 }
@@ -119,6 +155,9 @@ impl Loaded {
             Some(thumb)
         });
         let progress = book.as_ref().and_then(|b| b.progress).unwrap_or(0);
+        let new = book
+            .as_ref()
+            .is_some_and(|b| library::is_new(env, b, opened));
         let title = if line.title.is_empty() {
             library::readable_name(paperpaw_sdk::files::name(&line.path)).into_owned()
         } else {
@@ -131,7 +170,7 @@ impl Loaded {
             series: line.series,
             number: line.number,
             progress,
-            opened: opened || progress > 0,
+            new,
             thumb,
         }
     }
@@ -282,7 +321,7 @@ fn draw_state(
             let w = ui::draw_label(canvas, &font, style.small, at, area, &text, ink);
             (at + w) as u16
         }
-        _ if !book.opened => {
+        _ if book.new => {
             let paper = style.focus_paper(focused);
             let label = env.i18n.tr("files.list.new");
             x + draw_tag(canvas, env, style, x, area, label, false, ink, paper)
@@ -350,7 +389,11 @@ pub(crate) fn draw_book_row(
     let x = place.x + cw + margin;
     let width = (rect.x + rect.width).saturating_sub(x + margin);
     let title = wrap_lines(env, style, style.text, &book.title, f32::from(width), 2);
-    let state = book.progress > 0 || !book.opened || next || !tail.is_empty();
+    if sizes.compact {
+        draw_compact_row(canvas, env, style, sizes, rect, focused, book, note, next);
+        return;
+    }
+    let state = book.progress > 0 || book.new || next || !tail.is_empty();
     let block = title.len() as u16 * sizes.text_line
         + if note.is_empty() { 0 } else { sizes.small_line }
         + if state { sizes.small_line + gap / 3 } else { 0 };
@@ -385,6 +428,154 @@ pub(crate) fn draw_book_row(
     }
 }
 
+/// The width [`draw_state`] takes for `book` with a bar `bar` wide.
+fn state_width(env: &Env<'_>, style: &UiStyle, bar: u16, book: &Loaded) -> u16 {
+    let Some(font) = style.font(env) else {
+        return 0;
+    };
+    let gap = style.gap as u16;
+    match book.progress {
+        100 => {
+            let icon = ui::icon_width(env, "circle-check", style.small * 1.15);
+            let label = font.measure(style.small, env.i18n.tr("files.finished"));
+            (icon + label) as u16 + gap / 3
+        }
+        p if p > 0 => bar + gap / 2 + font.measure(style.small, &format!("{p} %")) as u16,
+        _ if book.new => tag_width(env, style, env.i18n.tr("files.list.new")),
+        _ => 0,
+    }
+}
+
+/// The width of a tag ([`draw_tag`]) saying `label`.
+fn tag_width(env: &Env<'_>, style: &UiStyle, label: &str) -> u16 {
+    style.font(env).map_or(0, |font| {
+        font.measure(style.small * 0.9, label) as u16 + style.gap as u16
+    })
+}
+
+/// A book's row on a small screen: its cover at the margin, the title on
+/// up to two lines, and one line below: `note` (the author) at the
+/// start, how far it is read at the end, on the right margin; `next`
+/// marks the book to read next in a series.
+#[allow(clippy::too_many_arguments)]
+fn draw_compact_row(
+    canvas: &mut Canvas<'_>,
+    env: &Env<'_>,
+    style: &UiStyle,
+    sizes: &Sizes,
+    rect: Rect,
+    focused: bool,
+    book: &Loaded,
+    note: &str,
+    next: bool,
+) {
+    let Some(font) = style.font(env) else {
+        return;
+    };
+    let ink = style.focus_ink(focused);
+    let faint = style.focus_faint(focused, 80);
+    let margin = style.margin as u16;
+    let gap = style.gap as u16;
+    let (cw, ch) = sizes.cover;
+    let place = Rect::new(rect.x + margin, rect.y + (rect.height - ch) / 2, cw, ch);
+    draw_cover(canvas, env, style, place, book, ink);
+    let x = place.x + cw + margin;
+    let right = (rect.x + rect.width).saturating_sub(margin);
+    let width = right.saturating_sub(x);
+    let title = wrap_lines(env, style, style.text, &book.title, f32::from(width), 2);
+    // The title and the details below it, together centred on the cover.
+    let block = title.len() as u16 * sizes.text_line + gap / 3 + sizes.small_line;
+    let mut y = rect.y + rect.height.saturating_sub(block) / 2;
+    for text in &title {
+        let area = Rect::new(x, y, width, sizes.text_line);
+        ui::draw_label(canvas, &font, style.text, f32::from(x), area, text, ink);
+        y += sizes.text_line;
+    }
+    let line = Rect::new(x, y + gap / 3, width, sizes.small_line);
+    let bar = env.metrics.mm(10) as u16;
+    let mut end = right;
+    let state = state_width(env, style, bar, book);
+    if state > 0 {
+        end = right.saturating_sub(state);
+        draw_state(canvas, env, style, sizes, end, line, bar, book, focused);
+    }
+    if next {
+        let label = env.i18n.tr("files.list.next");
+        let w = tag_width(env, style, label);
+        let at = end.saturating_sub(w + if state > 0 { gap / 2 } else { 0 });
+        let paper = style.focus_paper(focused);
+        draw_tag(canvas, env, style, at, line, label, true, ink, paper);
+        end = at;
+    }
+    if !note.is_empty() {
+        let room = end.saturating_sub(x + if end < right { gap } else { 0 });
+        let note = ui::fit(&font, style.small, note, f32::from(room));
+        ui::draw_label(canvas, &font, style.small, f32::from(x), line, &note, faint);
+    }
+}
+
+/// The "Continue reading" card on a small screen: the book read last as
+/// a row with a word above its title, the title larger, and a bar of how
+/// far it is read; its cover as large as the rows', so its text starts
+/// where theirs does.
+fn draw_compact_card(
+    canvas: &mut Canvas<'_>,
+    env: &Env<'_>,
+    style: &UiStyle,
+    sizes: &Sizes,
+    rect: Rect,
+    focused: bool,
+    book: &Loaded,
+) {
+    let Some(font) = style.font(env) else {
+        return;
+    };
+    if focused {
+        ui::draw_focus(canvas, style, rect);
+    }
+    let ink = style.focus_ink(focused);
+    let faint = style.focus_faint(focused, 80);
+    let margin = style.margin as u16;
+    let gap = style.gap as u16;
+    let (cw, ch) = sizes.card_cover;
+    let place = Rect::new(rect.x + margin, rect.y + (rect.height - ch) / 2, cw, ch);
+    draw_cover(canvas, env, style, place, book, ink);
+    let x = place.x + cw + margin;
+    let right = (rect.x + rect.width).saturating_sub(margin);
+    let width = right.saturating_sub(x);
+    let title = wrap_lines(env, style, style.title, &book.title, f32::from(width), 2);
+    let block = 2 * sizes.small_line + title.len() as u16 * sizes.title_line + gap / 2;
+    let mut y = rect.y + rect.height.saturating_sub(block) / 2;
+    let eyebrow = env.i18n.tr("files.list.continue-reading");
+    let area = Rect::new(x, y, width, sizes.small_line);
+    ui::draw_label(
+        canvas,
+        &font,
+        style.small,
+        f32::from(x),
+        area,
+        eyebrow,
+        faint,
+    );
+    y += sizes.small_line;
+    for text in &title {
+        let area = Rect::new(x, y, width, sizes.title_line);
+        ui::draw_label(canvas, &font, style.title, f32::from(x), area, text, ink);
+        y += sizes.title_line;
+    }
+    y += gap / 2;
+    let area = Rect::new(x, y, width, sizes.small_line);
+    let percent = format!("{} %", book.progress);
+    let label = font.measure(style.small, &percent) as u16;
+    let bar = width.saturating_sub(label + gap / 2);
+    draw_bar(canvas, style, sizes, x, area, bar, book.progress, ink);
+    let at = f32::from(right - label);
+    ui::draw_label(canvas, &font, style.small, at, area, &percent, ink);
+    if !focused {
+        ui::draw_separator(canvas, style, rect, 0);
+    }
+}
+
 /// Draws the "Continue reading" card in `rect`: the book read last with a
 /// large cover, its title, author and progress, and a button to go on.
 pub(crate) fn draw_card(
@@ -396,6 +587,10 @@ pub(crate) fn draw_card(
     focused: bool,
     book: &Loaded,
 ) {
+    if sizes.compact {
+        draw_compact_card(canvas, env, style, sizes, rect, focused, book);
+        return;
+    }
     let Some(font) = style.font(env) else {
         return;
     };
@@ -461,6 +656,61 @@ pub(crate) fn draw_card(
         label,
         paper,
     );
+}
+
+/// Draws the filter's row of a small screen in `rect`: what is shown
+/// (`label`) with a mark that it opens a choice, and at the end `end`
+/// (how many books) or, on touch screens, the search button
+/// (`search`).
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn draw_filter_row(
+    canvas: &mut Canvas<'_>,
+    env: &Env<'_>,
+    style: &UiStyle,
+    rect: Rect,
+    focused: bool,
+    label: &str,
+    end: &str,
+    search: Option<Rect>,
+) {
+    let Some(font) = style.font(env) else {
+        return;
+    };
+    if focused {
+        ui::draw_focus(canvas, style, rect);
+    }
+    let ink = style.focus_ink(focused);
+    let faint = style.focus_faint(focused, 80);
+    let margin = style.margin as u16;
+    let gap = style.gap as u16;
+    let x = rect.x + margin;
+    canvas.describe(
+        paperpaw_sdk::semantics::Role::Button,
+        label,
+        rect,
+        focused,
+        None,
+    );
+    let w = ui::draw_label(canvas, &font, style.text, f32::from(x), rect, label, ink);
+    let icon_x = f32::from(x) + w + f32::from(gap / 3);
+    ui::draw_icon(canvas, env, "chevron-down", style.small, icon_x, rect, ink);
+    let right = (rect.x + rect.width).saturating_sub(margin);
+    match search {
+        Some(button) => {
+            let size = style.title * ui::ICON_SCALE;
+            let w = ui::icon_width(env, "search", size);
+            let x = f32::from(button.x) + (f32::from(button.width) - w) / 2.0;
+            ui::draw_icon(canvas, env, "search", size, x, button, ink);
+        }
+        None => {
+            let w = font.measure(style.small, end);
+            let at = f32::from(right) - w;
+            ui::draw_label(canvas, &font, style.small, at, rect, end, faint);
+        }
+    }
+    if !focused {
+        ui::draw_separator(canvas, style, rect, 0);
+    }
 }
 
 /// The pills of the filters in `area`, from the margin, as wide as their

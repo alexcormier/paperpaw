@@ -13,12 +13,17 @@
 //! title or author, without a keyboard; on touch screens it also offers
 //! search.
 //!
-//! Buttons: left and right switch the filter, the page buttons move the
-//! focus a book at a time (on touch screens they turn pages), confirm
-//! opens, holding confirm (the menu button) offers what can be done with
-//! the focused book. Above the first book, the focus reaches "Find".
-//! Touch: tap a pill, a book, the search button (for "Find"); hold a book
-//! for its actions; tap the title for the library's menu.
+//! On small screens (the X4) the filters sit behind one row above the
+//! books, which shows what is shown and opens a choice of it (and of
+//! "Find"); larger screens show them as pills.
+//!
+//! Buttons work as in every list: the focus moves a book at a time, the
+//! page buttons turn pages, confirm opens, holding confirm (the menu
+//! button) offers what can be done with the focused book. Above the first
+//! book (and after the last) the focus reaches the filter's row.
+//! Touch: tap the filter's row or a pill, a book, the search button (for
+//! "Find"); hold a book for its actions; tap the title for the library's
+//! menu.
 //!
 //! What is known of each book to filter and sort is kept small
 //! ([`index`]); a page's books are read when it is shown, never while
@@ -43,8 +48,8 @@ use paperpaw_sdk::library::{self, catalog::Walk};
 use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
-    Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Hint, Id, MenuEntry, Params,
-    Rect, RefreshMode, RegisterError, Registrar, Screen, ScreenSpec,
+    Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, MenuEntry, Params, Rect,
+    RefreshMode, RegisterError, Registrar, Screen, ScreenSpec,
 };
 
 use index::{Filter, Index, NEVER, has_catalog, read_line};
@@ -64,6 +69,11 @@ const FAVOURITES: Id = Id::new_static("files.list.favourites");
 const SHELF: Id = Id::new_static("files.list.shelf");
 /// What can be done with a book ([`sheet`]).
 const SHEET: Id = Id::new_static("files.list.sheet");
+/// What the library shows, chosen from the filter's row.
+const SHOW: Id = Id::new_static("files.list.show");
+const SHOWN: Event<paperpaw_sdk::ui::choice::Picked> = Event::new("files.list.shown");
+/// The choices of [`SHOW`]: the filters' names, then "Find".
+const SHOW_OPTIONS: [&str; 6] = ["all", "reading", "unread", "finished", "shelves", "find"];
 /// Steps of reading books' progress and of making the catalog, apart.
 const STEP_MS: u64 = 20;
 /// Books whose progress is read in one step.
@@ -80,6 +90,13 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
         id: SHEET,
         title: Cow::Borrowed("files.title"),
         factory: Box::new(|env, params| Box::new(sheet::BookSheet::new(env, params))),
+    })?;
+    r.add_screen(ScreenSpec {
+        id: SHOW,
+        title: Cow::Borrowed("files.list.show"),
+        factory: Box::new(|env, params| {
+            Box::new(paperpaw_sdk::ui::choice::Choice::new(env, params))
+        }),
     })?;
     r.add_screen(ScreenSpec {
         id: FIND,
@@ -199,8 +216,12 @@ struct ListScreen {
     /// The focus shows: with buttons, and on touch screens once a button
     /// moved it.
     shown: bool,
-    /// The pills, and whether the last shows as an icon.
+    /// The pills, and whether the last shows as an icon (larger screens).
     pills: Vec<Rect>,
+    /// The filter's row (small screens).
+    filter_row: Option<Rect>,
+    /// The focus is on the filter's row or the pills.
+    filter_focused: bool,
     pill_icon: bool,
     /// Where the books (or shelves) go.
     area: Rect,
@@ -219,10 +240,15 @@ impl ListScreen {
         let header = ui::Header::new(env, &style, true);
         let display = env.device.display;
         let gap = style.gap as u16;
-        let pills_area = Rect::new(0, header.area.height, display.width, sizes.pill + gap / 2);
-        let labels: Vec<&str> = Filter::ALL.iter().map(|f| env.i18n.tr(f.label())).collect();
-        let (pills, pill_icon) = rows::pill_places(env, &style, &sizes, pills_area, &labels);
-        let top = pills_area.y + pills_area.height;
+        let (pills, pill_icon, filter_row, top) = if sizes.compact {
+            let row = Rect::new(0, header.area.height, display.width, sizes.filter_row);
+            (Vec::new(), false, Some(row), row.y + row.height + gap / 2)
+        } else {
+            let pills_area = Rect::new(0, header.area.height, display.width, sizes.pill + gap / 2);
+            let labels: Vec<&str> = Filter::ALL.iter().map(|f| env.i18n.tr(f.label())).collect();
+            let (pills, icon) = rows::pill_places(env, &style, &sizes, pills_area, &labels);
+            (pills, icon, None, pills_area.y + pills_area.height)
+        };
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
         let mut screen = Self {
             root: library::folder(env).to_string(),
@@ -238,6 +264,8 @@ impl ListScreen {
             shown: !env.device.input.touch,
             pills,
             pill_icon,
+            filter_row,
+            filter_focused: false,
             area,
             loaded: Vec::new(),
             loaded_page: None,
@@ -358,6 +386,24 @@ impl ListScreen {
         }
     }
 
+    /// How high the books' rows of `page` are drawn: on small screens as
+    /// many as fit, sharing what is left over, so a page ends at the
+    /// foot of the screen.
+    fn row_on(&self, page: usize) -> u16 {
+        let row = self.row_height();
+        if !self.sizes.compact || self.filter == Filter::Shelves {
+            return row;
+        }
+        let card = if self.card && page == 0 {
+            self.sizes.card
+        } else {
+            0
+        };
+        let room = self.area.height.saturating_sub(card);
+        let rows = (room / row.max(1)).max(1);
+        room / rows
+    }
+
     /// Rows on a page, and on the first page below the card.
     fn per_page(&self) -> usize {
         usize::from(self.area.height / self.row_height().max(1)).max(1)
@@ -404,14 +450,14 @@ impl ListScreen {
         let page = self.page_of(index);
         let slot = index - self.page_start(page);
         let a = self.area;
+        let row = self.row_on(page);
         if self.card && page == 0 {
             if slot == 0 {
                 return Rect::new(a.x, a.y, a.width, self.sizes.card);
             }
-            let y = a.y + self.sizes.card + (slot as u16 - 1) * self.sizes.row;
-            return Rect::new(a.x, y, a.width, self.sizes.row);
+            let y = a.y + self.sizes.card + (slot as u16 - 1) * row;
+            return Rect::new(a.x, y, a.width, row);
         }
-        let row = self.row_height();
         Rect::new(a.x, a.y + slot as u16 * row, a.width, row)
     }
 
@@ -461,7 +507,6 @@ impl ListScreen {
             return;
         }
         self.filter = filter;
-        self.header.note_focused = false;
         let env = *cx.env();
         self.refilter(&env);
         cx.request_redraw();
@@ -469,12 +514,13 @@ impl ListScreen {
     }
 
     /// Moves the focus by `delta` entries. Past the first (or the last)
-    /// it reaches "Find" in the header, as a tap on it does.
+    /// it reaches the filter's row (or the pills), as in other lists the
+    /// header's note.
     fn step(&mut self, delta: isize, cx: &mut Cx<'_, '_>) {
         let len = self.len();
         let before = self.focus;
-        if self.header.note_focused {
-            self.header.note_focused = false;
+        if self.filter_focused {
+            self.filter_focused = false;
             self.focus = if delta > 0 { 0 } else { len.saturating_sub(1) };
         } else if !self.shown {
             // The first press shows where the focus is.
@@ -482,7 +528,7 @@ impl ListScreen {
         } else {
             let next = self.focus as isize + delta;
             if next < 0 || next >= len as isize {
-                self.header.note_focused = true;
+                self.filter_focused = true;
             } else {
                 self.focus = next as usize;
             }
@@ -495,7 +541,7 @@ impl ListScreen {
     fn moved(&mut self, before: usize, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
         if self.page_of(before) == self.page_of(self.focus) {
-            cx.request_redraw_area(self.header.area);
+            cx.request_redraw_area(self.filter_area());
             if before < self.len() {
                 cx.request_redraw_area(self.place(before));
             }
@@ -517,7 +563,7 @@ impl ListScreen {
             return;
         }
         self.focus = self.page_start(page as usize);
-        self.header.note_focused = false;
+        self.filter_focused = false;
         let env = *cx.env();
         self.load_page(&env);
         cx.request_redraw();
@@ -577,6 +623,15 @@ impl ListScreen {
         if !env.device.input.touch || self.index.items.is_empty() {
             return None;
         }
+        if let Some(row) = self.filter_row {
+            // At the end of the filter's row, its icon on the margin.
+            let square = row.height;
+            let size = self.style.title * ui::ICON_SCALE;
+            let icon = ui::icon_width(env, "search", size) as u16;
+            let right = (row.x + row.width).saturating_sub(self.style.margin as u16);
+            let x = (right + (square - icon) / 2).saturating_sub(square);
+            return Some(Rect::new(x, row.y, square, square));
+        }
         let a = self.header.area;
         let square = a.height;
         let pages = self.pages();
@@ -589,6 +644,31 @@ impl ListScreen {
             (a.x + a.width).saturating_sub(self.style.margin as u16)
         };
         Some(Rect::new(right.saturating_sub(square), a.y, square, square))
+    }
+
+    /// Where the filter is: its row, or the pills' band.
+    fn filter_area(&self) -> Rect {
+        match self.filter_row {
+            Some(row) => row,
+            None => {
+                let top = self.header.area.y + self.header.area.height;
+                Rect::new(0, top, self.area.width, self.area.y.saturating_sub(top))
+            }
+        }
+    }
+
+    /// Offers what to show: the filters and "Find".
+    fn choose_shown(&self, cx: &mut Cx<'_, '_>) {
+        let env = *cx.env();
+        let title = env.i18n.tr("files.list.show");
+        cx.command(paperpaw_sdk::ui::choice::open(
+            SHOW,
+            &SHOWN,
+            title,
+            "",
+            "files.list.show.",
+            &SHOW_OPTIONS,
+        ));
     }
 
     fn draw_empty(&self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
@@ -679,15 +759,30 @@ impl Screen for ListScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let len = self.len();
-        // "Find": a note the focus reaches with buttons, a search button
-        // on touch screens.
+        // "Find": a search button on touch screens, in the header or at
+        // the end of the filter's row; with buttons in the filter's
+        // choice.
         let find = self.find_button(env);
-        let note = format!("{} ›", env.i18n.tr("files.list.find"));
-        let note = find.is_none().then_some(note.as_str());
         let paging = (len > 0).then(|| (self.page_of(self.focus), self.pages()));
         let title = env.i18n.tr("files.title");
-        self.header.draw(canvas, env, &style, title, note, paging);
-        if let Some(button) = find {
+        self.header.draw(canvas, env, &style, title, None, paging);
+        if let Some(row) = self.filter_row {
+            if !self.index.items.is_empty() {
+                let shown = Filter::ALL
+                    .iter()
+                    .position(|f| *f == self.filter)
+                    .unwrap_or(0);
+                let key = format!("files.list.show.{}", SHOW_OPTIONS[shown]);
+                let label = env.i18n.tr(&key).to_string();
+                let end = if self.filter == Filter::Shelves {
+                    String::new()
+                } else {
+                    env.i18n.plural("files.books", len as i64, &[])
+                };
+                let focused = self.shown && self.filter_focused;
+                rows::draw_filter_row(canvas, env, &style, row, focused, &label, &end, find);
+            }
+        } else if let Some(button) = find {
             let size = style.title * ui::ICON_SCALE;
             let w = ui::icon_width(env, "search", size);
             let x = f32::from(button.x) + (f32::from(button.width) - w) / 2.0;
@@ -700,7 +795,7 @@ impl Screen for ListScreen {
             .position(|f| *f == self.filter)
             .unwrap_or(0);
         // No pills before there are books to sort.
-        if !self.index.items.is_empty() {
+        if self.filter_row.is_none() && !self.index.items.is_empty() {
             rows::draw_pills(
                 canvas,
                 env,
@@ -721,7 +816,7 @@ impl Screen for ListScreen {
             if canvas.clip().intersection(&rect).is_none() {
                 continue;
             }
-            let focused = self.shown && !self.header.note_focused && index == self.focus;
+            let focused = self.shown && !self.filter_focused && index == self.focus;
             if self.card && index == 0 {
                 if let Some(book) = self.book(0) {
                     rows::draw_card(canvas, env, &style, &self.sizes, rect, focused, book);
@@ -751,17 +846,6 @@ impl Screen for ListScreen {
                 );
             }
         }
-    }
-
-    fn hint(&self, action: &Id, env: &Env<'_>) -> Hint {
-        let steps = if *action == actions::LEFT {
-            -1
-        } else if *action == actions::RIGHT {
-            1
-        } else {
-            return Hint::Default;
-        };
-        Hint::Text(env.i18n.tr(self.filter.step(steps).label()).to_string())
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
@@ -828,28 +912,23 @@ impl Screen for ListScreen {
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         let a = action;
         let touch = cx.env().device.input.touch;
-        if *a == actions::LEFT || *a == actions::RIGHT {
+        let side = *a == actions::LEFT || *a == actions::RIGHT;
+        if side && self.filter_focused && self.filter_row.is_none() {
+            // On the pills, left and right go from pill to pill.
             let steps = if *a == actions::LEFT { -1 } else { 1 };
             self.set_filter(self.filter.step(steps), cx);
         } else if *a == actions::NEXT_PAGE || *a == actions::PREV_PAGE {
-            let steps = if *a == actions::NEXT_PAGE { 1 } else { -1 };
-            // On touch screens (also swipes) a page; with buttons alone
-            // a book, as the other buttons switch the filter.
-            if touch {
-                self.turn(steps, cx);
-            } else {
-                self.step(steps, cx);
-            }
-        } else if [actions::UP, actions::PREVIOUS].contains(a) {
+            self.turn(if *a == actions::NEXT_PAGE { 1 } else { -1 }, cx);
+        } else if [actions::UP, actions::PREVIOUS, actions::LEFT].contains(a) {
             self.step(-1, cx);
-        } else if [actions::DOWN, actions::NEXT].contains(a) {
+        } else if [actions::DOWN, actions::NEXT, actions::RIGHT].contains(a) {
             self.step(1, cx);
-        } else if *a == actions::CONFIRM && self.header.note_focused {
-            cx.command(Command::OpenScreen(FIND, Params::new()));
+        } else if *a == actions::CONFIRM && self.filter_focused {
+            self.choose_shown(cx);
         } else if *a == actions::CONFIRM {
             self.activate(self.focus, cx);
         } else if *a == actions::MENU {
-            if touch || self.header.note_focused || !self.offer(self.focus, cx) {
+            if touch || self.filter_focused || !self.offer(self.focus, cx) {
                 open_menu(cx);
             }
         } else {
@@ -894,6 +973,19 @@ impl Screen for ListScreen {
             }
             return Handled::Yes;
         }
+        if let Some(row) = self.filter_row
+            && row.contains(point)
+        {
+            if self
+                .find_button(cx.env())
+                .is_some_and(|b| b.contains(point))
+            {
+                cx.command(Command::OpenScreen(FIND, Params::new()));
+            } else {
+                self.choose_shown(cx);
+            }
+            return Handled::Yes;
+        }
         if let Some(n) = self.pills.iter().position(|p| p.contains(point)) {
             self.set_filter(Filter::ALL[n], cx);
             return Handled::Yes;
@@ -908,7 +1000,19 @@ impl Screen for ListScreen {
         }
     }
 
-    fn on_event(&mut self, event: &Id, _params: &Params, cx: &mut Cx<'_, '_>) {
+    fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
+        if let Some(picked) = SHOWN.read(event, params) {
+            match SHOW_OPTIONS.iter().position(|o| *o == picked.option) {
+                Some(n) if n < Filter::ALL.len() => {
+                    self.filter_focused = false;
+                    self.set_filter(Filter::ALL[n], cx);
+                    cx.request_redraw();
+                }
+                Some(_) => cx.command(Command::OpenScreen(FIND, Params::new())),
+                None => {}
+            }
+            return;
+        }
         let env = *cx.env();
         if *event == events::LIBRARY_CHANGED {
             // Books came or went: the catalog anew.

@@ -78,6 +78,9 @@ pub struct Book {
     pub cover: Option<ImageRef>,
     /// Reading progress in percent, once opened.
     pub progress: Option<u8>,
+    /// The day the library first read the book ([`index`]), in days since
+    /// 1970 (UTC); none where the device did not know the date then.
+    pub added: Option<u32>,
     /// Fields plugins keep with the book: id (e.g. `myplugin.rating`)
     /// and value.
     pub fields: Vec<(String, String)>,
@@ -469,6 +472,7 @@ fn parse_details(source: &str) -> Book {
             (_, "cover-width") => cover_width = entry.value.as_u32(),
             (_, "cover-height") => cover_height = entry.value.as_u32(),
             (_, "progress") => book.progress = entry.value.as_u32().map(|p| p.min(100) as u8),
+            (_, "added") => book.added = entry.value.as_u32(),
             _ => {}
         }
     }
@@ -525,6 +529,9 @@ pub fn save(storage: &dyn Storage, path: &str, book: &Book) -> bool {
     if let Some(progress) = book.progress {
         set("progress", &progress.to_string());
     }
+    if let Some(added) = book.added {
+        set("added", &added.to_string());
+    }
     for (id, value) in &book.fields {
         ini = config::set(&ini, "field", id, fit(value));
     }
@@ -544,6 +551,9 @@ pub fn index(env: &Env<'_>, path: &str) -> Book {
     };
     book.size = storage.size(path).unwrap_or_default();
     book.indexed = true;
+    if book.added.is_none() {
+        book.added = today(env);
+    }
     if let Ok(document) = env.formats.open(storage, path) {
         // What the book names; else what its source said ([`provide`]).
         let metadata = document.metadata();
@@ -560,6 +570,27 @@ pub fn index(env: &Env<'_>, path: &str) -> Book {
         save(storage, path, &book);
     }
     book
+}
+
+/// Today in days since 1970 (UTC), as [`Book::added`] counts, if the
+/// device knows the date.
+pub fn today(env: &Env<'_>) -> Option<u32> {
+    crate::time::unix_seconds(env).and_then(|s| u32::try_from(s.div_euclid(86_400)).ok())
+}
+
+/// Books added this many days ago or less, and never opened, are new
+/// ([`is_new`]).
+pub const NEW_DAYS: u32 = 30;
+
+/// Whether `book` counts as new: added in the last [`NEW_DAYS`] days and
+/// never opened (no progress); `opened` says whether it was opened.
+pub fn is_new(env: &Env<'_>, book: &Book, opened: bool) -> bool {
+    match (book.added, today(env)) {
+        (Some(added), Some(today)) => {
+            !opened && book.progress.is_none() && today.saturating_sub(added) <= NEW_DAYS
+        }
+        _ => false,
+    }
 }
 
 /// What the library knows of the book at `path`, read from the book
@@ -754,6 +785,7 @@ mod tests {
                 height: 40,
             }),
             progress: Some(12),
+            added: Some(20_000),
             fields: alloc::vec![("stars.rating".into(), "4".into())],
         };
         save(&storage, "books/a.txt", &book);

@@ -706,9 +706,7 @@ impl Browser {
             if finished { "unfinished" } else { "finished" },
             "info",
         ];
-        // Not for books already in the archive.
-        let archive = env.settings.read(&ARCHIVE).trim_matches('/');
-        if !archive.is_empty() && !files::same_path(env.storage, files::parent(&path), archive) {
+        if can_archive(&env, &path) {
             options.push("archive");
         }
         if !env.device.input.touch {
@@ -752,25 +750,7 @@ impl Browser {
                 cx.request_redraw();
             }
             "archive" => {
-                let archive = env
-                    .settings
-                    .text(ARCHIVE.as_str())
-                    .trim_matches('/')
-                    .to_string();
-                let _ = env.storage.create_dir(&archive);
-                let target = files::free_path(env.storage, &archive, files::name(path));
-                match files::move_to(env.storage, path, &target) {
-                    Ok(()) => {
-                        cx.command(events::BOOK_MOVED.emit(events::BookMoved {
-                            from: path.to_string(),
-                            path: target,
-                        }));
-                        cx.command(Command::Notify(env.i18n.tr("files.archived").to_string()));
-                    }
-                    Err(_) => cx.command(Command::Notify(
-                        env.i18n.tr("files.archive-failed").to_string(),
-                    )),
-                }
+                archive(&env, path, cx);
                 // Gone from here: the focus stays at its place.
                 self.show_at(&env, Some(Self::book_entry(path)));
                 cx.request_redraw();
@@ -1317,6 +1297,36 @@ impl Screen for Browser {
         cx.request_redraw();
         cx.request_refresh(RefreshMode::Partial);
         cx.wake_at(env.now);
+    }
+}
+
+/// Whether the book at `path` may move to the archive: there is one, and
+/// the book is not in it.
+pub(crate) fn can_archive(env: &Env<'_>, path: &str) -> bool {
+    let archive = env.settings.read(&ARCHIVE).trim_matches('/');
+    !archive.is_empty() && !files::same_path(env.storage, files::parent(path), archive)
+}
+
+/// Moves the book at `path` to the archive folder, and says how it went.
+pub(crate) fn archive(env: &Env<'_>, path: &str, cx: &mut Cx<'_, '_>) {
+    let archive = env
+        .settings
+        .text(ARCHIVE.as_str())
+        .trim_matches('/')
+        .to_string();
+    let _ = env.storage.create_dir(&archive);
+    let target = files::free_path(env.storage, &archive, files::name(path));
+    match files::move_to(env.storage, path, &target) {
+        Ok(()) => {
+            cx.command(events::BOOK_MOVED.emit(events::BookMoved {
+                from: path.to_string(),
+                path: target,
+            }));
+            cx.command(Command::Notify(env.i18n.tr("files.archived").to_string()));
+        }
+        Err(_) => cx.command(Command::Notify(
+            env.i18n.tr("files.archive-failed").to_string(),
+        )),
     }
 }
 

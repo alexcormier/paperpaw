@@ -29,6 +29,7 @@ enum Action {
     Favourite,
     Unfavourite,
     Info,
+    Archive,
     Menu,
 }
 
@@ -87,6 +88,9 @@ impl BookSheet {
             actions.push((Action::Favourite, tr("files.option.favourite")));
         }
         actions.push((Action::Info, tr("files.option.info")));
+        if crate::can_archive(env, &path) {
+            actions.push((Action::Archive, tr("files.option.archive")));
+        }
         if !env.device.input.touch {
             actions.push((Action::Menu, tr("files.option.menu")));
         }
@@ -142,6 +146,7 @@ impl BookSheet {
                 crate::INFO_SCREEN,
                 Params::new().with(params::PATH, path.to_string()),
             )),
+            Action::Archive => crate::archive(&env, path, cx),
             Action::Menu => super::open_menu(cx),
         }
     }
